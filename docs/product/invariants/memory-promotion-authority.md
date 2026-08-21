@@ -19,6 +19,8 @@ PR may promote it to `locked`.
   migration policy.
 - Leave a pending Short-term item without exactly one consolidation route, or
   apply more than one of `promote`, `archive`, `review`, and `reject` to it.
+- Treat the Short-term TTL alone as a terminal route or hide an expired active
+  item before canonical apply records its disposition.
 - Add a generic, batch/daily, call-site, or user-asserted fast-track promotion
   pass alongside the consolidation route.
 - Commit a new active Short-term → Long-term transition without validating a
@@ -51,14 +53,18 @@ PR may promote it to `locked`.
   `backend/tests/unit/test_working_observations_extractor.py` — conversation,
   observation, explicit, and external memory writes enter Short-term
 - `backend/tests/unit/test_canonical_consolidation.py` — pending work receives
-  an exact one-route partition with authoritative subject/evidence validation
+  an exact one-route partition with authoritative subject/evidence validation;
+  owner-rejected sources and near-duplicate negative examples cannot promote
+- `backend/tests/unit/test_rejected_memory_feedback.py` — negative examples are
+  recent, bounded, sensitivity-safe, source-active, cached, and invalidatable
 - `backend/tests/unit/test_canonical_maintenance_ordering.py` — maintenance has
   one L2 route owner and blocked consolidation cannot fall through to generic
   promotion
 - `backend/tests/unit/test_canonical_short_term_maintenance_cron.py` and
   `backend/tests/unit/test_validate_memory_maintenance_scheduler.py` — the
-  scheduled runtime invokes only the canonical maintenance owner and reports
-  projection delivery failures
+  scheduled runtime invokes only the canonical maintenance owner, prioritizes
+  expiry work independently of the registry/cooldown, and reports projection
+  delivery and unadjudicated-expiry failures
 - `backend/tests/unit/test_atomic_apply.py` and
   `backend/tests/unit/test_memory_apply_store.py` — promotion atomically writes
   the item, graph assertion, ledger state, operation result, and outbox;

@@ -5,6 +5,7 @@ from types import ModuleType
 from typing import Iterator
 
 import pytest
+from fastapi import HTTPException
 
 from routers import auth
 from testing.import_isolation import load_module_fresh, stub_modules
@@ -97,6 +98,7 @@ def test_referral_link_captures_secure_cookie_and_opens_existing_desktop_downloa
 
 def test_authenticated_referrer_receives_a_stable_unique_https_link(monkeypatch):
     monkeypatch.setenv('ENCRYPTION_SECRET', TEST_SECRET.decode())
+    monkeypatch.delenv('REFERRAL_PUBLIC_BASE_URL', raising=False)
 
     with _loaded_referrals_router() as referrals:
         first = referrals.get_referral_link('referrer-123').referral_url
@@ -105,7 +107,34 @@ def test_authenticated_referrer_receives_a_stable_unique_https_link(monkeypatch)
 
     assert first == second
     assert first != other
-    assert first.startswith('https://api.omi.me/r/ref1.')
+    assert first.startswith('https://omi.me/r/ref1.')
+
+
+def test_authenticated_referrer_uses_configured_dev_public_origin(monkeypatch):
+    monkeypatch.setenv('ENCRYPTION_SECRET', TEST_SECRET.decode())
+    monkeypatch.setenv('REFERRAL_PUBLIC_BASE_URL', 'https://api.omiapi.com/')
+
+    with _loaded_referrals_router() as referrals:
+        referral_url = referrals.get_referral_link('referrer-123').referral_url
+
+    assert referral_url.startswith('https://api.omiapi.com/r/ref1.')
+    assert referrer_uid_from_code(referral_url.rsplit('/', 1)[-1]) == 'referrer-123'
+
+
+def test_referral_link_returns_sanitized_unavailable_response_when_signing_fails(monkeypatch):
+    with _loaded_referrals_router() as referrals:
+
+        def signing_failure(_uid):
+            raise ReferralCodeError('missing_referral_signing_secret')
+
+        monkeypatch.setattr(referrals, 'referral_link', signing_failure)
+
+        with pytest.raises(HTTPException) as error:
+            referrals.get_referral_link('referrer-123')
+
+    assert error.value.status_code == 503
+    assert error.value.detail == 'Referral links are temporarily unavailable'
+    assert 'signing' not in error.value.detail
 
 
 @pytest.mark.asyncio

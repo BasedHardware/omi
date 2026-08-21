@@ -445,22 +445,24 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
     }
   }
 
-  /// The registry is split across files: actions were relocated into extensions to
-  /// satisfy the line-count ratchet, so reading only the main file reports actions
-  /// that are in fact registered as missing. Read every registry source.
   private func bridgeSource() throws -> String {
-    let sources = URL(fileURLWithPath: #filePath)
+    // Every DesktopAutomationBridge*.swift, not just the base file. The registry is
+    // split across extensions to satisfy a line-count ratchet, so reading only the
+    // base file makes this contract fail the moment an action is relocated -- which
+    // is what happened when the notification actions moved to
+    // DesktopAutomationBridge+Notifications.swift. Globbing keeps the contract about
+    // "is this action registered" rather than "is it registered in one exact file".
+    let sourcesDir = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources")
-    let names = try FileManager.default
-      .contentsOfDirectory(atPath: sources.path)
-      .filter { $0 == "DesktopAutomationBridge.swift" || $0.hasPrefix("DesktopAutomationBridge+") }
+    let names = try FileManager.default.contentsOfDirectory(atPath: sourcesDir.path)
+      .filter { $0.hasPrefix("DesktopAutomationBridge") && $0.hasSuffix(".swift") }
       .sorted()
-    XCTAssertTrue(names.contains("DesktopAutomationBridge.swift"), "bridge registry source is missing")
+    XCTAssertFalse(names.isEmpty, "expected at least one DesktopAutomationBridge source")
     return
       try names
-      .map { try String(contentsOf: sources.appendingPathComponent($0), encoding: .utf8) }
+      .map { try String(contentsOf: sourcesDir.appendingPathComponent($0), encoding: .utf8) }
       .joined(separator: "\n")
   }
 

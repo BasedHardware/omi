@@ -21,7 +21,10 @@ class ReferralLinkResponse(BaseModel):
 
 @router.get('/v1/users/me/referral', response_model=ReferralLinkResponse)
 def get_referral_link(uid: str = Depends(auth.get_current_user_uid)) -> ReferralLinkResponse:
-    return ReferralLinkResponse(referral_url=referral_link(uid))
+    try:
+        return ReferralLinkResponse(referral_url=referral_link(uid))
+    except ReferralCodeError as error:
+        raise HTTPException(status_code=503, detail='Referral links are temporarily unavailable') from error
 
 
 @router.get('/r/{code}', response_class=RedirectResponse)

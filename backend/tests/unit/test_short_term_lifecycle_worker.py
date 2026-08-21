@@ -67,8 +67,8 @@ def test_worker_persists_stale_l2_and_tombstoned_lifecycle_transitions_idempoten
     second = process_short_term_lifecycle_items(
         [fresh, stale, archived, tombstoned],
         store=store,
-        now=NOW,
-        run_id='run-1',
+        now=NOW + timedelta(hours=1),
+        run_id='run-2',
         dispositions={'archived': 'archive'},
     )
 
@@ -87,6 +87,8 @@ def test_worker_persists_stale_l2_and_tombstoned_lifecycle_transitions_idempoten
     assert stale_record.outcome == 'remain_short_term'
     assert stale_record.reason == 'short_term_expired_requires_lifecycle_decision'
     assert stale_record.run_id == 'run-1'
+    assert stale_record.audit_metadata['item_revision'] == stale.item_revision
+    assert stale_record.audit_metadata['content_hash'] == stale.content_hash
     assert stale_record.audit_metadata['requires_lifecycle_decision'] is True
     assert stale_record.audit_metadata['default_access_allowed'] is False
     assert stale_record.audit_metadata['source_refs'] == [
