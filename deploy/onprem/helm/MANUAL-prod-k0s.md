@@ -397,6 +397,31 @@ kubectl -n omi exec deploy/backend -c backend -- \
 
 ---
 
+### Chat (on-prem LLM) — verify it end to end
+
+The chat path has its own script, driven from **outside** the cluster (a container in its own network
+namespace, so the request leaves the host and comes back through the LoadBalancer, like a phone would):
+
+```bash
+ENTRY_IP=$ENTRY_IP deploy/onprem/helm/run-chat-e2e-k0s.sh
+```
+
+It gets a real Keycloak token, runs a chat turn, and rejects the canned apology chat returns when the
+LLM call fails (a non-empty answer is not proof of success). It also asserts the negative half: the
+`llm-gateway` must NOT answer on the entry point — inference is an authenticated capability of the
+backend, not a service on the edge — and an unauthenticated `POST /v2/messages` must be 401.
+
+Enable the gateway at install/upgrade time:
+```bash
+--set chat.enabled=true --set chat.llmGateway.enabled=true \
+--set chat.llmGateway.serviceToken=$(openssl rand -hex 24) \
+--set chat.llmGateway.model=<the model your endpoint serves> \
+--set inference.openai.baseUrl=http://<your-endpoint>/v1 --set inference.openai.apiKey=<placeholder>
+```
+The API key can be a placeholder for a local endpoint that ignores it (compose uses `ollama`), but it
+must be **present**: the gateway treats a missing credential as `invalid_config` and answers 503 on
+every turn, which reaches the user as a generic apology.
+
 ## Day-two operations
 
 - **What runs where.** In the cluster: the API, the datastore (MongoDB), cache (Valkey), vector store
