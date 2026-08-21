@@ -71,6 +71,11 @@ from utils.memory.canonical_required_processing import (
     is_pending_required_processing,
     list_pending_required_processing_items,
 )
+from utils.memory.decision_path_telemetry import emit_memory_promotion_decision, emit_memory_promotion_failure
+from utils.memory.rejected_memory_feedback import (
+    RejectedMemoryFeedback,
+    get_recent_rejected_memory_feedback,
+)
 from utils.memory.promotion_flex import (
     PromotionFlexControlChanged,
     PromotionFlexDeferred,
@@ -584,6 +589,7 @@ class ConsolidationCandidate:
     tier: str
     captured_at: str
     sensitivity_labels: tuple[str, ...] = ()
+    user_rejected: bool = False
 
 
 @dataclass
@@ -591,6 +597,7 @@ class ConsolidationContext:
     uid: str
     pending_items: List[MemoryItem]
     candidates_by_anchor: Dict[str, List[ConsolidationCandidate]] = field(default_factory=_empty_candidate_map)
+    owner_rejected_examples: List[RejectedMemoryFeedback] = field(default_factory=list)
 
     @property
     def hydrated_memory_ids(self) -> Set[str]:
@@ -598,6 +605,7 @@ class ConsolidationContext:
         for candidates in self.candidates_by_anchor.values():
             for candidate in candidates:
                 ids.add(candidate.memory_id)
+        ids.update(feedback.memory_id for feedback in self.owner_rejected_examples)
         return ids
 
 
@@ -631,6 +639,22 @@ def gather_consolidation_candidates(
     per_item = candidate_limit if candidate_limit is not None else candidates_per_item_limit()
     context = ConsolidationContext(uid=uid, pending_items=list(pending_items))
     cache: Dict[str, Optional[MemoryItem]] = {item.memory_id: item for item in pending_items}
+    try:
+        pending_ids = set(cache)
+        context.owner_rejected_examples = [
+            feedback
+            for feedback in get_recent_rejected_memory_feedback(uid, db_client=client)
+            if feedback.memory_id not in pending_ids
+        ]
+    except Exception as exc:
+        logger.warning("consolidation rejection feedback unavailable uid=%s reason=%s", uid, type(exc).__name__)
+        record_fallback(
+            component="other",
+            from_mode="canonical_consolidation_rejection_feedback",
+            to_mode="consolidation_without_rejection_feedback",
+            reason="other",
+            outcome="degraded",
+        )
 
     for anchor in pending_items:
         content = (anchor.content or "").strip()
@@ -656,6 +680,7 @@ def gather_consolidation_candidates(
                     tier=item.tier.value,
                     captured_at=item.captured_at.isoformat(),
                     sensitivity_labels=tuple(item.sensitivity_labels),
+                    user_rejected=(item.promotion or {}).get("user_review") is False,
                 )
             )
             if len(candidates) >= per_item:
@@ -776,7 +801,19 @@ def format_consolidation_llm_context(context: ConsolidationContext) -> str:
     """Serialize a bounded, sensitivity-aware batch for the consolidation agent."""
     memories: List[Payload] = []
     candidate_groups: List[Payload] = []
-    payload: Payload = {"memories": memories, "candidate_groups": candidate_groups}
+    payload: Payload = {
+        "memories": memories,
+        "candidate_groups": candidate_groups,
+        "owner_rejected_examples": [
+            {
+                "memory_id": feedback.memory_id,
+                "content": feedback.content,
+                "updated_at": feedback.updated_at.isoformat(),
+                "user_rejected": True,
+            }
+            for feedback in context.owner_rejected_examples
+        ],
+    }
     for item in context.pending_items:
         restricted = _has_restricted_sensitivity(item.sensitivity_labels)
         content = item.content or ""
@@ -843,6 +880,7 @@ def format_consolidation_llm_context(context: ConsolidationContext) -> str:
                         "tier": c.tier,
                         "captured_at": c.captured_at,
                         "sensitivity_labels": list(c.sensitivity_labels),
+                        "user_rejected": c.user_rejected,
                     }
                     for c in candidates[:CONSOLIDATION_CONTEXT_CANDIDATES_PER_ANCHOR_MAX_COUNT]
                 ],
@@ -959,12 +997,19 @@ Rules:
 - Use supersedes only when older active facts are outdated/false or when this
   synthesized item intentionally replaces/merges them.
 - Duplicate candidates route archive or reject; do not promote another copy.
+- owner_rejected_examples and vector candidates with user_rejected=true are
+  owner-rejected negative examples. A near-duplicate of an owner-rejected item
+  MUST NOT route promote; route it archive or reject with
+  reconciliation=duplicate and target_memory_id set.
+- A pending memory whose promotion.user_review=false was itself rejected by
+  the owner and MUST NOT route promote.
 - Compatible facts use reconciliation=keep_both and supersedes=[].
 - evidence_ids must be a subset of the source item's evidence IDs.
 - review/archive/reject are terminal outcomes and must never silently promote.
 - sensitivity_labels are authoritative. A source with any restricted label
   ({restricted_sensitivity_labels}) MUST NOT route promote.
-- aboutness=third_party or unclear MUST NOT route promote.
+- aboutness=third_party MUST NOT route promote. aboutness=unclear is not a veto;
+  apply the relationship, usefulness, and authoritative source-attribution rules.
 - relationship_to_user asking_about, encountered, or unclear MUST NOT route
   promote. other_speaker is promotable only for recurring user_relationship
   context; otherwise route archive/review/reject.
@@ -988,7 +1033,7 @@ Reference conflict-resolution patterns (adapt for batch reasoning):
 {format_instructions}
 """
 
-CONSOLIDATION_CACHE_KEY = "omi-canonical-consolidation-v1"
+CONSOLIDATION_CACHE_KEY = "omi-canonical-consolidation-v2"
 
 
 def build_consolidation_llm_messages(context: ConsolidationContext) -> list[Any]:
@@ -1072,6 +1117,12 @@ def _agent_batch_blocks_watermark(agent_batch: ConsolidationAgentBatch) -> bool:
     return agent_batch.reasoning.startswith(("parse_failed:", "invoke_failed:", "output_invalid:"))
 
 
+def _stable_decision_failure_reason(error_code: str) -> str:
+    """Drop item IDs and free-form tails while retaining an aggregatable class."""
+    parts = (error_code or "unknown").split(":")
+    return ":".join(parts[:2])
+
+
 def _consolidation_decision_identity(
     *,
     uid: str,
@@ -1118,9 +1169,11 @@ def _validate_agent_batch(
     for decision in agent_batch.decisions:
         source = pending_by_id[decision.source_memory_id]
         if decision.route == "promote":
+            if (source.promotion or {}).get("user_review") is False:
+                return f"output_invalid:user_rejected_promotion:{source.memory_id}"
             if set(source.sensitivity_labels).intersection(RESTRICTED_SENSITIVITY_LABELS):
                 return f"output_invalid:restricted_sensitivity_promotion:{source.memory_id}"
-            if decision.aboutness in {"third_party", "unclear"}:
+            if decision.aboutness == "third_party":
                 return f"output_invalid:unsafe_aboutness_promotion:{source.memory_id}"
             relationship_is_durable = decision.relationship_to_user in {
                 "self",
@@ -1155,10 +1208,16 @@ def _validate_agent_batch(
                     return f"output_invalid:unknown_source_subject_promotion:{source.memory_id}"
                 if source_subject_id and decision.subject_entity_id != source_subject_id:
                     return f"output_invalid:source_subject_contradiction:{source.memory_id}"
-                if attribution == "user" and not (
-                    (decision.relationship_to_user == "self" and decision.aboutness == "primary_user")
-                    or (decision.relationship_to_user == "owned_work" and decision.aboutness == "user_owned_project")
-                    or (decision.relationship_to_user == "adopted" and decision.aboutness == "user_relationship")
+                if (
+                    attribution == "user"
+                    and decision.aboutness != "unclear"
+                    and not (
+                        (decision.relationship_to_user == "self" and decision.aboutness == "primary_user")
+                        or (
+                            decision.relationship_to_user == "owned_work" and decision.aboutness == "user_owned_project"
+                        )
+                        or (decision.relationship_to_user == "adopted" and decision.aboutness == "user_relationship")
+                    )
                 ):
                     return f"output_invalid:source_subject_contradiction:{source.memory_id}"
                 third_party_is_person = attribution == "third_party" and subject_kind in {
@@ -2002,6 +2061,14 @@ def run_canonical_consolidation(
                 uid,
                 type(exc).__name__,
             )
+            for item in llm_pending_batch:
+                emit_memory_promotion_failure(
+                    logger,
+                    uid=uid,
+                    memory_id=item.memory_id,
+                    status="candidate_hydration_failed",
+                    reason_code=f"candidate_hydration:{type(exc).__name__}",
+                )
             _record_batch_failure(
                 uid,
                 llm_pending_batch,
@@ -2019,6 +2086,14 @@ def run_canonical_consolidation(
             agent_batch = invoke_consolidation_agent(context, llm_invoke=llm_invoke)
         except (PromotionFlexControlChanged, PromotionFlexDeferred) as exc:
             watermark_blocked = True
+            for item in llm_pending_batch:
+                emit_memory_promotion_failure(
+                    logger,
+                    uid=uid,
+                    memory_id=item.memory_id,
+                    status="flex_deferred",
+                    reason_code=f"flex_deferred:{type(exc).__name__}",
+                )
             _record_deferred_batch_failure(
                 uid,
                 llm_pending_batch,
@@ -2041,6 +2116,17 @@ def run_canonical_consolidation(
                 uid,
                 output_error,
             )
+            decisions_by_id = {decision.source_memory_id: decision for decision in agent_batch.decisions}
+            for item in llm_pending_batch:
+                planned = decisions_by_id.get(item.memory_id)
+                emit_memory_promotion_failure(
+                    logger,
+                    uid=uid,
+                    memory_id=item.memory_id,
+                    route=planned.route if planned is not None else "none",
+                    status="decision_invalid",
+                    reason_code=_stable_decision_failure_reason(output_error),
+                )
             _record_batch_failure(
                 uid,
                 llm_pending_batch,
@@ -2060,6 +2146,17 @@ def run_canonical_consolidation(
                 result_guard()
             except PromotionFlexControlChanged as exc:
                 watermark_blocked = True
+                decisions_by_id = {decision.source_memory_id: decision for decision in agent_batch.decisions}
+                for item in llm_pending_batch:
+                    planned = decisions_by_id.get(item.memory_id)
+                    emit_memory_promotion_failure(
+                        logger,
+                        uid=uid,
+                        memory_id=item.memory_id,
+                        route=planned.route if planned is not None else "none",
+                        status="flex_deferred",
+                        reason_code=f"flex_deferred:{type(exc).__name__}",
+                    )
                 _record_deferred_batch_failure(
                     uid,
                     llm_pending_batch,
@@ -2088,6 +2185,17 @@ def run_canonical_consolidation(
                     uid,
                     type(exc).__name__,
                 )
+                decisions_by_id = {decision.source_memory_id: decision for decision in agent_batch.decisions}
+                for item in llm_pending_batch:
+                    planned = decisions_by_id.get(item.memory_id)
+                    emit_memory_promotion_failure(
+                        logger,
+                        uid=uid,
+                        memory_id=item.memory_id,
+                        route=planned.route if planned is not None else "none",
+                        status="recurrence_handoff_failed",
+                        reason_code=f"recurrence_handoff:{type(exc).__name__}",
+                    )
                 _record_batch_failure(
                     uid,
                     llm_pending_batch,
@@ -2129,6 +2237,25 @@ def run_canonical_consolidation(
                     pending_decision.source_memory_id for pending_decision in ordered_decisions[decision_index:]
                 }
                 unresolved_items = [item for item in llm_pending_batch if item.memory_id in unresolved_ids]
+                unresolved_decisions = {
+                    pending_decision.source_memory_id: pending_decision
+                    for pending_decision in ordered_decisions[decision_index:]
+                }
+                for item in unresolved_items:
+                    planned = unresolved_decisions[item.memory_id]
+                    is_failed_decision = item.memory_id == decision.source_memory_id
+                    emit_memory_promotion_failure(
+                        logger,
+                        uid=uid,
+                        memory_id=item.memory_id,
+                        route=planned.route,
+                        status="apply_failed" if is_failed_decision else "batch_aborted",
+                        reason_code=(
+                            f"apply_blocked:{type(exc).__name__}"
+                            if is_failed_decision
+                            else "batch_aborted:prior_apply_failure"
+                        ),
+                    )
                 _record_batch_failure(
                     uid,
                     unresolved_items,
@@ -2143,6 +2270,18 @@ def run_canonical_consolidation(
                 batch_apply_failed = True
                 break
             if applied_ids:
+                emit_memory_promotion_decision(
+                    logger,
+                    uid=uid,
+                    memory_id=decision.source_memory_id,
+                    route=decision.route,
+                    reconciliation=decision.reconciliation,
+                    relationship_to_user=decision.relationship_to_user,
+                    aboutness=decision.aboutness,
+                    basis_for_memory=decision.basis_for_memory,
+                    confidence=decision.confidence,
+                    status="applied",
+                )
                 report.decisions_applied += 1
                 if decision.source_memory_id not in batched_ids:
                     batched_ids.append(decision.source_memory_id)

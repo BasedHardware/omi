@@ -242,6 +242,13 @@ class MemoriesViewModel: ObservableObject {
   private(set) var refreshInvocations: Int = 0
   /// Bumped at the top of `handleConversationDeleted()` for observer wiring tests.
   private(set) var conversationDeleteInvocations: Int = 0
+  /// Owner verdicts recorded this session, keyed by memory id.
+  ///
+  /// `ServerMemory` is immutable and a rejected memory only disappears on the next
+  /// load (the backend drops it from default reads), so the card needs somewhere to
+  /// show the verdict immediately while triaging a screenful.
+  @Published var reviewVerdicts: [String: Bool] = [:]
+
   @Published var showingAddMemory = false
   @Published var newMemoryText = ""
   @Published var editingMemory: ServerMemory? = nil
@@ -1422,6 +1429,24 @@ class MemoriesViewModel: ObservableObject {
     }
   }
 
+  /// Records the owner's keep/reject verdict for a memory.
+  ///
+  /// Rejecting hides the memory from default reads server-side and drops it from the
+  /// keyword index and knowledge graph, so the row will be gone after the next load.
+  /// The verdict is kept locally until then rather than removing the row immediately,
+  /// so a review pass stays legible while it is in progress.
+  func reviewMemory(_ memory: ServerMemory, keep: Bool) async {
+    let previous = reviewVerdicts[memory.id]
+    reviewVerdicts[memory.id] = keep
+    do {
+      try await APIClient.shared.reviewMemory(id: memory.id, keep: keep)
+    } catch {
+      reviewVerdicts[memory.id] = previous
+      errorMessage = UserFacingErrorPresentation.message(for: error, while: .memories)
+      logError("MemoriesViewModel: Failed to review memory", error: error)
+    }
+  }
+
   func deleteMemory(_ memory: ServerMemory) async {
     // Cancel any existing pending delete
     deleteTask?.cancel()
@@ -2516,6 +2541,11 @@ struct MemoriesPage: View {
               onTap: {
                 viewModel.selectedMemory = memory
               },
+              verdict: viewModel.reviewVerdicts[memory.id]
+                ?? (memory.reviewed ? memory.userReview : nil),
+              onReview: { keep in
+                Task { await viewModel.reviewMemory(memory, keep: keep) }
+              },
               categoryIcon: categoryIcon,
               categoryColor: categoryColor,
               tagColorFor: tagColorFor,
@@ -2781,6 +2811,10 @@ private typealias MemoryTierBadge = MemoryLayerBadge
 private struct MemoryCardView: View {
   let memory: ServerMemory
   let onTap: () -> Void
+  /// nil = not yet judged. Session verdicts win over the server's, so a card
+  /// reflects the click immediately instead of waiting for the next load.
+  let verdict: Bool?
+  let onReview: (Bool) -> Void
   let categoryIcon: (MemoryCategory) -> String
   let categoryColor: (MemoryCategory) -> Color
   let tagColorFor: (String) -> Color
@@ -2851,6 +2885,12 @@ private struct MemoryCardView: View {
             tagColorFor: tagColorFor
           )
 
+          MemoryReviewControls(
+            verdict: verdict,
+            isRevealed: isHovered || verdict != nil,
+            onReview: onReview
+          )
+
           if isHovered {
             Image(systemName: "arrow.up.right")
               .scaledFont(size: OmiType.micro, weight: .medium)
@@ -2877,6 +2917,58 @@ private struct MemoryCardView: View {
         NSCursor.pop()
       }
     }
+  }
+}
+
+// MARK: - Memory Review Controls
+
+/// Keep / reject verdict for one memory.
+///
+/// This is the owner's only way to tell the backend a memory is wrong: rejecting
+/// hides it from default reads and drops it from the keyword index and knowledge
+/// graph. The controls stay hidden until hover so a long list reads cleanly, but a
+/// judged card keeps showing its verdict — during a review pass you need to see
+/// what you have already done.
+private struct MemoryReviewControls: View {
+  let verdict: Bool?
+  let isRevealed: Bool
+  let onReview: (Bool) -> Void
+
+  var body: some View {
+    HStack(spacing: OmiSpacing.xs) {
+      reviewButton(
+        keep: true,
+        symbol: verdict == true ? "hand.thumbsup.fill" : "hand.thumbsup",
+        tint: verdict == true ? Ink.listeningGreen : Ink.secondary,
+        label: "Keep this memory"
+      )
+      reviewButton(
+        keep: false,
+        symbol: verdict == false ? "hand.thumbsdown.fill" : "hand.thumbsdown",
+        tint: verdict == false ? Ink.errorRed : Ink.secondary,
+        label: "Reject this memory"
+      )
+    }
+    .opacity(isRevealed ? 1 : 0)
+    // Keep the row from reflowing as controls appear and disappear on hover.
+    .allowsHitTesting(isRevealed)
+  }
+
+  private func reviewButton(keep: Bool, symbol: String, tint: Color, label: String)
+    -> some View
+  {
+    Button {
+      onReview(keep)
+    } label: {
+      Image(systemName: symbol)
+        .scaledFont(size: OmiType.micro, weight: .medium)
+        .foregroundColor(tint)
+        .frame(width: 18, height: 18)
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .help(label)
+    .accessibilityLabel(label)
   }
 }
 
