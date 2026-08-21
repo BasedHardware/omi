@@ -206,3 +206,55 @@ def test_quota_redis_outage_fails_open_and_records_fallback(monkeypatch):
     assert se.consume_daily_send_quota('uid-1', 1) is True
     assert len(events) == 1
     assert events[0]['to_mode'] == 'quota_bypassed'
+
+
+def test_unnamed_participant_is_not_proposed():
+    """A bare address is an unknown person: one click must not mail it."""
+    conversation = _conversation_with_calendar_context(
+        [
+            {'name': 'Nik', 'email': 'nik@basedhardware.com'},
+            {'name': '  ', 'email': 'unknown@acme.com'},
+            {'email': 'noname@acme.com'},
+        ]
+    )
+    assert extract_share_recipients(conversation, ['nik@basedhardware.com']) == []
+
+
+def test_unresolved_owner_suppresses_the_whole_proposal(monkeypatch):
+    """#12017: without a known owner address the owner looks like a recipient."""
+    import utils.conversations.share_email as se
+    import utils.observability.fallback as fallback
+
+    events = []
+    monkeypatch.setattr(fallback, 'record_fallback', lambda **kw: events.append(kw))
+    monkeypatch.setattr(se, 'get_user_from_uid', lambda uid: {'uid': uid, 'email': None})
+
+    conversation = _conversation_with_calendar_context(
+        [
+            {'name': 'David Zhang', 'email': 'david@scalingforever.com'},
+            {'name': 'Sarah Chen', 'email': 'sarah@acme.com'},
+        ]
+    )
+    assert se.get_share_recipients('uid-1', conversation) == []
+    assert events and events[0]['to_mode'] == 'share_recipients_suppressed'
+
+
+def test_resolved_owner_still_proposes_the_other_participant(monkeypatch):
+    import utils.conversations.share_email as se
+
+    monkeypatch.setattr(se, 'get_user_from_uid', lambda uid: {'uid': uid, 'email': 'David@ScalingForever.com'})
+    conversation = _conversation_with_calendar_context(
+        [
+            {'name': 'David Zhang', 'email': 'david@scalingforever.com'},
+            {'name': 'Sarah Chen', 'email': 'sarah@acme.com'},
+        ]
+    )
+    assert se.get_share_recipients('uid-1', conversation) == [{'name': 'Sarah Chen', 'email': 'sarah@acme.com'}]
+
+
+def test_sender_name_falls_back_to_the_address_local_part():
+    import utils.conversations.share_email as se
+
+    assert se._sender_display_name({'display_name': 'David Zhang'}) == 'David Zhang'
+    assert se._sender_display_name({'display_name': None, 'email': 'david@scalingforever.com'}) == 'david'
+    assert se._sender_display_name({}) == 'Someone'
