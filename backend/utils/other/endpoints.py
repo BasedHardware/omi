@@ -9,6 +9,7 @@ from fastapi import Request
 from starlette.websockets import WebSocket
 from utils.auth import get_auth_provider, auth_backend_name
 from utils.auth import errors as auth_errors
+from utils.observability.fallback import record_fallback
 import logging
 import redis as redis_pkg
 
@@ -147,6 +148,18 @@ def verify_token(token: str) -> str:
         # same uid '123'. Restrict the fallback to the Firebase backend so OIDC always
         # rejects invalid tokens.
         if auth_backend_name() == 'firebase' and os.getenv('LOCAL_DEVELOPMENT') == 'true' and no_real_credential:
+            # The one fail-open in the auth chain, so it records like one (AGENTS.md fallback contract):
+            # a deployment handing uid '123' to every invalid token used to leave no trace at all
+            # (BACKLOG L14). Per request on purpose — the count IS the signal, and on a dev harness it is
+            # noise nobody scrapes anyway.
+            record_fallback(
+                component='auth',
+                from_mode='invalid_token',
+                to_mode='dev_uid_123',
+                reason='policy',
+                outcome='degraded',
+                log=logger,
+            )
             return '123'
         raise
 

@@ -38,6 +38,10 @@ class InvalidIdTokenError(Exception):
 
 # Populated by the module-scoped autouse fixture below.
 verify_token = None
+# The MODULE OBJECT the fixture imported, not a fresh `import utils.other.endpoints` — that would build a
+# different object outside `stub_modules`, and monkeypatching it would patch nothing the code under test
+# can see.
+endpoints_module = None
 
 
 def _build_fakes():
@@ -93,6 +97,7 @@ def _endpoints_isolation():
         endpoints = importlib.import_module("utils.other.endpoints")
         mod = sys.modules[__name__]
         mod.verify_token = endpoints.verify_token
+        mod.endpoints_module = endpoints
         yield
 
 
@@ -109,6 +114,9 @@ def _clear_local_dev_env(monkeypatch):
     monkeypatch.delenv('SERVICE_ACCOUNT_JSON', raising=False)
     monkeypatch.delenv('GOOGLE_APPLICATION_CREDENTIALS', raising=False)
     monkeypatch.delenv('FIREBASE_AUTH_CREDENTIALS_PATH', raising=False)
+    # Cleared too, so a test that does not set it exercises the DEFAULT backend (firebase) rather than
+    # whatever leaked in from another test — the bypass is gated on the backend as well (BACKLOG L14).
+    monkeypatch.delenv('AUTH_BACKEND', raising=False)
 
 
 # ---------------------------------------------------------------------------
@@ -203,3 +211,94 @@ def test_local_development_flag_off_raises_regardless_of_credentials(monkeypatch
 
     with pytest.raises(InvalidToken):
         verify_token('any-invalid-token')
+
+
+# ---------------------------------------------------------------------------
+# AUTH_BACKEND gating — the conjunct nothing was testing (BACKLOG L14)
+# ---------------------------------------------------------------------------
+
+
+def test_the_bypass_is_inert_on_an_oidc_backend(monkeypatch):
+    """The one fail-open in the auth chain, and `auth_backend_name() == 'firebase'` is all that keeps it
+    off an on-prem OIDC deployment that also sets LOCAL_DEVELOPMENT=true.
+
+    Measured before this test existed: deleting that conjunct left the ENTIRE suite green — a full sweep
+    of 984 files reported only the 4-5 known baseline failures. An OIDC deployment never has a Firebase
+    credential, so `no_real_credential` is always true there: without the backend gate, every invalid
+    token would have been granted uid '123'.
+    """
+    _clear_admin_env(monkeypatch)
+    _clear_local_dev_env(monkeypatch)
+    monkeypatch.setenv('LOCAL_DEVELOPMENT', 'true')
+    monkeypatch.setenv('AUTH_BACKEND', 'oidc')
+
+    with pytest.raises(InvalidToken):
+        verify_token('any-invalid-token')
+
+
+def test_the_bypass_still_works_on_the_default_backend(monkeypatch):
+    """The legacy principal: unset AUTH_BACKEND means firebase, which is every existing dev harness."""
+    _clear_admin_env(monkeypatch)
+    _clear_local_dev_env(monkeypatch)
+    monkeypatch.setenv('LOCAL_DEVELOPMENT', 'true')
+
+    assert verify_token('any-invalid-token') == '123'
+
+
+def test_the_bypass_works_when_firebase_is_declared_explicitly(monkeypatch):
+    _clear_admin_env(monkeypatch)
+    _clear_local_dev_env(monkeypatch)
+    monkeypatch.setenv('LOCAL_DEVELOPMENT', 'true')
+    monkeypatch.setenv('AUTH_BACKEND', 'firebase')
+
+    assert verify_token('any-invalid-token') == '123'
+
+
+def test_a_misspelled_backend_does_not_open_the_bypass(monkeypatch):
+    """A typo must not be a way to turn the bypass on.
+
+    It cannot be: `auth_backend_name()` refuses an unknown value with a ValueError instead of coercing to
+    firebase (fail-closed, ADR-0034), and `get_auth_provider()` raises the same thing before the except
+    branch is even reached. So the outcome is a loud configuration error, NOT a granted uid — which is
+    what this pins. (That it surfaces as a 500 rather than a 401 is a separate, deliberate loudness.)
+    """
+    _clear_admin_env(monkeypatch)
+    _clear_local_dev_env(monkeypatch)
+    monkeypatch.setenv('LOCAL_DEVELOPMENT', 'true')
+    monkeypatch.setenv('AUTH_BACKEND', 'oidcc')
+
+    with pytest.raises(ValueError, match='Unknown AUTH_BACKEND'):
+        verify_token('any-invalid-token')
+
+
+def test_the_bypass_records_a_fallback(monkeypatch):
+    """AGENTS.md requires a fail-open branch to call record_fallback. This one did not, so a deployment
+    granting uid '123' to every invalid token left no trace beyond whatever the caller logged."""
+    _clear_admin_env(monkeypatch)
+    _clear_local_dev_env(monkeypatch)
+    monkeypatch.setenv('LOCAL_DEVELOPMENT', 'true')
+    events: list[dict] = []
+    monkeypatch.setattr(endpoints_module, 'record_fallback', lambda **kw: events.append(kw))
+
+    assert verify_token('any-invalid-token') == '123'
+
+    assert len(events) == 1
+    assert events[0]['component'] == 'auth'
+    assert events[0]['to_mode'] == 'dev_uid_123'
+    assert events[0]['reason'] == 'policy'
+    assert events[0]['outcome'] == 'degraded'
+
+
+def test_a_rejected_token_records_nothing(monkeypatch):
+    """Only the fail-open is a fallback; an ordinary rejection is the system working."""
+    _clear_admin_env(monkeypatch)
+    _clear_local_dev_env(monkeypatch)
+    monkeypatch.setenv('LOCAL_DEVELOPMENT', 'true')
+    monkeypatch.setenv('AUTH_BACKEND', 'oidc')
+    events: list[dict] = []
+    monkeypatch.setattr(endpoints_module, 'record_fallback', lambda **kw: events.append(kw))
+
+    with pytest.raises(InvalidToken):
+        verify_token('any-invalid-token')
+
+    assert events == []

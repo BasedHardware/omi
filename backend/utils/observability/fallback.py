@@ -84,6 +84,9 @@ ALLOWED_COMPONENTS = frozenset(
         # 'other': a push backend degraded by a typo, or by a declared UnifiedPush with no base URL, was
         # indistinguishable from every other unlabelled fallback (BACKLOG L18).
         'push',
+        # The auth chain's single fail-open: the LOCAL_DEVELOPMENT uid-123 bypass (ADR-0034, BACKLOG L14).
+        # 'auth' is also a REASON in this module; the two namespaces are separate and both are correct.
+        'auth',
         # The document-store port itself (ADR-0015/0044): a guarantee the adapter could not give on this
         # deployment — today, a batch that could not run in one transaction because the server has none
         # (BACKLOG L25). Distinct from 'firestore_read', which is one backend's read path.
