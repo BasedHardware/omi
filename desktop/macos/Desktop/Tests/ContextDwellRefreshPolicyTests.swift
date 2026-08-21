@@ -12,7 +12,20 @@ final class ContextDwellRefreshPolicyTests: XCTestCase {
   func testFirstRefreshAfterTypingSettles() {
     XCTAssertTrue(
       ContextDwellRefreshPolicy.shouldRefresh(
-        secondsSinceAnchor: 12, firedRefreshesThisContext: 0, keyboardIdleSeconds: 3))
+        secondsSinceAnchor: 12, firedRefreshesThisContext: 0, keyboardIdleSeconds: 6))
+  }
+
+  func testComposingPauseDoesNotFireMidBurst() {
+    // Live regression: recipient → subject → body pauses run 1–3s. A refresh
+    // fired inside the burst evaluates a half-typed question and burns the
+    // repeat-cooldown slot, so the finished question's answer lands minutes
+    // late instead of seconds.
+    XCTAssertFalse(
+      ContextDwellRefreshPolicy.shouldRefresh(
+        secondsSinceAnchor: 20, firedRefreshesThisContext: 0, keyboardIdleSeconds: 3))
+    XCTAssertFalse(
+      ContextDwellRefreshPolicy.shouldRefresh(
+        secondsSinceAnchor: 60, firedRefreshesThisContext: 3, keyboardIdleSeconds: 4.5))
   }
 
   func testNoRefreshWithoutTypingSinceAnchor() {

@@ -40,8 +40,13 @@ enum ContextDwellRefreshPolicy {
   static let repeatRefreshCooldownSeconds: TimeInterval = 40
 
   /// The keyboard must have been quiet at least this long: mid-word capture
-  /// wastes the evaluation on a half-typed thought.
-  static let typingSettleSeconds: TimeInterval = 2
+  /// wastes the evaluation on a half-typed thought. 2s proved too eager in
+  /// live runs — composing pauses (recipient → subject → body) are routinely
+  /// 1–3s, and a refresh fired inside the burst evaluates a half-typed
+  /// question AND burns the repeat-cooldown slot, pushing the real question's
+  /// evaluation past the repeat cooldown into the sparse static-screen tick
+  /// cadence (~1/min), so the answer lands minutes late instead of seconds.
+  static let typingSettleSeconds: TimeInterval = 5
 
   /// Where the anchor moves when a fired refresh ABORTS before transitioning
   /// (its required fresh capture failed): far enough back that the retry
