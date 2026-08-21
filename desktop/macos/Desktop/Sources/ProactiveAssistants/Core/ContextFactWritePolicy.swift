@@ -263,7 +263,7 @@ enum ContextFactWritePolicy {
     if !receivedMarker,
       statement.range(
         of:
-          #"(?i)\b(?:draft|email|message|note|body|content)\b[^.]{0,70}\b(?:contain(?:s|ing)?|includes?|including|with)\b[^.]{0,40}\bquestion\b"#,
+          #"(?i)\b(?:draft|email|message|note|body|content)\b(?:[^.]|\.(?=\S)){0,70}\b(?:contain(?:s|ing)?|includes?|including|with)\b(?:[^.]|\.(?=\S)){0,40}\bquestion\b"#,
         options: .regularExpression) != nil
     {
       return true
@@ -281,7 +281,7 @@ enum ContextFactWritePolicy {
     // David asks …") out of this class.
     if statement.range(
       of:
-        #"(?i)\b(?:draft|email|message|note)\b[^.]{0,40}\b(?:being (?:composed|drafted|written)|composed to|addressed to)\b[^.]{0,60}\b(?:asking|asks|requesting|requests)\b"#,
+        #"(?i)\b(?:draft|email|message|note)\b(?:[^.]|\.(?=\S)){0,40}\b(?:being (?:composed|drafted|written)|composed to|addressed to)\b(?:[^.]|\.(?=\S)){0,60}\b(?:asking|asks|requesting|requests)\b"#,
       options: .regularExpression) != nil
     {
       return true
