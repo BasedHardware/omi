@@ -316,6 +316,22 @@ OAuth is required for user authentication. You need to configure both Google and
     ```
 
     Edit `.env` and fill in your API keys (see [Environment Variables](#environment-variables) below).
+
+    For a self-hosted backend used by an existing Omi mobile build, set the
+    Firebase token audience separately from your data project:
+
+    ```dotenv
+    # Stock development/community Omi mobile builds mint tokens for this project.
+    FIREBASE_AUTH_PROJECT_ID=based-hardware-dev
+
+    # Your own Google Cloud/Firebase project for Firestore and other backend data.
+    FIREBASE_PROJECT_ID=your-self-hosted-project
+    ```
+
+    Firebase ID tokens are verified with the issuer's public signing keys, so
+    `FIREBASE_AUTH_PROJECT_ID` does not require Omi service-account credentials.
+    Do not enable `LOCAL_DEVELOPMENT` on an internet-accessible deployment: that
+    mode intentionally bypasses authentication for local harnesses.
   </Step>
 </Steps>
 
