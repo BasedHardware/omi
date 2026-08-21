@@ -5,6 +5,14 @@ import type {
   OpenedBinding,
   RuntimeAdapter,
 } from "../adapters/interface.js";
+import { adapterCapabilitiesFor, isProductionAdapterId } from "../adapters/interface.js";
+import { routeAgentRequest, type AgentRoute } from "./agent-routing.js";
+import type { AdapterCandidate, AgentTaskRequirements } from "./adapter-scoring.js";
+import {
+  AGENT_FALLBACK_CHAIN_KEY,
+  AGENT_FALLBACK_FROM_KEY,
+  type AgentFallbackPlan,
+} from "./agent-fallback.js";
 import type { OutboundMessage } from "../protocol.js";
 import { AdapterRegistry } from "./adapter-registry.js";
 import { AdapterRuntimeError, failureFromError } from "./failures.js";
@@ -445,6 +453,108 @@ export class AgentRuntimeKernel extends KernelSessions {
       executionRole = "leaf";
     }
     return { executionRole, surfaceKind };
+  }
+
+  /**
+   * The registered adapters, paired with their declared capabilities, as
+   * selection candidates. Placeholder adapters are excluded — they are
+   * registerable but cannot run a task.
+   */
+  private connectedAdapterCandidates(): readonly AdapterCandidate[] {
+    return this.registry
+      .adapterIds()
+      .filter(isProductionAdapterId)
+      .map((adapterId) => ({ adapterId, capabilities: adapterCapabilitiesFor(adapterId) }));
+  }
+
+  /**
+   * Resolve which agent should run an utterance, against the adapters actually
+   * registered in this runtime.
+   *
+   * Callers use this when no adapter was named explicitly in the request. It
+   * returns a decision only — `install_required` and `no_agent_available` are
+   * answers for the user, not failures — and the caller still passes the chosen
+   * provider through the normal `applyDesktopIntentEffect` authority checks.
+   */
+  resolveAgentRoute(
+    utterance: string,
+    requirements?: AgentTaskRequirements,
+  ): AgentRoute {
+    return routeAgentRequest({
+      utterance,
+      connected: this.connectedAdapterCandidates(),
+      requirements,
+    });
+  }
+
+  /**
+   * Everything needed to retry a failed run on the next agent in its chain, or
+   * null when that run has no untried agents left.
+   *
+   * The kernel exposes the facts; it does not decide whether to retry. The
+   * policy lives in agent-fallback.ts, which is what the daemon subscribes.
+   */
+  agentFallbackPlanForRun(runId: string): AgentFallbackPlan | null {
+    let run: AgentRun;
+    try {
+      run = this.readRun(runId);
+    } catch {
+      return null;
+    }
+
+    const input = parseJsonObject(run.inputJson) as Record<string, unknown>;
+    const rawMetadata = input.metadata;
+    const metadata =
+      rawMetadata && typeof rawMetadata === "object" && !Array.isArray(rawMetadata)
+        ? (rawMetadata as Record<string, unknown>)
+        : {};
+    const chain = metadata[AGENT_FALLBACK_CHAIN_KEY];
+    if (!Array.isArray(chain)) return null;
+
+    const untried = chain.filter((id): id is string => typeof id === "string" && id.length > 0);
+    if (untried.length === 0) return null;
+
+    const prompt = typeof input.prompt === "string" ? input.prompt : "";
+    if (!prompt) return null;
+
+    let session: AgentSession;
+    try {
+      session = this.readSession(run.sessionId);
+    } catch {
+      return null;
+    }
+
+    const [nextAdapterId, ...remainingChain] = untried;
+    // The session is pinned to the agent that ran, so its default adapter is
+    // the one that just failed.
+    const failedAdapterId = session.defaultAdapterId;
+    const previouslyFailed = Array.isArray(metadata[AGENT_FALLBACK_FROM_KEY])
+      ? (metadata[AGENT_FALLBACK_FROM_KEY] as unknown[]).filter(
+          (id): id is string => typeof id === "string",
+        )
+      : [];
+    // The remainder is carried forward so each retry shortens the chain and the
+    // sequence always terminates; the failed-agent trail grows alongside it so
+    // the surface can name every agent that was tried.
+    const nextMetadata = {
+      ...metadata,
+      [AGENT_FALLBACK_CHAIN_KEY]: remainingChain,
+      [AGENT_FALLBACK_FROM_KEY]: [...previouslyFailed, failedAdapterId],
+    };
+
+    return {
+      ownerId: session.ownerId,
+      sessionId: run.sessionId,
+      failedRunId: run.runId,
+      clientId: run.clientId,
+      requestId: run.requestId,
+      prompt,
+      cwd: run.cwd ?? undefined,
+      failedAdapterId,
+      nextAdapterId,
+      remainingChain,
+      metadata: nextMetadata,
+    };
   }
 
   private desktopIntentAuthority(

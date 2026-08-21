@@ -65,11 +65,24 @@ const EXTERNAL_ADAPTER_ENV_ALLOWLIST = [
   "SSL_CERT_FILE",
   "SSL_CERT_DIR",
   "NODE_EXTRA_CA_CERTS",
-  // Adapter-specific home directory. Swift seeds HERMES_HOME before launching
-  // the Node bridge; forwarding it lets the spawned `hermes acp` subprocess
-  // locate its config/state instead of falling back to defaults.
-  "HERMES_HOME",
 ] as const;
+
+/**
+ * Environment each external adapter needs that no other adapter should see.
+ *
+ * Keyed by adapter id rather than added to the shared allowlist above: an
+ * adapter's own credentials and config paths are exactly the values that must
+ * not reach the *other* untrusted commands Omi spawns. Codex authenticates with
+ * an OpenAI key, so it receives one; Hermes and OpenClaw must not.
+ */
+const ADAPTER_SPECIFIC_ENV_ALLOWLIST: Partial<Record<ProductionAdapterId, readonly string[]>> = {
+  // Swift seeds HERMES_HOME before launching the Node bridge; forwarding it
+  // lets the spawned `hermes acp` subprocess locate its config/state.
+  hermes: ["HERMES_HOME"],
+  // The codex-acp bridge auths through the codex CLI's own login (CODEX_HOME)
+  // or an API key. Scoped here so the key reaches Codex and nothing else.
+  codex: ["CODEX_HOME", "OPENAI_API_KEY", "CODEX_API_KEY"],
+};
 
 /**
  * Proxy environment variable names that may carry embedded credentials
@@ -313,7 +326,11 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       const externalEnv: NodeJS.ProcessEnv = {
         OMI_ADAPTER_ID: this.adapterId,
       };
-      for (const key of EXTERNAL_ADAPTER_ENV_ALLOWLIST) {
+      const allowedKeys = [
+        ...EXTERNAL_ADAPTER_ENV_ALLOWLIST,
+        ...(ADAPTER_SPECIFIC_ENV_ALLOWLIST[this.adapterId] ?? []),
+      ];
+      for (const key of allowedKeys) {
         if (process.env[key] !== undefined) {
           // Proxy URLs may carry embedded credentials (user:pass@host).
           // Strip them before forwarding to untrusted subprocesses.

@@ -104,6 +104,7 @@ import {
   adapterIdForHarnessMode,
   ensureRegisteredAdapter,
 } from "./runtime/adapter-selection.js";
+import { createAgentFallbackSupervisor } from "./runtime/agent-fallback.js";
 import {
   SWIFT_ADVERTISED_AGENT_CONTROL_TOOL_NAMES,
   handleAgentControlToolCall,
@@ -1582,6 +1583,14 @@ async function main(): Promise<void> {
     },
   });
   kernel.subscribe(rejectPendingToolCallsForKernelEvent);
+  // Cross-agent fallback. A spawn returns before its adapter runs, so the only
+  // place a dead agent can be observed is the terminal run event; the supervisor
+  // retries the task on the next agent the router ranked.
+  kernel.subscribe(createAgentFallbackSupervisor({
+    planForRun: (runId) => kernel.agentFallbackPlanForRun(runId),
+    spawn: (input) => kernel.spawnBackgroundAgent(input),
+    log: logErr,
+  }));
   runtimeKernel = kernel;
   let piMonoClasses: typeof import("./adapters/pi-mono.js") | undefined;
   let piMonoAuthToken = process.env.OMI_AUTH_TOKEN;
@@ -1624,8 +1633,16 @@ async function main(): Promise<void> {
       onCreate: (adapter) => localAcpAdapters.add(adapter),
     });
   };
+  const ensureCodexAdapter = async (): Promise<boolean> => {
+    return ensureRegisteredAdapter(registry, "codex", {
+      log: logErr,
+      maxWorkers: 1,
+      onCreate: (adapter) => localAcpAdapters.add(adapter),
+    });
+  };
   const hermesAvailable = await ensureHermesAdapter();
   const openClawAvailable = await ensureOpenClawAdapter();
+  const codexAvailable = await ensureCodexAdapter();
   if (!piMonoAvailable && defaultAdapterId === "pi-mono" && process.env.OMI_AGENT_ALLOW_CONTROL_ONLY !== "1") {
     const msg = "pi-mono mode requires OMI_AUTH_TOKEN (Firebase ID token); refusing to start";
     logErr(msg);
@@ -1642,6 +1659,12 @@ async function main(): Promise<void> {
   }
   if (!openClawAvailable && defaultAdapterId === "openclaw") {
     const msg = adapterActivationError("openclaw") ?? "OpenClaw adapter is unavailable.";
+    logErr(msg);
+    send({ type: "error", message: msg });
+    process.exit(1);
+  }
+  if (!codexAvailable && defaultAdapterId === "codex") {
+    const msg = adapterActivationError("codex") ?? "Codex adapter is unavailable.";
     logErr(msg);
     send({ type: "error", message: msg });
     process.exit(1);

@@ -358,6 +358,47 @@ cd desktop/macos && ./scripts/agent-logic-harness.sh
 ```
 It is self-driving for agents: it runs the risky Swift lifecycle/state tests, focused agent runtime tests, exact `pi-mono-extension` package tests, and prints per-step runtime. Use `--swift-only`, `--node-only`, or `--skip-install` only when narrowing a failure.
 
+### Agent Routing (spoken agent selection)
+
+A task can name its agent out loud ("use codex to fix this"). Selection is
+deterministic — no model in the loop — and lives in `desktop/macos/agent/src/runtime/`:
+
+| Module | Answers |
+|---|---|
+| `agent-mention.ts` | Which agent did the user name, and which did they rule out |
+| `adapter-scoring.ts` | Which connected agents can do this task, best first |
+| `agent-install.ts` | What to tell a user who named an agent they have not installed |
+| `agent-routing.ts` | Composes the three into one decision |
+| `agent-fallback.ts` | Retries a failed run on the next agent in the chain |
+
+Rules (fail the PR if any break):
+1. **Selection reads the capability matrix, never a model.** `DesktopIntentRouter`
+   documents that it has no language heuristics; keep string matching at the
+   surface and capability facts in `adapters/interface.ts`. An agent that
+   declares `supportsTools: false` is ineligible for a tool task as a fact.
+2. **An explicitly requested adapter is never substituted.** A caller that passes
+   `adapterId` gets exactly that agent; only an unnamed task may be ranked.
+3. **A ruled-out agent is dropped from the chain, not just from selection.**
+   "don't use hermes" is not honoured by a runtime that starts elsewhere and then
+   falls back to Hermes.
+4. **Fallback reacts to the terminal run event, never to the spawn.**
+   `spawnBackgroundAgent` returns a receipt and runs the adapter asynchronously
+   (`void execution` in `kernel-runs.ts`), so a spawn-time retry loop cannot
+   observe the failure it is meant to recover from. The untried chain rides on run
+   metadata (`agentFallbackChain`) and `agent-fallback.ts` subscribes to
+   `run.failed`. The retry records what it replaced in `agentFallbackFrom`.
+5. **Alias and negation rules are a cross-platform contract.** They are
+   implemented twice (macOS + Windows) and pinned by
+   `contracts/parity/agent_routing.json`; change behaviour by editing the fixture,
+   and both conformance suites must pass.
+
+External adapters are activated by command env vars, one per agent:
+`OMI_CODEX_ADAPTER_COMMAND`, `OMI_HERMES_ADAPTER_COMMAND`,
+`OMI_OPENCLAW_ADAPTER_COMMAND`. Each external adapter also receives its own
+credentials only — `ADAPTER_SPECIFIC_ENV_ALLOWLIST` in `adapters/acp.ts` is keyed
+by adapter id, because these commands run under `shell: true` and one agent's API
+key must never reach another.
+
 ### Chat Continuity Write-Path Contract (INV-6)
 
 Invariant: Main Chat, Home chat, and floating/notch chat are one timeline over one

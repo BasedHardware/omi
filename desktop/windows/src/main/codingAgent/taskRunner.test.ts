@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { candidateAgents, cancelTask, runCodingAgentTask } from './taskRunner'
+import { agentsForTask, candidateAgents, cancelTask, runCodingAgentTask } from './taskRunner'
 import { AcpError } from './acp'
 import { ADAPTER_PROFILES, adapterConfiguredCommand, adapterIsActivated } from './adapterRegistry'
 import type {
@@ -115,6 +115,56 @@ describe('candidateAgents', () => {
   it('puts the named agent first with the rest as fallbacks', () => {
     activate('acp', 'openclaw', 'hermes')
     expect(candidateAgents('hermes', {})).toEqual(['hermes', 'acp', 'openclaw'])
+  })
+})
+
+describe('agentsForTask', () => {
+  beforeEach(() => {
+    vi.mocked(adapterIsActivated).mockReset()
+    vi.mocked(adapterConfiguredCommand).mockReturnValue(undefined)
+  })
+
+  it('runs the agent the prompt names', () => {
+    activate('acp', 'hermes', 'codex')
+    expect(agentsForTask({ prompt: 'use hermes to run the test suite' }, {})[0]).toBe('hermes')
+  })
+
+  it('still keeps the rest as fallbacks behind the named agent', () => {
+    activate('acp', 'hermes', 'codex')
+    expect(agentsForTask({ prompt: 'use hermes to fix this' }, {})).toEqual([
+      'hermes',
+      'acp',
+      'codex'
+    ])
+  })
+
+  it('drops an agent the prompt rules out, so no fallback lands on it', () => {
+    activate('acp', 'hermes')
+    expect(agentsForTask({ prompt: 'fix this, but do not use hermes' }, {})).toEqual(['acp'])
+  })
+
+  it('keeps the requested agent when another is ruled out in the same breath', () => {
+    activate('acp', 'hermes', 'codex')
+    expect(agentsForTask({ prompt: "don't use codex, use hermes" }, {})[0]).toBe('hermes')
+  })
+
+  it('leaves ordering untouched when the prompt names nobody', () => {
+    activate('acp', 'codex')
+    expect(agentsForTask({ prompt: 'fix the failing test' }, {})).toEqual(
+      candidateAgents(undefined, {})
+    )
+  })
+
+  it('never second-guesses an explicit agentId, whatever the prompt says', () => {
+    activate('acp', 'hermes', 'codex')
+    expect(agentsForTask({ agentId: 'codex', prompt: 'use hermes instead' }, {})[0]).toBe('codex')
+  })
+
+  it('ignores a spoken pi-mono, which is not a coding agent', () => {
+    // pi-mono is the default-chat engine; it is recognised as a name but must
+    // never become a coding-agent target.
+    activate('acp', 'codex')
+    expect(agentsForTask({ prompt: 'use pi mono for this' }, {})).toEqual(['acp', 'codex'])
   })
 })
 

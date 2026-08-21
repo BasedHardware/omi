@@ -21,6 +21,7 @@ cross-platform decision instead of a single-platform drive-by.
 | `day_keys.json` | Local-calendar-day identity of a UTC instant (conversation day grouping) |
 | `wire_action_item.json` | Action item wire decode: due_at instant equality across ISO offset forms, and the null / missing / unparseable agreement set |
 | `section_labels.json` | Relative day labels (Today / Yesterday / Tomorrow) as calendar-day relationships, including DST transition days |
+| `agent_routing.json` | Which coding agent a spoken task names: alias matching on word boundaries, and clause-scoped negation |
 
 ## Conformance suites
 
@@ -30,6 +31,19 @@ cross-platform decision instead of a single-platform drive-by.
 | Flutter app | `app/test/parity/parity_contracts_test.dart` | `app/test.sh`, CI Flutter tests |
 | Windows desktop | `desktop/windows/src/renderer/src/lib/parityContracts.test.ts` | `npm test` in `desktop/windows`, CI Desktop Windows tests |
 | macOS desktop | Adapter pending. The fixtures already encode the macOS model (`fold_overdue`, `categoryFor` in `desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift`); a `ParityContractsTests.swift` reading this directory is the follow-up for a machine that can run the Swift test lane. |
+
+`agent_routing.json` is a runtime rule rather than a renderer one, so it has its own
+per-platform suites alongside the table above:
+
+| Platform | Suite | Runs |
+|---|---|---|
+| macOS agent runtime | `desktop/macos/agent/tests/parity-agent-routing.test.ts` | `npm test` in `desktop/macos/agent` |
+| Windows main process | `desktop/windows/src/main/codingAgent/parityAgentRouting.test.ts` | `npm test` in `desktop/windows` |
+
+Its first run earned the contract: the Windows port compiled its alias table from
+`PRODUCTION_ADAPTER_IDS`, which deliberately omits `pi-mono`, so Windows was deaf to
+"pi mono" while macOS still heard it. Fixed by iterating the alias table itself —
+recognising a spoken name is separate from being allowed to run the task.
 
 The backend suite validates every fixture file structurally (parseable, complete
 expectations, self-consistent day-key arithmetic) so a malformed fixture cannot pass
