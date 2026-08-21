@@ -109,19 +109,19 @@ class _ObservedClientJourneyStream(AsyncIterator[_StreamItem]):
 
     async def aclose(self) -> None:
         if self._iterator is None:
-            self._attempt._abandon_stream()
+            self._attempt.abandon_stream()
             return
         close = getattr(self._iterator, 'aclose', None)
         if close is not None:
             await close()
         if not self._attempt.finished:
-            self._attempt._abandon_stream()
+            self._attempt.abandon_stream()
 
     def __del__(self) -> None:
         attempt = getattr(self, '_attempt', None)
         if attempt is not None and not attempt.finished:
             try:
-                attempt._abandon_stream()
+                attempt.abandon_stream()
             except Exception:
                 # Object finalizers may run during interpreter shutdown.
                 pass
@@ -252,7 +252,9 @@ class ClientJourneyAttempt:
     def cancel(self) -> None:
         self.finish('cancelled')
 
-    def _abandon_stream(self) -> None:
+    def abandon_stream(self) -> None:
+        """Terminalize an attached stream that was not exhausted."""
+
         self._stream_active = False
         self._stream_attached = False
         self.cancel()
@@ -290,7 +292,7 @@ class ClientJourneyAttempt:
                             success_observed = True
                     yield item
             except (asyncio.CancelledError, GeneratorExit, ClientDisconnect, OSError):
-                self._abandon_stream()
+                self.abandon_stream()
                 raise
             except BaseException:
                 self._stream_active = False

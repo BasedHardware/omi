@@ -13,7 +13,7 @@ unattributable population into misleading telemetry. Once those clients send
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Literal, cast
+from typing import Literal
 
 ClientJourneyName = Literal[
     'desktop_chat',
@@ -125,28 +125,22 @@ def _bounded(value: object | None, *, max_length: int = 128) -> str:
 
 def bounded_client_journey(value: object | None) -> ClientJourneyName:
     normalized = _bounded(value)
-    return cast(ClientJourneyName, normalized if normalized in _CLIENT_JOURNEY_SET else 'unknown')
+    return normalized if normalized in _CLIENT_JOURNEY_SET else 'unknown'
 
 
 def bounded_client_journey_outcome(value: object | None) -> ClientJourneyOutcome:
     normalized = _bounded(value)
-    return cast(
-        ClientJourneyOutcome,
-        normalized if normalized in _CLIENT_JOURNEY_OUTCOME_SET else 'unknown',
-    )
+    return normalized if normalized in _CLIENT_JOURNEY_OUTCOME_SET else 'unknown'
 
 
 def bounded_client_journey_issue_class(value: object | None) -> ClientJourneyIssueClass:
     normalized = _bounded(value)
-    return cast(
-        ClientJourneyIssueClass,
-        normalized if normalized in _CLIENT_JOURNEY_ISSUE_CLASS_SET else 'unknown',
-    )
+    return normalized if normalized in _CLIENT_JOURNEY_ISSUE_CLASS_SET else 'unknown'
 
 
 def bounded_client_kind(value: object | None) -> ClientKind:
     normalized = _bounded(value)
-    return cast(ClientKind, normalized if normalized in _CLIENT_KIND_SET else 'unknown')
+    return normalized if normalized in _CLIENT_KIND_SET else 'unknown'
 
 
 def resolve_client_kind(*, x_app_platform: object | None, user_agent: object | None) -> ClientKind:
