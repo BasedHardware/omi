@@ -638,16 +638,13 @@ public class ProactiveAssistantsPlugin: NSObject {
     windowID: CGWindowID, seconds: TimeInterval
   ) async -> ScreenCaptureService.WindowCaptureResult? {
     guard let service = screenCaptureService else { return nil }
-    return await withTaskGroup(of: ScreenCaptureService.WindowCaptureResult?.self) { group in
-      group.addTask { await service.captureWindowCGImage(windowID: windowID) }
-      group.addTask {
+    return await AsyncFirstResolved.run(
+      { await service.captureWindowCGImage(windowID: windowID) },
+      {
         try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
         return nil
       }
-      let first = await group.next() ?? nil
-      group.cancelAll()
-      return first
-    }
+    )
   }
 
   /// A dwell refresh must capture its own frame: the preview-skip path starves
