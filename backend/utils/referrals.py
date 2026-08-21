@@ -82,7 +82,7 @@ def referrer_uid_from_code(code: str, *, secret: Optional[bytes] = None) -> str:
 
 
 def referral_link(uid: str, *, secret: Optional[bytes] = None, public_base_url: Optional[str] = None) -> str:
-    base_url = (public_base_url or os.getenv('REFERRAL_PUBLIC_BASE_URL') or 'https://api.omi.me').rstrip('/')
+    base_url = (public_base_url or os.getenv('REFERRAL_PUBLIC_BASE_URL') or 'https://omi.me').rstrip('/')
     return f'{base_url}/r/{create_referral_code(uid, secret=secret)}'
 
 
