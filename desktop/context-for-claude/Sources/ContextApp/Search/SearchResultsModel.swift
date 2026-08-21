@@ -246,7 +246,14 @@ final class SearchResultsModel: ObservableObject {
     ///   again" is a question, so it must not be de-duplicated away.
     func ask(_ text: String) {
         query = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Asked before the reload, because the reload is what closes over it: `reload()` returns
+        // early when the capture database is not open yet, leaving `totalCount` holding the
+        // *previous* question's answer. Reporting then would bucket one query's result count
+        // against another's — and a search that never ran is not a search. The emit used to live
+        // inside `reload()` past this same guard, so this keeps the behaviour it always had.
+        let storeWasOpen = store() != nil
         reload()
+        guard storeWasOpen else { return }
         report(Self.searchEvents(
             query: query, resultCount: totalCount, isFirstOfSession: !hasReportedTheSearchSurface))
     }
