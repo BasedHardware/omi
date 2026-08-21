@@ -1482,12 +1482,40 @@ def _save_action_items(uid: str, conversation: Conversation, people: Sequence[Pe
     if not conversation.structured:
         return
 
-    wake_word_gate = conversation_capture.prepare_wake_word_capture_gate(uid, conversation, people)
+    try:
+        wake_word_gate = conversation_capture.prepare_wake_word_capture_gate(uid, conversation, people)
+    except Exception:
+        logger.exception(f"wake-word capture gate failed for conversation {conversation.id}")
+        record_fallback(
+            component='other',
+            from_mode='wake_word_gate',
+            to_mode='ungated_capture',
+            reason='other',
+            outcome='degraded',
+        )
+        wake_word_gate = None
     if not conversation.structured.action_items:
         return
 
     is_locked = conversation.is_locked
-    if conversation_capture.process_conversation_before_legacy(uid, conversation, wake_word_gate):
+    try:
+        captured_canonically = conversation_capture.process_conversation_before_legacy(
+            uid, conversation, wake_word_gate
+        )
+    except Exception:
+        # Everything above the compatibility writer runs before any task row exists, so an
+        # exception here used to drop the conversation's tasks entirely: the writer below
+        # never ran and the executor discarded the traceback.
+        logger.exception(f"canonical task capture failed for conversation {conversation.id}")
+        record_fallback(
+            component='other',
+            from_mode='canonical_task_capture',
+            to_mode='legacy_action_items',
+            reason='other',
+            outcome='degraded',
+        )
+        captured_canonically = False
+    if captured_canonically:
         emit_product_event(
             uid=uid,
             event='Task Extracted',

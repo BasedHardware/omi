@@ -118,6 +118,20 @@ def prepare_wake_word_capture_gate(
     )
 
 
+def _evidence_seconds(value: Any) -> float | None:
+    """Clamp a segment offset to the non-negative range EvidenceRef accepts.
+
+    Segment offsets are relative to conversation start and audio-merge arithmetic
+    lands them marginally below zero (-1e-07 is common, whole seconds happen when a
+    synced file predates the conversation). Evidence offsets are absolute positions,
+    so the floor is zero rather than a validation error.
+    """
+
+    if not isinstance(value, (int, float)):
+        return None
+    return max(0.0, float(value))
+
+
 def _conversation_evidence_ref(
     action_item: Any,
     conversation_id: str,
@@ -130,8 +144,8 @@ def _conversation_evidence_ref(
         id=conversation_id,
         scope=EvidenceScope.canonical,
         transcript_segment_ids=[segment.id for segment in supporting_segments],
-        start_seconds=min((segment.start for segment in supporting_segments), default=None),
-        end_seconds=max((segment.end for segment in supporting_segments), default=None),
+        start_seconds=_evidence_seconds(min((segment.start for segment in supporting_segments), default=None)),
+        end_seconds=_evidence_seconds(max((segment.end for segment in supporting_segments), default=None)),
     )
 
 
@@ -172,6 +186,21 @@ def canonical_fields(
 
 def canonical_conversation_fields(action_item: Any, conversation: Any) -> dict[str, Any]:
     return canonical_fields(action_item, conversation.id, getattr(conversation, 'transcript_segments', ()) or ())
+
+
+_CAPTURE_ACCEPT_OUTCOMES = frozenset({'auto_accept_silent', 'create_direct', 'pending_candidate'})
+
+
+def _accepts_on_capture(decision: Any, proposal: Any) -> bool:
+    """Return whether a conversation capture resolves itself instead of waiting for review.
+
+    Conversation capture reaches every client, and only macOS reads the Candidate
+    review surface. A parked ``create`` therefore never becomes a task for mobile
+    users, so this surface accepts every proposed create and leaves only mutations
+    of existing tasks (update/complete) for explicit review.
+    """
+
+    return proposal.proposed_action == CandidateAction.create and decision.policy.outcome in _CAPTURE_ACCEPT_OUTCOMES
 
 
 def process_before_legacy(
@@ -218,7 +247,7 @@ def process_before_legacy(
             idempotency_key=_idempotency_key(conversation_id, semantic_key, occurrence),
             account_generation=control.account_generation,
         )
-        if decision.policy.outcome in {'auto_accept_silent', 'create_direct'}:
+        if _accepts_on_capture(decision, proposal):
             candidate_service.accept_candidate(
                 uid,
                 candidate.candidate_id,
