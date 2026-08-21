@@ -1,6 +1,6 @@
 {
   "annotate_overrides": 1,
-  "avoid_print": 30,
+  "avoid_print": 29,
   "avoid_renaming_method_parameters": 1,
   "avoid_unnecessary_containers": 2,
   "constant_identifier_names": 8,
