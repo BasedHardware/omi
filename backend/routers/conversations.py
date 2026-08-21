@@ -416,8 +416,8 @@ def reprocess_conversation(
     if conversations_db.is_soft_deleted(conversation):
         raise HTTPException(status_code=404, detail="Conversation not found")
 
-    # Stuck "processing" conversations (#5097): after 30 minutes, clear the admit
-    # fence so force_process can run again.
+    # Stuck "processing" conversations (#5097): after 30 minutes, close the
+    # admission via the lifecycle owner so force_process can run again.
     if conversation.get('status') == ConversationStatus.processing.value:
         admitted_at = conversation.get('processing_admitted_at')
         stuck = True
@@ -438,11 +438,11 @@ def reprocess_conversation(
                 status_code=409,
                 detail='Conversation is still processing; retry after it finishes or wait 30 minutes',
             )
-        conversations_db.update_conversation(
-            uid,
-            conversation_id,
-            {'status': ConversationStatus.completed.value, 'processing_admitted_at': None},
-        )
+        if not lifecycle_service.complete(uid, conversation_id):
+            raise HTTPException(
+                status_code=409,
+                detail='Conversation processing state changed; retry reprocess',
+            )
         conversation = _get_valid_conversation_by_id(uid, conversation_id)
 
     conversation = deserialize_conversation(conversation)
