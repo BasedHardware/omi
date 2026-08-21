@@ -6,7 +6,7 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-08-19 (durable meeting receipt and reconciliation)
+> Last updated: 2026-08-19 (durable meeting receipt; bounded client-kind propagation)
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, STT providers, embedding API). Update when the
@@ -17,7 +17,10 @@ Audio frames (`101`) require the four-byte opcode, an eight-byte timestamp, and
 PCM payload; JSON opcodes require an object payload, with transcript, finalization,
 and speaker-sample fields validated before they enter background queues. Malformed
 or unknown frames close the session with a protocol error instead of reaching
-application processing.
+application processing. The backend-to-Pusher WebSocket query also carries the
+bounded `client_kind` resolved from the listen connection headers. Pusher forwards
+that bounded value to webhook delivery and inline finalization journey metrics;
+it never forwards a raw client header as a metric label.
 
 Transcript, speaker-sample, audio-webhook, and private-cloud queues are bounded.
 Buffered audio also shares a per-session byte budget, so variable-size payloads

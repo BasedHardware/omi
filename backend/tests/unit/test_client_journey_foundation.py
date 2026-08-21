@@ -375,6 +375,9 @@ def test_recorders_are_fail_open_and_still_report_their_own_breakage(monkeypatch
         journeys.record_client_journey_terminal(
             'desktop_chat', 'desktop_macos', 'failure', 1.0, issue_class='provider_error'
         )
+        broken_job = MagicMock()
+        broken_job.get.side_effect = RuntimeError('provenance lookup failed')
+        journeys.record_conversation_finalization_client_terminal('success', broken_job, client_kind='mobile_ios')
 
     assert 'client_journey_metric_record_failed' in caplog.text
 

@@ -71,6 +71,7 @@ from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
 from utils.request_validation import NonNegativeOffset, PositiveLimit
+from utils.journey_metrics_contract import resolve_client_kind
 from utils.product_telemetry import emit_product_event
 from utils.conversations.calendar_linking import (
     get_overlapping_calendar_event,
@@ -334,6 +335,7 @@ def finalize_conversation(
             force_process=True,
             extra_updates=extra_updates or None,
             require_cloud_tasks=True,
+            client_kind=resolve_client_kind(x_app_platform=conversation.client_platform, user_agent=None),
         )
     except lifecycle_service.FinalizationDispatchUnavailable as error:
         raise HTTPException(status_code=503, detail='Conversation finalization is temporarily unavailable') from error

@@ -297,38 +297,54 @@ class TestDurableExternalIntegrationFanout:
     async def test_finalization_delivery_sends_the_durable_idempotency_key(self):
         app = _make_app('app-1', 'https://app.test/hook')
         app.triggers_on_conversation_creation.return_value = True
-        conversation = types.SimpleNamespace(id='conversation-1', discarded=False, is_locked=False, source=None)
+        conversation = types.SimpleNamespace(
+            id='conversation-1', discarded=False, is_locked=False, source=None, client_platform='ios'
+        )
         response = MagicMock(status_code=200)
         response.json.return_value = {}
         client = AsyncMock()
         client.post = AsyncMock(return_value=response)
+        attempt = MagicMock()
 
         with patch.object(app_integrations, 'get_available_apps', return_value=[app]), patch.object(
             app_integrations, 'get_webhook_client', return_value=client
-        ), patch.object(app_integrations, 'conversation_to_dict', return_value={}):
+        ), patch.object(app_integrations, 'conversation_to_dict', return_value={}), patch.object(
+            app_integrations, 'ClientJourneyAttempt', return_value=attempt
+        ) as journey_factory:
             await app_integrations.trigger_external_integrations(
                 'uid-1', conversation, idempotency_key='fanout-1', require_delivery=True
             )
 
         assert client.post.call_args.kwargs['headers'] == {'X-Omi-Idempotency-Key': 'fanout-1'}
+        journey_factory.assert_called_once_with('app_webhook_delivery', 'mobile_ios')
+        attempt.succeed.assert_called_once_with()
+        attempt.fail.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_finalization_delivery_failure_remains_retryable(self):
         app = _make_app('app-1', 'https://app.test/hook')
         app.triggers_on_conversation_creation.return_value = True
-        conversation = types.SimpleNamespace(id='conversation-1', discarded=False, is_locked=False, source=None)
+        conversation = types.SimpleNamespace(
+            id='conversation-1', discarded=False, is_locked=False, source=None, client_platform='ios'
+        )
         response = MagicMock(status_code=503, text='unavailable')
         client = AsyncMock()
         client.post = AsyncMock(return_value=response)
+        attempt = MagicMock()
 
         with patch.object(app_integrations, 'get_available_apps', return_value=[app]), patch.object(
             app_integrations, 'get_webhook_client', return_value=client
-        ), patch.object(app_integrations, 'conversation_to_dict', return_value={}), pytest.raises(
+        ), patch.object(app_integrations, 'conversation_to_dict', return_value={}), patch.object(
+            app_integrations, 'ClientJourneyAttempt', return_value=attempt
+        ), pytest.raises(
             app_integrations.ExternalIntegrationFanoutError
         ):
             await app_integrations.trigger_external_integrations(
                 'uid-1', conversation, idempotency_key='fanout-1', require_delivery=True
             )
+
+        attempt.fail.assert_called_once_with('upstream_rejected')
+        attempt.succeed.assert_not_called()
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize('status_code', [400, 401, 404])

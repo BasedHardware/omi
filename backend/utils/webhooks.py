@@ -22,6 +22,8 @@ from utils.conversations.render import populate_speaker_names, populate_folder_n
 from utils.conversations.render import conversation_to_dict
 from utils.executors import db_executor, run_blocking
 from utils.http_client import get_webhook_client, get_webhook_circuit_breaker, get_webhook_semaphore
+from utils.journey_metrics_contract import ClientKind, bounded_client_kind, resolve_client_kind
+from utils.observability.journeys import ClientJourneyAttempt
 from utils.notifications import send_notification
 import logging
 
@@ -206,8 +208,13 @@ async def conversation_created_webhook(uid, memory: Conversation):
         if not webhook_url:
             return
         webhook_url = _append_query_params(webhook_url, {'uid': uid})
+        journey_attempt = ClientJourneyAttempt(
+            'app_webhook_delivery',
+            resolve_client_kind(x_app_platform=getattr(memory, 'client_platform', None), user_agent=None),
+        )
         cb = get_webhook_circuit_breaker(webhook_url)
         if not cb.allow_request():
+            journey_attempt.fail('dependency_unavailable')
             logger.info(f'memory_created_webhook: circuit breaker open for {webhook_url[:80]}')
             return
         try:
@@ -219,9 +226,11 @@ async def conversation_created_webhook(uid, memory: Conversation):
                 headers={'Content-Type': 'application/json'},
             )
             if response.status_code >= 200 and response.status_code < 300:
+                journey_attempt.succeed()
                 cb.record_success()
                 await run_blocking(db_executor, record_dev_webhook_success, uid, WebhookType.memory_created)
             else:
+                journey_attempt.fail('upstream_rejected')
                 cb.record_failure()
                 should_disable = await run_blocking(
                     db_executor,
@@ -233,6 +242,7 @@ async def conversation_created_webhook(uid, memory: Conversation):
                 )
                 await _handle_dev_webhook_disable(uid, WebhookType.memory_created, should_disable)
         except Exception as e:
+            journey_attempt.fail('upstream_timeout' if isinstance(e, TimeoutError) else 'provider_error')
             cb.record_failure()
             should_disable = await run_blocking(
                 db_executor, record_dev_webhook_failure, uid, WebhookType.memory_created, 0, type(e).__name__
@@ -298,7 +308,7 @@ async def day_summary_webhook(uid, summary: str, summary_json: Optional[dict] = 
         return
 
 
-async def realtime_transcript_webhook(uid, segments: List[dict]):
+async def realtime_transcript_webhook(uid, segments: List[dict], *, client_kind: ClientKind = 'unknown'):
     logger.info(f"realtime_transcript_webhook {uid}")
     toggled = await run_blocking(db_executor, user_webhook_status_db, uid, WebhookType.realtime_transcript)
 
@@ -307,8 +317,10 @@ async def realtime_transcript_webhook(uid, segments: List[dict]):
         if not webhook_url:
             return
         webhook_url = _append_query_params(webhook_url, {'uid': uid})
+        journey_attempt = ClientJourneyAttempt('app_webhook_delivery', bounded_client_kind(client_kind))
         cb = get_webhook_circuit_breaker(webhook_url)
         if not cb.allow_request():
+            journey_attempt.fail('dependency_unavailable')
             logger.info(f'realtime_transcript_webhook: circuit breaker open for {webhook_url[:80]}')
             return
         try:
@@ -319,6 +331,7 @@ async def realtime_transcript_webhook(uid, segments: List[dict]):
                 headers={'Content-Type': 'application/json'},
             )
             if response.status_code >= 200 and response.status_code < 300:
+                journey_attempt.succeed()
                 cb.record_success()
                 await run_blocking(db_executor, record_dev_webhook_success, uid, WebhookType.realtime_transcript)
                 try:
@@ -332,6 +345,7 @@ async def realtime_transcript_webhook(uid, segments: List[dict]):
                 except Exception:
                     pass
             else:
+                journey_attempt.fail('upstream_rejected')
                 cb.record_failure()
                 should_disable = await run_blocking(
                     db_executor,
@@ -343,6 +357,7 @@ async def realtime_transcript_webhook(uid, segments: List[dict]):
                 )
                 await _handle_dev_webhook_disable(uid, WebhookType.realtime_transcript, should_disable)
         except Exception as e:
+            journey_attempt.fail('upstream_timeout' if isinstance(e, TimeoutError) else 'provider_error')
             cb.record_failure()
             should_disable = await run_blocking(
                 db_executor, record_dev_webhook_failure, uid, WebhookType.realtime_transcript, 0, type(e).__name__

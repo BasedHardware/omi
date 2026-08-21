@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import threading
-from collections.abc import AsyncIterable, AsyncIterator, Callable
+from collections.abc import AsyncIterable, AsyncIterator, Callable, Mapping
 from datetime import datetime, timezone
 from time import monotonic
 from typing import Literal, TypeVar, cast
@@ -31,7 +31,10 @@ from utils.journey_metrics_contract import (
     bounded_client_journey_issue_class,
     bounded_client_journey_outcome,
     bounded_client_kind,
+    resolve_client_kind,
 )
+
+logger = logging.getLogger(__name__)
 
 JourneyName = Literal['chat_response', 'pusher_session', 'capture_finalization']
 JourneyOutcome = Literal['success', 'failure', 'cancelled', 'stale']
@@ -352,6 +355,38 @@ class ClientJourneyAttempt:
                     self.fail('incomplete_stream')
 
         return _ObservedClientJourneyStream(self, observed)
+
+
+def record_conversation_finalization_client_terminal(
+    outcome: object,
+    job: Mapping[str, object],
+    *,
+    client_kind: object | None = None,
+    issue_class: object | None = None,
+) -> None:
+    """Terminalize a client journey only when its originating client is known."""
+
+    def _record() -> None:
+        resolved_client_kind = client_kind
+        if resolved_client_kind is None:
+            if 'client_platform' not in job:
+                return
+            resolved_client_kind = resolve_client_kind(x_app_platform=job.get('client_platform'), user_agent=None)
+        accepted_at = job.get('created_at')
+        if not isinstance(accepted_at, datetime):
+            logger.warning('Conversation finalization client metric missing accepted timestamp')
+            return
+        if accepted_at.tzinfo is None:
+            accepted_at = accepted_at.replace(tzinfo=timezone.utc)
+        record_client_journey_terminal(
+            'conversation_finalization',
+            bounded_client_kind(resolved_client_kind),
+            outcome,
+            (datetime.now(timezone.utc) - accepted_at).total_seconds(),
+            issue_class=issue_class,
+        )
+
+    _record_fail_open('conversation finalization terminal', _record)
 
 
 def record_capture_finalization_terminal(outcome: JourneyOutcome, accepted_at: datetime | None) -> None:
