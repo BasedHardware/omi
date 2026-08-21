@@ -41,7 +41,8 @@ Guard names may be refined during implementation, but equivalent behavioral and 
 
 ## Path globs
 
-- deleted UID-cohort selectors and any attempted replacement
+Also binding, though not expressible as a glob: the deleted UID-cohort selectors, and any attempted replacement of them.
+
 - `backend/config/memory_rollout.py`
 - `backend/utils/memory/**`
 - `backend/database/memories.py`
