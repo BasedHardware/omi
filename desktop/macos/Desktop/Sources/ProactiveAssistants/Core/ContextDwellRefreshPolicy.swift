@@ -67,6 +67,25 @@ enum ContextDwellRefreshPolicy {
     return retryAnchor(now: now)
   }
 
+  /// One re-extraction per typing burst when an evaluation went silent with no
+  /// forced lookup: the extraction model stochastically omits the typed
+  /// question (~1 in 4 live runs), and without a second look the user's
+  /// question dies unanswered. Bounded on purpose — recent typing required, and
+  /// the burst stamp (wall time of the last key-down) may only be spent once,
+  /// so an idle screen or a repeat silence for the same burst never buys more
+  /// model calls.
+  static func questionRescueGrant(
+    lastRescueBurstStamp: Date?, currentBurstStamp: Date, keyboardIdleSeconds: TimeInterval
+  ) -> Bool {
+    guard keyboardIdleSeconds < 120 else { return false }
+    if let last = lastRescueBurstStamp,
+      abs(currentBurstStamp.timeIntervalSince(last)) < 3
+    {
+      return false
+    }
+    return true
+  }
+
   /// One grace follow-up per typing burst: after the first fired refresh the
   /// anchor moves to the fire time, so "typed since the anchor" could never
   /// re-trigger without NEW typing — and a refresh whose extraction returned

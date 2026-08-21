@@ -399,8 +399,19 @@ actor ContextProactivityEngine {
         }
       }
       let recentMessages = recentDeliveries.compactMap(\.message)
-      if let candidate = ContextProactiveCandidateLookup.firstDeliverable(
-        candidates: grounded, recentMessages: recentMessages)
+      // A question the user is typing RIGHT NOW outranks resurfacing an armed
+      // candidate: the candidate short-circuit used to consume the evaluation
+      // (and with the candidate show ceiling exhausted, silence it), so the
+      // typed question never reached the director or its forced retrieval —
+      // the bucket went permanently mute for answers while any candidate
+      // stayed armed. The candidate stays armed for the next quiet evaluation.
+      let pendingUserQuestion =
+        await MainActor.run { ContextBucketsFeature.isRetrievalHopEnabled }
+        && ContextDirectorRetrievalHop.forcedLookupQuery(
+          validatedFacts: snapshot.validatedFacts) != nil
+      if !pendingUserQuestion,
+        let candidate = ContextProactiveCandidateLookup.firstDeliverable(
+          candidates: grounded, recentMessages: recentMessages)
       {
         await evaluateCandidateAndDeliver(
           candidate: candidate,
@@ -418,6 +429,12 @@ actor ContextProactivityEngine {
     // must agree, and a mid-visit flag flip must not desynchronize them. With
     // the flag off, schema and prompt are byte-identical to the pre-hop build.
     let retrievalHopEnabled = await MainActor.run { ContextBucketsFeature.isRetrievalHopEnabled }
+    if !retrievalHopEnabled {
+      let diag = await MainActor.run {
+        "enabled=\(ContextBucketsFeature.isEnabled) nonprod=\(AppBuild.isNonProduction) env=\(ProcessInfo.processInfo.environment["OMI_FORCE_BUCKET_RETRIEVAL"] ?? "unset")"
+      }
+      log("ForcedLookupDebug: retrieval hop DISABLED (\(diag))")
+    }
     let prompt = ContextProactivityPromptBuilder.directorStablePrompt(
       snapshot: snapshot, allowLookup: retrievalHopEnabled)
     let envSignal = await MainActor.run {
@@ -647,6 +664,16 @@ actor ContextProactivityEngine {
         try await store.completeDelivery(
           id: deliveryID, decisionType: decision.decision, provenanceJSON: provenanceJSON,
           message: nil, state: "suppressed")
+        if forcedLookup == nil {
+          // Silence with no forced lookup right after typing is the signature
+          // of an extraction that missed the typed question; the plugin may
+          // grant one re-extraction for the burst (see
+          // ContextDwellRefreshPolicy.questionRescueGrant).
+          await MainActor.run {
+            NotificationCenter.default.post(
+              name: ProactiveAssistantsPlugin.contextEvalSilentWithoutLookup, object: nil)
+          }
+        }
         return
       }
       // Retrieved refs are hop-allowlist-validated above, so an insight or

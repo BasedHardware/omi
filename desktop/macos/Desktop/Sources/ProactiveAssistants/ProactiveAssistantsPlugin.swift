@@ -61,6 +61,7 @@ public class ProactiveAssistantsPlugin: NSObject {
   private var dwellContextAnchor: Date?
   private var dwellRefreshCount = 0
   private var dwellGeneration = 0
+  private var lastQuestionRescueBurstStamp: Date?
 
   private(set) var isMonitoring = false
   private var isStartingMonitoring = false  // Prevents race condition with async startMonitoring
@@ -226,6 +227,16 @@ public class ProactiveAssistantsPlugin: NSObject {
 
     // Set up system event observers for sleep/wake/lock recovery
     setupSystemEventObservers()
+
+    // A silent evaluation with no forced lookup right after typing gets ONE
+    // re-extraction: the extraction model stochastically omits the typed
+    // question, and this is the deterministic second chance (see
+    // ContextDwellRefreshPolicy.questionRescueGrant).
+    NotificationCenter.default.addObserver(
+      forName: Self.contextEvalSilentWithoutLookup, object: nil, queue: .main
+    ) { [weak self] _ in
+      Task { @MainActor in self?.grantQuestionRescueIfEarned() }
+    }
 
     // Listen for CLI-triggered test notifications
     setupTestNotificationListeners()
@@ -627,6 +638,26 @@ public class ProactiveAssistantsPlugin: NSObject {
   /// hardware and reads accessibility users' typing as idleness.
   private static func keyboardIdleSeconds() -> TimeInterval {
     CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .keyDown)
+  }
+
+  /// Posted by the engine when an evaluation ends in model-chosen silence with
+  /// no forced lookup armed — the signature of an extraction that missed the
+  /// typed question.
+  public static let contextEvalSilentWithoutLookup = Notification.Name(
+    "OmiContextEvalSilentWithoutLookup")
+
+  private func grantQuestionRescueIfEarned() {
+    let idle = Self.keyboardIdleSeconds()
+    let burstStamp = Date().addingTimeInterval(-idle)
+    guard
+      ContextDwellRefreshPolicy.questionRescueGrant(
+        lastRescueBurstStamp: lastQuestionRescueBurstStamp,
+        currentBurstStamp: burstStamp,
+        keyboardIdleSeconds: idle)
+    else { return }
+    lastQuestionRescueBurstStamp = burstStamp
+    dwellContextAnchor = ContextDwellRefreshPolicy.retryAnchor(now: Date())
+    log("Context dwell refresh: silent evaluation after typing; granting one re-extraction")
   }
 
   /// SCShareableContent resolution inside captureWindowCGImage can stall for
