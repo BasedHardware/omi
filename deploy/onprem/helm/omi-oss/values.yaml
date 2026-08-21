@@ -104,18 +104,34 @@ auth:
       storage: 2Gi
       password: ""   # required when db=postgres (dev overlay sets a throwaway value)
 chat:
-  # KNOWN GAP vs compose: this profile brings up the vector store (Qdrant) only. The chart ships NO
-  # llm_gateway workload and renders no OMI_LLM_GATEWAY_* env, while compose has both
-  # (compose.selfhost.yaml + backend.env.*). Without that wiring the backend would take its direct
-  # branch into the built-in cloud model table (gpt-*, gemini via Vertex, openrouter, perplexity),
-  # three of which have no base-URL override at all (openrouter, perplexity, the Vertex host). So on
-  # this target chat completion is NOT available and those features would reach a vendor. Retrieval
-  # and embeddings do work. Wiring the gateway here is tracked work, not a values switch, and the
-  # vendor-egress question is a decision of its own (a deployment MAY legitimately use the operator's
-  # own external OpenAI-compatible endpoint — ADR-0035 — so "external" is not the same as "cloud").
+  # Brings up the vector store (Qdrant) AND, with llmGateway below, the on-prem chat LLM path — the
+  # compose parity that used to be missing here. The backend only ever emits `omi:auto:<feature>` lane
+  # ids; the gateway is what resolves a lane to a concrete model, so without it the backend falls back
+  # to its built-in CLOUD model table (gpt-*, gemini via Vertex, openrouter, perplexity — and three of
+  # those have no base-URL override at all). The LLM itself stays the operator's (ADR-0035): the
+  # gateway forwards to inference.openai.baseUrl.
   enabled: false
   # Embedding dimension — MUST match the operator's embeddings model (compose default 1024, e.g. bge-m3).
   vectorDim: 1024
+  llmGateway:
+    # The chat completion path. Needs inference.openai.baseUrl (the operator's OpenAI-compatible
+    # endpoint) and chat.llmGateway.serviceToken. Off by default like every other profile switch.
+    enabled: false
+    # The single model your endpoint serves, by its /v1/chat/completions name. Every feature lane is
+    # pinned to it — the on-prem posture is one local model, not a per-feature vendor mix.
+    model: "qwen2.5:14b"
+    # Shared secret between backend and gateway. A mismatch is a 401 on every chat turn, which the
+    # user sees as a canned apology rather than an error: generate one and set it here.
+    #   openssl rand -hex 24
+    serviceToken: ""
+    # Feature lanes to pin. Mirrors deploy/onprem/llm_gateway/generated_route_overrides.yaml, which is
+    # what compose bind-mounts; keep the two in step.
+    features:
+      - app_generator
+      - chat_agent
+      - chat_extraction
+      - chat_graph
+    resources: {}
   qdrant:
     image: qdrant/qdrant@sha256:057ee3a8da769fe7310dd3537b4dc7583bf87a95ce8ac43c0af5a46bc580d1fc  # 1.19.0
     imagePullPolicy: IfNotPresent

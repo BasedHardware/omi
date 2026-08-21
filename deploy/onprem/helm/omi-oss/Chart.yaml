@@ -8,5 +8,5 @@ type: application
 # appVersion is this chart's PROJECTION of the stack release (deploy/onprem/omi.oss.release.env,
 # ADR-0054): it is the default tag of every image we build, and a CI check fails if the two drift.
 # Bump both together with the release; `version` also moves on template-only changes.
-version: 0.2.0
-appVersion: "0.2.0"
+version: 0.3.0
+appVersion: "0.3.0"

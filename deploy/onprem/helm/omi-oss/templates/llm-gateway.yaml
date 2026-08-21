@@ -1,0 +1,131 @@
+{{- if and .Values.chat.enabled .Values.chat.llmGateway.enabled }}
+{{- /*
+On-prem chat LLM gateway (D32, ADR-0035) — the Helm mirror of compose's `llm_gateway` service.
+
+Why it must exist at all: the backend never speaks a model name. It sends an `omi:auto:<feature>` LANE
+id, and only this service resolves a lane to a concrete model before forwarding OpenAI-compatibly to
+the operator's endpoint. A plain Ollama/vLLM therefore CANNOT be the target of OMI_LLM_GATEWAY_URL.
+Without this workload the backend falls back to its built-in cloud model table (gpt-*, gemini via
+Vertex, openrouter, perplexity) — three of whose providers have no base-URL override at all — which is
+exactly the parity gap this closes.
+
+It runs the SAME image as the backend (the gateway ships inside it), so there is no extra image to
+build, push or version: it inherits the release tag like every other workload (ADR-0054).
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: llm-gateway-routes
+  labels:
+    {{- include "omi-oss.labels" . | nindent 4 }}
+    app.kubernetes.io/component: llm-gateway
+data:
+  # Mounted OVER the image's committed cloud config, exactly as compose bind-mounts
+  # deploy/onprem/llm_gateway/generated_route_overrides.yaml. Every feature is pinned to the single
+  # model the operator's endpoint serves; `provider: openai` is the WIRE format, not a vendor.
+  generated_route_overrides.yaml: |
+    generated_route_overrides:
+    {{- range .Values.chat.llmGateway.features }}
+      - feature: {{ . }}
+        primary: {provider: openai, model: {{ $.Values.chat.llmGateway.model | quote }}}
+    {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-gateway
+  labels:
+    {{- include "omi-oss.labels" . | nindent 4 }}
+    app.kubernetes.io/component: llm-gateway
+spec:
+  selector:
+    app.kubernetes.io/component: llm-gateway
+    app.kubernetes.io/part-of: omi-oss
+  ports:
+    - name: http
+      port: 9080
+      targetPort: 9080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-gateway
+  labels:
+    {{- include "omi-oss.labels" . | nindent 4 }}
+    app.kubernetes.io/component: llm-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: llm-gateway
+      app.kubernetes.io/part-of: omi-oss
+  template:
+    metadata:
+      labels:
+        {{- include "omi-oss.labels" . | nindent 8 }}
+        app.kubernetes.io/component: llm-gateway
+      annotations:
+        # Roll the pod when the lane map changes, the same way the backend rolls on its configmap.
+        # Checksummed from the VALUES that generate the routes, not from this template: the ConfigMap
+        # lives in this same file, so including it here would recurse.
+        checksum/routes: {{ toYaml .Values.chat.llmGateway | sha256sum }}
+        # ALSO roll on a Secret change. Found live: the service token and OPENAI_API_KEY come from
+        # backend-secret via secretKeyRef, which is read once at container start — so changing either
+        # left the old pod running with the stale value, and the gateway answered 503 invalid_config
+        # while `helm upgrade` reported success. A different template file, so no recursion.
+        checksum/secret: {{ include (print $.Template.BasePath "/backend-secret.yaml") . | sha256sum }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: llm-gateway
+          image: {{ include "omi-oss.image" (dict "root" . "image" .Values.backend.image) }}
+          imagePullPolicy: {{ .Values.backend.imagePullPolicy }}
+          command: ["sh", "-c", "exec uvicorn llm_gateway.main:app --host 0.0.0.0 --port 9080 --loop uvloop"]
+          ports:
+            - containerPort: 9080
+          env:
+            # The operator's OpenAI-compatible endpoint — the same values the backend uses for the
+            # inference profile, so there is one place to configure the LLM.
+            - name: OPENAI_BASE_URL
+              value: {{ required "chat.llmGateway needs inference.openai.baseUrl (the operator's endpoint)" .Values.inference.openai.baseUrl | quote }}
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secret
+                  key: OPENAI_API_KEY
+                  optional: true
+            # Shared with the backend: a mismatch is a 401 'invalid service authentication' on every
+            # chat turn, which surfaces to the user as a canned apology rather than an error.
+            - name: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secret
+                  key: OMI_LLM_GATEWAY_SERVICE_TOKEN
+          volumeMounts:
+            - name: routes
+              mountPath: /app/llm_gateway/config/generated_route_overrides.yaml
+              subPath: generated_route_overrides.yaml
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 9080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 9080
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.chat.llmGateway.resources | nindent 12 }}
+      volumes:
+        - name: routes
+          configMap:
+            name: llm-gateway-routes
+{{- end }}

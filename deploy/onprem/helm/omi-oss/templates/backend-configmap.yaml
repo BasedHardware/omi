@@ -12,6 +12,15 @@ data:
   {{- end }}
   # Derived from the in-cluster mongo service — seeds the replica set at the same stable member host.
   MONGO_URI: "mongodb://{{ include "omi-oss.mongoHost" . }}:27017/?replicaSet={{ .Values.mongo.replicaSetName }}"
+  {{- if and .Values.chat.enabled .Values.chat.llmGateway.enabled }}
+  # chat LLM gateway (D32, ADR-0035): the backend emits omi:auto:<feature> LANE ids and ONLY the
+  # gateway resolves them to a model, so this wiring is what keeps chat off the built-in cloud model
+  # table. ALLOW_PROD_FEATURE_MODE is upstream's interlock: gateway feature-mode is blocked outside
+  # dev/local unless explicitly acknowledged, and OMI_ENV_STAGE=selfhost is a real runtime (ADR-0059).
+  OMI_LLM_GATEWAY_FEATURE_MODE: "gateway"
+  OMI_LLM_GATEWAY_URL: "http://llm-gateway:9080"
+  OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE: "true"
+  {{- end }}
   {{- if .Values.chat.enabled }}
   # chat profile: on-prem vector store (Qdrant) instead of Pinecone (ADR-0033). Collections are
   # auto-created at QDRANT_VECTOR_DIM on first upsert.
