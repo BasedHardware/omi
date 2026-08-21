@@ -146,7 +146,7 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     )
   }
 
-  /// The bar carries six flat pills and no menu. The claim worth holding is not the pill count —
+  /// The bar carries five flat destination pills and no destination menu. The claim worth holding is not the pill count —
   /// it is that **nothing was stranded when the menu was deleted** (INV-NAV-1). `reach` names the one
   /// mechanism responsible for each destination, so this fails the moment a pill is removed without
   /// the destination being moved somewhere that exists.
@@ -245,6 +245,45 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     }
 
     XCTAssertEqual(referral, advanced + 1)
+  }
+
+  func testReferControlIsPinnedImmediatelyBeforeTheMicrophoneControl() {
+    let recorder = TopNavigationLayoutRecorder()
+    let host = NSHostingView(
+      rootView: TopNavigationTrailingControlsLayout(
+        updateStatus: {
+          TopNavigationLayoutProbe(recorder: recorder, slot: .updateStatus) {
+            Color.clear.frame(width: 100, height: 32)
+          }
+        },
+        referral: {
+          TopNavigationLayoutProbe(recorder: recorder, slot: .referral) {
+            Color.clear.frame(width: 78, height: 30)
+          }
+        },
+        statusControls: {
+          HStack(spacing: 2) {
+            TopNavigationLayoutProbe(recorder: recorder, slot: .microphone) {
+              Color.clear.frame(width: 32, height: 32)
+            }
+            Color.clear.frame(width: 32, height: 32)
+          }
+        }
+      )
+    )
+    host.frame = NSRect(x: 0, y: 0, width: 280, height: 32)
+    host.layoutSubtreeIfNeeded()
+
+    guard
+      let updateStatus = recorder.frame(of: .updateStatus),
+      let referral = recorder.frame(of: .referral),
+      let microphone = recorder.frame(of: .microphone)
+    else {
+      return XCTFail("expected every trailing control to be laid out")
+    }
+
+    XCTAssertEqual(referral.minX, updateStatus.maxX + OmiSpacing.sm, accuracy: 0.5)
+    XCTAssertEqual(microphone.minX, referral.maxX + OmiSpacing.sm, accuracy: 0.5)
   }
 
   /// A destination whose `reach` points at a page the bar does not have a pill for is exactly the
@@ -364,14 +403,11 @@ final class TopNavigationBarLayoutTests: XCTestCase {
       rootView: TopNavigationBarLayout(
         expandedNavigation: {
           TopNavigationLayoutProbe(recorder: recorder, slot: .expanded) {
-            HStack(spacing: TopNavigationPillMetrics.itemSpacing) {
-              TopNavigationDestinationRow(
-                selectedIndex: SidebarNavItem.dashboard.rawValue,
-                badges: TopNavigationDestinationBadges(library: 99, tasks: 99),
-                onSelect: { _ in }
-              )
-              ReferralTopBarButton {}
-            }
+            TopNavigationDestinationRow(
+              selectedIndex: SidebarNavItem.dashboard.rawValue,
+              badges: TopNavigationDestinationBadges(library: 99, tasks: 99),
+              onSelect: { _ in }
+            )
           }
         },
         compactNavigation: {
@@ -380,8 +416,11 @@ final class TopNavigationBarLayoutTests: XCTestCase {
           }
         },
         persistentControls: {
-          Color.clear.frame(
-            width: TopNavigationLayoutMetrics.persistentControlsWidth, height: 32)
+          HStack(spacing: OmiSpacing.sm) {
+            ReferralTopBarButton {}
+            Color.clear.frame(
+              width: TopNavigationLayoutMetrics.persistentControlsWidth, height: 32)
+          }
         },
         settings: {
           Color.clear.frame(width: TopNavigationLayoutMetrics.settingsControlWidth, height: 32)
@@ -410,7 +449,7 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     // horizontal padding on both sides plus the fixed icon column, and the gaps are `itemSpacing`.
     // Real pills are wider than that — they carry a word, and two carry a badge — so this is a strict
     // lower bound that still fails the moment a pill stops being rendered.
-    let pills = CGFloat(TopNavigationRoutes.primaryItems.count + 1)
+    let pills = CGFloat(TopNavigationRoutes.primaryItems.count)
     let minimumPillWidth =
       TopNavigationPillMetrics.horizontalPadding * 2 + TopNavigationPillMetrics.iconWidth
     let floor = pills * minimumPillWidth + (pills - 1) * TopNavigationPillMetrics.itemSpacing
@@ -508,6 +547,9 @@ private enum TopNavigationLayoutSlot: Hashable {
   case compact
   case persistentControls
   case settings
+  case updateStatus
+  case referral
+  case microphone
 }
 
 private final class TopNavigationLayoutRecorder: @unchecked Sendable {

@@ -160,18 +160,41 @@ struct ReferralSheetView: View {
 
 struct ReferralTopBarButton: View {
   let action: () -> Void
+  @State private var isHovering = false
 
   var body: some View {
     Button(action: action) {
-      TopNavigationPill(
-        icon: "gift",
-        title: "Refer",
-        badgeCount: 0,
-        isSelected: false
-      )
+      HStack(spacing: OmiSpacing.xs) {
+        Image(systemName: "gift")
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+          .frame(width: TopNavigationPillMetrics.iconWidth)
+        Text("Refer")
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+          .lineLimit(1)
+          .fixedSize()
+      }
+      .foregroundStyle(Ink.primary)
+      .padding(.horizontal, TopNavigationPillMetrics.horizontalPadding)
+      .frame(height: TopNavigationPillMetrics.height)
+      .background {
+        Capsule(style: .continuous)
+          .fill(Ink.rowFillHover)
+          .overlay {
+            if isHovering {
+              Capsule(style: .continuous).fill(Ink.wash)
+            }
+          }
+      }
+      .overlay {
+        Capsule(style: .continuous).strokeBorder(Ink.hairline, lineWidth: 1)
+      }
+      .contentShape(Capsule(style: .continuous))
+      .fixedSize()
     }
     .buttonStyle(.plain)
+    .onHover { isHovering = $0 }
     .help("Refer a friend")
+    .accessibilityLabel("Refer a friend")
     .accessibilityIdentifier("top-navigation-refer")
   }
 }
