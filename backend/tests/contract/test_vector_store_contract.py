@@ -196,3 +196,25 @@ def test_namespace_isolation(store_ns):
     store.upsert(ns, [_rec("a", [1, 0, 0, 0, 0, 0, 0, 0], uid="u1")])
     hits = store.query(other, [1, 0, 0, 0, 0, 0, 0, 0], top_k=10)
     assert hits == []
+
+
+def test_a_batch_larger_than_any_vendor_request_limit_is_written_whole(store_ns):
+    """The port takes a batch; splitting it is the ADAPTER's problem (BACKLOG L3).
+
+    Pinecone rejects more than 100 vectors per request and Qdrant has no such cap. That asymmetry must
+    not reach a caller: `upsert_action_item_vectors_batch` sends up to 500 (its router bounds `items` at
+    500), the write is best-effort, and a rejected request meant the vectors were LOST — logged and
+    dropped, on the cloud backend only. Whatever the backend, `upsert(n)` writes n.
+    """
+    store, ns = store_ns
+    count = 250
+
+    written = store.upsert(ns, [_rec(f"big-{i}", [1, 0, 0, 0, 0, 0, 0, 0], uid="u1") for i in range(count)])
+    assert written == count
+
+    # And they are actually there: a return value alone would pass for an adapter that counted a batch it
+    # then failed to write.
+    got = set()
+    for page in store.list_ids(ns, prefix="big-"):
+        got.update(page)
+    assert len(got) == count

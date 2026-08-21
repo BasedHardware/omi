@@ -42,14 +42,34 @@ def _match_field(match: Any, key: str, default: Any = None) -> Any:
     return getattr(match, key, default)
 
 
+# Pinecone's documented per-request upsert limit, and the same number database/vector_db.py loops at in
+# the two writers that got it right ("Pinecone upsert limit is 100 vectors per call").
+_UPSERT_BATCH_SIZE = 100
+
+
 class PineconeVectorStore:
     """VectorStore over a Pinecone serverless index. ``namespace`` maps to a Pinecone namespace."""
 
     def upsert(self, namespace: str, records: List[VectorRecord]) -> int:
+        """Write records, splitting at Pinecone's per-request limit.
+
+        The limit is the vendor's, so it is handled here rather than by each caller: hiding it is what
+        this port is for (ADR-0033), and a caller that does not know about it must not lose the tail of
+        its batch. It happened — `upsert_action_item_vectors_batch` sent up to 500 vectors in one call
+        (its router bounds `items` at 500) while two sibling writers in the same module looped at 100,
+        and because that write is deliberately best-effort the rejected request was caught, logged, and
+        the vectors were simply gone (BACKLOG L3). The Qdrant adapter has no such cap and gets no
+        chunking: this is not a port-level rule, it is one backend's request limit.
+        """
         if not records:
             return 0
-        _get_index().upsert(vectors=list(records), namespace=namespace)
-        return len(records)
+        index = _get_index()
+        written = 0
+        for start in range(0, len(records), _UPSERT_BATCH_SIZE):
+            chunk = list(records[start : start + _UPSERT_BATCH_SIZE])
+            index.upsert(vectors=chunk, namespace=namespace)
+            written += len(chunk)
+        return written
 
     def query(
         self,

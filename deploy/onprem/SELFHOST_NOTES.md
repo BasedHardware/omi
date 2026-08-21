@@ -950,7 +950,7 @@ docker run -d --name vc-qdrant --network host qdrant/qdrant:latest   # wait: cur
 docker run --rm --network host -v $(git rev-parse --show-toplevel)/backend:/app -w /app \
   -e QDRANT_URL=http://127.0.0.1:6333 -e QDRANT_VECTOR_DIM=8 \
   omi-oss-backend-test -m pytest -q tests/contract/test_vector_store_contract.py
-# expected: 24 passed, 12 skipped
+# expected: 30 passed, 15 skipped   (the skips are the `pinecone` parametrization: no offline emulator)
 docker rm -f vc-qdrant    # cleanup
 ```
 
