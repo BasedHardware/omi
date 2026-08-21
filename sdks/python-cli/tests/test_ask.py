@@ -25,6 +25,19 @@ def test_ask_posts_question_and_prints_answer(authed_profile, respx_mock, cli_ru
     assert body["limit"] == 5  # default grounding size
 
 
+def test_ask_forwards_timezone_verbatim_and_defaults_to_utc(authed_profile, respx_mock, cli_runner) -> None:
+    """The CLI is not the validation boundary — the backend's ``DeveloperAskRequest``
+    validator is, so the option is forwarded as typed rather than pre-screened here.
+    A CLI-side IANA check would drift from the server's ``ZoneInfo`` database."""
+    route = respx_mock.post("/v1/dev/user/ask").respond(json={"answer": "ok", "sources": []})
+
+    assert cli_runner.invoke(app, ["ask", "when?"]).exit_code == 0
+    assert json.loads(route.calls[0].request.content)["timezone"] == "UTC"
+
+    assert cli_runner.invoke(app, ["ask", "when?", "--timezone", "Asia/Kolkata"]).exit_code == 0
+    assert json.loads(route.calls[1].request.content)["timezone"] == "Asia/Kolkata"
+
+
 def test_ask_json_mode_emits_raw_payload(authed_profile, respx_mock, cli_runner) -> None:
     respx_mock.post("/v1/dev/user/ask").respond(json={"answer": "42", "sources": []})
 
