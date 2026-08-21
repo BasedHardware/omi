@@ -210,6 +210,14 @@ enum FloatingBarNotificationQueuePolicy {
   ) -> Bool {
     currentIsPersistent && !showingAIConversation
   }
+
+  /// A displaced persistent card rejoins at the TAIL: every notification that
+  /// queued while it was visible presents first, and the card — which never
+  /// times out — returns once the queue drains, so it can neither be lost nor
+  /// starve anything behind it.
+  static func requeueIndex(queueCount: Int) -> Int {
+    queueCount
+  }
 }
 
 enum FloatingBarNotificationAction: Equatable {

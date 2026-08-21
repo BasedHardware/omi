@@ -3432,13 +3432,16 @@ class FloatingControlBarManager {
         showingAIConversation: window.state.showingAIConversation)
     {
       // A persistent card waits for the user's decision, but it must not
-      // starve every later notification: the newcomer presents now and the
-      // persistent card is requeued at the FRONT — still awaiting its
-      // Copy/Send/close decision — as soon as the newcomer resolves. Its
-      // authorization snapshot stays registered for the re-present, and no
-      // dismissal is tracked because the user never acted on it.
+      // starve later notifications: the newcomer presents now and the
+      // persistent card is requeued at the TAIL, so everything that queued
+      // while it was visible presents before it returns — still awaiting its
+      // Copy/Send/close decision. Its authorization snapshot stays registered
+      // for the re-present, and no dismissal is tracked because the user
+      // never acted on it.
       window.dismissNotification(animated: false)
-      pendingNotifications.insert(current, at: 0)
+      pendingNotifications.insert(
+        current,
+        at: FloatingBarNotificationQueuePolicy.requeueIndex(queueCount: pendingNotifications.count))
       if let onPresented {
         notificationPresentationCallbacks[notification.id] = NotificationPresentationCallbacks(
           onPresented: onPresented,

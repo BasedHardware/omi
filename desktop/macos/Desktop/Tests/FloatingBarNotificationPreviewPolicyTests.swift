@@ -364,4 +364,11 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
     XCTAssertEqual(pending?.conversationId, conversationID)
     XCTAssertEqual(pending?.showTranscript, false)
   }
+
+  /// Multiple notifications arriving during displacement present before the
+  /// persistent card returns: it always rejoins at the tail of the queue.
+  func testDisplacedPersistentCardRequeuesBehindEverythingAlreadyQueued() {
+    XCTAssertEqual(FloatingBarNotificationQueuePolicy.requeueIndex(queueCount: 0), 0)
+    XCTAssertEqual(FloatingBarNotificationQueuePolicy.requeueIndex(queueCount: 3), 3)
+  }
 }
