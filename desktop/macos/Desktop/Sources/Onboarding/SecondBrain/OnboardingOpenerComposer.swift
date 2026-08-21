@@ -7,6 +7,35 @@ struct OnboardingMeetingBrief: Equatable {
   let time: String
 }
 
+/// The bounded, in-memory receipt from the real answer Omi produced during onboarding.
+///
+/// It is deliberately not persisted: the answer can contain personal screen context. Home may use
+/// it for the immediate onboarding handoff, and it disappears when the opener is dismissed or the
+/// app relaunches.
+struct OnboardingProofReceipt: Equatable {
+  static let maxExcerptLength = 180
+
+  let answerExcerpt: String
+  let sourceLabel: String
+
+  static func setupAnswer(_ answer: String) -> OnboardingProofReceipt? {
+    let collapsed =
+      answer
+      .components(separatedBy: .whitespacesAndNewlines)
+      .filter { !$0.isEmpty }
+      .joined(separator: " ")
+    guard !collapsed.isEmpty else { return nil }
+
+    let excerpt: String
+    if collapsed.count <= maxExcerptLength {
+      excerpt = collapsed
+    } else {
+      excerpt = String(collapsed.prefix(maxExcerptLength - 1)).trimmingCharacters(in: .whitespaces) + "…"
+    }
+    return OnboardingProofReceipt(answerExcerpt: excerpt, sourceLabel: "Answered during your screen demo")
+  }
+}
+
 /// The personalized first beat shown in the Chat tab the instant onboarding
 /// finishes: a greeting addressed to the user by name + tappable starter
 /// questions that fire real Omi queries.
@@ -16,6 +45,19 @@ struct OnboardingOpenerContent: Equatable {
   /// Muted detail line under the headline: today's meetings + listening state.
   let subline: String
   let starters: [String]
+  let proofReceipt: OnboardingProofReceipt?
+
+  init(
+    greeting: String,
+    subline: String,
+    starters: [String],
+    proofReceipt: OnboardingProofReceipt? = nil
+  ) {
+    self.greeting = greeting
+    self.subline = subline
+    self.starters = starters
+    self.proofReceipt = proofReceipt
+  }
 }
 
 /// Pure, deterministic composer for the post-onboarding opener. Kept free of
@@ -41,12 +83,14 @@ enum OnboardingOpenerComposer {
     meetings: [OnboardingMeetingBrief],
     now: Date,
     baseStarters: [String],
+    proofReceipt: OnboardingProofReceipt? = nil,
     calendar: Calendar = .current
   ) -> OnboardingOpenerContent {
     OnboardingOpenerContent(
       greeting: greeting(name: name, now: now, calendar: calendar),
       subline: subline(mode: mode, meetings: meetings),
-      starters: starters(meetings: meetings, baseStarters: baseStarters)
+      starters: starters(meetings: meetings, baseStarters: baseStarters),
+      proofReceipt: proofReceipt
     )
   }
 

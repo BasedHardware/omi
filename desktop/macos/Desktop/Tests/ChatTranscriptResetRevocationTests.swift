@@ -87,4 +87,21 @@ final class ChatTranscriptResetRevocationTests: XCTestCase {
     XCTAssertFalse(provider.isSending)
     XCTAssertFalse(provider.isStopping)
   }
+
+  func testOwnerChangeClearsThePreviousOwnersOnboardingProof() {
+    let provider = ChatProvider()
+    provider.onboardingOpener = OnboardingOpenerContent(
+      greeting: "Morning, Owner A",
+      subline: "Private setup context",
+      starters: ["What should I do today?"],
+      proofReceipt: OnboardingProofReceipt(
+        answerExcerpt: "Owner A's private screen answer",
+        sourceLabel: "Answered during your screen demo"))
+
+    NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
+
+    XCTAssertNil(
+      provider.onboardingOpener,
+      "Owner change must clear the previous owner's name and proof excerpt synchronously")
+  }
 }

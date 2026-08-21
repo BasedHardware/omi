@@ -284,7 +284,7 @@ final class SBOnboardingModel: ObservableObject {
     switch step {
     case .promise:
       return
-        "Hey, I'm Omi, your second brain. I hear your conversations, remember everything, and handle the follow-ups. Three quick things:"
+        "Hey, I'm Omi — the second brain you trust more than your first. First I'll learn how you work. Then we'll connect what I can hear, see, and do — with every permission explained."
     case .name: return "What should I call you?"
     case .howHeard: return "Quick one. How did you hear about Omi?"
     case .language:
@@ -328,7 +328,7 @@ final class SBOnboardingModel: ObservableObject {
       return "The more I can see, the more I can help. Connect anything you want me to know:"
     case .capture:
       return
-        "You're all set, \(name). One last thing: should I listen all the time, or only during your meetings?"
+        "Your second brain is ready, \(name). One last thing: should I listen all the time, or only during your meetings?"
     }
   }
 
@@ -703,6 +703,9 @@ final class SBOnboardingModel: ObservableObject {
   /// `clearOnboardingChatFlag` is the only real difference between the two
   /// paths, and it is ordered exactly where each path had it.
   func finishOnboardingHandoff(clearOnboardingChatFlag: Bool) {
+    // `voiceAnswer` is sampled only while the screen-demo stage owns its isolated viewport. Do not
+    // reread the ambient floating bar here: a later answer may belong to a different turn.
+    let proofReceipt = voiceAnswer.flatMap(OnboardingProofReceipt.setupAnswer)
     teardownAll()
     // Fades rather than cuts: onboarding's last beat should not end on a click.
     OmiOnboardingCinematic.stopAmbientMusic()
@@ -716,7 +719,7 @@ final class SBOnboardingModel: ObservableObject {
     // the Chat tab's starter chips.
     savePostOnboardingGuidance()
     // Greet the user in the Home chat with the personalized opener + starters.
-    chatProvider.presentOnboardingOpener()
+    chatProvider.presentOnboardingOpener(proofReceipt: proofReceipt)
     ChatToolExecutor.onboardingAppState = nil
     OnboardingChatPersistence.clear()
     ChatDraftStore.shared.clear(.onboardingMain)

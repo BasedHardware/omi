@@ -103,4 +103,39 @@ final class OnboardingOpenerComposerTests: XCTestCase {
     XCTAssertTrue(content.subline.hasPrefix("'Design sync' at 2:00 PM today"))
     XCTAssertEqual(content.starters, ["Prep me for 'Design sync'", "What should I do today?"])
   }
+
+  // MARK: screen proof
+
+  func testScreenProofUsesOnlyTheActiveCompletedTurn() {
+    let messages = [
+      ChatMessage(clientTurnId: "older", text: "Unrelated later answer", sender: .ai),
+      ChatMessage(clientTurnId: "demo", text: "  Focus the launch review.  ", sender: .ai),
+    ]
+
+    XCTAssertEqual(
+      SBOnboardingScreenProofPolicy.completedAnswer(in: messages, activeClientTurnId: "demo"),
+      "Focus the launch review.")
+  }
+
+  func testScreenProofRejectsStreamingAndFailedAnswers() {
+    let streaming = ChatMessage(
+      clientTurnId: "demo", text: "Partial", sender: .ai, isStreaming: true)
+    var failed = ChatMessage(clientTurnId: "demo", text: "Could not answer", sender: .ai)
+    failed.journalStatus = .failed
+
+    XCTAssertNil(
+      SBOnboardingScreenProofPolicy.completedAnswer(
+        in: [streaming], activeClientTurnId: "demo"))
+    XCTAssertNil(
+      SBOnboardingScreenProofPolicy.completedAnswer(in: [failed], activeClientTurnId: "demo"))
+  }
+
+  func testScreenProofRejectsMissingOrUnrelatedTurnIdentity() {
+    let answer = ChatMessage(clientTurnId: "other", text: "Not the demo", sender: .ai)
+
+    XCTAssertNil(
+      SBOnboardingScreenProofPolicy.completedAnswer(in: [answer], activeClientTurnId: nil))
+    XCTAssertNil(
+      SBOnboardingScreenProofPolicy.completedAnswer(in: [answer], activeClientTurnId: "demo"))
+  }
 }

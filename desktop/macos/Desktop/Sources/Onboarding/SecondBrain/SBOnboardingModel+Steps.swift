@@ -3,6 +3,23 @@ import Combine
 import CoreGraphics
 import Foundation
 
+enum SBOnboardingScreenProofPolicy {
+  static func completedAnswer(
+    in messages: [ChatMessage],
+    activeClientTurnId: String?
+  ) -> String? {
+    guard let turnId = activeClientTurnId?.trimmingCharacters(in: .whitespacesAndNewlines),
+      !turnId.isEmpty,
+      let answer = messages.last(where: {
+        $0.clientTurnId == turnId && $0.sender == .ai && !$0.isStreaming
+      }),
+      answer.journalStatus != .failed
+    else { return nil }
+    let text = answer.text.trimmingCharacters(in: .whitespacesAndNewlines)
+    return text.isEmpty ? nil : text
+  }
+}
+
 // MARK: - Permissions (one at a time)
 
 extension SBOnboardingModel {
@@ -743,6 +760,7 @@ extension SBOnboardingModel {
   /// the notch, which spins while Omi is thinking.
   func startScreenDemo() {
     screenDemoDone = false
+    voiceAnswer = nil
     screenDemoPTTReady = false
     screenDemoPTTUnavailable = false
     FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
@@ -790,12 +808,26 @@ extension SBOnboardingModel {
     // surface through `voiceProjection`; typed answers use `showingAIResponse`.
     // Drop the current voice projection so re-entering the demo cannot inherit a
     // stale response from a prior turn.
-    voiceCancellable = Publishers.Merge(
+    let responseBecameVisible = Publishers.Merge(
       bar.$showingAIResponse.filter { $0 }.map { _ in () },
       bar.$voiceProjection.dropFirst().filter { $0.isResponseActive }.map { _ in () }
     )
-    .receive(on: DispatchQueue.main)
-    .sink { [weak self] _ in self?.screenDemoDone = true }
+    .map { _ -> String? in nil }
+    let completedAnswerUpdated = chatProvider.$messages
+      .dropFirst()
+      .compactMap { [weak bar] messages in
+        SBOnboardingScreenProofPolicy.completedAnswer(
+          in: messages,
+          activeClientTurnId: bar?.chatViewport.activeClientTurnId)
+      }
+      .map(Optional.some)
+    voiceCancellable = Publishers.Merge(responseBecameVisible, completedAnswerUpdated)
+      .receive(on: DispatchQueue.main)
+      .sink { [weak self] answer in
+        guard let self else { return }
+        self.screenDemoDone = true
+        if let answer { self.voiceAnswer = answer }
+      }
     screenDemoPTTReady = true
     FloatingControlBarManager.shared.showForOnboardingDemo()
   }

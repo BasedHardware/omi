@@ -43,6 +43,7 @@ struct QueryShellHome: View {
   @ObservedObject var chatProvider: ChatProvider
   @ObservedObject var memoriesViewModel: MemoriesViewModel
   @ObservedObject private var tasksStore = TasksStore.shared
+  @ObservedObject private var homeSuggestionsStore = HomeSuggestionsStore.shared
   var taskChatCoordinator: TaskChatCoordinator? = nil
   /// The Chat-first shell keeps the existing modern Home presentation even when the reversible legacy
   /// preference is enabled. This is presentation-only; capability sampling and rich-block access
@@ -69,6 +70,10 @@ struct QueryShellHome: View {
   /// The always-visible search bar's text. Not the chat draft: the one chat composer lives inside
   /// the panel (INV-6) and keeps `chatProvider.composerDraft`; this field only narrows the spine.
   @State private var searchText = ""
+  /// Search is a compact command while Home is resting. It expands into the unchanged full search
+  /// field on demand, so the shared chat composer remains the only obvious text box on first paint.
+  @State private var isSearchExpanded = false
+  @State private var searchFocusClaims = 0
   // Home IS the conversation. The panel rests on the chat and shows search results only while the
   // search bar above it holds text — clearing the field (or esc) always lands back on the chat.
   // There is no stored mode, so no bridge action or stale state can strand the page on the list.
@@ -96,6 +101,10 @@ struct QueryShellHome: View {
   /// `.focused()` does not reach, and a flag already `true` could never re-claim a caret AppKit had
   /// since given away — which is precisely the case the `didBecomeActive` claim below exists for.
   @State private var caretClaims = 0
+  /// The overview is Home's activation and empty state. A returning user with a transcript goes
+  /// straight back to that transcript; onboarding may deliberately put its proof receipt in front
+  /// once, and any send or explicit continue returns to the established `QueryAnswerThread`.
+  @State private var showsSecondBrainHome = true
 
   private var usesLegacyPresentation: Bool {
     useLegacyHomeDesign && !forceModernPresentation
@@ -120,15 +129,19 @@ struct QueryShellHome: View {
   private var querySurface: some View {
     GeometryReader { proxy in
       let lane = QueryShellLayout.laneWidth(for: proxy.size.width)
-      // The search bar is always mounted above the panel, so the body's room subtracts it in both
-      // modes — `panelBodyHeight` only knows the hero reserve for `.results`.
+      let usesCompactSearch = HomeSearchPresentationPolicy.isCompact(
+        mode: mode, isExpanded: isSearchExpanded)
+      // Resting Home keeps its search command inside the answer panel's header. Only the expanded
+      // search field needs a separate glass object and the air between it and the panel.
+      let searchReserve =
+        usesCompactSearch
+        ? 0 : QueryShellLayout.barMinHeight + QueryShellLayout.panelGap
       let chrome = QueryShellLayout.panelChromeHeight(
         mode: mode,
         composerHeight: mode == .answer
           ? max(QueryShellLayout.panelComposerMinHeight, composerHeight) : 0)
       let room =
-        proxy.size.height - QueryShellLayout.surfaceTopInset - QueryShellLayout.barMinHeight
-        - QueryShellLayout.panelGap - chrome
+        proxy.size.height - QueryShellLayout.surfaceTopInset - searchReserve - chrome
       let bodyHeight = min(
         QueryShellLayout.maximumBodyHeight, max(QueryShellLayout.minimumBodyHeight, room))
       // **Only this column is woken by a keystroke.** The composer draft is not published on
@@ -136,10 +149,12 @@ struct QueryShellHome: View {
       // shell and the transcript while still giving the bar — and the list it filters — the live text.
       ChatDraftScope(draft: chatProvider.composerDraft) { draft in
         VStack(spacing: QueryShellLayout.panelGap) {
-          // **The search bar is always on screen.** It is pure search — typing narrows the spine
-          // below; clearing it returns the panel to the conversation. The chat composer is a
-          // different control and stays pinned inside the panel (INV-6: one chat composer).
-          QuerySearchBar(text: $searchText)
+          // Resting Home keeps search as a compact command so the chat composer is the only obvious
+          // field. Its command lives in the panel header; expanding it mounts the same pure-search
+          // bar used by results above the panel, and it never sends.
+          if !usesCompactSearch {
+            QuerySearchBar(text: $searchText, focusClaim: searchFocusClaims)
+          }
           QueryResultsPanel(
             request: requestBinding(),
             mode: mode,
@@ -166,9 +181,10 @@ struct QueryShellHome: View {
         .padding(.top, OmiSpacing.sm)
       }
     }
-    // A typed character belongs in the field even when the field is not focused: this is a search
-    // surface, and a search surface that swallows the first letter you type is broken.
+    // The shared chat composer receives the caret on Home. Search takes it only after the explicit
+    // Search history command (or ⌘K) expands that field.
     .onAppear {
+      if chatProvider.isSending { showsSecondBrainHome = false }
       claimCaret()
     }
     // **Coming back to Omi puts the caret back in the field.** This surface's whole job is to be typed
@@ -179,6 +195,12 @@ struct QueryShellHome: View {
     // Harmless when the field already has it — the claim is a no-op once the caret is already there.
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       claimCaret()
+    }
+    // Screen counts and the proof canvas are owner-bound. A completion from owner A must never
+    // publish into owner B's Home after the identity fence moves.
+    .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
+      screenCount = nil
+      Task { await loadScreenCount() }
     }
     // The two product flows the provider drives and nothing renders. Both were hosted only by the
     // deleted chat page, so since that deletion a browser tool with no extension token has killed
@@ -219,6 +241,8 @@ struct QueryShellHome: View {
     .onReceive(NotificationCenter.default.publisher(for: .homeStageOpenChat)) { _ in
       guard !usesLegacyPresentation else { return }
       searchText = HomeBridgeIntent.openChat.searchTextAfter(searchText)
+      isSearchExpanded = false
+      showsSecondBrainHome = false
       claimCaret()
     }
     // `home_close_panel` collapses Home to its resting chat state — the same thing Escape does.
@@ -232,6 +256,8 @@ struct QueryShellHome: View {
     .onReceive(NotificationCenter.default.publisher(for: .homeStageAsk)) { note in
       guard !usesLegacyPresentation, let query = note.userInfo?["query"] as? String else { return }
       searchText = HomeBridgeIntent.ask.searchTextAfter(searchText)
+      isSearchExpanded = false
+      showsSecondBrainHome = false
       chatProvider.draftText = query
       ask()
     }
@@ -243,11 +269,23 @@ struct QueryShellHome: View {
     // Escape while searching clears the search and lands back on the conversation; with an empty
     // field it falls through to the shell's own Escape (dismiss the window).
     .onEscapeKey(priority: .content) {
-      guard !searchText.isEmpty else { return false }
-      searchText = ""
+      if !searchText.isEmpty {
+        searchText = ""
+        return true
+      }
+      guard isSearchExpanded else { return false }
+      isSearchExpanded = false
+      claimCaret()
       return true
     }
-    .task { await loadScreenCount() }
+    .task {
+      async let screen: Void = loadScreenCount()
+      async let suggestions: Void = homeSuggestionsStore.refreshIfNeeded()
+      _ = await (screen, suggestions)
+    }
+    .onChange(of: chatProvider.isSending) { _, isSending in
+      if isSending { showsSecondBrainHome = false }
+    }
     // **No rule here reads an empty field as an instruction.** Emptying the bar used to eject you
     // from answer mode — so backspacing your last question to type a follow-up threw the conversation
     // off screen mid-edit, and the composer could never be cleared by the send either. `esc Results`
@@ -311,23 +349,61 @@ struct QueryShellHome: View {
         onOpenRewind: openRewind
       )
     case .answer:
-      QueryAnswerThread(
-        chatProvider: chatProvider,
-        onOpenCitation: openCitation,
-        onRetry: retry,
-        chatFirstRichBlockContext: chatFirstRichBlockContext
-      )
+      if shouldPresentSecondBrainHome {
+        SecondBrainHome(
+          snapshot: secondBrainSnapshot,
+          hasConversation: !chatProvider.messages.isEmpty,
+          canUsePrompts: SecondBrainPromptPolicy.canUseSuggestion(draft: chatProvider.draftText),
+          onAsk: askFromSecondBrainHome,
+          onContinueConversation: revealConversation
+        )
+      } else {
+        QueryAnswerThread(
+          chatProvider: chatProvider,
+          onOpenCitation: openCitation,
+          onRetry: retry,
+          chatFirstRichBlockContext: chatFirstRichBlockContext
+        )
+      }
     }
   }
 
   // MARK: - The panel's chat controls
 
+  private var compactSearchControl: some View {
+    Button(action: expandSearch) {
+      HStack(spacing: OmiSpacing.sm) {
+        Image(systemName: "magnifyingglass")
+          .accessibilityHidden(true)
+        Text("Search history")
+        Text("⌘K")
+          .foregroundStyle(Ink.secondary)
+      }
+      .inkStyle(InkType.statusLabel, color: Ink.primary)
+      .padding(.horizontal, OmiSpacing.md)
+      .frame(minHeight: 36)
+      .glassChip(isActive: false)
+    }
+    .buttonStyle(.plain)
+    .keyboardShortcut("k", modifiers: .command)
+    .help("Search everything Omi has captured")
+    .accessibilityIdentifier("query-search-expand")
+  }
+
+  private func expandSearch() {
+    isSearchExpanded = true
+    searchFocusClaims &+= 1
+  }
+
   /// The one slot the panel gives its host, filled differently per mode: on the list it is the way
   /// into the conversation, and in the conversation it is what you can do to it.
   @ViewBuilder
   private var headerAccessory: some View {
-    if mode == .answer, menu.isPresentable {
-      chatMenu
+    if mode == .answer {
+      compactSearchControl
+      if menu.isPresentable {
+        chatMenu
+      }
     }
   }
 
@@ -387,6 +463,7 @@ struct QueryShellHome: View {
   private func clearTranscript() {
     Task {
       await chatProvider.clearChat()
+      showsSecondBrainHome = true
     }
   }
 
@@ -418,6 +495,7 @@ struct QueryShellHome: View {
     let submission = QueryShellSubmission.resolve(text: chatProvider.draftText)
     if chatProvider.draftText != submission.text { chatProvider.draftText = submission.text }
     guard submission.mode != nil else { return }
+    showsSecondBrainHome = false
     claimCaret()
     guard let question = submission.question else { return }
     lastAskedQuestion = question
@@ -431,6 +509,21 @@ struct QueryShellHome: View {
       messageLength: question.count, hasSelectedAppContext: false, source: "query_shell")
     chatProvider.dismissOnboardingOpener()
     Task { await chatProvider.sendMessage(question) }
+  }
+
+  private func askFromSecondBrainHome(_ question: String) {
+    guard SecondBrainPromptPolicy.canUseSuggestion(draft: chatProvider.draftText) else {
+      claimCaret()
+      return
+    }
+    PostOnboardingPromptSuggestions.consume()
+    chatProvider.draftText = question
+    submit()
+  }
+
+  private func revealConversation() {
+    showsSecondBrainHome = false
+    claimCaret()
   }
 
   /// Re-sends the question that failed, not whatever the bar holds now — the send emptied it.
@@ -566,16 +659,71 @@ struct QueryShellHome: View {
     return conversations + memoriesViewModel.memories.count + tasks + screenCount
   }
 
+  private var secondBrainSnapshot: SecondBrainHomeSnapshot {
+    SecondBrainHomeSnapshot.compose(
+      conversations: appState.conversations.filter { $0.deleted != true }.count,
+      memories: memoriesViewModel.memories.count,
+      tasks: tasksStore.tasks.filter { !$0.isRetired }.count,
+      screenCount: screenCount,
+      personalizedPrompts: homeSuggestionsStore.personalizedQuestions,
+      onboardingPrompts: PostOnboardingPromptSuggestions.suggestions(),
+      opener: chatProvider.onboardingOpener,
+      contextEvidence: secondBrainContextEvidence)
+  }
+
+  private var shouldPresentSecondBrainHome: Bool {
+    SecondBrainHomePresentationPolicy.showsOverview(
+      requested: showsSecondBrainHome,
+      hasMessages: !chatProvider.messages.isEmpty,
+      hasOnboardingOpener: chatProvider.onboardingOpener != nil,
+      isSending: chatProvider.isSending)
+  }
+
+  /// A small, real window into what Omi can answer from. This is already-loaded account data: no
+  /// extra fetch, no invented example, and no second source of truth.
+  private var secondBrainContextEvidence: [SecondBrainHomeSnapshot.Evidence] {
+    var evidence: [SecondBrainHomeSnapshot.Evidence] = []
+
+    let recentConversation = appState.conversations
+      .filter { $0.deleted != true && !$0.discarded && !$0.title.isEmpty }
+      .max(by: { conversationDate($0) < conversationDate($1) })
+    if let conversation = recentConversation {
+      evidence.append(.init(kind: .conversation, text: conversation.title))
+    }
+
+    let recentTask = tasksStore.tasks
+      .filter { !$0.isRetired && !$0.completed && !$0.description.isEmpty }
+      .max(by: { ($0.updatedAt ?? $0.createdAt) < ($1.updatedAt ?? $1.createdAt) })
+    if let task = recentTask {
+      evidence.append(.init(kind: .task, text: task.description))
+    }
+
+    let recentMemory = memoriesViewModel.memories
+      .filter { !$0.content.isEmpty }
+      .max(by: { ($0.capturedAt ?? $0.updatedAt) < ($1.capturedAt ?? $1.updatedAt) })
+    if let memory = recentMemory {
+      evidence.append(.init(kind: .memory, text: memory.content))
+    }
+
+    return evidence
+  }
+
+  private func conversationDate(_ conversation: ServerConversation) -> Date {
+    conversation.finishedAt ?? conversation.startedAt ?? conversation.createdAt
+  }
+
   private func loadScreenCount() async {
     // Rewind's pool opens asynchronously after launch, and this is a `.task` that runs once — so an
     // ask that lands before it is open under-reports the archive by its entire size for the rest of
     // the session. That is what made the corner read "390 results · of 147 captured": 147 was the
     // conversations and memories alone, with the whole screen archive counted as nothing.
+    guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else { return }
     guard await SpineScreenIndex.poolWhenReady() != nil else {
-      screenCount = 0
       return
     }
-    screenCount = (try? await RewindDatabase.shared.getScreenshotCount()) ?? 0
+    let count = try? await RewindDatabase.shared.getScreenshotCount()
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
+    screenCount = count
   }
 }
 
