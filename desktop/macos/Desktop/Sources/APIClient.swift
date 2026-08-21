@@ -731,6 +731,36 @@ extension APIClient {
     return DesktopBackendEnvironment.conversationShareURL(id: id)
   }
 
+  /// Calendar-detected people the meeting summary could be sent to (the other
+  /// participants' emails, never the owner's own address). Empty when the
+  /// conversation has no calendar identity or the meeting was too large for a
+  /// blanket proposal.
+  func getConversationShareRecipients(id: String) async throws -> [ConversationShareRecipient] {
+    guard let url = URL(string: baseURL + "v1/conversations/\(id)/share-recipients") else {
+      throw URLError(.badURL)
+    }
+    var request = URLRequest(url: url)
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
+    let response: ConversationShareRecipientsResponse = try await performRequest(request)
+    return response.recipients
+  }
+
+  /// One-click send of the meeting summary email to detected participants.
+  /// The backend validates membership against the detected set and flips the
+  /// conversation to shared visibility so the emailed link resolves.
+  func sendConversationSummaryEmail(id: String, recipientEmails: [String]) async throws -> [String] {
+    guard let url = URL(string: baseURL + "v1/conversations/\(id)/share-email") else {
+      throw URLError(.badURL)
+    }
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.httpBody = try JSONSerialization.data(withJSONObject: ["recipient_emails": recipientEmails])
+    let response: ConversationShareEmailResponse = try await performRequest(request)
+    return response.sentTo
+  }
+
   /// Updates the title of a conversation
   func updateConversationTitle(id: String, title: String) async throws -> ServerConversation {
     var components = URLComponents(string: baseURL + "v1/conversations/\(id)/title")!
