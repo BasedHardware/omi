@@ -1,0 +1,66 @@
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialModel.swift
+  s_889715362e92a5::t_6e869948763b20 998,1002,1006,1010-1025
+  s_5799d664feb3c5::t_6a3feb5c2749b8 997,999-1001,1003-1005,1007-1009,1026-1033,1042-1045
+desktop/context-for-claude/Sources/ContextApp/Activity/ActivitySurface.swift
+  s_889715362e92a5::t_2253071429502e 146-154
+desktop/context-for-claude/Sources/ContextApp/ContextApp.swift
+  s_889715362e92a5::t_cc342b8132dce3 51,302-312,388,448-451,453,468,487-488,502-506,508,521-522,531
+desktop/context-for-claude/Sources/ContextApp/Engine.swift
+  s_889715362e92a5::t_b4a3c59824c437 1523-1524,1653-1655,1674-1676
+desktop/context-for-claude/Sources/ContextApp/MenuBar/StatusItemController.swift
+  s_889715362e92a5::t_028132a82e0cff 129
+desktop/context-for-claude/Sources/ContextApp/MenuBar/StatusView.swift
+  s_889715362e92a5::t_9f247ec1dc00e9 562-566,569,596,608,611-613,624,638-642
+desktop/context-for-claude/Sources/ContextApp/Onboarding/OnboardingView.swift
+  s_889715362e92a5::t_753850355958f1 1148-1154,1156
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindView.swift
+  s_889715362e92a5::t_340aa1f60d794f 76,292-295,426-429
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindWindow.swift
+  s_889715362e92a5::t_249a608cb4eacc 47-66,72-74,77,99,129-140,194-206,263,268,293,297-308
+desktop/context-for-claude/Sources/ContextApp/Search/SearchBarView.swift
+  s_889715362e92a5::t_a64783e927187a 417-425,427-428,432-435,440-449
+desktop/context-for-claude/Sources/ContextApp/Search/SearchBarWindow.swift
+  s_889715362e92a5::t_9a3c74c2fe785b 51-53,57,73-79,199-203,206-212,254,258-259,279-285,302-306,448-449,451,456
+desktop/context-for-claude/Sources/ContextApp/Search/SearchResultsModel.swift
+  s_889715362e92a5::t_cbfe45c0611147 193-200,250-288,485-487
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsGeneralPane.swift
+  s_889715362e92a5::t_2dae2db8c4884f 199-201
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsWindow.swift
+  s_889715362e92a5::t_b469ab24cbe32d 35-36,40,48-51,122
+desktop/context-for-claude/Sources/ContextApp/Support/Analytics/AnalyticsEvent.swift
+  s_889715362e92a5::t_b2f32e2b0f6d88 74-112,196,199,201-277,379-382,415-431,475-484,488,507
+desktop/context-for-claude/Sources/ContextApp/Support/Analytics/ContextAnalytics.swift
+  s_889715362e92a5::t_485a6a7e0218c1 48-59,305-306,353-389,416-417,446-465,497-499,513
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialEnvironment.swift
+  s_889715362e92a5::t_4dcea112cb7260 316-318,325
+desktop/context-for-claude/Tests/ContextAppTests/AnalyticsTests.swift
+  s_889715362e92a5::t_88709c58b4751a 118-122,146,178-182,269-405,662-665,667,673-681,717,731-746,765-766
+desktop/context-for-claude/Tests/ContextAppTests/RewindTests.swift
+  s_889715362e92a5::t_713041bb1e29ec 821
+desktop/context-for-claude/Tests/ContextAppTests/TimelineKeyStatusTests.swift
+  s_889715362e92a5::t_dfdcbe796b5ca2 211
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "b13028a37d02c6db59e787231b6f95a8d0765497",
+  "prompts": {},
+  "sessions": {
+    "s_5799d664feb3c5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7a560635-5b6c-4f58-8252-1717f103fd11",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_889715362e92a5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4099c3ef-6301-4e7a-8e3f-cc75e94c9318",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
