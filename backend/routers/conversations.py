@@ -1406,14 +1406,16 @@ def send_conversation_share_email(
 
     def _publish():
         # An already link-visible conversation keeps its existing visibility
-        # (never downgrade `public` to `shared`); only a private one is flipped.
+        # (never downgrade `public` to `shared`); only a still-private one is
+        # flipped, atomically: the write is preconditioned on the same read
+        # that observed 'private', so a concurrent share/public change voids
+        # this publish instead of being overwritten. The CAS token comes from
+        # the publish write's own result; when nothing was published there is
+        # no token and rollback is a no-op.
         if not was_shared:
-            # CAS token from the write's own result: rollback may only reverse
-            # THIS request's write. Any concurrent write — even one storing the
-            # same 'shared' value — bumps the doc's update_time and voids it.
-            publish_token['update_time'] = conversations_db.set_conversation_visibility_returning_update_time(
-                uid, conversation_id, ConversationVisibility.shared
-            )
+            published, update_time = conversations_db.publish_conversation_visibility_if_private(uid, conversation_id)
+            if published:
+                publish_token['update_time'] = update_time
         redis_db.store_conversation_to_uid(conversation_id, uid)
         redis_db.add_public_conversation(conversation_id)
 

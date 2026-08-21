@@ -1527,17 +1527,36 @@ def set_conversation_visibility(uid: str, conversation_id: str, visibility: str)
     conversation_ref.update({'visibility': visibility})
 
 
-def set_conversation_visibility_returning_update_time(uid: str, conversation_id: str, visibility: str):
-    """Visibility write that returns its own WriteResult.update_time.
+def publish_conversation_visibility_if_private(uid: str, conversation_id: str):
+    """Atomically flip visibility private→shared, preserving concurrent shares.
 
-    The returned timestamp is the CAS token for rollback: taken from the write
-    itself (not a follow-up read), so no concurrent writer can slip between
-    token capture and the write it describes.
+    The write carries a last_update_time precondition from the same read that
+    observed 'private', so a concurrent writer (including one setting 'public')
+    voids this publish instead of being downgraded. Returns
+    ``(published, update_time)`` where ``update_time`` is the publish write's
+    own WriteResult timestamp — the CAS token for rollback. ``(False, None)``
+    means the conversation was (or became) link-visible some other way and this
+    request must neither re-publish nor roll back.
     """
+    from google.api_core import exceptions as gcloud_exceptions
+
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    result = conversation_ref.update({'visibility': visibility})
-    return getattr(result, 'update_time', None)
+    for _ in range(3):
+        snapshot = conversation_ref.get()
+        data = snapshot.to_dict() or {}
+        if data.get('visibility') in ('shared', 'public'):
+            return (False, None)
+        try:
+            result = conversation_ref.update(
+                {'visibility': 'shared'},
+                option=db.write_option(last_update_time=snapshot.update_time),
+            )
+            return (True, getattr(result, 'update_time', None))
+        except gcloud_exceptions.FailedPrecondition:
+            continue
+    # Persistent contention: leave visibility to the other writers.
+    return (False, None)
 
 
 def set_conversation_visibility_if_unchanged(uid: str, conversation_id: str, visibility: str, last_update_time) -> bool:

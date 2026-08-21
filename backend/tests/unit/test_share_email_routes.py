@@ -65,13 +65,16 @@ def _stub_data_layer(monkeypatch):
     # the doc token matches, mirroring Firestore's last_update_time precondition.
     state['doc_token'] = 't1'
 
-    def publish_write(uid, cid, value):
-        state['visibility'] = getattr(value, 'value', value)
+    def conditional_publish(uid, cid):
+        # Mirrors the precondition semantics: publish only while still private.
+        if state['visibility'] in ('shared', 'public'):
+            return (False, None)
+        state['visibility'] = 'shared'
         state['doc_token'] = 't1'
-        return 't1'
+        return (True, 't1')
 
     monkeypatch.setattr(
-        conversations_router.conversations_db, 'set_conversation_visibility_returning_update_time', publish_write
+        conversations_router.conversations_db, 'publish_conversation_visibility_if_private', conditional_publish
     )
 
     def guarded_set(uid, cid, value, last_update_time):
@@ -336,3 +339,28 @@ def test_publish_infrastructure_failure_releases_reservation_and_quota(monkeypat
     assert dispatched == []
     assert refunds == [1]
     assert _stub_data_layer['sent'] == []  # reservation released for retry
+
+
+def test_concurrent_public_change_before_publish_is_preserved(monkeypatch, _stub_data_layer):
+    """User makes the conversation public between our read and the publish:
+    the conditional publish yields to it and a failed send must not touch it."""
+    # The conversation was private at request time...
+    calls = {'n': 0}
+
+    def racing_publish(uid, cid):
+        # ...but by publish time another actor already made it public.
+        state = _stub_data_layer
+        state['visibility'] = 'public'
+        return (False, None)
+
+    monkeypatch.setattr(
+        conversations_router.conversations_db, 'publish_conversation_visibility_if_private', racing_publish
+    )
+
+    def failing_send(*, uid, conversation, recipient_emails):
+        raise RuntimeError('email provider rejected the send')
+
+    monkeypatch.setattr(conversations_router.share_email, 'send_summary_email', failing_send)
+    response = _client().post(f'/v1/conversations/{CONV_ID}/share-email', json={'recipient_emails': ['sarah@acme.com']})
+    assert response.status_code == 502
+    assert _stub_data_layer['visibility'] == 'public'
