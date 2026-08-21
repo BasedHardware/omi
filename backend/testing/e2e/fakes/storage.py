@@ -9,6 +9,14 @@ real app is imported, while this module keeps bucket/blob bytes under a temp dir
 import datetime
 import os
 import shutil
+
+# This fake replaces ``google.cloud.storage.Client``, so it sits BELOW the object-store adapter and must
+# speak the SDK's language: the GCS adapter translates ``google.api_core.exceptions.NotFound`` into the
+# neutral ``ObjectNotFound``. Raising FileNotFoundError meant that translation never ran in e2e, so the
+# six ``except ObjectNotFound`` handlers in utils/other/storage.py were unreachable there. The sibling
+# fake (testing/sync_cloud_tasks_stack/storage.py) already did this. ``google.cloud.exceptions.NotFound``
+# IS ``google.api_core.exceptions.NotFound`` (verified), so either import names the same class.
+from google.cloud.exceptions import NotFound as BlobNotFound
 import tempfile
 from pathlib import Path
 from typing import Iterable, Optional
@@ -98,7 +106,7 @@ class FakeBlob:
 
     def reload(self, *args, **kwargs):
         if not self.exists():
-            raise FileNotFoundError(self.name)
+            raise BlobNotFound(self.name)
         return None
 
     def upload_from_filename(self, filename, *args, **kwargs):
@@ -107,7 +115,7 @@ class FakeBlob:
 
     def download_to_filename(self, filename, *args, **kwargs):
         if not self.exists():
-            raise FileNotFoundError(self.name)
+            raise BlobNotFound(self.name)
         Path(filename).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(self.path, filename)
 
@@ -120,7 +128,7 @@ class FakeBlob:
 
     def download_as_bytes(self, *args, **kwargs) -> bytes:
         if not self.exists():
-            raise FileNotFoundError(self.name)
+            raise BlobNotFound(self.name)
         return self.path.read_bytes()
 
     def delete(self, *args, **kwargs):

@@ -13,6 +13,7 @@ import hashlib
 import re
 from collections import defaultdict
 from typing import Any
+from utils.vector import filters as neutral_filters
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 
@@ -167,30 +168,23 @@ class FakeVectorStore:
         return len(self._vectors[namespace])
 
     def _matches_filter(self, metadata: dict[str, Any], filter_data: dict[str, Any]) -> bool:
+        """Delegate to the neutral filter contract (ADR-0033) — the SAME interpreter the real adapters
+        and the unit-test fake (tests/vector_store_fakes.py) use.
+
+        This used to be a hand-rolled copy, and it had drifted three ways, one of them load-bearing:
+          * an operator it did not know fell through to ``return True``, so
+            ``{'memory_schema_version': {'$exists': False}}`` — the ns2 legacy barrier — matched
+            EVERYTHING, and every retrieval e2e asserting that barrier proved nothing;
+          * ``$and``/``$or`` did ``return all(...)``/``return any(...)``, ending the loop, so a clause
+            sitting next to them was silently discarded;
+          * nothing validated the filter, so an out-of-contract operator passed here and would have been
+            rejected by both real adapters.
+        A fake more permissive than the real thing does not just miss bugs — it makes assertions lie.
+        """
         if not filter_data:
             return True
-        for key, expected in filter_data.items():
-            if key == "$and":
-                return all(self._matches_filter(metadata, clause) for clause in expected)
-            if key == "$or":
-                return any(self._matches_filter(metadata, clause) for clause in expected)
-
-            actual = metadata.get(key)
-            if isinstance(expected, dict):
-                for op, value in expected.items():
-                    if op == "$eq" and actual != value:
-                        return False
-                    if op == "$in":
-                        actual_values = actual if isinstance(actual, list) else [actual]
-                        if not any(item in value for item in actual_values):
-                            return False
-                    if op == "$gte" and (actual is None or actual < value):
-                        return False
-                    if op == "$lte" and (actual is None or actual > value):
-                        return False
-            elif actual != expected:
-                return False
-        return True
+        neutral_filters.validate(filter_data)
+        return neutral_filters.matches(filter_data, metadata)
 
 
 def install_vector_search_fakes(monkeypatch, vector_db_module):
