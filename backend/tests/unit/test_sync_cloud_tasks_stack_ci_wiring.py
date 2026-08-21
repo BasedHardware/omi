@@ -12,10 +12,6 @@ from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
-# Keep in lockstep with test_listen_pusher_stack_ci_wiring._BOUNDED_APT_GET:
-# unbounded apt-get is the hang that previously burned this job's timeout.
-_BOUNDED_APT_GET = 'sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=10 -o Acquire::https::Timeout=10'
-
 
 def test_sync_cloud_tasks_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -> None:
     workflow = (_REPO_ROOT / '.github' / 'workflows' / 'backend-hermetic-e2e.yml').read_text(encoding='utf-8')
@@ -40,8 +36,7 @@ def test_sync_cloud_tasks_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -
     assert 'npm ci --ignore-scripts' in job
     assert 'uses: actions/setup-java@v5' in job
     assert "java-version: '21'" in job
-    assert f'{_BOUNDED_APT_GET} update' in job
-    assert f'{_BOUNDED_APT_GET} install --yes redis-server' in job
+    assert 'uses: ./.github/actions/install-redis-server' in job
     assert 'timeout-minutes: 5' in job
     assert 'npm run test:sync-cloud-tasks-stack:emulator' in job
 

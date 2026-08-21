@@ -163,21 +163,8 @@ jobs:
           java-version: '21'
 
       - name: Install Redis server
-        # The harness spawns its own `redis-server` binary per test on an
-        # ephemeral port (see backend/testing/*/run.py), so this needs the
-        # actual package installed, not a `services:` container.
-        #
-        # apt against the default Azure-mirror apt source on hosted runners
-        # can silently stall (connects but never completes the transfer)
-        # instead of failing, which previously let this step hang until the
-        # job's 20-minute timeout killed it with an opaque "operation was
-        # canceled". Bound each apt network attempt and retry a few times so
-        # a stalled mirror fails over quickly, and cap the step itself as a
-        # backstop.
         timeout-minutes: 5
-        run: |
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=10 -o Acquire::https::Timeout=10 update
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=10 -o Acquire::https::Timeout=10 install --yes redis-server
+        uses: ./.github/actions/install-redis-server
 
       - name: Run listen to pusher stack gauntlet
         run: npm run test:listen-pusher-stack:emulator -- --state-dir "$RUNNER_TEMP/listen-pusher-stack"
@@ -250,21 +237,8 @@ jobs:
           java-version: '21'
 
       - name: Install Redis server
-        # The harness spawns its own `redis-server` binary per test on an
-        # ephemeral port (see backend/testing/*/run.py), so this needs the
-        # actual package installed, not a `services:` container.
-        #
-        # apt against the default Azure-mirror apt source on hosted runners
-        # can silently stall (connects but never completes the transfer)
-        # instead of failing, which previously let this step hang until the
-        # job's 20-minute timeout killed it with an opaque "operation was
-        # canceled". Bound each apt network attempt and retry a few times so
-        # a stalled mirror fails over quickly, and cap the step itself as a
-        # backstop.
         timeout-minutes: 5
-        run: |
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=10 -o Acquire::https::Timeout=10 update
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=10 -o Acquire::https::Timeout=10 install --yes redis-server
+        uses: ./.github/actions/install-redis-server
 
       - name: Run Sync Cloud Tasks stack gauntlet
         run: npm run test:sync-cloud-tasks-stack:emulator
@@ -314,21 +288,8 @@ jobs:
           java-version: '21'
 
       - name: Install Redis server
-        # The harness spawns its own `redis-server` binary per test on an
-        # ephemeral port (see backend/testing/*/run.py), so this needs the
-        # actual package installed, not a `services:` container.
-        #
-        # apt against the default Azure-mirror apt source on hosted runners
-        # can silently stall (connects but never completes the transfer)
-        # instead of failing, which previously let this step hang until the
-        # job's 20-minute timeout killed it with an opaque "operation was
-        # canceled". Bound each apt network attempt and retry a few times so
-        # a stalled mirror fails over quickly, and cap the step itself as a
-        # backstop.
         timeout-minutes: 5
-        run: |
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=10 -o Acquire::https::Timeout=10 update
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=10 -o Acquire::https::Timeout=10 install --yes redis-server
+        uses: ./.github/actions/install-redis-server
 
       - name: Run Phase 0A replay harness feasibility experiment
         env:

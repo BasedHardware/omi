@@ -35,8 +35,7 @@ def test_listen_pusher_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -> N
     assert 'for attempt in 1 2 3' in job
     assert 'uses: actions/setup-java@v5' in job
     assert "java-version: '21'" in job
-    assert f'{_BOUNDED_APT_GET} update' in job
-    assert f'{_BOUNDED_APT_GET} install --yes redis-server' in job
+    assert 'uses: ./.github/actions/install-redis-server' in job
     assert 'timeout-minutes: 5' in job
     assert 'npm run test:listen-pusher-stack:emulator -- --state-dir "$RUNNER_TEMP/listen-pusher-stack"' in job
     assert 'name: Show listen gauntlet process diagnostics on failure' in job
@@ -139,7 +138,10 @@ def test_hermetic_e2e_tokenizer_warmup_is_cached_and_bounded() -> None:
 
 def test_hermetic_gauntlet_redis_apt_installs_are_bounded() -> None:
     workflow = (_REPO_ROOT / '.github' / 'workflows' / 'backend-hermetic-e2e.yml').read_text(encoding='utf-8')
+    action = (_REPO_ROOT / '.github' / 'actions' / 'install-redis-server' / 'action.yml').read_text(encoding='utf-8')
 
-    assert workflow.count(f'{_BOUNDED_APT_GET} update') == 3
-    assert workflow.count(f'{_BOUNDED_APT_GET} install --yes redis-server') == 3
+    assert workflow.count('uses: ./.github/actions/install-redis-server') == 3
+    assert workflow.count('timeout-minutes: 5') == 3
+    assert f'{_BOUNDED_APT_GET} update' in action
+    assert f'{_BOUNDED_APT_GET} install --yes redis-server' in action
     assert 'sudo apt-get install --yes redis-server' not in workflow
