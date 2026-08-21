@@ -79,6 +79,11 @@ ALLOWED_COMPONENTS = frozenset(
         'object_store',
         # Egress toward a third-party vendor, denied by posture (ADR-0057).
         'vendor_egress',
+        # Push TRANSPORT selection (ADR-0011) — distinct from 'pusher', which is the websocket service.
+        # utils/push/selector.py has recorded under this name since it was written, and it bucketed to
+        # 'other': a push backend degraded by a typo, or by a declared UnifiedPush with no base URL, was
+        # indistinguishable from every other unlabelled fallback (BACKLOG L18).
+        'push',
         'other',
     }
 )

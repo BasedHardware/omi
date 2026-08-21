@@ -101,6 +101,7 @@ from utils.executors import (
 )
 from utils.executors import start_background_task
 from utils.cloud_tasks import validate_account_deletion_dispatch_configuration
+from utils.push.selector import validate_push_configuration
 from services.conversation_finalization import reconcile_listen_finalization_jobs
 from services.conversation_finalization import reconcile_meeting_receipts
 from services.conversation_finalization import reconcile_stale_processing_conversations
@@ -112,6 +113,10 @@ log_langsmith_status()
 
 # Validate Stripe price IDs so misconfigured plans fail loud
 validate_stripe_price_ids()
+
+# Same idea for the push transport: a declared UnifiedPush with no internal base URL delivers nothing,
+# and used to say so only as one ERROR per endpoint on the first notification (BACKLOG L18).
+validate_push_configuration()
 
 _auth_emulator_host = os.environ.get("FIREBASE_AUTH_EMULATOR_HOST", "").strip()
 _firebase_admin_options = firebase_admin_options()

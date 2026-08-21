@@ -1213,11 +1213,25 @@ the session → backend `saveToken {"status":"Ok"}`, `GET /v1/users/me/subscript
 ## Push notifications (UnifiedPush/ntfy) — ADR-0011
 
 Remote push is the one allowed cloud dependency, behind `PUSH_NOTIFICATION_BACKEND`:
-- `fcm` (default) — Firebase Cloud Messaging / APNs. Needs Firebase.
+- `fcm` (**the code's default**) — Firebase Cloud Messaging / APNs. Needs Firebase.
 - `disabled` — no remote push at all. The backend runs fully and sends nothing; the app shows only
-  its own local notifications. Nothing else to deploy.
+  its own local notifications. Nothing else to deploy. **This is what `backend.env.base` declares**, because
+  the ntfy server is opt-in — and because the flag being *undeclared* meant the flag was effectively set to
+  the cloud value (measured: `resolve_push_backend()` answered `fcm` on this stack, ADR-0071).
 - `unifiedpush` — self-hosted push via [ntfy](https://ntfy.sh), no Google. Bring the server up with
   the `push` profile.
+
+**The two UnifiedPush variables are a PAIR.** `UNIFIEDPUSH_INTERNAL_BASE_URL` is required by the transport:
+the stored endpoint is user-registered, so POSTing to it verbatim would be an SSRF primitive, and
+`_target_url` refuses. Setting the backend without the base URL used to give a deployment that reported
+`unifiedpush`, passed readiness, and lost **100% of notifications** with one ERROR log per endpoint. It now
+resolves to `disabled` with `omi_fallback_total{component="push",reason="config_incomplete"}` and an explicit
+line at boot:
+
+```
+STARTUP: PUSH_NOTIFICATION_BACKEND=unifiedpush but UNIFIEDPUSH_INTERNAL_BASE_URL is not set — no push
+notification will be delivered ...
+```
 
 ```bash
 cd deploy/onprem
