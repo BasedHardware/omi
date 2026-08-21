@@ -1,6 +1,6 @@
 # INV-CUTOVER-1: Whole-account cohort cutover authority
 
-**Status:** proposed
+**Status:** locked
 
 This revision is proposed as of 2026-08-07. It must remain unchanged for seven
 days, with its behavioral guards, before a follow-up can lock it.

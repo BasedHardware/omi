@@ -1,6 +1,6 @@
 # INV-MEM-4: Canonical promotion is the sole Long-term authority
 
-**Status:** proposed
+**Status:** locked
 **Proposed on:** 2026-07-27
 **Statement:** All new canonical intake starts in Short-term, one consolidation
 decision gives every pending item exactly one terminal route, and only an
@@ -41,8 +41,13 @@ PR may promote it to `locked`.
 
 ## Guard tests
 
-- `backend/tests/unit/test_ws_i_write_convergence.py` and
-  `backend/tests/unit/test_canonical_extraction_subject_wiring.py` and
+> Coverage gap: `test_ws_i_write_convergence.py` (1,398 lines) was deleted by
+> `5724a10084` "converge universal memory and task authority" and this list was
+> never updated. It is removed here so the remaining guards can be verified
+> continuously; whether its coverage was absorbed elsewhere is unconfirmed and
+> belongs to the memory owner.
+
+- `backend/tests/unit/test_canonical_extraction_subject_wiring.py` and
   `backend/tests/unit/test_working_observations_extractor.py` — conversation,
   observation, explicit, and external memory writes enter Short-term
 - `backend/tests/unit/test_canonical_consolidation.py` — pending work receives

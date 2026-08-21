@@ -1,6 +1,6 @@
 # INV-TASK-1: Complete dated task buckets with bounded No Deadline paging
 
-**Status:** proposed
+**Status:** locked
 **Statement:** The active Tasks view always presents the complete Today, Tomorrow, and Later buckets while loading No Deadline tasks in bounded pages at the true scroll bottom.
 
 ## MUST NOT
