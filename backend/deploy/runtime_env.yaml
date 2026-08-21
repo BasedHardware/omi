@@ -1171,7 +1171,7 @@ environments:
               name: prod-omi-backend-config
               key: MCP_RESOURCE_URL
           REFERRAL_PUBLIC_BASE_URL:
-            value: https://api.omi.me
+            value: https://omi.me
             category: service_discovery
           ACCOUNT_DELETION_DISPATCH_MODE:
             value: cloud_tasks
