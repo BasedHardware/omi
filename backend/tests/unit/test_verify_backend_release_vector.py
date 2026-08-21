@@ -460,7 +460,7 @@ def test_firestore_readiness_fails_before_admitted_source_checkout_when_read_onl
             'Google Auth for read-only Firestore inventory'
         )
         if workflow.name == 'gcp_backend_auto_dev.yml':
-            assert readiness.index('Verify Release Eligibility proof is merged into current main') < readiness.index(
+            assert readiness.index('Resolve and verify the newest proven main source') < readiness.index(
                 'Require read-only Firestore credentials'
             )
 
