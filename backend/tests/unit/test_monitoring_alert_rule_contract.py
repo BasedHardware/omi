@@ -1,6 +1,7 @@
 """Static contracts for Grafana alert rules."""
 
 import json
+import re
 from pathlib import Path
 
 import yaml
@@ -389,3 +390,71 @@ def test_silent_failure_alerts_link_a_panel_that_shows_their_own_signal():
             annotations = rules[uid]["annotations"]
             assert annotations["__dashboardUid__"] == dashboard["uid"], f"{export_name}:{uid}"
             assert annotations["__panelId__"] == panel_id, f"{export_name}:{uid}"
+
+
+JOURNEY_SELECTOR = re.compile(r'journey="([a-z_]+)"')
+JOURNEY_METRIC_PREFIXES = ("omi_journey_", "omi_client_journey_")
+# A journey may be exempt from liveness coverage only while its counter provably
+# cannot arrive. Each entry needs a reason and must be deleted in the same change
+# that makes the counter reachable.
+LIVENESS_EXEMPT_JOURNEYS = {
+    "chat_response": (
+        "Emitted by backend/routers/chat.py from the Cloud Run backend service. Prometheus "
+        "scrapes GKE pods only, so this counter reads zero and including it in the liveness "
+        "rule would page permanently. Remove this exemption in the change that gives Cloud "
+        "Run services a metrics ingestion path, and add the journey to the liveness rule."
+    ),
+}
+
+
+def _journeys_alerted_on(rules: dict[str, dict]) -> dict[str, set[str]]:
+    alerted: dict[str, set[str]] = {}
+    for uid, rule in rules.items():
+        if uid == SIGNAL_DEAD_RULE:
+            continue
+        for query in rule["data"]:
+            expression = query["model"].get("expr") or ""
+            if not any(prefix in expression for prefix in JOURNEY_METRIC_PREFIXES):
+                continue
+            for journey in JOURNEY_SELECTOR.findall(expression):
+                alerted.setdefault(journey, set()).add(uid)
+    return alerted
+
+
+def test_every_alerted_journey_is_covered_by_the_liveness_rule():
+    """An alert whose input counter is dead does not fail loudly — it goes quiet.
+
+    omi-journey-chat-fail sat armed and unfirable for its entire existence
+    because omi_journey_accepted_total{journey="chat_response"} is emitted from
+    an unscraped Cloud Run process. A desktop chat outage then ran for roughly
+    19 hours with no page. Adding a journey alert without liveness coverage
+    recreates that exact hole, so it fails here instead.
+    """
+    for export_name, rules in _all_rule_exports().items():
+        liveness = rules[SIGNAL_DEAD_RULE]["data"][0]["model"]["expr"]
+        covered = set(JOURNEY_SELECTOR.findall(liveness))
+        covered |= (
+            set(re.findall(r'journey=~"([a-z_|]+)"', liveness)[0].split("|"))
+            if re.findall(r'journey=~"([a-z_|]+)"', liveness)
+            else set()
+        )
+
+        for journey, uids in _journeys_alerted_on(rules).items():
+            if journey in LIVENESS_EXEMPT_JOURNEYS:
+                assert LIVENESS_EXEMPT_JOURNEYS[journey].strip(), journey
+                assert (
+                    journey not in covered
+                ), f"{export_name}: {journey} is both exempt and covered — delete the exemption"
+                continue
+            assert journey in covered, (
+                f"{export_name}: {journey} is alerted on by {sorted(uids)} but is not covered by "
+                f"{SIGNAL_DEAD_RULE}. Either add it to the liveness rule or record why its counter "
+                f"cannot arrive in LIVENESS_EXEMPT_JOURNEYS."
+            )
+
+
+def test_liveness_exemptions_are_documented_in_the_runbook():
+    runbook = (REPO / SILENT_FAILURE_RUNBOOK).read_text(encoding="utf-8")
+
+    for journey in LIVENESS_EXEMPT_JOURNEYS:
+        assert journey in runbook, f"{journey} is exempt from liveness coverage but the runbook does not say why"

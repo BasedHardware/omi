@@ -132,3 +132,22 @@ emitted from Cloud Run and is expected to read zero until an ingestion path
 exists. Add it to the rule in the same change that makes those metrics arrive —
 otherwise the rule pages permanently and gets muted, which is worse than the
 gap it describes.
+
+## Adding a journey alert later
+
+Every alert that reads a journey counter inherits that counter's failure mode: if the
+counter dies, the alert does not fail — it goes quiet, and quiet is indistinguishable
+from healthy. `omi-journey-chat-fail` sat armed and unfirable for its entire existence
+for exactly this reason.
+
+`test_every_alerted_journey_is_covered_by_the_liveness_rule` makes that impossible to
+ship again. Any rule whose expression selects `journey="..."` on an `omi_journey_*` or
+`omi_client_journey_*` metric must have that journey inside `omi-journey-signal-dead`'s
+selector, so a dead counter pages on its own.
+
+The only escape is `LIVENESS_EXEMPT_JOURNEYS` in the contract test, which requires a
+written reason. There is one entry today — `chat_response`, because it is emitted from
+Cloud Run and cannot arrive at all. **Delete that exemption in the same change that gives
+Cloud Run services a metrics ingestion path**, and add `chat_response` to the liveness
+rule at the same time. The test asserts a journey is never both exempt and covered, so
+the two cannot silently disagree.
