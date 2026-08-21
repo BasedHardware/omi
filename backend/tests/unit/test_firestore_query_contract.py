@@ -8,6 +8,7 @@ import pytest
 from google.cloud.firestore_v1 import FieldFilter
 
 import database.action_items as action_items_db
+import database.chat as chat_db
 import database.task_recommendations as task_recommendations_db
 import routers.task_recommendations as task_recommendations_router
 from database.firestore_index_registry import (
@@ -19,6 +20,7 @@ from database.firestore_index_registry import (
     EXPIRED_SHORT_TERM_LIFECYCLE_QUERY,
     EXPIRED_MEMORY_OUTBOX_LEASE_QUERY,
     INDEX_ONLY_REQUIREMENTS,
+    MESSAGES_BY_APP_ORDERED_QUERY,
     POLICY_EXPIRED_SHORT_TERM_QUERY,
     RECENT_REJECTED_MEMORY_FEEDBACK_QUERY,
     REVIEW_QUEUE_BY_CONFLICT_QUERY,
@@ -533,21 +535,23 @@ class _StreamRecordingQuery:
 
 
 class _StreamRecordingUserRef:
-    def __init__(self, recorder):
+    def __init__(self, recorder, collection_name='action_items'):
         self._recorder = recorder
+        self._collection_name = collection_name
 
     def collection(self, name):
-        assert name == 'action_items'
+        assert name == self._collection_name
         return _StreamRecordingQuery(self._recorder)
 
 
 class _StreamRecordingFirestore:
-    def __init__(self, recorder):
+    def __init__(self, recorder, collection_name='action_items'):
         self._recorder = recorder
+        self._collection_name = collection_name
 
     def collection(self, name):
         assert name == 'users'
-        return SimpleNamespace(document=lambda _uid: _StreamRecordingUserRef(self._recorder))
+        return SimpleNamespace(document=lambda _uid: _StreamRecordingUserRef(self._recorder, self._collection_name))
 
 
 def _declared_index_signatures():
@@ -584,6 +588,40 @@ def test_due_date_filtered_action_item_reads_have_a_declared_composite_index(mon
     declared = _declared_index_signatures()
     for filters, orders in compound:
         assert _equality_plus_order_signature('action_items', filters, orders) in declared
+
+
+@pytest.mark.parametrize(
+    ('symbol', 'call'),
+    [
+        ('get_app_messages', lambda: chat_db.get_app_messages('index-contract-user', 'some-app', limit=20)),
+        (
+            'get_messages',
+            lambda: chat_db.get_messages('index-contract-user', app_id='some-app', limit=20),
+        ),
+    ],
+)
+def test_app_scoped_message_reads_have_a_declared_composite_index(monkeypatch, symbol, call):
+    """plugin_id-filtered, created_at-descending message reads need a declared composite.
+
+    Regression for a self-host FailedPrecondition 400 on GET /v1/messages: prod has this
+    index only because it was created by hand at some point, but firestore_index_registry.py
+    never declared it, so a fresh self-host deploy 400s on this exact query.
+    """
+    recorder = []
+    monkeypatch.setattr(chat_db, 'db', _StreamRecordingFirestore(recorder, collection_name='messages'))
+
+    call()
+
+    compound = [(filters, orders) for filters, orders in recorder if orders and any(op == '==' for _, op in filters)]
+    assert compound, f'{symbol} no longer builds a plugin_id equality + created_at ordering chain'
+    declared = _declared_index_signatures()
+    for filters, orders in compound:
+        assert _equality_plus_order_signature('messages', filters, orders) in declared
+
+
+def test_messages_by_app_ordered_query_is_registered_for_the_messages_collection():
+    assert MESSAGES_BY_APP_ORDERED_QUERY.collection_group == 'messages'
+    assert MESSAGES_BY_APP_ORDERED_QUERY.index_requirement.to_manifest() in firebase_index_manifest()['indexes']
 
 
 def test_query_source_paths_are_posix_canonical_on_every_host_platform():
