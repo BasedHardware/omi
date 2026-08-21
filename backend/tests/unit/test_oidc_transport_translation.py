@@ -49,3 +49,71 @@ def test_get_user_profile_non_json_body_is_neutral(monkeypatch):
     monkeypatch.setattr(httpx, "get", lambda *a, **k: _Resp())
     with pytest.raises(errors.AuthError):
         OIDCAuthProvider().get_user_profile("u1")
+
+
+# --- verify_token's own catch-all: a bug must not read as "refresh your token" (BACKLOG L13) ---
+
+
+def _verify_env(monkeypatch):
+    monkeypatch.setenv("OIDC_ISSUER", "http://keycloak:8080/realms/omi")
+    monkeypatch.setenv("OIDC_JWKS_URL", "http://keycloak:8080/realms/omi/protocol/openid-connect/certs")
+    monkeypatch.setenv("OIDC_AUDIENCE", "omi-backend")
+
+
+def test_a_transport_failure_fetching_the_jwks_is_the_transient_class(monkeypatch):
+    """What the broad catch was FOR, and it keeps working: no keys right now, ask again later."""
+    import utils.auth.adapters.oidc as oidc_mod
+
+    _verify_env(monkeypatch)
+
+    def unreachable(*_a, **_k):
+        raise OSError('connection refused')
+
+    monkeypatch.setattr(oidc_mod, '_get_jwks_client', unreachable)
+
+    with pytest.raises(errors.JWKSUnavailable):
+        OIDCAuthProvider().verify_token('tok')
+
+
+def test_a_programming_error_is_NOT_told_to_refresh(monkeypatch):
+    """`except Exception -> JWKSUnavailable` mapped a TypeError to the retryable class, and the WS mapper
+    turns that into close code 4001 "Token refresh required" — so a deterministic bug told the client to
+    refresh, forever, while HTTP hid it behind the same 401 (BACKLOG L13).
+
+    The Firebase adapter already fixed exactly this: an unknown failure becomes a plain AuthError, not a
+    retryable one, with the reasoning written in `_translate`. This is that shape, on the OIDC side.
+    """
+    import utils.auth.adapters.oidc as oidc_mod
+
+    from utils.other.endpoints import map_ws_auth_close
+
+    _verify_env(monkeypatch)
+
+    def bug(*_a, **_k):
+        raise TypeError("unsupported operand type(s) — a real bug, not a network problem")
+
+    monkeypatch.setattr(oidc_mod, '_get_jwks_client', bug)
+
+    with pytest.raises(errors.AuthError) as raised:
+        OIDCAuthProvider().verify_token('tok')
+
+    assert not isinstance(raised.value, errors.JWKSUnavailable), 'a bug is not "keys unavailable"'
+    assert not isinstance(raised.value, errors.ExpiredToken)
+    assert not isinstance(raised.value, errors.InvalidToken), 'nor is it a bad token from the client'
+
+    code, _reason = map_ws_auth_close(raised.value)
+    assert code == 1008, 'the client must be told the request is invalid, not to refresh its token'
+
+
+def test_an_unexpected_error_keeps_its_message(monkeypatch):
+    """The operator needs the original text to recognise a bug; swallowing it would trade one silence for
+    another."""
+    import utils.auth.adapters.oidc as oidc_mod
+
+    _verify_env(monkeypatch)
+    monkeypatch.setattr(
+        oidc_mod, '_get_jwks_client', lambda *_a, **_k: (_ for _ in ()).throw(AttributeError('no attribute zap'))
+    )
+
+    with pytest.raises(errors.AuthError, match='no attribute zap'):
+        OIDCAuthProvider().verify_token('tok')

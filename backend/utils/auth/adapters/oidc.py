@@ -158,8 +158,21 @@ class OIDCAuthProvider:
             # unset) is permanent — let it propagate as-is instead of the broad handler below reclassifying
             # it as JWKSUnavailable (a transient/retryable class) (cubic PR 10887 oidc.py:84).
             raise
-        except Exception as exc:  # JWKS fetch/transport failures
+        except OSError as exc:
+            # JWKS fetch/transport failure — URLError, timeouts, DNS, connection refused are all OSError
+            # subclasses. This is the transient class the WS mapper turns into 4001 "refresh your token",
+            # and it is the only thing that should be.
             raise errors.JWKSUnavailable(str(exc))
+        except Exception as exc:
+            # Anything else here is OURS, not the client's: a TypeError, a wrong admin config, an
+            # unexpected library shape. Mapping it to JWKSUnavailable told the client to refresh a token
+            # that was fine — forever, since a deterministic bug never stops happening — and HTTP hid it
+            # behind the same 401 (BACKLOG L13). A plain AuthError maps to close code 1008 instead.
+            #
+            # This mirrors the Firebase adapter, which already made this exact distinction: its
+            # ``_translate`` maps an unknown failure to ``AuthError`` and says why. The two adapters now
+            # agree, which is the point of having a neutral taxonomy at all.
+            raise errors.AuthError(str(exc))
 
         if check_revoked and not self._introspect_active(bearer):
             # A JWT stays signature/exp-valid after a server-side logout/revocation; only introspection
