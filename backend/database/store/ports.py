@@ -118,4 +118,66 @@ class DocumentStore(Protocol):
     def batch(self) -> WriteBatch: ...
 
 
-__all__ = ["DocumentStore", "Transaction", "WriteBatch", "Filter"]
+@runtime_checkable
+class FacadeSessionStore(Protocol):
+    """The extra surface a store MUST implement to sit behind the ADR-0044 facade.
+
+    ``NeutralFirestoreClient`` is not a domain caller: it impersonates a Firestore ``Client`` so
+    upstream code that threads ``db_client`` runs unchanged. Upstream's ``@transactional`` bodies
+    interleave reads and writes on one handle, so the facade needs to run each op **inside a specific
+    session** — something the domain-facing ``DocumentStore`` above deliberately does not express
+    (``run_transaction`` takes a callback and owns the session itself).
+
+    This protocol is that requirement, written down. It used to be an unwritten convention: the facade
+    reached for ``store._get(..., session=...)`` and friends, which exist on ``MongoDocumentStore`` and
+    the in-memory test fake and nowhere else. An adapter author implementing the documented port in
+    full got ``AttributeError`` deep inside a transaction — and, worse, a ``_begin`` that silently fell
+    back to no session at all, so every transaction in the product would have run **without
+    atomicity, without an error**. Fixing the loud half while shipping the silent half was the real
+    hazard (BACKLOG L31).
+
+    The names keep their leading underscore on purpose: they are a facade-internal extension, not part
+    of the neutral surface domain modules are allowed to call. ``session`` is opaque to the facade's
+    callers but not yet neutral — ``_FacadeTransaction`` drives it with the **Mongo session protocol**
+    (``commit_transaction`` / ``abort_transaction`` / ``end_session``). Making that neutral too is the
+    open half of L31, to be done together with a third adapter and not before.
+    """
+
+    # Same semantics as the DocumentStore ops of the same name, executed inside ``session``.
+    def _get(self, path: str, *, fields: Optional[Sequence[str]] = None, session: Any = None) -> StoredDocument: ...
+    def _set(self, path: str, data: Dict[str, Any], *, merge: bool = False, session: Any = None) -> None: ...
+    def _update(
+        self, path: str, data: Dict[str, Any], *, if_updated_at: Optional[datetime] = None, session: Any = None
+    ) -> None: ...
+    def _create(self, path: str, data: Dict[str, Any], *, session: Any = None) -> None: ...
+    def _delete(self, path: str, *, if_updated_at: Optional[datetime] = None, session: Any = None) -> None: ...
+
+    def _begin_session(self) -> Any:
+        """Open a session with an active transaction, or return ``None`` to declare session-less.
+
+        ``None`` is a **declaration**, not an absence: "this store applies writes directly and offers
+        no atomicity" — what the in-memory unit-test fake wants, since a unit test asserts domain
+        logic and the live contract suite owns atomicity. A real adapter must return a session; if it
+        cannot, it must say so here rather than let the facade infer it from a missing attribute.
+        """
+
+
+# Every name the facade needs beyond DocumentStore, in one place so the error message can list what
+# is missing instead of surfacing whichever attribute happened to be touched first.
+FACADE_SESSION_OPS = ("_get", "_set", "_update", "_create", "_delete", "_begin_session")
+
+
+def missing_facade_session_ops(store: Any) -> tuple[str, ...]:
+    """The FACADE_SESSION_OPS ``store`` does not implement (empty tuple = usable behind the facade)."""
+    return tuple(name for name in FACADE_SESSION_OPS if not callable(getattr(store, name, None)))
+
+
+__all__ = [
+    "DocumentStore",
+    "FacadeSessionStore",
+    "FACADE_SESSION_OPS",
+    "Filter",
+    "Transaction",
+    "WriteBatch",
+    "missing_facade_session_ops",
+]

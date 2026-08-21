@@ -27,6 +27,7 @@ from database.store import sentinels as _neutral
 from database.store.errors import AlreadyExists as _StoreAlreadyExists
 from database.store.errors import NotFound as _StoreNotFound
 from database.store.errors import PreconditionFailed as _StorePreconditionFailed
+from database.store.ports import missing_facade_session_ops
 from database.store.records import StoredDocument
 
 # Google sentinels/types are only needed to RECOGNISE values upstream passes in; importing them here
@@ -581,15 +582,17 @@ class _FacadeTransaction:
 
     # --- lifecycle (driven by the decorator/wrapper) ---
     def _begin(self, retry_id: Any = None) -> None:
-        # Mongo: a real replica-set session transaction. A store without a Mongo client (the neutral
-        # FakeDocumentStore in unit tests) runs session-less — writes apply directly, no atomicity,
-        # which is what a hermetic unit test asserting domain logic needs.
-        mongo = getattr(self._client._store, "_mongo_client", None)
-        if mongo is not None:
-            self._session = mongo.start_session()
-            self._session.start_transaction()
-        else:
-            self._session = None
+        # The store opens its own session (ports.FacadeSessionStore): the Mongo adapter returns a
+        # replica-set session with an active transaction, the neutral FakeDocumentStore returns None to
+        # DECLARE session-less — writes apply directly, no atomicity, which is what a hermetic unit
+        # test asserting domain logic needs.
+        #
+        # This used to sniff ``store._mongo_client`` and treat its absence as "session-less". That
+        # inference is why a store implementing the documented port in full would have run every
+        # transaction in the product WITHOUT ATOMICITY AND WITHOUT AN ERROR: the loud half
+        # (AttributeError from _read) invited a fix, and the silent half shipped behind it. Asking the
+        # store makes "no session" a declaration instead of a guess (BACKLOG L31).
+        self._session = self._client._store._begin_session()
         self._id = id(self)
 
     def _commit(self) -> Any:
@@ -693,6 +696,20 @@ class NeutralFirestoreClient:
     """
 
     def __init__(self, store: Any) -> None:
+        # Fail here, at construction, rather than at the first transaction: the facade needs more than
+        # the domain-facing DocumentStore (session-scoped ops + a session opener — ports.FacadeSessionStore),
+        # and a store missing them cannot be used behind it. Naming every missing method beats surfacing
+        # whichever attribute a transaction happened to touch first, three layers down (BACKLOG L31).
+        missing = missing_facade_session_ops(store)
+        if missing:
+            raise TypeError(
+                f"{type(store).__name__} cannot back NeutralFirestoreClient: it does not implement "
+                f"{', '.join(missing)}. The facade runs upstream's @transactional bodies inside one "
+                "session, which the domain-facing DocumentStore port does not express; see "
+                "database/store/ports.py:FacadeSessionStore. Return None from _begin_session() to "
+                "declare a store session-less on purpose (no atomicity) — never leave it unimplemented, "
+                "or transactions apply without atomicity and without an error."
+            )
         self._store = store
 
     def document(self, path: str) -> _DocRef:

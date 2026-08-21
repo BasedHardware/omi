@@ -231,6 +231,16 @@ class FakeDocumentStore:
     def _create(self, path: str, data: Dict[str, Any], *, session: Any = None) -> None:
         self.create(path, data)
 
+    def _begin_session(self) -> Any:
+        """Declare session-less on purpose (ports.FacadeSessionStore).
+
+        Writes apply directly, with no atomicity: a hermetic unit test asserts domain logic, and the
+        live dual-backend contract suite owns atomicity. Declaring it beats the facade inferring it
+        from a missing ``_mongo_client``, which is how a real adapter could have lost atomicity in
+        silence (BACKLOG L31).
+        """
+        return None
+
     def _delete(self, path: str, *, if_updated_at: Any = None, session: Any = None) -> None:
         self.delete(path, if_updated_at=if_updated_at)
 

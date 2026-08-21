@@ -743,5 +743,17 @@ class MongoDocumentStore:
     def batch(self) -> _MongoBatch:
         return _MongoBatch(self)
 
+    # --- facade session support (ports.FacadeSessionStore) ---
+    def _begin_session(self) -> Any:
+        """Open a replica-set session with an active transaction, for the ADR-0044 facade.
+
+        The facade used to reach for ``store._mongo_client`` and start the session itself; the
+        requirement now lives in ``ports.FacadeSessionStore`` and the store owns its own session,
+        so a store that cannot offer one says so by returning ``None`` instead of being guessed at.
+        """
+        session = self._mongo_client.start_session()
+        session.start_transaction()
+        return session
+
 
 __all__ = ["MongoDocumentStore"]
