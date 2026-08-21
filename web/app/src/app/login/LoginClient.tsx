@@ -229,7 +229,7 @@ export function LoginClient() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: 0.1 }}
-              className="text-2xl font-display font-semibold text-text-primary mb-1"
+              className="mb-1 text-center font-display text-2xl font-semibold text-text-primary"
             >
               {isReferralFlow ? 'One free month of Operator' : 'Omi'}
             </motion.h1>

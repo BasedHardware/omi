@@ -80,6 +80,7 @@ describe('LoginClient geometry', () => {
 
     expect(markup).toContain('One free month of Operator');
     expect(markup).toContain('Create your account to claim it');
+    expect(markup).toContain('text-center font-display text-2xl');
     expect(markup).toContain('Continue with Apple');
     expect(markup).toContain('Continue with Google');
   });
