@@ -45,6 +45,33 @@ class Transaction(Protocol):
     def create(self, path: str, data: Dict[str, Any]) -> None: ...
     def delete(self, path: str, *, if_updated_at: Optional[datetime] = None) -> None: ...
 
+    def query(
+        self,
+        collection: str,
+        *,
+        filters: Optional[Iterable[Filter]] = None,
+        order_by: Optional[OrderBy] = None,
+        direction: str = "asc",
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        fields: Optional[Sequence[str]] = None,
+        start_after: Optional[Dict[str, Any]] = None,
+    ) -> List[StoredDocument]:
+        """``DocumentStore.query`` executed inside this transaction (BACKLOG L24).
+
+        Upstream reads collections inside ``@firestore.transactional`` bodies — the idempotency-key
+        de-dup in ``database/action_items.py``, the relationship detach in ``goals.py``, the photo probe
+        in ``conversation_finalization_jobs.py`` — and the facade used to accept that transaction and
+        drop it, so on Mongo those reads ran outside the session.
+
+        What the two backends promise here is NOT the same, and the difference is measured rather than
+        assumed (ADR-0070): Firestore takes a LOCK on what a transaction reads (a competing writer gets
+        409) and refuses read-after-write outright; Mongo gives a consistent snapshot, allows
+        read-after-write, and takes no read lock — so a concurrent write to a row this query returned
+        does not stop the commit. The contract is therefore only "the read runs in the transaction's own
+        view of committed state". A caller that needs read-set conflict detection must not rely on this.
+        """
+
 
 @runtime_checkable
 class WriteBatch(Protocol):
@@ -152,6 +179,12 @@ class FacadeSessionStore(Protocol):
     def _create(self, path: str, data: Dict[str, Any], *, session: Any = None) -> None: ...
     def _delete(self, path: str, *, if_updated_at: Optional[datetime] = None, session: Any = None) -> None: ...
 
+    def _query(self, collection: str, *, session: Any = None, **kwargs: Any) -> List[StoredDocument]:
+        """``query`` inside ``session``. Upstream's transactional bodies read COLLECTIONS, not just
+        documents (``query.stream(transaction=tx)``), and the facade used to accept that transaction and
+        drop it — so on Mongo the de-dup read in ``database/action_items.py`` ran outside the session
+        (BACKLOG L24)."""
+
     def _begin_session(self) -> Any:
         """Open a session with an active transaction, or return ``None`` to declare session-less.
 
@@ -164,7 +197,7 @@ class FacadeSessionStore(Protocol):
 
 # Every name the facade needs beyond DocumentStore, in one place so the error message can list what
 # is missing instead of surfacing whichever attribute happened to be touched first.
-FACADE_SESSION_OPS = ("_get", "_set", "_update", "_create", "_delete", "_begin_session")
+FACADE_SESSION_OPS = ("_get", "_set", "_update", "_create", "_delete", "_query", "_begin_session")
 
 
 def missing_facade_session_ops(store: Any) -> tuple[str, ...]:

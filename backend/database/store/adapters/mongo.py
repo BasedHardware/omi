@@ -347,6 +347,9 @@ class _MongoTransaction:
     def delete(self, path: str, *, if_updated_at: Any = None) -> None:
         self._store._delete(path, if_updated_at=if_updated_at, session=self._session)
 
+    def query(self, collection: str, **kw: Any) -> List[StoredDocument]:
+        return self._store._query(collection, session=self._session, **kw)
+
 
 class MongoDocumentStore:
     """``DocumentStore`` backed by MongoDB (pymongo, sync)."""
@@ -536,6 +539,36 @@ class MongoDocumentStore:
         fields: Optional[Sequence[str]] = None,
         start_after: Optional[Dict[str, Any]] = None,
     ) -> List[StoredDocument]:
+        return self._query(
+            collection,
+            filters=filters,
+            order_by=order_by,
+            direction=direction,
+            limit=limit,
+            offset=offset,
+            fields=fields,
+            start_after=start_after,
+        )
+
+    def _query(
+        self,
+        collection: str,
+        *,
+        filters: Optional[Iterable[Filter]] = None,
+        order_by: Optional[str] = None,
+        direction: str = "asc",
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        fields: Optional[Sequence[str]] = None,
+        start_after: Optional[Dict[str, Any]] = None,
+        session: Any = None,
+    ) -> List[StoredDocument]:
+        """``query`` with an explicit session — the facade's read path inside a transaction (L24).
+
+        The session-aware twin of every other op here (``_get``/``_set``/…): the public ``query`` is the
+        domain surface and passes ``session=None``. Before this existed, ``find(..., session=None)`` was
+        hardcoded, so a query the caller had explicitly bound to a transaction ran outside it.
+        """
         mongo_filter = self._filter(collection, filters)
         # order_by is a single field name (str) or a list of (field, direction) tuples.
         specs = [(order_by, direction)] if isinstance(order_by, str) else list(order_by or [])
@@ -576,7 +609,7 @@ class MongoDocumentStore:
         # fields=[] means ids-only; an empty dict projection would make pymongo return ALL fields, so fall
         # back to {"_id": 1} (cubic 10887 facade:258). fields=None = no projection (full doc).
         projection = ({"d." + field: 1 for field in fields} or {"_id": 1}) if fields is not None else None
-        cursor = self._db[_collection_name(collection)].find(mongo_filter, projection, session=None)
+        cursor = self._db[_collection_name(collection)].find(mongo_filter, projection, session=session)
         if specs:
             # Map ``__name__`` order to _id (the document name); other fields sort by their payload key.
             # Append an _id tiebreak only when _id is not already an order key (mirrors Firestore's

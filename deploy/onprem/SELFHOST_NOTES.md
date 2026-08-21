@@ -895,6 +895,19 @@ Every test must run **twice** (the `bind_store` fixture is parametrized `firesto
 per-backend `SKIPPED` means that service's env var never reached the container — the suite then proves
 half of what its name claims, which is how two of these suites sat dead for months. Check the counts.
 
+**What the transaction contract does and does not promise** (ADR-0070), because the two backends differ and
+the suite only asserts the intersection. Measured on this rig:
+
+| | Mongo | Firestore emulator |
+|---|---|---|
+| a query in the transaction sees the transaction's own writes | yes | **no** — the SDK raises `ReadAfterWriteError` |
+| a concurrent write to a row the transaction only READ blocks the commit | **no** — it commits with the stale read | yes — the transaction holds a lock, the writer gets `409 Aborted` |
+| write-write on the same document | aborts (`TransientTransactionError`) | aborts |
+
+So `tx.query` means "the read runs in the transaction's own view of committed state" and nothing more. Code
+that needs read-set conflict detection (the `idempotency_key` de-dup in `database/action_items.py`) is NOT
+protected on Mongo by the transaction alone — BACKLOG L46.
+
 Note: gRPC (Firestore) bypasses the Python socket guard; pymongo uses Python sockets but on loopback,
 which the guard permits.
 

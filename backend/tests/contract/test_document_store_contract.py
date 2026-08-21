@@ -834,3 +834,42 @@ def test_run_transaction_aborts_on_exception(store, uid):
 
     # The aborted write must not have been committed.
     assert store.get(f"users/{uid}").to_dict()["samples"] == ["s1"]
+
+
+def test_a_query_inside_a_transaction_runs_inside_it(store, uid):
+    """``tx.query`` is part of the neutral Transaction contract (BACKLOG L24).
+
+    Upstream reads collections inside `@firestore.transactional` bodies — the idempotency-key de-dup in
+    `database/action_items.py`, the relationship detach in `goals.py`, the photo probe in
+    `conversation_finalization_jobs.py` — via `query.stream(transaction=tx)`. The facade ACCEPTED that
+    parameter and IGNORED it, so on Mongo those reads ran outside the session entirely.
+
+    What "inside it" means differs per backend and the contract can only promise the part both give:
+    the rows a transaction reads are the committed state it is working from. It deliberately does NOT
+    assert that the read is visible to the transaction's own later writes, nor that reading a row locks
+    it — measured, those differ (Firestore refuses read-after-write outright and takes a lock; Mongo
+    allows read-after-write and takes none). See ADR-0070.
+    """
+    store.set(f"users/{uid}/action_items/a1", {"key": "k1", "done": False})
+    store.set(f"users/{uid}/action_items/a2", {"key": "k2", "done": False})
+
+    def read_in_tx(tx):
+        rows = tx.query(
+            f"users/{uid}/action_items",
+            filters=[("key", "==", "k1")],
+        )
+        return [row.id for row in rows]
+
+    assert store.run_transaction(read_in_tx) == ["a1"]
+
+
+def test_a_transactional_query_sees_a_row_written_before_the_transaction(store, uid):
+    """The de-dup case in one line: a row committed a moment earlier must be found, or the read that is
+    supposed to prevent a duplicate does not see the thing it is checking for."""
+    def create_then_read(tx):
+        return [row.id for row in tx.query(f"users/{uid}/action_items", filters=[("key", "==", "k9")])]
+
+    assert store.run_transaction(create_then_read) == []
+
+    store.set(f"users/{uid}/action_items/a9", {"key": "k9", "done": False})
+    assert store.run_transaction(create_then_read) == ["a9"]

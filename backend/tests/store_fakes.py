@@ -244,6 +244,12 @@ class FakeDocumentStore:
     def _delete(self, path: str, *, if_updated_at: Any = None, session: Any = None) -> None:
         self.delete(path, if_updated_at=if_updated_at)
 
+    def _query(self, collection: str, *, session: Any = None, **kw: Any) -> List[StoredDocument]:
+        # Session-less like the rest: this fake has no transaction isolation to offer, and saying so is
+        # the point (ports.FacadeSessionStore). What it DOES give the facade is a query that runs at all
+        # when a transaction is threaded through it — the shape upstream's transactional bodies use.
+        return self.query(collection, **kw)
+
     def query(
         self,
         collection: str,

@@ -182,9 +182,10 @@ class _FirestoreBatch:
 class _FirestoreTransaction:
     """Neutral transaction handle over a Firestore transaction. Reads/writes are path-based."""
 
-    def __init__(self, transaction: Any, client: Any):
+    def __init__(self, transaction: Any, client: Any, store: Any = None):
         self._transaction = transaction
         self._client = client
+        self._store = store
 
     def get(self, path: str) -> StoredDocument:
         snapshot = self._client.document(path).get(transaction=self._transaction)
@@ -208,6 +209,9 @@ class _FirestoreTransaction:
 
     def delete(self, path: str, *, if_updated_at: Any = None) -> None:
         self._transaction.delete(self._client.document(path), option=_last_update_option(if_updated_at))
+
+    def query(self, collection: str, **kw: Any) -> List[StoredDocument]:
+        return self._store.query(collection, transaction=self._transaction, **kw)
 
 
 class FirestoreDocumentStore:
@@ -280,7 +284,14 @@ class FirestoreDocumentStore:
         offset: Optional[int] = None,
         fields: Optional[Sequence[str]] = None,
         start_after: Optional[Dict[str, Any]] = None,
+        transaction: Any = None,
     ) -> List[StoredDocument]:
+        """``transaction`` runs the read inside that Firestore transaction (BACKLOG L24).
+
+        Firestore's own rule applies and is worth knowing at the call site: a transaction reads first
+        and writes second, so a query after a write in the same transaction raises
+        ``ReadAfterWriteError`` from the SDK — measured, not inferred (ADR-0070).
+        """
         coll = self._client.collection(collection)
         query: Any = coll
         for field, op, value in filters or ():
@@ -312,7 +323,7 @@ class FirestoreDocumentStore:
             query = query.offset(offset)
         if limit is not None:
             query = query.limit(limit)
-        return [_record_from_query(snapshot) for snapshot in query.stream()]
+        return [_record_from_query(snapshot) for snapshot in query.stream(transaction=transaction)]
 
     def count(self, collection: str, *, filters: Optional[Iterable[Filter]] = None) -> int:
         coll = self._client.collection(collection)
@@ -410,7 +421,7 @@ class FirestoreDocumentStore:
 
         @transactional
         def _runner(transaction: Any) -> Any:
-            return fn(_FirestoreTransaction(transaction, client))
+            return fn(_FirestoreTransaction(transaction, client, self))
 
         # run_transactional restarts on an expired-transaction 400; @transactional retries contention.
         # A tx.create()/tx.update() precondition failure surfaces here at COMMIT, after the write call

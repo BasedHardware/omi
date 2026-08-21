@@ -297,6 +297,16 @@ class _AggregationQuery:
         self._value = value
 
     def get(self, transaction: Any = None, **kwargs: Any) -> List[List["_AggregationResult"]]:
+        if transaction is not None:
+            # Same rule as _GroupQuery.stream: refused, not ignored (BACKLOG L24). The count already ran
+            # when `.count()` built this object, so honouring a transaction here would be a lie — and the
+            # neutral port's `count` has no session-aware form. No caller counts inside a transaction
+            # (checked), so this documents the boundary instead of pretending to hold it.
+            raise NotImplementedError(
+                'count().get(transaction=...) is not supported: the aggregation already ran, and the '
+                'neutral port has no transactional count. Count outside the transaction, or read the '
+                'documents inside it.'
+            )
         return [[_AggregationResult(self._value)]]
 
 
@@ -501,7 +511,7 @@ class _Query:
         # a bare cursor value (single-field): pair it with an empty id lower bound
         return {"values": [cur], "id": ""}
 
-    def _run(self) -> List[StoredDocument]:
+    def _run(self, transaction: Optional["_FacadeTransaction"] = None) -> List[StoredDocument]:
         order: Any = None
         direction = "asc"
         if len(self._order_by) == 1:
@@ -510,27 +520,34 @@ class _Query:
             # Multi-field (incl. a trailing __name__): pass the pairs through; the store maps __name__ to
             # its _id tiebreak and builds a composite keyset for the cursor.
             order = self._order_by
-        return self._client._store.query(
-            self._collection,
-            filters=self._filters or None,
-            order_by=order,
-            direction=direction,
-            limit=self._limit,
-            offset=self._offset,
-            start_after=self._resolve_start_after(),
-            fields=self._fields,
-        )
+        kwargs: Dict[str, Any] = {
+            "filters": self._filters or None,
+            "order_by": order,
+            "direction": direction,
+            "limit": self._limit,
+            "offset": self._offset,
+            "start_after": self._resolve_start_after(),
+            "fields": self._fields,
+        }
+        if transaction is not None:
+            # Inside the caller's transaction, via the same session every other op on this handle uses.
+            # This parameter used to be accepted and DROPPED (BACKLOG L24): upstream reads collections
+            # inside `@firestore.transactional` bodies — the idempotency-key de-dup in
+            # database/action_items.py, the relationship detach in goals.py, the photo probe in
+            # conversation_finalization_jobs.py — and every one of those reads ran outside the session.
+            return self._client._store._query(self._collection, session=transaction._session, **kwargs)
+        return self._client._store.query(self._collection, **kwargs)
 
     def count(self) -> "_AggregationQuery":
         # Firestore's count() returns an AggregationQuery; callers do .count().get()[0][0].value.
         return _AggregationQuery(self._client._store.count(self._collection, filters=self._filters or None))
 
     def stream(self, transaction: Optional["_FacadeTransaction"] = None) -> Iterable[_Snapshot]:
-        for stored in self._run():
+        for stored in self._run(transaction):
             yield _Snapshot(_DocRef(self._client, stored.path), stored)
 
-    def get(self) -> List[_Snapshot]:
-        return list(self.stream())
+    def get(self, transaction: Optional["_FacadeTransaction"] = None) -> List[_Snapshot]:
+        return list(self.stream(transaction))
 
 
 class _CollRef(_Query):
@@ -827,6 +844,17 @@ class _GroupQuery:
         return self._clone(start_after=path)
 
     def stream(self, transaction: Optional[_FacadeTransaction] = None) -> Iterable[_Snapshot]:
+        if transaction is not None:
+            # Refused rather than ignored. A cross-parent sweep inside a transaction is not something the
+            # neutral port expresses (``query_group`` has no session-aware twin) and no caller asks for it
+            # — the on-prem group queries are background jobs (memory vector repair, projection sync),
+            # which run outside any transaction. Accepting-and-dropping the argument is the exact defect
+            # BACKLOG L24 was about, so the honest answer here is to say so instead of repeating it.
+            raise NotImplementedError(
+                'collection_group().stream(transaction=...) is not supported: query_group has no '
+                'transactional form in the neutral port. Read the parents individually inside the '
+                'transaction, or do the sweep outside it.'
+            )
         for stored in self._client._store.query_group(
             self._group,
             filters=self._filters or None,
