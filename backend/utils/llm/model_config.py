@@ -56,6 +56,7 @@ RouteRef = Union[ExplicitRouteRef, AutoLaneRouteRef]
 _TWO_TIER_MODEL_PROFILE: Dict[str, Tuple[str, str]] = {
     # OpenAI — default intelligence
     'conv_action_items': ('gpt-5.6-luna', 'openai'),
+    'wake_word_adjudication': ('gpt-5.6-luna', 'openai'),
     'conv_structure': ('gpt-5.6-luna', 'openai'),
     'conv_app_result': ('gpt-5.6-luna', 'openai'),
     'daily_summary': ('gpt-5.6-luna', 'openai'),
