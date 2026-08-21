@@ -114,6 +114,7 @@ seam, which is dev-only: the packaged app never opens a CDP port
 | `OMI_SANDBOX=<name>`        | Pin the userData profile suffix (`OMI_SANDBOX=1` = legacy `chat-kg`)                                                                                                                           |
 | `OMI_DEV_NO_REMOTE_DEBUG=1` | Don't open a CDP port for this instance                                                                                                                                                        |
 | `OMI_DEV_HW_GPU=1`          | Use hardware GPU instead of the dev software-render default                                                                                                                                    |
+| `OMI_OZONE=wayland`         | Linux only: run under native Wayland instead of the default XWayland. Needed on compositors with limited XWayland support (e.g. niri), where the main window can otherwise fail to map at all. Costs global shortcuts (push-to-talk/overlay summon) and active-window detection, and the companion bar can't be positioned off-screen. |
 
 ## Troubleshooting
 
