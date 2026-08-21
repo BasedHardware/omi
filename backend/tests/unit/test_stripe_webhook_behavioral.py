@@ -11,7 +11,8 @@ import os
 import re
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+from unittest.mock import MagicMock as _MagicMock, patch
 
 import pytest
 
@@ -46,6 +47,13 @@ def _get_build_subscription_fn():
         'get_plan_type_from_price_id': None,  # set per-test
         'get_plan_limits': None,  # set per-test
         'get_basic_plan_limits': lambda: {'daily_chat_message_limit': 10, 'daily_speech_hours_limit': 1},
+        # The unresolvable-price branch now emits fallback telemetry before returning
+        # None, so the extracted source needs these names. This namespace execs source
+        # text, so any new call in the copied function must be mirrored here or the
+        # test fails with NameError rather than on behavior.
+        'record_fallback': lambda **kwargs: None,
+        'logger': _MagicMock(),
+        'sanitize': lambda value: value,
     }
     exec(compile(func_source, '<payment.py>', 'exec'), namespace)
     return namespace['_build_subscription_from_stripe_object'], namespace
