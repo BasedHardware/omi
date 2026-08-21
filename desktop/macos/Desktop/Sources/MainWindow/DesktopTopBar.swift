@@ -4,7 +4,7 @@ import SwiftUI
 /// The constant floating top bar.
 ///
 /// **It carries the destinations flat, and nothing opens.** On the left, one pill per destination:
-/// `Home`, `Library`, `Tasks`, `Rewind`, `Apps`. On the right, three wordless controls:
+/// `Home`, `Library`, `Tasks`, `Rewind`, `Apps`, then the referral action. On the right, three wordless controls:
 /// microphone, screen capture, settings.
 ///
 /// The bar used to spell out `Home · Memory · Tasks · Apps` beside `Listening` and `Capture`, and both
@@ -47,6 +47,7 @@ struct DesktopTopBar: View {
   /// last resigned front (see DesktopHomeView).
   let sinceDate: Date
   let onRewind: () -> Void
+  @State private var showingReferral = false
 
   private var newConversations: Int {
     appState.conversations.filter { $0.createdAt > sinceDate && $0.deleted != true }.count
@@ -70,8 +71,11 @@ struct DesktopTopBar: View {
         Spacer(minLength: 0)
         TopNavigationBarLayout(
           expandedNavigation: {
-            TopNavigationDestinationRow(
-              selectedIndex: selectedIndex, badges: badges, onSelect: navigate)
+            HStack(spacing: TopNavigationPillMetrics.itemSpacing) {
+              TopNavigationDestinationRow(
+                selectedIndex: selectedIndex, badges: badges, onSelect: navigate)
+              ReferralTopBarButton { showingReferral = true }
+            }
           },
           compactNavigation: { compactNavigationMenu },
           persistentControls: {
@@ -103,6 +107,9 @@ struct DesktopTopBar: View {
     // belongs to the shared top-bar component so every shell and exported preview paints it above the
     // destination sibling rather than relying on each call site to remember (INV-NAV-1).
     .zIndex(1)
+    .sheet(isPresented: $showingReferral) {
+      ReferralSheetView()
+    }
   }
 
   /// The complete primary navigation remains available when the full row of pills will not fit beside
@@ -116,6 +123,12 @@ struct DesktopTopBar: View {
         } label: {
           Label(item.title, systemImage: item.icon)
         }
+      }
+      Divider()
+      Button {
+        showingReferral = true
+      } label: {
+        Label("Refer", systemImage: "gift")
       }
     } label: {
       Label("Navigate", systemImage: "sidebar.left")
@@ -201,11 +214,11 @@ enum TopNavigationLayoutMetrics {
   /// three objects on the lane are lit by the same light.
   static var barShadow: InkGlassShadow { .ambient }
 
-  /// What the trailing cluster costs the row: the two capture icons, the gap, and the gear.
+  /// What the trailing cluster costs the row: the two capture icons.
   ///
   /// Stated here so the layout test can ask "does the flat row of destinations fit beside the controls
   /// at the narrowest window" without hosting the capture stack and its permissions.
-  static let persistentControlsWidth: CGFloat = 32 * 2 + 2
+  static let persistentControlsWidth: CGFloat = 32 * 2 + OmiSpacing.sm
   static let settingsControlWidth: CGFloat = 32
 }
 

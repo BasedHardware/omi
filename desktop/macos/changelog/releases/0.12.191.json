@@ -1,0 +1,8 @@
+{
+  "version": "0.12.191",
+  "date": "2026-08-20",
+  "changes": [
+    "Kept macOS release retries to at most one candidate per hour even while the previous build is still running",
+    "Rewind now shows the latest screenshot within seconds of capture instead of trailing 1–2 minutes, and the player follows new captures live while parked on the newest frame"
+  ]
+}
