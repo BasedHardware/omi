@@ -157,7 +157,7 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
       "muted in-bar preview must keep a banner surface so director delivery is visible")
   }
 
-  /// Behavioral guard for the four-type taxonomy: the director's real entry point must
+  /// Behavioral guard for the category taxonomy: the director's real entry point must
   /// refuse a delivery whose category toggle is off. A "suggest" decision is a generic
   /// tip, which the taxonomy files under Insight. Every upstream gate is pinned open
   /// (owner seeded, master on, frequency Maximum, not paywalled) and the surface is
@@ -219,7 +219,7 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
     XCTAssertEqual(droppedCount, 1)
   }
 
-  /// The four category toggles bind every proactive producer at the shared
+  /// The category toggles bind every proactive producer at the shared
   /// `sendNotification` boundary — including the dedicated producers that never
   /// consulted a toggle before generating: goals (Insight) and meeting action items
   /// (Task). Same construction as the director test: every upstream gate is pinned
@@ -302,5 +302,73 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
 
     XCTAssertEqual(result, .rejectedOwnerChange)
     XCTAssertEqual(droppedCount, 1)
+  }
+
+  // MARK: - Persistent card queue policy
+
+  /// A persistent card (meeting summary share) has no timeout, so a newcomer
+  /// must displace it — with the persistent card requeued at the front — or a
+  /// single un-acted card would starve every later proactive notification.
+  func testPersistentCardIsDisplacedByNewcomerExceptDuringAIConversation() {
+    XCTAssertTrue(
+      FloatingBarNotificationQueuePolicy.shouldDisplacePersistentCard(
+        currentIsPersistent: true, showingAIConversation: false))
+    XCTAssertFalse(
+      FloatingBarNotificationQueuePolicy.shouldDisplacePersistentCard(
+        currentIsPersistent: true, showingAIConversation: true))
+    XCTAssertFalse(
+      FloatingBarNotificationQueuePolicy.shouldDisplacePersistentCard(
+        currentIsPersistent: false, showingAIConversation: false))
+  }
+
+  @MainActor
+  func testNotificationsAreNotPersistentByDefault() {
+    let plain = FloatingBarNotification(
+      ownerID: "owner", title: "t", message: "m", assistantId: "default")
+    XCTAssertFalse(plain.isPersistent)
+    let share = FloatingBarNotification(
+      ownerID: "owner", title: "t", message: "m",
+      assistantId: MeetingActionItemBannerPolicy.assistantID,
+      action: .meetingSummaryShare(conversationID: "c1", recipients: []),
+      isPersistent: true)
+    XCTAssertTrue(share.isPersistent)
+  }
+
+  @MainActor
+  func testSeeSummaryNavigationDrivesConversationOpenContract() {
+    final class Captured: @unchecked Sendable {
+      var navigatePayload: Int?
+      var openRequested = false
+    }
+    let conversationID = "conv-see-summary-\(UUID().uuidString)"
+    let captured = Captured()
+    let center = NotificationCenter.default
+    let navToken = center.addObserver(
+      forName: .navigateToSidebarItem, object: nil, queue: nil
+    ) { note in
+      captured.navigatePayload = note.userInfo?["rawValue"] as? Int
+    }
+    let openToken = center.addObserver(
+      forName: .desktopAutomationOpenConversationRequested, object: nil, queue: nil
+    ) { _ in captured.openRequested = true }
+    defer {
+      center.removeObserver(navToken)
+      center.removeObserver(openToken)
+    }
+
+    MeetingSummaryShareActions.postOpenSignals(conversationID: conversationID)
+
+    XCTAssertEqual(captured.navigatePayload, SidebarNavItem.conversations.rawValue)
+    XCTAssertTrue(captured.openRequested)
+    let pending = ConversationDetailAutomationState.shared.takePendingOpenRequest()
+    XCTAssertEqual(pending?.conversationId, conversationID)
+    XCTAssertEqual(pending?.showTranscript, false)
+  }
+
+  /// Multiple notifications arriving during displacement present before the
+  /// persistent card returns: it always rejoins at the tail of the queue.
+  func testDisplacedPersistentCardRequeuesBehindEverythingAlreadyQueued() {
+    XCTAssertEqual(FloatingBarNotificationQueuePolicy.requeueIndex(queueCount: 0), 0)
+    XCTAssertEqual(FloatingBarNotificationQueuePolicy.requeueIndex(queueCount: 3), 3)
   }
 }

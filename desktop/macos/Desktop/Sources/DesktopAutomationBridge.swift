@@ -1676,6 +1676,76 @@ final class DesktopAutomationActionRegistry {
       return ["shown": "true"]
     }
 
+    // Drives the real post-meeting completion signal so the entire production
+    // chain runs (banner service → conversation + recipients fetch → persistent
+    // share card). Same NotificationCenter signal the finalization service posts.
+    register(
+      name: "trigger_meeting_completion",
+      summary:
+        "Post the real meeting-completion signal for a conversation id (presents the meeting summary share card). Non-prod only.",
+      params: ["conversation_id"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "trigger_meeting_completion is disabled on production bundles"]
+      }
+      guard let conversationID = params["conversation_id"], !conversationID.isEmpty else {
+        throw DesktopAutomationActionError.invalidParams("conversation_id is required")
+      }
+      NotificationCenter.default.post(
+        name: .desktopMeetingConversationDidComplete,
+        object: MeetingCompletionNotification(conversationIDs: [conversationID]))
+      return ["posted": conversationID]
+    }
+
+    // Cursor-free driver for the meeting summary share card: `state` reads the
+    // presented card, `copy`/`send` run the same MeetingSummaryShareActions the
+    // card's buttons call, `close` is the user dismissal path.
+    register(
+      name: "meeting_summary_share",
+      summary:
+        "Inspect or drive the presented meeting summary share card (action=state|copy|send|close). Non-prod only.",
+      params: ["action"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "meeting_summary_share is disabled on production bundles"]
+      }
+      let mgr = FloatingControlBarManager.shared
+      guard let bar = mgr.barState else { return ["error": "no bar state"] }
+      guard let notification = bar.currentNotification,
+        case .meetingSummaryShare(let conversationID, let recipients)? = notification.action
+      else {
+        return ["present": "false"]
+      }
+      switch (params["action"] ?? "state").lowercased() {
+      case "state":
+        return [
+          "present": "true",
+          "assistant_id": notification.assistantId,
+          "title": notification.title,
+          "message": notification.message,
+          "persistent": notification.isPersistent ? "true" : "false",
+          "conversation_id": conversationID,
+          "recipients": recipients.map(\.email).joined(separator: ","),
+        ]
+      case "copy":
+        let feedback = await MeetingSummaryShareActions.copyLink(conversationID: conversationID)
+        return ["copied": feedback == .copied ? "true" : "false"]
+      case "send":
+        do {
+          let sent = try await MeetingSummaryShareActions.sendSummary(
+            conversationID: conversationID, recipients: recipients)
+          return ["sent_to": sent.joined(separator: ",")]
+        } catch {
+          return ["error": "send failed: \(error.localizedDescription)"]
+        }
+      case "close":
+        mgr.dismissCurrentNotification()
+        return ["closed": "true"]
+      default:
+        throw DesktopAutomationActionError.invalidParams("action must be state, copy, send, or close")
+      }
+    }
+
     // Cursor-free click diagnosis: report which window (any app's) is topmost at a screen point,
     // and — when it is one of ours — the exact view AppKit hit-tests there. Exists because "I
     // click X and nothing happens" is otherwise undiagnosable without synthesizing real clicks.
@@ -3446,49 +3516,7 @@ final class DesktopAutomationActionRegistry {
       ]
     }
 
-    register(
-      name: "settings_notifications_snapshot",
-      summary: "Return notification settings and local permission state"
-    ) { _ in
-      async let settingsTask = APIClient.shared.getNotificationSettings()
-      let settings = try await settingsTask
-      let appState = await MainActor.run { AppState.current }
-      let hasPermission = appState?.hasNotificationPermission ?? false
-      let bannersDisabled = appState?.isNotificationBannerDisabled ?? false
-      return [
-        "schema": "enabled,frequency,frequency_label,has_permission,banners_disabled",
-        "enabled": settings.enabled ? "true" : "false",
-        "frequency": "\(settings.frequency)",
-        "frequency_label": settings.frequencyDescription,
-        "has_permission": hasPermission ? "true" : "false",
-        "banners_disabled": bannersDisabled ? "true" : "false",
-      ]
-    }
-
-    register(
-      name: "set_notification_settings",
-      summary: "Update notification settings via the real API",
-      params: ["enabled", "frequency"]
-    ) { params in
-      let enabled = params["enabled"].map { boolParam($0, default: true) }
-      let frequency = params["frequency"].flatMap { Int($0) }
-      let response = try await APIClient.shared.updateNotificationSettings(
-        enabled: enabled,
-        frequency: frequency
-      )
-      UserDefaults.standard.set(
-        response.enabled,
-        forKey: NotificationService.masterEnabledDefaultsKey)
-      UserDefaults.standard.set(
-        response.frequency,
-        forKey: NotificationService.frequencyDefaultsKey)
-      return [
-        "saved": "true",
-        "enabled": response.enabled ? "true" : "false",
-        "frequency": "\(response.frequency)",
-      ]
-    }
-
+    registerNotificationActions()
     register(
       name: "rewind_settings_snapshot",
       summary: "Return Rewind settings retention and excluded-app counts"
@@ -3835,7 +3863,7 @@ final class DesktopAutomationActionRegistry {
 }
 
 /// Coerce a string param ("true"/"1"/"yes") into a Bool, falling back when absent.
-private func boolParam(_ raw: String?, default fallback: Bool) -> Bool {
+func boolParam(_ raw: String?, default fallback: Bool) -> Bool {
   guard let raw = raw?.trimmingCharacters(in: .whitespaces).lowercased(), !raw.isEmpty else {
     return fallback
   }

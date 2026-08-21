@@ -19,7 +19,8 @@ from pydantic import ValidationError
 
 from database._client import db as default_db_client
 from database.memory_collections import MemoryCollections
-from models.product_memory import MemoryItemStatus, MemoryLayer
+from jobs.short_term_lifecycle_worker import fetch_expiry_urgent_short_term_memory_items_firestore
+from models.product_memory import DEFAULT_SHORT_TERM_TTL, MemoryItemStatus, MemoryLayer
 from utils.executors import db_executor, run_blocking
 from utils.log_sanitizer import sanitize_validation_error
 from utils.observability.fallback import record_fallback
@@ -58,6 +59,7 @@ DEFAULT_GRAPH_BACKFILL_PAGE_SIZE = 5
 GRAPH_BACKFILL_SCAN_PAGE_MULTIPLIER = 5
 DEFAULT_GRAPH_BACKFILL_SCAN_SIZE = DEFAULT_GRAPH_BACKFILL_PAGE_SIZE * GRAPH_BACKFILL_SCAN_PAGE_MULTIPLIER
 MAX_MAINTENANCE_UIDS_PER_RUN = 400
+EXPIRY_ADJUDICATION_LOOKAHEAD = DEFAULT_SHORT_TERM_TTL / 2
 CANONICAL_MEMORY_MAINTENANCE_SEED_CURSOR_PATH = "canonical_memory_maintenance_control/seed_cursor"
 CANONICAL_MEMORY_MAINTENANCE_SEED_SCHEMA_VERSION = 1
 CANONICAL_MEMORY_DREAMING_STATE_COLLECTION = "canonical_memory_dreaming_state"
@@ -73,6 +75,46 @@ class CanonicalMaintenanceInventoryUnavailable(RuntimeError):
 
 class CanonicalMaintenanceUIDInventory(Protocol):
     def __call__(self, db_client: Any, limit: int) -> Iterable[str]: ...
+
+
+@dataclass(frozen=True)
+class ExpiryOrderedMaintenanceInventory:
+    uids: tuple[str, ...]
+    candidate_item_count: int = 0
+    expired_active_item_count: int = 0
+
+
+def expiry_ordered_maintenance_uid_inventory(
+    db_client: Any,
+    *,
+    now: datetime,
+    limit: int = MAX_MAINTENANCE_UIDS_PER_RUN,
+) -> ExpiryOrderedMaintenanceInventory:
+    """Return UIDs ordered by their earliest approaching Short-term expiry."""
+    bounded_limit = max(1, min(MAX_MAINTENANCE_UIDS_PER_RUN, int(limit)))
+    deadline = now.astimezone(timezone.utc) + EXPIRY_ADJUDICATION_LOOKAHEAD
+    try:
+        items = fetch_expiry_urgent_short_term_memory_items_firestore(
+            db_client=db_client,
+            deadline=deadline,
+        )
+    except Exception as exc:
+        raise CanonicalMaintenanceInventoryUnavailable("expiry-ordered canonical memory inventory failed") from exc
+
+    uids: list[str] = []
+    expired_active_items = 0
+    for item in items:
+        if item.effective_expiry <= now:
+            expired_active_items += 1
+        if item.uid not in uids:
+            uids.append(item.uid)
+        if len(uids) >= bounded_limit:
+            break
+    return ExpiryOrderedMaintenanceInventory(
+        uids=tuple(uids),
+        candidate_item_count=len(items),
+        expired_active_item_count=expired_active_items,
+    )
 
 
 def _registry_uid(snapshot: Any) -> Optional[str]:
@@ -375,6 +417,15 @@ def _empty_errors() -> list[str]:
 
 
 def canonical_maintenance_enabled() -> bool:
+    """Whether *this process* hosts the ST→LT cron.
+
+    Not a product rollout flag — that is ``MEMORY_ENABLED``, which is universal for
+    authenticated accounts. This one is per-deployable routing, so the ``"false"``
+    default is correct: only ``memory-maintenance-job`` sets it true, and
+    ``scripts/runtime_env_validation/manifest.py`` fails the build if any other job
+    or request-path surface does. Read the deployed value from
+    ``deploy/runtime_env/*.overlay.yaml``, not from this default.
+    """
     raw = os.getenv(MEMORY_CANONICAL_MAINTENANCE_ENABLED_ENV, "false")
     return raw.lower() == "true"
 
@@ -430,6 +481,12 @@ class CanonicalShortTermMaintenanceCronSummary:
     user_count: int = 0
     inventory_source: str = "bounded_registry"
     inventory_complete: bool = False
+    expiry_urgent_users: int = 0
+    expiry_urgent_items: int = 0
+    expired_active_candidates_total: int = 0
+    expired_without_terminal_disposition_total: int = 0
+    expired_with_recorded_disposition_total: int = 0
+    expired_terminal_dispositions_total: int = 0
     routed_total: int = 0
     promoted_total: int = 0
     skipped_users: int = 0
@@ -500,18 +557,50 @@ def run_universal_short_term_maintenance(
 
     client = db_client if db_client is not None else default_db_client
     promotion_flex = PromotionFlexRunRouter(db_client=client, force_enabled=maintenance_flex_forced())
-    try:
-        if uid_inventory is None:
-            uids = bounded_canonical_memory_uid_inventory(client, limit=inventory_limit, persist_cursor=False)
-        else:
+    expiry_inventory = ExpiryOrderedMaintenanceInventory(uids=())
+    registry_uids: tuple[str, ...] = ()
+    inventory_errors: list[str] = []
+    if uid_inventory is None:
+        try:
+            expiry_inventory = expiry_ordered_maintenance_uid_inventory(
+                client,
+                now=current_time,
+                limit=inventory_limit,
+            )
+        except CanonicalMaintenanceInventoryUnavailable as exc:
+            inventory_errors.append("canonical_expiry_inventory_unavailable")
+            logger.warning(
+                "canonical_short_term_maintenance_cron: canonical_expiry_inventory_unavailable (%s)",
+                type(exc).__name__,
+            )
+        try:
+            registry_uids = bounded_canonical_memory_uid_inventory(
+                client,
+                limit=inventory_limit,
+                persist_cursor=False,
+            )
+        except CanonicalMaintenanceInventoryUnavailable as exc:
+            inventory_errors.append("canonical_uid_inventory_unavailable")
+            logger.warning(
+                "canonical_short_term_maintenance_cron: canonical_uid_inventory_unavailable (%s)",
+                type(exc).__name__,
+            )
+        uids = tuple(dict.fromkeys((*expiry_inventory.uids, *registry_uids)))[
+            : max(1, min(MAX_MAINTENANCE_UIDS_PER_RUN, int(inventory_limit)))
+        ]
+    else:
+        try:
             uids = _resolve_maintenance_uids(client, uid_inventory=uid_inventory, limit=inventory_limit)
-    except CanonicalMaintenanceInventoryUnavailable as exc:
+        except CanonicalMaintenanceInventoryUnavailable as exc:
+            inventory_errors.append("canonical_uid_inventory_unavailable")
+            logger.warning(
+                "canonical_short_term_maintenance_cron: canonical_uid_inventory_unavailable (%s)",
+                type(exc).__name__,
+            )
+            uids = ()
+
+    if not uids and inventory_errors:
         message = "canonical_uid_inventory_unavailable"
-        logger.warning(
-            "canonical_short_term_maintenance_cron: %s (%s)",
-            message,
-            type(exc).__name__,
-        )
         return CanonicalShortTermMaintenanceCronSummary(
             run_id=effective_run_id,
             inventory_source="unavailable",
@@ -521,8 +610,20 @@ def run_universal_short_term_maintenance(
     summary = CanonicalShortTermMaintenanceCronSummary(
         run_id=effective_run_id,
         user_count=len(uids),
-        inventory_source="injected" if uid_inventory is not None else "bounded_registry",
-        inventory_complete=True,
+        inventory_source=(
+            "injected"
+            if uid_inventory is not None
+            else (
+                "expiry_ordered+bounded_registry"
+                if expiry_inventory.uids and registry_uids
+                else "expiry_ordered" if expiry_inventory.uids else "bounded_registry"
+            )
+        ),
+        inventory_complete=not inventory_errors,
+        expiry_urgent_users=len(expiry_inventory.uids),
+        expiry_urgent_items=expiry_inventory.candidate_item_count,
+        expired_active_candidates_total=expiry_inventory.expired_active_item_count,
+        errors=inventory_errors,
     )
     logger.info(
         "canonical_short_term_maintenance_cron: start run_id=%s user_count=%d flex=%s",
@@ -530,20 +631,21 @@ def run_universal_short_term_maintenance(
         len(uids),
         promotion_flex.control.enabled,
     )
-    last_completed_uid: Optional[str] = None
+    completed_uids: set[str] = set()
     for uid in uids:
         stm_count = count_active_short_term(uid, db_client=client)
         if stm_count == 0:
             summary.skipped_no_short_term += 1
             summary.skipped_users += 1
-            last_completed_uid = uid
+            completed_uids.add(uid)
             logger.info("canonical_short_term_maintenance_cron: uid=%s skipped_reason=no_active_short_term", uid)
             continue
         overflow = stm_count is not None and stm_count > OVERFLOW_SHORT_TERM_THRESHOLD
-        if recently_dreamed(uid, db_client=client, now=current_time) and not overflow:
+        expiry_urgent = uid in expiry_inventory.uids
+        if recently_dreamed(uid, db_client=client, now=current_time) and not overflow and not expiry_urgent:
             summary.skipped_recently_dreamed += 1
             summary.skipped_users += 1
-            last_completed_uid = uid
+            completed_uids.add(uid)
             logger.info("canonical_short_term_maintenance_cron: uid=%s skipped_reason=recently_dreamed", uid)
             continue
         promotion_llm_invoke = promotion_flex.llm_invoke_for_uid(uid)
@@ -577,7 +679,7 @@ def run_universal_short_term_maintenance(
             message = _safe_maintenance_error(uid, exc)
             summary.errors.append(message)
             logger.warning("canonical_short_term_maintenance_cron: failed %s", message)
-            last_completed_uid = uid
+            completed_uids.add(uid)
             continue
 
         promoted = _promoted_count(report)
@@ -585,6 +687,10 @@ def run_universal_short_term_maintenance(
         trigger = report.consolidation.trigger_reason if report.consolidation else None
         summary.routed_total += report.routed_count
         summary.promoted_total += promoted
+        if report.lifecycle is not None:
+            summary.expired_without_terminal_disposition_total += report.lifecycle.lifecycle_created_count
+            summary.expired_with_recorded_disposition_total += report.lifecycle.lifecycle_existing_count
+            summary.expired_terminal_dispositions_total += report.lifecycle.lifecycle_terminal_count
         outbox = report.outbox or {}
         outbox_delivered = int(outbox.get("delivered_count") or 0)
         outbox_retryable = int(outbox.get("retryable_failure_count") or 0)
@@ -661,7 +767,7 @@ def run_universal_short_term_maintenance(
         )
         if not dream_incomplete:
             persist_last_dreamed_at(uid, db_client=client, now=current_time)
-        last_completed_uid = uid
+        completed_uids.add(uid)
 
         logger.info(
             "canonical_short_term_maintenance_cron: uid=%s trigger_reason=%s routed_count=%d "
@@ -700,9 +806,14 @@ def run_universal_short_term_maintenance(
             summary.errors.append(message)
             logger.warning("canonical_short_term_maintenance_cron: %s", message)
 
-    if uid_inventory is None and last_completed_uid:
+    last_completed_registry_uid: Optional[str] = None
+    for registry_uid in registry_uids:
+        if registry_uid not in completed_uids:
+            break
+        last_completed_registry_uid = registry_uid
+    if uid_inventory is None and last_completed_registry_uid:
         try:
-            _persist_registry_cursor(client, last_completed_uid)
+            _persist_registry_cursor(client, last_completed_registry_uid)
         except CanonicalMaintenanceInventoryUnavailable as exc:
             summary.errors.append(f"cursor_persist:{type(exc).__name__}")
             logger.warning(
@@ -713,7 +824,11 @@ def run_universal_short_term_maintenance(
     logger.info(
         "canonical_short_term_maintenance_cron: done run_id=%s user_count=%d routed_total=%d "
         "promoted_total=%d dreamed_users=%d skipped_no_short_term=%d skipped_recently_dreamed=%d "
-        "flex_deferred=%s graph_enriched_total=%d graph_enrichment_blocked_total=%d skipped_users=%d errors=%d",
+        "flex_deferred=%s expiry_urgent_users=%d expiry_urgent_items=%d "
+        "expired_active_candidates_total=%d "
+        "expired_without_terminal_disposition_total=%d expired_with_recorded_disposition_total=%d "
+        "expired_terminal_dispositions_total=%d graph_enriched_total=%d graph_enrichment_blocked_total=%d "
+        "skipped_users=%d errors=%d",
         effective_run_id,
         summary.user_count,
         summary.routed_total,
@@ -722,6 +837,12 @@ def run_universal_short_term_maintenance(
         summary.skipped_no_short_term,
         summary.skipped_recently_dreamed,
         summary.flex_deferred,
+        summary.expiry_urgent_users,
+        summary.expiry_urgent_items,
+        summary.expired_active_candidates_total,
+        summary.expired_without_terminal_disposition_total,
+        summary.expired_with_recorded_disposition_total,
+        summary.expired_terminal_dispositions_total,
         summary.graph_enriched_total,
         summary.graph_enrichment_blocked_total,
         summary.skipped_users,

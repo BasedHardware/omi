@@ -46,6 +46,7 @@ from utils.memory.canonical_memory_adapter import (
     write_canonical_external_memory,
 )
 from utils.memory.product_memory_read_service import iter_authoritative_product_memory_items
+from utils.memory.rejected_memory_feedback import clear_rejected_memory_feedback_cache
 from utils.memory.required_promotion import required_processing_payload
 from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
 from utils.client_device import DeviceScopeRequest
@@ -1359,6 +1360,7 @@ class MemoryService:
     """
 
     def _invalidate_prompt_cache(self, uid: str) -> None:
+        clear_rejected_memory_feedback_cache(uid)
         try:
             from utils.llms.memory import clear_prompt_data_cache
         except ImportError:

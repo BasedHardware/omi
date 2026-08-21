@@ -122,7 +122,7 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
         run: |
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update
-          sudo apt-get install -y imagemagick fonts-dejavu-core tesseract-ocr tesseract-ocr-eng xvfb
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install -y imagemagick fonts-dejavu-core tesseract-ocr tesseract-ocr-eng xvfb
       - name: Provision .env
         run: cp .env.example .env
       - name: Install dependencies

@@ -284,6 +284,25 @@ CANONICAL_CONSOLIDATION_QUERY = FirestoreQuerySpec(
     ),
 )
 
+RECENT_REJECTED_MEMORY_FEEDBACK_QUERY = FirestoreQuerySpec(
+    identifier='memory_items_recent_rejected_feedback',
+    collection_group='memory_items',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('status', 'in', 'statuses'),
+        FirestoreQueryFilter('source_state', '==', 'source_state'),
+        FirestoreQueryFilter('promotion.user_review', '==', 'user_review'),
+        FirestoreQueryFilter('updated_at', '>=', 'updated_at'),
+    ),
+    index_fields=(
+        _asc('status'),
+        _asc('source_state'),
+        _asc('promotion.user_review'),
+        _desc('updated_at'),
+        _asc('__name__'),
+    ),
+)
+
 POLICY_EXPIRED_SHORT_TERM_QUERY = FirestoreQuerySpec(
     identifier='memory_items_policy_expired_short_term_by_capture',
     collection_group='memory_items',
@@ -300,6 +319,26 @@ POLICY_EXPIRED_SHORT_TERM_QUERY = FirestoreQuerySpec(
         _asc('status'),
         _asc('processing_state'),
         _asc('source_state'),
+        _asc('captured_at'),
+        _asc('memory_id'),
+        _asc('__name__'),
+    ),
+)
+
+EXPIRY_URGENT_SHORT_TERM_BY_CAPTURE_QUERY = FirestoreQuerySpec(
+    identifier='memory_items_expiry_urgent_short_term_by_capture',
+    collection_group='memory_items',
+    query_scope='COLLECTION_GROUP',
+    filters=(
+        FirestoreQueryFilter('tier', '==', 'tier'),
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('processing_state', 'in', 'processing_states'),
+        FirestoreQueryFilter('captured_at', '<=', 'captured_at'),
+    ),
+    index_fields=(
+        _asc('tier'),
+        _asc('status'),
+        _asc('processing_state'),
         _asc('captured_at'),
         _asc('memory_id'),
         _asc('__name__'),
@@ -431,6 +470,26 @@ EXPIRED_SHORT_TERM_LIFECYCLE_QUERY = FirestoreQuerySpec(
         FirestoreQueryFilter('tier', '==', 'tier'),
         FirestoreQueryFilter('status', '==', 'status'),
         FirestoreQueryFilter('processing_state', '==', 'processing_state'),
+        FirestoreQueryFilter('expires_at', '<=', 'expires_at'),
+    ),
+    index_fields=(
+        _asc('tier'),
+        _asc('status'),
+        _asc('processing_state'),
+        _asc('expires_at'),
+        _asc('memory_id'),
+        _asc('__name__'),
+    ),
+)
+
+EXPIRY_URGENT_SHORT_TERM_BY_STORED_EXPIRY_QUERY = FirestoreQuerySpec(
+    identifier='memory_items_expiry_urgent_short_term_by_stored_expiry',
+    collection_group='memory_items',
+    query_scope='COLLECTION_GROUP',
+    filters=(
+        FirestoreQueryFilter('tier', '==', 'tier'),
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('processing_state', 'in', 'processing_states'),
         FirestoreQueryFilter('expires_at', '<=', 'expires_at'),
     ),
     index_fields=(
@@ -632,7 +691,9 @@ QUERY_SPECS = (
     REVIEW_QUEUE_BY_STATUS_ID_QUERY,
     REQUIRED_MEMORY_PROCESSING_QUERY,
     CANONICAL_CONSOLIDATION_QUERY,
+    RECENT_REJECTED_MEMORY_FEEDBACK_QUERY,
     POLICY_EXPIRED_SHORT_TERM_QUERY,
+    EXPIRY_URGENT_SHORT_TERM_BY_CAPTURE_QUERY,
     CANONICAL_GRAPH_READ_QUERY,
     CANONICAL_MEMORY_ATLAS_READ_QUERY,
     UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
@@ -642,6 +703,7 @@ QUERY_SPECS = (
     SUPERSEDED_MEMORY_BY_CANONICAL_TARGET_QUERY,
     SUPERSEDED_MEMORY_BY_LEGACY_TARGET_QUERY,
     EXPIRED_SHORT_TERM_LIFECYCLE_QUERY,
+    EXPIRY_URGENT_SHORT_TERM_BY_STORED_EXPIRY_QUERY,
     ACTIVE_ATTENTION_OVERRIDE_QUERY,
     LEGACY_CONVERSATION_RECOVERY_QUERY,
     STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
@@ -701,17 +763,26 @@ INDEX_REQUIREMENTS = (
 
 
 # Firestore auto-indexes every field of every document in both directions unless a field is
-# explicitly exempted. For large text fields that no query ever filters or orders on, that index
-# is pure storage cost: measured on `screen_activity`, single-field index bytes were roughly three
-# times the document bytes, and the `ocrText` index alone was the majority of the collection.
-# `ocrText` is only ever read back and rendered; semantic search runs on Pinecone vectors, not on
-# Firestore. Exempting a field only removes single-field indexes — composite indexes declared
-# above are unaffected, so a field named in a composite index can still appear here.
+# explicitly exempted. For text fields that no query ever filters or orders on, that index is pure
+# storage cost: measured on prod `screen_activity` (964,964 documents, mean 1,052 B), the four
+# originally declared fields carried roughly 2.75x the document bytes in index entries, matching
+# the earlier "about three times" estimate.
+#
+# Only the two text fields are exempted, and the split is deliberate. `ocrText` (mean 899 B, capped
+# at 1,000 characters on write) is ~71% of that index cost and `windowTitle` ~10%; both are only
+# ever read back and rendered, since semantic search runs on Pinecone vectors rather than Firestore.
+# `deviceName` (11 B) and `clientDeviceId` (14 B) are together ~19% of an already small number --
+# under ten cents a month at current volume -- and are the one plausible future filter here:
+# utils/memory/device_scope_filter.py already scopes by device in Python, and pushing that down to
+# a Firestore filter would fail with FAILED_PRECONDITION against a disabled index. Re-enabling has
+# no scripted path (the reconcile workflow is disable-only) and forces a full collection-group
+# backfill, so they stay indexed.
+#
+# Exempting a field only removes single-field indexes — composite indexes declared above are
+# unaffected, so a field named in a composite index can still appear here.
 FIELD_INDEXING_EXEMPTIONS: tuple[tuple[str, str], ...] = (
     ('screen_activity', 'ocrText'),
     ('screen_activity', 'windowTitle'),
-    ('screen_activity', 'deviceName'),
-    ('screen_activity', 'clientDeviceId'),
 )
 
 

@@ -496,8 +496,12 @@ extension APIClient {
   func createConversationFromSegments(_ request: CreateConversationFromSegmentsRequest)
     async throws -> CreateConversationFromSegmentsResponse
   {
+    // The backend runs the full summarization pipeline synchronously inside
+    // this request, which routinely exceeds the transport's 30s default; a
+    // short timeout here turns every slower meeting into a fail-then-retry
+    // loop that delays the post-meeting notification by minutes.
     let response: CreateConversationFromSegmentsResponse = try await post(
-      "v1/conversations/from-segments", body: request, customBaseURL: nil)
+      "v1/conversations/from-segments", body: request, customBaseURL: nil, requestTimeout: 180)
     invalidateConversationsCountCache()
     return response
   }
@@ -846,6 +850,18 @@ extension APIClient {
     }
     let body = UpdateReadRequest(isRead: isRead, isDismissed: isDismissed)
     return try await patch("v3/memories/\(id)/read", body: body)
+  }
+
+  /// Records the owner's verdict on a memory.
+  ///
+  /// `keep: false` is the reject signal: the backend hides the memory from default
+  /// reads and drops it from the keyword index and knowledge graph. `value` is a
+  /// query parameter, not a body field — the route declares it as a bare scalar.
+  func reviewMemory(id: String, keep: Bool) async throws {
+    let _: MemoryStatusResponse = try await post(
+      "v3/memories/\(id)/review?value=\(keep)",
+      body: EmptyBody()
+    )
   }
 
   /// Marks all memories as read

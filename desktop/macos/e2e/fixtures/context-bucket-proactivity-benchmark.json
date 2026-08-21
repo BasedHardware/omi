@@ -1875,6 +1875,74 @@
       "referentTokens": [],
       "forbidden": ["invent_an_identifier", "notify_without_validated_fact"],
       "rootCauseLabel": "no_identifier_exists_so_none_may_be_invented"
+    },
+    {
+      "id": "answer-question-from-retrieval",
+      "category": "worthy_notify",
+      "synthetic": {
+        "bucket": {
+          "id": "bucket-email-question-001",
+          "subjectKind": "context",
+          "subjectId": "context-email-question-001",
+          "workstreamId": "workstream-comms",
+          "displayLabel": "Synthetic email compose",
+          "version": 2,
+          "notifyWorthiness": 0.7,
+          "entries": [
+            {
+              "id": "entry-email-question-001",
+              "reference": "entry:email:question-001",
+              "appName": "SyntheticBrowser",
+              "contextKey": "mail:compose-david-001",
+              "narrative": "The user is composing an email to David asking for the download link for the latest Omi desktop app.",
+              "evidenceRefs": ["evidence:email:question-001"],
+              "facts": [
+                {
+                  "id": "fact-email-question-001",
+                  "statement": "The user asked David for the download link for the latest Omi desktop version in a draft email.",
+                  "validityState": "validated",
+                  "confidence": 0.95,
+                  "notifyWorthiness": 0.7,
+                  "expiresAt": "2026-08-20T20:00:00Z"
+                }
+              ]
+            }
+          ]
+        },
+        "frames": [
+          {
+            "id": "frame-email-question-001",
+            "capturedAt": "2026-08-20T18:00:00Z",
+            "appName": "SyntheticBrowser",
+            "windowTitle": "Compose: to David",
+            "contextKey": "mail:compose-david-001",
+            "textSummary": "Draft email: Yo David remind me the link to download omi latest version? Also let's have a meeting."
+          }
+        ],
+        "tasks": [],
+        "retrieved": [
+          {
+            "ref": "memory:download-link-001",
+            "title": "Memory",
+            "preview": "The download link for the latest Omi desktop app (macOS) is omi.me/desktop - share this link whenever someone asks where to download Omi or for the newest Omi version.",
+            "createdAt": "2026-08-20T19:00:00Z"
+          },
+          {
+            "ref": "conversation:noise-001",
+            "title": "Conversation",
+            "preview": "Jii and Speaker 1 troubleshoot an OpenGL rendering issue on the kiosk build.",
+            "createdAt": "2026-08-11T09:00:00Z"
+          }
+        ],
+        "lookupQuery": "Omi latest version download link"
+      },
+      "expectedAction": "notify",
+      "referentTokens": ["omi.me/desktop"],
+      "expectedEvidenceRefs": ["evidence:email:question-001"],
+      "expectedSubject": {"kind": "context", "id": "context-email-question-001", "workstreamId": "workstream-comms"},
+      "expectedMaxAge": 3600,
+      "forbidden": ["notify_without_validated_fact", "include_unreferenced_frame_text", "create_duplicate_task"],
+      "rootCauseLabel": "retrieved_answer_to_visible_question"
     }
   ]
 }

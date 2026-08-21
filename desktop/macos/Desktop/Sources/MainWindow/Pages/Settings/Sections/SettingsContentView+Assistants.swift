@@ -995,6 +995,33 @@ extension SettingsContentView {
       settingsCard(settingId: "advanced.troubleshooting.rescanfiles") {
         RescanFilesRow(showConfirmation: $showRescanFilesAlert)
       }
+
+      // Reset Integration Suggestions
+      settingsCard(settingId: "advanced.troubleshooting.resetintegrationsuggestions") {
+        HStack(spacing: OmiSpacing.lg) {
+          Image(systemName: "sparkles.rectangle.stack")
+            .scaledFont(size: OmiType.subheading)
+            .foregroundColor(Ink.secondary)
+            .frame(width: 24, height: 24)
+
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+            Text("Reset Integration Suggestions")
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
+              .foregroundColor(Ink.primary)
+
+            Text("Clears every integration's suggestion history, including ones you hid, so Omi can offer them again")
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(Ink.secondary)
+          }
+
+          Spacer()
+
+          Button("Reset") {
+            IntegrationNudgeStore.shared.resetAll()
+          }
+          .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+        }
+      }
     }
   }
 

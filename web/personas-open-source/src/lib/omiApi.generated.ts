@@ -2929,6 +2929,10 @@ export interface RecordLlmUsageBucketRequest {
   total_tokens?: number;
 }
 
+export interface ReferralLinkResponse {
+  referral_url: string;
+}
+
 export interface ReorderFoldersRequest {
   folder_ids: Array<string>;
 }
@@ -3077,6 +3081,14 @@ export interface SendMessageRequest {
   text: string;
 }
 
+export interface SendShareEmailRequest {
+  recipient_emails: Array<string>;
+}
+
+export interface SendShareEmailResponse {
+  sent_to: Array<string>;
+}
+
 export interface SetConversationActionItemsStateRequest {
   items_idx: Array<number>;
   values: Array<boolean>;
@@ -3111,6 +3123,15 @@ export interface ShareChatMessagesRequest {
 export interface ShareChatMessagesResponse {
   token: string;
   url: string;
+}
+
+export interface ShareRecipient {
+  email: string;
+  name?: string | null;
+}
+
+export interface ShareRecipientsResponse {
+  recipients: Array<ShareRecipient>;
 }
 
 export interface ShareTasksRequest {
@@ -4529,6 +4550,7 @@ export interface OmiApiSchemas {
   "Recommendation": Recommendation;
   "RecommendationSubjectKind": RecommendationSubjectKind;
   "RecordLlmUsageBucketRequest": RecordLlmUsageBucketRequest;
+  "ReferralLinkResponse": ReferralLinkResponse;
   "ReorderFoldersRequest": ReorderFoldersRequest;
   "ReplyToReviewRequest": ReplyToReviewRequest;
   "ResponseMessage": ResponseMessage;
@@ -4547,6 +4569,8 @@ export interface OmiApiSchemas {
   "SearchedMemory": SearchedMemory;
   "Section": Section;
   "SendMessageRequest": SendMessageRequest;
+  "SendShareEmailRequest": SendShareEmailRequest;
+  "SendShareEmailResponse": SendShareEmailResponse;
   "SetConversationActionItemsStateRequest": SetConversationActionItemsStateRequest;
   "SetConversationEventsStateRequest": SetConversationEventsStateRequest;
   "SetDefaultPaymentMethodRequest": SetDefaultPaymentMethodRequest;
@@ -4555,6 +4579,8 @@ export interface OmiApiSchemas {
   "ShareActionItemsResponse": ShareActionItemsResponse;
   "ShareChatMessagesRequest": ShareChatMessagesRequest;
   "ShareChatMessagesResponse": ShareChatMessagesResponse;
+  "ShareRecipient": ShareRecipient;
+  "ShareRecipientsResponse": ShareRecipientsResponse;
   "ShareTasksRequest": ShareTasksRequest;
   "SharedActionItemPreview": SharedActionItemPreview;
   "SharedActionItemsResponse": SharedActionItemsResponse;
@@ -5900,6 +5926,27 @@ export interface OmiApiPaths {
       operationId: "set_assignee_conversation_segment_v1_conversations__conversation_id__segments__segment_idx__assign_patch";
       responses: {
         "200": Conversation;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/share-email": {
+    post: {
+      operationId: "send_conversation_share_email_v1_conversations__conversation_id__share_email_post";
+      responses: {
+        "200": SendShareEmailResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/share-recipients": {
+    get: {
+      operationId: "get_conversation_share_recipients_v1_conversations__conversation_id__share_recipients_get";
+      responses: {
+        "200": ShareRecipientsResponse;
         "401": void;
         "404": void;
         "422": HTTPValidationError;
@@ -7865,6 +7912,16 @@ export interface OmiApiPaths {
       operationId: "get_user_paywall_status_v1_users_me_paywall_get";
       responses: {
         "200": PaywallStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/me/referral": {
+    get: {
+      operationId: "get_referral_link_v1_users_me_referral_get";
+      responses: {
+        "200": ReferralLinkResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -11148,6 +11205,46 @@ export async function set_assignee_conversation_segment_v1_conversations__conver
   const _search = _params ? `?${_params}` : "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "PATCH",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function send_conversation_share_email_v1_conversations__conversation_id__share_email_post(path: { conversation_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: SendShareEmailRequest, init?: OmiApiClientInit): Promise<SendShareEmailResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/conversations/${path.conversation_id}/share-email`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_conversation_share_recipients_v1_conversations__conversation_id__share_recipients_get(path: { conversation_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ShareRecipientsResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/conversations/${path.conversation_id}/share-recipients`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
     headers: {
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
@@ -14902,6 +14999,25 @@ export async function get_user_paywall_status_v1_users_me_paywall_get(query: { p
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_referral_link_v1_users_me_referral_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ReferralLinkResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/me/referral`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_user_subscription_endpoint_v1_users_me_subscription_get(header: { X_App_Platform?: string, X_App_Version?: string, authorization?: string, X_Device_Id_Hash?: string }, init?: OmiApiClientInit): Promise<UserSubscriptionResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/me/subscription`;
@@ -16697,4 +16813,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 402 client methods generated.
+// Total: 405 client methods generated.

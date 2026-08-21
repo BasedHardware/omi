@@ -46,7 +46,7 @@ flowchart TD
 | **Conversation** | Persisted **session record** at `users/{uid}/conversations`: processed `transcript_segments`, session metadata (`structured`, `apps_results`), audio/photo linkage. Upstream of memory. | `in_progress` → `processing` → `completed`; user can delete whole session | N/A — Conversations tab, not Memories |
 | **Capture session** | Ephemeral listen/recording window (WebSocket lifetime). For voice paths, **1:1 with a Conversation** stub created at listen start. Use this term when distinguishing runtime capture from the persisted record. | Ends when recording stops | N/A |
 | **Raw input** | True source capture: audio in GCS, screenshots/files. Conversation docs hold **processed** transcripts (STT, diarization, speaker attribution) — not pristine raw audio/text. | Retained per recording/privacy policy | N/A — never surfaced as "memory" |
-| **Short-term memory** (Layer 1) | Broad new intake in **Memories**, tagged `layer=short_term`. Observations and explicit submissions retain source evidence (usually a Conversation via `evidence[].source_id`). | Every new memory starts here; **TTL/decay**; exactly one consolidation route settles it | Yes when eligible |
+| **Short-term memory** (Layer 1) | Broad new intake in **Memories**, tagged `layer=short_term`. Observations and explicit submissions retain source evidence (usually a Conversation via `evidence[].source_id`). | Every new memory starts here; the **TTL is an adjudication deadline**; exactly one consolidation route settles it | Yes when eligible; reaching TTL alone never hides an unadjudicated active item |
 | **Long-term memory** (Layer 2) | Durable synthesized facts in **Memories**, tagged `layer=long_term` (e.g. "Name is David Zhang", "Based in Seattle"). | Only an atomic `promote` route with a server-authored admission receipt and per-memory graph assertion may enter; may **age to Archive** | Yes |
 | **Archive** | Aged-out long-term (`layer=archive` or terminal state); kept for recall but not shown by default. | Terminal unless explicitly resurfaced | No (explicit opt-in only) |
 | **Workflow** | Action items and goals — task state, due dates, integrations, progress. **Not** memory layers. | Task: pending → done; Goal: active → ended | Yes (dedicated UX) |
@@ -240,6 +240,13 @@ pretend to have a canonical promotion receipt or graph assertion.
 
 `LifecycleState.working` is an **in-flight extraction state**, not a stored field on this record — it
 exists only inside the extraction pipeline and resolves to a `layer` before the record is durable.
+
+The expiry deadline schedules terminal adjudication; it is not a synthetic
+terminal decision by itself. If scheduled maintenance has not yet committed
+promote, archive, review, or reject, the active Short-term row remains
+default-readable and is reported as expired without a disposition. Once the
+canonical ledger commits a route, normal Long-term or Archive visibility rules
+apply.
 
 ---
 

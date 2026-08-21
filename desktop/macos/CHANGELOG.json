@@ -2,6 +2,67 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.196",
+      "date": "2026-08-21",
+      "changes": [
+        "Proactive insights can now answer a question you are writing — when your history holds the answer (a link, a name, a date), Omi delivers it instead of staying silent",
+        "Proactive insights now react to what you type: a question written mid-visit is evaluated within seconds instead of waiting for an app switch, and answers found in your memories are delivered on beta"
+      ]
+    },
+    {
+      "version": "0.12.195",
+      "date": "2026-08-21",
+      "changes": [
+        "After a call, the meeting notes notification now stays up until you act on it and can email the summary directly to the person you met with (detected from your calendar), with a new Meeting Summary Notifications toggle in Settings"
+      ]
+    },
+    {
+      "version": "0.12.194",
+      "date": "2026-08-21",
+      "changes": [
+        "You can now keep or reject memories directly from the macOS Memories page"
+      ]
+    },
+    {
+      "version": "0.12.193",
+      "date": "2026-08-21",
+      "changes": [
+        "Chat tells you when a failure is ours. When Omi's AI service did not respond, the transcript used to say \"Omi couldn't answer this one. Try sending it again\" — which reads as though your message was the problem, so people retried into a failure that could not succeed. It now says the AI service didn't respond and that it is on our side, not your message"
+      ]
+    },
+    {
+      "version": "0.12.192",
+      "date": "2026-08-20",
+      "changes": [
+        "Integration Suggestions is now the fifth notification type — a row beside Focus, Task, Insight, and Memory in Settings, with its own Integration chat badge",
+        "Notification chat rows no longer repeat their content twice when the message already restates the headline",
+        "Added Refer a Friend links that give eligible new Desktop users one free month of Omi Pro"
+      ]
+    },
+    {
+      "version": "0.12.191",
+      "date": "2026-08-20",
+      "changes": [
+        "Kept macOS release retries to at most one candidate per hour even while the previous build is still running",
+        "Rewind now shows the latest screenshot within seconds of capture instead of trailing 1–2 minutes, and the player follows new captures live while parked on the newest frame"
+      ]
+    },
+    {
+      "version": "0.12.190",
+      "date": "2026-08-20",
+      "changes": [
+        "Fixed Omi quitting by itself during first-run permission setup",
+        "Fixed the Save button turning blank in the Add Memory dialog as soon as you typed",
+        "Automatically deletes leftover agent tool-output files older than a week so they stop filling the Mac",
+        "Made each hourly macOS update start its Codemagic release build without waiting for GitHub's macOS queue",
+        "Fixed the screenshot embedding backfill failing to find the entries it needed to re-index",
+        "Notifications now come in exactly four types — Focus, Task, Insight, Memory — each controlled by its own toggle in Settings (the toggle formerly called Live Suggestions is now Focus Notifications)",
+        "Fixed macOS updates getting stuck before release when new changes kept landing during the hourly release train",
+        "Fixed the conversation processing banner overlapping source and duration details",
+        "Fixed longer push-to-talk questions losing the screenshot Omi answers from, so it can still see your screen"
+      ]
+    },
+    {
       "version": "0.12.189",
       "date": "2026-08-20",
       "changes": [

@@ -39,7 +39,8 @@ jobs:
         run: |
           python3 .github/scripts/plan-desktop-release.py \
             --repository "${{ github.repository }}" \
-            --min-tag-interval-seconds 3600
+            --min-tag-interval-seconds 3600 \
+            --codemagic-source-gate
 
       - name: Show release plan
         run: echo "${{ steps.plan.outputs.reason }}"
@@ -299,7 +300,7 @@ jobs:
             echo "merged_main_sha=$MERGED_MAIN_SHA"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Bind immutable planner evidence to merged green source
+      - name: Bind immutable planner evidence to merged release source
         if: steps.plan.outputs.should_release == 'true'
         id: identity
         run: |
@@ -348,7 +349,7 @@ jobs:
           if-no-files-found: error
           overwrite: false
 
-      - name: Publish immutable tag from merged green source
+      - name: Publish immutable tag from merged release source
         if: steps.plan.outputs.should_release == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -362,7 +363,7 @@ jobs:
             echo "Omi Bot token not available; cannot publish a candidate tag." >&2
             exit 1
           fi
-          # The publisher verifies the exact green candidate is still reachable
+          # The publisher verifies the exact candidate is still reachable
           # from authoritative GitHub main. Later merges belong to the next
           # train; an unmerged candidate or existing tag still fails closed.
           python3 .github/scripts/publish-desktop-candidate-tag.py \
@@ -374,21 +375,21 @@ jobs:
           git fetch --no-tags origin "+refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
           test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$CANDIDATE_SHA"
 
-      - name: Verify native Codemagic tag intake or dispatch fenced fallback
+      - name: Dispatch or reuse the exact-tag Codemagic build
         if: steps.plan.outputs.should_release == 'true'
         env:
           CODEMAGIC_API_TOKEN: ${{ secrets.CODEMAGIC_API_TOKEN }}
         run: |
-          # The helper waits the complete native-intake budget first. It posts at
-          # most one tag-bound fallback only after a final all-state same-tag
-          # absence fence; any existing same-tag build remains canonical.
+          # Codemagic's automatic tag trigger is disabled for this workflow.
+          # One all-state exact-tag query fences retries, then the helper posts
+          # at most one API build and verifies its immutable source identity.
           python3 .github/scripts/check-codemagic-tag-intake.py \
             --app-id "66c95e6ec76853c447b8bcbb" \
             --workflow-id "omi-desktop-swift-release" \
             --release-tag "${{ steps.version.outputs.release_tag }}" \
             --source-sha "${{ steps.identity.outputs.candidate_sha }}" \
-            --timeout-seconds 600 \
-            --poll-seconds 15 \
+            --timeout-seconds 0 \
+            --poll-seconds 5 \
             --dispatch-fallback-on-absence \
             --evidence "$RUNNER_TEMP/codemagic-native-tag-intake.json"
 

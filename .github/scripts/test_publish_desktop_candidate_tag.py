@@ -43,11 +43,11 @@ class PublishDesktopCandidateTagTests(unittest.TestCase):
         job = workflow.split("  plan-and-tag:\n", 1)[1]
         self.assertLess(job.index("- name: Generate Omi Bot token"), job.index("- name: Checkout with Omi Bot token"))
         self.assertEqual(job.count("token: ${{ steps.app-token.outputs.token }}"), 2)
-        self.assertIn("Verify native Codemagic tag intake or dispatch fenced fallback", job)
+        self.assertIn("Dispatch or reuse the exact-tag Codemagic build", job)
         self.assertIn("check-codemagic-tag-intake.py", job)
         self.assertIn("if: always() && steps.plan.outputs.should_release == 'true'", job)
 
-    def test_native_git_transport_publishes_a_lightweight_tag_not_an_annotated_tag(self) -> None:
+    def test_git_transport_publishes_a_timestamped_annotated_tag(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / "source"
@@ -80,7 +80,7 @@ class PublishDesktopCandidateTagTests(unittest.TestCase):
             original_directory = Path.cwd()
             try:
                 os.chdir(source)
-                publisher.create_local_lightweight_tag(
+                publisher.create_local_candidate_tag(
                     release_tag=RELEASE_TAG,
                     candidate_sha=candidate_sha,
                 )
@@ -89,8 +89,7 @@ class PublishDesktopCandidateTagTests(unittest.TestCase):
                 os.chdir(original_directory)
 
             tag_type = git("cat-file", "-t", f"refs/tags/{RELEASE_TAG}", cwd=remote)
-            self.assertEqual(tag_type, "commit")
-            self.assertNotEqual(tag_type, "tag")
+            self.assertEqual(tag_type, "tag")
             self.assertEqual(git("rev-parse", f"{RELEASE_TAG}^{{commit}}", cwd=remote), candidate_sha)
 
     def test_publishes_merged_candidate_after_main_advances(self) -> None:
@@ -115,7 +114,16 @@ class PublishDesktopCandidateTagTests(unittest.TestCase):
         )
         self.assertEqual(
             run_git.call_args_list[0].args,
-            (["tag", RELEASE_TAG, CANDIDATE_SHA],),
+            (
+                [
+                    "tag",
+                    "--annotate",
+                    "--message",
+                    f"Omi Desktop candidate {RELEASE_TAG}",
+                    RELEASE_TAG,
+                    CANDIDATE_SHA,
+                ],
+            ),
         )
         self.assertEqual(
             run_git.call_args_list[1],
