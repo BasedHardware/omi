@@ -155,6 +155,9 @@ environments:
             config_map:
               name: dev-omi-backend-config
               key: MCP_RESOURCE_URL
+          REFERRAL_PUBLIC_BASE_URL:
+            value: https://api.omiapi.com
+            category: service_discovery
           OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
             value: 'false'
             category: rollout
@@ -1167,6 +1170,9 @@ environments:
             config_map:
               name: prod-omi-backend-config
               key: MCP_RESOURCE_URL
+          REFERRAL_PUBLIC_BASE_URL:
+            value: https://api.omi.me
+            category: service_discovery
           ACCOUNT_DELETION_DISPATCH_MODE:
             value: cloud_tasks
             category: reliability
