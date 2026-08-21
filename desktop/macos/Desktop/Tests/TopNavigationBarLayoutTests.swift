@@ -177,11 +177,19 @@ final class TopNavigationBarLayoutTests: XCTestCase {
       ShellDestination.unreachable(), [],
       "a destination lost the only mechanism that reached it")
 
-    // The retired menu's three are the hub's own views, reached from the hub's switcher. `Activity`
-    // is not among them: it is what the hub's pill opens, so the bar is its door.
+    // The hub's other three pages are reached from Activity's chip row, on the page the pill opens.
+    // `Activity` itself is what the pill opens, so the bar is its own door.
     XCTAssertEqual(
-      ShellDestination.allCases.filter { $0.reach == .memoryHubView }.compactMap(\.memoryDestination),
+      ShellDestination.allCases.filter { $0.reach == .activityChipRow }
+        .compactMap(\.memoryDestination),
       [.conversations, .memories, .brainMap])
+    // The claim is checkable because the row and the model read one value. A page dropped from the
+    // chip row is unreachable here rather than silently stranded in the app.
+    for destination in ShellDestination.allCases where destination.reach == .activityChipRow {
+      XCTAssertTrue(
+        ActivityDestinationChip.reachableHubDestinations.contains(destination.memoryDestination!),
+        "\(destination.title) claims the chip row reaches it, but the row does not offer it")
+    }
     XCTAssertEqual(ShellDestination.activity.reach, .topBar)
 
     // The pill names the view it opens. It used to say `Memories` and open whichever hub view was
@@ -379,7 +387,7 @@ final class TopNavigationBarLayoutTests: XCTestCase {
 
   func testLibraryPillReadsAsCurrentOnEveryHubView() {
     for destination in ShellDestination.allCases
-    where destination.reach == .memoryHubView || destination == .activity {
+    where destination.reach == .activityChipRow || destination == .activity {
       XCTAssertTrue(
         ShellDestination.isHubPage(selectedIndex: destination.navItem.rawValue),
         "\(destination.title) must light the Activity pill")

@@ -44,6 +44,9 @@ struct MemoryHubPage: View {
   /// singleton below — correct for the modern shell, where this page mounts `ConversationsPageHost`
   /// itself and that host is guaranteed to be the one that consumes the request.
   var onOpenConversationRecord: ((ServerConversation) -> Void)? = nil
+  /// Tasks lives on the shell rail, so Activity's chip row reaches it through the host that owns
+  /// that index — the same shape as `onOpenRewind`.
+  var onOpenTasks: (() -> Void)? = nil
 
   private var destination: MemoryHubDestination {
     MemoryHubDestination(rawValue: destinationRawValue) ?? .memories
@@ -62,14 +65,13 @@ struct MemoryHubPage: View {
   /// The hub wears its own switcher. It used to live in the top bar's `Library` hover menu, which
   /// made the window's chrome responsible for one page's three views — and made Brain Map reachable
   /// only by hovering. A page's tabs belong to the page (INV-NAV-1: same destinations, same owner).
+  /// **The hub wears no switcher.** It used to carry one directly above Activity's own filter row —
+  /// two chip rows a few points apart, sharing three of their words, doing different things. The
+  /// row that survived is Activity's, and every chip in it navigates (`ActivityDestinationChip`),
+  /// so the hub's four pages are reached from one place with one rule. Landing on any of them and
+  /// pressing `Activity` in the top bar comes back to that row (INV-NAV-1).
   var body: some View {
-    VStack(spacing: 0) {
-      MemoryHubSwitcher(selection: destination, onSelect: select)
-        .padding(.top, 22)
-        .padding(.horizontal, 28)
-        .padding(.bottom, 4)
-      hubContent
-    }
+    hubContent
   }
 
   private func select(_ next: MemoryHubDestination) {
@@ -112,7 +114,9 @@ struct MemoryHubPage: View {
           }
         },
         onOpenBrainMap: { select(.brainMap) },
-        onOpenRewind: { onOpenRewind?() }
+        onOpenRewind: { onOpenRewind?() },
+        onOpenHubDestination: select,
+        onOpenTasks: { onOpenTasks?() }
       )
       .frame(maxWidth: .infinity, maxHeight: .infinity)
     case .memories:

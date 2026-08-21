@@ -71,9 +71,13 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
   enum Reach: Equatable {
     /// A pill in the top bar: always visible, one click.
     case topBar
-    /// One of the Memory hub's own three views, selected by the hub's switcher on the hub's page.
-    /// The bar reaches the hub itself with the `Library` pill.
-    case memoryHubView
+    /// A chip in Activity's row, on the page the `Activity` pill opens.
+    ///
+    /// This replaced `memoryHubView` when the hub's switcher was deleted. The old case named a
+    /// mechanism `unreachable()` never actually checked — it only verified the pill existed — so
+    /// removing the switcher would have stranded three pages with every test still green. This one
+    /// is checked against `ActivityDestinationChip`, the same value the row renders from.
+    case activityChipRow
     /// A row in the Settings section list, which the bar's gear opens.
     ///
     /// This case exists because `PermissionsPage` had `nil` for an answer. It renders correctly and
@@ -135,7 +139,7 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
     switch self {
     /// `Activity` is what the hub's pill opens, so its door is the bar itself — the other three
     /// hub views are reached from the hub's switcher once you are there.
-    case .conversations, .memories, .brainMap: return .memoryHubView
+    case .conversations, .memories, .brainMap: return .activityChipRow
     case .permissions: return .settingsSidebar
     case .home, .tasks, .rewind, .apps, .activity: return .topBar
     }
@@ -159,9 +163,11 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
       switch destination.reach {
       case .topBar:
         return !barTargets.contains(destination.navItem.rawValue)
-      case .memoryHubView:
+      case .activityChipRow:
+        // Two claims, both checkable: the row actually offers this page, and the bar still carries
+        // the pill that opens the page the row lives on.
         guard let hubView = destination.memoryDestination,
-          MemoryHubDestination.allCases.contains(hubView)
+          ActivityDestinationChip.reachableHubDestinations.contains(hubView)
         else { return true }
         return !barTargets.contains(SidebarNavItem.conversations.rawValue)
       case .settingsSidebar:

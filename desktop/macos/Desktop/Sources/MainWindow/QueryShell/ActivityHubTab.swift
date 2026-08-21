@@ -16,6 +16,11 @@ struct ActivityHubTab: View {
   let onOpenMemory: (SpineMemory) -> Void
   let onOpenBrainMap: () -> Void
   let onOpenRewind: () -> Void
+  /// Opens one of the Memory hub's sibling pages. The chip row is the only door to them now that
+  /// the hub's switcher is gone, so a host that cannot supply this would strand three pages.
+  let onOpenHubDestination: (MemoryHubDestination) -> Void
+  /// Tasks is the shell's own destination, reached from the rail the host owns.
+  let onOpenTasks: () -> Void
 
   @ObservedObject private var tasksStore = TasksStore.shared
   @State private var filters = QueryShellFilters()
@@ -40,6 +45,7 @@ struct ActivityHubTab: View {
           total: total,
           onExitAnswer: nil,
           bodyHeight: bodyHeight,
+          chipBehavior: .openDestinations(selected: .activity, open: openChip),
           headerAccessory: { EmptyView() },
           footer: { EmptyView() }
         ) {
@@ -65,6 +71,22 @@ struct ActivityHubTab: View {
 
   private var searchBar: some View {
     QuerySearchBar(text: $searchText, accessibilityID: "activity-search-field")
+  }
+
+  /// Every chip in this row navigates — see `ActivityDestinationChip`. `Activity` is the page we
+  /// are already on, so it is the row's selected state rather than a fifth way to reload it.
+  private func openChip(_ chip: ActivityDestinationChip) {
+    switch chip {
+    case .activity:
+      return
+    case .conversations, .memories, .brainMap:
+      guard let destination = chip.hubDestination else { return }
+      onOpenHubDestination(destination)
+    case .tasks:
+      onOpenTasks()
+    case .rewind:
+      onOpenRewind()
+    }
   }
 
   private var requestBinding: Binding<QueryShellRequest> {

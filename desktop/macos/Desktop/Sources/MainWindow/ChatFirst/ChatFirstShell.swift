@@ -117,9 +117,12 @@ struct ChatFirstShell: View {
 
   @ViewBuilder
   private var destination: some View {
-    if ChatFirstPageGlassLanePolicy.shouldWrap(navigation.route) {
+    if ChatFirstPageGlassLanePolicy.shouldWrap(
+      navigation.route, memoryDestinationRawValue: memoryDestinationRawValue)
+    {
       PageGlassLane(
-        selectedIndex: ChatFirstPageGlassLanePolicy.pageGlassLaneIndex(for: navigation.route)
+        selectedIndex: ChatFirstPageGlassLanePolicy.pageGlassLaneIndex(for: navigation.route),
+        memoryDestinationRawValue: memoryDestinationRawValue
       ) {
         routeDestination
       }
@@ -155,22 +158,16 @@ struct ChatFirstShell: View {
       }
       .onDisappear { automationRuntime.unregisterChatPage() }
     case .conversations:
-      // This route is one of the Memory hub's three views, so it wears the hub's switcher too —
-      // otherwise landing here would strand Memories and Brain Map behind a route change nothing
-      // on screen offers (INV-NAV-1).
-      VStack(spacing: 0) {
-        MemoryHubSwitcher(selection: .conversations, onSelect: selectHubDestination)
-          .padding(.top, 22)
-          .padding(.horizontal, 28)
-          .padding(.bottom, 4)
-        ChatFirstConversationsHost(
-          navigation: navigation,
-          appState: appState,
-          chatProvider: viewModelContainer.chatProvider,
-          automationRuntime: automationRuntime,
-          explicitSelectionGeneration: conversationsSelectionGeneration
-        )
-      }
+      // No switcher here either. Every hub page is reached from Activity's chip row, and the
+      // `Activity` pill in the top bar is always one click away from this route, so the siblings
+      // are two clicks out rather than stranded (INV-NAV-1, `ShellDestination.reach`).
+      ChatFirstConversationsHost(
+        navigation: navigation,
+        appState: appState,
+        chatProvider: viewModelContainer.chatProvider,
+        automationRuntime: automationRuntime,
+        explicitSelectionGeneration: conversationsSelectionGeneration
+      )
       .accessibilityIdentifier("chat-first-route-conversations")
       .onAppear { navigation.markRouteVisible(.conversations) }
     case .tasks:
@@ -208,7 +205,8 @@ struct ChatFirstShell: View {
         // host as a record rather than as an id the host has to find again. `selectPrimary` — what
         // the spine used to call — is the tab-selection primitive and drops pending records by
         // design, which is why the click landed on the list.
-        onOpenConversationRecord: { navigation.open(conversation: $0) }
+        onOpenConversationRecord: { navigation.open(conversation: $0) },
+        onOpenTasks: { navigation.selectPrimary(.tasks) }
       )
       .accessibilityIdentifier("chat-first-route-memories")
       .onAppear { navigation.markRouteVisible(.memories) }
@@ -386,11 +384,15 @@ struct ChatFirstShell: View {
 /// Chat-first keeps Home and Rewind as self-contained surfaces. All other mounted destinations
 /// receive the existing shared lane exactly once at the shell boundary.
 enum ChatFirstPageGlassLanePolicy {
-  static func shouldWrap(_ route: ChatFirstRoute) -> Bool {
+  static func shouldWrap(_ route: ChatFirstRoute, memoryDestinationRawValue: Int? = nil) -> Bool {
     switch route {
     case .chat, .more(.dashboard), .more(.rewind):
       return false
-    case .conversations, .tasks, .goals, .memories,
+    case .memories:
+      // The memory route mounts the hub, and Activity is the one hub page that builds Home's own
+      // two panels. Wrapping it puts glass inside glass and doubles the scrim.
+      return MemoryHubDestination(rawValue: memoryDestinationRawValue ?? -1) != .activity
+    case .conversations, .tasks, .goals,
       .more(.apps), .more(.permissions), .more(.settings):
       return true
     }
