@@ -1,4 +1,4 @@
-"""LangSmith tracing must be off by construction on an offline (on-prem) deployment.
+"""LangSmith tracing must be off by construction on an self-hosted deployment.
 
 The tracer path was gated on ONE condition — "is an API key present?" — and never consulted
 `is_langsmith_enabled()`. The module's own startup log states the consequence: "Global tracing off but
@@ -10,10 +10,14 @@ operator believes tracing is disabled.
 The flag is deliberately NOT the gate here: upstream ships exactly that combination in its cloud values
 (LANGCHAIN_TRACING_V2="false" with a key injected) and relies on per-request tracing, so honouring the
 flag would change upstream product behaviour — which is not the delta this fork carries. Instead the
-gate is the deployment's own declaration: PROVIDER_MODE=offline / OMI_ENV_STAGE=offline, which both
-`deploy/onprem/backend.env.base.example` and the Helm values already set, resolved through the existing
-`utils.env_loader.resolve_stage_from_env()` rather than a parallel notion of "on-prem". Cloud behaviour
-is untouched; on-prem stops depending on nobody having set a key.
+gate is the deployment's own declaration — `OMI_ENV_STAGE=selfhost` (ADR-0058), which both
+`deploy/onprem/backend.env.base.example` and the Helm values set — resolved through the existing
+`utils.env_loader.resolve_stage_from_env()` rather than a parallel notion of "self-hosted". Cloud
+behaviour is untouched; a self-hosted stack stops depending on nobody having set a key.
+
+The stage is not the RIGHT key in principle — it answers "am I a real deployment", not "may data leave
+for a vendor" (ADR-0057 introduces that axis and this gate moves onto it) — but it is the key we have,
+and these tests pin the behaviour so the move is safe.
 """
 
 from __future__ import annotations
@@ -34,16 +38,17 @@ def _a_key_is_present(monkeypatch):
         monkeypatch.delenv(var, raising=False)
 
 
-def test_offline_provider_mode_disables_the_chat_tracer(monkeypatch):
-    monkeypatch.setenv('PROVIDER_MODE', 'offline')
+def test_selfhost_stage_disables_the_chat_tracer(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'selfhost')
 
     assert ls.get_chat_tracer_callbacks() == []
 
 
-def test_offline_env_stage_disables_the_chat_tracer(monkeypatch):
+def test_upstreams_offline_stage_is_not_our_signal(monkeypatch):
+    """`offline` means "fake providers" upstream and is NOT our deployment marker (ADR-0058)."""
     monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
 
-    assert ls.get_chat_tracer_callbacks() == []
+    assert ls.get_chat_tracer_callbacks() != []
 
 
 def test_a_non_offline_stage_keeps_upstream_behaviour(monkeypatch):
@@ -60,11 +65,11 @@ def test_no_key_is_still_no_tracer(monkeypatch):
     assert ls.get_chat_tracer_callbacks() == []
 
 
-def test_prompt_hub_is_not_pulled_from_an_offline_deployment(monkeypatch):
+def test_prompt_hub_is_not_pulled_from_a_selfhost_deployment(monkeypatch):
     """The hub pull is a second SaaS call on the same module; it must go quiet offline too."""
     from utils.observability import langsmith_prompts as lp
 
-    monkeypatch.setenv('PROVIDER_MODE', 'offline')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'selfhost')
     lp._prompt_cache.clear()
 
     # Assert the CLIENT is never constructed. A bare "returns None" assertion would pass for the wrong
@@ -78,10 +83,10 @@ def test_prompt_hub_is_not_pulled_from_an_offline_deployment(monkeypatch):
     monkeypatch.setitem(sys.modules, 'langsmith', SimpleNamespace(Client=_Tripwire))
 
     assert lp._fetch_prompt_from_langsmith('omi-agentic-system') is None
-    assert constructed == [], 'an offline deployment must not even build a LangSmith client'
+    assert constructed == [], 'a self-hosted deployment must not even build a LangSmith client'
 
 
-def test_prompt_hub_is_still_reached_when_not_offline(monkeypatch):
+def test_prompt_hub_is_still_reached_when_not_selfhost(monkeypatch):
     """Proves the tripwire above measures the guard and not the absence of a network."""
     from utils.observability import langsmith_prompts as lp
 
@@ -97,4 +102,4 @@ def test_prompt_hub_is_still_reached_when_not_offline(monkeypatch):
     monkeypatch.setitem(sys.modules, 'langsmith', SimpleNamespace(Client=_Tripwire))
 
     assert lp._fetch_prompt_from_langsmith('omi-agentic-system') is None
-    assert constructed == ['client'], 'a non-offline deployment does try to reach the hub'
+    assert constructed == ['client'], 'a non-selfhost deployment does try to reach the hub'

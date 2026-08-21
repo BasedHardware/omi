@@ -46,8 +46,11 @@ backend:
   # Plain (non-secret) backend env — the Helm mirror of backend.env.base. MONGO_URI/REDIS host are
   # derived from the in-cluster service names by the configmap template, not set here.
   env:
-    PROVIDER_MODE: offline
-    OMI_ENV_STAGE: offline
+    # `selfhost` = a real deployment, not a developer's machine (ADR-0058). NOT "offline"/air-gapped:
+    # the network is bridged and the operator's LLM endpoint is expected to be reachable. `prod` would
+    # demand Google Cloud Tasks at startup; `dev`/`local` would enable a fallback to api.openai.com.
+    # PROVIDER_MODE is intentionally absent — upstream uses it for "fake providers".
+    OMI_ENV_STAGE: selfhost
     STORAGE_BACKEND: mongo
     FIREBASE_PROJECT_ID: demo-omi-local
     FIREBASE_AUTH_PROJECT_ID: demo-omi-local

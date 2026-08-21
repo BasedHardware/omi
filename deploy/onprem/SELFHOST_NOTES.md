@@ -256,7 +256,7 @@ below). Wire it in `backend.env`:
 OMI_LLM_GATEWAY_FEATURE_MODE=gateway
 OMI_LLM_GATEWAY_URL=http://llm_gateway:9080
 OMI_LLM_GATEWAY_SERVICE_TOKEN=<same value as llm_gateway.env>
-OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true          # OMI_ENV_STAGE=offline is prod-like
+OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true          # OMI_ENV_STAGE=selfhost is a real runtime
 # embeddings — direct (they do NOT go through the gateway; the one hard-cloud gap, now pointable)
 OMI_EMBEDDINGS_BASE_URL=http://<ollama-host>:11434/v1
 OMI_EMBEDDINGS_MODEL=nomic-embed-text
@@ -306,7 +306,7 @@ docker compose -f compose.dev.yaml --profile chat up -d
 Three on-prem requirements the gateway wiring encodes (each was a real failure the E2E caught):
 1. **the `llm_gateway` service must run** — `OMI_LLM_GATEWAY_URL` points at it (`:9080`), not at Ollama;
 2. **`OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true`** — gateway mode is blocked outside dev, and
-   `OMI_ENV_STAGE=offline` is treated as prod-like;
+   `OMI_ENV_STAGE=selfhost` is a real (non-dev) runtime — see ADR-0058 for why that value;
 3. **tiktoken encodings are baked into the backend image** (build-time) so the chat token-budget step
    needs no runtime download (would hit `openaipublic.blob.core.windows.net` → fails no-egress).
 
@@ -519,7 +519,7 @@ Mount the **whole repo** so `backend/` sits at its real depth:
 -v $(git rev-parse --show-toplevel):/repo -w /repo/backend
 ```
 
-Do **not** set `OMI_ENV_STAGE=offline` for the unit sweep: that variable is for the runtime compose
+Do **not** set `OMI_ENV_STAGE=selfhost` for the unit sweep: that variable is for the runtime compose
 posture, and forcing it makes a couple of tests assert the wrong environment/stage. `LOCAL_DEVELOPMENT=true`
 is the signal the unit suite expects. (See the two known residuals at the end.)
 

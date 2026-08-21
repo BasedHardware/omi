@@ -12,7 +12,7 @@ import time
 from typing import Optional, Dict, Any, Tuple, Iterable, cast
 from dataclasses import dataclass
 
-from utils.observability.langsmith import is_offline_deployment, has_langsmith_api_key
+from utils.observability.langsmith import has_langsmith_api_key, is_selfhost_deployment
 import logging
 
 logger = logging.getLogger(__name__)
@@ -64,10 +64,10 @@ def _fetch_prompt_from_langsmith(prompt_name: str) -> Optional[CachedPrompt]:
     Note: Prompt fetching only requires an API key, not tracing to be enabled.
     This allows prompt versioning to work even when global tracing is disabled.
     """
-    if is_offline_deployment():
+    if is_selfhost_deployment():
         # Second SaaS surface on this module: the hub pull is an outbound call to LangSmith,
         # and it fails open to the local prompt, so an offline deployment loses nothing by
-        # skipping it (utils/observability/langsmith.py::is_offline_deployment).
+        # skipping it (utils/observability/langsmith.py::is_selfhost_deployment).
         return None
     if not has_langsmith_api_key():
         logger.error(f"⚠️  LangSmith API key not configured, cannot fetch prompt: {prompt_name}")

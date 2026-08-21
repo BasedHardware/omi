@@ -4,7 +4,10 @@ Stages select committed template files (``backend/.env.<stage>``) for different
 deployment contexts. Personal secrets live in ``backend/.env``, which always
 loads last and overrides stage defaults.
 
-Set ``OMI_ENV_STAGE`` to one of: ``prod``, ``dev``, ``local``, ``offline``.
+Set ``OMI_ENV_STAGE`` to one of: ``prod``, ``dev``, ``local``, ``offline``, ``selfhost``.
+``selfhost`` is this fork's own stage: a real self-hosted deployment (ADR-0058). It is NOT
+``offline`` — that one means "fake providers" upstream, while a self-hosted stack runs real
+providers that merely happen to be local.
 When unset, only ``backend/.env`` is loaded (production / legacy behavior).
 If ``OMI_ENV_STAGE`` is unset and ``PROVIDER_MODE=offline``, stage ``offline``
 is inferred for harness compatibility.
@@ -22,7 +25,7 @@ from dotenv import dotenv_values, load_dotenv
 
 logger = logging.getLogger(__name__)
 
-VALID_STAGES = frozenset({"prod", "dev", "local", "offline"})
+VALID_STAGES = frozenset({"prod", "dev", "local", "offline", "selfhost"})
 
 # ``local`` uses the existing harness filename for backward compatibility.
 STAGE_ENV_FILENAMES: dict[str, str] = {
@@ -30,6 +33,7 @@ STAGE_ENV_FILENAMES: dict[str, str] = {
     "dev": ".env.dev",
     "local": ".env.local-dev",
     "offline": ".env.offline",
+    "selfhost": ".env.selfhost",
 }
 
 _PROVIDER_SECRET_RE = re.compile(
@@ -43,6 +47,7 @@ class EnvStage(str, Enum):
     DEV = "dev"
     LOCAL = "local"
     OFFLINE = "offline"
+    SELFHOST = "selfhost"
 
 
 def backend_dir() -> Path:
