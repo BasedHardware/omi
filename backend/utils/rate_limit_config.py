@@ -64,6 +64,10 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # a reconnect storm into a 429 death-spiral, so this is sized for heavy multi-session
     # use rather than a single client. Tune via RATE_LIMIT_BOOST for events.
     "mcp:sse": (2000, 3600),
+    # RFC 7591 registration is public and writes one durable OAuth client.
+    # Bound it per source address so discovery remains automatic without
+    # allowing an unauthenticated caller to grow the client collection freely.
+    "mcp:client_registration": (120, 3600),
     # Action items — lightweight Firestore writes from MCP clients (no LLM), but
     # an agent can loop, so cap creation per hour. Complete/update/delete operate
     # on existing tasks and ride the shared mcp:sse / per-request auth limits.

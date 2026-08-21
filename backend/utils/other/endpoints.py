@@ -639,6 +639,11 @@ def check_rate_limit_inline(key: str, policy_name: str) -> None:
     _enforce_rate_limit(key, policy_name)
 
 
+def check_rate_limit_inline_fail_closed(key: str, policy_name: str) -> None:
+    """Check a custom-auth or pre-auth route and reject when Redis is unavailable."""
+    _enforce_rate_limit(key, policy_name, fail_closed=True)
+
+
 F = TypeVar("F", bound=Callable[..., Any])
 
 

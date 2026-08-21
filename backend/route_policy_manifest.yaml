@@ -69,6 +69,29 @@ routes:
     path: /health
     policy: *desktop_migration_policy
   - route_type: http
+    method: POST
+    path: /api/oauth/register
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - public
+        placement: none
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: mcp:client_registration
+        key_subject: ip
+        enforcement: fail_closed
+        placement: inline
+      timeout_class: default_method
+      surface: oauth
+      visibility: public_documented
+      data_domain: auth
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
     method: GET
     path: /ready
     policy: *desktop_migration_policy

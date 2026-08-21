@@ -9,7 +9,8 @@ description: "Debug and fix common MCP connection issues"
 <AccordionGroup>
   <Accordion title="OAuth sign-in or consent does not open" icon="lock">
     - Confirm the remote server URL is exactly `https://api.omi.me/v1/mcp/sse`
-    - Use Omi's registered ChatGPT or Claude connection flow; arbitrary client IDs are not accepted
+    - Clients with RFC 7591 support should discover `https://api.omi.me/api/oauth/register` and obtain a public client ID automatically
+    - Clients without dynamic registration must use Omi's registered ChatGPT or Claude flow; arbitrary unregistered client IDs are rejected
     - For Claude, use client ID `omi-claude-prod` and leave the client secret blank
     - For ChatGPT's developer-mode fallback, use `omi-chatgpt-prod`, leave the secret blank, and set token auth method to `none`
     - If the client cannot complete OAuth, use the manual MCP-key fallback in the [Setup guide](/doc/developer/mcp/setup)
