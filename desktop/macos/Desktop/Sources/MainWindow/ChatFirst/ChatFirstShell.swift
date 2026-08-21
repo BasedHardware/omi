@@ -203,7 +203,12 @@ struct ChatFirstShell: View {
         onSelectDestination: selectHubDestination,
         // The Activity spine's screenshot rows leave for Rewind through the
         // shell that owns the route — without this the rows are inert here.
-        onOpenRewind: { navigation.selectMore(.rewind) }
+        onOpenRewind: { navigation.selectMore(.rewind) },
+        // The typed deep link, so a conversation opened from Activity arrives at the Conversations
+        // host as a record rather than as an id the host has to find again. `selectPrimary` — what
+        // the spine used to call — is the tab-selection primitive and drops pending records by
+        // design, which is why the click landed on the list.
+        onOpenConversationRecord: { navigation.open(conversation: $0) }
       )
       .accessibilityIdentifier("chat-first-route-memories")
       .onAppear { navigation.markRouteVisible(.memories) }
@@ -251,12 +256,10 @@ struct ChatFirstShell: View {
       get: { ChatFirstModernNavigationPolicy.topBarIndex(for: navigation.route) },
       set: { rawValue in
         if rawValue == SidebarNavItem.conversations.rawValue {
-          let destination =
-            MemoryHubDestination(rawValue: memoryDestinationRawValue) ?? .memories
-          if destination == .conversations {
-            conversationsSelectionGeneration &+= 1
-          }
-          navigation.selectPrimary(destination == .conversations ? .conversations : .memories)
+          // The pill says `Activity`, so it opens Activity — not whichever hub view happened to be
+          // persisted last. Routing through the same writer the hub's own switcher uses keeps one
+          // path responsible for moving both halves of the state.
+          selectHubDestination(.activity)
           return
         }
         guard let route = ChatFirstModernNavigationPolicy.route(forTopBarIndex: rawValue) else {
@@ -465,7 +468,12 @@ enum ChatFirstMemoryRoutePolicy {
   ) -> MemoryHubDestination? {
     switch route {
     case .memories:
-      return current == .brainMap ? .brainMap : .memories
+      // Every hub view that *lives* on the memory route survives the transition. This used to
+      // whitelist `.brainMap` by name, so when `.activity` was added as a fourth hub view the
+      // route sync silently rewrote it back to `.memories` — the click landed on Memories no
+      // matter which view you asked for. Deriving the answer from the one route mapping keeps
+      // the sync and the selection from drifting apart again.
+      return MemoryHubSelectionPolicy.chatFirstRoute(for: current) == .memories ? current : .memories
     case .conversations:
       return .conversations
     default:
@@ -517,6 +525,14 @@ private struct ChatFirstConversationsHost: View {
     }
     .onChange(of: explicitSelectionGeneration) { _, _ in
       showsCaptureArchive = false
+    }
+    // **The latch had no second release.** Once any capture link was followed, `showsCaptureArchive`
+    // stayed true until a tab was explicitly re-selected, so "open this exact conversation" kept
+    // landing in the archive's reduced pane — which reads its own summary and never consumes a
+    // pending record. An exact conversation is precisely the "ordinary Conversations navigation"
+    // the branch above promises the full editor to, so it releases the latch.
+    .onChange(of: navigation.pendingConversation?.id) { _, id in
+      if id != nil { showsCaptureArchive = false }
     }
   }
 }

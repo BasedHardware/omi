@@ -177,11 +177,22 @@ final class TopNavigationBarLayoutTests: XCTestCase {
       ShellDestination.unreachable(), [],
       "a destination lost the only mechanism that reached it")
 
-    // The retired menu's three plus the Activity spine are the hub's own views, and the hub itself
-    // has a pill.
+    // The retired menu's three are the hub's own views, reached from the hub's switcher. `Activity`
+    // is not among them: it is what the hub's pill opens, so the bar is its door.
     XCTAssertEqual(
       ShellDestination.allCases.filter { $0.reach == .memoryHubView }.compactMap(\.memoryDestination),
-      [.conversations, .memories, .brainMap, .activity])
+      [.conversations, .memories, .brainMap])
+    XCTAssertEqual(ShellDestination.activity.reach, .topBar)
+
+    // The pill names the view it opens. It used to say `Memories` and open whichever hub view was
+    // persisted last, so the word on the bar and the page you got were only sometimes the same.
+    let hubPill = TopNavigationRoutes.primaryItems.first {
+      $0.index == SidebarNavItem.conversations.rawValue
+    }
+    XCTAssertEqual(hubPill?.title, "Activity")
+    XCTAssertNotEqual(
+      hubPill?.icon, "clock.arrow.circlepath",
+      "the hub pill must not wear Rewind's glyph two pills away from Rewind")
     // Chat is a peer pill, not a brand mark: the eight-dot mark belongs to the query bar, where it
     // animates while Omi is answering. The pill wears a chat glyph because the page IS the chat.
     XCTAssertEqual(ShellDestination.home.navItem, .dashboard)
@@ -302,7 +313,7 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     XCTAssertEqual(
       Set(ShellDestination.unreachable(fromBarItems: barWithoutLibrary)),
       [.conversations, .memories, .brainMap, .activity],
-      "without the Memories pill the hub's views have no way in")
+      "without the Activity pill the hub's views have no way in")
   }
 
   /// **The bridge's destination vocabulary, now that a test can reach it.** This mapping was a
@@ -367,10 +378,11 @@ final class TopNavigationBarLayoutTests: XCTestCase {
   }
 
   func testLibraryPillReadsAsCurrentOnEveryHubView() {
-    for destination in ShellDestination.allCases where destination.reach == .memoryHubView {
+    for destination in ShellDestination.allCases
+    where destination.reach == .memoryHubView || destination == .activity {
       XCTAssertTrue(
         ShellDestination.isHubPage(selectedIndex: destination.navItem.rawValue),
-        "\(destination.title) must light the Library pill")
+        "\(destination.title) must light the Activity pill")
     }
     XCTAssertFalse(ShellDestination.isHubPage(selectedIndex: SidebarNavItem.dashboard.rawValue))
     XCTAssertFalse(ShellDestination.isHubPage(selectedIndex: SidebarNavItem.apps.rawValue))

@@ -133,9 +133,11 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
 
   var reach: Reach {
     switch self {
-    case .conversations, .memories, .brainMap, .activity: return .memoryHubView
+    /// `Activity` is what the hub's pill opens, so its door is the bar itself — the other three
+    /// hub views are reached from the hub's switcher once you are there.
+    case .conversations, .memories, .brainMap: return .memoryHubView
     case .permissions: return .settingsSidebar
-    case .home, .tasks, .rewind, .apps: return .topBar
+    case .home, .tasks, .rewind, .apps, .activity: return .topBar
     }
   }
 
@@ -208,9 +210,15 @@ enum TopNavigationRoutes {
     TopNavigationItem(
       index: SidebarNavItem.dashboard.rawValue, title: "Chat", icon: "bubble.left.and.text.bubble.right",
       tooltip: "Chat — talk to Omi about everything you've seen and heard"),
+    // The hub's pill names the view it opens. It used to say `Memories` while opening whichever hub
+    // view was last persisted, so the word on the bar and the page you landed on were only
+    // sometimes the same thing. It opens `Activity` — the chronological spine over everything
+    // captured — and says so; Conversations, Memories and Brain Map stay one click away in the
+    // hub's own switcher, which is the mechanism `ShellDestination.reach` records for them.
+    // The glyph is deliberately not `clock.arrow.circlepath`: that is Rewind's, two pills away.
     TopNavigationItem(
-      index: SidebarNavItem.conversations.rawValue, title: "Memories", icon: "books.vertical",
-      tooltip: "Everything Omi has kept — activity, conversations, memories, brain map"),
+      index: SidebarNavItem.conversations.rawValue, title: "Activity", icon: "square.stack",
+      tooltip: "Activity — everything Omi captured, newest first"),
     TopNavigationItem(
       index: SidebarNavItem.tasks.rawValue, title: "Tasks", icon: "checklist",
       tooltip: "Tasks — everything Omi heard you commit to"),

@@ -12,7 +12,8 @@ import SwiftUI
 struct ActivityHubTab: View {
   let appState: AppState
   @ObservedObject var memoriesViewModel: MemoriesViewModel
-  let onOpenConversation: (String) -> Void
+  let onOpenConversation: (ServerConversation) -> Void
+  let onOpenMemory: (SpineMemory) -> Void
   let onOpenBrainMap: () -> Void
   let onOpenRewind: () -> Void
 
@@ -48,6 +49,7 @@ struct ActivityHubTab: View {
             memoriesViewModel: memoriesViewModel,
             tasksStore: tasksStore,
             onOpenConversation: onOpenConversation,
+            onOpenMemory: onOpenMemory,
             onOpenBrainMap: onOpenBrainMap,
             onOpenRewind: onOpenRewind
           )
