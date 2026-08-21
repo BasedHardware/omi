@@ -32,6 +32,11 @@ from utils.log_sanitizer import sanitize
 OPENAI_API_KEY_ENV_VAR = 'OPENAI_API_KEY'
 OPENAI_BASE_URL_ENV_VAR = 'OPENAI_BASE_URL'
 DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com/v1'
+
+# Anthropic's base, overridable like OpenAI's. Two INDEPENDENT copies of this literal existed (here and in
+# routers/anthropic_messages.py), so a deployment could not redirect it at all (BACKLOG L4). Resolved once,
+# at import, and imported by the router so the two cannot drift apart again.
+ANTHROPIC_BASE_URL_DEFAULT = os.getenv('ANTHROPIC_BASE_URL', 'https://api.anthropic.com/v1')
 DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 MAX_RESPONSE_BYTES_ENV_VAR = 'OPENAI_MAX_RESPONSE_BYTES'
 PROVIDER_ERROR_DETAIL_BYTES = 1000
@@ -589,7 +594,7 @@ class AnthropicMessagesProvider:
         self,
         *,
         api_key_env: str = 'ANTHROPIC_API_KEY',
-        base_url: str = 'https://api.anthropic.com/v1',
+        base_url: str = ANTHROPIC_BASE_URL_DEFAULT,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
         self._api_key_env = api_key_env
