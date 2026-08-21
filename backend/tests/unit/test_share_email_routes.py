@@ -315,3 +315,24 @@ def test_ambiguous_failure_keeps_reservation_and_publish(monkeypatch, _stub_data
     repeat = _client().post(f'/v1/conversations/{CONV_ID}/share-email', json={'recipient_emails': ['sarah@acme.com']})
     assert repeat.status_code == 200
     assert _stub_data_layer['visibility'] == 'shared'
+
+
+def test_publish_infrastructure_failure_releases_reservation_and_quota(monkeypatch, _stub_data_layer):
+    refunds = []
+    monkeypatch.setattr(conversations_router.share_email, 'refund_daily_send_quota', lambda uid, n: refunds.append(n))
+
+    def broken_redis(cid, uid):
+        raise ConnectionError('redis down')
+
+    monkeypatch.setattr(conversations_router.redis_db, 'store_conversation_to_uid', broken_redis)
+    dispatched = []
+    monkeypatch.setattr(
+        conversations_router.share_email,
+        'send_summary_email',
+        lambda **kw: dispatched.append(1) or {'sent_to': kw['recipient_emails']},
+    )
+    first = _client().post(f'/v1/conversations/{CONV_ID}/share-email', json={'recipient_emails': ['sarah@acme.com']})
+    assert first.status_code == 502
+    assert dispatched == []
+    assert refunds == [1]
+    assert _stub_data_layer['sent'] == []  # reservation released for retry

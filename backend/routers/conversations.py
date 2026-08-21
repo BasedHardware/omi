@@ -1438,24 +1438,34 @@ def send_conversation_share_email(
         share_email.send_summary_email(uid=uid, conversation=conversation, recipient_emails=to_dispatch)
         return {'sent_to': requested}
 
-    def _release_reservation():
+    def _release_reservation_and_quota():
         try:
             conversations_db.release_share_email_recipients(uid, conversation_id, to_dispatch)
         except Exception:
             logger.exception('share email: failed to release recipient reservation')
+        share_email.refund_daily_send_quota(uid, len(to_dispatch))
 
     try:
         return share_email.publish_then_send(publish=_publish, unpublish=_unpublish, send=_send)
-    except ValueError as e:
-        _release_reservation()
-        raise HTTPException(status_code=503, detail=str(e))
     except share_email.AmbiguousDeliveryError as e:
-        # Delivery may have happened: the reservation stands (no duplicate on
-        # retry) and the link stays published.
+        # Delivery may have happened: reservation and quota stand (no duplicate
+        # on retry) and the link stays published.
         raise HTTPException(status_code=504, detail=str(e))
+    except ValueError as e:
+        _release_reservation_and_quota()
+        raise HTTPException(status_code=503, detail=str(e))
     except RuntimeError as e:
-        _release_reservation()
+        _release_reservation_and_quota()
         raise HTTPException(status_code=502, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception:
+        # Any other pre-delivery failure (e.g. Redis raising inside the publish
+        # path) is definitive: nothing was dispatched, so the reservation and
+        # quota must not stay consumed or retries would falsely no-op.
+        logger.exception('share email: definitive failure before delivery')
+        _release_reservation_and_quota()
+        raise HTTPException(status_code=502, detail='share email failed before delivery')
 
 
 @router.patch(

@@ -181,6 +181,19 @@ def consume_daily_send_quota(uid: str, recipient_count: int) -> bool:
         return True
 
 
+def refund_daily_send_quota(uid: str, recipient_count: int) -> None:
+    """Return quota consumed by a dispatch that definitively did not happen."""
+    from datetime import datetime, timezone
+
+    from database.redis_db import r
+
+    key = f"share_email_quota:{uid}:{datetime.now(timezone.utc).strftime('%Y%m%d')}"
+    try:
+        r.incrby(key, -recipient_count)
+    except Exception:
+        logger.exception('share email: quota refund failed')
+
+
 def publish_then_send(
     *,
     publish: Any,
