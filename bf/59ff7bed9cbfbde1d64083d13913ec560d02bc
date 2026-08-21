@@ -1,0 +1,19 @@
+desktop/context-for-claude/docs/analytics.md
+  s_889715362e92a5::t_7d5a7db6bdc8f0 45-49,55-112,130-137
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "bf59ff7bed9cbfbde1d64083d13913ec560d02bc",
+  "prompts": {},
+  "sessions": {
+    "s_889715362e92a5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4099c3ef-6301-4e7a-8e3f-cc75e94c9318",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
