@@ -195,13 +195,27 @@ RELEASE=$(grep '^OMI_OSS_RELEASE=' ../omi.oss.release.env | cut -d= -f2)
 echo $RELEASE                             # -> e.g. 0.2.0
 ```
 
-**c.** Tag each of the five images for the registry and push them:
+**c.** Tag each of the five images for the registry and push them. **Push to `localhost:5000`, not to
+`$REG`**: the registry serves plain HTTP, and Docker treats only `localhost` as an insecure registry by
+default — pushing to `NODE_IP:5000` fails with `http: server gave HTTP response to HTTPS client`. It is the
+same registry either way, and the node still pulls from `$REG`.
 ```bash
 for img in backend whisper parakeet diarizer nllb; do
-  docker tag  omi-oss-$img:$RELEASE $REG/omi-oss-$img:$RELEASE
-  docker push $REG/omi-oss-$img:$RELEASE
+  docker tag  omi-oss-$img:$RELEASE localhost:5000/omi-oss-$img:$RELEASE
+  docker push localhost:5000/omi-oss-$img:$RELEASE
 done
 ```
+(The alternative is `{"insecure-registries": ["NODE_IP:5000"]}` in `/etc/docker/daemon.json` plus a Docker
+restart. Not worth restarting the daemon for a push.)
+
+**Re-deploying after a code change** — the two halves are separate, and forgetting the second one is how you
+end up debugging a fix that is not running: push the new image (above), then
+```bash
+helm upgrade omi ./omi-oss -n omi --reset-then-reuse-values --wait   # picks up chart/values changes
+kubectl -n omi rollout restart deployment/backend                    # picks up the new IMAGE
+```
+The `helm upgrade` alone does **not** pull a new image when the tag is unchanged: the pod spec is identical,
+so Kubernetes has no reason to restart anything.
 (The build also produces `:latest` as a local alias for development. Do **not** push or deploy that one:
 a mutable tag makes a later `helm upgrade` leave the pod spec unchanged, so the node keeps serving the
 cached image and the upgrade silently does nothing.)

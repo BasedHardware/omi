@@ -509,10 +509,20 @@ Measured here on 2026-08-21: **8 of 45** features had no entry — `app_integrat
 `web_search` (perplexity). `translation` carries transcript text. The earlier reading, "37 of 37 covered",
 compared our file against *upstream's* override file, which cannot show a lane neither file mentions.
 
-`check_oss_llm_gateway_route_coverage.py` now ratchets this against the configured-feature set and also
-checks the `provider:` of every covered entry (a coverage count means nothing if an entry can name gemini).
-`web_search` is the one written-off lane, with its reason in the guard's baseline: it is a search product,
-and a local chat model would answer it with invented results and a fabricated "Sources:" section.
+**The list is declared TWICE**, and that is the other half of the story. The chart does not mount this file:
+`templates/llm-gateway.yaml` regenerates its ConfigMap from `chat.llmGateway.features` in `values.yaml`. That
+pair had drifted from 44 to 4, and measured on the live k0s release **41 of 45 lanes did not serve** — 33 x
+400 `provider_invalid_request` (the lane kept a CLOUD model name our endpoint does not serve) and 8 x 503
+`invalid_config` (a vendor provider with no credentials). The four that worked were exactly the chat lanes,
+which is why the chat E2E passed while memories, daily summaries, notifications and translation did not.
+Unifying the two declarations is open (BACKLOG L45); keeping them in step is now mechanical.
+
+`check_oss_llm_gateway_route_coverage.py` ratchets all of it: coverage against the configured-feature set,
+the `provider:` of every covered entry (a coverage count means nothing if an entry can name gemini), and the
+parity of the two declarations — features **and** per-feature `request_timeout_ms`, which the three `*_flex`
+lanes need or the loader caps them at 30s. `web_search` is the one written-off lane, with its reason in the
+guard's baseline: it is a search product, and a local chat model would answer it with invented results and a
+fabricated "Sources:" section.
 
 **Verify every lane against the live gateway** — the check the guard cannot do, because it needs the network.
 Write the probe to a file and pipe it in (the caller header is required: 403 without it):
@@ -540,6 +550,18 @@ docker compose -f compose.prod.yaml exec -T backend /opt/venv/bin/python - < /tm
 
 Expected today: **44 x 200**, and `503 invalid_config` for `web_search` alone. A 200 whose body carries
 `"model": "omi:auto:<feature>"` and `fp_ollama` in `system_fingerprint` is proof the lane was served locally.
+
+**Run it on the k8s target too** — this is the check that found the drift, and it needs the pod, not the
+chart:
+
+```bash
+POD=$(kubectl -n omi get pods -l app.kubernetes.io/component=backend -o jsonpath='{.items[0].metadata.name}')
+kubectl -n omi exec -i $POD -c backend -- /opt/venv/bin/python - < /tmp/probe_lanes.py
+```
+
+And remember the two halves of a k0s redeploy: `helm upgrade` picks up chart and values changes, but the pod
+spec is unchanged when the image tag is, so a code change also needs the image pushed and
+`kubectl -n omi rollout restart deployment/backend`. See `helm/MANUAL-prod-k0s.md` Step 4c.
 
 ## Vendor egress: `OMI_VENDOR_EGRESS` (ADR-0057)
 

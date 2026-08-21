@@ -25,9 +25,13 @@ data:
   # model the operator's endpoint serves; `provider: openai` is the WIRE format, not a vendor.
   generated_route_overrides.yaml: |
     generated_route_overrides:
+    {{- $timeouts := .Values.chat.llmGateway.requestTimeoutMsByFeature | default dict }}
     {{- range .Values.chat.llmGateway.features }}
       - feature: {{ . }}
         primary: {provider: openai, model: {{ $.Values.chat.llmGateway.model | quote }}}
+      {{- with index $timeouts . }}
+        request_timeout_ms: {{ . }}
+      {{- end }}
     {{- end }}
 ---
 apiVersion: v1

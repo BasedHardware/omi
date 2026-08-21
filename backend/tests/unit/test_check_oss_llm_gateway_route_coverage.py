@@ -42,6 +42,25 @@ _PINNED_FEATURES: Dict[str, Tuple[str, str]] = {
 }
 '''
 
+HELM_VALUES = '''
+chat:
+  enabled: false
+  llmGateway:
+    enabled: false
+    model: "qwen2.5:14b"
+    features:
+      - chat_agent
+      - translation
+      - fair_use
+    requestTimeoutMsByFeature:
+      translation: 900000
+    resources: {}
+  qdrant:
+    # a sibling block with its own list-shaped key: must not contribute
+    features:
+      - not_a_lane
+'''
+
 OVERRIDES = '''
 # a comment naming a feature: feature: not_real — must not be read as an entry
 generated_route_overrides:
@@ -102,6 +121,62 @@ def test_an_entry_with_no_readable_provider_reports_empty_not_ours():
         '  - feature: translation\n    primary: {provider: openai, model: qwen2.5:14b}', '  - feature: translation'
     )
     assert _MODULE.overridden_features(text)['translation'] == ''
+
+
+# --- the second declaration: the chart ------------------------------------------------------------
+
+
+def test_helm_features_are_read_only_from_the_gateway_block():
+    """`features:` is a generic key; a sibling component could grow one. The walk is scoped."""
+    features, timeouts = _MODULE.helm_declared(HELM_VALUES)
+    assert features == {'chat_agent', 'translation', 'fair_use'}
+    assert 'not_a_lane' not in features
+    assert timeouts == {'translation': 900000}
+
+
+def test_no_helm_values_means_no_drift_verdict():
+    """Passing an empty string must not report 44 phantom drifts — the check has to be skippable."""
+    result = _MODULE.check(TABLE, OVERRIDES, {'web_search': 'note'}, '')
+    assert result['helm_drift'] == []
+    assert result['helm_timeout_drift'] == []
+
+
+def test_a_lane_pinned_in_one_target_only_fails():
+    """The measured failure: this pair had drifted from 44 to 4, and 41 of 45 lanes did not serve on the
+    live k0s release while compose was fine."""
+    helm = HELM_VALUES.replace('      - translation\n', '')
+    result = _MODULE.check(TABLE, OVERRIDES, {'web_search': 'note'}, helm)
+    assert result['helm_drift'] == ['translation (compose only)']
+
+
+def test_a_lane_the_chart_pins_and_compose_does_not_also_fails():
+    """Drift has two directions and neither is acceptable."""
+    helm = HELM_VALUES.replace('      - fair_use\n', '      - fair_use\n      - web_search\n')
+    result = _MODULE.check(TABLE, OVERRIDES, {'web_search': 'note'}, helm)
+    assert result['helm_drift'] == ['web_search (helm only)']
+
+
+def test_a_timeout_set_on_one_target_only_fails():
+    """A missing request_timeout_ms caps a long extraction at 30s, so the lane fails on a local model."""
+    compose = OVERRIDES.replace(
+        '  - feature: translation\n    primary: {provider: openai, model: qwen2.5:14b}',
+        '  - feature: translation\n    primary: {provider: openai, model: qwen2.5:14b}\n    request_timeout_ms: 900000',
+    )
+    assert _MODULE.compose_timeouts(compose) == {'translation': 900000}
+
+    helm = HELM_VALUES.replace('      translation: 900000\n', '')
+    result = _MODULE.check(TABLE, compose, {'web_search': 'note'}, helm)
+    assert result['helm_timeout_drift'] == ['translation: compose=900000 helm=-']
+
+
+def test_matching_targets_report_no_drift():
+    compose = OVERRIDES.replace(
+        '  - feature: translation\n    primary: {provider: openai, model: qwen2.5:14b}',
+        '  - feature: translation\n    primary: {provider: openai, model: qwen2.5:14b}\n    request_timeout_ms: 900000',
+    )
+    result = _MODULE.check(TABLE, compose, {'web_search': 'note'}, HELM_VALUES)
+    assert result['helm_drift'] == []
+    assert result['helm_timeout_drift'] == []
 
 
 # --- the ratchet --------------------------------------------------------------------------------
@@ -179,13 +254,15 @@ def test_an_empty_baseline_file_says_what_happened(tmp_path):
 def test_the_repository_is_at_or_below_its_baseline():
     """The ratchet on the real tree — the check CI runs."""
     root = Path(__file__).resolve().parents[3]
-    table_source, overrides_text = _MODULE._read(root)
+    table_source, overrides_text, helm_values_text = _MODULE._read(root)
     baseline = _MODULE.load_baseline(root / _MODULE.DEFAULT_BASELINE)
-    result = _MODULE.check(table_source, overrides_text, baseline)
+    result = _MODULE.check(table_source, overrides_text, baseline, helm_values_text)
     assert result['uncovered'] == []
     assert result['vendor_pinned'] == []
     assert result['unknown_feature'] == []
     assert result['stale_baseline'] == []
+    assert result['helm_drift'] == []
+    assert result['helm_timeout_drift'] == []
 
 
 def test_web_search_is_the_only_written_off_lane_and_it_carries_a_real_note():

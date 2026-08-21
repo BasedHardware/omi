@@ -53,6 +53,12 @@ FEATURE_TABLE_NAMES = ('_TWO_TIER_MODEL_PROFILE', '_PINNED_FEATURES')
 
 OUR_OVERRIDES = Path('deploy/onprem/llm_gateway/generated_route_overrides.yaml')
 
+# The SAME list, declared a second time for Kubernetes: the chart renders its own ConfigMap from
+# chat.llmGateway.features instead of mounting the file above. Two declarations of one thing is the
+# ADR-0061 class, and this pair had already drifted from 44 to 4 -- measured on the live k0s release, 41 of
+# 45 lanes did not serve. Whichever way that is eventually unified, the guard has to read BOTH today.
+HELM_VALUES = Path('deploy/onprem/helm/omi-oss/values.yaml')
+
 # The provider our endpoint speaks. Anything else in our override file is a vendor by definition: the
 # gateway's non-openai providers are google/anthropic/openrouter/perplexity, none of which can be pointed
 # at an operator-run endpoint the way OPENAI_BASE_URL can.
@@ -131,7 +137,65 @@ def overridden_features(text: str) -> dict[str, str]:
     return features
 
 
-def check(table_source: str, overrides_text: str, baseline: dict[str, str]) -> dict[str, list[str]]:
+def helm_declared(text: str) -> tuple[set[str], dict[str, int]]:
+    """({features}, {feature: request_timeout_ms}) from the chart's values, read line-wise.
+
+    Scoped to the ``llmGateway:`` block on purpose: ``features:`` is a generic key and another component
+    could grow one. The walk stops at the first line indented no deeper than ``llmGateway:`` itself, so a
+    sibling block cannot contribute.
+    """
+    features: set[str] = set()
+    timeouts: dict[str, int] = {}
+    in_gateway = False
+    gateway_indent = 0
+    collecting: str | None = None
+    for line in text.splitlines():
+        if not line.strip() or line.lstrip().startswith('#'):
+            continue
+        indent = len(line) - len(line.lstrip())
+        if re.match(r'\s*llmGateway:\s*$', line):
+            in_gateway, gateway_indent, collecting = True, indent, None
+            continue
+        if not in_gateway:
+            continue
+        if indent <= gateway_indent:
+            break
+        key = re.match(r'\s*([A-Za-z_][A-Za-z0-9_]*):\s*$', line)
+        if key:
+            collecting = key.group(1) if key.group(1) in ('features', 'requestTimeoutMsByFeature') else None
+            continue
+        if collecting == 'features':
+            item = re.match(r'\s*-\s*([A-Za-z0-9_-]+)\s*$', line)
+            if item:
+                features.add(item.group(1))
+            continue
+        if collecting == 'requestTimeoutMsByFeature':
+            pair = re.match(r'\s*([A-Za-z0-9_-]+):\s*(\d+)\s*$', line)
+            if pair:
+                timeouts[pair.group(1)] = int(pair.group(2))
+    return features, timeouts
+
+
+def compose_timeouts(text: str) -> dict[str, int]:
+    """{feature: request_timeout_ms} from the compose-mounted file, for the parity check."""
+    timeouts: dict[str, int] = {}
+    current: str | None = None
+    for line in text.splitlines():
+        if line.lstrip().startswith('#'):
+            continue
+        feature = re.match(r'\s*-\s*feature:\s*(\S+)\s*$', line)
+        if feature:
+            current = feature.group(1)
+            continue
+        value = re.match(r'\s*request_timeout_ms:\s*(\d+)\s*$', line)
+        if value and current:
+            timeouts[current] = int(value.group(1))
+    return timeouts
+
+
+def check(
+    table_source: str, overrides_text: str, baseline: dict[str, str], helm_values_text: str = ''
+) -> dict[str, list[str]]:
     """Pure over strings so the tests need no repository.
 
     uncovered       -- a configured feature with no override and no baseline note (FAILS)
@@ -139,12 +203,32 @@ def check(table_source: str, overrides_text: str, baseline: dict[str, str]) -> d
     unknown_feature -- an override for a feature the backend does not configure (FAILS: the gateway
                        itself raises ConfigValidationError on this, so catching it here is just faster)
     stale_baseline  -- a note for a feature we now cover, or that no longer exists
+    helm_drift      -- the chart's list and the compose file disagree (FAILS): same posture, two targets
+    helm_timeout_drift -- a per-feature request_timeout_ms one target sets and the other does not (FAILS:
+                       without it the loader caps a long extraction at 30s, so the lane fails on a locally
+                       served model)
     unreviewed      -- notes still carrying the default marker: the size of the debt
     """
     configured = configured_features(table_source)
     overrides = overridden_features(overrides_text)
     uncovered = configured - set(overrides)
+    helm_features, helm_timeout_map = helm_declared(helm_values_text)
+    compose_timeout_map = compose_timeouts(overrides_text)
+    drift: list[str] = []
+    timeout_drift: list[str] = []
+    if helm_values_text.strip():
+        drift = sorted(
+            [f'{name} (compose only)' for name in set(overrides) - helm_features]
+            + [f'{name} (helm only)' for name in helm_features - set(overrides)]
+        )
+        timeout_drift = sorted(
+            f'{name}: compose={compose_timeout_map.get(name, "-")} helm={helm_timeout_map.get(name, "-")}'
+            for name in set(compose_timeout_map) | set(helm_timeout_map)
+            if compose_timeout_map.get(name) != helm_timeout_map.get(name)
+        )
     return {
+        'helm_drift': drift,
+        'helm_timeout_drift': timeout_drift,
         'uncovered': sorted(uncovered - set(baseline)),
         'vendor_pinned': sorted(
             f'{feature} -> {provider or "unreadable"}'
@@ -171,10 +255,11 @@ def load_baseline(path: Path) -> dict[str, str]:
     return payload
 
 
-def _read(repository_root: Path) -> tuple[str, str]:
+def _read(repository_root: Path) -> tuple[str, str, str]:
     return (
         (repository_root / FEATURE_TABLE_SOURCE).read_text(encoding='utf-8'),
         (repository_root / OUR_OVERRIDES).read_text(encoding='utf-8'),
+        (repository_root / HELM_VALUES).read_text(encoding='utf-8'),
     )
 
 
@@ -187,7 +272,7 @@ def main() -> int:
     args = parser.parse_args()
 
     repository_root = args.root.resolve()
-    table_source, overrides_text = _read(repository_root)
+    table_source, overrides_text, helm_values_text = _read(repository_root)
     baseline_path = args.baseline if args.baseline.is_absolute() else repository_root / args.baseline
 
     if args.print_baseline:
@@ -200,19 +285,20 @@ def main() -> int:
         return 0
 
     baseline = load_baseline(baseline_path)
-    result = check(table_source, overrides_text, baseline)
+    result = check(table_source, overrides_text, baseline, helm_values_text)
 
     if args.report:
         configured = configured_features(table_source)
         overrides = overridden_features(overrides_text)
+        helm_features, _ = helm_declared(helm_values_text)
         print(f'configured features : {len(configured)}')
-        print(f'pinned to us        : {len(overrides)}')
+        print(f'pinned to us        : {len(overrides)} (compose) / {len(helm_features)} (helm)')
         print(f'written off         : {len(baseline) - len(result["unreviewed"])}')
         print(f'UNREVIEWED          : {len(result["unreviewed"])}')
         print(*(f'  {name}' for name in result['unreviewed']), sep='\n')
         return 0
 
-    failures = ('uncovered', 'vendor_pinned', 'unknown_feature', 'stale_baseline')
+    failures = ('uncovered', 'vendor_pinned', 'unknown_feature', 'stale_baseline', 'helm_drift', 'helm_timeout_drift')
     if not any(result[key] for key in failures):
         return 0
 
@@ -234,6 +320,14 @@ def main() -> int:
         print('FAIL: baseline notes for features that no longer need one (we pin them now, or the')
         print('feature is gone). Remove the entries -- a list that only grows rots into noise.')
         print(*(f'  {name}' for name in result['stale_baseline']), sep='\n')
+    if result['helm_drift']:
+        print('FAIL: the chart pins a different set of lanes than compose does. Same posture, two targets:')
+        print(f'reconcile {HELM_VALUES} (chat.llmGateway.features) with {OUR_OVERRIDES}.')
+        print(*(f'  {name}' for name in result['helm_drift']), sep='\n')
+    if result['helm_timeout_drift']:
+        print('FAIL: a per-feature request_timeout_ms differs between the two targets. Without it the')
+        print('loader caps the call at 30s and the lane fails on a locally served model.')
+        print(*(f'  {name}' for name in result['helm_timeout_drift']), sep='\n')
     return 1
 
 
