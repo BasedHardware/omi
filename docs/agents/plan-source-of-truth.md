@@ -17,8 +17,24 @@ Cloud Run snapshot from the same date; they are observations, not values selecte
 | Q4: acceptance guard | A catalog compiler validates the whole catalog, generates projections, rejects destructive identity/price-ledger changes, inventories committed Stripe IDs, and runs behavioral matrix tests. The final guard admits only catalog readers or byte-for-byte generated projections. Pairwise source regex checks are retired. |
 | Q6: identity remap | Do not lower the `99.0.0` floors yet. First ship lossless unknown-plan decoding in every client, then publish the six-value wire schema, set real capability floors, use the existing force-upgrade mechanism for the long tail, observe, and finally delete the remap. Missing or malformed caller identity always receives the oldest safe legacy contract. |
 
-This change does not choose a price, quota, or exhaustion policy. B1 and B3 remain named, machine-visible product
-decisions owned by David.
+This change does not choose a price. It does now carry David's rulings on the two quota/exhaustion decisions,
+taken after this document was first written:
+
+- **B1 — Free monthly transcription allowance is 300 minutes (18,000s)**, the value the listen plane already
+  enforces, so no free user loses capability they actually have. The `0 == unlimited` sentinel is retired:
+  unlimited is typed `{"kind": "unlimited"}` and `0` means zero.
+- **B3 — Plus and Unlimited-v2 hard-cap.** Current runtime behavior stands; the contradicting comment and the
+  second `is_overage_plan()` predicate were deleted rather than implemented.
+
+`open_decisions` in the catalog is therefore `{}`, and `--require-publishable` no longer reports B1 or B3. It
+still reports the Stripe import (P1) and cost-accounting completeness (M1), which remain genuinely open.
+
+One consequence of the B1 sentinel ruling is load-bearing and easy to get wrong: the *pre-catalog env overlays*
+(`BASIC_TIER_*`, `PLUS_TIER_*`, the chat overlays) were authored when `0` meant unlimited, and production sets
+the Basic words/insights overlays to exactly `0` on that meaning. Retiring the sentinel must not silently
+reinterpret configuration that is already deployed, so those legacy values are read through
+`_legacy_overlay_value`, which maps a legacy `0` to unlimited. The catalog's own values use the typed
+representation. D2 deletes the overlays and this bridge together.
 
 ## Why a repository catalog
 

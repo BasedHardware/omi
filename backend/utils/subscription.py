@@ -826,10 +826,49 @@ if _BASIC_TIER_SECONDS_DEFAULT is None:
         'basic.transcription must declare a finite allowance; an unlimited free tier '
         'would make transcription spend unbounded per user'
     )
-BASIC_TIER_MINUTES_LIMIT_PER_MONTH = int(
-    os.getenv('BASIC_TIER_MINUTES_LIMIT_PER_MONTH', str(_BASIC_TIER_SECONDS_DEFAULT // 60))
-)
-BASIC_TIER_MONTHLY_SECONDS_LIMIT = BASIC_TIER_MINUTES_LIMIT_PER_MONTH * 60
+
+
+def _legacy_overlay_value(env_name: str) -> Optional[int] | str:
+    """Read a pre-catalog quota overlay, honoring the sentinel it was written under.
+
+    These env vars predate the catalog and were authored when ``0`` meant
+    *unlimited* -- production sets BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH and
+    BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH to exactly ``0`` on that meaning.
+    The catalog retires the sentinel, but retiring it must not silently
+    *reinterpret configuration that is already deployed*: reading those zeros as
+    finite zero would hand every Free user a zero words/insights allowance and
+    advertise "0 words transcribed per month".
+
+    So the sentinel is honored where the legacy value is read, and only there. The
+    catalog's own values use the typed representation and are untouched. D2 deletes
+    these overlays, at which point this bridge goes with them.
+
+    Returns ``_UNSET`` when the variable is absent, ``None`` for a legacy unlimited
+    zero, and the int otherwise.
+    """
+    raw = os.getenv(env_name)
+    if raw is None:
+        return _UNSET
+    value = int(raw)
+    return None if value == 0 else value
+
+
+_UNSET = 'unset'
+
+_basic_minutes_overlay = _legacy_overlay_value('BASIC_TIER_MINUTES_LIMIT_PER_MONTH')
+if _basic_minutes_overlay == _UNSET:
+    BASIC_TIER_MINUTES_LIMIT_PER_MONTH = _BASIC_TIER_SECONDS_DEFAULT // 60
+    BASIC_TIER_MONTHLY_SECONDS_LIMIT: Optional[int] = _BASIC_TIER_SECONDS_DEFAULT
+elif _basic_minutes_overlay is None:
+    # Legacy zero: this overlay predates the catalog and 0 meant unlimited. Charts
+    # currently set 300 so this is latent, but reading a deployed 0 as a finite zero
+    # would make has_transcription_credits return False for every Free user -- the
+    # same inversion as the words/insights overlays, with worse consequences.
+    BASIC_TIER_MINUTES_LIMIT_PER_MONTH = 0
+    BASIC_TIER_MONTHLY_SECONDS_LIMIT = None
+else:
+    BASIC_TIER_MINUTES_LIMIT_PER_MONTH = _basic_minutes_overlay
+    BASIC_TIER_MONTHLY_SECONDS_LIMIT = _basic_minutes_overlay * 60
 
 
 def _catalog_or_legacy_basic_limit(allocation: str) -> Optional[int]:
@@ -847,8 +886,8 @@ def _catalog_or_legacy_basic_limit(allocation: str) -> Optional[int]:
     env_name = legacy_env_names.get(allocation)
     if env_name is None:
         return catalog_value
-    raw_value = os.getenv(env_name)
-    return int(raw_value) if raw_value is not None else catalog_value
+    overlay = _legacy_overlay_value(env_name)
+    return catalog_value if overlay == _UNSET else overlay
 
 
 BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH = _catalog_or_legacy_basic_limit('words_transcribed')

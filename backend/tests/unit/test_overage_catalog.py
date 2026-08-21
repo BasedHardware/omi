@@ -96,3 +96,58 @@ class TestChatLimitZeroSemantics:
         snap = self._snapshot(monkeypatch, None, 10_000.0)
         assert snap['limit'] is None
         assert snap['allowed'] is True, "None remains the typed representation of unlimited"
+
+
+class TestLegacyZeroOverlayKeepsUnlimited:
+    """Production sets the Basic words/insights overlays to literal ``0``.
+
+    Those variables were authored when ``0`` meant *unlimited*. The catalog retires
+    that sentinel, but retiring it must not reinterpret configuration that is
+    already deployed: reading prod's zeros as a finite zero would hand every Free
+    user a zero allowance and advertise "0 words transcribed per month".
+
+    This pins the bridge against the values actually set on the production Cloud Run
+    service and the prod Helm charts, verified 2026-08-20.
+    """
+
+    PROD_OVERLAY = {
+        'BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH': '0',
+        'BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH': '0',
+    }
+
+    def _reloaded(self, monkeypatch):
+        import importlib
+
+        from utils import subscription as sub_mod
+
+        for key, value in self.PROD_OVERLAY.items():
+            monkeypatch.setenv(key, value)
+        return importlib.reload(sub_mod)
+
+    def test_prod_zero_overlays_still_mean_unlimited(self, monkeypatch):
+        from models.users import PlanType
+
+        sub_mod = self._reloaded(monkeypatch)
+        try:
+            limits = sub_mod.get_plan_limits(PlanType.basic)
+            assert limits.words_transcribed is None, 'a legacy zero overlay must stay unlimited'
+            assert limits.insights_gained is None, 'a legacy zero overlay must stay unlimited'
+        finally:
+            import importlib
+
+            monkeypatch.undo()
+            importlib.reload(sub_mod)
+
+    def test_nonzero_overlay_is_still_honored_as_finite(self, monkeypatch):
+        import importlib
+
+        from models.users import PlanType
+        from utils import subscription as sub_mod
+
+        monkeypatch.setenv('BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH', '5000')
+        sub_mod = importlib.reload(sub_mod)
+        try:
+            assert sub_mod.get_plan_limits(PlanType.basic).words_transcribed == 5000
+        finally:
+            monkeypatch.undo()
+            importlib.reload(sub_mod)

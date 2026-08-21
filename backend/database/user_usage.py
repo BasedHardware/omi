@@ -136,10 +136,12 @@ def get_monthly_chat_usage(
         data: Dict[str, Any] = _typed_doc(snap)
         questions_before_document = questions
         plan_usage = data.get('plan_usage')
+        plan_attributed_questions = 0
         if isinstance(plan_usage, dict):
             for plan_id, plan_data in plan_usage.items():
                 if not isinstance(plan_data, dict):
                     continue
+                plan_attributed_questions += int(plan_data.get('questions', 0) or 0)
                 row = usage_by_plan.setdefault(str(plan_id), _plan_usage_row())
                 metadata = plan_data.get('_metadata')
                 if isinstance(metadata, dict):
@@ -198,12 +200,23 @@ def get_monthly_chat_usage(
                 # backend_chat.quota_questions so LLM telemetry no longer drives quota.
                 questions += int(value)
 
-        if not isinstance(plan_usage, dict):
-            # Historical rows have no trustworthy plan snapshot. Keep their
-            # usage visible as explicitly unattributed, with no cost value that
-            # could be mistaken for a measured zero.
+        # Anything the document's root counters report that `plan_usage` does not
+        # account for is unattributed. Two cases reach here:
+        #
+        #  * No plan_usage at all -- a historical row written before attribution.
+        #  * MIXED rows: the first post-deploy write adds plan_usage to a document
+        #    that already carries pre-deploy root counters. Keying only on the
+        #    absence of plan_usage would drop that residual entirely, so a user's
+        #    earlier questions would silently vanish from per-plan reporting for
+        #    the rest of the month.
+        #
+        # Reporting the residual as `_unattributed` keeps the totals honest. It is
+        # never folded into a real plan, because we do not know which plan earned it.
+        document_questions = questions - questions_before_document
+        residual_questions = document_questions - plan_attributed_questions
+        if not isinstance(plan_usage, dict) or residual_questions > 0:
             legacy_row = usage_by_plan.setdefault(_UNATTRIBUTED_PLAN, _plan_usage_row())
-            legacy_row['questions'] += questions - questions_before_document
+            legacy_row['questions'] += residual_questions
             legacy_row['cost_status'] = 'missing'
             legacy_row['cost_exclusions']['plan_snapshot_missing'] = (
                 legacy_row['cost_exclusions'].get('plan_snapshot_missing', 0) + 1
