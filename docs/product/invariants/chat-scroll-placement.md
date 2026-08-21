@@ -1,6 +1,6 @@
 # INV-CHAT-2: Chat launch placement and reading position
 
-**Status:** proposed
+**Status:** locked
 **Statement:** A newly presented macOS chat transcript starts at the live edge; explicit reader movement then owns the viewport until the reader chooses to return to the live edge.
 
 This invariant was added after a QA regression where Home's launch transition

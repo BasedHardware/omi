@@ -721,11 +721,25 @@ final class SBOnboardingModel: ObservableObject {
     OnboardingChatPersistence.clear()
     ChatDraftStore.shared.clear(.onboardingMain)
     ChatDraftStore.shared.clear(.onboardingFloating)
+    // **Mark onboarding done before anything can await, and before the last window can close.**
+    //
+    // `applicationShouldTerminateAfterLastWindowClosed` returns true while this flag is false --
+    // deliberately, so a half-finished onboarding does not leave a menu-bar process behind. That
+    // makes the flag load-bearing for process lifetime, not just for which view renders. Setting
+    // it after `await finishOnboardingJournal()` left a window in which the onboarding window had
+    // already gone away and the flag was still false, and the app quit on the user at the exact
+    // moment they finished. It then reran onboarding on next launch, because the flag never got
+    // written -- observed twice in a row on a bundle whose onboarding was not pre-seeded.
+    //
+    // The `[weak self]` made it worse rather than safer: `teardownAll()` runs at the top of this
+    // function, so a deallocated model meant `guard let self else { return }` skipped the write
+    // entirely and onboarding could never complete at all.
+    //
+    // The journal is genuinely async and genuinely optional. Completion is neither.
+    appState.hasCompletedOnboarding = true
     onComplete?()
-    Task { [weak self] in
-      guard let self else { return }
-      await self.chatProvider.finishOnboardingJournal()
-      self.appState.hasCompletedOnboarding = true
+    Task { [chatProvider] in
+      await chatProvider.finishOnboardingJournal()
     }
   }
 

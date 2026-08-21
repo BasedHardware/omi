@@ -8,11 +8,13 @@ Covers:
 5. Completion notification fires for shared tasks
 """
 
+import importlib.util
 import json
 import os
 import sys
 import types
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import MagicMock, patch, call
 
 os.environ.setdefault(
@@ -121,6 +123,22 @@ utils_users_mod.get_user_display_name = MagicMock(return_value="TestUser")
 _stub_module("utils.other")
 _stub_module("utils.other.endpoints")
 sys.modules["utils.other.endpoints"].get_current_user_uid = MagicMock()
+
+# The action-items router imports the list-read budget seam at module level
+# (#11831). Delegate the stubbed submodule to the real (stdlib-only) module so
+# the import binds real symbols without pulling heavy dependencies.
+list_budget_stub = _stub_module("utils.other.list_budget")
+_list_budget_path = Path(__file__).resolve().parents[2] / "utils" / "other" / "list_budget.py"
+_list_budget_spec = importlib.util.spec_from_file_location("_omi_real_list_budget", _list_budget_path)
+_list_budget_real = importlib.util.module_from_spec(_list_budget_spec)
+_list_budget_spec.loader.exec_module(_list_budget_real)
+
+
+def _list_budget_getattr(name):
+    return getattr(_list_budget_real, name)
+
+
+list_budget_stub.__getattr__ = _list_budget_getattr
 
 import database.redis_db as redis_db
 import routers.action_items as action_items_router

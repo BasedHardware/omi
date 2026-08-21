@@ -104,6 +104,8 @@ envFrom:
       name: dev-omi-backend-config
 
 env:
+  - name: REFERRAL_PUBLIC_BASE_URL
+    value: "https://api.omiapi.com"
   - name: DESKTOP_UPDATE_POINTERS_MODE
     value: "primary"
   - name: DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE

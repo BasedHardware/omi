@@ -20,6 +20,7 @@ final class AutomationSettingsSectionTests: XCTestCase {
     XCTAssertEqual(Section.automationMatch("rewind"), .rewind)
     XCTAssertEqual(Section.automationMatch("general"), .general)
     XCTAssertEqual(Section.automationMatch("advanced"), .advanced)
+    XCTAssertEqual(Section.automationMatch("refer-a-friend"), .referral)
     XCTAssertEqual(Section.automationMatch("shortcuts"), .shortcuts)
     XCTAssertEqual(Section.automationMatch("about"), .about)
   }

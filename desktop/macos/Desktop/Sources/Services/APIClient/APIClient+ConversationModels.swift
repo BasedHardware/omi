@@ -947,3 +947,30 @@ struct MoveToFolderRequest: Encodable {
     case folderId = "folder_id"
   }
 }
+
+/// A calendar-detected meeting participant the summary can be emailed to.
+struct ConversationShareRecipient: Codable, Equatable {
+  let name: String?
+  let email: String
+
+  /// Compact label for a "Send to …" control: first name when known, else the
+  /// email's local part.
+  var shortLabel: String {
+    if let name, !name.isEmpty {
+      return name.split(separator: " ").first.map(String.init) ?? name
+    }
+    return email.split(separator: "@").first.map(String.init) ?? email
+  }
+}
+
+struct ConversationShareRecipientsResponse: Codable {
+  let recipients: [ConversationShareRecipient]
+}
+
+struct ConversationShareEmailResponse: Codable {
+  let sentTo: [String]
+
+  enum CodingKeys: String, CodingKey {
+    case sentTo = "sent_to"
+  }
+}

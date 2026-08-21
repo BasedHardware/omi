@@ -23,6 +23,7 @@ model_config_features:
   request_shapes:
     plain_chat:
       - conv_action_items
+      - wake_word_adjudication
       - conv_app_result
       - conv_discard
       - conv_folder

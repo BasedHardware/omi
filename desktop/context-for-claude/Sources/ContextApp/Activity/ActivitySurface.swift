@@ -143,7 +143,15 @@ struct ActivitySurface: View {
             )
             .padding(.horizontal, ActivitySurfaceLayout.horizontalPadding)
             if showsChips {
-                ActivityKindChips(selection: kind, onSelect: { kind = $0 })
+                ActivityKindChips(
+                    selection: kind,
+                    onSelect: { picked in
+                        // Reported here rather than inside `ActivityKindChips`, so the render
+                        // harness building the row for a snapshot is not a person filtering.
+                        // Which chip is not sent: the vocabulary counts that the filter was used.
+                        ContextAnalytics.record(.controlUsed(.activityKindChip))
+                        kind = picked
+                    })
                     .padding(.horizontal, ActivitySurfaceLayout.horizontalPadding)
             }
             // Only when a column on screen is standing in for the account, and never for a reason

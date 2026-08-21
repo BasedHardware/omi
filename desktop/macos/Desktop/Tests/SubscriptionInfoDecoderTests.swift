@@ -153,4 +153,34 @@ final class SubscriptionInfoDecoderTests: XCTestCase {
     let info = try JSONDecoder().decode(UserSubscriptionInfo.self, from: json.data(using: .utf8)!)
     XCTAssertEqual(info.plan, .pro)
   }
+
+  func testDecodePlusPlan() throws {
+    let plan = try JSONDecoder().decode(SubscriptionPlanType.self, from: Data(#""plus""#.utf8))
+    XCTAssertEqual(plan, .plus)
+    XCTAssertEqual(plan.rawValue, "plus")
+    XCTAssertTrue(plan.hasPaidCapability)
+  }
+
+  func testDecodeUnlimitedV2Plan() throws {
+    let plan = try JSONDecoder().decode(SubscriptionPlanType.self, from: Data(#""unlimited_v2""#.utf8))
+    XCTAssertEqual(plan, .unlimitedV2)
+    XCTAssertEqual(plan.rawValue, "unlimited_v2")
+    XCTAssertTrue(plan.hasPaidCapability)
+  }
+
+  func testDecodeUnknownPlanPreservesIdentityAndDeniesPaidCapability() throws {
+    let rawValue = "future_plan_123"
+    let plan = try JSONDecoder().decode(SubscriptionPlanType.self, from: Data(#""future_plan_123""#.utf8))
+
+    guard case .unknown(let decodedRawValue) = plan else {
+      return XCTFail("future plan should retain an unknown representation")
+    }
+    XCTAssertEqual(decodedRawValue, rawValue)
+    XCTAssertEqual(plan.rawValue, rawValue)
+    XCTAssertEqual(plan.displayName, "Plan unavailable")
+    XCTAssertFalse(plan.hasPaidCapability)
+
+    let encoded = try JSONEncoder().encode(plan)
+    XCTAssertEqual(String(data: encoded, encoding: .utf8), #""future_plan_123""#)
+  }
 }

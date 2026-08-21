@@ -23,6 +23,7 @@ os.environ.setdefault('MEMORY_MODE', 'read')
 # Some unit tests exercise canonical-memory LLM call paths. Provide a fake key
 # so client construction remains hermetic when those tests invoke it.
 os.environ.setdefault('OPENAI_API_KEY', 'fake-key-for-hermetic-tests')
+os.environ.setdefault('PERPLEXITY_API_KEY', 'fake-key-for-hermetic-tests')
 
 # Some unit tests exercise token counting. Stub tiktoken before any test
 # triggers an encoding lookup, avoiding a download in hermetic CI.

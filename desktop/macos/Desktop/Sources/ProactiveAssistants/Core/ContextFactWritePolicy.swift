@@ -45,6 +45,14 @@ enum ContextFactWriteVerdict: Equatable, Sendable {
 enum ContextFactWritePolicy {
   static let humanEventWorthinessFloor = 0.6
 
+  /// A user-authored question is only answerable NOW: a question fact that
+  /// outlives its compose moment lets a later departure evaluation force
+  /// retrieval for a question no longer on screen and deliver the wrong
+  /// answer (seen live: a stale ask answered instead of the current one).
+  /// Ten minutes covers grace retries and slow evaluations; a re-ask
+  /// re-validates through the expiry-aware duplicate check.
+  static let userQuestionFactTTLSeconds: TimeInterval = 600
+
   /// Extraction machinery observed echoed back as statements in live data.
   ///
   /// Every pattern is anchored to the echo it was measured on. Unanchored
@@ -64,6 +72,7 @@ enum ContextFactWritePolicy {
     // exactly the class `floorHumanEvent` promotes to arming eligibility — so a
     // leaked example would not merely be stored, it would arm a notification.
     #"(?i)^\W*nik asked for the demo recording before tomorrow's launch video"#,
+    #"(?i)^\W*the user is asking alex@example\.com"#,
     #"(?i)^\W*the user is viewing a window with a sidebar and a chat panel"#,
     #"(?i)^\W*ambient narrative:"#,
   ]
@@ -202,9 +211,126 @@ enum ContextFactWritePolicy {
     if matchesAny(machineryPatterns, in: trimmed) || isPromptEcho(trimmed) {
       return .dropMachinery
     }
-    if isHumanEvent(trimmed) { return .floorHumanEvent }
+    if isHumanEvent(trimmed) || isUserAuthoredQuestion(trimmed) { return .floorHumanEvent }
     if matchesAny(sceneryPatterns, in: trimmed) { return .capScenery }
     return .pass
+  }
+
+  /// A question the user is writing, recorded as a fact. This class seeds the
+  /// answer-delivery path (dwell refresh -> departure evaluation -> retrieval
+  /// hop), and nano scores it like scenery: the live fact "The body of the
+  /// email currently contains the question: What is the latest omi desktop app
+  /// download link?" arrived at worthiness 0.0, which kept the bucket
+  /// ineligible and the departure trigger dark. Conjunctive on purpose: a
+  /// question signal (a literal "?" or the word "question") must co-occur with
+  /// an authoring/asking frame, so page content that merely displays a
+  /// question ("the page shows a FAQ") never floors.
+  static func isUserAuthoredQuestion(_ statement: String) -> Bool {
+    // A strong asking verb with the user as subject IS the signal: extraction
+    // freely paraphrases the typed question away from its punctuation and its
+    // interrogative words ("The user is asking for a link to the latest Omi
+    // desktop to be shared"), so requiring a separate question marker missed
+    // real asks. Weak authoring verbs (writing/typing/composing/drafting)
+    // still need an explicit question marker so ordinary composing never
+    // floors.
+    if statement.range(
+      of:
+        #"(?i)\b(?:the user|user)\b[^.]{0,40}\b(?:is asking|asks|asked|wants to know|is requesting|requests)\b"#,
+      options: .regularExpression) != nil
+    {
+      return true
+    }
+    // Artifact-subject branches below must never classify RECEIVED content:
+    // "An email from David contains the question: …" is someone else's ask.
+    let receivedMarker =
+      statement.range(
+        of: #"(?i)\b(?:from|received|sender|sent by|reply from|inbox)\b"#,
+        options: .regularExpression) != nil
+    if !receivedMarker,
+      statement.range(
+        of: #"(?i)\b(?:body|draft|message|email)\b[^.]{0,60}\bcontains the question\b"#,
+        options: .regularExpression) != nil
+    {
+      return true
+    }
+    // Passive draft-subject phrasings observed live: "A draft email is
+    // addressed to david@… containing a question about …" and "A note or
+    // message content questions the URL to download Omi for Mac." — the model
+    // displaces the user subject onto the artifact, and both scored 0.0,
+    // keeping the departure trigger dark. A draft that contains or poses a
+    // question was authored by the user in every compose context this path
+    // serves; received questions arrive as speech-acts ("David asked …").
+    if !receivedMarker,
+      statement.range(
+        of:
+          #"(?i)\b(?:draft|email|message|note|body|content)\b(?:[^.]|\.(?=\S)){0,70}\b(?:contain(?:s|ing)?|includes?|including|with)\b(?:[^.]|\.(?=\S)){0,40}\bquestion\b"#,
+        options: .regularExpression) != nil
+    {
+      return true
+    }
+    if !receivedMarker,
+      statement.range(
+        of: #"(?i)\b(?:draft|email|message|note|body|text|content)\b[^.]{0,50}\bquestions\b"#,
+        options: .regularExpression) != nil
+    {
+      return true
+    }
+    // Compose-anchored artifact-subject asking ("A message is being composed
+    // to david@… asking for the latest Omi desktop link" — live, w=1.0, yet
+    // unclassified). The compose anchor keeps received mail ("An email from
+    // David asks …") out of this class.
+    if statement.range(
+      of:
+        #"(?i)\b(?:draft|email|message|note)\b(?:[^.]|\.(?=\S)){0,40}\b(?:being (?:composed|drafted|written)|composed to|addressed to)\b(?:[^.]|\.(?=\S)){0,60}\b(?:asking|asks|requesting|requests)\b"#,
+      options: .regularExpression) != nil
+    {
+      return true
+    }
+    // User-subject inclusion verbs ("The user included a question about the
+    // latest Omi desktop link in the body of the email" — live, scored 0.9 by
+    // the model yet unclassified here, so the forced lookup never armed).
+    if statement.range(
+      of:
+        #"(?i)\b(?:the user|user)\b[^.]{0,40}\b(?:included|includes|including|added|adds|adding|embedded|embeds|posed|poses|posing|put|puts)\b[^.]{0,40}\bquestion\b"#,
+      options: .regularExpression) != nil
+    {
+      return true
+    }
+    // Structural catch-all fitted after five distinct live paraphrases each
+    // needed its own pattern: an artifact-subject statement carrying a literal
+    // question mark ("The message body includes the line: 'what is the latest
+    // Omi desktop link?'") is the user's own typed question unless the
+    // statement marks the artifact as received.
+    if statement.contains("?"),
+      statement.range(
+        of: #"(?i)\b(?:draft|email|message|note|body|compose|subject)\b"#,
+        options: .regularExpression) != nil,
+      statement.range(
+        of: #"(?i)\b(?:from|received|sender|sent by|reply from|inbox)\b"#,
+        options: .regularExpression) == nil
+    {
+      return true
+    }
+    let questionMarker =
+      statement.contains("?")
+      || statement.range(of: #"(?i)\bquestion\b"#, options: .regularExpression) != nil
+    guard questionMarker else { return false }
+    if statement.range(
+      of:
+        #"(?i)\b(?:the user|user)\b[^.]{0,40}\b(?:is writing|is typing|is composing|is drafting|wrote|writes|typed)\b"#,
+      options: .regularExpression) != nil
+    {
+      return true
+    }
+    // Extraction sometimes mangles the subject ("Yu is composing a new email
+    // ... What is the latest link?"): a literal question mark inside a
+    // compose/draft-frame statement is still the user's own typed question —
+    // received questions surface as speech-acts ("David asked ..."), not as
+    // compose frames.
+    return statement.contains("?")
+      && statement.range(
+        of: #"(?i)\b(?:composing|drafting|writing|typing)\b[^.]{0,60}\b(?:email|message|draft|reply)\b"#,
+        options: .regularExpression) != nil
   }
 
   /// A capitalized name immediately before a speech verb, where the name is not

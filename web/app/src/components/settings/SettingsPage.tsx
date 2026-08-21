@@ -96,6 +96,7 @@ import {
   getCustomerPortal,
 } from '@/lib/api';
 import { SUPPORTED_LANGUAGES, API_KEY_SCOPES } from '@/types/user';
+import { decodePlan, planGrantsPaidCapability } from '@/types/user';
 import type {
   DailySummarySettings,
   UserUsage,
@@ -881,6 +882,25 @@ function UsageChart({
 
 type PlanUsageTab = 'plan' | 'usage';
 
+function UnknownPlanCard() {
+  return (
+    <Card>
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-xl bg-white/[0.08] flex items-center justify-center flex-shrink-0">
+          <AlertTriangle className="w-5 h-5 text-text-secondary" />
+        </div>
+        <div>
+          <h3 className="text-lg font-semibold text-text-primary">Plan unavailable</h3>
+          <p className="text-sm text-text-tertiary mt-1">
+            This account uses a plan that this version of Omi does not recognize yet.
+            Plan features are unavailable until the plan can be identified.
+          </p>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 function UsageSectionContent({
   allUsage,
   subscription,
@@ -940,15 +960,6 @@ function UsageSectionContent({
     });
   };
 
-  const getPlanDisplayName = (plan: string) => {
-    if (plan === 'unlimited' || plan === 'unlimited_v2') return 'Unlimited';
-    if (plan === 'plus') return 'Plus';
-    if (plan === 'operator') return 'Operator';
-    if (plan === 'architect') return 'Architect';
-    if (plan === 'basic') return 'Free';
-    return plan || 'Free';
-  };
-
   // Get usage for selected period
   const usage = allUsage ? allUsage[selectedPeriod] : null;
   const monthlyUsage = allUsage?.monthly;
@@ -962,7 +973,11 @@ function UsageSectionContent({
     memories_created: 50,
   };
 
-  const isUnlimited = subscription?.is_unlimited;
+  const planIdentity = subscription
+    ? subscription.plan_identity ?? decodePlan(subscription.plan)
+    : null;
+  const isUnlimited = planIdentity ? planGrantsPaidCapability(planIdentity) : false;
+  const isUnknownPlan = planIdentity?.kind === 'unknown';
   const isCancelingSubscription = subscription?.cancel_at_period_end;
 
   // Calculate usage percentages for basic plan
@@ -1105,9 +1120,11 @@ function UsageSectionContent({
 
       {/* Tab Content */}
       {activeTab === 'plan' ? (
-        /* PLAN TAB - Different views for Basic vs Unlimited */
+        /* PLAN TAB - Unknown plans remain neutral; known plans choose Basic vs paid. */
         <div className="space-y-6">
-          {!isUnlimited ? (
+          {isUnknownPlan ? (
+            <UnknownPlanCard />
+          ) : !isUnlimited ? (
             /* BASIC PLAN VIEW */
             <>
               {/* Current Plan Card */}

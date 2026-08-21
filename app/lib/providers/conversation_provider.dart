@@ -14,6 +14,7 @@ import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/utils/logger.dart';
 
 typedef ConversationListFetcher = Future<({List<ServerConversation> items, bool ok})> Function();
+typedef ConversationPageFetcher = Future<({List<ServerConversation> items, bool ok, bool truncated})> Function();
 typedef ConversationLifecycleFetcher = Future<({ServerConversation? item, bool ok})> Function(String id);
 typedef DailySummariesChecker = Future<bool> Function();
 typedef ConversationSearchFetcher = Future<(List<ServerConversation>, int, int)> Function(
@@ -140,7 +141,7 @@ class ConversationProvider extends ChangeNotifier {
   ConversationDetailsFetcher? conversationDetailsFetcherOverride;
 
   @visibleForTesting
-  ConversationListFetcher? conversationPageFetcherOverride;
+  ConversationPageFetcher? conversationPageFetcherOverride;
 
   @visibleForTesting
   Future<bool> Function(String conversationId)? conversationDeleteFetcherOverride;
@@ -543,7 +544,7 @@ class ConversationProvider extends ChangeNotifier {
     );
     if (_conversationServerOffset == 0) {
       _conversationServerOffset = rawNewConversations.length;
-      _conversationServerHasMore = rawNewConversations.length >= _conversationPageSize;
+      _conversationServerHasMore = !result.truncated && rawNewConversations.length >= _conversationPageSize;
     }
     _conversationServerLoadedIds.addAll(rawNewConversations.map((conversation) => conversation.id));
     final currentlyProcessingIds = processingConversations
@@ -670,7 +671,7 @@ class ConversationProvider extends ChangeNotifier {
       processingRowsAtStart,
     );
     _conversationServerOffset = result.items.length;
-    _conversationServerHasMore = result.items.length >= _conversationPageSize;
+    _conversationServerHasMore = !result.truncated && result.items.length >= _conversationPageSize;
     _conversationServerLoadedIds
       ..clear()
       ..addAll(result.items.map((conversation) => conversation.id));
@@ -946,9 +947,12 @@ class ConversationProvider extends ChangeNotifier {
     );
   }
 
-  Future<({List<ServerConversation> items, bool ok})> _getConversationsFromServer() async {
+  Future<({List<ServerConversation> items, bool ok, bool truncated})> _getConversationsFromServer() async {
     final fetcher = _conversationListFetcher;
-    if (fetcher != null) return fetcher();
+    if (fetcher != null) {
+      final result = await fetcher();
+      return (items: result.items, ok: result.ok, truncated: false);
+    }
 
     final (startDate, endDate) = _getDateFilterRange();
 
@@ -1131,7 +1135,7 @@ class ConversationProvider extends ChangeNotifier {
     }
     final newConversations = pageResult.items;
     _conversationServerOffset += newConversations.length;
-    _conversationServerHasMore = newConversations.length >= _conversationPageSize;
+    _conversationServerHasMore = !pageResult.truncated && newConversations.length >= _conversationPageSize;
     _conversationServerLoadedIds.addAll(newConversations.map((conversation) => conversation.id));
     final existingIds = conversations.map((conversation) => conversation.id).toSet();
     conversations.addAll(

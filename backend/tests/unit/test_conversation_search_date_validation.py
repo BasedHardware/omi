@@ -57,6 +57,7 @@ _stubs = [
     'google.cloud.firestore_v1',
     'utils.request_validation',
     'utils.other.endpoints',
+    'utils.other.list_budget',
     'utils.other.storage',
     # Names only: this file's _AutoMockModule/_register_module wrap them. Parents
     # (including utils.conversations) are created by _register_module, so the
