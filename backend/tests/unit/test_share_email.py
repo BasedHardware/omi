@@ -158,7 +158,7 @@ def test_ambiguous_delivery_keeps_publish():
 
 
 def test_read_timeout_maps_to_ambiguous_and_connect_failure_to_definitive(monkeypatch):
-    import requests
+    import httpx
 
     from utils.conversations import share_email as se
 
@@ -167,9 +167,9 @@ def test_read_timeout_maps_to_ambiguous_and_connect_failure_to_definitive(monkey
     conversation = {'id': 'c1', 'structured': {'title': 'T', 'overview': 'O'}}
 
     def raise_read_timeout(*a, **kw):
-        raise requests.exceptions.ReadTimeout('read timed out')
+        raise httpx.ReadTimeout('read timed out')
 
-    monkeypatch.setattr(se.requests, 'post', raise_read_timeout)
+    monkeypatch.setattr(se.httpx, 'post', raise_read_timeout)
     try:
         se.send_summary_email(uid='u1', conversation=conversation, recipient_emails=['a@b.co'])
     except se.AmbiguousDeliveryError:
@@ -178,9 +178,9 @@ def test_read_timeout_maps_to_ambiguous_and_connect_failure_to_definitive(monkey
         raise AssertionError('read timeout must be ambiguous')
 
     def raise_connection_error(*a, **kw):
-        raise requests.ConnectionError('refused')
+        raise httpx.ConnectError('refused')
 
-    monkeypatch.setattr(se.requests, 'post', raise_connection_error)
+    monkeypatch.setattr(se.httpx, 'post', raise_connection_error)
     try:
         se.send_summary_email(uid='u1', conversation=conversation, recipient_emails=['a@b.co'])
     except se.AmbiguousDeliveryError:

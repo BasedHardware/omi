@@ -19,7 +19,7 @@ import os
 import re
 from typing import Any, Dict, List, Optional
 
-import requests
+import httpx
 
 from database.auth import get_user_from_uid
 from utils.share_links import build_share_url
@@ -284,16 +284,16 @@ def send_summary_email(
         f"{uid}:{conversation.get('id')}:{','.join(sorted(normalized))}".encode()
     ).hexdigest()
     try:
-        response = requests.post(
+        response = httpx.post(
             RESEND_API_URL,
             json=payload,
             headers={'Authorization': f'Bearer {api_key}', 'Idempotency-Key': idempotency_key},
-            timeout=15,
+            timeout=15.0,
         )
-    except (requests.ConnectionError, requests.exceptions.ConnectTimeout) as exc:
+    except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
         # The request never reached the provider — definitively not delivered.
         raise RuntimeError('email provider unreachable') from exc
-    except requests.RequestException as exc:
+    except httpx.HTTPError as exc:
         # Sent but no response read (e.g. read timeout): delivery is unknown.
         raise AmbiguousDeliveryError('email delivery status unknown') from exc
     if response.status_code >= 400:
