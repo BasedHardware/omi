@@ -639,6 +639,12 @@ public class ProactiveAssistantsPlugin: NSObject {
     // whole refresh if the user already switched away: tracking the old app's
     // frame after a switch would contaminate the new context's bucket.
     guard AssistantCoordinator.shared.currentTrackedApp == appName else { return }
+    // The fresh pre-transition capture is REQUIRED: transitioning without it
+    // would extract a stale frame that predates the typed content, spending
+    // the refresh (and its cooldown) on nothing. On failure — or on macOS 13,
+    // which has no window-image capture path here — the anchor is backdated so
+    // the refresh retries in ~10s instead of waiting out the full cooldown.
+    var capturedFreshFrame = false
     if #available(macOS 14.0, *), let screenCaptureService {
       let result = await screenCaptureService.captureWindowCGImage(windowID: windowID)
       if case .success(let image) = result,
@@ -654,7 +660,12 @@ public class ProactiveAssistantsPlugin: NSObject {
             frameNumber: frameCount,
             captureTime: Date()
           ))
+        capturedFreshFrame = true
       }
+    }
+    guard capturedFreshFrame else {
+      dwellContextAnchor = ContextDwellRefreshPolicy.retryAnchor(now: Date())
+      return
     }
     guard
       let arrivingFence = await AssistantCoordinator.shared.refreshActiveContextForDwell(

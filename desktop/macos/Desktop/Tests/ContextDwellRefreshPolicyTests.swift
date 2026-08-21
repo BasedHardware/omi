@@ -46,4 +46,21 @@ final class ContextDwellRefreshPolicyTests: XCTestCase {
         secondsSinceAnchor: 45, firedRefreshesThisContext: 40, keyboardIdleSeconds: 5),
       "repeats never exhaust while the user keeps typing")
   }
+
+  func testRetryAnchorReArmsShortlyWithoutDoubleFire() {
+    let now = Date()
+    let anchor = ContextDwellRefreshPolicy.retryAnchor(now: now)
+    let age = now.timeIntervalSince(anchor)
+    // A failed refresh retries in ~10s (cooldown minus the backdate)...
+    XCTAssertEqual(
+      age, ContextDwellRefreshPolicy.repeatRefreshCooldownSeconds - 10, accuracy: 0.001)
+    // ...which is NOT immediately eligible again, so the tick loop cannot
+    // double-fire in the same breath.
+    XCTAssertFalse(
+      ContextDwellRefreshPolicy.shouldRefresh(
+        secondsSinceAnchor: age, firedRefreshesThisContext: 1, keyboardIdleSeconds: 5))
+    XCTAssertTrue(
+      ContextDwellRefreshPolicy.shouldRefresh(
+        secondsSinceAnchor: age + 11, firedRefreshesThisContext: 1, keyboardIdleSeconds: 5))
+  }
 }

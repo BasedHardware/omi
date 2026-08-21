@@ -43,6 +43,14 @@ enum ContextDwellRefreshPolicy {
   /// wastes the evaluation on a half-typed thought.
   static let typingSettleSeconds: TimeInterval = 2
 
+  /// Where the anchor moves when a fired refresh ABORTS before transitioning
+  /// (its required fresh capture failed): far enough back that the retry
+  /// happens ~10s later instead of waiting out the full repeat cooldown, close
+  /// enough that the tick loop cannot double-fire in the same breath.
+  static func retryAnchor(now: Date) -> Date {
+    now.addingTimeInterval(-(repeatRefreshCooldownSeconds - 10))
+  }
+
   static func shouldRefresh(
     secondsSinceAnchor: TimeInterval,
     firedRefreshesThisContext: Int,
