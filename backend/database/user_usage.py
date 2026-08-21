@@ -82,6 +82,26 @@ def _plan_usage_row() -> Dict[str, Any]:
     }
 
 
+def _plan_data_questions(value: Dict[str, Any]) -> int:
+    """Questions a plan_usage subtree accounts for.
+
+    Writers store questions at ``plan_usage.{plan}.{bucket}.quota_questions`` (and one
+    level deeper for feature/model layouts). There is no top-level ``questions`` field,
+    so this must recurse exactly like ``_accumulate_plan_data`` -- reading a flat
+    ``questions`` key yields 0 for every real document and makes the residual below the
+    document's entire count.
+    """
+    total = 0
+    for key, child in value.items():
+        if key == '_metadata':
+            continue
+        if isinstance(child, dict):
+            total += _plan_data_questions(child)
+        elif key == 'quota_questions':
+            total += int(child or 0)
+    return total
+
+
 def _accumulate_plan_data(row: Dict[str, Any], value: Dict[str, Any]) -> None:
     """Collect metrics from both flat bucket and feature/model plan layouts."""
     for key, child in value.items():
@@ -141,7 +161,7 @@ def get_monthly_chat_usage(
             for plan_id, plan_data in plan_usage.items():
                 if not isinstance(plan_data, dict):
                     continue
-                plan_attributed_questions += int(plan_data.get('questions', 0) or 0)
+                plan_attributed_questions += _plan_data_questions(plan_data)
                 row = usage_by_plan.setdefault(str(plan_id), _plan_usage_row())
                 metadata = plan_data.get('_metadata')
                 if isinstance(metadata, dict):
@@ -214,7 +234,10 @@ def get_monthly_chat_usage(
         # never folded into a real plan, because we do not know which plan earned it.
         document_questions = questions - questions_before_document
         residual_questions = document_questions - plan_attributed_questions
-        if not isinstance(plan_usage, dict) or residual_questions > 0:
+        # A document with no plan_usage is entirely unattributed; one WITH plan_usage
+        # contributes only what plan_usage fails to account for. Guard on the residual
+        # in both cases so a fully attributed document creates no phantom row.
+        if residual_questions > 0:
             legacy_row = usage_by_plan.setdefault(_UNATTRIBUTED_PLAN, _plan_usage_row())
             legacy_row['questions'] += residual_questions
             legacy_row['cost_status'] = 'missing'

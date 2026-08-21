@@ -241,7 +241,10 @@ def _build_subscription_from_stripe_object(stripe_sub: dict) -> Subscription | N
             component='other',
             from_mode='stripe_price_resolution',
             to_mode='skip_subscription_write',
-            reason='unrecognized_price',
+            # Must be a member of ALLOWED_REASONS, or bucket_reason() relabels it
+            # 'other' and the reason dimension is lost. The price is absent from both
+            # the catalog ledger and the env binding: a configuration gap.
+            reason='config_incomplete',
             outcome='degraded',
             log=logger,
         )

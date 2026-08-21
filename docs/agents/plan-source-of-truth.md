@@ -26,15 +26,28 @@ taken after this document was first written:
 - **B3 — Plus and Unlimited-v2 hard-cap.** Current runtime behavior stands; the contradicting comment and the
   second `is_overage_plan()` predicate were deleted rather than implemented.
 
-`open_decisions` in the catalog is therefore `{}`, and `--require-publishable` no longer reports B1 or B3. It
-still reports the Stripe import (P1) and cost-accounting completeness (M1), which remain genuinely open.
+`open_decisions` in the catalog is therefore `{}`, and `--require-publishable` no longer reports B1 or B3.
+Since P1 was withdrawn it no longer reports any Stripe import either: `validate_publishable_catalog` now checks
+open decisions and cost-accounting completeness only, so **M1 is the sole remaining publishable gap**.
 
-One consequence of the B1 sentinel ruling is load-bearing and easy to get wrong: the *pre-catalog env overlays*
-(`BASIC_TIER_*`, `PLUS_TIER_*`, the chat overlays) were authored when `0` meant unlimited, and production sets
-the Basic words/insights overlays to exactly `0` on that meaning. Retiring the sentinel must not silently
-reinterpret configuration that is already deployed, so those legacy values are read through
-`_legacy_overlay_value`, which maps a legacy `0` to unlimited. The catalog's own values use the typed
-representation. D2 deletes the overlays and this bridge together.
+One consequence of the B1 sentinel ruling is load-bearing and easy to get wrong. The rule is narrow and
+deliberately so: **retiring the sentinel must not silently reinterpret configuration that is already
+deployed.** It says nothing about configuration nobody has deployed.
+
+Only the **Basic** family is bridged, via `_legacy_overlay` in `backend/utils/subscription.py`, which maps a
+legacy `0` to unlimited. That is because production actually ships
+`BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH=0` and `BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH=0` on the old
+meaning; reading those as a finite zero would hand every Free user a zero allowance. The Basic minutes overlay
+is bridged too — charts set `300`, so the zero branch is latent, but a deployed `0` there would make
+`has_transcription_credits` false for every Free user.
+
+The **chat overlays** (`FREE/NEO/OPERATOR_CHAT_QUESTIONS_PER_MONTH`, `ARCHITECT_CHAT_COST_USD_PER_MONTH`) and
+the **Plus transcription overlay** are deliberately **not** bridged: no chart or deploy file sets any of them,
+so there is no deployed configuration to protect, and under David's ruling a finite `0` means zero. That is
+pinned by `TestChatLimitZeroSemantics` in `backend/tests/unit/test_overage_catalog.py`. If one of those vars is
+ever set to `0` in a deploy, bridge it first or the meaning inverts silently.
+
+The catalog's own values always use the typed representation. D2 deletes the overlays and this bridge together.
 
 ## Why a repository catalog
 
@@ -54,10 +67,11 @@ called at import/startup (`backend/main.py`, lines 109-113), skips development a
 
 The catalog therefore separates two kinds of fact:
 
-- Desired commercial contract: plan ID, lifecycle, storefronts, price amount in minor units, currency, interval,
-  lookup key, entitlements, allocations, and exhaustion policy. This is reviewed and versioned in Git.
-- Observed execution object: Stripe product/price ID and its retrieved immutable fields. It is accepted only when a
-  protected workflow proves it matches the desired spec and records the binding.
+- Desired commercial contract: plan ID, lifecycle, storefronts, currency, interval, entitlements, allocations,
+  and exhaustion policy. This is reviewed and versioned in Git. It carries **no price amount** — see the revised
+  Q1 above; amounts are read live from Stripe and never copied here.
+- Billed identity: the Stripe product/price IDs and the plan each maps to, kept in an append-only recognition
+  ledger. This is the one Stripe fact the repository owns, because Stripe cannot supply it.
 
 The source file is `backend/config/plan_catalog.json`. `backend/scripts/generate_plan_catalog.py` is its compiler,
 and `backend/config/plan_catalog_generated.py` is a generated backend projection. Hand-written Python imports the
@@ -138,7 +152,7 @@ The catalog owns the answer to “what is this plan allowed?”:
 - stable identity, aliases, lifecycle, display identity, storefront eligibility, and wire fallback;
 - capabilities and named profiles, such as desktop access, cloud vectors, fair-use class, and phone calls;
 - per-feature allocations, period, exact unit, finite/unlimited/open-decision state, and exhaustion policy; and
-- intended customer price and its Stripe binding state.
+- billed identity: which Stripe price IDs map to this plan (never the amount).
 
 Feature modules own how those declarations are measured and enforced: Redis/Firestore key shape, counter updates,
 request admission, overage arithmetic, provider selection, kill switches, and anti-abuse algorithms. A feature may
@@ -254,7 +268,7 @@ Retirement sequence:
 
 | Finding | Foundation now | Target resolution |
 |---|---|---|
-| B1: five Free transcription values | The catalog records B1 as `decision_required`, in seconds, with legacy runtime value zero and all five observations. Backend defaults derive from it, but existing env overlays remain effective, so no policy changes in this PR. | David selects one value. Generated service/client projections replace Helm, Cloud Run, web, and localization literals; every service reports catalog SHA plus effective value. The publishable guard rejects the open decision and undeclared override. |
+| B1: five Free transcription values | **DECIDED (P9/P10): 300 minutes = 18,000s, and the `0 == unlimited` sentinel is retired.** The catalog records the finite value in seconds. Backend defaults derive from it, but existing env overlays remain effective, so no policy changes in this PR. | David selects one value. Generated service/client projections replace Helm, Cloud Run, web, and localization literals; every service reports catalog SHA plus effective value. The publishable guard rejects the open decision and undeclared override. |
 | B2: split dev Architect IDs | Both monthly IDs and the shared annual ID are in the append-only ledger and resolve to Architect without a live Stripe lookup, so either service's existing subscriber remains recognized. | Read-only import verifies both objects. One environment binding becomes purchasable; the other becomes retained. All services consume the same generated binding, making a split impossible. |
 | B3: two overage predicates and false prose | `enforce_chat_quota` and `utils.overage.is_overage_plan` now call one catalog predicate. Plus/Unlimited-v2 retain hard-cap behavior through explicit open decision B3. | David selects `hard_cap` or `overage` once in the catalog. Enforcement, reporting, UI, and billing projections derive from that field and its typed unit. |
 | B4: paid plans disappear | Paid-plan IDs and telemetry allowlists are generated; the support scanner and sync rate-limit telemetry consume them. Plus and Unlimited-v2 have behavioral coverage. | Remaining consumers may use only the generated set. The consumer registry rejects a new manual predicate. |
@@ -275,7 +289,8 @@ treated as an observed overlay, not a catalog answer.
 - `backend/config/plan_catalog.json`: canonical six-plan identity, aliases, lifecycle, storefronts, typed allocations,
   profiles, open decisions, measurement completeness, billing intent state, recognized prices, and products.
 - `backend/scripts/generate_plan_catalog.py`: strict schema/compiler, deterministic projection, merge-base compatibility,
-  production-source Stripe ID inventory, publishability check, and offline Stripe binding/snapshot validator.
+  production-source Stripe ID inventory, and publishability check. (The offline Stripe binding/snapshot
+  validator was deleted with the publication workflow — see the revised Q1.)
 - `backend/config/plan_catalog_generated.py` and `backend/config/plan_catalog.py`: generated data plus stable query and
   resolution APIs. Open decisions throw unless a caller explicitly requests preserved legacy behavior.
 - Backend migration of the enum, plan sets, display map, default limits, desktop quota profiles, phone-call defaults,
@@ -288,7 +303,7 @@ treated as an observed overlay, not a catalog answer.
 Dependencies use the work-item IDs below. “Mechanical” means agents may run the work in parallel after its
 dependencies land without changing a decision. “Judgment” means one owner must review the boundary or rollout.
 
-1. **D1 — Rule on B1 and B3 (judgment; no code until David answers).** Update
+1. **D1 — COMPLETE (2026-08-20).** B1 and B3 were ruled on and applied; `open_decisions` is `{}`. Original scope: update
    `backend/config/plan_catalog.json` only: replace B1's `decision_required` limit and both B3 exhaustion decisions,
    increment `catalog_revision`, regenerate, and update behavioral expectations. Acceptance: `--require-publishable`
    no longer reports B1/B3; no environment, UI, or client value is edited in this item. This blocks D5 quota fan-out,
@@ -387,12 +402,30 @@ P1, C1-C4, and M1 may proceed in parallel. C5-C8 may proceed in parallel after t
 proceed in parallel after the relevant David ruling. P2, D2, W1, W2, and production binding/floor changes require a
 single integration owner because they cross a money or compatibility boundary.
 
+## Open ledger gap — needs verification against dev Stripe
+
+`backend/tests/unit/test_available_plans_resilience.py` labels four IDs "Real Stripe dev price IDs". The
+Unlimited pair (`price_1RrxXL…IddzR902`, `price_1RrxXL…3kDbWmjs`) resolves from the recognition ledger. The
+**Architect pair does not**:
+
+- `price_1TAznX1F8wnoWYvwyaSVQbZW`
+- `price_1TAznX1F8wnoWYvwN8YmzbiC`
+
+If any dev subscriber still bills on those, they land in the skip-write branch: the webhook emits fallback
+telemetry and leaves the local row stale. Dev-only, and the asymmetry suggests the Unlimited pair was added to
+the ledger and the Architect pair overlooked.
+
+**Deliberately not fixed here.** Appending to the recognition ledger asserts that a Stripe price maps to a plan,
+and the only evidence available in-repo is a comment in a test file. That is the same unverified-copy reasoning
+this project exists to eliminate — the foundation refused to infer *amounts* from test fixtures, and inferring
+*billed identity* from one is worse. Confirm both IDs in the dev Stripe dashboard, then append them.
+
 ## Owner decisions still required
 
-1. B1: the canonical Free monthly transcription allowance, expressed in seconds, including whether zero means
-   unlimited or whether the ambiguous zero convention is retired.
-2. B3: whether Plus and Unlimited-v2 hard-cap or enter overage after their included chat allowance. The current runtime
-   behavior remains hard-cap until this is answered.
+1. ~~B1: the canonical Free monthly transcription allowance.~~ **Decided 2026-08-20: 300 minutes (18,000s);
+   the ambiguous `0 == unlimited` convention is retired in favour of a typed unlimited.**
+2. ~~B3: whether Plus and Unlimited-v2 hard-cap or enter overage.~~ **Decided 2026-08-20: hard-cap; current
+   runtime behavior stands and the contradicting second predicate was deleted.**
 3. ~~P1 review: approve imported Stripe amounts.~~ **Withdrawn** — no amounts are imported.
    The dev Architect price-id split (B2) is still worth resolving, but it is a configuration
    fix, not a catalog decision.

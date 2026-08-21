@@ -427,3 +427,55 @@ def test_all_time_usage_builds_totals_and_history_from_one_stream(mock_db, monke
     ]
     query.stream.assert_called_once_with()
     record_read.assert_called_once_with(FirestoreReadFamily.ALL_TIME_USAGE, FirestoreReadMode.UNBOUNDED, 2)
+
+
+def test_fully_attributed_document_creates_no_phantom_unattributed_row(mock_db):
+    """A document whose plan_usage accounts for all its questions must not also
+    report those questions as unattributed.
+
+    Writers store questions at plan_usage.{plan}.{bucket}.quota_questions -- there is
+    no top-level plan_usage.{plan}.questions field. Reading the attributed total from
+    that non-existent field made it always 0, so the residual was the document's FULL
+    root count and every post-deploy document counted twice: once against its real
+    plan and once against _unattributed.
+    """
+    _setup_docs(
+        mock_db,
+        {
+            "2026-06-23": {
+                "desktop_chat": {"quota_questions": 2},
+                "plan_usage": {"operator": {"desktop_chat": {"quota_questions": 2}}},
+            }
+        },
+    )
+
+    usage = user_usage.get_monthly_chat_usage("uid", now=NOW)
+    by_plan = usage["usage_by_plan"]
+
+    assert by_plan["operator"]["questions"] == 2
+    assert usage["questions"] == 2
+    assert "_unattributed" not in by_plan, f"phantom unattributed row: {by_plan}"
+    assert sum(r["questions"] for r in by_plan.values()) == usage["questions"]
+
+
+def test_mixed_document_attributes_only_the_unaccounted_residual(mock_db):
+    """The genuine MIXED case: pre-deploy root counters plus post-deploy plan_usage.
+
+    Only the portion plan_usage does not account for belongs to _unattributed.
+    """
+    _setup_docs(
+        mock_db,
+        {
+            "2026-06-23": {
+                "desktop_chat": {"quota_questions": 5},
+                "plan_usage": {"operator": {"desktop_chat": {"quota_questions": 2}}},
+            }
+        },
+    )
+
+    usage = user_usage.get_monthly_chat_usage("uid", now=NOW)
+    by_plan = usage["usage_by_plan"]
+
+    assert by_plan["operator"]["questions"] == 2
+    assert by_plan["_unattributed"]["questions"] == 3, "only the 3 unaccounted questions"
+    assert sum(r["questions"] for r in by_plan.values()) == usage["questions"] == 5

@@ -1,6 +1,6 @@
 # Plan catalog audience
 
-Canonical identity, price intent, entitlements, allocations, publication protocol, and migration ownership are in
+Canonical identity, billed price identity, entitlements, allocations, and migration ownership are in
 `backend/config/plan_catalog.json` and `docs/agents/plan-source-of-truth.md`. This page owns only storefront audience
 behavior. Do not add plan values or Stripe IDs here.
 

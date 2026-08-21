@@ -296,7 +296,7 @@ def _validate_billing(billing: Any, path: str, is_paid: bool, errors: list[str])
             errors.append(f'{price_path}: expected an object')
             continue
         required = {'interval', 'currency', 'primary_env_var', 'accepted_env_vars'}
-        allowed = required | {'lookup_key'}
+        allowed = required
         missing = sorted(required - set(price))
         extra = sorted(set(price) - allowed)
         if missing:
@@ -313,9 +313,6 @@ def _validate_billing(billing: Any, path: str, is_paid: bool, errors: list[str])
         currency = price.get('currency')
         if not isinstance(currency, str) or not re.fullmatch(r'[a-z]{3}', currency):
             errors.append(f'{price_path}.currency: expected a lowercase ISO currency code')
-            lookup_key = price.get('lookup_key')
-            if not isinstance(lookup_key, str) or not lookup_key.startswith('omi.subscription.'):
-                errors.append(f'{price_path}.lookup_key: managed prices require an omi.subscription.* lookup key')
         primary_env_var = price.get('primary_env_var')
         accepted_env_vars = price.get('accepted_env_vars')
         if not isinstance(primary_env_var, str) or not ENV_VAR_RE.fullmatch(primary_env_var):
