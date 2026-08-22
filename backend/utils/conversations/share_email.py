@@ -114,21 +114,30 @@ def _participants_from_conversation(conversation: Dict[str, Any]) -> List[Dict[s
 def _attendee_count(participants: List[Dict[str, Optional[str]]]) -> int:
     """How many distinct people the sources describe.
 
-    The same meeting reaches us in shapes that each describe one person more
-    than once: a conversation can carry both `calendar_meeting_context` and
-    `calendar_event`, and `context_from_calendar_link` emits every attendee
-    twice on its own — once name-only, once email-only. Summing entries would
-    double an ordinary meeting past the size gate and silently drop its
-    proposal, so count the two identity dimensions separately and take the
-    larger: six names and six addresses are six people however they arrived.
+    An address is the only stable identity here. The same meeting can arrive as
+    both `calendar_meeting_context` and `calendar_event`, and each source may
+    spell one person differently ("Nik" vs "Nik Shevchenko"), so counting names
+    alongside addresses would make one attendee look like two. Conversations
+    stored before attendees were paired also carry a person's name and address
+    as separate entries, so names are counted only when no address accompanies
+    them, and the two tallies are compared rather than summed.
+
+    The gate errs toward proposing: it exists to stop a blanket proposal for a
+    large meeting, and every proposed recipient still needs a name *and* an
+    address, so a slight undercount cannot address anyone new — while an
+    overcount silently drops a legitimate proposal.
     """
-    emails = {email for email in (_normalized_email(p.get('email')) for p in participants) if email}
-    names: set[str] = set()
+    emails: set[str] = set()
+    unattached_names: set[str] = set()
     for participant in participants:
+        email = _normalized_email(participant.get('email'))
+        if email:
+            emails.add(email)
+            continue
         raw_name = participant.get('name')
         if isinstance(raw_name, str) and raw_name.strip():
-            names.add(raw_name.strip().casefold())
-    return max(len(emails), len(names))
+            unattached_names.add(raw_name.strip().casefold())
+    return max(len(emails), len(unattached_names))
 
 
 def _is_captured_name(name: str, email: str) -> bool:
