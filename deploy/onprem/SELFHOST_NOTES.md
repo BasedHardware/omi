@@ -966,9 +966,19 @@ docker run --rm -v $(git rev-parse --show-toplevel):/repo -w /repo/backend \
   -e ENCRYPTION_SECRET="$(openssl rand -hex 32)" -e OPENAI_API_KEY=test -e PYTHONUTF8=1 \
   -e OMP_NUM_THREADS=1 -e LOCAL_DEVELOPMENT=true \
   omi-oss-backend-test bash -c '
+    run_one() {
+      start=$(date +%s)
+      out=$(timeout 240 /opt/venv/bin/python -m pytest -q -o addopts="" -p no:cacheprovider "$1" 2>&1 | tail -1)
+      took=$(( $(date +%s) - start ))
+      # A bound per file, and the duration named above 20s: without it one slow file is
+      # indistinguishable from a hang and the run just stops being finishable. The bound must stay ABOVE
+      # the slowest real file (154s today) or the sweep silently stops verifying it.
+      [ "$took" -ge 20 ] && echo "SLOW($took s) $1"
+      echo "$out" | grep -qiE "failed|error" && echo "FAIL | $1 | $out" || echo "PASS | $1 | $out"
+    }
+    export -f run_one
     ls tests/unit/test_*.py tests/unit/utils/test_*.py testing/e2e/test_*.py | \
-    xargs -P 16 -I{} sh -c '\''out=$(/opt/venv/bin/python -m pytest -q -o addopts="" -p no:cacheprovider "{}" 2>&1 | tail -1);
-      echo "$out" | grep -qiE "failed|error" && echo "FAIL | {} | $out" || echo "PASS | {} | $out"'\'' '
+    xargs -P 16 -I{} bash -c '\''run_one "$@"'\'' _ {}
 ```
 
 Include `testing/e2e/test_*.py` in the glob: port residuals (`db_client=`, changed signatures) survive
@@ -986,6 +996,24 @@ time docker run --rm -v $(git rev-parse --show-toplevel):/repo ...   # the sweep
 
 Reference on 20 cores, after the cleanup: **~3 min** for the full unit sweep, **~2m40s** with the
 one-container runner. Twice that means something changed — look at `_temp` first.
+
+**Bound every file.** The sweep runs `timeout 240` per file, and prints `SLOW(<n>s) <file>` for anything
+over 20 seconds. Without a bound one slow file is indistinguishable from a hang, and the whole run just
+stops being finishable — which is exactly what happened after the upstream merge of 2026-08-22: the sweep
+went from ~3m10s to over ten minutes with no indication of why. Bounded, it is 3m38s and the reason is a
+line of output.
+
+The bound must sit ABOVE the slowest real file, or the sweep silently stops verifying it. Measured today:
+
+| file | time | why |
+|---|---|---|
+| `tests/unit/test_desktop_proxy.py` | **154 s** | upstream. Two of its 91 tests wait out the proxy's own `_TOTAL_TIMEOUT_SECONDS = 75.0` deadline — with that constant temporarily set to 2.0 the pair passes in 3s instead of 151s |
+| `tests/integration/test_mentor_topics_eval.py` | 69 s | live tier |
+| `tests/integration/test_qos_live_cp9.py` | 44 s | live tier |
+| `tests/unit/test_subscription_restructure.py` | 43 s | |
+| `tests/integration/test_qos_all_features_l1.py` | 43 s | live tier |
+| `tests/integration/test_qos_real_llm.py` | 31 s | live tier |
+| `tests/unit/test_firestore_query_contract.py` | 24 s | |
 
 **Second, empty `backend/_temp/`.** It is gitignored scratch that the speech-profile and audio suites
 write into, it is never cleaned, and `test_runtime_image_contracts` copies the whole backend tree **once
