@@ -4,14 +4,10 @@ import CoreGraphics
 enum MemoryHubDestination: Int, CaseIterable, Identifiable {
   static let storageKey = "memoryHubDestination"
 
-  /// The order the hub's own switcher reads in: the thing you captured, what Omi kept from it, then
-  /// the map over all of it. Declared here rather than inside the switcher view so it stays a plain
-  /// value a test can read without hopping to the main actor.
-  ///
-  /// `allCases` is *not* this order — its raw values are storage identity and start at `memories`,
-  /// which is where the persisted default lands, not where the row should start.
-  static let switcherOrder: [MemoryHubDestination] = [.activity, .conversations, .memories, .brainMap]
-
+  /// `allCases` is storage identity, not reading order: the raw values are persisted, so this list
+  /// starts at `memories` — where the stored default lands — rather than where the user's row
+  /// starts. The order the four pages are *presented* in belongs to the control that presents them,
+  /// `ActivityDestinationChip`.
   case memories
   case conversations
   case brainMap

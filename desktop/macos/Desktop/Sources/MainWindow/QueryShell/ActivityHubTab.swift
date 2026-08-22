@@ -19,8 +19,6 @@ struct ActivityHubTab: View {
   /// Opens one of the Memory hub's sibling pages. The chip row is the only door to them now that
   /// the hub's switcher is gone, so a host that cannot supply this would strand three pages.
   let onOpenHubDestination: (MemoryHubDestination) -> Void
-  /// Tasks is the shell's own destination, reached from the rail the host owns.
-  let onOpenTasks: () -> Void
 
   @ObservedObject private var tasksStore = TasksStore.shared
   @State private var filters = QueryShellFilters()
@@ -80,12 +78,7 @@ struct ActivityHubTab: View {
     case .activity:
       return
     case .conversations, .memories, .brainMap:
-      guard let destination = chip.hubDestination else { return }
-      onOpenHubDestination(destination)
-    case .tasks:
-      onOpenTasks()
-    case .rewind:
-      onOpenRewind()
+      onOpenHubDestination(chip.hubDestination)
     }
   }
 

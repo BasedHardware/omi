@@ -29,7 +29,10 @@ struct ConversationSummarySections: View {
   var body: some View {
     if !sections.isEmpty {
       VStack(alignment: .leading, spacing: OmiSpacing.lg) {
-        ForEach(sections) { section in
+        // Keyed by position, not by heading. These blocks are model-written, so two can share a
+        // heading — or have none at all, which this view explicitly allows below — and identical
+        // `ForEach` ids make SwiftUI drop or duplicate rows rather than render both.
+        ForEach(Array(sections.enumerated()), id: \.offset) { _, section in
           VStack(alignment: .leading, spacing: OmiSpacing.xs) {
             if !section.heading.isEmpty {
               Text(section.heading)
