@@ -588,9 +588,9 @@ function encodeCursor(position: number): string {
 function decodeCursor(cursor: string): number | null {
   if (!/^[A-Za-z0-9_-]{1,32}$/.test(cursor)) return null;
   try {
-    const value = Number(
-      atob(cursor.replaceAll("-", "+").replaceAll("_", "/"))
-    );
+    const standard = cursor.replaceAll("-", "+").replaceAll("_", "/");
+    const padded = standard + "=".repeat((4 - (standard.length % 4)) % 4);
+    const value = Number(atob(padded));
     return Number.isSafeInteger(value) && value > 0 ? value : null;
   } catch {
     return null;
