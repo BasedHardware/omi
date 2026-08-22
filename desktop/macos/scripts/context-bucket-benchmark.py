@@ -32,6 +32,8 @@ DIRECTOR_CASES = {
     "worthy-revisit-unresolved-task",
     "worthy-new-actionable-fact",
     "silence-ambient-narrative",
+    "silence-user-own-completed-work",
+    "silence-record-correction-no-next-step",
     "silence-low-confidence-fact",
     "identity-same-numbered-context",
     "identity-similar-title-isolated",
