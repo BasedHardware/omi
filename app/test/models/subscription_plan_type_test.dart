@@ -15,22 +15,41 @@ Subscription _subFromWirePlan(String plan) {
 
 void main() {
   group('PlanType wire mapping', () {
-    test('decodes the mobile consumer tiers instead of falling back to basic', () {
-      // Regression: before the enum carried plus/unlimited_v2, an unknown plan
-      // fell back to PlanType.basic — a paying subscriber was shown as free.
-      expect(_subFromWirePlan('plus').plan, PlanType.plus);
-      expect(_subFromWirePlan('unlimited_v2').plan, PlanType.unlimitedV2);
+    test('decodes every catalog identity and the legacy pro alias', () {
+      const expected = {
+        'basic': PlanType.basic,
+        'plus': PlanType.plus,
+        'unlimited': PlanType.unlimited,
+        'unlimited_v2': PlanType.unlimitedV2,
+        'operator': PlanType.operator,
+        'architect': PlanType.architect,
+        'pro': PlanType.architect,
+      };
+
+      for (final entry in expected.entries) {
+        final subscription = _subFromWirePlan(entry.key);
+        expect(subscription.plan, entry.value, reason: '${entry.key} should decode to its catalog identity');
+        final expectedWireName = entry.key == 'pro' ? 'architect' : entry.key;
+        expect(
+          subscription.toJson()['plan'],
+          expectedWireName,
+          reason: '${entry.key} should encode to its canonical catalog identity',
+        );
+      }
+
+      final legacyPro = _subFromWirePlan('pro').plan;
+      expect(legacyPro.isUnknown, isFalse);
+      expect(legacyPro.wireName, 'architect');
     });
 
-    test('decodes the existing tiers', () {
-      expect(_subFromWirePlan('basic').plan, PlanType.basic);
-      expect(_subFromWirePlan('unlimited').plan, PlanType.unlimited);
-      expect(_subFromWirePlan('operator').plan, PlanType.operator);
-      expect(_subFromWirePlan('architect').plan, PlanType.architect);
-    });
+    test('preserves a future plan identity instead of falling back to basic', () {
+      final subscription = _subFromWirePlan('future_plan_123');
 
-    test('still falls back to basic for a genuinely unknown plan', () {
-      expect(_subFromWirePlan('some_future_tier').plan, PlanType.basic);
+      expect(subscription.plan, isNot(PlanType.basic));
+      expect(subscription.plan.isUnknown, isTrue);
+      expect(subscription.plan.name, 'future_plan_123');
+      expect(subscription.plan.wireName, 'future_plan_123');
+      expect(subscription.toJson()['plan'], 'future_plan_123');
     });
 
     test('serializes back to the backend plan id, not the Dart enum name', () {
@@ -40,6 +59,9 @@ void main() {
       for (final plan in PlanType.values) {
         expect(_subFromWirePlan(plan.wireName).plan, plan);
       }
+
+      final future = _subFromWirePlan('future_plan_123');
+      expect(future.toGenerated().plan, 'future_plan_123');
     });
   });
 
@@ -70,6 +92,15 @@ void main() {
       for (final plan in [PlanType.basic, PlanType.unlimited, PlanType.plus, PlanType.unlimitedV2]) {
         expect(plan.grantsDesktop, isFalse, reason: '${plan.name} must not grant desktop');
       }
+    });
+
+    test('unknown plans grant no paid capability by assumption', () {
+      final unknown = PlanType.fromWire('future_plan_123');
+
+      expect(unknown.isUnknown, isTrue);
+      expect(unknown.isPaid, isFalse);
+      expect(unknown.hasUnlimitedTranscription, isFalse);
+      expect(unknown.grantsDesktop, isFalse);
     });
   });
 }

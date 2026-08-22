@@ -25,11 +25,22 @@ const renderCard = () =>
     />,
   );
 
+// MemoryCard formats created_at with toLocaleDateString, which renders in the
+// runner's LOCAL timezone. The fixture is UTC midnight, so a hardcoded 'Aug 1, 2026'
+// silently became 'Jul 31, 2026' on any runner behind UTC (e.g. America/New_York) and
+// the test failed for reasons unrelated to the layout it exists to guard. Derive the
+// expected label the same way the component does so the assertion is timezone-independent.
+const EXPECTED_TIMESTAMP = new Date(memory.created_at).toLocaleDateString('en-US', {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+});
+
 describe('MemoryCard layout', () => {
   it('keeps hover actions out of metadata flow', () => {
     const { container } = renderCard();
     const card = container.querySelector('#memory-memory-1');
-    const timestamp = screen.getByText('Aug 1, 2026');
+    const timestamp = screen.getByText(EXPECTED_TIMESTAMP);
     const actions = screen.getByTestId('memory-card-actions');
     const metadata = screen.getByTestId('memory-card-metadata');
 
@@ -40,7 +51,7 @@ describe('MemoryCard layout', () => {
 
     fireEvent.mouseEnter(card!);
 
-    expect(screen.getByText('Aug 1, 2026')).toBe(timestamp);
+    expect(screen.getByText(EXPECTED_TIMESTAMP)).toBe(timestamp);
     expect(screen.getByTestId('memory-card-actions')).toBe(actions);
   });
 

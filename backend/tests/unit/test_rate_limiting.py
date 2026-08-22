@@ -130,6 +130,11 @@ class TestRatePolicies(unittest.TestCase):
             max_req, _ = RATE_POLICIES[name]
             self.assertGreaterEqual(max_req, 100, f"{name} should allow bursts")
 
+    def test_action_items_list_caps_tight_loops(self):
+        """First-party listing must be below a Windows poll storm and above hydrate."""
+        max_req, window = RATE_POLICIES["action_items:list"]
+        self.assertEqual((max_req, window), (12, 60))
+
 
 class TestBoostFactor(unittest.TestCase):
     """Test boost factor applies correctly."""

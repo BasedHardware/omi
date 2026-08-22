@@ -9865,4 +9865,36 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get diagnosticsShareFailed => 'تشخیصی معلومات شیئر نہیں کی جا سکیں۔ براہ کرم دوبارہ کوشش کریں۔';
+
+  @override
+  String get appDisabledTitle => 'یہ ایپ غیر فعال ہے اور اسے انسٹال نہیں کیا جا سکتا۔';
+
+  @override
+  String get appDisabledWebhookFailures => 'اس کا اینڈ پوائنٹ مسلسل 72 گھنٹے ناکام رہا، اس لیے ترسیل روک دی گئی۔';
+
+  @override
+  String get appDisabledGeneric => 'اسے Omi نے غیر فعال کیا تھا۔';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'پہلے اینڈ پوائنٹ درست کریں — دوبارہ فعال کرنے پر ہر ترتیب شدہ URL دوبارہ جانچا جاتا ہے۔';
+
+  @override
+  String get appReEnable => 'دوبارہ فعال کریں';
+
+  @override
+  String get appReEnableFailedTitle => 'دوبارہ فعال نہیں ہو سکا';
+
+  @override
+  String get appReEnableFailedBody => 'اس ایپ کو دوبارہ فعال نہیں کیا جا سکا۔ براہ کرم دوبارہ کوشش کریں۔';
+
+  @override
+  String appDisabledOn(String date) {
+    return '$date کو غیر فعال کیا گیا۔';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'آخری خرابی: $error';
+  }
 }

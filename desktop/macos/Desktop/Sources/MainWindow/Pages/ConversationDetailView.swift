@@ -600,6 +600,18 @@ struct ConversationDetailView: View {
       overviewSection
     }
 
+    // The backend's headed summary blocks. `overview` is only a compatibility paragraph now, so
+    // without these the pane shows a fraction of what was actually written.
+    //
+    // Shown only when Omi's own summary is the one on screen. `sections` belongs to the first-party
+    // structured summary, and a promoted app result already *replaces* that summary — rendering
+    // both stacks a second, unattributed Omi summary under the app's, which is also the one thing
+    // the Flutter client deliberately does not do.
+    if selection.appId == nil {
+      ConversationSummarySections(sections: displayConversation.structured.sections)
+        .padding(.horizontal, OmiSpacing.lg)
+    }
+
     // Metadata chips
     metadataSection
 

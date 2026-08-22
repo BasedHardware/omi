@@ -65,7 +65,7 @@ steps:
 
   - id: S4
     name: Reach the Brain Map from the panel's filter row
-    do: "In results mode, verify the panel header carries a 'Brain Map ›' control beside 'Filter ›' — in the header, not among the All / Conversations / Memories / Rewind chips, which only narrow the list in place. Click it and verify the app lands on the Library page with its Brain Map view selected (the hub's own switcher shows Brain Map as current). Press Escape to return Home."
+    do: "In results mode, verify the panel header carries a 'Brain Map ›' control beside 'Filter ›' — in the header, not among the All / Conversations / Memories / Rewind chips, which only narrow the list in place. Click it and verify the app lands on the hub's Brain Map page, and that the page carries the '‹ Activity' control (accessibility identifier activity-back-button) back to the spine. Press Escape to return Home."
     expect:
       text_visible:
         - Brain Map

@@ -231,7 +231,7 @@ def test_include_archive_pagination_and_locked_privacy(monkeypatch):
 def test_get_memories_forwards_include_archive():
     mem_mod = _load_memories_router()
     service = MagicMock()
-    service.read_page.return_value = types.SimpleNamespace(memories=[], next_cursor=None)
+    service.read_page.return_value = types.SimpleNamespace(memories=[], next_cursor=None, truncated=False)
     scope_request = types.SimpleNamespace(device_scope="all", client_device_id=None)
     with (
         patch.object(mem_mod, "MemoryService", return_value=service),

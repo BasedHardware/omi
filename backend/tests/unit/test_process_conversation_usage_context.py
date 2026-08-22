@@ -31,6 +31,7 @@ from llm_gateway.gateway.schemas import FailureClass
 from models.conversation import Conversation, CreateConversation
 from models.conversation_enums import ConversationSource, ConversationStatus
 from models.structured import Structured
+from models.transcript_segment import TranscriptSegment
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
@@ -401,6 +402,7 @@ def test_sub_feature_constants_exist():
     assert hasattr(usage_tracker.Features, 'CONVERSATION_ACTION_ITEMS')
     assert hasattr(usage_tracker.Features, 'CONVERSATION_FOLDER')
     assert hasattr(usage_tracker.Features, 'CONVERSATION_APPS')
+    assert hasattr(usage_tracker.Features, 'WAKE_WORD_ADJUDICATION')
     # Verify they're distinct from the umbrella
     assert usage_tracker.Features.CONVERSATION_DISCARD != usage_tracker.Features.CONVERSATION_PROCESSING
     assert usage_tracker.Features.CONVERSATION_STRUCTURE != usage_tracker.Features.CONVERSATION_PROCESSING
@@ -602,6 +604,54 @@ def test_discard_call_uses_discard_feature_tracking():
     assert captured.get("ctx") is not None
     assert captured["ctx"].feature == usage_tracker.Features.CONVERSATION_DISCARD
     assert captured["ctx"].uid == "user-1"
+
+
+def test_wake_word_marker_reaches_discard_adjudication_without_bypassing_it(monkeypatch):
+    conversation = CreateConversation(
+        started_at=datetime(2026, 8, 20, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 8, 20, 0, 0, 5, tzinfo=timezone.utc),
+        transcript_segments=[
+            TranscriptSegment(
+                id='wake-segment',
+                text="Hey Omi, don't forget to send the budget.",
+                speaker='SPEAKER_00',
+                is_user=True,
+                start=0,
+                end=5,
+            )
+        ],
+        source=ConversationSource.phone,
+    )
+    captured: dict[str, object] = {}
+
+    def fake_discard(transcript, photos, duration_seconds, *, trusted_wake_word_markers=False):
+        captured.update(
+            transcript=transcript,
+            photos=photos,
+            duration_seconds=duration_seconds,
+            trusted_wake_word_markers=trusted_wake_word_markers,
+        )
+        return True
+
+    monkeypatch.setattr(
+        process_conversation,
+        'conversation_transcripts_for_llm',
+        lambda *_args, **_kwargs: (
+            "Test User: Hey Omi, don't forget to send the budget.",
+            '[segment:wake-segment 0.000-5.000] '
+            "<omi-wake-word-invocation/> Test User: Hey Omi, don't forget to send the budget.",
+        ),
+    )
+    monkeypatch.setattr(process_conversation, 'should_discard_conversation', fake_discard)
+
+    structured, discarded = process_conversation._get_structured('uid', 'multi', conversation)
+
+    assert discarded is True
+    assert structured.action_items == []
+    assert isinstance(captured['transcript'], str)
+    assert '<omi-wake-word-invocation/>' in captured['transcript']
+    assert captured['trusted_wake_word_markers'] is True
+    assert captured['duration_seconds'] == 5
 
 
 def test_track_usage_context_resets_after_call():

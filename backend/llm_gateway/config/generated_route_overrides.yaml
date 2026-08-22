@@ -117,3 +117,6 @@ generated_route_overrides:
   - feature: what_matters_now
     primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: low}
+  - feature: wake_word_adjudication
+    primary: {provider: openai, model: gpt-5.6-luna}
+    provider_options: {reasoning_effort: high}

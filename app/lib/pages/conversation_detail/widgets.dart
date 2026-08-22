@@ -62,8 +62,9 @@ List<TextSpan> highlightSearchMatches(String text, String searchQuery, {int curr
       TextSpan(
         text: text.substring(index, index + searchQuery.length),
         style: TextStyle(
-          backgroundColor:
-              isCurrentResult ? Colors.orange.withValues(alpha: 0.9) : Colors.deepPurple.withValues(alpha: 0.6),
+          backgroundColor: isCurrentResult
+              ? Colors.orange.withValues(alpha: 0.9)
+              : Colors.deepPurple.withValues(alpha: 0.6),
           color: Colors.white,
           fontWeight: FontWeight.bold,
         ),
@@ -81,6 +82,25 @@ List<TextSpan> highlightSearchMatches(String text, String searchQuery, {int curr
   }
 
   return spans;
+}
+
+/// Renders the structured summary's sections as headed markdown blocks so they go
+/// through the same markdown renderer (and styling) as the overview above them.
+String sectionsToMarkdown(List<Section> sections) {
+  final blocks = <String>[];
+  for (final section in sections) {
+    final heading = section.heading.trim();
+    final body = section.bodyMarkdown.trim();
+    if (heading.isEmpty && body.isEmpty) continue;
+    if (heading.isEmpty) {
+      blocks.add(body);
+    } else if (body.isEmpty) {
+      blocks.add('## $heading');
+    } else {
+      blocks.add('## $heading\n\n$body');
+    }
+  }
+  return blocks.join('\n\n');
 }
 
 class GetSummaryWidgets extends StatelessWidget {
@@ -858,9 +878,13 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
   @override
   Widget build(BuildContext context) {
     final String content = widget.appResponse.content.trim().decodeString;
+    // Sections belong to Omi's own structured summary; an app summary replaces them.
+    final String sectionsContent = widget.appResponse.appId == null
+        ? sectionsToMarkdown(widget.conversation.structured.sections)
+        : '';
 
     if (widget.asSliver) {
-      return _buildSliver(context, content);
+      return _buildSliver(context, content, sectionsContent);
     }
 
     return Container(
@@ -871,7 +895,7 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
-            child: content.isEmpty
+            child: content.isEmpty && sectionsContent.isEmpty
                 ? Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -896,19 +920,21 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
                     ],
                   )
                 : _isEditing
-                    ? _buildEditor(context, content)
-                    : GestureDetector(
-                        onDoubleTap: widget.onSaveSummary == null ? null : () => _startEditing(content),
-                        child: ConversationMarkdownWidget(
-                          content: content,
-                          searchQuery: widget.searchQuery,
-                          currentResultIndex: widget.currentResultIndex,
-                        ),
-                      ),
+                ? _buildEditor(context, content)
+                : GestureDetector(
+                    onDoubleTap: widget.onSaveSummary == null ? null : () => _startEditing(content),
+                    child: ConversationMarkdownWidget(
+                      content: content,
+                      searchQuery: widget.searchQuery,
+                      currentResultIndex: widget.currentResultIndex,
+                    ),
+                  ),
           ),
 
+          if (sectionsContent.isNotEmpty && !_isEditing) ConversationMarkdownWidget(content: sectionsContent),
+
           // App info in a more subtle format below the content - only show if content is not empty
-          if (content.isNotEmpty && !_isEditing)
+          if ((content.isNotEmpty || sectionsContent.isNotEmpty) && !_isEditing)
             GestureDetector(
               onTap: () async {
                 if (widget.app != null) {
@@ -1095,8 +1121,9 @@ class GetAppsWidgets extends StatelessWidget {
                 canStartEditing: canStartEditing,
                 onEditStarted: onEditStarted == null ? null : () => onEditStarted!(summarizedApp.appId),
                 onEditCancelled: onEditCancelled == null ? null : () => onEditCancelled!(summarizedApp.appId),
-                onSaveSummary:
-                    onSaveSummary == null ? null : (newContent) => onSaveSummary!(summarizedApp.appId, newContent),
+                onSaveSummary: onSaveSummary == null
+                    ? null
+                    : (newContent) => onSaveSummary!(summarizedApp.appId, newContent),
                 asSliver: true,
               ),
             const SliverToBoxAdapter(child: SizedBox(height: 8)),
@@ -1286,8 +1313,8 @@ class GetGeolocationWidgets extends StatelessWidget {
 }
 
 extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
-  Widget _buildSliver(BuildContext context, String content) {
-    if (content.isEmpty || _isEditing) {
+  Widget _buildSliver(BuildContext context, String content, String sectionsContent) {
+    if ((content.isEmpty && sectionsContent.isEmpty) || _isEditing) {
       return SliverMainAxisGroup(
         slivers: [
           SliverToBoxAdapter(
@@ -1327,15 +1354,21 @@ extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
 
     return SliverMainAxisGroup(
       slivers: [
-        SliverPadding(
-          padding: const EdgeInsets.only(bottom: 20),
-          sliver: ConversationMarkdownSliver(
-            content: content,
-            searchQuery: widget.searchQuery,
-            currentResultIndex: widget.currentResultIndex,
-            onDoubleTap: widget.onSaveSummary == null ? null : () => _startEditing(content),
+        if (content.isNotEmpty)
+          SliverPadding(
+            padding: const EdgeInsets.only(bottom: 20),
+            sliver: ConversationMarkdownSliver(
+              content: content,
+              searchQuery: widget.searchQuery,
+              currentResultIndex: widget.currentResultIndex,
+              onDoubleTap: widget.onSaveSummary == null ? null : () => _startEditing(content),
+            ),
           ),
-        ),
+        if (sectionsContent.isNotEmpty)
+          SliverPadding(
+            padding: const EdgeInsets.only(bottom: 20),
+            sliver: ConversationMarkdownSliver(content: sectionsContent),
+          ),
         SliverToBoxAdapter(child: _buildAppAttribution(context)),
       ],
     );

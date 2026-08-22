@@ -117,7 +117,12 @@ def _claim_result(
     attempt_count: int = 0,
     created_at: datetime | None = None,
 ) -> FinalizationClaim:
-    return {'status': status, 'lease_epoch': lease_epoch, 'attempt_count': attempt_count, 'created_at': created_at}
+    return {
+        'status': status,
+        'lease_epoch': lease_epoch,
+        'attempt_count': attempt_count,
+        'created_at': created_at,
+    }
 
 
 def _is_current_lease(job: dict[str, Any], dispatch_generation: int, lease_epoch: int) -> bool:
@@ -298,6 +303,7 @@ def _create_or_get_finalization_intent_txn(
         'finalization_revision': revision,
         'status': status,
         'requires_byok': requires_byok,
+        'client_platform': conversation.get('client_platform'),
         # REST finalization has historically forced enrichment while the listen
         # pipeline retains its existing default. Persist the choice with the
         # immutable finalization generation so a replay cannot change it.

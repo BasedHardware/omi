@@ -1,41 +1,109 @@
 import 'package:omi/backend/schema/gen/subscription_usage_wire.g.dart' as wire;
 
-enum PlanType { basic, unlimited, architect, operator, plus, unlimitedV2 }
-
 enum SubscriptionStatus { active, inactive }
 
-const Map<PlanType, String> _planTypeWireNames = {
-  PlanType.basic: 'basic',
-  PlanType.unlimited: 'unlimited',
-  PlanType.architect: 'architect',
-  PlanType.operator: 'operator',
-  PlanType.plus: 'plus',
-  PlanType.unlimitedV2: 'unlimited_v2',
-};
+/// A subscription plan identity received from the backend.
+///
+/// This is intentionally a class rather than an enum. The backend can deploy
+/// a new plan before this app is updated, and decoding that value must not
+/// silently turn a paying subscriber into [PlanType.basic]. Known plan values
+/// retain the enum-shaped API used by the app (`PlanType.values`, `.name`, and
+/// the static plan constants), while unknown values retain their raw wire ID.
+class PlanType {
+  static const PlanType basic = PlanType._('basic', 'basic', 'basic');
+  static const PlanType unlimited = PlanType._('unlimited', 'unlimited', 'unlimited');
+  static const PlanType architect = PlanType._('architect', 'architect', 'architect');
+  static const PlanType operator = PlanType._('operator', 'operator', 'operator');
+  static const PlanType plus = PlanType._('plus', 'plus', 'plus');
+  static const PlanType unlimitedV2 = PlanType._('unlimitedV2', 'unlimited_v2', 'unlimited_v2');
 
-extension PlanTypeX on PlanType {
-  String get wireName => _planTypeWireNames[this]!;
+  /// The canonical catalog identities known by this client.
+  ///
+  /// Legacy aliases and future identities are deliberately not included.
+  static const List<PlanType> values = <PlanType>[basic, unlimited, architect, operator, plus, unlimitedV2];
 
-  bool get isPaid => this != PlanType.basic;
+  /// Dart-style identifier used by existing analytics and UI call sites.
+  final String name;
+
+  /// The exact plan ID to use at the backend wire boundary.
+  ///
+  /// For an unknown plan this is the raw value received from the backend.
+  final String wireName;
+
+  /// Canonical catalog identity, or null for an unrecognized future value.
+  final String? _canonicalWireName;
+
+  const PlanType._(this.name, this.wireName, this._canonicalWireName);
+
+  /// Creates a lossless representation for a plan ID unknown to this client.
+  factory PlanType.unknown(String rawWireName) {
+    return PlanType._(rawWireName, rawWireName, null);
+  }
+
+  /// Decodes a backend plan ID without collapsing unknown values to Basic.
+  ///
+  /// `pro` is the catalog's legacy alias for Architect and is canonicalized to
+  /// Architect's identity at the domain boundary.
+  factory PlanType.fromWire(String? value) {
+    switch (value) {
+      case 'basic':
+        return PlanType.basic;
+      case 'unlimited':
+        return PlanType.unlimited;
+      case 'architect':
+        return PlanType.architect;
+      case 'operator':
+        return PlanType.operator;
+      case 'plus':
+        return PlanType.plus;
+      case 'unlimited_v2':
+        return PlanType.unlimitedV2;
+      case 'pro':
+        return PlanType.architect;
+      case null:
+        // GeneratedSubscription supplies the legacy default for an omitted
+        // plan field. Keep this defensive path aligned with that contract.
+        return PlanType.basic;
+      default:
+        return PlanType.unknown(value);
+    }
+  }
+
+  bool get isUnknown => _canonicalWireName == null;
+
+  /// Unknown plans never infer paid access from an unfamiliar ID.
+  bool get isPaid => !isUnknown && _canonicalWireName != PlanType.basic.wireName;
 
   /// Plans with no monthly transcription cap. Plus is paid but metered
-  /// (1500 min/month), so it is deliberately excluded.
+  /// (1500 min/month), so it is deliberately excluded. Unknown plans are
+  /// conservative and do not infer unlimited access.
   bool get hasUnlimitedTranscription =>
-      this == PlanType.unlimited ||
-      this == PlanType.operator ||
-      this == PlanType.architect ||
-      this == PlanType.unlimitedV2;
+      _canonicalWireName == PlanType.unlimited.wireName ||
+      _canonicalWireName == PlanType.operator.wireName ||
+      _canonicalWireName == PlanType.architect.wireName ||
+      _canonicalWireName == PlanType.unlimitedV2.wireName;
 
   /// Mirrors backend DESKTOP_ENTITLED_PLAN_TYPES.
-  bool get grantsDesktop => this == PlanType.operator || this == PlanType.architect;
+  bool get grantsDesktop =>
+      _canonicalWireName == PlanType.operator.wireName || _canonicalWireName == PlanType.architect.wireName;
+
+  @override
+  bool operator ==(Object other) {
+    if (other is! PlanType) return false;
+    if (isUnknown || other.isUnknown) {
+      return isUnknown && other.isUnknown && wireName == other.wireName;
+    }
+    return _canonicalWireName == other._canonicalWireName;
+  }
+
+  @override
+  int get hashCode => isUnknown ? wireName.hashCode : _canonicalWireName.hashCode;
+
+  @override
+  String toString() => isUnknown ? 'PlanType.unknown($wireName)' : 'PlanType.$name';
 }
 
-PlanType _planTypeFromWire(String? value) {
-  for (final entry in _planTypeWireNames.entries) {
-    if (entry.value == value) return entry.key;
-  }
-  return PlanType.basic;
-}
+PlanType _planTypeFromWire(String? value) => PlanType.fromWire(value);
 
 SubscriptionStatus _subscriptionStatusFromWire(String? value) {
   return SubscriptionStatus.values.asNameMap()[value] ?? SubscriptionStatus.inactive;

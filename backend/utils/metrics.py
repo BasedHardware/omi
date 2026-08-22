@@ -5,6 +5,13 @@ from typing import Any
 from fastapi import Response
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest, start_http_server
 
+from utils.journey_metrics_contract import (
+    CLIENT_JOURNEY_ISSUE_CLASSES,
+    CLIENT_JOURNEY_OUTCOMES,
+    CLIENT_JOURNEYS,
+    CLIENT_KINDS,
+)
+
 BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS = Gauge(
     'backend_listen_active_ws_connections',
     'Number of currently active WebSocket connections in backend-listen',
@@ -81,6 +88,54 @@ for _journey in ('chat_response', 'pusher_session', 'capture_finalization'):
         OMI_JOURNEY_LATENCY_SECONDS.labels(journey=_journey, outcome=_outcome)
 for _outcome in ('requeued', 'enqueue_failed'):
     OMI_CAPTURE_FINALIZATION_RECONCILIATIONS_TOTAL.labels(outcome=_outcome)
+
+OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL = Counter(
+    'omi_client_journey_accepted_total',
+    'Accepted client-segmented product journeys by bounded journey and client kind',
+    ['journey', 'client_kind'],
+)
+
+OMI_CLIENT_JOURNEY_TERMINAL_TOTAL = Counter(
+    'omi_client_journey_terminal_total',
+    'Terminal client-segmented product journey outcomes by bounded labels',
+    ['journey', 'client_kind', 'outcome'],
+)
+
+OMI_CLIENT_JOURNEY_ISSUES_TOTAL = Counter(
+    'omi_client_journey_issues_total',
+    'Bounded issue detail for failed or degraded client-segmented product journeys',
+    ['journey', 'client_kind', 'issue_class'],
+)
+
+OMI_CLIENT_JOURNEY_DURATION_SECONDS = Histogram(
+    'omi_client_journey_duration_seconds',
+    'Elapsed time from acceptance to terminal client-segmented journey outcome',
+    ['journey', 'outcome'],
+    buckets=(0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 900, 3600, 21600, 86400),
+)
+
+# This is a separate, versioned contract from the legacy omi_journey_* family
+# above. Keep client_kind off the histogram: its 16 bucket series per child
+# would multiply the most expensive metric without helping outcome segmentation.
+# Initialize the complete bounded product so healthy-but-idle exporters expose
+# zeros instead of making an idle process indistinguishable from a missing one.
+for _journey in CLIENT_JOURNEYS:
+    for _client_kind in CLIENT_KINDS:
+        OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL.labels(journey=_journey, client_kind=_client_kind)
+        for _outcome in CLIENT_JOURNEY_OUTCOMES:
+            OMI_CLIENT_JOURNEY_TERMINAL_TOTAL.labels(
+                journey=_journey,
+                client_kind=_client_kind,
+                outcome=_outcome,
+            )
+        for _issue_class in CLIENT_JOURNEY_ISSUE_CLASSES:
+            OMI_CLIENT_JOURNEY_ISSUES_TOTAL.labels(
+                journey=_journey,
+                client_kind=_client_kind,
+                issue_class=_issue_class,
+            )
+    for _outcome in CLIENT_JOURNEY_OUTCOMES:
+        OMI_CLIENT_JOURNEY_DURATION_SECONDS.labels(journey=_journey, outcome=_outcome)
 
 LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS = Gauge(
     'listen_finalization_oldest_nonterminal_age_seconds',
@@ -309,6 +364,30 @@ MEMORY_HISTORICAL_SUPPRESSION_TOTAL = Counter(
     'Historical rows suppressed by canonical identity or canonical state',
     ['reason'],
 )
+
+LIST_READ_REQUEST_TOTAL = Counter(
+    'list_read_requests_total',
+    'Bounded list GET read outcomes by route',
+    ['route', 'outcome'],
+)
+
+LIST_READ_DOCUMENTS_TOTAL = Counter(
+    'list_read_documents_total',
+    'Documents scanned by bounded list GET reads by route',
+    ['route'],
+)
+
+LIST_READ_SECONDS = Histogram(
+    'list_read_seconds',
+    'Wall-clock seconds spent in bounded list GET reads by route',
+    ['route'],
+)
+
+for _list_route in ('action-items', 'conversations', 'memories'):
+    LIST_READ_DOCUMENTS_TOTAL.labels(route=_list_route)
+    LIST_READ_SECONDS.labels(route=_list_route)
+    for _list_outcome in ('complete', 'truncated'):
+        LIST_READ_REQUEST_TOTAL.labels(route=_list_route, outcome=_list_outcome)
 
 MEMORY_HISTORICAL_MATERIALIZATION_TOTAL = Counter(
     'memory_historical_materialization_total',

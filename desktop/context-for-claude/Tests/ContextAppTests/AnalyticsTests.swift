@@ -115,6 +115,11 @@ final class AnalyticsEventTests: XCTestCase {
         allowed += AnalyticsEvent.PermissionState.allCases.map(\.rawValue)
         allowed += AnalyticsEvent.CaptureSource.allCases.map(\.rawValue)
         allowed += AnalyticsEvent.Surface.allCases.map(\.rawValue)
+        allowed += AnalyticsEvent.OpenSource.allCases.map(\.rawValue)
+        allowed += AnalyticsEvent.DurationBucket.allCases.map(\.rawValue)
+        allowed += AnalyticsEvent.ClaudeTarget.allCases.map(\.rawValue)
+        allowed += AnalyticsEvent.Control.allCases.map(\.rawValue)
+        allowed += AnalyticsEvent.TutorialOutcome.allCases.map(\.rawValue)
         allowed += AnalyticsEvent.ArtifactKind.allCases.map(\.rawValue)
         allowed += AnalyticsEvent.UpdateOutcome.allCases.map(\.rawValue)
         allowed += AnalyticsEvent.FallbackReason.allCases.map(\.rawValue)
@@ -138,7 +143,7 @@ final class AnalyticsEventTests: XCTestCase {
     func testTheDailyRollupExpandsToolCallsIntoOnePropertyEach() {
         let rollup = DailyRollup(
             toolCalls: ["recall": 7, "screen": 2], captureMinutes: 41, screenMinutes: 120,
-            activeHours: 6, signedIn: true, airgapped: false)
+            activeHours: 6, signedIn: true, airgapped: false, conversations: 3)
 
         XCTAssertEqual(rollup.properties["tool_recall"], .int(7))
         XCTAssertEqual(rollup.properties["tool_screen"], .int(2))
@@ -170,7 +175,11 @@ final class AnalyticsEventTests: XCTestCase {
             .firstLaunch, .appLaunched, .dailyActive(.empty), .permission(.microphone, .granted),
             .onboardingStep(index: 0, of: 1), .onboardingFinished(secondsElapsed: 0),
             .accountStateChanged(signedIn: false), .captureStateChanged(source: .screen, live: true),
-            .gestureFired, .surfaceOpened(.settings), .searchRan(resultCountBucket: .zero),
+            .gestureFired, .surfaceOpened(.settings, via: .menuBarRow),
+            .surfaceClosed(.rewind, openFor: .minutes),
+            .claudeHandoff(target: .claudeApp, delivered: true), .controlUsed(.askClaude),
+            .tutorialStep(index: 0, of: 11, outcome: .entered),
+            .searchRan(resultCountBucket: .zero),
             .firstArtifact(.conversation), .updateOutcome(.upToDate),
             .fallback(area: .capture, outcome: .degraded, reason: .offline),
         ]
@@ -256,6 +265,143 @@ final class UsageClockTests: XCTestCase {
             UsageClock.shared.noteActivity(at: calendar.date(from: components)!)
         }
         XCTAssertEqual(UsageClock.shared.activeHourCount, 3)
+    }
+
+    /// **The count the minutes could not be.** `capture_minutes` reads the same on an install's
+    /// hundredth day as on its first, and `cfc_first_artifact` fires once per install ever — so
+    /// "how much does this person actually produce in a day" had no answer at all.
+    func testConversationsAreCountedAndClearedOnTheDayBoundary() {
+        let clock = UsageClock.shared
+        XCTAssertEqual(clock.conversationCount, 0, "a fresh clock has closed nothing")
+
+        clock.noteConversation()
+        clock.noteConversation()
+        clock.noteConversation()
+        XCTAssertEqual(clock.conversationCount, 3)
+
+        // The same reset the minutes roll over on. A count that survived it would report yesterday's
+        // conversations again today, and again the day after.
+        clock.reset(at: Date(timeIntervalSince1970: 1_760_000_000))
+        XCTAssertEqual(clock.conversationCount, 0)
+    }
+}
+
+/// Dwell, as the buckets that are the disclosure boundary rather than a rounding convenience.
+final class DurationBucketTests: XCTestCase {
+
+    /// Every boundary, from both sides. A bucket whose edges are wrong reports a timeline read for
+    /// an hour as one abandoned in seconds, and nothing downstream can tell.
+    func testDurationBucketsSplitAtTheirDocumentedBoundaries() {
+        typealias Bucket = AnalyticsEvent.DurationBucket
+        XCTAssertEqual(Bucket(0), .seconds)
+        XCTAssertEqual(Bucket(9.999), .seconds)
+        XCTAssertEqual(Bucket(10), .aMinute)
+        XCTAssertEqual(Bucket(59.999), .aMinute)
+        XCTAssertEqual(Bucket(60), .minutes)
+        XCTAssertEqual(Bucket(599.999), .minutes)
+        XCTAssertEqual(Bucket(600), .tensOfMinutes)
+        XCTAssertEqual(Bucket(3599.999), .tensOfMinutes)
+        XCTAssertEqual(Bucket(3600), .hours)
+        XCTAssertEqual(Bucket(86_400), .hours)
+    }
+
+    /// A clock that ran backwards — a system clock corrected mid-visit — is a dwell of nothing, not
+    /// a negative one that would fall through every `..<` above.
+    func testANegativeIntervalIsTheShortestBucket() {
+        XCTAssertEqual(AnalyticsEvent.DurationBucket(-500), .seconds)
+    }
+}
+
+/// **The open/close state machine behind Rewind's dwell**, and the close path that does not go
+/// through the app.
+///
+/// The timeline is `.titled` and `.closable`: the X button and ⌘W call AppKit's own `close()` and
+/// never reach `RewindWindow.dismiss()`. The first version of this measurement stashed the open
+/// instant and cleared it only in `dismiss()`, which meant an ordinary close left the clock running
+/// — and because re-opening takes the bring-forward branch, which deliberately does not restart it,
+/// the *next* close reported one bucket covering every minute the window had spent shut.
+final class DwellClockTests: XCTestCase {
+
+    private let epoch = Date(timeIntervalSince1970: 1_700_000_000)
+
+    func testAClockThatWasNeverPresentedHasNothingToReport() {
+        var clock = DwellClock()
+        XCTAssertFalse(clock.isRunning)
+        XCTAssertNil(clock.closed(at: epoch), "a close with no open is silence, not a zero")
+    }
+
+    func testAVisitReportsItsBucketOnce() {
+        var clock = DwellClock()
+        clock.presented(at: epoch)
+        XCTAssertTrue(clock.isRunning)
+        XCTAssertEqual(clock.closed(at: epoch.addingTimeInterval(90)), .minutes)
+        XCTAssertFalse(clock.isRunning)
+        XCTAssertNil(
+            clock.closed(at: epoch.addingTimeInterval(120)),
+            "a second close — the notification arriving behind dismiss() — must report nothing")
+    }
+
+    func testRaisingAWindowThatIsAlreadyUpDoesNotRestartTheVisit() {
+        var clock = DwellClock()
+        clock.presented(at: epoch)
+        clock.presented(at: epoch.addingTimeInterval(1_800))
+        XCTAssertEqual(
+            clock.closed(at: epoch.addingTimeInterval(3_000)), .tensOfMinutes,
+            "one visit spanning 50 minutes, not a fresh 20-minute one")
+    }
+
+    /// The regression. Against an implementation that closes without clearing, the second visit
+    /// measures from the first open and reports `.hours`.
+    func testAVisitAfterACloseMeasuresOnlyTheSecondVisit() {
+        var clock = DwellClock()
+        clock.presented(at: epoch)
+        XCTAssertEqual(clock.closed(at: epoch.addingTimeInterval(30)), .aMinute)
+
+        // Two hours shut, then opened again for five seconds.
+        let reopened = epoch.addingTimeInterval(7_200)
+        clock.presented(at: reopened)
+        XCTAssertEqual(
+            clock.closed(at: reopened.addingTimeInterval(5)), .seconds,
+            "the time the window spent closed is not dwell")
+    }
+}
+
+
+/// What a committed question reports, and what typing one does not.
+final class SearchEventTests: XCTestCase {
+
+    /// **The defect this moved to fix.** `cfc_search_ran` came from `reload()`, which runs on every
+    /// keystroke, once per panel open with an empty query, and again on every filter click. An empty
+    /// field is not a question and must report nothing at all.
+    func testAnEmptyQueryReportsNothing() {
+        for query in ["", "   ", "\n\t "] {
+            XCTAssertTrue(
+                SearchResultsModel.searchEvents(
+                    query: query, resultCount: 0, isFirstOfSession: true).isEmpty,
+                "'\(query)' is the absence of a question, not a search for nothing")
+        }
+    }
+
+    /// A real question reports the search — including a zero-result one, which is the search most
+    /// worth knowing about.
+    func testACommittedQuestionReportsTheSearch() {
+        let names = SearchResultsModel.searchEvents(
+            query: "invoice", resultCount: 0, isFirstOfSession: false).map(\.name)
+        XCTAssertEqual(names, ["cfc_search_ran"])
+    }
+
+    /// `.search` is the results body being shown, once per panel session — not once per keystroke,
+    /// which is what an emit keyed on the read would have been.
+    func testTheSearchSurfaceIsReportedOnceForTheFirstQuestionOnly() {
+        let first = SearchResultsModel.searchEvents(
+            query: "invoice", resultCount: 12, isFirstOfSession: true)
+        XCTAssertEqual(first.map(\.name), ["cfc_surface_opened", "cfc_search_ran"])
+        XCTAssertEqual(first.first?.properties["surface"], .string("search"))
+        XCTAssertEqual(first.last?.properties["result_count"], .string("several"))
+
+        let second = SearchResultsModel.searchEvents(
+            query: "receipt", resultCount: 1, isFirstOfSession: false)
+        XCTAssertEqual(second.map(\.name), ["cfc_search_ran"])
     }
 }
 
@@ -513,13 +659,26 @@ final class SurfaceEmitterTripwireTests: XCTestCase {
         XCTAssertFalse(text.isEmpty, "read no app source at all, so nothing below was checked")
 
         for surface in AnalyticsEvent.Surface.allCases {
+            // **`, via:` is part of the pattern, and it is what keeps this a guard rather than a
+            // formality.** The emit now carries a route, so matching on the surface alone would be
+            // satisfied by the *enum declaration* and by any prose mentioning the case — and the
+            // trailing comma is the only thing that cannot appear in either.
             XCTAssertTrue(
-                text.contains(".surfaceOpened(.\(surface.rawValue))"),
+                text.contains(".surfaceOpened(.\(surface.rawValue), via:"),
                 """
                 No call site records \(surface.rawValue). Either give it one or take the case out — \
                 an empty series is read as an answer about users, not as a gap in the instrumentation.
                 """)
         }
+
+        // The other half of the same rule, for the case this change added: a surface whose *close*
+        // is measured has to have a call site closing it, or `open_for` is a dimension with no data
+        // behind it. Only `.rewind` is dwell-measured today, and this asserts that one rather than
+        // demanding a `surfaceClosed` for every surface — a panel that dismisses itself on a click
+        // outside it has no dwell worth the name.
+        XCTAssertTrue(
+            text.contains(".surfaceClosed(.rewind, openFor:"),
+            "nothing reports how long the timeline was up, so cfc_surface_closed has no emitter")
     }
 }
 
@@ -555,7 +714,7 @@ extension AnalyticsEvent {
             .appLaunched,
             .dailyActive(DailyRollup(
                 toolCalls: ["recall": 3], captureMinutes: 12, screenMinutes: 30,
-                activeHours: 4, signedIn: true, airgapped: false)),
+                activeHours: 4, signedIn: true, airgapped: false, conversations: 5)),
             .onboardingStep(index: 2, of: 5),
             .onboardingFinished(secondsElapsed: 94),
             .accountStateChanged(signedIn: true),
@@ -569,7 +728,22 @@ extension AnalyticsEvent {
             [AnalyticsEvent.captureStateChanged(source: source, live: true),
              AnalyticsEvent.captureStateChanged(source: source, live: false)]
         }
-        events += Surface.allCases.map { AnalyticsEvent.surfaceOpened($0) }
+        // Every surface against every route, because `via` is a payload value like any other and
+        // the privacy invariant is checked on values.
+        events += Surface.allCases.flatMap { surface in
+            OpenSource.allCases.map { AnalyticsEvent.surfaceOpened(surface, via: $0) }
+        }
+        events += Surface.allCases.flatMap { surface in
+            DurationBucket.allCases.map { AnalyticsEvent.surfaceClosed(surface, openFor: $0) }
+        }
+        events += ClaudeTarget.allCases.flatMap { target in
+            [AnalyticsEvent.claudeHandoff(target: target, delivered: true),
+             AnalyticsEvent.claudeHandoff(target: target, delivered: false)]
+        }
+        events += Control.allCases.map { AnalyticsEvent.controlUsed($0) }
+        events += TutorialOutcome.allCases.map {
+            AnalyticsEvent.tutorialStep(index: 3, of: 11, outcome: $0)
+        }
         events += ArtifactKind.allCases.map { AnalyticsEvent.firstArtifact($0) }
         events += UpdateOutcome.allCases.map { AnalyticsEvent.updateOutcome($0) }
         events += FallbackReason.allCases.map {
@@ -588,7 +762,8 @@ final class AnalyticsEventShapeTests: XCTestCase {
         let expected: Set<String> = [
             "cfc_first_launch", "cfc_app_launched", "cfc_daily_active", "cfc_permission",
             "cfc_onboarding_step", "cfc_onboarding_finished", "cfc_account_state",
-            "cfc_capture_state", "cfc_gesture_fired", "cfc_surface_opened", "cfc_search_ran",
+            "cfc_capture_state", "cfc_gesture_fired", "cfc_surface_opened", "cfc_surface_closed",
+            "cfc_claude_handoff", "cfc_control_used", "cfc_tutorial_step", "cfc_search_ran",
             "cfc_first_artifact", "cfc_update_outcome", "cfc_fallback",
         ]
         XCTAssertEqual(

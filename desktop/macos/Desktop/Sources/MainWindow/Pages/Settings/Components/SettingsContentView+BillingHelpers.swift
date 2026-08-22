@@ -17,7 +17,7 @@ extension SettingsContentView {
   var hasPaidSubscription: Bool {
     guard let subscription = userSubscription?.subscription else { return false }
     if subscription.features.contains("byok") { return false }
-    return subscription.plan != .basic && subscription.status == .active
+    return subscription.plan.hasPaidCapability && subscription.status == .active
   }
 
   var shouldShowPlanPurchaseOptions: Bool {
@@ -55,6 +55,8 @@ extension SettingsContentView {
     switch subscription.plan {
     case .basic:
       return "Free"
+    case .plus:
+      return "Plus"
     case .unlimited:
       // Backend serializes Operator subscribers as plan="unlimited" for
       // backward compat with old mobile builds that don't know the
@@ -64,10 +66,14 @@ extension SettingsContentView {
         return "Operator"
       }
       return "Neo"
+    case .unlimitedV2:
+      return "Unlimited"
     case .architect, .pro:
       return "Architect"
     case .operator:
       return "Operator"
+    case .unknown:
+      return subscription.plan.displayName
     }
   }
 
@@ -831,7 +837,7 @@ extension SettingsContentView {
           // hit the paywall once (e.g. WS connected before payment cleared
           // the trial cache) — without this they'd stay paywalled until the
           // next app restart even after their Operator/Architect plan is active.
-          if subscription.subscription.plan != .basic,
+          if subscription.subscription.plan.hasPaidCapability,
             subscription.subscription.status == .active,
             AppState.current?.isPaywalled == true
           {
@@ -909,7 +915,7 @@ extension SettingsContentView {
       desktopGrandfatherUntil: subscription.desktopGrandfatherUntil
     )
 
-    if subscription.subscription.plan != .basic,
+    if subscription.subscription.plan.hasPaidCapability,
       subscription.subscription.status == .active,
       AppState.current?.isPaywalled == true
     {
@@ -1076,7 +1082,7 @@ extension SettingsContentView {
           let matchedPrice =
             expectedPriceId == nil || subscription.subscription.currentPriceId == expectedPriceId
           let hasPaidPlan =
-            subscription.subscription.plan != .basic && subscription.subscription.status == .active
+            subscription.subscription.plan.hasPaidCapability && subscription.subscription.status == .active
 
           if matchedPrice && hasPaidPlan {
             await MainActor.run {

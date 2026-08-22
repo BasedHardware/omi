@@ -362,7 +362,7 @@ class MessageProvider extends ChangeNotifier {
     }
     messages = await getMessagesFromServer(dropdownSelected: dropdownSelected);
     if (messages.isEmpty) {
-      messages = SharedPreferencesUtil().cachedMessages;
+      messages = ServerMessage.visibleOnMobile(SharedPreferencesUtil().cachedMessages);
     } else {
       SharedPreferencesUtil().cachedMessages = messages;
       setHasCachedMessages(true);
@@ -375,7 +375,7 @@ class MessageProvider extends ChangeNotifier {
   void setMessagesFromCache() {
     if (SharedPreferencesUtil().cachedMessages.isNotEmpty) {
       setHasCachedMessages(true);
-      messages = SharedPreferencesUtil().cachedMessages;
+      messages = ServerMessage.visibleOnMobile(SharedPreferencesUtil().cachedMessages);
       messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
     }
     notifyListeners();
@@ -393,7 +393,7 @@ class MessageProvider extends ChangeNotifier {
       firstTimeLoadingText = l10n?.msgLearningMemories ?? 'Learning from your memories...';
       notifyListeners();
     }
-    messages = mes;
+    messages = ServerMessage.visibleOnMobile(mes);
     messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
     setLoadingMessages(false);
     notifyListeners();
@@ -411,7 +411,7 @@ class MessageProvider extends ChangeNotifier {
   Future clearChat() async {
     setClearingChat(true);
     var mes = await clearChatServer(appId: appProvider?.selectedChatAppId);
-    messages = mes;
+    messages = ServerMessage.visibleOnMobile(mes);
     messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
     setClearingChat(false);
     notifyListeners();
@@ -450,6 +450,7 @@ class MessageProvider extends ChangeNotifier {
   }
 
   void addMessage(ServerMessage message) {
+    if (message.hideFromMobileChat) return;
     if (messages.firstWhereOrNull((m) => m.id == message.id) != null) {
       return;
     }
@@ -559,7 +560,8 @@ class MessageProvider extends ChangeNotifier {
         if (chunk.type == MessageChunkType.error) {
           if (_tryParseQuotaError(chunk.text)) {
             final l10n = globalNavigatorKey.currentContext?.l10n;
-            message.text = l10n?.chatQuotaExceededReply ??
+            message.text =
+                l10n?.chatQuotaExceededReply ??
                 "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
             if (playResponseAudio) {
               await OmiVoicePlaybackService.instance.interrupt();
@@ -672,7 +674,8 @@ class MessageProvider extends ChangeNotifier {
           if (_tryParseQuotaError(chunk.text)) {
             // Keep the user's message visible; replace AI placeholder with quota message
             final l10n = globalNavigatorKey.currentContext?.l10n;
-            message.text = l10n?.chatQuotaExceededReply ??
+            message.text =
+                l10n?.chatQuotaExceededReply ??
                 "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
             notifyListeners();
             return;
