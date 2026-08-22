@@ -170,6 +170,8 @@
 	status = "okay";
 	pinctrl-0 = <&pdm0_default>;
 	pinctrl-names = "default";
+	/* +56 requests 8 kHz PCM at ratio 80, producing a 640 kHz PDM
+	 * clock inside the T5838 400-800 kHz low-power operating band. */
 	clock-source = "PCLK32M_HFXO";
 	// #address-cells = < 0x1 >;
 	// #size-cells = < 0x0 >;

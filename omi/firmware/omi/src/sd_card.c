@@ -14,6 +14,7 @@
 #include <zephyr/sys/util.h>
 
 #include "rtc.h"
+#include "sd_read_recovery.h"
 
 LOG_MODULE_REGISTER(sd_card, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -187,6 +188,12 @@ static bool cached_read_batch_valid;
 static int64_t last_batch_activity_ms;
 static uint8_t writing_error_counter;
 
+/* Intentionally global so a non-resetting SWD snapshot can distinguish an
+ * ordinary read from a controller/card recovery during a hardware soak. */
+struct sd_read_recovery_metrics g_sd_read_recovery = {
+    .magic = SD_READ_RECOVERY_DIAG_MAGIC,
+};
+
 static uint32_t write_drop_packets;
 static uint32_t write_drop_bytes;
 static int64_t last_write_blocked_log_ms;
@@ -198,6 +205,12 @@ static uint32_t compat_saved_offset;
 static void sd_worker_thread(void);
 static void sd_set_io_low_power(bool enable);
 static int flush_current_batch(bool sync_media);
+
+static int read_sd_sectors(void *context, uint8_t *buffer, uint32_t start_sector, uint32_t sector_count)
+{
+    ARG_UNUSED(context);
+    return disk_access_read(DISK_DRIVE_NAME, buffer, start_sector, sector_count);
+}
 
 static void invalidate_read_batch_cache(void)
 {
@@ -391,7 +404,8 @@ static int load_batch_for_seq(uint64_t seq, uint8_t *buffer, struct raw_batch_he
     }
 
     uint32_t sector = batch_sector_for_base_seq(base_seq);
-    int ret = disk_access_read(DISK_DRIVE_NAME, buffer, sector, RAW_BATCH_SECTORS);
+    int ret = sd_read_batch_with_sector_fallback(
+        read_sd_sectors, NULL, buffer, sector, RAW_BATCH_SECTORS, DISK_SECTOR_SIZE, &g_sd_read_recovery);
     if (ret != 0) {
         LOG_ERR("batch read failed at sector %u: %d", sector, ret);
         return -EIO;
@@ -449,13 +463,10 @@ static int restore_tail_batch(void)
     struct raw_batch_header header;
     int ret = load_batch_for_seq(base_seq, current_batch, &header);
     if (ret < 0) {
-        LOG_WRN("dropping incomplete tail batch after recovery error: %d", ret);
-        ring_state.write_seq = base_seq;
-        if (ring_state.read_seq > ring_state.write_seq) {
-            ring_state.read_seq = ring_state.write_seq;
-        }
-        (void) persist_ring_metadata();
-        start_empty_batch(ring_state.write_seq);
+        /* A media read failure is not evidence that the durable tail is bad.
+         * Preserve both metadata and the slot so a later remount/read can retry.
+         * Truncating here silently loses otherwise valid audio. */
+        LOG_ERR("unable to restore incomplete tail batch: %d", ret);
         return ret;
     }
 
@@ -862,8 +873,19 @@ static int sd_mount(void)
         return ret;
     }
 
-    (void) restore_tail_batch();
+    ret = restore_tail_batch();
+    if (ret < 0) {
+        /* Keep the worker available for read/drain diagnostics, but never append
+         * over a tail we could not restore. A later reboot can retry without any
+         * ring cursor or media mutation. */
+        LOG_ERR("failed to restore raw ring tail; mounting read-only: %d", ret);
+        sd_write_blocked = true;
+        is_mounted = true;
+        return 0;
+    }
+
     is_mounted = true;
+    sd_write_blocked = false;
 
     LOG_INF("Raw SD ring mounted: sectors=%u, batches=%u, capacity=%u packets",
             disk_sector_count,
@@ -1347,9 +1369,13 @@ int sd_ring_read(uint64_t start_seq, uint8_t *buf, uint32_t max_bytes, uint32_t 
         return ret;
     }
 
-    ret = wait_for_sd_worker_response(&resp.sem, 15000, "sd_ring_read");
-    if (ret < 0) {
-        return ret;
+    ret = k_sem_take(&resp.sem, K_MSEC(15000));
+    if (ret != 0) {
+        /* The queued request owns the caller's buffer pointer until the worker
+         * responds. Never return on the warning threshold: doing so would let
+         * the worker memcpy into a caller stack frame that no longer exists. */
+        LOG_WRN("sd_ring_read exceeded 15000 ms; waiting for the in-flight worker request to finish");
+        (void) k_sem_take(&resp.sem, K_FOREVER);
     }
 
     *bytes_read = resp.bytes_read;

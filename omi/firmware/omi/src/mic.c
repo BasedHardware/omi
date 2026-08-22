@@ -12,25 +12,33 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/atomic.h>
 
+#include "audio_frontend.h"
 #include "lib/core/settings.h"
 
 #ifdef CONFIG_OMI_ENABLE_T5838_AAD
+#include "t5838_aad.h"
+#endif
+
+#ifdef CONFIG_OMI_ENABLE_T5838_HW_AAD_SLEEP
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/gpio.h>
-#include <zephyr/sys/atomic.h>
 
 #include "sd_card.h"
 #include "storage.h"
-#include "t5838_aad.h"
 #include "transport.h"
 #endif
 
 LOG_MODULE_REGISTER(mic, CONFIG_LOG_DEFAULT_LEVEL);
 
-#define MAX_SAMPLE_RATE 16000
+#define CAPTURE_SAMPLE_RATE 8000
+#define OUTPUT_SAMPLE_RATE 16000
 #define SAMPLE_BIT_WIDTH 16
 #define BYTES_PER_SAMPLE sizeof(int16_t)
 #define CHANNELS 2
+#define UPSAMPLE_FACTOR 2
+#define MIC_RAIL_SETTLE_MS 20
+BUILD_ASSERT(OUTPUT_SAMPLE_RATE == CAPTURE_SAMPLE_RATE * UPSAMPLE_FACTOR,
+             "capture/output rates must match the 2:1 interpolator");
 
 /* Milliseconds to wait for a block to be read. */
 #define READ_TIMEOUT 1000
@@ -42,7 +50,7 @@ LOG_MODULE_REGISTER(mic, CONFIG_LOG_DEFAULT_LEVEL);
  * Application, after getting a given block from the driver and processing its
  * data, needs to free that block.
  */
-#define MAX_BLOCK_SIZE BLOCK_SIZE(MAX_SAMPLE_RATE, 2)
+#define MAX_BLOCK_SIZE BLOCK_SIZE(CAPTURE_SAMPLE_RATE, CHANNELS)
 #define BLOCK_COUNT 4
 
 K_MEM_SLAB_DEFINE_STATIC(mem_slab, MAX_BLOCK_SIZE, BLOCK_COUNT, 4);
@@ -57,10 +65,12 @@ static volatile bool mic_running = false;
 static K_SEM_DEFINE(mic_stopped_sem, 0, 1);
 static atomic_t mic_stop_req = ATOMIC_INIT(0);
 
-#define MAX_FRAMES (MAX_SAMPLE_RATE / 10)
-static int16_t mono_buffer[MAX_FRAMES];
+#define MAX_CAPTURE_FRAMES (CAPTURE_SAMPLE_RATE / 10)
+#define OUTPUT_FRAMES_PER_BLOCK (OUTPUT_SAMPLE_RATE / 10)
+static int16_t mono_buffer[OUTPUT_FRAMES_PER_BLOCK];
+static struct audio_frontend_state frontend_state;
 
-#ifdef CONFIG_OMI_ENABLE_T5838_AAD
+#ifdef CONFIG_OMI_ENABLE_T5838_HW_AAD_SLEEP
 /*
  * Hardware AAD (T5838): during silence the mic is clocked into AAD sleep
  * (PDM off, ~20uA) and its WAKE pin (P1.02, active-HIGH) resumes it on sound.
@@ -77,7 +87,6 @@ static K_THREAD_STACK_DEFINE(aad_stack, AAD_THREAD_STACK_SIZE);
 static struct k_thread aad_thread_data;
 static bool aad_thread_started; /* aad_thread_data is a live thread */
 static K_SEM_DEFINE(aad_sem, 0, 1);
-#define AAD_PDM_SETTLE_MS 20
 
 static atomic_t aad_wake_pending = ATOMIC_INIT(0); /* WAKE edge seen by ISR */
 static atomic_t aad_woke = ATOMIC_INIT(0);         /* tell mic ctx it just woke */
@@ -89,23 +98,6 @@ static void aad_track_silence(const int16_t *buf, size_t n);
 static int aad_hw_start(void);
 #endif
 
-static inline void
-interleaved_stereo_to_mono(const int16_t *restrict interleaved, size_t frames, int16_t *restrict mono_out)
-{
-    /* Mix L and R channels directly from interleaved format: L0, R0, L1, R1, ... */
-    for (size_t i = 0, j = 0; i < frames; ++i, j += 2) {
-        int32_t left = (int32_t) interleaved[j + 0];
-        int32_t right = (int32_t) interleaved[j + 1];
-        int32_t sum = left + right;
-        sum >>= 1; /* divide by 2 to avoid clipping */
-        if (sum > 32767)
-            sum = 32767;
-        if (sum < -32768)
-            sum = -32768;
-        mono_out[i] = (int16_t) sum;
-    }
-}
-
 static void process_audio_buffer(void *buffer, uint32_t size)
 {
     /* size is total interleaved stereo size: frames * 2ch * 2bytes */
@@ -113,17 +105,22 @@ static void process_audio_buffer(void *buffer, uint32_t size)
     size_t frames = size / (BYTES_PER_SAMPLE * CHANNELS);
     int16_t *inter = (int16_t *) buffer;
 
-    /* Verify we don't exceed static buffer size */
-    if (frames > MAX_FRAMES) {
-        LOG_ERR("Frame count %zu exceeds MAX_FRAMES %d", frames, MAX_FRAMES);
+    if (frames > MAX_CAPTURE_FRAMES) {
+        LOG_ERR("Frame count %zu exceeds MAX_CAPTURE_FRAMES %d", frames, MAX_CAPTURE_FRAMES);
         k_mem_slab_free(&mem_slab, buffer);
         return;
     }
 
-    interleaved_stereo_to_mono(inter, frames, mono_buffer);
+    size_t output_frames =
+        audio_frontend_8k_stereo_to_16k_mono(&frontend_state, inter, frames, mono_buffer, ARRAY_SIZE(mono_buffer));
+    if (output_frames != OUTPUT_FRAMES_PER_BLOCK) {
+        LOG_ERR("Audio frontend produced %zu frames, expected %d", output_frames, OUTPUT_FRAMES_PER_BLOCK);
+        k_mem_slab_free(&mem_slab, buffer);
+        return;
+    }
 
-#ifdef CONFIG_OMI_ENABLE_T5838_AAD
-    aad_track_silence(mono_buffer, frames);
+#ifdef CONFIG_OMI_ENABLE_T5838_HW_AAD_SLEEP
+    aad_track_silence(mono_buffer, output_frames);
 #endif
 
     if (callback_func) {
@@ -211,15 +208,17 @@ int mic_start()
     struct pcm_stream_cfg stream = {
         .pcm_width = SAMPLE_BIT_WIDTH,
         .mem_slab = &mem_slab,
-        .pcm_rate = MAX_SAMPLE_RATE,
-        .block_size = BLOCK_SIZE(MAX_SAMPLE_RATE, CHANNELS),
+        .pcm_rate = CAPTURE_SAMPLE_RATE,
+        .block_size = BLOCK_SIZE(CAPTURE_SAMPLE_RATE, CHANNELS),
     };
 
     struct dmic_cfg cfg = {
         .io =
             {
-                .min_pdm_clk_freq = 512000,
-                .max_pdm_clk_freq = 3500000,
+                /* Ratio 80 at 8 kHz gives a 640 kHz PDM clock, inside the
+                 * T5838 400-800 kHz low-power operating band. */
+                .min_pdm_clk_freq = 630000,
+                .max_pdm_clk_freq = 650000,
                 .min_pdm_clk_dc = 48,
                 .max_pdm_clk_dc = 52,
             },
@@ -255,7 +254,7 @@ int mic_start()
     mic_running = true;
     k_thread_start(mic_thread_id);
 
-#ifdef CONFIG_OMI_ENABLE_T5838_AAD
+#ifdef CONFIG_OMI_ENABLE_T5838_HW_AAD_SLEEP
     ret = aad_hw_start(); /* WAKE pin ISR + hardware-AAD thread */
     if (ret) {
         /* Non-fatal: the mic still records, it just won't power-save via AAD.
@@ -312,14 +311,14 @@ bool mic_is_running()
 
 bool mic_in_aad_sleep(void)
 {
-#ifdef CONFIG_OMI_ENABLE_T5838_AAD
+#ifdef CONFIG_OMI_ENABLE_T5838_HW_AAD_SLEEP
     return atomic_get(&aad_in_sleep) != 0;
 #else
     return false;
 #endif
 }
 
-#ifdef CONFIG_OMI_ENABLE_T5838_AAD
+#ifdef CONFIG_OMI_ENABLE_T5838_HW_AAD_SLEEP
 
 /* Force-disable the PDM hardware so the CLK/DIN pins revert to GPIO control.
  * dmic STOP alone does not reliably release the CLK pin for FAKE2C bit-banging. */
@@ -364,7 +363,7 @@ static void enter_hw_aad(void)
 {
     aad_wake_irq(false); /* mask WAKE during config bit-bang */
     mic_pause();         /* stop PDM peripheral */
-    k_msleep(AAD_PDM_SETTLE_MS);
+    k_msleep(MIC_RAIL_SETTLE_MS);
     pdm_hw_disable();                   /* fully release the CLK pin for bit-banging */
     t5838_aad_enter();                  /* program AAD mode-A + clock into sleep */
     k_msleep(CONFIG_OMI_AAD_SETTLE_MS); /* settle noise floor; swallow entry transient */
@@ -493,7 +492,7 @@ static int aad_hw_start(void)
     return 0;
 }
 
-#endif /* CONFIG_OMI_ENABLE_T5838_AAD */
+#endif /* CONFIG_OMI_ENABLE_T5838_HW_AAD_SLEEP */
 
 void mic_off()
 {
@@ -509,16 +508,18 @@ void mic_off()
         LOG_INF("Microphone stopped");
     }
 
-#ifdef CONFIG_OMI_ENABLE_T5838_AAD
+#ifdef CONFIG_OMI_ENABLE_T5838_HW_AAD_SLEEP
     /* Stop the AAD worker first so it can't run a sleep/wake transition (re-driving
-     * pins or the rail) after we cut power. Mask WAKE, then drop PDM_EN so the
-     * T5838 + TXS0104 level-shifter lose power (otherwise the shifter's pull-ups
-     * keep leaking ~1 mA through system-off). mic_off is the power-down path. */
+     * pins or the rail) after we cut power. */
     aad_wake_irq(false);
     if (aad_thread_started) {
         k_thread_abort(&aad_thread_data);
         aad_thread_started = false;
     }
+#endif
+#ifdef CONFIG_OMI_ENABLE_T5838_AAD
+    /* Drop PDM_EN so the microphone and level shifter do not leak through the
+     * system-off path. This rail ownership is independent of hardware AAD. */
     t5838_aad_power(false);
 #endif
 }
@@ -530,7 +531,7 @@ void mic_on()
         /* Restore the mic/level-shifter rail in case a prior mic_off() cut it,
          * so capture works again after an off/on cycle. */
         t5838_aad_power(true);
-        k_msleep(AAD_PDM_SETTLE_MS);
+        k_msleep(MIC_RAIL_SETTLE_MS);
 #endif
         int ret = dmic_trigger(dmic_dev, DMIC_TRIGGER_START);
         if (ret < 0) {
