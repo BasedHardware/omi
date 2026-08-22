@@ -79,8 +79,10 @@ def _build_fakes():
     firebase_admin_stub.auth = firebase_auth_stub
     for err_cls in (CertificateFetchError, ExpiredIdTokenError, InvalidIdTokenError, RevokedIdTokenError):
         setattr(firebase_auth_stub, err_cls.__name__, err_cls)
-    firebase_auth_stub.verify_id_token = MagicMock(side_effect=InvalidIdTokenError("Invalid token"))
-    firebase_auth_stub.get_user = MagicMock()
+    # Exception CLASSES only, no behaviour. Every test here patches the PORT
+    # (``utils.other.endpoints.verify_token``) and raises the neutral taxonomy, so a stubbed
+    # ``verify_id_token`` was describing a call path these tests never take. Proved rather than assumed:
+    # replacing it with a raiser left the file green (BACKLOG L15).
 
     # database stubs -- must be active before utils.other.endpoints imports.
     database_client_stub = types.ModuleType("database._client")

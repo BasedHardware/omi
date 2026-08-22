@@ -10,6 +10,9 @@ import pytest
 from fastapi import HTTPException
 
 from testing.import_isolation import load_module_fresh, stub_modules
+from tests.auth_fakes import FakeAuthProvider
+from utils.auth.errors import AuthError
+from utils.auth.ports import Principal
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
@@ -89,7 +92,25 @@ def _loaded_dependencies() -> Iterator[tuple[ModuleType, ModuleType, ModuleType,
         }
     ):
         dependencies = load_module_fresh('dependencies', str(BACKEND_DIR / 'dependencies.py'))
-        yield dependencies, firebase_auth, mcp_api_key_db, dev_api_key_db
+        yield dependencies, _install_provider(dependencies), mcp_api_key_db, dev_api_key_db
+
+
+def _install_provider(dependencies: ModuleType) -> Any:
+    """Put a NEUTRAL provider behind the dependency, and assert it is really the one it resolves.
+
+    These tests hold WHERE auth verification runs (an owned executor, off the event loop) and what the
+    dependency does with a failure. Neither is Firebase-specific: an OIDC deployment blocks in the same
+    place on a JWKS fetch. Driving them by stubbing ``firebase_admin.auth`` left the port crossed only by
+    the Firebase adapter, which is BACKLOG L15. The adapter's own SDK-exception translation has its own
+    test (tests/unit/test_firebase_translate_unknown_error.py).
+    """
+    fake = FakeAuthProvider()
+    fake.register('firebase-token', Principal(uid='user-1'))
+    dependencies.get_auth_provider = lambda: fake
+    # Assert the seam rather than trust it: if the module stops binding the name, this assignment reaches
+    # nothing and the tests quietly return to whatever the real provider does.
+    assert dependencies.get_auth_provider() is fake
+    return fake
 
 
 async def _assert_loop_responsive_while_worker_waits(
@@ -109,26 +130,21 @@ async def _assert_loop_responsive_while_worker_waits(
     return await asyncio.wait_for(task, timeout=2)
 
 
-def test_firebase_verification_uses_the_critical_executor() -> None:
-    with _loaded_dependencies() as (dependencies, firebase_auth, _mcp_db, _dev_db):
+def test_token_verification_uses_the_critical_executor() -> None:
+    with _loaded_dependencies() as (dependencies, provider, _mcp_db, _dev_db):
         calls: list[tuple[Any, Any, tuple[Any, ...], dict[str, Any]]] = []
-
-        def verify_id_token(token: str, **_kw: Any) -> dict[str, str]:
-            assert token == 'firebase-token'
-            return {'uid': 'user-1'}
 
         async def tracking_run_blocking(executor: Any, fn: Any, *args: Any, **kwargs: Any) -> Any:
             calls.append((executor, fn, args, kwargs))
             return fn(*args, **kwargs)
 
-        firebase_auth.verify_id_token = verify_id_token
         dependencies.run_blocking = tracking_run_blocking
 
         result = asyncio.run(dependencies.get_current_user_id(SimpleNamespace(credentials='firebase-token')))
 
         assert result == 'user-1'
         assert calls == [
-            (dependencies.critical_executor, dependencies.get_auth_provider().verify_token, ('firebase-token',), {}),
+            (dependencies.critical_executor, provider.verify_token, ('firebase-token',), {}),
             (
                 dependencies.db_executor,
                 dependencies.enforce_account_deletion_http_access,
@@ -145,7 +161,7 @@ def test_firebase_verification_uses_the_critical_executor() -> None:
 
 
 def test_mcp_and_developer_key_lookups_use_the_critical_executor() -> None:
-    with _loaded_dependencies() as (dependencies, _firebase_auth, mcp_api_key_db, dev_api_key_db):
+    with _loaded_dependencies() as (dependencies, _provider, mcp_api_key_db, dev_api_key_db):
         calls: list[tuple[Any, Any, tuple[Any, ...], dict[str, Any]]] = []
         rate_limit_calls: list[dict[str, Any]] = []
 
@@ -201,7 +217,7 @@ def test_mcp_and_developer_key_lookups_use_the_critical_executor() -> None:
 
 
 def test_auth_repair_metadata_is_emitted_from_the_dependency_layer() -> None:
-    with _loaded_dependencies() as (dependencies, _firebase_auth, mcp_api_key_db, _dev_db):
+    with _loaded_dependencies() as (dependencies, _provider, mcp_api_key_db, _dev_db):
         mcp_api_key_db.get_api_key_auth_result = lambda _token: SimpleNamespace(
             context={'user_id': 'mcp-user', 'scopes': [], 'app_id': 'mcp-app', 'key_id': 'mcp-key'},
             repairs=frozenset({'cache_write'}),
@@ -223,7 +239,7 @@ def test_auth_repair_metadata_is_emitted_from_the_dependency_layer() -> None:
 
 
 def test_all_api_key_scope_dependencies_route_rate_limits_through_the_critical_executor() -> None:
-    with _loaded_dependencies() as (dependencies, _firebase_auth, _mcp_db, _dev_db):
+    with _loaded_dependencies() as (dependencies, _provider, _mcp_db, _dev_db):
         executor_calls: list[tuple[Any, Any]] = []
         policies: list[str] = []
 
@@ -310,20 +326,26 @@ def test_all_api_key_scope_dependencies_route_rate_limits_through_the_critical_e
         }
 
 
-def test_firebase_verification_keeps_the_event_loop_responsive() -> None:
-    with _loaded_dependencies() as (dependencies, firebase_auth, _mcp_db, _dev_db):
+def test_token_verification_keeps_the_event_loop_responsive() -> None:
+    with _loaded_dependencies() as (dependencies, provider, _mcp_db, _dev_db):
 
         async def exercise() -> None:
             entered = asyncio.Event()
             release = threading.Event()
             loop = asyncio.get_running_loop()
 
-            def blocking_verify(_token: str, **_kw: Any) -> dict[str, str]:
+            loop_thread = threading.get_ident()
+            ran_on: list[int] = []
+
+            def blocking_verify(_token: str, **_kw: Any) -> Principal:
+                ran_on.append(threading.get_ident())
                 loop.call_soon_threadsafe(entered.set)
                 assert release.wait(timeout=2)
-                return {'uid': 'user-1'}
+                return Principal(uid='user-1')
 
-            firebase_auth.verify_id_token = blocking_verify
+            # Blocking inside the PROVIDER, not inside a Firebase stub: on OIDC the same call blocks on a
+            # JWKS fetch, and the offload has to hold there too.
+            provider.verify_token = blocking_verify
             safety_release = threading.Timer(1, release.set)
             safety_release.start()
             try:
@@ -336,12 +358,18 @@ def test_firebase_verification_keeps_the_event_loop_responsive() -> None:
                 safety_release.cancel()
 
             assert result == 'user-1'
+            # The load-bearing assertion, and the reason it is by THREAD and not by timing: the safety
+            # release exists so a regression cannot hang the suite, but it also means a verification that
+            # runs ON the event loop merely stalls it for a second and then completes. Measured: with the
+            # offload removed, everything above still passed. WHERE the call ran is the contract, and
+            # thread identity states it exactly.
+            assert ran_on and ran_on[0] != loop_thread, 'token verification ran on the event loop thread'
 
         asyncio.run(exercise())
 
 
 def test_persisted_api_key_lookup_keeps_the_event_loop_responsive() -> None:
-    with _loaded_dependencies() as (dependencies, _firebase_auth, mcp_api_key_db, _dev_db):
+    with _loaded_dependencies() as (dependencies, _provider, mcp_api_key_db, _dev_db):
 
         async def exercise() -> None:
             entered = asyncio.Event()
@@ -375,7 +403,7 @@ def test_persisted_api_key_lookup_keeps_the_event_loop_responsive() -> None:
 
 
 def test_api_key_rate_limit_keeps_the_event_loop_responsive_and_propagates_http_errors() -> None:
-    with _loaded_dependencies() as (dependencies, _firebase_auth, _mcp_db, _dev_db):
+    with _loaded_dependencies() as (dependencies, _provider, _mcp_db, _dev_db):
         auth = dependencies.ApiKeyAuth(
             uid='user-1',
             scopes=[dependencies.Scopes.ACTION_ITEMS_WRITE],
@@ -419,8 +447,10 @@ def test_api_key_rate_limit_keeps_the_event_loop_responsive_and_propagates_http_
 
 
 def test_authentication_and_scope_failures_preserve_public_http_semantics() -> None:
-    with _loaded_dependencies() as (dependencies, firebase_auth, _mcp_db, _dev_db):
-        firebase_auth.verify_id_token = lambda _token, **_kw: (_ for _ in ()).throw(ValueError('invalid token'))
+    with _loaded_dependencies() as (dependencies, provider, _mcp_db, _dev_db):
+        # A bare AuthError is what ADR-0074 maps an UNEXPECTED adapter failure to, stated neutrally
+        # instead of as a raw ValueError escaping the Firebase SDK.
+        provider.register_error('bad-token', AuthError('invalid token'))
         with pytest.raises(HTTPException) as firebase_exc:
             asyncio.run(dependencies.get_current_user_id(SimpleNamespace(credentials='bad-token')))
         assert firebase_exc.value.status_code == 401

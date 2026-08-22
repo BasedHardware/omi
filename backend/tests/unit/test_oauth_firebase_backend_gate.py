@@ -27,7 +27,7 @@ from utils.auth import reset_auth_provider_for_tests
 
 def test_authorize_gated_501_on_oidc_backend(monkeypatch):
     monkeypatch.setenv("AUTH_BACKEND", "oidc")
-    with _loaded_oauth_router() as (oauth, _firebase_auth, _apps_db):
+    with _loaded_oauth_router() as (oauth, _provider, _apps_db):
         app = FastAPI()
         app.include_router(oauth.router)
         client = TestClient(app)
@@ -38,7 +38,7 @@ def test_authorize_gated_501_on_oidc_backend(monkeypatch):
 
 def test_token_gated_501_on_oidc_backend(monkeypatch):
     monkeypatch.setenv("AUTH_BACKEND", "oidc")
-    with _loaded_oauth_router() as (oauth, _firebase_auth, _apps_db):
+    with _loaded_oauth_router() as (oauth, _provider, _apps_db):
         with pytest.raises(HTTPException) as exc:
             asyncio.run(
                 oauth.oauth_token(
@@ -56,7 +56,7 @@ def test_authorize_allowed_on_firebase_backend(monkeypatch):
     """The default Firebase backend keeps working — the gate must not regress the first-class path."""
     monkeypatch.setenv("AUTH_BACKEND", "firebase")
     reset_auth_provider_for_tests()
-    with _loaded_oauth_router() as (oauth, _firebase_auth, _apps_db):
+    with _loaded_oauth_router() as (oauth, _provider, _apps_db):
         app = FastAPI()
         app.include_router(oauth.router)
         client = TestClient(app)
@@ -67,7 +67,7 @@ def test_authorize_allowed_on_firebase_backend(monkeypatch):
 def test_token_allowed_on_firebase_backend(monkeypatch):
     monkeypatch.setenv("AUTH_BACKEND", "firebase")
     reset_auth_provider_for_tests()
-    with _loaded_oauth_router() as (oauth, _firebase_auth, _apps_db):
+    with _loaded_oauth_router() as (oauth, _provider, _apps_db):
         result = asyncio.run(
             oauth.oauth_token(
                 firebase_id_token="firebase-token",
