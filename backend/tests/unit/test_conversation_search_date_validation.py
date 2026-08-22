@@ -61,6 +61,7 @@ _stubs = [
     # is not importable and the name has to be stubbed like the rest.
     'utils.journey_metrics_contract',
     'utils.other.endpoints',
+    'utils.other.list_budget',
     'utils.other.storage',
     # Names only: this file's _AutoMockModule/_register_module wrap them. Parents
     # (including utils.conversations) are created by _register_module, so the

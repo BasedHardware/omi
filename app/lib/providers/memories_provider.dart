@@ -38,8 +38,8 @@ class MemoriesProvider extends ChangeNotifier {
   final Future<bool> Function(String) _deleteMemoryRequest;
 
   MemoriesProvider({FetchMemoriesRequest? fetchMemoriesRequest, Future<bool> Function(String)? deleteMemoryRequest})
-      : _fetchMemoriesRequest = fetchMemoriesRequest ?? getMemoriesResult,
-        _deleteMemoryRequest = deleteMemoryRequest ?? deleteMemoryServer;
+    : _fetchMemoriesRequest = fetchMemoriesRequest ?? getMemoriesResult,
+      _deleteMemoryRequest = deleteMemoryRequest ?? deleteMemoryServer;
 
   List<Memory> get memories => _memories;
   bool get loading => _loading;
@@ -72,7 +72,8 @@ class MemoriesProvider extends ChangeNotifier {
       // When the server does not support device_scope, legacy memories have no
       // primary_capture_device/capture_device_ids. Skip the local device filter
       // in that case to avoid hiding all legacy rows on the "This device" view.
-      final deviceMatch = !_filterThisDeviceOnly ||
+      final deviceMatch =
+          !_filterThisDeviceOnly ||
           !_deviceScopeSupported ||
           ClientDeviceService.instance.memoryMatchesThisDevice(
             primaryCaptureDevice: memory.primaryCaptureDevice,
@@ -80,8 +81,7 @@ class MemoriesProvider extends ChangeNotifier {
           );
 
       return matchesSearch && categoryMatch && deviceMatch;
-    }).toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    }).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
   void setFilterThisDeviceOnly(bool enabled) {
@@ -251,7 +251,12 @@ class MemoriesProvider extends ChangeNotifier {
       }
       deviceScopeSupported = result.deviceScopeSupported;
       all.addAll(result.memories);
-      if (result.memories.length < limit) {
+      // A truncated page is an honest partial response with no resumable cursor;
+      // stop loading instead of continuing with an unstable offset.
+      if (result.truncated || result.memories.length < limit) {
+        if (result.truncated) {
+          Logger.warning('MemoriesProvider: server returned a truncated list; stopping at $offset rows');
+        }
         break;
       }
       offset += result.memories.length;

@@ -9,7 +9,8 @@ import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/http/api/audio.dart';
 import 'package:omi/backend/http/api/conversations.dart'
     hide unlinkCalendarEvent, autoLinkCalendarEvent, linkCalendarEvent;
-import 'package:omi/backend/http/api/conversations.dart' as conv_api
+import 'package:omi/backend/http/api/conversations.dart'
+    as conv_api
     show unlinkCalendarEvent, autoLinkCalendarEvent, linkCalendarEvent;
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
@@ -405,14 +406,20 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     notifyListeners();
   }
 
-  /// Returns the first app result from the conversation if available
-  /// This is typically the summary of the conversation
+  /// Returns the first app result that actually carries content, which is the
+  /// summary of the conversation. An app result with empty content is not a
+  /// summary: returning it suppressed the structured sections (they only render
+  /// when `appId == null`) while `AppResultDetailWidget` fell into its
+  /// "no summary" placeholder, so a conversation with a full sections summary
+  /// rendered as having none. Mirrors desktop's `ConversationSummarySelection`.
   AppResponse? getSummarizedApp() {
-    if (conversation.appResults.isNotEmpty) {
-      return conversation.appResults[0];
+    final appResult = conversation.appResults.firstWhereOrNull((r) => r.content.trim().isNotEmpty);
+    if (appResult != null) {
+      return appResult;
     }
-    // If no appResults but we have structured overview, create a fake AppResponse
-    if (conversation.structured.overview.isNotEmpty) {
+    // If no app result carries content but we have a structured overview or
+    // sections, create a fake AppResponse
+    if (conversation.structured.overview.isNotEmpty || conversation.structured.sections.isNotEmpty) {
       return AppResponse(conversation.structured.overview, appId: null);
     }
     return null;
@@ -462,8 +469,9 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       if (_isDisposed) return;
 
       // Preserve locally added apps that aren't in the API response yet
-      final locallyAddedApps =
-          _cachedEnabledConversationApps.where((app) => _locallyAddedAppIds.contains(app.id)).toList();
+      final locallyAddedApps = _cachedEnabledConversationApps
+          .where((app) => _locallyAddedAppIds.contains(app.id))
+          .toList();
 
       _cachedEnabledConversationApps.clear();
       _cachedEnabledConversationApps.addAll(apps);
@@ -515,7 +523,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   Future<bool> enableApp(App app) async {
     try {
       // Make the server call to enable the app
-      final success = await enableAppServer(app.id);
+      final (success, _) = await enableAppServer(app.id);
       if (_isDisposed) return false;
 
       if (success) {

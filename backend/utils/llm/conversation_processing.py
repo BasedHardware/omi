@@ -22,6 +22,11 @@ from .clients import get_llm, get_llm_gateway_chat_structured, parser
 from .discard_parser import DiscardConversation, LenientDiscardParser
 from .gateway_error_contract import is_byok_rate_limit_gateway_error
 from utils.byok import has_byok_keys
+from utils.conversations.wake_word import (
+    WAKE_WORD_DISCARD_PROMPT_RULES,
+    WAKE_WORD_PROMPT_RULES,
+    has_structural_wake_word_marker,
+)
 from utils.llm.gateway_client import record_chat_extraction_gateway_result
 from utils.llm.gateway_observability import record_gateway_shadow_comparison
 from utils.llm.prompt_cache import (
@@ -527,7 +532,11 @@ def _submit_conversation_action_items_shadow(
 
 
 def should_discard_conversation(
-    transcript: str, photos: Optional[List[ConversationPhoto]] = None, duration_seconds: Optional[float] = None
+    transcript: str,
+    photos: Optional[List[ConversationPhoto]] = None,
+    duration_seconds: Optional[float] = None,
+    *,
+    trusted_wake_word_markers: bool = False,
 ) -> bool:
     # If there's a long transcript, it's very unlikely we want to discard it.
     # This is a performance optimization to avoid unnecessary LLM calls.
@@ -593,6 +602,8 @@ Content:
 {format_instructions}'''.replace(
         '    ', ''
     ).strip()
+    if trusted_wake_word_markers and has_structural_wake_word_marker(transcript):
+        prompt_template = f'{prompt_template}\n\n{WAKE_WORD_DISCARD_PROMPT_RULES}'
     custom_parser = LenientDiscardParser(pydantic_object=DiscardConversation)
     prompt_values = {
         'full_context': full_context,
@@ -672,6 +683,7 @@ def extract_action_items(
     calendar_meeting_context: Optional['CalendarMeetingContext'] = None,
     output_language_code: Optional[str] = None,
     task_intelligence_capture: bool = False,
+    trusted_wake_word_markers: bool = False,
 ) -> List[ActionItem]:
     """
     Dedicated function to extract action items from conversation content.
@@ -686,6 +698,9 @@ def extract_action_items(
             conversation (top vector matches, recently active). Caller is
             expected to pre-filter to open items only; this function defends
             in depth by skipping any item that arrives marked completed.
+        trusted_wake_word_markers: True only for transcripts rendered by
+            ``conversation_transcript_for_action_items``. Raw external text
+            must leave marker-shaped content inert.
 
     Returns:
         List of extracted ActionItem objects
@@ -940,6 +955,8 @@ def extract_action_items(
     {format_instructions}'''.replace(
         '    ', ''
     ).strip()
+    if trusted_wake_word_markers and has_structural_wake_word_marker(transcript):
+        instructions_text = f'{instructions_text}\n\n{WAKE_WORD_PROMPT_RULES}'
 
     response_language = output_language_code or language_code
     action_items_parser = PydanticOutputParser(pydantic_object=ActionItemsExtraction)
@@ -1104,6 +1121,7 @@ def get_conversation_notes(
     tz: str,
     task_intelligence_capture: bool,
     existing_action_items: Optional[List[Dict[str, Any]]] = None,
+    trusted_wake_word_markers: bool = False,
 ) -> Structured:
     """Generate sections, actions, and events in one coherent model call."""
     if not prefix.context.strip():
@@ -1193,6 +1211,8 @@ DATE CONTEXT
 - Timezone: {tz or 'UTC'}
 
 {extraction_parser.get_format_instructions()}'''
+    if trusted_wake_word_markers and has_structural_wake_word_marker(prefix.context):
+        task_instructions = f'{task_instructions}\n\n{WAKE_WORD_PROMPT_RULES}'
 
     cache_enabled = shared_conversation_cache_supported() and prefix.cache_eligible
     messages = [*prefix.messages(cache_enabled=cache_enabled), SystemMessage(content=task_instructions)]

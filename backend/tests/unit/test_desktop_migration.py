@@ -9,6 +9,7 @@ Covers:
 5. Batch limit (commit triggers at BATCH_LIMIT=500)
 """
 
+import importlib.util
 import os
 import sys
 import types
@@ -174,9 +175,20 @@ endpoints_stub.get_current_user_uid = MagicMock()
 endpoints_stub.with_rate_limit = lambda dep, policy: dep
 endpoints_stub.with_rate_limit_context = lambda dep, policy: dep
 endpoints_stub.timeit = lambda f: f
-_stub_module("utils.observability")
-fallback_stub = _stub_module("utils.observability.fallback")
-fallback_stub.record_fallback = MagicMock()
+list_budget_stub = _stub_module("utils.other.list_budget")
+_list_budget_path = Path(__file__).resolve().parents[2] / "utils" / "other" / "list_budget.py"
+_list_budget_spec = importlib.util.spec_from_file_location("_omi_real_list_budget", _list_budget_path)
+_list_budget_real = importlib.util.module_from_spec(_list_budget_spec)
+_list_budget_spec.loader.exec_module(_list_budget_real)
+
+
+def _list_budget_getattr(name):
+    # Delegate every symbol to the real module so tests collected after this
+    # hermetic stubber still exercise the real budget seam.
+    return getattr(_list_budget_real, name)
+
+
+list_budget_stub.__getattr__ = _list_budget_getattr
 task_intelligence_stub = _stub_package("utils.task_intelligence")
 candidate_service_stub = _stub_module("utils.task_intelligence.candidate_service")
 candidate_service_stub.create_candidate = MagicMock()
@@ -234,7 +246,7 @@ class RecordLlmUsageBucketRequest(BaseModel):
     cache_read_tokens: int = Field(0, ge=0)
     cache_write_tokens: int = Field(0, ge=0)
     total_tokens: int = Field(0, ge=0)
-    cost_usd: float = Field(0.0, ge=0.0)
+    cost_usd: float | None = Field(None, ge=0.0)
     account: str = Field('omi', max_length=100)
 
 
@@ -326,14 +338,14 @@ class TestRecordDesktopLlmUsageValidation:
         r = RecordLlmUsageBucketRequest()
         assert r.account == 'omi'
 
-    def test_all_defaults_zero(self):
-        """All token fields default to 0."""
+    def test_cost_defaults_to_unmeasured(self):
+        """Missing cost is distinct from a measured zero."""
         r = RecordLlmUsageBucketRequest()
         assert r.input_tokens == 0
         assert r.output_tokens == 0
         assert r.cache_read_tokens == 0
         assert r.total_tokens == 0
-        assert r.cost_usd == 0.0
+        assert r.cost_usd is None
 
 
 class TestCreateFocusSessionValidation:

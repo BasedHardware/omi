@@ -1,12 +1,9 @@
-"""Usage-based overage billing for chat.
+"""Usage-based overage billing for plans whose catalog policy enables it.
 
-Every paid plan participates — we never ask a paying user to upgrade, we bill
-the excess.
-
-  - Operator (500 included chat questions / mo): overage on questions past cap.
-  - Neo / Unlimited (200 included): overage on questions past cap.
-  - Architect ($400 included AI compute / mo): overage on cost past cap.
-  - Free users still hard-capped (no payment method on file).
+  - Question- and cost-based allowances, along with exhaustion policy, come from
+    the catalog's typed chat allocation.
+  - Free, Plus, and Unlimited-v2 are hard-capped; overage is only calculated for
+    plans whose catalog policy is ``overage``.
   - BYOK users bypass everything (handled in ``utils.subscription.enforce_chat_quota``).
 
 True costs are tracked on every chat call via
@@ -23,13 +20,10 @@ This module reads those numbers rather than maintaining a parallel counter.
 import os
 from typing import Any, Dict, Optional
 
+from config.plan_catalog import get_plan_allocation, plan_uses_overage
 from database import user_usage as user_usage_db
 from models.users import PlanType
-from utils.subscription import (
-    ARCHITECT_CHAT_COST_USD_PER_MONTH,
-    NEO_CHAT_QUESTIONS_PER_MONTH,
-    OPERATOR_CHAT_QUESTIONS_PER_MONTH,
-)
+from utils.subscription import get_plan_limits
 
 # Markup applied to raw provider cost before charging the user.
 # 1.15 = 15 % on top of true cost (covers variance + infra).
@@ -73,25 +67,20 @@ def build_explainer_text() -> str:
     )
 
 
-def _plan_included_questions(plan: PlanType) -> Optional[int]:
-    """Included chat questions for question-based overage plans."""
-    if plan == PlanType.operator:
-        return OPERATOR_CHAT_QUESTIONS_PER_MONTH
-    if plan == PlanType.unlimited:
-        return NEO_CHAT_QUESTIONS_PER_MONTH
-    return None
+def _included_chat_allowance(plan: PlanType) -> tuple[Optional[int], Optional[float]]:
+    """Return the catalog chat allowance projected to the reporting units.
 
-
-def _plan_included_cost_usd(plan: PlanType) -> Optional[float]:
-    """Included monthly AI-compute dollars for cost-based overage plans."""
-    if plan == PlanType.architect:
-        return ARCHITECT_CHAT_COST_USD_PER_MONTH
-    return None
-
-
-def is_overage_plan(plan: PlanType) -> bool:
-    """True if this plan bills overage past its included allowance."""
-    return _plan_included_questions(plan) is not None or _plan_included_cost_usd(plan) is not None
+    The catalog stores money as integer ``usd_cent``. Conversion to dollars is
+    performed only at this existing API/reporting boundary. ``None`` means the
+    catalog explicitly declared the allowance unlimited.
+    """
+    allocation = get_plan_allocation(plan, 'chat')
+    limits = get_plan_limits(plan)
+    if allocation['unit'] == 'question':
+        return limits.chat_questions_per_month, None
+    if allocation['unit'] == 'usd_cent':
+        return None, limits.chat_cost_usd_per_month
+    raise ValueError(f'{plan.value}.chat has unsupported catalog unit {allocation["unit"]!r}')
 
 
 def get_user_overage(uid: str, plan: PlanType) -> Dict[str, Any]:
@@ -107,8 +96,7 @@ def get_user_overage(uid: str, plan: PlanType) -> Dict[str, Any]:
       - markup_multiplier:  the multiplier applied
       - reset_at:           unix ts when the monthly bucket rolls over
     """
-    included_q = _plan_included_questions(plan)
-    included_cost = _plan_included_cost_usd(plan)
+    included_q, included_cost = _included_chat_allowance(plan)
     usage = user_usage_db.get_monthly_chat_usage(uid)
     used_q = int(usage.get('questions', 0))
     real_cost = float(usage.get('cost_usd', 0.0))
@@ -116,6 +104,18 @@ def get_user_overage(uid: str, plan: PlanType) -> Dict[str, Any]:
 
     overage_usd = 0.0
     excess_q = 0
+    if not plan_uses_overage(plan):
+        return {
+            'included_questions': included_q,
+            'included_cost_usd': included_cost,
+            'used_questions': used_q,
+            'excess_questions': excess_q,
+            'real_cost_usd': round(real_cost, 4),
+            'overage_usd': overage_usd,
+            'markup_multiplier': OVERAGE_MARKUP_MULTIPLIER,
+            'reset_at': reset_at,
+        }
+
     if included_q is not None and used_q > included_q and used_q > 0:
         # Question-based: attribute cost proportionally.
         excess_q = used_q - included_q

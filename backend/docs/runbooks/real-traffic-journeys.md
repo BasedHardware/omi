@@ -75,6 +75,24 @@ terminalizes immediately and cannot be overwritten by a later `[DONE]` or clean
 stream exhaustion. This is what detects failures emitted after HTTP 200 headers
 have already been committed.
 
+Desktop call sites use these boundaries:
+
+- `desktop_chat` covers `/v2/chat/completions`, including its managed-gateway and
+  direct-Anthropic branches. A stream succeeds only after at least one nonempty
+  content/tool delta, a `[DONE]` frame, and clean exhaustion. A nonstreaming
+  response succeeds only with nonempty assistant content or a tool call. In-band
+  `error` frames, empty answers, provider errors, and incomplete streams are not
+  successes.
+- `desktop_proactivity` covers the strict `/v1/desktop/proactivity/completions`
+  facade and generative calls through the legacy desktop Gemini proxy. The strict
+  facade succeeds only after its requested JSON schema validates. A legacy Gemini
+  stream needs nonempty candidate text plus a terminal `finishReason`; a normal
+  response needs nonempty candidate text. Per-user Redis caps are `degraded` with
+  `quota_capped`, while provider and invalid-response shapes are failures.
+
+Client journey metric writes are fail-open. Collector or registry exceptions are
+swallowed at the observability boundary and cannot change the product response.
+
 Acceptance and terminal counters are event rates, not an in-flight gauge.
 Never subtract them to infer backlog across processes or restarts. A journey
 accepted in one process and completed in another must persist its acceptance

@@ -478,6 +478,26 @@ def test_firestore_ledger_write_is_immutable_idempotent_and_snapshots_subscripti
     assert not record_llm_gateway_attempt(event, firestore_client=client)
     stored = client.collections[ATTEMPTS_COLLECTION]['invocation-1:1']
     assert stored['subscription_tier'] == 'pro'
+    assert stored['plan_id'] == 'architect'
+    assert stored['plan_attribution_status'] == 'complete'
+    assert stored['cost_attribution_status'] == 'missing'
+
+
+def test_firestore_ledger_marks_priced_omi_cost_complete_for_the_canonical_plan() -> None:
+    client = _FakeFirestoreClient(subscription_plan='operator')
+    event = {
+        'attempt_id': 'invocation-1:2',
+        'provider': 'openai',
+        'user_uid': 'user-123',
+        'payer': 'omi',
+        'cost_status': 'estimated',
+        'estimated_cost_micro_usd': 2500,
+    }
+
+    assert record_llm_gateway_attempt(event, firestore_client=client)
+    stored = client.collections[ATTEMPTS_COLLECTION]['invocation-1:2']
+    assert stored['plan_id'] == 'operator'
+    assert stored['cost_attribution_status'] == 'complete'
 
 
 @pytest.mark.asyncio

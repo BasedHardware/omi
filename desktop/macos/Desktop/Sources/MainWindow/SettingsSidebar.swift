@@ -195,7 +195,7 @@ struct SettingsSearchItem: Identifiable {
 
     // Referral
     SettingsSearchItem(
-      name: "Refer a Friend", subtitle: "Share one free month of Omi Pro",
+      name: "Refer a Friend", subtitle: "Share one free month of Operator",
       keywords: ["refer", "referral", "friend", "gift", "free month", "share link"],
       section: .referral, icon: "gift", settingId: "referral.link"),
 

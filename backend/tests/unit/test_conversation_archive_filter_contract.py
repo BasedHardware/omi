@@ -11,6 +11,17 @@ from testing.import_isolation import AutoMockModule, load_module_fresh, stub_mod
 
 _BACKEND = Path(__file__).resolve().parents[2]
 
+# database.conversations imports the list-read budget seam at module level
+# (#11831). The seam is stdlib-only and budget-optional, so load the real
+# module (under a private name) and install it as the stubbed submodule; a bare
+# AutoMock would swallow the rows budgeted_stream_iter must yield.
+import importlib.util as _importlib_util
+
+_list_budget_path = _BACKEND / "utils" / "other" / "list_budget.py"
+_list_budget_spec = _importlib_util.spec_from_file_location("_omi_real_list_budget", str(_list_budget_path))
+list_budget_real = _importlib_util.module_from_spec(_list_budget_spec)
+_list_budget_spec.loader.exec_module(list_budget_real)
+
 
 class _FieldFilter:
     def __init__(self, field_path, op_string, value):
@@ -168,6 +179,7 @@ def conversations_db():
         "utils.encryption": AutoMockModule("utils.encryption"),
         "utils.other": utils_other,
         "utils.other.hume": AutoMockModule("utils.other.hume"),
+        "utils.other.list_budget": list_budget_real,
         "utils.other.storage": AutoMockModule("utils.other.storage"),
     }
 

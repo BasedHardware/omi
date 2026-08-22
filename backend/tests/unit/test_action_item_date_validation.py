@@ -125,6 +125,7 @@ _SYS_MODULE_NAMES = [
     "utils.retrieval.agentic",
     "utils.conversations",
     "utils.conversations.render",
+    "utils.conversations.wake_word",
     "langchain_core",
     "langchain_core.tools",
     "langchain_core.runnables",
@@ -325,6 +326,13 @@ _load_module_from_file("utils.llm.prompt_cache", BACKEND_DIR / "utils" / "llm" /
 prompt_prefix_stub = _stub_module("utils.llm.conversation_prompt_prefix")
 prompt_prefix_stub.ConversationPromptPrefix = MagicMock
 prompt_prefix_stub.shared_conversation_cache_supported = MagicMock(return_value=False)
+
+# wake_word is stdlib-only; load the real trust-boundary helper before the
+# isolated conversation-processing module imports it.
+_load_module_from_file(
+    "utils.conversations.wake_word",
+    BACKEND_DIR / "utils" / "conversations" / "wake_word.py",
+)
 
 conversation_processing = _load_module_from_file(
     "utils.llm.conversation_processing",

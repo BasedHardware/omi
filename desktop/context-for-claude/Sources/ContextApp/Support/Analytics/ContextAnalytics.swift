@@ -45,6 +45,18 @@ enum ContextAnalytics {
     static func record(_ event: AnalyticsEvent) {
         guard isEnabled else { return }
 
+        // **`active_hours` had no production emitter and this is it.** `UsageClock.noteActivity` was
+        // called from nowhere, so the hour set was filled only as a side effect of capture
+        // transitions inside `mark()` — which measures "hours in which capture toggled", not the
+        // "distinct hours in which anything at all happened" the rollup documents. Every recorded
+        // event is something happening, so this is the honest denominator.
+        //
+        // Safe from any thread and safe under the one re-entrancy this function has: `noteActivity`
+        // takes `UsageClock`'s lock, inserts an `Int`, and releases it before returning — it calls
+        // nothing, so the airgap path's `record` → `recordSuppression` → `recordFallback` → `record`
+        // hop cannot arrive back here holding that lock.
+        UsageClock.shared.noteActivity()
+
         // Read live, never cached: the toggle takes effect on the next event, which is what lets
         // Airgap Mode promise "immediately" rather than "after relaunch".
         guard !NetworkEgress.isSuppressed(.analytics) else {
@@ -290,7 +302,8 @@ enum ContextAnalytics {
             screenMinutes: UsageClock.shared.minutes(for: .screen),
             activeHours: UsageClock.shared.activeHourCount,
             signedIn: OmiAuth.shared.isSignedIn,
-            airgapped: NetworkEgress.isAirgapped)
+            airgapped: NetworkEgress.isAirgapped,
+            conversations: UsageClock.shared.conversationCount)
 
         // An install with nothing at all to say on its first partial day is not a data point, it is
         // noise from a launch that happened at 23:58. Everything else reports, idle included — an
@@ -337,6 +350,43 @@ enum ContextAnalytics {
 
 /// How long capture actually ran today, and how much of the day it was spread across.
 ///
+/// **One visit to a surface, as a state machine** — the thing `cfc_surface_closed` reports.
+///
+/// A window's dwell looks like two lines of arithmetic and is not: it is an optional whose lifetime
+/// has to survive a window that closes by routes the app does not own. The timeline is `.titled` and
+/// `.closable`, so the X and ⌘W call AppKit's `close()` and never reach the app's own `dismiss()` —
+/// and a stash cleared on only one of those paths keeps running while the window is shut, so the
+/// *next* close reports a single bucket spanning every minute in between. A fabricated `hours` is
+/// worse than no measurement, because it is indistinguishable from a real one.
+///
+/// Extracted rather than left inline because that failure is invisible in a window test and obvious
+/// here: `testAVisitAfterACloseMeasuresOnlyTheSecondVisit` is the regression, and it fails against
+/// an implementation that forgets to clear.
+struct DwellClock {
+    private var presentedAt: Date?
+
+    /// Starts a visit, or leaves one already running alone.
+    ///
+    /// Idempotent on purpose: raising a window that is already up is the same visit, not a new one,
+    /// and restarting here would report a long read as a series of short ones.
+    mutating func presented(at now: Date = Date()) {
+        if presentedAt == nil { presentedAt = now }
+    }
+
+    /// Ends the visit and yields its bucket, or nil when there is no visit to end.
+    ///
+    /// Nil is the answer for a close with no matching open — a second close racing the first, or a
+    /// teardown of a window that never appeared — and the caller reports nothing rather than
+    /// inventing a `seconds`.
+    mutating func closed(at now: Date = Date()) -> AnalyticsEvent.DurationBucket? {
+        guard let presentedAt else { return nil }
+        self.presentedAt = nil
+        return AnalyticsEvent.DurationBucket(now.timeIntervalSince(presentedAt))
+    }
+
+    var isRunning: Bool { presentedAt != nil }
+}
+
 /// Wall-clock accumulation rather than a count of start/stop events: "started capture 40 times" and
 /// "captured for 40 minutes" are very different products, and only the second one says whether the
 /// app is doing its job.
@@ -363,6 +413,8 @@ final class UsageClock: @unchecked Sendable {
     /// runs while *any* of its sources is live and stops when the last one does.
     private var live: [Channel: Set<AnalyticsEvent.CaptureSource>] = [:]
     private var activeHours: Set<Int> = []
+    /// Conversations durably closed today. See `noteConversation`.
+    private var conversations = 0
 
     private static func channel(for source: AnalyticsEvent.CaptureSource) -> Channel {
         switch source {
@@ -389,6 +441,26 @@ final class UsageClock: @unchecked Sendable {
             }
         }
         noteHourLocked(now)
+    }
+
+    /// Records that a conversation was durably closed.
+    ///
+    /// **Counted at the close, because that is when a conversation exists.** A session is open while
+    /// somebody is still talking; the row that becomes a conversation in the account is written when
+    /// it closes, and `Engine` has three sites that close one — the rollover inside `append`, the
+    /// explicit close on pause and quit, and the sweep that closes what a crash left open. All three
+    /// count, and an insert that threw does not.
+    ///
+    /// Not the downloaded-memory cache: that is a copy of what the account already holds, and
+    /// counting it would report another device's work as this Mac's.
+    func noteConversation() {
+        lock.lock(); defer { lock.unlock() }
+        conversations += 1
+    }
+
+    var conversationCount: Int {
+        lock.lock(); defer { lock.unlock() }
+        return conversations
     }
 
     /// Records that something happened, for the active-hours spread. Cheap enough to call from any
@@ -422,6 +494,9 @@ final class UsageClock: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         seconds.removeAll()
         activeHours.removeAll()
+        // The same day boundary as the minutes, and it has to be: a count that survived the reset
+        // would report yesterday's conversations again today, and again the day after.
+        conversations = 0
         for channel in startedAt.keys { startedAt[channel] = now }
         noteHourLocked(now)
     }
@@ -435,6 +510,7 @@ final class UsageClock: @unchecked Sendable {
         startedAt.removeAll()
         live.removeAll()
         activeHours.removeAll()
+        conversations = 0
     }
     #endif
 }

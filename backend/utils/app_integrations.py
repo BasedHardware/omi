@@ -26,6 +26,10 @@ from database import redis_db
 from database.apps import get_app_by_id_db, record_app_usage
 from database.redis_db import delete_app_cache_by_id
 from database.webhook_health import (
+    ACTION_DISABLE,
+    ACTION_REDIRECT_NOT_FOLLOWED,
+    ACTION_WARN_DAY1,
+    ACTION_WARN_DAY2,
     record_app_webhook_failure,
     record_app_webhook_success,
     is_app_webhook_disabled,
@@ -121,9 +125,19 @@ def _notify_app_owner(app_id: str, title: str, body: str):
 
 def _handle_webhook_health_action(app_id: str, action: int, error: str):
     """Handle graduated response from webhook health tracking.
-    action: 0=nothing, 1=day1 warn, 2=day2 warn, 3=auto-disable
+    action: 0=nothing, 1=day1 warn, 2=day2 warn, 3=auto-disable,
+    4=redirect not followed (notify only)
     """
-    if action == 1:
+    if action == ACTION_REDIRECT_NOT_FOLLOWED:
+        logger.warning(f'Webhook health: app {app_id} endpoint redirects and was not delivered. {error}')
+        _notify_app_owner(
+            app_id,
+            'Webhook Endpoint Redirects',
+            f'Your app webhook returned a redirect ({error[:40]}), so the payload was not delivered. '
+            'For security we do not follow redirects. Update the webhook URL to the final destination '
+            '(check for a missing/extra trailing slash or an http:// to https:// upgrade).',
+        )
+    elif action == ACTION_WARN_DAY1:
         logger.warning(f'Webhook health: app {app_id} failing for 24h+ (day 1 warning). Last error: {error}')
         _notify_app_owner(
             app_id,
@@ -131,7 +145,7 @@ def _handle_webhook_health_action(app_id: str, action: int, error: str):
             f'Your app webhook has been failing for 24+ hours. Error: {error[:100]}. '
             'Please check your endpoint. It will be auto-disabled in 48 hours if failures continue.',
         )
-    elif action == 2:
+    elif action == ACTION_WARN_DAY2:
         logger.warning(f'Webhook health: app {app_id} failing for 48h+ (day 2 final warning). Last error: {error}')
         _notify_app_owner(
             app_id,
@@ -139,7 +153,7 @@ def _handle_webhook_health_action(app_id: str, action: int, error: str):
             f'Your app webhook has been failing for 48+ hours. Error: {error[:100]}. '
             'It will be auto-disabled in 24 hours if failures continue.',
         )
-    elif action == 3:
+    elif action == ACTION_DISABLE:
         logger.error(f'Webhook health: auto-disabling app {app_id} after 72h+ of failures. Last error: {error}')
         disable_app_in_firestore(app_id, error, 72)
         delete_app_cache_by_id(app_id)
@@ -147,7 +161,7 @@ def _handle_webhook_health_action(app_id: str, action: int, error: str):
             app_id,
             'Webhook Auto-Disabled',
             f'Your app has been auto-disabled after 72+ hours of webhook failures. Error: {error[:100]}. '
-            'Please fix your endpoint and re-enable the app from your developer dashboard.',
+            'Fix your endpoint, then open the app in your developer dashboard and press Re-enable.',
         )
 
 

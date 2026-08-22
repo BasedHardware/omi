@@ -85,6 +85,10 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
         timeout = (
             path_timeout if path_timeout is not None else self.methods_timeout.get(request.method, self.default_timeout)
         )
+        # Stamp the monotonic request start so request-scoped read budgets
+        # (utils.other.list_budget) can derive an internal deadline that leaves
+        # serialization headroom under this middleware's hard cutoff.
+        request.state.omi_request_started_monotonic = time.monotonic()
         try:
             return await asyncio.wait_for(call_next(request), timeout=timeout)
         except asyncio.TimeoutError:

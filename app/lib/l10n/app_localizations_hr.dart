@@ -9888,4 +9888,37 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get diagnosticsShareFailed => 'Dijagnostiku nije bilo moguće podijeliti. Pokušaj ponovno.';
+
+  @override
+  String get appDisabledTitle => 'Ova je aplikacija onemogućena i ne može se instalirati.';
+
+  @override
+  String get appDisabledWebhookFailures =>
+      'Njezina krajnja točka nije radila 72 sata zaredom pa je isporuka zaustavljena.';
+
+  @override
+  String get appDisabledGeneric => 'Onemogućila ju je Omi.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Najprije popravi krajnju točku — ponovno omogućivanje iznova provjerava svaki konfigurirani URL.';
+
+  @override
+  String get appReEnable => 'Ponovno omogući';
+
+  @override
+  String get appReEnableFailedTitle => 'Ponovno omogućivanje nije uspjelo';
+
+  @override
+  String get appReEnableFailedBody => 'Ovu aplikaciju nije bilo moguće ponovno omogućiti. Pokušaj ponovno.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Onemogućeno $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Posljednja pogreška: $error.';
+  }
 }

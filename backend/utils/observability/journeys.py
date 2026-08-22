@@ -34,8 +34,6 @@ from utils.journey_metrics_contract import (
     resolve_client_kind,
 )
 
-logger = logging.getLogger(__name__)
-
 JourneyName = Literal['chat_response', 'pusher_session', 'capture_finalization']
 JourneyOutcome = Literal['success', 'failure', 'cancelled', 'stale']
 ReconciliationOutcome = Literal['requeued', 'enqueue_failed']

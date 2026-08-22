@@ -18,6 +18,7 @@ from database.firestore_index_registry import (
 from database.memory_collections import MemoryCollections
 from models.product_memory import MemoryAccessPolicy, MemoryItem, MemoryItemStatus
 from utils.memory.memory_read_api import query_archive_product_memory_items
+from utils.other.list_budget import ListReadBudget
 
 DEFAULT_PRODUCT_MEMORY_READ_LIMIT = 100
 MAX_PRODUCT_MEMORY_READ_LIMIT = 500
@@ -93,10 +94,30 @@ def fetch_archive_product_memory_search(
     }
 
 
-def iter_authoritative_product_memory_items(uid: str, *, db_client: Any) -> Iterator[MemoryItem]:
-    """Stream validated authoritative memory items for one user."""
+def iter_authoritative_product_memory_items(
+    uid: str,
+    *,
+    db_client: Any,
+    budget: Optional["ListReadBudget"] = None,
+) -> Iterator[MemoryItem]:
+    """Stream validated authoritative memory items for one user.
+
+    With a ``budget`` the collection stream runs under the request's per-RPC
+    timeout and each fetched row is charged (#11831).
+    """
     collection_path = MemoryCollections(uid=uid).memory_items
-    for snapshot in db_client.collection(collection_path).stream():
+    if budget is None:
+        snapshots: Iterator[Any] = db_client.collection(collection_path).stream()
+    else:
+        timeout = budget.rpc_timeout()
+        try:
+            snapshots = db_client.collection(collection_path).stream(timeout=timeout)
+        except TypeError:
+            # Test fakes predating the budget seam.
+            snapshots = db_client.collection(collection_path).stream()
+    for snapshot in snapshots:
+        if budget is not None:
+            budget.charge(1)
         raw_payload: object = snapshot.to_dict()
         payload = cast(Dict[str, Any], raw_payload) if isinstance(raw_payload, dict) else {}
         item = MemoryItem.model_validate(payload)
@@ -105,11 +126,16 @@ def iter_authoritative_product_memory_items(uid: str, *, db_client: Any) -> Iter
         yield item
 
 
-def fetch_authoritative_product_memory_items(uid: str, *, db_client: Any) -> List[MemoryItem]:
+def fetch_authoritative_product_memory_items(
+    uid: str,
+    *,
+    db_client: Any,
+    budget: Optional["ListReadBudget"] = None,
+) -> List[MemoryItem]:
     """Load and coerce all authoritative memory product memory item docs for one user."""
 
     return sorted(
-        iter_authoritative_product_memory_items(uid, db_client=db_client),
+        iter_authoritative_product_memory_items(uid, db_client=db_client, budget=budget),
         key=_memory_item_sort_key,
     )
 

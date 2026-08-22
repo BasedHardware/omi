@@ -1,7 +1,7 @@
 version: 2
 name: navigation
 tier: manual
-description: Top navigation bar smoke — the flat destination row (Home, Library, Tasks, Rewind, Apps), the Memory hub's own three-way switcher, the Settings gear and Rewind all reach their real pages with no menu and nothing opening on hover
+description: Top navigation bar smoke — the flat destination row (Home, Activity, Tasks, Rewind, Apps), Activity's navigating chip row into the hub's other three pages and the "‹ Activity" control back off each of them, the Settings gear and Rewind all reach their real pages with no menu and nothing opening on hover
 app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/ShellClickThrough.swift
@@ -11,10 +11,11 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/SidebarNavItem.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
   - desktop/macos/Desktop/Sources/MainWindow/PageGlassLane.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/ActivityDestinationChip.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationsDestinationView.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift
   - desktop/macos/Desktop/Sources/MainWindow/TopNavigationDestinations.swift
-  - desktop/macos/Desktop/Sources/MainWindow/Components/HubDestinationSwitcher.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ActivityBackButton.swift
   - desktop/macos/Desktop/Sources/MainWindow/ShellWindowChrome.swift
   - desktop/macos/Desktop/Sources/MainWindow/ShellSummon.swift
   - desktop/macos/Desktop/Sources/MainWindow/ActiveDisplay.swift
@@ -28,34 +29,39 @@ preconditions:
 steps:
   - id: S1
     name: Verify Home tab loads
-    do: "Verify the app is on the search surface. The top bar shows the flat row of destinations — Home, Library, Tasks, Rewind, Apps — with nothing that opens a menu and no Omi mark duplicated out of the query bar; the right cluster is three wordless icons with state dots (microphone, screen capture, settings). Home content is a query bar above a separate results panel."
+    do: "Verify the app is on the search surface. The top bar shows the flat row of destinations — Home, Activity, Tasks, Rewind, Apps — with nothing that opens a menu and no Omi mark duplicated out of the query bar; the right cluster is three wordless icons with state dots (microphone, screen capture, settings). Home content is a query bar above a separate results panel."
     expect:
       interactive_count: { min: 8 }
       text_visible:
         - Home
-        - Library
+        - Activity
         - Tasks
         - Rewind
         - Apps
 
   - id: S2
-    name: Navigate to the Memory hub and move between its three views
+    name: Navigate to Activity and reach the hub's other three pages from its chip row
     do: >-
-      Click the Library button in the top nav bar (agent-swift find text 'Library' click).
-      Verify the Memory hub loads and that the hub's own switcher — Conversations,
-      Memories, Brain Map — is visible on the page itself, not in the top bar. Click
-      each of the three and confirm the page changes: the conversations list, the
-      memories list, then the Brain Map. No menu opens at any point, and nothing opens
-      on hover.
+      Click the Activity button in the top nav bar (agent-swift find text 'Activity' click).
+      Verify the Activity spine loads and that a single row of chips — Activity,
+      Conversations, Memories, Brain Map — sits on the page itself, not in the top bar,
+      with Activity shown as the current one. There is exactly one such row: no second
+      row of look-alike chips underneath it that narrows the list in place. Click each of
+      the other three in turn and confirm the page actually changes — the conversations
+      list, the memories list, then the Brain Map — and that each of those pages carries
+      a "‹ Activity" control on its leading edge (accessibility identifier
+      activity-back-button) that returns to the spine, with the chip row back with it. No
+      menu opens at any point, and nothing opens on hover.
     expect:
       text_visible:
+        - Activity
         - Memories
         - Conversations
         - Brain Map
 
   - id: S2a
     name: Return Home with Escape
-    do: "Press Escape while the Memory page is visible. Verify the app returns to Home and the top navigation bar remains visible."
+    do: "Press Escape while an Activity page is visible. Verify the app returns to Home and the top navigation bar remains visible."
     expect:
       text_visible:
         - Home
@@ -146,7 +152,7 @@ steps:
     expect:
       text_visible:
         - Home
-        - Library
+        - Activity
         - Tasks
         - Apps
 
@@ -166,6 +172,6 @@ steps:
     expect:
       text_visible:
         - Home
-        - Library
+        - Activity
         - Tasks
         - Apps
