@@ -32,6 +32,7 @@ from config.stt_provider_policy import (
 )
 from models.transcript_segment import TranscriptSegment
 from utils.byok import get_byok_key
+from utils.observability.fallback import record_fallback
 from utils.other.endpoints import timeit
 from utils.stt.outcomes import TranscriptionFailure
 from utils.stt.speaker_embedding import SPEAKER_MATCH_THRESHOLD, compare_embeddings, extract_embedding_from_bytes
@@ -1001,6 +1002,16 @@ def _parakeet_assign_speaker_sync(
         return f'SPEAKER_{len(centroids) - 1:02d}'
     except Exception as e:
         logger.warning(f'Parakeet batch diarization failed, defaulting to SPEAKER_00: {e}')
+        # Every segment collapsing onto one label turns a conversation into a monologue. Worth counting:
+        # a diarizer whose model failed to load does this for EVERY conversation, silently (BACKLOG L20).
+        record_fallback(
+            component='speaker',
+            from_mode='diarization',
+            to_mode='single_speaker',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
         return 'SPEAKER_00'
 
 

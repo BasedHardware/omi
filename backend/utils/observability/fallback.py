@@ -91,6 +91,9 @@ ALLOWED_COMPONENTS = frozenset(
         # deployment — today, a batch that could not run in one transaction because the server has none
         # (BACKLOG L25). Distinct from 'firestore_read', which is one backend's read path.
         'document_store',
+        # Speaker identity (BACKLOG L20): the matcher unreachable, the batch diarizer failing, or an
+        # enrolment that stored no embedding. All three keep the conversation — and lose WHO said it.
+        'speaker',
         'other',
     }
 )
