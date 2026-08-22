@@ -2833,6 +2833,13 @@ private struct MeetingSummaryShareCard: View {
     .onReceive(NotificationCenter.default.publisher(for: .meetingSummaryShareBeginAddressing)) { _ in
       beginAddressing()
     }
+    .onReceive(NotificationCenter.default.publisher(for: .meetingSummaryShareSubmit)) { note in
+      if let address = note.object as? String, !address.isEmpty {
+        recipientEmail = address
+      }
+      isAddressing = true
+      sendSummary()
+    }
   }
 
   private var actionRow: some View {

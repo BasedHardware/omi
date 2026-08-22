@@ -1749,18 +1749,16 @@ final class DesktopAutomationActionRegistry {
         // `email` mirrors what the owner types into the Share field; with no
         // address supplied the detected suggestion is used, which is exactly
         // what the field prefills with.
+        // Drive the card's own Send handler so its phase (sending → sent /
+        // failed) is exercised, not just the network call underneath it.
         let typed = params["email"]?.trimmingCharacters(in: .whitespaces) ?? ""
-        let addresses = typed.isEmpty ? recipients.map(\.email) : [typed]
-        guard !addresses.isEmpty else {
+        let address = typed.isEmpty ? (recipients.first?.email ?? "") : typed
+        guard !address.isEmpty else {
           return ["error": "no recipient: pass email=<address>"]
         }
-        do {
-          let sent = try await MeetingSummaryShareActions.sendSummary(
-            conversationID: conversationID, recipientEmails: addresses)
-          return ["sent_to": sent.joined(separator: ",")]
-        } catch {
-          return ["error": "send failed: \(error.localizedDescription)"]
-        }
+        NotificationCenter.default.post(
+          name: .meetingSummaryShareSubmit, object: address)
+        return ["submitted": address]
       case "share":
         NotificationCenter.default.post(name: .meetingSummaryShareBeginAddressing, object: nil)
         return ["addressing": "true"]
