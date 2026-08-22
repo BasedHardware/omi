@@ -1,5 +1,5 @@
-# GPU services requirements — extends backend deps with torch/pyannote/speechbrain
--r ../requirements.txt
+# GPU extras layered on top of the main backend uv.lock (see Dockerfile).
+# Install with: uv sync --frozen --no-dev && uv pip install -r modal/requirements.txt
 torch==2.10.0
 torchaudio==2.10.0
 pyannote.audio==3.3.1

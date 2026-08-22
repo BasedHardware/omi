@@ -645,9 +645,9 @@ class TestWebhookInvalidationCoverage:
         idx_update = block.find('_update_subscription_from_session')
         assert idx_update != -1, "_update_subscription_from_session call not found"
         signal_match = self._find_invalidation_call(block)
-        assert (
-            signal_match and signal_match.start() > idx_update
-        ), "set_credits_invalidation_signal must be called after _update_subscription_from_session"
+        assert signal_match and signal_match.start() > idx_update, (
+            "set_credits_invalidation_signal must be called after _update_subscription_from_session"
+        )
 
     def test_subscription_webhook_calls_invalidation(self):
         """customer.subscription.updated/deleted/created must call set_credits_invalidation_signal."""
@@ -662,9 +662,9 @@ class TestWebhookInvalidationCoverage:
         assert idx_update_sub != -1, "update_user_subscription call not found"
         # Signal should appear near the update call
         signal_match = self._find_invalidation_call(block)
-        assert (
-            signal_match and signal_match.start() > idx_update_sub
-        ), "set_credits_invalidation_signal must be called after update_user_subscription"
+        assert signal_match and signal_match.start() > idx_update_sub, (
+            "set_credits_invalidation_signal must be called after update_user_subscription"
+        )
 
     def test_schedule_completed_calls_invalidation(self):
         """subscription_schedule.completed must call set_credits_invalidation_signal."""

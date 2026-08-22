@@ -14,7 +14,12 @@ from database.redis_db import (
     enable_user_webhook_db,
     set_user_webhook_db,
 )
-from database.webhook_health import record_dev_webhook_failure, record_dev_webhook_success, _DEV_FAILURE_THRESHOLD
+from database.webhook_health import (
+    record_dev_webhook_failure,
+    record_dev_webhook_success,
+    enqueue_dev_webhook_dlq,
+    _DEV_FAILURE_THRESHOLD,
+)
 from models.conversation import Conversation
 from models.users import WebhookType, webhook_url_from_setting
 import database.notifications as notification_db
@@ -163,11 +168,29 @@ async def _post_dev_webhook(
         logger.error(
             f'{webhook_name}: delivery failed status={last_response.status_code} attempts={attempts} url={webhook_url}'
         )
+        await run_blocking(
+            db_executor,
+            enqueue_dev_webhook_dlq,
+            webhook_name=webhook_name,
+            webhook_url=webhook_url,
+            status_code=last_response.status_code,
+            error=f'HTTP {last_response.status_code}',
+            idempotency_key=headers.get('Idempotency-Key'),
+        )
         return last_response
 
     if last_exception is None:
         raise RuntimeError(f'{webhook_name}: delivery failed without a response or exception')
     logger.error(f'{webhook_name}: delivery failed error={type(last_exception).__name__} attempts={attempts}')
+    await run_blocking(
+        db_executor,
+        enqueue_dev_webhook_dlq,
+        webhook_name=webhook_name,
+        webhook_url=webhook_url,
+        status_code=0,
+        error=type(last_exception).__name__,
+        idempotency_key=headers.get('Idempotency-Key'),
+    )
     raise last_exception
 
 
@@ -429,6 +452,66 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
             )
             await _handle_dev_webhook_disable(uid, WebhookType.audio_bytes, should_disable)
             logger.error(f"Error sending audio bytes to developer webhook: {e}")
+
+
+async def button_event_webhook(
+    uid: str,
+    *,
+    button_event: str,
+    device_id: str,
+    event_id: str,
+    timestamp: str,
+    session_id: Optional[str] = None,
+) -> None:
+    """Forward an opt-in hardware button gesture to the developer webhook (#11719)."""
+    toggled = await run_blocking(db_executor, user_webhook_status_db, uid, WebhookType.button_event)
+    if not toggled:
+        return
+    webhook_url = await run_blocking(db_executor, get_user_webhook_db, uid, WebhookType.button_event)
+    if not webhook_url:
+        return
+    webhook_url = _append_query_params(webhook_url, {'uid': uid})
+    cb = get_webhook_circuit_breaker(webhook_url)
+    if not cb.allow_request():
+        logger.info(f'button_event_webhook: circuit breaker open for {webhook_url[:80]}')
+        return
+    payload = {
+        'event_type': 'button_event',
+        'button_event': button_event,
+        'device_id': device_id,
+        'event_id': event_id,
+        'timestamp': timestamp,
+        'session_id': session_id,
+    }
+    try:
+        response = await _post_dev_webhook(
+            'button_event_webhook',
+            webhook_url,
+            json=payload,
+            headers={'Content-Type': 'application/json'},
+            idempotency_key=event_id,
+        )
+        if 200 <= response.status_code < 300:
+            cb.record_success()
+            await run_blocking(db_executor, record_dev_webhook_success, uid, WebhookType.button_event)
+        else:
+            cb.record_failure()
+            should_disable = await run_blocking(
+                db_executor,
+                record_dev_webhook_failure,
+                uid,
+                WebhookType.button_event,
+                response.status_code,
+                f'HTTP {response.status_code}',
+            )
+            await _handle_dev_webhook_disable(uid, WebhookType.button_event, should_disable)
+    except Exception as e:
+        cb.record_failure()
+        should_disable = await run_blocking(
+            db_executor, record_dev_webhook_failure, uid, WebhookType.button_event, 0, type(e).__name__
+        )
+        await _handle_dev_webhook_disable(uid, WebhookType.button_event, should_disable)
+        logger.error(f'Error sending button_event developer webhook: {e}')
 
 
 def webhook_first_time_setup(uid: str, wType: WebhookType) -> bool:

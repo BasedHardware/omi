@@ -562,7 +562,7 @@ class TestSupervisorBehavior:
                 break
 
         assert exit_reason == "lifetime_done", (
-            f"Expected 'lifetime_done' but got '{exit_reason}'. " "Lifetime task completion must trigger teardown."
+            f"Expected 'lifetime_done' but got '{exit_reason}'. Lifetime task completion must trigger teardown."
         )
 
         receive_task.cancel()
@@ -775,9 +775,9 @@ class TestProductionFlowStructure:
         for i, line in enumerate(lines):
             if 'asyncio.gather(' in line:
                 gather_block = '\n'.join(lines[i : i + 6])
-                assert not (
-                    'receive_task' in gather_block and 'bg_main_tasks' in gather_block
-                ), f"receive_task must not be gathered with bg_main_tasks (line {i + 1})"
+                assert not ('receive_task' in gather_block and 'bg_main_tasks' in gather_block), (
+                    f"receive_task must not be gathered with bg_main_tasks (line {i + 1})"
+                )
 
     def test_drain_tasks_used_for_bg_cleanup(self):
         """drain_tasks() must be used with BG_DRAIN_TIMEOUT for bg task cleanup."""

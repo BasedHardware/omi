@@ -91,9 +91,10 @@ def test_cache_aligned_history_read_is_scoped_and_overfetches_hidden_records():
     messages_ref.count.return_value.get.side_effect = [_count(21), _count(2)]
     visible_messages = [{"id": f"m{i}"} for i in range(13)]
 
-    with patch.object(chat_db, "db", fake_db), patch.object(
-        chat_db, "get_messages", return_value=visible_messages
-    ) as get_messages:
+    with (
+        patch.object(chat_db, "db", fake_db),
+        patch.object(chat_db, "get_messages", return_value=visible_messages) as get_messages,
+    ):
         result = chat_db.get_cache_aligned_messages("u1", app_id="app-1", chat_session_id="session-1")
 
     # 21 raw - 2 reported = 19 visible; the 10+8 epoch has grown to 11.
@@ -125,9 +126,10 @@ def test_cache_aligned_history_caps_reported_overfetch_for_large_lifetime_count(
     messages_ref.count.return_value.get.side_effect = [_count(500), _count(300)]
     visible_messages = [{"id": f"m{i}"} for i in range(66)]
 
-    with patch.object(chat_db, "db", fake_db), patch.object(
-        chat_db, "get_messages", return_value=visible_messages
-    ) as get_messages:
+    with (
+        patch.object(chat_db, "db", fake_db),
+        patch.object(chat_db, "get_messages", return_value=visible_messages) as get_messages,
+    ):
         result = chat_db.get_cache_aligned_messages("u1", app_id="app-1")
 
     expected_raw_limit = 16 + chat_db.CHAT_HISTORY_REPORTED_RAW_SCAN_CAP  # 16 + 50 = 66

@@ -37,7 +37,7 @@ class RejectedMemoryFeedback:
     updated_at: datetime
 
 
-_feedback_cache: TTLCache[str, Tuple[RejectedMemoryFeedback, ...]] = TTLCache(
+_feedback_cache: TTLCache[str, Tuple[RejectedMemoryFeedback, ...]] = TTLCache(  # ty: ignore[not-subscriptable]
     maxsize=REJECTED_MEMORY_FEEDBACK_CACHE_MAX_USERS,
     ttl=REJECTED_MEMORY_FEEDBACK_CACHE_TTL_SECONDS,
 )

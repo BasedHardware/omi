@@ -45,9 +45,10 @@ class TestIsSoftDeleted:
 class TestReprocessTombstoneGuard:
     def test_reprocess_rejects_soft_deleted_conversation(self):
         deleted = {'id': 'c1', 'deleted': True, 'status': 'completed'}
-        with patch.object(conv_router, '_get_valid_conversation_by_id', return_value=deleted), patch.object(
-            conv_router, 'process_conversation'
-        ) as process:
+        with (
+            patch.object(conv_router, '_get_valid_conversation_by_id', return_value=deleted),
+            patch.object(conv_router, 'process_conversation') as process,
+        ):
             with pytest.raises(HTTPException) as exc:
                 conv_router.reprocess_conversation(conversation_id='c1', uid='u1')
         assert exc.value.status_code == 404
@@ -56,9 +57,11 @@ class TestReprocessTombstoneGuard:
     def test_reprocess_still_allows_a_discarded_conversation(self):
         discarded = {'id': 'c1', 'discarded': True, 'status': 'completed'}
         fake_conv = SimpleNamespace(language='en')
-        with patch.object(conv_router, '_get_valid_conversation_by_id', return_value=discarded), patch.object(
-            conv_router, 'deserialize_conversation', return_value=fake_conv
-        ), patch.object(conv_router, 'process_conversation', return_value=fake_conv) as process:
+        with (
+            patch.object(conv_router, '_get_valid_conversation_by_id', return_value=discarded),
+            patch.object(conv_router, 'deserialize_conversation', return_value=fake_conv),
+            patch.object(conv_router, 'process_conversation', return_value=fake_conv) as process,
+        ):
             result = conv_router.reprocess_conversation(conversation_id='c1', uid='u1')
         process.assert_called_once()
         assert result is fake_conv

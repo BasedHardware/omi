@@ -187,9 +187,7 @@ async def search_google_contacts(access_token: str, query: str) -> Optional[str]
             return None
         else:
             error_body = response.text[:200] if response.text else "No error body"
-            logger.error(
-                f"⚠️ Google Contacts API (Other Contacts) error {response.status_code}: {sanitize(error_body)}"
-            )
+            logger.error(f"⚠️ Google Contacts API (Other Contacts) error {response.status_code}: {sanitize(error_body)}")
     except httpx.HTTPError as e:
         logger.error(f"⚠️ Network error searching Other Contacts: {e}")
     except Exception as e:
@@ -860,7 +858,6 @@ async def create_calendar_event_tool(
     assert access_token is not None
 
     try:
-
         # Parse start and end times
         try:
             start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
@@ -1046,7 +1043,6 @@ async def delete_calendar_event_tool(
     assert access_token is not None
 
     try:
-
         # If event_id is provided, delete directly
         if event_id:
             try:
@@ -1303,7 +1299,6 @@ async def update_calendar_event_tool(
     assert access_token is not None
 
     try:
-
         # Find the event if event_id not provided
         target_event_id = event_id
         if not target_event_id:

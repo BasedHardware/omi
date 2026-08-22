@@ -114,9 +114,11 @@ async def test_mobile_header_alone_never_reads_coordinates_or_discloses_location
         assert function is agentic.get_user_location_context_consent
         return None
 
-    with patch.object(agentic, 'run_blocking', fake_run_blocking), patch.object(
-        agentic, 'get_cached_user_geolocation', cached_coordinates
-    ), patch.object(agentic, 'async_get_google_maps_city', maps_city):
+    with (
+        patch.object(agentic, 'run_blocking', fake_run_blocking),
+        patch.object(agentic, 'get_cached_user_geolocation', cached_coordinates),
+        patch.object(agentic, 'async_get_google_maps_city', maps_city),
+    ):
         assert await agentic.get_mobile_city('uid1', 'ios') is None
 
     cached_coordinates.assert_not_awaited()
@@ -135,8 +137,9 @@ async def test_valid_location_context_opt_in_allows_city_only_prompt_metadata():
         raise AssertionError(f'unexpected blocking call: {function}')
 
     maps_city = AsyncMock(return_value='New York, New York, United States')
-    with patch.object(agentic, 'run_blocking', fake_run_blocking), patch.object(
-        agentic, 'async_get_google_maps_city', maps_city
+    with (
+        patch.object(agentic, 'run_blocking', fake_run_blocking),
+        patch.object(agentic, 'async_get_google_maps_city', maps_city),
     ):
         city = await agentic.get_mobile_city('uid1', 'android')
 
@@ -164,9 +167,11 @@ async def test_revoked_or_expired_location_context_never_reads_coordinates_or_ca
             assert function is agentic.get_user_location_context_consent
             return consent
 
-        with patch.object(agentic, 'run_blocking', fake_run_blocking), patch.object(
-            agentic, 'get_cached_user_geolocation', cached_coordinates
-        ), patch.object(agentic, 'async_get_google_maps_city', maps_city):
+        with (
+            patch.object(agentic, 'run_blocking', fake_run_blocking),
+            patch.object(agentic, 'get_cached_user_geolocation', cached_coordinates),
+            patch.object(agentic, 'async_get_google_maps_city', maps_city),
+        ):
             assert await agentic.get_mobile_city('uid1', 'ios') is None
 
         cached_coordinates.assert_not_awaited()
@@ -184,8 +189,9 @@ async def test_invalid_cached_coordinates_never_reach_maps_after_opt_in():
             return {'latitude': 90.1, 'longitude': 0}
         raise AssertionError(f'unexpected blocking call: {function}')
 
-    with patch.object(agentic, 'run_blocking', fake_run_blocking), patch.object(
-        agentic, 'async_get_google_maps_city', maps_city
+    with (
+        patch.object(agentic, 'run_blocking', fake_run_blocking),
+        patch.object(agentic, 'async_get_google_maps_city', maps_city),
     ):
         assert await agentic.get_mobile_city('uid1', 'ios') is None
 
@@ -214,8 +220,9 @@ async def test_chat_router_passes_metadata_to_every_interactive_path():
         persona = SimpleNamespace(id='persona1', is_a_persona=lambda: True)
         with patch.object(graph, 'execute_persona_chat_stream', stream):
             assert [chunk async for chunk in graph.execute_chat_stream('uid1', [message], app=persona)] == [None]
-        with patch.object(graph, '_has_file_context', AsyncMock(return_value=True)), patch.object(
-            graph, '_execute_file_chat_stream', stream
+        with (
+            patch.object(graph, '_has_file_context', AsyncMock(return_value=True)),
+            patch.object(graph, '_execute_file_chat_stream', stream),
         ):
             assert [chunk async for chunk in graph.execute_chat_stream('uid1', [message], chat_session=session)] == [
                 None
@@ -236,10 +243,11 @@ async def test_chat_router_and_agentic_share_one_setup_deadline():
         yield None
 
     before = asyncio.get_running_loop().time()
-    with patch.object(graph, '_current_prompt_metadata', AsyncMock(return_value=('<dt/>', 'UTC'))), patch.object(
-        graph, 'execute_agentic_chat_stream', capture_agentic
-    ), patch.object(graph, 'AGENT_STREAM_SETUP_TIMEOUT_SECONDS', 25.0), patch.object(
-        agentic, 'AGENT_STREAM_SETUP_TIMEOUT_SECONDS', 25.0
+    with (
+        patch.object(graph, '_current_prompt_metadata', AsyncMock(return_value=('<dt/>', 'UTC'))),
+        patch.object(graph, 'execute_agentic_chat_stream', capture_agentic),
+        patch.object(graph, 'AGENT_STREAM_SETUP_TIMEOUT_SECONDS', 25.0),
+        patch.object(agentic, 'AGENT_STREAM_SETUP_TIMEOUT_SECONDS', 25.0),
     ):
         assert [chunk async for chunk in graph.execute_chat_stream('uid1', [message])] == [None]
     after = asyncio.get_running_loop().time()
@@ -264,10 +272,11 @@ async def test_file_route_classification_shares_router_setup_deadline():
         agentic_calls.append(1)
         yield None
 
-    with patch.object(graph, '_current_prompt_metadata', AsyncMock(return_value=('<dt/>', 'UTC'))), patch.object(
-        graph, '_has_file_context', slow_file_context
-    ), patch.object(graph, 'execute_agentic_chat_stream', capture_agentic), patch.object(
-        graph, 'AGENT_STREAM_SETUP_TIMEOUT_SECONDS', 0.01
+    with (
+        patch.object(graph, '_current_prompt_metadata', AsyncMock(return_value=('<dt/>', 'UTC'))),
+        patch.object(graph, '_has_file_context', slow_file_context),
+        patch.object(graph, 'execute_agentic_chat_stream', capture_agentic),
+        patch.object(graph, 'AGENT_STREAM_SETUP_TIMEOUT_SECONDS', 0.01),
     ):
         chunks = [chunk async for chunk in graph.execute_chat_stream('uid1', [message], chat_session=session)]
 
@@ -327,9 +336,11 @@ async def test_file_assistants_stream_runs_setup_and_sync_callbacks_off_loop():
             stream_callback.end_nowait()
             loop.call_soon_threadsafe(worker_finished.set)
 
-    with patch.object(chat_file.chat_db, 'get_chat_files_desc', lambda *_args, **_kwargs: []), patch.object(
-        chat_file.FileChatTool, '_ensure_thread_and_assistant', fake_ensure
-    ), patch.object(chat_file.FileChatTool, 'ask_stream', blocking_ask):
+    with (
+        patch.object(chat_file.chat_db, 'get_chat_files_desc', lambda *_args, **_kwargs: []),
+        patch.object(chat_file.FileChatTool, '_ensure_thread_and_assistant', fake_ensure),
+        patch.object(chat_file.FileChatTool, 'ask_stream', blocking_ask),
+    ):
         task = asyncio.create_task(tool.process_chat_with_file_stream('summarize', ['file1'], callback))
         await asyncio.wait_for(ask_started.wait(), timeout=0.5)
 
@@ -379,14 +390,13 @@ async def test_file_stream_deadline_fires_while_sync_assistants_stream_is_off_lo
             async for chunk in graph._execute_file_chat_stream('uid1', [message], session, callback_data=callback_data)
         ]
 
-    with patch.object(graph, 'FileChatTool', lambda *_args: tool), patch.object(
-        chat_file.chat_db, 'get_chat_files_desc', lambda *_args, **_kwargs: []
-    ), patch.object(chat_file.FileChatTool, '_ensure_thread_and_assistant', fake_ensure), patch.object(
-        chat_file.FileChatTool, 'ask_stream', blocking_ask
-    ), patch.object(
-        graph, 'AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS', 0.01
-    ), patch.object(
-        agentic, 'AGENT_STREAM_CANCEL_GRACE_SECONDS', 0.05
+    with (
+        patch.object(graph, 'FileChatTool', lambda *_args: tool),
+        patch.object(chat_file.chat_db, 'get_chat_files_desc', lambda *_args, **_kwargs: []),
+        patch.object(chat_file.FileChatTool, '_ensure_thread_and_assistant', fake_ensure),
+        patch.object(chat_file.FileChatTool, 'ask_stream', blocking_ask),
+        patch.object(graph, 'AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS', 0.01),
+        patch.object(agentic, 'AGENT_STREAM_CANCEL_GRACE_SECONDS', 0.05),
     ):
         stream_task = asyncio.create_task(collect_file_stream())
         await asyncio.wait_for(ask_started.wait(), timeout=0.5)
@@ -426,18 +436,15 @@ async def test_agentic_setup_reads_run_off_loop():
         # End the stream immediately so the generator's queue loop breaks.
         await callback.queue.put(None)
 
-    with patch.object(agentic, 'get_user_timezone', rec('tz', 'UTC')), patch.object(
-        agentic, '_get_agentic_qa_prompt', rec('prompt', 'SYSTEM')
-    ), patch.object(agentic, 'load_app_tools', rec('app_tools', [])), patch.object(
-        agentic, 'get_current_datetime_block', lambda uid, tz=None, location=None: ''
-    ), patch.object(
-        agentic, '_convert_tools', lambda core, app: ([], {})
-    ), patch.object(
-        agentic, '_messages_to_anthropic', lambda messages: []
-    ), patch.object(
-        agentic, '_inject_current_datetime', lambda anthropic_messages, block: []
-    ), patch.object(
-        agentic, '_run_anthropic_agent_stream', fake_agent_stream
+    with (
+        patch.object(agentic, 'get_user_timezone', rec('tz', 'UTC')),
+        patch.object(agentic, '_get_agentic_qa_prompt', rec('prompt', 'SYSTEM')),
+        patch.object(agentic, 'load_app_tools', rec('app_tools', [])),
+        patch.object(agentic, 'get_current_datetime_block', lambda uid, tz=None, location=None: ''),
+        patch.object(agentic, '_convert_tools', lambda core, app: ([], {})),
+        patch.object(agentic, '_messages_to_anthropic', lambda messages: []),
+        patch.object(agentic, '_inject_current_datetime', lambda anthropic_messages, block: []),
+        patch.object(agentic, '_run_anthropic_agent_stream', fake_agent_stream),
     ):
         chunks = []
         async for chunk in agentic.execute_agentic_chat_stream(
@@ -471,9 +478,11 @@ async def test_persona_stream_forwards_langchain_callbacks_and_terminates():
 
     callback_data = {}
     app = SimpleNamespace(id='persona-1', name='Persona', persona_prompt='SYSTEM')
-    with patch.object(graph, 'get_llm', lambda *_args, **_kwargs: FakeLLM()), patch.object(
-        graph, 'get_chat_tracer_callbacks', lambda **_kwargs: []
-    ), patch.object(graph, 'track_usage', lambda *_args, **_kwargs: nullcontext()):
+    with (
+        patch.object(graph, 'get_llm', lambda *_args, **_kwargs: FakeLLM()),
+        patch.object(graph, 'get_chat_tracer_callbacks', lambda **_kwargs: []),
+        patch.object(graph, 'track_usage', lambda *_args, **_kwargs: nullcontext()),
+    ):
         chunks = [
             chunk
             async for chunk in graph.execute_persona_chat_stream(
@@ -498,8 +507,9 @@ async def test_persona_callback_drain_cancels_a_silent_producer():
             raise
 
     task = asyncio.create_task(stalled_producer())
-    with patch.object(graph, 'AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS', 0.01), patch.object(
-        agentic, 'AGENT_STREAM_CANCEL_GRACE_SECONDS', 0.05
+    with (
+        patch.object(graph, 'AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS', 0.01),
+        patch.object(agentic, 'AGENT_STREAM_CANCEL_GRACE_SECONDS', 0.05),
     ):
         chunks = [chunk async for chunk in graph._drain_chat_callback(callback, task, route='persona')]
 
@@ -518,8 +528,9 @@ async def test_agentic_stream_cancels_a_silent_producer_before_the_proxy_deadlin
             cancelled.set()
             raise
 
-    with patch.object(agentic, 'AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS', 0.01), patch.object(
-        agentic, 'AGENT_STREAM_CANCEL_GRACE_SECONDS', 0.05
+    with (
+        patch.object(agentic, 'AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS', 0.01),
+        patch.object(agentic, 'AGENT_STREAM_CANCEL_GRACE_SECONDS', 0.05),
     ):
         chunks = await _collect_agentic_chunks(stalled_producer)
 
@@ -539,9 +550,11 @@ async def test_agentic_stream_keeps_an_answer_streamed_before_the_deadline():
         full_response.append('the answer so far')
         await asyncio.Event().wait()
 
-    with patch.object(agentic, 'AGENT_STREAM_PROGRESS_HEARTBEAT_SECONDS', 0.01), patch.object(
-        agentic, 'AGENT_STREAM_MAX_DURATION_SECONDS', 0.05
-    ), patch.object(agentic, 'AGENT_STREAM_CANCEL_GRACE_SECONDS', 0.05):
+    with (
+        patch.object(agentic, 'AGENT_STREAM_PROGRESS_HEARTBEAT_SECONDS', 0.01),
+        patch.object(agentic, 'AGENT_STREAM_MAX_DURATION_SECONDS', 0.05),
+        patch.object(agentic, 'AGENT_STREAM_CANCEL_GRACE_SECONDS', 0.05),
+    ):
         chunks = await _collect_agentic_chunks(stalls_after_answering, callback_data)
 
     # The terminal None is what makes the router persist instead of writing a
@@ -560,8 +573,9 @@ async def test_agentic_stream_still_errors_when_nothing_was_streamed():
     async def stalled_producer(*_args, **_kwargs):
         await asyncio.Event().wait()
 
-    with patch.object(agentic, 'AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS', 0.01), patch.object(
-        agentic, 'AGENT_STREAM_CANCEL_GRACE_SECONDS', 0.05
+    with (
+        patch.object(agentic, 'AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS', 0.01),
+        patch.object(agentic, 'AGENT_STREAM_CANCEL_GRACE_SECONDS', 0.05),
     ):
         chunks = await _collect_agentic_chunks(stalled_producer, callback_data)
 
@@ -641,22 +655,17 @@ async def test_agentic_setup_budget_does_not_consume_first_event_deadline():
         args[5].append('hello')
         await callback.end()
 
-    with patch.object(agentic, 'get_user_timezone', slow_tz), patch.object(
-        agentic, '_get_agentic_qa_prompt', lambda *_args, **_kwargs: 'SYSTEM'
-    ), patch.object(agentic, 'load_app_tools', lambda _uid: []), patch.object(
-        agentic, 'get_current_datetime_block', lambda _uid, tz=None, location=None: ''
-    ), patch.object(
-        agentic, '_convert_tools', lambda _core, _app: ([], {})
-    ), patch.object(
-        agentic, '_messages_to_anthropic', lambda _messages: []
-    ), patch.object(
-        agentic, '_inject_current_datetime', lambda messages, _block: messages
-    ), patch.object(
-        agentic, '_run_anthropic_agent_stream', quick_producer
-    ), patch.object(
-        agentic, 'AGENT_STREAM_SETUP_TIMEOUT_SECONDS', 2.0
-    ), patch.object(
-        agentic, 'AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS', 0.1
+    with (
+        patch.object(agentic, 'get_user_timezone', slow_tz),
+        patch.object(agentic, '_get_agentic_qa_prompt', lambda *_args, **_kwargs: 'SYSTEM'),
+        patch.object(agentic, 'load_app_tools', lambda _uid: []),
+        patch.object(agentic, 'get_current_datetime_block', lambda _uid, tz=None, location=None: ''),
+        patch.object(agentic, '_convert_tools', lambda _core, _app: ([], {})),
+        patch.object(agentic, '_messages_to_anthropic', lambda _messages: []),
+        patch.object(agentic, '_inject_current_datetime', lambda messages, _block: messages),
+        patch.object(agentic, '_run_anthropic_agent_stream', quick_producer),
+        patch.object(agentic, 'AGENT_STREAM_SETUP_TIMEOUT_SECONDS', 2.0),
+        patch.object(agentic, 'AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS', 0.1),
     ):
         # If setup shared the first-event clock, the 200ms setup would leave no
         # budget for the producer (100ms window) and this would idle-timeout before 'hello'.

@@ -50,7 +50,7 @@ class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
 
     def submit(self, fn: Callable[..., T], /, *args: Any, **kwargs: Any) -> Future[T]:
         future = super().submit(self._tracked, fn, *args, **kwargs)
-        return future
+        return future  # ty: ignore[invalid-return-type]
 
     def _tracked(self, fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:
         with self._active_lock:
@@ -111,7 +111,7 @@ def submit_with_context(
     ctx = contextvars.copy_context()
     future = executor.submit(ctx.run, fn, *args, **kwargs)
     future.add_done_callback(functools.partial(_log_background_failure, getattr(fn, '__name__', repr(fn))))
-    return future
+    return future  # ty: ignore[invalid-return-type]
 
 
 def get_executor_metrics() -> List[Dict[str, Any]]:

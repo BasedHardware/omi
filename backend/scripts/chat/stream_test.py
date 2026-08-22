@@ -126,10 +126,10 @@ async def test_stream():
         #     file_ids=[],  # ['x']
         # ),
         # uid=uid,
-    )
+    )  # ty: ignore[missing-argument]
 
     # Read the stream
-    async for chunk in cast(Any, response).body_iterator:
+    async for chunk in cast(Any, response).body_iterator:  # ty: ignore[redundant-cast]
         if isinstance(chunk, bytes):
             print(chunk.decode('utf-8'))
         else:

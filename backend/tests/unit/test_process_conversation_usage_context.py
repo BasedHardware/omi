@@ -581,8 +581,9 @@ def test_discard_call_uses_discard_feature_tracking():
     conversation.photos = []
     conversation.get_person_ids.return_value = []
     conversation.external_data = None  # Prevent CalendarMeetingContext parsing
-    conversation.started_at = None
-    conversation.finished_at = None
+    conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
+    conversation.finished_at = datetime(2026, 8, 4, 0, 5, tzinfo=timezone.utc)
+    conversation.transcript_segments = []
 
     # Mock notification_db
     notifications_mod = sys.modules["database.notifications"]
@@ -593,8 +594,9 @@ def test_discard_call_uses_discard_feature_tracking():
     action_items_mod.get_action_items = MagicMock(return_value=[])
 
     # Patch on the process_conversation module (where it's imported/bound)
-    with patch.object(process_conversation, "should_discard_conversation", fake_discard), patch.object(
-        process_conversation, "get_transcript_structure", MagicMock()
+    with (
+        patch.object(process_conversation, "should_discard_conversation", fake_discard),
+        patch.object(process_conversation, "get_transcript_structure", MagicMock()),
     ):
         try:
             process_conversation._get_structured("user-1", "en", conversation)
@@ -686,7 +688,8 @@ def test_byok_rate_limit_reaches_conversation_composition_as_safe_actionable_429
     conversation.photos = []
     conversation.external_data = None
     conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
-    conversation.finished_at = datetime(2026, 8, 4, 0, 1, tzinfo=timezone.utc)
+    conversation.finished_at = datetime(2026, 8, 4, 0, 5, tzinfo=timezone.utc)
+    conversation.transcript_segments = []
 
     monkeypatch.setattr(process_conversation, 'should_discard_conversation', MagicMock(return_value=False))
     monkeypatch.setattr(
@@ -721,7 +724,8 @@ def test_unwrapped_openai_byok_rate_limit_reaches_conversation_composition(monke
     conversation.photos = []
     conversation.external_data = None
     conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
-    conversation.finished_at = datetime(2026, 8, 4, 0, 1, tzinfo=timezone.utc)
+    conversation.finished_at = datetime(2026, 8, 4, 0, 5, tzinfo=timezone.utc)
+    conversation.transcript_segments = []
 
     sdk_error = openai.RateLimitError(
         sensitive_provider_body,
@@ -761,7 +765,8 @@ def test_non_byok_rate_limit_failures_keep_generic_processing_error(monkeypatch,
     conversation.photos = []
     conversation.external_data = None
     conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
-    conversation.finished_at = datetime(2026, 8, 4, 0, 1, tzinfo=timezone.utc)
+    conversation.finished_at = datetime(2026, 8, 4, 0, 5, tzinfo=timezone.utc)
+    conversation.transcript_segments = []
 
     monkeypatch.setattr(process_conversation, 'should_discard_conversation', MagicMock(return_value=False))
     monkeypatch.setattr(process_conversation, 'get_transcript_structure', MagicMock(side_effect=error))
@@ -788,7 +793,8 @@ def test_byok_rate_limit_in_action_item_extraction_reaches_composition_boundary(
     conversation.photos = []
     conversation.external_data = None
     conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
-    conversation.finished_at = datetime(2026, 8, 4, 0, 1, tzinfo=timezone.utc)
+    conversation.finished_at = datetime(2026, 8, 4, 0, 5, tzinfo=timezone.utc)
+    conversation.transcript_segments = []
 
     monkeypatch.setattr(process_conversation, 'should_discard_conversation', MagicMock(return_value=False))
     monkeypatch.setattr(
@@ -838,8 +844,9 @@ def test_no_umbrella_conversation_processing_tracking():
     conversation.photos = []
     conversation.get_person_ids.return_value = []
     conversation.external_data = None
-    conversation.started_at = None
-    conversation.finished_at = None
+    conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
+    conversation.finished_at = datetime(2026, 8, 4, 0, 5, tzinfo=timezone.utc)
+    conversation.transcript_segments = []
 
     notifications_mod = sys.modules["database.notifications"]
     notifications_mod.get_user_time_zone = MagicMock(return_value="UTC")
@@ -885,8 +892,9 @@ def test_action_items_tracked_separately_from_structure():
     conversation.photos = []
     conversation.get_person_ids.return_value = []
     conversation.external_data = None
-    conversation.started_at = None
-    conversation.finished_at = None
+    conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
+    conversation.finished_at = datetime(2026, 8, 4, 0, 5, tzinfo=timezone.utc)
+    conversation.transcript_segments = []
 
     notifications_mod = sys.modules["database.notifications"]
     notifications_mod.get_user_time_zone = MagicMock(return_value="UTC")
@@ -894,10 +902,11 @@ def test_action_items_tracked_separately_from_structure():
     action_items_mod = sys.modules["database.action_items"]
     action_items_mod.get_action_items = MagicMock(return_value=[])
 
-    with patch.object(process_conversation, "should_discard_conversation", MagicMock(return_value=False)), patch.object(
-        process_conversation, "get_transcript_structure", MagicMock()
-    ), patch.object(process_conversation, "extract_action_items", MagicMock(return_value=[])), patch.object(
-        process_conversation, "track_usage", spy_track_usage
+    with (
+        patch.object(process_conversation, "should_discard_conversation", MagicMock(return_value=False)),
+        patch.object(process_conversation, "get_transcript_structure", MagicMock()),
+        patch.object(process_conversation, "extract_action_items", MagicMock(return_value=[])),
+        patch.object(process_conversation, "track_usage", spy_track_usage),
     ):
         try:
             process_conversation._get_structured("user-3", "en", conversation)
@@ -931,8 +940,9 @@ def test_structure_and_apps_tracked_at_runtime():
     conversation.photos = []
     conversation.get_person_ids.return_value = []
     conversation.external_data = None
-    conversation.started_at = None
-    conversation.finished_at = None
+    conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
+    conversation.finished_at = datetime(2026, 8, 4, 0, 5, tzinfo=timezone.utc)
+    conversation.transcript_segments = []
     conversation.structured = MagicMock()
     conversation.structured.title = "Test"
     conversation.structured.overview = "Test overview"
@@ -960,12 +970,14 @@ def test_structure_and_apps_tracked_at_runtime():
     redis_mod.get_user_preferred_app = MagicMock(return_value=None)
     redis_mod.get_conversation_summary_app_ids = MagicMock(return_value=[])
 
-    with patch.object(process_conversation, "should_discard_conversation", MagicMock(return_value=False)), patch.object(
-        process_conversation, "get_transcript_structure", MagicMock()
-    ), patch.object(process_conversation, "extract_action_items", MagicMock(return_value=[])), patch.object(
-        process_conversation, "assign_conversation_to_folder", MagicMock(return_value=("f1", 0.9, "match"))
-    ), patch.object(
-        process_conversation, "track_usage", spy_track_usage
+    with (
+        patch.object(process_conversation, "should_discard_conversation", MagicMock(return_value=False)),
+        patch.object(process_conversation, "get_transcript_structure", MagicMock()),
+        patch.object(process_conversation, "extract_action_items", MagicMock(return_value=[])),
+        patch.object(
+            process_conversation, "assign_conversation_to_folder", MagicMock(return_value=("f1", 0.9, "match"))
+        ),
+        patch.object(process_conversation, "track_usage", spy_track_usage),
     ):
         try:
             process_conversation._get_structured("user-4", "en", conversation)
@@ -987,8 +999,9 @@ def test_action_items_skipped_on_discard():
     conversation.photos = []
     conversation.get_person_ids.return_value = []
     conversation.external_data = None
-    conversation.started_at = None
-    conversation.finished_at = None
+    conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
+    conversation.finished_at = datetime(2026, 8, 4, 0, 5, tzinfo=timezone.utc)
+    conversation.transcript_segments = []
 
     notifications_mod = sys.modules["database.notifications"]
     notifications_mod.get_user_time_zone = MagicMock(return_value="UTC")
@@ -998,8 +1011,9 @@ def test_action_items_skipped_on_discard():
 
     extract_mock = MagicMock(return_value=[])
 
-    with patch.object(process_conversation, "should_discard_conversation", MagicMock(return_value=True)), patch.object(
-        process_conversation, "extract_action_items", extract_mock
+    with (
+        patch.object(process_conversation, "should_discard_conversation", MagicMock(return_value=True)),
+        patch.object(process_conversation, "extract_action_items", extract_mock),
     ):
         structured, discarded = process_conversation._get_structured("user-5", "en", conversation)
 
@@ -1065,9 +1079,9 @@ def test_llm_calls_use_omi_qos_tier_system():
         re.DOTALL,
     )
     assert struct_match is not None
-    assert (
-        struct_match.group(1) == "conv_structure"
-    ), f"Expected get_llm('conv_structure') for structure, got {struct_match.group(1)}"
+    assert struct_match.group(1) == "conv_structure", (
+        f"Expected get_llm('conv_structure') for structure, got {struct_match.group(1)}"
+    )
 
     # get_app_result should use the conv_app_result QoS lane.
     app_match = re.search(
@@ -1076,9 +1090,9 @@ def test_llm_calls_use_omi_qos_tier_system():
         re.DOTALL,
     )
     assert app_match is not None
-    assert (
-        app_match.group(1) == "conv_app_result"
-    ), f"Expected get_llm('conv_app_result') for app result, got {app_match.group(1)}"
+    assert app_match.group(1) == "conv_app_result", (
+        f"Expected get_llm('conv_app_result') for app result, got {app_match.group(1)}"
+    )
 
     # extract_action_items should use the conv_action_items QoS lane.
     action_match = re.search(
@@ -1087,9 +1101,9 @@ def test_llm_calls_use_omi_qos_tier_system():
         re.DOTALL,
     )
     assert action_match is not None
-    assert (
-        action_match.group(1) == "conv_action_items"
-    ), f"Expected get_llm('conv_action_items') for action items, got {action_match.group(1)}"
+    assert action_match.group(1) == "conv_action_items", (
+        f"Expected get_llm('conv_action_items') for action items, got {action_match.group(1)}"
+    )
 
     # Verify cache keys are passed through get_llm's cache_key param (model-safe)
     assert 'ACTION_ITEMS_CACHE_KEY' in conv_proc_source, "Missing stable cache key for action items"
@@ -1112,16 +1126,16 @@ def test_all_callsites_use_get_llm():
     assert 'conv_discard' in conv_proc_calls, "Missing get_llm('conv_discard') in conversation_processing.py"
     assert 'daily_summary' in conv_proc_calls, "Missing get_llm('daily_summary') in conversation_processing.py"
     # conv_structure appears in both get_transcript_structure and get_reprocess_transcript_structure
-    assert (
-        conv_proc_calls.count('conv_structure') >= 2
-    ), f"Expected at least 2 get_llm('conv_structure') calls (structure + reprocess), got {conv_proc_calls.count('conv_structure')}"
+    assert conv_proc_calls.count('conv_structure') >= 2, (
+        f"Expected at least 2 get_llm('conv_structure') calls (structure + reprocess), got {conv_proc_calls.count('conv_structure')}"
+    )
 
     # knowledge_graph.py: 2 callsites
     kg_source = (backend_dir / "utils" / "llm" / "knowledge_graph.py").read_text(encoding="utf-8")
     kg_calls = re.findall(r"get_llm\(\s*'(\w+)'", kg_source)
-    assert (
-        kg_calls.count('knowledge_graph') == 2
-    ), f"Expected 2 get_llm('knowledge_graph') calls, got {kg_calls.count('knowledge_graph')}"
+    assert kg_calls.count('knowledge_graph') == 2, (
+        f"Expected 2 get_llm('knowledge_graph') calls, got {kg_calls.count('knowledge_graph')}"
+    )
 
     # memories.py: 6 callsites (memories x3 incl. the memory-log extract SSOT, learnings x1,
     # memory_category x1, memory_conflict x1)
@@ -1680,9 +1694,9 @@ def test_custom_stt_conversation_without_llm_byok_key_skips_llm_work(monkeypatch
     assert result is completed_conversation
     assert structured_calls == [], 'LLM structuring ran for a custom-STT conversation without an LLM key'
     assert completed_conversation.status == ConversationStatus.completed
-    assert (
-        persisted.get('status') == ConversationStatus.completed
-    ), f'custom-STT skip path did not durably persist the completed status: {persisted}'
+    assert persisted.get('status') == ConversationStatus.completed, (
+        f'custom-STT skip path did not durably persist the completed status: {persisted}'
+    )
 
 
 def test_custom_stt_conversation_with_llm_byok_key_runs_llm_work(monkeypatch):

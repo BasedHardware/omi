@@ -118,9 +118,10 @@ def _valid(aid, completed=False):
 def test_conversation_list_skips_malformed_not_500():
     bad = {'id': 'a2', 'description': 'missing completed'}  # missing required field -> ValidationError
     page = [_valid('a1'), bad]
-    with patch.object(
-        ai_mod.conversations_db, 'get_conversation', return_value={'id': 'c1', 'is_locked': False}
-    ), patch.object(ai_mod.action_items_db, 'get_action_items_by_conversation', return_value=page):
+    with (
+        patch.object(ai_mod.conversations_db, 'get_conversation', return_value={'id': 'c1', 'is_locked': False}),
+        patch.object(ai_mod.action_items_db, 'get_action_items_by_conversation', return_value=page),
+    ):
         resp = ai_mod.get_conversation_action_items(conversation_id='c1', uid='uid1')
     assert [i.id for i in resp['action_items']] == ['a1']
 
@@ -147,8 +148,9 @@ def test_main_list_skips_malformed_not_500():
 def test_search_skips_malformed_not_500():
     bad = {'id': 'a2', 'description': 'missing completed'}
     page = [_valid('a1'), bad]
-    with patch.object(ai_mod, 'search_action_items_by_vector', return_value=['a1', 'a2']), patch.object(
-        ai_mod.action_items_db, 'get_action_items_by_ids', return_value=page
+    with (
+        patch.object(ai_mod, 'search_action_items_by_vector', return_value=['a1', 'a2']),
+        patch.object(ai_mod.action_items_db, 'get_action_items_by_ids', return_value=page),
     ):
         resp = ai_mod.search_action_items(query='meeting', limit=10, uid='uid1')
     assert [i.id for i in resp['action_items']] == ['a1']

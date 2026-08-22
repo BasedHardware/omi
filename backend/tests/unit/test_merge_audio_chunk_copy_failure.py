@@ -156,6 +156,6 @@ def test_merge_propagates_custom_stt_marker_from_any_source(monkeypatch):
 
     merge.perform_merge_async('u1', ['conv_custom', 'conv_normal'], reprocess=False)
 
-    assert (
-        created['data']['uses_custom_stt'] is True
-    ), f"merged conversation lost the custom-STT marker: {created['data'].get('uses_custom_stt')}"
+    assert created['data']['uses_custom_stt'] is True, (
+        f"merged conversation lost the custom-STT marker: {created['data'].get('uses_custom_stt')}"
+    )

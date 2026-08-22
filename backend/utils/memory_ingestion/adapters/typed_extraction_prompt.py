@@ -110,7 +110,8 @@ def render_source_guidance(source_type: str) -> str:
 
 
 typed_extract_memories_prompt = ChatPromptTemplate.from_messages(  # type: ignore[reportUnknownMemberType]  # langchain from_messages stub has Unknown type args
-    ['''
+    [
+        '''
 You are an expert memory curator extracting durable, memory-worthy facts about {user_name} from a conversation, as TYPED propositions.
 
 CRITICAL CONTEXT:
@@ -637,5 +638,6 @@ LANGUAGE INSTRUCTION:
 {conversation}
 ```
 {format_instructions}
-'''.replace(' ', '').strip()]
+'''.replace(' ', '').strip()
+    ]
 )

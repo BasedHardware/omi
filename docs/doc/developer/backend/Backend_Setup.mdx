@@ -243,7 +243,7 @@ OAuth is required for user authentication. You need to configure both Google and
     ```
   </Step>
   <Step title="Install System Dependencies" icon="box">
-    The backend Docker images run Python 3.11, so use Python 3.11 locally as well. If your package manager installs a newer default Python, install or select Python 3.11 before creating the virtual environment.
+    The backend Docker images run Python 3.13, so use Python 3.13 locally as well. If your package manager installs a newer default Python, install or select Python 3.13 before creating the virtual environment.
 
     <Tabs>
       <Tab title="macOS">
@@ -253,7 +253,7 @@ OAuth is required for user authentication. You need to configure both Google and
         ```
       </Tab>
       <Tab title="Windows">
-        Install Python 3.11 from [python.org](https://www.python.org/downloads/windows/), then install the remaining system tools and `uv`:
+        Install Python 3.13 from [python.org](https://www.python.org/downloads/windows/), then install the remaining system tools and `uv`:
 
         ```powershell
         choco install git.install ffmpeg
@@ -279,7 +279,7 @@ OAuth is required for user authentication. You need to configure both Google and
   </Step>
   <Step title="Set Up Python Virtual Environment" icon="python">
     <Tip>
-    The backend uses `uv`, `.python-version`, and `pylock.toml` for reproducible local and CI installs.
+    The backend uses `uv`, `.python-version`, and `uv.lock` for reproducible local and CI installs.
     </Tip>
 
     <Tabs>
@@ -447,7 +447,7 @@ OAuth is required for user authentication. You need to configure both Google and
   </Accordion>
   <Accordion title="Virtual environment not activating" icon="terminal">
     - On Windows, you may need to enable script execution: `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`
-    - Make sure you're using Python 3.11
+    - Make sure you're using Python 3.13
   </Accordion>
 </AccordionGroup>
 

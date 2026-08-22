@@ -237,7 +237,7 @@ class TestVRAMStress:
 
         print(
             f"\n  Baseline VRAM: {baseline_used:.0f}/{baseline_total:.0f} MiB "
-            f"({baseline_used/baseline_total*100:.1f}%)"
+            f"({baseline_used / baseline_total * 100:.1f}%)"
         )
         print(f"  Sending {cc} concurrent requests with {duration}s audio...")
 
@@ -260,7 +260,7 @@ class TestVRAMStress:
 
         assert new_ooms == 0, f"{new_ooms} OOM events during 30s audio stress test"
         assert monitor.peak_pct < VRAM_HEADROOM_PCT, (
-            f"Peak VRAM {monitor.peak_pct:.1f}% exceeds {VRAM_HEADROOM_PCT}% " f"threshold with {cc}x {duration}s audio"
+            f"Peak VRAM {monitor.peak_pct:.1f}% exceeds {VRAM_HEADROOM_PCT}% threshold with {cc}x {duration}s audio"
         )
 
     def test_vram_scaling_with_audio_duration(self, gpu_available):
@@ -319,7 +319,7 @@ class TestVRAMStress:
                 f"peak VRAM {r['peak_mib']:.0f} MiB ({r['peak_pct']:.1f}%)"
             )
             assert r["peak_pct"] < VRAM_HEADROOM_PCT, (
-                f"Peak VRAM {r['peak_pct']:.1f}% exceeds {VRAM_HEADROOM_PCT}% " f"at {dur}s audio with cc={cc}"
+                f"Peak VRAM {r['peak_pct']:.1f}% exceeds {VRAM_HEADROOM_PCT}% at {dur}s audio with cc={cc}"
             )
 
     def test_no_oom_at_production_pattern(self, gpu_available):
@@ -470,8 +470,7 @@ class TestVRAMSustainedLeak:
             f"monotonic accumulation detected (R²={r_squared:.3f})"
         )
         assert recovery_delta < 2000, (
-            f"VRAM did not recover: baseline {baseline_used:.0f} → "
-            f"final {final_used:.0f} MiB (+{recovery_delta:.0f})"
+            f"VRAM did not recover: baseline {baseline_used:.0f} → final {final_used:.0f} MiB (+{recovery_delta:.0f})"
         )
 
 
@@ -498,7 +497,7 @@ class TestVRAMBaseline:
         print(f"  Free for inference: {total - used:.0f} MiB")
 
         assert pct < 50, (
-            f"Idle VRAM {pct:.1f}% is too high — model weights alone shouldn't " f"use more than 50% of {total:.0f} MiB"
+            f"Idle VRAM {pct:.1f}% is too high — model weights alone shouldn't use more than 50% of {total:.0f} MiB"
         )
 
     def test_single_request_vram_delta(self, gpu_available):

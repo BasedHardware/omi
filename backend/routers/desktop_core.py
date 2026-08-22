@@ -264,7 +264,9 @@ async def sentry_poll() -> dict[str, object]:
         reason = (
             "sentry_auth_error"
             if response.status_code in {401, 403}
-            else "sentry_rate_limited" if response.status_code == 429 else "sentry_upstream_error"
+            else "sentry_rate_limited"
+            if response.status_code == 429
+            else "sentry_upstream_error"
         )
         return _sentry_poll_skip(reason, response.status_code)
     try:

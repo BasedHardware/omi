@@ -68,9 +68,9 @@ class TestChatEndpointStreaming:
             timeout=60,
         )
         assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text[:200]}"
-        assert "text/event-stream" in r.headers.get(
-            "content-type", ""
-        ), f"Expected text/event-stream, got {r.headers.get('content-type')}"
+        assert "text/event-stream" in r.headers.get("content-type", ""), (
+            f"Expected text/event-stream, got {r.headers.get('content-type')}"
+        )
 
         # Collect streamed chunks
         chunks = []

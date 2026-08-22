@@ -42,7 +42,7 @@ def _batch_engine_module():
     _torch_props.total_memory = 16 * 1024**3
     _torch.cuda.get_device_properties.return_value = _torch_props
     _torch.cuda.empty_cache = MagicMock()
-    _torch.inference_mode = lambda: (lambda fn: fn)
+    _torch.inference_mode = lambda: lambda fn: fn
     _torch.compile = lambda m: m
     _torch.backends.cudnn = MagicMock()
 

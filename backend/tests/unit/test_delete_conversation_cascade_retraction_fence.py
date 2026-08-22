@@ -44,9 +44,9 @@ def test_the_cascade_branch_guards_retraction_behind_the_skip_helper():
 
 def test_the_guard_precedes_the_retraction_call():
     body = _delete_conversation_source()
-    assert body.index("retraction_can_be_skipped") < body.index(
-        "retract_conversation_memories"
-    ), "the guard must run before the retraction it protects"
+    assert body.index("retraction_can_be_skipped") < body.index("retract_conversation_memories"), (
+        "the guard must run before the retraction it protects"
+    )
 
 
 def test_the_retraction_call_is_inside_the_guard():
@@ -75,6 +75,6 @@ def test_exhausted_replacement_conflict_maps_to_retryable_503_before_any_delete(
         body,
     )
     assert mapped, "the retract call must map ConversationReplacementConflictError to a 503"
-    assert (
-        "conversations_db.delete_conversation" in body.split("except ConversationReplacementConflictError")[1]
-    ), "the conversation document delete must stay in the post-retract success path"
+    assert "conversations_db.delete_conversation" in body.split("except ConversationReplacementConflictError")[1], (
+        "the conversation document delete must stay in the post-retract success path"
+    )

@@ -118,9 +118,11 @@ def test_upgrade_rejects_subscription_pending_cancellation(payment_router):
         "items": {"data": [{"id": "si_1", "price": {"id": "price_current"}}]},
     }
 
-    with patch.object(router, "_validate_price_id"), patch.object(
-        router.is_paid_plan, "__call__", return_value=True
-    ), patch.object(router.stripe.Subscription, "retrieve", return_value=stripe_subscription):
+    with (
+        patch.object(router, "_validate_price_id"),
+        patch.object(router.is_paid_plan, "__call__", return_value=True),
+        patch.object(router.stripe.Subscription, "retrieve", return_value=stripe_subscription),
+    ):
         with pytest.raises(router.HTTPException) as exc_info:
             router.upgrade_subscription_endpoint(router.UpgradeSubscriptionRequest(price_id="price_target"), uid="u1")
 
@@ -174,9 +176,10 @@ def test_reactivate_falls_back_to_stripe_when_local_subscription_is_stale():
         "items": {"data": [{"id": "si_1", "price": {"id": "price_same"}}]},
     }
 
-    with patch.object(router.stripe.Subscription, "retrieve", return_value=stripe_subscription), patch.object(
-        router.stripe.Subscription, "modify"
-    ) as mock_modify:
+    with (
+        patch.object(router.stripe.Subscription, "retrieve", return_value=stripe_subscription),
+        patch.object(router.stripe.Subscription, "modify") as mock_modify,
+    ):
         result = router._try_reactivate_subscription("u1", "price_same")
 
     assert result is not None

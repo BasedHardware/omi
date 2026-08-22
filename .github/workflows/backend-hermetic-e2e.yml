@@ -82,17 +82,19 @@ jobs:
         uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
         with:
           enable-cache: true
-          cache-dependency-glob: backend/pylock*.toml
+          cache-dependency-glob: backend/uv.lock
 
       - name: Install backend and e2e dependencies
         working-directory: backend
-        run: uv pip sync pylock.toml --system
+        run: |
+          uv sync --frozen --group e2e --no-install-project
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Restore tokenizer cache
         uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}/tiktoken-cache
-          key: tiktoken-${{ runner.os }}-${{ hashFiles('backend/pylock.toml') }}
+          key: tiktoken-${{ runner.os }}-${{ hashFiles('backend/uv.lock') }}
 
       - name: Prewarm tokenizer cache
         env:
@@ -125,13 +127,13 @@ jobs:
         uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
         with:
           enable-cache: true
-          cache-dependency-glob: backend/pylock*.toml
+          cache-dependency-glob: backend/uv.lock
 
       - name: Install backend dependencies in the gauntlet virtualenv
         working-directory: backend
         run: |
           uv venv .venv
-          uv pip sync pylock.toml --python .venv/bin/python
+          UV_PROJECT_ENVIRONMENT=.venv uv sync --frozen --no-install-project
 
       - name: Set up Node.js for the Firestore emulator
         uses: actions/setup-node@v7
@@ -212,13 +214,13 @@ jobs:
         uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
         with:
           enable-cache: true
-          cache-dependency-glob: backend/pylock*.toml
+          cache-dependency-glob: backend/uv.lock
 
       - name: Install backend dependencies in the gauntlet virtualenv
         working-directory: backend
         run: |
           uv venv .venv
-          uv pip sync pylock.toml --python .venv/bin/python
+          UV_PROJECT_ENVIRONMENT=.venv uv sync --frozen --no-install-project
 
       - name: Set up Node.js for the Firestore emulator
         uses: actions/setup-node@v7
@@ -289,13 +291,13 @@ jobs:
         uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
         with:
           enable-cache: true
-          cache-dependency-glob: backend/pylock*.toml
+          cache-dependency-glob: backend/uv.lock
 
       - name: Install backend dependencies in the gauntlet virtualenv
         working-directory: backend
         run: |
           uv venv .venv
-          uv pip sync pylock.toml --python .venv/bin/python
+          UV_PROJECT_ENVIRONMENT=.venv uv sync --frozen --no-install-project
 
       - name: Set up Node.js for the Firestore emulator
         uses: actions/setup-node@v7

@@ -1652,7 +1652,7 @@ class MemoryService:
                     self._write_historical_override(uid, memory_id, status)
                 continue
             try:
-                batch = cast(Any, batch_factory())
+                batch = cast(Any, batch_factory())  # ty: ignore[redundant-cast]
                 for memory_id in chunk:
                     path = f"{MemoryCollections(uid=uid).memory_historical_overrides}/{memory_id}"
                     payload = {

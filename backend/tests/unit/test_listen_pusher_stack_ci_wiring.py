@@ -27,7 +27,7 @@ def test_listen_pusher_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -> N
     assert 'uses: actions/setup-python@v6' in job
     assert 'uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84' in job
     assert 'uv venv .venv' in job
-    assert 'uv pip sync pylock.toml --python .venv/bin/python' in job
+    assert 'UV_PROJECT_ENVIRONMENT=.venv uv sync --frozen --no-install-project' in job
     assert 'uses: actions/setup-node@v7' in job
     assert "node-version: '22'" in job
     assert 'cache-dependency-path: package-lock.json' in job
@@ -132,7 +132,7 @@ def test_hermetic_e2e_tokenizer_warmup_is_cached_and_bounded() -> None:
 
     assert 'uses: actions/cache@v6' in job
     assert 'path: ${{ runner.temp }}/tiktoken-cache' in job
-    assert "key: tiktoken-${{ runner.os }}-${{ hashFiles('backend/pylock.toml') }}" in job
+    assert "key: tiktoken-${{ runner.os }}-${{ hashFiles('backend/uv.lock') }}" in job
     assert job.count('TIKTOKEN_CACHE_DIR: ${{ runner.temp }}/tiktoken-cache') == 2
     assert 'python backend/scripts/prewarm_tiktoken_cache.py' in job
 

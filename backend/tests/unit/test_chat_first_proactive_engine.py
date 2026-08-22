@@ -466,8 +466,10 @@ def test_agent_admission_happens_before_the_judge_and_duplicate_wake_stays_quiet
     monkeypatch.setattr(
         engine.intent_db,
         'admit_agent_judgment',
-        lambda *args, **kwargs: events.append('admit')
-        or engine.intent_db.AgentJudgmentAdmission(existing_intent=None, newly_reserved=False),
+        lambda *args, **kwargs: (
+            events.append('admit')
+            or engine.intent_db.AgentJudgmentAdmission(existing_intent=None, newly_reserved=False)
+        ),
     )
     monkeypatch.setattr(
         engine.intent_db,

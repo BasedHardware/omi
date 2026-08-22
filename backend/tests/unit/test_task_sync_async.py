@@ -60,9 +60,9 @@ def _awaited_run_blocking_offloads(tree):
 def test_blocking_calls_are_not_called_directly():
     tree = _module()
     for callee in BLOCKING_CALLS:
-        assert (
-            _direct_calls(tree, callee) == []
-        ), f'{callee} is called directly in task_sync.py; it must be offloaded via run_blocking'
+        assert _direct_calls(tree, callee) == [], (
+            f'{callee} is called directly in task_sync.py; it must be offloaded via run_blocking'
+        )
 
 
 def test_blocking_calls_are_offloaded_and_awaited():

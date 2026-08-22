@@ -103,6 +103,7 @@ import json
 import subprocess
 from typing import Any
 
+
 def omi(*args: str) -> Any:
     """Invoke the omi CLI in JSON mode, raising on non-success exit codes."""
     result = subprocess.run(
@@ -121,6 +122,7 @@ def omi(*args: str) -> Any:
         raise RuntimeError(f"omi exited {result.returncode}: {err}")
     return json.loads(result.stdout) if result.stdout.strip() else None
 
+
 # Read all open action items and mark anything older than 30 days complete.
 from datetime import datetime, timedelta, timezone
 
@@ -138,7 +140,7 @@ Memories: 120/hr. Conversations: 25/hr. Batch creates: 15/hr.
 
 ```python
 result = subprocess.run(["omi", "--json", "memory", "create", text], capture_output=True, text=True)
-if result.returncode == 4:                             # rate limited
+if result.returncode == 4:  # rate limited
     err = json.loads(result.stderr)
     # err["detail"] looks like: "Retry in 12s. ..."
     time.sleep(parse_retry_window(err["detail"]) or 60)

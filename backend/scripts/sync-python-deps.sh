@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sync the backend local virtualenv from the checked-in uv pylock.
+# Sync the backend local virtualenv from the checked-in uv.lock.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -7,24 +7,9 @@ cd "$ROOT_DIR"
 
 PYTHON_VERSION="$(tr -d '[:space:]' < .python-version)"
 VENV_PATH="${VENV_PATH:-.venv}"
-LOCK_FILE="pylock.toml"
-PYTHON_BIN="$VENV_PATH/bin/python"
 
-case "$(uname -s)-$(uname -m)" in
-  Darwin-arm64|Darwin-aarch64)
-    LOCK_FILE="pylock.macos.toml"
-    ;;
-  Darwin-x86_64|Darwin-amd64)
-    LOCK_FILE="pylock.macos-x86_64.toml"
-    ;;
-  MINGW*-x86_64|MSYS*-x86_64|CYGWIN*-x86_64)
-    LOCK_FILE="pylock.windows.toml"
-    PYTHON_BIN="$VENV_PATH/Scripts/python.exe"
-    ;;
-esac
-
-if [[ ! -f "$LOCK_FILE" ]]; then
-  echo "Expected dependency lock $LOCK_FILE for platform $(uname -s)-$(uname -m), but it was not found." >&2
+if [[ ! -f uv.lock ]]; then
+  echo "Expected dependency lock uv.lock in $ROOT_DIR, but it was not found." >&2
   exit 1
 fi
 
@@ -34,7 +19,6 @@ if ! command -v uv >/dev/null 2>&1; then
 fi
 
 uv python install "$PYTHON_VERSION"
-uv venv --allow-existing --python "$PYTHON_VERSION" "$VENV_PATH"
-uv pip sync "$LOCK_FILE" --python "$PYTHON_BIN"
+UV_PROJECT_ENVIRONMENT="$VENV_PATH" uv sync --frozen --python "$PYTHON_VERSION"
 
-echo "Backend dependencies synced from $LOCK_FILE into $ROOT_DIR/$VENV_PATH"
+echo "Backend dependencies synced from uv.lock into $ROOT_DIR/$VENV_PATH"

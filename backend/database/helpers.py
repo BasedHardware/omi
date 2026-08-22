@@ -55,7 +55,7 @@ def set_data_protection_level(data_arg_name: str) -> Callable[[F], F]:
 
             if not uid:
                 raise TypeError(
-                    f"Function {func.__name__} decorated with set_data_protection_level must have a 'uid' argument."
+                    f"Function {func.__name__} decorated with set_data_protection_level must have a 'uid' argument."  # ty: ignore[unresolved-attribute]
                 )
 
             # If data is None or not a dict/list, do nothing and let the original function handle it.
@@ -148,7 +148,7 @@ def prepare_for_write(
 
             if not uid:
                 raise TypeError(
-                    f"Function {func.__name__} decorated with prepare_for_write must have a 'uid' argument."
+                    f"Function {func.__name__} decorated with prepare_for_write must have a 'uid' argument."  # ty: ignore[unresolved-attribute]
                 )
 
             if not isinstance(original_data, (dict, list)):
@@ -207,7 +207,7 @@ def prepare_for_read(decrypt_func: Callable[[Dict[str, Any], str], Dict[str, Any
             bound_args.apply_defaults()
             uid = bound_args.arguments.get('uid')
             if not uid:
-                raise TypeError(f"Function {func.__name__} decorated with prepare_for_read must have a 'uid' argument.")
+                raise TypeError(f"Function {func.__name__} decorated with prepare_for_read must have a 'uid' argument.")  # ty: ignore[unresolved-attribute]
 
             result = func(*args, **kwargs)
 
@@ -260,7 +260,7 @@ def with_photos(photos_getter: Callable[..., Any]) -> Callable[[F], F]:
 
             uid = bound_args.arguments.get('uid')
             if not uid:
-                raise TypeError(f"Function {func.__name__} decorated with with_photos must have a 'uid' argument.")
+                raise TypeError(f"Function {func.__name__} decorated with with_photos must have a 'uid' argument.")  # ty: ignore[unresolved-attribute]
 
             # Execute the original function to get the conversation data
             result = func(*args, **kwargs)
@@ -270,7 +270,7 @@ def with_photos(photos_getter: Callable[..., Any]) -> Callable[[F], F]:
 
             def _fetch_and_attach_photos(conversation_data: Any) -> Any:
                 if not isinstance(conversation_data, dict) or 'id' not in conversation_data:
-                    return cast(Any, conversation_data)
+                    return cast(Any, conversation_data)  # ty: ignore[redundant-cast]
 
                 data_dict: Dict[str, Any] = cast(Dict[str, Any], conversation_data)
 

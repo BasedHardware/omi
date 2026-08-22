@@ -1221,7 +1221,11 @@ async def _verify_apple_id_token(id_token: str, client_id: str) -> Dict[str, Any
 
         # Verify and decode the token
         decoded_token = jwt.decode(
-            id_token, public_key, algorithms=['RS256'], audience=client_id, issuer='https://appleid.apple.com'
+            id_token,
+            public_key,  # ty: ignore[invalid-argument-type]
+            algorithms=['RS256'],
+            audience=client_id,
+            issuer='https://appleid.apple.com',
         )
 
         return decoded_token

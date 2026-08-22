@@ -162,8 +162,7 @@ def process_mentor_notification(uid: str, segments: List[Dict[str, Any]]) -> Lis
         buffer_data['messages_at_last_analysis'] = len(buffer_data['messages'])
 
         logger.info(
-            f"Mentor notification ready for user {uid} "
-            f"(total_messages={len(sorted_messages)}, new={new_message_count})"
+            f"Mentor notification ready for user {uid} (total_messages={len(sorted_messages)}, new={new_message_count})"
         )
         return sorted_messages
 

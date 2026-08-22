@@ -69,7 +69,7 @@ async def import_limitless_data(
         f = await run_blocking(storage_executor, open, zip_path, 'wb')
         try:
             while contents := await file.read(1024 * 1024):  # Read in 1MB chunks
-                await run_blocking(storage_executor, f.write, contents)
+                await run_blocking(storage_executor, f.write, contents)  # ty: ignore[invalid-argument-type]
         finally:
             f.close()
     except Exception as e:

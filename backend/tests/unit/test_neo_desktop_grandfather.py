@@ -208,20 +208,20 @@ class TestWebhookBuilderPopulatesPeriodStart:
             src = f.read()
         # Both the inactive-downgrade Subscription(...) and the active
         # Subscription(...) constructors must pass current_period_start.
-        assert (
-            src.count("current_period_start=stripe_sub.get('current_period_start')") >= 2
-        ), "_build_subscription_from_stripe_object must set current_period_start on both branches"
+        assert src.count("current_period_start=stripe_sub.get('current_period_start')") >= 2, (
+            "_build_subscription_from_stripe_object must set current_period_start on both branches"
+        )
 
     def test_reconcile_paths_set_current_period_start(self):
         with open('utils/subscription.py', encoding='utf-8') as f:
             src = f.read()
         # find_active_paid_subscription_for_user + reconcile_basic_plan_with_stripe.
-        assert (
-            "current_period_start=d.get('current_period_start')" in src
-        ), "find_active_paid_subscription_for_user must set current_period_start"
-        assert (
-            "subscription.current_period_start = stripe_sub_dict.get('current_period_start')" in src
-        ), "reconcile_basic_plan_with_stripe must set current_period_start"
+        assert "current_period_start=d.get('current_period_start')" in src, (
+            "find_active_paid_subscription_for_user must set current_period_start"
+        )
+        assert "subscription.current_period_start = stripe_sub_dict.get('current_period_start')" in src, (
+            "reconcile_basic_plan_with_stripe must set current_period_start"
+        )
 
 
 class TestPolicyDocstring:

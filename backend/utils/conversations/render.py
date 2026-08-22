@@ -198,8 +198,7 @@ def conversations_to_string(
             _as_utc(conversation.created_at).astimezone(display_tz).strftime("%d %b %Y at %H:%M") + f" {tz_label}"
         )
         conversation_str = (
-            f"Conversation #{i + 1}\n"
-            f"{formatted_date} ({str(conversation.structured.category.value).capitalize()})\n"
+            f"Conversation #{i + 1}\n{formatted_date} ({str(conversation.structured.category.value).capitalize()})\n"
         )
 
         # Add started_at and finished_at if available
@@ -245,7 +244,7 @@ def conversations_to_string(
                 conversation_str += f"- {event.title} ({event.start} - {event.duration} minutes)\n"
 
         if use_transcript:
-            conversation_str += f"\nTranscript:\n{conversation.get_transcript(include_timestamps=include_timestamps, people=people, user_name=user_name)}\n"  # type: ignore[reportArgumentType]  # conversation.py reverted to main; people/user_name may be Optional
+            conversation_str += f"\nTranscript:\n{conversation.get_transcript(include_timestamps=include_timestamps, people=people, user_name=user_name)}\n"  # type: ignore[reportArgumentType]  # conversation.py reverted to main; people/user_name may be Optional  # ty: ignore[invalid-argument-type]
             # photos
             photo_descriptions = conversation.get_photos_descriptions(include_timestamps=include_timestamps)
             if photo_descriptions != 'None':

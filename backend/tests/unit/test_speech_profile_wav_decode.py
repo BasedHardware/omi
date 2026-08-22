@@ -101,9 +101,11 @@ class TestUploadProfileWavDecodeGuard:
         """A failing AudioSegment.from_wav must surface as HTTPException(400), not escape as 500."""
         fake_file = _fake_upload_file(b"not a wav")
 
-        with patch.object(mod, "os") as mock_os, patch("builtins.open", MagicMock()), patch.object(
-            mod, "AudioSegment"
-        ) as mock_aseg:
+        with (
+            patch.object(mod, "os") as mock_os,
+            patch("builtins.open", MagicMock()),
+            patch.object(mod, "AudioSegment") as mock_aseg,
+        ):
             # makedirs is a no-op; everything else on os.* stays usable via the mock.
             mock_os.makedirs.return_value = None
             mock_aseg.from_wav.side_effect = _FakeDecodeError("Decoding failed")
@@ -117,11 +119,13 @@ class TestUploadProfileWavDecodeGuard:
         """On a decode failure the handler must bail before VAD / storage side effects."""
         fake_file = _fake_upload_file(b"garbage bytes")
 
-        with patch.object(mod, "os") as mock_os, patch("builtins.open", MagicMock()), patch.object(
-            mod, "AudioSegment"
-        ) as mock_aseg, patch.object(mod, "apply_vad_for_speech_profile") as mock_vad, patch.object(
-            mod, "upload_profile_audio"
-        ) as mock_upload:
+        with (
+            patch.object(mod, "os") as mock_os,
+            patch("builtins.open", MagicMock()),
+            patch.object(mod, "AudioSegment") as mock_aseg,
+            patch.object(mod, "apply_vad_for_speech_profile") as mock_vad,
+            patch.object(mod, "upload_profile_audio") as mock_upload,
+        ):
             mock_os.makedirs.return_value = None
             mock_aseg.from_wav.side_effect = _FakeDecodeError("Decoding failed")
 
@@ -135,11 +139,13 @@ class TestUploadProfileWavDecodeGuard:
     def test_empty_vad_returns_400_not_500(self):
         fake_file = _fake_upload_file(b'silence')
 
-        with patch.object(mod, "os") as mock_os, patch("builtins.open", MagicMock()), patch.object(
-            mod, "AudioSegment"
-        ) as mock_aseg, patch.object(vad_mod, "vad_is_empty", return_value=[]) as mock_vad, patch.object(
-            mod, "upload_profile_audio"
-        ) as mock_upload:
+        with (
+            patch.object(mod, "os") as mock_os,
+            patch("builtins.open", MagicMock()),
+            patch.object(mod, "AudioSegment") as mock_aseg,
+            patch.object(vad_mod, "vad_is_empty", return_value=[]) as mock_vad,
+            patch.object(mod, "upload_profile_audio") as mock_upload,
+        ):
             mock_os.makedirs.return_value = None
             mock_aseg.from_wav.return_value = MagicMock(frame_rate=16000, duration_seconds=5)
 
@@ -163,14 +169,13 @@ class TestUploadProfileWavDecodeGuard:
             def join(self):
                 pass
 
-        with patch.object(batch_mod.os, "makedirs"), patch.object(
-            batch_mod, "get_users_uid", return_value=["test-uid"]
-        ), patch.object(batch_mod, "get_profile_audio_if_exists", return_value="/tmp/profile.wav"), patch.object(
-            batch_mod, "upload_profile_audio"
-        ) as mock_upload, patch.object(
-            vad_mod, "vad_is_empty", return_value=[]
-        ) as mock_vad, patch.object(
-            batch_mod.threading, "Thread", ImmediateThread
+        with (
+            patch.object(batch_mod.os, "makedirs"),
+            patch.object(batch_mod, "get_users_uid", return_value=["test-uid"]),
+            patch.object(batch_mod, "get_profile_audio_if_exists", return_value="/tmp/profile.wav"),
+            patch.object(batch_mod, "upload_profile_audio") as mock_upload,
+            patch.object(vad_mod, "vad_is_empty", return_value=[]) as mock_vad,
+            patch.object(batch_mod.threading, "Thread", ImmediateThread),
         ):
             batch_mod.execute()
 

@@ -276,8 +276,7 @@ def extract_l1_memory_archive_items_from_text(
             {
                 'role': 'user',
                 'content': (
-                    f'{volatile_human}'
-                    'Extract memory candidates from the FULL TRANSCRIPT in the shared context above.'
+                    f'{volatile_human}Extract memory candidates from the FULL TRANSCRIPT in the shared context above.'
                 ),
             },
         ]

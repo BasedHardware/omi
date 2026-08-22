@@ -377,9 +377,7 @@ def main() -> int:
 
     load_elapsed = time.monotonic() - start_mono
     submitted = request_id
-    print(
-        f"\nLoad phase complete: {submitted} sent in {load_elapsed:.0f}s. " f"Cooling down {COOLDOWN}s...", flush=True
-    )
+    print(f"\nLoad phase complete: {submitted} sent in {load_elapsed:.0f}s. Cooling down {COOLDOWN}s...", flush=True)
 
     # Cooldown: let memory settle
     time.sleep(COOLDOWN)
@@ -439,8 +437,7 @@ def main() -> int:
     print("=" * 74)
 
     print(
-        f"\nLoad: {submitted} requests in {load_elapsed:.0f}s "
-        f"({submitted / (load_elapsed / 60):.0f} req/min effective)"
+        f"\nLoad: {submitted} requests in {load_elapsed:.0f}s ({submitted / (load_elapsed / 60):.0f} req/min effective)"
     )
     print(f"Completed: {done} ({ok} OK, {fail} failed)")
     if latencies:
@@ -464,12 +461,10 @@ def main() -> int:
 
     print(f"\nGates:")
     print(f"  OOMs:     {int(final_oom):>3d}     {'PASS' if oom_pass else 'FAIL'} (gate: 0)")
-    print(f"  Peak:     {peak_pct:>5.1f}%   {'PASS' if headroom_pass else 'FAIL'} " f"(gate: <{HEADROOM_PCT:.0f}%)")
-    print(f"  Slope:    {slope:>+6.1f}   {'PASS' if slope_pass else 'FAIL'} " f"(gate: <{SLOPE_THRESH:.0f} MiB/min)")
+    print(f"  Peak:     {peak_pct:>5.1f}%   {'PASS' if headroom_pass else 'FAIL'} (gate: <{HEADROOM_PCT:.0f}%)")
+    print(f"  Slope:    {slope:>+6.1f}   {'PASS' if slope_pass else 'FAIL'} (gate: <{SLOPE_THRESH:.0f} MiB/min)")
     if baseline_used and final_used:
-        print(
-            f"  Recovery: {recovery_pct:>+5.1f}%  {'PASS' if cooldown_pass else 'FAIL'} " f"(gate: <20% above baseline)"
-        )
+        print(f"  Recovery: {recovery_pct:>+5.1f}%  {'PASS' if cooldown_pass else 'FAIL'} (gate: <20% above baseline)")
 
     print(f"\n{'*** PASS ***' if all_pass else '*** FAIL ***'}")
 

@@ -117,7 +117,7 @@ def build_non_active_route_audit_report(
         status="red" if red_reasons else "green",
         total_accounted_outcomes=len(evidence),
         counts_by_route=counts_by_route,
-        evidence=sorted(evidence, key=lambda item: (item.route.value, item.outcome_id)),
+        evidence=sorted(evidence, key=lambda item: (item.route.value, item.outcome_id)),  # ty: ignore[unresolved-attribute]
         missing_source_ids=missing_source_ids,
         red_reasons=red_reasons,
     )

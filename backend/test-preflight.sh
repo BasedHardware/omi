@@ -63,16 +63,20 @@ else
   bad "pytest not installed (${PYTHON_BIN:-python} -m pip install pytest)"
 fi
 
-if [[ -n "$PYTHON_BIN" ]] && PYRIGHT_PYTHON_FORCE_VERSION=1.1.403 "$PYTHON_BIN" -m pyright --version &>/dev/null 2>&1; then
-  ok "pyright $(PYRIGHT_PYTHON_FORCE_VERSION=1.1.403 "$PYTHON_BIN" -m pyright --version 2>&1 | head -n 1 | awk '{print $2}')"
+if [[ -n "$PYTHON_BIN" ]] && "$PYTHON_BIN" -m ty --version &>/dev/null 2>&1; then
+  ok "ty $("$PYTHON_BIN" -m ty --version 2>&1 | head -n 1)"
+elif [[ -n "$PYTHON_BIN" ]] && command -v ty &>/dev/null && ty --version &>/dev/null 2>&1; then
+  ok "ty $(ty --version 2>&1 | head -n 1)"
 else
-  bad "pyright not installed (${PYTHON_BIN:-python} -m pip install pyright)"
+  bad "ty not installed (cd backend && ./scripts/sync-python-deps.sh)"
 fi
 
-if command -v black &>/dev/null; then
-  ok "black (formatter)"
+if [[ -n "$PYTHON_BIN" ]] && "$PYTHON_BIN" -m ruff --version &>/dev/null 2>&1; then
+  ok "ruff $("$PYTHON_BIN" -m ruff --version 2>&1 | head -n 1)"
+elif command -v ruff &>/dev/null; then
+  ok "ruff $(ruff --version 2>&1 | head -n 1)"
 else
-  skip "black not installed — pre-commit hook will fail (pip install black)"
+  skip "ruff not installed — pre-commit hook will fail (cd backend && ./scripts/sync-python-deps.sh)"
 fi
 
 # ── Python packages ──
@@ -90,7 +94,7 @@ for pkg in pydantic fastapi firebase_admin google.cloud.firestore redis deepgram
 done
 
 if [[ ${#missing_pkgs[@]} -gt 0 ]]; then
-  echo -e "  ${YELLOW}→${NC} Run: ${PYTHON_BIN:-python} -m pip install -r requirements.txt"
+  echo -e "  ${YELLOW}→${NC} Run: ./scripts/sync-python-deps.sh"
 fi
 
 # ── Environment variables (required for unit tests) ──

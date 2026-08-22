@@ -46,7 +46,7 @@ def _parakeet_modules():
     torch_fake.cuda.get_device_properties.return_value = _torch_props
     torch_fake.cuda.empty_cache = MagicMock()
     torch_fake.cuda.mem_get_info.return_value = (10 * 1024**3, 16 * 1024**3)
-    torch_fake.inference_mode = lambda: (lambda fn: fn)
+    torch_fake.inference_mode = lambda: lambda fn: fn
     torch_fake.compile = lambda m: m
     torch_fake.backends.cudnn = MagicMock()
 
@@ -118,7 +118,6 @@ def _make_app_with_mocks(gpu_ready=True, nim_mode=False, fatal_cuda_reason=None)
 
 
 class TestHealthEndpoint:
-
     def test_health_returns_503_when_loading(self):
         app, mod, _, _ = _make_app_with_mocks(gpu_ready=False)
         client = TestClient(app, raise_server_exceptions=False)
@@ -174,7 +173,6 @@ class TestHealthEndpoint:
 
 
 class TestBatchMetricsEndpoint:
-
     def test_batch_metrics_with_engine(self):
         app, mod, _, engine = _make_app_with_mocks()
         client = TestClient(app, raise_server_exceptions=False)
@@ -253,7 +251,6 @@ class TestStreamAdmissionEndpoint:
 
 
 class TestV1TranscribeEndpoint:
-
     def test_v1_returns_503_when_loading(self):
         app, mod, _, _ = _make_app_with_mocks(gpu_ready=False)
         client = TestClient(app, raise_server_exceptions=False)
@@ -287,7 +284,6 @@ class TestV1TranscribeEndpoint:
 
 
 class TestV2TranscribeEndpoint:
-
     def test_v2_returns_503_when_loading(self):
         app, mod, _, _ = _make_app_with_mocks(gpu_ready=False)
         client = TestClient(app, raise_server_exceptions=False)
@@ -341,7 +337,6 @@ def _make_wav_bytes(duration_s=2.0, sample_rate=16000, channels=1, sampwidth=2):
 
 
 class TestAudioDurationFromBytes:
-
     def test_valid_wav_returns_positive_duration(self):
         from main import _get_audio_duration_from_bytes
 
@@ -392,7 +387,6 @@ class TestAudioDurationFromBytes:
 
 
 class TestDurationGuardHTTP413:
-
     def test_v1_returns_413_for_oversized_wav(self):
         app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
         mod._max_file_duration_sec = 5.0
@@ -553,7 +547,6 @@ class TestDurationGuardHTTP413:
 
 
 class TestMetricsEndpoint:
-
     def test_metrics_endpoint_contains_new_series(self):
         app, mod, _, _ = _make_app_with_mocks()
         client = TestClient(app, raise_server_exceptions=False)

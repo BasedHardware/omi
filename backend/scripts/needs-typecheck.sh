@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Return success when a changed path requires the backend Pyright boundary.
+# Return success when a changed path requires the backend ty typecheck boundary.
 set -euo pipefail
 
 usage() {
@@ -21,7 +21,7 @@ fi
 
 while IFS= read -r path || [ -n "$path" ]; do
   case "$path" in
-    backend/*.py|backend/pyrightconfig.json|backend/scripts/typecheck.sh|backend/scripts/needs-typecheck.sh|backend/requirements.txt|backend/pylock*.toml|.github/workflows/backend-unit-tests.yml|scripts/pre-push)
+    backend/*.py|backend/typecheck-paths.json|backend/pyproject.toml|backend/uv.lock|backend/scripts/typecheck.sh|backend/scripts/needs-typecheck.sh|.github/workflows/backend-unit-tests.yml|scripts/pre-push)
       exit 0
       ;;
   esac

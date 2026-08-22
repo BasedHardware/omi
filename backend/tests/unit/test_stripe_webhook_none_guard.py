@@ -155,9 +155,9 @@ def test_customer_subscription_logs_none_subscription():
     handler_section = source[handler_start:handler_end]
 
     # Must log unknown price ID when subscription build fails
-    assert (
-        'unknown price ID' in handler_section
-    ), "customer.subscription.* handler must log when subscription build returns None"
+    assert 'unknown price ID' in handler_section, (
+        "customer.subscription.* handler must log when subscription build returns None"
+    )
 
 
 # ── Fix 5: Inactive subscriptions downgrade without needing valid price ID ──

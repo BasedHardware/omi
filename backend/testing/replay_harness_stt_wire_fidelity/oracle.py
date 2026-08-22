@@ -281,8 +281,9 @@ async def _capacity_fallback_scenario() -> dict[str, Any]:
     fallback = AsyncMock(return_value=_FallbackSocket())
 
     async with _LoopbackParakeet("capacity") as upstream:
-        with _configured_parakeet_endpoint(upstream.api_url), patch.object(
-            listen_receiver_module, "process_audio_modulate", fallback
+        with (
+            _configured_parakeet_endpoint(upstream.api_url),
+            patch.object(listen_receiver_module, "process_audio_modulate", fallback),
         ):
             result = await receiver._create_stt_socket(lambda _segments: None, 16000)
 
@@ -306,9 +307,11 @@ async def _initialization_failure_scenario() -> dict[str, Any]:
     unavailable_fallback = AsyncMock(side_effect=RuntimeError("controlled_local_fallback_unavailable"))
 
     async with _LoopbackParakeet("initialization") as upstream:
-        with _configured_parakeet_endpoint(upstream.api_url), patch.object(
-            listen_receiver_module, "process_audio_modulate", unavailable_fallback
-        ), patch.object(listen_receiver_module, "should_initialize_vad_gate", return_value=False):
+        with (
+            _configured_parakeet_endpoint(upstream.api_url),
+            patch.object(listen_receiver_module, "process_audio_modulate", unavailable_fallback),
+            patch.object(listen_receiver_module, "should_initialize_vad_gate", return_value=False),
+        ):
             initialized = await receiver.initialize_stt()
 
         if initialized:

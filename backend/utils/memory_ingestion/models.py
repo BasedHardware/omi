@@ -276,8 +276,7 @@ def _build_source_type_registry() -> dict[str, SourceTypeConfig]:
             requires_corroboration=False,
             default_empty_on_noise=False,
             guidance_notes=(
-                "Test fixture. Apply standard extraction rules. "
-                "Real source_type preserved in metadata for evaluation."
+                "Test fixture. Apply standard extraction rules. Real source_type preserved in metadata for evaluation."
             ),
         ),
     }

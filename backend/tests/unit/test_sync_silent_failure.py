@@ -496,12 +496,12 @@ class TestSegmentDeduplication:
         func_body = source[start:next_def]
 
         assert 'dedupe_segments_for_merge(' in func_body, "Must call shared merge dedupe helper"
-        assert (
-            'not deduped_segments' in func_body or 'if not deduped_segments' in func_body
-        ), "Must handle case where all segments are duplicates"
-        assert (
-            'store_partial_merge_survivor_audio(' in func_body
-        ), "Partial dedupe must store sliced private-cloud audio for survivors"
+        assert 'not deduped_segments' in func_body or 'if not deduped_segments' in func_body, (
+            "Must handle case where all segments are duplicates"
+        )
+        assert 'store_partial_merge_survivor_audio(' in func_body, (
+            "Partial dedupe must store sliced private-cloud audio for survivors"
+        )
 
     def test_dedupe_helper_uses_rounding(self):
         """Shared helper must round timestamps for reliable comparison."""
@@ -910,10 +910,11 @@ class TestProcessSegmentReal:
         errors = []
         lock = threading.Lock()
 
-        with patch('utils.sync.pipeline.prerecorded', return_value=([], 'en')), patch(
-            'utils.sync.pipeline.delete_syncing_temporal_file'
-        ), patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'), patch(
-            'utils.sync.pipeline.time.sleep'
+        with (
+            patch('utils.sync.pipeline.prerecorded', return_value=([], 'en')),
+            patch('utils.sync.pipeline.delete_syncing_temporal_file'),
+            patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'),
+            patch('utils.sync.pipeline.time.sleep'),
         ):
             from models.conversation_enums import ConversationSource
 
@@ -934,12 +935,12 @@ class TestProcessSegmentReal:
         errors = []
         lock = threading.Lock()
 
-        with patch('utils.sync.pipeline.prerecorded', return_value=([{'text': 'um'}], 'en')), patch(
-            'utils.sync.pipeline.postprocess_words', return_value=[]
-        ), patch('utils.sync.pipeline.delete_syncing_temporal_file'), patch(
-            'utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'
-        ), patch(
-            'utils.sync.pipeline.time.sleep'
+        with (
+            patch('utils.sync.pipeline.prerecorded', return_value=([{'text': 'um'}], 'en')),
+            patch('utils.sync.pipeline.postprocess_words', return_value=[]),
+            patch('utils.sync.pipeline.delete_syncing_temporal_file'),
+            patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'),
+            patch('utils.sync.pipeline.time.sleep'),
         ):
             from models.conversation_enums import ConversationSource
 
@@ -960,10 +961,11 @@ class TestProcessSegmentReal:
         errors = []
         lock = threading.Lock()
 
-        with patch('utils.sync.pipeline.prerecorded', side_effect=ConnectionError('timeout')), patch(
-            'utils.sync.pipeline.delete_syncing_temporal_file'
-        ), patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'), patch(
-            'utils.sync.pipeline.time.sleep'
+        with (
+            patch('utils.sync.pipeline.prerecorded', side_effect=ConnectionError('timeout')),
+            patch('utils.sync.pipeline.delete_syncing_temporal_file'),
+            patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'),
+            patch('utils.sync.pipeline.time.sleep'),
         ):
             from models.conversation_enums import ConversationSource
 
@@ -989,18 +991,15 @@ class TestProcessSegmentReal:
         mock_conv = MagicMock()
         mock_conv.id = 'conv-abc123'
 
-        with patch('utils.sync.pipeline.prerecorded', return_value=([{'text': 'hello'}], 'en')), patch(
-            'utils.sync.pipeline.postprocess_words', return_value=[real_segment]
-        ), patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000.0), patch(
-            'utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None
-        ), patch(
-            'utils.sync.pipeline.process_conversation', return_value=mock_conv
-        ), patch(
-            'utils.sync.pipeline.delete_syncing_temporal_file'
-        ), patch(
-            'utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'
-        ), patch(
-            'utils.sync.pipeline.time.sleep'
+        with (
+            patch('utils.sync.pipeline.prerecorded', return_value=([{'text': 'hello'}], 'en')),
+            patch('utils.sync.pipeline.postprocess_words', return_value=[real_segment]),
+            patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000.0),
+            patch('utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None),
+            patch('utils.sync.pipeline.process_conversation', return_value=mock_conv),
+            patch('utils.sync.pipeline.delete_syncing_temporal_file'),
+            patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'),
+            patch('utils.sync.pipeline.time.sleep'),
         ):
             from models.conversation_enums import ConversationSource
 
@@ -1032,18 +1031,15 @@ class TestProcessSegmentReal:
         mock_conv = MagicMock()
         mock_conv.id = 'conv-success'
 
-        with patch('utils.sync.pipeline.prerecorded', side_effect=mock_deepgram_mixed), patch(
-            'utils.sync.pipeline.postprocess_words', return_value=[real_segment]
-        ), patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000.0), patch(
-            'utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None
-        ), patch(
-            'utils.sync.pipeline.process_conversation', return_value=mock_conv
-        ), patch(
-            'utils.sync.pipeline.delete_syncing_temporal_file'
-        ), patch(
-            'utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'
-        ), patch(
-            'utils.sync.pipeline.time.sleep'
+        with (
+            patch('utils.sync.pipeline.prerecorded', side_effect=mock_deepgram_mixed),
+            patch('utils.sync.pipeline.postprocess_words', return_value=[real_segment]),
+            patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000.0),
+            patch('utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None),
+            patch('utils.sync.pipeline.process_conversation', return_value=mock_conv),
+            patch('utils.sync.pipeline.delete_syncing_temporal_file'),
+            patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'),
+            patch('utils.sync.pipeline.time.sleep'),
         ):
             from models.conversation_enums import ConversationSource
 
@@ -1091,18 +1087,15 @@ class TestProcessSegmentReal:
 
         existing_conv['finished_at'] = datetime.fromtimestamp(1700000005.0, tz=timezone.utc)
 
-        with patch('utils.sync.pipeline.prerecorded', return_value=([{'text': 'hello'}], 'en')), patch(
-            'utils.sync.pipeline.postprocess_words', return_value=[mock_segment]
-        ), patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000.0), patch(
-            'utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=existing_conv
-        ), patch(
-            'utils.sync.pipeline.update_conversation_segments'
-        ) as mock_update, patch(
-            'utils.sync.pipeline.delete_syncing_temporal_file'
-        ), patch(
-            'utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'
-        ), patch(
-            'utils.sync.pipeline.time.sleep'
+        with (
+            patch('utils.sync.pipeline.prerecorded', return_value=([{'text': 'hello'}], 'en')),
+            patch('utils.sync.pipeline.postprocess_words', return_value=[mock_segment]),
+            patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000.0),
+            patch('utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=existing_conv),
+            patch('utils.sync.pipeline.update_conversation_segments') as mock_update,
+            patch('utils.sync.pipeline.delete_syncing_temporal_file'),
+            patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'),
+            patch('utils.sync.pipeline.time.sleep'),
         ):
             from models.conversation_enums import ConversationSource
 
@@ -1146,18 +1139,15 @@ class TestProcessSegmentReal:
         # Offline WAL filename ~5 minutes ahead of live conversation start
         wal_ts = conv_start + 300.0
 
-        with patch('utils.sync.pipeline.prerecorded', return_value=([{'text': 'hello'}], 'en')), patch(
-            'utils.sync.pipeline.postprocess_words', return_value=[mock_segment]
-        ), patch('utils.sync.pipeline.get_timestamp_from_path', return_value=wal_ts), patch(
-            'utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=existing_conv
-        ), patch(
-            'utils.sync.pipeline.update_conversation_segments'
-        ) as mock_update, patch(
-            'utils.sync.pipeline.delete_syncing_temporal_file'
-        ), patch(
-            'utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'
-        ), patch(
-            'utils.sync.pipeline.time.sleep'
+        with (
+            patch('utils.sync.pipeline.prerecorded', return_value=([{'text': 'hello'}], 'en')),
+            patch('utils.sync.pipeline.postprocess_words', return_value=[mock_segment]),
+            patch('utils.sync.pipeline.get_timestamp_from_path', return_value=wal_ts),
+            patch('utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=existing_conv),
+            patch('utils.sync.pipeline.update_conversation_segments') as mock_update,
+            patch('utils.sync.pipeline.delete_syncing_temporal_file'),
+            patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'),
+            patch('utils.sync.pipeline.time.sleep'),
         ):
             from models.conversation_enums import ConversationSource
 
@@ -1212,24 +1202,18 @@ class TestProcessSegmentReal:
             'discarded': False,
         }
 
-        with patch('utils.sync.pipeline.prerecorded', return_value=([{'text': 'hello'}], 'en')), patch(
-            'utils.sync.pipeline.postprocess_words', return_value=[dup_seg, new_seg]
-        ), patch('utils.sync.pipeline.get_timestamp_from_path', return_value=conv_start), patch(
-            'utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=existing_conv
-        ), patch(
-            'utils.sync.pipeline.update_conversation_segments'
-        ) as mock_update, patch(
-            'utils.sync.pipeline.delete_syncing_temporal_file'
-        ), patch(
-            'utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'
-        ), patch(
-            'utils.sync.pipeline._download_audio_bytes', return_value=b'fake-wav'
-        ), patch(
-            'utils.sync.pipeline._store_sync_audio_chunk'
-        ) as mock_full_store, patch(
-            'utils.sync.pipeline.store_partial_merge_survivor_audio'
-        ) as mock_partial_store, patch(
-            'utils.sync.pipeline.time.sleep'
+        with (
+            patch('utils.sync.pipeline.prerecorded', return_value=([{'text': 'hello'}], 'en')),
+            patch('utils.sync.pipeline.postprocess_words', return_value=[dup_seg, new_seg]),
+            patch('utils.sync.pipeline.get_timestamp_from_path', return_value=conv_start),
+            patch('utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=existing_conv),
+            patch('utils.sync.pipeline.update_conversation_segments') as mock_update,
+            patch('utils.sync.pipeline.delete_syncing_temporal_file'),
+            patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'),
+            patch('utils.sync.pipeline._download_audio_bytes', return_value=b'fake-wav'),
+            patch('utils.sync.pipeline._store_sync_audio_chunk') as mock_full_store,
+            patch('utils.sync.pipeline.store_partial_merge_survivor_audio') as mock_partial_store,
+            patch('utils.sync.pipeline.time.sleep'),
         ):
             from models.conversation_enums import ConversationSource
 
@@ -1268,10 +1252,11 @@ class TestProcessSegmentReal:
         lock = threading.Lock()
 
         # VAD selected these three as speech-eligible; every one transcribes empty.
-        with patch('utils.sync.pipeline.prerecorded', return_value=([], 'en')), patch(
-            'utils.sync.pipeline.delete_syncing_temporal_file'
-        ), patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'), patch(
-            'utils.sync.pipeline.time.sleep'
+        with (
+            patch('utils.sync.pipeline.prerecorded', return_value=([], 'en')),
+            patch('utils.sync.pipeline.delete_syncing_temporal_file'),
+            patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'),
+            patch('utils.sync.pipeline.time.sleep'),
         ):
             from models.conversation_enums import ConversationSource
 
@@ -1294,13 +1279,14 @@ class TestProcessSegmentReal:
         errors = []
         lock = threading.Lock()
 
-        with patch(
-            'utils.sync.pipeline.prerecorded',
-            side_effect=RuntimeError('Deepgram transcription failed after 2 attempts: timeout'),
-        ), patch('utils.sync.pipeline.delete_syncing_temporal_file'), patch(
-            'utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'
-        ), patch(
-            'utils.sync.pipeline.time.sleep'
+        with (
+            patch(
+                'utils.sync.pipeline.prerecorded',
+                side_effect=RuntimeError('Deepgram transcription failed after 2 attempts: timeout'),
+            ),
+            patch('utils.sync.pipeline.delete_syncing_temporal_file'),
+            patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'),
+            patch('utils.sync.pipeline.time.sleep'),
         ):
             from models.conversation_enums import ConversationSource
 
@@ -1492,9 +1478,12 @@ class TestVoiceMessageRuntimeErrorHandling:
             async def _run_inline(_executor, fn, *args, **kwargs):
                 return fn(*args, **kwargs)
 
-            with patch('utils.chat.run_blocking', side_effect=_run_inline), patch(
-                'utils.chat.prerecorded',
-                side_effect=RuntimeError('Deepgram transcription failed after 2 attempts: timeout'),
+            with (
+                patch('utils.chat.run_blocking', side_effect=_run_inline),
+                patch(
+                    'utils.chat.prerecorded',
+                    side_effect=RuntimeError('Deepgram transcription failed after 2 attempts: timeout'),
+                ),
             ):
                 async for _chunk in self._process_stream_fn('/tmp/test.wav', 'uid', language='en'):
                     pass

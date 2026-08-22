@@ -43,11 +43,15 @@ not *imports*.
 ```python
 # BEFORE (banned): constructs at import; fails without credentials; forces tests to stub.
 from openai import OpenAI
+
 client = OpenAI()
 
 # AFTER (import-pure): construction deferred to first use; tests inject a fake.
 from openai import OpenAI
+
 _client = None
+
+
 def get_client():
     global _client
     if _client is None:
@@ -110,18 +114,21 @@ Migrate to a fixture-scoped `monkeypatch`:
 # AFTER — hermetic: restored at fixture teardown.
 import pytest
 
+
 @pytest.fixture
 def fake_vector_db(monkeypatch):
     from testing.import_isolation import AutoMockModule
+
     fake = AutoMockModule("database.vector_db")
     fake.find_similar_memories = lambda *a, **k: []
     # If the production module is already imported, patch its attribute:
     import database.vector_db as real  # works because Tier-1 made import cheap
+
     monkeypatch.setattr(real, "find_similar_memories", fake.find_similar_memories)
     return real
 
-def test_thing(fake_vector_db):
-    ...
+
+def test_thing(fake_vector_db): ...
 ```
 
 If the production module *cannot* be imported cheaply yet (Tier-1 not done for that
@@ -131,6 +138,7 @@ module), use the reserve finder:
 @pytest.fixture
 def fake_vector_db():
     from testing.import_isolation import AutoMockModule, stub_modules
+
     fake = AutoMockModule("database.vector_db")
     with stub_modules({"database.vector_db": fake}):
         yield fake

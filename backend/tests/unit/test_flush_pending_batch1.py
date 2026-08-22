@@ -46,7 +46,7 @@ def _make_torch_fake() -> MagicMock:
     torch.cuda.get_device_properties.return_value = props
     torch.cuda.empty_cache = MagicMock()
     torch.cuda.mem_get_info.return_value = (10 * 1024**3, 16 * 1024**3)
-    torch.inference_mode = lambda: (lambda fn: fn)
+    torch.inference_mode = lambda: lambda fn: fn
     torch.compile = lambda m: m
     torch.backends.cudnn = MagicMock()
     return torch

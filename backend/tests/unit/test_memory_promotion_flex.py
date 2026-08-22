@@ -162,7 +162,7 @@ def test_one_enabled_control_routes_every_scheduled_workload_to_flex(
     calls = []
     router = promotion_flex.PromotionFlexRunRouter(
         db_client=db,
-        flex_llm_factory=lambda *args, **kwargs: (calls.append(("factory", args, kwargs)) or _Model(calls)),
+        flex_llm_factory=lambda *args, **kwargs: calls.append(("factory", args, kwargs)) or _Model(calls),
     )
 
     model = router.llm_for_uid("uid-a", standard_feature=standard_feature, flex_feature=flex_feature, workload=workload)
@@ -260,7 +260,7 @@ def test_force_enabled_routes_flex_and_skips_control_drift(monkeypatch):
     router = promotion_flex.PromotionFlexRunRouter(
         db_client=db,
         force_enabled=True,
-        flex_llm_factory=lambda *args, **kwargs: (calls.append(("factory", args, kwargs)) or _Model(calls)),
+        flex_llm_factory=lambda *args, **kwargs: calls.append(("factory", args, kwargs)) or _Model(calls),
     )
 
     model = router.llm_for_uid(
@@ -293,7 +293,7 @@ def test_router_defers_instead_of_using_standard_when_flex_cannot_fit_job_budget
     router = promotion_flex.PromotionFlexRunRouter(
         db_client=object(),
         control_reader=lambda **_kwargs: control,
-        flex_llm_factory=lambda *args, **kwargs: (calls.append(("factory", args, kwargs)) or _Model(calls)),
+        flex_llm_factory=lambda *args, **kwargs: calls.append(("factory", args, kwargs)) or _Model(calls),
         monotonic=lambda: next(clock),
     )
     model = router.llm_for_uid(

@@ -55,7 +55,7 @@ class TestResamplePcm:
         samples = [100, 200, 300, 400]
         data = struct.pack(f'<{len(samples)}h', *samples)
         result = self._resample(data, 8000, 16000)
-        result_samples = struct.unpack(f'<{len(result)//2}h', result)
+        result_samples = struct.unpack(f'<{len(result) // 2}h', result)
         assert len(result_samples) == 8  # doubled
         # Each original sample should appear twice
         assert result_samples[0] == 100
@@ -68,7 +68,7 @@ class TestResamplePcm:
         samples = [100, 200, 300, 400, 500, 600, 700, 800]
         data = struct.pack(f'<{len(samples)}h', *samples)
         result = self._resample(data, 16000, 8000)
-        result_samples = struct.unpack(f'<{len(result)//2}h', result)
+        result_samples = struct.unpack(f'<{len(result) // 2}h', result)
         assert len(result_samples) == 4  # halved
 
     def test_empty_data(self):
@@ -87,7 +87,7 @@ class TestResamplePcm:
         samples = list(range(100))
         data = struct.pack(f'<{len(samples)}h', *samples)
         result = self._resample(data, 8000, 48000)
-        result_samples = struct.unpack(f'<{len(result)//2}h', result)
+        result_samples = struct.unpack(f'<{len(result) // 2}h', result)
         assert len(result_samples) == 600  # 6x expansion
         # First and last samples should map correctly
         assert result_samples[0] == 0
@@ -104,7 +104,7 @@ class TestMixNChannelBuffers:
         """Single channel should pass through unchanged."""
         data = bytearray(struct.pack('<4h', 100, 200, 300, 400))
         result = self._mix([data])
-        samples = struct.unpack(f'<{len(result)//2}h', result)
+        samples = struct.unpack(f'<{len(result) // 2}h', result)
         assert samples == (100, 200, 300, 400)
 
     def test_two_channel_mix(self):
@@ -112,7 +112,7 @@ class TestMixNChannelBuffers:
         ch1 = bytearray(struct.pack('<2h', 100, 200))
         ch2 = bytearray(struct.pack('<2h', 300, 400))
         result = self._mix([ch1, ch2])
-        samples = struct.unpack(f'<{len(result)//2}h', result)
+        samples = struct.unpack(f'<{len(result) // 2}h', result)
         assert samples == (400, 600)
 
     def test_clamping_overflow(self):
@@ -120,7 +120,7 @@ class TestMixNChannelBuffers:
         ch1 = bytearray(struct.pack('<1h', 30000))
         ch2 = bytearray(struct.pack('<1h', 30000))
         result = self._mix([ch1, ch2])
-        samples = struct.unpack(f'<{len(result)//2}h', result)
+        samples = struct.unpack(f'<{len(result) // 2}h', result)
         assert samples[0] == 32767  # clamped, not 60000 or wrapped
 
     def test_clamping_underflow(self):
@@ -128,7 +128,7 @@ class TestMixNChannelBuffers:
         ch1 = bytearray(struct.pack('<1h', -30000))
         ch2 = bytearray(struct.pack('<1h', -30000))
         result = self._mix([ch1, ch2])
-        samples = struct.unpack(f'<{len(result)//2}h', result)
+        samples = struct.unpack(f'<{len(result) // 2}h', result)
         assert samples[0] == -32768  # clamped
 
     def test_different_lengths_uses_min(self):
@@ -136,7 +136,7 @@ class TestMixNChannelBuffers:
         ch1 = bytearray(struct.pack('<4h', 1, 2, 3, 4))
         ch2 = bytearray(struct.pack('<2h', 10, 20))
         result = self._mix([ch1, ch2])
-        samples = struct.unpack(f'<{len(result)//2}h', result)
+        samples = struct.unpack(f'<{len(result) // 2}h', result)
         assert len(samples) == 2
         assert samples == (11, 22)
 
@@ -156,7 +156,7 @@ class TestMixNChannelBuffers:
         ch2 = bytearray(struct.pack('<1h', 20000))
         ch3 = bytearray(struct.pack('<1h', 20000))
         result = self._mix([ch1, ch2, ch3])
-        samples = struct.unpack(f'<{len(result)//2}h', result)
+        samples = struct.unpack(f'<{len(result) // 2}h', result)
         assert samples[0] == 32767  # 60000 clamped to 32767
 
 
@@ -1234,8 +1234,8 @@ class TestMultiChannelStereoSplit:
             left.extend(stereo_data[offset : offset + 2])
             right.extend(stereo_data[offset + 2 : offset + 4])
 
-        left_samples = struct.unpack(f'<{len(left)//2}h', left)
-        right_samples = struct.unpack(f'<{len(right)//2}h', right)
+        left_samples = struct.unpack(f'<{len(left) // 2}h', left)
+        right_samples = struct.unpack(f'<{len(right) // 2}h', right)
         assert left_samples == (100, 200, 300)
         assert right_samples == (400, 500, 600)
 

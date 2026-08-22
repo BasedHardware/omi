@@ -94,12 +94,12 @@ class TestPagination:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch('utils.github_releases.get_generic_cache', return_value=None), patch(
-            'utils.github_releases.set_generic_cache'
-        ) as mock_set_cache, patch('utils.github_releases.get_web_fetch_client', return_value=mock_client), patch.dict(
-            'os.environ', {'GITHUB_TOKEN': 'test-token'}
+        with (
+            patch('utils.github_releases.get_generic_cache', return_value=None),
+            patch('utils.github_releases.set_generic_cache') as mock_set_cache,
+            patch('utils.github_releases.get_web_fetch_client', return_value=mock_client),
+            patch.dict('os.environ', {'GITHUB_TOKEN': 'test-token'}),
         ):
-
             result = await get_omi_github_releases("test_key", tag_filter=FIRMWARE_TAG_PATTERN)
 
         assert len(result) == 5
@@ -129,12 +129,12 @@ class TestPagination:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch('utils.github_releases.get_generic_cache', return_value=None), patch(
-            'utils.github_releases.set_generic_cache'
-        ), patch('utils.github_releases.get_web_fetch_client', return_value=mock_client), patch.dict(
-            'os.environ', {'GITHUB_TOKEN': 'test-token'}
+        with (
+            patch('utils.github_releases.get_generic_cache', return_value=None),
+            patch('utils.github_releases.set_generic_cache'),
+            patch('utils.github_releases.get_web_fetch_client', return_value=mock_client),
+            patch.dict('os.environ', {'GITHUB_TOKEN': 'test-token'}),
         ):
-
             result = await get_omi_github_releases("test_key")
 
         # Should return all 100 desktop releases unfiltered
@@ -152,10 +152,11 @@ class TestPagination:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_response)
 
-        with patch('utils.github_releases.get_generic_cache', return_value=None), patch(
-            'utils.github_releases.set_generic_cache'
-        ), patch('utils.github_releases.get_web_fetch_client', return_value=mock_client), patch.dict(
-            'os.environ', {}, clear=True
+        with (
+            patch('utils.github_releases.get_generic_cache', return_value=None),
+            patch('utils.github_releases.set_generic_cache'),
+            patch('utils.github_releases.get_web_fetch_client', return_value=mock_client),
+            patch.dict('os.environ', {}, clear=True),
         ):
             await get_omi_github_releases("test_key")
 
@@ -172,10 +173,11 @@ class TestPagination:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_response)
 
-        with patch('utils.github_releases.get_generic_cache', return_value=None), patch(
-            'utils.github_releases.set_generic_cache'
-        ), patch('utils.github_releases.get_web_fetch_client', return_value=mock_client), patch.dict(
-            'os.environ', {'GITHUB_TOKEN': 'test-token'}
+        with (
+            patch('utils.github_releases.get_generic_cache', return_value=None),
+            patch('utils.github_releases.set_generic_cache'),
+            patch('utils.github_releases.get_web_fetch_client', return_value=mock_client),
+            patch.dict('os.environ', {'GITHUB_TOKEN': 'test-token'}),
         ):
             await get_omi_github_releases("test_key")
 
@@ -196,12 +198,12 @@ class TestPagination:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch('utils.github_releases.get_generic_cache', return_value=None), patch(
-            'utils.github_releases.set_generic_cache'
-        ), patch('utils.github_releases.get_web_fetch_client', return_value=mock_client), patch.dict(
-            'os.environ', {'GITHUB_TOKEN': 'test-token'}
+        with (
+            patch('utils.github_releases.get_generic_cache', return_value=None),
+            patch('utils.github_releases.set_generic_cache'),
+            patch('utils.github_releases.get_web_fetch_client', return_value=mock_client),
+            patch.dict('os.environ', {'GITHUB_TOKEN': 'test-token'}),
         ):
-
             result = await get_omi_github_releases("test_key", tag_filter=FIRMWARE_TAG_PATTERN)
 
         assert len(result) == 0
@@ -232,12 +234,12 @@ class TestCacheBehavior:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch('utils.github_releases.get_generic_cache', return_value=None), patch(
-            'utils.github_releases.set_generic_cache'
-        ) as mock_set, patch('utils.github_releases.get_web_fetch_client', return_value=mock_client), patch.dict(
-            'os.environ', {'GITHUB_TOKEN': 'test-token'}
+        with (
+            patch('utils.github_releases.get_generic_cache', return_value=None),
+            patch('utils.github_releases.set_generic_cache') as mock_set,
+            patch('utils.github_releases.get_web_fetch_client', return_value=mock_client),
+            patch.dict('os.environ', {'GITHUB_TOKEN': 'test-token'}),
         ):
-
             result = await get_omi_github_releases("test_key")
 
         assert result == []
@@ -271,12 +273,12 @@ class TestLastKnownGoodFallback:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch('utils.github_releases.get_generic_cache', side_effect=fake_get), patch(
-            'utils.github_releases.set_generic_cache'
-        ) as mock_set, patch('utils.github_releases.get_web_fetch_client', return_value=mock_client), patch.dict(
-            'os.environ', {'GITHUB_TOKEN': 'test-token'}
+        with (
+            patch('utils.github_releases.get_generic_cache', side_effect=fake_get),
+            patch('utils.github_releases.set_generic_cache') as mock_set,
+            patch('utils.github_releases.get_web_fetch_client', return_value=mock_client),
+            patch.dict('os.environ', {'GITHUB_TOKEN': 'test-token'}),
         ):
-
             result = await get_omi_github_releases("test_key")
 
         assert result == lkg
@@ -303,12 +305,12 @@ class TestLastKnownGoodFallback:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch('utils.github_releases.get_generic_cache', side_effect=fake_get), patch(
-            'utils.github_releases.set_generic_cache'
-        ), patch('utils.github_releases.get_web_fetch_client', return_value=mock_client), patch.dict(
-            'os.environ', {'GITHUB_TOKEN': 'test-token'}
+        with (
+            patch('utils.github_releases.get_generic_cache', side_effect=fake_get),
+            patch('utils.github_releases.set_generic_cache'),
+            patch('utils.github_releases.get_web_fetch_client', return_value=mock_client),
+            patch.dict('os.environ', {'GITHUB_TOKEN': 'test-token'}),
         ):
-
             result = await get_omi_github_releases("test_key")
 
         assert result == lkg
@@ -326,12 +328,12 @@ class TestLastKnownGoodFallback:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch('utils.github_releases.get_generic_cache', side_effect=fake_get), patch(
-            'utils.github_releases.set_generic_cache'
-        ), patch('utils.github_releases.get_web_fetch_client', return_value=mock_client), patch.dict(
-            'os.environ', {'GITHUB_TOKEN': 'test-token'}
+        with (
+            patch('utils.github_releases.get_generic_cache', side_effect=fake_get),
+            patch('utils.github_releases.set_generic_cache'),
+            patch('utils.github_releases.get_web_fetch_client', return_value=mock_client),
+            patch.dict('os.environ', {'GITHUB_TOKEN': 'test-token'}),
         ):
-
             result = await get_omi_github_releases("test_key")
 
         assert result == lkg
@@ -350,12 +352,12 @@ class TestLastKnownGoodFallback:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch('utils.github_releases.get_generic_cache', return_value=None), patch(
-            'utils.github_releases.set_generic_cache'
-        ) as mock_set, patch('utils.github_releases.get_web_fetch_client', return_value=mock_client), patch.dict(
-            'os.environ', {'GITHUB_TOKEN': 'test-token'}
+        with (
+            patch('utils.github_releases.get_generic_cache', return_value=None),
+            patch('utils.github_releases.set_generic_cache') as mock_set,
+            patch('utils.github_releases.get_web_fetch_client', return_value=mock_client),
+            patch.dict('os.environ', {'GITHUB_TOKEN': 'test-token'}),
         ):
-
             result = await get_omi_github_releases("test_key")
 
         assert result == releases

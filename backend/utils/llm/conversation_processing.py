@@ -599,9 +599,7 @@ discard = <True|False>
 Content:
 {full_context}
 
-{format_instructions}'''.replace(
-        '    ', ''
-    ).strip()
+{format_instructions}'''.replace('    ', '').strip()
     if trusted_wake_word_markers and has_structural_wake_word_marker(transcript):
         prompt_template = f'{prompt_template}\n\n{WAKE_WORD_DISCARD_PROMPT_RULES}'
     custom_parser = LenientDiscardParser(pydantic_object=DiscardConversation)
@@ -952,9 +950,7 @@ def extract_action_items(
     DUE DATE EXTRACTION:
     Resolve each due date in the user's LOCAL time. NEVER produce a past date.
 
-    {format_instructions}'''.replace(
-        '    ', ''
-    ).strip()
+    {format_instructions}'''.replace('    ', '').strip()
     if trusted_wake_word_markers and has_structural_wake_word_marker(transcript):
         instructions_text = f'{instructions_text}\n\n{WAKE_WORD_PROMPT_RULES}'
 
@@ -1305,9 +1301,7 @@ def get_transcript_structure(
     • Vague suggestions ("let's grab coffee soon")
     • Hypothetical scenarios ("if we meet Tuesday...")
 
-    {format_instructions}'''.replace(
-        '    ', ''
-    ).strip()
+    {format_instructions}'''.replace('    ', '').strip()
 
     # Second system message contains every per-conversation value, including timestamp.
     context_message = (
@@ -1427,9 +1421,7 @@ def get_reprocess_transcript_structure(
     Content:
     {full_context}
 
-    {format_instructions}'''.replace(
-        '    ', ''
-    ).strip()
+    {format_instructions}'''.replace('    ', '').strip()
 
     prompt = cast(Any, ChatPromptTemplate).from_messages([('system', prompt_text)])
     gateway_mode_enabled = should_route_features_through_gateway()

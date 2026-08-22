@@ -178,7 +178,7 @@ def _enqueue_named_task(
                 audience=audience or _oidc_audience(),
             ),
         ),
-        dispatch_deadline=duration_pb2.Duration(seconds=DISPATCH_DEADLINE_SECONDS),
+        dispatch_deadline=duration_pb2.Duration(seconds=DISPATCH_DEADLINE_SECONDS),  # ty: ignore[unresolved-attribute]
     )
     try:
         client.create_task(parent=parent, task=task)  # type: ignore[reportUnknownMemberType]  # google.cloud.tasks_v2 partially untyped
@@ -312,7 +312,9 @@ def _verify_cloud_tasks_oidc(request: Request, *, audience: str, invoker_sa: str
         raise HTTPException(status_code=403, detail='Missing bearer token')
 
     try:
-        claims: Any = id_token.verify_oauth2_token(auth_header[len('Bearer ') :], _get_auth_request(), audience=audience)  # type: ignore[reportUnknownMemberType]  # google.oauth2.id_token partially untyped
+        claims: Any = id_token.verify_oauth2_token(
+            auth_header[len('Bearer ') :], _get_auth_request(), audience=audience
+        )  # type: ignore[reportUnknownMemberType]  # google.oauth2.id_token partially untyped
     except Exception as e:
         # Distinguishes bad tokens from transient JWKS-fetch failures in logs
         if log_failure:

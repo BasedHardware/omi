@@ -230,12 +230,13 @@ jobs:
       - name: Check Python formatting
         if: needs.changes.outputs.has_python == 'true'
         run: |
-          # Pinned: an unpinned black drifts from local/pre-commit formatting on
-          # every black release, making this check fail on untouched files.
-          pip install -q black==26.5.1
+          # Use the backend-locked ruff (quote-style=preserve, line-length 120).
+          curl -LsSf https://astral.sh/uv/0.12.5/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          (cd backend && uv sync --frozen --only-group dev --no-install-project)
           FILES=$(grep 'backend/.*\.py$' /tmp/changed-files.txt | while IFS= read -r f; do [ -f "$f" ] && echo "$f"; done || true)
           if [ -n "$FILES" ]; then
-            echo "$FILES" | xargs black --check --line-length 120 --skip-string-normalization
+            echo "$FILES" | xargs ./backend/.venv/bin/ruff format --check --config backend/pyproject.toml
           fi
 
       - name: Check ARB formatting

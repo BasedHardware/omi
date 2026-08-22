@@ -319,11 +319,15 @@ async def test_mentor_notification_tracked_under_realtime_integrations(integrati
         with original_track(uid, feature):
             yield
 
-    with patch.object(app, 'track_usage', spy_track_usage), patch.object(
-        app,
-        'process_mentor_notification',
-        MagicMock(return_value=[{'text': 'hello'}]),
-    ), patch.object(app, '_process_mentor_proactive_notification', MagicMock(return_value=None)):
+    with (
+        patch.object(app, 'track_usage', spy_track_usage),
+        patch.object(
+            app,
+            'process_mentor_notification',
+            MagicMock(return_value=[{'text': 'hello'}]),
+        ),
+        patch.object(app, '_process_mentor_proactive_notification', MagicMock(return_value=None)),
+    ):
         await app.trigger_realtime_integrations('user-rt-1', [{'text': 'hello'}], 'conv-1')
 
     assert ('user-rt-1', usage.Features.REALTIME_INTEGRATIONS) in captured_contexts
@@ -343,9 +347,11 @@ async def test_no_tracking_when_no_llm_calls(integration_harness):
         with original_track(uid, feature):
             yield
 
-    with patch.object(app, 'track_usage', spy_track_usage), patch.object(
-        app, 'process_mentor_notification', MagicMock(return_value=None)
-    ), patch.object(app, 'get_available_apps', MagicMock(return_value=[])):
+    with (
+        patch.object(app, 'track_usage', spy_track_usage),
+        patch.object(app, 'process_mentor_notification', MagicMock(return_value=None)),
+        patch.object(app, 'get_available_apps', MagicMock(return_value=[])),
+    ):
         await app.trigger_realtime_integrations('user-rt-2', [{'text': 'hello'}], 'conv-2')
 
     assert captured_contexts == []
@@ -368,11 +374,15 @@ async def test_track_usage_context_entered_around_proactive_message(integration_
         call_log.append(('process_called',))
         return 'Test notification'
 
-    with patch.object(app, 'track_usage', spy_track_usage), patch.object(
-        app,
-        'process_mentor_notification',
-        MagicMock(return_value=[{'text': 'hello'}]),
-    ), patch.object(app, '_process_mentor_proactive_notification', spy_process):
+    with (
+        patch.object(app, 'track_usage', spy_track_usage),
+        patch.object(
+            app,
+            'process_mentor_notification',
+            MagicMock(return_value=[{'text': 'hello'}]),
+        ),
+        patch.object(app, '_process_mentor_proactive_notification', spy_process),
+    ):
         await app.trigger_realtime_integrations('user-rt-3', [{'text': 'hello'}], 'conv-3')
 
     marker = ('enter', 'user-rt-3', usage.Features.REALTIME_INTEGRATIONS)
@@ -406,8 +416,9 @@ async def test_audio_app_lookup_uses_db_executor_without_blocking_loop(integrati
     safety_release = threading.Timer(1, release.set)
     safety_release.start()
     try:
-        with patch.object(app, 'run_blocking', routing_run_blocking), patch.object(
-            app, 'get_available_apps', blocking_get_apps
+        with (
+            patch.object(app, 'run_blocking', routing_run_blocking),
+            patch.object(app, 'get_available_apps', blocking_get_apps),
         ):
             task = asyncio.create_task(app.trigger_realtime_audio_bytes('user-audio', 16_000, bytearray(b'audio')))
             deadline = asyncio.get_running_loop().time() + 0.75
@@ -445,8 +456,9 @@ async def test_trial_paywall_read_uses_db_executor_and_preserves_errors(integrat
         calls.append((executor, func, args, kwargs))
         return func(*args, **kwargs)
 
-    with patch.object(app, 'run_blocking', tracking_run_blocking), patch.object(
-        app, 'is_trial_paywalled', failing_paywall
+    with (
+        patch.object(app, 'run_blocking', tracking_run_blocking),
+        patch.object(app, 'is_trial_paywalled', failing_paywall),
     ):
         with pytest.raises(RuntimeError, match='paywall store unavailable'):
             await app.trigger_realtime_integrations('user-paywall', [{'text': 'hello'}], 'conv-1', source='desktop')
@@ -464,10 +476,11 @@ async def test_realtime_message_uses_async_notification_boundary(integration_har
     client.post.return_value = response
     notifier = AsyncMock(return_value=None)
 
-    with patch.object(app, 'get_available_apps', return_value=[external_app]), patch.object(
-        app, 'process_mentor_notification', return_value=None
-    ), patch.object(app, 'get_webhook_client', return_value=client), patch.object(
-        app, 'send_app_notification_async', notifier
+    with (
+        patch.object(app, 'get_available_apps', return_value=[external_app]),
+        patch.object(app, 'process_mentor_notification', return_value=None),
+        patch.object(app, 'get_webhook_client', return_value=client),
+        patch.object(app, 'send_app_notification_async', notifier),
     ):
         result = await app.trigger_realtime_integrations('user-message', [{'text': 'hello'}], 'conv-1')
 
@@ -485,10 +498,11 @@ async def test_realtime_notification_failure_remains_fail_soft(integration_harne
     client.post.return_value = response
     integration_harness.add_app_message.reset_mock()
 
-    with patch.object(app, 'get_available_apps', return_value=[external_app]), patch.object(
-        app, 'process_mentor_notification', return_value=None
-    ), patch.object(app, 'get_webhook_client', return_value=client), patch.object(
-        app, 'send_app_notification_async', AsyncMock(side_effect=RuntimeError('fcm unavailable'))
+    with (
+        patch.object(app, 'get_available_apps', return_value=[external_app]),
+        patch.object(app, 'process_mentor_notification', return_value=None),
+        patch.object(app, 'get_webhook_client', return_value=client),
+        patch.object(app, 'send_app_notification_async', AsyncMock(side_effect=RuntimeError('fcm unavailable'))),
     ):
         result = await app.trigger_realtime_integrations('user-message', [{'text': 'hello'}], 'conv-1')
 
@@ -516,10 +530,11 @@ async def test_realtime_non_public_webhook_rejected_fail_soft(integration_harnes
     external_app = _realtime_app()
     client = AsyncMock()
 
-    with patch.object(app, 'get_available_apps', return_value=[external_app]), patch.object(
-        app, 'process_mentor_notification', return_value=None
-    ), patch.object(app, 'safe_request_target', side_effect=app.UnsafeWebhookURLError('private ip')), patch.object(
-        app, 'get_webhook_client', return_value=client
+    with (
+        patch.object(app, 'get_available_apps', return_value=[external_app]),
+        patch.object(app, 'process_mentor_notification', return_value=None),
+        patch.object(app, 'safe_request_target', side_effect=app.UnsafeWebhookURLError('private ip')),
+        patch.object(app, 'get_webhook_client', return_value=client),
     ):
         result = await app.trigger_realtime_integrations('user-ssrf', [{'text': 'hi'}], 'conv-ssrf')
 

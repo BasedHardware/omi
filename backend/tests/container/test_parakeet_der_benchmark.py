@@ -398,7 +398,7 @@ class TestVoxConverseDERBenchmark:
         if catastrophic:
             details = ", ".join(f"{r['id']}={r['der']:.0%}" for r in catastrophic)
             assert False, (
-                f"{len(catastrophic)} clips exceed per-clip max " f"{benchmark_results['per_clip_max']:.0%}: {details}"
+                f"{len(catastrophic)} clips exceed per-clip max {benchmark_results['per_clip_max']:.0%}: {details}"
             )
 
     def test_minimum_clips_scored(self, benchmark_results):
@@ -406,9 +406,9 @@ class TestVoxConverseDERBenchmark:
         if benchmark_results["report_only"]:
             pytest.skip("Report-only mode")
 
-        assert (
-            benchmark_results["clips_scored"] >= 10
-        ), f"Only {benchmark_results['clips_scored']} clips scored, need at least 10"
+        assert benchmark_results["clips_scored"] >= 10, (
+            f"Only {benchmark_results['clips_scored']} clips scored, need at least 10"
+        )
 
 
 if __name__ == "__main__":

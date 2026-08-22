@@ -66,12 +66,11 @@ def _validate_json_value(value: Any, *, depth: int, ancestors: set[int]) -> None
         return
     if not isinstance(value, (list, dict)):
         raise ValueError(
-            "promotion graph arguments must contain only JSON values "
-            "(null, boolean, number, string, array, or object)"
+            "promotion graph arguments must contain only JSON values (null, boolean, number, string, array, or object)"
         )
     if depth > PROMOTION_GRAPH_ARGUMENTS_MAX_DEPTH:
         raise ValueError(
-            f"promotion graph arguments exceed maximum JSON nesting depth " f"of {PROMOTION_GRAPH_ARGUMENTS_MAX_DEPTH}"
+            f"promotion graph arguments exceed maximum JSON nesting depth of {PROMOTION_GRAPH_ARGUMENTS_MAX_DEPTH}"
         )
 
     container = cast(list[Any] | Dict[Any, Any], value)
@@ -123,8 +122,7 @@ def _validate_and_normalize_arguments(value: Any, *, require_nonempty: bool = Tr
         raise ValueError("promotion graph arguments must be encodable as canonical JSON") from exc
     if payload_size > PROMOTION_GRAPH_ARGUMENTS_MAX_JSON_BYTES:
         raise ValueError(
-            f"promotion graph arguments JSON payload must be at most "
-            f"{PROMOTION_GRAPH_ARGUMENTS_MAX_JSON_BYTES} bytes"
+            f"promotion graph arguments JSON payload must be at most {PROMOTION_GRAPH_ARGUMENTS_MAX_JSON_BYTES} bytes"
         )
     return normalized
 
@@ -179,7 +177,7 @@ class PromotionGraphPlan(BaseModel):
             raise ValueError("promotion graph subject and predicate must not be blank")
         if len(stripped) > PROMOTION_GRAPH_SUBJECT_MAX_LENGTH:
             raise ValueError(
-                f"promotion graph subject_entity_id must be at most " f"{PROMOTION_GRAPH_SUBJECT_MAX_LENGTH} characters"
+                f"promotion graph subject_entity_id must be at most {PROMOTION_GRAPH_SUBJECT_MAX_LENGTH} characters"
             )
         return stripped
 

@@ -433,9 +433,10 @@ class TestTranscribeUrl:
         decoded_audio = MagicMock()
         decoded_audio.export.side_effect = lambda buffer, format: buffer.write(wav_bytes)
 
-        with patch('httpx.Client') as mock_client_cls, patch.object(
-            pr.AudioSegment, 'from_file', return_value=decoded_audio
-        ) as from_file:
+        with (
+            patch('httpx.Client') as mock_client_cls,
+            patch.object(pr.AudioSegment, 'from_file', return_value=decoded_audio) as from_file,
+        ):
             mock_client = MagicMock()
             mock_client.__enter__ = MagicMock(return_value=mock_client)
             mock_client.__exit__ = MagicMock(return_value=False)
@@ -460,8 +461,9 @@ class TestTranscribeUrl:
         stream_resp.__enter__ = MagicMock(return_value=stream_resp)
         stream_resp.__exit__ = MagicMock(return_value=False)
 
-        with patch('httpx.Client') as mock_client_cls, patch.object(
-            pr.AudioSegment, 'from_file', side_effect=RuntimeError('decode failed')
+        with (
+            patch('httpx.Client') as mock_client_cls,
+            patch.object(pr.AudioSegment, 'from_file', side_effect=RuntimeError('decode failed')),
         ):
             mock_client = MagicMock()
             mock_client.__enter__ = MagicMock(return_value=mock_client)
@@ -524,8 +526,9 @@ class TestStreamingFactoryRouting:
     def test_parakeet_in_stt_service_models(self):
         from utils.stt.streaming import STTService, get_stt_service_for_language
 
-        with patch('utils.stt.streaming.stt_service_models', ['parakeet']), patch.dict(
-            os.environ, {'HOSTED_PARAKEET_API_URL': 'http://fake-parakeet:8080'}
+        with (
+            patch('utils.stt.streaming.stt_service_models', ['parakeet']),
+            patch.dict(os.environ, {'HOSTED_PARAKEET_API_URL': 'http://fake-parakeet:8080'}),
         ):
             service, lang, model = get_stt_service_for_language('en', multi_lang_enabled=False)
             assert service == STTService.parakeet
@@ -534,8 +537,9 @@ class TestStreamingFactoryRouting:
     def test_parakeet_streaming_fallback_for_cjk_uses_deepgram(self):
         from utils.stt.streaming import STTService, get_stt_service_for_language
 
-        with patch('utils.stt.streaming.stt_service_models', ['parakeet', 'dg-nova-3']), patch.dict(
-            os.environ, {'HOSTED_PARAKEET_API_URL': 'http://fake-parakeet:8080'}
+        with (
+            patch('utils.stt.streaming.stt_service_models', ['parakeet', 'dg-nova-3']),
+            patch.dict(os.environ, {'HOSTED_PARAKEET_API_URL': 'http://fake-parakeet:8080'}),
         ):
             service, lang, model = get_stt_service_for_language('ja')
             assert service == STTService.deepgram
@@ -691,8 +695,9 @@ class TestDiarization:
         def fake_extract_boom(audio_data, filename="audio.wav"):
             raise RuntimeError("embedding service down")
 
-        with patch('httpx.Client') as mock_client_cls, patch.object(
-            pr, 'extract_embedding_from_bytes', fake_extract_boom
+        with (
+            patch('httpx.Client') as mock_client_cls,
+            patch.object(pr, 'extract_embedding_from_bytes', fake_extract_boom),
         ):
             mock_client = MagicMock()
             mock_client.__enter__ = MagicMock(return_value=mock_client)

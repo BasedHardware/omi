@@ -699,7 +699,7 @@ def _stage_trace(
 ) -> StageTrace:
     return StageTrace(
         stage_name=stage_name,
-        status=status,  # type: ignore[arg-type]
+        status=status,  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
         started_at=started_at,
         finished_at=finished_at,
         input_count=input_count,
@@ -720,13 +720,13 @@ def _frames_from_structured_payload(event: RawContextEvent, actor: ActorDescript
         if not isinstance(raw_frame, dict):
             continue
         frame_payload: Dict[str, Any] = dict(cast(Dict[str, Any], raw_frame))
-        frame_payload.setdefault("subject", _actor_subject(actor).dict())
-        frame_payload.setdefault("temporal", TemporalScope().dict())
-        frame_payload.setdefault("modality", Modality().dict())
-        frame_payload.setdefault("sensitivity", SensitivityClassification().dict())
-        frame_payload.setdefault("evidence", [_evidence_for_event(event, index).dict()])
+        frame_payload.setdefault("subject", _actor_subject(actor).dict())  # ty: ignore[deprecated]
+        frame_payload.setdefault("temporal", TemporalScope().dict())  # ty: ignore[deprecated]
+        frame_payload.setdefault("modality", Modality().dict())  # ty: ignore[deprecated]
+        frame_payload.setdefault("sensitivity", SensitivityClassification().dict())  # ty: ignore[deprecated]
+        frame_payload.setdefault("evidence", [_evidence_for_event(event, index).dict()])  # ty: ignore[deprecated]
         frame_payload.setdefault("source_event_ids", [event.event_id])
-        frame_payload.setdefault("extraction", ExtractionMetadata(source_block_id=event.event_id).dict())
+        frame_payload.setdefault("extraction", ExtractionMetadata(source_block_id=event.event_id).dict())  # ty: ignore[deprecated]
         try:
             frames.append(MemoryEventFrame.model_validate(frame_payload))
         except ValidationError:
@@ -757,7 +757,7 @@ def _heuristic_frames_from_text(event: RawContextEvent, actor: ActorDescriptor |
         uncertainty_reasons = [] if confidence == "high" else ["speaker_uncertain"]
         frames.append(
             MemoryEventFrame(
-                frame_type=frame_type,  # type: ignore[arg-type]
+                frame_type=frame_type,  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
                 subject=_actor_subject(actor),
                 predicate=predicate,
                 object=FrameObject(object_type="literal", value=object_value, confidence=confidence),
@@ -767,7 +767,7 @@ def _heuristic_frames_from_text(event: RawContextEvent, actor: ActorDescriptor |
                 evidence=[_evidence_for_event(event, index, quote=match.group(0))],
                 source_event_ids=[event.event_id],
                 confidence=confidence,
-                uncertainty_reasons=uncertainty_reasons,  # type: ignore[arg-type]
+                uncertainty_reasons=uncertainty_reasons,  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
                 extraction=ExtractionMetadata(source_block_id=event.event_id, notes=["heuristic_stub"]),
                 scope="conversation" if event.source_ref.conversation_id else "unknown",
                 scope_ref=event.source_ref if event.source_ref.conversation_id else None,
@@ -1625,7 +1625,9 @@ def _memory_kind(frame_type: str) -> str:
     return "other"
 
 
-def _review_reason(frame: MemoryEventFrame, decision: MemoryDecision) -> Literal[
+def _review_reason(
+    frame: MemoryEventFrame, decision: MemoryDecision
+) -> Literal[
     "low_confidence",
     "subject_ambiguous",
     "speaker_uncertain",
@@ -1651,7 +1653,9 @@ def _review_reason(frame: MemoryEventFrame, decision: MemoryDecision) -> Literal
     return "other"
 
 
-def _rejected_reason(action: str) -> Literal[
+def _rejected_reason(
+    action: str,
+) -> Literal[
     "not_memory_worthy",
     "ephemeral",
     "duplicate",

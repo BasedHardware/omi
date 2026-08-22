@@ -703,7 +703,7 @@ def _apply_processed_result(
     operation = MemoryOperation.new(
         uid=item.uid,
         operation_type=MemoryOperationType.synthesis,
-        source_packet_id=(f"required_processing:{item.memory_id}:r{item.item_revision}:" f"{receipt['output_hash']}"),
+        source_packet_id=(f"required_processing:{item.memory_id}:r{item.item_revision}:{receipt['output_hash']}"),
         target_memory_id=item.memory_id,
         evidence_ids=evidence_ids,
         logical_payload=logical_payload,

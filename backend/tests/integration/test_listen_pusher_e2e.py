@@ -328,9 +328,9 @@ class TestConversationLifecycleE2E:
         pcm_data, sample_rate = test_audio
         conversation_ids_to_cleanup = []
 
-        print(f"\n{'='*70}")
+        print(f"\n{'=' * 70}")
         print("E2E Conversation Lifecycle Test")
-        print(f"{'='*70}")
+        print(f"{'=' * 70}")
 
         try:
             # Record start time to filter conversations created during this test
@@ -457,7 +457,7 @@ class TestConversationLifecycleE2E:
                             break
 
             assert conversation_id is not None, (
-                f"No completed conversation found after {wait_timeout}s. " f"Check backend/pusher logs for errors."
+                f"No completed conversation found after {wait_timeout}s. Check backend/pusher logs for errors."
             )
 
             conv = get_conversation_from_firestore(DEV_UID, conversation_id)
@@ -522,9 +522,9 @@ class TestPrivateCloudSyncE2E:
         pcm_data, sample_rate = test_audio
         conversation_id = None
 
-        print(f"\n{'='*70}")
+        print(f"\n{'=' * 70}")
         print("E2E Private Cloud Sync Test")
-        print(f"{'='*70}")
+        print(f"{'=' * 70}")
 
         try:
             # Enable private cloud sync
@@ -639,9 +639,9 @@ class TestSpeakerDetectionFromTextE2E:
         pcm_data, sample_rate = test_audio
         conversation_id = None
 
-        print(f"\n{'='*70}")
+        print(f"\n{'=' * 70}")
         print("E2E Speaker Detection from Text Test")
-        print(f"{'='*70}")
+        print(f"{'=' * 70}")
 
         # Record existing people before test
         print("\n[1] Recording existing people...")

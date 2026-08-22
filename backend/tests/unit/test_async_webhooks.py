@@ -63,9 +63,10 @@ class TestRealtimeTranscriptWebhook:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        with patch("utils.webhooks.get_webhook_client", return_value=mock_client), patch(
-            "utils.webhooks.send_webhook_notification"
-        ) as mock_notify:
+        with (
+            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.send_webhook_notification") as mock_notify,
+        ):
             await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
             mock_notify.assert_called_once_with("uid-1", "Important alert here")
 
@@ -79,9 +80,10 @@ class TestRealtimeTranscriptWebhook:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        with patch("utils.webhooks.get_webhook_client", return_value=mock_client), patch(
-            "utils.webhooks.send_webhook_notification"
-        ) as mock_notify:
+        with (
+            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.send_webhook_notification") as mock_notify,
+        ):
             await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
             mock_notify.assert_not_called()
 
@@ -90,8 +92,9 @@ class TestRealtimeTranscriptWebhook:
         """Verify disabled webhook returns early without HTTP call."""
         mock_client = AsyncMock()
 
-        with patch("utils.webhooks.user_webhook_status_db", return_value=False), patch(
-            "utils.webhooks.get_webhook_client", return_value=mock_client
+        with (
+            patch("utils.webhooks.user_webhook_status_db", return_value=False),
+            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
         ):
             await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
             mock_client.post.assert_not_called()
@@ -104,8 +107,9 @@ class TestRealtimeTranscriptWebhook:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(side_effect=httpx.TimeoutException("connect timeout"))
 
-        with patch("utils.webhooks.get_webhook_client", return_value=mock_client), patch(
-            "utils.webhooks._get_dev_webhook_retry_delays", return_value=()
+        with (
+            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks._get_dev_webhook_retry_delays", return_value=()),
         ):
             # Should not raise
             await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
@@ -156,8 +160,9 @@ class TestSendAudioBytesDeveloperWebhook:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        with patch("utils.webhooks.get_user_webhook_db", return_value="https://example.com/audio,10"), patch(
-            "utils.webhooks.get_webhook_client", return_value=mock_client
+        with (
+            patch("utils.webhooks.get_user_webhook_db", return_value="https://example.com/audio,10"),
+            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
         ):
             await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\x00'))
 
@@ -170,8 +175,9 @@ class TestSendAudioBytesDeveloperWebhook:
         """Verify disabled webhook returns early."""
         mock_client = AsyncMock()
 
-        with patch("utils.webhooks.user_webhook_status_db", return_value=False), patch(
-            "utils.webhooks.get_webhook_client", return_value=mock_client
+        with (
+            patch("utils.webhooks.user_webhook_status_db", return_value=False),
+            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
         ):
             await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\x00'))
             mock_client.post.assert_not_called()
@@ -180,8 +186,9 @@ class TestSendAudioBytesDeveloperWebhook:
     async def test_invalid_webhook_url_skips(self):
         mock_client = AsyncMock()
 
-        with patch("utils.webhooks.get_user_webhook_db", return_value="ftp://evil.example/audio,5"), patch(
-            "utils.webhooks.get_webhook_client", return_value=mock_client
+        with (
+            patch("utils.webhooks.get_user_webhook_db", return_value="ftp://evil.example/audio,5"),
+            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
         ):
             await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\x00' * 100))
             mock_client.post.assert_not_called()
@@ -235,8 +242,9 @@ class TestSendAudioBytesDeveloperWebhook:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(side_effect=slow_then_fast_post)
 
-        with patch("utils.webhooks.get_webhook_client", return_value=mock_client), patch(
-            "utils.webhooks._get_dev_webhook_retry_delays", return_value=()
+        with (
+            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks._get_dev_webhook_retry_delays", return_value=()),
         ):
             first = asyncio.create_task(send_audio_bytes_developer_webhook("uid-lock", 8000, bytearray(b'\x01')))
             await first_started.wait()
@@ -274,17 +282,17 @@ class TestConversationAndSummaryWebhooksStructural:
         """conversation_created_webhook must be defined as an async function."""
         tree = self._parse_webhooks_ast()
         async_funcs = {node.name for node in ast.walk(tree) if isinstance(node, ast.AsyncFunctionDef)}
-        assert (
-            'conversation_created_webhook' in async_funcs
-        ), "conversation_created_webhook must be async — it was migrated from blocking requests to httpx"
+        assert 'conversation_created_webhook' in async_funcs, (
+            "conversation_created_webhook must be async — it was migrated from blocking requests to httpx"
+        )
 
     def test_day_summary_webhook_is_async(self):
         """day_summary_webhook must be defined as an async function."""
         tree = self._parse_webhooks_ast()
         async_funcs = {node.name for node in ast.walk(tree) if isinstance(node, ast.AsyncFunctionDef)}
-        assert (
-            'day_summary_webhook' in async_funcs
-        ), "day_summary_webhook must be async — it was migrated from blocking requests to httpx"
+        assert 'day_summary_webhook' in async_funcs, (
+            "day_summary_webhook must be async — it was migrated from blocking requests to httpx"
+        )
 
     def test_webhooks_does_not_import_requests(self):
         """utils/webhooks.py must not import the blocking requests library."""
@@ -292,16 +300,16 @@ class TestConversationAndSummaryWebhooksStructural:
         # Allow 'requests' only as part of another name (e.g. 'allow_request')
         bare_import = re.search(r'^import requests\b', source, re.MULTILINE)
         from_import = re.search(r'^from requests\b', source, re.MULTILINE)
-        assert (
-            bare_import is None and from_import is None
-        ), "utils/webhooks.py must not import the blocking 'requests' library — use httpx.AsyncClient"
+        assert bare_import is None and from_import is None, (
+            "utils/webhooks.py must not import the blocking 'requests' library — use httpx.AsyncClient"
+        )
 
     def test_webhooks_uses_httpx_client(self):
         """utils/webhooks.py must use the shared httpx client (get_webhook_client)."""
         source = self._read_webhooks_source()
-        assert (
-            'get_webhook_client' in source
-        ), "webhooks.py must use get_webhook_client() (shared httpx.AsyncClient) for HTTP calls"
+        assert 'get_webhook_client' in source, (
+            "webhooks.py must use get_webhook_client() (shared httpx.AsyncClient) for HTTP calls"
+        )
 
     def test_conversation_created_webhook_uses_await_post(self):
         """conversation_created_webhook must await an async HTTP post, not call requests.post."""
@@ -315,9 +323,9 @@ class TestConversationAndSummaryWebhooksStructural:
 
         assert 'await' in func_body, "conversation_created_webhook must use await for async HTTP call"
         assert '_post_dev_webhook(' in func_body, "conversation_created_webhook must use the async webhook helper"
-        assert (
-            'requests.post' not in func_body
-        ), "conversation_created_webhook must not use blocking requests.post — use httpx.AsyncClient"
+        assert 'requests.post' not in func_body, (
+            "conversation_created_webhook must not use blocking requests.post — use httpx.AsyncClient"
+        )
 
     def test_day_summary_webhook_uses_await_post(self):
         """day_summary_webhook must await an async HTTP post, not call requests.post."""
@@ -330,9 +338,9 @@ class TestConversationAndSummaryWebhooksStructural:
 
         assert 'await' in func_body, "day_summary_webhook must use await for async HTTP call"
         assert '_post_dev_webhook(' in func_body, "day_summary_webhook must use the async webhook helper"
-        assert (
-            'requests.post' not in func_body
-        ), "day_summary_webhook must not use blocking requests.post — use httpx.AsyncClient"
+        assert 'requests.post' not in func_body, (
+            "day_summary_webhook must not use blocking requests.post — use httpx.AsyncClient"
+        )
 
 
 class TestDaySummaryWebhookJsonField:
@@ -377,9 +385,9 @@ class TestDaySummaryWebhookJsonField:
         mock_client.post.assert_called_once()
         payload = mock_client.post.call_args.kwargs["json"]
 
-        assert isinstance(
-            payload["summary_json"], dict
-        ), f"summary_json must be a JSON object, got {type(payload['summary_json'])}: {payload['summary_json']!r}"
+        assert isinstance(payload["summary_json"], dict), (
+            f"summary_json must be a JSON object, got {type(payload['summary_json'])}: {payload['summary_json']!r}"
+        )
         assert payload["summary_json"]["headline"] == "Productive day with three meetings"
 
         assert isinstance(payload["summary"], str), "legacy summary must remain a string for backward compatibility"
@@ -435,8 +443,9 @@ class TestCircuitBreakerIntegration:
 
         mock_client = AsyncMock()
 
-        with patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb), patch(
-            "utils.webhooks.get_webhook_client", return_value=mock_client
+        with (
+            patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
+            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
         ):
             await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
             mock_client.post.assert_not_called()
@@ -454,8 +463,9 @@ class TestCircuitBreakerIntegration:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        with patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb), patch(
-            "utils.webhooks.get_webhook_client", return_value=mock_client
+        with (
+            patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
+            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
         ):
             await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
             mock_cb.record_success.assert_called_once()
@@ -469,9 +479,11 @@ class TestCircuitBreakerIntegration:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(side_effect=Exception("connection refused"))
 
-        with patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb), patch(
-            "utils.webhooks.get_webhook_client", return_value=mock_client
-        ), patch("utils.webhooks._get_dev_webhook_retry_delays", return_value=()):
+        with (
+            patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
+            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks._get_dev_webhook_retry_delays", return_value=()),
+        ):
             await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
             mock_cb.record_failure.assert_called_once()
 
@@ -483,8 +495,9 @@ class TestCircuitBreakerIntegration:
 
         mock_client = AsyncMock()
 
-        with patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb), patch(
-            "utils.webhooks.get_webhook_client", return_value=mock_client
+        with (
+            patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
+            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
         ):
             await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\x00' * 100))
             mock_client.post.assert_not_called()

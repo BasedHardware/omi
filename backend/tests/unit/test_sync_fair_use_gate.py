@@ -588,9 +588,9 @@ class TestSyncEndpointCodeStructure:
             if in_triggered_block:
                 if stripped and not stripped.startswith('#') and not line.startswith(' ' * 16):
                     break  # exited the block
-                assert (
-                    'should_lock' not in stripped
-                ), "soft cap trigger must not set should_lock — matches transcribe.py behavior"
+                assert 'should_lock' not in stripped, (
+                    "soft cap trigger must not set should_lock — matches transcribe.py behavior"
+                )
 
 
 class TestLockDecisionBehavior:

@@ -564,9 +564,11 @@ class TestExtractActionItemsPostValidation:
         mock_llm = MagicMock()
         mock_llm.bind.return_value = mock_llm
         mock_llm.__or__ = MagicMock(return_value=mock_chain)
-        with patch.object(conv_proc, 'get_llm', return_value=mock_llm) as mock_get_llm, patch.object(
-            conv_proc, 'PydanticOutputParser'
-        ) as mock_parser_cls, patch.object(conv_proc, 'ChatPromptTemplate') as mock_prompt_cls:
+        with (
+            patch.object(conv_proc, 'get_llm', return_value=mock_llm) as mock_get_llm,
+            patch.object(conv_proc, 'PydanticOutputParser') as mock_parser_cls,
+            patch.object(conv_proc, 'ChatPromptTemplate') as mock_prompt_cls,
+        ):
             mock_parser = MagicMock()
             mock_parser.get_format_instructions.return_value = "format"
             mock_parser_cls.return_value = mock_parser
@@ -600,9 +602,11 @@ class TestExtractActionItemsPostValidation:
         mock_llm = MagicMock()
         mock_llm.bind.return_value = mock_llm
         mock_llm.__or__ = MagicMock(return_value=mock_chain)
-        with patch.object(conv_proc, 'get_llm', return_value=mock_llm) as mock_get_llm, patch.object(
-            conv_proc, 'PydanticOutputParser'
-        ) as mock_parser_cls, patch.object(conv_proc, 'ChatPromptTemplate') as mock_prompt_cls:
+        with (
+            patch.object(conv_proc, 'get_llm', return_value=mock_llm) as mock_get_llm,
+            patch.object(conv_proc, 'PydanticOutputParser') as mock_parser_cls,
+            patch.object(conv_proc, 'ChatPromptTemplate') as mock_prompt_cls,
+        ):
             mock_parser = MagicMock()
             mock_parser.get_format_instructions.return_value = "format"
             mock_parser_cls.return_value = mock_parser
@@ -638,9 +642,11 @@ class TestExtractActionItemsPostValidation:
         mock_llm = MagicMock()
         mock_llm.bind.return_value = mock_llm
         mock_llm.__or__ = MagicMock(return_value=mock_chain)
-        with patch.object(conv_proc, 'get_llm', return_value=mock_llm) as mock_get_llm, patch.object(
-            conv_proc, 'PydanticOutputParser'
-        ) as mock_parser_cls, patch.object(conv_proc, 'ChatPromptTemplate') as mock_prompt_cls:
+        with (
+            patch.object(conv_proc, 'get_llm', return_value=mock_llm) as mock_get_llm,
+            patch.object(conv_proc, 'PydanticOutputParser') as mock_parser_cls,
+            patch.object(conv_proc, 'ChatPromptTemplate') as mock_prompt_cls,
+        ):
             mock_parser = MagicMock()
             mock_parser.get_format_instructions.return_value = "format"
             mock_parser_cls.return_value = mock_parser
@@ -676,9 +682,11 @@ class TestExtractActionItemsPostValidation:
         mock_llm = MagicMock()
         mock_llm.bind.return_value = mock_llm
         mock_llm.__or__ = MagicMock(return_value=mock_chain)
-        with patch.object(conv_proc, 'get_llm', return_value=mock_llm) as mock_get_llm, patch.object(
-            conv_proc, 'PydanticOutputParser'
-        ) as mock_parser_cls, patch.object(conv_proc, 'ChatPromptTemplate') as mock_prompt_cls:
+        with (
+            patch.object(conv_proc, 'get_llm', return_value=mock_llm) as mock_get_llm,
+            patch.object(conv_proc, 'PydanticOutputParser') as mock_parser_cls,
+            patch.object(conv_proc, 'ChatPromptTemplate') as mock_prompt_cls,
+        ):
             mock_parser = MagicMock()
             mock_parser.get_format_instructions.return_value = "format"
             mock_parser_cls.return_value = mock_parser
@@ -720,10 +728,11 @@ class TestActionItemTimezoneConversion:
         mock_llm = MagicMock()
         mock_llm.bind.return_value = mock_llm
         mock_llm.__or__ = MagicMock(return_value=mock_chain)
-        with patch.object(conv_proc, 'get_llm', return_value=mock_llm), patch.object(
-            conv_proc, 'PydanticOutputParser'
-        ) as mock_parser_cls, patch.object(conv_proc, 'ChatPromptTemplate') as mock_prompt_cls, patch.object(
-            conv_proc, 'ZoneInfo', side_effect=self._zone_info
+        with (
+            patch.object(conv_proc, 'get_llm', return_value=mock_llm),
+            patch.object(conv_proc, 'PydanticOutputParser') as mock_parser_cls,
+            patch.object(conv_proc, 'ChatPromptTemplate') as mock_prompt_cls,
+            patch.object(conv_proc, 'ZoneInfo', side_effect=self._zone_info),
         ):
             mock_parser = MagicMock()
             mock_parser.get_format_instructions.return_value = "format"

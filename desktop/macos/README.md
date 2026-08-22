@@ -13,7 +13,7 @@ dmg-assets/       DMG installer resources
 
 ## Development
 
-Requires macOS 14.0+, Python 3.11 with uv, and code signing with an Apple Developer ID.
+Requires macOS 14.0+, Python 3.13 with uv, and code signing with an Apple Developer ID.
 
 ```bash
 # Run (builds Swift app, starts Python backend, launches app)

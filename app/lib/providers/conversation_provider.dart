@@ -783,8 +783,10 @@ class ConversationProvider extends ChangeNotifier {
         return false;
       }
 
-      // Filter out short conversations unless explicitly showing them
-      if (!showShortConversations) {
+      // Filter out short conversations unless explicitly showing them.
+      // Server-side hard-discard (#6154) removes sub-30s noise; keep this as an
+      // optional client filter only when the user set a non-zero threshold.
+      if (!showShortConversations && shortConversationThreshold > 0) {
         final durationSeconds = convo.getDurationInSeconds();
         if (durationSeconds < shortConversationThreshold) {
           return false;

@@ -284,7 +284,7 @@ def _build_quota_accounting_unavailable_reply(compat_app_id: Optional[str]) -> R
     """
     ai_msg = Message(
         id=str(uuid.uuid4()),
-        text=("Usage accounting is temporarily unavailable. Please retry in a moment — " "your message was not saved."),
+        text=("Usage accounting is temporarily unavailable. Please retry in a moment — your message was not saved."),
         created_at=datetime.now(timezone.utc),
         sender='ai',
         type='text',

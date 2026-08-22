@@ -1,13 +1,19 @@
-FROM gcr.io/based-hardware-dev/python:3.11-slim-forky AS builder
+ARG PYTHON_BASE_IMAGE=python:3.13-slim-bookworm
+ARG UV_VERSION=0.12.5
 
+FROM ${PYTHON_BASE_IMAGE} AS builder
+
+ARG UV_VERSION
 ENV PATH="/opt/venv/bin:$PATH"
-RUN python -m venv /opt/venv
+
+RUN python -m venv /opt/venv && \
+    python3 -m pip install --no-cache-dir "uv==${UV_VERSION}"
 
 COPY backend/diarizer/requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt
+RUN uv pip install --python /opt/venv/bin/python --no-cache-dir -r /tmp/requirements.txt
 
-FROM gcr.io/based-hardware-dev/python:3.11-slim-forky
-# Python 3.11 on Debian 14 (Forky)
+FROM ${PYTHON_BASE_IMAGE}
+# Python 3.13 — speaker embedding GPU service
 
 WORKDIR /app
 ENV PATH="/usr/local/nvidia/bin:/usr/local/cuda/bin:/opt/venv/bin:$PATH"

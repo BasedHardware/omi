@@ -202,8 +202,7 @@ def _arguments() -> argparse.Namespace:
         "--scan-limit",
         type=int,
         help=(
-            f"Candidate rows to read before filtering (1-{MAX_STRUCTURED_SCAN_SIZE}); "
-            "does not increase the apply bound"
+            f"Candidate rows to read before filtering (1-{MAX_STRUCTURED_SCAN_SIZE}); does not increase the apply bound"
         ),
     )
     parser.add_argument("--apply-limit", type=int, default=1, help=f"Ready plans to commit (1-{MAX_PAGE_SIZE})")

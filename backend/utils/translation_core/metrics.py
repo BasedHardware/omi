@@ -144,14 +144,14 @@ def _counter(name: str, doc: str, labels: list[str]) -> Counter:
     try:
         return Counter(name, doc, labels)
     except ValueError:
-        return REGISTRY._names_to_collectors[name]  # type: ignore[return-value]
+        return REGISTRY._names_to_collectors[name]  # type: ignore[return-value]  # ty: ignore[invalid-return-type]
 
 
 def _histogram(name: str, doc: str, labels: list[str], buckets: list[float]) -> Histogram:
     try:
         return Histogram(name, doc, labels, buckets=buckets)
     except ValueError:
-        return REGISTRY._names_to_collectors[name]  # type: ignore[return-value]
+        return REGISTRY._names_to_collectors[name]  # type: ignore[return-value]  # ty: ignore[invalid-return-type]
 
 
 def _bounded(value: str) -> str:

@@ -374,7 +374,7 @@ def bounded_canonical_memory_uid_inventory(
         # this fluent surface, but the callable narrowing above intentionally
         # leaves the return type opaque.  Keep that injection seam while making
         # the structural expectation explicit to the type checker.
-        registry = cast(Any, collection(CANONICAL_MEMORY_MAINTENANCE_REGISTRY_COLLECTION))
+        registry = cast(Any, collection(CANONICAL_MEMORY_MAINTENANCE_REGISTRY_COLLECTION))  # ty: ignore[redundant-cast]
         query = registry.where("uid", ">", cursor) if cursor else registry
         query = query.order_by("uid")
         page = list(query.limit(bounded_limit).stream())
@@ -616,7 +616,9 @@ def run_universal_short_term_maintenance(
             else (
                 "expiry_ordered+bounded_registry"
                 if expiry_inventory.uids and registry_uids
-                else "expiry_ordered" if expiry_inventory.uids else "bounded_registry"
+                else "expiry_ordered"
+                if expiry_inventory.uids
+                else "bounded_registry"
             )
         ),
         inventory_complete=not inventory_errors,

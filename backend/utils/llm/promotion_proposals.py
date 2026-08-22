@@ -23,7 +23,7 @@ try:
 except Exception as exc:
     # Benchmark/product-module tests may run without Firestore ADC or optional provider deps.
     # Keep the L2 prompt/parser/validation importable so callers can inject an equivalent llm.
-    get_llm = None
+    get_llm = None  # ty: ignore[invalid-assignment]
     _client_import_error = exc
 _CLIENT_IMPORT_ERROR = _client_import_error
 
@@ -394,11 +394,11 @@ def _proposal_to_patch(
         arguments=proposal.arguments,
         supersedes=proposal.supersedes,
         rationale=proposal.rationale,
-        confidence=proposal.confidence,  # type: ignore[arg-type]
-        relationship_to_user=proposal.relationship_to_user,  # type: ignore[arg-type]
+        confidence=proposal.confidence,  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
+        relationship_to_user=proposal.relationship_to_user,  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
         subject_entity_id=proposal.subject_entity_id,
         subject_label=proposal.subject_label,
-        aboutness=proposal.aboutness,  # type: ignore[arg-type]
+        aboutness=proposal.aboutness,  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
     )
 
 
@@ -522,7 +522,7 @@ def synthesize_durable_memory_patch_result(
                 )
                 continue
             patch = _with_server_control_ids(patch, packet, observed_head_commit_id)
-            patch = DurableMemoryPatch(**patch.dict())
+            patch = DurableMemoryPatch(**patch.dict())  # ty: ignore[deprecated]
         except ValidationError:
             outcomes.append(
                 CandidateOutcome(index=index, status=CandidateOutcomeStatus.invalid, reason_code="validation_error")

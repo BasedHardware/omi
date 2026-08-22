@@ -287,8 +287,10 @@ def test_review_queue_timeout_accepts_or_drops_by_current_evidence(monkeypatch):
     monkeypatch.setattr(
         review_queue,
         'resolve_review_conflict',
-        lambda uid, review_id, decision, **kwargs: resolved.append((review_id, kwargs['current_veracity']))
-        or {'decision': review_queue.timeout_decision({}, kwargs['current_veracity'])},
+        lambda uid, review_id, decision, **kwargs: (
+            resolved.append((review_id, kwargs['current_veracity']))
+            or {'decision': review_queue.timeout_decision({}, kwargs['current_veracity'])}
+        ),
     )
 
     result = review_queue.resolve_expired_review_conflicts(

@@ -810,9 +810,9 @@ class TestConversationSplit:
         has_lifecycle_event = 'memory_processing_started' in event_types or 'memory_created' in event_types
 
         # At minimum, we should have received transcripts
-        assert (
-            has_transcripts or has_lifecycle_event
-        ), f"Should receive transcripts or lifecycle events. Got event types: {event_types}"
+        assert has_transcripts or has_lifecycle_event, (
+            f"Should receive transcripts or lifecycle events. Got event types: {event_types}"
+        )
 
 
 # ===================================================================

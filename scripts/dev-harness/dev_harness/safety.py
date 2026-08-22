@@ -119,6 +119,19 @@ _OFFLINE_PROVIDER_PLACEHOLDERS = {
     "GEMINI_API_KEY": "omi-local-harness-offline-gemini-not-real",
     "ANTHROPIC_API_KEY": "omi-local-harness-offline-anthropic-not-real",
 }
+# Filesystem fake GCS (#11703) — names match testing.e2e.fakes.storage.DEFAULT_BUCKETS.
+_OFFLINE_FAKE_GCS_ENV = {
+    "OMI_USE_FAKE_GCS": "1",
+    "BUCKET_SPEECH_PROFILES": "speech-profiles",
+    "BUCKET_POSTPROCESSING": "postprocessing",
+    "BUCKET_MEMORIES_RECORDINGS": "memories-recordings",
+    "BUCKET_PRIVATE_CLOUD_SYNC": "omi-private-cloud-sync",
+    "BUCKET_TEMPORAL_SYNC_LOCAL": "sync-temporal",
+    "BUCKET_PLUGINS_LOGOS": "plugins-logos",
+    "BUCKET_APP_THUMBNAILS": "app-thumbnails",
+    "BUCKET_CHAT_FILES": "chat-files",
+    "BUCKET_DESKTOP_UPDATES": "desktop-updates",
+}
 _PROVIDER_SECRET_RE = re.compile(
     r"(API_KEY|ACCESS_TOKEN|AUTH_TOKEN|SECRET|DEEPGRAM|OPENAI|ANTHROPIC|GROQ|ELEVENLABS)", re.IGNORECASE
 )
@@ -288,6 +301,8 @@ def build_child_env(
             "PROVIDER_MODE": provider_mode,
         }
     )
+    if provider_mode == "offline":
+        child.update(_OFFLINE_FAKE_GCS_ENV)
 
     for key, value in (extra or {}).items():
         if key in _STRIPPED_EXACT_ENV_KEYS or key.startswith(_STRIPPED_ENV_PREFIXES):

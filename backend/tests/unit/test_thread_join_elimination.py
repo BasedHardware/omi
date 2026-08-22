@@ -115,20 +115,20 @@ class TestAsyncGatherInBackgroundThread:
         filepath = os.path.join(BACKEND_DIR, 'utils', 'apps.py')
         source = _read_source(filepath)
         assert 'async def _batch()' in source, "update_personas_async must wrap asyncio.gather in async _batch() helper"
-        assert (
-            'set_event_loop' in source
-        ), "update_personas_async must call asyncio.set_event_loop(loop) before run_until_complete"
+        assert 'set_event_loop' in source, (
+            "update_personas_async must call asyncio.set_event_loop(loop) before run_until_complete"
+        )
 
     def test_process_conversation_uses_batch_wrapper(self):
         """process_conversation.py _update_personas_async must use async _batch() wrapper."""
         filepath = os.path.join(BACKEND_DIR, 'utils', 'conversations', 'process_conversation.py')
         source = _read_source(filepath)
-        assert (
-            'async def _batch()' in source
-        ), "_update_personas_async must wrap asyncio.gather in async _batch() helper"
-        assert (
-            'set_event_loop' in source
-        ), "_update_personas_async must call asyncio.set_event_loop(loop) before run_until_complete"
+        assert 'async def _batch()' in source, (
+            "_update_personas_async must wrap asyncio.gather in async _batch() helper"
+        )
+        assert 'set_event_loop' in source, (
+            "_update_personas_async must call asyncio.set_event_loop(loop) before run_until_complete"
+        )
 
     def test_gather_batch_pattern_works_in_thread(self):
         """Runtime test: asyncio.gather inside _batch() wrapper works from a background thread."""

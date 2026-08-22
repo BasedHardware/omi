@@ -101,9 +101,10 @@ class TestDailySummaryGates:
     def test_test_daily_summary_blocked_past_cap(self):
         import routers.users as users_router
 
-        with patch.object(users_router, 'enforce_chat_quota', side_effect=_quota_402()) as gate, patch.object(
-            users_router, 'notification_db'
-        ) as notif_db:
+        with (
+            patch.object(users_router, 'enforce_chat_quota', side_effect=_quota_402()) as gate,
+            patch.object(users_router, 'notification_db') as notif_db,
+        ):
             with pytest.raises(HTTPException) as exc_info:
                 users_router.test_daily_summary(request=None, uid='u1', x_app_platform='macos')
             assert exc_info.value.status_code == 402
@@ -113,9 +114,10 @@ class TestDailySummaryGates:
     def test_regenerate_daily_summary_blocked_past_cap(self):
         import routers.users as users_router
 
-        with patch.object(users_router, 'enforce_chat_quota', side_effect=_quota_402()) as gate, patch.object(
-            users_router, 'daily_summaries_db'
-        ) as summaries_db:
+        with (
+            patch.object(users_router, 'enforce_chat_quota', side_effect=_quota_402()) as gate,
+            patch.object(users_router, 'daily_summaries_db') as summaries_db,
+        ):
             with pytest.raises(HTTPException) as exc_info:
                 users_router.regenerate_daily_summary('summary-1', uid='u1', x_app_platform='macos')
             assert exc_info.value.status_code == 402
@@ -125,9 +127,10 @@ class TestDailySummaryGates:
     def test_regenerate_daily_summary_allowed_proceeds(self):
         import routers.users as users_router
 
-        with patch.object(users_router, 'enforce_chat_quota') as gate, patch.object(
-            users_router, 'daily_summaries_db'
-        ) as summaries_db:
+        with (
+            patch.object(users_router, 'enforce_chat_quota') as gate,
+            patch.object(users_router, 'daily_summaries_db') as summaries_db,
+        ):
             summaries_db.get_daily_summary.return_value = None
             with pytest.raises(HTTPException) as exc_info:
                 users_router.regenerate_daily_summary('summary-1', uid='u1', x_app_platform='macos')
@@ -146,9 +149,10 @@ class TestGoalsGate:
     def test_extract_progress_blocked_past_cap(self):
         import routers.goals as goals_router
 
-        with patch.object(goals_router, 'enforce_chat_quota', side_effect=_quota_402()) as gate, patch.object(
-            goals_router, 'extract_and_update_goal_progress'
-        ) as llm:
+        with (
+            patch.object(goals_router, 'enforce_chat_quota', side_effect=_quota_402()) as gate,
+            patch.object(goals_router, 'extract_and_update_goal_progress') as llm,
+        ):
             request = goals_router.ProgressExtractRequest(text='ran 5k today')
             with pytest.raises(HTTPException) as exc_info:
                 goals_router.extract_and_update_progress(request, uid='u1', x_app_platform='macos')
@@ -159,9 +163,10 @@ class TestGoalsGate:
     def test_extract_progress_allowed_proceeds(self):
         import routers.goals as goals_router
 
-        with patch.object(goals_router, 'enforce_chat_quota') as gate, patch.object(
-            goals_router, 'extract_and_update_goal_progress', return_value=None
-        ) as llm:
+        with (
+            patch.object(goals_router, 'enforce_chat_quota') as gate,
+            patch.object(goals_router, 'extract_and_update_goal_progress', return_value=None) as llm,
+        ):
             request = goals_router.ProgressExtractRequest(text='ran 5k today')
             result = goals_router.extract_and_update_progress(request, uid='u1', x_app_platform='macos')
             assert result == {'updated': False, 'reason': 'No active goal'}
@@ -178,9 +183,10 @@ class TestAppGeneratorGates:
     def test_generate_description_blocked_past_cap(self):
         import routers.apps as apps_router
 
-        with patch.object(apps_router, 'enforce_chat_quota', side_effect=_quota_402()) as gate, patch.object(
-            apps_router, 'generate_description'
-        ) as llm:
+        with (
+            patch.object(apps_router, 'enforce_chat_quota', side_effect=_quota_402()) as gate,
+            patch.object(apps_router, 'generate_description') as llm,
+        ):
             data = apps_router.GenerateDescriptionRequest(name='My App', description='does things')
             with pytest.raises(HTTPException) as exc_info:
                 apps_router.generate_description_endpoint(data, uid='u1', x_app_platform='macos')
@@ -223,15 +229,16 @@ class TestOmniRelayGate:
         from models.users import PlanType
 
         ws = _fake_websocket()
-        with patch.object(relay, 'raise_if_gateway_feature_mode_blocks_direct_model_surface'), patch.object(
-            relay, 'run_blocking', _passthrough_run_blocking
-        ), patch.object(relay, '_verify_ws_auth', return_value='u1'), patch.object(
-            relay, 'extract_byok_from_websocket', return_value={}
-        ), patch.object(
-            relay, 'is_trial_paywalled', return_value=False
-        ), patch.object(
-            relay, 'get_chat_quota_snapshot', return_value={'plan': PlanType.basic, 'allowed': False}
-        ) as snapshot:
+        with (
+            patch.object(relay, 'raise_if_gateway_feature_mode_blocks_direct_model_surface'),
+            patch.object(relay, 'run_blocking', _passthrough_run_blocking),
+            patch.object(relay, '_verify_ws_auth', return_value='u1'),
+            patch.object(relay, 'extract_byok_from_websocket', return_value={}),
+            patch.object(relay, 'is_trial_paywalled', return_value=False),
+            patch.object(
+                relay, 'get_chat_quota_snapshot', return_value={'plan': PlanType.basic, 'allowed': False}
+            ) as snapshot,
+        ):
             asyncio.run(relay.omni_relay(ws))
             snapshot.assert_called_once_with('u1', 'desktop')
             ws.close.assert_awaited_once_with(code=1008, reason='quota_exceeded')
@@ -243,23 +250,18 @@ class TestOmniRelayGate:
         # BYOK key for THIS session's provider + genuine enrollment → exempt.
         # _upstream is forced to error so the handler exits right after the gate.
         ws = _fake_websocket(provider='gemini')
-        with patch.object(relay, 'raise_if_gateway_feature_mode_blocks_direct_model_surface'), patch.object(
-            relay, 'run_blocking', _passthrough_run_blocking
-        ), patch.object(relay, '_verify_ws_auth', return_value='u1'), patch.object(
-            relay, 'extract_byok_from_websocket', return_value={'gemini': 'sk-user'}
-        ), patch.object(
-            relay, 'set_byok_keys'
-        ), patch.object(
-            relay, 'validate_byok_websocket', return_value=None
-        ), patch.object(
-            relay, 'is_trial_paywalled', return_value=False
-        ), patch.object(
-            relay.users_db, 'is_byok_active', return_value=True
-        ), patch.object(
-            relay, '_upstream', return_value=(None, 'forced-exit')
-        ), patch.object(
-            relay, 'get_chat_quota_snapshot'
-        ) as snapshot:
+        with (
+            patch.object(relay, 'raise_if_gateway_feature_mode_blocks_direct_model_surface'),
+            patch.object(relay, 'run_blocking', _passthrough_run_blocking),
+            patch.object(relay, '_verify_ws_auth', return_value='u1'),
+            patch.object(relay, 'extract_byok_from_websocket', return_value={'gemini': 'sk-user'}),
+            patch.object(relay, 'set_byok_keys'),
+            patch.object(relay, 'validate_byok_websocket', return_value=None),
+            patch.object(relay, 'is_trial_paywalled', return_value=False),
+            patch.object(relay.users_db, 'is_byok_active', return_value=True),
+            patch.object(relay, '_upstream', return_value=(None, 'forced-exit')),
+            patch.object(relay, 'get_chat_quota_snapshot') as snapshot,
+        ):
             asyncio.run(relay.omni_relay(ws))
             snapshot.assert_not_called()
             ws.close.assert_awaited_once()
@@ -273,21 +275,19 @@ class TestOmniRelayGate:
         from models.users import PlanType
 
         ws = _fake_websocket(provider='gemini')
-        with patch.object(relay, 'raise_if_gateway_feature_mode_blocks_direct_model_surface'), patch.object(
-            relay, 'run_blocking', _passthrough_run_blocking
-        ), patch.object(relay, '_verify_ws_auth', return_value='u1'), patch.object(
-            relay, 'extract_byok_from_websocket', return_value={'deepgram': 'dg-user'}
-        ), patch.object(
-            relay, 'set_byok_keys'
-        ), patch.object(
-            relay, 'validate_byok_websocket', return_value=None
-        ), patch.object(
-            relay, 'is_trial_paywalled', return_value=False
-        ), patch.object(
-            relay.users_db, 'is_byok_active', return_value=True
-        ), patch.object(
-            relay, 'get_chat_quota_snapshot', return_value={'plan': PlanType.basic, 'allowed': False}
-        ) as snapshot:
+        with (
+            patch.object(relay, 'raise_if_gateway_feature_mode_blocks_direct_model_surface'),
+            patch.object(relay, 'run_blocking', _passthrough_run_blocking),
+            patch.object(relay, '_verify_ws_auth', return_value='u1'),
+            patch.object(relay, 'extract_byok_from_websocket', return_value={'deepgram': 'dg-user'}),
+            patch.object(relay, 'set_byok_keys'),
+            patch.object(relay, 'validate_byok_websocket', return_value=None),
+            patch.object(relay, 'is_trial_paywalled', return_value=False),
+            patch.object(relay.users_db, 'is_byok_active', return_value=True),
+            patch.object(
+                relay, 'get_chat_quota_snapshot', return_value={'plan': PlanType.basic, 'allowed': False}
+            ) as snapshot,
+        ):
             asyncio.run(relay.omni_relay(ws))
             snapshot.assert_called_once_with('u1', 'desktop')
             ws.close.assert_awaited_once_with(code=1008, reason='quota_exceeded')
@@ -297,14 +297,13 @@ class TestOmniRelayGate:
         from models.users import PlanType
 
         ws = _fake_websocket(provider='unsupported-provider')
-        with patch.object(relay, 'raise_if_gateway_feature_mode_blocks_direct_model_surface'), patch.object(
-            relay, 'run_blocking', _passthrough_run_blocking
-        ), patch.object(relay, '_verify_ws_auth', return_value='u1'), patch.object(
-            relay, 'extract_byok_from_websocket', return_value={}
-        ), patch.object(
-            relay, 'is_trial_paywalled', return_value=False
-        ), patch.object(
-            relay, 'get_chat_quota_snapshot', return_value={'plan': PlanType.basic, 'allowed': True}
+        with (
+            patch.object(relay, 'raise_if_gateway_feature_mode_blocks_direct_model_surface'),
+            patch.object(relay, 'run_blocking', _passthrough_run_blocking),
+            patch.object(relay, '_verify_ws_auth', return_value='u1'),
+            patch.object(relay, 'extract_byok_from_websocket', return_value={}),
+            patch.object(relay, 'is_trial_paywalled', return_value=False),
+            patch.object(relay, 'get_chat_quota_snapshot', return_value={'plan': PlanType.basic, 'allowed': True}),
         ):
             asyncio.run(relay.omni_relay(ws))
             # Past the quota gate; exits at provider validation (1011), not 1008.

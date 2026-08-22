@@ -138,10 +138,13 @@ def test_lazy_enrichment_uses_non_user_usage_attribution(monkeypatch, partial_pr
         monkeypatch.setitem(sys.modules, 'utils.task_intelligence.proactive_engine', partial)
     # create=True binds the in-function import seam whether or not that name
     # already exists on the cached module.
-    with patch(
-        'utils.task_intelligence.proactive_engine.persist_desktop_meeting_arrival_best_effort',
-        create=True,
-    ), patch.object(conv_router, 'process_conversation', return_value=model) as process:
+    with (
+        patch(
+            'utils.task_intelligence.proactive_engine.persist_desktop_meeting_arrival_best_effort',
+            create=True,
+        ),
+        patch.object(conv_router, 'process_conversation', return_value=model) as process,
+    ):
         result = conv_router._enrich_deferred_conversation('u1', conversation)
 
     assert result['deferred'] is False

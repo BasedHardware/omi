@@ -24,11 +24,11 @@ def _needs_typecheck(paths: list[str]) -> bool:
 def test_typecheck_predicate_accepts_every_typed_boundary_input():
     for path in (
         'backend/routers/users.py',
-        'backend/pyrightconfig.json',
+        'backend/typecheck-paths.json',
         'backend/scripts/typecheck.sh',
         'backend/scripts/needs-typecheck.sh',
-        'backend/requirements.txt',
-        'backend/pylock.toml',
+        'backend/pyproject.toml',
+        'backend/uv.lock',
         '.github/workflows/backend-unit-tests.yml',
         'scripts/pre-push',
     ):

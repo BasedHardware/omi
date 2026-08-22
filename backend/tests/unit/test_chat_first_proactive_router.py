@@ -209,8 +209,9 @@ def test_v1_leaves_conversation_link_pending_and_v2_later_acknowledges_it(monkey
     monkeypatch.setattr(
         chat_first_router.chat_first_intents_db,
         'acknowledge_materialization',
-        lambda *args, **kwargs: acknowledgements.append(kwargs)
-        or intent.model_copy(update={'delivery_state': 'delivered'}),
+        lambda *args, **kwargs: (
+            acknowledgements.append(kwargs) or intent.model_copy(update={'delivery_state': 'delivered'})
+        ),
     )
     projected = []
     monkeypatch.setattr(

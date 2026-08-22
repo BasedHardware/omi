@@ -17,7 +17,7 @@ class AutoModelPick(BaseModel):
     updated_at: float = Field(description='Unix timestamp (seconds) the cached pick was last refreshed.')
     detail: dict[str, Any] = Field(
         description=(
-            'Provenance for the pick. May contain a "reason" string and/or a ' '"scores" map of provider id -> score.'
+            'Provenance for the pick. May contain a "reason" string and/or a "scores" map of provider id -> score.'
         )
     )
     attribution: str = Field(description='Required attribution URL for the data source.')

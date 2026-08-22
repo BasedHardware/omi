@@ -147,9 +147,9 @@ client_stub.get_firestore_client = MagicMock(return_value=mock_db)
 
 # Stub database.helpers (used by chat.py)
 helpers_stub = _stub_module("database.helpers")
-helpers_stub.set_data_protection_level = lambda **kw: (lambda f: f)
-helpers_stub.prepare_for_write = lambda **kw: (lambda f: f)
-helpers_stub.prepare_for_read = lambda **kw: (lambda f: f)
+helpers_stub.set_data_protection_level = lambda **kw: lambda f: f
+helpers_stub.prepare_for_write = lambda **kw: lambda f: f
+helpers_stub.prepare_for_read = lambda **kw: lambda f: f
 
 # Stub models and utils needed by database.users and database.chat
 _ensure_package_path("models", BACKEND_DIR / "models")
@@ -526,9 +526,7 @@ class TestDesktopMessagesWireCompat:
 
         with patch.object(chat_db, 'acquire_chat_session', return_value='session-123'):
             with patch.object(chat_db, 'db') as patched_db:
-                patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-                    mock_doc_ref
-                )
+                patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = mock_doc_ref
                 result = chat_db.save_message('test-uid', text='hello', sender='human', app_id='my-app')
 
         # Verify the doc written to Firestore
@@ -2390,8 +2388,8 @@ class TestLegacyConversationRecovery:
         staged_col.where.return_value = recovery_query
 
         firestore_client = MagicMock()
-        firestore_client.collection.return_value.document.return_value.collection.side_effect = (
-            lambda collection_name: (action_items_col if collection_name == 'action_items' else staged_col)
+        firestore_client.collection.return_value.document.return_value.collection.side_effect = lambda collection_name: (
+            action_items_col if collection_name == 'action_items' else staged_col
         )
         result = staged_tasks_db.restore_legacy_conversation_items(
             'test-uid', limit=2, firestore_client=firestore_client
@@ -2420,8 +2418,8 @@ class TestLegacyConversationRecovery:
         staged_col.document.return_value = cursor_ref
 
         firestore_client = MagicMock()
-        firestore_client.collection.return_value.document.return_value.collection.side_effect = (
-            lambda collection_name: (action_items_col if collection_name == 'action_items' else staged_col)
+        firestore_client.collection.return_value.document.return_value.collection.side_effect = lambda collection_name: (
+            action_items_col if collection_name == 'action_items' else staged_col
         )
         result = staged_tasks_db.restore_legacy_conversation_items(
             'test-uid', cursor='legacy-1', firestore_client=firestore_client

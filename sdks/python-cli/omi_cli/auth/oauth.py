@@ -54,7 +54,7 @@ from omi_cli.errors import AuthError, UsageError
 # (AIzaSyAqRWo5RN8Y…); that is exactly what broke browser login in 0.2.0.
 _FIREBASE_API_KEY = "AIzaSyA88gHcmiAxjN_aE23tHRWXOgFfapyO6dk"
 _FIREBASE_SIGNIN_URL = (
-    "https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken" f"?key={_FIREBASE_API_KEY}"
+    f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key={_FIREBASE_API_KEY}"
 )
 _FIREBASE_REFRESH_URL = f"https://securetoken.googleapis.com/v1/token?key={_FIREBASE_API_KEY}"
 

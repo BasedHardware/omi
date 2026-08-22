@@ -197,7 +197,10 @@ def fake_firestore(monkeypatch):
             recommendation_db.TASK_INTELLIGENCE_CONTROL_COLLECTION,
             recommendation_db.TASK_INTELLIGENCE_CONTROL_DOCUMENT,
         )
-    ] = TaskWorkflowControl(workflow_mode=TaskWorkflowMode.read, account_generation=0,).model_dump(mode='python')
+    ] = TaskWorkflowControl(
+        workflow_mode=TaskWorkflowMode.read,
+        account_generation=0,
+    ).model_dump(mode='python')
     return fake
 
 

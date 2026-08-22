@@ -542,7 +542,7 @@ async def sync_x_for_user(uid: str, *, background_flex: Optional[PromotionFlexRu
             try:
                 await run_blocking(db_executor, upsert_x_post_vectors_batch, uid, items_to_index[i : i + 100])
             except Exception as e:
-                logger.warning(f'x_connector: failed to index x_posts chunk[{i}:{i+100}] for uid={uid}: {e}')
+                logger.warning(f'x_connector: failed to index x_posts chunk[{i}:{i + 100}] for uid={uid}: {e}')
         extraction_llm = (
             background_flex.llm_for_uid(
                 uid,

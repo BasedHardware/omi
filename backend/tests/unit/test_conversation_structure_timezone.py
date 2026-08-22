@@ -247,9 +247,11 @@ def _capture_structure(fn, **kwargs):
     mock_llm = MagicMock()
     mock_llm.__or__ = MagicMock(return_value=mock_chain)
 
-    with patch.object(conv_proc, "get_llm", return_value=mock_llm), patch.object(
-        conv_proc, "ChatPromptTemplate"
-    ) as mock_prompt_cls, patch.object(conv_proc, "_build_conversation_context", return_value="ctx"):
+    with (
+        patch.object(conv_proc, "get_llm", return_value=mock_llm),
+        patch.object(conv_proc, "ChatPromptTemplate") as mock_prompt_cls,
+        patch.object(conv_proc, "_build_conversation_context", return_value="ctx"),
+    ):
         mock_prompt = MagicMock()
         mock_prompt.__or__ = MagicMock(return_value=mock_chain)
         mock_prompt_cls.from_messages.return_value = mock_prompt
@@ -402,9 +404,11 @@ def test_unique_prompt_routes_drop_legacy_cache_key_whenever_gateway_mode_is_on(
         captured.update(kwargs)
         return _LLM()
 
-    with patch.object(conv_proc, 'get_llm', side_effect=_fake_get_llm), patch.object(
-        conv_proc, 'ChatPromptTemplate'
-    ) as mock_prompt_cls, patch.object(conv_proc, '_build_conversation_context', return_value='ctx'):
+    with (
+        patch.object(conv_proc, 'get_llm', side_effect=_fake_get_llm),
+        patch.object(conv_proc, 'ChatPromptTemplate') as mock_prompt_cls,
+        patch.object(conv_proc, '_build_conversation_context', return_value='ctx'),
+    ):
         mock_prompt = MagicMock()
         mock_prompt.__or__ = MagicMock(return_value=_Chain(_LLM()))
         mock_prompt_cls.from_messages.return_value = mock_prompt

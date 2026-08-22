@@ -125,8 +125,9 @@ def test_source_with_no_canonical_memories_is_deleted_despite_the_closed_fence()
     delete_conversation = sys.modules["database.conversations"].delete_conversation
     delete_conversation.reset_mock()
 
-    with patch("utils.memory.retraction_scope.canonical_intake_is_fenced", return_value=True), patch(
-        "utils.conversations.merge_conversations.MemoryService", return_value=service
+    with (
+        patch("utils.memory.retraction_scope.canonical_intake_is_fenced", return_value=True),
+        patch("utils.conversations.merge_conversations.MemoryService", return_value=service),
     ):
         with patch(
             "utils.conversations.merge_conversations.retraction_can_be_skipped",
@@ -148,8 +149,9 @@ def test_the_fence_is_still_advanced_so_failure_handling_keeps_the_merged_target
         nonlocal advanced
         advanced = True
 
-    with patch("utils.memory.retraction_scope.canonical_intake_is_fenced", return_value=True), patch(
-        "utils.conversations.merge_conversations.MemoryService", return_value=service
+    with (
+        patch("utils.memory.retraction_scope.canonical_intake_is_fenced", return_value=True),
+        patch("utils.conversations.merge_conversations.MemoryService", return_value=service),
     ):
         with patch(
             "utils.conversations.merge_conversations.retraction_can_be_skipped",
@@ -167,8 +169,9 @@ def test_a_source_that_does_have_memories_still_aborts_when_retraction_fails():
     delete_conversation = sys.modules["database.conversations"].delete_conversation
     delete_conversation.reset_mock()
 
-    with patch("utils.memory.retraction_scope.canonical_intake_is_fenced", return_value=True), patch(
-        "utils.conversations.merge_conversations.MemoryService", return_value=service
+    with (
+        patch("utils.memory.retraction_scope.canonical_intake_is_fenced", return_value=True),
+        patch("utils.conversations.merge_conversations.MemoryService", return_value=service),
     ):
         with patch(
             "utils.conversations.merge_conversations.retraction_can_be_skipped",
@@ -186,8 +189,9 @@ def test_a_failing_cohort_read_aborts_rather_than_assuming_there_is_nothing_to_r
     delete_conversation = sys.modules["database.conversations"].delete_conversation
     delete_conversation.reset_mock()
 
-    with patch("utils.memory.retraction_scope.canonical_intake_is_fenced", return_value=True), patch(
-        "utils.conversations.merge_conversations.MemoryService", return_value=service
+    with (
+        patch("utils.memory.retraction_scope.canonical_intake_is_fenced", return_value=True),
+        patch("utils.conversations.merge_conversations.MemoryService", return_value=service),
     ):
         with patch(
             "utils.conversations.merge_conversations.retraction_can_be_skipped",
@@ -215,8 +219,9 @@ def test_intake_enabled_never_reaches_the_history_scan():
 def test_intake_enabled_always_retracts_even_for_an_apparently_empty_source():
     service = MagicMock()
 
-    with patch("utils.conversations.merge_conversations.retraction_can_be_skipped", return_value=False), patch(
-        "utils.conversations.merge_conversations.MemoryService", return_value=service
+    with (
+        patch("utils.conversations.merge_conversations.retraction_can_be_skipped", return_value=False),
+        patch("utils.conversations.merge_conversations.MemoryService", return_value=service),
     ):
         _delete_conversation_and_related_data("uid-any", "conv-1")
 

@@ -130,8 +130,9 @@ class TestDgUsageBatchingBehavior:
         pipe = MagicMock()
         fair_use.redis_client.pipeline.return_value = pipe
 
-        with patch.object(fair_use, 'FAIR_USE_ENABLED', True), patch.object(
-            fair_use, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000
+        with (
+            patch.object(fair_use, 'FAIR_USE_ENABLED', True),
+            patch.object(fair_use, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000),
         ):
             # Simulate 60s of audio: 50 chunks/sec × 60s × 20ms = 60000ms
             total_ms = 60000
@@ -148,8 +149,9 @@ class TestDgUsageBatchingBehavior:
         pipe = MagicMock()
         fair_use.redis_client.pipeline.return_value = pipe
 
-        with patch.object(fair_use, 'FAIR_USE_ENABLED', True), patch.object(
-            fair_use, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000
+        with (
+            patch.object(fair_use, 'FAIR_USE_ENABLED', True),
+            patch.object(fair_use, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000),
         ):
             # 24h of audio = 86,400,000 ms — well within Python int range
             total_ms = 86_400_000
@@ -166,8 +168,9 @@ class TestDgUsageBatchingBehavior:
 
     def test_zero_ms_skips_redis(self, fair_use):
         """Zero ms should not trigger Redis write."""
-        with patch.object(fair_use, 'FAIR_USE_ENABLED', True), patch.object(
-            fair_use, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000
+        with (
+            patch.object(fair_use, 'FAIR_USE_ENABLED', True),
+            patch.object(fair_use, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000),
         ):
             fair_use.record_dg_usage_ms('user1', 0)
 

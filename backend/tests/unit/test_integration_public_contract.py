@@ -77,10 +77,9 @@ def test_no_undocumented_integration_routes_drifted_in():
     actual = {(m, _normalize(p)) for (m, p) in _operations(spec)}
     expected = {(m, _normalize(p)) for (m, p) in EXPECTED_OPERATIONS}
     extra = sorted(actual - expected)
-    assert (
-        not extra
-    ), 'Undocumented integration routes appeared in the spec. Add them to ' 'EXPECTED_OPERATIONS with intent: ' + str(
-        extra
+    assert not extra, (
+        'Undocumented integration routes appeared in the spec. Add them to '
+        'EXPECTED_OPERATIONS with intent: ' + str(extra)
     )
 
 
@@ -117,6 +116,6 @@ def test_each_integration_route_has_a_modeled_success_response(method: str, path
         f'{method} {path} 200 response has no modeled schema (anonymous/inline '
         'object). Add a Pydantic response_model to the backend route.'
     )
-    assert ref.startswith(
-        '#/components/schemas/'
-    ), f'{method} {path} 200 response must reference a named schema, got {ref}'
+    assert ref.startswith('#/components/schemas/'), (
+        f'{method} {path} 200 response must reference a named schema, got {ref}'
+    )

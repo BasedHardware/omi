@@ -169,9 +169,11 @@ class TestShareEndpoint:
     def test_share_creates_token_and_url(self):
         """Valid share returns URL with token."""
         request = ShareTasksRequest(task_ids=["t1", "t2"])
-        with patch("routers.action_items.action_items_db") as mock_db, patch(
-            "routers.action_items.get_user_display_name"
-        ) as mock_name, patch("routers.action_items.redis_db") as mock_redis:
+        with (
+            patch("routers.action_items.action_items_db") as mock_db,
+            patch("routers.action_items.get_user_display_name") as mock_name,
+            patch("routers.action_items.redis_db") as mock_redis,
+        ):
             mock_db.get_action_item.return_value = {"id": "t1", "description": "Test"}
             mock_name.return_value = "Alice"
             mock_redis.store_task_share.return_value = True
@@ -186,9 +188,11 @@ class TestShareEndpoint:
     def test_share_returns_500_on_redis_failure(self):
         """If Redis store fails (returns None), should raise 500."""
         request = ShareTasksRequest(task_ids=["t1"])
-        with patch("routers.action_items.action_items_db") as mock_db, patch(
-            "routers.action_items.get_user_display_name"
-        ) as mock_name, patch("routers.action_items.redis_db") as mock_redis:
+        with (
+            patch("routers.action_items.action_items_db") as mock_db,
+            patch("routers.action_items.get_user_display_name") as mock_name,
+            patch("routers.action_items.redis_db") as mock_redis,
+        ):
             mock_db.get_action_item.return_value = {"id": "t1", "description": "Test"}
             mock_name.return_value = "Alice"
             mock_redis.store_task_share.return_value = None
@@ -214,9 +218,10 @@ class TestPublicGetEndpoint:
 
     def test_public_endpoint_only_exposes_description_and_due(self):
         """Public endpoint must NOT leak conversation_id or internal fields."""
-        with patch("routers.action_items.redis_db") as mock_redis, patch(
-            "routers.action_items.action_items_db"
-        ) as mock_db:
+        with (
+            patch("routers.action_items.redis_db") as mock_redis,
+            patch("routers.action_items.action_items_db") as mock_db,
+        ):
             mock_redis.get_task_share.return_value = {
                 "uid": "u1",
                 "display_name": "Alice",
@@ -255,9 +260,10 @@ class TestAcceptEndpoint:
 
     def test_accept_creates_copy_with_shared_from(self):
         request = AcceptSharedTasksRequest(token="tok1")
-        with patch("routers.action_items.redis_db") as mock_redis, patch(
-            "routers.action_items.action_items_db"
-        ) as mock_db:
+        with (
+            patch("routers.action_items.redis_db") as mock_redis,
+            patch("routers.action_items.action_items_db") as mock_db,
+        ):
             mock_redis.get_task_share.return_value = self._mock_share_data()
             mock_redis.try_accept_task_share.return_value = True
             mock_db.get_action_item.return_value = {
@@ -295,9 +301,10 @@ class TestAcceptEndpoint:
 
     def test_accept_prevents_duplicate(self):
         request = AcceptSharedTasksRequest(token="tok1")
-        with patch("routers.action_items.redis_db") as mock_redis, patch(
-            "routers.action_items.action_items_db"
-        ) as mock_db:
+        with (
+            patch("routers.action_items.redis_db") as mock_redis,
+            patch("routers.action_items.action_items_db") as mock_db,
+        ):
             mock_redis.get_task_share.return_value = self._mock_share_data()
             mock_db.get_action_item.return_value = {"id": "t1", "description": "Task", "is_locked": False}
             mock_redis.try_accept_task_share.return_value = False
@@ -310,9 +317,10 @@ class TestAcceptEndpoint:
     def test_accept_returns_503_on_redis_failure(self):
         """If Redis try_accept fails (returns None), should raise 503."""
         request = AcceptSharedTasksRequest(token="tok1")
-        with patch("routers.action_items.redis_db") as mock_redis, patch(
-            "routers.action_items.action_items_db"
-        ) as mock_db:
+        with (
+            patch("routers.action_items.redis_db") as mock_redis,
+            patch("routers.action_items.action_items_db") as mock_db,
+        ):
             mock_redis.get_task_share.return_value = self._mock_share_data()
             mock_db.get_action_item.return_value = {"id": "t1", "description": "Task", "is_locked": False}
             mock_redis.try_accept_task_share.return_value = None
@@ -327,9 +335,11 @@ class TestCompletionNotification:
     """Completing a shared task notifies the sender."""
 
     def test_completion_sends_notification_to_sender(self):
-        with patch("routers.action_items.action_items_db") as mock_db, patch(
-            "routers.action_items.get_user_display_name"
-        ) as mock_name, patch("routers.action_items.send_notification") as mock_notify:
+        with (
+            patch("routers.action_items.action_items_db") as mock_db,
+            patch("routers.action_items.get_user_display_name") as mock_name,
+            patch("routers.action_items.send_notification") as mock_notify,
+        ):
             mock_db.get_action_item.side_effect = [
                 # First call: _get_valid_action_item
                 {
@@ -358,9 +368,10 @@ class TestCompletionNotification:
             )
 
     def test_no_notification_for_non_shared_task(self):
-        with patch("routers.action_items.action_items_db") as mock_db, patch(
-            "routers.action_items.send_notification"
-        ) as mock_notify:
+        with (
+            patch("routers.action_items.action_items_db") as mock_db,
+            patch("routers.action_items.send_notification") as mock_notify,
+        ):
             mock_db.get_action_item.side_effect = [
                 {"id": "t1", "description": "My own task", "completed": False},
                 {"id": "t1", "description": "My own task", "completed": True},
@@ -373,9 +384,10 @@ class TestCompletionNotification:
 
     def test_no_notification_on_uncomplete(self):
         """Uncompleting a shared task should NOT notify sender."""
-        with patch("routers.action_items.action_items_db") as mock_db, patch(
-            "routers.action_items.send_notification"
-        ) as mock_notify:
+        with (
+            patch("routers.action_items.action_items_db") as mock_db,
+            patch("routers.action_items.send_notification") as mock_notify,
+        ):
             mock_db.get_action_item.side_effect = [
                 {
                     "id": "t1",
@@ -497,9 +509,10 @@ class TestPublicPreviewSkipsLocked:
     """Gap 2: GET /v1/action-items/shared/{token} must skip locked items."""
 
     def test_public_preview_skips_locked_items(self):
-        with patch("routers.action_items.redis_db") as mock_redis, patch(
-            "routers.action_items.action_items_db"
-        ) as mock_db:
+        with (
+            patch("routers.action_items.redis_db") as mock_redis,
+            patch("routers.action_items.action_items_db") as mock_db,
+        ):
             mock_redis.get_task_share.return_value = {
                 "uid": "u1",
                 "display_name": "Alice",
@@ -516,9 +529,10 @@ class TestPublicPreviewSkipsLocked:
         assert result["tasks"][0]["description"] == "Visible"
 
     def test_public_preview_all_locked_returns_empty(self):
-        with patch("routers.action_items.redis_db") as mock_redis, patch(
-            "routers.action_items.action_items_db"
-        ) as mock_db:
+        with (
+            patch("routers.action_items.redis_db") as mock_redis,
+            patch("routers.action_items.action_items_db") as mock_db,
+        ):
             mock_redis.get_task_share.return_value = {
                 "uid": "u1",
                 "display_name": "Alice",
@@ -537,9 +551,10 @@ class TestAcceptSkipsLocked:
 
     def test_accept_skips_locked_items(self):
         request = AcceptSharedTasksRequest(token="tok1")
-        with patch("routers.action_items.redis_db") as mock_redis, patch(
-            "routers.action_items.action_items_db"
-        ) as mock_db:
+        with (
+            patch("routers.action_items.redis_db") as mock_redis,
+            patch("routers.action_items.action_items_db") as mock_db,
+        ):
             mock_redis.get_task_share.return_value = {
                 "uid": "uid_alice",
                 "display_name": "Alice",
@@ -563,9 +578,10 @@ class TestAcceptSkipsLocked:
     def test_accept_all_locked_returns_402_without_burning_token(self):
         """If all items are locked, return 402 and don't burn the acceptance token."""
         request = AcceptSharedTasksRequest(token="tok1")
-        with patch("routers.action_items.redis_db") as mock_redis, patch(
-            "routers.action_items.action_items_db"
-        ) as mock_db:
+        with (
+            patch("routers.action_items.redis_db") as mock_redis,
+            patch("routers.action_items.action_items_db") as mock_db,
+        ):
             mock_redis.get_task_share.return_value = {
                 "uid": "uid_alice",
                 "display_name": "Alice",
@@ -585,9 +601,10 @@ class TestAcceptSkipsLocked:
     def test_accept_rollback_on_post_claim_race(self):
         """If items become locked after pre-check but before copy, rollback token and return 402."""
         request = AcceptSharedTasksRequest(token="tok1")
-        with patch("routers.action_items.redis_db") as mock_redis, patch(
-            "routers.action_items.action_items_db"
-        ) as mock_db:
+        with (
+            patch("routers.action_items.redis_db") as mock_redis,
+            patch("routers.action_items.action_items_db") as mock_db,
+        ):
             mock_redis.get_task_share.return_value = {
                 "uid": "uid_alice",
                 "display_name": "Alice",
@@ -767,6 +784,6 @@ class TestSyncBatchSkipsLocked:
             action_items_router.sync_batch_update(request, uid='test-uid')
 
         updates = mock_db.batch_sync_update_action_items.call_args.args[1]
-        assert updates == [
-            {'id': 't1', 'data': {'due_at': None}}
-        ], 'an explicit null due_at must reach storage instead of being treated as an omitted field'
+        assert updates == [{'id': 't1', 'data': {'due_at': None}}], (
+            'an explicit null due_at must reach storage instead of being treated as an omitted field'
+        )

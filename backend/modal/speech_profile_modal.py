@@ -37,7 +37,7 @@ model: Any = SpeakerRecognition.from_hparams(  # type: ignore[reportUnknownMembe
 
 def sample_same_speaker_as_segment(sample_audio: str, segment: str) -> float:
     try:
-        score, prediction = cast(Any, model.verify_files(sample_audio, segment))  # type: ignore[reportUnknownMemberType]  # speechbrain untyped
+        score, prediction = cast(Any, model.verify_files(sample_audio, segment))  # type: ignore[reportUnknownMemberType]  # speechbrain untyped  # ty: ignore[redundant-cast]
         if bool(prediction[0]):
             return float(score[0])
         return 0
@@ -64,7 +64,6 @@ def classify_segments(
 
     file_name = os.path.basename(audio_file_path)
     for i, segment in enumerate(segments):
-
         duration = segment.end - segment.start
         by_chunk_matches: defaultdict[str, float] = defaultdict(float)
 

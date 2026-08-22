@@ -474,8 +474,9 @@ def test_overlapping_request_is_not_told_a_dispatch_in_flight_was_sent(monkeypat
     monkeypatch.setattr(
         conversations_router.share_email,
         'send_summary_email',
-        lambda *, uid, conversation, recipient_emails: sends.append(list(recipient_emails))
-        or {'sent_to': recipient_emails},
+        lambda *, uid, conversation, recipient_emails: (
+            sends.append(list(recipient_emails)) or {'sent_to': recipient_emails}
+        ),
     )
     retry = client.post(
         f'/v1/conversations/{CONV_ID}/share-email',

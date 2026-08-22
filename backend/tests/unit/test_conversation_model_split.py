@@ -723,9 +723,9 @@ class TestPhase4ConsumerMigration:
             'utils/chat.py',
         ]:
             source = pathlib.Path(file_path).read_text(encoding='utf-8')
-            assert (
-                'from models.conversation import' not in source
-            ), f'{file_path} still imports from models.conversation'
+            assert 'from models.conversation import' not in source, (
+                f'{file_path} still imports from models.conversation'
+            )
 
     def test_type_checking_only_imports(self):
         """Files using TYPE_CHECKING should not have runtime Conversation import."""

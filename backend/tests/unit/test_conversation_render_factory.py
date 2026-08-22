@@ -255,9 +255,9 @@ class TestProductionCallSitesMigrated:
             path = os.path.join(backend, rel_path)
             with open(path, encoding='utf-8') as f:
                 content = f.read()
-            assert (
-                'Conversation.conversations_to_string' not in content
-            ), f"{rel_path} still uses Conversation.conversations_to_string"
+            assert 'Conversation.conversations_to_string' not in content, (
+                f"{rel_path} still uses Conversation.conversations_to_string"
+            )
 
     def test_render_consumers_import_from_render_module(self):
         backend = os.path.join(os.path.dirname(__file__), '../..')

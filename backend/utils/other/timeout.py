@@ -39,7 +39,7 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
             if timeout is None:
                 continue
             try:
-                result[method.upper()] = float(timeout)  # type: ignore[arg-type]  # guarded by try/except
+                result[method.upper()] = float(timeout)  # type: ignore[arg-type]  # guarded by try/except  # ty: ignore[invalid-argument-type]
             except (TypeError, ValueError):
                 raise ValueError(f"Invalid timeout value for method {method}: {timeout}")
         return result
@@ -51,7 +51,7 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
             if timeout is None:
                 continue
             try:
-                result[path] = float(timeout)  # type: ignore[arg-type]  # guarded by try/except
+                result[path] = float(timeout)  # type: ignore[arg-type]  # guarded by try/except  # ty: ignore[invalid-argument-type]
             except (TypeError, ValueError):
                 raise ValueError(f"Invalid timeout value for path {path}: {timeout}")
         return result

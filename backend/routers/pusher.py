@@ -499,7 +499,7 @@ async def _websocket_util_trigger(
                     # session's conversation id. This does not mutate session-scoped state.
                     conversation_or_memory_id = memory_id or current_conversation_id
                     append_bounded(
-                        transcript_queue,
+                        transcript_queue,  # ty: ignore[invalid-argument-type]
                         {'segments': segments, 'memory_id': conversation_or_memory_id},
                         'transcript',
                     )
@@ -569,7 +569,7 @@ async def _websocket_util_trigger(
                             f"Queued speaker sample request: person={person_id}, {len(segment_ids)} segments {uid}"
                         )
                         append_bounded(
-                            speaker_sample_queue,
+                            speaker_sample_queue,  # ty: ignore[invalid-argument-type]
                             {
                                 'person_id': person_id,
                                 'conversation_id': conv_id,

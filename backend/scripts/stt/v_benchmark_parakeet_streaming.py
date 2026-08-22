@@ -188,7 +188,7 @@ async def main() -> None:
                     'dg_segments': dg['segments'],
                 }
             )
-            print(f"    DG: WER={dg_wer*100:.1f}% first_seg={dg['first_segment_s']}s segs={dg['segments']}")
+            print(f"    DG: WER={dg_wer * 100:.1f}% first_seg={dg['first_segment_s']}s segs={dg['segments']}")
         except Exception as e:
             print(f"    DG ERROR: {e}")
 
@@ -206,7 +206,7 @@ async def main() -> None:
                     'pk_segments': pk['segments'],
                 }
             )
-            print(f"    PK: WER={pk_wer*100:.1f}% first_seg={pk['first_segment_s']}s segs={pk['segments']}")
+            print(f"    PK: WER={pk_wer * 100:.1f}% first_seg={pk['first_segment_s']}s segs={pk['segments']}")
         except Exception as e:
             print(f"    PK ERROR: {e}")
 

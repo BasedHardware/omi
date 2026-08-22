@@ -33,11 +33,7 @@ LEGACY_UNLISTED_TESTS = {
 
 FULL_RUN_PATHS = (
     '.github/workflows/backend-unit-tests.yml',
-    'backend/pylock.toml',
-    'backend/pylock.macos.toml',
-    'backend/pylock.macos-x86_64.toml',
-    'backend/pylock.runtime.toml',
-    'backend/pylock.windows.toml',
+    'backend/uv.lock',
     'backend/pyproject.toml',
     'backend/requirements.txt',
     'backend/test-preflight.sh',

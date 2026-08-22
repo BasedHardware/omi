@@ -763,7 +763,7 @@ def _request(
     tools = body.get('tools')
     choice = _tool_choice(body.get('tool_choice'))
     client_tools = _anthropic_client_tools(tools)
-    upstream_model = cast(str, result['model'])
+    upstream_model = cast(str, result['model'])  # ty: ignore[redundant-cast]
     web_search_supported = _web_search_supported_for_upstream(upstream_model)
     _record_web_search_withheld(
         body,

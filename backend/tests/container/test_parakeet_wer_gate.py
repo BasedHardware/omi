@@ -322,8 +322,7 @@ class TestWERRegressionGate:
         if catastrophic:
             details = ", ".join(f"{r['id']}={r['wer']:.0f}%" for r in catastrophic)
             assert False, (
-                f"{len(catastrophic)} samples exceed per-sample max "
-                f"{benchmark_results['per_sample_max']}%: {details}"
+                f"{len(catastrophic)} samples exceed per-sample max {benchmark_results['per_sample_max']}%: {details}"
             )
 
     def test_minimum_samples_scored(self, benchmark_results):
@@ -331,9 +330,9 @@ class TestWERRegressionGate:
             pytest.skip("Report-only mode")
 
         min_required = min(5, benchmark_results["samples_total"])
-        assert (
-            benchmark_results["samples_scored"] >= min_required
-        ), f"Only {benchmark_results['samples_scored']} samples scored, need at least {min_required}"
+        assert benchmark_results["samples_scored"] >= min_required, (
+            f"Only {benchmark_results['samples_scored']} samples scored, need at least {min_required}"
+        )
 
     def test_all_transcriptions_nonempty(self, benchmark_results):
         if benchmark_results["report_only"]:

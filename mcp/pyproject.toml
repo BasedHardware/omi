@@ -3,7 +3,7 @@ name = "mcp-server-omi"
 dynamic = ["version"]
 description = 'Model Context Protocol Server for Omi AI'
 readme = "README.md"
-requires-python = ">=3.11.6"
+requires-python = ">=3.13"
 license = "MIT"
 keywords = ["omi", "mcp"]
 authors = [
@@ -12,9 +12,8 @@ authors = [
 classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Developers",
-  "License :: OSI Approved :: MIT License", 
-  "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
     "click>=8.1.7",
@@ -30,8 +29,14 @@ mcp-server-omi = "mcp_server_omi:main"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[dependency-groups]
+dev = [
+    "ty>=0.0.1",
+    "ruff>=0.12.0",
+    "pytest>=8.0.0",
+]
+
 [tool.uv]
-dev-dependencies = ["pyright>=1.1.389", "ruff>=0.7.3", "pytest>=8.0.0"]
 constraint-dependencies = [
     "pyjwt>=2.13.0",
     "starlette>=1.3.1",
@@ -39,6 +44,17 @@ constraint-dependencies = [
     "python-multipart>=0.0.31",
     "mcp==2.0.0",
 ]
+default-groups = ["dev"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.format]
+quote-style = "preserve"
+
+[tool.ty.environment]
+python-version = "3.13"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

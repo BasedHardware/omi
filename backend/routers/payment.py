@@ -305,7 +305,7 @@ def _update_subscription_from_session(uid: str, session: stripe.checkout.Session
                     logger.info(f"Subscription for user {uid} updated from session {session.id}.")
     except FirestoreNotFound:
         logger.warning(
-            f"Stripe webhook: user {uid} not found in Firestore, " f"skipping checkout session subscription update"
+            f"Stripe webhook: user {uid} not found in Firestore, skipping checkout session subscription update"
         )
 
 
@@ -946,7 +946,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
             # create-on-miss behavior that would resurrect a deleted user's doc
             if not await run_blocking(db_executor, users_db.get_user_profile, uid):
                 logger.warning(
-                    f"Stripe webhook: user {uid} not found in Firestore, " f"skipping checkout session processing"
+                    f"Stripe webhook: user {uid} not found in Firestore, skipping checkout session processing"
                 )
                 return {"status": "success"}
 
@@ -1151,7 +1151,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                             )
                 except FirestoreNotFound:
                     logger.warning(
-                        f"Stripe webhook: user {uid} not found in Firestore, " f"skipping scheduled upgrade update"
+                        f"Stripe webhook: user {uid} not found in Firestore, skipping scheduled upgrade update"
                     )
                 except Exception as e:
                     logger.error(f"Error updating subscription after scheduled upgrade: {e}")
@@ -1182,7 +1182,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                             )
                 except FirestoreNotFound:
                     logger.warning(
-                        f"Stripe webhook: user {uid} not found in Firestore, " f"skipping schedule cancellation update"
+                        f"Stripe webhook: user {uid} not found in Firestore, skipping schedule cancellation update"
                     )
                 except Exception as e:
                     logger.error(f"Error updating subscription after schedule cancellation: {e}")
@@ -1382,7 +1382,8 @@ def get_paypal_payment_details_endpoint(uid: str = Depends(auth.get_current_user
 @router.get("/v1/payments/success", response_class=HTMLResponse)
 def stripe_success(session_id: str = Query(...)):
     # The subscription is updated via webhook. This page is just for user feedback.
-    return HTMLResponse(content="""
+    return HTMLResponse(
+        content="""
         <html>
             <head><title>Success</title></head>
             <body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; flex-direction: column;">
@@ -1390,12 +1391,14 @@ def stripe_success(session_id: str = Query(...)):
                 <p>Your subscription is now active. You can close this window and return to the app.</p>
             </body>
         </html>
-    """)
+    """
+    )
 
 
 @router.get("/v1/payments/cancel", response_class=HTMLResponse)
 def stripe_cancel():
-    return HTMLResponse(content="""
+    return HTMLResponse(
+        content="""
         <html>
             <head><title>Cancelled</title></head>
             <body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; flex-direction: column;">
@@ -1403,7 +1406,8 @@ def stripe_cancel():
                 <p>Your payment process was cancelled. You can return to the app.</p>
             </body>
         </html>
-    """)
+    """
+    )
 
 
 @router.post('/v1/payments/customer-portal', response_model=CustomerPortalSessionResponse)
@@ -1436,7 +1440,8 @@ def create_customer_portal_endpoint(uid: str = Depends(auth.get_current_user_uid
 
 @router.get("/v1/payments/portal-return", response_class=HTMLResponse)
 def portal_return():
-    return HTMLResponse(content="""
+    return HTMLResponse(
+        content="""
         <html>
             <head><title>Portal Complete</title></head>
             <body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; flex-direction: column;">
@@ -1444,7 +1449,8 @@ def portal_return():
                 <p>Your payment settings have been updated. You can close this window and return to the app.</p>
             </body>
         </html>
-    """)
+    """
+    )
 
 
 @router.get("/v1/payment-methods/status", response_model=PaymentMethodStatusResponse)
@@ -1480,7 +1486,6 @@ def set_default_payment_method_endpoint(
 def get_app_subscription(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Get user's subscription for a specific app"""
     try:
-
         paid_app_check = get_is_user_paid_app(app_id, uid)
         if not paid_app_check:
             return {"subscription": None}
@@ -1513,7 +1518,6 @@ def get_app_subscription(app_id: str, uid: str = Depends(auth.get_current_user_u
 def cancel_app_subscription(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Cancel user's subscription for a specific app"""
     try:
-
         paid_app_check = get_is_user_paid_app(app_id, uid)
         if not paid_app_check:
             raise HTTPException(status_code=404, detail="No active subscription found for this app")

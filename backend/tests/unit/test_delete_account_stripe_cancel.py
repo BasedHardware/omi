@@ -79,15 +79,12 @@ def _sub(stripe_subscription_id):
 
 
 def test_paid_user_subscription_is_left_for_the_claimed_wipe_worker(users_service):
-    with patch.object(
-        users_service.users_db, 'get_user_subscription', return_value=_sub('sub_123')
-    ) as get_sub, patch.object(
-        users_service.stripe_utils, 'cancel_subscription', return_value=MagicMock()
-    ) as cancel, patch.object(
-        users_service.auth, 'delete_account'
-    ) as fb_delete, patch.object(
-        users_service, 'submit_with_context'
-    ) as submit:
+    with (
+        patch.object(users_service.users_db, 'get_user_subscription', return_value=_sub('sub_123')) as get_sub,
+        patch.object(users_service.stripe_utils, 'cancel_subscription', return_value=MagicMock()) as cancel,
+        patch.object(users_service.auth, 'delete_account') as fb_delete,
+        patch.object(users_service, 'submit_with_context') as submit,
+    ):
         resp = users_service.start_account_deletion(uid='uid1')
     get_sub.assert_not_called()
     cancel.assert_not_called()
@@ -97,11 +94,12 @@ def test_paid_user_subscription_is_left_for_the_claimed_wipe_worker(users_servic
 
 
 def test_free_user_does_not_call_stripe(users_service):
-    with patch.object(users_service.users_db, 'get_user_subscription', return_value=_sub(None)), patch.object(
-        users_service.stripe_utils, 'cancel_subscription'
-    ) as cancel, patch.object(users_service.auth, 'delete_account'), patch.object(
-        users_service, 'submit_with_context'
-    ) as submit:
+    with (
+        patch.object(users_service.users_db, 'get_user_subscription', return_value=_sub(None)),
+        patch.object(users_service.stripe_utils, 'cancel_subscription') as cancel,
+        patch.object(users_service.auth, 'delete_account'),
+        patch.object(users_service, 'submit_with_context') as submit,
+    ):
         resp = users_service.start_account_deletion(uid='uid1')
     cancel.assert_not_called()
     submit.assert_called_once_with(users_service.cleanup_executor, users_service.background_wipe_user_data, 'uid1')
@@ -109,13 +107,13 @@ def test_free_user_does_not_call_stripe(users_service):
 
 
 def test_request_does_not_observe_stripe_errors_before_claimed_wipe(users_service):
-    with patch.object(users_service.users_db, 'get_user_subscription', return_value=_sub('sub_123')), patch.object(
-        users_service.stripe_utils, 'cancel_subscription', side_effect=Exception('stripe down')
-    ), patch.object(users_service.users_db, 'mark_user_deletion_billing_failed') as mark_billing_failed, patch.object(
-        users_service.auth, 'delete_account'
-    ) as fb_delete, patch.object(
-        users_service, 'submit_with_context'
-    ) as submit:
+    with (
+        patch.object(users_service.users_db, 'get_user_subscription', return_value=_sub('sub_123')),
+        patch.object(users_service.stripe_utils, 'cancel_subscription', side_effect=Exception('stripe down')),
+        patch.object(users_service.users_db, 'mark_user_deletion_billing_failed') as mark_billing_failed,
+        patch.object(users_service.auth, 'delete_account') as fb_delete,
+        patch.object(users_service, 'submit_with_context') as submit,
+    ):
         resp = users_service.start_account_deletion(uid='uid1')
     mark_billing_failed.assert_not_called()
     fb_delete.assert_not_called()

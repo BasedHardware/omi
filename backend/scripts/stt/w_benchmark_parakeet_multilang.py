@@ -196,15 +196,15 @@ def main() -> None:
 
     print('\nSINGLE-LANGUAGE:')
     if dg_single:
-        print(f"  Deepgram avg WER: {sum(dg_single)/len(dg_single):.0%}")
+        print(f"  Deepgram avg WER: {sum(dg_single) / len(dg_single):.0%}")
     if pk_single:
-        print(f"  Parakeet avg WER: {sum(pk_single)/len(pk_single):.0%}")
+        print(f"  Parakeet avg WER: {sum(pk_single) / len(pk_single):.0%}")
 
     print('\nCODE-SWITCHING:')
     if dg_cs:
-        print(f"  Deepgram avg WER: {sum(dg_cs)/len(dg_cs):.0%}")
+        print(f"  Deepgram avg WER: {sum(dg_cs) / len(dg_cs):.0%}")
     if pk_cs:
-        print(f"  Parakeet avg WER: {sum(pk_cs)/len(pk_cs):.0%}")
+        print(f"  Parakeet avg WER: {sum(pk_cs) / len(pk_cs):.0%}")
 
     print('\nTRANSCRIPTS:')
     for r in results:

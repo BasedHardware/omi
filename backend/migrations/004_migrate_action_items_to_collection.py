@@ -437,9 +437,11 @@ def verify_migration():
 
         conversations_ref = user_doc.reference.collection('conversations')
         conversations_with_items_docs = safe_firestore_operation(
-            lambda: conversations_ref.where(filter=firestore.FieldFilter('structured.action_items', '!=', []))
-            .limit(10)
-            .get(),
+            lambda: (
+                conversations_ref.where(filter=firestore.FieldFilter('structured.action_items', '!=', []))
+                .limit(10)
+                .get()
+            ),
             f"Get conversations with items for user {uid}",
         )
 

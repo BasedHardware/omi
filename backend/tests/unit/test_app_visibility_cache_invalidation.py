@@ -123,13 +123,13 @@ def _change_visibility(approved, private):
     Returns (invalidate_list_called, delete_per_app_cache_called).
     """
     app_obj = MagicMock(uid='uid1', approved=approved)
-    with patch.object(apps_mod, 'get_available_app_by_id', return_value={'id': 'app-1', 'uid': 'uid1'}), patch.object(
-        apps_mod, 'App', return_value=app_obj
-    ), patch.object(apps_mod, 'update_app_visibility_in_db') as update_db, patch.object(
-        apps_mod, 'invalidate_approved_apps_cache'
-    ) as invalidate, patch.object(
-        apps_mod, 'delete_app_cache_by_id'
-    ) as delete_cache:
+    with (
+        patch.object(apps_mod, 'get_available_app_by_id', return_value={'id': 'app-1', 'uid': 'uid1'}),
+        patch.object(apps_mod, 'App', return_value=app_obj),
+        patch.object(apps_mod, 'update_app_visibility_in_db') as update_db,
+        patch.object(apps_mod, 'invalidate_approved_apps_cache') as invalidate,
+        patch.object(apps_mod, 'delete_app_cache_by_id') as delete_cache,
+    ):
         result = apps_mod.change_app_visibility('app-1', private, uid='uid1')
 
     assert result == {'status': 'ok'}

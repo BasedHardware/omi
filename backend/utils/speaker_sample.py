@@ -53,7 +53,7 @@ async def verify_and_transcribe_sample(
     # deepgram_prerecorded_from_bytes returns List[dict] or (when return_language=True) Tuple[List[dict], str].
     # return_language defaults to False, so the runtime value is always the list; narrow for the type system.
     if isinstance(raw_words, tuple):
-        raw_words = cast(Any, raw_words[0])
+        raw_words = cast(Any, raw_words[0])  # ty: ignore[redundant-cast]
     words: List[Dict[str, Any]] = cast(List[Dict[str, Any]], raw_words)
 
     if len(words) < MIN_WORDS:

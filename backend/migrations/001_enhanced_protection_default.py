@@ -70,7 +70,7 @@ def migrate_user_to_enhanced(uid: str):
             logger.info(f"Migrating {len(conversations_to_migrate)} conversations for {uid}...")
             for i in range(0, len(conversations_to_migrate), batch_size):
                 batch_ids = conversations_to_migrate[i : i + batch_size]
-                logger.info(f"  Migrating conversation batch {i//batch_size + 1} for {uid} ({len(batch_ids)} items)")
+                logger.info(f"  Migrating conversation batch {i // batch_size + 1} for {uid} ({len(batch_ids)} items)")
                 conversations_db.migrate_conversations_level_batch(uid, batch_ids, 'enhanced')
             logger.info(f"Conversations migrated for {uid}.")
 
@@ -78,7 +78,7 @@ def migrate_user_to_enhanced(uid: str):
             logger.info(f"Migrating {len(memories_to_migrate)} memories for {uid}...")
             for i in range(0, len(memories_to_migrate), batch_size):
                 batch_ids = memories_to_migrate[i : i + batch_size]
-                logger.info(f"  Migrating memory batch {i//batch_size + 1} for {uid} ({len(batch_ids)} items)")
+                logger.info(f"  Migrating memory batch {i // batch_size + 1} for {uid} ({len(batch_ids)} items)")
                 memories_db.migrate_memories_level_batch(uid, batch_ids, 'enhanced')
             logger.info(f"Memories migrated for {uid}.")
 
@@ -86,7 +86,7 @@ def migrate_user_to_enhanced(uid: str):
             logger.info(f"Migrating {len(chats_to_migrate)} chats for {uid}...")
             for i in range(0, len(chats_to_migrate), batch_size):
                 batch_ids = chats_to_migrate[i : i + batch_size]
-                logger.info(f"  Migrating chat batch {i//batch_size + 1} for {uid} ({len(batch_ids)} items)")
+                logger.info(f"  Migrating chat batch {i // batch_size + 1} for {uid} ({len(batch_ids)} items)")
                 chat_db.migrate_chats_level_batch(uid, batch_ids, 'enhanced')
             logger.info(f"Chats migrated for {uid}.")
 

@@ -245,10 +245,10 @@ def main() -> int:
         )
 
         if new_ooms > 0:
-            print(f"\n  !!! OOM at {dur}s with cc={CONCURRENCY}. " f"Errors from failed requests:")
+            print(f"\n  !!! OOM at {dur}s with cc={CONCURRENCY}. Errors from failed requests:")
             for r in results:
                 if r["status"] != 200:
-                    print(f"      req {r['id']}: status={r['status']} " f"err={r['error']} body={r['body'][:200]}")
+                    print(f"      req {r['id']}: status={r['status']} err={r['error']} body={r['body'][:200]}")
 
     total_ooms = int(get_oom_count() - initial_ooms)
     print("\n" + "=" * 70)
@@ -257,7 +257,7 @@ def main() -> int:
     print(f"Total OOMs: {total_ooms}")
     if oom_threshold_found:
         print(f"OOM threshold: {oom_threshold_found}s audio @ cc={CONCURRENCY}")
-        print(f"\nREPRODUCED: OOM occurs with {CONCURRENCY}x {oom_threshold_found}s " f"concurrent requests.")
+        print(f"\nREPRODUCED: OOM occurs with {CONCURRENCY}x {oom_threshold_found}s concurrent requests.")
         print("Root cause: torch.compile disabled (ATTENTION_MODE=auto) eliminates")
         print("operator fusion, tripling VRAM for attention tensors (B,8,T,T).")
     else:

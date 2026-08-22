@@ -719,12 +719,12 @@ checks:
     reason: "INV-DATA-1 mutation-tests every production-family mobile and desktop routing authority and rejects retired GKE desktop-backend ownership"
   - id: desktop-backend-release-boundary
     command: ["python3", ".github/scripts/check-desktop-backend-release-policy.py"]
-    triggers: [".github/workflows/desktop_backend_auto_dev.yml", ".github/workflows/desktop_backend_prod.yml", ".github/workflows/desktop_backend_recover_prod.yml", ".github/workflows/desktop_promote_prod.yml", ".github/scripts/desktop_backend_candidate_probe.py", ".github/scripts/verify_desktop_backend_image_lineage.py", ".github/scripts/check-desktop-backend-release-policy.py", "backend/Dockerfile.desktop_backend", "backend/**/*.py", "backend/pylock.runtime.toml", "desktop/macos/pi-mono-extension/index.ts", ".github/checks-manifest.yaml"]
+    triggers: [".github/workflows/desktop_backend_auto_dev.yml", ".github/workflows/desktop_backend_prod.yml", ".github/workflows/desktop_backend_recover_prod.yml", ".github/workflows/desktop_promote_prod.yml", ".github/scripts/desktop_backend_candidate_probe.py", ".github/scripts/verify_desktop_backend_image_lineage.py", ".github/scripts/check-desktop-backend-release-policy.py", "backend/Dockerfile.desktop_backend", "backend/**/*.py", "backend/uv.lock", "desktop/macos/pi-mono-extension/index.ts", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "desktop-backend candidates must prove immutable OCI-index-to-linux/amd64 lineage, authenticated streamed chat with terminal usage, and managed voice-provider paths before any Cloud Run traffic shift"
   - id: desktop-backend-release-boundary-fixtures
     command: ["python3", ".github/scripts/test_check_desktop_backend_release_policy.py"]
-    triggers: [".github/workflows/desktop_backend_auto_dev.yml", ".github/workflows/desktop_backend_prod.yml", ".github/workflows/desktop_backend_recover_prod.yml", ".github/workflows/desktop_promote_prod.yml", ".github/scripts/verify_desktop_backend_image_lineage.py", ".github/scripts/check-desktop-backend-release-policy.py", ".github/scripts/test_check_desktop_backend_release_policy.py", "backend/Dockerfile.desktop_backend", "backend/**/*.py", "backend/pylock.runtime.toml", "desktop/macos/pi-mono-extension/index.ts", ".github/checks-manifest.yaml"]
+    triggers: [".github/workflows/desktop_backend_auto_dev.yml", ".github/workflows/desktop_backend_prod.yml", ".github/workflows/desktop_backend_recover_prod.yml", ".github/workflows/desktop_promote_prod.yml", ".github/scripts/verify_desktop_backend_image_lineage.py", ".github/scripts/check-desktop-backend-release-policy.py", ".github/scripts/test_check_desktop_backend_release_policy.py", "backend/Dockerfile.desktop_backend", "backend/**/*.py", "backend/uv.lock", "desktop/macos/pi-mono-extension/index.ts", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "mutation fixtures reject traffic-before-proof, missing reconciler actAs preflight, mutable/stale/wrong-platform images, automatic production deploys, baked runtime credentials, and chat-contract drift"
   - id: desktop-backend-traffic-lineage-fixtures
@@ -734,7 +734,7 @@ checks:
     reason: "a traffic promotion gate must refuse only backwards promotions; refusing on branch recency discards candidates whose build and acceptance are already paid for"
   - id: desktop-backend-candidate-probe-fixtures
     command: ["python3", ".github/scripts/test_desktop_backend_candidate_probe.py"]
-    triggers: [".github/scripts/desktop_backend_candidate_probe.py", ".github/scripts/test_desktop_backend_candidate_probe.py", "backend/**/*.py", "backend/pylock.runtime.toml", ".github/checks-manifest.yaml"]
+    triggers: [".github/scripts/desktop_backend_candidate_probe.py", ".github/scripts/test_desktop_backend_candidate_probe.py", "backend/**/*.py", "backend/uv.lock", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "candidate evidence must require two authenticated streamed chat turns with terminal usage, bounded streaming, Firestore readiness, and secure token handling"
   - id: stable-pointer-precondition-cli

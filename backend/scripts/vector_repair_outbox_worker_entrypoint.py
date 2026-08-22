@@ -301,7 +301,7 @@ def create_vector_repair_outbox_worker_app(
         )
 
     routes_by_path["/memory-vector-repair-outbox-worker/tick"] = vector_repair_outbox_worker_tick_http
-    worker_app.routes_by_path = routes_by_path
+    worker_app.routes_by_path = routes_by_path  # ty: ignore[invalid-assignment]
     return worker_app
 
 

@@ -78,7 +78,9 @@ def parse_lifelog_md(
     title = (
         title_match.group(1).strip()
         if title_match
-        else title_slug.replace('-', ' ') if title_slug else 'Imported Conversation'
+        else title_slug.replace('-', ' ')
+        if title_slug
+        else 'Imported Conversation'
     )
 
     # Extract H2 and H3 headers (these are Limitless AI-generated topic summaries)

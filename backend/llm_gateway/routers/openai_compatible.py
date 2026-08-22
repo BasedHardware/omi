@@ -574,7 +574,9 @@ async def _stream_with_terminal_metrics(
             usage_status=(
                 UsageStatus.CONFIRMED
                 if usage_metadata is not None and usage_metadata.usage is not None
-                else UsageStatus.NOT_REPORTED if outcome == 'success' else UsageStatus.INDETERMINATE
+                else UsageStatus.NOT_REPORTED
+                if outcome == 'success'
+                else UsageStatus.INDETERMINATE
             ),
         )
         if accounting_context is not None:

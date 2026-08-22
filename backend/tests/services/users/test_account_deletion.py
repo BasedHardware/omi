@@ -1151,13 +1151,15 @@ def test_background_wipe_user_data_preserves_order(monkeypatch):
     monkeypatch.setattr(
         account_deletion,
         'purge_derived_user_data',
-        lambda uid: calls.append(('purge', uid))
-        or {
-            'required_failures': [],
-            'best_effort_failures': [],
-            'vectors_deleted': 0,
-            'recordings_deleted': 0,
-        },
+        lambda uid: (
+            calls.append(('purge', uid))
+            or {
+                'required_failures': [],
+                'best_effort_failures': [],
+                'vectors_deleted': 0,
+                'recordings_deleted': 0,
+            }
+        ),
     )
     monkeypatch.setattr(
         account_deletion.users_db,

@@ -81,7 +81,8 @@ def test_merged_note_call_projects_sections_and_preserves_action_detail(monkeypa
     class Model:
         def invoke(self, messages):
             captured['messages'] = messages
-            return SimpleNamespace(content='''{
+            return SimpleNamespace(
+                content='''{
                   "title":"Ash and David Discuss Agent Infrastructure",
                   "overview":"compatibility",
                   "emoji":"🔐",
@@ -89,7 +90,8 @@ def test_merged_note_call_projects_sections_and_preserves_action_detail(monkeypa
                   "sections":[{"heading":"Agent operations","body_markdown":"Ash runs ~12 long-running agents.","source_segment_ids":["s1"]}],
                   "action_items":[{"description":"Send Fulcrum dinner invite","owner_name":"David","context":"Tentative NYC lunch or dinner with Ash.","due_at":"2026-09-08T12:00:00","due_certainty":"tentative","capture_owner":"user","source_segment_ids":["s9"]}],
                   "events":[]
-                }''')
+                }'''
+            )
 
     def fake_get_llm(_feature, **kwargs):
         captured['kwargs'] = kwargs

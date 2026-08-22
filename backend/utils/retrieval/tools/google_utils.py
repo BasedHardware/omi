@@ -173,7 +173,7 @@ async def refresh_google_token(
             await _mark_google_integration_reauth_required(uid, integration, integration_key, 'invalid_grant')
         else:
             logger.error(
-                f"🔄 Google token refresh failed for uid={uid}: " f"status={response.status_code}, body={error_body}"
+                f"🔄 Google token refresh failed for uid={uid}: status={response.status_code}, body={error_body}"
             )
         emit_auth_refresh_failed(
             telemetry_context, response.text or 'token_refresh_failed', provider_status_code=response.status_code

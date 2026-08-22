@@ -733,14 +733,15 @@ chmod +x "{python}"
             )
 
         self.assertRegex(
-            (REPO_ROOT / "backend/requirements.txt").read_text(encoding="utf-8"),
-            r"(?im)^pyyaml==6\.0\.1$",
+            (REPO_ROOT / "backend/pyproject.toml").read_text(encoding="utf-8"),
+            r'(?im)^\s*"PyYAML==6\.0\.3",?\s*$',
         )
-        for lock in REPO_ROOT.glob("backend/pylock*.toml"):
-            self.assertRegex(
-                lock.read_text(encoding="utf-8"),
-                r'(?ms)^\[\[packages\]\]\nname = "pyyaml"\nversion = "6\.0\.1"$',
-            )
+        lock = REPO_ROOT / "backend/uv.lock"
+        self.assertTrue(lock.is_file(), "backend/uv.lock must be checked in")
+        self.assertRegex(
+            lock.read_text(encoding="utf-8"),
+            r'(?ms)^name = "pyyaml"\nversion = "6\.0\.3"$',
+        )
 
     def test_runtime_env_compose_uses_locked_pyyaml_in_every_declared_lane(self) -> None:
         """The compose check must never depend on a runner-global PyYAML install."""

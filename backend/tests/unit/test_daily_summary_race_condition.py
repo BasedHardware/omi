@@ -434,9 +434,9 @@ class TestDailyRecapNotDesktopPaywalled:
             for line in inspect.getsource(notification_harness.send_summary).splitlines()
             if not line.strip().startswith('#')
         ]
-        assert not any(
-            'is_trial_paywalled' in line for line in code_lines
-        ), "daily recap must not gate on the desktop trial paywall (regressed #9357)"
+        assert not any('is_trial_paywalled' in line for line in code_lines), (
+            "daily recap must not gate on the desktop trial paywall (regressed #9357)"
+        )
 
     def test_module_no_longer_imports_desktop_paywall(self, notification_harness):
         # The import was removed with the gate; re-adding it would signal the gate is back.

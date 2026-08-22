@@ -36,7 +36,7 @@ def test_persona_delete_dispatches_to_delete_persona():
 
     assert len(matches) == 1, f"expected exactly one DELETE route, got {len(matches)}"
     assert matches[0].endpoint is apps_router.delete_persona, (
-        "DELETE /v1/personas/{persona_id} resolves to " f"{matches[0].endpoint.__name__}, not delete_persona"
+        f"DELETE /v1/personas/{{persona_id}} resolves to {matches[0].endpoint.__name__}, not delete_persona"
     )
 
 

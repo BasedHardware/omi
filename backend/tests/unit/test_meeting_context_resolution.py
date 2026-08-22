@@ -358,9 +358,7 @@ class TestBrowserHostedConferencingDetection:
                 {
                     'appName': 'Google Chrome',
                     'windowTitle': 'Meet - amc-iajq-asx',
-                    'ocrText': (
-                        'meet.google.com/amc-iajq-asx\n' 'Ash Kalb and Boardy Boardman are in this call\n' 'Mute'
-                    ),
+                    'ocrText': ('meet.google.com/amc-iajq-asx\nAsh Kalb and Boardy Boardman are in this call\nMute'),
                 }
             ],
             started_at=CONVERSATION_START,

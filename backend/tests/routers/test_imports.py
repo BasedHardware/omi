@@ -42,9 +42,10 @@ def _job(status, uid=UID, job_id="j1"):
 class TestCancelImportJob:
     @pytest.mark.parametrize("status", ["pending", "processing"])
     def test_cancel_in_progress(self, status):
-        with patch.object(imports_mod.import_jobs_db, "get_import_job", return_value=_job(status)), patch.object(
-            imports_mod.import_jobs_db, "update_import_job"
-        ) as upd:
+        with (
+            patch.object(imports_mod.import_jobs_db, "get_import_job", return_value=_job(status)),
+            patch.object(imports_mod.import_jobs_db, "update_import_job") as upd,
+        ):
             resp = imports_mod.cancel_import_job("j1", uid=UID)
         assert resp.status == ImportJobStatus.cancelled
         upd.assert_called_once()
@@ -52,9 +53,10 @@ class TestCancelImportJob:
 
     @pytest.mark.parametrize("status", ["completed", "failed", "cancelled"])
     def test_cancel_terminal_is_409(self, status):
-        with patch.object(imports_mod.import_jobs_db, "get_import_job", return_value=_job(status)), patch.object(
-            imports_mod.import_jobs_db, "update_import_job"
-        ) as upd:
+        with (
+            patch.object(imports_mod.import_jobs_db, "get_import_job", return_value=_job(status)),
+            patch.object(imports_mod.import_jobs_db, "update_import_job") as upd,
+        ):
             with pytest.raises(HTTPException) as ei:
                 imports_mod.cancel_import_job("j1", uid=UID)
         assert ei.value.status_code == 409
@@ -76,18 +78,20 @@ class TestCancelImportJob:
 class TestDeleteImportJob:
     @pytest.mark.parametrize("status", ["completed", "failed", "cancelled"])
     def test_delete_terminal_ok(self, status):
-        with patch.object(imports_mod.import_jobs_db, "get_import_job", return_value=_job(status)), patch.object(
-            imports_mod.import_jobs_db, "delete_import_job"
-        ) as dele:
+        with (
+            patch.object(imports_mod.import_jobs_db, "get_import_job", return_value=_job(status)),
+            patch.object(imports_mod.import_jobs_db, "delete_import_job") as dele,
+        ):
             result = imports_mod.delete_import_job("j1", uid=UID)
         assert result == {"status": "ok", "job_id": "j1"}
         dele.assert_called_once_with("j1")
 
     @pytest.mark.parametrize("status", ["pending", "processing"])
     def test_delete_in_progress_is_409(self, status):
-        with patch.object(imports_mod.import_jobs_db, "get_import_job", return_value=_job(status)), patch.object(
-            imports_mod.import_jobs_db, "delete_import_job"
-        ) as dele:
+        with (
+            patch.object(imports_mod.import_jobs_db, "get_import_job", return_value=_job(status)),
+            patch.object(imports_mod.import_jobs_db, "delete_import_job") as dele,
+        ):
             with pytest.raises(HTTPException) as ei:
                 imports_mod.delete_import_job("j1", uid=UID)
         assert ei.value.status_code == 409

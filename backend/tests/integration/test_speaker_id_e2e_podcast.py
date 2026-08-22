@@ -145,8 +145,7 @@ def ensure_private_cloud_sync(uid, enabled=True):
 async def connect_listen(extra_params="", timeout=30):
     """Connect to /v4/listen and wait for 'ready' status."""
     url = (
-        f"{LISTEN_URL}?uid={DEV_UID}&language=en&sample_rate=16000&codec=pcm8"
-        f"&speaker_auto_assign=enabled{extra_params}"
+        f"{LISTEN_URL}?uid={DEV_UID}&language=en&sample_rate=16000&codec=pcm8&speaker_auto_assign=enabled{extra_params}"
     )
     ws = await websockets.connect(url, extra_headers=DEV_AUTH_HEADER, max_size=10 * 1024 * 1024)
     start = time.time()
@@ -323,9 +322,9 @@ class TestSpeakerIdE2EPodcast:
         person_id = str(uuid.uuid4())
         person_name = "PodcastHost"
 
-        print(f"\n{'='*70}")
+        print(f"\n{'=' * 70}")
         print(f"E2E Speaker ID Test — person_id={person_id[:8]}...")
-        print(f"{'='*70}")
+        print(f"{'=' * 70}")
 
         try:
             # ── SETUP: Create person + enable private cloud sync ──────────
@@ -370,7 +369,7 @@ class TestSpeakerIdE2EPodcast:
             ][:5]
 
             print(f"  Assigning speaker_id={target_speaker_id} to person '{person_name}'")
-            print(f"  Segment IDs: {[sid[:8]+'...' for sid in assign_segment_ids]}")
+            print(f"  Segment IDs: {[sid[:8] + '...' for sid in assign_segment_ids]}")
 
             # Send speaker_assigned event
             assign_msg = json.dumps(
@@ -548,9 +547,9 @@ class TestSpeakerIdE2EPodcast:
                 pass
 
             # ── RESULTS ───────────────────────────────────────────────────
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print(f"RESULTS")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             print(f"  Session 2 transcripts: {len(transcripts2)} segments")
             print(f"  All events: {[e.get('type') for e in all_events]}")
             print(f"  Speaker label suggestions: {len(suggestion_events)}")

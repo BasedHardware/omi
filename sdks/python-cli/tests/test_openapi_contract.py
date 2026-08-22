@@ -76,9 +76,9 @@ def test_cli_memory_category_enum_matches_public_openapi():
 def test_cli_goal_type_enum_matches_public_openapi():
     spec = load_public_openapi()
     goal_type_schema = spec['components']['schemas'].get('GoalType')
-    assert (
-        goal_type_schema and 'enum' in goal_type_schema
-    ), 'GoalType enum missing from public OpenAPI; the CLI mirrors it for goal create/update validation.'
+    assert goal_type_schema and 'enum' in goal_type_schema, (
+        'GoalType enum missing from public OpenAPI; the CLI mirrors it for goal create/update validation.'
+    )
     expected = set(goal_type_schema['enum'])
     actual = {item.value for item in GoalType}
 

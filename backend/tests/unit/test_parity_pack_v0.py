@@ -126,9 +126,10 @@ def test_identity_rejects_whitespace_only_fields() -> None:
 
 def test_hermetic_runner_denies_egress_counts_fakes_and_runs_cleanup() -> None:
     cleanup: list[str] = []
-    with pytest.raises(UnexpectedEgress), hermetic_run(
-        cleanup=(lambda: cleanup.append("first"), lambda: cleanup.append("second"))
-    ) as fakes:
+    with (
+        pytest.raises(UnexpectedEgress),
+        hermetic_run(cleanup=(lambda: cleanup.append("first"), lambda: cleanup.append("second"))) as fakes,
+    ):
         fakes.hit("llm")
         fakes.hit("llm")
         fakes.require(llm=2)

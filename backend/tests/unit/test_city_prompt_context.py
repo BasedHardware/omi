@@ -6,9 +6,10 @@ from utils.conversations.location import async_get_google_maps_city
 
 
 def test_city_context_uses_cached_value_without_calling_maps():
-    with patch('utils.conversations.location.r') as redis, patch(
-        'utils.conversations.location.get_maps_client'
-    ) as client:
+    with (
+        patch('utils.conversations.location.r') as redis,
+        patch('utils.conversations.location.get_maps_client') as client,
+    ):
         redis.get.return_value = b'New York, New York, United States'
 
         assert asyncio.run(async_get_google_maps_city(40.7128, -74.006)) == 'New York, New York, United States'
@@ -35,9 +36,11 @@ def test_city_context_uses_locality_and_never_returns_coordinates():
     }
     client = MagicMock()
     client.get = AsyncMock(return_value=response)
-    with patch('utils.conversations.location.r') as redis, patch(
-        'utils.conversations.location.get_maps_client', return_value=client
-    ), patch('utils.conversations.location.get_maps_semaphore', return_value=semaphore()):
+    with (
+        patch('utils.conversations.location.r') as redis,
+        patch('utils.conversations.location.get_maps_client', return_value=client),
+        patch('utils.conversations.location.get_maps_semaphore', return_value=semaphore()),
+    ):
         redis.get.return_value = None
 
         assert asyncio.run(async_get_google_maps_city(40.7128, -74.006)) == 'New York, New York, United States'

@@ -147,9 +147,7 @@ async def tts_synthesize(
             err_text = err_body.decode('utf-8', errors='replace')[:200]
             await upstream_cm.__aexit__(None, None, None)
             semaphore.release()
-            logger.warning(
-                f"tts_synthesize: ElevenLabs returned {resp.status_code} uid={uid}: " f"{sanitize(err_text)}"
-            )
+            logger.warning(f"tts_synthesize: ElevenLabs returned {resp.status_code} uid={uid}: {sanitize(err_text)}")
             raise HTTPException(status_code=resp.status_code, detail="TTS upstream error")
     except HTTPException:
         raise

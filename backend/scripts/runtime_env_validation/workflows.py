@@ -623,9 +623,7 @@ def _validate_firestore_readiness_workflow_contract(
     if 'firestore_readiness' not in normalized_needs:
         errors.append(ValidationError(scope, 'backend deploy must depend on the isolated Firestore readiness job'))
 
-    expected_path = (
-        '${{ runner.temp }}/firestore-schema-proposal-' '${{ github.run_id }}-${{ github.run_attempt }}.json'
-    )
+    expected_path = '${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}.json'
     is_manual_deploy = Path(workflow_file).name == 'gcp_backend.yml'
     permissions = _as_config_dict(readiness_job.get('permissions')) or {}
     expected_permissions = {'actions': 'read', 'contents': 'read'} if is_manual_deploy else {'contents': 'read'}

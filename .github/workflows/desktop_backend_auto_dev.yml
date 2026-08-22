@@ -6,7 +6,7 @@ on:
     paths:
       - 'backend/Dockerfile.desktop_backend'
       - 'backend/**/*.py'
-      - 'backend/pylock.runtime.toml'
+      - 'backend/uv.lock'
       - 'backend/runtime_images.json'
       - '.github/workflows/desktop_backend_auto_dev.yml'
       - '.github/scripts/desktop_backend_candidate_probe.py'

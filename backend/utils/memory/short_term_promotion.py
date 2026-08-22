@@ -287,8 +287,7 @@ def run_canonical_short_term_ttl_lifecycle(
         else:
             existing += 1
             logger.info(
-                "canonical_short_term_ttl_lifecycle: expired_with_recorded_disposition "
-                "uid=%s memory_id=%s run_id=%s",
+                "canonical_short_term_ttl_lifecycle: expired_with_recorded_disposition uid=%s memory_id=%s run_id=%s",
                 uid,
                 item.memory_id,
                 run_id,

@@ -1179,7 +1179,7 @@ def _retrieve_user_speaker_id(words: List[Dict[str, Any]], skip_n_seconds: int) 
 
     if not user_speaker_id:
         return None
-    return max(user_speaker_id, key=user_speaker_id.get)  # type: ignore[reportUnknownVariableType,reportUnknownArgumentType]  # pyright can't infer defaultdict key type
+    return max(user_speaker_id, key=user_speaker_id.get)  # type: ignore[reportUnknownVariableType,reportUnknownArgumentType]  # pyright can't infer defaultdict key type  # ty: ignore[no-matching-overload]
 
 
 def _merge_segments(
@@ -1256,7 +1256,9 @@ def _segments_as_objects(segments: List[Dict[str, Any]]) -> List[TranscriptSegme
 
 
 def postprocess_words(
-    words: List[Dict[str, Any]], duration: int, skip_n_seconds: int = 0  # , merge_segments: bool = True
+    words: List[Dict[str, Any]],
+    duration: int,
+    skip_n_seconds: int = 0,  # , merge_segments: bool = True
 ) -> List[TranscriptSegment]:
     cleaned_words = _words_cleaning(words)
     user_speaker_id = _retrieve_user_speaker_id(cleaned_words, skip_n_seconds)

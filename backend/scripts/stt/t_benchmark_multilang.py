@@ -202,11 +202,11 @@ def run_prerecorded_compare(manifest: List[Dict[str, Any]]) -> None:
     print('\nSUMMARY:')
     if valid_dg:
         print(
-            f"  Deepgram:   avg_WER={sum(float(r['deepgram_wer']) for r in valid_dg)/len(valid_dg):.1%}  cases={len(valid_dg)}/{len(results)}"
+            f"  Deepgram:   avg_WER={sum(float(r['deepgram_wer']) for r in valid_dg) / len(valid_dg):.1%}  cases={len(valid_dg)}/{len(results)}"
         )
     if valid_mod:
         print(
-            f"  Modulate:   avg_WER={sum(float(r['modulate_wer']) for r in valid_mod)/len(valid_mod):.1%}  cases={len(valid_mod)}/{len(results)}"
+            f"  Modulate:   avg_WER={sum(float(r['modulate_wer']) for r in valid_mod) / len(valid_mod):.1%}  cases={len(valid_mod)}/{len(results)}"
         )
 
     print('\nTRANSCRIPTS:')
@@ -313,11 +313,11 @@ async def run_streaming_compare(manifest: List[Dict[str, Any]]) -> None:
     print('\nSUMMARY:')
     if valid_dg:
         print(
-            f"  Deepgram:   avg_WER={sum(float(r['deepgram_wer']) for r in valid_dg)/len(valid_dg):.1%}  cases={len(valid_dg)}/{len(results)}"
+            f"  Deepgram:   avg_WER={sum(float(r['deepgram_wer']) for r in valid_dg) / len(valid_dg):.1%}  cases={len(valid_dg)}/{len(results)}"
         )
     if valid_mod:
         print(
-            f"  Modulate:   avg_WER={sum(float(r['modulate_wer']) for r in valid_mod)/len(valid_mod):.1%}  cases={len(valid_mod)}/{len(results)}"
+            f"  Modulate:   avg_WER={sum(float(r['modulate_wer']) for r in valid_mod) / len(valid_mod):.1%}  cases={len(valid_mod)}/{len(results)}"
         )
 
     output_path = RESULTS_DIR / 'multilang_streaming_benchmark.json'

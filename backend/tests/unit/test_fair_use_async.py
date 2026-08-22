@@ -31,12 +31,12 @@ def _patch_fair_use_deps():
     module scope we patch the module attributes (the sanctioned Tier-2 seam)
     for the duration of each test.
     """
-    with patch.object(fair_use_mod, 'redis_client', MagicMock(name='redis_client')), patch.object(
-        fair_use_mod, 'fair_use_db', _fair_use_db
-    ), patch.object(fair_use_mod, 'users_db', MagicMock(name='users_db')), patch.object(
-        fair_use_mod, 'has_transcription_credits', MagicMock(return_value=True)
-    ), patch.object(
-        fair_use_mod, 'is_paid_plan', MagicMock(return_value=False)
+    with (
+        patch.object(fair_use_mod, 'redis_client', MagicMock(name='redis_client')),
+        patch.object(fair_use_mod, 'fair_use_db', _fair_use_db),
+        patch.object(fair_use_mod, 'users_db', MagicMock(name='users_db')),
+        patch.object(fair_use_mod, 'has_transcription_credits', MagicMock(return_value=True)),
+        patch.object(fair_use_mod, 'is_paid_plan', MagicMock(return_value=False)),
     ):
         yield
 
@@ -144,12 +144,12 @@ class TestTriggerClassifierIfNeeded:
         escalate = MagicMock(return_value={'action': 'none', 'previous_stage': 'none', 'new_stage': 'none'})
         _redis().set.return_value = True
 
-        with patch.object(fair_use_mod, 'run_blocking', tracking_run_blocking), patch.object(
-            fair_use_mod, 'get_enforcement_stage', stage
-        ), patch.object(fair_use_mod, 'is_free_credits_exhausted', exhausted), patch.object(
-            fair_use_mod, 'escalate_enforcement', escalate
-        ), patch.object(
-            fair_use_mod, '_get_classify_user_purpose', return_value=classify
+        with (
+            patch.object(fair_use_mod, 'run_blocking', tracking_run_blocking),
+            patch.object(fair_use_mod, 'get_enforcement_stage', stage),
+            patch.object(fair_use_mod, 'is_free_credits_exhausted', exhausted),
+            patch.object(fair_use_mod, 'escalate_enforcement', escalate),
+            patch.object(fair_use_mod, '_get_classify_user_purpose', return_value=classify),
         ):
             await fair_use_mod.trigger_classifier_if_needed(
                 'user1',
@@ -298,11 +298,15 @@ class TestFairUseStatusRestrictionExpiry:
             'last_case_ref': 'FU-EXPIRED',
         }
 
-        with patch.object(fair_use_admin_mod, 'fair_use_db', _fair_use_db), patch.object(
-            fair_use_admin_mod,
-            'get_rolling_speech_ms',
-            return_value={'daily_ms': 0, 'three_day_ms': 0, 'weekly_ms': 0},
-        ), patch.object(fair_use_admin_mod, 'get_dg_budget_status', return_value=self._dg_budget()):
+        with (
+            patch.object(fair_use_admin_mod, 'fair_use_db', _fair_use_db),
+            patch.object(
+                fair_use_admin_mod,
+                'get_rolling_speech_ms',
+                return_value={'daily_ms': 0, 'three_day_ms': 0, 'weekly_ms': 0},
+            ),
+            patch.object(fair_use_admin_mod, 'get_dg_budget_status', return_value=self._dg_budget()),
+        ):
             result = fair_use_admin_mod.get_my_fair_use_status('user1')
 
         assert result['stage'] == 'throttle'
@@ -319,11 +323,15 @@ class TestFairUseStatusRestrictionExpiry:
             'last_case_ref': 'FU-ACTIVE',
         }
 
-        with patch.object(fair_use_admin_mod, 'fair_use_db', _fair_use_db), patch.object(
-            fair_use_admin_mod,
-            'get_rolling_speech_ms',
-            return_value={'daily_ms': 0, 'three_day_ms': 0, 'weekly_ms': 0},
-        ), patch.object(fair_use_admin_mod, 'get_dg_budget_status', return_value=self._dg_budget()):
+        with (
+            patch.object(fair_use_admin_mod, 'fair_use_db', _fair_use_db),
+            patch.object(
+                fair_use_admin_mod,
+                'get_rolling_speech_ms',
+                return_value={'daily_ms': 0, 'three_day_ms': 0, 'weekly_ms': 0},
+            ),
+            patch.object(fair_use_admin_mod, 'get_dg_budget_status', return_value=self._dg_budget()),
+        ):
             result = fair_use_admin_mod.get_my_fair_use_status('user1')
 
         assert result['stage'] == 'restrict'

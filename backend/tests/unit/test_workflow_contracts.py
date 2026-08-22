@@ -354,7 +354,7 @@ def test_backend_static_contract_job_uses_the_pinned_backend_environment():
 
     assert 'uses: actions/setup-python@v6' in workflow
     assert 'uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84' in workflow
-    assert 'uv pip sync pylock.toml --system' in workflow
+    assert 'uv sync --frozen --no-dev --no-install-project' in workflow
     assert 'backend/scripts/pre-deploy-check.sh' in workflow
     assert 'python3 -m pip install' not in pre_deploy
     assert "python3 -c 'import pytest, yaml'" in pre_deploy

@@ -274,12 +274,16 @@ async def _run_gateway_oracle(upstream: _LoopbackOpenAI) -> dict[str, Any]:
 def run_oracle() -> dict[str, Any]:
     """Run the gateway against its controlled loopback upstream."""
 
-    with _temporary_environment(
-        {
-            "OMI_LLM_GATEWAY_SERVICE_TOKEN": "loopback-test-token",
-            "OPENAI_API_KEY": "loopback-test-key",
-        }
-    ), _bounded_evidence_logging(), _LoopbackOpenAI() as upstream:
+    with (
+        _temporary_environment(
+            {
+                "OMI_LLM_GATEWAY_SERVICE_TOKEN": "loopback-test-token",
+                "OPENAI_API_KEY": "loopback-test-key",
+            }
+        ),
+        _bounded_evidence_logging(),
+        _LoopbackOpenAI() as upstream,
+    ):
         return asyncio.run(_run_gateway_oracle(upstream))
 
 

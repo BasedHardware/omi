@@ -415,6 +415,36 @@ def reprocess_conversation(
     # on the raw doc because the Conversation model does not carry `deleted`.
     if conversations_db.is_soft_deleted(conversation):
         raise HTTPException(status_code=404, detail="Conversation not found")
+
+    # Stuck "processing" conversations (#5097): after 30 minutes, close the
+    # admission via the lifecycle owner so force_process can run again.
+    if conversation.get('status') == ConversationStatus.processing.value:
+        admitted_at = conversation.get('processing_admitted_at')
+        stuck = True
+        if admitted_at is not None:
+            try:
+                if isinstance(admitted_at, str):
+                    admitted_dt = datetime.fromisoformat(admitted_at.replace('Z', '+00:00'))
+                else:
+                    admitted_dt = admitted_at
+                if admitted_dt.tzinfo is None:
+                    admitted_dt = admitted_dt.replace(tzinfo=timezone.utc)
+                age = (datetime.now(timezone.utc) - admitted_dt).total_seconds()
+                stuck = age >= 30 * 60
+            except (TypeError, ValueError):
+                stuck = True
+        if not stuck:
+            raise HTTPException(
+                status_code=409,
+                detail='Conversation is still processing; retry after it finishes or wait 30 minutes',
+            )
+        if not lifecycle_service.complete(uid, conversation_id):
+            raise HTTPException(
+                status_code=409,
+                detail='Conversation processing state changed; retry reprocess',
+            )
+        conversation = _get_valid_conversation_by_id(uid, conversation_id)
+
     conversation = deserialize_conversation(conversation)
     if not language_code:
         language_code = conversation.language or 'en'

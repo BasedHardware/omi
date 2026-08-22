@@ -353,9 +353,11 @@ def test_listen_pusher_wire_contract_provider_connect_failure_is_terminal(
         with client.websocket_connect(NATIVE_LISTEN_URL, headers=NATIVE_AUTH_HEADERS) as websocket:
             failed = receive_until(
                 websocket,
-                lambda payload: isinstance(payload, dict)
-                and payload.get('type') == 'service_status'
-                and payload.get('status') == 'stt_failed',
+                lambda payload: (
+                    isinstance(payload, dict)
+                    and payload.get('type') == 'service_status'
+                    and payload.get('status') == 'stt_failed'
+                ),
             )
             assert failed['provider'] == 'parakeet'
             assert failed['reason'] == 'initialization_failed'
@@ -402,9 +404,11 @@ def test_listen_pusher_wire_contract_provider_send_failure_is_terminal_after_pus
 
             failed = receive_until(
                 websocket,
-                lambda payload: isinstance(payload, dict)
-                and payload.get('type') == 'service_status'
-                and payload.get('status') == 'stt_failed',
+                lambda payload: (
+                    isinstance(payload, dict)
+                    and payload.get('type') == 'service_status'
+                    and payload.get('status') == 'stt_failed'
+                ),
             )
             assert failed['provider'] == 'parakeet'
             assert failed['reason'] in {'connection_lost', 'send_failed'}

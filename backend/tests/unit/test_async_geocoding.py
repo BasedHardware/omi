@@ -181,9 +181,11 @@ class TestAsyncCacheMiss:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_httpx_response)
 
-        with patch.object(location_module, "r") as mock_r, patch.object(
-            location_module, "get_maps_client", return_value=mock_client
-        ), patch.dict("os.environ", {"GOOGLE_MAPS_API_KEY": "test-key"}):
+        with (
+            patch.object(location_module, "r") as mock_r,
+            patch.object(location_module, "get_maps_client", return_value=mock_client),
+            patch.dict("os.environ", {"GOOGLE_MAPS_API_KEY": "test-key"}),
+        ):
             mock_r.get.return_value = None
 
             result = await async_get_google_maps_location(37.785, -122.409)
@@ -209,9 +211,11 @@ class TestAsyncCacheMiss:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_httpx_response)
 
-        with patch.object(location_module, "r") as mock_r, patch.object(
-            location_module, "get_maps_client", return_value=mock_client
-        ), patch.dict("os.environ", {"GOOGLE_MAPS_API_KEY": "test-key"}):
+        with (
+            patch.object(location_module, "r") as mock_r,
+            patch.object(location_module, "get_maps_client", return_value=mock_client),
+            patch.dict("os.environ", {"GOOGLE_MAPS_API_KEY": "test-key"}),
+        ):
             mock_r.get.return_value = None
 
             await async_get_google_maps_location(37.785, -122.409)
@@ -232,9 +236,11 @@ class TestAsyncApiEdgeCases:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_httpx_response)
 
-        with patch.object(location_module, "r") as mock_r, patch.object(
-            location_module, "get_maps_client", return_value=mock_client
-        ), patch.dict("os.environ", {"GOOGLE_MAPS_API_KEY": "test-key"}):
+        with (
+            patch.object(location_module, "r") as mock_r,
+            patch.object(location_module, "get_maps_client", return_value=mock_client),
+            patch.dict("os.environ", {"GOOGLE_MAPS_API_KEY": "test-key"}),
+        ):
             mock_r.get.return_value = None
             result = await async_get_google_maps_location(37.785, -122.409)
 
@@ -251,9 +257,11 @@ class TestAsyncApiEdgeCases:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_httpx_response)
 
-        with patch.object(location_module, "r") as mock_r, patch.object(
-            location_module, "get_maps_client", return_value=mock_client
-        ), patch.dict("os.environ", {"GOOGLE_MAPS_API_KEY": "test-key"}):
+        with (
+            patch.object(location_module, "r") as mock_r,
+            patch.object(location_module, "get_maps_client", return_value=mock_client),
+            patch.dict("os.environ", {"GOOGLE_MAPS_API_KEY": "test-key"}),
+        ):
             mock_r.get.return_value = None
             result = await async_get_google_maps_location(37.785, -122.409)
 
@@ -271,9 +279,11 @@ class TestAsyncApiEdgeCases:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_httpx_response)
 
-        with patch.object(location_module, "r") as mock_r, patch.object(
-            location_module, "get_maps_client", return_value=mock_client
-        ), patch.dict("os.environ", {"GOOGLE_MAPS_API_KEY": "test-key"}):
+        with (
+            patch.object(location_module, "r") as mock_r,
+            patch.object(location_module, "get_maps_client", return_value=mock_client),
+            patch.dict("os.environ", {"GOOGLE_MAPS_API_KEY": "test-key"}),
+        ):
             mock_r.get.side_effect = ConnectionError("Redis down")
 
             result = await async_get_google_maps_location(37.785, -122.409)
@@ -289,9 +299,11 @@ class TestAsyncApiEdgeCases:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(side_effect=httpx.TimeoutException("timeout"))
 
-        with patch.object(location_module, "r") as mock_r, patch.object(
-            location_module, "get_maps_client", return_value=mock_client
-        ), patch.dict("os.environ", {"GOOGLE_MAPS_API_KEY": "test-key"}):
+        with (
+            patch.object(location_module, "r") as mock_r,
+            patch.object(location_module, "get_maps_client", return_value=mock_client),
+            patch.dict("os.environ", {"GOOGLE_MAPS_API_KEY": "test-key"}),
+        ):
             mock_r.get.return_value = None
             result = await async_get_google_maps_location(37.785, -122.409)
 

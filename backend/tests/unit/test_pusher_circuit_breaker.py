@@ -207,8 +207,9 @@ async def test_connect_records_success_on_breaker():
     cb = PusherCircuitBreaker()
     mock_ws = MagicMock()
 
-    with patch('utils.pusher.get_circuit_breaker', return_value=cb), patch(
-        'utils.pusher._connect_to_trigger_pusher', return_value=mock_ws
+    with (
+        patch('utils.pusher.get_circuit_breaker', return_value=cb),
+        patch('utils.pusher._connect_to_trigger_pusher', return_value=mock_ws),
     ):
         result = await connect_to_trigger_pusher(uid="test", sample_rate=8000)
 
@@ -221,8 +222,9 @@ async def test_connect_records_failure_on_breaker():
     """Failed connect records failure on circuit breaker."""
     cb = PusherCircuitBreaker(failure_threshold=5)
 
-    with patch('utils.pusher.get_circuit_breaker', return_value=cb), patch(
-        'utils.pusher._connect_to_trigger_pusher', side_effect=Exception("conn fail")
+    with (
+        patch('utils.pusher.get_circuit_breaker', return_value=cb),
+        patch('utils.pusher._connect_to_trigger_pusher', side_effect=Exception("conn fail")),
     ):
         with pytest.raises(Exception, match="conn fail"):
             await connect_to_trigger_pusher(uid="test", sample_rate=8000, retries=1)
@@ -238,9 +240,11 @@ async def test_connect_fails_fast_when_breaker_trips_during_retries():
     async def fake_sleep(d):
         pass
 
-    with patch('utils.pusher.get_circuit_breaker', return_value=cb), patch(
-        'utils.pusher._connect_to_trigger_pusher', side_effect=Exception("conn fail")
-    ), patch('utils.pusher.asyncio.sleep', side_effect=fake_sleep):
+    with (
+        patch('utils.pusher.get_circuit_breaker', return_value=cb),
+        patch('utils.pusher._connect_to_trigger_pusher', side_effect=Exception("conn fail")),
+        patch('utils.pusher.asyncio.sleep', side_effect=fake_sleep),
+    ):
         with pytest.raises(PusherCircuitBreakerOpen):
             await connect_to_trigger_pusher(uid="test", sample_rate=8000, retries=5)
 
@@ -310,8 +314,9 @@ async def test_cancelled_half_open_probe_reopens_breaker():
         started.set()
         await asyncio.Future()
 
-    with patch('utils.pusher.get_circuit_breaker', return_value=cb), patch(
-        'utils.pusher._connect_to_trigger_pusher', side_effect=hang
+    with (
+        patch('utils.pusher.get_circuit_breaker', return_value=cb),
+        patch('utils.pusher._connect_to_trigger_pusher', side_effect=hang),
     ):
         task = asyncio.create_task(connect_to_trigger_pusher(uid="test", sample_rate=8000))
         await started.wait()
@@ -337,8 +342,9 @@ async def test_stale_inflight_success_does_not_close_open_breaker():
             return MagicMock()
         raise RuntimeError("failed")
 
-    with patch('utils.pusher.get_circuit_breaker', return_value=cb), patch(
-        'utils.pusher._connect_to_trigger_pusher', side_effect=connect
+    with (
+        patch('utils.pusher.get_circuit_breaker', return_value=cb),
+        patch('utils.pusher._connect_to_trigger_pusher', side_effect=connect),
     ):
         stale = asyncio.create_task(connect_to_trigger_pusher(uid="slow", retries=1))
         await started.wait()
@@ -354,9 +360,10 @@ async def test_stale_inflight_success_does_not_close_open_breaker():
 @pytest.mark.asyncio
 async def test_connect_builds_encoded_websocket_url():
     socket = MagicMock()
-    with patch('utils.pusher.PusherAPI', 'https://pusher.example/base?existing=1'), patch(
-        'utils.pusher.websockets.connect', return_value=socket
-    ) as connect:
+    with (
+        patch('utils.pusher.PusherAPI', 'https://pusher.example/base?existing=1'),
+        patch('utils.pusher.websockets.connect', return_value=socket) as connect,
+    ):
         assert await _connect_to_trigger_pusher('user&admin=true', 16000) is socket
 
     assert connect.await_args.args[0] == (
@@ -444,8 +451,9 @@ async def test_breaker_recovery_lifecycle():
     assert cb.state == CircuitState.HALF_OPEN
 
     # 4. Probe succeeds
-    with patch('utils.pusher.get_circuit_breaker', return_value=cb), patch(
-        'utils.pusher._connect_to_trigger_pusher', return_value=mock_ws
+    with (
+        patch('utils.pusher.get_circuit_breaker', return_value=cb),
+        patch('utils.pusher._connect_to_trigger_pusher', return_value=mock_ws),
     ):
         result = await connect_to_trigger_pusher(uid="test", sample_rate=8000)
     assert result is mock_ws
@@ -466,9 +474,11 @@ async def test_breaker_stays_open_on_probe_failure():
     assert cb.state == CircuitState.HALF_OPEN
 
     # Probe fails
-    with patch('utils.pusher.get_circuit_breaker', return_value=cb), patch(
-        'utils.pusher._connect_to_trigger_pusher', side_effect=Exception("still down")
-    ), patch('utils.pusher.asyncio.sleep', side_effect=fake_sleep):
+    with (
+        patch('utils.pusher.get_circuit_breaker', return_value=cb),
+        patch('utils.pusher._connect_to_trigger_pusher', side_effect=Exception("still down")),
+        patch('utils.pusher.asyncio.sleep', side_effect=fake_sleep),
+    ):
         with pytest.raises(Exception, match="still down"):
             await connect_to_trigger_pusher(uid="test", sample_rate=8000, retries=1)
 

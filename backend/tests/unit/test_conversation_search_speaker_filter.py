@@ -34,9 +34,9 @@ import utils.conversations.search as search_mod  # noqa: E402
 
 def _fake_client(recorder):
     fake = MagicMock()
-    fake.collections.__getitem__.return_value.documents.search.side_effect = lambda params: recorder.update(
-        params=dict(params)
-    ) or {"hits": []}
+    fake.collections.__getitem__.return_value.documents.search.side_effect = lambda params: (
+        recorder.update(params=dict(params)) or {"hits": []}
+    )
     return fake
 
 

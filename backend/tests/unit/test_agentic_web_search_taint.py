@@ -140,9 +140,9 @@ def test_web_search_is_withheld_after_a_private_tool_result(monkeypatch):
 
     assert len(requests) == 2
     assert WEB_SEARCH_NAME in _tool_names(requests[0]), 'clean opening request should still offer web_search'
-    assert WEB_SEARCH_NAME not in _tool_names(
-        requests[1]
-    ), 'web_search must be withheld once private data is in context'
+    assert WEB_SEARCH_NAME not in _tool_names(requests[1]), (
+        'web_search must be withheld once private data is in context'
+    )
     assert [fallback['reason'] for fallback in fallbacks] == ['private_tool_output_in_context']
     assert fallbacks[0]['from_mode'] == 'anthropic_web_search'
     assert fallbacks[0]['to_mode'] == 'model_knowledge'

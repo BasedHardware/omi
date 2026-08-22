@@ -298,9 +298,9 @@ class TestCallSitesMigrated:
             with open(path, encoding='utf-8') as f:
                 content = f.read()
             # Should not have the old inline pattern of stripping action_items inside an is_locked check
-            assert (
-                "conv['structured']['action_items'] = []" not in content
-            ), f"{rel_path} still has inline locked redaction"
+            assert "conv['structured']['action_items'] = []" not in content, (
+                f"{rel_path} still has inline locked redaction"
+            )
 
     def test_no_duplicate_speaker_enrichment(self):
         """Routers should not define their own _add_speaker_names_to_segments."""
@@ -311,9 +311,9 @@ class TestCallSitesMigrated:
             path = os.path.join(backend, rel_path)
             with open(path, encoding='utf-8') as f:
                 content = f.read()
-            assert (
-                'def _add_speaker_names_to_segments' not in content
-            ), f"{rel_path} still has duplicate speaker enrichment function"
+            assert 'def _add_speaker_names_to_segments' not in content, (
+                f"{rel_path} still has duplicate speaker enrichment function"
+            )
 
     def test_no_duplicate_folder_enrichment(self):
         """Routers should not define their own _add_folder_names_to_conversations."""
@@ -324,9 +324,9 @@ class TestCallSitesMigrated:
             path = os.path.join(backend, rel_path)
             with open(path, encoding='utf-8') as f:
                 content = f.read()
-            assert (
-                'def _add_folder_names_to_conversations' not in content
-            ), f"{rel_path} still has duplicate folder enrichment function"
+            assert 'def _add_folder_names_to_conversations' not in content, (
+                f"{rel_path} still has duplicate folder enrichment function"
+            )
 
     def test_no_duplicate_json_serialize_datetime(self):
         """Production files should use render.serialize_datetimes, not local copies."""
@@ -337,9 +337,9 @@ class TestCallSitesMigrated:
             path = os.path.join(backend, rel_path)
             with open(path, encoding='utf-8') as f:
                 content = f.read()
-            assert (
-                'def _json_serialize_datetime' not in content
-            ), f"{rel_path} still has duplicate _json_serialize_datetime"
+            assert 'def _json_serialize_datetime' not in content, (
+                f"{rel_path} still has duplicate _json_serialize_datetime"
+            )
 
     def test_no_as_dict_cleaned_dates_in_production_callers(self):
         """Production callers should use render.conversation_to_dict."""
@@ -366,6 +366,6 @@ class TestCallSitesMigrated:
             path = os.path.join(backend, rel_path)
             with open(path, encoding='utf-8') as f:
                 content = f.read()
-            assert (
-                'upsert_conversation(uid, conversation.as_dict_cleaned_dates())' not in content
-            ), f"{rel_path} writes ISO strings to Firestore via as_dict_cleaned_dates()"
+            assert 'upsert_conversation(uid, conversation.as_dict_cleaned_dates())' not in content, (
+                f"{rel_path} writes ISO strings to Firestore via as_dict_cleaned_dates()"
+            )

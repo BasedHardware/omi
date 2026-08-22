@@ -103,7 +103,7 @@ class HighRecallProductionLikeMemories(BaseModel):
 
 
 # Build a Literal type from TYPED_PREDICATES so Pydantic validates at parse time.
-_PredicateLiteral = Literal[tuple(TYPED_PREDICATES)]
+_PredicateLiteral = Literal[tuple(TYPED_PREDICATES)]  # ty: ignore[invalid-type-form]
 
 
 class TypedProductionLikeMemory(ProductionLikeMemory):

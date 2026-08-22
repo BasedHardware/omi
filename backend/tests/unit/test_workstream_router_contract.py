@@ -156,8 +156,10 @@ def test_task_intelligence_snapshot_writes_canonicalize_accepted_legacy_device_i
     monkeypatch.setattr(
         task_recommendations_router.recommendations,
         'ingest_context_snapshot' if route_name == 'replace_context_snapshot' else 'ingest_open_loop_snapshot',
-        lambda _uid, snapshot, **_kwargs: captured.setdefault('device_id', snapshot.device_id)
-        or SnapshotReceipt(snapshot_id='snapshot-1', replaced=True, expires_at=now),
+        lambda _uid, snapshot, **_kwargs: (
+            captured.setdefault('device_id', snapshot.device_id)
+            or SnapshotReceipt(snapshot_id='snapshot-1', replaced=True, expires_at=now)
+        ),
     )
 
     getattr(task_recommendations_router, route_name)(
@@ -232,8 +234,9 @@ def test_what_matters_now_initializes_the_dev_smoke_fixture_before_rollout(monke
     monkeypatch.setattr(
         task_recommendations_router,
         '_rollout',
-        lambda uid: calls.append(('rollout', uid))
-        or SimpleNamespace(intelligence_product_enabled=True, account_generation=0),
+        lambda uid: (
+            calls.append(('rollout', uid)) or SimpleNamespace(intelligence_product_enabled=True, account_generation=0)
+        ),
     )
     monkeypatch.setattr(task_recommendations_router, '_bound_device_id', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(

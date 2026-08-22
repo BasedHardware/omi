@@ -75,7 +75,7 @@ for _name in [
     _register(_name)
 
 # Passthrough @tool decorator so the tool stays a plain callable.
-sys.modules["langchain_core.tools"].tool = lambda func=None, **kw: (func if func is not None else (lambda f: f))
+sys.modules["langchain_core.tools"].tool = lambda func=None, **kw: func if func is not None else (lambda f: f)
 
 
 def _load_module_from_file(module_name, file_path):

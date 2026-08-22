@@ -332,7 +332,7 @@ def run_vad_gate(pcm_data: bytes, threshold: float, session_id: str) -> Tuple[by
 
 
 def print_table(results: List[Dict[str, object]]) -> None:
-    header = f"{'LANG':<5} {'VOL':<12} {'DG_LANG':<7} {'SIM%':>7} {'SAVE%':>7} " f"{'DROP':<5} {'PASS':<5} {'STATUS'}"
+    header = f"{'LANG':<5} {'VOL':<12} {'DG_LANG':<7} {'SIM%':>7} {'SAVE%':>7} {'DROP':<5} {'PASS':<5} {'STATUS'}"
     print('\n' + header)
     print('-' * len(header))
     for entry in results:

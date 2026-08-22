@@ -80,7 +80,7 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
 
     def test_development_workflow_covers_full_desktop_runtime_source_closure(self) -> None:
         self.assertIn("'backend/**/*.py'", self.dev)
-        self.assertIn("'backend/pylock.runtime.toml'", self.dev)
+        self.assertIn("'backend/uv.lock'", self.dev)
 
     def test_requires_python_dockerfile_context_for_every_desktop_deploy(self) -> None:
         retired_desktop_context = "./desktop/macos/" + "Backend" + "-Rust"

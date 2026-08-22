@@ -326,9 +326,11 @@ class TestRealtimeIntegrationsOffload:
         tracking, calls = _make_tracking_run_blocking()
         get_apps = MagicMock(return_value=[])
 
-        with patch.object(app_integrations, "run_blocking", tracking), patch.object(
-            app_integrations, "get_available_apps", get_apps
-        ), patch.object(app_integrations, "process_mentor_notification", MagicMock(return_value=None)):
+        with (
+            patch.object(app_integrations, "run_blocking", tracking),
+            patch.object(app_integrations, "get_available_apps", get_apps),
+            patch.object(app_integrations, "process_mentor_notification", MagicMock(return_value=None)),
+        ):
             await app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], "conv-1")
 
         offloaded_fns = [fn for (fn, _a, _kw) in calls]
@@ -355,12 +357,12 @@ class TestRealtimeIntegrationsOffload:
         tracking, calls = _make_tracking_run_blocking()
         record_usage = MagicMock()
 
-        with patch.object(app_integrations, "run_blocking", tracking), patch.object(
-            app_integrations, "get_available_apps", MagicMock(return_value=[app1])
-        ), patch.object(app_integrations, "process_mentor_notification", MagicMock(return_value=None)), patch.object(
-            app_integrations, "get_webhook_client", return_value=mock_client
-        ), patch.object(
-            app_integrations, "record_app_usage", record_usage
+        with (
+            patch.object(app_integrations, "run_blocking", tracking),
+            patch.object(app_integrations, "get_available_apps", MagicMock(return_value=[app1])),
+            patch.object(app_integrations, "process_mentor_notification", MagicMock(return_value=None)),
+            patch.object(app_integrations, "get_webhook_client", return_value=mock_client),
+            patch.object(app_integrations, "record_app_usage", record_usage),
         ):
             await app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], "conv-1")
 
@@ -372,10 +374,11 @@ class TestRealtimeIntegrationsOffload:
         tracking, calls = _make_executor_tracking_run_blocking()
         mentor_processor = MagicMock(return_value=None)
 
-        with patch.object(app_integrations, "run_blocking", tracking), patch.object(
-            app_integrations, "process_mentor_notification", return_value=[{"text": "hi"}]
-        ), patch.object(app_integrations, "get_available_apps", return_value=[]), patch.object(
-            app_integrations, "_process_mentor_proactive_notification", mentor_processor
+        with (
+            patch.object(app_integrations, "run_blocking", tracking),
+            patch.object(app_integrations, "process_mentor_notification", return_value=[{"text": "hi"}]),
+            patch.object(app_integrations, "get_available_apps", return_value=[]),
+            patch.object(app_integrations, "_process_mentor_proactive_notification", mentor_processor),
         ):
             await app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], "conv-1")
 
@@ -394,12 +397,12 @@ class TestRealtimeIntegrationsOffload:
         tracking, calls = _make_executor_tracking_run_blocking()
         proactive_processor = MagicMock(return_value=None)
 
-        with patch.object(app_integrations, "run_blocking", tracking), patch.object(
-            app_integrations, "process_mentor_notification", return_value=None
-        ), patch.object(app_integrations, "get_available_apps", return_value=[app]), patch.object(
-            app_integrations, "get_webhook_client", return_value=client
-        ), patch.object(
-            app_integrations, "_process_proactive_notification", proactive_processor
+        with (
+            patch.object(app_integrations, "run_blocking", tracking),
+            patch.object(app_integrations, "process_mentor_notification", return_value=None),
+            patch.object(app_integrations, "get_available_apps", return_value=[app]),
+            patch.object(app_integrations, "get_webhook_client", return_value=client),
+            patch.object(app_integrations, "_process_proactive_notification", proactive_processor),
         ):
             await app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], "conv-1")
 
@@ -440,16 +443,17 @@ class TestRealtimeIntegrationsOffload:
         safety_release = threading.Timer(1, release.set)
         safety_release.start()
         try:
-            with patch.object(app_integrations, "run_blocking", routing_run_blocking), patch.object(
-                app_integrations, "postprocess_executor", worker
-            ), patch.object(app_integrations, "track_usage", tracked_usage), patch.object(
-                app_integrations, "process_mentor_notification", return_value=[{"text": "hi"}]
-            ), patch.object(
-                app_integrations, "get_available_apps", return_value=[]
-            ), patch.object(
-                app_integrations,
-                "_process_mentor_proactive_notification",
-                blocking_mentor_processor,
+            with (
+                patch.object(app_integrations, "run_blocking", routing_run_blocking),
+                patch.object(app_integrations, "postprocess_executor", worker),
+                patch.object(app_integrations, "track_usage", tracked_usage),
+                patch.object(app_integrations, "process_mentor_notification", return_value=[{"text": "hi"}]),
+                patch.object(app_integrations, "get_available_apps", return_value=[]),
+                patch.object(
+                    app_integrations,
+                    "_process_mentor_proactive_notification",
+                    blocking_mentor_processor,
+                ),
             ):
                 task = _asyncio.create_task(
                     app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], "conv-1")
@@ -475,12 +479,14 @@ class TestRealtimeIntegrationsOffload:
     async def test_mentor_pipeline_preserves_failure_semantics(self):
         tracking, _calls = _make_executor_tracking_run_blocking()
 
-        with patch.object(app_integrations, "run_blocking", tracking), patch.object(
-            app_integrations, "process_mentor_notification", return_value=[{"text": "hi"}]
-        ), patch.object(
-            app_integrations,
-            "_process_mentor_proactive_notification",
-            side_effect=RuntimeError("mentor failed"),
+        with (
+            patch.object(app_integrations, "run_blocking", tracking),
+            patch.object(app_integrations, "process_mentor_notification", return_value=[{"text": "hi"}]),
+            patch.object(
+                app_integrations,
+                "_process_mentor_proactive_notification",
+                side_effect=RuntimeError("mentor failed"),
+            ),
         ):
             with pytest.raises(RuntimeError, match="mentor failed"):
                 await app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], "conv-1")
