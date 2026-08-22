@@ -26,6 +26,7 @@ def _conversation() -> dict:
             'calendar_meeting_context': {
                 'calendar_event_id': 'evt-1',
                 'title': 'Weekly sync',
+                'calendar_source': 'google_calendar',
                 'participants': [
                     {'name': 'Owner', 'email': 'owner@acme.com'},
                     {'name': 'Sarah Chen', 'email': 'sarah@acme.com'},

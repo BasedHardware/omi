@@ -7,17 +7,15 @@ from utils.conversations.share_email import (
 )
 
 
-def _conversation_with_calendar_context(participants):
-    return {
-        'id': 'conv-1',
-        'external_data': {
-            'calendar_meeting_context': {
-                'calendar_event_id': 'evt-1',
-                'title': 'Weekly sync',
-                'participants': participants,
-            }
-        },
+def _conversation_with_calendar_context(participants, calendar_source='google_calendar'):
+    context = {
+        'calendar_event_id': 'evt-1',
+        'title': 'Weekly sync',
+        'participants': participants,
     }
+    if calendar_source is not None:
+        context['calendar_source'] = calendar_source
+    return {'id': 'conv-1', 'external_data': {'calendar_meeting_context': context}}
 
 
 def test_recipients_exclude_owner_and_dedupe():
@@ -284,5 +282,52 @@ def test_local_part_stand_in_name_is_not_proposed():
             {'name': 'Nik', 'email': 'nik@basedhardware.com'},
             {'name': 'JORDAN', 'email': 'jordan@acme.com'},
         ]
+    )
+    assert extract_share_recipients(conversation, ['nik@basedhardware.com']) == []
+
+
+def test_screen_derived_identity_is_never_a_share_recipient():
+    """#12036: OCR of the conferencing window saw a calendar tile for a later meeting."""
+    conversation = {
+        'id': 'conv-1',
+        'external_data': {
+            'calendar_meeting_context': {
+                'calendar_event_id': 'screen-activity',
+                'title': 'Video meeting',
+                'calendar_source': 'screen_activity',
+                'participants': [
+                    {'name': 'Aryan Gupta and Nik', 'email': 'nik@basedhardware.com'},
+                    {'name': 'Aryan Gupta', 'email': 'aryan@example.com'},
+                ],
+            }
+        },
+    }
+    assert extract_share_recipients(conversation, ['kodjima33@gmail.com']) == []
+
+
+def test_calendar_backed_sources_still_propose():
+    for source in ('system_calendar', 'macos_calendar', 'google', 'google_calendar', 'outlook_calendar'):
+        conversation = {
+            'id': 'conv-1',
+            'external_data': {
+                'calendar_meeting_context': {
+                    'calendar_event_id': 'evt-1',
+                    'title': 'Weekly sync',
+                    'calendar_source': source,
+                    'participants': [
+                        {'name': 'Nik', 'email': 'nik@basedhardware.com'},
+                        {'name': 'Sarah Chen', 'email': 'sarah@acme.com'},
+                    ],
+                }
+            },
+        }
+        assert extract_share_recipients(conversation, ['nik@basedhardware.com']) == [
+            {'name': 'Sarah Chen', 'email': 'sarah@acme.com'}
+        ], source
+
+
+def test_unlabelled_context_source_is_not_trusted():
+    conversation = _conversation_with_calendar_context(
+        [{'name': 'Sarah Chen', 'email': 'sarah@acme.com'}], calendar_source=None
     )
     assert extract_share_recipients(conversation, ['nik@basedhardware.com']) == []

@@ -95,6 +95,11 @@ _NON_PERSON_WORDS = {
     'you',
 }
 
+# One person is never called "X and Y". A line joining people is a roster or an
+# event title (a calendar tile for a *different* meeting reads exactly like
+# "Aryan Gupta and Nik"); only `_split_roster` may take such a line apart.
+_JOINER_WORDS = {'and', 'with', 'vs', 'versus', 'or', 'et'}
+
 
 def _clean_line(raw_line: str) -> str:
     return re.sub(r'\s+', ' ', raw_line).strip(' •|*·-—\t')
@@ -113,6 +118,8 @@ def _looks_like_person_name(value: str) -> bool:
     if not 1 <= len(words) <= 4:
         return False
     if any(word.casefold() in _NON_PERSON_WORDS for word in words):
+        return False
+    if any(word.casefold().strip(".'’-") in _JOINER_WORDS for word in words):
         return False
     if not all(re.fullmatch(r"[A-Za-z][A-Za-z.'\u2019\-]*", word) for word in words):
         return False

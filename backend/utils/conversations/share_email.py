@@ -41,6 +41,12 @@ class AmbiguousDeliveryError(RuntimeError):
 # blanket "send to everyone" proposal is more likely wrong than helpful.
 MAX_MEETING_PARTICIPANTS = 10
 MAX_RECIPIENTS = 5
+# Sources that mean "the user actually has this event on a calendar, with these
+# invitees". Anything else — screen-derived identity, or an unlabelled source we
+# cannot attribute — is inference, and inference must not address an email.
+CALENDAR_BACKED_SOURCES = frozenset(
+    {'system_calendar', 'macos_calendar', 'google', 'google_calendar', 'outlook_calendar'}
+)
 # Attributable but still bounded: one authenticated user may relay at most
 # this many summary emails per UTC day.
 DAILY_SEND_QUOTA = 30
@@ -77,12 +83,19 @@ def normalized_recipient_emails(values: List[str]) -> List[str]:
 
 
 def _participants_from_conversation(conversation: Dict[str, Any]) -> List[Dict[str, Optional[str]]]:
-    """All {name, email} pairs the calendar sources recorded for this conversation."""
+    """All {name, email} pairs a *calendar* recorded for this conversation.
+
+    Screen-derived identity is excluded on purpose. It is inferred from whatever
+    the conferencing window happened to show, which includes calendar tiles for
+    other meetings — one such tile put a later meeting's guest on this card and
+    offered to email him (issue #12036). An address the user actually invited is
+    the only basis for a one-click send.
+    """
     participants: List[Dict[str, Optional[str]]] = []
 
     external_data = conversation.get('external_data') or {}
     calendar_context = external_data.get('calendar_meeting_context') or conversation.get('calendar_meeting_context')
-    if isinstance(calendar_context, dict):
+    if isinstance(calendar_context, dict) and calendar_context.get('calendar_source') in CALENDAR_BACKED_SOURCES:
         for participant in calendar_context.get('participants') or []:
             if isinstance(participant, dict):
                 participants.append({'name': participant.get('name'), 'email': participant.get('email')})

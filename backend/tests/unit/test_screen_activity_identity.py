@@ -190,6 +190,23 @@ class TestPrecisionFirst:
         # This is exactly the shape that produced "Coinflow Portal" and "Blocked users".
         assert participants_from_ocr(['Coinflow Portal\nBlocked users\nOmi Monitor\nSpud pay']) == []
 
+    def test_a_calendar_tile_for_another_meeting_is_not_a_participant(self):
+        """#12036: 'Aryan Gupta and Nik' is an event title, not a person.
+
+        It is four capitalised tokens, so the shape filter accepted it, and the
+        token 'nik' matched the local part of an address in the same window --
+        which bound a later meeting's guest to this call and put him on the
+        post-meeting card's Send button.
+        """
+        participants = participants_from_ocr(
+            ['Aryan Gupta and Nik - New York Networking\nAryan Gupta and Nik\nnik@basedhardware.com']
+        )
+        assert [(p.name, p.email) for p in participants] == [(None, 'nik@basedhardware.com')]
+
+    def test_a_roster_sentence_still_splits_joined_names(self):
+        participants = participants_from_ocr(['Ash Kalb and Boardy Boardman are in this call'])
+        assert [p.name for p in participants] == ['Ash Kalb', 'Boardy Boardman']
+
     def test_a_name_line_is_accepted_once_an_email_corroborates_it(self):
         participants = participants_from_ocr(['Boardy Boardman\nCoinflow Portal\nboardy@boardy.ai'])
         assert [(p.name, p.email) for p in participants] == [('Boardy Boardman', 'boardy@boardy.ai')]
