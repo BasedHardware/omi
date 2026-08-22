@@ -2148,6 +2148,47 @@ def test_memory_maintenance_auto_dev_workflow_is_listed_and_targets_job():
     )
 
 
+def test_x_connector_sync_job_workflow_is_listed_and_targets_job():
+    workflow = ROOT.parent / '.github/workflows/gcp_x_connector_sync_job.yml'
+    text = workflow.read_text(encoding='utf-8')
+    assert 'SERVICE: x-connector-sync-job' in text
+    assert 'SCHEDULER_JOB: x-connector-sync-6h' in text
+    assert 'Dockerfile.x_connector_sync_job' in text
+    assert "id-token: 'write'" in text
+    assert 'verify-llm-gateway-serving' in text
+    assert (
+        'flags: ${{ steps.runtime-env.outputs.cloud_run_flags }} '
+        '${{ steps.runtime-env.outputs.x_connector_sync_job_flags }}'
+    ) in text
+    manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'))
+    for env_name in ('dev', 'prod'):
+        assert (
+            '.github/workflows/gcp_x_connector_sync_job.yml'
+            in manifest['environments'][env_name]['cloud_run']['workflow_files']
+        )
+        assert 'x-connector-sync-job' in manifest['environments'][env_name]['cloud_run']['jobs']
+        notifications = manifest['environments'][env_name]['cloud_run']['jobs']['notifications-job']
+        x_sync = manifest['environments'][env_name]['cloud_run']['jobs']['x-connector-sync-job']
+        assert 'PINECONE_API_KEY' not in notifications.get('secrets', {})
+        assert 'PINECONE_INDEX_NAME' not in notifications.get('env', {})
+        assert 'OMI_LLM_GATEWAY_SERVICE_TOKEN' not in notifications.get('secrets', {})
+        assert 'OMI_LLM_GATEWAY_URL' not in notifications.get('env', {})
+        assert 'OMI_BACKGROUND_FLEX_CAPABLE' not in notifications.get('env', {})
+        assert 'X_OAUTH_CLIENT_SECRET' not in notifications.get('secrets', {})
+        assert 'RAPID_API_KEY' not in notifications.get('secrets', {})
+        assert 'X_OAUTH_CLIENT_ID' not in notifications.get('env', {})
+        assert 'X_OAUTH_REDIRECT_URI' not in notifications.get('env', {})
+        assert 'RAPID_API_HOST' not in notifications.get('env', {})
+        assert 'X_OAUTH_CLIENT_SECRET' in x_sync.get('secrets', {})
+        assert 'RAPID_API_KEY' in x_sync.get('secrets', {})
+        assert 'OMI_LLM_GATEWAY_SERVICE_TOKEN' in x_sync.get('secrets', {})
+        assert 'X_OAUTH_CLIENT_ID' in x_sync.get('env', {})
+        assert 'X_OAUTH_REDIRECT_URI' in x_sync.get('env', {})
+        assert 'RAPID_API_HOST' in x_sync.get('env', {})
+        assert x_sync.get('env', {}).get('OMI_BACKGROUND_FLEX_CAPABLE', {}).get('value') == 'true'
+        assert x_sync.get('env', {}).get('OMI_LLM_GATEWAY_URL', {}).get('env_var') == 'OMI_LLM_GATEWAY_URL'
+
+
 def test_sync_backfill_co_deploy_is_required_per_workflow(tmp_path):
     validator = load_validator()
     values_file = tmp_path / 'backend_listen.yaml'
