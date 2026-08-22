@@ -388,7 +388,7 @@ final class TopNavigationBarLayoutTests: XCTestCase {
       "without the gear there is no way into Settings, so the page behind it is stranded")
   }
 
-  func testLibraryPillReadsAsCurrentOnEveryHubView() {
+  func testTheActivityPillReadsAsCurrentOnEveryHubPage() {
     for destination in ShellDestination.allCases
     where destination.reach == .activityChipRow || destination == .activity {
       XCTAssertTrue(
@@ -399,9 +399,9 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     XCTAssertFalse(ShellDestination.isHubPage(selectedIndex: SidebarNavItem.apps.rawValue))
   }
 
-  /// The badge used to be one number on `Library` covering conversations, memories *and* tasks,
-  /// because Tasks lived inside the menu. Tasks has its own pill now, so a task counted on `Library`
-  /// would point at the wrong page.
+  /// The badge used to be one number on the hub's pill — then labelled `Library` — covering
+  /// conversations, memories *and* tasks, because Tasks lived inside the menu. Tasks has its own
+  /// pill now, so a task counted on the hub's pill would point at the wrong page.
   func testNewItemCountsAreCarriedByThePillThatOwnsThem() {
     let badges = TopNavigationDestinationBadges(library: 4, tasks: 7)
     XCTAssertEqual(badges.count(forNavItemIndex: SidebarNavItem.conversations.rawValue), 4)
