@@ -26,6 +26,8 @@ test body reads identically for either backend.
 from __future__ import annotations
 
 import os
+import pathlib
+import re
 from typing import Any
 
 import pytest
@@ -34,19 +36,30 @@ from tests.store_fakes import install_fake_db_client
 
 
 # ``db`` is a lazy proxy that resolves through the accessor on every call, so patching the accessor is
-# enough for it. ``get_firestore_client`` is NOT: five domain modules do
-# ``from ._client import db, get_firestore_client``, which binds the function OBJECT at import time, so
-# patching ``_client.get_firestore_client`` never reaches them. On the mongo leg those functions kept
-# calling the real accessor -- which, with FIRESTORE_EMULATOR_HOST set for the other leg, quietly talked
-# to the EMULATOR and returned nothing. A test that then asserted "no rows" would have passed for the
-# wrong reason; the one that asserted rows is how this was found (BACKLOG L1, same class as L30/L31).
-_ACCESSOR_IMPORTERS = (
-    'database.action_items',
-    'database.conversations',
-    'database.memories',
-    'database.staged_tasks',
-    'database.users',
-)
+# enough for it. ``get_firestore_client`` is NOT: several domain modules import the FUNCTION OBJECT at
+# module load, so patching ``_client.get_firestore_client`` never reaches them. On the mongo leg those
+# functions kept calling the real accessor -- which, with FIRESTORE_EMULATOR_HOST set for the other leg,
+# quietly talked to the EMULATOR and returned nothing. A test that then asserted "no rows" would have
+# passed for the wrong reason (BACKLOG L1, same class as L30/L31).
+#
+# Computed, not listed. The first version of this was a hand-written tuple built from a grep for
+# ``from ._client import ...`` -- which missed ``from database._client import ...``, and the very next
+# suite tripped over the module that uses the absolute form. A fact about the import graph does not
+# belong in a literal.
+_ACCESSOR_IMPORT = re.compile(r'^from (?:\.|database\.)_client import (?P<names>.+)$', re.M)
+
+
+def _accessor_importers() -> list[str]:
+    """``database.*`` modules that bind ``get_firestore_client`` as a module-level name."""
+    domain = pathlib.Path(__file__).resolve().parents[2] / 'database'
+    found = []
+    for path in sorted(domain.glob('*.py')):
+        text = path.read_text(encoding='utf-8', errors='replace')
+        for match in _ACCESSOR_IMPORT.finditer(text):
+            if 'get_firestore_client' in match.group('names'):
+                found.append(f'database.{path.stem}')
+                break
+    return found
 
 
 def _bind_accessor(monkeypatch, client) -> None:
@@ -57,10 +70,12 @@ def _bind_accessor(monkeypatch, client) -> None:
 
     monkeypatch.setattr(_client, 'get_firestore_client', lambda: client)
     monkeypatch.setattr(_client, '_firestore_client', client, raising=False)
-    for name in _ACCESSOR_IMPORTERS:
+    importers = _accessor_importers()
+    assert importers, 'the accessor scan found nothing — the import pattern or the tree moved'
+    for name in importers:
         module = importlib.import_module(name)
-        # raising=True on purpose: if a module stops importing the name, this list is stale and the
-        # silent-blind-spot is back. Fail here, where the reason is written down.
+        # raising=True: if a module stops binding the name, the scan and the module disagree and the
+        # blind spot is back. Fail here, where the reason is written down.
         monkeypatch.setattr(module, 'get_firestore_client', lambda: client)
 
 
