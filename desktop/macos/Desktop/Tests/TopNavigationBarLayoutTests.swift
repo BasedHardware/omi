@@ -186,8 +186,11 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     // The claim is checkable because the row and the model read one value. A page dropped from the
     // chip row is unreachable here rather than silently stranded in the app.
     for destination in ShellDestination.allCases where destination.reach == .activityChipRow {
+      guard let hubView = destination.memoryDestination else {
+        return XCTFail("\(destination.title) claims the chip row reaches it but names no hub page")
+      }
       XCTAssertTrue(
-        ActivityDestinationChip.reachableHubDestinations.contains(destination.memoryDestination!),
+        ActivityDestinationChip.reachableHubDestinations.contains(hubView),
         "\(destination.title) claims the chip row reaches it, but the row does not offer it")
     }
     XCTAssertEqual(ShellDestination.activity.reach, .topBar)
