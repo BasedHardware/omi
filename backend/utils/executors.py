@@ -111,7 +111,7 @@ def submit_with_context(
     ctx = contextvars.copy_context()
     future = executor.submit(ctx.run, fn, *args, **kwargs)
     future.add_done_callback(functools.partial(_log_background_failure, getattr(fn, '__name__', repr(fn))))
-    return future
+    return future  # ty: ignore[invalid-return-type]
 
 
 def get_executor_metrics() -> List[Dict[str, Any]]:
