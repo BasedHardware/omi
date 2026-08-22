@@ -42,6 +42,10 @@ class _Query:
         self.docs = docs
         self.projected_fields = None
         self.applied_filters = []
+        self.page_limit = None
+        self.cursor = None
+        self.page_sizes = []
+        self.start_after_calls = []
 
     def select(self, fields):
         self.projected_fields = fields
@@ -49,6 +53,19 @@ class _Query:
 
     def where(self, filter):
         self.applied_filters.append((filter.field_path, filter.op_string, filter.value))
+        return self
+
+    def order_by(self, field):
+        assert field == '__name__'
+        return self
+
+    def limit(self, value):
+        self.page_limit = value
+        return self
+
+    def start_after(self, cursor):
+        self.cursor = cursor
+        self.start_after_calls.append(cursor.id)
         return self
 
     def stream(self):
@@ -64,7 +81,12 @@ class _Query:
                 and type(doc._data[field_path]) is type(value)
                 and doc._data[field_path] == value
             ]
-        return filtered
+        if self.cursor is not None:
+            cursor_index = next(index for index, doc in enumerate(filtered) if doc.id == self.cursor.id)
+            filtered = filtered[cursor_index + 1 :]
+        page = filtered[: self.page_limit]
+        self.page_sizes.append(len(page))
+        return page
 
 
 class _CollectionPath:
@@ -186,12 +208,46 @@ def test_visible_action_item_ids_records_firestore_read():
         ]
     )
 
-    before = FIRESTORE_READ_OPERATIONS.labels(family='action_items_visible_ids', mode='unbounded')._value.get()
+    before = FIRESTORE_READ_OPERATIONS.labels(family='action_items_visible_ids', mode='bounded')._value.get()
 
     action_items_db.get_visible_action_item_ids('user-9', completed=False, firestore_client=client)
 
-    after = FIRESTORE_READ_OPERATIONS.labels(family='action_items_visible_ids', mode='unbounded')._value.get()
+    after = FIRESTORE_READ_OPERATIONS.labels(family='action_items_visible_ids', mode='bounded')._value.get()
     assert after == before + 1
+
+
+def test_visible_action_item_ids_uses_bounded_cursor_pages():
+    client = _Firestore([_Doc(f'task-{index:04d}', {'completed': False}) for index in range(501)])
+
+    ids = action_items_db.get_visible_action_item_ids('user-9', completed=False, firestore_client=client)
+
+    assert len(ids) == 501
+    assert client.query.page_sizes == [500, 1]
+    assert client.query.start_after_calls == ['task-0499']
+
+
+def test_all_action_item_ids_uses_bounded_cursor_pages():
+    client = _Firestore([_Doc(f'task-{index:04d}', {}) for index in range(501)])
+
+    ids = action_items_db.get_action_item_ids('user-9', firestore_client=client)
+
+    assert len(ids) == 501
+    assert client.query.projected_fields == []
+    assert client.query.page_sizes == [500, 1]
+    assert client.query.start_after_calls == ['task-0499']
+
+
+def test_active_description_lookup_continues_after_first_bounded_page(monkeypatch):
+    docs = [_Doc(f'task-{index:04d}', {'completed': False, 'description': 'other'}) for index in range(500)]
+    docs.append(_Doc('task-0500', {'completed': False, 'description': 'Target'}))
+    client = _Firestore(docs)
+    monkeypatch.setattr(action_items_db, 'db', client)
+
+    result = action_items_db.get_active_action_item_by_description('user-9', 'target')
+
+    assert result['id'] == 'task-0500'
+    assert client.query.page_sizes == [500, 1]
+    assert client.query.start_after_calls == ['task-0499']
 
 
 def test_batch_delete_rejects_locked_items_before_any_delete(monkeypatch):
