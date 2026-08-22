@@ -1065,26 +1065,22 @@ docker run --rm --network container:wp2-mongo -v $(git rev-parse --show-toplevel
   -e FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 -e MONGO_URI="mongodb://127.0.0.1:27017/?replicaSet=rs0" \
   -e FIREBASE_PROJECT_ID=demo-omi-local -e GOOGLE_CLOUD_PROJECT=demo-omi-local \
   -e ENCRYPTION_SECRET="$(openssl rand -hex 32)" -e OPENAI_API_KEY=test \
+  -e MEMORY_ENABLED=on \
   omi-oss-backend-test bash -c '
-    for f in tests/contract/test_document_store_contract.py \
-             tests/contract/test_users_people_contract.py \
-             tests/contract/test_conversations_contract.py \
-             tests/contract/test_apps_contract.py \
-             tests/contract/test_chat_contract.py \
-             tests/contract/test_action_items_contract.py \
-             tests/contract/test_finalization_jobs_contract.py \
-             tests/contract/test_llm_usage_contract.py \
-             tests/contract/test_user_usage_contract.py \
-             tests/contract/test_staged_tasks_contract.py \
-             tests/contract/test_action_item_dedup_contract.py \
-             tests/contract/test_notifications_contract.py \
-             tests/contract/test_sync_ledger_contract.py \
-             tests/contract/test_folders_contract.py \
-             tests/contract/test_memories_contract.py; do
-      /opt/venv/bin/python -m pytest -q -o addopts="" -p no:cacheprovider "$f" | tail -1 | sed "s|^|$f: |"
+    for f in tests/contract/test_*.py; do
+      /opt/venv/bin/python -m pytest -q -o addopts="" -p no:cacheprovider "$f" | tail -1 | sed "s|^|$(basename $f .py): |"
     done'
 docker rm -f wp2-mongo wp2-emu    # cleanup
 ```
+
+The loop **globs the directory** rather than naming the suites. It used to list them, and the list was
+a second declaration of a fact the filesystem already carries: a suite added without being added to the
+list runs nowhere and nobody notices, which is the failure mode this file has already recorded twice
+(the gateway lane list, ADR-0081). Files needing a service that is not up skip cleanly and say so, and
+a skip you can see is the point.
+
+`MEMORY_ENABLED=on` is required by `test_memory_apply_store_contract.py`: every canonical-intake entry
+point is fenced by `_require_canonical_intake_enabled()`, so without it the whole file skips.
 
 Every test must run **twice** (the `bind_store` fixture is parametrized `firestore`/`mongo`). A
 per-backend `SKIPPED` means that service's env var never reached the container — the suite then proves

@@ -106,6 +106,14 @@ def bind_store(request, monkeypatch) -> Any:
     Skips per-backend when that service's env is absent — but a per-backend SKIPPED means the suite
     proved half of what its name claims, which is how two of these suites sat dead for months. Check
     the counts: every test should appear twice.
+
+    **Never call ``monkeypatch.undo()`` in a test that uses this fixture.** pytest injects ONE
+    ``MonkeyPatch`` per test function and this fixture shares it, so ``undo()`` reverts the binding too.
+    On the mongo leg the rest of the test then talks to the FIRESTORE EMULATOR — which is up, for the
+    other leg — and nothing raises: the assertions simply describe the wrong database. That is the exact
+    failure mode this file was written to close (BACKLOG L1/L30/L31), and it was reproduced by accident
+    while writing the mcp_oauth suite. If a test needs to remove a patch mid-body, arm a flag the patch
+    reads instead, and re-assert the binding at teardown.
     """
     from database import _client
 
