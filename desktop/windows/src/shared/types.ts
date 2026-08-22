@@ -990,6 +990,11 @@ export type OmiBridgeApi = {
   /** Phase 1 of a Rewind search: KEYWORD (FTS5/BM25) results, immediately. Never
    *  waits on the network — semantic hits follow on `onRewindSearchResults`. */
   rewindSearch: (query: string) => Promise<RewindSearchGroup[]>
+  /** Local days holding screen capture, newest first (Activity spine). */
+  spineScreenDays: (limit?: number) => Promise<number[]>
+  /** One local day's exact totals plus a bounded sample of its frames. Null when
+   *  the day id is not a number; a zeroed projection when the read failed. */
+  spineScreenDay: (dayId: number) => Promise<SpineScreenDay | null>
   /** Phase 2: the same result list with semantic hits merged in, delivered if and
    *  when the embedding round-trip lands. Never fires when semantic search is
    *  unavailable (signed out, backend down, nothing indexed) — the keyword results
@@ -2034,6 +2039,25 @@ export type RewindFrame = {
   width: number
   height: number
   indexed: number // 0 = not yet OCR'd, 1 = OCR done
+}
+
+/** One local day of screen capture as the Activity spine consumes it. */
+export type SpineScreenMoment = {
+  id: number
+  timestamp: number
+  appName: string
+  windowTitle: string | null
+  imagePath: string | null
+}
+
+export type SpineScreenDay = {
+  /** Local midnight, epoch ms. */
+  dayId: number
+  /** Exact frame count for the day, not the sample size. */
+  total: number
+  /** 24 entries, index = local hour. Exact, never sampled. */
+  hourCounts: number[]
+  sampled: SpineScreenMoment[]
 }
 
 export type RewindSearchGroup = {
