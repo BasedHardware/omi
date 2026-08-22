@@ -65,9 +65,13 @@ def _fixture_repo(root: Path) -> Path:
 
     (repo / "backend").mkdir()
     (repo / "backend/.env.local-dev.template").write_text("OMI_FIXTURE=1\n", encoding="utf-8")
-    (repo / "backend/requirements.txt").write_text("", encoding="utf-8")
-    # Stand in for the backend venv so the dependency install is a no-op and the
+    (repo / "backend/scripts").mkdir(parents=True)
+    # Stand in for the locked uv sync so the dependency install is a no-op and the
     # test exercises the hook step without touching the network.
+    _write_executable(
+        repo / "backend/scripts/sync-python-deps.sh",
+        "#!/usr/bin/env bash\necho \"Backend dependencies synced (fixture)\"\nexit 0\n",
+    )
     _write_executable(repo / "backend/.venv/bin/python", "#!/usr/bin/env bash\nexit 0\n")
 
     _git("-C", str(repo), "add", "-A")

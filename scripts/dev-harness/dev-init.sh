@@ -27,4 +27,7 @@ echo "Backend Python dependencies synced via uv ($PYTHON_BIN)"
 bash scripts/install-git-hooks.sh
 
 echo ""
-echo "Dev harness ready. Next: PROVIDER_MODE=offline make dev-up"
+echo "Dev harness ready."
+echo "  Mobile / API against local backend:  make dev-up"
+echo "  Desktop + local backend:             make dev-desktop"
+
