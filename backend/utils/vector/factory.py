@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
-from typing import Dict, Mapping, Optional
+from typing import Dict, Mapping, Optional, List
 
 from utils.observability.fallback import record_fallback
 from utils.vector.ports import VectorStore
@@ -112,9 +112,9 @@ def validate_vector_dimension(env: Optional[Mapping[str, str]] = None) -> None:
     consequence, never raise. Unknown is not mismatched — an embeddings endpoint or a store that is not up
     yet is a normal boot ordering, not a misconfiguration, and must not be reported as one.
 
-    Not the same-dimension model swap: vectors of the right length but a different geometry land in the
-    same collection and degrade search with no error, and nothing records which model produced a vector.
-    That needs somewhere to keep the model name — the open half of L19.
+    Since ADR-0086 it also crosses the MODEL, not only the dimension: a swap to another model of the same
+    dimension puts vectors of the right length and a different geometry into the same collection, which
+    degrades search with no error at all. The model of record lives in ``utils.vector.namespace_state``.
     """
     try:
         source = os.environ if env is None else env
@@ -159,8 +159,47 @@ def validate_vector_dimension(env: Optional[Mapping[str, str]] = None) -> None:
                 + '. Every write to them will be rejected. They were created under an older '
                 'QDRANT_VECTOR_DIM or an older model; re-index them or restore the previous model.'
             )
+            return
+
+        _validate_namespace_models(sorted(existing))
     except BaseException:  # pragma: no cover - a startup check must never stop startup
         pass
+
+
+def _validate_namespace_models(collections: List[str]) -> None:
+    """Cross each existing collection against the model that wrote it (ADR-0086).
+
+    Runs only after the dimensions agree, and that ordering is deliberate: a dimension mismatch is the
+    louder, more urgent fault, and reporting both at once would bury it. Same house style — name the
+    consequence, never raise. Unknown is not mismatched: a collection with no record is adopted.
+    """
+    from utils.llm.clients import _embeddings_model
+    from utils.vector.namespace_state import compare_namespace_model
+
+    model = _embeddings_model()
+    problems = [
+        problem
+        for problem in (
+            compare_namespace_model(name, model=model, dim=configured_vector_dimension()) for name in collections
+        )
+        if problem
+    ]
+    if not problems:
+        return
+    logger.error(
+        'STARTUP: these vector collections were written by a DIFFERENT embeddings model than the one '
+        'configured now, at the same dimension — so nothing will fail and every search over them will '
+        'quietly return worse results: %s. Re-index them, or restore the previous model.',
+        '; '.join(problems),
+    )
+    record_fallback(
+        component='vector_store',
+        from_mode='model_of_record',
+        to_mode='model_mismatch',
+        reason='capability_mismatch',
+        outcome='degraded',
+        log=logger,
+    )
 
 
 def _report_dimension_mismatch(message: str) -> None:

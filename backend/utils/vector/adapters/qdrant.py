@@ -75,8 +75,24 @@ def _ensure_collection(namespace: str) -> str:
                 collection_name=name,
                 vectors_config=models.VectorParams(size=_cfg_dim(), distance=models.Distance.COSINE),
             )
+            # Creation is the one moment when the model that owns this namespace is known for certain:
+            # nothing has been written yet. Recorded here so the boot check can later catch a swap to a
+            # different model of the SAME dimension, which leaves no other trace (ADR-0086).
+            _record_creating_model(name)
         _ensured.add(name)
     return name
+
+
+def _record_creating_model(collection: str) -> None:
+    """Remember which embeddings model this collection was created for. Never raises: a bookkeeping
+    failure must not break the write that triggered the creation."""
+    try:
+        from utils.llm.clients import _embeddings_model
+        from utils.vector.namespace_state import record_namespace_state
+
+        record_namespace_state(collection, model=_embeddings_model(), dim=_cfg_dim())
+    except Exception:  # pragma: no cover - defensive, see docstring
+        pass
 
 
 def _point_id(original_id: str) -> str:
