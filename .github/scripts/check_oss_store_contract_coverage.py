@@ -90,7 +90,13 @@ class _ShapeVisitor(ast.NodeVisitor):
             self.shapes.add('cursor')
         elif name == 'select':
             self.shapes.add('projection')
-        elif name == 'count':
+        elif name == 'count' and not node.args:
+            # Firestore's aggregation is `.count()` / `.count(alias=...)` — never a positional argument.
+            # `list.count(x)` always takes one, and matching it counted a Python tally as a document-store
+            # aggregation: `workstreams.py` reported an `aggregation` shape it does not have, and the
+            # worklist would have asked for a contract test of something that is not there. Measured on
+            # the whole tree: every genuine Firestore .count() call has zero positional args, and the only
+            # one with an argument is the list tally.
             self.shapes.add('aggregation')
         elif name == 'batch':
             self.shapes.add('batch')

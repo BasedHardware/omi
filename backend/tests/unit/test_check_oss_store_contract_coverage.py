@@ -176,3 +176,30 @@ def test_the_repository_is_at_or_below_its_baseline():
     counts = _MODULE.check(domain, contract)
     assert _MODULE.violations(counts, baseline) == []
     assert _MODULE.stale(counts, baseline) == [], 'the baseline must equal the measurement, not exceed it'
+
+
+def test_a_python_list_tally_is_not_a_document_store_aggregation():
+    """`.count(` matched anything, so `ordered_outcomes.count('imported')` — a plain list tally — was
+    reported as a Firestore aggregation. `workstreams.py` carried an `aggregation` shape it does not
+    have, and the worklist would have asked for a contract test of something that is not there.
+
+    The discriminator is exact, not heuristic: Firestore's aggregation is `.count()` or
+    `.count(alias=...)` and never takes a positional argument, while `list.count(x)` always does.
+    Measured across every `.count(` in `database/` — 19 zero-arg Firestore calls, one one-arg tally.
+    """
+    source = """
+def real(collection):
+    return collection.where('a', '==', 1).count().get()
+
+def tally(values):
+    return values.count('imported')
+"""
+
+    assert 'aggregation' in _MODULE.module_shapes(source)
+
+    tally_only = """
+def tally(values):
+    return values.count('imported') + values.count('failed')
+"""
+
+    assert 'aggregation' not in _MODULE.module_shapes(tally_only)
