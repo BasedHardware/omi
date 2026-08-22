@@ -453,7 +453,7 @@ def _get_structured(
         short_by_speech = speech_seconds < SHORT_CONVERSATION_HARD_DISCARD_SECONDS and (
             duration_seconds is None or duration_seconds < 120
         )
-        if not has_photos and (short_by_duration or short_by_speech):
+        if not has_photos and not has_wake_word_marker and (short_by_duration or short_by_speech):
             return Structured(emoji=random.choice(['🧠', '🎉'])), True
 
         # Determine whether to discard the conversation based on its content (transcript and/or photos).
