@@ -33,6 +33,37 @@ import pytest
 from tests.store_fakes import install_fake_db_client
 
 
+# ``db`` is a lazy proxy that resolves through the accessor on every call, so patching the accessor is
+# enough for it. ``get_firestore_client`` is NOT: five domain modules do
+# ``from ._client import db, get_firestore_client``, which binds the function OBJECT at import time, so
+# patching ``_client.get_firestore_client`` never reaches them. On the mongo leg those functions kept
+# calling the real accessor -- which, with FIRESTORE_EMULATOR_HOST set for the other leg, quietly talked
+# to the EMULATOR and returned nothing. A test that then asserted "no rows" would have passed for the
+# wrong reason; the one that asserted rows is how this was found (BACKLOG L1, same class as L30/L31).
+_ACCESSOR_IMPORTERS = (
+    'database.action_items',
+    'database.conversations',
+    'database.memories',
+    'database.staged_tasks',
+    'database.users',
+)
+
+
+def _bind_accessor(monkeypatch, client) -> None:
+    """Point every binding of ``get_firestore_client`` at this backend's client."""
+    import importlib
+
+    from database import _client
+
+    monkeypatch.setattr(_client, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(_client, '_firestore_client', client, raising=False)
+    for name in _ACCESSOR_IMPORTERS:
+        module = importlib.import_module(name)
+        # raising=True on purpose: if a module stops importing the name, this list is stale and the
+        # silent-blind-spot is back. Fail here, where the reason is written down.
+        monkeypatch.setattr(module, 'get_firestore_client', lambda: client)
+
+
 @pytest.fixture(params=["firestore", "mongo"])
 def bind_store(request, monkeypatch) -> Any:
     """Bind ``db`` to the production client for this backend; yield a neutral seeding store.
@@ -51,8 +82,7 @@ def bind_store(request, monkeypatch) -> Any:
         from database.store.adapters.firestore import FirestoreDocumentStore
 
         client = _fs.Client(project=os.environ.get("FIREBASE_PROJECT_ID", "demo-omi-local"))
-        monkeypatch.setattr(_client, "get_firestore_client", lambda: client)
-        monkeypatch.setattr(_client, "_firestore_client", client, raising=False)
+        _bind_accessor(monkeypatch, client)
         # Explicit client on the seeding store too: its default is the lazy ``db`` boundary handle,
         # which resolves through the accessor patched just above.
         yield FirestoreDocumentStore(client=client)
@@ -67,7 +97,10 @@ def bind_store(request, monkeypatch) -> Any:
     # connections open for every parametrized test, accumulating across the suite.
     store = MongoDocumentStore(uri=uri, db_name="omi_contract")
     try:
+        from database.store.firestore_facade import NeutralFirestoreClient
+
         install_fake_db_client(monkeypatch, store=store)
+        _bind_accessor(monkeypatch, NeutralFirestoreClient(store))
         yield store
     finally:
         store.close()

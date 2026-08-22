@@ -207,9 +207,7 @@ def detail(domain_sources: dict[str, str], contract_sources: dict[str, str]) -> 
 def _read_sources(repository_root: Path, scan_root: Path) -> tuple[dict[str, str], dict[str, str]]:
     base = scan_root if scan_root.is_absolute() else repository_root / scan_root
     domain = {path.stem: path.read_text(encoding='utf-8') for path in sorted((base / DOMAIN_DIR).glob('*.py'))}
-    contract = {
-        str(path): path.read_text(encoding='utf-8') for path in sorted((base / CONTRACT_DIR).glob('test_*.py'))
-    }
+    contract = {str(path): path.read_text(encoding='utf-8') for path in sorted((base / CONTRACT_DIR).glob('test_*.py'))}
     return domain, contract
 
 
@@ -233,6 +231,21 @@ def violations(counts: dict[str, int], baseline: dict[str, int]) -> list[str]:
     ]
 
 
+def stale(counts: dict[str, int], baseline: dict[str, int]) -> list[str]:
+    """Baseline entries that claim MORE debt than exists -- the ratchet's other direction.
+
+    Without this the number only ever ratchets down when somebody remembers to edit the file, so a
+    module that has just been covered keeps appearing on the worklist and the reported debt drifts
+    away from the measurement. The runtime-env parity guard already self-cleans this way (ADR-0061),
+    and the reason is L32: a list that only grows rots into noise nobody reads.
+    """
+    return [
+        f'{DOMAIN_DIR}/{module}.py: baseline claims {allowed} uncovered shape(s), measured ' f'{counts.get(module, 0)}'
+        for module, allowed in sorted(baseline.items())
+        if allowed > counts.get(module, 0)
+    ]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, default=REPOSITORY_ROOT)
@@ -253,14 +266,21 @@ def main() -> int:
         return 0
 
     baseline_path = args.baseline if args.baseline.is_absolute() else repository_root / args.baseline
-    errors = violations(counts, load_baseline(baseline_path))
-    if not errors:
+    baseline = load_baseline(baseline_path)
+    errors = violations(counts, baseline)
+    outdated = stale(counts, baseline)
+    if not errors and not outdated:
         return 0
-    print('FAIL: a document-store query shape the facade has to translate gained no dual-backend cover.')
-    print('Add a contract test under backend/tests/contract/ that drives the module through the facade')
-    print('against BOTH a live Firestore emulator and a live Mongo replica set (recipe:')
-    print('deploy/onprem/SELFHOST_NOTES.md, "Dual-backend contract test"), or raise the baseline knowingly.')
-    print(*errors, sep='\n')
+    if errors:
+        print('FAIL: a document-store query shape the facade has to translate gained no dual-backend cover.')
+        print('Add a contract test under backend/tests/contract/ that drives the module through the facade')
+        print('against BOTH a live Firestore emulator and a live Mongo replica set (recipe:')
+        print('deploy/onprem/SELFHOST_NOTES.md, "Dual-backend contract test"), or raise the baseline knowingly.')
+        print(*errors, sep='\n')
+    if outdated:
+        print('FAIL: the baseline claims debt that no longer exists -- lower or remove these entries in the')
+        print('same change that covered them, so the reported number stays the measurement.')
+        print(*outdated, sep='\n')
     return 1
 
 

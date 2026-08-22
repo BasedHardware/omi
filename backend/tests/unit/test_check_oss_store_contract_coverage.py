@@ -155,9 +155,24 @@ def test_baseline_shape_is_validated(tmp_path):
         _MODULE.load_baseline(bad)
 
 
+def test_a_baseline_entry_that_outlived_its_debt_is_a_failure():
+    """The ratchet's other direction. Without it the number only falls when somebody remembers to edit
+    the file, so a module that has just been covered keeps appearing on the worklist and the reported
+    debt drifts away from the measurement — which is how L32's list rotted into noise."""
+    counts = {'chat': 6}
+
+    assert _MODULE.stale(counts, {'chat': 6}) == []
+    assert _MODULE.stale(counts, {'chat': 6, 'action_items': 4}) == [
+        'database/action_items.py: baseline claims 4 uncovered shape(s), measured 0'
+    ]
+    assert _MODULE.stale(counts, {'chat': 7}) == ['database/chat.py: baseline claims 7 uncovered shape(s), measured 6']
+
+
 def test_the_repository_is_at_or_below_its_baseline():
     """The ratchet itself, on the real tree — the check CI runs."""
     root = Path(__file__).resolve().parents[3]
     domain, contract = _MODULE._read_sources(root, _MODULE.DEFAULT_SCAN_ROOT)
     baseline = _MODULE.load_baseline(root / _MODULE.DEFAULT_BASELINE)
-    assert _MODULE.violations(_MODULE.check(domain, contract), baseline) == []
+    counts = _MODULE.check(domain, contract)
+    assert _MODULE.violations(counts, baseline) == []
+    assert _MODULE.stale(counts, baseline) == [], 'the baseline must equal the measurement, not exceed it'
