@@ -609,6 +609,26 @@ Never place raw provider responses, exception text, stack traces, or dynamic Gra
 Keep the message human-readable and direct the operator to the linked dashboard for bounded verification. Do not change
 Grafana credentials, contact points, or routing configuration while adding a rule.
 
+### Silent-Failure Alerts
+
+Status codes and request counts cannot express every production failure. Four rules exist
+specifically for failures that stay green on every other signal, and are documented together in
+[`silent-failure-detection.md`](../../docs/runbooks/silent-failure-detection.md):
+
+| Rule | Catches |
+|---|---|
+| `omi-llm-gateway-invalid-request-rejections` | Requests rejected during validation, **before** a route is selected. These are counted by `llm_gateway_request_rejections_total` and never reach `llm_gateway_requests_total`, so the affected lane keeps reporting 100% success. |
+| `omi-llm-gateway-lane-failure-ratio` | A lane failing more than a quarter of its real requests over an hour. |
+| `omi-llm-gateway-lane-zero-success` | A lane with attempts but no successful request in six hours. The `or ... * 0` zero-fill is required: a lane that has never succeeded has no `outcome="success"` series, so a plain ratio produces no series and no alert. |
+| `omi-journey-signal-dead` | A journey counter that stopped reporting while the platform is demonstrably serving traffic. Every real-traffic journey rule assumes its counter is scraped; when that breaks, the rule goes quiet rather than failing loudly. |
+
+Thresholds on these rules are set from measured production distributions, not intuition, and the
+measurement belongs in the rule's `threshold` annotation and in the runbook.
+
+A rule must not be added for a signal that is not yet ingested. `omi-journey-signal-dead` excludes
+`journey="chat_response"` because that counter is emitted from Cloud Run, which Prometheus does not
+scrape; adding it before an ingestion path exists would page permanently and get muted.
+
 Parakeet stream-capacity alerts use the existing `parakeet_active_streams` gauge divided by ready Parakeet replicas:
 
 ```promql
