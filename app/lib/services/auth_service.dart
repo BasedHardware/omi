@@ -16,6 +16,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/env/environment_profile.dart';
 import 'package:omi/flavors.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/utils/logger.dart';
@@ -316,9 +317,61 @@ class AuthService {
       case AuthTokenMissingUser():
         break;
       case AuthTokenTransientFailure():
+        _scheduleLocalDevRecovery();
         break;
     }
     return null;
+  }
+
+  bool _localDevRecoveryInFlight = false;
+
+  /// Recover a local-development session by minting a new token instead of
+  /// refreshing the old one.
+  ///
+  /// Local dev has an escape hatch production does not: the harness mints a fresh
+  /// custom token on demand, so a session can be *replaced* rather than
+  /// refreshed. That matters because `getIdTokenResult(true)` is not reliable
+  /// against the Auth emulator — measured on iPhone 17 Pro / iOS 27.0 the forced
+  /// refresh never returned, while `signInWithCustomToken` against the same
+  /// emulator succeeded every time.
+  ///
+  /// Scheduled rather than awaited, and deliberately off the current call stack.
+  /// An earlier version awaited it inline from [getIdToken] and **deadlocked on
+  /// device**: the recovery re-enters sign-in from inside the refresh call stack,
+  /// and the probe showed it entering `signInWithLocalDevToken()` and never
+  /// returning — no HTTP request ever left the app — while the identical call
+  /// from the sign-in button succeeds. The caller therefore gets its failure
+  /// immediately, and the *next* request picks up the re-minted session.
+  ///
+  /// Deliberately narrow: `local_dev` only, only after a transient refresh
+  /// failure, and re-entrancy guarded. Production is untouched — a failed refresh
+  /// must stay a failed refresh there, because silently re-authenticating would
+  /// hide exactly the signal an expired or revoked session is meant to give.
+  void _scheduleLocalDevRecovery() {
+    if (Env.profile != AppEnvironmentProfile.localDev) return;
+    if (_localDevRecoveryInFlight) return;
+    _localDevRecoveryInFlight = true;
+
+    unawaited(Future<void>.delayed(Duration.zero, () async {
+      try {
+        Logger.debug('local-dev: refresh failed, re-minting a session out of band');
+        final credential = await signInWithLocalDevToken();
+        final user = credential?.user;
+        if (user == null) return;
+        // Unforced: sign-in just populated a fresh token, so read the cached one
+        // rather than re-entering the forced-refresh path that just failed.
+        final token = await user.getIdToken();
+        if (token == null || token.isEmpty) return;
+        SharedPreferencesUtil().authToken = token;
+        _sessionExpired = false;
+        markAuthenticatedUser(user.uid);
+        Logger.debug('local-dev: session re-minted; the next request will use it');
+      } catch (e) {
+        Logger.debug('local-dev: re-mint failed: $e');
+      } finally {
+        _localDevRecoveryInFlight = false;
+      }
+    }));
   }
 
   Future<AuthTokenResult> refreshIdToken() {
@@ -625,6 +678,50 @@ class AuthService {
       Logger.debug('Token exchange error: $e');
       return null;
     }
+  }
+
+  /// Sign in against a local dev harness with no OAuth provider involved.
+  ///
+  /// Community builds cannot complete a real OAuth flow: Google and Apple issue
+  /// OAuth clients against the official bundle id, and a community build is
+  /// deliberately signed with a suffixed one. The backend mints a Firebase custom
+  /// token against the local Auth emulator instead, and this reuses the same
+  /// custom-token sign-in the OAuth path ends with.
+  ///
+  /// The real gate is server-side and structural (the endpoint 404s unless the
+  /// backend is bound to an Auth emulator). The profile check here is only to
+  /// keep the call from being made at all outside local development.
+  Future<UserCredential?> signInWithLocalDevToken({String uid = 'local-dev-user'}) async {
+    if (Env.profile != AppEnvironmentProfile.localDev) {
+      throw StateError('Local development sign-in is only available in the local_dev profile.');
+    }
+
+    final response = await http.post(
+      Uri.parse('${Env.authApiBaseUrl}v1/auth/local-dev/custom-token'),
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: {'uid': uid},
+    );
+
+    if (response.statusCode == 404) {
+      throw StateError(
+        'This backend has no local-dev sign-in endpoint. It is only registered when the '
+        'backend runs against a Firebase Auth emulator — check the harness is up.',
+      );
+    }
+    if (response.statusCode != 200) {
+      throw Exception('Local development sign-in failed: HTTP ${response.statusCode}');
+    }
+
+    final decoded = json.decode(response.body) as Map<String, dynamic>;
+    final customToken = decoded['custom_token'] as String?;
+    if (customToken == null || customToken.isEmpty) {
+      throw Exception('Local development sign-in returned no custom token');
+    }
+
+    final credential = await FirebaseAuth.instance.signInWithCustomToken(customToken);
+    await _updateUserPreferences(credential, 'local_dev');
+    Logger.debug('Local development sign-in successful');
+    return credential;
   }
 
   Future<UserCredential> _signInWithOAuthCredentials(Map<String, dynamic> oauthCredentials) async {
