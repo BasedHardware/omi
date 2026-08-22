@@ -190,6 +190,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   private static let responseViewOverhead: CGFloat = 199
 
   let state = FloatingControlBarState()
+  private let appState: AppState
   private var hostingView: NSHostingView<AnyView>?
   private var isResizingProgrammatically = false
   private var isUserDragging = false
@@ -426,10 +427,12 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   var onRate: ((String, Int?) -> Void)?
   var onShareLink: (() async -> String?)?
 
-  override init(
+  init(
+    appState: AppState,
     contentRect: NSRect, styleMask style: NSWindow.StyleMask,
     backing backingStoreType: NSWindow.BackingStoreType = .buffered, defer flag: Bool = false
   ) {
+    self.appState = appState
     let initialScreen = FloatingBarPlacementScreenPolicy.screenForRecentering(
       barScreen: Optional<NSScreen>.none,
       cursorScreen: Self.screenContainingCursor(),
@@ -501,6 +504,19 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     }
     syncMouseInterception()
     scheduleStartupDisplayRevalidation()
+  }
+
+  override convenience init(
+    contentRect: NSRect, styleMask style: NSWindow.StyleMask,
+    backing backingStoreType: NSWindow.BackingStoreType = .buffered, defer flag: Bool = false
+  ) {
+    self.init(
+      appState: AppState.current ?? AppState(),
+      contentRect: contentRect,
+      styleMask: style,
+      backing: backingStoreType,
+      defer: flag
+    )
   }
 
   deinit {
@@ -742,6 +758,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
   private func setupViews() {
     let swiftUIView = FloatingControlBarView(
+      appState: appState,
       window: self,
       onPlayPause: { [weak self] in self?.onPlayPause?() },
       onAskAI: { [weak self] in self?.handleAskAI() },
@@ -2954,6 +2971,7 @@ class FloatingControlBarManager {
     log("FloatingControlBarManager: setup() creating floating bar window")
 
     let barWindow = FloatingControlBarWindow(
+      appState: appState,
       contentRect: .zero,
       styleMask: [.borderless],
       backing: .buffered,

@@ -74,6 +74,7 @@ enum NotchChromeLayout {
 /// Main floating control bar SwiftUI view composing all sub-views.
 struct FloatingControlBarView: View {
   @EnvironmentObject var state: FloatingControlBarState
+  @ObservedObject var appState: AppState
   @ObservedObject private var shortcutSettings = ShortcutSettings.shared
   @ObservedObject private var agentPills = AgentPillsManager.shared
   weak var window: NSWindow?
@@ -1286,6 +1287,7 @@ struct FloatingControlBarView: View {
           }
 
           HStack(spacing: OmiSpacing.xs) {
+            listeningStatusButton
             compactLabel("Push to talk", keys: shortcutSettings.pttShortcut.displayTokens)
           }
         }
@@ -1369,41 +1371,80 @@ struct FloatingControlBarView: View {
   /// ambient status channel at this size: voice-response gradient wins,
   /// then the aggregate subagent color, then neutral gray.
   private func compactCircleView(agentGroup: NotchAgentStatusGroup?) -> some View {
-    RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
-      .fill(compactPillFill(agentGroup: agentGroup))
-      .frame(width: 28, height: 6)
-      .shadow(
-        color: state.isVoiceResponseGlowActive ? Color.white.opacity(0.85) : .clear,
-        radius: state.isVoiceResponseGlowActive ? 16 : 0,
-        x: 0,
-        y: 0
-      )
-      .shadow(
-        color: state.isVoiceResponseGlowActive ? Color.white.opacity(0.45) : .clear,
-        radius: state.isVoiceResponseGlowActive ? 28 : 0,
-        x: 0,
-        y: 0
-      )
-      .overlay {
-        if state.isVoiceResponseGlowActive {
-          RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
-            .stroke(
-              LinearGradient(
-                colors: [
-                  Color.white.opacity(0.9),
-                  Color(red: 0.25, green: 0.75, blue: 1.0),
-                  Color.white.opacity(0.7),
-                ],
-                startPoint: .leading,
-                endPoint: .trailing
-              ),
-              lineWidth: 1.4
-            )
-            .padding(-2.2)
-            .blur(radius: 0.25)
-        }
+    Button {
+      appState.toggleConversationListening(source: "ui")
+    } label: {
+      HStack(spacing: OmiSpacing.xs) {
+        Circle()
+          .fill(appState.isConversationListening ? Ink.listeningGreen : PageGlass.warning)
+          .frame(width: 6, height: 6)
+        RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
+          .fill(compactPillFill(agentGroup: agentGroup))
+          .frame(width: 28, height: 6)
+          .shadow(
+            color: state.isVoiceResponseGlowActive ? Color.white.opacity(0.85) : .clear,
+            radius: state.isVoiceResponseGlowActive ? 16 : 0,
+            x: 0,
+            y: 0
+          )
+          .shadow(
+            color: state.isVoiceResponseGlowActive ? Color.white.opacity(0.45) : .clear,
+            radius: state.isVoiceResponseGlowActive ? 28 : 0,
+            x: 0,
+            y: 0
+          )
+          .overlay {
+            if state.isVoiceResponseGlowActive {
+              RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
+                .stroke(
+                  LinearGradient(
+                    colors: [
+                      Color.white.opacity(0.9),
+                      Color(red: 0.25, green: 0.75, blue: 1.0),
+                      Color.white.opacity(0.7),
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                  ),
+                  lineWidth: 1.4
+                )
+                .padding(-2.2)
+                .blur(radius: 0.25)
+            }
+          }
       }
-      .omiAnimation(.easeInOut(duration: 0.18), value: state.isVoiceResponseGlowActive)
+      .padding(.horizontal, OmiSpacing.xxs)
+      .padding(.vertical, OmiSpacing.xs)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .help(appState.isConversationListening ? "Listening" : "Paused")
+    .omiAnimation(.easeInOut(duration: 0.18), value: state.isVoiceResponseGlowActive)
+  }
+
+  private var listeningStatusButton: some View {
+    let isListening = appState.isConversationListening
+    return Button {
+      appState.toggleConversationListening(source: "ui")
+    } label: {
+      HStack(spacing: OmiSpacing.xxs) {
+        Circle()
+          .fill(isListening ? Ink.listeningGreen : PageGlass.warning)
+          .frame(width: 6, height: 6)
+        Image(systemName: isListening ? "ear.fill" : "ear.slash.fill")
+          .scaledFont(size: 10, weight: .semibold)
+          .foregroundColor(.white.opacity(0.9))
+        Text(isListening ? "Listening" : "Paused")
+          .scaledFont(size: OmiType.caption, weight: .medium)
+          .foregroundColor(.white)
+      }
+      .padding(.horizontal, OmiSpacing.sm)
+      .padding(.vertical, OmiSpacing.xxs)
+      .background(Color.white.opacity(0.1))
+      .cornerRadius(OmiChrome.stripRadius)
+    }
+    .buttonStyle(.plain)
+    .help(isListening ? "Pause conversation listening" : "Resume conversation listening")
   }
 
   private func compactPillFill(agentGroup: NotchAgentStatusGroup?) -> LinearGradient {

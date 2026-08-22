@@ -277,13 +277,18 @@ struct FinishedRecordingEnvelope: Equatable, Sendable {
 
 @MainActor
 class AppState: ObservableObject {
+  private static let conversationListeningDefaultsKey = "omi.listening.enabled"
+
   /// Weak reference to the current AppState instance, set on init.
   /// Used by background services (e.g. TranscriptionRetryService) to check recording state.
   static weak var current: AppState?
 
   @AppStorage("hasCompletedOnboarding") var hasCompletedOnboarding = false
+  @AppStorage(AppState.conversationListeningDefaultsKey) var persistedConversationListening = true
 
   // Transcription state
+  @Published var isConversationListening =
+    UserDefaults.standard.object(forKey: AppState.conversationListeningDefaultsKey) as? Bool ?? true
   @Published var isTranscribing = false {
     didSet {
       // Preferred-mic reconnect must track live Listening even when Settings is closed (#10921).
@@ -600,6 +605,9 @@ class AppState: ObservableObject {
   }
 
   nonisolated(unsafe) private var ownerChangeObserver: NSObjectProtocol?
+  nonisolated(unsafe) private var toggleListeningShortcutObserver: NSObjectProtocol?
+  nonisolated let conversationListeningSnapshotLock = NSLock()
+  nonisolated(unsafe) var conversationListeningSnapshot = true
 
   /// Bumped on every in-place account switch. Owner-scoped loads capture it
   /// before awaiting and drop their result if it moved — a previous account's
@@ -634,6 +642,7 @@ class AppState: ObservableObject {
     ShortcutSettings.migratePTTMicrophoneChoiceIfNeeded()
     // Register as the current instance so background services can check recording state
     AppState.current = self
+    setConversationListeningSnapshot(isConversationListening)
     ownerChangeObserver = NotificationCenter.default.addObserver(
       forName: .runtimeOwnerDidChange, object: nil, queue: nil
     ) { [weak self] _ in
@@ -685,6 +694,16 @@ class AppState: ObservableObject {
 
     // Setup lifecycle observers for saving conversations
     setupLifecycleObservers()
+
+    toggleListeningShortcutObserver = NotificationCenter.default.addObserver(
+      forName: .toggleListeningShortcutPressed,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated {
+        self?.toggleConversationListening(source: "hotkey")
+      }
+    }
 
     // Wire up memory pressure callback so ResourceMonitor can trim transcript state
     ResourceMonitor.shared.onMemoryPressureTrimTranscript = { [weak self] in
@@ -929,6 +948,9 @@ class AppState: ObservableObject {
     if let ownerChangeObserver {
       NotificationCenter.default.removeObserver(ownerChangeObserver)
     }
+    if let toggleListeningShortcutObserver {
+      NotificationCenter.default.removeObserver(toggleListeningShortcutObserver)
+    }
   }
 }
 
@@ -978,6 +1000,8 @@ extension Notification.Name {
   static let navigateToTaskSettings = Notification.Name("navigateToTaskSettings")
   /// Posted to navigate to Ask Omi Floating Bar settings
   static let navigateToFloatingBarSettings = Notification.Name("navigateToFloatingBarSettings")
+  /// Posted when the global Toggle Listening shortcut fires
+  static let toggleListeningShortcutPressed = Notification.Name("toggleListeningShortcutPressed")
   /// Posted to navigate to AI Chat settings
   static let navigateToAIChatSettings = Notification.Name("navigateToAIChatSettings")
   /// Posted when a new Rewind frame is captured (for live frame count updates)

@@ -53,6 +53,7 @@ final class FloatingBarNotificationGroundTests: XCTestCase {
 
   private func makeView(state: FloatingControlBarState) -> some View {
     FloatingControlBarView(
+      appState: AppState(),
       window: nil,
       onPlayPause: {},
       onAskAI: {},
