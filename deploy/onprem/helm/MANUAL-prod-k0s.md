@@ -67,7 +67,10 @@ A plain Kubernetes cluster with a GPU and the three add-ons Omi relies on. Nothi
 
 Install the k0s binary:
 ```bash
-curl -sSLf https://get.k0s.sh | sudo sh
+source ../omi.oss.cluster.prereqs                       # the pinned prerequisite versions
+# K0S_VERSION is how get.k0s.sh takes a version; unset, line 52 of that script resolves the
+# newest release, so two installs of one Omi release can land on different control planes.
+curl -sSLf https://get.k0s.sh | sudo K0S_VERSION="$OMI_OSS_K0S_VERSION" sh
 ```
 
 Install a single-node cluster (controller + worker on one machine) and start it:
@@ -99,6 +102,7 @@ Install the Operator. `driver.enabled=false` reuses the driver already on the no
 values are the **k0s-specific** containerd config path + socket + runtime class:
 ```bash
 helm install gpu-operator -n gpu-operator --create-namespace nvidia/gpu-operator \
+  --version "$OMI_OSS_GPU_OPERATOR_CHART" \
   --set driver.enabled=false \
   --set toolkit.env[0].name=CONTAINERD_CONFIG --set toolkit.env[0].value=/etc/k0s/containerd.d/nvidia.toml \
   --set toolkit.env[1].name=CONTAINERD_SOCKET --set toolkit.env[1].value=/run/k0s/containerd.sock \
@@ -129,7 +133,7 @@ Three cluster-level components the chart relies on (installed once, like on any 
 
 **a. Envoy Gateway** — the HTTPS entry point (Gateway API):
 ```bash
-helm install eg oci://docker.io/envoyproxy/gateway-helm --version v1.2.1 \
+helm install eg oci://docker.io/envoyproxy/gateway-helm --version "$OMI_OSS_ENVOY_GATEWAY_CHART" \
   -n envoy-gateway-system --create-namespace --wait
 ```
 
@@ -139,6 +143,7 @@ helm repo add openebs https://openebs.github.io/openebs && helm repo update open
 ```
 ```bash
 helm install openebs openebs/openebs -n openebs --create-namespace --wait \
+  --version "$OMI_OSS_OPENEBS_CHART" \
   --set engines.replicated.mayastor.enabled=false \
   --set engines.local.lvm.enabled=false --set engines.local.zfs.enabled=false
 ```
@@ -148,7 +153,8 @@ helm install openebs openebs/openebs -n openebs --create-namespace --wait \
 helm repo add metallb https://metallb.github.io/metallb && helm repo update metallb
 ```
 ```bash
-helm install metallb metallb/metallb -n metallb-system --create-namespace --wait
+helm install metallb metallb/metallb -n metallb-system --create-namespace --wait \
+  --version "$OMI_OSS_METALLB_CHART"
 ```
 Put YOUR `ENTRY_IP` into the pool file and apply it:
 ```bash

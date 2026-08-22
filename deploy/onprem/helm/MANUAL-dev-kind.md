@@ -69,18 +69,21 @@ kind load docker-image omi-oss-backend:latest --name omi-dev
 The dev values reproduce the production topology, so install the same three add-ons (once):
 ```bash
 # 4a. Envoy Gateway — HTTPS entry point
-helm install eg oci://docker.io/envoyproxy/gateway-helm --version v1.2.1 \
+source ../omi.oss.cluster.prereqs                       # the pinned prerequisite versions
+helm install eg oci://docker.io/envoyproxy/gateway-helm --version "$OMI_OSS_ENVOY_GATEWAY_CHART" \
   -n envoy-gateway-system --create-namespace --wait
 
 # 4b. OpenEBS — local storage class "openebs-hostpath"
 helm repo add openebs https://openebs.github.io/openebs && helm repo update openebs
 helm install openebs openebs/openebs -n openebs --create-namespace --wait \
+  --version "$OMI_OSS_OPENEBS_CHART" \
   --set engines.replicated.mayastor.enabled=false \
   --set engines.local.lvm.enabled=false --set engines.local.zfs.enabled=false
 
 # 4c. MetalLB — LoadBalancer IPs on Kind's docker network, then the pool
 helm repo add metallb https://metallb.github.io/metallb && helm repo update metallb
-helm install metallb metallb/metallb -n metallb-system --create-namespace --wait
+helm install metallb metallb/metallb -n metallb-system --create-namespace --wait \
+  --version "$OMI_OSS_METALLB_CHART"
 kubectl apply -f metallb-pool.yaml          # already set to Kind's 172.18.255.200 range
 ```
 
