@@ -1,0 +1,3 @@
+{
+  "change": "Fixed the app quitting during onboarding when you granted microphone or screen recording permission"
+}
