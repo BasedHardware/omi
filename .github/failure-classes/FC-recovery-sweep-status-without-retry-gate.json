@@ -1,0 +1,17 @@
+{
+ "schema_version": 1,
+ "id": "FC-recovery-sweep-status-without-retry-gate",
+ "violated_contract": "Every status in a recovery sweep's actionable set must be gated by the timestamp its own writer stamps. A status that is unconditionally actionable makes the sweep's retry rate a function of pod count and tick rate rather than of the record, so a record whose retried operation can never succeed is re-claimed on every pass by every worker, indefinitely.",
+ "canonical_prevention": "Gate each actionable status in both the candidate query and the transactional claim, with one predicate shared by the two so they cannot disagree about what is actionable, and assert the bound behaviourally by running repeated sweeps against one record inside the window. Gate the record rather than the caller so the bound does not depend on replica count or tick interval. Bound the retry RATE without delaying the FIRST retry: gate on attempts already spent, stamped by the claim transaction that reads the record, rather than on the age of the most recent failure alone -- an age-only gate cannot distinguish a transient failure from a permanent one and makes the operator's thirty-second fix cost the user a full window. Let a missing counter or missing timestamp fail toward retrying rather than toward stranding the record.",
+ "canonical_prevention_artifact": [
+  "backend/tests/unit/test_claim_deletion_wipe_txn.py"
+ ],
+ "evidence_prs": [
+  11683
+ ],
+ "scope_hints": [
+  "backend/database/users.py",
+  "backend/services/users/account_deletion.py"
+ ],
+ "status": "open"
+}

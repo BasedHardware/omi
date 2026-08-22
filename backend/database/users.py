@@ -33,6 +33,21 @@ import logging
 
 logger = logging.getLogger(__name__)
 DELETION_WIPE_RUNNING_STALE_AFTER = timedelta(hours=6)
+# After its first retry, a ``failed`` wipe is retried no more than once per this
+# window per record. Every other wipe status is already age-gated by the
+# timestamp its own writer stamps; ``failed`` was the exception, so a record
+# whose enqueue could never succeed was re-claimed on every reconciler pass
+# forever. The gate is on the record, not the caller, so it bounds retries
+# regardless of how many pods run the periodic reconciler or how often they
+# restart into the startup drain.
+DELETION_WIPE_FAILED_RETRY_AFTER = timedelta(minutes=10)
+# The first retry of a ``failed`` wipe is never delayed — only repeats are. A
+# transient failure an operator fixes in seconds (a queue that was briefly
+# absent, a permission that was just granted) must not cost a user's deletion
+# request a full window before anything tries again. Backing off is only
+# warranted once one retry has already been spent and failed, which is what
+# distinguishes "unlucky" from "cannot succeed".
+DELETION_WIPE_FAILED_IMMEDIATE_RETRIES = 1
 _DELETION_WIPE_TERMINAL_STATUSES = frozenset({'completed', 'cancelled'})
 _DELETION_WIPE_LEGACY_ACTIONABLE_STATUSES = frozenset({'pending', 'retrying', 'running', 'failed'})
 LOCATION_CONTEXT_CONSENT_TTL = timedelta(days=30)
@@ -604,14 +619,45 @@ def cancel_user_deletion_wipe(uid: str):
     )
 
 
+def _failed_wipe_is_retryable(data: dict, failed_cutoff: datetime) -> bool:
+    """Is this ``failed`` record eligible for another retry right now?
+
+    One rule, applied identically by the reconciler query and by the claim
+    transaction that re-validates it. Three ways to be eligible:
+
+    * **Fewer than ``DELETION_WIPE_FAILED_IMMEDIATE_RETRIES`` retries spent.**
+      The first retry after a failure is immediate. Delaying it would make a
+      transient failure — a queue absent for thirty seconds, a permission just
+      granted — cost a user's deletion request a full window before anything
+      tried again, which is a worse defect than the storm this gate exists to
+      stop. The count is stamped by the claim transaction, so a record that has
+      never been retried carries no field and reads as ``0``.
+    * **No ``wipe_failed_at``.** Unlike ``pending`` — refreshed by the live
+      deletion that owns it — a ``failed`` record has no other writer, so
+      gating it on a timestamp it does not carry would strand that user's
+      deletion permanently. A missing timestamp fails toward retrying, never
+      toward dropping.
+    * **The last failure is older than the window.** The gate throttles
+      retries, it never stops them: once the underlying cause is fixed every
+      backlogged wipe still drains, at most one window late.
+    """
+    retries = data.get('wipe_failed_retry_count') or 0
+    if retries < DELETION_WIPE_FAILED_IMMEDIATE_RETRIES:
+        return True
+    failed_at = data.get('wipe_failed_at')
+    return failed_at is None or failed_at < failed_cutoff
+
+
 def get_pending_deletion_wipes(
     limit: int = 100,
     stale_after: timedelta = timedelta(minutes=10),
     running_stale_after: timedelta = DELETION_WIPE_RUNNING_STALE_AFTER,
+    failed_retry_after: timedelta = DELETION_WIPE_FAILED_RETRY_AFTER,
 ) -> list[dict]:
     """Return account_deletions documents whose wipe needs retry.
 
-    Queries ``failed`` records (always actionable), stale ``pending`` records
+    Queries ``failed`` records that are still owed a first retry or whose last
+    failure is older than ``failed_retry_after``, stale ``pending`` records
     (queued more than ``stale_after`` ago), stale ``deleting_auth`` records
     (intent written but never transitioned to ``pending`` — usually a crash
     after ``auth.delete_account()`` succeeded), stale ``running`` records (worker
@@ -630,10 +676,23 @@ def get_pending_deletion_wipes(
     """
     stale_cutoff = datetime.now(timezone.utc) - stale_after
     running_cutoff = datetime.now(timezone.utc) - running_stale_after
+    failed_cutoff = datetime.now(timezone.utc) - failed_retry_after
     budget = limit
 
-    failed_docs = db.collection('account_deletions').where('wipe_status', '==', 'failed').limit(budget).stream()
-    result = [doc.to_dict() | {'uid': doc.id} for doc in failed_docs]
+    # Over-fetch and filter in Python for the same reason the ``pending``
+    # branch below does: a server-side ``.limit(budget)`` would cap the query
+    # before older failures beyond the first page of recently-failed docs.
+    # Eligibility is ``_failed_wipe_is_retryable`` and nothing else — the claim
+    # transaction re-validates with the same predicate, so the two can never
+    # disagree about which records are actionable.
+    failed_docs = db.collection('account_deletions').where('wipe_status', '==', 'failed').stream()
+    result = []
+    for doc in failed_docs:
+        if len(result) >= limit:
+            break
+        data = doc.to_dict()
+        if _failed_wipe_is_retryable(data, failed_cutoff):
+            result.append(data | {'uid': doc.id})
 
     if len(result) < limit:
         # Over-fetch *all* pending docs and age-filter in Python. A tight
@@ -699,11 +758,16 @@ def get_pending_deletion_wipes(
 
 @transactional
 def _claim_deletion_wipe_txn(
-    transaction, doc_ref, stale_after: timedelta, running_stale_after: timedelta
+    transaction,
+    doc_ref,
+    stale_after: timedelta,
+    running_stale_after: timedelta,
+    failed_retry_after: timedelta = DELETION_WIPE_FAILED_RETRY_AFTER,
 ) -> str | None:
     """Atomically claim a wipe for re-enqueueing inside a Firestore transaction.
 
-    Transitions ``wipe_status`` from ``failed``, stale ``pending``, stale
+    Transitions ``wipe_status`` from ``failed`` (still owed a first retry, or
+    last failure older than ``failed_retry_after``), stale ``pending``, stale
     ``deleting_auth`` (auth user verified gone by caller), stale ``running``
     (worker crashed mid-execution), or stale ``retrying`` to ``retrying`` so
     concurrent workers cannot re-enqueue the same wipe. Fresh ``pending``,
@@ -748,7 +812,27 @@ def _claim_deletion_wipe_txn(
         transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
         return snapshot.id
     if status == 'failed':
-        transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
+        # Re-validate eligibility *inside* the transaction, exactly as the
+        # ``pending`` branch above re-validates its own marker, and with the
+        # same predicate the reconciler query used. Without this a wipe whose
+        # enqueue can never succeed — a Cloud Tasks queue that does not exist
+        # returns 404 on every attempt — is re-claimed on every reconciler
+        # pass, writing a claim transaction and an error log per pod per pass
+        # indefinitely.
+        #
+        # The retry counter is stamped here rather than by the three writers of
+        # ``wipe_failed_at`` because this is the transaction that already holds
+        # the snapshot: the read, the decision and the increment are one atomic
+        # step, so concurrent pods cannot both spend the same immediate retry.
+        # It counts retries, not failures, which is why the first retry after a
+        # *fresh* failure on a never-retried record is still immediate.
+        retries = data.get('wipe_failed_retry_count') or 0
+        if not _failed_wipe_is_retryable(data, now - failed_retry_after):
+            return None
+        transaction.update(
+            doc_ref,
+            {'wipe_status': 'retrying', 'wipe_claimed_at': now, 'wipe_failed_retry_count': retries + 1},
+        )
         return snapshot.id
     if status == 'retrying':
         claimed_at = data.get('wipe_claimed_at')
@@ -769,6 +853,7 @@ def claim_deletion_wipe(
     uid: str,
     stale_after: timedelta = timedelta(minutes=10),
     running_stale_after: timedelta = DELETION_WIPE_RUNNING_STALE_AFTER,
+    failed_retry_after: timedelta = DELETION_WIPE_FAILED_RETRY_AFTER,
 ) -> str | None:
     """Attempt to claim a pending/failed/stale wipe for re-enqueueing.
 
@@ -778,7 +863,7 @@ def claim_deletion_wipe(
     """
     doc_ref = db.collection('account_deletions').document(uid)
     transaction = db.transaction()
-    return _claim_deletion_wipe_txn(transaction, doc_ref, stale_after, running_stale_after)
+    return _claim_deletion_wipe_txn(transaction, doc_ref, stale_after, running_stale_after, failed_retry_after)
 
 
 @transactional
