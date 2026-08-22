@@ -22,7 +22,6 @@
   "memory_non_active_routes": 1,
   "memory_outbox_worker": 1,
   "memory_vector_repair_outbox_worker": 1,
-  "notifications": 2,
   "projection_repair": 1,
   "recording_sessions": 1,
   "recurrence_inbox": 2,

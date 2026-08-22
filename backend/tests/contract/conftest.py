@@ -79,6 +79,26 @@ def _bind_accessor(monkeypatch, client) -> None:
         monkeypatch.setattr(module, 'get_firestore_client', lambda: client)
 
 
+def _bind_port_factory(monkeypatch, store) -> None:
+    """Point ``get_document_store()`` at this backend's store, too.
+
+    A THIRD way a domain module reaches storage, after ``db`` and ``get_firestore_client``: some modules
+    (``database/notifications.py``) call the port factory directly. It reads ``STORAGE_BACKEND`` from the
+    environment, which the suites do not set, so it defaulted to a ``FirestoreDocumentStore`` — and on the
+    mongo leg that store then resolved its client through the patched ``db``, i.e. a Firestore adapter
+    wrapping the neutral facade wrapping Mongo. Reads and writes still landed in the right place, so the
+    sandwich was invisible until ``delete(option=...)`` hit a facade DocRef that takes no ``option``
+    (BACKLOG L1, same class as L30/L31 and as the accessor blind spot above).
+
+    Patched by object, not by env var: the factory memoises its singleton, so setting STORAGE_BACKEND
+    after the first resolution would change nothing.
+    """
+    from database.store import factory
+
+    monkeypatch.setattr(factory, "_store", store, raising=False)
+    monkeypatch.setattr(factory, "get_document_store", lambda: store)
+
+
 @pytest.fixture(params=["firestore", "mongo"])
 def bind_store(request, monkeypatch) -> Any:
     """Bind ``db`` to the production client for this backend; yield a neutral seeding store.
@@ -98,6 +118,7 @@ def bind_store(request, monkeypatch) -> Any:
 
         client = _fs.Client(project=os.environ.get("FIREBASE_PROJECT_ID", "demo-omi-local"))
         _bind_accessor(monkeypatch, client)
+        _bind_port_factory(monkeypatch, FirestoreDocumentStore(client=client))
         # Explicit client on the seeding store too: its default is the lazy ``db`` boundary handle,
         # which resolves through the accessor patched just above.
         yield FirestoreDocumentStore(client=client)
@@ -116,6 +137,7 @@ def bind_store(request, monkeypatch) -> Any:
 
         install_fake_db_client(monkeypatch, store=store)
         _bind_accessor(monkeypatch, NeutralFirestoreClient(store))
+        _bind_port_factory(monkeypatch, store)
         yield store
     finally:
         store.close()
