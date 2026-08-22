@@ -1065,12 +1065,13 @@ ServerConversation _conversation(
   bool starred = false,
   String? folderId,
   String title = 'Title',
-}) => ServerConversation(
-  id: id,
-  createdAt: createdAt ?? DateTime.utc(2026),
-  structured: Structured(title, 'Overview'),
-  status: status,
-  discarded: discarded,
-  starred: starred,
-  folderId: folderId,
-);
+}) =>
+    ServerConversation(
+      id: id,
+      createdAt: createdAt ?? DateTime.utc(2026),
+      structured: Structured(title, 'Overview'),
+      status: status,
+      discarded: discarded,
+      starred: starred,
+      folderId: folderId,
+    );

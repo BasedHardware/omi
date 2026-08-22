@@ -10,8 +10,7 @@ void main() {
       expect(
         ln.myApps,
         isNot(ln.installedApps),
-        reason:
-            'The authorship filter must not read the same as the '
+        reason: 'The authorship filter must not read the same as the '
             'possession filter, or "My Apps" looks broken next to '
             '"Installed Apps".',
       );
@@ -25,8 +24,7 @@ void main() {
       expect(
         ln.myApps.toLowerCase(),
         isNot(equals('my apps')),
-        reason:
-            'The authorship filter used to say "My Apps", which reads '
+        reason: 'The authorship filter used to say "My Apps", which reads '
             'as the apps a user has rather than the apps they created.',
       );
     });

@@ -1,8 +1,8 @@
 import 'dart:math' as math;
 
 typedef BackgroundResourceEventEmitter = void Function(String eventName, Map<String, dynamic> properties);
-typedef BackgroundResourceSnapshotLoader =
-    Future<BackgroundResourceSnapshot> Function(DateTime backgroundStartedAt, BackgroundResourceSnapshot startSnapshot);
+typedef BackgroundResourceSnapshotLoader = Future<BackgroundResourceSnapshot> Function(
+    DateTime backgroundStartedAt, BackgroundResourceSnapshot startSnapshot);
 
 class BackgroundResourceSnapshot {
   const BackgroundResourceSnapshot({
@@ -58,9 +58,9 @@ class BackgroundResourceTelemetry {
     DateTime Function()? now,
     String Function()? sessionIdFactory,
     this.minimumDuration = const Duration(minutes: 1),
-  }) : _emit = emit,
-       _now = now ?? DateTime.now,
-       _sessionIdFactory = sessionIdFactory ?? (() => DateTime.now().microsecondsSinceEpoch.toString());
+  })  : _emit = emit,
+        _now = now ?? DateTime.now,
+        _sessionIdFactory = sessionIdFactory ?? (() => DateTime.now().microsecondsSinceEpoch.toString());
 
   static const eventName = 'Mobile Background Resource Session';
 

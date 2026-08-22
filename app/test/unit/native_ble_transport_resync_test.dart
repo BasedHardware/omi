@@ -144,9 +144,8 @@ void main() {
       BleBridge.instance.onDeviceReady(uuid, audioServices);
       async.flushMicrotasks();
 
-      final subscribesBeforeWatch = hostApi.subscribed
-          .where((s) => s.toLowerCase().contains(beeAudioCharacteristicUuid.toLowerCase()))
-          .length;
+      final subscribesBeforeWatch =
+          hostApi.subscribed.where((s) => s.toLowerCase().contains(beeAudioCharacteristicUuid.toLowerCase())).length;
       expect(subscribesBeforeWatch, greaterThanOrEqualTo(1));
 
       async.elapse(const Duration(seconds: 4));
