@@ -61,11 +61,19 @@ def _search_app_dict(app_id='a1'):
         'description': 'Does things',
         'image': 'http://img',
         'capabilities': ['chat'],
+        'approved': True,
+        'private': False,
     }
 
 
 def _search_with_reviews(monkeypatch, reviews):
-    """Run the real /v2/apps/search handler over one app carrying `reviews`."""
+    """Run the real /v2/apps/search handler over one app carrying `reviews`.
+
+    Driven through `my_apps`, which is the scope that still reads raw documents and computes
+    rating_avg in the handler. The public catalog moved to `get_approved_available_apps`, whose own
+    averaging already clamps — the static sweep at the bottom of this file is what keeps both
+    aggregation sites honest.
+    """
     from routers import apps as routers_apps
 
     app_dict = _search_app_dict()
@@ -79,7 +87,7 @@ def _search_with_reviews(monkeypatch, reviews):
         rating=None,
         capability=None,
         sort=None,
-        my_apps=None,
+        my_apps=True,
         installed_apps=None,
         offset=0,
         limit=20,
