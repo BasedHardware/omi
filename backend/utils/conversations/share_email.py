@@ -111,6 +111,27 @@ def _participants_from_conversation(conversation: Dict[str, Any]) -> List[Dict[s
     return participants
 
 
+def _attendee_count(participants: List[Dict[str, Optional[str]]]) -> int:
+    """How many distinct people the sources describe.
+
+    A conversation can carry the same meeting twice — once as
+    `calendar_meeting_context`, once as `calendar_event` — so counting raw
+    entries would double every attendee and push an ordinary meeting past the
+    size gate. People are identified by address, falling back to name for an
+    entry that has no usable address.
+    """
+    identities: set[str] = set()
+    for participant in participants:
+        email = _normalized_email(participant.get('email'))
+        if email:
+            identities.add(email)
+            continue
+        name = participant.get('name')
+        if isinstance(name, str) and name.strip():
+            identities.add(f'name:{name.strip().casefold()}')
+    return len(identities)
+
+
 def _is_captured_name(name: str, email: str) -> bool:
     """Whether `name` is a real captured name rather than a stand-in address.
 
@@ -138,7 +159,7 @@ def extract_share_recipients(conversation: Dict[str, Any], owner_emails: List[st
     participant, or a meeting too large for a blanket proposal).
     """
     participants = _participants_from_conversation(conversation)
-    if len(participants) > MAX_MEETING_PARTICIPANTS:
+    if _attendee_count(participants) > MAX_MEETING_PARTICIPANTS:
         return []
 
     owner_set = {email for email in (_normalized_email(e) for e in owner_emails) if email}

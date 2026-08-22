@@ -331,3 +331,51 @@ def test_unlabelled_context_source_is_not_trusted():
         [{'name': 'Sarah Chen', 'email': 'sarah@acme.com'}], calendar_source=None
     )
     assert extract_share_recipients(conversation, ['nik@basedhardware.com']) == []
+
+
+def test_meeting_present_in_both_calendar_representations_is_counted_once():
+    """The same six people in both shapes must not read as twelve attendees."""
+    people = [(f'Person {i}', f'p{i}@acme.com') for i in range(5)]
+    conversation = {
+        'id': 'conv-1',
+        'external_data': {
+            'calendar_meeting_context': {
+                'calendar_event_id': 'evt-1',
+                'title': 'Weekly sync',
+                'calendar_source': 'google_calendar',
+                'participants': [{'name': 'Nik', 'email': 'nik@basedhardware.com'}]
+                + [{'name': name, 'email': email} for name, email in people],
+            }
+        },
+        'calendar_event': {
+            'event_id': 'evt-1',
+            'title': 'Weekly sync',
+            'attendees': ['Nik'] + [name for name, _ in people],
+            'attendee_emails': ['nik@basedhardware.com'] + [email for _, email in people],
+        },
+    }
+    assert extract_share_recipients(conversation, ['nik@basedhardware.com']) == [
+        {'name': name, 'email': email} for name, email in people
+    ]
+
+
+def test_duplicate_representations_still_respect_the_size_gate():
+    people = [{'name': f'P{i}', 'email': f'p{i}@acme.com'} for i in range(MAX_MEETING_PARTICIPANTS + 1)]
+    conversation = {
+        'id': 'conv-1',
+        'external_data': {
+            'calendar_meeting_context': {
+                'calendar_event_id': 'evt-1',
+                'title': 'All hands',
+                'calendar_source': 'google_calendar',
+                'participants': people,
+            }
+        },
+        'calendar_event': {
+            'event_id': 'evt-1',
+            'title': 'All hands',
+            'attendees': [p['name'] for p in people],
+            'attendee_emails': [p['email'] for p in people],
+        },
+    }
+    assert extract_share_recipients(conversation, ['nik@basedhardware.com']) == []
