@@ -45,7 +45,7 @@ dependencies:
   firebase_crashlytics: 4.3.2
 
   # Auth
-  google_sign_in: 7.2.0
+  google_sign_in: 6.2.2
   sign_in_with_apple: ^8.1.0
 
   # Analytics and Support
@@ -97,7 +97,7 @@ dependencies:
   package_info_plus: ^8.0.1
   device_info_plus: ^11.5.0
   path_provider: 2.1.5
-  flutter_foreground_task: 11.0.1
+  flutter_foreground_task: 10.0.0
   upgrader: 11.4.0
   crypto: ^3.0.3
   flutter_markdown: ^0.7.7
@@ -159,7 +159,7 @@ dependency_overrides:
 
 dev_dependencies:
   flutter_launcher_icons: 0.13.1
-  google_sign_in_ios: 6.3.0
+  google_sign_in_ios: 5.7.5
   flutter_lints: ^4.0.0
   integration_test:
     sdk: flutter
