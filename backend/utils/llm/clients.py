@@ -535,26 +535,29 @@ def get_llm(
             get_active_profile_name(),
         )
 
-    preferred_openrouter_key = get_byok_key('openrouter')
-    preferred_openrouter = bool(preferred_openrouter_key)
     byok_profile = get_byok_profile()
-    if preferred_openrouter_key:
-        model = _byok_fallback_model('openrouter')
-        provider = 'openrouter'
-        byok_provider = 'openrouter'
-        byok_key = preferred_openrouter_key
-    elif byok_profile:
+    byok_key = None
+    byok_provider = _effective_byok_provider(model, provider)
+
+    if byok_profile:
         profile_model, profile_provider = byok_profile.get(feature, (model, provider))
         profile_key = get_byok_key(_effective_byok_provider(profile_model, profile_provider))
         if profile_key:
             model, provider, byok_key = profile_model, profile_provider, profile_key
             byok_provider = _effective_byok_provider(model, provider)
         else:
-            byok_provider = _effective_byok_provider(model, provider)
             byok_key = get_byok_key(byok_provider)
     else:
-        byok_provider = _effective_byok_provider(model, provider)
         byok_key = get_byok_key(byok_provider)
+
+    if not byok_key:
+        preferred_openrouter_key = get_byok_key('openrouter')
+        if preferred_openrouter_key:
+            model = _byok_fallback_model('openrouter')
+            provider = 'openrouter'
+            byok_provider = 'openrouter'
+            byok_key = preferred_openrouter_key
+
     if not byok_key:
         configured_provider = provider
         for candidate in ('openrouter', 'openai', 'gemini', 'anthropic'):
@@ -574,7 +577,7 @@ def get_llm(
                 )
                 break
 
-    if byok_key and byok_profile and not preferred_openrouter:
+    if byok_key and byok_profile:
         byok_model, byok_prov = byok_profile.get(feature, (model, provider))
         byok_prov_eff = _effective_byok_provider(byok_model, byok_prov)
         byok_key_for_profile = get_byok_key(byok_prov_eff)

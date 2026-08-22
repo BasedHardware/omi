@@ -960,6 +960,33 @@ class TestCacheRouting:
         assert args[1] == 'openai', f"provider must stay openai, got {args[1]}"
         assert args[2] == 'sk-legacy-openai'
 
+    def test_byok_profile_takes_precedence_over_openrouter_fallback(self, monkeypatch):
+        """Profile-specific BYOK route wins over OpenRouter preference.
+
+        'followup' has a Gemini BYOK QoS profile entry. When the user has
+        BOTH an OpenRouter key AND a Gemini key, the Gemini profile route
+        must be used — OpenRouter must not hijack the feature-specific route.
+        """
+        from utils.llm import clients
+
+        create_client = MagicMock(return_value=MagicMock())
+        monkeypatch.setattr(clients, '_create_byok_client', create_client)
+        monkeypatch.setattr(
+            clients,
+            'get_byok_key',
+            lambda provider: (
+                'sk-or-key' if provider == 'openrouter' else ('AIza-gemini-key' if provider == 'gemini' else None)
+            ),
+        )
+        monkeypatch.setattr(clients, 'should_route_features_through_gateway', lambda: False)
+        monkeypatch.setattr(clients, 'maybe_wrap_dev_gateway_shadow', lambda **kwargs: kwargs['legacy_model'])
+
+        assert clients.get_llm('followup') is not None
+        args = create_client.call_args.args
+        assert 'gemini' in args[0], f"model must be Gemini, got {args[0]}"
+        assert args[1] == 'gemini', f"provider must be gemini, got {args[1]}"
+        assert args[2] == 'AIza-gemini-key', f"key must be Gemini BYOK key, got {args[2]}"
+
 
 # ---------------------------------------------------------------------------
 # 12. Middleware dispatch: context isolation between requests
