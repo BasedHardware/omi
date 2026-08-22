@@ -23,6 +23,7 @@ class AnalyticsManager {
   }
 
   private var lastTranscriptionStartedAt: Date?
+  private let appSessionLifecycle = AppSessionLifecycle()
   /// Main-actor-isolated test observation at the actual AnalyticsManager
   /// boundary. It is nil in production and is deliberately not a mutable global
   /// outside the actor, so tests can observe the real event/payload safely under
@@ -557,6 +558,21 @@ class AnalyticsManager {
 
   func appLaunched() {
     PostHogManager.shared.appLaunched()
+    if let session = appSessionLifecycle.appLaunched() {
+      PostHogManager.shared.appSessionStarted(session)
+      log("Analytics: App session started (\(session.kind.rawValue))")
+    }
+  }
+
+  func appBecameActive() {
+    if let session = appSessionLifecycle.appBecameActive() {
+      PostHogManager.shared.appSessionStarted(session)
+      log("Analytics: App session started (\(session.kind.rawValue))")
+    }
+  }
+
+  func appResignedActive() {
+    appSessionLifecycle.appResignedActive()
   }
 
   func trackStartupTiming(
