@@ -307,8 +307,19 @@ def context_from_screen_activity(
 
 
 def context_from_calendar_link(link: CalendarEventLink) -> CalendarMeetingContext:
-    participants = [MeetingParticipant(name=name) for name in link.attendees]
-    participants.extend(MeetingParticipant(email=email) for email in link.attendee_emails)
+    # `extract_attendees` fills both lists in one pass over the event's
+    # attendees, so equal lengths mean entry *i* is one person's name and
+    # address. Emitting them as separate name-only and email-only participants
+    # described every attendee twice and lost which address belonged to whom.
+    # Unequal lengths mean an attendee was missing one half, and positional
+    # pairing would then attach the wrong address to a name — keep those apart.
+    if len(link.attendees) == len(link.attendee_emails):
+        participants = [
+            MeetingParticipant(name=name, email=email) for name, email in zip(link.attendees, link.attendee_emails)
+        ]
+    else:
+        participants = [MeetingParticipant(name=name) for name in link.attendees]
+        participants.extend(MeetingParticipant(email=email) for email in link.attendee_emails)
     return CalendarMeetingContext(
         calendar_event_id=link.event_id,
         title=link.title,

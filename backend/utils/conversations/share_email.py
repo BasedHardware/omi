@@ -114,22 +114,21 @@ def _participants_from_conversation(conversation: Dict[str, Any]) -> List[Dict[s
 def _attendee_count(participants: List[Dict[str, Optional[str]]]) -> int:
     """How many distinct people the sources describe.
 
-    A conversation can carry the same meeting twice — once as
-    `calendar_meeting_context`, once as `calendar_event` — so counting raw
-    entries would double every attendee and push an ordinary meeting past the
-    size gate. People are identified by address, falling back to name for an
-    entry that has no usable address.
+    The same meeting reaches us in shapes that each describe one person more
+    than once: a conversation can carry both `calendar_meeting_context` and
+    `calendar_event`, and `context_from_calendar_link` emits every attendee
+    twice on its own — once name-only, once email-only. Summing entries would
+    double an ordinary meeting past the size gate and silently drop its
+    proposal, so count the two identity dimensions separately and take the
+    larger: six names and six addresses are six people however they arrived.
     """
-    identities: set[str] = set()
+    emails = {email for email in (_normalized_email(p.get('email')) for p in participants) if email}
+    names: set[str] = set()
     for participant in participants:
-        email = _normalized_email(participant.get('email'))
-        if email:
-            identities.add(email)
-            continue
-        name = participant.get('name')
-        if isinstance(name, str) and name.strip():
-            identities.add(f'name:{name.strip().casefold()}')
-    return len(identities)
+        raw_name = participant.get('name')
+        if isinstance(raw_name, str) and raw_name.strip():
+            names.add(raw_name.strip().casefold())
+    return max(len(emails), len(names))
 
 
 def _is_captured_name(name: str, email: str) -> bool:

@@ -244,3 +244,42 @@ class TestPrecisionFirst:
     def test_participants_are_capped(self):
         roster = ', '.join(f'Person Number{index}' for index in range(20)) + ' are in this call'
         assert len(participants_from_ocr([roster])) <= 12
+
+
+class TestCalendarLinkPairing:
+    """#12036 follow-up: the link shape described every attendee twice."""
+
+    def _link(self, attendees, attendee_emails):
+        from datetime import datetime, timezone
+
+        from models.conversation import CalendarEventLink
+
+        return CalendarEventLink(
+            event_id='evt-1',
+            title='Weekly sync',
+            attendees=attendees,
+            attendee_emails=attendee_emails,
+            start_time=datetime(2026, 8, 22, 15, 0, tzinfo=timezone.utc),
+            end_time=datetime(2026, 8, 22, 15, 30, tzinfo=timezone.utc),
+        )
+
+    def test_equal_lengths_pair_each_name_with_its_address(self):
+        from utils.conversations.meeting_context import context_from_calendar_link
+
+        context = context_from_calendar_link(
+            self._link(['Nik', 'Sarah Chen'], ['nik@basedhardware.com', 'sarah@acme.com'])
+        )
+        assert [(p.name, p.email) for p in context.participants] == [
+            ('Nik', 'nik@basedhardware.com'),
+            ('Sarah Chen', 'sarah@acme.com'),
+        ]
+
+    def test_mismatched_lengths_are_left_unpaired_rather_than_mispaired(self):
+        from utils.conversations.meeting_context import context_from_calendar_link
+
+        context = context_from_calendar_link(self._link(['Nik', 'Sarah Chen'], ['sarah@acme.com']))
+        assert [(p.name, p.email) for p in context.participants] == [
+            ('Nik', None),
+            ('Sarah Chen', None),
+            (None, 'sarah@acme.com'),
+        ]

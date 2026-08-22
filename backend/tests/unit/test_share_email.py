@@ -333,6 +333,61 @@ def test_unlabelled_context_source_is_not_trusted():
     assert extract_share_recipients(conversation, ['nik@basedhardware.com']) == []
 
 
+def _calendar_link_conversation(people, *, also_as_calendar_event):
+    """The real production shape: a Google calendar link plus, optionally, the
+    same meeting repeated as `calendar_event`.
+
+    `context_from_calendar_link` emits each attendee twice — once name-only,
+    once email-only — so this is the boundary where naive counting doubles.
+    """
+    from datetime import datetime, timezone
+
+    from models.conversation import CalendarEventLink
+    from utils.conversations.meeting_context import context_from_calendar_link
+
+    link = CalendarEventLink(
+        event_id='evt-1',
+        title='Weekly sync',
+        attendees=[name for name, _ in people],
+        attendee_emails=[email for _, email in people],
+        start_time=datetime(2026, 8, 22, 15, 0, tzinfo=timezone.utc),
+        end_time=datetime(2026, 8, 22, 15, 30, tzinfo=timezone.utc),
+    )
+    context = context_from_calendar_link(link).model_dump()
+    conversation = {'id': 'conv-1', 'external_data': {'calendar_meeting_context': context}}
+    if also_as_calendar_event:
+        conversation['calendar_event'] = {
+            'event_id': 'evt-1',
+            'title': 'Weekly sync',
+            'attendees': [name for name, _ in people],
+            'attendee_emails': [email for _, email in people],
+        }
+    return conversation
+
+
+def test_calendar_link_shape_counts_each_attendee_once():
+    """context_from_calendar_link emits 6 name-only + 6 email-only entries for 6 people."""
+    people = [('Nik', 'nik@basedhardware.com')] + [(f'Person {i}', f'p{i}@acme.com') for i in range(5)]
+    conversation = _calendar_link_conversation(people, also_as_calendar_event=False)
+    assert extract_share_recipients(conversation, ['nik@basedhardware.com']) == [
+        {'name': name, 'email': email} for name, email in people[1:]
+    ]
+
+
+def test_calendar_link_shape_combined_with_calendar_event_stays_eligible():
+    people = [('Nik', 'nik@basedhardware.com')] + [(f'Person {i}', f'p{i}@acme.com') for i in range(5)]
+    conversation = _calendar_link_conversation(people, also_as_calendar_event=True)
+    assert extract_share_recipients(conversation, ['nik@basedhardware.com']) == [
+        {'name': name, 'email': email} for name, email in people[1:]
+    ]
+
+
+def test_genuinely_oversized_meeting_is_still_suppressed_in_that_shape():
+    people = [(f'Person {i}', f'p{i}@acme.com') for i in range(MAX_MEETING_PARTICIPANTS + 1)]
+    conversation = _calendar_link_conversation(people, also_as_calendar_event=True)
+    assert extract_share_recipients(conversation, ['nik@basedhardware.com']) == []
+
+
 def test_meeting_present_in_both_calendar_representations_is_counted_once():
     """The same six people in both shapes must not read as twelve attendees."""
     people = [(f'Person {i}', f'p{i}@acme.com') for i in range(5)]
