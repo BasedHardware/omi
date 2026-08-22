@@ -101,6 +101,7 @@ from utils.executors import (
 )
 from utils.executors import start_background_task
 from utils.cloud_tasks import validate_account_deletion_dispatch_configuration
+from config.placeholder_values import validate_configuration_values
 from utils.push.selector import validate_push_configuration
 from utils.vector.factory import validate_vector_dimension
 from services.conversation_finalization import reconcile_listen_finalization_jobs
@@ -114,6 +115,11 @@ log_langsmith_status()
 
 # Validate Stripe price IDs so misconfigured plans fail loud
 validate_stripe_price_ids()
+
+# Before anything reads a value: refuse configuration that only LOOKS set. A CHANGE_ME secret is a
+# PUBLISHED secret, and an unsubstituted <host> in OIDC_ISSUER boots fine and fails at the first
+# authenticated request (BACKLOG L49/L48).
+validate_configuration_values()
 
 # Same idea for the push transport: a declared UnifiedPush with no internal base URL delivers nothing,
 # and used to say so only as one ERROR per endpoint on the first notification (BACKLOG L18).
