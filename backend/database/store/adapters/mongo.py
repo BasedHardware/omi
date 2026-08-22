@@ -763,7 +763,7 @@ class MongoDocumentStore:
         direction: str = "asc",
         limit: Optional[int] = None,
         offset: Optional[int] = None,
-        start_after: Optional[str] = None,
+        start_after: Optional[Any] = None,
     ) -> List[StoredDocument]:
         # A collection-group query is the whole Mongo collection named after the leaf (``group``),
         # with NO ``_parent`` scope — docs from every parent live there already (see the path model).
@@ -783,7 +783,25 @@ class MongoDocumentStore:
         # A __name__ order on a collection group is the implicit document-name (_id) keyset — strip it so
         # it doesn't count as an "explicit order" that conflicts with start_after (cubic PR 10887 #2).
         specs = [(f, d) for f, d in specs if f != "__name__"]
-        if start_after is not None:
+        if isinstance(start_after, dict):
+            # FIELD keyset (parity with the Firestore adapter): resume after (value, path) in the order
+            # the caller asked for. Expressed as the usual keyset disjunction — strictly past the value,
+            # or equal to it and strictly past the path — so ties neither repeat nor skip.
+            if not specs:
+                raise NotImplementedError(
+                    "query_group start_after={'value','id'} is a field keyset and needs an order_by; "
+                    "pass the document path form for the implicit document-name order"
+                )
+            field, field_direction = specs[0]
+            beyond = "$gt" if field_direction == "asc" else "$lt"
+            keyset = {
+                "$or": [
+                    {"d." + field: {beyond: start_after["value"]}},
+                    {"d." + field: start_after["value"], "_id": {beyond: start_after["id"]}},
+                ]
+            }
+            mongo_filter = {"$and": [mongo_filter, keyset]} if mongo_filter else keyset
+        elif start_after is not None:
             if specs:
                 # The document-name keyset supplies a single position; it cannot combine with an explicit
                 # order_by (parity with the Firestore adapter, cubic PR 10887 A7).

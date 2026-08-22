@@ -355,7 +355,7 @@ class FirestoreDocumentStore:
         direction: str = "asc",
         limit: Optional[int] = None,
         offset: Optional[int] = None,
-        start_after: Optional[str] = None,
+        start_after: Optional[Any] = None,
     ) -> List[StoredDocument]:
         query: Any = self._client.collection_group(group)
         for field, op, value in filters or ():
@@ -372,7 +372,23 @@ class FirestoreDocumentStore:
         specs = [(f, d) for f, d in specs if f != "__name__"]
         for _field, _dir in specs:
             query = query.order_by(_field, direction=_DIRECTION[_dir])
-        if start_after is not None:
+        if isinstance(start_after, dict):
+            # FIELD keyset: {"value": <order-field value>, "id": <full document path>}. One value per
+            # order field plus the path for the __name__ tiebreak, so the cursor's arity matches the
+            # order — which is exactly what the document-name keyset below cannot supply, and why the two
+            # forms are separate rather than one overloaded argument.
+            #
+            # This is what an incremental scan needs: "everything changed since X, in change order,
+            # resumable". The name keyset cannot express it, because a range filter forces the ordering
+            # onto the filtered field (BACKLOG L39).
+            if not specs:
+                raise NotImplementedError(
+                    "query_group start_after={'value','id'} is a field keyset and needs an order_by; "
+                    "pass the document path form for the implicit document-name order"
+                )
+            query = query.order_by('__name__', direction=_DIRECTION[specs[-1][1]])
+            query = query.start_after([start_after["value"], self._client.document(start_after["id"])])
+        elif start_after is not None:
             # Document-name keyset: order by __name__ and resume after the cursor path's position. The
             # cursor is a DocumentReference — it positions by path even if the document no longer exists
             # (passing it bare, not in a list, breaks the SDK cursor normalization). This keyset supplies

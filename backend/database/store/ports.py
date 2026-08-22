@@ -138,7 +138,14 @@ class DocumentStore(Protocol):
         direction: str = "asc",
         limit: Optional[int] = None,
         offset: Optional[int] = None,
-        start_after: Optional[str] = None,
+        # Two cursor forms, and they are not interchangeable:
+        #   str  — the document-path keyset, for the implicit document-name order (no order_by)
+        #   dict — {"value": <order-field value>, "id": <full path>}, a FIELD keyset that positions an
+        #          explicit order_by. Needed because a range filter forces the ordering onto the
+        #          filtered field, so a name cursor cannot resume it (BACKLOG L39): "everything changed
+        #          since X, in change order, resumable" is only expressible with this form.
+        # Each adapter refuses the mismatched pairing rather than building an invalid cursor.
+        start_after: Optional[Any] = None,
     ) -> List[StoredDocument]: ...  # cross-parent collection-group query; results carry full paths
     def get_many(self, collection: str, ids: Sequence[str]) -> List[StoredDocument]: ...
     def list_ids(self, collection: str) -> List[str]: ...

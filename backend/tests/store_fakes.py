@@ -367,7 +367,15 @@ class FakeDocumentStore:
         # it doesn't count as an explicit order that conflicts with start_after (cubic PR 10887 #2).
         specs = [(order_by, direction)] if isinstance(order_by, str) else list(order_by or [])
         specs = [(f, d) for f, d in specs if f != "__name__"]
-        if start_after is not None and specs:
+        field_keyset = start_after if isinstance(start_after, dict) else None
+        if field_keyset is not None and not specs:
+            # Mirrors both adapters: a field keyset positions an ORDER, so without one there is nothing
+            # for it to position (the document-path form is what an unordered group scan uses).
+            raise NotImplementedError(
+                "query_group start_after={'value','id'} is a field keyset and needs an order_by; "
+                "pass the document path form for the implicit document-name order"
+            )
+        if start_after is not None and field_keyset is None and specs:
             # A single document-name cursor cannot position a field-ordered result set; both real adapters
             # reject this (mongo.py / firestore.py query_group). The fake must too, or a test passes here
             # and breaks against both backends (cubic PR 10887 #5).
@@ -390,7 +398,18 @@ class FakeDocumentStore:
             # No explicit order (or a __name__-only order): document-name (full path) ascending, matching
             # Firestore's implicit __name__ order so a keyset ``start_after`` pages consistently from page one.
             rows.sort(key=lambda pd: pd[0])
-        if start_after is not None:
+        if field_keyset is not None:
+            # Field keyset (mirrors the adapters): strictly past the value, or equal to it and strictly
+            # past the path — so a tie neither repeats nor skips.
+            field, field_direction = specs[0]
+            value, path = field_keyset["value"], field_keyset["id"]
+            beyond = (lambda a, b: a > b) if field_direction == "asc" else (lambda a, b: a < b)
+            rows = [
+                pd
+                for pd in rows
+                if beyond(pd[1].get(field), value) or (pd[1].get(field) == value and beyond(pd[0], path))
+            ]
+        elif start_after is not None:
             # Document-name keyset (mirrors the adapters): resume strictly after the cursor path.
             rows = [pd for pd in rows if pd[0] > start_after]
         if offset is not None:
