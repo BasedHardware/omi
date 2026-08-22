@@ -351,6 +351,11 @@ const omi: OmiBridgeApi = {
     return () => ipcRenderer.removeListener('rewind:captured', listener)
   },
   rewindSearch: (query: string) => ipcRenderer.invoke('rewind:search', query),
+  /** One search over every local corpus (memories, tasks, captured screen text).
+   *  Conversations are searched separately by the renderer against the backend,
+   *  which is the only place the full history lives. */
+  searchLocal: (query: string, limit?: number) =>
+    ipcRenderer.invoke('omi-search:local', query, limit),
   // --- Track 4 (Rewind semantic search) --- Phase 2 of a search: the same results
   // with semantic hits merged in, pushed if/when the embedding round-trip lands.
   // Keyword results are already on screen by then — see the rewind:search handler.
