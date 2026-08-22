@@ -153,11 +153,13 @@ function getPlatformLink(userAgent: string) {
   const isAndroid = /android/i.test(userAgent);
   const isIOS = /iphone|ipad|ipod/i.test(userAgent);
 
-  return isAndroid
-    ? 'https://play.google.com/store/apps/details?id=com.friend.ios'
-    : isIOS
-      ? 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163'
-      : 'https://omi.me';
+  if (isAndroid) {
+    return 'https://play.google.com/store/apps/details?id=com.friend.ios';
+  }
+  if (isIOS) {
+    return 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163';
+  }
+  return 'https://omi.me';
 }
 
 // Helper function to format date
