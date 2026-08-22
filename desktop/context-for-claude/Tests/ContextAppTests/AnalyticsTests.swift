@@ -93,10 +93,59 @@ final class AnalyticsPayloadTests: XCTestCase {
     /// captured rows and is joinable to their account, so an analytics id equal to it would make every
     /// "anonymous" event trivially re-identifiable by anyone holding both datasets.
     func testTheAnalyticsIDIsNotTheBackendDeviceHash() {
-        let installID = "6E7D2C61-0000-4000-8000-000000000000"
+        let installID = Self.pinnedInstallID
         XCTAssertNotEqual(AnalyticsIdentity.derive(from: installID), ClientDevice.hash(of: installID))
         XCTAssertFalse(AnalyticsIdentity.derive(from: installID).contains(ClientDevice.hash(of: installID)))
     }
+
+    /// The derivation, pinned to a literal rather than recomputed.
+    ///
+    /// The two tests above are both *relative*: they compare the derivation against itself and
+    /// against the device hash, so a change to the salt, the digest, the prefix or the truncation
+    /// satisfies all of them while re-anonymising every install on the planet and restarting every
+    /// retention curve. The property the identity actually needs is that it produces the **same
+    /// string it produced last release**, and only a literal can say that.
+    ///
+    /// If this fails, the answer is almost never to update the literal. Read the doc comment on
+    /// `AnalyticsIdentity.salt` first.
+    func testTheAnalyticsIDDerivationIsPinnedToItsShippedValue() {
+        XCTAssertEqual(
+            AnalyticsIdentity.derive(from: Self.pinnedInstallID), "cfc_436214da822c0b7e",
+            "changing this severs every install's history — see AnalyticsIdentity.salt")
+        XCTAssertEqual(
+            ClientDevice.hash(of: Self.pinnedInstallID), "667a8eea",
+            "the backend's eight-hex contract, pinned beside the analytics id it must stay apart from")
+    }
+
+    /// **The super-property set is closed, and the closure is the privacy boundary.**
+    ///
+    /// Keeping `distinct_id` salted apart from the backend's device hash only buys anonymity while
+    /// nothing *else* on the payload carries the join. A `device_hash` super-property — proposed to
+    /// make the PostHog series joinable to the Firestore install roster — is not a weaker version of
+    /// making the two ids equal; it is the same join, spelled as a property. `macos_<hash>` is the
+    /// key of `users/{uid}/screen_activity/{clientDeviceId}-{rowId}`, so it resolves to a uid and a
+    /// uid resolves to a person, and every property on every event here would become a named
+    /// person's record of when their microphone was on.
+    ///
+    /// Asserted as an exact key set rather than as a blocklist of forbidden names, because the
+    /// failure mode is somebody adding a *new* identifier, and a blocklist can only ever refuse the
+    /// ones already imagined. Adding a genuinely non-identifying super-property means editing this
+    /// literal and saying why in the commit — which is the review this boundary is owed.
+    func testTheSuperPropertySetIsClosed() {
+        let keys = Set(
+            AnalyticsPayload.superProperties(
+                version: "1.0.12", build: "1000012", macOSVersion: "Version 15.5.0"
+            ).keys)
+
+        XCTAssertEqual(
+            keys, ["app", "app_version", "app_build", "macos_version"],
+            "a new super-property is a new disclosure on every event this app has ever sent")
+    }
+
+    /// The install id both derivations are pinned against. Fixed rather than minted, and never read
+    /// from `UserDefaults`: `ClientDevice.deviceIdHash` would mint and store a real install id in the
+    /// test process's own defaults domain, which is a side effect a test has no business having.
+    private static let pinnedInstallID = "6E7D2C61-0000-4000-8000-000000000000"
 }
 
 /// The closed-vocabulary invariant, checked against the real event list.
