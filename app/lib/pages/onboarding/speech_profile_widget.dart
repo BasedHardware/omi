@@ -252,6 +252,27 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                   ),
                   barrierDismissible: false,
                 );
+              } else if (error == 'STT_UNAVAILABLE') {
+                // The provider already gave up reconnecting after repeated
+                // 1011 closes with no captured speech, so offer the same
+                // way out as the "Skip for now" link instead of a "Try
+                // again" that would only restart the same failing loop.
+                showDialog(
+                  context: context,
+                  builder: (c) => getDialog(
+                    context,
+                    () {
+                      provider.close();
+                      widget.onSkip();
+                    },
+                    () {},
+                    context.l10n.connectionLost,
+                    context.l10n.connectionLostDesc,
+                    okButtonText: context.l10n.skipForNow,
+                    singleButton: true,
+                  ),
+                  barrierDismissible: false,
+                );
               }
             },
             child: Column(
