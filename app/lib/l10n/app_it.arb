@@ -3218,5 +3218,14 @@
     "sendRawAudioToOmi": "Invia l'audio grezzo a Omi",
     "sendRawAudioToOmiDescription": "Disattiva per impedire l'invio dell'audio grezzo a Omi. Le trascrizioni e i dati necessari alle funzioni cloud possono ancora essere inviati a Omi.",
     "findDevice": "Trova",
-    "diagnosticsShareFailed": "Impossibile condividere la diagnostica. Riprova."
+    "diagnosticsShareFailed": "Impossibile condividere la diagnostica. Riprova.",
+    "appDisabledTitle": "Questa app è disattivata e non può essere installata.",
+    "appDisabledWebhookFailures": "Il suo endpoint ha continuato a fallire per 72 ore, quindi gli invii sono stati interrotti.",
+    "appDisabledGeneric": "È stata disattivata da Omi.",
+    "appDisabledOwnerHint": "Correggi prima l'endpoint: la riattivazione ricontrolla ogni URL configurato.",
+    "appReEnable": "Riattiva",
+    "appReEnableFailedTitle": "Riattivazione non riuscita",
+    "appReEnableFailedBody": "Non è stato possibile riattivare questa app. Riprova.",
+    "appDisabledOn": "Disattivata il {date}.",
+    "appDisabledLastError": "Ultimo errore: {error}."
 }

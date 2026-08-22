@@ -3194,5 +3194,14 @@
     "sendRawAudioToOmi": "未処理の音声を Omi に送信",
     "sendRawAudioToOmiDescription": "オフにすると、未処理の音声は Omi に送信されません。文字起こしとクラウド機能に必要なデータは、引き続き Omi に送信される場合があります。",
     "findDevice": "探す",
-    "diagnosticsShareFailed": "診断情報を共有できませんでした。もう一度お試しください。"
+    "diagnosticsShareFailed": "診断情報を共有できませんでした。もう一度お試しください。",
+    "appDisabledTitle": "このアプリは無効化されているため、インストールできません。",
+    "appDisabledWebhookFailures": "エンドポイントが72時間連続で失敗したため、配信が停止されました。",
+    "appDisabledGeneric": "Omi によって無効化されました。",
+    "appDisabledOwnerHint": "先にエンドポイントを修正してください。再有効化すると、設定済みのすべての URL が再確認されます。",
+    "appReEnable": "再有効化",
+    "appReEnableFailedTitle": "再有効化できませんでした",
+    "appReEnableFailedBody": "このアプリを再有効化できませんでした。もう一度お試しください。",
+    "appDisabledOn": "{date} に無効化されました。",
+    "appDisabledLastError": "最後のエラー: {error}"
 }

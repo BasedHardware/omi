@@ -1312,6 +1312,38 @@ export async function updateApp(
 }
 
 /**
+ * Re-enable an app that the backend auto-disabled after webhook failures.
+ *
+ * Sends `disabled: false` explicitly — the backend re-enable branch reads an
+ * unset-exclusive payload, so omitting the field is a no-op rather than a
+ * failure. The endpoint re-checks every configured URL and rejects the request
+ * with a specific reason, so that detail is surfaced instead of the status code.
+ */
+export async function reEnableApp(appId: string): Promise<void> {
+  const token = await getIdToken();
+  if (!token) {
+    throw new Error('Not authenticated');
+  }
+
+  const formData = new FormData();
+  formData.append('app_data', JSON.stringify({ id: appId, disabled: false }));
+
+  const response = await fetch(`${API_BASE_URL}/v1/apps/${appId}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const detail = await response
+      .json()
+      .then((body) => body?.detail)
+      .catch(() => null);
+    throw new Error(detail || `Failed to re-enable app: ${response.status}`);
+  }
+}
+
+/**
  * Delete an app
  */
 export async function deleteApp(appId: string): Promise<void> {
