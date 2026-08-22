@@ -411,8 +411,8 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     if (conversation.appResults.isNotEmpty) {
       return conversation.appResults[0];
     }
-    // If no appResults but we have structured overview, create a fake AppResponse
-    if (conversation.structured.overview.isNotEmpty) {
+    // If no appResults but we have a structured overview or sections, create a fake AppResponse
+    if (conversation.structured.overview.isNotEmpty || conversation.structured.sections.isNotEmpty) {
       return AppResponse(conversation.structured.overview, appId: null);
     }
     return null;

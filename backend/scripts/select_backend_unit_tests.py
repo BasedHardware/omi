@@ -110,6 +110,34 @@ MONITORING_CONTRACT_SOURCES = (
 AREA_TESTS = (
     (
         (
+            'backend/config/plan_catalog',
+            'backend/scripts/generate_plan_catalog.py',
+            'backend/models/users.py',
+            'backend/utils/subscription.py',
+            'backend/utils/overage.py',
+            'backend/utils/fair_use.py',
+            'backend/utils/sync/rate_limit.py',
+            'backend/scripts/support/find_stripe_entitlement_mismatches.py',
+            'backend/routers/payment.py',
+            'backend/routers/desktop_proactivity.py',
+            'backend/database/phone_call_config.py',
+        ),
+        (),
+        (
+            'tests/unit/test_plan_catalog_contract.py',
+            'tests/unit/test_subscription_*.py',
+            'tests/unit/test_user_subscription_wire_contract.py',
+            'tests/unit/test_stripe_*.py',
+            'tests/unit/test_payment_price_id_validation.py',
+            'tests/unit/test_chat_quota.py',
+            'tests/unit/test_fair_use_*.py',
+            'tests/unit/test_phone_call*.py',
+            'tests/unit/test_desktop_proactivity.py',
+            'tests/unit/test_sync_fair_use_gate.py',
+        ),
+    ),
+    (
+        (
             'backend/database/users.py',
             'backend/models/geolocation.py',
             'backend/models/users.py',

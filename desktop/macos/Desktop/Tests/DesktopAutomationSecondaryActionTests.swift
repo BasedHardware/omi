@@ -446,11 +446,24 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
   }
 
   private func bridgeSource() throws -> String {
-    let url = URL(fileURLWithPath: #filePath)
+    // Every DesktopAutomationBridge*.swift, not just the base file. The registry is
+    // split across extensions to satisfy a line-count ratchet, so reading only the
+    // base file makes this contract fail the moment an action is relocated -- which
+    // is what happened when the notification actions moved to
+    // DesktopAutomationBridge+Notifications.swift. Globbing keeps the contract about
+    // "is this action registered" rather than "is it registered in one exact file".
+    let sourcesDir = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
-      .appendingPathComponent("Sources/DesktopAutomationBridge.swift")
-    return try String(contentsOf: url, encoding: .utf8)
+      .appendingPathComponent("Sources")
+    let names = try FileManager.default.contentsOfDirectory(atPath: sourcesDir.path)
+      .filter { $0.hasPrefix("DesktopAutomationBridge") && $0.hasSuffix(".swift") }
+      .sorted()
+    XCTAssertFalse(names.isEmpty, "expected at least one DesktopAutomationBridge source")
+    return
+      try names
+      .map { try String(contentsOf: sourcesDir.appendingPathComponent($0), encoding: .utf8) }
+      .joined(separator: "\n")
   }
 
   private func actionBody(named action: String, in source: String) throws -> String {

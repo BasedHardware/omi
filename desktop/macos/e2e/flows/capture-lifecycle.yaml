@@ -4,6 +4,7 @@ tier: 2
 description: Hermetic capture lifecycle via capture_test_transcript seam (no mic/STT)
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/MeetingNoteTakingNotice.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+FinishedRecordingLifecycle.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift
   - desktop/macos/Desktop/Sources/Audio/PreferredMicrophoneReconnect.swift
@@ -182,6 +183,23 @@ steps:
       result.detail.is_transcribing: "false"
 
   - id: S11
+    name: A detected meeting announces that notes are being taken
+    bridge.action:
+      name: trigger_meeting_started_notice
+    expect:
+      result.detail.presented: "true"
+
+  - id: S12
+    name: The notch shows the note-taking statement, not a prompt
+    bridge.action:
+      name: notification_state
+    expect:
+      result.detail.present: "true"
+      result.detail.title: "Meeting detected"
+      result.detail.message: "Omi is taking notes"
+      result.detail.persistent: "false"
+
+  - id: S13
     name: Logs clean
     log.expect:
       absent:

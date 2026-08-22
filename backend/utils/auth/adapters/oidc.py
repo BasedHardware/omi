@@ -28,7 +28,7 @@ from typing import Any, Dict, Optional
 from urllib.parse import quote
 
 from utils.auth import errors
-from utils.auth.ports import Principal, UserProfile
+from utils.auth.ports import IdpIdentity, Principal, UserProfile
 
 # Outbound admin-API calls pin an explicit timeout so a hung IdP never blocks a worker thread
 # indefinitely (the utils outbound-timeout guard enforces this).
@@ -324,7 +324,7 @@ class OIDCAuthProvider:
     def mint_custom_token(self, uid: str) -> str:
         raise errors.Unsupported("mint_custom_token is Firebase-only; OIDC uses standard Auth-Code+PKCE")
 
-    def exchange_idp_credential(self, provider: str, id_token: str, access_token: Optional[str] = None) -> str:
+    def exchange_idp_credential(self, provider: str, id_token: str, access_token: Optional[str] = None) -> IdpIdentity:
         raise errors.Unsupported("exchange_idp_credential is Firebase-only; OIDC brokers IdPs at the provider")
 
 

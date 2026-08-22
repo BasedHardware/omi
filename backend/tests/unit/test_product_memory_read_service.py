@@ -134,9 +134,13 @@ def test_fetch_default_product_memory_search_reads_authoritative_items_and_filte
     )
 
     assert db_client.collection_paths == ['users/u1/memory_items']
-    assert [item['memory_id'] for item in response['items']] == ['fresh-short-term', 'long-term']
-    assert response['total_count'] == 2
-    assert response['returned_count'] == 2
+    assert [item['memory_id'] for item in response['items']] == [
+        'fresh-short-term',
+        'long-term',
+        'stale-short-term',
+    ]
+    assert response['total_count'] == 3
+    assert response['returned_count'] == 3
     assert response['offset'] == 0
     assert response['limit'] == 100
     assert response['archive_default_visible'] is False
@@ -228,8 +232,8 @@ def test_fetch_default_product_memory_search_paginates_after_filtering_with_dete
         offset=1,
     )
 
-    assert [item['memory_id'] for item in response['items']] == ['b-long', 'c-long']
-    assert response['total_count'] == 3
+    assert [item['memory_id'] for item in response['items']] == ['a-fresh', 'b-long']
+    assert response['total_count'] == 4
     assert response['returned_count'] == 2
     assert response['offset'] == 1
     assert response['limit'] == 2

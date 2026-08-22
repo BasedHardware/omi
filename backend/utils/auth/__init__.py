@@ -9,12 +9,13 @@ from utils.auth.errors import (
     Unsupported,
 )
 from utils.auth.factory import auth_backend_name, get_auth_provider, reset_auth_provider_for_tests
-from utils.auth.ports import AuthProvider, Principal, UserProfile
+from utils.auth.ports import AuthProvider, IdpIdentity, Principal, UserProfile
 
 __all__ = [
     "AuthProvider",
     "Principal",
     "UserProfile",
+    "IdpIdentity",
     "AuthError",
     "InvalidToken",
     "ExpiredToken",

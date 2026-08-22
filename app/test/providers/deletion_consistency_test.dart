@@ -219,6 +219,37 @@ void main() {
           reason: 'loadMemories must re-check _pendingDeletionId at apply time '
               'and suppress items deleted after the snapshot was taken');
     });
+
+    test('loadMemories stops paging when the server signals truncation', () async {
+      var calls = 0;
+      final provider = MemoriesProvider(
+        fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async {
+          calls++;
+          // First page is full but truncated; provider must not continue.
+          return GetMemoriesResult(
+            [
+              Memory(
+                  id: 'm-$calls',
+                  uid: 'u1',
+                  content: 'c',
+                  category: MemoryCategory.manual,
+                  createdAt: DateTime.now(),
+                  updatedAt: DateTime.now(),
+                  visibility: MemoryVisibility.public)
+            ],
+            true,
+            truncated: true,
+          );
+        },
+        deleteMemoryRequest: (_) async => true,
+      );
+      memoryProviders.add(provider);
+
+      await provider.loadMemories(limit: 1);
+
+      expect(calls, 1, reason: 'A truncated page must stop further fetch attempts');
+      expect(provider.memories.length, 1);
+    });
   });
 
   group('ActionItemsProvider deletion eventual consistency', () {

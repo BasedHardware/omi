@@ -50,6 +50,27 @@ class UserProfile:
     created_at: Optional[int] = None
 
 
+@dataclass(frozen=True)
+class IdpIdentity:
+    """The result of exchanging a provider credential: who they are, and whether this exchange is what
+    created the account.
+
+    ``is_new_user`` exists because a caller needs it and the port used to drop it. Upstream's referral
+    entitlement is granted only on a genuinely first sign-in, and it read that fact straight off the
+    Firebase ``signInWithIdp`` response (``isNewUser``) — which the port swallowed when it returned a
+    bare uid string. There is no equivalent the caller can reconstruct: "we have no user document" is a
+    different question and would hand a trial to an existing user whose document went missing.
+
+    Backends that cannot tell report ``False`` rather than guessing. That is the conservative direction
+    for every caller so far — a first-sign-in bonus not granted is a support ticket, one granted twice is
+    a payout — and today it is moot: the only other adapter (OIDC) raises ``Unsupported`` for this verb
+    entirely, because on-prem brokers IdPs at the provider.
+    """
+
+    uid: str
+    is_new_user: bool = False
+
+
 @runtime_checkable
 class AuthProvider(Protocol):
     """The neutral auth contract. ``verify_token`` is the hot path (HTTP + WS); the rest are user ops."""
@@ -71,9 +92,12 @@ class AuthProvider(Protocol):
     # --- Firebase-only (OIDC raises errors.Unsupported) ---
     def mint_custom_token(self, uid: str) -> str: ...
 
-    def exchange_idp_credential(self, provider: str, id_token: str, access_token: Optional[str] = None) -> str:
-        """Exchange a provider (google/apple) credential for the canonical uid (Firebase signInWithIdp)."""
+    def exchange_idp_credential(
+        self, provider: str, id_token: str, access_token: Optional[str] = None
+    ) -> "IdpIdentity":
+        """Exchange a provider (google/apple) credential for the canonical identity (Firebase
+        signInWithIdp)."""
         ...
 
 
-__all__ = ["Principal", "UserProfile", "AuthProvider"]
+__all__ = ["Principal", "UserProfile", "IdpIdentity", "AuthProvider"]

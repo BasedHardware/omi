@@ -35,6 +35,8 @@ class _AutoMockModule(ModuleType):
         return mock
 
 
+from testing.import_isolation import package_submodule_stubs
+
 _stubs = [
     'ulid',
     'pinecone',
@@ -55,16 +57,12 @@ _stubs = [
     'google.cloud.firestore_v1',
     'utils.request_validation',
     'utils.other.endpoints',
+    'utils.other.list_budget',
     'utils.other.storage',
-    'utils.conversations.factory',
-    'utils.conversations.analytics',
-    'utils.conversations.render',
-    'utils.conversations.process_conversation',
-    'utils.conversations.meeting_receipt',
-    'utils.conversations.search',
-    'utils.conversations.calendar_linking',
-    'utils.conversations.calendar_utils',
-    'utils.conversations.location',
+    # Names only: this file's _AutoMockModule/_register_module wrap them. Parents
+    # (including utils.conversations) are created by _register_module, so the
+    # package itself is omitted here. See package_submodule_stubs.
+    *sorted(package_submodule_stubs('utils.conversations', include_package=False)),
     'utils.executors',
     'utils.product_telemetry',
     'utils.llm.conversation_processing',

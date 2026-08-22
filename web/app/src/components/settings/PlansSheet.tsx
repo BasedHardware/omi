@@ -18,6 +18,7 @@ import type {
   PricingOption,
   AvailablePlansResponse,
 } from '@/types/user';
+import { decodePlan, planGrantsPaidCapability } from '@/types/user';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 interface PlansSheetProps {
@@ -43,13 +44,27 @@ export function PlansSheet({
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
 
-  const isUnlimited = subscription?.is_unlimited;
+  const planIdentity = subscription
+    ? subscription.plan_identity ?? decodePlan(subscription.plan)
+    : null;
+  const isUnlimited = planIdentity ? planGrantsPaidCapability(planIdentity) : false;
+  const isUnknownPlan = planIdentity?.kind === 'unknown';
   const isCanceling_ = subscription?.cancel_at_period_end;
 
   useEffect(() => {
     let cancelled = false;
 
     if (open) {
+      if (isUnknownPlan) {
+        setPricingOptions([]);
+        setSelectedPriceId(null);
+        setError(null);
+        setIsLoadingPlans(false);
+        return () => {
+          cancelled = true;
+        };
+      }
+
       // Use cached plans if available, otherwise fetch
       if (cachedPlans && cachedPlans.length > 0) {
         if (cancelled) return;
@@ -70,7 +85,7 @@ export function PlansSheet({
     return () => {
       cancelled = true;
     };
-  }, [open, cachedPlans, subscription?.current_price_id]);
+  }, [open, cachedPlans, subscription?.current_price_id, isUnknownPlan]);
 
   const loadPlans = async (cancelled = false) => {
     setIsLoadingPlans(true);
@@ -98,7 +113,7 @@ export function PlansSheet({
   };
 
   const handleSubscribe = async () => {
-    if (!selectedPriceId) return;
+    if (isUnknownPlan || !selectedPriceId) return;
 
     setIsLoading(true);
     setError(null);
@@ -257,7 +272,9 @@ export function PlansSheet({
                       </div>
                       <div>
                         <Dialog.Title className="text-lg font-semibold text-text-primary">
-                          {isUnlimited && !isCanceling_
+                          {isUnknownPlan
+                            ? 'Plan unavailable'
+                            : isUnlimited && !isCanceling_
                             ? 'Manage Your Plan'
                             : 'Choose Your Plan'}
                         </Dialog.Title>
@@ -274,7 +291,15 @@ export function PlansSheet({
 
                   {/* Content */}
                   <div className="p-6 space-y-6">
-                    {isLoadingPlans ? (
+                    {isUnknownPlan ? (
+                      <div className="py-8 text-center">
+                        <p className="text-sm text-text-secondary">
+                          This account uses a plan that this version of Omi does not
+                          recognize yet. Plan options are unavailable until the plan can
+                          be identified.
+                        </p>
+                      </div>
+                    ) : isLoadingPlans ? (
                       <div className="flex items-center justify-center py-12">
                         <Loader2 className="w-6 h-6 text-text-primary animate-spin" />
                       </div>

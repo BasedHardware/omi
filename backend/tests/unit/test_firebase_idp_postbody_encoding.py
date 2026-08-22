@@ -26,11 +26,9 @@ def test_idp_postbody_url_encodes_reserved_characters(monkeypatch):
 
     monkeypatch.setattr(httpx, 'post', fake_post)
 
-    uid = FirebaseAuthProvider().exchange_idp_credential(
-        'google', id_token='a+b&c=d e', access_token='x&y=z'
-    )
+    identity = FirebaseAuthProvider().exchange_idp_credential('google', id_token='a+b&c=d e', access_token='x&y=z')
 
-    assert uid == 'uid-abc'
+    assert identity.uid == 'uid-abc'
     # Round-trip: the raw reserved characters survive intact only if each field was encoded.
     parsed = parse_qs(captured['postBody'], keep_blank_values=True)
     assert parsed['id_token'] == ['a+b&c=d e']

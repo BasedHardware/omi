@@ -40,6 +40,9 @@ DELIBERATELY_REMOVED_ENDPOINTS: frozenset[str] = frozenset(
         '/v1/agent/vm-status',
         '/v1/agent/vm-ensure',
         '/v1/agent/keepalive',
+        # Desktop Crisp client removed in macOS 0.12.162+; endpoint had no other
+        # callers. Screen-activity sync stays on the same router (#11429).
+        '/v1/crisp/unread',
     }
 )
 

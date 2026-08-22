@@ -245,6 +245,7 @@ class TestModelQosProfiles:
     def test_all_profiles_use_the_authorized_two_tier_openai_map(self):
         luna_features = {
             'conv_action_items',
+            'wake_word_adjudication',
             'conv_structure',
             'conv_app_result',
             'daily_summary',
@@ -324,6 +325,7 @@ class TestModelQosProfiles:
             'learnings',
             'chat_graph',
             'proactive_notification',
+            'wake_word_adjudication',
         ]
         for feature in new_features:
             for profile_name, profile in MODEL_QOS_PROFILES.items():

@@ -6,6 +6,7 @@ import pytest
 
 from utils.memory import canonical_short_term_maintenance_cron as cron
 from utils.memory.canonical_consolidation import ConsolidationReport
+from utils.memory.short_term_promotion import CanonicalShortTermLifecycleReport
 
 NOW = datetime(2026, 6, 24, 12, 0, tzinfo=timezone.utc)
 
@@ -455,6 +456,54 @@ def test_overflow_queue_bypasses_recent_dream_cooldown(monkeypatch):
     assert calls == [("uid-overflow", 0)]
     assert summary.skipped_recently_dreamed == 1
     assert summary.dreamed_users == 1
+
+
+def test_expiry_ordered_backstop_bypasses_cooldown_and_registry_failure(monkeypatch):
+    _enable(monkeypatch)
+    calls = []
+    monkeypatch.setattr(
+        cron,
+        'expiry_ordered_maintenance_uid_inventory',
+        lambda _db, now, limit: cron.ExpiryOrderedMaintenanceInventory(
+            uids=('uid-urgent',),
+            candidate_item_count=1,
+            expired_active_item_count=1,
+        ),
+    )
+    monkeypatch.setattr(
+        cron,
+        'bounded_canonical_memory_uid_inventory',
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(cron.CanonicalMaintenanceInventoryUnavailable('registry down')),
+    )
+    monkeypatch.setattr(cron, 'count_active_short_term', lambda uid, db_client, cap=11: 1)
+    monkeypatch.setattr(cron, 'recently_dreamed', lambda uid, db_client, now: True)
+
+    def maintenance(uid, **_kwargs):
+        calls.append(uid)
+        return cron.CanonicalShortTermMaintenanceReport(
+            uid=uid,
+            lifecycle=CanonicalShortTermLifecycleReport(
+                uid=uid,
+                lifecycle_created_count=1,
+                lifecycle_existing_count=1,
+                lifecycle_terminal_count=1,
+            ),
+        )
+
+    monkeypatch.setattr(cron, 'run_canonical_short_term_maintenance', maintenance)
+
+    summary = cron.run_universal_short_term_maintenance(db_client=object(), now=NOW)
+
+    assert calls == ['uid-urgent']
+    assert summary.inventory_source == 'expiry_ordered'
+    assert summary.inventory_complete is False
+    assert summary.expiry_urgent_users == 1
+    assert summary.expired_active_candidates_total == 1
+    assert summary.expired_without_terminal_disposition_total == 1
+    assert summary.expired_with_recorded_disposition_total == 1
+    assert summary.expired_terminal_dispositions_total == 1
+    assert summary.skipped_recently_dreamed == 0
+    assert summary.errors == ['canonical_uid_inventory_unavailable']
 
 
 def test_failed_consolidation_does_not_start_dream_cooldown(monkeypatch):

@@ -12,7 +12,7 @@ import os
 from typing import Any, List, Optional
 
 from utils.auth import errors
-from utils.auth.ports import Principal, UserProfile
+from utils.auth.ports import IdpIdentity, Principal, UserProfile
 
 # Pin an explicit timeout on the Identity Toolkit call so a hung provider never blocks indefinitely
 # (the utils outbound-timeout guard enforces this).
@@ -108,8 +108,8 @@ class FirebaseAuthProvider:
             raise _translate(exc)
         return token.decode('utf-8') if isinstance(token, bytes) else str(token)
 
-    def exchange_idp_credential(self, provider: str, id_token: str, access_token: Optional[str] = None) -> str:
-        """Firebase signInWithIdp REST exchange → the canonical Firebase uid (needs FIREBASE_API_KEY)."""
+    def exchange_idp_credential(self, provider: str, id_token: str, access_token: Optional[str] = None) -> IdpIdentity:
+        """Firebase signInWithIdp REST exchange → the canonical identity (needs FIREBASE_API_KEY)."""
         import httpx
 
         api_key = (os.getenv('FIREBASE_API_KEY') or '').strip()
@@ -146,12 +146,15 @@ class FirebaseAuthProvider:
         if resp.status_code != 200:
             raise errors.AuthError(f'signInWithIdp failed: status={resp.status_code}')
         try:
-            uid = resp.json().get('localId')
+            body = resp.json()
         except ValueError as exc:  # non-JSON 200 body
             raise errors.AuthError(f'signInWithIdp returned a non-JSON body: {exc}')
+        uid = body.get('localId')
         if not uid:
             raise errors.AuthError('no uid returned from signInWithIdp')
-        return uid
+        # `is True`, not truthiness: signInWithIdp returns the flag as a real boolean, and anything else
+        # (absent, a string, null) means "this response does not say so" — which must read as NOT new.
+        return IdpIdentity(uid=uid, is_new_user=body.get('isNewUser') is True)
 
 
 __all__ = ["FirebaseAuthProvider"]

@@ -11,6 +11,10 @@ and background processing.
 - `process_conversation.py` is the synchronous enrichment coordinator. It
   persists the completed conversation and delegates expensive child work to the
   named executor lanes.
+- `wake_word.py` owns the pure, end-of-conversation matcher and trusted inline
+  prompt marker. It has no realtime state, I/O, or speaker-identity gate. The
+  independent invocation classifier lives in `utils/llm/`; task-intelligence
+  capture owns the conjunction gate that consumes its validated verdicts.
 - `finalizer.py` is the durable handoff boundary for a persisted conversation.
   A caller must have already acquired a finalization-job lease before invoking
   it; it loads the conversation, performs enrichment through the postprocess

@@ -122,7 +122,7 @@ Local T2 and fault suites remain available as engineering QA tools. They do not 
 | `subagent-row-benchmark` | v1 | typed bridge | 3 | Perf |
 | `apps` | v2 | manual `do:` | manual | Marketplace walker journey |
 | `audio-recording` | v2 | manual `do:` | manual | Needs mic permission |
-| `refer-external` | v2 | manual `do:` | manual | Profile menu → affiliate URL |
+| `refer-external` | v2 | manual `do:` | manual | Top bar + Settings → unique referral link |
 | `delete-account` | v2 | manual `do:` | manual | Confirmation sheet only; never confirm |
 | `logout` | v2 | manual bridge | manual | `sign_out` bridge action; local Auth emulator only |
 | `onboarding-smoke` | v2 | manual `do:` + bridge | manual | `reset_onboarding`; Wave 7 fix — manual until 2× local green |
@@ -146,7 +146,7 @@ Local T2 and fault suites remain available as engineering QA tools. They do not 
 | Plan / usage | T2 | bridge | read subscription | ✅ `plan-usage.yaml` |
 | Apps catalog | T2 + Live P2 | bridge + manual | catalog snapshot + walker | ✅ `apps-marketplace.yaml` / ⚠️ `apps.yaml` |
 | Connector import | T2 + Live P2 | bridge + manual | API probe + sheet UI | ✅ `connector-import.yaml` / ⚠️ `connector-import-progress.yaml` |
-| Refer external | Live P2 | manual | opens browser | ⚠️ `refer-external.yaml` |
+| Referrals | Live P2 | manual | copies unique link | ⚠️ `refer-external.yaml` |
 | Delete account | Live P2 | manual | confirm sheet only | ⚠️ `delete-account.yaml` |
 | Logout | Live P2 | manual bridge | `sign_out` action | ⚠️ `logout.yaml` (local emulator; stays manual — destructive to session) |
 | Onboarding reset | Live P2 | manual + bridge | reset + restart | ⚠️ `onboarding-smoke.yaml` (fix landed; manual gate) |

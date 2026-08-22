@@ -226,7 +226,7 @@ def test_developer_rollout_reader_derives_default_memory_grant_without_reading_m
     assert decision.memory_default_developer_enabled is True
 
 
-def test_developer_default_memory_adapter_uses_product_search_and_excludes_stale_short_term_and_archive():
+def test_developer_default_memory_adapter_keeps_expired_unadjudicated_short_term_and_excludes_archive():
     now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     stale_short_term = _memory_item(
@@ -253,8 +253,12 @@ def test_developer_default_memory_adapter_uses_product_search_and_excludes_stale
     assert result.fallback_reason is None
     results = result.memories
     assert db_client.collection_paths == ['users/u1/memory_items']
-    assert [item['id'] for item in results] == ['fresh-short-term', 'long-term']
-    assert [item['content'] for item in results] == ['coffee fresh short term', 'coffee long term']
+    assert [item['id'] for item in results] == ['fresh-short-term', 'long-term', 'stale-short-term']
+    assert [item['content'] for item in results] == [
+        'coffee fresh short term',
+        'coffee long term',
+        'coffee stale short term',
+    ]
     assert all((item['category'] == 'other' for item in results))
     assert all((item['visibility'] == 'private' for item in results))
     assert all((item['memory_default_memory'] is True for item in results))
@@ -350,8 +354,8 @@ def test_developer_vector_adapter_uses_hydrated_vector_service_and_preserves_ran
     results = result.memories
     assert vector_calls == [{'uid': 'u1', 'query': 'coffee', 'mode': SearchMode.default, 'limit': 30}]
     assert db_client.collection_paths == []
-    assert [item['id'] for item in results] == ['long-term', 'fresh-short-term']
-    assert [item['relevance_score'] for item in results] == [0.92, 0.8]
+    assert [item['id'] for item in results] == ['stale-short-term', 'long-term', 'fresh-short-term']
+    assert [item['relevance_score'] for item in results] == [0.99, 0.92, 0.8]
     assert all((item['memory_default_memory'] is True for item in results))
     assert all((item['archive_default_visible'] is False for item in results))
     assert all((item['policy']['consumer'] == 'developer_api' for item in results))

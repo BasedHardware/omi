@@ -434,6 +434,20 @@ http.Request _buildRequest(String url, Map<String, String> headers, String body,
   return request;
 }
 
+/// Reads the Omi list-truncation header from a backend response.
+///
+/// The header name is case-insensitive because `package:http` may preserve
+/// the server's casing, and the value is the literal string `"true"`.
+bool isOmiListTruncated(http.Response? response) {
+  if (response == null) return false;
+  for (final entry in response.headers.entries) {
+    if (entry.key.toLowerCase() == 'x-omi-list-truncated' && entry.value == 'true') {
+      return true;
+    }
+  }
+  return false;
+}
+
 Future<http.StreamedResponse> _sendMultipartWithProgress(
   http.MultipartRequest request,
   UploadProgressCallback? onProgress,

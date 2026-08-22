@@ -199,6 +199,27 @@ struct FloatingBarNotificationContext: Equatable {
   }
 }
 
+/// Pure decision for how a persistent card interacts with the notification
+/// queue: a newcomer displaces it (the persistent card returns right after)
+/// rather than queueing behind a card that has no timeout — otherwise one
+/// un-acted persistent card would starve every later proactive notification.
+enum FloatingBarNotificationQueuePolicy {
+  static func shouldDisplacePersistentCard(
+    currentIsPersistent: Bool,
+    showingAIConversation: Bool
+  ) -> Bool {
+    currentIsPersistent && !showingAIConversation
+  }
+
+  /// A displaced persistent card rejoins at the TAIL: every notification that
+  /// queued while it was visible presents first, and the card — which never
+  /// times out — returns once the queue drains, so it can neither be lost nor
+  /// starve anything behind it.
+  static func requeueIndex(queueCount: Int) -> Int {
+    queueCount
+  }
+}
+
 enum FloatingBarNotificationAction: Equatable {
   case openWhatMattersNow(recommendationID: String)
   /// Offer to connect an integration the user has open but has not set up.
@@ -208,6 +229,10 @@ enum FloatingBarNotificationAction: Equatable {
   /// what was recognized, so a conversion can be attributed to the native-app
   /// or browser-site trigger that produced the card rather than merged.
   case connectIntegration(telemetryID: String, triggerID: String)
+  /// Post-meeting summary share card: carries what the card's buttons need —
+  /// the conversation to share and the calendar-detected recipients a
+  /// one-click "Send to …" email would go to (empty = no send button).
+  case meetingSummaryShare(conversationID: String, recipients: [ConversationShareRecipient])
 }
 
 /// A custom in-app notification rendered directly below the floating bar.
@@ -230,6 +255,10 @@ struct FloatingBarNotification: Identifiable, Equatable {
   let insightDeliveryID: UUID?
   /// Screenshot JPEG data from the moment the notification was generated (not shown in UI)
   let screenshotData: Data?
+  /// A persistent card never times out: it stays presented until the user
+  /// acts on it or dismisses it. Reserved for cards whose whole point is an
+  /// explicit decision (e.g. the meeting summary share card).
+  let isPersistent: Bool
 
   init(
     ownerID: String,
@@ -241,7 +270,8 @@ struct FloatingBarNotification: Identifiable, Equatable {
     action: FloatingBarNotificationAction? = nil,
     suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
     insightDeliveryID: UUID? = nil,
-    screenshotData: Data? = nil
+    screenshotData: Data? = nil,
+    isPersistent: Bool = false
   ) {
     self.ownerID = ownerID
     self.title = title
@@ -253,6 +283,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
     self.suggestionTelemetryIdentity = suggestionTelemetryIdentity
     self.insightDeliveryID = insightDeliveryID
     self.screenshotData = screenshotData
+    self.isPersistent = isPersistent
   }
 
   static func == (lhs: FloatingBarNotification, rhs: FloatingBarNotification) -> Bool {

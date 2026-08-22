@@ -341,7 +341,25 @@ final class ChatRowPresentationTests: XCTestCase {
     XCTAssertEqual(ProactiveNotificationKind.from(assistantId: "memory-extraction"), .memory)
     XCTAssertEqual(ProactiveNotificationKind.from(assistantId: "goals"), .goal)
     XCTAssertEqual(ProactiveNotificationKind.from(assistantId: "meeting-notes"), .meetingNotes)
-    XCTAssertEqual(ProactiveNotificationBadge(kind: .meetingNotes).label, "Meeting notes")
+    XCTAssertEqual(ProactiveNotificationKind.from(assistantId: "integration_connect"), .integration)
+    XCTAssertEqual(ProactiveNotificationBadge(kind: .meetingNotes).label, "Task")
+  }
+
+  /// The user-facing taxonomy is exactly five proactive categories — Focus, Task,
+  /// Insight, Memory, Integration — matching the five toggles in Settings →
+  /// Notifications. Focus is the focus-nudge assistant alone; tips, resurfaced items,
+  /// and generated goals are insights; connect-an-app offers are integrations.
+  /// `.general` is reserved for functional system alerts outside the taxonomy.
+  func testEveryProactiveKindPresentsAsOneOfTheFiveCategories() {
+    XCTAssertEqual(ProactiveNotificationBadge(kind: .suggestion).label, "Focus")
+    XCTAssertEqual(ProactiveNotificationBadge(kind: .task).label, "Task")
+    XCTAssertEqual(ProactiveNotificationBadge(kind: .meetingNotes).label, "Task")
+    XCTAssertEqual(ProactiveNotificationBadge(kind: .insight).label, "Insight")
+    XCTAssertEqual(ProactiveNotificationBadge(kind: .resurface).label, "Insight")
+    XCTAssertEqual(ProactiveNotificationBadge(kind: .goal).label, "Insight")
+    XCTAssertEqual(ProactiveNotificationBadge(kind: .memory).label, "Memory")
+    XCTAssertEqual(ProactiveNotificationBadge(kind: .integration).label, "Integration")
+    XCTAssertEqual(ProactiveNotificationBadge(kind: .general).label, "Notification")
   }
 
   func testNotificationJournalTextPreservesTheHeadlineAndBody() {
@@ -353,6 +371,64 @@ final class ChatRowPresentationTests: XCTestCase {
     XCTAssertEqual(
       FloatingControlBarManager.notificationJournalText(title: "Meeting notes ready", body: ""),
       "Meeting notes ready")
+  }
+
+  /// The director's copy contract makes the title and the message both name the same
+  /// referent; journaled together into one chat row that read as saying everything
+  /// twice (observed live on beta after 5a076e10b3). A headline whose every token the
+  /// body already carries — quoted, inflected, or reordered — is dropped from the row.
+  func testJournalDropsAHeadlineTheBodyAlreadyRestates() {
+    // Body quotes the title verbatim (smart quotes stripped by tokenization).
+    XCTAssertEqual(
+      FloatingControlBarManager.notificationJournalText(
+        title: "Instruct David Editor to write extra script for main Omi demo video",
+        body:
+          "\u{201C}Instruct David Editor to write extra script for main Omi demo video\u{201D} is due August 21."),
+      "\u{201C}Instruct David Editor to write extra script for main Omi demo video\u{201D} is due August 21.")
+    // Body restates the title with different casing and inflection.
+    XCTAssertEqual(
+      FloatingControlBarManager.notificationJournalText(
+        title: "Latest Omi desktop app download link",
+        body: "The latest Omi desktop app download link is omi.me/desktop."),
+      "The latest Omi desktop app download link is omi.me/desktop.")
+    // Body reorders the title's tokens ("fix on main" -> "fix is live on main").
+    XCTAssertEqual(
+      FloatingControlBarManager.notificationJournalText(
+        title: "The Omi macOS click-away deadzone fix on main",
+        body: "The Omi macOS click-away deadzone fix is live on main; verify it when you can."),
+      "The Omi macOS click-away deadzone fix is live on main; verify it when you can.")
+    // A headline contributing even one new token keeps its own line.
+    XCTAssertEqual(
+      FloatingControlBarManager.notificationJournalText(
+        title: "Ship the quarterly report",
+        body: "You promised it by 5pm — draft the summary now."),
+      "Ship the quarterly report\nYou promised it by 5pm — draft the summary now.")
+    // Live beta rows (Aug 21): the title's only novel tokens were prepositions
+    // ("for", "at") the body phrased differently — function words never keep a
+    // redundant headline alive.
+    XCTAssertEqual(
+      FloatingControlBarManager.notificationJournalText(
+        title: "Latest Omi desktop link for David at scalingforever.com",
+        body:
+          "The latest Omi desktop app download link is omi.me/desktop. You can paste it into the message to david@scalingforever.com."
+      ),
+      "The latest Omi desktop app download link is omi.me/desktop. You can paste it into the message to david@scalingforever.com."
+    )
+    XCTAssertEqual(
+      FloatingControlBarManager.notificationJournalText(
+        title: "Latest Omi desktop link for david@scalingforever.com",
+        body:
+          "The latest Omi desktop download link is omi.me/desktop, so you may not need to send the draft to david@scalingforever.com."
+      ),
+      "The latest Omi desktop download link is omi.me/desktop, so you may not need to send the draft to david@scalingforever.com."
+    )
+    // A title whose content genuinely differs from the body still keeps its line
+    // even when it shares function words.
+    XCTAssertEqual(
+      FloatingControlBarManager.notificationJournalText(
+        title: "Draft for the board meeting",
+        body: "You promised the revenue summary by 5pm."),
+      "Draft for the board meeting\nYou promised the revenue summary by 5pm.")
   }
 
   func testAnOrdinaryReplyAndAUserTurnAreNotPushes() {

@@ -306,7 +306,8 @@ struct QueryShellHome: View {
         appState: appState,
         memoriesViewModel: memoriesViewModel,
         tasksStore: tasksStore,
-        onOpenConversation: openConversation,
+        onOpenConversation: openConversationRecord,
+        onOpenMemory: openMemory,
         onOpenBrainMap: openBrainMap,
         onOpenRewind: openRewind
       )
@@ -447,6 +448,32 @@ struct QueryShellHome: View {
   }
 
   // MARK: - Where a row goes
+
+  /// Opens the exact conversation a spine row is about.
+  ///
+  /// The row carries the whole record, so the typed deep link can hand it straight to the
+  /// Conversations host. The id-only path below stays for the shell that has no typed navigation
+  /// owner, where this page mounts the Conversations host itself.
+  private func openConversationRecord(_ conversation: ServerConversation) {
+    if let context = chatFirstRichBlockContext {
+      context.navigation.open(conversation: conversation)
+      return
+    }
+    openConversation(conversation.id)
+  }
+
+  /// Opens the exact memory a spine row is about, on the same terms the Brain Map's citations use:
+  /// leave this surface only once the memory actually resolved.
+  private func openMemory(_ memory: SpineMemory) {
+    if let context = chatFirstRichBlockContext {
+      context.navigation.open(focus: .memory(id: memory.id))
+      return
+    }
+    Task {
+      await MemoryAtlasCitationOpen.open(
+        id: memory.id, in: memoriesViewModel, leave: { navigate(.memories) })
+    }
+  }
 
   /// Opens the real Conversations page on the real conversation — never a copy of it here (INV-NAV-1).
   private func openConversation(_ id: String) {

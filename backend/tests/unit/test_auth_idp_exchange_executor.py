@@ -17,11 +17,12 @@ from typing import Any, List, Tuple
 
 from routers import auth as auth_router
 from utils import executors
+from utils.auth.ports import IdpIdentity
 
 
 class _FakeAdapter:
-    def exchange_idp_credential(self, provider: str, id_token: str, access_token: Any = None) -> str:
-        return "uid-xyz"
+    def exchange_idp_credential(self, provider: str, id_token: str, access_token: Any = None) -> IdpIdentity:
+        return IdpIdentity(uid="uid-xyz")
 
     def mint_custom_token(self, uid: str) -> str:
         return "custom-token"

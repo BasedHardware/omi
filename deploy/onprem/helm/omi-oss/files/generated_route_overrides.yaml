@@ -110,5 +110,10 @@ generated_route_overrides:
     primary: {provider: openai, model: qwen2.5:14b}
   - feature: smart_glasses
     primary: {provider: openai, model: qwen2.5:14b}
+  # Arrived with upstream (wake-word adjudication for conversation capture). Upstream routes it to a
+  # cloud model with `reasoning_effort: high`; the option is dropped here because the local
+  # OpenAI-compatible servers do not take it, and an unpinned lane would have kept the CLOUD route.
+  - feature: wake_word_adjudication
+    primary: {provider: openai, model: qwen2.5:14b}
   - feature: what_matters_now
     primary: {provider: openai, model: qwen2.5:14b}

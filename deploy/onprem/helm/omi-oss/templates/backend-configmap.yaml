@@ -70,6 +70,13 @@ data:
   # identity is not an auth concern, and a firebase-backed self-host would advertise it just the same.
   # Emitted only when a hostname can be derived; "https:///v1/mcp/sse" would be worse than the default.
   MCP_RESOURCE_URL: "{{ . }}/v1/mcp/sse"
+  # The base of every referral link this deployment's users share (utils/referrals.py). Unset, the code
+  # default is upstream's OWN host (https://omi.me), so a self-hosted user inviting a colleague would
+  # hand out a link into Omi's cloud — the same class as MCP_RESOURCE_URL above, and the same fix.
+  # Note what this does NOT reach: `REFERRAL_SIGNUP_URL` is a module constant pinned to
+  # https://app.omi.me/login, so the page a referral code lands on is still upstream's. That is
+  # upstream's product surface, not configuration, and it is recorded rather than patched here.
+  REFERRAL_PUBLIC_BASE_URL: "{{ . }}"
   {{- end }}
   {{- if .Values.auth.enabled }}
   # auth profile: OIDC (Keycloak) instead of Firebase (ADR-0034). OIDC_ISSUER is the public HTTPS issuer

@@ -1,0 +1,7 @@
+{
+  "version": "0.12.203",
+  "date": "2026-08-22",
+  "changes": [
+    "The meeting notes card now has a Share button that opens an address field — prefilled with the detected participant, but yours to change — plus a link button to copy, and Omi tells you it is taking notes when it detects a meeting"
+  ]
+}

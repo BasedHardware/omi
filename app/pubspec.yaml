@@ -81,6 +81,8 @@ dependencies:
   phone_numbers_parser: ^9.0.25
   share_plus: 11.0.0
   shared_preferences: 2.5.3
+  # Auth token only — Keychain (iOS/macOS) / EncryptedSharedPreferences (Android).
+  flutter_secure_storage: 9.2.4
   url_launcher: ^6.3.0
   wav: ^1.4.0
   path: ^1.9.0

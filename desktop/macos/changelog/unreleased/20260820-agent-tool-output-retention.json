@@ -1,3 +1,0 @@
-{
-  "change": "Automatically deletes leftover agent tool-output files older than a week so they stop filling the Mac"
-}

@@ -190,6 +190,14 @@ final class SearchResultsModel: ObservableObject {
     /// instead, so the answer is always the store that exists *now*.
     private let store: () -> ContextStore?
 
+    /// Whether this panel session has already reported that results were shown.
+    ///
+    /// **An instance flag is the session**, and it is one because of how `SearchBarWindow` is built:
+    /// `dismiss()` drops `current` and the next `present()` rebuilds the window, its view, and this
+    /// model — so a new model *is* a new panel, and a panel merely brought forward keeps the one it
+    /// had. Nothing has to reset it, which is the reason it cannot drift out of step.
+    private var hasReportedTheSearchSurface = false
+
     init(store: @escaping () -> ContextStore?) {
         self.store = store
     }
@@ -238,7 +246,53 @@ final class SearchResultsModel: ObservableObject {
     ///   again" is a question, so it must not be de-duplicated away.
     func ask(_ text: String) {
         query = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Asked before the reload, because the reload is what closes over it: `reload()` returns
+        // early when the capture database is not open yet, leaving `totalCount` holding the
+        // *previous* question's answer. Reporting then would bucket one query's result count
+        // against another's — and a search that never ran is not a search. The emit used to live
+        // inside `reload()` past this same guard, so this keeps the behaviour it always had.
+        let storeWasOpen = store() != nil
         reload()
+        guard storeWasOpen else { return }
+        report(Self.searchEvents(
+            query: query, resultCount: totalCount, isFirstOfSession: !hasReportedTheSearchSurface))
+    }
+
+    /// **What a committed question reports** — nothing at all for an empty one.
+    ///
+    /// Pure, and separated from the emit, because the rule it states is the whole of a defect that
+    /// shipped: `cfc_search_ran` came from `reload()`, which runs on **every keystroke** (there is no
+    /// debounce), once per panel open with an *empty* query from `SearchBarView.onAppear`, and again
+    /// on every filter click. The series counted typing, opening and filtering, and called all three
+    /// searches. A question is a question when it is committed, and an empty field is not one.
+    ///
+    /// `.search` rides along on the first of them rather than on the panel opening, and that is the
+    /// distinction `Surface` now draws: `.activity` is the window going up, `.search` is results
+    /// being shown in it. Once per panel session, so it counts sessions that searched rather than
+    /// letters typed.
+    ///
+    /// `nonisolated` because it reads nothing but its arguments — which is the property that makes
+    /// it assertable at all, from a suite that has no panel and no main actor to run one on.
+    ///
+    /// - Parameter isFirstOfSession: whether results have already been reported for this panel.
+    nonisolated static func searchEvents(
+        query: String, resultCount: Int, isFirstOfSession: Bool
+    ) -> [AnalyticsEvent] {
+        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
+        var events: [AnalyticsEvent] = []
+        // `.inAppPill`: the results body is only ever reached from a control inside the panel that
+        // is already open — the field itself, or a query another surface handed it.
+        if isFirstOfSession { events.append(.surfaceOpened(.search, via: .inAppPill)) }
+        // Bucketed, and never the query. Read after the answer settles so a zero-result search —
+        // the one worth knowing about — is counted as a search rather than as nothing happening.
+        events.append(.searchRan(resultCountBucket: AnalyticsEvent.CountBucket(resultCount)))
+        return events
+    }
+
+    private func report(_ events: [AnalyticsEvent]) {
+        guard !events.isEmpty else { return }
+        hasReportedTheSearchSurface = true
+        for event in events { ContextAnalytics.record(event) }
     }
 
     /// A new query. Cheap to call on every keystroke: identical text is a no-op.
@@ -435,11 +489,9 @@ final class SearchResultsModel: ObservableObject {
             // something is: "109 results" over a grid of four is a lie either way round. Unnarrowed,
             // it is both halves added up — the page is one answer, so its count has to be too.
             totalCount = narrowedBySource ? visibleScreens.count : seen.total + spoken.total
-            // Bucketed, and never the query itself. Recorded after the answer settles so a
-            // zero-result search — the one worth knowing about — is counted as a search rather
-            // than as nothing having happened.
-            ContextAnalytics.record(
-                .searchRan(resultCountBucket: AnalyticsEvent.CountBucket(totalCount)))
+            // **Nothing is reported from here**, and that is the fix rather than an omission: this
+            // runs on every keystroke, on every filter click, and once per panel open with an empty
+            // query. See `searchEvents`, which `ask(_:)` is the one caller of.
             // A selection the new answer no longer contains is a keyboard target that is not on
             // screen — Return would open a card the user cannot see. Kept when the moment survived
             // the re-read, because a chip that merely reorders the page should not cost somebody

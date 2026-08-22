@@ -74,11 +74,17 @@ class _FakeCollection:
 
 
 class _FakeUserRef:
-    def __init__(self, collection):
+    def __init__(self, collection, subscription_plan=None):
         self._collection = collection
+        self._subscription_plan = subscription_plan
 
     def collection(self, name):
         return self._collection
+
+    def get(self, *_args):
+        if self._subscription_plan is None:
+            return _FakeDocSnapshot({}, exists=False)
+        return _FakeDocSnapshot({'subscription': {'plan': self._subscription_plan}})
 
 
 def test_record_llm_usage_sanitizes_model_with_dots():
@@ -105,6 +111,44 @@ def test_record_llm_usage_sanitizes_model_with_dots():
     # Check that '.' is replaced with '_'
     assert "chat.gpt-4_1-mini.input_tokens" in call["data"]
     assert "chat.gpt-4_1-mini.output_tokens" in call["data"]
+
+
+def test_bucket_attribution_maps_legacy_pro_and_omits_unmeasured_cost():
+    doc_ref = _FakeDocRef()
+    collection = _FakeCollection(doc_ref)
+    user_ref = _FakeUserRef(collection, subscription_plan='pro')
+
+    with patch.object(llm_usage, 'db') as patched_db:
+        patched_db.collection.return_value.document.return_value = user_ref
+        llm_usage.record_llm_usage_bucket('user', input_tokens=10, output_tokens=5)
+
+    data = doc_ref.set_calls[0]['data']
+    assert 'desktop_chat.cost_usd' not in data
+    assert 'desktop_chat_omi.cost_usd' not in data
+    assert data['plan_usage.architect.desktop_chat.input_tokens'] == 10
+    assert data['plan_usage.architect.desktop_chat.output_tokens'] == 5
+    assert data['plan_usage.architect._metadata.cost_status_counts.missing'] == 1
+
+
+def test_bucket_complete_cost_is_joinable_to_catalog_plan():
+    doc_ref = _FakeDocRef()
+    collection = _FakeCollection(doc_ref)
+    user_ref = _FakeUserRef(collection, subscription_plan='operator')
+
+    with patch.object(llm_usage, 'db') as patched_db:
+        patched_db.collection.return_value.document.return_value = user_ref
+        llm_usage.record_llm_usage_bucket(
+            'user',
+            input_tokens=10,
+            output_tokens=5,
+            cost_usd=0.25,
+            cost_status='complete',
+        )
+
+    data = doc_ref.set_calls[0]['data']
+    assert data['desktop_chat.cost_usd'] == 0.25
+    assert data['plan_usage.operator.desktop_chat.cost_usd'] == 0.25
+    assert data['plan_usage.operator._metadata.cost_status_counts.complete'] == 1
 
 
 def test_record_llm_usage_sanitizes_model_with_slash():

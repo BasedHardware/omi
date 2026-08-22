@@ -11,7 +11,7 @@ from dataclasses import replace
 from typing import Dict, List, Optional
 
 from utils.auth.errors import AuthError, ExpiredToken, InvalidToken, JWKSUnavailable, RevokedToken, Unsupported
-from utils.auth.ports import Principal, UserProfile
+from utils.auth.ports import IdpIdentity, Principal, UserProfile
 
 
 class FakeAuthProvider:
@@ -25,6 +25,7 @@ class FakeAuthProvider:
         self._revoked: set[str] = set()
         self._errors: Dict[str, AuthError] = {}
         self.deleted: List[str] = []
+        self._new_user_tokens: set[str] = set()
         self.minted: List[str] = []
 
     # --- test setup ---
@@ -99,10 +100,19 @@ class FakeAuthProvider:
         self.minted.append(uid)
         return f"custom-token:{uid}"
 
-    def exchange_idp_credential(self, provider: str, id_token: str, access_token: Optional[str] = None) -> str:
+    def register_new_user_exchange(self, id_token: str) -> "FakeAuthProvider":
+        """Make the next exchange of this credential report a freshly created account.
+
+        Off by default, because that is the direction a caller can afford to be wrong in: a
+        first-sign-in bonus not granted is a support ticket, one granted twice is a payout.
+        """
+        self._new_user_tokens.add(id_token)
+        return self
+
+    def exchange_idp_credential(self, provider: str, id_token: str, access_token: Optional[str] = None) -> IdpIdentity:
         if not self._supports_firebase_only:
             raise Unsupported("exchange_idp_credential is Firebase-only")
-        return f"uid-for:{provider}:{id_token}"
+        return IdpIdentity(uid=f"uid-for:{provider}:{id_token}", is_new_user=id_token in self._new_user_tokens)
 
 
 __all__ = ["FakeAuthProvider"]

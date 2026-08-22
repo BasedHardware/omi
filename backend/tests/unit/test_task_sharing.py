@@ -8,11 +8,13 @@ Covers:
 5. Completion notification fires for shared tasks
 """
 
+import importlib.util
 import json
 import os
 import sys
 import types
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import MagicMock, patch, call
 
 os.environ.setdefault(
@@ -121,6 +123,32 @@ utils_users_mod.get_user_display_name = MagicMock(return_value="TestUser")
 _stub_module("utils.other")
 _stub_module("utils.other.endpoints")
 sys.modules["utils.other.endpoints"].get_current_user_uid = MagicMock()
+# The list route wraps its auth dependency in the rate-limit decorator at MODULE level
+# (routers/action_items.py), so the stub has to carry it or the import raises before a single test
+# runs. Identity, not a MagicMock: the return value IS the FastAPI dependency, and a MagicMock
+# there makes the signature inspection fail further in.
+#
+# This is upstream's test and upstream's router, and it collects-errors on upstream/main too —
+# verified by running this exact file in a worktree at upstream/main. Their CI selects tests by
+# changed file, so the PR that added the decorator never ran this one. Our sweep runs everything,
+# which is how it surfaced. Worth proposing upstream.
+sys.modules["utils.other.endpoints"].with_rate_limit = lambda dependency, _policy: dependency
+
+# The action-items router imports the list-read budget seam at module level
+# (#11831). Delegate the stubbed submodule to the real (stdlib-only) module so
+# the import binds real symbols without pulling heavy dependencies.
+list_budget_stub = _stub_module("utils.other.list_budget")
+_list_budget_path = Path(__file__).resolve().parents[2] / "utils" / "other" / "list_budget.py"
+_list_budget_spec = importlib.util.spec_from_file_location("_omi_real_list_budget", _list_budget_path)
+_list_budget_real = importlib.util.module_from_spec(_list_budget_spec)
+_list_budget_spec.loader.exec_module(_list_budget_real)
+
+
+def _list_budget_getattr(name):
+    return getattr(_list_budget_real, name)
+
+
+list_budget_stub.__getattr__ = _list_budget_getattr
 
 import database.redis_db as redis_db
 import routers.action_items as action_items_router

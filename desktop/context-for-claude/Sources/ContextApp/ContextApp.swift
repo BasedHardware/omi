@@ -48,7 +48,7 @@ struct ContextApp: App {
                 // accident" the header above says there must not be. Replacing the group is what
                 // removes SwiftUI's own item rather than sitting a second one beside it.
                 CommandGroup(replacing: .appSettings) {
-                    Button("Settings…") { SettingsWindow.present() }
+                    Button("Settings…") { SettingsWindow.present(via: .shortcut) }
                         .keyboardShortcut(",", modifiers: .command)
                 }
 
@@ -299,7 +299,17 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
             // What each one does is `shortcutFired`; the toggle it acts on is built here, once, so
             // the mapping below never has to know how to find a window.
             GlobalShortcuts.shared.start { action in
-                Self.shortcutFired(action, on: SearchBarWindow.hotkeyToggle())
+                // The chord and a recorded key are the same press to this closure and two different
+                // routes to the person making it: one is the gesture the product teaches, the other
+                // is a shortcut they chose. `binding(for:)` is the only thing that can tell them
+                // apart, and it lives out here rather than inside the toggle so the window stays a
+                // parameter — see `shortcutFired`.
+                let via: AnalyticsEvent.OpenSource
+                switch GlobalShortcuts.shared.binding(for: action) {
+                case .gestureDefault: via = .gesture
+                case .recorded: via = .shortcut
+                }
+                Self.shortcutFired(action, on: SearchBarWindow.hotkeyToggle(via: via))
             }
 
             // …and "both rebindable" is only true because of this line. Settings' two recorders talk
@@ -375,7 +385,7 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
     /// rest of a reopen — un-minimising a window the user had put in the Dock is its half, and
     /// nothing here duplicates it.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
-        MainActor.assumeIsolated { Self.surfaceSomethingForTheUser() }
+        MainActor.assumeIsolated { Self.surfaceSomethingForTheUser(via: .reopen) }
         return true
     }
 
@@ -435,8 +445,12 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
     /// for that reason alone — a reset that opened `OnboardingWindow` itself would be a second opinion
     /// about what an un-onboarded install shows, and the first flow to earn a place in `landing` would
     /// find only one of the two updated.
+    ///
+    /// - Parameter via: how the app was asked for. `.launch` is the default because two of the three
+    ///   callers are one — a process starting, and a reset that puts the install back to a first run
+    ///   — and only the Dock icon is the other, which says so.
     @MainActor
-    static func surfaceSomethingForTheUser() {
+    static func surfaceSomethingForTheUser(via: AnalyticsEvent.OpenSource = .launch) {
         switch landing(
             onboarded: UserDefaults.standard.bool(forKey: onboardedKey),
             onboardingInProgress: OnboardingResume().step != nil,
@@ -451,7 +465,7 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
             // being stopped.
             Tutorial.start(resumingAt: beat)
         case .activity:
-            openActivities()
+            openActivities(via: via)
         }
     }
 
@@ -470,8 +484,8 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
     /// showed nothing for the second or two before the store opens would be exactly the inert gesture
     /// this panel exists to stop.
     @MainActor
-    private static func openActivities() {
-        SearchBarWindow.present()
+    private static func openActivities(via: AnalyticsEvent.OpenSource) {
+        SearchBarWindow.present(via: via)
     }
 
     /// The timeline, opened the one way it is ever opened.
@@ -485,8 +499,13 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
     /// to delete it: the menu bar's "Open Timeline" row is now the app's route to this window, and it
     /// had a hand-rolled copy of exactly the reconstruction the note above warns about. One owner,
     /// called from there.
+    ///
+    /// - Parameter via: which of this window's routes was taken — the menu bar's row, the search
+    ///   panel's Timeline pill, or the tutorial. It is threaded through rather than reported at the
+    ///   two call sites for the same reason the hand-offs are constructed here: a third route would
+    ///   otherwise arrive with the second one's label on it.
     @MainActor
-    static func openTimeline() {
+    static func openTimeline(via: AnalyticsEvent.OpenSource) {
         // The store opens lazily on the engine's own queue, so ask at open time rather than at
         // launch. Nil means it is not open yet: decline to put a timeline over nothing instead of
         // showing an empty one. That answer is worth keeping even though it makes a Dock click do
@@ -499,7 +518,8 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
 
         RewindWindow.present(
             store: store,
-            onOpenSettings: { SettingsWindow.present() },
+            via: via,
+            onOpenSettings: { SettingsWindow.present(via: .inAppPill) },
             // The "Search All" pill brings the main window forward with the timeline's query in it.
             // The tutorial's search beat rides on this the way the timeline beat rides on the
             // shortcut: the press falls straight through, the real window comes forward because the
@@ -508,7 +528,7 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
             // It used to `guard !Tutorial.searchPillWasPressed() else { return }` — the tutorial
             // consumed the click and drew its own imitation of the results, so the one beat that
             // teaches people to search was the one beat where searching did not open the search bar.
-            onSearch: { query in SearchBarWindow.present(prefill: query) })
+            onSearch: { query in SearchBarWindow.present(via: .inAppPill, prefill: query) })
     }
 
     /// **Whether a process being terminated right now has to bring itself back.**
