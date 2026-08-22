@@ -119,7 +119,7 @@ class TestConcurrentTranscription:
         all_results = []
 
         for round_num in range(ROUNDS):
-            print(f"\n  Round {round_num + 1}/{ROUNDS}: " f"firing {CONCURRENCY} concurrent requests...")
+            print(f"\n  Round {round_num + 1}/{ROUNDS}: firing {CONCURRENCY} concurrent requests...")
             t0 = time.time()
 
             with ThreadPoolExecutor(max_workers=CONCURRENCY) as pool:
@@ -215,7 +215,7 @@ class TestConcurrentTranscription:
         successes = sum(1 for r in results if r["status"] == 200)
         failures_500 = [r for r in results if r["status"] == 500]
 
-        print(f"\n  Mixed mode: {successes}/{CONCURRENCY} succeeded, " f"{len(failures_500)} x 500")
+        print(f"\n  Mixed mode: {successes}/{CONCURRENCY} succeeded, {len(failures_500)} x 500")
 
         assert len(failures_500) == 0, f"{len(failures_500)} requests failed with 500 in mixed diarize mode"
 
@@ -237,7 +237,7 @@ class TestConcurrentTranscription:
         for i in range(5):
             result = _send_transcribe_request(wav_data, True, 1000 + i)
             assert result["status"] == 200, (
-                f"Sequential request {i} failed after burst: " f"status={result['status']} body={result['body'][:200]}"
+                f"Sequential request {i} failed after burst: status={result['status']} body={result['body'][:200]}"
             )
             if result["status"] == 200:
                 data = json.loads(result["body"])

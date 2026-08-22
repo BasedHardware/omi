@@ -26,7 +26,7 @@ def _make_torch_stub():
     _torch_props.total_memory = 16 * 1024**3
     _torch.cuda.get_device_properties.return_value = _torch_props
     _torch.cuda.empty_cache = MagicMock()
-    _torch.inference_mode = lambda: (lambda fn: fn)
+    _torch.inference_mode = lambda: lambda fn: fn
     _torch.compile = lambda m: m
     _torch.backends.cudnn = MagicMock()
     return _torch
@@ -861,9 +861,9 @@ class TestBatchesInflight:
                 try:
                     with pytest.raises(RuntimeError, match="GPU exploded"):
                         await asyncio.wait_for(engine.submit("/tmp/fail.wav"), timeout=5)
-                    assert (
-                        engine._batches_inflight == 0
-                    ), f"_batches_inflight must be 0 after error, got {engine._batches_inflight}"
+                    assert engine._batches_inflight == 0, (
+                        f"_batches_inflight must be 0 after error, got {engine._batches_inflight}"
+                    )
                     result = await asyncio.wait_for(engine.submit("/tmp/ok.wav"), timeout=5)
                     assert result["text"] == "ok"
                 finally:
@@ -978,9 +978,9 @@ class TestBatchesInflight:
                 try:
                     assert engine._batches_inflight == 0
                     await engine._flush_batch()
-                    assert (
-                        engine._batches_inflight == 0
-                    ), f"_batches_inflight must be 0 after empty-pending flush, got {engine._batches_inflight}"
+                    assert engine._batches_inflight == 0, (
+                        f"_batches_inflight must be 0 after empty-pending flush, got {engine._batches_inflight}"
+                    )
                 finally:
                     await engine.stop()
 

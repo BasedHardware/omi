@@ -168,8 +168,9 @@ def test_local_fixture_check_uses_pytest_selection_supported_by_runner(monkeypat
     assert status == "PASS"
     assert "hermetic e2e harness" in summary
     assert captured["command"][-2:] == ["-k", "test_conversation_create_process_finalize_lifecycle"]
-    assert "testing/e2e/test_conversation_processing.py::test_conversation_create_process_finalize_lifecycle" not in (
-        captured["command"]
+    assert (
+        "testing/e2e/test_conversation_processing.py::test_conversation_create_process_finalize_lifecycle"
+        not in (captured["command"])
     )
     assert captured["env"]["E2E_PYTEST_TIMEOUT"] == "7s"
     assert details["pytest_target"].endswith("::test_conversation_create_process_finalize_lifecycle")

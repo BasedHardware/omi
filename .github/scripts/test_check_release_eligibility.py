@@ -225,7 +225,7 @@ class WorkflowContractTests(unittest.TestCase):
             (
                 "missing OpenAPI cache key",
                 "cache-dependency-glob: backend/openapi-requirements.txt",
-                "cache-dependency-glob: backend/pylock.toml",
+                "cache-dependency-glob: backend/uv.lock",
                 "release eligibility uv setup must key the OpenAPI dependency cache",
             ),
             (

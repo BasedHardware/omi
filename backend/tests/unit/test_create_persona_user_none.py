@@ -49,24 +49,18 @@ def _run_create_persona(user_value):
     fake_app_create = MagicMock()
     fake_app_create.model_dump.return_value = {}
 
-    with patch.object(apps_mod, 'run_blocking', side_effect=fake_run_blocking), patch.object(
-        apps_mod, 'get_user_from_uid', MagicMock()
-    ), patch.object(apps_mod, 'increment_username', MagicMock()), patch.object(
-        apps_mod, 'save_username', MagicMock()
-    ), patch.object(
-        apps_mod, 'generate_persona_prompt', side_effect=fake_generate_persona_prompt
-    ), patch.object(
-        apps_mod, 'generate_persona_desc', MagicMock()
-    ), patch.object(
-        apps_mod, '_write_file', MagicMock()
-    ), patch.object(
-        apps_mod, 'upload_app_logo', MagicMock(return_value='http://img')
-    ), patch.object(
-        apps_mod, 'add_app_to_db', MagicMock()
-    ), patch.object(
-        apps_mod.AppCreate, 'model_validate', return_value=fake_app_create
-    ), patch.object(
-        apps_mod.os, 'makedirs', MagicMock()
+    with (
+        patch.object(apps_mod, 'run_blocking', side_effect=fake_run_blocking),
+        patch.object(apps_mod, 'get_user_from_uid', MagicMock()),
+        patch.object(apps_mod, 'increment_username', MagicMock()),
+        patch.object(apps_mod, 'save_username', MagicMock()),
+        patch.object(apps_mod, 'generate_persona_prompt', side_effect=fake_generate_persona_prompt),
+        patch.object(apps_mod, 'generate_persona_desc', MagicMock()),
+        patch.object(apps_mod, '_write_file', MagicMock()),
+        patch.object(apps_mod, 'upload_app_logo', MagicMock(return_value='http://img')),
+        patch.object(apps_mod, 'add_app_to_db', MagicMock()),
+        patch.object(apps_mod.AppCreate, 'model_validate', return_value=fake_app_create),
+        patch.object(apps_mod.os, 'makedirs', MagicMock()),
     ):
         return asyncio.run(apps_mod.create_persona(persona_data=persona_data, file=_FakeUpload(), uid='uid1'))
 

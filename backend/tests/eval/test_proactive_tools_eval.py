@@ -418,10 +418,10 @@ def main():
     all_self_reg = SELF_REGULATION_CASES
     total_cases = len(all_should_notify) + len(all_should_not) + len(all_self_reg)
 
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f"PROACTIVE MENTOR — UNIFIED PROMPT EVAL ({total_cases} test cases)")
     print(f"Model: gpt-4.1-mini | Judge: gpt-5.1")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
 
     results = []
     stats = {
@@ -506,17 +506,17 @@ def main():
         )
 
     # Summary
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print("SUMMARY")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
 
     total_pass = sum(1 for r in results if r["judge_result"].get("pass"))
 
     print(f"\n  Should Notify:    {stats['should_notify']['pass']}/{stats['should_notify']['total']}")
     print(f"  Should NOT Notify: {stats['should_not']['pass']}/{stats['should_not']['total']}")
     print(f"  Self-Regulation:   {stats['self_reg']['pass']}/{stats['self_reg']['total']}")
-    print(f"\n  OVERALL: {total_pass}/{total_cases} passed ({total_pass/total_cases*100:.0f}%)")
-    print(f"{'='*70}\n")
+    print(f"\n  OVERALL: {total_pass}/{total_cases} passed ({total_pass / total_cases * 100:.0f}%)")
+    print(f"{'=' * 70}\n")
 
     # Write results to file
     output_path = os.path.join(os.path.dirname(__file__), "proactive_tools_eval_results.json")

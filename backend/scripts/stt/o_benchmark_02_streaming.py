@@ -137,7 +137,7 @@ async def stream_to_provider(audio_pcm: bytes, language: str, provider: str) -> 
 
     if provider == 'modulate':
         try:
-            await asyncio.wait_for(socket.drain_and_close(), timeout=30)
+            await asyncio.wait_for(socket.drain_and_close(), timeout=30)  # ty: ignore[unresolved-attribute]
         except (asyncio.TimeoutError, Exception):
             pass
     else:

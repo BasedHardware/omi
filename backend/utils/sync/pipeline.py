@@ -557,7 +557,12 @@ def bind_or_converge_sync_ledger_completion(
         raise SyncJobRunLeaseLost(f'sync content ledger owner lost: job={job_id}')
 
     finalized = _require_run_owner(
-        fenced_finalize_sync_job_from_durable_ledger(job_id, run_lock_token, binding.result), job_id=job_id
+        fenced_finalize_sync_job_from_durable_ledger(
+            job_id,
+            run_lock_token,
+            binding.result,  # ty: ignore[invalid-argument-type]
+        ),
+        job_id=job_id,
     )
     delete_sync_job_run_lock_epoch(job_id)
     return finalized
@@ -951,11 +956,10 @@ def identify_speakers_for_segments(
             if best_match and best_distance < SPEAKER_MATCH_THRESHOLD:
                 person_id, person_name = best_match
                 speaker_to_person_map[speaker_id] = (person_id, person_name)
-                segment_person_assignment_map[best_seg.id] = person_id
+                segment_person_assignment_map[best_seg.id] = person_id  # ty: ignore[invalid-assignment]
                 matched_person_ids.add(person_id)
                 logger.info(
-                    f'Speaker ID (sync): speaker {speaker_id} -> {person_id} '
-                    f'(distance={best_distance:.3f}) uid={uid}'
+                    f'Speaker ID (sync): speaker {speaker_id} -> {person_id} (distance={best_distance:.3f}) uid={uid}'
                 )
 
     # Text-based detection runs independently for all unmatched speakers.
@@ -971,7 +975,7 @@ def identify_speakers_for_segments(
                 person = users_db.get_person_by_name(uid, detected_name)
                 if person:
                     # Per-segment assignment always applies
-                    segment_person_assignment_map[seg.id] = person['id']
+                    segment_person_assignment_map[seg.id] = person['id']  # ty: ignore[invalid-assignment]
                     # Update speaker map only when diarization is active
                     if speaker_id > 0:
                         speaker_to_person_map[speaker_id] = (person['id'], person['name'])
@@ -1089,7 +1093,7 @@ def process_segment(
                 deferred_outcome=deferred_outcome,
             )
             return False
-        transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
+        transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)  # ty: ignore[invalid-argument-type]
         if not transcript_segments:
             # Words survived the provider but nothing survived post-processing:
             # again no transcribable speech, valid and empty rather than failed.
@@ -1139,9 +1143,9 @@ def process_segment(
                 logger.warning(
                     f'Target conversation {target_conversation_id} not found or deleted, falling back to timestamp lookup'
                 )
-                closest_memory = get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
+                closest_memory = get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)  # ty: ignore[invalid-argument-type]
         else:
-            closest_memory = get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
+            closest_memory = get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)  # ty: ignore[invalid-argument-type]
 
         if not closest_memory:
             started_at = datetime.fromtimestamp(timestamp, tz=timezone.utc)
@@ -1158,7 +1162,7 @@ def process_segment(
             )
             created = process_conversation(
                 uid,
-                language,
+                language,  # ty: ignore[invalid-argument-type]
                 create_memory,
                 persistence_observer=_require_current_conversation_persistence,
             )
@@ -1171,7 +1175,7 @@ def process_segment(
 
             # assign timestamps to each segment
             for segment in transcript_segments:
-                segment['timestamp'] = timestamp + segment['start']
+                segment['timestamp'] = timestamp + segment['start']  # ty: ignore[invalid-assignment]
             for segment in closest_memory['transcript_segments']:
                 segment['timestamp'] = closest_memory['started_at'].timestamp() + segment['start']
 
@@ -1258,7 +1262,7 @@ def process_segment(
             if closest_memory.get('discarded', False) or target_conversation_id:
                 reason = 'discarded' if closest_memory.get('discarded', False) else 'auto-sync'
                 logger.info(f'Conversation {closest_memory["id"]} reprocessing ({reason}) after segment merge')
-                _reprocess_conversation_after_update(uid, closest_memory['id'], language)
+                _reprocess_conversation_after_update(uid, closest_memory['id'], language)  # ty: ignore[invalid-argument-type]
             else:
                 # Summary/structured data is now stale (it predates the merged segments).
                 # Record it so the caller reprocesses once per conversation at batch end,
@@ -2099,7 +2103,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     target_conversation_id,
                     assignment_turnstile,
                     private_cloud_sync_enabled=private_cloud_sync_enabled,
-                    data_protection_level=data_protection_level,
+                    data_protection_level=data_protection_level,  # ty: ignore[invalid-argument-type]
                     client_device_id=client_device_id,
                     client_platform=client_platform,
                     sync_lane=sync_lane,
@@ -2230,7 +2234,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                         response,
                         content_id,
                         job_id,
-                        active_run_lock_token,
+                        active_run_lock_token,  # ty: ignore[invalid-argument-type]
                         active_run_lock_epoch,
                     ),
                     coordinator_loop,
@@ -2384,7 +2388,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
         except Exception as e:
             failure = failure_from_exception(e, provider=sync_provider)
             logger.error(
-                'event=sync_transcription_job outcome=%s status=%s provider=%s model=%s ' 'lane=%s exception_type=%s',
+                'event=sync_transcription_job outcome=%s status=%s provider=%s model=%s lane=%s exception_type=%s',
                 failure.outcome.value,
                 'retrying' if task_mode else 'failed',
                 failure.provider,

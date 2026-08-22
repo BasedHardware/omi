@@ -241,7 +241,7 @@ def test_known_missing_routes_do_not_drift():
     # Every route in KNOWN_MISSING must still be actually missing, otherwise it
     # was fixed and the entry is now stale.
     stale = sorted(KNOWN_MISSING_ROUTES - actually_missing)
-    assert not stale, 'These KNOWN_MISSING_ROUTES are now in the app-client spec — remove ' 'them from the set: ' + str(
+    assert not stale, 'These KNOWN_MISSING_ROUTES are now in the app-client spec — remove them from the set: ' + str(
         stale
     )
 

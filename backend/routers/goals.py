@@ -304,7 +304,7 @@ def get_goal_advice(
 
 @router.get('/v1/goals/advice', tags=['goals'], response_model=AdviceResponse)
 def get_current_goal_advice(
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "goals:advice"))
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "goals:advice")),
 ) -> dict:
     """Get AI-generated advice for the current active goal."""
     goal = goals_db.get_user_goal(uid)

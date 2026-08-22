@@ -188,7 +188,7 @@ def _bounded_metadata(value: str | None, *, fallback: str, redact_sensitive_assi
     if not compact:
         return fallback
     maximum_length = 500
-    return compact if len(compact) <= maximum_length else f'{compact[:maximum_length - 1]}…'
+    return compact if len(compact) <= maximum_length else f'{compact[: maximum_length - 1]}…'
 
 
 def format_failure(config: CandidateConfig, observation: ReadinessObservation) -> str:

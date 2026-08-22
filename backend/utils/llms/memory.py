@@ -16,7 +16,7 @@ PROMPT_MEMORY_LIMIT = 1000
 
 _PROMPT_DATA_CACHE_MAX_SIZE = 1024
 _PROMPT_DATA_CACHE_TTL_SECONDS = 30
-_prompt_data_cache: TTLCache[str, Tuple[Optional[str], List[MemoryDB], List[MemoryDB], List[MemoryDB]]] = TTLCache(
+_prompt_data_cache: TTLCache[str, Tuple[Optional[str], List[MemoryDB], List[MemoryDB], List[MemoryDB]]] = TTLCache(  # ty: ignore[not-subscriptable]
     maxsize=_PROMPT_DATA_CACHE_MAX_SIZE, ttl=_PROMPT_DATA_CACHE_TTL_SECONDS
 )
 _prompt_data_cache_lock = threading.Lock()

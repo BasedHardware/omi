@@ -253,8 +253,8 @@ def test_main_methods_timeout_includes_post():
                     # Verify value is os.environ.get('HTTP_POST_TIMEOUT')
                     assert isinstance(post_value, ast.Call), "POST value should be a function call"
                     assert isinstance(post_value.args[0], ast.Constant), "First arg should be a string constant"
-                    assert (
-                        post_value.args[0].value == "HTTP_POST_TIMEOUT"
-                    ), f"POST env var should be HTTP_POST_TIMEOUT, got {post_value.args[0].value}"
+                    assert post_value.args[0].value == "HTTP_POST_TIMEOUT", (
+                        f"POST env var should be HTTP_POST_TIMEOUT, got {post_value.args[0].value}"
+                    )
                     return
     raise AssertionError("methods_timeout assignment not found in main.py")

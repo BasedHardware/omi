@@ -213,8 +213,9 @@ def _item(**over):
 
 
 def _run(items, tz):
-    with patch.object(action_item_tools.action_items_db, 'get_action_items', return_value=items), patch.object(
-        action_item_tools.notification_db, 'get_user_time_zone', return_value=tz
+    with (
+        patch.object(action_item_tools.action_items_db, 'get_action_items', return_value=items),
+        patch.object(action_item_tools.notification_db, 'get_user_time_zone', return_value=tz),
     ):
         return get_action_items_tool(config=_make_config())
 
@@ -278,8 +279,11 @@ class TestActionItemsTimezoneRendering:
     def test_timezone_lookup_failure_falls_back_to_utc(self):
         # A Firestore failure in the timezone lookup must not abort retrieval; it
         # falls back to UTC formatting instead (cubic finding on #8483).
-        with patch.object(action_item_tools.action_items_db, 'get_action_items', return_value=[_item()]), patch.object(
-            action_item_tools.notification_db, 'get_user_time_zone', side_effect=RuntimeError("firestore down")
+        with (
+            patch.object(action_item_tools.action_items_db, 'get_action_items', return_value=[_item()]),
+            patch.object(
+                action_item_tools.notification_db, 'get_user_time_zone', side_effect=RuntimeError("firestore down")
+            ),
         ):
             result = get_action_items_tool(config=_make_config())
         assert "Due: 2026-06-26 22:00:00 UTC" in result

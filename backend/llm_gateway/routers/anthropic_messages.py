@@ -504,7 +504,9 @@ async def _iter_open_anthropic_stream(
                 usage_status=(
                     UsageStatus.CONFIRMED
                     if usage_metadata.usage is not None
-                    else UsageStatus.NOT_REPORTED if outcome == 'success' else UsageStatus.INDETERMINATE
+                    else UsageStatus.NOT_REPORTED
+                    if outcome == 'success'
+                    else UsageStatus.INDETERMINATE
                 ),
             )
         if accounting_context is not None and attempt_trace is not None:

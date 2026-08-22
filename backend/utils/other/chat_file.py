@@ -304,7 +304,7 @@ class FileChatTool:
         if self.thread_id:
             # Try to retrieve existing thread
             try:
-                thread = openai.beta.threads.retrieve(self.thread_id, timeout=timeout)  # type: ignore[reportDeprecated]  # Assistants API still in use
+                thread = openai.beta.threads.retrieve(self.thread_id, timeout=timeout)  # type: ignore[reportDeprecated]  # Assistants API still in use  # ty: ignore[deprecated]
                 logger.info(f"Retrieved existing thread: {thread.id}")
             except Exception as error:
                 logger.error('file chat thread retrieval failed error_type=%s', type(error).__name__)
@@ -312,7 +312,7 @@ class FileChatTool:
 
         if not self.thread_id:
             try:
-                thread = openai.beta.threads.create(timeout=timeout)  # type: ignore[reportDeprecated]  # Assistants API still in use
+                thread = openai.beta.threads.create(timeout=timeout)  # type: ignore[reportDeprecated]  # Assistants API still in use  # ty: ignore[deprecated]
                 self.thread_id = thread.id
                 created_new = True
                 logger.info(f"Created new thread: {self.thread_id}")
@@ -323,7 +323,7 @@ class FileChatTool:
         if self.assistant_id:
             # Try to retrieve existing assistant
             try:
-                assistant = openai.beta.assistants.retrieve(self.assistant_id, timeout=timeout)  # type: ignore[reportDeprecated]  # Assistants API still in use
+                assistant = openai.beta.assistants.retrieve(self.assistant_id, timeout=timeout)  # type: ignore[reportDeprecated]  # Assistants API still in use  # ty: ignore[deprecated]
                 logger.info(f"Retrieved existing assistant: {assistant.id}")
             except Exception as error:
                 logger.error('file chat assistant retrieval failed error_type=%s', type(error).__name__)
@@ -331,7 +331,7 @@ class FileChatTool:
 
         if not self.assistant_id:
             try:
-                assistant = openai.beta.assistants.create(  # type: ignore[reportDeprecated]  # Assistants API still in use
+                assistant = openai.beta.assistants.create(  # type: ignore[reportDeprecated]  # Assistants API still in use  # ty: ignore[deprecated]
                     name="File Reader",
                     instructions="You are a helpful assistant that answers questions about the provided file. Use the file_search tool to search the file contents when needed.",
                     # Luna supports vision Chat Completions but not the
@@ -376,11 +376,11 @@ class FileChatTool:
                 attachments.append({"file_id": file.openai_file_id, "tools": [{"type": "file_search"}]})
 
         # ask question
-        openai.beta.threads.messages.create(  # type: ignore[reportDeprecated]  # Assistants API still in use
+        openai.beta.threads.messages.create(  # type: ignore[reportDeprecated]  # Assistants API still in use  # ty: ignore[deprecated]
             thread_id=thread_id,
             role="user",
-            content=contents,  # type: ignore[arg-type]  # openai accepts a permissive dict shape here
-            attachments=attachments,  # type: ignore[arg-type]  # openai accepts a permissive dict shape here
+            content=contents,  # type: ignore[arg-type]  # openai accepts a permissive dict shape here  # ty: ignore[invalid-argument-type]
+            attachments=attachments,  # type: ignore[arg-type]  # openai accepts a permissive dict shape here  # ty: ignore[invalid-argument-type]
             timeout=30.0,
         )
 
@@ -396,7 +396,7 @@ class FileChatTool:
         self._fill_question(uid, question, file_ids, thread_id)
 
         # Create run and poll for completion (with 2 minute timeout)
-        run = openai.beta.threads.runs.create_and_poll(  # type: ignore[reportDeprecated]  # Assistants API still in use
+        run = openai.beta.threads.runs.create_and_poll(  # type: ignore[reportDeprecated]  # Assistants API still in use  # ty: ignore[deprecated]
             thread_id=thread_id,
             assistant_id=assistant_id,
             timeout=120.0,  # 2 minutes total timeout
@@ -405,7 +405,7 @@ class FileChatTool:
         # Check terminal status
         if run.status == 'completed':
             # Get the messages
-            messages = openai.beta.threads.messages.list(thread_id=thread_id, timeout=30.0)  # type: ignore[reportDeprecated]  # Assistants API still in use
+            messages = openai.beta.threads.messages.list(thread_id=thread_id, timeout=30.0)  # type: ignore[reportDeprecated]  # Assistants API still in use  # ty: ignore[deprecated]
 
             # Return the latest assistant response
             if messages.data and len(messages.data) > 0:
@@ -414,7 +414,7 @@ class FileChatTool:
                     return first_block.text.value
                 # Fall back to the original attribute access for any non-text block,
                 # which raises AttributeError — matching the prior behavior.
-                return first_block.text.value  # type: ignore[union-attr]  # preserve prior crash semantics for non-text blocks
+                return first_block.text.value  # type: ignore[union-attr]  # preserve prior crash semantics for non-text blocks  # ty: ignore[unresolved-attribute]
 
             raise Exception("No response received from assistant")
         else:
@@ -440,7 +440,7 @@ class FileChatTool:
         try:
             self._fill_question(uid, question, file_ids, thread_id)
 
-            with openai.beta.threads.runs.stream(  # type: ignore[reportDeprecated]  # Assistants API still in use
+            with openai.beta.threads.runs.stream(  # type: ignore[reportDeprecated]  # Assistants API still in use  # ty: ignore[deprecated]
                 thread_id=thread_id,
                 assistant_id=assistant_id,
                 event_handler=AssistantEventHandler(),
@@ -471,11 +471,11 @@ class FileChatTool:
 
         if self.thread_id:
             try:
-                openai.beta.threads.delete(self.thread_id, timeout=30.0)  # type: ignore[reportDeprecated]  # Assistants API still in use
+                openai.beta.threads.delete(self.thread_id, timeout=30.0)  # type: ignore[reportDeprecated]  # Assistants API still in use  # ty: ignore[deprecated]
             except Exception as error:
                 logger.error('file chat thread deletion failed error_type=%s', type(error).__name__)
         if self.assistant_id:
             try:
-                openai.beta.assistants.delete(self.assistant_id, timeout=30.0)  # type: ignore[reportDeprecated]  # Assistants API still in use
+                openai.beta.assistants.delete(self.assistant_id, timeout=30.0)  # type: ignore[reportDeprecated]  # Assistants API still in use  # ty: ignore[deprecated]
             except Exception as error:
                 logger.error('file chat assistant deletion failed error_type=%s', type(error).__name__)

@@ -1778,8 +1778,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
             sync_model = latest_job.get('stt_model')
             if not failure.retryable or task_retry_count >= max_attempts - 1:
                 logger.error(
-                    'event=sync_transcription_job outcome=%s status=failed_final lane=%s '
-                    'attempt=%d exception_type=%s',
+                    'event=sync_transcription_job outcome=%s status=failed_final lane=%s attempt=%d exception_type=%s',
                     failure.outcome.value,
                     sync_lane,
                     task_retry_count + 1,
@@ -1803,7 +1802,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
             # Reset to 'queued' so the stale detector cannot terminally fail the
             # job while the Cloud Tasks retry backoff elapses. Blobs are kept.
             logger.warning(
-                'event=sync_transcription_job outcome=%s status=retrying lane=%s ' 'attempt=%d exception_type=%s',
+                'event=sync_transcription_job outcome=%s status=retrying lane=%s attempt=%d exception_type=%s',
                 failure.outcome.value,
                 sync_lane,
                 task_retry_count + 1,

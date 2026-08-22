@@ -228,7 +228,7 @@ class TestDERRegressionGate:
             print(f"  Segments: {len(result['segments'])}")
 
             assert der <= DER_THRESHOLD, (
-                f"DER {der}% exceeds threshold {DER_THRESHOLD}%. " f"Diarization quality has regressed."
+                f"DER {der}% exceeds threshold {DER_THRESHOLD}%. Diarization quality has regressed."
             )
         finally:
             if tmp_path:

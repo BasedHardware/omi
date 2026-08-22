@@ -470,9 +470,7 @@ async def main():
                 break
             scenario_num += 1
             print(
-                f"[{scenario_num}/{total_scenarios}] "
-                f"concurrency={conc}, batch={batch_size}, "
-                f"duration={duration}s ...",
+                f"[{scenario_num}/{total_scenarios}] concurrency={conc}, batch={batch_size}, duration={duration}s ...",
                 end="",
                 flush=True,
             )

@@ -23,11 +23,7 @@ def test_file_isolation_failure_prints_exact_rerun_guidance(tmp_path):
     fake_python = tmp_path / "fake-python"
     _write_executable(
         fake_python,
-        "#!/usr/bin/env bash\n"
-        "if [[ \"$1\" == \"-m\" && \"$2\" == \"pytest\" ]]; then\n"
-        "  exit 1\n"
-        "fi\n"
-        "exit 0\n",
+        "#!/usr/bin/env bash\nif [[ \"$1\" == \"-m\" && \"$2\" == \"pytest\" ]]; then\n  exit 1\nfi\nexit 0\n",
     )
 
     environment = os.environ | {

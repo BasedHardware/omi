@@ -230,8 +230,9 @@ def test_mismatched_lengths_returns_422(router):
 def test_negative_index_is_skipped_not_corrupting(router):
     """A negative event_idx (-1) must NOT write to the last event."""
     convo, events = _fake_conversation_with_events(2)
-    with patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}), patch.object(
-        router.conv, "deserialize_conversation", return_value=convo
+    with (
+        patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}),
+        patch.object(router.conv, "deserialize_conversation", return_value=convo),
     ):
         data = router.SetConversationEventsStateRequest(events_idx=[-1], values=[True])
         result = router.conv.set_conversation_events_state("c1", data, uid="u1")
@@ -244,8 +245,9 @@ def test_negative_index_is_skipped_not_corrupting(router):
 def test_valid_index_still_updates(router):
     """Sanity: an in-range index still applies the value (fix must not break the happy path)."""
     convo, events = _fake_conversation_with_events(2)
-    with patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}), patch.object(
-        router.conv, "deserialize_conversation", return_value=convo
+    with (
+        patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}),
+        patch.object(router.conv, "deserialize_conversation", return_value=convo),
     ):
         data = router.SetConversationEventsStateRequest(events_idx=[1], values=[True])
         router.conv.set_conversation_events_state("c1", data, uid="u1")
@@ -290,8 +292,9 @@ def test_segment_assign_out_of_range_returns_404(router):
     """An out-of-range segment_idx must raise 404, not IndexError -> HTTP 500."""
     convo, segments = _fake_conversation_with_segments(2)
     handler = _segment_assign_handler(router.conv)
-    with patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}), patch.object(
-        router.conv, "deserialize_conversation", return_value=convo
+    with (
+        patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}),
+        patch.object(router.conv, "deserialize_conversation", return_value=convo),
     ):
         with pytest.raises(HTTPException) as exc:
             handler("c1", 999, "is_user", uid="u1")
@@ -305,8 +308,9 @@ def test_segment_assign_negative_index_returns_404(router):
     """A negative segment_idx (-1) must 404 instead of silently mutating the last segment."""
     convo, segments = _fake_conversation_with_segments(2)
     handler = _segment_assign_handler(router.conv)
-    with patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}), patch.object(
-        router.conv, "deserialize_conversation", return_value=convo
+    with (
+        patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}),
+        patch.object(router.conv, "deserialize_conversation", return_value=convo),
     ):
         with pytest.raises(HTTPException) as exc:
             handler("c1", -1, "person_id", value="person-9", uid="u1")
@@ -320,9 +324,11 @@ def test_segment_assign_valid_index_still_updates(router):
     convo, segments = _fake_conversation_with_segments(2)
     handler = _segment_assign_handler(router.conv)
     emitted = []
-    with patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}), patch.object(
-        router.conv, "deserialize_conversation", return_value=convo
-    ), patch.object(router.conv, "emit_product_event", side_effect=lambda **event: emitted.append(event)):
+    with (
+        patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}),
+        patch.object(router.conv, "deserialize_conversation", return_value=convo),
+        patch.object(router.conv, "emit_product_event", side_effect=lambda **event: emitted.append(event)),
+    ):
         result = handler("c1", 1, "is_user", value="true", uid="u1")
 
     assert segments[1].is_user is True
@@ -349,9 +355,11 @@ def test_segment_assign_repeating_the_same_identity_is_an_acceptance(router):
     handler = _segment_assign_handler(router.conv)
     emitted = []
 
-    with patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}), patch.object(
-        router.conv, "deserialize_conversation", return_value=convo
-    ), patch.object(router.conv, "emit_product_event", side_effect=lambda **event: emitted.append(event)):
+    with (
+        patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}),
+        patch.object(router.conv, "deserialize_conversation", return_value=convo),
+        patch.object(router.conv, "emit_product_event", side_effect=lambda **event: emitted.append(event)),
+    ):
         handler("c1", 0, "is_user", value="true", uid="u1")
 
     assert len(emitted) == 1
@@ -372,9 +380,11 @@ def test_bulk_assign_resolves_legacy_positional_target_and_persists_canonical_id
         value="person-9",
     )
 
-    with patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}), patch.object(
-        router.conv, "deserialize_conversation", return_value=convo
-    ), patch.object(router.conv.conversations_db, "update_conversation_segments"):
+    with (
+        patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}),
+        patch.object(router.conv, "deserialize_conversation", return_value=convo),
+        patch.object(router.conv.conversations_db, "update_conversation_segments"),
+    ):
         result = router.conv.assign_segments_bulk("c1", data, background_tasks, uid="u1")
 
     assert result is convo
@@ -400,9 +410,11 @@ def test_bulk_assign_exact_id_still_supports_user_assignment(router):
         value="true",
     )
 
-    with patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}), patch.object(
-        router.conv, "deserialize_conversation", return_value=convo
-    ), patch.object(router.conv.conversations_db, "update_conversation_segments"):
+    with (
+        patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}),
+        patch.object(router.conv, "deserialize_conversation", return_value=convo),
+        patch.object(router.conv.conversations_db, "update_conversation_segments"),
+    ):
         router.conv.assign_segments_bulk("c1", data, background_tasks, uid="u1")
 
     assert segments[0].is_user is True
@@ -427,9 +439,11 @@ def test_bulk_assign_rejects_unresolved_target_without_partial_mutation(router):
     )
     update = MagicMock()
 
-    with patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}), patch.object(
-        router.conv, "deserialize_conversation", return_value=convo
-    ), patch.object(router.conv.conversations_db, "update_conversation_segments", update):
+    with (
+        patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}),
+        patch.object(router.conv, "deserialize_conversation", return_value=convo),
+        patch.object(router.conv.conversations_db, "update_conversation_segments", update),
+    ):
         with pytest.raises(HTTPException) as exc:
             router.conv.assign_segments_bulk("c1", data, background_tasks, uid="u1")
 

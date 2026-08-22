@@ -119,10 +119,10 @@ def test_state_without_uid_returns_invalid_state_not_500():
     async def _run_blocking(_executor, fn, *args, **kwargs):
         return fn(*args, **kwargs)
 
-    with patch.object(
-        int_mod, 'validate_and_consume_oauth_state', return_value={'app_key': 'google_calendar'}
-    ), patch.object(int_mod, 'render_oauth_response', return_value=sentinel) as render, patch.object(
-        int_mod, 'run_blocking', _run_blocking
+    with (
+        patch.object(int_mod, 'validate_and_consume_oauth_state', return_value={'app_key': 'google_calendar'}),
+        patch.object(int_mod, 'render_oauth_response', return_value=sentinel) as render,
+        patch.object(int_mod, 'run_blocking', _run_blocking),
     ):
         result = asyncio.run(
             int_mod.handle_oauth_callback(

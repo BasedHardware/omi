@@ -29,12 +29,12 @@ def test_shared_endpoint_strips_internal_fields_before_serialising():
         captured['external_data'] = c.external_data
         return {'id': 'c1'}
 
-    with patch.object(conv_router.redis_db, 'get_conversation_uid', return_value='owner-uid'), patch.object(
-        conv_router, '_get_valid_conversation_by_id', return_value={'visibility': 'public'}
-    ), patch.object(conv_router, 'deserialize_conversation', return_value=conv), patch.object(
-        conv_router, 'conversation_to_dict', side_effect=fake_to_dict
-    ), patch.object(
-        conv_router.users_db, 'get_people_by_ids', return_value=[]
+    with (
+        patch.object(conv_router.redis_db, 'get_conversation_uid', return_value='owner-uid'),
+        patch.object(conv_router, '_get_valid_conversation_by_id', return_value={'visibility': 'public'}),
+        patch.object(conv_router, 'deserialize_conversation', return_value=conv),
+        patch.object(conv_router, 'conversation_to_dict', side_effect=fake_to_dict),
+        patch.object(conv_router.users_db, 'get_people_by_ids', return_value=[]),
     ):
         conv_router.get_shared_conversation_by_id('c1')
 

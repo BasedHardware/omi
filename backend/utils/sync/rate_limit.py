@@ -35,7 +35,7 @@ _REVISION_PATTERN = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$')
 def bounded_fair_use_retry_after(value: object) -> int:
     """Return a positive, bounded retry interval; legacy missing deadlines retry hourly."""
     try:
-        seconds = int(value)  # type: ignore[arg-type]
+        seconds = int(value)  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
     except (TypeError, ValueError, OverflowError):
         return DEFAULT_FAIR_USE_RETRY_AFTER_SECONDS
     return min(max(seconds, 1), MAX_FAIR_USE_RETRY_AFTER_SECONDS)

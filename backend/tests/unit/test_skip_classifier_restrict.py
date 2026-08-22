@@ -28,9 +28,10 @@ class TestSkipClassifierRestrict:
 
         mock_classify = AsyncMock(return_value={'misuse_score': 0.9, 'usage_type': 'audiobook'})
 
-        with patch.object(fair_use_mod, 'get_enforcement_stage', return_value='restrict'), patch.object(
-            fair_use_mod, '_get_classify_user_purpose', return_value=mock_classify
-        ) as mock_getter:
+        with (
+            patch.object(fair_use_mod, 'get_enforcement_stage', return_value='restrict'),
+            patch.object(fair_use_mod, '_get_classify_user_purpose', return_value=mock_classify) as mock_getter,
+        ):
             await fair_use_mod.trigger_classifier_if_needed('test-uid', _make_trigger())
             mock_getter.assert_not_called()
 
@@ -48,9 +49,10 @@ class TestSkipClassifierRestrict:
         """Users at restrict should not call escalate_enforcement either."""
         fair_use_mod.redis_client = MagicMock()
 
-        with patch.object(fair_use_mod, 'get_enforcement_stage', return_value='restrict'), patch.object(
-            fair_use_mod, 'escalate_enforcement'
-        ) as mock_escalate:
+        with (
+            patch.object(fair_use_mod, 'get_enforcement_stage', return_value='restrict'),
+            patch.object(fair_use_mod, 'escalate_enforcement') as mock_escalate,
+        ):
             await fair_use_mod.trigger_classifier_if_needed('test-uid', _make_trigger())
             mock_escalate.assert_not_called()
 
@@ -62,14 +64,15 @@ class TestSkipClassifierRestrict:
 
         mock_classify = AsyncMock(return_value={'misuse_score': 0.5, 'usage_type': 'personal'})
 
-        with patch.object(fair_use_mod, 'get_enforcement_stage', return_value='throttle'), patch.object(
-            fair_use_mod, 'is_free_credits_exhausted', return_value=False
-        ), patch.object(
-            fair_use_mod, '_get_classify_user_purpose', return_value=mock_classify
-        ) as mock_getter, patch.object(
-            fair_use_mod,
-            'escalate_enforcement',
-            return_value={'action': 'none', 'previous_stage': 'throttle', 'new_stage': 'throttle', 'event_id': '1'},
+        with (
+            patch.object(fair_use_mod, 'get_enforcement_stage', return_value='throttle'),
+            patch.object(fair_use_mod, 'is_free_credits_exhausted', return_value=False),
+            patch.object(fair_use_mod, '_get_classify_user_purpose', return_value=mock_classify) as mock_getter,
+            patch.object(
+                fair_use_mod,
+                'escalate_enforcement',
+                return_value={'action': 'none', 'previous_stage': 'throttle', 'new_stage': 'throttle', 'event_id': '1'},
+            ),
         ):
             await fair_use_mod.trigger_classifier_if_needed('test-uid', _make_trigger())
             mock_classify.assert_called_once()
@@ -82,14 +85,15 @@ class TestSkipClassifierRestrict:
 
         mock_classify = AsyncMock(return_value={'misuse_score': 0.3, 'usage_type': 'personal'})
 
-        with patch.object(fair_use_mod, 'get_enforcement_stage', return_value='warning'), patch.object(
-            fair_use_mod, 'is_free_credits_exhausted', return_value=False
-        ), patch.object(
-            fair_use_mod, '_get_classify_user_purpose', return_value=mock_classify
-        ) as mock_getter, patch.object(
-            fair_use_mod,
-            'escalate_enforcement',
-            return_value={'action': 'none', 'previous_stage': 'warning', 'new_stage': 'warning', 'event_id': '2'},
+        with (
+            patch.object(fair_use_mod, 'get_enforcement_stage', return_value='warning'),
+            patch.object(fair_use_mod, 'is_free_credits_exhausted', return_value=False),
+            patch.object(fair_use_mod, '_get_classify_user_purpose', return_value=mock_classify) as mock_getter,
+            patch.object(
+                fair_use_mod,
+                'escalate_enforcement',
+                return_value={'action': 'none', 'previous_stage': 'warning', 'new_stage': 'warning', 'event_id': '2'},
+            ),
         ):
             await fair_use_mod.trigger_classifier_if_needed('test-uid', _make_trigger())
             mock_classify.assert_called_once()
@@ -102,14 +106,15 @@ class TestSkipClassifierRestrict:
 
         mock_classify = AsyncMock(return_value={'misuse_score': 0.1, 'usage_type': 'personal'})
 
-        with patch.object(fair_use_mod, 'get_enforcement_stage', return_value='none'), patch.object(
-            fair_use_mod, 'is_free_credits_exhausted', return_value=False
-        ), patch.object(
-            fair_use_mod, '_get_classify_user_purpose', return_value=mock_classify
-        ) as mock_getter, patch.object(
-            fair_use_mod,
-            'escalate_enforcement',
-            return_value={'action': 'none', 'previous_stage': 'none', 'new_stage': 'none', 'event_id': '3'},
+        with (
+            patch.object(fair_use_mod, 'get_enforcement_stage', return_value='none'),
+            patch.object(fair_use_mod, 'is_free_credits_exhausted', return_value=False),
+            patch.object(fair_use_mod, '_get_classify_user_purpose', return_value=mock_classify) as mock_getter,
+            patch.object(
+                fair_use_mod,
+                'escalate_enforcement',
+                return_value={'action': 'none', 'previous_stage': 'none', 'new_stage': 'none', 'event_id': '3'},
+            ),
         ):
             await fair_use_mod.trigger_classifier_if_needed('test-uid', _make_trigger())
             mock_classify.assert_called_once()

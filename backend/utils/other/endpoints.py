@@ -650,7 +650,7 @@ def timeit(func: F) -> F:
     def measure_time(*args: Any, **kw: Any) -> Any:
         start_time = time.time()
         result = func(*args, **kw)
-        logger.info("Processing time of %s(): %.2f seconds." % (func.__qualname__, time.time() - start_time))
+        logger.info("Processing time of %s(): %.2f seconds." % (func.__qualname__, time.time() - start_time))  # ty: ignore[unresolved-attribute]
         return result
 
     return cast(F, measure_time)

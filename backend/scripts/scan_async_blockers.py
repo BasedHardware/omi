@@ -829,7 +829,9 @@ def print_report(results: Dict[str, Any]) -> None:
             print(f"  {f}: {len(eps)} endpoints")
             for e in eps:
                 blocking = e.get("all_blocking", [])
-                extra = f" | blocking: {', '.join(c['call']+':'+str(c['line']) for c in blocking)}" if blocking else ""
+                extra = (
+                    f" | blocking: {', '.join(c['call'] + ':' + str(c['line']) for c in blocking)}" if blocking else ""
+                )
                 print(f"    :{e['line']} {e['endpoint']}{extra}")
         print()
 

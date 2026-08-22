@@ -287,14 +287,14 @@ get exit code `4` plus a message telling you how long to wait.
 
 ```bash
 # Editable install with dev extras
-pip install -e .[dev]
+uv sync --extra dev
 
 # Run the test suite
 pytest -q
 
 # Lint
-black --check --line-length 120 --skip-string-normalization sdks/python-cli/
-mypy omi_cli
+uv run ruff format --check .
+uv run ty check omi_cli
 
 # Build a wheel + sdist (no upload, no tag)
 bash release.sh --build-only

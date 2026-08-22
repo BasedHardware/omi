@@ -50,7 +50,7 @@ class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
 
     def submit(self, fn: Callable[..., T], /, *args: Any, **kwargs: Any) -> Future[T]:
         future = super().submit(self._tracked, fn, *args, **kwargs)
-        return future
+        return future  # ty: ignore[invalid-return-type]
 
     def _tracked(self, fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:
         with self._active_lock:

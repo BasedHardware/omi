@@ -118,7 +118,7 @@ class TestHighConcurrency:
         all_results = []
 
         for round_num in range(HIGH_ROUNDS):
-            print(f"\n  Round {round_num + 1}/{HIGH_ROUNDS}: " f"firing {HIGH_CONCURRENCY} concurrent requests...")
+            print(f"\n  Round {round_num + 1}/{HIGH_ROUNDS}: firing {HIGH_CONCURRENCY} concurrent requests...")
             t0 = time.time()
 
             with ThreadPoolExecutor(max_workers=HIGH_CONCURRENCY) as pool:
@@ -155,7 +155,7 @@ class TestHighConcurrency:
         total_500 = sum(1 for r in all_results if r["status"] == 500)
         total_err = sum(1 for r in all_results if r["error"] is not None)
 
-        print(f"\n  TOTAL: {total_success}/{total} succeeded, " f"{total_500} x 500, {total_err} connection errors")
+        print(f"\n  TOTAL: {total_success}/{total} succeeded, {total_500} x 500, {total_err} connection errors")
 
         cuda_errors = [r for r in all_results if r["status"] == 500 and b"CUDA" in r["body"]]
         assert len(cuda_errors) == 0, f"{len(cuda_errors)} CUDA errors in high-concurrency test"
@@ -272,7 +272,7 @@ class TestHighConcurrency:
         successes = [r for r in results if r["status"] == 200]
         failures = [r for r in results if r["status"] != 200 or r["error"] is not None]
 
-        assert len(failures) == 0, f"{len(failures)}/{len(results)} requests failed — " f"cannot measure RTFx"
+        assert len(failures) == 0, f"{len(failures)}/{len(results)} requests failed — cannot measure RTFx"
 
         rps = len(successes) / t_total
         rtfx = rps * RTFX_AUDIO_DURATION

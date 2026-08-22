@@ -15175,9 +15175,5 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-<<<<<<< HEAD
   // Total: 406 Swift client methods generated.
-=======
-  // Total: 404 Swift client methods generated.
->>>>>>> 7864ef7bda (chore: regenerate OpenAPI clients (Dart/TS/Swift))
 }

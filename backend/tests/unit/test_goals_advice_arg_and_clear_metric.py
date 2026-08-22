@@ -31,9 +31,10 @@ from routers import goals as goals_router
 # ---------------------------------------------------------------------------
 def test_current_goal_advice_passes_uid_then_goal_id():
     """The route must forward (uid, goal_id) to the advice helper — the util's real signature."""
-    with patch.object(
-        goals_router.goals_db, "get_user_goal", return_value={"id": "goal_abc", "title": "Run a 5k"}
-    ), patch.object(goals_router, "get_goal_advice_llm", return_value="real advice") as advice_mock:
+    with (
+        patch.object(goals_router.goals_db, "get_user_goal", return_value={"id": "goal_abc", "title": "Run a 5k"}),
+        patch.object(goals_router, "get_goal_advice_llm", return_value="real advice") as advice_mock,
+    ):
         result = goals_router.get_current_goal_advice(uid="u1")
 
     advice_mock.assert_called_once_with("u1", "goal_abc")
@@ -41,9 +42,10 @@ def test_current_goal_advice_passes_uid_then_goal_id():
 
 
 def test_current_goal_advice_no_goal_returns_setup_message():
-    with patch.object(goals_router.goals_db, "get_user_goal", return_value=None), patch.object(
-        goals_router, "get_goal_advice_llm"
-    ) as advice_mock:
+    with (
+        patch.object(goals_router.goals_db, "get_user_goal", return_value=None),
+        patch.object(goals_router, "get_goal_advice_llm") as advice_mock,
+    ):
         result = goals_router.get_current_goal_advice(uid="u1")
 
     advice_mock.assert_not_called()

@@ -51,7 +51,7 @@ PARAKEET_READY_POD_NO_SUCCESS_EXPR = (
 )
 PARAKEET_FATAL_CUDA_RULE = "omi-parakeet-fatal-cuda"
 PARAKEET_FATAL_CUDA_EXPR = (
-    'sum by (pod) (increase(parakeet_gpu_fatal_errors_total{container="parakeet",' 'namespace="prod-omi-backend"}[5m]))'
+    'sum by (pod) (increase(parakeet_gpu_fatal_errors_total{container="parakeet",namespace="prod-omi-backend"}[5m]))'
 )
 
 
@@ -144,9 +144,9 @@ def test_grafana_alert_rules_have_safe_human_impact_metadata():
                 value = annotations[key]
                 assert isinstance(value, str) and value.strip(), f"{export_name}:{uid}:{key}"
                 value_lower = value.lower()
-                assert not any(
-                    marker in value_lower for marker in UNSAFE_ANNOTATION_MARKERS
-                ), f"{export_name}:{uid}:{key} exposes raw alert output"
+                assert not any(marker in value_lower for marker in UNSAFE_ANNOTATION_MARKERS), (
+                    f"{export_name}:{uid}:{key} exposes raw alert output"
+                )
 
             assert isinstance(labels["component"], str) and labels["component"].strip(), f"{export_name}:{uid}"
 

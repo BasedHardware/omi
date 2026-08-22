@@ -419,7 +419,7 @@ def fold_commits(commits: List[Dict[str, Any]], valid_time: Optional[datetime] =
 def _resolve_arg_change(value: Any) -> Any:
     if isinstance(value, dict) and "to" in value:
         return cast(Dict[str, Any], value).get("to")
-    return cast(Any, value)
+    return cast(Any, value)  # ty: ignore[redundant-cast]
 
 
 def _apply_mutation(facts: Dict[str, Dict[str, Any]], item: Dict[str, Any], commit_time: Optional[datetime]) -> None:

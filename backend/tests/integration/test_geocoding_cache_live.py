@@ -45,7 +45,6 @@ def _skip_if_no_credentials():
 
 
 class TestGeoCacheLive:
-
     def test_first_call_hits_api_and_caches(self):
         """First call should hit Google API and write to Redis."""
         _skip_if_no_credentials()

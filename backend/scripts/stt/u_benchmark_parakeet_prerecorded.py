@@ -125,7 +125,7 @@ def main() -> None:
                     'dg_punct': dg_punct['total'],
                 }
             )
-            print(f"    DG: WER={dg_wer*100:.1f}% lat={dg_time:.2f}s words={dg_words}")
+            print(f"    DG: WER={dg_wer * 100:.1f}% lat={dg_time:.2f}s words={dg_words}")
         except Exception as e:
             print(f"    DG ERROR: {e}")
             row.update({'dg_text': f'ERROR: {e}', 'dg_wer': None, 'dg_latency_s': None})
@@ -144,7 +144,7 @@ def main() -> None:
                     'pk_punct': pk_punct['total'],
                 }
             )
-            print(f"    PK: WER={pk_wer*100:.1f}% lat={pk_time:.2f}s segs={pk_segments}")
+            print(f"    PK: WER={pk_wer * 100:.1f}% lat={pk_time:.2f}s segs={pk_segments}")
         except Exception as e:
             print(f"    PK ERROR: {e}")
             row.update({'pk_text': f'ERROR: {e}', 'pk_wer': None, 'pk_latency_s': None})
@@ -189,10 +189,10 @@ def main() -> None:
 
     print(tabulate(table, headers=['Sample', 'Duration', 'Words', 'DG WER', 'PK WER', 'DG Lat', 'PK Lat']))
 
-    print(f'\n  Deepgram avg WER:  {sum(dg_wers)/len(dg_wers):.1f}%' if dg_wers else '')
-    print(f'  Parakeet avg WER:  {sum(pk_wers)/len(pk_wers):.1f}%' if pk_wers else '')
-    print(f'  Deepgram avg lat:  {sum(dg_lats)/len(dg_lats):.2f}s' if dg_lats else '')
-    print(f'  Parakeet avg lat:  {sum(pk_lats)/len(pk_lats):.2f}s' if pk_lats else '')
+    print(f'\n  Deepgram avg WER:  {sum(dg_wers) / len(dg_wers):.1f}%' if dg_wers else '')
+    print(f'  Parakeet avg WER:  {sum(pk_wers) / len(pk_wers):.1f}%' if pk_wers else '')
+    print(f'  Deepgram avg lat:  {sum(dg_lats) / len(dg_lats):.2f}s' if dg_lats else '')
+    print(f'  Parakeet avg lat:  {sum(pk_lats) / len(pk_lats):.2f}s' if pk_lats else '')
     print(f'\n  Results saved to: {RESULTS_DIR / "parakeet_prerecorded_results.json"}')
 
 

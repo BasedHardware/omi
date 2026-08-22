@@ -142,9 +142,9 @@ def request_bytes(request: urllib.request.Request, timeout_seconds: float, max_b
 def build_multipart(audio: bytes, language: str) -> tuple[str, bytes]:
     """Encode the real FastAPI UploadFile multipart shape for the WAV fixture."""
     boundary = f'----omi-transcription-probe-{uuid.uuid4().hex}'
-    language_part = (
-        f'--{boundary}\r\n' 'Content-Disposition: form-data; name="language"\r\n\r\n' f'{language}\r\n'
-    ).encode('ascii')
+    language_part = (f'--{boundary}\r\nContent-Disposition: form-data; name="language"\r\n\r\n{language}\r\n').encode(
+        'ascii'
+    )
     prefix = (
         f'--{boundary}\r\n'
         'Content-Disposition: form-data; name="files"; filename="transcription-release-probe.wav"\r\n'

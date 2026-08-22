@@ -1307,9 +1307,9 @@ class TestOnnxStateAndConcurrency:
             baseline = time.perf_counter() - baseline_start
 
             # ONNX is truly concurrent (no pool), so all should complete in ~1x sleep time
-            assert elapsed < max(
-                sleep_sec * 3, baseline * 1.5
-            ), f'Took {elapsed:.3f}s against a {baseline:.3f}s bare-thread baseline — unexpected serialization'
+            assert elapsed < max(sleep_sec * 3, baseline * 1.5), (
+                f'Took {elapsed:.3f}s against a {baseline:.3f}s bare-thread baseline — unexpected serialization'
+            )
 
 
 @pytest.mark.slow
@@ -1358,9 +1358,9 @@ class TestLongSessionStress:
 
         # Mapper checkpoints should be capped
         cps = gate.dg_wall_mapper._checkpoints
-        assert (
-            len(cps) <= DgWallMapper._MAX_CHECKPOINTS
-        ), f'Checkpoints {len(cps)} exceeds cap {DgWallMapper._MAX_CHECKPOINTS}'
+        assert len(cps) <= DgWallMapper._MAX_CHECKPOINTS, (
+            f'Checkpoints {len(cps)} exceeds cap {DgWallMapper._MAX_CHECKPOINTS}'
+        )
         assert len(cps) > 0, 'Should have at least some checkpoints'
 
         # Remap should still work (no crash) and produce monotonic results
@@ -1368,9 +1368,9 @@ class TestLongSessionStress:
             dg_times = [0.5, 1.0, 5.0, 10.0]
             wall_times = [gate.dg_wall_mapper.dg_to_wall_rel(t) for t in dg_times]
             for i in range(1, len(wall_times)):
-                assert (
-                    wall_times[i] >= wall_times[i - 1]
-                ), f'Non-monotonic remap: dg={dg_times[i]} -> wall={wall_times[i]} < {wall_times[i-1]}'
+                assert wall_times[i] >= wall_times[i - 1], (
+                    f'Non-monotonic remap: dg={dg_times[i]} -> wall={wall_times[i]} < {wall_times[i - 1]}'
+                )
 
     def test_json_log_after_long_session(self):
         """to_json_log should produce valid output after extended session."""

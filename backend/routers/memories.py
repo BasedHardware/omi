@@ -225,7 +225,7 @@ def _validate_device_scope_request(device_scope: str, resolved_device_id: Option
     Agents and API clients get an explicit 400 (not silent unfiltered data) so they
     can supply X-App-Platform / X-Device-Id-Hash or client_device_id as needed.
     """
-    detail = device_scope_validation_error(device_scope, resolved_device_id)  # type: ignore[arg-type]
+    detail = device_scope_validation_error(device_scope, resolved_device_id)  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
     if detail:
         raise HTTPException(status_code=400, detail=detail)
 

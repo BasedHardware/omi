@@ -385,7 +385,7 @@ class TestPublicEndpointRateLimit:
             # First 10 should succeed (404 = not found, but not rate-limited)
             for i in range(10):
                 resp = client.get(f'/v1/fair-use/case/FU-BURST{i:04d}/status')
-                assert resp.status_code == 404, f'Request {i+1} should be 404, got {resp.status_code}'
+                assert resp.status_code == 404, f'Request {i + 1} should be 404, got {resp.status_code}'
 
             # 11th should be rate-limited
             resp = client.get('/v1/fair-use/case/FU-BURST9999/status')

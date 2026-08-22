@@ -177,7 +177,7 @@ def _enforce_fast_unit_duration_guard(session):
         if terminalreporter is not None:
             terminalreporter.section('Backend fast unit duration guard configuration error')
             terminalreporter.line(
-                'BACKEND_FAST_UNIT_FAIL_SECONDS must be greater than or equal to ' 'BACKEND_FAST_UNIT_WARN_SECONDS.'
+                'BACKEND_FAST_UNIT_FAIL_SECONDS must be greater than or equal to BACKEND_FAST_UNIT_WARN_SECONDS.'
             )
         session.exitstatus = 1
         return

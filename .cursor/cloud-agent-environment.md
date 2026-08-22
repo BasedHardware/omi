@@ -6,7 +6,7 @@ Guidance for AI agents running in a Cursor Cloud VM. Linked from `AGENTS.md`.
 
 Only the **Python backend** (`backend/`) is exercised on this VM. The macOS desktop app, iOS/Android builds, and firmware **cannot** be built or run here (they need macOS/Xcode, the Android SDK, or embedded hardware).
 
-Preinstalled in the snapshot: `uv` (global), `redis-server`, `firebase-tools` (Firestore emulator), Java 21, FFmpeg, Node. The startup update script refreshes `backend/.venv` from `backend/pylock.toml` (idempotent `uv pip sync`). To use the venv: `cd backend && source .venv/bin/activate`.
+Preinstalled in the snapshot: `uv` (global), `redis-server`, `firebase-tools` (Firestore emulator), Java 21, FFmpeg, Node. The startup update script refreshes `backend/.venv` from `backend/uv.lock` (idempotent `uv sync --frozen`). To use the venv: `cd backend && source .venv/bin/activate`.
 
 ## Preferred: hermetic E2E harness (no credentials)
 

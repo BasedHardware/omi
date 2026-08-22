@@ -17,12 +17,12 @@ from routers.apps import ReplyToReviewRequest
 
 def _call(data):
     """Drive reply_to_review past the app/owner/reviewer gates so we reach the response check."""
-    with patch.object(apps_mod, 'get_available_app_by_id', return_value={'id': 'app-1', 'uid': 'uid1'}), patch.object(
-        apps_mod, 'App', return_value=MagicMock(uid='uid1', private=False, name='Test App')
-    ), patch.object(apps_mod, 'get_specific_user_review', return_value={'uid': 'r1', 'score': 5}), patch.object(
-        apps_mod, 'set_app_review'
-    ), patch.object(
-        apps_mod, 'send_app_review_reply_notification'
+    with (
+        patch.object(apps_mod, 'get_available_app_by_id', return_value={'id': 'app-1', 'uid': 'uid1'}),
+        patch.object(apps_mod, 'App', return_value=MagicMock(uid='uid1', private=False, name='Test App')),
+        patch.object(apps_mod, 'get_specific_user_review', return_value={'uid': 'r1', 'score': 5}),
+        patch.object(apps_mod, 'set_app_review'),
+        patch.object(apps_mod, 'send_app_review_reply_notification'),
     ):
         return apps_mod.reply_to_review('app-1', data, uid='uid1')
 

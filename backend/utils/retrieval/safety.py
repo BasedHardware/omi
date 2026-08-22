@@ -70,7 +70,7 @@ class AgentSafetyGuard:
         # Check for tool call loops
         if self._is_loop_detected(tool_name, params):
             raise SafetyGuardError(
-                "I seem to be stuck trying to answer your question. " "Could you rephrase it in a different way?"
+                "I seem to be stuck trying to answer your question. Could you rephrase it in a different way?"
             )
 
         # Record the call

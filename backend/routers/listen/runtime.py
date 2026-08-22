@@ -302,7 +302,7 @@ class ListenSessionRuntime:
         self.parity_capture = ListenParityCapture.from_environ(
             principal_id=request.uid,
             session_id=getattr(self, 'session_id', ''),
-            provider=getattr(self.stt_service, 'value', self.stt_service),
+            provider=getattr(self.stt_service, 'value', self.stt_service),  # ty: ignore[invalid-argument-type]
             model=self.stt_model or '',
             request={
                 'codec': request.codec,

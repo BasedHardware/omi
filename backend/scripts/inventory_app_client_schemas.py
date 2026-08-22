@@ -341,7 +341,9 @@ def scan_dart_decode_sites() -> list[DartDecodeSite]:
                     context=(
                         'stream_protocol'
                         if is_stream_protocol
-                        else 'error_discriminator' if is_error_discriminator else decode_site_context(line)
+                        else 'error_discriminator'
+                        if is_error_discriminator
+                        else decode_site_context(line)
                     ),
                 )
             )

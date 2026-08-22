@@ -94,7 +94,9 @@ def _long_term_item(**overrides) -> MemoryItem:
 
 def test_extract_kg_skips_when_already_extracted():
     item = _long_term_item(kg_extracted=True)
-    with (patch("utils.memory.canonical_kg_promotion.extract_knowledge_from_memory") as mock_extract,):
+    with (
+        patch("utils.memory.canonical_kg_promotion.extract_knowledge_from_memory") as mock_extract,
+    ):
         result = extract_kg_for_promoted_memory("uid-canonical", item)
         assert result.success is False
         assert result.skipped_reason == "already_extracted"
@@ -217,7 +219,9 @@ def test_extract_kg_includes_arguments_and_predicate_only_prefix():
 
 def test_extract_kg_rejects_negative_user_review_before_projection():
     item = _long_term_item(promotion={"user_review": False})
-    with (patch("utils.memory.canonical_kg_promotion.extract_knowledge_from_memory") as mock_extract,):
+    with (
+        patch("utils.memory.canonical_kg_promotion.extract_knowledge_from_memory") as mock_extract,
+    ):
         result = extract_kg_for_promoted_memory("uid-canonical", item)
 
     assert result.skipped_reason == "user_rejected"

@@ -11,7 +11,6 @@ av.logging.set_level(av.logging.ERROR)  # type: ignore[reportAttributeAccessIssu
 
 
 class AACDecoder:
-
     def __init__(self, uid: str = '', session_id: str = '', sample_rate: int = 16000, channels: int = 1):
         self.uid = uid
         self.session_id = session_id

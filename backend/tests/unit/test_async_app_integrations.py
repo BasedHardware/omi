@@ -303,9 +303,11 @@ class TestDurableExternalIntegrationFanout:
         client = AsyncMock()
         client.post = AsyncMock(return_value=response)
 
-        with patch.object(app_integrations, 'get_available_apps', return_value=[app]), patch.object(
-            app_integrations, 'get_webhook_client', return_value=client
-        ), patch.object(app_integrations, 'conversation_to_dict', return_value={}):
+        with (
+            patch.object(app_integrations, 'get_available_apps', return_value=[app]),
+            patch.object(app_integrations, 'get_webhook_client', return_value=client),
+            patch.object(app_integrations, 'conversation_to_dict', return_value={}),
+        ):
             await app_integrations.trigger_external_integrations(
                 'uid-1', conversation, idempotency_key='fanout-1', require_delivery=True
             )
@@ -321,10 +323,11 @@ class TestDurableExternalIntegrationFanout:
         client = AsyncMock()
         client.post = AsyncMock(return_value=response)
 
-        with patch.object(app_integrations, 'get_available_apps', return_value=[app]), patch.object(
-            app_integrations, 'get_webhook_client', return_value=client
-        ), patch.object(app_integrations, 'conversation_to_dict', return_value={}), pytest.raises(
-            app_integrations.ExternalIntegrationFanoutError
+        with (
+            patch.object(app_integrations, 'get_available_apps', return_value=[app]),
+            patch.object(app_integrations, 'get_webhook_client', return_value=client),
+            patch.object(app_integrations, 'conversation_to_dict', return_value={}),
+            pytest.raises(app_integrations.ExternalIntegrationFanoutError),
         ):
             await app_integrations.trigger_external_integrations(
                 'uid-1', conversation, idempotency_key='fanout-1', require_delivery=True
@@ -341,9 +344,11 @@ class TestDurableExternalIntegrationFanout:
         client = AsyncMock()
         client.post = AsyncMock(return_value=response)
 
-        with patch.object(app_integrations, 'get_available_apps', return_value=[app]), patch.object(
-            app_integrations, 'get_webhook_client', return_value=client
-        ), patch.object(app_integrations, 'conversation_to_dict', return_value={}):
+        with (
+            patch.object(app_integrations, 'get_available_apps', return_value=[app]),
+            patch.object(app_integrations, 'get_webhook_client', return_value=client),
+            patch.object(app_integrations, 'conversation_to_dict', return_value={}),
+        ):
             messages = await app_integrations.trigger_external_integrations(
                 'uid-1', conversation, idempotency_key='fanout-1', require_delivery=True
             )
@@ -366,11 +371,12 @@ class TestDurableExternalIntegrationFanout:
         client = AsyncMock()
         client.post = AsyncMock(return_value=response)
 
-        with patch.object(app_integrations, 'get_available_apps', return_value=[app]), patch.object(
-            app_integrations, 'get_webhook_client', return_value=client
-        ), patch.object(app_integrations, 'conversation_to_dict', return_value={}), patch.object(
-            app_integrations, 'record_fallback'
-        ) as fallback:
+        with (
+            patch.object(app_integrations, 'get_available_apps', return_value=[app]),
+            patch.object(app_integrations, 'get_webhook_client', return_value=client),
+            patch.object(app_integrations, 'conversation_to_dict', return_value={}),
+            patch.object(app_integrations, 'record_fallback') as fallback,
+        ):
             messages = await app_integrations.trigger_external_integrations(
                 'uid-1',
                 conversation,
@@ -407,15 +413,15 @@ class TestSSRFConfigRejection:
         cb = MagicMock()
         cb.allow_request.return_value = True
 
-        with patch.object(app_integrations, 'get_available_apps', return_value=[app]), patch.object(
-            app_integrations, 'get_webhook_client', return_value=client
-        ), patch.object(
-            app_integrations, 'safe_request_target', side_effect=app_integrations.UnsafeWebhookURLError('private')
-        ), patch.object(
-            app_integrations, 'get_webhook_circuit_breaker', return_value=cb
-        ), patch.object(
-            app_integrations, 'record_app_webhook_failure'
-        ) as record_failure:
+        with (
+            patch.object(app_integrations, 'get_available_apps', return_value=[app]),
+            patch.object(app_integrations, 'get_webhook_client', return_value=client),
+            patch.object(
+                app_integrations, 'safe_request_target', side_effect=app_integrations.UnsafeWebhookURLError('private')
+            ),
+            patch.object(app_integrations, 'get_webhook_circuit_breaker', return_value=cb),
+            patch.object(app_integrations, 'record_app_webhook_failure') as record_failure,
+        ):
             # Must not raise ExternalIntegrationFanoutError even with require_delivery.
             result = await app_integrations.trigger_external_integrations(
                 'uid-1', conversation, idempotency_key='fanout-1', require_delivery=True
@@ -434,15 +440,15 @@ class TestSSRFConfigRejection:
         cb = MagicMock()
         cb.allow_request.return_value = True
 
-        with patch.object(app_integrations, 'get_available_apps', return_value=[app]), patch.object(
-            app_integrations, 'get_webhook_client', return_value=client
-        ), patch.object(
-            app_integrations, 'safe_request_target', side_effect=app_integrations.UnsafeWebhookURLError('private')
-        ), patch.object(
-            app_integrations, 'get_webhook_circuit_breaker', return_value=cb
-        ), patch.object(
-            app_integrations, 'record_app_webhook_failure'
-        ) as record_failure:
+        with (
+            patch.object(app_integrations, 'get_available_apps', return_value=[app]),
+            patch.object(app_integrations, 'get_webhook_client', return_value=client),
+            patch.object(
+                app_integrations, 'safe_request_target', side_effect=app_integrations.UnsafeWebhookURLError('private')
+            ),
+            patch.object(app_integrations, 'get_webhook_circuit_breaker', return_value=cb),
+            patch.object(app_integrations, 'record_app_webhook_failure') as record_failure,
+        ):
             result = await app_integrations.trigger_realtime_audio_bytes('uid-1', 8000, bytearray(b'\x00' * 10))
 
         assert result == {}
@@ -474,8 +480,9 @@ class TestAsyncTriggerRealtimeAudioBytes:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        with patch.object(app_integrations, "get_available_apps", return_value=[app1, app2]), patch.object(
-            app_integrations, "get_webhook_client", return_value=mock_client
+        with (
+            patch.object(app_integrations, "get_available_apps", return_value=[app1, app2]),
+            patch.object(app_integrations, "get_webhook_client", return_value=mock_client),
         ):
             await app_integrations.trigger_realtime_audio_bytes("uid-1", 8000, bytearray(b'\x00' * 10))
 
@@ -491,8 +498,9 @@ class TestAsyncTriggerRealtimeAudioBytes:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        with patch.object(app_integrations, "get_available_apps", return_value=[app]), patch.object(
-            app_integrations, "get_webhook_client", return_value=mock_client
+        with (
+            patch.object(app_integrations, "get_available_apps", return_value=[app]),
+            patch.object(app_integrations, "get_webhook_client", return_value=mock_client),
         ):
             await app_integrations.trigger_realtime_audio_bytes("uid-1", 16000, bytearray(b'\x00' * 10))
 
@@ -512,8 +520,9 @@ class TestAsyncTriggerRealtimeAudioBytes:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        with patch.object(app_integrations, "get_available_apps", return_value=[app]), patch.object(
-            app_integrations, "get_webhook_client", return_value=mock_client
+        with (
+            patch.object(app_integrations, "get_available_apps", return_value=[app]),
+            patch.object(app_integrations, "get_webhook_client", return_value=mock_client),
         ):
             await app_integrations.trigger_realtime_audio_bytes("uid-1", 16000, bytearray(b'\x00' * 10))
 
@@ -543,8 +552,9 @@ class TestAsyncTriggerRealtimeAudioBytes:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(side_effect=_side_effect)
 
-        with patch.object(app_integrations, "get_available_apps", return_value=[app1, app2]), patch.object(
-            app_integrations, "get_webhook_client", return_value=mock_client
+        with (
+            patch.object(app_integrations, "get_available_apps", return_value=[app1, app2]),
+            patch.object(app_integrations, "get_webhook_client", return_value=mock_client),
         ):
             # Should not raise
             await app_integrations.trigger_realtime_audio_bytes("uid-1", 8000, bytearray(b'\x00'))
@@ -562,9 +572,11 @@ class TestAsyncTriggerRealtimeAudioBytes:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        with patch.object(app_integrations, "get_available_apps", return_value=[app1]), patch.object(
-            app_integrations, "get_webhook_client", return_value=mock_client
-        ), patch.object(app_integrations, "threading") as mock_threading:
+        with (
+            patch.object(app_integrations, "get_available_apps", return_value=[app1]),
+            patch.object(app_integrations, "get_webhook_client", return_value=mock_client),
+            patch.object(app_integrations, "threading") as mock_threading,
+        ):
             await app_integrations.trigger_realtime_audio_bytes("uid-1", 8000, bytearray(b'\x00'))
             mock_threading.Thread.assert_not_called()
 
@@ -589,8 +601,9 @@ class TestAudioBytesChunkedFanOut:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        with patch.object(app_integrations, "get_available_apps", return_value=apps), patch.object(
-            app_integrations, "get_webhook_client", return_value=mock_client
+        with (
+            patch.object(app_integrations, "get_available_apps", return_value=apps),
+            patch.object(app_integrations, "get_webhook_client", return_value=mock_client),
         ):
             await app_integrations.trigger_realtime_audio_bytes("uid-1", 8000, bytearray(b'\x00' * 100))
 
@@ -604,8 +617,9 @@ class TestAsyncTriggerRealtimeIntegrations:
     @pytest.mark.asyncio
     async def test_no_apps_returns_empty(self):
         """No apps and no mentor → empty result."""
-        with patch.object(app_integrations, "get_available_apps", return_value=[]), patch.object(
-            app_integrations, "process_mentor_notification", return_value=None
+        with (
+            patch.object(app_integrations, "get_available_apps", return_value=[]),
+            patch.object(app_integrations, "process_mentor_notification", return_value=None),
         ):
             result = await app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], "conv-1")
         assert result == {}
@@ -624,9 +638,11 @@ class TestAsyncTriggerRealtimeIntegrations:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        with patch.object(app_integrations, "get_available_apps", return_value=[app1, app2]), patch.object(
-            app_integrations, "process_mentor_notification", return_value=None
-        ), patch.object(app_integrations, "get_webhook_client", return_value=mock_client):
+        with (
+            patch.object(app_integrations, "get_available_apps", return_value=[app1, app2]),
+            patch.object(app_integrations, "process_mentor_notification", return_value=None),
+            patch.object(app_integrations, "get_webhook_client", return_value=mock_client),
+        ):
             await app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], "conv-1")
 
         assert mock_client.post.call_count == 2
@@ -644,12 +660,12 @@ class TestAsyncTriggerRealtimeIntegrations:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        with patch.object(app_integrations, "get_available_apps", return_value=[app1]), patch.object(
-            app_integrations, "process_mentor_notification", return_value=None
-        ), patch.object(app_integrations, "get_webhook_client", return_value=mock_client), patch.object(
-            app_integrations, "send_app_notification_async", new_callable=AsyncMock
-        ) as mock_notify, patch.object(
-            app_integrations, "add_app_message", return_value={"id": "msg-1"}
+        with (
+            patch.object(app_integrations, "get_available_apps", return_value=[app1]),
+            patch.object(app_integrations, "process_mentor_notification", return_value=None),
+            patch.object(app_integrations, "get_webhook_client", return_value=mock_client),
+            patch.object(app_integrations, "send_app_notification_async", new_callable=AsyncMock) as mock_notify,
+            patch.object(app_integrations, "add_app_message", return_value={"id": "msg-1"}),
         ):
             result = await app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], "conv-1")
 
@@ -669,9 +685,11 @@ class TestAsyncTriggerRealtimeIntegrations:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        with patch.object(app_integrations, "get_available_apps", return_value=[app1]), patch.object(
-            app_integrations, "process_mentor_notification", return_value=None
-        ), patch.object(app_integrations, "get_webhook_client", return_value=mock_client):
+        with (
+            patch.object(app_integrations, "get_available_apps", return_value=[app1]),
+            patch.object(app_integrations, "process_mentor_notification", return_value=None),
+            patch.object(app_integrations, "get_webhook_client", return_value=mock_client),
+        ):
             await app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], None)
 
         call_url = mock_client.post.call_args[0][0]

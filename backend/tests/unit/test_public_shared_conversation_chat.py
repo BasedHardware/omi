@@ -436,7 +436,7 @@ def test_transcript_builder_does_not_copy_an_oversized_segment():
     finally:
         tracemalloc.stop()
 
-    assert transcript == ('Owner: head\n' '[... transcript truncated at segment boundaries ...]\n' 'Speaker 3: tail')
+    assert transcript == ('Owner: head\n[... transcript truncated at segment boundaries ...]\nSpeaker 3: tail')
     assert peak_bytes < 500_000
 
 

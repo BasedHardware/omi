@@ -168,7 +168,7 @@ Make the description specific to THIS person based on what you see in their conv
 
         loaded: Any = json.loads(content)
         if isinstance(loaded, list) and loaded:
-            loaded = cast(Any, loaded[0])
+            loaded = cast(Any, loaded[0])  # ty: ignore[redundant-cast]
         result = cast(Dict[str, str], loaded)
 
         logger.info(f"[Wrapped]     - Decision style: {result.get('name')}")
@@ -604,7 +604,7 @@ Be specific with actual names. If something isn't clearly mentioned, make your b
 
         loaded: Any = json.loads(content)
         if isinstance(loaded, list) and loaded:
-            loaded = cast(Any, loaded[0])
+            loaded = cast(Any, loaded[0])  # ty: ignore[redundant-cast]
         result = cast(Dict[str, Any], loaded)
 
         logger.info(f"[Wrapped]     - Obsessions found: {result}")
@@ -726,7 +726,7 @@ Be specific and empathetic. These should feel personal and meaningful."""
 
         loaded: Any = json.loads(content)
         if isinstance(loaded, list) and loaded:
-            loaded = cast(Any, loaded[0])
+            loaded = cast(Any, loaded[0])  # ty: ignore[redundant-cast]
         result = cast(Dict[str, Any], loaded)
 
         logger.info(f"[Wrapped]     - Struggles and wins found")

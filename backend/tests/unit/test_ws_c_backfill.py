@@ -806,9 +806,9 @@ def test_remediation_archives_only_planned_noise_through_apply_and_outbox(_trust
         "projection_sync": "delete",
         "vector_sync": "delete",
     }
-    assert any(
-        path.startswith(f"users/{LEGACY_UID}/memory_commits/") for path in db.docs
-    ), "remediation must use the canonical apply ledger"
+    assert any(path.startswith(f"users/{LEGACY_UID}/memory_commits/") for path in db.docs), (
+        "remediation must use the canonical apply ledger"
+    )
 
 
 def test_remediation_count_lock_refuses_to_mutate_when_the_fresh_plan_changes(_trusted_account):

@@ -225,8 +225,6 @@ check_optional_formatters() {
   local -a arb_files=()
   local -a firmware_files=()
   local file
-  local -a black_cmd=()
-
   for file in "${CHANGED_FILES[@]}"; do
     [ -f "$file" ] || continue
     case "$file" in
@@ -270,17 +268,20 @@ check_optional_formatters() {
   fi
 
   if [ "${#python_files[@]}" -gt 0 ]; then
-    if command -v black >/dev/null 2>&1; then
-      black_cmd=(black)
-    elif "$PYTHON_BIN" -m black --version >/dev/null 2>&1; then
-      black_cmd=("$PYTHON_BIN" -m black)
+    local -a ruff_cmd=()
+    if [ -x "${REPO_ROOT:-$ROOT}/backend/.venv/bin/ruff" ]; then
+      ruff_cmd=("${REPO_ROOT:-$ROOT}/backend/.venv/bin/ruff")
+    elif [ -x "backend/.venv/bin/ruff" ]; then
+      ruff_cmd=(backend/.venv/bin/ruff)
+    elif command -v ruff >/dev/null 2>&1; then
+      ruff_cmd=(ruff)
     fi
 
-    if [ "${#black_cmd[@]}" -gt 0 ]; then
-      echo "==> black --check (${#python_files[@]} file(s))"
-      "${black_cmd[@]}" --check --line-length 120 --skip-string-normalization "${python_files[@]}"
+    if [ "${#ruff_cmd[@]}" -gt 0 ]; then
+      echo "==> ruff format --check (${#python_files[@]} file(s))"
+      "${ruff_cmd[@]}" format --check --config backend/pyproject.toml "${python_files[@]}"
     else
-      echo "Skipping Python format check; black is not installed."
+      echo "Skipping Python format check; ruff is not installed (run: cd backend && ./scripts/sync-python-deps.sh)."
     fi
   fi
 

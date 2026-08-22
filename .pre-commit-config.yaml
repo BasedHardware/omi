@@ -2,10 +2,10 @@
 #
 # Install:  pip install pre-commit && pre-commit install
 # Run all:  pre-commit run --all-files
-# Run one:  pre-commit run black --files backend/utils/translation.py
+# Run one:  pre-commit run ruff-format --files backend/utils/translation.py
 #
 # Timing (warm cache, M2 MacBook):
-#   black           ~0.3s   ruff            ~0.4s
+#   ruff format     ~0.3s   ruff check      ~0.4s
 #   detect-secrets  ~1.2s   pre-commit-hooks ~0.1s
 #   Total:          ~2.0s
 #
@@ -14,26 +14,17 @@
 # Run manually: .github/scripts/run-pre-push.sh
 
 repos:
-  # ── Python formatting (mirrors CI: black --line-length 120) ──
-  - repo: https://github.com/psf/black
-    rev: 24.4.2
-    hooks:
-      - id: black
-        name: black (format)
-        language_version: python3.9
-        args: [--line-length=120, --skip-string-normalization]
-        types_or: [python]
-
-  # ── Python linting + import sorting (NOT in CI — free bug finding) ──
+  # ── Python format + lint (Astral ruff; mirrors backend/pyproject.toml) ──
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.4.4
+    rev: v0.12.12
     hooks:
-      # Lint + auto-fix (unused imports, undefined names, noqa abuse)
-      # Note: formatting handled by black above — ruff-format intentionally
-      # omitted to avoid conflicts when black and ruff-format disagree on output
+      - id: ruff-format
+        name: ruff (format)
+        args: [--config, backend/pyproject.toml]
+        types_or: [python]
       - id: ruff
         name: ruff (lint + fix)
-        args: [--fix, --exit-non-zero-on-fix, --target-version, py39]
+        args: [--fix, --exit-non-zero-on-fix, --config, backend/pyproject.toml]
         types_or: [python]
 
   # ── Secret detection (critical for open-source repo with creds in history) ──

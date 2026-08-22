@@ -211,9 +211,9 @@ class TestWebhookClearFairUseSourceLevel:
     def _assert_clear_fair_use_called(block):
         direct_call = r'\bclear_fair_use_on_upgrade\s*\(\s*uid\b'
         run_blocking_call = r'\brun_blocking\s*\([^)]*\bclear_fair_use_on_upgrade\b[^)]*\buid\b'
-        assert re.search(direct_call, block) or re.search(
-            run_blocking_call, block, re.DOTALL
-        ), "clear_fair_use_on_upgrade is not called with uid"
+        assert re.search(direct_call, block) or re.search(run_blocking_call, block, re.DOTALL), (
+            "clear_fair_use_on_upgrade is not called with uid"
+        )
 
     def test_payment_imports_clear_fair_use_on_upgrade(self):
         """payment.py must import clear_fair_use_on_upgrade."""

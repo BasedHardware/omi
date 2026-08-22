@@ -30,7 +30,7 @@ def prewarm(
         except Exception as error:
             if attempt == attempts or not _retryable(error):
                 raise RuntimeError(
-                    f'tiktoken prewarm failed on attempt {attempt}/{attempts}: ' f'{type(error).__name__}: {error}'
+                    f'tiktoken prewarm failed on attempt {attempt}/{attempts}: {type(error).__name__}: {error}'
                 ) from error
             delay = float(attempt)
             print(

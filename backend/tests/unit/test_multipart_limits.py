@@ -104,9 +104,7 @@ def _multipart_body(name: str, value: bytes, filename: str | None = None) -> tup
         content_type = 'Content-Type: audio/wav\r\n'
 
     body = (
-        (f'--{boundary}\r\n' f'{disposition}\r\n' f'{content_type}' '\r\n').encode()
-        + value
-        + f'\r\n--{boundary}--\r\n'.encode()
+        (f'--{boundary}\r\n{disposition}\r\n{content_type}\r\n').encode() + value + f'\r\n--{boundary}--\r\n'.encode()
     )
     headers = Headers({'Content-Type': f'multipart/form-data; boundary={boundary}'})
     return headers, body

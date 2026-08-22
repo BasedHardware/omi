@@ -1,8 +1,9 @@
-FROM python:3.11-slim
+FROM python:3.13-slim-bookworm
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir fastapi uvicorn[standard] websockets starlette
+RUN pip install --no-cache-dir uv==0.12.5 && \
+    uv pip install --system --no-cache-dir fastapi uvicorn[standard] websockets starlette
 
 COPY mock_deps/ /app/mock_deps/
 COPY harness_main.py /app/

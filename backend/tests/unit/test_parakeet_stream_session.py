@@ -140,7 +140,6 @@ def _stream_handler_module():
 
 
 class TestCosineDistance:
-
     def test_cosine_distance_matches_expected_values(self):
         assert speaker_math.cosine_distance(np.array([1.0, 0.0]), np.array([1.0, 0.0])) == pytest.approx(0.0)
         assert speaker_math.cosine_distance(np.array([1.0, 0.0]), np.array([0.0, 1.0])) == pytest.approx(1.0)
@@ -158,9 +157,11 @@ class TestRNNTWarmup:
         model = MagicMock()
         model.decoding.decoding.decoding_computer = object()
 
-        with patch.object(sh, '_asr_model', model), patch.object(
-            sh, '_NemoRNNTStreamingDecoder', side_effect=fatal_error
-        ), patch.object(sh, 'report_gpu_inference_error', return_value=True) as report:
+        with (
+            patch.object(sh, '_asr_model', model),
+            patch.object(sh, '_NemoRNNTStreamingDecoder', side_effect=fatal_error),
+            patch.object(sh, 'report_gpu_inference_error', return_value=True) as report,
+        ):
             with pytest.raises(RuntimeError, match="stream is capturing"):
                 sh.warmup_rnnt_decoder()
 
@@ -170,14 +171,15 @@ class TestRNNTWarmup:
         model = MagicMock()
         model.decoding.decoding.decoding_computer = object()
 
-        with patch.object(sh, '_asr_model', model), patch.object(
-            sh, '_NemoRNNTStreamingDecoder', side_effect=RuntimeError("temporary decoder failure")
-        ), patch.object(sh, 'report_gpu_inference_error', return_value=False):
+        with (
+            patch.object(sh, '_asr_model', model),
+            patch.object(sh, '_NemoRNNTStreamingDecoder', side_effect=RuntimeError("temporary decoder failure")),
+            patch.object(sh, 'report_gpu_inference_error', return_value=False),
+        ):
             sh.warmup_rnnt_decoder()
 
 
 class TestStreamSessionFeed:
-
     def test_silence_produces_no_segments(self):
         session = sh.StreamSession(sample_rate=16000)
         session._vad = None
@@ -202,7 +204,6 @@ class TestStreamSessionFeed:
 
 
 class TestStreamSessionFlush:
-
     def test_flush_with_pending_audio(self):
         session = sh.StreamSession(sample_rate=16000)
         session._pending_audio = bytearray(_make_pcm(1.0))
@@ -230,7 +231,6 @@ class TestStreamSessionFlush:
 
 
 class TestStreamSessionRNNTStreaming:
-
     def test_drain_streaming_asr_decodes_available_chunks(self):
         class FakeDecoder:
             def __init__(self):
@@ -261,9 +261,11 @@ class TestStreamSessionRNNTStreaming:
 
         session = sh.StreamSession(sample_rate=16000)
         fatal_error = AcceleratorError("CUDA stream capture failed")
-        with patch.object(session, '_streaming_enabled', return_value=True), patch.object(
-            session, '_drain_streaming_asr_sync', side_effect=fatal_error
-        ), patch.object(sh, 'report_gpu_inference_error', return_value=True) as report:
+        with (
+            patch.object(session, '_streaming_enabled', return_value=True),
+            patch.object(session, '_drain_streaming_asr_sync', side_effect=fatal_error),
+            patch.object(sh, 'report_gpu_inference_error', return_value=True) as report,
+        ):
             with pytest.raises(AcceleratorError):
                 asyncio.run(session._drain_streaming_asr(force=True))
 
@@ -272,9 +274,11 @@ class TestStreamSessionRNNTStreaming:
 
     def test_nonfatal_decode_error_keeps_batch_fallback(self):
         session = sh.StreamSession(sample_rate=16000)
-        with patch.object(session, '_streaming_enabled', return_value=True), patch.object(
-            session, '_drain_streaming_asr_sync', side_effect=RuntimeError("temporary decode failure")
-        ), patch.object(sh, 'report_gpu_inference_error', return_value=False):
+        with (
+            patch.object(session, '_streaming_enabled', return_value=True),
+            patch.object(session, '_drain_streaming_asr_sync', side_effect=RuntimeError("temporary decode failure")),
+            patch.object(sh, 'report_gpu_inference_error', return_value=False),
+        ):
             asyncio.run(session._drain_streaming_asr(force=True))
 
         assert session._streaming_failed is True
@@ -285,9 +289,10 @@ class TestStreamSessionRNNTStreaming:
         session._speech_start_s = 0.0
         session._streaming_text = ""
 
-        with patch.object(session, '_streaming_enabled', return_value=True), patch.object(
-            sh, 'transcribe_file', return_value={"text": "batch", "segments": []}
-        ) as batch_transcribe:
+        with (
+            patch.object(session, '_streaming_enabled', return_value=True),
+            patch.object(sh, 'transcribe_file', return_value={"text": "batch", "segments": []}) as batch_transcribe,
+        ):
             result = asyncio.run(session._transcribe_utterance())
 
         assert result == []
@@ -300,8 +305,9 @@ class TestStreamSessionRNNTStreaming:
         session._streaming_text = "hello world"
         session._last_emitted_text = "hello"
 
-        with patch.object(session, '_streaming_enabled', return_value=True), patch.object(
-            session, '_assign_speaker', return_value="SPEAKER_0"
+        with (
+            patch.object(session, '_streaming_enabled', return_value=True),
+            patch.object(session, '_assign_speaker', return_value="SPEAKER_0"),
         ):
             result = asyncio.run(session._transcribe_utterance())
 
@@ -311,7 +317,6 @@ class TestStreamSessionRNNTStreaming:
 
 
 class TestStreamSessionCleanup:
-
     def test_cleanup_clears_all_buffers(self):
         session = sh.StreamSession(sample_rate=16000)
         session._pcm_buf = bytearray(b'\x00' * 1000)
@@ -329,7 +334,6 @@ class TestStreamSessionCleanup:
 
 
 class TestStreamSessionSpeaker:
-
     def test_short_segment_returns_last_speaker(self):
         session = sh.StreamSession(sample_rate=16000)
         session._last_speaker = 2
@@ -344,7 +348,6 @@ class TestStreamSessionSpeaker:
 
 
 class TestStreamSessionVADParams:
-
     def test_custom_threshold(self):
         session = sh.StreamSession(sample_rate=16000, vad_threshold=0.8)
         assert session._speech_threshold == 0.8
@@ -361,14 +364,14 @@ class TestStreamSessionVADParams:
 
 
 class TestStreamSessionBuiltinEmbedding:
-
     def test_get_embedding_routes_through_gpu_worker(self):
         session = sh.StreamSession(sample_rate=16000)
         fake_worker = MagicMock()
         fake_worker.submit_embedding_sync.return_value = np.zeros(256, dtype=np.float32)
 
-        with patch.object(sh, 'has_builtin_embedding', return_value=True), patch.object(
-            sh._transcribe_mod, '_gpu_worker', fake_worker
+        with (
+            patch.object(sh, 'has_builtin_embedding', return_value=True),
+            patch.object(sh._transcribe_mod, '_gpu_worker', fake_worker),
         ):
             result = session._get_embedding_builtin(_make_pcm(1.0))
 
@@ -381,8 +384,9 @@ class TestStreamSessionBuiltinEmbedding:
         fake_worker = MagicMock()
         fake_worker.submit_embedding_sync.return_value = np.ones(128, dtype=np.float32)
 
-        with patch.object(sh, 'has_builtin_embedding', return_value=True), patch.object(
-            sh._transcribe_mod, '_gpu_worker', fake_worker
+        with (
+            patch.object(sh, 'has_builtin_embedding', return_value=True),
+            patch.object(sh._transcribe_mod, '_gpu_worker', fake_worker),
         ):
             result = session._get_embedding_builtin(_make_pcm(1.0))
 
@@ -404,9 +408,11 @@ class TestStreamSessionBuiltinEmbedding:
         fake_worker = MagicMock()
         fake_worker.submit_embedding_sync.return_value = np.zeros(256, dtype=np.float32)
 
-        with patch.object(sh, 'has_builtin_embedding', return_value=True), patch.object(
-            sh._transcribe_mod, '_gpu_worker', fake_worker
-        ), patch.object(session, '_get_embedding_http') as http_mock:
+        with (
+            patch.object(sh, 'has_builtin_embedding', return_value=True),
+            patch.object(sh._transcribe_mod, '_gpu_worker', fake_worker),
+            patch.object(session, '_get_embedding_http') as http_mock,
+        ):
             result = session._get_embedding(_make_pcm(1.0))
 
         assert result is not None
@@ -416,9 +422,10 @@ class TestStreamSessionBuiltinEmbedding:
         session = sh.StreamSession(sample_rate=16000)
         http_emb = np.ones((1, 256), dtype=np.float32)
 
-        with patch.object(sh, 'has_builtin_embedding', return_value=False), patch.object(
-            session, '_get_embedding_http', return_value=http_emb
-        ) as http_mock:
+        with (
+            patch.object(sh, 'has_builtin_embedding', return_value=False),
+            patch.object(session, '_get_embedding_http', return_value=http_emb) as http_mock,
+        ):
             old_url = sh.SPEAKER_EMBEDDING_URL
             sh.SPEAKER_EMBEDDING_URL = 'http://fake'
             try:

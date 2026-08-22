@@ -396,9 +396,7 @@ def _cancel_subscription_for_account_deletion(uid: str) -> None:
     except Exception as e:
         raw_error = str(e)
         sanitized_error = sanitize(raw_error)
-        if not isinstance(
-            sanitized_error, str
-        ):  # pyright: ignore[reportUnnecessaryIsInstance]  # tests stub sanitize with MagicMock
+        if not isinstance(sanitized_error, str):  # pyright: ignore[reportUnnecessaryIsInstance]  # tests stub sanitize with MagicMock
             sanitized_error = raw_error
         _retry_firestore_write(
             lambda: users_db.mark_user_deletion_billing_failed(uid, subscription_id, sanitized_error),

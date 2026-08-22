@@ -187,9 +187,11 @@ def test_malformed_conversation_skipped_not_500():
     missing_structured = _valid('bad')
     del missing_structured['structured']
     page = [_valid('c1'), missing_structured, _valid('c2')]
-    with patch.object(conversations_db, 'get_conversations', return_value=page), patch.object(
-        developer_module, 'populate_folder_names', lambda *a, **k: None
-    ), patch.object(developer_module, 'populate_speaker_names', lambda *a, **k: None):
+    with (
+        patch.object(conversations_db, 'get_conversations', return_value=page),
+        patch.object(developer_module, 'populate_folder_names', lambda *a, **k: None),
+        patch.object(developer_module, 'populate_speaker_names', lambda *a, **k: None),
+    ):
         resp = _build().get('/v1/dev/user/conversations')
     assert resp.status_code == 200
     assert [c['id'] for c in resp.json()] == ['c1', 'c2']
@@ -200,9 +202,11 @@ def test_pagination_is_clamped_before_firestore():
     # would otherwise raise (HTTP 500) and an oversized/zero limit would stream the whole
     # collection. Call the handler directly (the TestClient async path is flaky on Windows; the
     # clamp is what matters).
-    with patch.object(conversations_db, 'get_conversations', return_value=[]) as m, patch.object(
-        developer_module, 'populate_folder_names', lambda *a, **k: None
-    ), patch.object(developer_module, 'populate_speaker_names', lambda *a, **k: None):
+    with (
+        patch.object(conversations_db, 'get_conversations', return_value=[]) as m,
+        patch.object(developer_module, 'populate_folder_names', lambda *a, **k: None),
+        patch.object(developer_module, 'populate_speaker_names', lambda *a, **k: None),
+    ):
         developer_module.get_conversations(uid=_read_auth(), limit=99999, offset=-1)
         developer_module.get_conversations(uid=_read_auth(), limit=99999, offset=0, include_transcript=True)
         developer_module.get_conversations(uid=_read_auth(), limit=0, offset=5)

@@ -18,7 +18,7 @@ def _ready_indexes():
 def _gcloud_live_index(index, *, state='READY'):
     return {
         'name': (
-            'projects/dev-project/databases/(default)/collectionGroups/' f"{index['collectionGroup']}/indexes/index-id"
+            f'projects/dev-project/databases/(default)/collectionGroups/{index['collectionGroup']}/indexes/index-id'
         ),
         'queryScope': index['queryScope'],
         'fields': index['fields'],
@@ -421,9 +421,7 @@ def test_provision_missing_uses_gcloud_with_every_manifest_field_and_waits_for_r
 
 def test_live_gcloud_indexes_derive_collection_group_with_explicit_document_id():
     live_index = {
-        'name': (
-            'projects/dev-project/databases/(default)/collectionGroups/' 'task_attention_overrides/indexes/index-id'
-        ),
+        'name': ('projects/dev-project/databases/(default)/collectionGroups/task_attention_overrides/indexes/index-id'),
         'queryScope': 'COLLECTION',
         'fields': [
             {'fieldPath': 'account_generation', 'order': 'ASCENDING'},

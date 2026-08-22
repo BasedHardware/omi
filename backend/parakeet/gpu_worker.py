@@ -518,7 +518,7 @@ class GPUWorker:
     @staticmethod
     def _extract_results(results: Any, timestamps: bool) -> List[Dict[str, Any]]:
         out: List[Dict[str, Any]] = []
-        items: List[Any] = cast(List[Any], results if isinstance(results, list) else [results])
+        items: List[Any] = cast(List[Any], results if isinstance(results, list) else [results])  # ty: ignore[redundant-cast]
         for r in items:
             if timestamps and hasattr(r, 'text') and hasattr(r, 'timestamp'):
                 ts: Dict[str, Any] = {}
@@ -532,7 +532,9 @@ class GPUWorker:
                                 ek: (
                                     round(ev, 4)
                                     if isinstance(ev, float)
-                                    else str(ev) if not isinstance(ev, (int, str)) else ev
+                                    else str(ev)
+                                    if not isinstance(ev, (int, str))
+                                    else ev
                                 )
                                 for ek, ev in e.items()
                             }

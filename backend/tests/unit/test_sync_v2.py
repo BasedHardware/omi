@@ -105,8 +105,7 @@ class TestSyncV2Structure:
         assert 'start_background_task' in func_body, "v2 must use start_background_task for async coordinator"
         assert '_run_full_pipeline_background_async' in func_body, "v2 must dispatch the async pipeline coordinator"
         assert 'submit_with_context' not in func_body, (
-            "v2 must NOT use submit_with_context — async coordinator runs on event loop, "
-            "not a thread pool slot (#7361)"
+            "v2 must NOT use submit_with_context — async coordinator runs on event loop, not a thread pool slot (#7361)"
         )
 
     def test_v2_has_hard_restriction_gate(self):
@@ -141,9 +140,9 @@ class TestSyncV2Structure:
         next_def = source.index('\ndef ', start + 1)
         func_body = source[start:next_def]
 
-        assert (
-            'syncing/{uid}/{job_id}' in func_body or "f'syncing/{uid}/{job_id}/'" in func_body
-        ), "v2 must use job-specific directory"
+        assert 'syncing/{uid}/{job_id}' in func_body or "f'syncing/{uid}/{job_id}/'" in func_body, (
+            "v2 must use job-specific directory"
+        )
 
     def test_v2_background_has_cleanup(self):
         """Background worker must clean up files in finally block."""
@@ -207,9 +206,9 @@ class TestSyncV2Structure:
 
         assert "'stage': 'decoding'" in func_body, "Background must heartbeat decode stage"
         assert "'stage': 'vad'" in func_body, "Background must heartbeat VAD stage"
-        assert (
-            "'stage': 'processing'" in func_body or "'stage': 'stt_llm'" in func_body
-        ), "Background must heartbeat processing stage"
+        assert "'stage': 'processing'" in func_body or "'stage': 'stt_llm'" in func_body, (
+            "Background must heartbeat processing stage"
+        )
 
     def test_v2_get_checks_ownership(self):
         """GET endpoint must verify job belongs to requesting user."""
@@ -281,12 +280,12 @@ class TestSyncV2Structure:
             next_section = len(source)
         func_body = source[start:next_section]
 
-        assert (
-            'run_blocking(sync_executor' in func_body
-        ), "fast-path file save must use sync_executor to avoid storage_executor saturation (#7372)"
-        assert (
-            'run_blocking(storage_executor' not in func_body
-        ), "fast-path must NOT use storage_executor — background pipeline saturates it (#7372)"
+        assert 'run_blocking(sync_executor' in func_body, (
+            "fast-path file save must use sync_executor to avoid storage_executor saturation (#7372)"
+        )
+        assert 'run_blocking(storage_executor' not in func_body, (
+            "fast-path must NOT use storage_executor — background pipeline saturates it (#7372)"
+        )
 
     def test_device_provenance_survives_inline_and_cloud_task_dispatch(self):
         """Offline sync must stamp the conversation that canonical extraction reads."""
@@ -2093,9 +2092,10 @@ class TestAsyncCoordinatorBehavioral:
 
             pipeline.retrieve_vad_segments = _blocking_vad
             pipeline.run_blocking = _routing_run_blocking
-            with patch.object(pipeline.os.path, 'isdir', return_value=True), patch.object(
-                pipeline.shutil, 'rmtree'
-            ) as rmtree:
+            with (
+                patch.object(pipeline.os.path, 'isdir', return_value=True),
+                patch.object(pipeline.shutil, 'rmtree') as rmtree,
+            ):
                 coordinator = asyncio.create_task(
                     module._run_full_pipeline_background_async(
                         'job-vad-cancel',
@@ -3627,9 +3627,9 @@ class TestBYOKContextPropagation:
         plain_submits = _re.findall(
             r'(?:critical_executor|sync_executor|storage_executor|postprocess_executor)\.submit\(', source
         )
-        assert (
-            len(plain_submits) == 0
-        ), f"Found {len(plain_submits)} plain .submit() calls — must use submit_with_context"
+        assert len(plain_submits) == 0, (
+            f"Found {len(plain_submits)} plain .submit() calls — must use submit_with_context"
+        )
 
     def test_no_plain_submit_in_process_conversation(self):
         """All executor .submit() calls in process_conversation.py must use submit_with_context."""
@@ -3641,9 +3641,9 @@ class TestBYOKContextPropagation:
         plain_submits = _re.findall(
             r'(?:critical_executor|sync_executor|storage_executor|postprocess_executor)\.submit\(', source
         )
-        assert (
-            len(plain_submits) == 0
-        ), f"Found {len(plain_submits)} plain .submit() calls — must use submit_with_context"
+        assert len(plain_submits) == 0, (
+            f"Found {len(plain_submits)} plain .submit() calls — must use submit_with_context"
+        )
 
 
 # ---------------------------------------------------------------------------

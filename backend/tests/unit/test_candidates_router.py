@@ -637,26 +637,30 @@ def test_suggested_surface_returns_five_quality_candidates_and_suppresses_exact_
     monkeypatch.setattr(
         candidates_router.candidates_db,
         'list_candidates',
-        lambda uid, **kwargs: calls.append((uid, kwargs))
-        or [
-            stale,
-            eligible[5],
-            mutation,
-            duplicate_workstream,
-            duplicate,
-            eligible[2],
-            weak,
-            *eligible[:2],
-            without_evidence,
-            weak_ownership,
-            *eligible[3:5],
-        ],
+        lambda uid, **kwargs: (
+            calls.append((uid, kwargs))
+            or [
+                stale,
+                eligible[5],
+                mutation,
+                duplicate_workstream,
+                duplicate,
+                eligible[2],
+                weak,
+                *eligible[:2],
+                without_evidence,
+                weak_ownership,
+                *eligible[3:5],
+            ]
+        ),
     )
     monkeypatch.setattr(
         candidates_router.recommendation_db,
         'list_active_override_dedupe_keys',
-        lambda uid, **kwargs: override_calls.append((uid, kwargs))
-        or {candidates_router.candidate_recommendation_dedupe_key('duplicate-workstream')},
+        lambda uid, **kwargs: (
+            override_calls.append((uid, kwargs))
+            or {candidates_router.candidate_recommendation_dedupe_key('duplicate-workstream')}
+        ),
     )
 
     response = candidates_router.list_candidates(

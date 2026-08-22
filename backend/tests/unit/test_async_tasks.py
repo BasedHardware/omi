@@ -770,12 +770,12 @@ class TestStructuralUsage:
         for filename in ['routers/pusher.py', 'routers/listen/runtime.py']:
             with open(self.BACKEND_DIR / filename, encoding='utf-8') as f:
                 source = f.read()
-            assert (
-                'asyncio.gather(*tasks)' not in source
-            ), f"{filename} still has raw asyncio.gather(*tasks) — use supervise_tasks/drain_tasks"
-            assert (
-                'asyncio.gather(*bg_main_tasks)' not in source
-            ), f"{filename} still has raw asyncio.gather(*bg_main_tasks) — use drain_tasks"
+            assert 'asyncio.gather(*tasks)' not in source, (
+                f"{filename} still has raw asyncio.gather(*tasks) — use supervise_tasks/drain_tasks"
+            )
+            assert 'asyncio.gather(*bg_main_tasks)' not in source, (
+                f"{filename} still has raw asyncio.gather(*bg_main_tasks) — use drain_tasks"
+            )
 
     def test_no_dynamic_uid_in_metric_labels(self):
         """Metric labels must be static — no uid/session_id to prevent cardinality explosion."""

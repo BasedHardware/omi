@@ -51,7 +51,7 @@ You'll also need [NDK](https://developer.android.com/ndk/downloads) to build Opu
 </Note>
 
 <Note>
-The local backend harness additionally needs **Python 3.11** (not 3.12+ — the
+The local backend harness additionally needs **Python 3.13** (the
 backend pins 3.11), a **Java runtime** for the Firestore emulator, and
 **firebase-tools** (or `npx`). `make dev-up` names any of these that are missing.
 </Note>
@@ -102,7 +102,7 @@ data requires the explicit `beta` profile (see [Mobile beta](https://github.com/
     ```
 
     `make dev-init` builds `backend/.venv` from whatever `python3` resolves to,
-    and the backend requires **Python 3.11** — make sure that's what you get, or
+    and the backend requires **Python 3.13** — make sure that's what you get, or
     the harness fails later with import errors.
 
     No provider API keys? Use fake providers instead:

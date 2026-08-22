@@ -196,7 +196,7 @@ def self_check() -> int:
             print(f"self-check failed: {failure}", file=sys.stderr)
         return 1
 
-    print("self-check passed " f"(files + {WORKFLOW_ID} workflow + suite wiring + nonce contract + --self-check)")
+    print(f"self-check passed (files + {WORKFLOW_ID} workflow + suite wiring + nonce contract + --self-check)")
     return 0
 
 
@@ -616,18 +616,20 @@ class MemoryContinuityGauntlet:
             "chat_text": lambda: search_memory_default_chat_memories_text(
                 uid=state.uid, query="coffee", limit=10, db_client=state.db, now=now
             ),
-            "chat_list": lambda: list_default_chat_memories_decision_text(
-                uid=state.uid, limit=10, offset=0, db_client=state.db
-            ).text,
-            "developer": lambda: search_memory_default_developer_memories(
-                uid=state.uid,
-                query="coffee",
-                limit=10,
-                offset=0,
-                db_client=state.db,
-                rollout_decision=rollout,
-                now=now,
-            ).memories,
+            "chat_list": lambda: (
+                list_default_chat_memories_decision_text(uid=state.uid, limit=10, offset=0, db_client=state.db).text
+            ),
+            "developer": lambda: (
+                search_memory_default_developer_memories(
+                    uid=state.uid,
+                    query="coffee",
+                    limit=10,
+                    offset=0,
+                    db_client=state.db,
+                    rollout_decision=rollout,
+                    now=now,
+                ).memories
+            ),
             "agent_tools": lambda: tool_memories_service.get_memories_text(uid=state.uid, limit=50),
             "product_search": lambda: fetch_default_product_memory_search(
                 uid=state.uid,
@@ -642,9 +644,9 @@ class MemoryContinuityGauntlet:
             payload = reader()
             serialized = json.dumps(payload, default=str)
             assert archive_nonce not in serialized, surface_name
-            assert (
-                "surface visible coffee preference" in serialized or "coffee fresh short term" in serialized
-            ), surface_name
+            assert "surface visible coffee preference" in serialized or "coffee fresh short term" in serialized, (
+                surface_name
+            )
             self.record_step(
                 "surfaces",
                 surface_name,

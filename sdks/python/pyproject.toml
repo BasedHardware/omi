@@ -18,15 +18,13 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Multimedia :: Sound/Audio",
     "Topic :: Communications",
     "Topic :: System :: Hardware",
 ]
 keywords = ["omi", "bluetooth", "audio", "transcription", "deepgram", "wearable"]
-requires-python = ">=3.10"
+requires-python = ">=3.13"
 dependencies = [
     "aenum==3.1.15",
     "aiofiles==24.1.0",
@@ -82,9 +80,8 @@ stt-all = [
 dev = [
     "pytest>=7.0",
     "pytest-asyncio>=0.21.0",
-    "black>=23.0",
-    "isort>=5.12",
-    "mypy>=1.0",
+    "ruff>=0.12.0",
+    "ty>=0.0.1",
 ]
 
 [project.scripts]
@@ -97,16 +94,13 @@ include = ["omi*"]
 [tool.setuptools.package-data]
 omi = ["py.typed"]
 
-[tool.black]
+[tool.ruff]
 line-length = 88
-target-version = ['py310']
+target-version = "py313"
 
-[tool.isort]
-profile = "black"
-multi_line_output = 3
+[tool.ruff.format]
+quote-style = "preserve"
 
-[tool.mypy]
-python_version = "3.10"
-strict = true
-warn_return_any = true
-warn_unused_configs = true
+[tool.ty.environment]
+python-version = "3.13"
+

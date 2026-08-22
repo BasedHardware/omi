@@ -30,8 +30,9 @@ def test_delete_user_caller_ids_calls_twilio_for_each_sid():
         {'id': 'a', 'twilio_sid': 'PNaaaa'},
         {'id': 'b', 'twilio_sid': 'PNbbbb'},
     ]
-    with patch.object(twilio_service, '_delete_caller_id_status', return_value='deleted') as mock_delete, patch.object(
-        phone_calls_db, 'get_phone_numbers', return_value=numbers
+    with (
+        patch.object(twilio_service, '_delete_caller_id_status', return_value='deleted') as mock_delete,
+        patch.object(phone_calls_db, 'get_phone_numbers', return_value=numbers),
     ):
         deleted = twilio_service.delete_user_caller_ids('uid-1')
     assert deleted == 2
@@ -47,8 +48,9 @@ def test_delete_user_caller_ids_skips_entries_without_sid():
         {'id': 'c', 'twilio_sid': None},
         {'id': 'd', 'twilio_sid': ''},
     ]
-    with patch.object(twilio_service, '_delete_caller_id_status', return_value='deleted') as mock_delete, patch.object(
-        phone_calls_db, 'get_phone_numbers', return_value=numbers
+    with (
+        patch.object(twilio_service, '_delete_caller_id_status', return_value='deleted') as mock_delete,
+        patch.object(phone_calls_db, 'get_phone_numbers', return_value=numbers),
     ):
         deleted = twilio_service.delete_user_caller_ids('uid-1')
     assert deleted == 1
@@ -73,8 +75,9 @@ def test_delete_user_caller_ids_continues_when_one_raises():
             return 'failed'
         return 'deleted'
 
-    with patch.object(twilio_service, '_delete_caller_id_status', side_effect=fake_delete) as mock_delete, patch.object(
-        phone_calls_db, 'get_phone_numbers', return_value=numbers
+    with (
+        patch.object(twilio_service, '_delete_caller_id_status', side_effect=fake_delete) as mock_delete,
+        patch.object(phone_calls_db, 'get_phone_numbers', return_value=numbers),
     ):
         deleted = twilio_service.delete_user_caller_ids('uid-1')
     assert deleted == 2
@@ -82,8 +85,9 @@ def test_delete_user_caller_ids_continues_when_one_raises():
 
 
 def test_delete_user_caller_ids_returns_zero_when_no_phone_numbers():
-    with patch.object(twilio_service, '_delete_caller_id_status', return_value='deleted') as mock_delete, patch.object(
-        phone_calls_db, 'get_phone_numbers', return_value=[]
+    with (
+        patch.object(twilio_service, '_delete_caller_id_status', return_value='deleted') as mock_delete,
+        patch.object(phone_calls_db, 'get_phone_numbers', return_value=[]),
     ):
         deleted = twilio_service.delete_user_caller_ids('uid-1')
     assert deleted == 0
@@ -94,8 +98,9 @@ def test_delete_user_caller_ids_swallows_phone_list_error():
     # If we can't even list the user's phone_numbers, we still must not raise —
     # the caller (delete_account background wipe) needs to keep going so the
     # Firestore wipe completes.
-    with patch.object(twilio_service, '_delete_caller_id_status', return_value='deleted') as mock_delete, patch.object(
-        phone_calls_db, 'get_phone_numbers', side_effect=RuntimeError('firestore down')
+    with (
+        patch.object(twilio_service, '_delete_caller_id_status', return_value='deleted') as mock_delete,
+        patch.object(phone_calls_db, 'get_phone_numbers', side_effect=RuntimeError('firestore down')),
     ):
         deleted = twilio_service.delete_user_caller_ids('uid-1')
     assert deleted == 0
@@ -104,16 +109,18 @@ def test_delete_user_caller_ids_swallows_phone_list_error():
 
 def test_delete_user_caller_ids_swallows_client_init_error():
     numbers = [{'id': 'a', 'twilio_sid': 'PNaaaa'}]
-    with patch.object(twilio_service, '_get_client', side_effect=ValueError('twilio env missing')), patch.object(
-        phone_calls_db, 'get_phone_numbers', return_value=numbers
+    with (
+        patch.object(twilio_service, '_get_client', side_effect=ValueError('twilio env missing')),
+        patch.object(phone_calls_db, 'get_phone_numbers', return_value=numbers),
     ):
         assert twilio_service.delete_user_caller_ids('uid-1') == 0
 
 
 def test_delete_user_caller_ids_strict_raises_on_delete_failure():
     numbers = [{'id': 'a', 'twilio_sid': 'PNaaaa'}]
-    with patch.object(twilio_service, '_delete_caller_id_status', return_value='failed'), patch.object(
-        phone_calls_db, 'get_phone_numbers', return_value=numbers
+    with (
+        patch.object(twilio_service, '_delete_caller_id_status', return_value='failed'),
+        patch.object(phone_calls_db, 'get_phone_numbers', return_value=numbers),
     ):
         try:
             twilio_service.delete_user_caller_ids_strict('uid-1')
@@ -125,8 +132,9 @@ def test_delete_user_caller_ids_strict_raises_on_delete_failure():
 
 def test_delete_user_caller_ids_strict_treats_already_deleted_as_success():
     numbers = [{'id': 'a', 'twilio_sid': 'PNaaaa'}]
-    with patch.object(twilio_service, '_delete_caller_id_status', return_value='already_deleted'), patch.object(
-        phone_calls_db, 'get_phone_numbers', return_value=numbers
+    with (
+        patch.object(twilio_service, '_delete_caller_id_status', return_value='already_deleted'),
+        patch.object(phone_calls_db, 'get_phone_numbers', return_value=numbers),
     ):
         assert twilio_service.delete_user_caller_ids_strict('uid-1') == 1
 

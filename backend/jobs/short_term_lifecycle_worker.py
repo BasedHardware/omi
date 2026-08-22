@@ -550,7 +550,7 @@ def build_short_term_lifecycle_transition_record(
         'disposition': audit_metadata.get('disposition'),
     }
     idempotency_key = (
-        f"short-term-lifecycle:{item.uid}:{item.memory_id}:" f"{decision.outcome.value}:{_sha256(idempotency_payload)}"
+        f"short-term-lifecycle:{item.uid}:{item.memory_id}:{decision.outcome.value}:{_sha256(idempotency_payload)}"
     )
     return ShortTermLifecycleTransitionRecord(
         uid=item.uid,

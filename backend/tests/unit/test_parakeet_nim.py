@@ -27,7 +27,6 @@ def _make_wav_file(duration_s=1.0, sample_rate=16000):
 
 
 class TestNimTranscribe:
-
     def test_nim_calls_correct_endpoint(self):
         with patch.dict(os.environ, {'PARAKEET_INFERENCE_MODE': 'nim', 'NIM_INFERENCE_URL': 'http://nim:9000'}):
             if 'transcribe' in sys.modules:

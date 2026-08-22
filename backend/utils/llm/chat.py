@@ -378,7 +378,8 @@ def _get_qa_rag_prompt(
       - Avoid citing irrelevant memories.
     """
 
-    return f"""
+    return (
+        f"""
     <assistant_role>
         You are an assistant for question-answering tasks.
     </assistant_role>
@@ -437,7 +438,10 @@ def _get_qa_rag_prompt(
     </question_timezone>
 
     <answer>
-    """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
+    """.replace('    ', '')
+        .replace('\n\n\n', '\n\n')
+        .strip()
+    )
 
 
 # The agentic system prompt is wrapped in a single Anthropic cache_control breakpoint,
@@ -457,7 +461,7 @@ _PLATFORM_CONTEXT_LINES = {
         "give Windows-appropriate steps (not macOS)."
     ),
     'macos': (
-        "The user is using Omi on a Mac — when giving instructions or troubleshooting, " "give macOS-appropriate steps."
+        "The user is using Omi on a Mac — when giving instructions or troubleshooting, give macOS-appropriate steps."
     ),
     'ios': (
         "The user is using Omi on an iPhone (iOS app) — when giving instructions or troubleshooting, "

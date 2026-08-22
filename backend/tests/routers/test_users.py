@@ -50,8 +50,9 @@ def test_invalid_geolocation_is_ignored_without_cache_access():
     cache_read = MagicMock()
     cache_write = MagicMock()
 
-    with patch.object(users_router, 'get_cached_user_geolocation', cache_read), patch.object(
-        users_router, 'cache_user_geolocation', cache_write
+    with (
+        patch.object(users_router, 'get_cached_user_geolocation', cache_read),
+        patch.object(users_router, 'cache_user_geolocation', cache_write),
     ):
         result = users_router.set_user_geolocation(
             users_router.GeolocationInput(latitude=90.1, longitude=0), uid='uid1'
@@ -473,8 +474,9 @@ def test_update_person_name_existing_returns_ok():
 def test_byok_subscription_endpoint_returns_unlimited_plan():
     # `PlanLimits` was used in this module without being imported, so every BYOK
     # user's GET /v1/users/me/subscription raised NameError -> 500 in prod.
-    with patch.object(users_router.users_db, 'is_byok_active', MagicMock(return_value=True)), patch.object(
-        users_router, 'has_byok_keys', MagicMock(return_value=True)
+    with (
+        patch.object(users_router.users_db, 'is_byok_active', MagicMock(return_value=True)),
+        patch.object(users_router, 'has_byok_keys', MagicMock(return_value=True)),
     ):
         response = users_router.get_user_subscription_endpoint(uid='uid1')
 
@@ -485,8 +487,9 @@ def test_byok_subscription_endpoint_returns_unlimited_plan():
 
 def test_marketplace_reviewer_subscription_endpoint_returns_unlimited_plan():
     # Same missing import on the reviewer branch (routers/users.py:1193).
-    with patch.object(users_router.users_db, 'is_byok_active', MagicMock(return_value=False)), patch.dict(
-        users_router.os.environ, {'MARKETPLACE_APP_REVIEWERS': 'reviewer-uid'}
+    with (
+        patch.object(users_router.users_db, 'is_byok_active', MagicMock(return_value=False)),
+        patch.dict(users_router.os.environ, {'MARKETPLACE_APP_REVIEWERS': 'reviewer-uid'}),
     ):
         response = users_router.get_user_subscription_endpoint(uid='reviewer-uid')
 
@@ -498,24 +501,26 @@ def test_subscription_endpoint_falls_back_to_basic_when_no_valid_subscription():
     # `get_default_basic_subscription` was called at routers/users.py:1220 without being
     # imported, so a user whose subscription is missing or expired got NameError -> 500
     # instead of the basic plan the branch exists to return.
-    with patch.object(users_router.users_db, 'is_byok_active', MagicMock(return_value=False)), patch.object(
-        users_router, 'get_user_subscription', MagicMock(return_value=None)
-    ), patch.object(users_router, 'reconcile_basic_plan_with_stripe', MagicMock()), patch.object(
-        users_router, 'get_user_valid_subscription', MagicMock(return_value=None)
-    ), patch.object(
-        users_router, 'get_monthly_usage_for_subscription', MagicMock(return_value={})
-    ), patch.object(
-        users_router, 'get_paid_plan_definitions', MagicMock(return_value=[])
-    ), patch.object(
-        users_router, 'should_hide_subscription_ui', MagicMock(return_value=False)
-    ), patch.object(
-        users_router,
-        'get_phone_call_quota_snapshot',
-        MagicMock(return_value=MagicMock(to_client_dict=lambda: {'has_access': False, 'is_paid': False})),
-    ), patch.object(
-        users_router,
-        'get_chat_quota_snapshot',
-        MagicMock(return_value={'used': 0.0, 'limit': None, 'unit': 'questions', 'allowed': True, 'reset_at': None}),
+    with (
+        patch.object(users_router.users_db, 'is_byok_active', MagicMock(return_value=False)),
+        patch.object(users_router, 'get_user_subscription', MagicMock(return_value=None)),
+        patch.object(users_router, 'reconcile_basic_plan_with_stripe', MagicMock()),
+        patch.object(users_router, 'get_user_valid_subscription', MagicMock(return_value=None)),
+        patch.object(users_router, 'get_monthly_usage_for_subscription', MagicMock(return_value={})),
+        patch.object(users_router, 'get_paid_plan_definitions', MagicMock(return_value=[])),
+        patch.object(users_router, 'should_hide_subscription_ui', MagicMock(return_value=False)),
+        patch.object(
+            users_router,
+            'get_phone_call_quota_snapshot',
+            MagicMock(return_value=MagicMock(to_client_dict=lambda: {'has_access': False, 'is_paid': False})),
+        ),
+        patch.object(
+            users_router,
+            'get_chat_quota_snapshot',
+            MagicMock(
+                return_value={'used': 0.0, 'limit': None, 'unit': 'questions', 'allowed': True, 'reset_at': None}
+            ),
+        ),
     ):
         response = users_router.get_user_subscription_endpoint(
             uid='uid-without-subscription', x_app_platform='ios', x_app_version='1.0.0'

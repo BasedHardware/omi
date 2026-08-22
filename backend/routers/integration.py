@@ -557,7 +557,7 @@ def send_notification_via_integration(
         raise HTTPException(status_code=403, detail="Invalid API key")
 
     # Verify if the app exists
-    app_data = cast(Optional[Dict[str, Any]], apps_utils.get_available_app_by_id(app_id, uid))  # type: ignore[reportUnknownMemberType]  # utils.apps.get_available_app_by_id returns bare dict
+    app_data = cast(Optional[Dict[str, Any]], apps_utils.get_available_app_by_id(app_id, uid))  # type: ignore[reportUnknownMemberType]  # utils.apps.get_available_app_by_id returns bare dict  # ty: ignore[redundant-cast]
     if not app_data:
         raise HTTPException(status_code=404, detail='App not found')
 

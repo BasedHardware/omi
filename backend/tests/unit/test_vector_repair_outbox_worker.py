@@ -659,8 +659,9 @@ class TestWorkerCore:
     def test_pinecone_adapter_delete_uses_uid_fenced_filter_in_ns2(self):
         calls = []
         deleter = make_pinecone_vector_deleter(
-            delete_vectors=lambda *, filter, namespace: calls.append({"filter": filter, "namespace": namespace})
-            or {"ok": True}
+            delete_vectors=lambda *, filter, namespace: (
+                calls.append({"filter": filter, "namespace": namespace}) or {"ok": True}
+            )
         )
 
         provider_id = canonical_memory_provider_id("u1", "mem-1")
@@ -679,10 +680,12 @@ class TestWorkerCore:
         upserts = []
         repairer = make_pinecone_vector_repairer(
             embed_text=lambda content: [0.1, 0.2, 0.3],
-            delete_vectors=lambda *, filter, namespace: deletes.append({"filter": filter, "namespace": namespace})
-            or {"count": 1},
-            upsert_vectors=lambda *, vectors, namespace: upserts.append({"vectors": vectors, "namespace": namespace})
-            or {"count": 1},
+            delete_vectors=lambda *, filter, namespace: (
+                deletes.append({"filter": filter, "namespace": namespace}) or {"count": 1}
+            ),
+            upsert_vectors=lambda *, vectors, namespace: (
+                upserts.append({"vectors": vectors, "namespace": namespace}) or {"count": 1}
+            ),
             now=datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc),
         )
 

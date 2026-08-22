@@ -51,8 +51,9 @@ async def test_retries_with_async_sleep():
     async def fake_sleep(duration):
         sleep_calls.append(duration)
 
-    with patch('utils.stt.streaming.connect_to_deepgram', side_effect=fail_then_succeed), patch(
-        'utils.stt.streaming.asyncio.sleep', side_effect=fake_sleep
+    with (
+        patch('utils.stt.streaming.connect_to_deepgram', side_effect=fail_then_succeed),
+        patch('utils.stt.streaming.asyncio.sleep', side_effect=fake_sleep),
     ):
         result = await connect_to_deepgram_with_backoff(
             on_message=MagicMock(),
@@ -76,8 +77,9 @@ async def test_raises_after_all_retries_exhausted():
     async def fake_sleep(duration):
         pass
 
-    with patch('utils.stt.streaming.connect_to_deepgram', side_effect=Exception("DG fail")), patch(
-        'utils.stt.streaming.asyncio.sleep', side_effect=fake_sleep
+    with (
+        patch('utils.stt.streaming.connect_to_deepgram', side_effect=Exception("DG fail")),
+        patch('utils.stt.streaming.asyncio.sleep', side_effect=fake_sleep),
     ):
         with pytest.raises(Exception, match="DG fail"):
             await connect_to_deepgram_with_backoff(
@@ -120,8 +122,9 @@ async def test_aborts_between_retries_when_inactive():
     async def fake_sleep(duration):
         pass
 
-    with patch('utils.stt.streaming.connect_to_deepgram', side_effect=fail_and_deactivate), patch(
-        'utils.stt.streaming.asyncio.sleep', side_effect=fake_sleep
+    with (
+        patch('utils.stt.streaming.connect_to_deepgram', side_effect=fail_and_deactivate),
+        patch('utils.stt.streaming.asyncio.sleep', side_effect=fake_sleep),
     ):
         result = await connect_to_deepgram_with_backoff(
             on_message=MagicMock(),
@@ -152,8 +155,9 @@ async def test_is_active_none_skips_check():
     async def fake_sleep(duration):
         pass
 
-    with patch('utils.stt.streaming.connect_to_deepgram', side_effect=fail_once), patch(
-        'utils.stt.streaming.asyncio.sleep', side_effect=fake_sleep
+    with (
+        patch('utils.stt.streaming.connect_to_deepgram', side_effect=fail_once),
+        patch('utils.stt.streaming.asyncio.sleep', side_effect=fake_sleep),
     ):
         result = await connect_to_deepgram_with_backoff(
             on_message=MagicMock(),
@@ -194,8 +198,9 @@ async def test_retries_one_failure_raises_no_sleep():
     async def fake_sleep(duration):
         sleep_calls.append(duration)
 
-    with patch('utils.stt.streaming.connect_to_deepgram', side_effect=Exception("DG fail")), patch(
-        'utils.stt.streaming.asyncio.sleep', side_effect=fake_sleep
+    with (
+        patch('utils.stt.streaming.connect_to_deepgram', side_effect=Exception("DG fail")),
+        patch('utils.stt.streaming.asyncio.sleep', side_effect=fake_sleep),
     ):
         with pytest.raises(Exception, match="DG fail"):
             await connect_to_deepgram_with_backoff(
@@ -218,9 +223,10 @@ async def test_connect_uses_run_blocking():
     async def fake_run_blocking(_executor, func, *args, **kwargs):
         return func(*args, **kwargs)
 
-    with patch('utils.stt.streaming.connect_to_deepgram', return_value=mock_conn) as mock_connect, patch(
-        'utils.stt.streaming.run_blocking', side_effect=fake_run_blocking
-    ) as mock_run_blocking:
+    with (
+        patch('utils.stt.streaming.connect_to_deepgram', return_value=mock_conn) as mock_connect,
+        patch('utils.stt.streaming.run_blocking', side_effect=fake_run_blocking) as mock_run_blocking,
+    ):
         result = await connect_to_deepgram_with_backoff(
             on_message=MagicMock(),
             on_error=MagicMock(),
@@ -281,8 +287,9 @@ async def test_retries_on_none_then_succeeds():
     async def fake_sleep(duration):
         sleep_calls.append(duration)
 
-    with patch('utils.stt.streaming.connect_to_deepgram', side_effect=none_then_succeed), patch(
-        'utils.stt.streaming.asyncio.sleep', side_effect=fake_sleep
+    with (
+        patch('utils.stt.streaming.connect_to_deepgram', side_effect=none_then_succeed),
+        patch('utils.stt.streaming.asyncio.sleep', side_effect=fake_sleep),
     ):
         result = await connect_to_deepgram_with_backoff(
             on_message=MagicMock(),
@@ -307,8 +314,9 @@ async def test_returns_none_after_all_none_retries_exhausted():
     async def fake_sleep(duration):
         sleep_calls.append(duration)
 
-    with patch('utils.stt.streaming.connect_to_deepgram', return_value=None), patch(
-        'utils.stt.streaming.asyncio.sleep', side_effect=fake_sleep
+    with (
+        patch('utils.stt.streaming.connect_to_deepgram', return_value=None),
+        patch('utils.stt.streaming.asyncio.sleep', side_effect=fake_sleep),
     ):
         result = await connect_to_deepgram_with_backoff(
             on_message=MagicMock(),
@@ -1047,24 +1055,27 @@ class TestGetSttServiceForLanguage:
     """Verify serving selection cannot reactivate retired Deepgram models."""
 
     def test_english_prefers_parakeet(self):
-        with patch('utils.stt.streaming.stt_service_models', ['parakeet']), patch.dict(
-            'os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.test'}
+        with (
+            patch('utils.stt.streaming.stt_service_models', ['parakeet']),
+            patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.test'}),
         ):
             service, lang, model = get_stt_service_for_language('en', multi_lang_enabled=False)
 
         assert (service, lang, model) == (STTService.parakeet, 'en', 'parakeet')
 
     def test_cjk_uses_modulate_when_parakeet_is_not_capable(self):
-        with patch('utils.stt.streaming.stt_service_models', ['parakeet', 'modulate-velma-2']), patch.dict(
-            'os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.test'}
+        with (
+            patch('utils.stt.streaming.stt_service_models', ['parakeet', 'modulate-velma-2']),
+            patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.test'}),
         ):
             service, lang, model = get_stt_service_for_language('zh-TW', multi_lang_enabled=False)
 
         assert (service, lang, model) == (STTService.modulate, 'zh', 'velma-2')
 
     def test_retired_configuration_uses_non_deepgram_defaults(self):
-        with patch('utils.stt.streaming.stt_service_models', ['dg-nova-3']), patch.dict(
-            'os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.test'}
+        with (
+            patch('utils.stt.streaming.stt_service_models', ['dg-nova-3']),
+            patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.test'}),
         ):
             service, lang, model = get_stt_service_for_language('en', multi_lang_enabled=False)
 
@@ -1076,8 +1087,9 @@ class TestGetSttServiceForLanguage:
             assert get_stt_service_for_language('xx-INVALID') == (None, None, None)
 
     def test_missing_language_defaults_to_english(self):
-        with patch('utils.stt.streaming.stt_service_models', ['parakeet']), patch.dict(
-            'os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.test'}
+        with (
+            patch('utils.stt.streaming.stt_service_models', ['parakeet']),
+            patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.test'}),
         ):
             service, lang, model = get_stt_service_for_language(None)
 
@@ -1102,8 +1114,9 @@ class TestGetSttServiceForLanguage:
 def test_selection_respects_model_capability_and_live_multilingual_mode(
     language, multi_lang_enabled, surface, preferred_service, expected
 ):
-    with patch('utils.stt.streaming.stt_service_models', ['parakeet', 'modulate-velma-2']), patch.dict(
-        'os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.test'}
+    with (
+        patch('utils.stt.streaming.stt_service_models', ['parakeet', 'modulate-velma-2']),
+        patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.test'}),
     ):
         result = get_stt_service_for_language(
             language,
@@ -1116,8 +1129,9 @@ def test_selection_respects_model_capability_and_live_multilingual_mode(
 
 
 def test_explicit_parakeet_preference_reorders_only_a_capable_live_selection():
-    with patch('utils.stt.streaming.stt_service_models', ['modulate-velma-2', 'parakeet']), patch.dict(
-        'os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.test'}
+    with (
+        patch('utils.stt.streaming.stt_service_models', ['modulate-velma-2', 'parakeet']),
+        patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.test'}),
     ):
         result = get_stt_service_for_language('en', multi_lang_enabled=False, preferred_service='parakeet')
 
@@ -1149,8 +1163,9 @@ class TestFillerWordsLanguageBehavior:
         mock_client = MagicMock()
         mock_client.listen.websocket.v.return_value = mock_dg_conn
 
-        with patch('utils.stt.streaming._deepgram_client_for_request', return_value=mock_client), patch(
-            'utils.stt.streaming.LiveOptions', side_effect=capture_live_options
+        with (
+            patch('utils.stt.streaming._deepgram_client_for_request', return_value=mock_client),
+            patch('utils.stt.streaming.LiveOptions', side_effect=capture_live_options),
         ):
             connect_to_deepgram(
                 on_message=MagicMock(),
@@ -1251,9 +1266,11 @@ class TestConnectKeywordsNoneGuard:
 
         keyword_set = MagicMock(side_effect=lambda options, kw: options)
 
-        with patch('utils.stt.streaming._deepgram_client_for_request', return_value=mock_client), patch(
-            'utils.stt.streaming.LiveOptions', side_effect=lambda **kwargs: MagicMock()
-        ), patch('utils.stt.streaming._dg_keywords_set', keyword_set):
+        with (
+            patch('utils.stt.streaming._deepgram_client_for_request', return_value=mock_client),
+            patch('utils.stt.streaming.LiveOptions', side_effect=lambda **kwargs: MagicMock()),
+            patch('utils.stt.streaming._dg_keywords_set', keyword_set),
+        ):
             result = connect_to_deepgram(
                 on_message=MagicMock(),
                 on_error=MagicMock(),

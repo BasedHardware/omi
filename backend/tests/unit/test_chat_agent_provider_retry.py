@@ -213,11 +213,12 @@ def _run(agentic_mod, streams, safety_guard=None, tool_result='tool result'):
     full_response = []
 
     async def go():
-        with patch.object(agentic_mod.anthropic_client.messages, 'stream', side_effect=stream), patch.object(
-            agentic_mod, '_execute_tool', new=AsyncMock(return_value=tool_result)
-        ), patch.object(agentic_mod, 'handle_llm_error_async', new=AsyncMock()), patch.object(
-            agentic_mod, 'record_fallback'
-        ) as recorded:
+        with (
+            patch.object(agentic_mod.anthropic_client.messages, 'stream', side_effect=stream),
+            patch.object(agentic_mod, '_execute_tool', new=AsyncMock(return_value=tool_result)),
+            patch.object(agentic_mod, 'handle_llm_error_async', new=AsyncMock()),
+            patch.object(agentic_mod, 'record_fallback') as recorded,
+        ):
             result = await agentic_mod._run_anthropic_agent_stream(
                 'SYSTEM',
                 [{'role': 'user', 'content': 'question'}],
@@ -490,16 +491,14 @@ async def test_gateway_mode_selects_openai_agent_runner(agentic_mod):
     async def anthropic_runner(*_args):
         raise AssertionError('gateway mode selected the Anthropic runner')
 
-    with patch.object(agentic_mod, 'should_route_chat_agent_through_gateway', return_value=True), patch.object(
-        agentic_mod, 'run_blocking', new=fake_run_blocking
-    ), patch.object(agentic_mod, '_convert_tools', return_value=([], {})), patch.object(
-        agentic_mod, '_messages_to_anthropic', return_value=[{'role': 'user', 'content': 'hello'}]
-    ), patch.object(
-        agentic_mod, '_inject_current_datetime', side_effect=lambda messages, _block: messages
-    ), patch.object(
-        agentic_mod, '_run_openai_agent_stream', new=openai_runner
-    ), patch.object(
-        agentic_mod, '_run_anthropic_agent_stream', new=anthropic_runner
+    with (
+        patch.object(agentic_mod, 'should_route_chat_agent_through_gateway', return_value=True),
+        patch.object(agentic_mod, 'run_blocking', new=fake_run_blocking),
+        patch.object(agentic_mod, '_convert_tools', return_value=([], {})),
+        patch.object(agentic_mod, '_messages_to_anthropic', return_value=[{'role': 'user', 'content': 'hello'}]),
+        patch.object(agentic_mod, '_inject_current_datetime', side_effect=lambda messages, _block: messages),
+        patch.object(agentic_mod, '_run_openai_agent_stream', new=openai_runner),
+        patch.object(agentic_mod, '_run_anthropic_agent_stream', new=anthropic_runner),
     ):
         chunks = [
             chunk
@@ -542,18 +541,15 @@ async def test_anthropic_byok_keeps_agentic_chat_on_direct_runner(agentic_mod):
     async def gateway_runner(*_args):
         raise AssertionError('Anthropic BYOK must not select the gateway runner')
 
-    with patch.object(agentic_mod, 'should_route_chat_agent_through_gateway', return_value=True), patch.object(
-        agentic_mod, 'get_byok_key', return_value='sk-ant-test'
-    ), patch.object(agentic_mod, 'run_blocking', new=fake_run_blocking), patch.object(
-        agentic_mod, '_convert_tools', return_value=([], {})
-    ), patch.object(
-        agentic_mod, '_messages_to_anthropic', return_value=[{'role': 'user', 'content': 'hello'}]
-    ), patch.object(
-        agentic_mod, '_inject_current_datetime', side_effect=lambda messages, _block: messages
-    ), patch.object(
-        agentic_mod, '_run_openai_agent_stream', new=gateway_runner
-    ), patch.object(
-        agentic_mod, '_run_anthropic_agent_stream', new=direct_runner
+    with (
+        patch.object(agentic_mod, 'should_route_chat_agent_through_gateway', return_value=True),
+        patch.object(agentic_mod, 'get_byok_key', return_value='sk-ant-test'),
+        patch.object(agentic_mod, 'run_blocking', new=fake_run_blocking),
+        patch.object(agentic_mod, '_convert_tools', return_value=([], {})),
+        patch.object(agentic_mod, '_messages_to_anthropic', return_value=[{'role': 'user', 'content': 'hello'}]),
+        patch.object(agentic_mod, '_inject_current_datetime', side_effect=lambda messages, _block: messages),
+        patch.object(agentic_mod, '_run_openai_agent_stream', new=gateway_runner),
+        patch.object(agentic_mod, '_run_anthropic_agent_stream', new=direct_runner),
     ):
         chunks = [
             chunk
@@ -797,10 +793,11 @@ def _run_openai(agentic_mod, scripts, safety_guard=None, get_llm_error=None, too
     get_llm = MagicMock(side_effect=get_llm_error) if get_llm_error else MagicMock(return_value=_FakeChatModel(scripts))
 
     async def go():
-        with patch.object(agentic_mod, 'get_llm', new=get_llm), patch.object(
-            agentic_mod, '_execute_tool', new=AsyncMock(return_value=tool_result)
-        ), patch.object(agentic_mod, 'handle_llm_error_async', new=AsyncMock()), patch.object(
-            agentic_mod, 'record_fallback'
+        with (
+            patch.object(agentic_mod, 'get_llm', new=get_llm),
+            patch.object(agentic_mod, '_execute_tool', new=AsyncMock(return_value=tool_result)),
+            patch.object(agentic_mod, 'handle_llm_error_async', new=AsyncMock()),
+            patch.object(agentic_mod, 'record_fallback'),
         ):
             return await agentic_mod._run_openai_agent_stream(
                 'SYSTEM',

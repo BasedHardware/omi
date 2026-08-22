@@ -1529,7 +1529,7 @@ def replace_conversation_sourced_memories(
             )
             if preview.status != ApplyStatus.committed:
                 raise RuntimeError(
-                    f"canonical conversation replacement planning failed: " f"{preview.status.value} ({preview.reason})"
+                    f"canonical conversation replacement planning failed: {preview.status.value} ({preview.reason})"
                 )
             writes.append(write)
             planning_control = preview.control_state
@@ -1630,7 +1630,7 @@ def _apply_canonical_user_mutation(
             uid=uid,
             operation_type=MemoryOperationType.user_mutation,
             source_packet_id=(
-                f"user_mutation:{mutation_kind}:{memory_id}:r{item.item_revision}:" f"{idempotency_key[:16]}"
+                f"user_mutation:{mutation_kind}:{memory_id}:r{item.item_revision}:{idempotency_key[:16]}"
             ),
             target_memory_id=memory_id,
             evidence_ids=evidence_ids,

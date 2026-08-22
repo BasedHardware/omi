@@ -57,9 +57,9 @@ def _awaited_run_blocking_offloads(fn_node):
 def test_redis_calls_are_not_called_directly():
     fn = _load_function(TARGET_FN)
     for callee in BLOCKING_CALLS:
-        assert (
-            _direct_calls(fn, callee) == []
-        ), f'{callee} is called directly in {TARGET_FN}; it must be offloaded via run_blocking'
+        assert _direct_calls(fn, callee) == [], (
+            f'{callee} is called directly in {TARGET_FN}; it must be offloaded via run_blocking'
+        )
 
 
 def test_redis_calls_are_offloaded_and_awaited():

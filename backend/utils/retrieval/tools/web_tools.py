@@ -159,7 +159,7 @@ async def _hostname_is_public(hostname: str) -> bool:
         results = await loop.getaddrinfo(hostname, None)
         if not results:
             return False
-        return not any(_is_private_ip(r[4][0]) for r in results)
+        return not any(_is_private_ip(r[4][0]) for r in results)  # ty: ignore[invalid-argument-type]
     except Exception:
         return False
 

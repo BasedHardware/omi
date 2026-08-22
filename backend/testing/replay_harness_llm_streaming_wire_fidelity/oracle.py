@@ -271,12 +271,17 @@ def run_oracle() -> dict[str, Any]:
     previous_overrides = dict(app.dependency_overrides)
     registry: ProviderRegistry | None = None
     try:
-        with _temporary_environment(
-            {
-                "OMI_LLM_GATEWAY_SERVICE_TOKEN": "loopback-test-token",
-                "OPENAI_API_KEY": "loopback-test-key",
-            }
-        ), _bounded_evidence_logging(), _LoopbackOpenAI() as upstream, _loopback_egress_only():
+        with (
+            _temporary_environment(
+                {
+                    "OMI_LLM_GATEWAY_SERVICE_TOKEN": "loopback-test-token",
+                    "OPENAI_API_KEY": "loopback-test-key",
+                }
+            ),
+            _bounded_evidence_logging(),
+            _LoopbackOpenAI() as upstream,
+            _loopback_egress_only(),
+        ):
             registry = ProviderRegistry(
                 {
                     "openai": OpenAICompatibleChatCompletionProvider(base_url=upstream.base_url),

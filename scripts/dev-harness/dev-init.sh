@@ -15,20 +15,9 @@ else
   echo "Keeping existing $secrets_file (not overwritten)"
 fi
 
+bash backend/scripts/sync-python-deps.sh
 PYTHON_BIN="$(dev_harness_python)"
-if [ "$PYTHON_BIN" = "python3" ]; then
-  python3 -m venv backend/.venv
-  PYTHON_BIN="$(dev_harness_python)"
-  echo "Created backend/.venv"
-fi
-
-if ! "$PYTHON_BIN" -m pip --version >/dev/null; then
-  echo "${PYTHON_BIN%/bin/python} is incomplete; recreate it with: python3 -m venv backend/.venv" >&2
-  exit 1
-fi
-
-"$PYTHON_BIN" -m pip install -q -r backend/requirements.txt
-echo "Backend Python dependencies installed"
+echo "Backend Python dependencies synced via uv ($PYTHON_BIN)"
 
 # scripts/install-git-hooks.sh owns hook installation. A linked worktree's
 # `.git` is a file holding a gitdir pointer, so a literal `.git/hooks` path does
@@ -38,6 +27,4 @@ echo "Backend Python dependencies installed"
 bash scripts/install-git-hooks.sh
 
 echo ""
-echo "Next: add your four API keys to backend/.env.local-dev, then run:"
-echo "  make dev-up        # start the harness for mobile/iOS testing"
-echo "  make dev-desktop   # start the harness and the desktop app"
+echo "Dev harness ready. Next: PROVIDER_MODE=offline make dev-up"

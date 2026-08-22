@@ -189,7 +189,7 @@ def run_vad_window(
         },
     )
     new_context = audio_2d[:, -VAD_CONTEXT_SAMPLES:]  # save tail as next context
-    return float(output[0][0]), new_state, new_context  # type: ignore[reportUnknownVariableType,reportUnknownArgumentType]  # onnxruntime untyped
+    return float(output[0][0]), new_state, new_context  # type: ignore[reportUnknownVariableType,reportUnknownArgumentType]  # onnxruntime untyped  # ty: ignore[invalid-return-type, not-subscriptable]
 
 
 @overload

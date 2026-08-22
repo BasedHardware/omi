@@ -82,30 +82,21 @@ PY
 # to delete a healthy venv just to repeat setup after a branch change.
 mkdir -p "$TMPDIR/sync/backend/scripts" "$TMPDIR/sync/bin"
 cp "$ROOT/backend/scripts/sync-python-deps.sh" "$TMPDIR/sync/backend/scripts/sync-python-deps.sh"
-printf '3.11\n' >"$TMPDIR/sync/backend/.python-version"
-# The sync script selects a different checked-in lock by host platform.
-# Keep this fixture runnable in macOS, Linux, Windows, and Intel-macOS CI.
-touch \
-  "$TMPDIR/sync/backend/pylock.toml" \
-  "$TMPDIR/sync/backend/pylock.macos.toml" \
-  "$TMPDIR/sync/backend/pylock.macos-x86_64.toml" \
-  "$TMPDIR/sync/backend/pylock.windows.toml"
+printf '3.13.13\n' >"$TMPDIR/sync/backend/.python-version"
+# The sync script installs from the checked-in uv.lock.
+touch "$TMPDIR/sync/backend/uv.lock"
+# Minimal pyproject so `uv sync` has a project root marker in real runs; the
+# fixture stub uv does not need real contents.
+printf '[project]\nname = "omi-backend"\nversion = "0.0.0"\nrequires-python = ">=3.13,<3.14"\ndependencies = []\n' >"$TMPDIR/sync/backend/pyproject.toml"
 cat >"$TMPDIR/sync/bin/uv" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 if [ "$1" = "python" ]; then
   exit 0
 fi
-if [ "$1" = "venv" ]; then
-  target="${!#}"
-  if [ -e "$target" ] && [[ " $* " != *" --allow-existing "* ]]; then
-    echo "refusing to replace existing venv" >&2
-    exit 42
-  fi
+if [ "$1" = "sync" ]; then
+  target="${UV_PROJECT_ENVIRONMENT:-.venv}"
   mkdir -p "$target/bin"
-  exit 0
-fi
-if [ "$1" = "pip" ] && [ "$2" = "sync" ]; then
   exit 0
 fi
 echo "unexpected uv invocation: $*" >&2

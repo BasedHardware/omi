@@ -752,15 +752,15 @@ def search_apps(
 
     # Apply sorting
     if sort == 'rating_desc':
-        filtered_apps = sorted(filtered_apps, key=lambda a: (a.rating_avg or 0), reverse=True)
+        filtered_apps = sorted(filtered_apps, key=lambda a: a.rating_avg or 0, reverse=True)
     elif sort == 'rating_asc':
-        filtered_apps = sorted(filtered_apps, key=lambda a: (a.rating_avg or 0))
+        filtered_apps = sorted(filtered_apps, key=lambda a: a.rating_avg or 0)
     elif sort == 'name_asc':
         filtered_apps = sorted(filtered_apps, key=lambda a: a.name.lower())
     elif sort == 'name_desc':
         filtered_apps = sorted(filtered_apps, key=lambda a: a.name.lower(), reverse=True)
     elif sort == 'installs_desc':
-        filtered_apps = sorted(filtered_apps, key=lambda a: (a.installs or 0), reverse=True)
+        filtered_apps = sorted(filtered_apps, key=lambda a: a.installs or 0, reverse=True)
     else:
         # sort by installs when searching, otherwise by name
         if q and q.strip():

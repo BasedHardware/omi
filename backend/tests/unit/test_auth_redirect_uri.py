@@ -288,10 +288,13 @@ class TestPkceBinding:
         import asyncio
 
         request = MagicMock()
-        with patch("routers.auth.set_auth_session") as mock_set_session, patch(
-            "routers.auth._google_auth_redirect",
-            new_callable=AsyncMock,
-            return_value=MagicMock(),
+        with (
+            patch("routers.auth.set_auth_session") as mock_set_session,
+            patch(
+                "routers.auth._google_auth_redirect",
+                new_callable=AsyncMock,
+                return_value=MagicMock(),
+            ),
         ):
             asyncio.get_event_loop().run_until_complete(
                 auth_authorize(
@@ -641,11 +644,16 @@ class TestCallbackEndpoints:
         )
 
         request = MagicMock()
-        with patch('routers.auth.get_auth_session', return_value=session_data), patch(
-            'routers.auth._exchange_provider_code_for_oauth_credentials',
-            new_callable=AsyncMock,
-            return_value=fake_creds,
-        ), patch('routers.auth.set_auth_code') as mock_set_code, patch('routers.auth.templates') as mock_templates:
+        with (
+            patch('routers.auth.get_auth_session', return_value=session_data),
+            patch(
+                'routers.auth._exchange_provider_code_for_oauth_credentials',
+                new_callable=AsyncMock,
+                return_value=fake_creds,
+            ),
+            patch('routers.auth.set_auth_code') as mock_set_code,
+            patch('routers.auth.templates') as mock_templates,
+        ):
             mock_templates.TemplateResponse.return_value = MagicMock()
             asyncio.get_event_loop().run_until_complete(
                 auth_callback_google(request=request, code='oauth-code', state='session-id')
@@ -680,11 +688,16 @@ class TestCallbackEndpoints:
         )
 
         request = MagicMock()
-        with patch('routers.auth.get_auth_session', return_value=session_data), patch(
-            'routers.auth._exchange_provider_code_for_oauth_credentials',
-            new_callable=AsyncMock,
-            return_value=fake_creds,
-        ), patch('routers.auth.set_auth_code') as mock_set_code, patch('routers.auth.templates') as mock_templates:
+        with (
+            patch('routers.auth.get_auth_session', return_value=session_data),
+            patch(
+                'routers.auth._exchange_provider_code_for_oauth_credentials',
+                new_callable=AsyncMock,
+                return_value=fake_creds,
+            ),
+            patch('routers.auth.set_auth_code') as mock_set_code,
+            patch('routers.auth.templates') as mock_templates,
+        ):
             mock_templates.TemplateResponse.return_value = MagicMock()
             asyncio.get_event_loop().run_until_complete(auth_callback_google(request=request, code='c', state='s'))
             stored = json.loads(mock_set_code.call_args[0][1])
@@ -707,9 +720,10 @@ class TestTokenEdgeCases:
         )
         request = MagicMock()
 
-        with patch('routers.auth.get_auth_code', return_value=code_data), patch(
-            'routers.auth.delete_auth_code'
-        ) as mock_delete:
+        with (
+            patch('routers.auth.get_auth_code', return_value=code_data),
+            patch('routers.auth.delete_auth_code') as mock_delete,
+        ):
             asyncio.get_event_loop().run_until_complete(
                 auth_token(
                     request=request,
@@ -797,8 +811,12 @@ class TestTokenEdgeCases:
         )
         request = MagicMock()
 
-        with patch('routers.auth.get_auth_code', return_value=code_data), patch('routers.auth.delete_auth_code'), patch(
-            'routers.auth._generate_custom_token', new_callable=AsyncMock, side_effect=RuntimeError("firebase down")
+        with (
+            patch('routers.auth.get_auth_code', return_value=code_data),
+            patch('routers.auth.delete_auth_code'),
+            patch(
+                'routers.auth._generate_custom_token', new_callable=AsyncMock, side_effect=RuntimeError("firebase down")
+            ),
         ):
             with pytest.raises(HTTPException) as exc_info:
                 asyncio.get_event_loop().run_until_complete(

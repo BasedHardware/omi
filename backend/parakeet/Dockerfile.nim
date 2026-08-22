@@ -26,20 +26,21 @@
 #   docker run -d --gpus all -p 9000:9000 nvcr.io/nim/nvidia/parakeet-1-1b-rnnt-multilingual:latest
 #   docker run -p 8080:8080 -e NIM_INFERENCE_URL=http://host.docker.internal:9000 parakeet-nim-gateway
 
-FROM gcr.io/based-hardware-dev/python:3.11-slim-forky
+FROM python:3.13-slim-bookworm
 
 WORKDIR /app
 ENV PATH="/opt/venv/bin:$PATH"
 
 RUN python -m venv /opt/venv && \
-    pip install --no-cache-dir \
+    pip install --no-cache-dir uv==0.12.5 && \
+    uv pip install --python /opt/venv/bin/python --no-cache-dir \
     fastapi==0.121.0 \
-    uvicorn[standard]==0.34.0 \
+    "uvicorn[standard]==0.34.0" \
     python-multipart==0.0.18 \
     httpx==0.28.1 \
     numpy==2.4.0 \
-    scipy>=1.11.0 \
-    langdetect>=1.0.9
+    "scipy>=1.11.0" \
+    "langdetect>=1.0.9"
 
 COPY backend/parakeet/main.py .
 COPY backend/parakeet/transcribe.py .

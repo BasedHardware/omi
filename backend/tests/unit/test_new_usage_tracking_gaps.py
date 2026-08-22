@@ -498,17 +498,17 @@ class TestSourceTrackUsageWrapping:
     def test_users_py_followup_call(self):
         """routers/users.py must pass uid to followup_question_prompt."""
         source = (BACKEND_ROOT / "routers" / "users.py").read_text(encoding="utf-8")
-        assert (
-            "followup_question_prompt(uid," in source
-        ), "followup_question_prompt must be called with uid as first arg"
+        assert "followup_question_prompt(uid," in source, (
+            "followup_question_prompt must be called with uid as first arg"
+        )
 
     def test_llm_clients_usage_callback(self):
         """utils/llm/clients.py must attach _usage_callback to ChatOpenAI."""
         source = (BACKEND_ROOT / "utils" / "llm" / "clients.py").read_text(encoding="utf-8")
         assert "_usage_callback = get_usage_callback()" in source, "clients.py must initialize the usage callback"
-        assert (
-            "'callbacks': [_usage_callback]" in source or "callbacks.append(_usage_callback)" in source
-        ), "clients.py must attach usage callback"
+        assert "'callbacks': [_usage_callback]" in source or "callbacks.append(_usage_callback)" in source, (
+            "clients.py must attach usage callback"
+        )
 
     def test_usage_tracker_imports_in_modified_files(self):
         """Each modified file must import track_usage and Features from usage_tracker."""

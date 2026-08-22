@@ -320,7 +320,7 @@ class BatchEngine:
                         if not req.future.done():
                             req.future.set_result(result)
                 else:
-                    items: List[Any] = cast(List[Any], results if isinstance(results, list) else [results])
+                    items: List[Any] = cast(List[Any], results if isinstance(results, list) else [results])  # ty: ignore[redundant-cast]
                     for i, req in enumerate(batch):
                         if not req.future.done():
                             result = items[i] if i < len(items) else {"text": ""}

@@ -736,7 +736,7 @@ chmod +x "{python}"
             (REPO_ROOT / "backend/requirements.txt").read_text(encoding="utf-8"),
             r"(?im)^pyyaml==6\.0\.1$",
         )
-        for lock in REPO_ROOT.glob("backend/pylock*.toml"):
+        for lock in REPO_ROOT.glob("backend/uv.lock"):
             self.assertRegex(
                 lock.read_text(encoding="utf-8"),
                 r'(?ms)^\[\[packages\]\]\nname = "pyyaml"\nversion = "6\.0\.1"$',

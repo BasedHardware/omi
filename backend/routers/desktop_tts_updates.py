@@ -77,7 +77,7 @@ def _manual_download_url(release: ReleaseInfo) -> str:
     if release.manual_download_url and release.manual_download_url.strip():
         return release.manual_download_url.strip()
     if release.download_url.endswith("/Omi.zip"):
-        return f"{release.download_url[:-len('Omi.zip')]}Omi.dmg"
+        return f"{release.download_url[: -len('Omi.zip')]}Omi.dmg"
     return release.download_url
 
 

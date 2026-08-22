@@ -950,8 +950,7 @@ def upsert_action_item_vectors_batch(uid: str, items: List[Dict[str, Any]]) -> i
         return len(payload)
     except Exception as e:
         logger.exception(
-            f'upsert_action_item_vectors_batch failed uid={uid} count={len(items)} '
-            f'(tasks saved, vectors missing): {e}'
+            f'upsert_action_item_vectors_batch failed uid={uid} count={len(items)} (tasks saved, vectors missing): {e}'
         )
         return 0
 

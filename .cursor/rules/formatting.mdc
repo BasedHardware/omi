@@ -3,7 +3,7 @@ description: "Formatting commands"
 alwaysApply: false
 ---
 - Format Dart: `dart format --line-length 120 <files>`.
-- Format Python: `black --line-length 120 --skip-string-normalization <files>`.
+- Format Python: `uv run --project backend ruff format <files>` (quote-style=preserve).
 - Format C/C++: `clang-format -i <files>`.
 - Do not manually format generated Dart files (`*.gen.dart`, `*.g.dart`).
 - See AGENTS.md for full rules.

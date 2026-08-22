@@ -91,7 +91,7 @@ def redact_text(
                         "redaction", source_event_id, payload_path, absolute_start, pattern.category
                     ),
                     source_event_id=source_event_id,
-                    category=pattern.category,  # type: ignore[arg-type]
+                    category=pattern.category,  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
                     placeholder=placeholder,
                     char_start=absolute_start,
                     char_end=absolute_end,

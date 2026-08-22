@@ -78,7 +78,7 @@ def test_source_closure_excludes_builder_stage_copies() -> None:
     with tempfile.NamedTemporaryFile(mode="w", suffix="Dockerfile", delete=False) as f:
         f.write(
             "FROM base AS builder\n"
-            "COPY backend/pusher/pylock.toml /tmp/pylock.toml\n"
+            "COPY backend/uv.lock /tmp/pylock.toml\n"
             "FROM base\n"
             "COPY --from=builder /opt/venv /opt/venv\n"
             "COPY backend/config/ ./config/\n"
@@ -90,7 +90,7 @@ def test_source_closure_excludes_builder_stage_copies() -> None:
     assert "backend/pusher/" in sources
     # Builder-stage copies must NOT be included.
     assert "/opt/venv" not in sources
-    assert "backend/pusher/pylock.toml" not in sources
+    assert "backend/uv.lock" not in sources
 
 
 def test_liblc3_source_is_pinned() -> None:

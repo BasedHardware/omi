@@ -46,8 +46,8 @@ def create_subscription_checkout_session(
 ):
     """Create a Stripe Checkout session for a subscription."""
     try:
-        success_url = urljoin(base_url, 'v1/payments/success?session_id={CHECKOUT_SESSION_ID}')  # type: ignore[reportArgumentType]  # base_url validated at runtime
-        cancel_url = urljoin(base_url, 'v1/payments/cancel')  # type: ignore[reportArgumentType]  # base_url validated at runtime
+        success_url = urljoin(base_url, 'v1/payments/success?session_id={CHECKOUT_SESSION_ID}')  # type: ignore[reportArgumentType]  # base_url validated at runtime  # ty: ignore[invalid-argument-type]
+        cancel_url = urljoin(base_url, 'v1/payments/cancel')  # type: ignore[reportArgumentType]  # base_url validated at runtime  # ty: ignore[invalid-argument-type]
 
         # session creation parameters
         session_params: Dict[str, Any] = {
@@ -88,7 +88,7 @@ def create_subscription_checkout_session(
 
         checkout_session = stripe.checkout.Session.create(**session_params)
         return checkout_session
-    except stripe.error.InvalidRequestError:  # type: ignore[reportAttributeAccessIssue,reportUnknownMemberType]  # stripe.error exposed dynamically at runtime
+    except stripe.error.InvalidRequestError:  # type: ignore[reportAttributeAccessIssue,reportUnknownMemberType]  # stripe.error exposed dynamically at runtime  # ty: ignore[possibly-missing-submodule]
         raise
     except Exception as e:
         logger.error(f"Error creating checkout session: {e}")
@@ -137,7 +137,7 @@ def find_app_subscription_by_customer_id(
         latest_subscription = None
 
         for sub in subscriptions.data:
-            sub_dict = sub.to_dict()  # type: ignore[reportDeprecated, reportUnknownVariableType]  # legacy stripe to_dict
+            sub_dict = sub.to_dict()  # type: ignore[reportDeprecated, reportUnknownVariableType]  # legacy stripe to_dict  # ty: ignore[deprecated]
             if sub_dict.get('metadata', {}).get('app_id') == app_id and sub_dict.get('metadata', {}).get('uid') == uid:
                 if latest_subscription is None or sub_dict.get('created', 0) > latest_subscription.get('created', 0):
                     latest_subscription = sub_dict
@@ -155,7 +155,7 @@ def find_app_subscription_by_metadata(app_id: str, uid: str, status_filter: str 
         latest_subscription = None
 
         for sub in subscriptions.data:
-            sub_dict = sub.to_dict()  # type: ignore[reportDeprecated, reportUnknownVariableType]  # legacy stripe to_dict
+            sub_dict = sub.to_dict()  # type: ignore[reportDeprecated, reportUnknownVariableType]  # legacy stripe to_dict  # ty: ignore[deprecated]
             if sub_dict.get('metadata', {}).get('app_id') == app_id and sub_dict.get('metadata', {}).get('uid') == uid:
                 if latest_subscription is None or sub_dict.get('created', 0) > latest_subscription.get('created', 0):
                     latest_subscription = sub_dict
@@ -228,8 +228,8 @@ def create_connect_account(uid: str, country: str):
     # Generate the onboarding URL with dynamic return and refresh URLs
     account_links = stripe.AccountLink.create(
         account=account.id,
-        refresh_url=urljoin(base_url, f"/v1/stripe/refresh/{account.id}"),  # type: ignore[reportArgumentType]  # base_url validated at runtime
-        return_url=urljoin(base_url, f"/v1/stripe/return/{account.id}"),  # type: ignore[reportArgumentType]  # base_url validated at runtime
+        refresh_url=urljoin(base_url, f"/v1/stripe/refresh/{account.id}"),  # type: ignore[reportArgumentType]  # base_url validated at runtime  # ty: ignore[invalid-argument-type]
+        return_url=urljoin(base_url, f"/v1/stripe/return/{account.id}"),  # type: ignore[reportArgumentType]  # base_url validated at runtime  # ty: ignore[invalid-argument-type]
         type="account_onboarding",
     )
 
@@ -239,8 +239,8 @@ def create_connect_account(uid: str, country: str):
 def refresh_connect_account_link(account_id: str):
     account_link = stripe.AccountLink.create(
         account=account_id,
-        refresh_url=urljoin(base_url, f"/v1/stripe/refresh/{account_id}"),  # type: ignore[reportArgumentType]  # base_url validated at runtime
-        return_url=urljoin(base_url, f"/v1/stripe/return/{account_id}"),  # type: ignore[reportArgumentType]  # base_url validated at runtime
+        refresh_url=urljoin(base_url, f"/v1/stripe/refresh/{account_id}"),  # type: ignore[reportArgumentType]  # base_url validated at runtime  # ty: ignore[invalid-argument-type]
+        return_url=urljoin(base_url, f"/v1/stripe/return/{account_id}"),  # type: ignore[reportArgumentType]  # base_url validated at runtime  # ty: ignore[invalid-argument-type]
         type="account_onboarding",
     )
     return {"account_id": account_id, "url": account_link.url}

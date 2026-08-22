@@ -83,7 +83,9 @@ def test_golden_association_fixtures_append_only_material_intent_match(enabled):
                 reason=(
                     AssociationReason.selected
                     if judgment['material']
-                    else AssociationReason.immaterial if judgment['workstream_id'] else AssociationReason.no_match
+                    else AssociationReason.immaterial
+                    if judgment['workstream_id']
+                    else AssociationReason.no_match
                 ),
             ),
             append_event=append,
@@ -288,8 +290,9 @@ def test_universal_user_executes_retrieval_and_recurrence_mutation(enabled):
         'uid-1',
         _recurrence_signal(distinct_days=3),
         account_generation=7,
-        create_candidate=lambda *args, **kwargs: calls.append('candidate')
-        or SimpleNamespace(candidate_id='candidate-1'),
+        create_candidate=lambda *args, **kwargs: (
+            calls.append('candidate') or SimpleNamespace(candidate_id='candidate-1')
+        ),
     )
 
     assert outcome.outcome == AssociationOutcomeKind.no_candidates
@@ -342,9 +345,7 @@ def test_maintenance_orchestrator_hands_recurrence_to_workflow_callback(monkeypa
         run_id='run-1',
         uid_inventory=lambda _db, _limit: ['uid-1'],
         recurrence_signal_persister=lambda *args, **kwargs: 1,
-        recurrence_signal_consumer=lambda uid, signals, firestore_client=None: (
-            consumed.extend(signals) or len(signals)
-        ),
+        recurrence_signal_consumer=lambda uid, signals, firestore_client=None: consumed.extend(signals) or len(signals),
     )
 
     assert consumed == [signal]
@@ -403,8 +404,9 @@ def test_persisted_shadow_mode_cannot_suppress_canonical_recurrence_candidate(mo
         'uid-1',
         _recurrence_signal(distinct_days=3),
         account_generation=7,
-        create_candidate=lambda *args, **kwargs: calls.append('candidate')
-        or SimpleNamespace(candidate_id='candidate-1'),
+        create_candidate=lambda *args, **kwargs: (
+            calls.append('candidate') or SimpleNamespace(candidate_id='candidate-1')
+        ),
     )
 
     assert result.outcome == RecurrenceOutcomeKind.candidate_created

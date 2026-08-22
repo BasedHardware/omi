@@ -88,9 +88,10 @@ notif = _load_real_notifications()
 
 
 def _call(completed, due_at):
-    with patch.object(notif, "send_action_item_deletion_message") as cancel, patch.object(
-        notif, "send_action_item_update_message"
-    ) as reschedule:
+    with (
+        patch.object(notif, "send_action_item_deletion_message") as cancel,
+        patch.object(notif, "send_action_item_update_message") as reschedule,
+    ):
         notif.sync_action_item_reminder("u1", "a1", "desc", completed, due_at)
         return cancel, reschedule
 

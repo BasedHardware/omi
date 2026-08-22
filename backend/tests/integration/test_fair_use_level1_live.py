@@ -279,7 +279,7 @@ async def main():
         for i in range(3):
             await asyncio.sleep(5)
             current = check_redis_speech(r, TEST_UID)
-            print(f'  [+{(i+1)*5}s] speech_ms={current["daily_ms"]} buckets={current["buckets"]}')
+            print(f'  [+{(i + 1) * 5}s] speech_ms={current["daily_ms"]} buckets={current["buckets"]}')
             if current['daily_ms'] > 0:
                 speech_detected = True
                 print(f'  [OK] Speech detected in Redis (post-close)!')

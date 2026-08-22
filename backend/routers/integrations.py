@@ -651,7 +651,7 @@ async def oauth_callback(
     return await handle_oauth_callback(request, provider_key, code, state, config)
 
 
-@router.on_event("shutdown")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
+@router.on_event("shutdown")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring  # ty: ignore[deprecated]
 async def shutdown_http_client():
     """Cleanup HTTP client on app shutdown."""
     await close_http_client()

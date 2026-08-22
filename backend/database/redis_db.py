@@ -67,7 +67,7 @@ def try_catch_decorator(func: Callable[..., T]) -> Callable[..., Optional[T]]:
         try:
             return func(*args, **kwargs)
         except Exception as e:
-            logger.error(f'Error calling {func.__name__} {e}')
+            logger.error(f'Error calling {func.__name__} {e}')  # ty: ignore[unresolved-attribute]
             return None
 
     return wrapper

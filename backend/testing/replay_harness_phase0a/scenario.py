@@ -233,9 +233,9 @@ def _run_scenario_instance(
     transport to deliver both copies, then observes the black-box STT count
     (a boundary defeat may leave the job non-terminal, which is expected).
     """
-    print(f"\n{'='*60}", file=sys.stderr)
+    print(f"\n{'=' * 60}", file=sys.stderr)
     print(f"  Phase 0A scenario: {label}", file=sys.stderr)
-    print(f"{'='*60}", file=sys.stderr)
+    print(f"{'=' * 60}", file=sys.stderr)
 
     harness = Harness(topology_path, state_dir, fault_controls=fault_controls)
     firestore_client = firestore.Client(project=PROJECT)
@@ -378,7 +378,7 @@ def run_phase0a(topology_path: Path, state_root: Path) -> int:
             print(f"\n  Attestation {i}: VALID (outcome={att.get('outcome')})", file=sys.stderr)
 
     # Report feasibility outcome.
-    print(f"\n{'='*60}", file=sys.stderr)
+    print(f"\n{'=' * 60}", file=sys.stderr)
     if all_passed and attestations:
         print("  FEASIBILITY OUTCOME: GREEN/BOUNDED", file=sys.stderr)
         print("  The out-of-process architecture composes:", file=sys.stderr)
@@ -393,6 +393,6 @@ def run_phase0a(topology_path: Path, state_root: Path) -> int:
         print("    - Self-consistent egress attestation (not independent kernel audit)", file=sys.stderr)
     else:
         print("  FEASIBILITY OUTCOME: BLOCKED — see errors above", file=sys.stderr)
-    print(f"{'='*60}\n", file=sys.stderr)
+    print(f"{'=' * 60}\n", file=sys.stderr)
 
     return 0 if all_passed else 1

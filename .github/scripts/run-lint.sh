@@ -6,7 +6,7 @@
 #   ./github/scripts/run-lint.sh --files a.py b.py # specific files
 #
 # Timing (warm cache, M2 MacBook):
-#   black:           ~0.3s    ruff lint+format: ~0.5s
+#   ruff format:     ~0.3s    ruff lint:        ~0.4s
 #   detect-secrets:  ~1.2s    pre-commit-hooks:  ~0.1s
 #   Total:           ~2.1s
 
@@ -17,6 +17,10 @@ cd "$(dirname "$0")/../.."
 MODE="check"  # "check" or "fix"
 FILES_ARG=""
 FAIL=0
+RUFF_BIN="ruff"
+if [ -x backend/.venv/bin/ruff ]; then
+  RUFF_BIN="backend/.venv/bin/ruff"
+fi
 
 if [ "${1:-}" = "--fix" ]; then
   MODE="fix"
@@ -32,31 +36,32 @@ if [ -n "$FILES_ARG" ]; then
   # Run on specific files
   echo "🔍 Running lints on specified files ($MODE)..."
   if command -v pre-commit &>/dev/null; then
+    # shellcheck disable=SC2086
     pre-commit run --files $FILES_ARG || FAIL=1
   else
     echo "⚠️  pre-commit not installed, running tools directly"
     for f in $FILES_ARG; do
       [ "${f##*.}" != "py" ] && continue
       if [ "$MODE" = "fix" ]; then
-        echo "  black (fix) $f"
-        if ! black --line-length=120 --skip-string-normalization "$f" 2>&1; then
-          echo "    ❌ black failed on $f"
+        echo "  ruff format (fix) $f"
+        if ! "$RUFF_BIN" format --config backend/pyproject.toml "$f" 2>&1; then
+          echo "    ❌ ruff format failed on $f"
           FAIL=1
         fi
-        echo "  ruff (fix) $f"
-        if ! ruff check --fix --target-version py39 "$f" 2>&1; then
-          echo "    ❌ ruff failed on $f"
+        echo "  ruff check (fix) $f"
+        if ! "$RUFF_BIN" check --fix --config backend/pyproject.toml "$f" 2>&1; then
+          echo "    ❌ ruff check failed on $f"
           FAIL=1
         fi
       else
-        echo "  black (check) $f"
-        if ! black --check --line-length=120 --skip-string-normalization "$f" 2>&1; then
-          echo "    ❌ black failed on $f"
+        echo "  ruff format (check) $f"
+        if ! "$RUFF_BIN" format --check --config backend/pyproject.toml "$f" 2>&1; then
+          echo "    ❌ ruff format failed on $f"
           FAIL=1
         fi
-        echo "  ruff (check) $f"
-        if ! ruff check --target-version py39 "$f" 2>&1; then
-          echo "    ❌ ruff failed on $f"
+        echo "  ruff check $f"
+        if ! "$RUFF_BIN" check --config backend/pyproject.toml "$f" 2>&1; then
+          echo "    ❌ ruff check failed on $f"
           FAIL=1
         fi
       fi

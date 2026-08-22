@@ -161,7 +161,7 @@ def patch_google_storage():
     """Patch google.cloud.storage.Client to return the filesystem fake."""
     from google.cloud import storage
 
-    storage.Client = FakeStorageClient
+    storage.Client = FakeStorageClient  # ty: ignore[invalid-assignment]
 
 
 def fake_upload_blob(bucket_name: str, source_file: str, destination_blob_name: str):

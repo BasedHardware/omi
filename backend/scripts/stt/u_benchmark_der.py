@@ -428,15 +428,15 @@ def run_der_benchmark(manifest: List[Dict[str, Any]]) -> None:
     print('\nSUMMARY:')
     if valid_dg:
         print(
-            f"  Deepgram:   avg_DER={sum(r['deepgram_der'] for r in valid_dg)/len(valid_dg):.1%}  cases={len(valid_dg)}"
+            f"  Deepgram:   avg_DER={sum(r['deepgram_der'] for r in valid_dg) / len(valid_dg):.1%}  cases={len(valid_dg)}"
         )
     if valid_mod:
         print(
-            f"  Modulate:   avg_DER={sum(r['modulate_der'] for r in valid_mod)/len(valid_mod):.1%}  cases={len(valid_mod)}"
+            f"  Modulate:   avg_DER={sum(r['modulate_der'] for r in valid_mod) / len(valid_mod):.1%}  cases={len(valid_mod)}"
         )
     if valid_pk:
         print(
-            f"  Parakeet:   avg_DER={sum(r['parakeet_der'] for r in valid_pk)/len(valid_pk):.1%}  cases={len(valid_pk)}"
+            f"  Parakeet:   avg_DER={sum(r['parakeet_der'] for r in valid_pk) / len(valid_pk):.1%}  cases={len(valid_pk)}"
         )
 
     output_path = RESULTS_DIR / 'der_benchmark.json'

@@ -69,7 +69,7 @@ def peppered_fingerprint(client_fingerprint: str) -> str:
 # ---------------------------------------------------------------------------
 _BYOK_STATE_CACHE_MAX = 1024
 _BYOK_STATE_CACHE_TTL = 30  # seconds
-_byok_state_cache: TTLCache[str, Dict[str, Any]] = TTLCache(maxsize=_BYOK_STATE_CACHE_MAX, ttl=_BYOK_STATE_CACHE_TTL)
+_byok_state_cache: TTLCache[str, Dict[str, Any]] = TTLCache(maxsize=_BYOK_STATE_CACHE_MAX, ttl=_BYOK_STATE_CACHE_TTL)  # ty: ignore[not-subscriptable]
 _byok_state_cache_lock = threading.Lock()
 
 

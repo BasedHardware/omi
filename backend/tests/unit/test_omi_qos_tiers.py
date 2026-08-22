@@ -477,9 +477,11 @@ class TestGetOrCreateLlmBehavioral:
                 return self
 
         options = {'mode': 'explicit', 'ttl': '30m'}
-        with _patch.object(clients_mod, 'should_route_features_through_gateway', return_value=True), _patch.object(
-            clients_mod, 'get_or_create_omi_gateway_llm', return_value=_Recorder()
-        ), _patch.object(clients_mod, 'maybe_wrap_dev_gateway_shadow', return_value=_Recorder()):
+        with (
+            _patch.object(clients_mod, 'should_route_features_through_gateway', return_value=True),
+            _patch.object(clients_mod, 'get_or_create_omi_gateway_llm', return_value=_Recorder()),
+            _patch.object(clients_mod, 'maybe_wrap_dev_gateway_shadow', return_value=_Recorder()),
+        ):
             clients_mod.get_llm('conv_structure', prompt_cache_options=options)
 
         assert 'prompt_cache_options' not in captured, 'must not be bound as a named argument'
@@ -886,9 +888,9 @@ class TestRuntimeProviderRouting:
         if os.environ.get('GEMINI_API_KEY'):
             from langchain_google_genai import ChatGoogleGenerativeAI
 
-            assert isinstance(
-                llm, ChatGoogleGenerativeAI
-            ), f'followup should be ChatGoogleGenerativeAI, got {type(llm)}'
+            assert isinstance(llm, ChatGoogleGenerativeAI), (
+                f'followup should be ChatGoogleGenerativeAI, got {type(llm)}'
+            )
         else:
             # No key — falls back to ChatOpenAI placeholder pointing at Gemini endpoint
             assert hasattr(llm, 'invoke')
@@ -1153,9 +1155,11 @@ class TestGeminiThinkingBudget:
             return MagicMock()
 
         try:
-            with _patch.dict(os.environ, {'GEMINI_API_KEY': '', 'USE_VERTEX_AI': ''}), _patch(
-                'utils.llm.clients.ChatOpenAI', side_effect=fake_openai
-            ), _patch('utils.llm.clients.ChatGoogleGenerativeAI', side_effect=lambda *a, **k: MagicMock()):
+            with (
+                _patch.dict(os.environ, {'GEMINI_API_KEY': '', 'USE_VERTEX_AI': ''}),
+                _patch('utils.llm.clients.ChatOpenAI', side_effect=fake_openai),
+                _patch('utils.llm.clients.ChatGoogleGenerativeAI', side_effect=lambda *a, **k: MagicMock()),
+            ):
                 _get_or_create_gemini_llm('gemini-2.5-flash-lite', thinking_budget=0)
             assert 'thinking_budget' not in captured, 'thinking_budget must not reach the ChatOpenAI fallback'
         finally:
@@ -1174,9 +1178,11 @@ class TestGeminiThinkingBudget:
             return MagicMock()
 
         try:
-            with _patch.dict(os.environ, {'GEMINI_API_KEY': 'test-key', 'USE_VERTEX_AI': ''}), _patch(
-                'utils.llm.providers.ChatGoogleGenerativeAI', side_effect=fake_genai
-            ), _patch('utils.llm.providers.ChatOpenAI', side_effect=lambda *a, **k: MagicMock()):
+            with (
+                _patch.dict(os.environ, {'GEMINI_API_KEY': 'test-key', 'USE_VERTEX_AI': ''}),
+                _patch('utils.llm.providers.ChatGoogleGenerativeAI', side_effect=fake_genai),
+                _patch('utils.llm.providers.ChatOpenAI', side_effect=lambda *a, **k: MagicMock()),
+            ):
                 _get_or_create_gemini_llm('gemini-2.5-flash-lite', thinking_budget=0)
             assert captured.get('thinking_budget') == 0, 'native ChatGoogleGenerativeAI must receive thinking_budget'
         finally:
@@ -1195,9 +1201,11 @@ class TestGeminiThinkingBudget:
             return MagicMock()
 
         try:
-            with _patch.dict(os.environ, {'GEMINI_API_KEY': 'test-key', 'USE_VERTEX_AI': ''}), _patch(
-                'utils.llm.providers.ChatGoogleGenerativeAI', side_effect=fake_genai
-            ), _patch('utils.llm.providers.ChatOpenAI', side_effect=lambda *a, **k: MagicMock()):
+            with (
+                _patch.dict(os.environ, {'GEMINI_API_KEY': 'test-key', 'USE_VERTEX_AI': ''}),
+                _patch('utils.llm.providers.ChatGoogleGenerativeAI', side_effect=fake_genai),
+                _patch('utils.llm.providers.ChatOpenAI', side_effect=lambda *a, **k: MagicMock()),
+            ):
                 _get_or_create_gemini_llm('gemini-3-flash-preview', thinking_budget=0)
             assert 'thinking_budget' not in captured, 'thinking_budget only applies to gemini-2.5* models'
         finally:

@@ -374,7 +374,7 @@ def bounded_canonical_memory_uid_inventory(
         # this fluent surface, but the callable narrowing above intentionally
         # leaves the return type opaque.  Keep that injection seam while making
         # the structural expectation explicit to the type checker.
-        registry = cast(Any, collection(CANONICAL_MEMORY_MAINTENANCE_REGISTRY_COLLECTION))
+        registry = cast(Any, collection(CANONICAL_MEMORY_MAINTENANCE_REGISTRY_COLLECTION))  # ty: ignore[redundant-cast]
         query = registry.where("uid", ">", cursor) if cursor else registry
         query = query.order_by("uid")
         page = list(query.limit(bounded_limit).stream())

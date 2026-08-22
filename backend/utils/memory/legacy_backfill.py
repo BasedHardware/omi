@@ -604,7 +604,7 @@ def _archive_legacy_backfill_item_via_apply(
     operation = MemoryOperation.new(
         uid=uid,
         operation_type=MemoryOperationType.archive_transition,
-        source_packet_id=(f"legacy_backfill_remediation_archive:{item.memory_id}:" f"r{item.item_revision}"),
+        source_packet_id=(f"legacy_backfill_remediation_archive:{item.memory_id}:r{item.item_revision}"),
         target_memory_id=item.memory_id,
         evidence_ids=evidence_ids,
         logical_payload=logical_payload,
@@ -988,7 +988,7 @@ def _upgrade_pending_admission_candidate(
     operation = MemoryOperation.new(
         uid=uid,
         operation_type=MemoryOperationType.long_term_apply,
-        source_packet_id=(f"legacy_admission_upgrade:{bucket.value}:{item.memory_id}:" f"r{item.item_revision}"),
+        source_packet_id=(f"legacy_admission_upgrade:{bucket.value}:{item.memory_id}:r{item.item_revision}"),
         target_memory_id=item.memory_id,
         evidence_ids=evidence_ids,
         logical_payload=logical_payload,

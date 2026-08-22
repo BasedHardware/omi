@@ -100,7 +100,7 @@ def _assert_langchain_messages(messages):
     assert len(messages) >= 2, f"Expected at least 2 messages, got {len(messages)}"
     for msg in messages:
         assert not isinstance(msg, dict), (
-            f"Raw dict message found: {msg}. " "Must use SystemMessage/HumanMessage for Vertex AI compatibility."
+            f"Raw dict message found: {msg}. Must use SystemMessage/HumanMessage for Vertex AI compatibility."
         )
     assert isinstance(messages[0], SystemMessage), f"First message should be SystemMessage, got {type(messages[0])}"
     assert isinstance(messages[1], HumanMessage), f"Second message should be HumanMessage, got {type(messages[1])}"
@@ -168,12 +168,12 @@ def test_apps_router_uses_langchain_messages_not_raw_dicts():
             )
 
             # Must contain LangChain message objects
-            assert (
-                'SystemMessage(' in func_source
-            ), "generate_sample_prompts_endpoint must use SystemMessage() from langchain_core.messages"
-            assert (
-                'HumanMessage(' in func_source
-            ), "generate_sample_prompts_endpoint must use HumanMessage() from langchain_core.messages"
+            assert 'SystemMessage(' in func_source, (
+                "generate_sample_prompts_endpoint must use SystemMessage() from langchain_core.messages"
+            )
+            assert 'HumanMessage(' in func_source, (
+                "generate_sample_prompts_endpoint must use HumanMessage() from langchain_core.messages"
+            )
             break
 
     assert found_endpoint, "generate_sample_prompts_endpoint not found in routers/apps.py"

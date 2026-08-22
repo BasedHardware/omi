@@ -1056,7 +1056,9 @@ def _canonical_quote_ref(
     authoritative_speaker = (
         str(raw_speaker).strip()
         if isinstance(raw_speaker, str) and raw_speaker.strip()
-        else f"speaker_{speaker_id}" if speaker_id is not None else None
+        else f"speaker_{speaker_id}"
+        if speaker_id is not None
+        else None
     )
     segment_id = getattr(segment, "id", None)
     return {
@@ -2247,7 +2249,7 @@ def _send_important_conversation_notification_if_needed(uid: str, conversation: 
 
     # Send the notification
     logger.info(
-        f"Sending important conversation notification for {conversation.id} (duration: {duration_seconds/60:.1f} mins)"
+        f"Sending important conversation notification for {conversation.id} (duration: {duration_seconds / 60:.1f} mins)"
     )
     send_important_conversation_message(uid, conversation.id)
 

@@ -181,9 +181,11 @@ def _run_assign(llm_folder_id, confidence, category_folder_id):
     mock_chain.__or__ = MagicMock(return_value=mock_chain)
     mock_llm = MagicMock()
     mock_llm.__or__ = MagicMock(return_value=mock_chain)
-    with patch.object(conv_folder, "get_llm", return_value=mock_llm), patch.object(
-        conv_folder, "ChatPromptTemplate"
-    ) as mock_prompt_cls, patch.object(conv_folder, "PydanticOutputParser", return_value=MagicMock()):
+    with (
+        patch.object(conv_folder, "get_llm", return_value=mock_llm),
+        patch.object(conv_folder, "ChatPromptTemplate") as mock_prompt_cls,
+        patch.object(conv_folder, "PydanticOutputParser", return_value=MagicMock()),
+    ):
         mock_prompt = MagicMock()
         mock_prompt.__or__ = MagicMock(return_value=mock_chain)
         mock_prompt_cls.from_messages.return_value = mock_prompt

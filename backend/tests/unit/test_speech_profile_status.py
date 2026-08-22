@@ -62,10 +62,11 @@ def test_getter_fail_open_returns_none():
 # ---------------------------------------------------------------------------
 @pytest.mark.skipif(not _SP_IMPORTABLE, reason="PyAV (av) unavailable locally")
 def test_endpoint_full_status():
-    with patch.object(sp_router, "get_user_has_speech_profile", return_value=True), patch.object(
-        sp_router, "get_speech_profile_duration", return_value=42.5
-    ), patch.object(sp_router, "get_additional_profile_recordings", return_value=["s1.wav", "s2.wav"]), patch.object(
-        sp_router, "get_profile_audio_if_exists", return_value="http://x/p.wav"
+    with (
+        patch.object(sp_router, "get_user_has_speech_profile", return_value=True),
+        patch.object(sp_router, "get_speech_profile_duration", return_value=42.5),
+        patch.object(sp_router, "get_additional_profile_recordings", return_value=["s1.wav", "s2.wav"]),
+        patch.object(sp_router, "get_profile_audio_if_exists", return_value="http://x/p.wav"),
     ):
         resp = sp_router.get_speech_profile_status(uid="u1")
     assert resp == {
@@ -78,10 +79,11 @@ def test_endpoint_full_status():
 
 @pytest.mark.skipif(not _SP_IMPORTABLE, reason="PyAV (av) unavailable locally")
 def test_endpoint_coerces_none_duration_to_zero():
-    with patch.object(sp_router, "get_user_has_speech_profile", return_value=False), patch.object(
-        sp_router, "get_speech_profile_duration", return_value=None
-    ), patch.object(sp_router, "get_additional_profile_recordings", return_value=[]), patch.object(
-        sp_router, "get_profile_audio_if_exists", return_value=None
+    with (
+        patch.object(sp_router, "get_user_has_speech_profile", return_value=False),
+        patch.object(sp_router, "get_speech_profile_duration", return_value=None),
+        patch.object(sp_router, "get_additional_profile_recordings", return_value=[]),
+        patch.object(sp_router, "get_profile_audio_if_exists", return_value=None),
     ):
         resp = sp_router.get_speech_profile_status(uid="u1")
     assert resp["duration_seconds"] == 0.0
@@ -93,10 +95,11 @@ def test_endpoint_coerces_none_duration_to_zero():
 def test_endpoint_zeroes_stale_duration_when_no_profile():
     # Write-ahead cache can outlive a deleted profile: has_profile False must not report a
     # positive duration (the inconsistent state David flagged).
-    with patch.object(sp_router, "get_user_has_speech_profile", return_value=False), patch.object(
-        sp_router, "get_speech_profile_duration", return_value=42.5
-    ), patch.object(sp_router, "get_additional_profile_recordings", return_value=[]), patch.object(
-        sp_router, "get_profile_audio_if_exists", return_value=None
+    with (
+        patch.object(sp_router, "get_user_has_speech_profile", return_value=False),
+        patch.object(sp_router, "get_speech_profile_duration", return_value=42.5),
+        patch.object(sp_router, "get_additional_profile_recordings", return_value=[]),
+        patch.object(sp_router, "get_profile_audio_if_exists", return_value=None),
     ):
         resp = sp_router.get_speech_profile_status(uid="u1")
     assert resp["has_profile"] is False

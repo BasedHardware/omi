@@ -291,11 +291,7 @@ async def benchmark_config(
                     score=score,
                 )
             )
-            print(
-                f" {result.sentences_per_second:.1f} snt/s, "
-                f"p99={result.latency_p99_ms:.0f}ms, "
-                f"score={score:.1f}"
-            )
+            print(f" {result.sentences_per_second:.1f} snt/s, p99={result.latency_p99_ms:.0f}ms, score={score:.1f}")
 
     return results
 

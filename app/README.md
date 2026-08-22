@@ -20,7 +20,7 @@ Before getting started, make sure your device is connected and unlocked. If you'
    ```
 
    `make dev-init` builds `backend/.venv` from whatever `python3` resolves to,
-   and the backend requires **Python 3.11** (not 3.12+). The harness also needs a
+   and the backend requires **Python 3.13**. The harness also needs a
    Java runtime and `firebase-tools`/`npx`; `make dev-up` names what's missing.
 
    `make dev-status` shows what came up; `make dev-down` stops it. Ports, seeded

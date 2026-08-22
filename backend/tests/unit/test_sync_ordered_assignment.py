@@ -136,14 +136,14 @@ class TestCallersUseOrderedAssignment:
         assert 'turnstile' in body.split('):')[0], 'process_segment must accept a turnstile param'
         assert 'wait_turn' in body, 'process_segment must wait its chronological turn'
         assert 'finally:' in body and 'turnstile.complete(path)' in body, (
-            'process_segment must always release its turn (finally), ' 'or followers deadlock on early returns/errors'
+            'process_segment must always release its turn (finally), or followers deadlock on early returns/errors'
         )
 
     def test_wait_turn_precedes_conversation_lookup(self):
         body = _function_body(_read_pipeline_source(), 'process_segment')
-        assert body.index('wait_turn') < body.index(
-            'get_closest_conversation_to_timestamps'
-        ), 'turn must be acquired before the closest-conversation lookup'
+        assert body.index('wait_turn') < body.index('get_closest_conversation_to_timestamps'), (
+            'turn must be acquired before the closest-conversation lookup'
+        )
 
     def test_v1_sorts_segments_and_passes_turnstile(self):
         body = _async_function_body(_read_sync_source(), 'sync_local_files')

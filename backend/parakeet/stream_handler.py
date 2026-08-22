@@ -333,7 +333,7 @@ class _NemoRNNTStreamingDecoder:
                 multi_biasing_ids=None,
             )
             if isinstance(decode_result, tuple):
-                chunk_batched_hyps: Any = cast(Any, decode_result[0])
+                chunk_batched_hyps: Any = cast(Any, decode_result[0])  # ty: ignore[redundant-cast]
                 self._state = decode_result[1]
             else:
                 chunk_batched_hyps = decode_result

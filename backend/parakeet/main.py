@@ -213,7 +213,7 @@ async def transcribe(file: UploadFile = File(...)) -> JSONResponse | Dict[str, A
 
         if batch_engine is not None:
             PENDING_REQUESTS.set(len(batch_engine._pending))  # type: ignore[reportPrivateUsage]  # batch_engine internal queue
-            result = cast(Dict[str, Any], await batch_engine.submit(file_path, timestamps=True, owns_file=True))  # type: ignore[reportUnknownMemberType]  # batch_engine.submit partially typed
+            result = cast(Dict[str, Any], await batch_engine.submit(file_path, timestamps=True, owns_file=True))  # type: ignore[reportUnknownMemberType]  # batch_engine.submit partially typed  # ty: ignore[redundant-cast]
             PENDING_REQUESTS.set(len(batch_engine._pending))  # type: ignore[reportPrivateUsage]  # batch_engine internal queue
             return JSONResponse(content=_transcribe_from_gpu_result(result))
         else:
@@ -269,7 +269,7 @@ async def transcribe_v2(
 
         if batch_engine is not None:
             PENDING_REQUESTS.set(len(batch_engine._pending))  # type: ignore[reportPrivateUsage]  # batch_engine internal queue
-            gpu_result = cast(Dict[str, Any], await batch_engine.submit(file_path, timestamps=True, owns_file=False))  # type: ignore[reportUnknownMemberType]  # batch_engine.submit partially typed
+            gpu_result = cast(Dict[str, Any], await batch_engine.submit(file_path, timestamps=True, owns_file=False))  # type: ignore[reportUnknownMemberType]  # batch_engine.submit partially typed  # ty: ignore[redundant-cast]
             PENDING_REQUESTS.set(len(batch_engine._pending))  # type: ignore[reportPrivateUsage]  # batch_engine internal queue
             result = cast(
                 Dict[str, Any],
@@ -405,5 +405,5 @@ async def health_check() -> JSONResponse | Dict[str, Any]:
 async def batch_metrics() -> Dict[str, Any]:
     if batch_engine is not None:
         PENDING_REQUESTS.set(len(batch_engine._pending))  # type: ignore[reportPrivateUsage]  # batch_engine internal queue
-        return cast(Dict[str, Any], batch_engine.metrics)  # type: ignore[reportUnknownMemberType]  # batch_engine.metrics partially typed
+        return cast(Dict[str, Any], batch_engine.metrics)  # type: ignore[reportUnknownMemberType]  # batch_engine.metrics partially typed  # ty: ignore[redundant-cast]
     return {}

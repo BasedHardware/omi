@@ -54,9 +54,9 @@ def test_no_async_handler_calls_task_integration_db_directly():
                     and node.func.attr in BLOCKING
                 ):
                     offenders.append((fn.name, node.func.attr, node.lineno))
-    assert (
-        not offenders
-    ), f"async handlers call sync task-integration Firestore directly (use run_blocking): {offenders}"
+    assert not offenders, (
+        f"async handlers call sync task-integration Firestore directly (use run_blocking): {offenders}"
+    )
 
 
 def test_async_handlers_offload_task_integration_calls():

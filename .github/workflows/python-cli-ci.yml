@@ -26,29 +26,25 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - label: Linux / Python 3.10
+          - label: Linux / Python 3.13
             os: ubuntu-latest
-            python-version: '3.10'
-          - label: Linux / Python 3.12
-            os: ubuntu-latest
-            python-version: '3.12'
-          - label: Windows ACL / Python 3.12
+            python-version: '3.13'
+          - label: Windows ACL / Python 3.13
             os: windows-latest
-            python-version: '3.12'
+            python-version: '3.13'
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v6
+      - uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
         with:
-          python-version: ${{ matrix.python-version }}
-          cache: pip
-          cache-dependency-path: sdks/python-cli/pyproject.toml
+          enable-cache: true
+          cache-dependency-glob: sdks/python-cli/uv.lock
 
       - name: Install package and test dependencies
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
+          uv python install ${{ matrix.python-version }}
+          uv sync --frozen --extra dev
 
       - name: Run tests
-        run: python -m pytest -q
+        run: uv run pytest -q

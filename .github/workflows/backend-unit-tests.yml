@@ -123,7 +123,7 @@ jobs:
         uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
         with:
           enable-cache: true
-          cache-dependency-glob: backend/pylock*.toml
+          cache-dependency-glob: backend/uv.lock
 
       - name: Set up Helm
         uses: azure/setup-helm@v5
@@ -132,7 +132,7 @@ jobs:
         working-directory: backend
         run: |
           uv venv .venv
-          uv pip sync pylock.toml --python .venv/bin/python
+          UV_PROJECT_ENVIRONMENT=.venv uv sync --frozen --no-install-project
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Run authoritative backend unit contract

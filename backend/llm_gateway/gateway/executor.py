@@ -306,7 +306,9 @@ async def _execute_route(
                     fallback_from_route_artifact_id=(
                         fallback_from_route_artifact_id
                         if fallback_from_route_artifact_id is not None
-                        else route.route_artifact_id if actual_fallback else None
+                        else route.route_artifact_id
+                        if actual_fallback
+                        else None
                     ),
                     used_lkg=is_lkg,
                 )

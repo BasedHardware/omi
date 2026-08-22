@@ -13,7 +13,7 @@ environments) or when you are formatting files you have not staged.
 | Language | Manual command |
 |----------|----------------|
 | Dart (`app/`) | `dart format --line-length 120 <files>` |
-| Python (`backend/`) | `black --line-length 120 --skip-string-normalization <files>` |
+| Python (`backend/`) | `uv run --project backend ruff format <files>` (quote-style=preserve) |
 | ARB (`app/lib/l10n/`) | `jq --indent 4 '.' <file> > tmp && mv tmp <file>` |
 | C/C++ (firmware) | `clang-format -i <files>` |
 | Swift (`desktop/macos/Desktop/`) | `desktop/macos/scripts/swift-format-wrapper.sh format -i <files>` |

@@ -223,9 +223,9 @@ class TestPromptMessageOrdering:
         instructions_match = re.search(r"instructions_text\s*=\s*'''(.*?)'''", source, re.DOTALL)
         assert instructions_match, "Could not find instructions_text definition"
         instructions_content = instructions_match.group(1)
-        assert (
-            '{existing_items_context}' not in instructions_content
-        ), "existing_items_context should not be in instructions_text (breaks static prefix caching)"
+        assert '{existing_items_context}' not in instructions_content, (
+            "existing_items_context should not be in instructions_text (breaks static prefix caching)"
+        )
         # Verify it IS in the context_message
         context_match = re.search(r"context_message\s*=\s*'''(.*?)'''", source, re.DOTALL)
         assert context_match, "Could not find context_message definition"
@@ -237,9 +237,9 @@ class TestPromptMessageOrdering:
         instructions_match = re.search(r"instructions_text\s*=\s*'''(.*?)'''", source, re.DOTALL)
         assert instructions_match, "Could not find instructions_text definition"
         instructions_content = instructions_match.group(1)
-        assert (
-            '{language_code}' not in instructions_content
-        ), "language_code should not be in instructions_text (breaks static prefix caching for non-English)"
+        assert '{language_code}' not in instructions_content, (
+            "language_code should not be in instructions_text (breaks static prefix caching for non-English)"
+        )
         context_match = re.search(r"context_message\s*=\s*'''(.*?)'''", source, re.DOTALL)
         assert context_match, "Could not find context_message definition"
         assert 'language_code' in context_match.group(1), "language_code should be in context_message"
@@ -351,9 +351,9 @@ def test_gateway_formatted_instructions_without_explicit_cache_stay_a_concrete_m
     message = _gpt56_cacheable_system_message('Schema: {"title": "string"}', cache_enabled=False, formatted=True)
 
     assert not isinstance(message, tuple), 'formatted instructions must be a concrete message'
-    assert message.content == [
-        {'type': 'text', 'text': 'Schema: {"title": "string"}'}
-    ], 'no breakpoint: explicit-cache disabled must not request a cache write'
+    assert message.content == [{'type': 'text', 'text': 'Schema: {"title": "string"}'}], (
+        'no breakpoint: explicit-cache disabled must not request a cache write'
+    )
 
     prompt = ChatPromptTemplate.from_messages([message, ('system', 'Content: {conversation_context}')])
     rendered = prompt.format_messages(conversation_context='Transcript: hello')

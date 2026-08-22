@@ -45,7 +45,7 @@ class ClassificationTests(unittest.TestCase):
             'docs/doc/developer/guide.mdx',
             'AGENTS.md',
             'app/lib/l10n/app_fr.arb',
-            'backend/pylock.toml',
+            'backend/uv.lock',
             'app/pubspec.lock',
             'web/package-lock.json',
             'app/lib/gen/assets.g.dart',

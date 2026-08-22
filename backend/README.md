@@ -28,10 +28,10 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
    Replace `<project-id>` with your Google Cloud Project ID.
    This should generate the `application_default_credentials.json` file in the gcloud config directory (`~/.config/gcloud` on macOS/Linux or `%APPDATA%\gcloud` on Windows). This file is read automatically by gcloud in Python.
 
-4. Install Python 3.11
+4. Install Python 3.13
    - Mac: `brew install python@3.11`
-   - Windows: Install Python 3.11 from [python.org](https://www.python.org/downloads/windows/), then verify `python --version` prints `3.11.x`
-   - Nix envdir: It should be pre-installed; verify `python --version` prints `3.11.x`
+   - Windows: Install Python 3.13 from [python.org](https://www.python.org/downloads/windows/), then verify `python --version` prints `3.13.x`
+   - Nix envdir: It should be pre-installed; verify `python --version` prints `3.13.x`
 
 5. Install `pip` if it doesn't exist (follow instructions on [pip installation page](https://pip.pypa.io/en/stable/installation/))
 
@@ -67,7 +67,7 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
 
     **Option A: Using a virtual environment (recommended)**
     ```bash
-    # Verify Python 3.11 before creating the virtual environment
+    # Verify Python 3.13 before creating the virtual environment
     python --version
 
     # Create a virtual environment
@@ -108,6 +108,7 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
 17. Troubleshooting: If you get any error mentioning "no internet connection" while downloading models, add the following lines in the `utils/stt/vad.py` file after the import statements:
     ```python
     import ssl
+
     ssl._create_default_https_context = ssl._create_unverified_context
     ```
 

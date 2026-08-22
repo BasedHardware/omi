@@ -352,9 +352,9 @@ class TestTranslationE2E:
             events = await collect_events(ws, duration=10)
             translation_events = [e for e in events if e.get('type') == 'translating']
 
-            assert (
-                len(translation_events) == 0
-            ), f"Got unexpected TranslationEvents in single-language mode: {translation_events}"
+            assert len(translation_events) == 0, (
+                f"Got unexpected TranslationEvents in single-language mode: {translation_events}"
+            )
         finally:
             await ws.close()
 
@@ -758,8 +758,7 @@ class TestMultiChannelE2E:
             # With real speech on both channels, we expect both speaker labels
             # At minimum we should see at least one speaker label
             assert len(speakers_seen) > 0 or len(all_segments) > 0, (
-                f"No speaker labels found in segments. "
-                f"Sample segment: {all_segments[0] if all_segments else 'none'}"
+                f"No speaker labels found in segments. Sample segment: {all_segments[0] if all_segments else 'none'}"
             )
 
             # If both channels produced transcripts, we should see both speakers

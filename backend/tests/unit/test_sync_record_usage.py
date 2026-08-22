@@ -217,9 +217,9 @@ class TestV1Deprecation:
                         end = i + 1
                         break
             exc_args = body[exc_start:end]
-            assert (
-                '_V1_DEPRECATION_HEADERS' in exc_args
-            ), f"HTTPException at offset {exc_start} missing deprecation headers: {exc_args[:100]}"
+            assert '_V1_DEPRECATION_HEADERS' in exc_args, (
+                f"HTTPException at offset {exc_start} missing deprecation headers: {exc_args[:100]}"
+            )
 
     def test_v1_helper_exceptions_re_raised_with_headers(self):
         """Shared helpers (retrieve_file_paths, decode_files_to_wav) must be wrapped."""
@@ -232,6 +232,6 @@ class TestV1Deprecation:
         json_responses = [m.start() for m in re.finditer(r'return JSONResponse\(', body)]
         for resp_start in json_responses:
             resp_block = body[resp_start : resp_start + 300]
-            assert (
-                '_V1_DEPRECATION_HEADERS' in resp_block
-            ), f"JSONResponse at offset {resp_start} missing deprecation headers"
+            assert '_V1_DEPRECATION_HEADERS' in resp_block, (
+                f"JSONResponse at offset {resp_start} missing deprecation headers"
+            )

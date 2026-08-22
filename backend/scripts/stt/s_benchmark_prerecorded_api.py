@@ -305,11 +305,11 @@ def run_direct_benchmark(manifest: List[Dict[str, Any]], compare: bool, max_samp
         print('\nSUMMARY:')
         if valid_dg:
             print(
-                f"  Deepgram (routed):   avg_WER={sum(r['dg_wer'] for r in valid_dg)/len(valid_dg):.1%}  avg_latency={sum(r['dg_latency'] for r in valid_dg)/len(valid_dg):.2f}s  cases={len(valid_dg)}"
+                f"  Deepgram (routed):   avg_WER={sum(r['dg_wer'] for r in valid_dg) / len(valid_dg):.1%}  avg_latency={sum(r['dg_latency'] for r in valid_dg) / len(valid_dg):.2f}s  cases={len(valid_dg)}"
             )
         if valid_mod:
             print(
-                f"  Modulate (routed):   avg_WER={sum(r['mod_wer'] for r in valid_mod)/len(valid_mod):.1%}  avg_latency={sum(r['mod_latency'] for r in valid_mod)/len(valid_mod):.2f}s  cases={len(valid_mod)}"
+                f"  Modulate (routed):   avg_WER={sum(r['mod_wer'] for r in valid_mod) / len(valid_mod):.1%}  avg_latency={sum(r['mod_latency'] for r in valid_mod) / len(valid_mod):.2f}s  cases={len(valid_mod)}"
             )
 
         print('\nTRANSCRIPT COMPARISON:')
@@ -322,7 +322,7 @@ def run_direct_benchmark(manifest: List[Dict[str, Any]], compare: bool, max_samp
         valid = [r for r in results if r.get('wer', 1) < 1]
         if valid:
             print(
-                f"  avg_WER={sum(r['wer'] for r in valid)/len(valid):.1%}  avg_latency={sum(r['latency'] for r in valid)/len(valid):.2f}s  cases={len(valid)}"
+                f"  avg_WER={sum(r['wer'] for r in valid) / len(valid):.1%}  avg_latency={sum(r['latency'] for r in valid) / len(valid):.2f}s  cases={len(valid)}"
             )
 
     output_path = RESULTS_DIR / 'prerecorded_api_benchmark.json'

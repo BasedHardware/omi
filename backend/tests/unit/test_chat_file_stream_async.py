@@ -56,9 +56,9 @@ def _awaited_run_blocking_offloads(fn_node):
 
 def test_files_read_is_not_called_directly():
     fn = _load_function(TARGET_FN)
-    assert (
-        _direct_calls(fn, BLOCKING_CALL) == []
-    ), f'{BLOCKING_CALL} is called directly in {TARGET_FN}; it must be offloaded via run_blocking'
+    assert _direct_calls(fn, BLOCKING_CALL) == [], (
+        f'{BLOCKING_CALL} is called directly in {TARGET_FN}; it must be offloaded via run_blocking'
+    )
 
 
 def test_files_read_is_offloaded_and_awaited():

@@ -293,7 +293,7 @@ class TestSameUserCrossConversation:
             ]
             result = _call_and_get_cache_info(client, msgs)
             results.append(result)
-            print(f"  Call {i+1}: prompt={result['prompt_tokens']}, cached={result['cached_tokens']}")
+            print(f"  Call {i + 1}: prompt={result['prompt_tokens']}, cached={result['cached_tokens']}")
             if i < len(transcripts) - 1:
                 time.sleep(1)
 
@@ -335,7 +335,7 @@ class TestCrossUserCaching:
             ]
             result = _call_and_get_cache_info(client, msgs)
             results.append(result)
-            print(f"  Call {i+1} ({label}): prompt={result['prompt_tokens']}, cached={result['cached_tokens']}")
+            print(f"  Call {i + 1} ({label}): prompt={result['prompt_tokens']}, cached={result['cached_tokens']}")
             if i < len(user_calls) - 1:
                 time.sleep(1)
 
@@ -369,7 +369,7 @@ class TestCrossUserCaching:
             ]
             result = _call_and_get_cache_info(client, msgs)
             static_results.append(result)
-            print(f"    Call {i+1} (lang={lang}): prompt={result['prompt_tokens']}, cached={result['cached_tokens']}")
+            print(f"    Call {i + 1} (lang={lang}): prompt={result['prompt_tokens']}, cached={result['cached_tokens']}")
             if i < len(languages) - 1:
                 time.sleep(1)
 
@@ -394,7 +394,7 @@ class TestCrossUserCaching:
             ]
             result = _call_and_get_cache_info(client, msgs)
             dynamic_results.append(result)
-            print(f"    Call {i+1} (lang={lang}): prompt={result['prompt_tokens']}, cached={result['cached_tokens']}")
+            print(f"    Call {i + 1} (lang={lang}): prompt={result['prompt_tokens']}, cached={result['cached_tokens']}")
             if i < len(languages) - 1:
                 time.sleep(1)
 
@@ -406,10 +406,10 @@ class TestCrossUserCaching:
 
         print(f"\n  === RESULTS ===")
         print(
-            f"  Static prefix (new):  {static_cached}/{static_prompt} cached ({static_cached/max(static_prompt,1)*100:.1f}%)"
+            f"  Static prefix (new):  {static_cached}/{static_prompt} cached ({static_cached / max(static_prompt, 1) * 100:.1f}%)"
         )
         print(
-            f"  Dynamic prefix (old): {dynamic_cached}/{dynamic_prompt} cached ({dynamic_cached/max(dynamic_prompt,1)*100:.1f}%)"
+            f"  Dynamic prefix (old): {dynamic_cached}/{dynamic_prompt} cached ({dynamic_cached / max(dynamic_prompt, 1) * 100:.1f}%)"
         )
 
         if static_cached > dynamic_cached:
@@ -492,7 +492,7 @@ class TestPromptCacheRetention:
             ]
             result = _call_with_cache_params(client, msgs, cache_retention="24h")
             results.append(result)
-            print(f"  Call {i+1}: prompt={result['prompt_tokens']}, cached={result['cached_tokens']}")
+            print(f"  Call {i + 1}: prompt={result['prompt_tokens']}, cached={result['cached_tokens']}")
             if i < len(transcripts) - 1:
                 time.sleep(1)
 
@@ -546,7 +546,7 @@ class TestPromptCacheKey:
             ]
             result = _call_with_cache_params(client, msgs, cache_key="omi-extract-actions")
             results.append(result)
-            print(f"  Call {i+1}: prompt={result['prompt_tokens']}, cached={result['cached_tokens']}")
+            print(f"  Call {i + 1}: prompt={result['prompt_tokens']}, cached={result['cached_tokens']}")
             if i < len(transcripts) - 1:
                 time.sleep(1)
 
@@ -574,7 +574,7 @@ class TestPromptCacheKey:
             ]
             result = _call_with_cache_params(client, msgs, cache_retention="24h", cache_key="omi-extract-actions")
             results.append(result)
-            print(f"  Call {i+1}: prompt={result['prompt_tokens']}, cached={result['cached_tokens']}")
+            print(f"  Call {i + 1}: prompt={result['prompt_tokens']}, cached={result['cached_tokens']}")
             if i < len(transcripts) - 1:
                 time.sleep(1)
 

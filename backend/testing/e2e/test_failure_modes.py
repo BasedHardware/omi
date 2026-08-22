@@ -106,7 +106,7 @@ class TestSTTFailureHandling:
     """Test STT failure/timeout scenarios."""
 
     @pytest.mark.skip(
-        reason="STT WebSocket fake not yet implemented — " "requires async WS handler simulating Deepgram protocol"
+        reason="STT WebSocket fake not yet implemented — requires async WS handler simulating Deepgram protocol"
     )
     def test_stt_timeout_handled_gracefully(self, client, auth_headers):
         """

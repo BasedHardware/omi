@@ -1305,9 +1305,7 @@ def get_transcript_structure(
     • Vague suggestions ("let's grab coffee soon")
     • Hypothetical scenarios ("if we meet Tuesday...")
 
-    {format_instructions}'''.replace(
-        '    ', ''
-    ).strip()
+    {format_instructions}'''.replace('    ', '').strip()
 
     # Second system message contains every per-conversation value, including timestamp.
     context_message = (
@@ -1427,9 +1425,7 @@ def get_reprocess_transcript_structure(
     Content:
     {full_context}
 
-    {format_instructions}'''.replace(
-        '    ', ''
-    ).strip()
+    {format_instructions}'''.replace('    ', '').strip()
 
     prompt = cast(Any, ChatPromptTemplate).from_messages([('system', prompt_text)])
     gateway_mode_enabled = should_route_features_through_gateway()

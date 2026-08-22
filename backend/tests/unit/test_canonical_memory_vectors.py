@@ -606,12 +606,15 @@ def test_write_path_does_not_fast_sync_vector_on_idempotent_skip(canonical_write
         control_state=MemoryControlState(uid=uid, head_commit_id="head0", account_generation=1, source_generation=1),
     )
 
-    with patch(
-        "utils.memory.canonical_memory_adapter.apply_long_term_patch_firestore",
-        return_value=apply_result,
-    ), patch(
-        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
-        return_value=support.trusted_account_generation(),
+    with (
+        patch(
+            "utils.memory.canonical_memory_adapter.apply_long_term_patch_firestore",
+            return_value=apply_result,
+        ),
+        patch(
+            "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+            return_value=support.trusted_account_generation(),
+        ),
     ):
         returned_id = support.write_canonical_extraction_memory(
             uid,
@@ -672,18 +675,23 @@ def test_backfill_idempotent_skip_never_bypasses_normal_outbox(monkeypatch):
         control_state=control,
     )
 
-    with patch(
-        "utils.memory.legacy_backfill.apply_long_term_patch_firestore",
-        return_value=apply_result,
-    ), patch(
-        "utils.memory.legacy_backfill._persist_evidence",
-        return_value=None,
-    ), patch(
-        "utils.memory.legacy_backfill._build_backfill_evidence",
-        return_value=committed_item.evidence[0],
-    ), patch(
-        "utils.memory.legacy_backfill.legacy_backfill_memory_id",
-        return_value=canonical_memory_id,
+    with (
+        patch(
+            "utils.memory.legacy_backfill.apply_long_term_patch_firestore",
+            return_value=apply_result,
+        ),
+        patch(
+            "utils.memory.legacy_backfill._persist_evidence",
+            return_value=None,
+        ),
+        patch(
+            "utils.memory.legacy_backfill._build_backfill_evidence",
+            return_value=committed_item.evidence[0],
+        ),
+        patch(
+            "utils.memory.legacy_backfill.legacy_backfill_memory_id",
+            return_value=canonical_memory_id,
+        ),
     ):
         row_result = _apply_one_legacy_row(
             uid=uid,

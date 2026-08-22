@@ -404,16 +404,16 @@ async def execute_chat_stream(
     # 3. Default: Anthropic agentic chat
     # Claude decides implicitly whether to use tools — no requires_context() needed
     async for chunk in execute_agentic_chat_stream(
-        uid,
-        messages,
-        app,
-        callback_data=callback_data,
-        chat_session=chat_session,
-        context=context,
-        platform=platform,
-        current_datetime_block=current_datetime_block,
-        tz=tz,
-        setup_deadline_at=setup_deadline_at,
+        uid,  # ty: ignore[invalid-argument-type]
+        messages,  # ty: ignore[invalid-argument-type]
+        app,  # ty: ignore[invalid-argument-type]
+        callback_data=callback_data,  # ty: ignore[invalid-argument-type]
+        chat_session=chat_session,  # ty: ignore[invalid-argument-type]
+        context=context,  # ty: ignore[invalid-argument-type]
+        platform=platform,  # ty: ignore[invalid-argument-type]
+        current_datetime_block=current_datetime_block,  # ty: ignore[invalid-argument-type]
+        tz=tz,  # ty: ignore[invalid-argument-type]
+        setup_deadline_at=setup_deadline_at,  # ty: ignore[invalid-argument-type]
     ):
         yield chunk
 

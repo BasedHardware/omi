@@ -543,6 +543,6 @@ class TestNoDoubleWrapping:
         """utils/other/notifications.py should NOT wrap generate_comprehensive_daily_summary
         since tracking is now inside the function itself."""
         source = _read_source("utils/other/notifications.py")
-        assert (
-            "track_usage" not in source
-        ), "utils/other/notifications.py should not import or use track_usage (tracking is in the LLM function)"
+        assert "track_usage" not in source, (
+            "utils/other/notifications.py should not import or use track_usage (tracking is in the LLM function)"
+        )

@@ -788,8 +788,10 @@ class TestVerifyCloudTasksOidc:
         }
         job_hash = hashlib.sha256(b'job-1').hexdigest()[:32]
         task_id = f'account-delete-{job_hash}-abc123'
-        with patch.dict(os.environ, env), patch.object(cloud_tasks, '_enqueue_named_task') as enqueue, patch.object(
-            cloud_tasks.uuid, 'uuid4', return_value=MagicMock(hex='abc123')
+        with (
+            patch.dict(os.environ, env),
+            patch.object(cloud_tasks, '_enqueue_named_task') as enqueue,
+            patch.object(cloud_tasks.uuid, 'uuid4', return_value=MagicMock(hex='abc123')),
         ):
             cloud_tasks.enqueue_account_deletion_wipe('job-1')
         enqueue.assert_called_once_with(
@@ -808,9 +810,10 @@ class TestVerifyCloudTasksOidc:
         }
         claims = {'email': env['SYNC_TASKS_INVOKER_SA'], 'email_verified': True}
 
-        with patch.dict(os.environ, env), patch.object(
-            cloud_tasks.id_token, 'verify_oauth2_token', return_value=claims
-        ) as verify:
+        with (
+            patch.dict(os.environ, env),
+            patch.object(cloud_tasks.id_token, 'verify_oauth2_token', return_value=claims) as verify,
+        ):
             assert cloud_tasks.verify_account_deletion_cloud_tasks_oidc(
                 _request_with({'authorization': 'Bearer t'})
             ) == cloud_tasks.AccountDeletionTaskAuthentication(retry_count=0, audience='account_deletion')
@@ -826,9 +829,12 @@ class TestVerifyCloudTasksOidc:
         }
         claims = {'email': env['SYNC_TASKS_INVOKER_SA'], 'email_verified': True}
 
-        with patch.dict(os.environ, env), patch.object(
-            cloud_tasks.id_token, 'verify_oauth2_token', side_effect=[ValueError('wrong audience'), claims]
-        ) as verify:
+        with (
+            patch.dict(os.environ, env),
+            patch.object(
+                cloud_tasks.id_token, 'verify_oauth2_token', side_effect=[ValueError('wrong audience'), claims]
+            ) as verify,
+        ):
             assert cloud_tasks.verify_account_deletion_cloud_tasks_oidc(
                 _request_with({'authorization': 'Bearer t'})
             ) == cloud_tasks.AccountDeletionTaskAuthentication(retry_count=0, audience='legacy_sync')

@@ -257,7 +257,7 @@ from utils.byok import BYOKMiddleware
 app.add_middleware(BYOKMiddleware)
 
 
-@app.on_event("startup")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
+@app.on_event("startup")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring  # ty: ignore[deprecated]
 async def startup_event():
     validate_account_deletion_dispatch_configuration()
     asyncio.create_task(log_executor_health())
@@ -376,7 +376,7 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int | None =
             logger.error(f"Periodic meeting-receipt reconciliation failed: {e}")
 
 
-@app.on_event("shutdown")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
+@app.on_event("shutdown")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring  # ty: ignore[deprecated]
 async def shutdown_event():
     await drain_background_tasks(timeout=10.0)
     await close_all_clients()

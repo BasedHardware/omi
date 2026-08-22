@@ -61,19 +61,20 @@ def tearDownModule():
 
 
 class TestQueueWaitMetric(unittest.TestCase):
-
     def test_queue_wait_observed_inside_translate_batch(self):
         fake_translator = MagicMock()
         fake_result = MagicMock()
         fake_result.hypotheses = [["▁hola", "</s>"]]
         fake_translator.translate_batch.return_value = [fake_result]
 
-        with patch.object(_nllb_main, "_translator", fake_translator), patch.object(
-            _nllb_main,
-            "_tokenizer",
-            MagicMock(Encode=lambda t, out_type=str: ["▁hello"], Decode=lambda tokens: "hola"),
+        with (
+            patch.object(_nllb_main, "_translator", fake_translator),
+            patch.object(
+                _nllb_main,
+                "_tokenizer",
+                MagicMock(Encode=lambda t, out_type=str: ["▁hello"], Decode=lambda tokens: "hola"),
+            ),
         ):
-
             t_before = time.monotonic() - 0.5
             with patch.object(_nllb_main.QUEUE_WAIT, "observe") as mock_observe:
                 _nllb_main._translate_batch(["hello"], "eng_Latn", "spa_Latn", t_queued=t_before)
@@ -87,19 +88,20 @@ class TestQueueWaitMetric(unittest.TestCase):
         fake_result.hypotheses = [["▁hola", "</s>"]]
         fake_translator.translate_batch.return_value = [fake_result]
 
-        with patch.object(_nllb_main, "_translator", fake_translator), patch.object(
-            _nllb_main,
-            "_tokenizer",
-            MagicMock(Encode=lambda t, out_type=str: ["▁hello"], Decode=lambda tokens: "hola"),
+        with (
+            patch.object(_nllb_main, "_translator", fake_translator),
+            patch.object(
+                _nllb_main,
+                "_tokenizer",
+                MagicMock(Encode=lambda t, out_type=str: ["▁hello"], Decode=lambda tokens: "hola"),
+            ),
         ):
-
             with patch.object(_nllb_main.QUEUE_WAIT, "observe") as mock_observe:
                 _nllb_main._translate_batch(["hello"], "eng_Latn", "spa_Latn", t_queued=0.0)
                 mock_observe.assert_not_called()
 
 
 class TestEndpointQueueWaitPassthrough(unittest.TestCase):
-
     def test_translate_endpoint_passes_t_queued_to_executor(self):
         import asyncio
 
@@ -112,10 +114,13 @@ class TestEndpointQueueWaitPassthrough(unittest.TestCase):
             fake_result.hypotheses = [["▁hola", "</s>"]]
             fake_translator = MagicMock()
             fake_translator.translate_batch.return_value = [fake_result]
-            with patch.object(_nllb_main, "_translator", fake_translator), patch.object(
-                _nllb_main,
-                "_tokenizer",
-                MagicMock(Encode=lambda t, out_type=str: ["▁hello"], Decode=lambda tokens: "hola"),
+            with (
+                patch.object(_nllb_main, "_translator", fake_translator),
+                patch.object(
+                    _nllb_main,
+                    "_tokenizer",
+                    MagicMock(Encode=lambda t, out_type=str: ["▁hello"], Decode=lambda tokens: "hola"),
+                ),
             ):
                 result = func()
             fut = asyncio.get_event_loop().create_future()
@@ -134,22 +139,22 @@ class TestEndpointQueueWaitPassthrough(unittest.TestCase):
             assert len(captured_partials) == 1, "Expected one executor call"
             func = captured_partials[0]
             assert isinstance(func, partial), "Executor func should be a partial"
-            assert func.keywords.get('t_queued', 0) > 0 or (
-                len(func.args) >= 4 and func.args[3] > 0
-            ), "t_queued must be passed to _translate_batch via partial()"
+            assert func.keywords.get('t_queued', 0) > 0 or (len(func.args) >= 4 and func.args[3] > 0), (
+                "t_queued must be passed to _translate_batch via partial()"
+            )
         finally:
             loop.close()
 
 
 class TestModelLoadMetric(unittest.TestCase):
-
     def test_model_load_sets_duration_gauge(self):
-        with patch.object(_nllb_main, "ctranslate2") as mock_ct2, patch.object(_nllb_main, "spm") as mock_spm, patch(
-            "os.path.exists", return_value=True
-        ), patch.object(_nllb_main.MODEL_LOAD_DURATION, "set") as mock_duration, patch.object(
-            _nllb_main.MODEL_LOADED, "set"
-        ) as mock_loaded:
-
+        with (
+            patch.object(_nllb_main, "ctranslate2") as mock_ct2,
+            patch.object(_nllb_main, "spm") as mock_spm,
+            patch("os.path.exists", return_value=True),
+            patch.object(_nllb_main.MODEL_LOAD_DURATION, "set") as mock_duration,
+            patch.object(_nllb_main.MODEL_LOADED, "set") as mock_loaded,
+        ):
             mock_spp = MagicMock()
             mock_spm.SentencePieceProcessor.return_value = mock_spp
 
@@ -161,7 +166,6 @@ class TestModelLoadMetric(unittest.TestCase):
 
 
 class TestSlowBurnAlertVolumeGate(unittest.TestCase):
-
     def test_prometheusrule_has_volume_gate(self):
         rule_path = os.path.join(
             os.path.dirname(__file__), '..', '..', 'charts', 'nllb-translation', 'templates', 'prometheusrule.yaml'
@@ -172,9 +176,9 @@ class TestSlowBurnAlertVolumeGate(unittest.TestCase):
         assert "NLLBSLOBurnRateSlow" in content, "Slow burn alert should exist"
         slow_burn_start = content.index("NLLBSLOBurnRateSlow")
         slow_burn_section = content[slow_burn_start : slow_burn_start + 500]
-        assert (
-            "sum(rate(nllb_requests_total[30m])) > 0.1" in slow_burn_section
-        ), "Slow burn alert must have volume gate to prevent noisy alerts during low traffic"
+        assert "sum(rate(nllb_requests_total[30m])) > 0.1" in slow_burn_section, (
+            "Slow burn alert must have volume gate to prevent noisy alerts during low traffic"
+        )
 
 
 if __name__ == "__main__":

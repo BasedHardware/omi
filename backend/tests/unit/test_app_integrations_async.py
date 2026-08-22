@@ -65,9 +65,9 @@ def test_blocking_calls_are_not_called_directly():
     for fn_name, blocking in TARGETS.items():
         fn = _load_function(fn_name)
         for callee in blocking:
-            assert (
-                _direct_calls(fn, callee) == []
-            ), f'{callee} is called directly in {fn_name}; it must be offloaded via run_blocking'
+            assert _direct_calls(fn, callee) == [], (
+                f'{callee} is called directly in {fn_name}; it must be offloaded via run_blocking'
+            )
 
 
 def test_blocking_calls_are_offloaded_and_awaited():

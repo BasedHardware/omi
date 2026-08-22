@@ -267,21 +267,21 @@ class TestIntegrationMemoryLifecycle:
         match = re.search(r'(def process_external_integration_memory\(.+?)(?=\ndef )', source, re.DOTALL)
         assert match, "process_external_integration_memory not found"
         fn_body = match.group(1)
-        assert (
-            '.create_external_memory_batch(' in fn_body
-        ), "integration memory path must use create_external_memory_batch for required-processing lifecycle"
-        assert (
-            '.write_batch(' not in fn_body
-        ), "integration memory path must not use raw write_batch (skips required_processing_payload)"
+        assert '.create_external_memory_batch(' in fn_body, (
+            "integration memory path must use create_external_memory_batch for required-processing lifecycle"
+        )
+        assert '.write_batch(' not in fn_body, (
+            "integration memory path must not use raw write_batch (skips required_processing_payload)"
+        )
 
     def test_twitter_path_uses_create_external_memory_batch(self):
         source = _read_conversations_memories()
         match = re.search(r'(def process_twitter_memories\(.+?)(?=\ndef |\Z)', source, re.DOTALL)
         assert match, "process_twitter_memories not found"
         fn_body = match.group(1)
-        assert (
-            '.create_external_memory_batch(' in fn_body
-        ), "twitter memory path must use create_external_memory_batch for required-processing lifecycle"
-        assert (
-            '.write_batch(' not in fn_body
-        ), "twitter memory path must not use raw write_batch (skips required_processing_payload)"
+        assert '.create_external_memory_batch(' in fn_body, (
+            "twitter memory path must use create_external_memory_batch for required-processing lifecycle"
+        )
+        assert '.write_batch(' not in fn_body, (
+            "twitter memory path must not use raw write_batch (skips required_processing_payload)"
+        )

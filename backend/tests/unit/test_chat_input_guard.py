@@ -161,9 +161,9 @@ def _call_line(fn_node, callee):
 class TestGuardWiredIntoAgentStream:
     def test_agent_stream_calls_fit_within_budget(self):
         fn = _load_function(AGENT_FN)
-        assert (
-            _call_line(fn, 'fit_within_budget') is not None
-        ), f'{AGENT_FN} must call fit_within_budget to bound oversized input'
+        assert _call_line(fn, 'fit_within_budget') is not None, (
+            f'{AGENT_FN} must call fit_within_budget to bound oversized input'
+        )
 
     def test_guard_runs_before_producer_task_starts(self):
         fn = _load_function(AGENT_FN)

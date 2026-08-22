@@ -576,7 +576,7 @@ def test_static_prefix_contains_all_expected_sections():
     # Verify ordering: each section should come after the previous
     positions = [static_prefix.index(s) for s in expected_sections]
     assert positions == sorted(positions), (
-        "Static sections are not in the expected order. " f"Positions: {list(zip(expected_sections, positions))}"
+        f"Static sections are not in the expected order. Positions: {list(zip(expected_sections, positions))}"
     )
 
 
@@ -719,9 +719,9 @@ def test_core_tools_order_matches_exports():
     ]
 
     actual_names = [t.name for t in agentic_mod.CORE_TOOLS]
-    assert (
-        actual_names == expected_names
-    ), f"CORE_TOOLS order mismatch.\nExpected: {expected_names}\nActual: {actual_names}"
+    assert actual_names == expected_names, (
+        f"CORE_TOOLS order mismatch.\nExpected: {expected_names}\nActual: {actual_names}"
+    )
 
 
 def test_core_tools_not_accidentally_duplicated():
@@ -922,7 +922,7 @@ def test_anthropic_cache_control_has_ttl():
     src = inspect.getsource(agentic_mod._run_anthropic_agent_stream)
     assert '"ttl": "1h"' in src or "'ttl': '1h'" in src, (
         "cache_control must include ttl='1h' to avoid 5-min default "
-        f"(source excerpt: ...{src[src.find('cache_control'):src.find('cache_control')+120]}...)"
+        f"(source excerpt: ...{src[src.find('cache_control') : src.find('cache_control') + 120]}...)"
     )
     assert "ephemeral" in src, "cache type must be ephemeral"
 
@@ -993,8 +993,9 @@ async def test_anthropic_agent_loop_moves_automatic_cache_breakpoint_across_tool
     safety_guard.should_warn_user.return_value = None
     safety_guard.get_stats.return_value = {}
 
-    with patch.object(agentic_mod.anthropic_client.messages, "stream", side_effect=stream), patch.object(
-        agentic_mod, "_execute_tool", new=AsyncMock(return_value="tool result")
+    with (
+        patch.object(agentic_mod.anthropic_client.messages, "stream", side_effect=stream),
+        patch.object(agentic_mod, "_execute_tool", new=AsyncMock(return_value="tool result")),
     ):
         await agentic_mod._run_anthropic_agent_stream(
             "SYSTEM",
@@ -1155,9 +1156,9 @@ def test_passed_timezone_skips_duplicate_db_lookup():
 
     block = chat_mod.get_current_datetime_block("uid_alice", tz="America/New_York")
     assert "America/New_York" in block
-    assert (
-        chat_mod.notification_db.get_user_time_zone.call_count == 0
-    ), "Passing a resolved tz must not trigger another get_user_time_zone lookup"
+    assert chat_mod.notification_db.get_user_time_zone.call_count == 0, (
+        "Passing a resolved tz must not trigger another get_user_time_zone lookup"
+    )
 
     # Without a passed tz it still resolves on its own (one lookup).
     block2 = chat_mod.get_current_datetime_block("uid_alice")
@@ -1277,8 +1278,8 @@ def _find_first_diff(a: str, b: str) -> str:
             ctx_start = max(0, i - 20)
             return (
                 f"position {i}: "
-                f"a[{ctx_start}:{i+20}]='{a[ctx_start:i+20]}' vs "
-                f"b[{ctx_start}:{i+20}]='{b[ctx_start:i+20]}'"
+                f"a[{ctx_start}:{i + 20}]='{a[ctx_start : i + 20]}' vs "
+                f"b[{ctx_start}:{i + 20}]='{b[ctx_start : i + 20]}'"
             )
     if len(a) != len(b):
         return f"strings differ in length: {len(a)} vs {len(b)}"

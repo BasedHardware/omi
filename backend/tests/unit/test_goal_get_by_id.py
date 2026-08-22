@@ -30,9 +30,10 @@ from routers import goals as goals_router
 # ---------------------------------------------------------------------------
 def test_get_goal_by_id_returns_normalized_goal():
     goal = {"id": "goal_1", "title": "Read more"}
-    with patch.object(goals_router.goals_db, "get_goal_by_id", return_value=goal) as get_mock, patch.object(
-        goals_router, "normalize_goal_response", return_value={"normalized": True}
-    ) as norm_mock:
+    with (
+        patch.object(goals_router.goals_db, "get_goal_by_id", return_value=goal) as get_mock,
+        patch.object(goals_router, "normalize_goal_response", return_value={"normalized": True}) as norm_mock,
+    ):
         result = goals_router.get_goal_by_id(goal_id="goal_1", uid="u1")
     # The route must go through the canonical reader, not a second single-goal helper.
     get_mock.assert_called_once_with("u1", "goal_1")
@@ -53,9 +54,7 @@ def test_get_goal_by_id_404_when_missing():
 def _fake_client(doc):
     """Fake Firestore client injected via firestore_client=, the seam _goal_ref honours."""
     client = MagicMock()
-    client.collection.return_value.document.return_value.collection.return_value.document.return_value.get.return_value = (
-        doc
-    )
+    client.collection.return_value.document.return_value.collection.return_value.document.return_value.get.return_value = doc
     return client
 
 

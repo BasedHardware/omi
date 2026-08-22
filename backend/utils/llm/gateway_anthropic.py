@@ -28,7 +28,7 @@ from utils.llm.gateway_serving import is_gateway_transport_failure
 _CHAT_AGENT_FEATURE = 'chat_agent'
 _GATEWAY_CLIENT_CACHE_MAX_SIZE = 256
 _GATEWAY_CLIENT_CACHE_TTL_SECONDS = 3600
-_GATEWAY_CLIENT_CACHE: TTLCache[str, anthropic.AsyncAnthropic] = TTLCache(
+_GATEWAY_CLIENT_CACHE: TTLCache[str, anthropic.AsyncAnthropic] = TTLCache(  # ty: ignore[not-subscriptable]
     maxsize=_GATEWAY_CLIENT_CACHE_MAX_SIZE,
     ttl=_GATEWAY_CLIENT_CACHE_TTL_SECONDS,
 )
@@ -74,7 +74,7 @@ def _get_or_create_gateway_anthropic_client(*, byok_api_key: str | None = None) 
     client = anthropic.AsyncAnthropic(
         api_key='gateway-managed',
         base_url=get_llm_gateway_base_url(),
-        timeout=gateway_transport_timeout(),
+        timeout=gateway_transport_timeout(),  # ty: ignore[invalid-argument-type]
         max_retries=0,
         default_headers=default_headers,
     )

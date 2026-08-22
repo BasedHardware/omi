@@ -105,7 +105,7 @@ dev_harness_require_cli() {
   {
     echo "Omi dev harness is not provisioned: $python_bin cannot import dev_harness.cli"
     printf '%s\n' "$probe" | tail -n 1 | sed 's/^/  /'
-    echo "Run \`make dev-init\` first (creates backend/.venv and installs backend/requirements.txt)."
+    echo "Run \`make setup\` or \`cd backend && ./scripts/sync-python-deps.sh\` first (creates backend/.venv from uv.lock)."
   } >&2
   return 1
 }

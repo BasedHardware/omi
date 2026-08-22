@@ -913,7 +913,7 @@ async def update_persona_prompt(persona: Dict[str, Any]):
         limit=250,
         offset=0,
     )
-    memories = [memory.dict() for memory in universal_memories if memory.visibility == 'public']
+    memories = [memory.dict() for memory in universal_memories if memory.visibility == 'public']  # ty: ignore[deprecated]
     user_name = await run_blocking(db_executor, get_user_name, uid)
 
     # Get and condense recent conversations

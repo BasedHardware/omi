@@ -4,24 +4,26 @@ Inherits all rules from the root `../AGENTS.md`. This file adds backend-specific
 
 ## Setup
 
-Python 3.11 is required (not 3.12+ — Dockerfile pins 3.11). Backend local dev pins the exact interpreter in `.python-version` and uses `uv` for reproducible dependency sync. Also needs FFmpeg, Opus (`opuslib`), Redis (optional).
+Python 3.13 is required (Dockerfile pins 3.13-slim-bookworm). Backend local dev pins the exact interpreter in `.python-version` and uses `uv` (`pyproject.toml` + `uv.lock`) for reproducible dependency sync. Also needs FFmpeg, Opus (`opuslib`), Redis (optional).
 
 ```bash
 cp .env.template .env          # Fill in required values (see .env.template for full list)
-./scripts/sync-python-deps.sh  # creates .venv from .python-version + pylock.toml
+./scripts/sync-python-deps.sh  # creates .venv from .python-version + uv.lock
 source .venv/bin/activate
 uvicorn main:app --host 0.0.0.0 --port 8080
 ```
 
 **Env stages** (`OMI_ENV_STAGE`): `local` (emulator harness, `.env.local-dev`), `offline` (fake providers, `.env.offline`), `dev` (remote dev GCP, `.env.dev`), `prod` (reference only, `.env.prod`). `load_backend_env()` loads the stage file then `backend/.env` overrides. Templates: `backend/.env.*.template`. Harness: `PROVIDER_MODE=offline make dev-up` or `OMI_ENV_STAGE=offline`. Dev skips the startup-only Stripe price validation; plan catalog and checkout calls still require mode-matched Stripe credentials.
 
-When intentionally changing backend Python dependencies, edit the relevant `requirements*.txt` input file and refresh the lock:
+When intentionally changing backend Python dependencies, edit `pyproject.toml` and refresh the lock:
 
 ```bash
 ./scripts/update-python-lock.sh
 ```
 
-By default, the lock refresh preserves already-locked package versions so unrelated transitive upgrades do not sneak into infrastructure changes. Set `PYLOCK_UPGRADE=1` only when intentionally refreshing dependency versions.
+By default, `uv lock` preserves already-locked package versions so unrelated transitive upgrades do not sneak into infrastructure changes. Set `UV_UPGRADE=1` (or legacy `PYLOCK_UPGRADE=1`) only when intentionally refreshing dependency versions.
+
+**Parakeet exception:** the NeMo NGC image (`backend/parakeet/Dockerfile`) remains on the base image's Python 3.12; do not assume Parakeet shares the backend 3.13 pin.
 
 Key env vars: `OPENAI_API_KEY` (LLM calls), `HOSTED_PARAKEET_API_URL` / `MODULATE_API_KEY` (default STT), `DEEPGRAM_API_KEY` with its self-hosted endpoint, `GEMINI_API_KEY` / `ANTHROPIC_API_KEY` (desktop chat), `ENCRYPTION_SECRET` (tests), and `REDIS_DB_HOST` (fail-open rate limiting). `SERVICE_ACCOUNT_JSON` / `GOOGLE_APPLICATION_CREDENTIALS` are default Firebase Admin credentials; never commit them. When `SERVICE_ACCOUNT_JSON` is set, Firestore (and GCS) pin that customer-data SA and its `project_id` so GKE Workload Identity / a compute-project `GOOGLE_CLOUD_PROJECT` cannot silently win user-doc reads. Dev desktop-backend keeps ADC on the compute project for GCE/`agentVm`; quota and `llm_usage` use `get_customer_firestore_client()` from the Auth SA file (`FIREBASE_AUTH_CREDENTIALS_PATH`) so Beta sees production `based-hardware` entitlements without writing `agentVm` there.
 
@@ -237,10 +239,11 @@ A passing unit test is not the same as exercising the endpoint. Before putting a
 ## Formatting
 
 ```bash
-black --line-length 120 --skip-string-normalization <files>
+uv run --project backend ruff format <files>
+# or: backend/.venv/bin/ruff format --config backend/pyproject.toml <files>
 ```
 
-`--skip-string-normalization` is critical — without it, black flips all quotes and diffs explode.
+`[tool.ruff.format] quote-style = "preserve"` keeps existing quote styles (same role as black's `--skip-string-normalization`).
 
 ## Async I/O (3-Lane Architecture)
 
@@ -293,7 +296,7 @@ WS handlers in `transcribe.py` and `pusher.py` manage 5-11 concurrent tasks per 
 
 ## Common Gotchas
 
-1. **Python 3.11 only** — no 3.12+ syntax (nested same-type quotes in f-strings break the Docker build)
+1. **Python 3.13** — match `.python-version` / Docker (`python:3.13-slim-bookworm`). Parakeet/NeMo remains on its image Python 3.12.
 2. **Never `time.sleep()` in async** — use `asyncio.sleep()`. For blocking work: `await run_blocking(executor, fn)` with the appropriate pool
 3. **Sync `requests` in async is silent poison** — no error raised, just blocks the entire event loop. All connections freeze, health checks fail, HPA can't scale.
 4. **Semaphores are event-loop-bound** — `http_client.py` handles this via `(loop_id, name)` keying. Don't create raw `asyncio.Semaphore` outside that module.

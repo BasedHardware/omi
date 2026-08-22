@@ -1,19 +1,29 @@
-FROM gcr.io/based-hardware-dev/python:3.11-slim-forky AS builder
+ARG PYTHON_BASE_IMAGE=python:3.13-slim-bookworm
+ARG UV_VERSION=0.12.5
 
+FROM ${PYTHON_BASE_IMAGE} AS builder
+
+ARG UV_VERSION
 ENV PATH="/opt/venv/bin:$PATH"
-RUN python -m venv /opt/venv
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv
+ENV UV_LINK_MODE=copy
+
+RUN python -m venv /opt/venv && \
+    python3 -m pip install --no-cache-dir "uv==${UV_VERSION}"
 
 RUN apt-get update && apt-get install -y \
     git \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-COPY backend/requirements.txt /tmp/reqs/requirements.txt
-COPY backend/modal/requirements.txt /tmp/reqs/modal/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/reqs/modal/requirements.txt
+WORKDIR /opt/omi-backend
+COPY backend/pyproject.toml backend/uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project --compile-bytecode
+COPY backend/modal/requirements.txt /tmp/modal-requirements.txt
+RUN uv pip install --python /opt/venv/bin/python --no-cache-dir -r /tmp/modal-requirements.txt
 
-FROM gcr.io/based-hardware-dev/python:3.11-slim-forky
-# Python 3.11 on Debian 14 (Forky)
+FROM ${PYTHON_BASE_IMAGE}
+# Python 3.13 — GPU VAD / speaker identification
 
 WORKDIR /app
 ENV PATH="/usr/local/nvidia/bin:/usr/local/cuda/bin:/opt/venv/bin:$PATH"

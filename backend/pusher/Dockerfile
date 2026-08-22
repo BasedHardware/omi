@@ -1,5 +1,5 @@
-ARG PYTHON_BASE_IMAGE=gcr.io/based-hardware-dev/python:3.11-slim-forky
-ARG UV_VERSION=0.11.13
+ARG PYTHON_BASE_IMAGE=python:3.13-slim-bookworm
+ARG UV_VERSION=0.12.5
 
 FROM ${PYTHON_BASE_IMAGE} AS builder
 
@@ -9,6 +9,8 @@ ENV LIBLC3_COMMIT=ce2e41faf8c06d038df9f32504c61109a14130be
 RUN python -m venv /opt/venv
 RUN python3 -m pip install --no-cache-dir "uv==${UV_VERSION}"
 ENV PATH="/opt/venv/bin:$PATH"
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv
+ENV UV_LINK_MODE=copy
 
 # Install build dependencies for liblc3
 RUN apt-get update && apt-get install -y \
@@ -38,10 +40,10 @@ RUN git init liblc3 && \
     cd /tmp/liblc3 && \
     python3 -m pip wheel --no-cache-dir --wheel-dir /tmp/wheels .
 
-# Install Python requirements from the pusher-specific checked-in lock.
-WORKDIR /opt/venv
-COPY backend/pusher/pylock.toml /tmp/pylock.toml
-RUN uv pip sync /tmp/pylock.toml --python /opt/venv/bin/python --compile-bytecode
+# Install Python requirements from the pusher dependency group.
+WORKDIR /opt/omi-backend
+COPY backend/pyproject.toml backend/uv.lock ./
+RUN uv sync --frozen --only-group pusher --no-install-project --compile-bytecode
 
 FROM ${PYTHON_BASE_IMAGE}
 

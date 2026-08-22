@@ -385,7 +385,7 @@ def _lint(
 ) -> LintResult:
     return LintResult(
         lint_id=f"lint_{stable_hash(severity, code, message, frame_id, decision_id, mutation_id, length=20)}",
-        severity=severity,  # type: ignore[arg-type]
+        severity=severity,  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
         code=code,
         message=message,
         frame_id=frame_id,

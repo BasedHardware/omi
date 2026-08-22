@@ -113,10 +113,13 @@ web/app/public/firebase-messaging-sw.js
 # Miscellaneous
 !app/pubspec.lock
 !app/ios/Podfile.lock
-!mcp/uv.lock
 *.lock
 # After *.lock: the last matching pattern wins, so a re-include must follow it.
 !web/app/bun.lock
+!mcp/uv.lock
+!backend/uv.lock
+!sdks/python/uv.lock
+!sdks/python-cli/uv.lock
 *.log
 *.swo
 *.swp

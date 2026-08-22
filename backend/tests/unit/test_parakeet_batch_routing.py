@@ -24,7 +24,6 @@ from transcribe import (  # noqa: E402
 
 
 class TestTranscribeFromGpuResult:
-
     def test_full_result(self):
         result = {
             "text": "hello world",
@@ -63,7 +62,6 @@ class TestTranscribeFromGpuResult:
 
 
 class TestSetGpuWorker:
-
     def test_set_and_use(self):
         mock_worker = MagicMock()
         mock_worker.submit_sync.return_value = [
@@ -84,7 +82,6 @@ class TestSetGpuWorker:
 
 
 class TestTranscribeFileV2WithGpuResult:
-
     def test_diarize_false_adds_speaker_0(self):
         gpu_result = {
             "text": "hello world",
@@ -109,8 +106,9 @@ class TestTranscribeFileV2WithGpuResult:
             "timestamp": {"segment": [{"segment": "test", "start": 0.0, "end": 1.0}]},
         }
 
-        with patch("transcribe.SPEAKER_EMBEDDING_URL", ""), patch(
-            "transcribe.detect_language_from_text", return_value="en"
+        with (
+            patch("transcribe.SPEAKER_EMBEDDING_URL", ""),
+            patch("transcribe.detect_language_from_text", return_value="en"),
         ):
             result = transcribe_file_v2("/tmp/test.wav", gpu_result=gpu_result, diarize=True)
 
@@ -123,8 +121,10 @@ class TestTranscribeFileV2WithGpuResult:
             "timestamp": {"segment": [{"segment": "pre-computed", "start": 0.0, "end": 1.0}]},
         }
 
-        with patch("transcribe.transcribe_file") as mock_tf, patch("transcribe.SPEAKER_EMBEDDING_URL", ""), patch(
-            "transcribe.detect_language_from_text", return_value="en"
+        with (
+            patch("transcribe.transcribe_file") as mock_tf,
+            patch("transcribe.SPEAKER_EMBEDDING_URL", ""),
+            patch("transcribe.detect_language_from_text", return_value="en"),
         ):
             result = transcribe_file_v2("/tmp/test.wav", gpu_result=gpu_result, diarize=False)
             mock_tf.assert_not_called()
@@ -133,7 +133,6 @@ class TestTranscribeFileV2WithGpuResult:
 
 
 class TestTranscribeFileRouting:
-
     def test_nemo_mode_uses_gpu_worker(self):
         mock_worker = MagicMock()
         mock_worker.submit_sync.return_value = [

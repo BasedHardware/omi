@@ -21,9 +21,10 @@ from utils.other import storage as storage_mod
 class TestDeleteAllConversationRecordings:
     def test_unconfigured_bucket_is_a_no_op(self):
         """Before the fix this raised ValueError and blocked the whole account wipe."""
-        with patch.object(storage_mod, "memories_recordings_bucket", None), patch.object(
-            storage_mod, "_get_storage_client"
-        ) as get_client:
+        with (
+            patch.object(storage_mod, "memories_recordings_bucket", None),
+            patch.object(storage_mod, "_get_storage_client") as get_client,
+        ):
             assert storage_mod.delete_all_conversation_recordings("uid1") == 0
         get_client.assert_not_called()
 
@@ -33,8 +34,9 @@ class TestDeleteAllConversationRecordings:
         bucket.list_blobs.return_value = [blob]
         client = MagicMock()
         client.bucket.return_value = bucket
-        with patch.object(storage_mod, "memories_recordings_bucket", "memories-recordings"), patch.object(
-            storage_mod, "_get_storage_client", return_value=client
+        with (
+            patch.object(storage_mod, "memories_recordings_bucket", "memories-recordings"),
+            patch.object(storage_mod, "_get_storage_client", return_value=client),
         ):
             assert storage_mod.delete_all_conversation_recordings("uid1") == 1
         client.bucket.assert_called_once_with("memories-recordings")
@@ -45,8 +47,9 @@ class TestDeleteAllConversationRecordings:
         """The purge is required: a genuine GCS error must keep blocking the irreversible wipe."""
         client = MagicMock()
         client.bucket.side_effect = RuntimeError("gcs down")
-        with patch.object(storage_mod, "memories_recordings_bucket", "memories-recordings"), patch.object(
-            storage_mod, "_get_storage_client", return_value=client
+        with (
+            patch.object(storage_mod, "memories_recordings_bucket", "memories-recordings"),
+            patch.object(storage_mod, "_get_storage_client", return_value=client),
         ):
             with pytest.raises(RuntimeError):
                 storage_mod.delete_all_conversation_recordings("uid1")

@@ -522,7 +522,7 @@ def test_local_composite_actions_resolve_from_workflow_root(tmp_path):
             'Firestore index reconciliation must target vars.RUNTIME_GCP_PROJECT_ID',
         ),
         (
-            'python3 backend/scripts/reconcile_firestore_indexes.py ' '--project "${{ vars.RUNTIME_GCP_PROJECT_ID }}"',
+            'python3 backend/scripts/reconcile_firestore_indexes.py --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}"',
             'backend deploy Firestore reconciliation must use bounded --check-only proposal mode',
         ),
         (
@@ -755,9 +755,9 @@ def test_dev_cloud_run_pusher_contract_rejects_legacy_and_non_listener_bindings(
     rendered_state = validator._build_rendered_cloud_run_state(env_config)
 
     backend_env = rendered_state['services']['backend']['env']
-    next(entry for entry in backend_env if entry['name'] == 'HOSTED_PUSHER_API_URL')[
-        'value'
-    ] = 'http://internal-alb.pusher-ep-dev.il7.us-central1.lb.based-hardware-dev.internal'
+    next(entry for entry in backend_env if entry['name'] == 'HOSTED_PUSHER_API_URL')['value'] = (
+        'http://internal-alb.pusher-ep-dev.il7.us-central1.lb.based-hardware-dev.internal'
+    )
     rendered_state['services']['backend-sync']['env'].append(
         {
             'name': 'HOSTED_PUSHER_API_URL',
@@ -1552,8 +1552,7 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
     assert len(errors) == 1
     assert errors[0].scope == 'cloud_run/backend'
     assert errors[0].message == (
-        "secret binding SERVICE_ACCOUNT_JSON mismatch: "
-        "expected {'secret': 'SERVICE_ACCOUNT_JSON', 'version': 'latest'}"
+        "secret binding SERVICE_ACCOUNT_JSON mismatch: expected {'secret': 'SERVICE_ACCOUNT_JSON', 'version': 'latest'}"
     )
 
 
@@ -1767,9 +1766,9 @@ def test_scheduler_runtime_surfaces_declare_orphan_stale_setting(env):
             f'{env}/{section}/{service} runs the stale-processing scheduler but '
             f'omits LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS'
         )
-        assert (
-            entry.get('category') == 'reliability'
-        ), f'{env}/{section}/{service} must classify the recovery setting as reliability'
+        assert entry.get('category') == 'reliability', (
+            f'{env}/{section}/{service} must classify the recovery setting as reliability'
+        )
 
 
 def test_parakeet_selected_without_endpoint_is_rejected_for_all_cloud_run_validation_modes(tmp_path):

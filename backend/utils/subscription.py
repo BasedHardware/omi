@@ -1300,7 +1300,7 @@ def _has_active_stripe_subscription(uid: str) -> bool:
     try:
         subs = stripe.Subscription.list(customer=customer_id, status='active', limit=5)
         for sub in subs.data:
-            sub_dict: Dict[str, Any] = sub.to_dict()  # type: ignore[reportDeprecated]  # stripe public serialization API
+            sub_dict: Dict[str, Any] = sub.to_dict()  # type: ignore[reportDeprecated]  # stripe public serialization API  # ty: ignore[deprecated]
             if sub_dict.get('cancel_at_period_end'):
                 continue
             if sub_dict.get('metadata', {}).get('uid') == uid:
@@ -1334,7 +1334,7 @@ def find_active_paid_subscription_for_user(uid: str) -> Optional[Subscription]:
         return None
 
     for sub in subs.data:
-        d: Dict[str, Any] = sub.to_dict()  # type: ignore[reportDeprecated]  # stripe public serialization API
+        d: Dict[str, Any] = sub.to_dict()  # type: ignore[reportDeprecated]  # stripe public serialization API  # ty: ignore[deprecated]
         sub_uid = d.get('metadata', {}).get('uid')
         if sub_uid and sub_uid != uid:
             continue
@@ -1413,7 +1413,7 @@ def can_user_make_payment(uid: str, target_price_id: Optional[str] = None) -> Tu
             if not current_price_id and subscription.stripe_subscription_id:
                 try:
                     stripe_sub = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
-                    stripe_sub_dict = stripe_sub.to_dict() if stripe_sub else {}
+                    stripe_sub_dict = stripe_sub.to_dict() if stripe_sub else {}  # ty: ignore[deprecated]
                     items = stripe_sub_dict.get('items', {}).get('data', [])
                     if items:
                         current_price_id = items[0].get('price', {}).get('id')
@@ -1444,7 +1444,7 @@ def can_user_make_payment(uid: str, target_price_id: Optional[str] = None) -> Tu
                     try:
                         stripe_sub = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
                         if stripe_sub:
-                            stripe_sub_dict: Dict[str, Any] = stripe_sub.to_dict()  # type: ignore[reportDeprecated]  # stripe public serialization API
+                            stripe_sub_dict: Dict[str, Any] = stripe_sub.to_dict()  # type: ignore[reportDeprecated]  # stripe public serialization API  # ty: ignore[deprecated]
                             if stripe_sub_dict['items']['data']:
                                 current_price_id = stripe_sub_dict['items']['data'][0]['price']['id']
                     except Exception as e:
@@ -1577,7 +1577,7 @@ def reconcile_basic_plan_with_stripe(uid: str, subscription: Subscription | None
             period_end_dt = datetime.fromtimestamp(subscription.current_period_end, tz=timezone.utc)
             if period_end_dt >= datetime.now(timezone.utc):
                 stripe_sub = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
-                stripe_sub_dict: Optional[Dict[str, Any]] = stripe_sub.to_dict() if stripe_sub else None  # type: ignore[reportDeprecated]  # stripe public serialization API
+                stripe_sub_dict: Optional[Dict[str, Any]] = stripe_sub.to_dict() if stripe_sub else None  # type: ignore[reportDeprecated]  # stripe public serialization API  # ty: ignore[deprecated]
                 if stripe_sub_dict:
                     items: List[Dict[str, Any]] = stripe_sub_dict.get('items', {}).get('data') or []
                     price_id: Optional[str] = None

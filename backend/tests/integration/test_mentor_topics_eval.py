@@ -286,14 +286,14 @@ class TestTopicExtractionEval:
         print("=" * 100)
 
         # Quality gate: gpt-4.1-mini overall score must be >= 80% of gpt-4
-        assert (
-            avg_b_total >= avg_a_total * 0.80
-        ), f"gpt-4.1-mini overall {avg_b_total:.2f} is < 80% of gpt-4 {avg_a_total:.2f}"
+        assert avg_b_total >= avg_a_total * 0.80, (
+            f"gpt-4.1-mini overall {avg_b_total:.2f} is < 80% of gpt-4 {avg_a_total:.2f}"
+        )
 
         # Quality gate: gpt-4.1-mini should not lose majority of head-to-head matchups
-        assert (
-            b_wins + ties >= a_wins
-        ), f"gpt-4.1-mini lost majority: {a_wins} wins for gpt-4 vs {b_wins} for mini ({ties} ties)"
+        assert b_wins + ties >= a_wins, (
+            f"gpt-4.1-mini lost majority: {a_wins} wins for gpt-4 vs {b_wins} for mini ({ties} ties)"
+        )
 
     def test_mini_handles_edge_cases(self):
         """gpt-4.1-mini should handle edge cases gracefully."""

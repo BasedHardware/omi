@@ -74,7 +74,7 @@ def main() -> int:
     record = records[0]
     expected_path_prefix = f"users/{uid}/memory_outbox/"
     if not record["outbox_path"].startswith(expected_path_prefix):
-        raise AssertionError("expected users/{uid}/memory_outbox/{record_id} path, " f"got {record['outbox_path']}")
+        raise AssertionError(f"expected users/{{uid}}/memory_outbox/{{record_id}} path, got {record['outbox_path']}")
     if record["record_id"] != record["idempotency_key"]:
         raise AssertionError("record_id must equal idempotency_key for stable replay")
 

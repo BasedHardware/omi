@@ -103,10 +103,11 @@ class _FakeConv(BaseModel):
 
 def test_malformed_conversation_skipped_not_500():
     page = [{'id': 'c1'}, {}, {'id': 'c2'}]  # middle one missing required id
-    with patch.object(folders_mod, 'Conversation', _FakeConv), patch.object(
-        folders_mod.folders_db, 'get_folder', return_value={'id': 'f1'}
-    ), patch.object(folders_mod.folders_db, 'get_conversations_in_folder', return_value=page), patch.object(
-        folders_mod, 'redact_conversations_for_list', lambda x: None
+    with (
+        patch.object(folders_mod, 'Conversation', _FakeConv),
+        patch.object(folders_mod.folders_db, 'get_folder', return_value={'id': 'f1'}),
+        patch.object(folders_mod.folders_db, 'get_conversations_in_folder', return_value=page),
+        patch.object(folders_mod, 'redact_conversations_for_list', lambda x: None),
     ):
         result = folders_mod.get_folder_conversations(
             folder_id='f1', limit=100, offset=0, include_discarded=False, uid='u1'

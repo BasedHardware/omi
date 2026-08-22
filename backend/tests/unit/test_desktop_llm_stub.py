@@ -47,7 +47,7 @@ def test_floating_bar_marker_echo():
 
 
 def test_kernel_user_message_boundary_ignores_history_markers():
-    wrapped = 'Prior context with [[MARKER:old]]\n\n# User Message\n' 'Reply with exactly [[MARKER:chat-hermetic]]'
+    wrapped = 'Prior context with [[MARKER:old]]\n\n# User Message\nReply with exactly [[MARKER:chat-hermetic]]'
     body = _user_body(wrapped)
     directive = stub.stub_directive(body)
     assert isinstance(directive, stub._TextDirective)

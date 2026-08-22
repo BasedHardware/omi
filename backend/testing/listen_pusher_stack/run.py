@@ -750,9 +750,9 @@ async def _connect(stack: Stack, uid: str, session_id: str | None) -> tuple[Any,
     )
     await _receive_until(
         websocket,
-        lambda payload: isinstance(payload, dict)
-        and payload.get('type') == 'service_status'
-        and payload.get('status') == 'ready',
+        lambda payload: (
+            isinstance(payload, dict) and payload.get('type') == 'service_status' and payload.get('status') == 'ready'
+        ),
         label='ready',
     )
     return websocket, session
@@ -875,10 +875,12 @@ async def _normal_and_terminal_reconnect(stack: Stack) -> None:
     stack.age_conversation(uid, session_id)
     await _receive_until(
         websocket,
-        lambda payload: isinstance(payload, dict)
-        and payload.get('type') == 'memory_created'
-        and payload.get('conversation_id') == session_id
-        and payload.get('lifecycle_phase') == 'completed',
+        lambda payload: (
+            isinstance(payload, dict)
+            and payload.get('type') == 'memory_created'
+            and payload.get('conversation_id') == session_id
+            and payload.get('lifecycle_phase') == 'completed'
+        ),
         label='inline finalization completion',
         timeout=25.0,
     )

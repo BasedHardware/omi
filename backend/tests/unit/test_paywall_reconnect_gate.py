@@ -106,9 +106,9 @@ class TestCacheInvalidation:
 
     def test_payment_imports_clear_function(self):
         src = _read_source(PAYMENT_SRC_PATH)
-        assert (
-            'clear_trial_paywall_cache' in src.split('from utils.subscription import')[1].split(')')[0]
-        ), "payment.py must import clear_trial_paywall_cache from utils.subscription"
+        assert 'clear_trial_paywall_cache' in src.split('from utils.subscription import')[1].split(')')[0], (
+            "payment.py must import clear_trial_paywall_cache from utils.subscription"
+        )
 
     def test_byok_activate_clears_paywall_cache(self):
         src = _read_source(USERS_SRC_PATH)
@@ -153,9 +153,9 @@ class TestCacheInvalidationBehavioral:
         assert 'delete_generic_cache' in fn_body
         assert 'trial_paywall:expired:' in fn_body
         delete_count = fn_body.count('delete_generic_cache')
-        assert (
-            delete_count == 1
-        ), f"clear_trial_paywall_cache should call delete_generic_cache exactly once, got {delete_count}"
+        assert delete_count == 1, (
+            f"clear_trial_paywall_cache should call delete_generic_cache exactly once, got {delete_count}"
+        )
 
 
 class TestPlatformFiltering:
@@ -183,9 +183,9 @@ class TestPlatformFiltering:
         fn_start = src.find('def is_trial_paywalled(')
         assert fn_start != -1
         fn_body = src[fn_start : src.find('\ndef ', fn_start + 1)]
-        assert (
-            'return _is_trial_expired_cached(uid' in fn_body
-        ), "desktop paywall decisions must use the cached expiry lookup"
+        assert 'return _is_trial_expired_cached(uid' in fn_body, (
+            "desktop paywall decisions must use the cached expiry lookup"
+        )
 
     def test_is_trial_paywalled_uses_lower_for_case_insensitivity(self):
         src = _read_source(SUBSCRIPTION_SRC_PATH)

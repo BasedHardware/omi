@@ -135,21 +135,21 @@ def test_qos_cache_key_in_clients():
     source = _read_clients_source()
     assert "cache_key" in source, "clients.py get_llm() should accept cache_key parameter"
     # prompt_cache_key routing is gated by capability, not an exact-name set.
-    assert (
-        "supports_prompt_cache" in source
-    ), "clients.py should gate prompt_cache_key by capability (supports_prompt_cache)"
+    assert "supports_prompt_cache" in source, (
+        "clients.py should gate prompt_cache_key by capability (supports_prompt_cache)"
+    )
     cfg = _read_model_config_source()
-    assert (
-        "_CACHE_KEY_MODEL_PREFIXES" in cfg
-    ), "model_config.py should define _CACHE_KEY_MODEL_PREFIXES for family-based cache routing"
+    assert "_CACHE_KEY_MODEL_PREFIXES" in cfg, (
+        "model_config.py should define _CACHE_KEY_MODEL_PREFIXES for family-based cache routing"
+    )
 
 
 def test_qos_medium_tier_uses_extra_body_for_cache_retention():
     """prompt_cache_retention must use extra_body (not model_kwargs) for retention-capable models."""
     source = _read_clients_source() + _read_model_config_source()
-    assert (
-        'extra_body={"prompt_cache_retention"' in source or '"prompt_cache_retention": "24h"' in source
-    ), "prompt_cache_retention should be set via extra_body for retention-capable models"
+    assert 'extra_body={"prompt_cache_retention"' in source or '"prompt_cache_retention": "24h"' in source, (
+        "prompt_cache_retention should be set via extra_body for retention-capable models"
+    )
 
 
 def test_core_tools_constant_exists():
@@ -161,9 +161,9 @@ def test_core_tools_constant_exists():
 def test_core_tools_used_in_both_functions():
     """execute_agentic_chat_stream should use CORE_TOOLS."""
     source = _read_agentic_source()
-    assert (
-        source.count("list(CORE_TOOLS)") >= 1
-    ), "Execute function should use list(CORE_TOOLS) instead of inline tool lists"
+    assert source.count("list(CORE_TOOLS)") >= 1, (
+        "Execute function should use list(CORE_TOOLS) instead of inline tool lists"
+    )
 
 
 def test_no_duplicate_inline_tool_lists():
@@ -189,12 +189,12 @@ def test_system_prompt_static_prefix_is_stable():
     prompt_start = source[idx : idx + 300]
 
     # The first section should be <response_style> (static), not <assistant_role> (dynamic)
-    assert (
-        "<response_style>" in prompt_start
-    ), "System prompt should start with static <response_style> section, not dynamic content"
-    assert (
-        "{user_name}" not in prompt_start
-    ), "System prompt prefix should not contain {user_name} — dynamic content must be at the end"
+    assert "<response_style>" in prompt_start, (
+        "System prompt should start with static <response_style> section, not dynamic content"
+    )
+    assert "{user_name}" not in prompt_start, (
+        "System prompt prefix should not contain {user_name} — dynamic content must be at the end"
+    )
 
 
 def test_assistant_role_comes_after_static_sections():
@@ -207,9 +207,9 @@ def test_assistant_role_comes_after_static_sections():
     idx_response_style = fallback.find("<response_style>")
     idx_assistant_role = fallback.find("<assistant_role>")
     assert idx_response_style != -1 and idx_assistant_role != -1
-    assert (
-        idx_response_style < idx_assistant_role
-    ), "<response_style> (static) should come before <assistant_role> (dynamic) in the fallback prompt"
+    assert idx_response_style < idx_assistant_role, (
+        "<response_style> (static) should come before <assistant_role> (dynamic) in the fallback prompt"
+    )
 
 
 def test_static_prefix_has_no_dynamic_refs():

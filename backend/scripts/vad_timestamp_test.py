@@ -335,11 +335,11 @@ def print_drift_table(drifts: List[WordDrift], label: str) -> Dict[str, Any]:
     )
     print(
         f"  Within 500ms: {stats['words_within_500ms']}/{len(drifts)} "
-        f"({stats['words_within_500ms']/len(drifts)*100:.0f}%)"
+        f"({stats['words_within_500ms'] / len(drifts) * 100:.0f}%)"
     )
     print(
         f"  Within 1.0s:  {stats['words_within_1s']}/{len(drifts)} "
-        f"({stats['words_within_1s']/len(drifts)*100:.0f}%)"
+        f"({stats['words_within_1s'] / len(drifts) * 100:.0f}%)"
     )
 
     return stats
@@ -446,8 +446,8 @@ def main() -> int:
             f"{stats['mean_start_drift']:>10.3f}s | "
             f"{stats['p95_start_drift']:>9.3f}s | "
             f"{stats['max_start_drift']:>9.3f}s | "
-            f"{stats['words_within_500ms']/stats['words_matched']*100:>6.0f}% | "
-            f"{stats['words_within_1s']/stats['words_matched']*100:>6.0f}%"
+            f"{stats['words_within_500ms'] / stats['words_matched'] * 100:>6.0f}% | "
+            f"{stats['words_within_1s'] / stats['words_matched'] * 100:>6.0f}%"
         )
 
     # Save results

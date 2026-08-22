@@ -968,9 +968,9 @@ def list_user_grants(uid: str) -> List[Dict[str, Any]]:
         data.setdefault("id", doc.id)
         grants.append(data)
     grants.sort(
-        key=lambda grant: grant.get("updated_at")
-        or grant.get("created_at")
-        or datetime.min.replace(tzinfo=timezone.utc),
+        key=lambda grant: (
+            grant.get("updated_at") or grant.get("created_at") or datetime.min.replace(tzinfo=timezone.utc)
+        ),
         reverse=True,
     )
     return grants

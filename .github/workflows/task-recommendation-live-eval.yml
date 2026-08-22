@@ -27,7 +27,7 @@ jobs:
         working-directory: backend
         run: |
           uv venv .venv
-          uv pip sync pylock.toml --python .venv/bin/python
+          UV_PROJECT_ENVIRONMENT=.venv uv sync --frozen --no-install-project
 
       - name: Run live evaluation
         working-directory: backend
