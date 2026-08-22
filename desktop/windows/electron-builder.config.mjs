@@ -155,13 +155,19 @@ export default {
     // Runtime tools/libs the Linux platform seams call out of process. Missing
     // ones degrade gracefully (OCR/active-window return empty), but packaging the
     // depends keeps the shipped App experience complete on Debian/Ubuntu.
-    depends: [
-      'tesseract-ocr',
-      'tesseract-ocr-eng',
-      'libnotify4',
-      'libxss1',
-      'x11-utils'
-    ]
+    depends: ['tesseract-ocr', 'tesseract-ocr-eng', 'libnotify4', 'libxss1', 'x11-utils'],
+    // A soft dependency, not `depends`: xdg-desktop-portal is the universal
+    // front-end virtually every desktop already has, but the BACKEND that
+    // actually answers ScreenCast (xdg-desktop-portal-gnome/-kde/-wlr/…) is
+    // compositor-specific and can't be a single correct hard dependency —
+    // forcing e.g. -gnome onto a KDE or wlroots-compositor user would be
+    // wrong. Rewind's screen recording surfaces a real in-app error (see
+    // RewindCaptureNotice.tsx) when no backend answers; this Recommends just
+    // narrows the common "portal front-end isn't even installed" case.
+    // electron-builder's `recommends` REPLACES its own default
+    // (["libappindicator3-1"], needed for the tray icon) rather than
+    // appending, so it must be listed explicitly here too.
+    recommends: ['libappindicator3-1', 'xdg-desktop-portal']
   },
   npmRebuild: false,
   // See scripts/fix-pimono-chalk-unpack.mjs: corrects chalk's packaged version for
