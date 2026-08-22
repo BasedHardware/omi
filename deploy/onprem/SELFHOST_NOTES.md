@@ -608,6 +608,55 @@ And remember the two halves of a k0s redeploy: `helm upgrade` picks up chart and
 spec is unchanged when the image tag is, so a code change also needs the image pushed and
 `kubectl -n omi rollout restart deployment/backend`. See `helm/MANUAL-prod-k0s.md` Step 4c.
 
+## Object-store access: signed for the user's audio, public only for marketplace assets (ADR-0087)
+
+Ten producers in `utils/other/storage.py` returned a `public_url`. Measured on the pinned RustFS, **all
+ten were broken** — the per-object ACL is not honoured (an object uploaded `public-read` answers **403**
+to an anonymous GET, on `1.0.0-beta.12` and `1.0.0-rc.3` alike) and the buckets carried no policy.
+
+The fix was not "make them work". Five of the ten returned an unauthenticated link for **the user's own
+audio** — their enrolled voice, their conversation recordings, the file being synced — and those links
+DO work on GCS, where the buckets are public by project policy. Making them work here would have created
+the exposure instead of closing it.
+
+| group | producers | how the URL is minted now |
+|---|---|---|
+| user audio | speech profile, post-processing, sd-card, conversation recording, syncing temporal | **signed, 60 min** (`presign_get`) |
+| marketplace assets | app logo, app thumbnail | **public**, via a bucket policy on `plugins-logos` and `app-thumbnails` |
+| chat attachments | chat files | **unchanged** — the one producer uploading with `public=True`; the decision is open (L6) |
+
+A signed URL expires, so every consumer was checked before the change: none of the five URLs is
+persisted. Two have no caller, one has its return value discarded, one is fetched immediately by the STT
+provider, one goes straight back to the client in the upload response.
+
+**Applying the asset policy.** On k0s the buckets Job does it (`mc anonymous set download`, on those two
+buckets only). Compose creates buckets out-of-band, so do the same by hand once:
+
+```bash
+docker run --rm --network omi-oss_omi --entrypoint sh minio/mc:latest -c '
+  mc alias set r http://rustfs:9000 "$S3_ACCESS_KEY" "$S3_SECRET_KEY"
+  mc anonymous set download r/plugins-logos r/app-thumbnails'
+```
+
+Verify the split — this is the check that matters, and all three were run on the live stack:
+
+```bash
+# asset bucket, anonymous  -> 200
+curl -s -o /dev/null -w '%{http_code}\n' http://rustfs:9000/plugins-logos/<key>
+# audio bucket, anonymous  -> 403   (no policy, and the ACL is ignored)
+curl -s -o /dev/null -w '%{http_code}\n' http://rustfs:9000/memories-recordings/<uid>/<id>.wav
+# the SAME audio object with a signed URL -> 200
+curl -s -o /dev/null -w '%{http_code}\n' "$(python - <<'EOF'
+from utils.object_store import get_object_store
+print(get_object_store().presign_get('memories-recordings', '<uid>/<id>.wav', expires_seconds=3600))
+EOF
+)"
+```
+
+**`S3_PUBLIC_ACL` stays, and is not dead code**: MinIO honours the ACL, and on AWS buckets with Object
+Ownership = *bucket owner enforced* sending `public-read` makes the upload **fail**, so `S3_PUBLIC_ACL=''`
+is the right value there. On RustFS it is accepted and ignored.
+
 ## Vendor egress: `OMI_VENDOR_EGRESS` (ADR-0057)
 
 One explicit switch for "may data leave for a third party", declared `deny` in `backend.env.base` and in

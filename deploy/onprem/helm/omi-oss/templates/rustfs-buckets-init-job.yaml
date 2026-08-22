@@ -51,5 +51,14 @@ spec:
               for b in {{ range $k, $v := .Values.objstore.buckets }}{{ $v }} {{ end }}; do
                 mc mb --ignore-existing "rustfs/$b"
               done
-              echo "buckets provisioned."
+              # Anonymous read on the MARKETPLACE ASSET buckets only (ADR-0087). RustFS does not honour a
+              # per-object ACL — measured: an object uploaded with public-read answers 403 to an anonymous
+              # GET — so a bucket policy is the only mechanism that works. It is applied HERE and only
+              # here, to logos and thumbnails: those are public by definition. The buckets holding user
+              # audio deliberately get NO policy; their URLs are signed and time-limited instead, because
+              # "make public_url work" on a recording would create the exposure rather than close it.
+              for b in {{ .Values.objstore.buckets.PLUGINS_LOGOS }} {{ .Values.objstore.buckets.APP_THUMBNAILS }}; do
+                mc anonymous set download "rustfs/$b"
+              done
+              echo "buckets provisioned (anonymous read on the marketplace asset buckets only)."
 {{- end }}

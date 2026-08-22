@@ -53,6 +53,7 @@ OPUS_FRAME_SIZE = OPUS_SAMPLE_RATE * OPUS_FRAME_DURATION_MS // 1000  # 320 sampl
 # Valid private cloud sync extensions (longest first for correct matching)
 PRIVATE_CLOUD_EXTENSIONS = ['.batch.enc', '.batch.bin', '.opus.enc', '.opus', '.enc', '.bin']
 
+
 def _object_store():
     """Return the configured object-store adapter (ADR-0032). The migration seam: callers use this
     neutral port instead of GCS ``blob`` ops, so ``OBJECT_STORE_BACKEND`` (gcs|s3) swaps the backend.
@@ -109,7 +110,10 @@ def upload_profile_audio(file_path: str, uid: str) -> str:
     assert bucket is not None  # required=True raises if missing
     path = f'{uid}/speech_profile.wav'
     _object_store().put_from_file(bucket, path, file_path)
-    return _object_store().public_url(bucket, path)
+    # A signed URL, not a public one: this is the user's VOICE. `public_url` returned an unauthenticated
+    # link that works forever wherever the bucket is readable — on GCS it is, by project policy
+    # (ADR-0087).
+    return _signed_url(bucket, path, USER_AUDIO_URL_MINUTES)
 
 
 def get_user_has_speech_profile(uid: str) -> bool:
@@ -263,8 +267,13 @@ def get_speech_sample_signed_urls(paths: List[str]) -> List[str]:
 # ************* POST PROCESSING **************
 # ********************************************
 def upload_postprocessing_audio(file_path: str) -> str:
+    """Upload the conversation audio and return a URL the STT provider can fetch.
+
+    Signed, not public (ADR-0087). The caller already named the result ``signed_url``, which is what it
+    should always have been: this is the user's recording, and the provider only needs it for one call.
+    """
     _object_store().put_from_file(postprocessing_audio_bucket, file_path, file_path)
-    return _object_store().public_url(postprocessing_audio_bucket, file_path)
+    return _signed_url(postprocessing_audio_bucket, file_path, USER_AUDIO_URL_MINUTES)
 
 
 def delete_postprocessing_audio(file_path: str) -> None:
@@ -278,7 +287,9 @@ def delete_postprocessing_audio(file_path: str) -> None:
 
 def upload_sdcard_audio(file_path: str) -> str:
     _object_store().put_from_file(postprocessing_audio_bucket, file_path, file_path)
-    return _object_store().public_url(postprocessing_audio_bucket, f'sdcard/{file_path}')
+    # Signed for the same reason as the sibling above (ADR-0087). NOTE the pre-existing asymmetry, left
+    # as found: the object is written at `file_path` and the URL is minted for `sdcard/{file_path}`.
+    return _signed_url(postprocessing_audio_bucket, f'sdcard/{file_path}', USER_AUDIO_URL_MINUTES)
 
 
 def download_postprocessing_audio(file_path: str, destination_file_path: str) -> None:
@@ -293,7 +304,9 @@ def download_postprocessing_audio(file_path: str, destination_file_path: str) ->
 def upload_conversation_recording(file_path: str, uid: str, conversation_id: str) -> str:
     path = f'{uid}/{conversation_id}.wav'
     _object_store().put_from_file(memories_recordings_bucket, path, file_path)
-    return _object_store().public_url(memories_recordings_bucket, path)
+    # Signed (ADR-0087): a conversation recording behind a link that never expires is the thing this
+    # initiative exists to avoid.
+    return _signed_url(memories_recordings_bucket, path, USER_AUDIO_URL_MINUTES)
 
 
 def get_conversation_recording_if_exists(uid: str, memory_id: str) -> Optional[str]:
@@ -327,8 +340,13 @@ def delete_all_conversation_recordings(uid: str) -> int:
 # ************* SYNCING FILES **************
 # ********************************************
 def get_syncing_file_temporal_url(file_path: str):
+    """Upload a file being synced and return a URL for it.
+
+    Signed like its twin below (ADR-0087) — it carries the same audio. The two differ only in expiry;
+    this one has no live caller, and is kept because upstream's surface has it.
+    """
     _object_store().put_from_file(syncing_local_bucket, file_path, file_path)
-    return _object_store().public_url(syncing_local_bucket, file_path)
+    return _signed_url(syncing_local_bucket, file_path, USER_AUDIO_URL_MINUTES)
 
 
 def get_syncing_file_temporal_signed_url(file_path: str):
@@ -591,9 +609,7 @@ def upload_audio_chunks_batch(
     if protection_level == 'enhanced':
         # Encrypt each chunk individually (length-prefixed), stream to the object store
         path = f'chunks/{uid}/{conversation_id}/{batch_name}.batch.enc'
-        with _object_store().open_write(
-            private_cloud_sync_bucket, path, content_type='application/octet-stream'
-        ) as f:
+        with _object_store().open_write(private_cloud_sync_bucket, path, content_type='application/octet-stream') as f:
             for chunk in sorted_chunks:
                 encrypted_chunk = encryption.encrypt_audio_chunk(chunk['data'], uid)
                 f.write(encrypted_chunk)
@@ -601,9 +617,7 @@ def upload_audio_chunks_batch(
     else:
         # Standard — stream raw PCM data to the object store
         path = f'chunks/{uid}/{conversation_id}/{batch_name}.batch.bin'
-        with _object_store().open_write(
-            private_cloud_sync_bucket, path, content_type='application/octet-stream'
-        ) as f:
+        with _object_store().open_write(private_cloud_sync_bucket, path, content_type='application/octet-stream') as f:
             for chunk in sorted_chunks:
                 f.write(chunk['data'])
 
@@ -1165,7 +1179,9 @@ def mark_playback_unavailable(uid: str, conversation_id: str, audio_file_id: str
 
 
 def is_playback_unavailable(uid: str, conversation_id: str, audio_file_id: str) -> bool:
-    return _object_store().exists(private_cloud_sync_bucket, _playback_unavailable_path(uid, conversation_id, audio_file_id))
+    return _object_store().exists(
+        private_cloud_sync_bucket, _playback_unavailable_path(uid, conversation_id, audio_file_id)
+    )
 
 
 def enqueue_conversation_audio_merge(
@@ -1267,7 +1283,9 @@ def mark_conversation_playback_unavailable(uid: str, conversation_id: str, finge
     """Marker content carries the fingerprint it was written for: a marker for a
     stale fingerprint is ignored on read (late chunks may fix a chunks_missing verdict)."""
     path = _conversation_playback_unavailable_path(uid, conversation_id)
-    _object_store().put(private_cloud_sync_bucket, path, f'{fingerprint}:{reason}'.encode('utf-8'), content_type='text/plain')
+    _object_store().put(
+        private_cloud_sync_bucket, path, f'{fingerprint}:{reason}'.encode('utf-8'), content_type='text/plain'
+    )
 
 
 def get_conversation_playback_unavailable_fingerprint(uid: str, conversation_id: str) -> Optional[str]:
@@ -1438,6 +1456,13 @@ def delete_speech_profile_blob(path: str) -> bool:
     if not speech_profiles_bucket:
         return False
     return delete_blob(speech_profiles_bucket, path)
+
+
+# How long a server-minted URL for USER AUDIO stays valid (ADR-0087). Long enough for the consumer that
+# actually fetches it — the STT provider pulling the post-processing file, or the app right after an
+# upload — and short enough that a leaked URL is not a permanent handle on somebody's recording. The
+# syncing helper below uses 15 minutes because its file is consumed within seconds.
+USER_AUDIO_URL_MINUTES = 60
 
 
 def _signed_url(bucket: str, key: str, minutes: int) -> str:

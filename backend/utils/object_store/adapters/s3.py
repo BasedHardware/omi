@@ -100,10 +100,20 @@ def _public_base() -> str:
 
 
 def _public_acl() -> Optional[str]:
-    # ACL to apply to public objects. Default 'public-read' (RustFS/MinIO honor ACLs). On AWS buckets with
-    # Object Ownership = 'bucket owner enforced' (default since 2023) ACLs are DISABLED and public-read makes
-    # the upload fail — set S3_PUBLIC_ACL='' (empty) there and grant public access via a bucket policy
-    # instead (cubic PR 10887 s3.py:117). An empty value means "send no ACL".
+    # ACL to apply to public objects. Default 'public-read'.
+    #
+    # MEASURED, because the comment here used to claim "RustFS/MinIO honor ACLs" and that is FALSE for the
+    # RustFS we deploy: an object uploaded with public-read answers HTTP 403 to an anonymous GET on both
+    # 1.0.0-beta.12 (our pin) and 1.0.0-rc.3 (rustfs/rustfs#928, still open), and SeaweedFS 4.43 behaves the
+    # same. The only mechanism that works on all three is a BUCKET POLICY, and a prefix-scoped one at that
+    # (verified: `<bucket>/public/*` public, the rest private). So the ACL is accepted and ignored: an
+    # upload with public=True succeeds and its URL is unreachable, which reads as "public and broken"
+    # rather than "not public". Tracked as BACKLOG L6.
+    #
+    # It is kept because it is not dead everywhere: MinIO does honour it, and on AWS buckets with Object
+    # Ownership = 'bucket owner enforced' (default since 2023) ACLs are DISABLED and public-read makes the
+    # upload FAIL — set S3_PUBLIC_ACL='' (empty) there and grant public access via a bucket policy instead
+    # (cubic PR 10887 s3.py:117). An empty value means "send no ACL".
     value = os.getenv("S3_PUBLIC_ACL")
     if value is None:
         return "public-read"
