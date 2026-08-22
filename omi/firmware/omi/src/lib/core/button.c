@@ -12,6 +12,7 @@
 #include <zephyr/pm/device_runtime.h>
 #include <zephyr/sys/poweroff.h>
 
+#include "ble_perm.h"
 #include "button_gesture.h"
 #include "haptic.h"
 #include "imu.h"
@@ -44,11 +45,11 @@ static struct bt_gatt_attr button_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&button_uuid),
     BT_GATT_CHARACTERISTIC(&button_characteristic_data_uuid.uuid,
                            BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
-                           BT_GATT_PERM_READ,
+                           OMI_GATT_PERM_READ,
                            button_data_read_characteristic,
                            NULL,
                            NULL),
-    BT_GATT_CCC(button_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+    BT_GATT_CCC(button_ccc_config_changed_handler, OMI_GATT_PERM_CCC),
 };
 
 static struct bt_gatt_service button_service = BT_GATT_SERVICE(button_service_attr);

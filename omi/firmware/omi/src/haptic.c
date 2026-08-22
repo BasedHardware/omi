@@ -6,6 +6,8 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
+#include "lib/core/ble_perm.h"
+
 LOG_MODULE_REGISTER(haptic, CONFIG_LOG_DEFAULT_LEVEL);
 
 #define MAX_HAPTIC_DURATION 5000
@@ -42,7 +44,7 @@ static struct bt_gatt_attr haptic_attrs[] = {
     BT_GATT_PRIMARY_SERVICE(&haptic_service_uuid),
     BT_GATT_CHARACTERISTIC(&haptic_char_uuid.uuid,
                            BT_GATT_CHRC_WRITE,
-                           BT_GATT_PERM_WRITE,
+                           OMI_GATT_PERM_WRITE,
                            NULL,
                            haptic_write_handler,
                            NULL),
