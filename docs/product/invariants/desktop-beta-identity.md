@@ -42,7 +42,7 @@ Consequences that must hold:
 - `desktop/macos/Desktop/Tests/DesktopStorageIdentityTests.swift` — isolated
   "Omi Beta" storage root
 - `.github/scripts/check-release-process-guards.py` — Codemagic still smokes
-  both identities via `scripts/smoke-signed-desktop-artifact.sh`; the retired
+  both identities via `desktop/macos/scripts/smoke-signed-desktop-artifact.sh`; the retired
   qualification lane cannot be reintroduced
 - `backend/tests/unit/test_desktop_updates.py::TestBetaIdentityServing` —
   identity-aware appcast/download serving

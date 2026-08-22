@@ -12,13 +12,13 @@ import 'package:provider/provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 import 'package:upgrader/upgrader.dart';
 
-import 'package:omi/backend/http/api/agents.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/geolocation.dart';
+import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/pages/action_items/action_items_page.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
@@ -63,6 +63,7 @@ import 'package:omi/services/notifications.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/audio/foreground.dart';
+import 'package:omi/utils/analytics/background_resource_telemetry.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -157,6 +158,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   // Freemium switch handler for auto-switch dialogs
   final FreemiumSwitchHandler _freemiumHandler = FreemiumSwitchHandler();
+
+  late final BackgroundResourceTelemetry _backgroundResourceTelemetry = BackgroundResourceTelemetry(
+    emit: (eventName, properties) => PlatformManager.instance.analytics.track(eventName, properties: properties),
+  );
 
   CaptureProvider? _captureProvider;
   DeviceProvider? _deviceProviderForQuickActions;
@@ -253,15 +258,127 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     });
   }
 
+  BackgroundResourceSnapshot _captureBackgroundResourceSnapshot({
+    CaptureProvider? captureProvider,
+    DeviceProvider? deviceProvider,
+    bool foregroundTaskRunning = false,
+    int backgroundDisconnectCount = 0,
+    int connectionTimeoutCount = 0,
+    int failToConnectCount = 0,
+    int reconnectCount = 0,
+    int maxReconnectDurationMs = 0,
+    int reconnectionCountTotal = 0,
+    int failToConnectCountTotal = 0,
+    bool bleHistorySaturated = false,
+    int nativeBackgroundBytesConsumed = 0,
+    int nativeBackgroundPacketsConsumed = 0,
+  }) {
+    final capture = captureProvider ?? Provider.of<CaptureProvider>(context, listen: false);
+    final devices = deviceProvider ?? Provider.of<DeviceProvider>(context, listen: false);
+    final device = devices.connectedDevice ?? devices.pairedDevice;
+    return BackgroundResourceSnapshot(
+      bleBytesReceived: capture.lifetimeBleBytesReceived,
+      websocketBytesSent: capture.lifetimeWsSocketBytesSent,
+      recordingState: capture.recordingState.name,
+      deviceConnected: devices.isConnected,
+      deviceType: device?.type.name ?? 'none',
+      batchModeEnabled: SharedPreferencesUtil().batchModeEnabled,
+      foregroundTaskRunning: foregroundTaskRunning,
+      backgroundDisconnectCount: backgroundDisconnectCount,
+      connectionTimeoutCount: connectionTimeoutCount,
+      failToConnectCount: failToConnectCount,
+      reconnectCount: reconnectCount,
+      maxReconnectDurationMs: maxReconnectDurationMs,
+      reconnectionCountTotal: reconnectionCountTotal,
+      failToConnectCountTotal: failToConnectCountTotal,
+      bleHistorySaturated: bleHistorySaturated,
+      nativeBackgroundBytesConsumed: nativeBackgroundBytesConsumed,
+      nativeBackgroundPacketsConsumed: nativeBackgroundPacketsConsumed,
+      diagnosticsDeviceId: device?.id,
+    );
+  }
+
+  Future<BackgroundResourceSnapshot> _loadBackgroundResourceSnapshot(
+    DateTime backgroundStartedAt,
+    BackgroundResourceSnapshot startSnapshot,
+  ) async {
+    final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
+    final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+    final diagnosticsDeviceId = startSnapshot.diagnosticsDeviceId;
+    var foregroundTaskRunning = false;
+    try {
+      foregroundTaskRunning = await FlutterForegroundTask.isRunningService;
+    } catch (_) {}
+
+    var backgroundDisconnectCount = 0;
+    var connectionTimeoutCount = 0;
+    var failToConnectCount = 0;
+    var reconnectCount = 0;
+    var maxReconnectDurationMs = 0;
+    var reconnectionCountTotal = 0;
+    var failToConnectCountTotal = 0;
+    var bleHistorySaturated = false;
+    var nativeBackgroundBytesConsumed = 0;
+    var nativeBackgroundPacketsConsumed = 0;
+
+    if (Platform.isIOS && diagnosticsDeviceId != null) {
+      try {
+        final diagnostics = await BleHostApi().getDeviceDiagnostics(diagnosticsDeviceId);
+        final startMs = backgroundStartedAt.millisecondsSinceEpoch;
+        final recentEvents = diagnostics.disconnectHistory
+            .where((event) => event.timestamp >= startMs && !event.isManual)
+            .toList();
+        final backgroundEvents = recentEvents
+            .where((event) => event.appState == 'background' || event.appState == 'inactive')
+            .toList();
+        backgroundDisconnectCount = backgroundEvents.where((event) => event.eventType == 'disconnect').length;
+        failToConnectCount = backgroundEvents.where((event) => event.eventType == 'fail_to_connect').length;
+        connectionTimeoutCount = backgroundEvents
+            .where((event) => event.reason.toLowerCase().contains('timeout'))
+            .length;
+        final reconnectedEvents = backgroundEvents.where((event) => event.timeToReconnectMs > 0).toList();
+        reconnectCount = reconnectedEvents.length;
+        for (final event in reconnectedEvents) {
+          if (event.timeToReconnectMs > maxReconnectDurationMs) {
+            maxReconnectDurationMs = event.timeToReconnectMs;
+          }
+        }
+        reconnectionCountTotal = diagnostics.reconnectionCount;
+        failToConnectCountTotal = diagnostics.failToConnectCount;
+        bleHistorySaturated =
+            diagnostics.disconnectHistory.length >= 20 &&
+            diagnostics.disconnectHistory.every((event) => event.timestamp >= startMs);
+        nativeBackgroundBytesConsumed = diagnostics.nativeBackgroundBytesConsumed;
+        nativeBackgroundPacketsConsumed = diagnostics.nativeBackgroundPacketsConsumed;
+      } catch (_) {}
+    }
+
+    return _captureBackgroundResourceSnapshot(
+      captureProvider: captureProvider,
+      deviceProvider: deviceProvider,
+      foregroundTaskRunning: foregroundTaskRunning,
+      backgroundDisconnectCount: backgroundDisconnectCount,
+      connectionTimeoutCount: connectionTimeoutCount,
+      failToConnectCount: failToConnectCount,
+      reconnectCount: reconnectCount,
+      maxReconnectDurationMs: maxReconnectDurationMs,
+      reconnectionCountTotal: reconnectionCountTotal,
+      failToConnectCountTotal: failToConnectCountTotal,
+      bleHistorySaturated: bleHistorySaturated,
+      nativeBackgroundBytesConsumed: nativeBackgroundBytesConsumed,
+      nativeBackgroundPacketsConsumed: nativeBackgroundPacketsConsumed,
+    );
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
     String event = '';
     if (state == AppLifecycleState.paused) {
       event = 'App is paused';
-      // Stop keepalive when app goes to background
       if (mounted) {
-        Provider.of<MessageProvider>(context, listen: false).stopVmKeepalive();
+        _backgroundResourceTelemetry.onPaused(_captureBackgroundResourceSnapshot());
+        Provider.of<CaptureProvider>(context, listen: false).setMetricsAppActive(false);
       }
     } else if (state == AppLifecycleState.resumed) {
       event = 'App is resumed';
@@ -270,6 +387,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       if (mounted) {
         Provider.of<ConversationProvider>(context, listen: false).refreshConversations();
         final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
+        captureProvider.setMetricsAppActive(true);
+        unawaited(_backgroundResourceTelemetry.onResumed(_loadBackgroundResourceSnapshot));
         captureProvider.refreshInProgressConversations();
         // Heal phone-mic sessions that went silent while another app played
         // audio (Stage Manager / YouTube) without an AVAudioSession interrupt.
@@ -277,13 +396,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         // Pick up any batch recordings the native layer wrote while backgrounded/closed.
         Provider.of<LocalRecordingsProvider>(context, listen: false).refresh();
       }
-
-      // Ensure agent VM is running and restart keepalive
-      if (mounted && SharedPreferencesUtil().claudeAgentEnabled) {
-        ensureAgentVm();
-        Provider.of<MessageProvider>(context, listen: false).startVmKeepalive();
-      }
-
       // Sync Apple Reminders on foreground resume
       if (mounted && PlatformService.isApple) {
         final taskProvider = Provider.of<TaskIntegrationProvider>(context, listen: false);
@@ -369,22 +481,20 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     WidgetsBinding.instance.addObserver(this);
     _prewarmRemainingTabs(homePageIdx);
 
-    // Pre-warm agent VM and WebSocket so session is ready by the time the user opens chat
-    if (SharedPreferencesUtil().claudeAgentEnabled) {
-      print('[HomePage] claudeAgentEnabled=true, calling ensureAgentVm + starting keepalive + preConnectAgent');
-      ensureAgentVm();
-      final messageProvider = Provider.of<MessageProvider>(context, listen: false);
-      messageProvider.startVmKeepalive();
-      messageProvider.preConnectAgent();
-    } else {
-      print('[HomePage] claudeAgentEnabled=false, skipping VM ensure');
-    }
-
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
-        await ForegroundUtil.initializeForegroundService();
-        await ForegroundUtil.startForegroundTask();
+      // Android needs a foreground service to keep capture/location work alive.
+      // On iOS this plugin boots a second Flutter engine; conversation location
+      // is captured directly at recording start and first transcript instead.
+      if (Platform.isAndroid) {
+        final permission = await Geolocator.checkPermission();
+        if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
+          await ForegroundUtil.initializeForegroundService();
+          await ForegroundUtil.startForegroundTask();
+        }
+      } else if (Platform.isIOS) {
+        // Stop a headless foreground-task engine persisted by an older build.
+        // Native BLE/audio background modes continue to own active capture.
+        await ForegroundUtil.stopForegroundTask();
       }
       if (mounted) {
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
@@ -884,8 +994,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           color: isSyncing
                               ? Colors.deepPurple.withValues(alpha: 0.2)
                               : hasPendingOnDevice
-                                  ? Colors.orange.withValues(alpha: 0.15)
-                                  : const Color(0xFF1F1F25),
+                              ? Colors.orange.withValues(alpha: 0.15)
+                              : const Color(0xFF1F1F25),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
@@ -894,8 +1004,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           color: isSyncing
                               ? Colors.deepPurpleAccent
                               : hasPendingOnDevice
-                                  ? Colors.orangeAccent
-                                  : Colors.white70,
+                              ? Colors.orangeAccent
+                              : Colors.white70,
                         ),
                       ),
                     );
@@ -1093,10 +1203,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    // Stop VM keepalive timer
-    try {
-      Provider.of<MessageProvider>(context, listen: false).stopVmKeepalive();
-    } catch (_) {}
     // Cancel stream subscription to prevent memory leak
     _notificationStreamSubscription?.cancel();
     // Remove capture provider listener using stored reference
@@ -1120,7 +1226,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     _freemiumHandler.dispose();
     // Remove foreground task callback to prevent memory leak
     FlutterForegroundTask.removeTaskDataCallback(_onReceiveTaskData);
-    ForegroundUtil.stopForegroundTask();
+    if (Platform.isAndroid) {
+      ForegroundUtil.stopForegroundTask();
+    }
     super.dispose();
   }
 }

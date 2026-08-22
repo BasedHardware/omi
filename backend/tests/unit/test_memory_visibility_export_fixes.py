@@ -69,15 +69,17 @@ def test_historical_read_compensates_for_skipped_malformed_rows(service_mod, mon
     bad = _sample_memory_dict("bad")
     bad["id"] = ""  # adapter skips identity-less rows
     # First page: two good + one skipped. Compensation must pull the third good.
-    pages = {
-        0: [good[0], bad, good[1]],
-        3: [good[2]],
-    }
+    all_rows = [good[0], bad, good[1], good[2]]
 
-    def get_memories(_uid, limit, offset, **_kwargs):
-        return list(pages.get(offset, []))[:limit]
+    def list_index(_uid, limit, offset=0, **_kwargs):
+        return list(all_rows[offset : offset + limit])
 
-    monkeypatch.setattr(service_mod.memories_db, "get_memories", get_memories)
+    def get_by_ids(_uid, memory_ids, **_kwargs):
+        by_id = {row["id"]: row for row in good}
+        return [by_id[memory_id] for memory_id in memory_ids if memory_id in by_id]
+
+    monkeypatch.setattr(service_mod.memories_db, "list_memory_updated_or_created_index", list_index)
+    monkeypatch.setattr(service_mod.memories_db, "get_memories_by_ids", get_by_ids)
     adapter = service_mod.HistoricalMemoryAdapter(db_client=object())
 
     page = adapter.read("uid-test", limit=3, offset=0)

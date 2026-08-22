@@ -4,8 +4,24 @@ import Foundation
 enum OmiToolManifest {
   static let localAgentAPITools: [LocalAgentTool] = [
     LocalAgentTool(
+      name: "get_work_context",
+      description: "Primary tool for recent-work questions and locating a document, URL, page, or file. Call get_work_context before semantic_search or execute_sql for requests such as 'what was I doing in X?' or 'where was that doc?'. It returns durable handles and is historical context, not current visual evidence.",
+      properties: [
+        "minutes": [
+          "type": "number",
+          "description": "Minutes of recent activity to summarize (default 10, max 120)",
+        ],
+        "include_screen": [
+          "type": "boolean",
+          "description": "Also return the recent screenshot timeline and a screenshot_id (default false). Only set this when visits/briefs handles cannot answer the question, or the question is visual.",
+        ]
+      ],
+      required: [],
+      annotations: ["readOnlyHint": true, "destructiveHint": false, "openWorldHint": false]
+    ),
+    LocalAgentTool(
       name: "execute_sql",
-      description: "Run SQL on the user's local omi.db SQLite database. Use for app usage stats, screen time, activity counts, task lookups, aggregations. Read-only in agent adapters.",
+      description: "Run exact structured or quantitative queries on the user's local omi.db SQLite database: counts, date ranges, aggregates, and narrow record inspection. For recent-work questions such as 'what was I doing in X?' or locating a document, URL, page, or file, call get_work_context first and do not query screenshots.ocrText. The durable work index is context_visits(handlesJson) joined to context_buckets. Raw ocrText columns are refused; use substr(ocrText, 1, 200) only for an explicit bounded preview. Read-only in agent adapters.",
       properties: [
         "query": [
           "type": "string",
@@ -26,7 +42,7 @@ enum OmiToolManifest {
     ),
     LocalAgentTool(
       name: "semantic_search",
-      description: "Vector similarity search on the user's screen history. Use for fuzzy/conceptual queries about what the user saw on their computer.",
+      description: "Vector similarity search on screen content. Use for fuzzy/conceptual content only after get_work_context cannot identify the document, URL, or file; get_work_context owns recent-work and location questions.",
       properties: [
         "query": [
           "type": "string",
@@ -175,18 +191,6 @@ enum OmiToolManifest {
       required: [
       "screenshot_id"
     ],
-      annotations: ["readOnlyHint": true, "destructiveHint": false, "openWorldHint": false]
-    ),
-    LocalAgentTool(
-      name: "get_work_context",
-      description: "Get a compressed timeline of recent on-screen activity without sharing raw screenshot pixels. It is historical context, not current visual evidence.",
-      properties: [
-        "minutes": [
-          "type": "number",
-          "description": "Minutes of recent activity to summarize (default 10, max 120)",
-        ]
-      ],
-      required: [],
       annotations: ["readOnlyHint": true, "destructiveHint": false, "openWorldHint": false]
     )
   ]

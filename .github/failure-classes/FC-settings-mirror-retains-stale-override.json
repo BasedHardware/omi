@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "FC-settings-mirror-retains-stale-override",
+  "violated_contract": "A derived settings domain that promises to mirror an authoritative domain must reconcile on every launch path and must treat an absent authoritative key as a deletion. Skipping a reuse path or overlaying only present values leaves stale persisted overrides that silently diverge from the authority's effective defaults.",
+  "canonical_prevention": "Put reconciliation on the common path after full and reuse flows converge, implement exact allowlist mirroring rather than additive overlay, fail closed when the mirror cannot be verified, and test both copied values and source-key absence against a prepopulated target.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/tests/test-settings-seed.sh",
+    ".github/checks-manifest.yaml"
+  ],
+  "evidence_prs": [
+    8329,
+    9673
+  ],
+  "scope_hints": [
+    "desktop/macos/run.sh",
+    "desktop/macos/scripts/omi-settings-seed.sh"
+  ],
+  "status": "open"
+}

@@ -7,7 +7,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'package:collection/collection.dart';
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -70,7 +69,9 @@ class CaptureController extends ChangeNotifier
   static const int _maxInProgressConversationRefreshAttempts = 30;
   static const Duration _inProgressConversationRefreshInterval = Duration(seconds: 2);
 
-  final ConversationLocationCapture _conversationLocationCapture = ConversationLocationCapture();
+  final ConversationLocationCapture _conversationLocationCapture;
+  final Future<void> Function()? _inProgressConversationLoader;
+  final Future<BleAudioCodec> Function(String deviceId)? _audioCodecLoader;
 
   CaptureExternalActions externalActions;
   DeviceOnboardingProvider? deviceOnboardingProvider;
@@ -134,6 +135,8 @@ class CaptureController extends ChangeNotifier
 
   double get bleReceiveRateKbps => _metrics.bleReceiveRateKbps;
   double get wsSendRateKbps => _metrics.wsSendRateKbps;
+  int get lifetimeBleBytesReceived => _metrics.lifetimeBleBytesReceived;
+  int get lifetimeWsSocketBytesSent => _metrics.lifetimeWsSocketBytesSent;
 
   /// Call this in initState of a widget that needs BLE/WS metrics
   void addMetricsListener() {
@@ -145,6 +148,10 @@ class CaptureController extends ChangeNotifier
     _metrics.removeMetricsListener();
   }
 
+  void setMetricsAppActive(bool active) {
+    _metrics.setAppActive(active);
+  }
+
   /// Check if any segment has a personId not in local cache.
   /// Uses Set difference for O(N+M) complexity instead of O(N*M).
   bool _hasMissingPerson(List<TranscriptSegment> segments) {
@@ -153,8 +160,15 @@ class CaptureController extends ChangeNotifier
     return segmentPersonIds.difference(cachedIds).isNotEmpty;
   }
 
-  CaptureController({CaptureExternalActions? externalActions})
-      : externalActions = externalActions ?? const NoopCaptureExternalActions() {
+  CaptureController({
+    CaptureExternalActions? externalActions,
+    ConversationLocationCapture? conversationLocationCapture,
+    Future<void> Function()? inProgressConversationLoader,
+    Future<BleAudioCodec> Function(String deviceId)? audioCodecLoader,
+  }) : externalActions = externalActions ?? const NoopCaptureExternalActions(),
+       _conversationLocationCapture = conversationLocationCapture ?? ConversationLocationCapture(),
+       _inProgressConversationLoader = inProgressConversationLoader,
+       _audioCodecLoader = audioCodecLoader {
     // Restore a persisted device mute so it survives an app kill/restart. When
     // the device reconnects, streamDeviceRecording() reads _isPaused as
     // `wasPaused` and re-applies the mute instead of silently resuming.
@@ -215,30 +229,30 @@ class CaptureController extends ChangeNotifier
     _activeSource = PhoneMicSource();
     _phoneMicWalActive = true;
     await ServiceManager.instance().phoneMic.start(
-          onByteReceived: (bytes) {
-            final frames = _activeSource?.processBytes(bytes) ?? [];
-            for (final frame in frames) {
-              _wal.getSyncs().phone.onFrameCaptured(frame);
-              if (_socket?.state == SocketServiceState.connected) {
-                _socket?.send(frame.payload);
-                _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
-              }
-            }
-          },
-          onRecording: () {
-            updateRecordingState(RecordingState.record);
-          },
-          onStop: () {
-            if (!_micInterrupted) {
-              updateRecordingState(RecordingState.stop);
-            }
-          },
-          onInitializing: () {
-            updateRecordingState(RecordingState.initialising);
-          },
-          onStalled: _onMicStalled,
-          onInterruption: _onMicInterruption,
-        );
+      onByteReceived: (bytes) {
+        final frames = _activeSource?.processBytes(bytes) ?? [];
+        for (final frame in frames) {
+          _wal.getSyncs().phone.onFrameCaptured(frame);
+          if (_socket?.state == SocketServiceState.connected) {
+            _socket?.send(frame.payload);
+            _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
+          }
+        }
+      },
+      onRecording: () {
+        updateRecordingState(RecordingState.record);
+      },
+      onStop: () {
+        if (!_micInterrupted) {
+          updateRecordingState(RecordingState.stop);
+        }
+      },
+      onInitializing: () {
+        updateRecordingState(RecordingState.initialising);
+      },
+      onStalled: _onMicStalled,
+      onInterruption: _onMicInterruption,
+    );
   }
 
   void _onMicStalled() {
@@ -691,13 +705,13 @@ class CaptureController extends ChangeNotifier
     CustomSttConfig? customSttConfig,
   }) {
     return ServiceManager.instance().socket.conversation(
-          codec: codec,
-          sampleRate: sampleRate,
-          language: language,
-          force: force,
-          source: source,
-          customSttConfig: customSttConfig,
-        );
+      codec: codec,
+      sampleRate: sampleRate,
+      language: language,
+      force: force,
+      source: source,
+      customSttConfig: customSttConfig,
+    );
   }
 
   Future<void> _connectTranscriptionSocket({
@@ -724,8 +738,9 @@ class CaptureController extends ChangeNotifier
     Logger.debug('Initiating WebSocket with: codec=$codec, sampleRate=$sampleRate, channels=$channels, isPcm=$isPcm');
 
     // Get language and custom STT config
-    String language =
-        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
+    String language = SharedPreferencesUtil().hasSetPrimaryLanguage
+        ? SharedPreferencesUtil().userPrimaryLanguage
+        : "multi";
     final customSttConfig = SharedPreferencesUtil().customSttConfig;
 
     Logger.debug('Custom STT enabled: ${customSttConfig.isEnabled}, provider: ${customSttConfig.provider}');
@@ -879,20 +894,24 @@ class CaptureController extends ChangeNotifier
             _isProcessingButtonEvent = true;
             if (_isPaused) {
               PlatformManager.instance.analytics.omiDoubleTap(feature: 'unmute');
-              resumeDeviceRecording().then((_) {
-                _isProcessingButtonEvent = false;
-              }).catchError((e) {
-                Logger.debug("Error resuming device recording: $e");
-                _isProcessingButtonEvent = false;
-              });
+              resumeDeviceRecording()
+                  .then((_) {
+                    _isProcessingButtonEvent = false;
+                  })
+                  .catchError((e) {
+                    Logger.debug("Error resuming device recording: $e");
+                    _isProcessingButtonEvent = false;
+                  });
             } else {
               PlatformManager.instance.analytics.omiDoubleTap(feature: 'mute');
-              pauseDeviceRecording().then((_) {
-                _isProcessingButtonEvent = false;
-              }).catchError((e) {
-                Logger.debug("Error pausing device recording: $e");
-                _isProcessingButtonEvent = false;
-              });
+              pauseDeviceRecording()
+                  .then((_) {
+                    _isProcessingButtonEvent = false;
+                  })
+                  .catchError((e) {
+                    Logger.debug("Error pausing device recording: $e");
+                    _isProcessingButtonEvent = false;
+                  });
             }
           } else if (doubleTapAction == 2) {
             // Star ongoing conversation (doesn't end it)
@@ -986,7 +1005,8 @@ class CaptureController extends ChangeNotifier
 
         // Local storage syncs. In batch mode the native layer owns writing the
         // .bin files, so the Dart WAL writer must stay off to avoid double-writes.
-        var checkWalSupported = !SharedPreferencesUtil().batchModeEnabled &&
+        var checkWalSupported =
+            !SharedPreferencesUtil().batchModeEnabled &&
             (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass) &&
             codec.isOpusSupported() &&
             (_socket?.state != SocketServiceState.connected || SharedPreferencesUtil().unlimitedLocalStorageEnabled);
@@ -1052,6 +1072,7 @@ class CaptureController extends ChangeNotifier
   }
 
   Future<BleAudioCodec> _getAudioCodec(String deviceId) async {
+    if (_audioCodecLoader != null) return _audioCodecLoader!(deviceId);
     var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection == null) {
       return BleAudioCodec.pcm8;
@@ -1094,8 +1115,9 @@ class CaptureController extends ChangeNotifier
       return;
     }
     BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
-    var language =
-        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
+    var language = SharedPreferencesUtil().hasSetPrimaryLanguage
+        ? SharedPreferencesUtil().userPrimaryLanguage
+        : "multi";
     final customSttConfig = SharedPreferencesUtil().customSttConfig;
     final sttConfigId = customSttConfig.sttConfigId;
 
@@ -1184,10 +1206,7 @@ class CaptureController extends ChangeNotifier
     await SharedPreferencesUtil().saveString('batchAudioDir', docsDir.path);
 
     await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', false);
-    await SharedPreferencesUtil().saveBool(
-      'nativeBleStreamingEnabled',
-      _shouldEnableNativeBackgroundStreaming,
-    );
+    await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', _shouldEnableNativeBackgroundStreaming);
     Logger.debug(
       '[batch] config saved: batchMode=$batchMode dir=${docsDir.path} '
       'deviceId=${device.id} svc=${audioTarget.key} char=${audioTarget.value} type=${device.type.name}',
@@ -1244,10 +1263,7 @@ class CaptureController extends ChangeNotifier
       _nativeOmiRawAudioAllowed;
 
   Future<void> _reconcileNativeBackgroundStreamingPolicy() async {
-    await SharedPreferencesUtil().saveBool(
-      'nativeBleStreamingEnabled',
-      _shouldEnableNativeBackgroundStreaming,
-    );
+    await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', _shouldEnableNativeBackgroundStreaming);
   }
 
   /// Enable or disable Background Mode through CaptureProvider so the provider
@@ -1481,33 +1497,33 @@ class CaptureController extends ChangeNotifier
     // record
     try {
       await ServiceManager.instance().phoneMic.start(
-            onByteReceived: (bytes) {
-              // Process through AudioSource for frame splitting and sync key generation
-              final frames = _activeSource?.processBytes(bytes) ?? [];
+        onByteReceived: (bytes) {
+          // Process through AudioSource for frame splitting and sync key generation
+          final frames = _activeSource?.processBytes(bytes) ?? [];
 
-              for (final frame in frames) {
-                _wal.getSyncs().phone.onFrameCaptured(frame);
+          for (final frame in frames) {
+            _wal.getSyncs().phone.onFrameCaptured(frame);
 
-                if (_socket?.state == SocketServiceState.connected) {
-                  _socket?.send(frame.payload);
-                  _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
-                }
-              }
-            },
-            onRecording: () {
-              updateRecordingState(RecordingState.record);
-            },
-            onStop: () {
-              if (!_micInterrupted) {
-                updateRecordingState(RecordingState.stop);
-              }
-            },
-            onInitializing: () {
-              updateRecordingState(RecordingState.initialising);
-            },
-            onStalled: _onMicStalled,
-            onInterruption: _onMicInterruption,
-          );
+            if (_socket?.state == SocketServiceState.connected) {
+              _socket?.send(frame.payload);
+              _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
+            }
+          }
+        },
+        onRecording: () {
+          updateRecordingState(RecordingState.record);
+        },
+        onStop: () {
+          if (!_micInterrupted) {
+            updateRecordingState(RecordingState.stop);
+          }
+        },
+        onInitializing: () {
+          updateRecordingState(RecordingState.initialising);
+        },
+        onStalled: _onMicStalled,
+        onInterruption: _onMicInterruption,
+      );
     } catch (e, st) {
       // Typed native failures (permission_denied, engine_start_failed, ...) or
       // mic contention — fail visibly instead of recording silence.
@@ -1585,15 +1601,15 @@ class CaptureController extends ChangeNotifier
     updateRecordingState(RecordingState.record);
     try {
       await ServiceManager.instance().phoneMic.startBatch(
-            onStop: () {
-              if (!_micInterrupted && !_phoneMicBatchRestartInFlight) {
-                updateRecordingState(RecordingState.stop);
-              }
-            },
-            onInterruption: _onMicInterruption,
-            onBatchStalled: _onBatchStalled,
-            onError: _onBatchCaptureError,
-          );
+        onStop: () {
+          if (!_micInterrupted && !_phoneMicBatchRestartInFlight) {
+            updateRecordingState(RecordingState.stop);
+          }
+        },
+        onInterruption: _onMicInterruption,
+        onBatchStalled: _onBatchStalled,
+        onError: _onBatchCaptureError,
+      );
     } catch (e, st) {
       // No socket to clean in batch — fail visibly instead of recording nothing.
       Logger.error('[CaptureProvider] phone mic batch start failed: $e\n$st');
@@ -1657,6 +1673,8 @@ class CaptureController extends ChangeNotifier
       _updateRecordingDevice(null);
     }
     updateRecordingState(RecordingState.stop);
+    _keepAliveTimer?.cancel();
+    _keepAliveTimer = null;
     await _socket?.stop(reason: 'stop stream device recording');
   }
 
@@ -1694,10 +1712,29 @@ class CaptureController extends ChangeNotifier
     _startKeepAliveServices();
   }
 
+  bool get _shouldReconnectTranscriptionSocket {
+    final activeDeviceCapture = _recordingDevice != null && recordingState == RecordingState.deviceRecord && !_isPaused;
+    final activePhoneOrSystemCapture =
+        recordingState == RecordingState.record ||
+        recordingState == RecordingState.interrupted ||
+        recordingState == RecordingState.systemAudioRecord;
+    return activeDeviceCapture || activePhoneOrSystemCapture;
+  }
+
+  @visibleForTesting
+  bool get keepAliveScheduledForTesting => _keepAliveTimer?.isActive ?? false;
+
   void _startKeepAliveServices() {
     _keepAliveTimer?.cancel();
+    _keepAliveTimer = null;
+    if (!_shouldReconnectTranscriptionSocket) return;
     _keepAliveTimer = Timer.periodic(const Duration(seconds: 15), (t) async {
       Logger.debug("[Provider] keep alive");
+      if (!_shouldReconnectTranscriptionSocket) {
+        t.cancel();
+        _keepAliveTimer = null;
+        return;
+      }
       // rate 1/15s
       if (_keepAliveLastExecutedAt != null &&
           DateTime.now().subtract(const Duration(seconds: 15)).isBefore(_keepAliveLastExecutedAt!)) {
@@ -1708,30 +1745,42 @@ class CaptureController extends ChangeNotifier
       _keepAliveLastExecutedAt = DateTime.now();
       if (!recordingDeviceServiceReady || _socket?.state == SocketServiceState.connected) {
         t.cancel();
+        _keepAliveTimer = null;
         return;
       }
 
       if (!AuthService.instance.isSignedIn()) {
         Logger.debug("[Provider] keep alive - user not signed in, cancelling reconnect");
         t.cancel();
+        _keepAliveTimer = null;
         return;
       }
 
-      if (_recordingDevice != null) {
-        BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
-        await _initiateWebsocket(audioCodec: codec, source: _getConversationSourceFromDevice());
-        return;
-      }
-      if (recordingState == RecordingState.record || recordingState == RecordingState.interrupted) {
-        await _initiateWebsocket(
-          audioCodec: BleAudioCodec.pcm16,
-          sampleRate: 16000,
-          source: ConversationSource.phone.name,
-        );
-        return;
-      }
+      await _reconnectActiveCapture();
     });
   }
+
+  Future<void> _reconnectActiveCapture() async {
+    final device = _recordingDevice;
+    if (device != null && recordingState == RecordingState.deviceRecord && !_isPaused) {
+      final codec = await _getAudioCodec(device.id);
+      if (!_shouldReconnectTranscriptionSocket || _recordingDevice?.id != device.id) return;
+      await _initiateWebsocket(audioCodec: codec, source: _getConversationSourceFromDevice());
+      return;
+    }
+    if (recordingState == RecordingState.record ||
+        recordingState == RecordingState.interrupted ||
+        recordingState == RecordingState.systemAudioRecord) {
+      await _initiateWebsocket(
+        audioCodec: BleAudioCodec.pcm16,
+        sampleRate: 16000,
+        source: ConversationSource.phone.name,
+      );
+    }
+  }
+
+  @visibleForTesting
+  Future<void> reconnectActiveCaptureForTesting() => _reconnectActiveCapture();
 
   @override
   void onError(Object err) {
@@ -1799,7 +1848,11 @@ class CaptureController extends ChangeNotifier
     try {
       await _drainNativeBleTranscriptMessages();
       if (segments.isEmpty && photos.isEmpty) {
-        await _loadInProgressConversation();
+        if (_inProgressConversationLoader != null) {
+          await _inProgressConversationLoader!();
+        } else {
+          await _loadInProgressConversation();
+        }
       }
     } finally {
       _isRefreshingInProgressConversation = false;
@@ -2235,9 +2288,16 @@ class CaptureController extends ChangeNotifier
 
     if (segments.isEmpty && !_isLoadingInProgressConversation) {
       _isLoadingInProgressConversation = true;
-      FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
+      // Refresh the location at the first transcript without relying on the
+      // long-lived foreground-task isolate. This is fail-open and does not
+      // delay segment processing.
+      unawaited(_conversationLocationCapture.captureAndUpload());
       try {
-        await _loadInProgressConversation();
+        if (_inProgressConversationLoader != null) {
+          await _inProgressConversationLoader!();
+        } else {
+          await _loadInProgressConversation();
+        }
       } finally {
         _isLoadingInProgressConversation = false;
       }
@@ -2314,6 +2374,8 @@ class CaptureController extends ChangeNotifier
     // Persist so the mute survives an app kill/restart, not just a reconnect.
     SharedPreferencesUtil().deviceMuted = true;
     updateRecordingState(RecordingState.pause);
+    _keepAliveTimer?.cancel();
+    _keepAliveTimer = null;
     notifyListeners();
   }
 

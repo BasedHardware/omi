@@ -17,6 +17,7 @@ import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/daily_summary_journey.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_service.dart';
+import 'package:omi/utils/share_links.dart';
 
 class DailySummaryDetailPage extends StatefulWidget {
   final String summaryId;
@@ -93,8 +94,8 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.white))
           : _summary == null
-              ? _buildNotFound()
-              : _buildContent(),
+          ? _buildNotFound()
+          : _buildContent(),
     );
   }
 
@@ -109,7 +110,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
         return;
       }
       PlatformManager.instance.analytics.dailySummaryShared(summaryId: widget.summaryId, date: summary.date);
-      final url = 'https://h.omi.me/recaps/${widget.summaryId}';
+      final url = recapShareUrl(widget.summaryId);
       await SharePlus.instance.share(ShareParams(uri: Uri.parse(url), subject: summary.headline));
     } finally {
       if (mounted) setState(() => _isSharing = false);
@@ -298,8 +299,8 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       final message = result.statusCode == 429
           ? (result.errorDetail ?? context.l10n.recapRegenerateCooldown)
           : result.statusCode == 400
-              ? (result.errorDetail ?? context.l10n.recapRegenerateNoConversations)
-              : context.l10n.recapRegenerateFailed;
+          ? (result.errorDetail ?? context.l10n.recapRegenerateNoConversations)
+          : context.l10n.recapRegenerateFailed;
       AppSnackbar.showSnackbarError(message);
     }
   }
@@ -581,8 +582,9 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
                     initialCenter: singleLocation ? points.first : LatLng(centerLat, centerLng),
                     initialZoom: singleLocation ? 14 : 12,
                     // Use bounds fitting for multiple locations
-                    initialCameraFit:
-                        singleLocation ? null : CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(50)),
+                    initialCameraFit: singleLocation
+                        ? null
+                        : CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(50)),
                     interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
                   ),
                   children: [
@@ -824,8 +826,8 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     final endFormatted = _formatTimeTo12Hour(location.endTime);
     final timeText = startFormatted.isNotEmpty
         ? (endFormatted.isNotEmpty && startFormatted != endFormatted
-            ? '$startFormatted - $endFormatted'
-            : startFormatted)
+              ? '$startFormatted - $endFormatted'
+              : startFormatted)
         : '';
 
     final semanticsLabel = timeText.isEmpty ? location.shortName : '${location.shortName}, $timeText';

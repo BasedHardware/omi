@@ -3,13 +3,14 @@ from datetime import datetime, timezone, timedelta
 import logging
 from typing import Any, Dict, Iterable, List, Optional, Protocol, cast
 
-from google.api_core.exceptions import NotFound
+from google.api_core.exceptions import DeadlineExceeded as FirestoreDeadlineExceeded, NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database.firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode, record_firestore_read
 from ._client import db, get_firestore_client
+from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted
 
 logger = logging.getLogger(__name__)
 
@@ -119,17 +120,35 @@ def get_visible_action_item_ids(
     The account-wide ID census intentionally includes every document for reconciliation
     and account deletion. UI Select All needs a narrower contract: exclude soft-deleted
     rows and include only rows that the explicit ``completed`` list filter can render.
+
+    The ``completed`` filter is pushed server-side via ``FieldFilter`` so Firestore only
+    streams (and bills) documents in the requested bucket, instead of the whole collection.
+    Firestore equality does not match documents where the field is absent and does not
+    conflate 1/0 with booleans, so this is equivalent to the old Python identity check
+    (``completed_value is completed``) for every doc the query now returns.
+
+    ``deleted`` is deliberately NOT pushed into the query as
+    ``.where('deleted', '==', False)``: Firestore equality filters never match documents
+    where the field is absent, and most rows have no ``deleted`` field at all (it is only
+    set on soft-deleted rows). A server-side filter on it would silently drop every
+    undeleted row. Keep this check in Python instead.
     """
     client = firestore_client or get_firestore_client()
     coll = client.collection('users').document(uid).collection(action_items_collection)
+    query = coll.select(['completed', 'deleted']).where(filter=FieldFilter('completed', '==', completed))
     visible_ids: List[str] = []
-    for doc in coll.select(['completed', 'status', 'deleted']).stream():
+    doc_count = 0
+    for doc in query.stream():
+        doc_count += 1
         data = _typed_doc(doc)
         if data.get('deleted'):
             continue
-        completed_value = data.get('completed')
-        if completed_value is completed:
-            visible_ids.append(doc.id)
+        visible_ids.append(doc.id)
+    record_firestore_read(
+        FirestoreReadFamily.ACTION_ITEMS_VISIBLE_IDS,
+        FirestoreReadMode.UNBOUNDED,
+        doc_count,
+    )
     return visible_ids
 
 
@@ -443,6 +462,46 @@ def get_action_item(uid: str, action_item_id: str) -> Optional[Dict[str, Any]]:
 # Hard safety caps for list reads. Unbounded streams + in-process sort caused prod GET
 # /v1/action-items to hit HTTP_GET_TIMEOUT (30s) → 504 on large accounts.
 _ACTION_ITEMS_LIST_HARD_MAX = 2000
+# Slack so a handful of soft-deleted rows in a Firestore prefix still fill the page.
+_ACTION_ITEMS_LIST_DELETED_SLACK = 32
+# Lean projection for GET /v1/action-items. Omit `provenance` (evidence arrays dominate
+# payload on large accounts; ActionItemResponse defaults it to []). Do not add
+# `order_by due_at` here: missing `due_at` is excluded from that index and would
+# drop undated tasks. Existing `action_items_completed_due` stays for due-range reads.
+_ACTION_ITEMS_LIST_SELECT_FIELDS = (
+    'description',
+    'status',
+    'completed',
+    'deleted',
+    'goal_id',
+    'workstream_id',
+    'owner',
+    'due_at',
+    'due_confidence',
+    'source',
+    'priority',
+    'sort_order',
+    'indent_level',
+    'recurrence_rule',
+    'recurrence_parent_id',
+    'created_at',
+    'updated_at',
+    'completed_at',
+    'superseded_by',
+    'conversation_id',
+    'is_locked',
+    'exported',
+    'export_date',
+    'export_platform',
+    'apple_reminder_id',
+)
+
+
+def _list_scan_budget(row_budget: int) -> int:
+    """Docs to pull for one page: the page itself plus deleted slack, never 2× the page."""
+    if row_budget <= 0:
+        return 0
+    return min(_ACTION_ITEMS_LIST_HARD_MAX, int(row_budget) + _ACTION_ITEMS_LIST_DELETED_SLACK)
 
 
 def _action_item_list_sort_key(item: Dict[str, Any]) -> tuple:
@@ -455,23 +514,58 @@ def _action_item_list_sort_key(item: Dict[str, Any]) -> tuple:
     )
 
 
-def _stream_action_items_bounded(query: Any, *, max_docs: int) -> tuple[List[Dict[str, Any]], int]:
-    """Stream at most max_docs Firestore documents; skip soft-deleted rows."""
+def _stream_action_items_bounded(
+    query: Any,
+    *,
+    max_docs: int,
+    budget: Optional[ListReadBudget] = None,
+) -> tuple[List[Dict[str, Any]], int]:
+    """Stream at most max_docs Firestore documents; skip soft-deleted rows.
+
+    Applies a field projection and a Firestore ``limit`` so the backend process
+    never downloads full documents past the page budget (Python ``break`` alone
+    still lets the client library buffer the rest of the stream). With a
+    request ``budget`` the stream runs under its per-RPC timeout and charges
+    every fetched document; budget exhaustion stops the read and the partial
+    bucket is returned so the route can answer truncated (#11831).
+    """
     action_items: List[Dict[str, Any]] = []
     document_count = 0
     if max_docs <= 0:
         return action_items, 0
-    for doc in query.stream():
-        document_count += 1
-        data: Dict[str, Any] = _typed_doc(doc)
-        if data.get('deleted'):
+    query = query.select(list(_ACTION_ITEMS_LIST_SELECT_FIELDS)).limit(max_docs)
+    if budget is None:
+        iterator = query.stream()
+    else:
+        timeout = budget.rpc_timeout()
+        try:
+            iterator = query.stream(timeout=timeout)
+        except TypeError:
+            # Test fakes predating the budget seam do not accept a timeout kwarg.
+            iterator = query.stream()
+    try:
+        for doc in iterator:
+            if budget is not None:
+                budget.charge(1)
+            document_count += 1
+            data: Dict[str, Any] = _typed_doc(doc)
+            if data.get('deleted'):
+                if document_count >= max_docs:
+                    break
+                continue
+            data['id'] = doc.id
+            action_items.append(_prepare_action_item_for_read(data))
             if document_count >= max_docs:
                 break
-            continue
-        data['id'] = doc.id
-        action_items.append(_prepare_action_item_for_read(data))
-        if document_count >= max_docs:
-            break
+    except ListReadBudgetExhausted:
+        # Deadline/allowance ended mid-stream: keep the rows already fetched.
+        # The budget stays flagged truncated so the route marks the response.
+        return action_items, document_count
+    except FirestoreDeadlineExceeded:
+        # The per-RPC timeout derived from the budget cut a blocked stream.
+        if budget is not None:
+            budget.mark_exhausted('deadline')
+        return action_items, document_count
     return action_items, document_count
 
 
@@ -511,6 +605,7 @@ def get_action_items(
     due_end_date: Optional[datetime] = None,
     limit: Optional[int] = None,
     offset: int = 0,
+    budget: Optional[ListReadBudget] = None,
 ) -> List[Dict[str, Any]]:
     """
     Get action items for a user with optional filters.
@@ -520,7 +615,16 @@ def get_action_items(
     Legacy documents with missing/null ``completed`` are harvested via a separate bounded
     unfiltered scan and treated as active after ``_prepare_action_item_for_read``.
     All paths are hard-capped so GET /v1/action-items cannot unbounded-scan under
-    HTTP_GET_TIMEOUT. Pagination is applied after the product sort.
+    HTTP_GET_TIMEOUT. Pagination is applied after the product sort. When
+    ``completed`` is set, the scan budget is the page plus deleted slack
+    (not 2× the page). Offset is a live-item slice after that sort so it stays
+    aligned with Windows ``offset += items.length`` — Firestore ``offset``
+    counts deleted documents and would skip/duplicate across pages.
+    With a request ``budget`` the active, legacy, and completed queries share
+    that one budget — every fetched document charges it and every stream runs
+    under its per-RPC timeout — so the aggregate read cannot outlive the
+    request (#11831). Budget exhaustion stops at a bucket boundary and the
+    route reports ``truncated``/``has_more`` honestly.
     """
     offset = max(0, int(offset or 0))
     if limit is None or limit <= 0:
@@ -544,15 +648,17 @@ def get_action_items(
             due_end_date=due_end_date,
         )
 
+    def _out_of_budget() -> bool:
+        return budget is not None and budget.truncated
+
     def _fetch_filtered(completed_filter: Optional[bool], row_budget: int) -> List[Dict[str, Any]]:
         nonlocal total_docs
-        if row_budget <= 0:
+        if row_budget <= 0 or _out_of_budget():
             return []
         q = _base_query()
         if completed_filter is not None:
             q = q.where(filter=FieldFilter('completed', '==', completed_filter))
-        scan = min(_ACTION_ITEMS_LIST_HARD_MAX, max(row_budget * 2, row_budget + 32))
-        items, docs = _stream_action_items_bounded(q, max_docs=scan)
+        items, docs = _stream_action_items_bounded(q, max_docs=_list_scan_budget(row_budget), budget=budget)
         total_docs += docs
         items.sort(key=_action_item_list_sort_key)
         return items[:row_budget]
@@ -565,14 +671,14 @@ def get_action_items(
         seen = {item['id'] for item in active}
         # Legacy/partial docs: completed missing or null. Equality filters exclude them; harvest
         # with a bounded unfiltered scan and keep only those that prepare to active and are new.
-        if len(active) < need:
+        if len(active) < need and not _out_of_budget():
             # Bound unfiltered scan generously enough to product-sort before capping:
             # early-stopping mid-stream would freeze Firestore order instead of due-date order.
             legacy_scan = min(
                 _ACTION_ITEMS_LIST_HARD_MAX,
                 max(need * 8, 128),
             )
-            raw_legacy, docs = _stream_action_items_bounded(_base_query(), max_docs=legacy_scan)
+            raw_legacy, docs = _stream_action_items_bounded(_base_query(), max_docs=legacy_scan, budget=budget)
             total_docs += docs
             for item in raw_legacy:
                 if item['id'] in seen:
@@ -585,7 +691,7 @@ def get_action_items(
             active.sort(key=_action_item_list_sort_key)
             active = active[:need]
 
-        if len(active) >= need:
+        if len(active) >= need or _out_of_budget():
             action_items = active
         else:
             done = _fetch_filtered(True, need - len(active))

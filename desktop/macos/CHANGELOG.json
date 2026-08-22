@@ -2,6 +2,183 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.205",
+      "date": "2026-08-22",
+      "changes": [
+        "Proactive insights no longer recap what you just did, tell you to keep doing what you're already doing, or report a record change you can't act on — a notification now has to answer your question or change your next step"
+      ]
+    },
+    {
+      "version": "0.12.204",
+      "date": "2026-08-22",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.203",
+      "date": "2026-08-22",
+      "changes": [
+        "The meeting notes card now has a Share button that opens an address field — prefilled with the detected participant, but yours to change — plus a link button to copy, and Omi tells you it is taking notes when it detects a meeting"
+      ]
+    },
+    {
+      "version": "0.12.202",
+      "date": "2026-08-22",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.201",
+      "date": "2026-08-22",
+      "changes": [
+        "Fixed released builds accepting local CLI test triggers, which let any process on your Mac deliver a fake Omi notification and save it to your chat"
+      ]
+    },
+    {
+      "version": "0.12.200",
+      "date": "2026-08-21",
+      "changes": [
+        "Added an optional referral link as the final onboarding step and kept onboarding completion scoped to each signed-in account"
+      ]
+    },
+    {
+      "version": "0.12.199",
+      "date": "2026-08-21",
+      "changes": [
+        "Proactive insight cards in Chat no longer repeat their headline when the message already says the same thing",
+        "Refined the Refer button with a clean outlined treatment"
+      ]
+    },
+    {
+      "version": "0.12.198",
+      "date": "2026-08-21",
+      "changes": [
+        "Moved Refer beside the microphone and gave it a clearer neutral treatment"
+      ]
+    },
+    {
+      "version": "0.12.197",
+      "date": "2026-08-21",
+      "changes": [
+        "Fixed the app quitting the moment you finished onboarding, which sent you back through onboarding on the next launch"
+      ]
+    },
+    {
+      "version": "0.12.196",
+      "date": "2026-08-21",
+      "changes": [
+        "Proactive insights can now answer a question you are writing — when your history holds the answer (a link, a name, a date), Omi delivers it instead of staying silent",
+        "Proactive insights now react to what you type: a question written mid-visit is evaluated within seconds instead of waiting for an app switch, and answers found in your memories are delivered on beta"
+      ]
+    },
+    {
+      "version": "0.12.195",
+      "date": "2026-08-21",
+      "changes": [
+        "After a call, the meeting notes notification now stays up until you act on it and can email the summary directly to the person you met with (detected from your calendar), with a new Meeting Summary Notifications toggle in Settings"
+      ]
+    },
+    {
+      "version": "0.12.194",
+      "date": "2026-08-21",
+      "changes": [
+        "You can now keep or reject memories directly from the macOS Memories page"
+      ]
+    },
+    {
+      "version": "0.12.193",
+      "date": "2026-08-21",
+      "changes": [
+        "Chat tells you when a failure is ours. When Omi's AI service did not respond, the transcript used to say \"Omi couldn't answer this one. Try sending it again\" — which reads as though your message was the problem, so people retried into a failure that could not succeed. It now says the AI service didn't respond and that it is on our side, not your message"
+      ]
+    },
+    {
+      "version": "0.12.192",
+      "date": "2026-08-20",
+      "changes": [
+        "Integration Suggestions is now the fifth notification type — a row beside Focus, Task, Insight, and Memory in Settings, with its own Integration chat badge",
+        "Notification chat rows no longer repeat their content twice when the message already restates the headline",
+        "Added Refer a Friend links that give eligible new Desktop users one free month of Operator"
+      ]
+    },
+    {
+      "version": "0.12.191",
+      "date": "2026-08-20",
+      "changes": [
+        "Kept macOS release retries to at most one candidate per hour even while the previous build is still running",
+        "Rewind now shows the latest screenshot within seconds of capture instead of trailing 1–2 minutes, and the player follows new captures live while parked on the newest frame"
+      ]
+    },
+    {
+      "version": "0.12.190",
+      "date": "2026-08-20",
+      "changes": [
+        "Fixed Omi quitting by itself during first-run permission setup",
+        "Fixed the Save button turning blank in the Add Memory dialog as soon as you typed",
+        "Automatically deletes leftover agent tool-output files older than a week so they stop filling the Mac",
+        "Made each hourly macOS update start its Codemagic release build without waiting for GitHub's macOS queue",
+        "Fixed the screenshot embedding backfill failing to find the entries it needed to re-index",
+        "Notifications now come in exactly four types — Focus, Task, Insight, Memory — each controlled by its own toggle in Settings (the toggle formerly called Live Suggestions is now Focus Notifications)",
+        "Fixed macOS updates getting stuck before release when new changes kept landing during the hourly release train",
+        "Fixed the conversation processing banner overlapping source and duration details",
+        "Fixed longer push-to-talk questions losing the screenshot Omi answers from, so it can still see your screen"
+      ]
+    },
+    {
+      "version": "0.12.189",
+      "date": "2026-08-20",
+      "changes": [
+        "Fixed the desktop Home view's new-item state initialization",
+        "Omi now offers to connect an integration when you open an app it works with — Gmail, Google Calendar, Apple Notes, Notion, Obsidian, ChatGPT, Claude, Gemini, X, or your local files — with what the integration would do for you and what Omi would read; every connector's sheet now shows the same 'What you get' detail, and you can turn the suggestions off or reset them in Settings → Notifications",
+        "Proactive notifications now wait for something that changed, like a new blocker or approaching deadline, instead of repeating a standing status",
+        "Added environmental speaker context analysis to detect multi-party calls and meetings from ambient speech",
+        "Added voice barge-in interruption to halt playback immediately when the user begins speaking",
+        "Made \"where was that doc?\" answer from the document itself — recent-work questions now resolve to the URL or file you were in, without decoding screen history first",
+        "Added Accessibility to Settings → Permissions, so the permission Omi needs to identify the page or file you are in can finally be granted — and granting it now takes effect immediately instead of after a restart",
+        "Fixed a crash that could quit Omi while you were using its own window, once Accessibility was granted",
+        "Beta builds now use the improved meeting notes pipeline and calendar-aware participant identity by default",
+        "Fixed screen search vectors never backfilling for accounts on the new lossless screen history",
+        "Live suggestions and other AI features no longer fail silently when a pooled network connection goes stale",
+        "Fixed gaps in synced screen activity when OCR or search indexing finishes after capture",
+        "Fixed named development bundles keeping shortcuts that differ from Omi Dev",
+        "Fixed Permissions showing Accessibility as granted when it was switched off, and added the Bluetooth, Full Disk Access, and Automation permissions the page never displayed",
+        "Improved proactive notifications so work updates carry the exact on-screen name or handle when available",
+        "Recent-work answers now say how long ago each visit was, in a form that costs a fraction of the previous timestamps",
+        "Recent-work questions now answer from the document, page, or file you were actually in, instead of searching raw screen text",
+        "Fixed recent-work answers misreporting how long ago you were in an app, and made an in-progress visit say that it is still open"
+      ]
+    },
+    {
+      "version": "0.12.188",
+      "date": "2026-08-18",
+      "changes": [
+        "Improved internal Gemini usage reporting so AI capacity and costs can be tracked by workload without collecting request content",
+        "Conversation summaries now show the selected summarization app's output (e.g. General Summary) as the main summary, with a picker to switch apps and set your default — falling back to Omi's own summary when no app result is available",
+        "Improved the efficiency of automatic task extraction without changing which tasks are captured",
+        "Capped very large window captures so high-resolution external displays send smaller images to the assistant"
+      ]
+    },
+    {
+      "version": "0.12.187",
+      "date": "2026-08-17",
+      "changes": [
+        "Tuned which AI model each background assistant uses and slowed the memory-extraction timer to reduce noise; fixed a screen-change detector bug that caused unnecessary captures",
+        "Stopped creating a new cloud agent computer on every app launch"
+      ]
+    },
+    {
+      "version": "0.12.185",
+      "date": "2026-08-17",
+      "changes": [
+        "Made Brain Map replay skip quiet stretches, finish in about four seconds, zoom to a selected entity and its connections, and keep Escape from leaving the map while something is selected",
+        "Fixed Rewind capture ownership checks dropping frames right after sign-in",
+        "While downloading an update, the loading spinner now sits right next to the version instead of leaving a blank gap",
+        "Fixed a memory leak where each window kept its mouse-tracking helper alive for as long as the app was running."
+      ]
+    },
+    {
       "version": "0.12.183",
       "date": "2026-08-17",
       "changes": [

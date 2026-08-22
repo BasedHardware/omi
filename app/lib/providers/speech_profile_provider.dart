@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -51,6 +52,8 @@ class SpeechProfileProvider extends ChangeNotifier
   bool uploadingProfile = false;
   bool profileCompleted = false;
   Timer? forceCompletionTimer;
+  Timer? _reconnectTimer;
+  bool _reconnecting = false;
 
   bool isInitialising = false;
   bool isInitialised = false;
@@ -58,8 +61,8 @@ class SpeechProfileProvider extends ChangeNotifier
   String text = '';
   SpeechProfileProgressState progressState = SpeechProfileProgressState.keepSpeaking;
 
-  late Function? _finalizedCallback;
-  late Function? _processConversationCallback;
+  Function? _finalizedCallback;
+  Function? _processConversationCallback;
 
   /// only used during onboarding /////
   SpeechProfileLoadingState loadingState = SpeechProfileLoadingState.uploading;
@@ -172,22 +175,41 @@ class SpeechProfileProvider extends ChangeNotifier
   }
 
   Future<void> _initiateWebsocket({required BleAudioCodec codec, int? sampleRate, bool force = false}) async {
-    String language =
-        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
+    String language = SharedPreferencesUtil().hasSetPrimaryLanguage
+        ? SharedPreferencesUtil().userPrimaryLanguage
+        : "multi";
     int rate = sampleRate ?? (codec.isOpusSupported() ? 16000 : 8000);
 
-    _socket = await ServiceManager.instance().socket.speechProfile(
-          codec: codec,
-          sampleRate: rate,
-          language: language,
-          force: force,
-        );
+    _socket = await openSpeechProfileSocket(codec: codec, sampleRate: rate, language: language, force: force);
     if (_socket == null) {
       throw Exception("Can not create new speech profile socket");
     }
     _socket?.subscribe(this, this);
     await _socket?.requestFirstOnboardingQuestion();
   }
+
+  /// Opens the speech-profile socket. Overridden in tests to control the
+  /// timing of an attempt; production always goes through the socket service
+  /// pool. Mirrors CaptureProvider.openConversationSocket.
+  @visibleForTesting
+  Future<TranscriptSegmentSocketService?> openSpeechProfileSocket({
+    required BleAudioCodec codec,
+    required int sampleRate,
+    required String language,
+    required bool force,
+  }) {
+    return ServiceManager.instance().socket.speechProfile(
+      codec: codec,
+      sampleRate: sampleRate,
+      language: language,
+      force: force,
+    );
+  }
+
+  /// Uploads the recorded speech-profile audio. Overridden in tests to avoid
+  /// a real network call.
+  @visibleForTesting
+  Future<bool> uploadSpeechProfile(File file) => uploadProfile(file);
 
   /// Start phone microphone streaming (alternative to BLE device streaming).
   /// Returns false when the mic could not be acquired — contention with a live
@@ -257,7 +279,7 @@ class SpeechProfileProvider extends ChangeNotifier
       bool uploadSuccess = false;
       bool uploadFailedDueToShortAudio = false;
       try {
-        uploadSuccess = await uploadProfile(data.item1).timeout(
+        uploadSuccess = await uploadSpeechProfile(data.item1).timeout(
           const Duration(seconds: 30),
           onTimeout: () {
             Logger.debug('Profile upload timed out after 30 seconds');
@@ -273,15 +295,7 @@ class SpeechProfileProvider extends ChangeNotifier
       }
 
       if (!uploadSuccess) {
-        // Upload failed - notify user but still process conversation
-        uploadingProfile = false;
-        notifyError(uploadFailedDueToShortAudio ? 'TOO_SHORT' : 'UPLOAD_FAILED');
-
-        // Still trigger conversation processing
-        if (_processConversationCallback != null) {
-          Logger.debug('Triggering conversation processing despite upload failure...');
-          _processConversationCallback!();
-        }
+        completeAfterUploadFailure(tooShort: uploadFailedDueToShortAudio);
         return;
       }
 
@@ -296,6 +310,8 @@ class SpeechProfileProvider extends ChangeNotifier
         _processConversationCallback!();
       }
 
+      _reconnectTimer?.cancel();
+      _reconnectTimer = null;
       uploadingProfile = false;
       profileCompleted = true;
       text = '';
@@ -306,6 +322,32 @@ class SpeechProfileProvider extends ChangeNotifier
         _finalizedCallback!();
       }
     }
+  }
+
+  /// Upload failed - notify user but still complete onboarding. A failed
+  /// voice-print upload (e.g. no speech-profiles bucket configured, as in the
+  /// local dev harness) is a degraded feature, not a reason to trap the user
+  /// on the last onboarding question forever: the "All Done" continue button
+  /// in speech_profile_widget.dart is gated on profileCompleted, which this
+  /// branch previously never set. Separated from finalize() so it's directly
+  /// testable without a real (opus-decoder-backed) WavBytesUtil.
+  @visibleForTesting
+  void completeAfterUploadFailure({required bool tooShort}) {
+    uploadingProfile = false;
+    notifyError(tooShort ? 'TOO_SHORT' : 'UPLOAD_FAILED');
+
+    // Still trigger conversation processing
+    if (_processConversationCallback != null) {
+      Logger.debug('Triggering conversation processing despite upload failure...');
+      _processConversationCallback!();
+    }
+
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    profileCompleted = true;
+    text = '';
+    updateLoadingState(SpeechProfileLoadingState.allSet);
+    notifyListeners();
   }
 
   // TODO: use connection directly
@@ -408,6 +450,8 @@ class SpeechProfileProvider extends ChangeNotifier
     connectionStateListener?.cancel();
     _bleBytesStream?.cancel();
     forceCompletionTimer?.cancel();
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
 
     _stopPhoneMicStreaming();
 
@@ -432,6 +476,7 @@ class SpeechProfileProvider extends ChangeNotifier
     connectionStateListener?.cancel();
     _bleBytesStream?.cancel();
     forceCompletionTimer?.cancel();
+    _reconnectTimer?.cancel();
     _finalizedCallback = null;
     _socket?.unsubscribe(this);
     ServiceManager.instance().device.unsubscribe(this);
@@ -473,6 +518,7 @@ class SpeechProfileProvider extends ChangeNotifier
     // Only notify error if we're still recording and not completed
     if (startedRecording && !profileCompleted && !uploadingProfile) {
       notifyError('SOCKET_DISCONNECTED');
+      _scheduleReconnect();
     }
   }
 
@@ -481,7 +527,58 @@ class SpeechProfileProvider extends ChangeNotifier
     Logger.debug('Speech profile socket error: $err');
     if (startedRecording && !profileCompleted && !uploadingProfile) {
       notifyError('SOCKET_ERROR');
+      _scheduleReconnect();
     }
+  }
+
+  /// Retry connecting on an interval until it succeeds or the flow ends.
+  ///
+  /// Unlike the main capture socket (CaptureProvider._startKeepAliveServices),
+  /// this socket previously had no reconnect at all: once dropped,
+  /// skipCurrentQuestion() and outgoing mic audio are both no-ops gated on
+  /// `_socket?.state == connected` (see below), so onboarding hung forever
+  /// until the app was force-relaunched.
+  ///
+  /// The backend keeps no onboarding state across connections
+  /// (OnboardingHandler is constructed fresh per websocket in
+  /// routers/listen/runtime.py), so a reconnect always restarts the question
+  /// sequence from the top. Reset locally to match rather than showing a
+  /// stale question index against a server that has actually restarted.
+  void _scheduleReconnect() {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+      if (profileCompleted || uploadingProfile || _socket?.state == SocketServiceState.connected) {
+        timer.cancel();
+        return;
+      }
+
+      // _initiateWebsocket is async, so without this guard a slow attempt
+      // still in flight would overlap with the next 5s tick and open a
+      // second socket concurrently — the same failure mode CaptureProvider's
+      // keep-alive hit in #11305.
+      if (_reconnecting) return;
+      _reconnecting = true;
+
+      Logger.debug('Speech profile socket reconnect attempt');
+      try {
+        if (usePhoneMic) {
+          await _initiateWebsocket(codec: BleAudioCodec.pcm16, sampleRate: 16000, force: true);
+        } else if (device != null) {
+          final codec = await _getAudioCodec(device!.id);
+          await _initiateWebsocket(codec: codec, force: true);
+        } else {
+          return;
+        }
+
+        currentQuestionIndex = 0;
+        currentQuestion = '';
+        notifyListeners();
+      } catch (e) {
+        Logger.debug('Speech profile socket reconnect failed: $e');
+      } finally {
+        _reconnecting = false;
+      }
+    });
   }
 
   @override
@@ -534,5 +631,8 @@ class SpeechProfileProvider extends ChangeNotifier
   }
 
   @override
-  void onConnected() {}
+  void onConnected() {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+  }
 }

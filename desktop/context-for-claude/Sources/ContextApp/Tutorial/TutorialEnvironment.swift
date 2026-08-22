@@ -313,15 +313,16 @@ struct TutorialEnvironment {
             guard let store else { return }
             RewindWindow.present(
                 store: store,
-                onOpenSettings: { SettingsWindow.present() },
-                onSearch: { query in SearchBarWindow.present(prefill: query) })
+                via: .tutorial,
+                onOpenSettings: { SettingsWindow.present(via: .inAppPill) },
+                onSearch: { query in SearchBarWindow.present(via: .inAppPill, prefill: query) })
         }
         environment.dismissTimeline = { RewindWindow.dismiss() }
         environment.timelineIsVisible = { RewindWindow.isVisible }
         environment.watchSearchPanel = { happened in TutorialSearchPanelWatch.start(happened) }
         environment.stopWatchingSearchPanel = { TutorialSearchPanelWatch.stop() }
         environment.searchPanelIsVisible = { SearchBarWindow.isVisible }
-        environment.presentSearchPanel = { SearchBarWindow.present() }
+        environment.presentSearchPanel = { SearchBarWindow.present(via: .tutorial) }
         // The panel's own dismissal and not `orderOut`, because that is what announces `.closed` —
         // so a panel the tutorial takes away and one the user pressed Escape on leave every observer
         // in the same state.
@@ -551,11 +552,7 @@ enum ClaudeHandoff {
                     }
                 },
                 serverIsLoaded: {
-                    ClaudeServerLiveness.state(
-                        claudeDesktopPIDs: Set(
-                            NSRunningApplication.runningApplications(
-                                withBundleIdentifier: ClaudeRelaunch.bundleIdentifier
-                            ).map(\.processIdentifier)))
+                    ClaudeServerLiveness.state(claudeDesktopPIDs: ClaudeDesktopProcesses.pids)
                 })
         }
     }
@@ -774,7 +771,10 @@ enum ClaudeHandoff {
 /// opened Claude and a card telling them to type something.
 @MainActor
 enum ClaudeRelaunch {
-    static let bundleIdentifier = "com.anthropic.claudefordesktop"
+    /// Claude Desktop's bundle identifier lives on `ClaudeDesktopProcesses` now: the liveness probe
+    /// and the status surfaces need the same string, and two copies of it is one copy too many for a
+    /// constant that decides whether we can see Claude at all.
+    static var bundleIdentifier: String { ClaudeDesktopProcesses.bundleIdentifier }
 
     static var isInstalled: Bool {
         NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) != nil

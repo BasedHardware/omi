@@ -5,7 +5,7 @@ import uuid
 
 from utils.executors import postprocess_executor, submit_with_context
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from typing import Optional, List
 from datetime import datetime, timezone
 
@@ -23,6 +23,11 @@ from database.vector_db import (
 from utils.users import get_user_display_name
 from utils.share_links import build_share_url
 from utils.other import endpoints as auth
+from utils.other.list_budget import (
+    OMI_LIST_TRUNCATED_HEADER,
+    OMI_LIST_TRUNCATED_VALUE,
+    list_read_budget_for_request,
+)
 from utils.notifications import (
     send_notification,
     send_action_item_data_message,
@@ -43,6 +48,7 @@ from models.action_item import (
     PendingSyncResponse,
 )
 from utils.task_intelligence import task_links
+from utils.product_telemetry import emit_product_event
 
 router = APIRouter()
 
@@ -343,6 +349,8 @@ def _ensure_aware(value: datetime) -> datetime:
 
 @router.get("/v1/action-items", response_model=ActionItemsResponse, tags=['action-items'])
 def get_action_items(
+    request: Request = None,  # type: ignore[assignment]
+    response: Response = None,  # type: ignore[assignment]
     limit: int = Query(50, ge=1, le=500, description="Maximum number of action items to return"),
     offset: int = Query(0, ge=0, description="Number of action items to skip"),
     completed: Optional[bool] = Query(None, description="Filter by completion status"),
@@ -353,7 +361,13 @@ def get_action_items(
     due_end_date: Optional[datetime] = Query(None, description="Filter by due end date (inclusive)"),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    """Get action items for the current user."""
+    """Get action items for the current user.
+
+    Large accounts can outrun the request budget; such reads return the honest
+    partial page with ``truncated=true``, ``has_more=true``, and the
+    ``X-Omi-List-Truncated: true`` header instead of a bare middleware 504
+    (#11831).
+    """
     if start_date is not None and end_date is not None and _ensure_aware(start_date) > _ensure_aware(end_date):
         raise HTTPException(status_code=400, detail="start_date must be earlier than or equal to end_date")
     if (
@@ -363,6 +377,7 @@ def get_action_items(
     ):
         raise HTTPException(status_code=400, detail="due_start_date must be earlier than or equal to due_end_date")
 
+    budget = list_read_budget_for_request(request, route='action-items')
     action_items = action_items_db.get_action_items(
         uid=uid,
         conversation_id=conversation_id,
@@ -373,9 +388,13 @@ def get_action_items(
         due_end_date=due_end_date,
         limit=limit + 1,
         offset=offset,
+        budget=budget,
     )
 
-    has_more = len(action_items) > limit
+    truncated = budget.truncated
+    # A lookahead-derived has_more cannot report complete when the budget ended
+    # the aggregate scan before the lookahead resolved.
+    has_more = truncated or len(action_items) > limit
     action_items = action_items[:limit]
 
     for item in action_items:
@@ -384,8 +403,11 @@ def get_action_items(
             item['description'] = (description[:70] + '...') if len(description) > 70 else description
 
     response_items = _safe_action_item_responses(action_items, uid=uid)
+    if truncated and response is not None:
+        response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
+    budget.observe('truncated' if truncated else 'complete')
 
-    return {"action_items": response_items, "has_more": has_more}
+    return {"action_items": response_items, "has_more": has_more, "truncated": truncated}
 
 
 @router.get("/v1/action-items/search", response_model=ActionItemsSearchResponse, tags=['action-items'])
@@ -417,9 +439,11 @@ def list_action_item_ids(
     Without ``completed``: returns every ID with no field reads — the cheapest
     way for a client to know which tasks it has without paging the full list.
 
-    With ``completed``: returns only non-deleted IDs in the requested bucket,
-    which requires a three-field projection (``completed``, ``status``,
-    ``deleted``) streamed across the collection.
+    With ``completed``: returns only non-deleted IDs in the requested bucket. The
+    ``completed`` bucket is filtered server-side; only documents in that bucket are
+    streamed (a two-field ``completed``, ``deleted`` projection), and the ``deleted``
+    exclusion is still applied in Python since Firestore equality filters would drop
+    undeleted rows that have no ``deleted`` field.
 
     Declared before /v1/action-items/{action_item_id} so the static path is not
     captured as an action item id.
@@ -484,6 +508,25 @@ def update_action_item(
     updated_item = action_items_db.get_action_item(uid, action_item_id)
     if updated_item is None:
         raise HTTPException(status_code=500, detail="Updated action item could not be loaded")
+
+    if request.owner is not None:
+        previous_owner_value = existing_item.get('owner') or 'unknown'
+        previous_owner = getattr(previous_owner_value, 'value', str(previous_owner_value))
+        next_owner = request.owner.value
+        if previous_owner != next_owner:
+            emit_product_event(
+                uid=uid,
+                event='Task Assignee Corrected',
+                properties={
+                    'action_item_id': action_item_id,
+                    'conversation_id': updated_item.get('conversation_id'),
+                    'previous_assignee': (
+                        previous_owner if previous_owner in {'user', 'other', 'unknown'} else 'unknown'
+                    ),
+                    'new_assignee': next_owner,
+                    'field_changed': 'owner',
+                },
+            )
     _wake_task_changes(uid, [action_item_id], updated_item.get('updated_at'))
 
     # Reconcile the client-scheduled reminder when completion or due date changed, using the final

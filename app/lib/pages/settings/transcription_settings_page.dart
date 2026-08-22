@@ -252,7 +252,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
     // Restore JSON configs if customized
     if (config != null) {
-      final hasCustomRequest = config.requestType != null ||
+      final hasCustomRequest =
+          config.requestType != null ||
           config.headers != null ||
           config.params != null ||
           config.audioFieldName != null;
@@ -898,7 +899,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
     if (isLowSpec && !isIOS) {
       // Android low-spec: "Not Compatible" Dialog (Whisper may crash)
-      proceed = await showDialog<bool>(
+      proceed =
+          await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
               backgroundColor: const Color(0xFF1A1A1A),
@@ -945,7 +947,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           false;
     } else if (isLowSpec && isIOS) {
       // iOS low-spec: Milder "Performance Warning" (Apple Speech won't crash)
-      proceed = await showDialog<bool>(
+      proceed =
+          await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
               backgroundColor: const Color(0xFF1A1A1A),
@@ -991,7 +994,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           false;
     } else {
       // Standard "High Resource Usage" Warning for capable devices
-      proceed = await showDialog<bool>(
+      proceed =
+          await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
               backgroundColor: const Color(0xFF1A1A1A),
@@ -1193,10 +1197,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700, size: 14),
           const SizedBox(width: 6),
           Expanded(
-            child: Text(
-              warningText,
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-            ),
+            child: Text(warningText, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
           ),
         ],
       ),
@@ -1837,8 +1838,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.grey)),
           ),
           TextButton(
-            onPressed:
-                (freeSpaceMB != null && freeSpaceMB < estimatedSizeMB) ? null : () => Navigator.pop(context, true),
+            onPressed: (freeSpaceMB != null && freeSpaceMB < estimatedSizeMB)
+                ? null
+                : () => Navigator.pop(context, true),
             child: Text(context.l10n.download, style: const TextStyle(color: Colors.blue)),
           ),
         ],
@@ -2302,14 +2304,14 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                               isError
                                   ? Icons.error_outline
                                   : isWarning
-                                      ? Icons.warning_amber_outlined
-                                      : Icons.info_outline,
+                                  ? Icons.warning_amber_outlined
+                                  : Icons.info_outline,
                               size: 12,
                               color: isError
                                   ? Colors.red.shade400
                                   : isWarning
-                                      ? Colors.orange.shade400
-                                      : Colors.grey.shade500,
+                                  ? Colors.orange.shade400
+                                  : Colors.grey.shade500,
                             ),
                             const SizedBox(width: 6),
                             Expanded(
@@ -2319,8 +2321,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                                   color: isError
                                       ? Colors.red.shade300
                                       : isWarning
-                                          ? Colors.orange.shade300
-                                          : Colors.grey.shade400,
+                                      ? Colors.orange.shade300
+                                      : Colors.grey.shade400,
                                   fontSize: 11,
                                   fontFamily: 'monospace',
                                 ),
@@ -2479,8 +2481,9 @@ class _JsonEditorPageState extends State<_JsonEditorPage> {
 
   Widget _buildTemplateSelector() {
     final isResponseSchema = widget.isResponseSchema;
-    final templates =
-        isResponseSchema ? SttResponseSchema.templates.keys.toList() : SttProviderConfig.requestTemplates.keys.toList();
+    final templates = isResponseSchema
+        ? SttResponseSchema.templates.keys.toList()
+        : SttProviderConfig.requestTemplates.keys.toList();
     final description = isResponseSchema ? context.l10n.quicklyPopulateResponse : context.l10n.quicklyPopulateRequest;
 
     return Column(

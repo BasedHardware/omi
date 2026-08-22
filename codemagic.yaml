@@ -1879,12 +1879,9 @@ workflows:
         GCS_DESKTOP_UPDATES_BUCKET: "gs://omi_macos_updates"
         DMGBUILD_VERSION: "1.6.7"
       xcode: 16.4
-    triggering:
-      events:
-        - tag
-      tag_patterns:
-        - pattern: "v*-macos"
-          include: true
+    # API-dispatched by desktop_auto_release.yml after its exact tag is pushed.
+    # Keeping this workflow manual prevents a webhook/API race from creating
+    # duplicate builds for one immutable candidate.
     working_directory: desktop/macos
     cache:
       cache_paths:

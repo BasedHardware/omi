@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, Union, cast
 
 from google.cloud import firestore
@@ -13,6 +13,23 @@ USERS_COLLECTION = 'users'
 
 # Date inputs may arrive as datetime or as pre-formatted 'YYYY-MM-DD HH:MM:SS.mmm' strings.
 DateInput = Union[datetime, str]
+
+
+def normalize_screen_activity_timestamp(value: DateInput, *, end_of_second: bool = False) -> str:
+    """Return the one lexicographically sortable timestamp representation stored in Firestore."""
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        raw = str(value).strip()
+        try:
+            parsed = datetime.fromisoformat(raw.replace('Z', '+00:00'))
+        except ValueError as exc:
+            raise ValueError('screen activity timestamp must be ISO-8601 compatible') from exc
+
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    milliseconds = 999 if end_of_second and parsed.microsecond == 0 else parsed.microsecond // 1000
+    return f"{parsed.strftime('%Y-%m-%d %H:%M:%S')}.{milliseconds:03d}"
 
 
 def get_screen_activity_ids(uid: str) -> List[str]:
@@ -67,11 +84,10 @@ def get_screen_activity(
     query = collection_ref.order_by('timestamp', direction=firestore.Query.ASCENDING)
 
     if start_date:
-        # Timestamps stored as 'YYYY-MM-DD HH:MM:SS.mmm' strings — must match format for comparison
-        ts = start_date.strftime('%Y-%m-%d %H:%M:%S.000') if isinstance(start_date, datetime) else str(start_date)
+        ts = normalize_screen_activity_timestamp(start_date)
         query = query.where(filter=firestore.FieldFilter('timestamp', '>=', ts))
     if end_date:
-        ts = end_date.strftime('%Y-%m-%d %H:%M:%S.999') if isinstance(end_date, datetime) else str(end_date)
+        ts = normalize_screen_activity_timestamp(end_date, end_of_second=True)
         query = query.where(filter=firestore.FieldFilter('timestamp', '<=', ts))
     if app_filter:
         query = query.where(filter=firestore.FieldFilter('appName', '==', app_filter))

@@ -290,6 +290,17 @@ final class ScreenContextTelemetryTests: XCTestCase {
     XCTAssertTrue(prompt.contains("capture_screen"))
     XCTAssertTrue(prompt.contains("only after explicit current-turn consent"))
     XCTAssertTrue(prompt.contains("request_permission"))
+    XCTAssertTrue(prompt.contains("get_work_context before semantic_search or execute_sql"))
+    XCTAssertTrue(prompt.contains("It does not own recent-work retrieval"))
+    XCTAssertTrue(prompt.contains("never select raw screenshots.ocrText"))
+  }
+
+  func testDesktopChatSQLExamplesDoNotRouteRecentWorkToScreenshots() {
+    let prompt = ChatPrompts.desktopChat
+    XCTAssertTrue(prompt.contains("use get_work_context for \"what was I doing\""))
+    XCTAssertTrue(prompt.contains("recent-work retrieval belongs to get_work_context"))
+    XCTAssertFalse(prompt.contains("run ALL 3 for \"what did I do\" questions"))
+    XCTAssertFalse(prompt.contains("SELECT s.* FROM screenshots"))
   }
 
   func testScopedDesktopPromptDoesNotMentionExcludedScreenTools() {

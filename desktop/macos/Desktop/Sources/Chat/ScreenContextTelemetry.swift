@@ -515,12 +515,43 @@ enum ScreenContextWorkContextBuilder {
       1,
       min(300, Int(parseInt64(arguments["max_age_seconds"]) ?? Int64(staleCaptureThresholdSeconds)))
     )
+    let includeScreen = parseBool(arguments["include_screen"]) ?? false
     let now = Date()
     let start = now.addingTimeInterval(-Double(minutes) * 60)
     let formatter = ISO8601DateFormatter()
 
+    // Cheap index first. A durable handle (URL / file) already names the document the
+    // user means, so answering "where was that pricing doc" must not require Screen
+    // Recording, a video-chunk decode, or an OCR dump. Tape is the fallback for a
+    // question the handles cannot answer, and the caller asks for it by name.
+    let index = await workHistoryIndex(start: start, now: now)
+    if !includeScreen, index.hasDurableHandle {
+      var cheap: [String: Any] = [
+        "ok": true,
+        "name": "get_work_context",
+        "window_minutes": minutes,
+        "screen_now": [
+          "available": false,
+          "reason": "not_requested",
+        ],
+        "timeline": [],
+        "memories_hint": memoriesHint,
+        "guidance": handleFirstGuidance,
+        // The tape path reported `latest_capture_age_seconds`; this path reported nothing at
+        // all, leaving wall-clock visit times with no present to measure against.
+        "generated_at": formatter.string(from: now),
+      ]
+      attach(index, to: &cheap, now: now)
+      return cheap
+    }
+
     guard CGPreflightScreenCaptureAccess() else {
-      return permissionDeniedPayload(windowMinutes: minutes)
+      var denied = permissionDeniedPayload(windowMinutes: minutes)
+      // Screen Recording gates pixels, not the work index. Handles recorded before the
+      // permission lapsed still answer a "where was that" question, so they ride along
+      // instead of being thrown away with the screen.
+      attach(index, to: &denied, now: now)
+      return denied
     }
 
     guard await RewindDatabase.shared.getDatabaseQueue() != nil else {
@@ -658,24 +689,10 @@ enum ScreenContextWorkContextBuilder {
       "window_minutes": minutes,
       "screen_now": screenNow,
       "timeline": timeline,
-      "memories_hint": "For the user's operating principles/preferences, also call search_memories (omi-memory).",
-      "guidance":
-        "Prefer visits[].handles to identify the document, URL, or file the user means, then open or read that source. The screenshot timeline is fallback evidence only. This is recent historical activity, not proof of the current visible screen.",
+      "memories_hint": memoriesHint,
+      "guidance": handleFirstGuidance,
     ]
-    if let queue = await RewindDatabase.shared.getDatabaseQueue() {
-      let excluded = RewindSettings.shared.excludedApps
-      let visits =
-        (try? await queue.read { db in
-          try WorkHistoryIndex.fetchRecentVisits(
-            in: db, from: start, to: now, limit: 20, excludedApps: excluded)
-        }) ?? []
-      let briefs =
-        (try? await queue.read { db in
-          try WorkHistoryIndex.fetchBriefs(in: db, limit: 5, excludedApps: excluded)
-        }) ?? []
-      payload["visits"] = visits.map { $0.jsonObject(clock: clock) }
-      payload["briefs"] = briefs.map { $0.jsonObject() }
-    }
+    attach(index, to: &payload, now: now)
     if let failureCode {
       payload["failure_code"] = failureCode.rawValue
     }
@@ -683,7 +700,76 @@ enum ScreenContextWorkContextBuilder {
       payload["latest_capture_age_seconds"] = latestCaptureAgeSeconds
     }
     payload["freshness_threshold_seconds"] = staleThresholdSeconds
+    payload["generated_at"] = formatter.string(from: now)
     return payload
+  }
+
+  // MARK: - Work-history index (cheap path)
+
+  static let memoriesHint =
+    "For the user's operating principles/preferences, also call search_memories (omi-memory)."
+
+  static let handleFirstGuidance =
+    "Identify the document, URL, or file the user means from visits[].handles and briefs[].handles, then open or read that source. Timeline runs and screenshot_id are fallback evidence for a question the handles cannot answer; ask for them with include_screen=true. This is recent historical activity, not proof of the current visible screen."
+
+  struct WorkHistorySnapshot: Sendable {
+    var visits: [WorkHistoryVisitRecord] = []
+    var briefs: [WorkstreamBrief] = []
+
+    /// Whether the index can actually name a source.
+    ///
+    /// Skipping the tape is only an improvement when a handle is an *address* — a URL or a
+    /// file path the model can open. `app_window` is the fallback kind: it carries the same
+    /// app and window title the timeline already showed, so returning it alone and
+    /// suppressing the timeline would trade evidence for nothing. Measured on this
+    /// machine's Beta profile, 483 of 483 handles across 523 visits were `app_window`
+    /// (Accessibility was never granted, so no URL or file could be read), which is exactly
+    /// the state this guard keeps on today's behavior.
+    var hasDurableHandle: Bool {
+      visits.contains { $0.handles.contains(where: \.isDurable) }
+        || briefs.contains { $0.handles.contains(where: \.isDurable) }
+    }
+  }
+
+  /// Read the durable work index. This is the only read on the default path, and it is
+  /// deliberately independent of Screen Recording and of the Rewind frame store.
+  static func workHistoryIndex(start: Date, now: Date) async -> WorkHistorySnapshot {
+    guard let queue = await RewindDatabase.shared.getDatabaseQueue() else { return WorkHistorySnapshot() }
+    let excluded = RewindSettings.shared.excludedApps
+    let visits =
+      (try? await queue.read { db in
+        try WorkHistoryIndex.fetchRecentVisits(
+          in: db, from: start, to: now, limit: 20, excludedApps: excluded)
+      }) ?? []
+    let briefs =
+      (try? await queue.read { db in
+        try WorkHistoryIndex.fetchBriefs(in: db, limit: 5, excludedApps: excluded)
+      }) ?? []
+    return WorkHistorySnapshot(visits: visits, briefs: briefs)
+  }
+
+  static func attach(_ index: WorkHistorySnapshot, to payload: inout [String: Any], now: Date) {
+    guard !index.visits.isEmpty || !index.briefs.isEmpty else { return }
+    let calendar = Calendar.current
+    func clock(_ date: Date) -> String {
+      let c = calendar.dateComponents([.hour, .minute], from: date)
+      return String(format: "%02d:%02d", c.hour ?? 0, c.minute ?? 0)
+    }
+    payload["visits"] = index.visits.map { $0.jsonObject(clock: clock, now: now) }
+    payload["briefs"] = index.briefs.map { $0.jsonObject() }
+  }
+
+  static func parseBool(_ value: Any?) -> Bool? {
+    if let value = value as? Bool { return value }
+    if let value = value as? NSNumber { return value.boolValue }
+    if let value = value as? String {
+      switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+      case "true", "1", "yes": return true
+      case "false", "0", "no": return false
+      default: return nil
+      }
+    }
+    return nil
   }
 
   static func shouldUseFreshCapture(

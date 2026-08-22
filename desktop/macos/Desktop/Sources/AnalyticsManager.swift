@@ -98,6 +98,21 @@ class AnalyticsManager {
     integrationConnectTelemetryCaptureForTests?(event, properties)
   }
 
+  /// Integration-nudge seam: nil in production; tests install a scoped capture
+  /// to observe the real event names and payloads these methods emit.
+  private var integrationNudgeTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+
+  func setIntegrationNudgeTelemetryCaptureForTests(
+    _ capture: (@MainActor (String, [String: Any]) -> Void)?
+  ) {
+    integrationNudgeTelemetryCaptureForTests = capture
+  }
+
+  private func trackIntegrationNudge(_ event: String, properties: [String: Any]) {
+    integrationNudgeTelemetryCaptureForTests?(event, properties)
+    PostHogManager.shared.track(event, properties: properties)
+  }
+
   func setDevicePairingTelemetryCaptureForTests(
     _ capture: (@MainActor (String?, [String: Any], [String: Any]) -> Void)?
   ) {
@@ -271,6 +286,41 @@ class AnalyticsManager {
       IntegrationConnectTelemetry.failedEventName, properties: payload)
     PostHogManager.shared.track(
       IntegrationConnectTelemetry.failedEventName, properties: payload)
+  }
+
+  // MARK: - Integration Nudge Events
+
+  func integrationNudgeShown(
+    entry: IntegrationNudgeCatalogEntry,
+    trigger: IntegrationNudgeTrigger,
+    shownCount: Int
+  ) {
+    trackIntegrationNudge(
+      IntegrationNudgeTelemetry.shownEventName,
+      properties: IntegrationNudgeTelemetry.shownPayload(
+        integrationName: entry.displayName,
+        route: entry.route,
+        triggerID: trigger.id,
+        triggerKind: trigger.kind,
+        shownCount: shownCount
+      )
+    )
+  }
+
+  func integrationNudgeActioned(
+    entry: IntegrationNudgeCatalogEntry,
+    action: IntegrationNudgeTelemetry.Action,
+    triggerID: String
+  ) {
+    trackIntegrationNudge(
+      IntegrationNudgeTelemetry.actionedEventName,
+      properties: IntegrationNudgeTelemetry.actionedPayload(
+        integrationName: entry.displayName,
+        route: entry.route,
+        action: action,
+        triggerID: triggerID
+      )
+    )
   }
 
   // MARK: - Monitoring Events
@@ -897,6 +947,10 @@ class AnalyticsManager {
 
   func conversationReprocessed(conversationId: String, appId: String) {
     PostHogManager.shared.conversationReprocessed(conversationId: conversationId, appId: appId)
+  }
+
+  func conversationReprocessedDefault(conversationId: String) {
+    PostHogManager.shared.conversationReprocessedDefault(conversationId: conversationId)
   }
 
   // MARK: - Settings Events (Additional)

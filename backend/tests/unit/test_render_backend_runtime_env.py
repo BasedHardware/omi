@@ -365,3 +365,23 @@ def test_backend_service_deploys_remove_retired_canonical_memory_env_vars():
         job = manifest[env]['cloud_run']['jobs']['memory-maintenance-job']
         job_flags = _MODULE['_render_flags'](job['flags'])
         assert f'--remove-env-vars={retired}' in job_flags, f'memory-maintenance-job for {env} must strip {retired}'
+
+
+VERTEX_PT_CONTRACT = 'Vertex PT: 5 GSU gemini-2.5-flash us-central1, expires ~2027-05-28'
+
+
+@pytest.mark.parametrize(
+    ('env', 'project'),
+    [
+        ('dev', 'based-hardware-dev'),
+        ('prod', 'based-hardware'),
+    ],
+)
+def test_desktop_backend_compose_pins_vertex_pt(env, project):
+    desktop = _MANIFEST['environments'][env]['desktop_backend']
+    rendered = _MODULE['_render_env_vars'](desktop['env'])
+    assert 'USE_VERTEX_AI=true' in rendered, VERTEX_PT_CONTRACT
+    assert f'GOOGLE_CLOUD_PROJECT={project}' in rendered, VERTEX_PT_CONTRACT
+    assert 'GCP_LOCATION=us-central1' in rendered, VERTEX_PT_CONTRACT
+    docs = Path(__file__).resolve().parents[2] / 'docs' / 'vertex-pt-flash.md'
+    assert VERTEX_PT_CONTRACT.split(',')[0] in docs.read_text(encoding='utf-8')

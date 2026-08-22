@@ -87,7 +87,8 @@ final class RewindStorageErrorClassificationTests: XCTestCase {
     // CGImage frame path carries structured StorageFailureDiagnostics context (multi-line call).
     XCTAssertTrue(indexer.contains(#""RewindIndexer: Failed to process CGImage frame""#))
     XCTAssertTrue(indexer.contains(#"error: error,"#))
-    XCTAssertTrue(indexer.contains(#"logError("RewindIndexer: Failed to process frame with metadata", error: error)"#))
+    // The metadata-carrying processFrame overload was the focus_sessions writer and is deleted (SCA-335).
+    // DeadProactivePathTests now guards the inverse: that RewindIndexer never regains a focusStatus writer.
     XCTAssertTrue(indexer.contains(#"logError("RewindIndexer: Failed to flush video chunk", error: error)"#))
     XCTAssertTrue(
       encoder.contains(#"logError("VideoChunkEncoder: Failed to finalize stale video chunk", error: error)"#))

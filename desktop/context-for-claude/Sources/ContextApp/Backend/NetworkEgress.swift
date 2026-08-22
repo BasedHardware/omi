@@ -59,6 +59,16 @@ enum NetworkEgress {
         /// one would emit are the same line. `ContextApp` cannot link `ContextMCPKit`, so the two
         /// halves are tied by that shared slug and by a test on each side.
         case mcpOmiBackend = "omi-backend"
+        /// Product analytics: anonymous counts of launches, permissions, captures and MCP tool calls,
+        /// batched to PostHog. See `ContextAnalytics`.
+        ///
+        /// It is in this list for the same reason `updateCheck` is — "off this Mac" is the test — but
+        /// it is the entry with the sharpest edge, because it is the only client whose *entire
+        /// purpose* is to describe the person using the app. `ContextAnalytics.record` therefore
+        /// **drops** a suppressed event rather than spooling it: every other client here queues its
+        /// work and sends it when the switch goes off, and an analytics event that did the same would
+        /// mean Airgap Mode delayed the disclosure instead of preventing it. There is no catching up.
+        case analytics = "analytics"
 
         /// The subsystem a suppression is reported under, so the fallback record lands in the same
         /// area as that client's other degradations rather than in an "airgap" bucket of its own.
@@ -73,6 +83,10 @@ enum NetworkEgress {
             // adding one for a single client would put a suppression nobody is looking for into a
             // bucket nobody reads.
             case .faviconFetch, .updateCheck: return .settings
+            // Analytics is not any one subsystem's degradation — it reports on all of them — so it
+            // lands beside the other two clients a user meets in Settings rather than inventing an
+            // area that would hold exactly one client.
+            case .analytics: return .settings
             }
         }
     }
@@ -142,6 +156,12 @@ enum NetworkEgress {
             // the button appeared to do nothing.
             return "Airgap Mode is on, so Context for Claude isn't checking for updates. "
                 + "It stays on this version until you turn it off in Settings › General."
+        case .analytics:
+            // Says "not recorded" rather than "not sent", because the difference is the whole point:
+            // nothing is being held for later. A person who reads this and turns the switch off
+            // should not discover that a week of their activity went up at that moment.
+            return "Airgap Mode is on, so no usage counts are recorded. "
+                + "Nothing is held back to send later — those days simply aren't measured."
         }
     }
 

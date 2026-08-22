@@ -28,11 +28,28 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
+export const isFirebaseAuthConfigured =
+  Boolean(
+    firebaseConfig.apiKey &&
+    firebaseConfig.authDomain &&
+    firebaseConfig.projectId &&
+    firebaseConfig.storageBucket &&
+    firebaseConfig.messagingSenderId &&
+    firebaseConfig.appId,
+  ) &&
+  firebaseConfig.apiKey !== 'preview' &&
+  firebaseConfig.authDomain !== 'preview.local';
+
 // Initialize Firebase (prevent multiple initializations)
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+const app =
+  typeof window === 'undefined' || !isFirebaseAuthConfigured
+    ? null
+    : getApps().length === 0
+      ? initializeApp(firebaseConfig)
+      : getApps()[0];
 
 // Initialize Firebase Auth
-export const auth = getAuth(app);
+export const auth = app ? getAuth(app) : (null as unknown as ReturnType<typeof getAuth>);
 
 // Google Auth Provider
 const googleProvider = new GoogleAuthProvider();
@@ -50,6 +67,12 @@ appleProvider.addScope('name');
  */
 export const signInWithGoogle = async (): Promise<User | null> => {
   try {
+    if (!isFirebaseAuthConfigured) {
+      throw Object.assign(new Error('Firebase sign-in is not configured'), {
+        code: 'auth/configuration-not-found',
+      });
+    }
+    if (!app) throw new Error('Firebase auth is only available in a browser');
     const result = await signInWithPopup(auth, googleProvider);
     return result.user;
   } catch (error) {
@@ -63,6 +86,12 @@ export const signInWithGoogle = async (): Promise<User | null> => {
  */
 export const signInWithApple = async (): Promise<User | null> => {
   try {
+    if (!isFirebaseAuthConfigured) {
+      throw Object.assign(new Error('Firebase sign-in is not configured'), {
+        code: 'auth/configuration-not-found',
+      });
+    }
+    if (!app) throw new Error('Firebase auth is only available in a browser');
     const result = await signInWithPopup(auth, appleProvider);
     return result.user;
   } catch (error) {
@@ -76,6 +105,7 @@ export const signInWithApple = async (): Promise<User | null> => {
  */
 export const signOutUser = async (): Promise<void> => {
   try {
+    if (!app) return;
     await signOut(auth);
   } catch (error) {
     console.error('Sign out error:', error);
@@ -105,6 +135,7 @@ export const getIdToken = async (): Promise<string | null> => {
  * Subscribe to auth state changes
  */
 export const onAuthStateChange = (callback: (user: User | null) => void) => {
+  if (!app) return () => {};
   return onAuthStateChanged(auth, callback);
 };
 
@@ -147,6 +178,7 @@ export const getMessagingInstance = async (): Promise<Messaging | null> => {
   }
 
   try {
+    if (!app) return null;
     messagingInstance = getMessaging(app);
     return messagingInstance;
   } catch (error) {
@@ -164,7 +196,9 @@ const registerServiceWorker = async (): Promise<ServiceWorkerRegistration | null
   }
 
   try {
-    const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+    const registration = await navigator.serviceWorker.register(
+      '/firebase-messaging-sw.js',
+    );
 
     // Wait for the service worker to be active
     const installingWorker = registration.installing;
@@ -298,7 +332,7 @@ export const getCurrentFCMToken = async (): Promise<string | null> => {
  * @returns Unsubscribe function
  */
 export const onForegroundMessage = async (
-  callback: (payload: MessagePayload) => void
+  callback: (payload: MessagePayload) => void,
 ): Promise<(() => void) | null> => {
   const messaging = await getMessagingInstance();
   if (!messaging) {

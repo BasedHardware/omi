@@ -5,14 +5,19 @@
   "canonical_prevention": "Derive the isolation cluster from the source signal (here: a test file's use of RuntimeOwnerAuthorityTestFixture, which transitions the process-global owner authority through the standard UserDefaults domain) and union it with any explicit list, so omission is not an opt-out. Prove the derivation in the runner's hermetic self-test with an adopter suite that is deliberately absent from the explicit list.",
   "canonical_prevention_artifact": [
     "desktop/macos/scripts/swift-test-suites.sh",
-    "desktop/macos/tests/test-swift-test-suites.sh"
+    "desktop/macos/tests/test-swift-test-suites.sh",
+    "backend/testing/import_isolation.py",
+    "backend/tests/unit/test_import_isolation.py"
   ],
   "evidence_prs": [
-    9597
+    9597,
+    11888
   ],
   "scope_hints": [
     "desktop/macos/scripts/swift-test-suites.sh",
-    "desktop/macos/tests/**"
+    "desktop/macos/tests/**",
+    "backend/testing/import_isolation.py",
+    "backend/tests/**"
   ],
   "status": "open"
 }

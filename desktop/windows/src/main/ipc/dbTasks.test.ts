@@ -25,6 +25,7 @@ import {
   hardDeleteAbsentTasksOn,
   hardDeleteAbsentCompletedTasksOn,
   getUnsyncedActionItemsOn,
+  getSyncedActionItemIdsOn,
   getAllActionItemEmbeddingsOn,
   updateActionItemEmbeddingOn,
   getActionItemsMissingEmbeddingsOn,
@@ -457,6 +458,28 @@ describe('hardDeleteAbsentCompletedTasks (completed-phantom convergence)', () =>
       db.prepare('SELECT id FROM action_items ORDER BY id').all() as { id: number }[]
     ).map((r) => r.id)
     expect(remaining).toEqual([incompleteAbsent.id, unsynced.id, recent])
+  })
+})
+
+describe('getSyncedActionItemIds (census diff input)', () => {
+  it('returns backend ids + buckets for synced visible rows only', () => {
+    const active = insertLocalActionItemOn(db, ai({ description: 'a', backendId: 'ba' }))
+    markSyncedActionItemOn(db, active.id, 'ba', 1000)
+    const done = insertLocalActionItemOn(
+      db,
+      ai({ description: 'c', backendId: 'bc', completed: true })
+    )
+    markSyncedActionItemOn(db, done.id, 'bc', 1000)
+    insertLocalActionItemOn(db, ai({ description: 'unsynced' })) // no backend_id
+    const deleted = insertLocalActionItemOn(db, ai({ description: 'd', backendId: 'bd' }))
+    markSyncedActionItemOn(db, deleted.id, 'bd', 1000)
+    deleteActionItemByBackendIdOn(db, 'bd', 'user') // hard-deleted rows leave the census
+
+    const ids = getSyncedActionItemIdsOn(db)
+    expect(ids).toEqual([
+      { backendId: 'ba', completed: false },
+      { backendId: 'bc', completed: true }
+    ])
   })
 })
 

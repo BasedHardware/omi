@@ -11,10 +11,26 @@ and background processing.
 - `process_conversation.py` is the synchronous enrichment coordinator. It
   persists the completed conversation and delegates expensive child work to the
   named executor lanes.
+- `wake_word.py` owns the pure, end-of-conversation matcher and trusted inline
+  prompt marker. It has no realtime state, I/O, or speaker-identity gate. The
+  independent invocation classifier lives in `utils/llm/`; task-intelligence
+  capture owns the conjunction gate that consumes its validated verdicts.
 - `finalizer.py` is the durable handoff boundary for a persisted conversation.
   A caller must have already acquired a finalization-job lease before invoking
   it; it loads the conversation, performs enrichment through the postprocess
   bulkhead, and runs external integrations.
+- `meeting_treatment.py` owns the post-capture meeting policy. It uses durable
+  conversation timestamps plus the union of transcribed-speech intervals, so
+  dual microphone/system-audio transcripts cannot double-count speech.
+- `meeting_receipt.py` is the sole writer of the final meeting verdict. It
+  records reason and measured inputs on the finalization job, projects the
+  verdict to the conversation, and attaches the deterministic Chat intent.
+- `postprocess_conversation.py` is an **orphaned** WAV retranscription util.
+  The historical Flutter upload (`memoryPostProcessing`) and
+  `POST /v1/memories/{id}/post-processing` router were removed; no current
+  router imports it. Short-audio cancels were caused by the old client
+  stripping `quietSecondsForMemoryCreation` (120s) from the WAV before upload,
+  not by backend truncation. Do not rewire without fixing that client contract.
 - Route- or worker-specific ownership, retries, queues, and leases belong
   outside this package: `database/conversation_finalization_jobs.py`,
   `services/conversation_finalization.py`, and their callers own those states.

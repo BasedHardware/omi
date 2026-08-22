@@ -1,7 +1,7 @@
 'use client';
 
 import { X, FileText, Image as ImageIcon, Loader2 } from 'lucide-react';
-import Image from 'next/image';
+import Image from '@tschk/moonshine-next/image';
 import { cn } from '@/lib/utils';
 
 interface FilePreviewItem {
@@ -32,7 +32,7 @@ export function FilePreview({ files, onRemove, disabled }: FilePreviewProps) {
           className={cn(
             'relative flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden',
             'bg-bg-tertiary border border-bg-quaternary',
-            'group'
+            'group',
           )}
         >
           {/* Preview content */}
@@ -68,7 +68,7 @@ export function FilePreview({ files, onRemove, disabled }: FilePreviewProps) {
                 'bg-bg-primary border border-bg-tertiary',
                 'flex items-center justify-center',
                 'opacity-0 group-hover:opacity-100 transition-opacity',
-                'hover:bg-error hover:border-error hover:text-white'
+                'hover:bg-error hover:border-error hover:text-white',
               )}
             >
               <X className="w-3 h-3" />
@@ -103,6 +103,7 @@ export const ALLOWED_FILE_TYPES = {
   ],
 };
 
-export const ALLOWED_EXTENSIONS = '.jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md';
+export const ALLOWED_EXTENSIONS =
+  '.jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md';
 
 export const MAX_FILES = 4;

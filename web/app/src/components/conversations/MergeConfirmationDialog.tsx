@@ -82,7 +82,7 @@ export function MergeConfirmationDialog({
               'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50',
               'w-full max-w-md p-6 rounded-2xl',
               'bg-bg-secondary border border-bg-tertiary',
-              'shadow-[0_16px_64px_rgba(0,0,0,0.5)]'
+              'shadow-[0_16px_64px_rgba(0,0,0,0.5)]',
             )}
           >
             {/* Close button */}
@@ -93,18 +93,20 @@ export function MergeConfirmationDialog({
                 'absolute top-4 right-4 p-2 rounded-lg',
                 'text-text-quaternary hover:text-text-primary',
                 'hover:bg-bg-tertiary transition-colors',
-                'disabled:opacity-50 disabled:cursor-not-allowed'
+                'disabled:opacity-50 disabled:cursor-not-allowed',
               )}
             >
               <X className="w-4 h-4" />
             </button>
 
             {/* Icon */}
-            <div className={cn(
-              'w-12 h-12 rounded-xl mb-4',
-              'bg-purple-primary/20 flex items-center justify-center'
-            )}>
-              <Merge className="w-6 h-6 text-purple-primary" />
+            <div
+              className={cn(
+                'w-12 h-12 rounded-xl mb-4',
+                'bg-white/[0.14] flex items-center justify-center',
+              )}
+            >
+              <Merge className="w-6 h-6 text-text-primary" />
             </div>
 
             {/* Title */}
@@ -114,20 +116,20 @@ export function MergeConfirmationDialog({
 
             {/* Description */}
             <p className="text-sm text-text-secondary mb-4">
-              The selected conversations will be combined into a single conversation.
-              This action is processed in the background.
+              The selected conversations will be combined into a single conversation. This
+              action is processed in the background.
             </p>
 
             {/* Time gap warning */}
             {timeGapWarning && (
-              <div className={cn(
-                'flex items-start gap-3 p-3 rounded-xl mb-4',
-                'bg-warning/10 border border-warning/20'
-              )}>
+              <div
+                className={cn(
+                  'flex items-start gap-3 p-3 rounded-xl mb-4',
+                  'bg-warning/10 border border-warning/20',
+                )}
+              >
                 <AlertTriangle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-warning">
-                  {timeGapWarning}
-                </p>
+                <p className="text-sm text-warning">{timeGapWarning}</p>
               </div>
             )}
 
@@ -138,12 +140,10 @@ export function MergeConfirmationDialog({
                   key={conv.id}
                   className={cn(
                     'flex items-center gap-2 px-3 py-2 rounded-lg',
-                    'bg-bg-tertiary'
+                    'bg-bg-tertiary',
                   )}
                 >
-                  <span className="text-lg">
-                    {conv.structured.emoji || '💬'}
-                  </span>
+                  <span className="text-lg">{conv.structured.emoji || '💬'}</span>
                   <span className="text-sm text-text-primary truncate flex-1">
                     {conv.structured.title || 'Untitled'}
                   </span>
@@ -161,7 +161,7 @@ export function MergeConfirmationDialog({
                   'text-sm font-medium text-text-secondary',
                   'bg-bg-tertiary hover:bg-bg-quaternary',
                   'transition-colors duration-150',
-                  'disabled:opacity-50 disabled:cursor-not-allowed'
+                  'disabled:opacity-50 disabled:cursor-not-allowed',
                 )}
               >
                 Cancel
@@ -172,10 +172,10 @@ export function MergeConfirmationDialog({
                 className={cn(
                   'flex-1 flex items-center justify-center gap-2',
                   'px-4 py-2.5 rounded-xl',
-                  'text-sm font-medium text-white',
-                  'bg-purple-primary hover:bg-purple-primary/90',
+                  'text-sm font-medium text-bg-primary',
+                  'bg-text-primary hover:bg-text-primary/90',
                   'transition-colors duration-150',
-                  'disabled:opacity-50 disabled:cursor-not-allowed'
+                  'disabled:opacity-50 disabled:cursor-not-allowed',
                 )}
               >
                 {isLoading ? (

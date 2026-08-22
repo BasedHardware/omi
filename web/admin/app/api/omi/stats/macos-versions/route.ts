@@ -3,12 +3,17 @@ import admin, { getDb } from "@/lib/firebase/admin";
 import { verifyAdmin } from "@/lib/auth";
 import { posthogResults } from "@/lib/posthog";
 import { getPayload, setPayload } from "@/lib/payload-cache";
+import {
+  parsePlatformScope,
+  scopeFilterAnd,
+  type PlatformScope,
+} from "@/lib/platform-scope";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 3600;
 
-function cacheKey(): string {
-  return `macos-versions:v1`;
+function cacheKey(platform: PlatformScope = "macos"): string {
+  return `macos-versions:v1:${platform}`;
 }
 
 export { cacheKey as macosVersionsCacheKey };
@@ -88,7 +93,7 @@ function formatTodayLabel() {
   }).format(new Date());
 }
 
-export async function computeMacosVersions() {
+export async function computeMacosVersions(platform: PlatformScope = "macos") {
   const apiKey = process.env.POSTHOG_PERSONAL_API_KEY;
   const projectId = process.env.POSTHOG_PROJECT_ID;
   const host = (process.env.POSTHOG_HOST || "https://us.posthog.com").replace(/\/$/, "");
@@ -108,19 +113,22 @@ export async function computeMacosVersions() {
           ),
           timestamp
         ) AS app_version
+        ,
+        argMax(COALESCE(nullIf(properties.$os_name, ''), 'unknown'), timestamp) AS os_name
       FROM events
-      WHERE properties.$os_name = 'macOS'
-        AND toDate(timestamp) = today()
+      WHERE toDate(timestamp) = today()
+        ${scopeFilterAnd(platform)}
       GROUP BY actor_id
       ORDER BY actor_id ASC
       LIMIT 100000
     `;
 
-    const rows = (await posthogQuery(host, projectId, apiKey, activeUsersQuery)) as [unknown, unknown][];
+    const rows = (await posthogQuery(host, projectId, apiKey, activeUsersQuery)) as [unknown, unknown, unknown][];
     const activeUsers = rows
-      .map((row: [unknown, unknown]) => ({
+      .map((row: [unknown, unknown, unknown]) => ({
         userId: String(row[0] ?? "").trim(),
         appVersion: String(row[1] ?? "unknown").trim() || "unknown",
+        osName: String(row[2] ?? "unknown").trim() || "unknown",
       }))
       .filter((row) => row.userId.length > 0);
 
@@ -133,7 +141,13 @@ export async function computeMacosVersions() {
       };
     }
 
-    const channelMap = await getUserChannels(activeUsers.map((user) => user.userId));
+    // The first pie is release channel on macOS (Firestore update_channel);
+    // for mobile/all scopes it becomes the OS split — there is no channel
+    // concept for the app-store builds.
+    const channelMap =
+      platform === "macos"
+        ? await getUserChannels(activeUsers.map((user) => user.userId))
+        : new Map<string, string>();
 
     const channelCounts = new Map<string, number>();
     const versionCounts = new Map<string, number>();
@@ -141,9 +155,13 @@ export async function computeMacosVersions() {
     for (const user of activeUsers) {
       versionCounts.set(user.appVersion, (versionCounts.get(user.appVersion) || 0) + 1);
 
-      const channel = channelMap.get(user.userId);
-      const channelLabel = channel === "beta" || channel === "staging" ? "Beta" : "Production";
-      channelCounts.set(channelLabel, (channelCounts.get(channelLabel) || 0) + 1);
+      if (platform === "macos") {
+        const channel = channelMap.get(user.userId);
+        const channelLabel = channel === "beta" || channel === "staging" ? "Beta" : "Production";
+        channelCounts.set(channelLabel, (channelCounts.get(channelLabel) || 0) + 1);
+      } else {
+        channelCounts.set(user.osName, (channelCounts.get(user.osName) || 0) + 1);
+      }
     }
 
     const channelBreakdown = breakdownFromEntries(
@@ -169,14 +187,15 @@ export async function GET(request: NextRequest) {
   if (authResult instanceof NextResponse) return authResult;
 
   try {
-    const key = cacheKey();
+    const platform = parsePlatformScope(request.nextUrl.searchParams.get("platform") ?? "macos");
+    const key = cacheKey(platform);
 
     const cached = await getPayload<Awaited<ReturnType<typeof computeMacosVersions>>>(key);
     if (cached) {
       return NextResponse.json(cached.data);
     }
 
-    const payload = await computeMacosVersions();
+    const payload = await computeMacosVersions(platform);
     await setPayload(key, payload);
     return NextResponse.json(payload);
   } catch (error: any) {

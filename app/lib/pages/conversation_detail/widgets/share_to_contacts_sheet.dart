@@ -13,6 +13,7 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/share_links.dart';
 
 /// Contact with phone number for sharing
 class ShareableContact {
@@ -186,7 +187,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
       }
 
       // Build the share link and message
-      final shareLink = 'https://h.omi.me/conversations/${widget.conversation.id}';
+      final shareLink = conversationShareUrl(widget.conversation.id);
       final message = l10n.heresWhatWeDiscussed(shareLink);
 
       // Build recipients string (comma-separated phone numbers)
@@ -376,8 +377,8 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
                                 _selectedContacts.isEmpty
                                     ? context.l10n.selectContactsToShare
                                     : _selectedContacts.length > 1
-                                        ? context.l10n.shareWithContactsCount(_selectedContacts.length)
-                                        : context.l10n.shareWithContactCount(_selectedContacts.length),
+                                    ? context.l10n.shareWithContactsCount(_selectedContacts.length)
+                                    : context.l10n.shareWithContactCount(_selectedContacts.length),
                                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
                               ),
                       ),

@@ -16,7 +16,7 @@ import type {
 } from "./types.js";
 import { AgentRuntimeKernel, type DesktopAwarenessSnapshot, type ExecuteAgentRunInput } from "./kernel.js";
 import { serializeArtifact } from "./artifact-serialization.js";
-import { defaultArtifactRoot } from "./artifact-storage.js";
+import { defaultArtifactRoot, maybePruneExpiredToolOutputs, TOOL_OUTPUT_DIRECTORY_NAME } from "./artifact-storage.js";
 import { assertToolResultEnvelope, makeToolResultEnvelope, type ToolResultEnvelope } from "./tool-result-envelope.js";
 import { agentControlCapabilityManifest, agentControlInputSchema } from "./control-tool-manifest.js";
 import type { McpServerBuildContext } from "./jsonl-transport.js";
@@ -2089,10 +2089,12 @@ function persistToolOutputArtifact(
   fullJson: string,
 ): string | null {
   try {
-    const directory = join(defaultArtifactRoot(), "tool-output", ownerId, sessionId);
+    const rootDir = defaultArtifactRoot();
+    const directory = join(rootDir, TOOL_OUTPUT_DIRECTORY_NAME, ownerId, sessionId);
     mkdirSync(directory, { recursive: true });
     const path = join(directory, `${toolName}-${randomUUID()}.json`);
     writeFileSync(path, `${fullJson}\n`, "utf8");
+    maybePruneExpiredToolOutputs(rootDir);
     const artifact = context.kernel.persistArtifact({
       sessionId,
       kind: "tool_output",

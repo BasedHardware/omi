@@ -4,8 +4,8 @@ import SwiftUI
 /// The constant floating top bar.
 ///
 /// **It carries the destinations flat, and nothing opens.** On the left, one pill per destination:
-/// `Home`, `Library`, `Tasks`, `Rewind`, `Apps`. On the right, three wordless controls:
-/// microphone, screen capture, settings.
+/// `Home`, `Library`, `Tasks`, `Rewind`, `Apps`. On the right, the referral action sits immediately
+/// before the microphone, followed by screen capture and settings.
 ///
 /// The bar used to spell out `Home · Memory · Tasks · Apps` beside `Listening` and `Capture`, and both
 /// halves were wrong once Home became a search surface. A **`Memory` destination sitting next to a
@@ -47,6 +47,7 @@ struct DesktopTopBar: View {
   /// last resigned front (see DesktopHomeView).
   let sinceDate: Date
   let onRewind: () -> Void
+  @State private var showingReferral = false
 
   private var newConversations: Int {
     appState.conversations.filter { $0.createdAt > sinceDate && $0.deleted != true }.count
@@ -75,10 +76,11 @@ struct DesktopTopBar: View {
           },
           compactNavigation: { compactNavigationMenu },
           persistentControls: {
-            HStack(spacing: OmiSpacing.sm) {
-              DesktopUpdateStatusChip()
-              ShellStatusIcons(appState: appState)
-            }
+            TopNavigationTrailingControlsLayout(
+              updateStatus: { DesktopUpdateStatusChip() },
+              referral: { ReferralTopBarButton { showingReferral = true } },
+              statusControls: { ShellStatusIcons(appState: appState) }
+            )
           },
           settings: { settingsButton }
         )
@@ -103,6 +105,9 @@ struct DesktopTopBar: View {
     // belongs to the shared top-bar component so every shell and exported preview paints it above the
     // destination sibling rather than relying on each call site to remember (INV-NAV-1).
     .zIndex(1)
+    .sheet(isPresented: $showingReferral) {
+      ReferralSheetView()
+    }
   }
 
   /// The complete primary navigation remains available when the full row of pills will not fit beside
@@ -163,6 +168,32 @@ struct DesktopTopBar: View {
   }
 }
 
+/// The right-side controls in their visual order. Keeping Refer in this cluster makes its placement
+/// independent of navigation width and keeps it directly beside the microphone at every window size.
+struct TopNavigationTrailingControlsLayout<UpdateStatus: View, Referral: View, StatusControls: View>: View {
+  let updateStatus: UpdateStatus
+  let referral: Referral
+  let statusControls: StatusControls
+
+  init(
+    @ViewBuilder updateStatus: () -> UpdateStatus,
+    @ViewBuilder referral: () -> Referral,
+    @ViewBuilder statusControls: () -> StatusControls
+  ) {
+    self.updateStatus = updateStatus()
+    self.referral = referral()
+    self.statusControls = statusControls()
+  }
+
+  var body: some View {
+    HStack(spacing: OmiSpacing.sm) {
+      updateStatus
+      referral
+      statusControls
+    }
+  }
+}
+
 enum TopNavigationLayoutMetrics {
   /// The top bar follows the same readable lane as the query bar and results panel below it,
   /// retaining the composer's horizontal inset at narrow sizes.
@@ -201,11 +232,11 @@ enum TopNavigationLayoutMetrics {
   /// three objects on the lane are lit by the same light.
   static var barShadow: InkGlassShadow { .ambient }
 
-  /// What the trailing cluster costs the row: the two capture icons, the gap, and the gear.
+  /// What the trailing cluster costs the row: the two capture icons.
   ///
   /// Stated here so the layout test can ask "does the flat row of destinations fit beside the controls
   /// at the narrowest window" without hosting the capture stack and its permissions.
-  static let persistentControlsWidth: CGFloat = 32 * 2 + 2
+  static let persistentControlsWidth: CGFloat = 32 * 2 + OmiSpacing.sm
   static let settingsControlWidth: CGFloat = 32
 }
 

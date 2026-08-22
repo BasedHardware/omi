@@ -108,6 +108,7 @@ actor KernelJournalBackendSyncDriver {
     let sender: String
     let appId: String?
     let sessionId: String?
+    let contentBlocksJSON: String?
     let metadata: String?
     let messageSource: String
 
@@ -150,6 +151,14 @@ actor KernelJournalBackendSyncDriver {
       self.sender = sender
       self.appId = payload["appId"] as? String
       self.sessionId = payload["sessionId"] as? String
+      if payload["contentBlocks"] == nil || payload["contentBlocks"] is NSNull {
+        contentBlocksJSON = nil
+      } else {
+        guard let blocks = payload["contentBlocks"] as? [[String: Any]],
+          JSONSerialization.isValidJSONObject(blocks)
+        else { return nil }
+        contentBlocksJSON = KernelJournalBackendSyncDriver.jsonArrayString(blocks)
+      }
       self.metadata = payload["metadata"] as? String
       self.messageSource = messageSource
     }
@@ -388,6 +397,7 @@ actor KernelJournalBackendSyncDriver {
         sender: request.sender,
         appId: request.appId,
         sessionId: request.sessionId,
+        contentBlocksJSON: request.contentBlocksJSON,
         metadata: request.metadata,
         clientMessageId: request.turnId,
         messageSource: request.messageSource,
@@ -497,7 +507,7 @@ actor KernelJournalBackendSyncDriver {
       canonicalTurnId: row.clientMessageId.flatMap { $0.isEmpty ? nil : $0 },
       role: row.sender == "ai" || row.sender == "assistant" ? "assistant" : "user",
       content: row.text,
-      contentBlocksJSON: metadata.contentBlocksJSON,
+      contentBlocksJSON: row.contentBlocksJSON ?? metadata.contentBlocksJSON,
       resourcesJSON: metadata.resourcesJSON,
       metadataJSON: row.metadata ?? "{}",
       createdAtMs: Int(row.createdAt.timeIntervalSince1970 * 1_000)

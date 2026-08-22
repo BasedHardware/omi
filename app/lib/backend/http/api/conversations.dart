@@ -74,7 +74,7 @@ Future<List<ServerConversation>> getConversations({
 // succeeded. An empty `items` with `ok == false` means the fetch failed
 // (no response / non-200, e.g. auth token not ready right after a cold
 // start) — which callers must NOT treat as "the user has no conversations".
-Future<({List<ServerConversation> items, bool ok})> getConversationsResult({
+Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversationsResult({
   int limit = 50,
   int offset = 0,
   List<ConversationStatus> statuses = const [],
@@ -102,7 +102,7 @@ Future<({List<ServerConversation> items, bool ok})> getConversationsResult({
   }
 
   var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
-  if (response == null) return (items: <ServerConversation>[], ok: false);
+  if (response == null) return (items: <ServerConversation>[], ok: false, truncated: false);
   if (response.statusCode == 200) {
     // decode body bytes to utf8 string and then parse json so as to avoid utf8 char issues
     var body = utf8.decode(response.bodyBytes);
@@ -110,10 +110,10 @@ Future<({List<ServerConversation> items, bool ok})> getConversationsResult({
         .map((conversation) => ServerConversation.fromJson(conversation as Map<String, dynamic>))
         .toList();
     Logger.debug('getConversations length: ${memories.length}');
-    return (items: memories, ok: true);
+    return (items: memories, ok: true, truncated: isOmiListTruncated(response));
   }
   Logger.debug('getConversations error ${response.statusCode}');
-  return (items: <ServerConversation>[], ok: false);
+  return (items: <ServerConversation>[], ok: false, truncated: false);
 }
 
 Future<ServerConversation?> reProcessConversationServer(String conversationId, {String? appId}) async {
@@ -564,8 +564,8 @@ int? _parseRetryAfterSeconds(http.Response response) {
 /// Everything else remains a generic backend-capacity limit.
 SyncRateLimitKind syncRateLimitKindForResponse(http.Response response) =>
     response.headers['x-omi-rate-limit-reason']?.trim().toLowerCase() == 'fair_use'
-        ? SyncRateLimitKind.fairUse
-        : SyncRateLimitKind.backendCapacity;
+    ? SyncRateLimitKind.fairUse
+    : SyncRateLimitKind.backendCapacity;
 
 /// Upload-only: POST files and return as soon as the server acknowledges
 /// (HTTP 202 with a job_id, or the 200 fast-path with a finished result).
@@ -683,11 +683,20 @@ Future<SyncJobFetch> fetchSyncJobStatus(String jobId) async {
   }
 }
 
+/// Serialize a local calendar-day bound for conversation search.
+///
+/// Local [DateTime] values have no offset in [DateTime.toIso8601String], and
+/// `search_conversations_endpoint` parses naive datetimes in the server TZ.
+/// Convert to UTC first, matching the conversation-list date filter.
+String serializeConversationSearchDateBound(DateTime date) => date.toUtc().toIso8601String();
+
 Future<(List<ServerConversation>, int, int)> searchConversationsServer(
   String query, {
   int? page,
   int? limit,
   bool includeDiscarded = true,
+  DateTime? startDate,
+  DateTime? endDate,
   String? speakerId,
 }) async {
   Logger.debug(Env.apiBaseUrl);
@@ -700,6 +709,8 @@ Future<(List<ServerConversation>, int, int)> searchConversationsServer(
       'page': page ?? 1,
       'per_page': limit ?? 10,
       'include_discarded': includeDiscarded,
+      if (startDate != null) 'start_date': serializeConversationSearchDateBound(startDate),
+      if (endDate != null) 'end_date': serializeConversationSearchDateBound(endDate),
       if (speakerId != null) 'speaker_id': speakerId,
     }),
   );

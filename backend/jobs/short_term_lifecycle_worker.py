@@ -16,6 +16,8 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from database.firestore_index_registry import (
     EXPIRED_SHORT_TERM_LIFECYCLE_QUERY,
+    EXPIRY_URGENT_SHORT_TERM_BY_CAPTURE_QUERY,
+    EXPIRY_URGENT_SHORT_TERM_BY_STORED_EXPIRY_QUERY,
     POLICY_EXPIRED_SHORT_TERM_QUERY,
 )
 from database.memory_collections import MemoryCollections
@@ -38,6 +40,16 @@ from utils.memory.short_term_lifecycle import (
 JsonDict = Dict[str, Any]
 DEFAULT_SHORT_TERM_MAINTENANCE_SCAN_LIMIT = 250
 MAX_SHORT_TERM_MAINTENANCE_SCAN_LIMIT = 500
+MAX_EXPIRY_URGENT_SHORT_TERM_SCAN_LIMIT = 2000
+EXPIRY_URGENT_SHORT_TERM_PROJECTION = (
+    'uid',
+    'memory_id',
+    'tier',
+    'status',
+    'processing_state',
+    'captured_at',
+    'expires_at',
+)
 
 
 def _empty_transition_records() -> List["ShortTermLifecycleTransitionRecord"]:
@@ -90,6 +102,13 @@ class ShortTermLifecycleWorkerReport:
     @property
     def skipped_count(self) -> int:
         return len(self.skipped_memory_ids)
+
+
+@dataclass(frozen=True)
+class ExpiryUrgentShortTermCandidate:
+    uid: str
+    memory_id: str
+    effective_expiry: datetime
 
 
 class InMemoryShortTermLifecycleTransitionStore:
@@ -204,6 +223,20 @@ def _current_time(now: Optional[datetime]) -> datetime:
     return current_time.astimezone(timezone.utc)
 
 
+def _projected_datetime(value: Any) -> Optional[datetime]:
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        except ValueError:
+            return None
+    if not isinstance(value, datetime):
+        return None
+    try:
+        return _current_time(value)
+    except ValueError:
+        return None
+
+
 def _coerce_dispositions(
     dispositions: Optional[Mapping[str, ShortTermDisposition | str]],
 ) -> Dict[str, ShortTermDisposition | str]:
@@ -276,6 +309,96 @@ def fetch_expired_short_term_memory_items_firestore(
         key=lambda item: (effective_short_term_expiry(item), item.memory_id),
     )
     return items[:effective_limit]
+
+
+def fetch_expiry_urgent_short_term_memory_items_firestore(
+    *,
+    db_client: Any,
+    deadline: datetime,
+    limit: int = MAX_EXPIRY_URGENT_SHORT_TERM_SCAN_LIMIT,
+) -> List[ExpiryUrgentShortTermCandidate]:
+    """Fetch the globally earliest Short-term rows approaching policy expiry.
+
+    This collection-group query is the maintenance inventory backstop. It does
+    not depend on the per-user registry or its cursor, and it deliberately
+    includes pending and processed rows so a user's terminal owner gets a
+    chance to settle every unresolved Short-term item before the read deadline.
+    Blocked rows already carry a terminal review disposition and are excluded.
+    """
+
+    current_deadline = _current_time(deadline)
+    effective_limit = min(max(1, int(limit)), MAX_EXPIRY_URGENT_SHORT_TERM_SCAN_LIMIT)
+    collection_group = getattr(db_client, 'collection_group', None)
+    if not callable(collection_group):
+        raise RuntimeError('expiry-ordered Short-term inventory requires collection-group queries')
+
+    memory_items = collection_group('memory_items')
+    stored_expiry_query = EXPIRY_URGENT_SHORT_TERM_BY_STORED_EXPIRY_QUERY.build(
+        memory_items,
+        {
+            'tier': MemoryTier.short_term.value,
+            'status': MemoryItemStatus.active.value,
+            'processing_states': [ProcessingState.pending.value, ProcessingState.processed.value],
+            'expires_at': current_deadline,
+        },
+        field_filter_factory=FieldFilter,
+    )
+    stored_expiry_snapshots = (
+        stored_expiry_query.select(EXPIRY_URGENT_SHORT_TERM_PROJECTION)
+        .order_by('expires_at')
+        .order_by('memory_id')
+        .limit(effective_limit)
+        .stream()
+    )
+
+    policy_cutoff = current_deadline - DEFAULT_SHORT_TERM_TTL
+    policy_query = EXPIRY_URGENT_SHORT_TERM_BY_CAPTURE_QUERY.build(
+        memory_items,
+        {
+            'tier': MemoryTier.short_term.value,
+            'status': MemoryItemStatus.active.value,
+            'processing_states': [ProcessingState.pending.value, ProcessingState.processed.value],
+            'captured_at': policy_cutoff,
+        },
+        field_filter_factory=FieldFilter,
+    )
+    policy_snapshots = (
+        policy_query.select(EXPIRY_URGENT_SHORT_TERM_PROJECTION)
+        .order_by('captured_at')
+        .order_by('memory_id')
+        .limit(effective_limit)
+        .stream()
+    )
+
+    candidates_by_identity: Dict[Tuple[str, str], ExpiryUrgentShortTermCandidate] = {}
+    for snapshot in [*stored_expiry_snapshots, *policy_snapshots]:
+        payload = cast(JsonDict, snapshot.to_dict() or {})
+        uid = payload.get('uid')
+        memory_id = payload.get('memory_id')
+        if not isinstance(uid, str) or not uid.strip() or not isinstance(memory_id, str) or not memory_id.strip():
+            continue
+        if payload.get('tier') != MemoryTier.short_term.value or payload.get('status') != MemoryItemStatus.active.value:
+            continue
+        if payload.get('processing_state') not in {ProcessingState.pending.value, ProcessingState.processed.value}:
+            continue
+        captured_at = _projected_datetime(payload.get('captured_at'))
+        stored_expiry = _projected_datetime(payload.get('expires_at'))
+        if captured_at is None or stored_expiry is None:
+            continue
+        effective_expiry = min(stored_expiry, captured_at + DEFAULT_SHORT_TERM_TTL)
+        if effective_expiry > current_deadline:
+            continue
+        candidate = ExpiryUrgentShortTermCandidate(
+            uid=uid.strip(),
+            memory_id=memory_id.strip(),
+            effective_expiry=effective_expiry,
+        )
+        candidates_by_identity[(candidate.uid, candidate.memory_id)] = candidate
+
+    return sorted(
+        candidates_by_identity.values(),
+        key=lambda candidate: (candidate.effective_expiry, candidate.uid, candidate.memory_id),
+    )[:effective_limit]
 
 
 def _is_expired_short_term_lifecycle_item(item: MemoryItem, *, now: datetime) -> bool:
@@ -416,18 +539,15 @@ def build_short_term_lifecycle_transition_record(
         'policy_version': audit_metadata['policy_version'],
         'uid': item.uid,
         'memory_item_id': item.memory_id,
+        'item_revision': item.item_revision,
+        'content_hash': item.content_hash,
         'outcome': decision.outcome.value,
         'reason': reason,
-        'evaluated_at': evaluated_at,
         'source_refs': audit_metadata['source_refs'],
     }
     fingerprint_payload: JsonDict = {
-        'uid': item.uid,
-        'memory_item_id': item.memory_id,
-        'outcome': decision.outcome.value,
-        'reason': reason,
-        'run_id': run_id,
-        'audit_metadata': audit_metadata,
+        **idempotency_payload,
+        'disposition': audit_metadata.get('disposition'),
     }
     idempotency_key = (
         f"short-term-lifecycle:{item.uid}:{item.memory_id}:" f"{decision.outcome.value}:{_sha256(idempotency_payload)}"
@@ -492,6 +612,7 @@ def process_short_term_lifecycle_items(
 
 
 __all__ = [
+    "ExpiryUrgentShortTermCandidate",
     "FirestoreShortTermLifecycleTransitionStore",
     "InMemoryShortTermLifecycleTransitionStore",
     "ShortTermLifecyclePersistResult",
@@ -500,6 +621,7 @@ __all__ = [
     "ShortTermLifecycleWorkerReport",
     "build_short_term_lifecycle_transition_record",
     "fetch_expired_short_term_memory_items_firestore",
+    "fetch_expiry_urgent_short_term_memory_items_firestore",
     "process_short_term_lifecycle_item",
     "process_short_term_lifecycle_items",
     "run_short_term_lifecycle_firestore",

@@ -5,8 +5,9 @@ from __future__ import annotations
 import copy
 import hashlib
 import logging
+import time
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional, Tuple, cast
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, cast
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -39,6 +40,7 @@ from database.memory_apply_store import (
 from database.memory_vector_repair_outbox import build_vector_repair_purge_outbox_records
 from database.memory_vector_metadata import canonical_memory_provider_id
 from database.account_deletion_projection_fence import read_account_deletion_projection_fence
+from utils.other.list_budget import ListReadBudget, budgeted_document_get, budgeted_stream_list
 from models.memory_domain import (
     MemoryLayer as DomainMemoryLayer,
     MemoryProcessingState,
@@ -97,6 +99,19 @@ Payload = Dict[str, Any]
 SortKey = tuple[int, datetime | int]
 UserMutationPatchBuilder = Callable[[MemoryItem, datetime], Tuple[Payload, Payload]]
 
+# Concurrent same-account canonical writes race the account-global control
+# CAS inside the conversation source replacement. Retraction — the delete and
+# merge path — converges across those races instead of failing (#11726).
+_RETRACT_CONFLICT_ATTEMPTS = 5
+_RETRACT_CONFLICT_BACKOFF_SECONDS = (0.05, 0.1, 0.25, 0.5)
+# Extraction races the same control CAS but runs inside conversation processing,
+# which has no outer convergence loop: an immediate retry re-reads the control a
+# peer just advanced, so same-account writers keep losing in lockstep and the
+# whole enrichment fails. Back the replacement's own rounds off by default.
+_REPLACEMENT_CONFLICT_BACKOFF_SECONDS = (0.05, 0.1, 0.25, 0.5)
+# Retraction already wraps this call in the converging loop above; keeping its
+# inner rounds immediate stops the delete path's latency budget being multiplied.
+_IMMEDIATE_REPLACEMENT_RETRY_BACKOFF = (0.0, 0.0)
 _SETTLED_PROMOTION_FIELDS = frozenset(
     {
         "route",
@@ -124,6 +139,16 @@ class CanonicalBatchMutationLimitError(ValueError):
 
 class CanonicalMemoryNotFoundError(ValueError):
     """Raised when an item is absent or already tombstoned during an atomic batch read."""
+
+
+class ConversationReplacementConflictError(RuntimeError):
+    """Conversation source replacement exhausted its bounded conflict retries.
+
+    Subclasses :class:`RuntimeError` so pre-existing callers keep their
+    ``except RuntimeError`` contract. Callers that can retry the operation —
+    cascade delete, merge — get a typed signal instead of an opaque 500
+    (#11726).
+    """
 
 
 def _payload_or_empty(value: object) -> Payload:
@@ -361,6 +386,7 @@ def read_canonical_memories(
     include_pending_processing: bool = False,
     include_archive: bool = False,
     now: Optional[datetime] = None,
+    budget: Optional[ListReadBudget] = None,
 ) -> List[MemoryDB]:
     """Read canonical items, optionally exposing explicit pending submissions.
 
@@ -371,11 +397,13 @@ def read_canonical_memories(
     Archive rows stay excluded unless ``include_archive`` is an explicit owner
     opt-in. That flag is the only way this default list gains
     ``archive_capability``; chat/MCP archive routes keep their own grants.
+    With a ``budget`` the authoritative item stream runs under the request's
+    per-RPC timeout and charges every fetched row (#11831).
     """
     client = db_client if db_client is not None else default_db_client
     device_scope = device_scope_request.device_scope if device_scope_request else "all"
     client_device_id = device_scope_request.client_device_id if device_scope_request else None
-    items = fetch_authoritative_product_memory_items(uid=uid, db_client=client)
+    items = fetch_authoritative_product_memory_items(uid=uid, db_client=client, budget=budget)
     current_time = now or datetime.now(timezone.utc)
     archive_explicit = bool(include_archive)
     policy = MemoryAccessPolicy.for_omi_chat(archive_capability=archive_explicit)
@@ -465,7 +493,13 @@ def _canonical_scan_item_visible(
     return bool(scoped)
 
 
-def _read_canonical_memory_item_for_lineage(uid: str, memory_id: str, *, db_client: Any) -> Optional[MemoryItem]:
+def _read_canonical_memory_item_for_lineage(
+    uid: str,
+    memory_id: str,
+    *,
+    db_client: Any,
+    budget: Optional[ListReadBudget] = None,
+) -> Optional[MemoryItem]:
     """Read one canonical document for lineage traversal without status filtering.
 
     Snapshot/document id is the sole identity authority. Payload ``memory_id`` or
@@ -476,7 +510,7 @@ def _read_canonical_memory_item_for_lineage(uid: str, memory_id: str, *, db_clie
     if not requested_id:
         return None
     path = f"{MemoryCollections(uid=uid).memory_items}/{requested_id}"
-    snapshot = db_client.document(path).get()
+    snapshot = budgeted_document_get(db_client.document(path), budget)
     if not getattr(snapshot, "exists", False):
         return None
     doc_id = getattr(snapshot, "id", None)
@@ -505,6 +539,7 @@ def _canonical_scan_lineage_suppressed(
     include_archive: bool,
     device_scope: str,
     client_device_id: Optional[str],
+    budget: Optional[ListReadBudget] = None,
 ) -> bool:
     """Suppress a visible alias when a visible authoritative survivor wins.
 
@@ -534,7 +569,7 @@ def _canonical_scan_lineage_suppressed(
             lineage_root = min(path[cycle_start:])
             break
         try:
-            target = _read_canonical_memory_item_for_lineage(uid, next_id, db_client=db_client)
+            target = _read_canonical_memory_item_for_lineage(uid, next_id, db_client=db_client, budget=budget)
         except ValueError:
             # Payload/id/uid mismatch fail-closed for that hop: stop walking and
             # only evaluate identity-checked nodes already in the closure.
@@ -584,6 +619,7 @@ def read_canonical_scan_page(
     include_pending_processing: bool = False,
     include_archive: bool = False,
     now: Optional[datetime] = None,
+    budget: Optional[ListReadBudget] = None,
 ) -> Tuple[List[CanonicalScanSlot], bool]:
     """Read one bounded canonical raw scan page via Firestore keyset order.
 
@@ -620,7 +656,7 @@ def read_canonical_scan_page(
                 '__name__': items_ref.document(cursor_memory_id),
             }
         )
-    snapshots = list(query.limit(bounded_limit).stream())
+    snapshots = budgeted_stream_list(query.limit(bounded_limit), budget)
     slots: List[CanonicalScanSlot] = []
     for snapshot in snapshots:
         doc_id = getattr(snapshot, 'id', None)
@@ -667,6 +703,7 @@ def read_canonical_scan_page(
             include_archive=archive_explicit,
             device_scope=device_scope,
             client_device_id=client_device_id,
+            budget=budget,
         ):
             slots.append((None, scan_cursor))
             continue
@@ -1045,6 +1082,7 @@ def _canonical_extraction_apply_write(
     data: Dict[str, Any],
     *,
     control: MemoryControlState,
+    evidence_items: Optional[List[MemoryEvidence]] = None,
 ) -> tuple[CanonicalApplyWrite, str]:
     content = (data.get("content") or "").strip()
     if not content:
@@ -1067,7 +1105,8 @@ def _canonical_extraction_apply_write(
         idempotency_identity,
     )
 
-    evidence_items = _evidence_items_from_payload(data)
+    if evidence_items is None:
+        evidence_items = _evidence_items_from_payload(data)
     raw_evidence = [
         cast(Payload, raw) for raw in cast(List[object], data.get("evidence") or []) if isinstance(raw, dict)
     ]
@@ -1138,11 +1177,22 @@ def _canonical_extraction_apply_write(
     )
 
 
-def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_client: Any = None) -> str:
+def write_canonical_extraction_memory(
+    uid: str,
+    data: Dict[str, Any],
+    *,
+    db_client: Any = None,
+    evidence_items: Optional[List[MemoryEvidence]] = None,
+) -> str:
     """Persist one memory to memory_items + ledger (extraction or external/manual writes)."""
     client = db_client if db_client is not None else default_db_client
     control = _ensure_control_state(uid, db_client=client)
-    write, memory_id = _canonical_extraction_apply_write(uid, data, control=control)
+    write, memory_id = _canonical_extraction_apply_write(
+        uid,
+        data,
+        control=control,
+        evidence_items=evidence_items,
+    )
     for evidence in write.evidence:
         _persist_evidence(uid, evidence, db_client=client)
 
@@ -1183,9 +1233,67 @@ def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_clie
     return committed_id
 
 
+_EXTERNAL_EVIDENCE_REISSUE_LIMIT = 25
+
+
+def _reissued_external_evidence(
+    uid: str,
+    evidence_items: List[MemoryEvidence],
+    *,
+    db_client: Any,
+) -> List[MemoryEvidence]:
+    """Mint a fresh evidence identity when an external submission reuses a retired one.
+
+    External evidence ids are derived from the submitted content, and evidence
+    source_state is monotonic per identity. Deleting a memory tombstones its
+    evidence, so re-adding the same text would otherwise reuse the tombstoned
+    identity and fail the apply source gate on every retry. The new submission is
+    a new source artifact and gets its own identity; the tombstone stays retired.
+    Conversation-sourced evidence keeps the retired identity: a deleted
+    conversation is a deleted source, not a fresh one.
+    """
+    collections = MemoryCollections(uid=uid)
+    reissued: List[MemoryEvidence] = []
+    for item in evidence_items:
+        if item.conversation_id or item.source_type == "conversation":
+            reissued.append(item)
+            continue
+        evidence_id = item.evidence_id
+        for attempt in range(1, _EXTERNAL_EVIDENCE_REISSUE_LIMIT + 1):
+            snapshot = db_client.document(f"{collections.memory_evidence}/{evidence_id}").get()
+            if not getattr(snapshot, "exists", False):
+                break
+            stored = _snapshot_payload(snapshot)
+            if SourceState(stored.get("source_state") or SourceState.active.value) == SourceState.active:
+                break
+            evidence_id = (
+                "ev_"
+                + deterministic_contract_id(
+                    "canonical-external-evidence-reissue",
+                    {"evidence_id": item.evidence_id, "attempt": attempt},
+                )[:32]
+            )
+        else:
+            raise RuntimeError("canonical external write exhausted evidence identity reissues")
+        reissued.append(
+            item if evidence_id == item.evidence_id else item.model_copy(update={"evidence_id": evidence_id})
+        )
+    return reissued
+
+
 def write_canonical_external_memory(uid: str, data: Dict[str, Any], *, db_client: Any = None) -> str:
     """Persist a manual/API/integration memory via the canonical apply path."""
-    return write_canonical_extraction_memory(uid, data, db_client=db_client)
+    client = db_client if db_client is not None else default_db_client
+    return write_canonical_extraction_memory(
+        uid,
+        data,
+        db_client=client,
+        evidence_items=_reissued_external_evidence(
+            uid,
+            _evidence_items_from_payload(data),
+            db_client=client,
+        ),
+    )
 
 
 def _read_replacement_control(uid: str, *, db_client: Any) -> MemoryControlState:
@@ -1303,19 +1411,39 @@ def _conversation_replacement_digest(
     )
 
 
+def _backoff_before_replacement_retry(attempt: int, schedule: Sequence[float]) -> None:
+    """Pause between conversation-replacement conflict rounds.
+
+    A zero or missing entry keeps the round immediate, which is what callers
+    that own an outer converging loop pass.
+    """
+    if attempt >= len(schedule):
+        return
+    delay = schedule[attempt]
+    if delay > 0:
+        time.sleep(delay)
+
+
 def replace_conversation_sourced_memories(
     uid: str,
     conversation_id: str,
     items: List[Dict[str, Any]],
     *,
     db_client: Any = None,
+    conflict_backoff_seconds: Sequence[float] = _REPLACEMENT_CONFLICT_BACKOFF_SECONDS,
 ) -> Dict[str, Any]:
-    """Atomically replace one conversation's complete canonical memory set."""
+    """Atomically replace one conversation's complete canonical memory set.
+
+    Every same-account canonical write races the account-global control CAS, so
+    a conflicted round must re-plan against the control the peer left behind.
+    ``conflict_backoff_seconds`` bounds those rounds: one entry per retry, and
+    the number of attempts is ``len(...) + 1``.
+    """
     client = db_client if db_client is not None else default_db_client
     replacement_digest = _conversation_replacement_digest(uid, conversation_id, items)
     replacement_id = f"replace_{replacement_digest[:32]}"
     last_conflict: Optional[ConversationSourceReplacementConflict] = None
-    for _attempt in range(3):
+    for _attempt in range(len(conflict_backoff_seconds) + 1):
         observed_control = _read_replacement_control(uid, db_client=client)
         expected_source_items = [
             item
@@ -1351,6 +1479,7 @@ def replace_conversation_sourced_memories(
             last_conflict = ConversationSourceReplacementConflict(
                 "memory control changed during conversation source scan"
             )
+            _backoff_before_replacement_retry(_attempt, conflict_backoff_seconds)
             continue
         observed_control = confirmed_control
         next_generation = observed_control.source_generation + 1
@@ -1420,8 +1549,11 @@ def replace_conversation_sourced_memories(
             break
         except ConversationSourceReplacementConflict as exc:
             last_conflict = exc
+            _backoff_before_replacement_retry(_attempt, conflict_backoff_seconds)
     else:
-        raise RuntimeError("canonical conversation replacement conflicted repeatedly") from last_conflict
+        raise ConversationReplacementConflictError(
+            "canonical conversation replacement conflicted repeatedly"
+        ) from last_conflict
 
     committed_ids = set(result.committed_memory_ids)
     for memory_id in result.retracted_memory_ids:
@@ -2156,14 +2288,100 @@ def _non_tombstoned_lineage_memory_ids(
     )
 
 
+def _retracted_source_completion_control(
+    uid: str,
+    conversation_id: str,
+    *,
+    db_client: Any,
+) -> Optional[MemoryControlState]:
+    """Control state proving this source has nothing left to retract.
+
+    Mirrors the double-read fence the replacement loop itself uses: the cohort
+    scan only counts when the account-global control did not move while it
+    ran. ``None`` means completion is unproven — callers must keep retrying
+    the real replacement instead of treating the source as retracted.
+    """
+    before = _read_replacement_control(uid, db_client=db_client)
+    live_source_items = [
+        item
+        for item in fetch_authoritative_product_memory_items_for_source(
+            uid,
+            conversation_id,
+            db_client=db_client,
+        )
+        if item.status != MemoryItemStatus.tombstoned and _item_sourced_from_conversation(item, conversation_id)
+    ]
+    if live_source_items:
+        return None
+    after = _read_replacement_control(uid, db_client=db_client)
+    if (
+        before.head_commit_id != after.head_commit_id
+        or before.account_generation != after.account_generation
+        or before.source_generation != after.source_generation
+        or before.commit_sequence != after.commit_sequence
+    ):
+        return None
+    return after
+
+
+def _already_retracted_result(control: MemoryControlState) -> Dict[str, Any]:
+    """The committed-empty-replacement shape, without fighting the CAS for it."""
+    return {
+        "retracted_memory_ids": [],
+        "committed_memory_ids": [],
+        "reactivated_memory_ids": [],
+        "vector_delete_ids": [],
+        "tombstoned_evidence_ids": [],
+        "source_generation": control.source_generation,
+    }
+
+
 def retract_conversation_sourced_memories(uid: str, conversation_id: str, *, db_client: Any = None) -> Dict[str, Any]:
-    """Atomically replace one conversation's complete source set with nothing."""
-    return replace_conversation_sourced_memories(
-        uid,
-        conversation_id,
-        [],
-        db_client=db_client,
-    )
+    """Atomically replace one conversation's complete source set with nothing.
+
+    Concurrent same-account canonical writes — parallel cascade deletes,
+    extractions, merges — all race the account-global control CAS inside
+    :func:`replace_conversation_sourced_memories`, whose three immediate
+    attempts exhaust under sustained contention (#11726). A retraction
+    converges instead of failing: after each conflict round it re-checks,
+    under the same double-read control fence, whether the source is already
+    empty. That covers both a peer worker that committed this retraction and
+    a repeat delete whose committed receipt went stale after another
+    conversation's replacement advanced the generation. A source that still
+    has live items after every bounded round keeps raising, so callers fail
+    closed with the conversation and its memories intact.
+    """
+    client = db_client if db_client is not None else default_db_client
+    last_conflict: Optional[ConversationReplacementConflictError] = None
+    for attempt in range(_RETRACT_CONFLICT_ATTEMPTS):
+        try:
+            return replace_conversation_sourced_memories(
+                uid,
+                conversation_id,
+                [],
+                db_client=client,
+                conflict_backoff_seconds=_IMMEDIATE_REPLACEMENT_RETRY_BACKOFF,
+            )
+        except ConversationReplacementConflictError as exc:
+            last_conflict = exc
+            try:
+                completed_control = _retracted_source_completion_control(uid, conversation_id, db_client=client)
+            except Exception:
+                # A rescue-check read failure must not reintroduce the 500
+                # storm this loop exists to end — keep converging instead.
+                logger.exception(
+                    "canonical retraction completion check failed uid=%s conversation_id=%s",
+                    uid,
+                    conversation_id,
+                )
+                completed_control = None
+            if completed_control is not None:
+                return _already_retracted_result(completed_control)
+            if attempt + 1 < _RETRACT_CONFLICT_ATTEMPTS:
+                time.sleep(_RETRACT_CONFLICT_BACKOFF_SECONDS[min(attempt, len(_RETRACT_CONFLICT_BACKOFF_SECONDS) - 1)])
+    raise ConversationReplacementConflictError(
+        "canonical conversation retraction conflicted repeatedly"
+    ) from last_conflict
 
 
 def delete_canonical_memory(uid: str, memory_id: str, *, db_client: Any = None) -> None:

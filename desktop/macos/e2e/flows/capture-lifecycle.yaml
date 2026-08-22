@@ -4,11 +4,13 @@ tier: 2
 description: Hermetic capture lifecycle via capture_test_transcript seam (no mic/STT)
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/MeetingNoteTakingNotice.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+FinishedRecordingLifecycle.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift
   - desktop/macos/Desktop/Sources/Audio/PreferredMicrophoneReconnect.swift
   - desktop/macos/Desktop/Sources/AppState/SharedCaptureSilentMicRecoveryPolicy.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+ListenEvents.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceBargeInPolicy.swift
   - desktop/macos/Desktop/Sources/AppState/LocalTranscriptionDuplicatePolicy.swift
   - desktop/macos/Desktop/Sources/AppState/STTSessionState.swift
   - desktop/macos/Desktop/Sources/LocalTranscriptionService.swift
@@ -50,6 +52,10 @@ covers:
   - desktop/macos/Desktop/Sources/Rewind/Core/VideoChunkEncoder.swift
   - desktop/macos/Desktop/Sources/Rewind/Services/RewindIndexer.swift
   - desktop/macos/Desktop/Sources/MeetingDetector.swift
+  - desktop/macos/Desktop/Sources/CalendarMeetingContext/SystemCalendarMeetingContextFeature.swift
+  - desktop/macos/Desktop/Sources/CalendarMeetingContext/SystemCalendarMeetingContextService.swift
+  - desktop/macos/Desktop/Sources/CalendarMeetingContext/DerivedDataEgressPolicy.swift
+  - desktop/macos/Desktop/Sources/CalendarMeetingContext/OnDeviceMeetingIdentityService.swift
   - desktop/macos/Desktop/Sources/Rewind/Services/PowerMonitor.swift
   - desktop/macos/Desktop/Sources/Bluetooth/BtDevice.swift
   - desktop/macos/Desktop/Sources/Bluetooth/DeviceUUIDs.swift
@@ -177,6 +183,23 @@ steps:
       result.detail.is_transcribing: "false"
 
   - id: S11
+    name: A detected meeting announces that notes are being taken
+    bridge.action:
+      name: trigger_meeting_started_notice
+    expect:
+      result.detail.presented: "true"
+
+  - id: S12
+    name: The notch shows the note-taking statement, not a prompt
+    bridge.action:
+      name: notification_state
+    expect:
+      result.detail.present: "true"
+      result.detail.title: "Meeting detected"
+      result.detail.message: "Omi is taking notes"
+      result.detail.persistent: "false"
+
+  - id: S13
     name: Logs clean
     log.expect:
       absent:

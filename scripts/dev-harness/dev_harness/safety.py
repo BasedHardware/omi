@@ -8,6 +8,7 @@ It does not start emulators or desktop apps.
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import re
@@ -194,6 +195,48 @@ def is_loopback_host(value: str) -> bool:
 def validate_loopback_emulator_host(value: str, *, name: str = "emulator") -> str:
     if not is_loopback_host(value):
         raise SafetyError(f"{name} host must point to loopback, got {value!r}")
+    return value.strip()
+
+
+# Private ranges a LAN- or tailnet-reachable dev harness may bind to. Distinct
+# from the loopback-only guard above, which protects a different boundary: the
+# backend's own connection to its co-located emulators, which must never leave
+# loopback regardless of this setting. RFC 1918 covers ordinary LAN addresses;
+# 100.64.0.0/10 (RFC 6598 carrier-grade NAT) covers Tailscale, whose tailnet
+# addresses fall in that range and are the documented way a physical device
+# reaches this harness (see #11730/#11652).
+_PRIVATE_NETWORKS = (
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("100.64.0.0/10"),
+)
+
+
+def is_private_dev_host(value: str) -> bool:
+    """True for loopback or a non-public (LAN/CGNAT) address, never a public one."""
+
+    if is_loopback_host(value):
+        return True
+    host = _host_from_emulator_value(value)
+    try:
+        addr = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return any(addr in network for network in _PRIVATE_NETWORKS)
+
+
+def validate_dev_bind_host(value: str, *, name: str = "dev bind host") -> str:
+    """Fail closed unless the requested bind host is loopback or a private range.
+
+    Distinct from ``validate_loopback_emulator_host``: this guards what the
+    harness's own HTTP services and Firebase emulators may bind to when a
+    developer opts into LAN/tailnet reachability, never a publicly routable
+    address.
+    """
+
+    if not is_private_dev_host(value):
+        raise SafetyError(f"{name} must be loopback or a private (LAN/CGNAT) address, got {value!r}")
     return value.strip()
 
 

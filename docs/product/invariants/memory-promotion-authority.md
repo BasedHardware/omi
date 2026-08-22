@@ -1,6 +1,6 @@
 # INV-MEM-4: Canonical promotion is the sole Long-term authority
 
-**Status:** proposed
+**Status:** locked
 **Proposed on:** 2026-07-27
 **Statement:** All new canonical intake starts in Short-term, one consolidation
 decision gives every pending item exactly one terminal route, and only an
@@ -19,6 +19,8 @@ PR may promote it to `locked`.
   migration policy.
 - Leave a pending Short-term item without exactly one consolidation route, or
   apply more than one of `promote`, `archive`, `review`, and `reject` to it.
+- Treat the Short-term TTL alone as a terminal route or hide an expired active
+  item before canonical apply records its disposition.
 - Add a generic, batch/daily, call-site, or user-asserted fast-track promotion
   pass alongside the consolidation route.
 - Commit a new active Short-term → Long-term transition without validating a
@@ -41,19 +43,28 @@ PR may promote it to `locked`.
 
 ## Guard tests
 
-- `backend/tests/unit/test_ws_i_write_convergence.py` and
-  `backend/tests/unit/test_canonical_extraction_subject_wiring.py` and
+> Coverage gap: `test_ws_i_write_convergence.py` (1,398 lines) was deleted by
+> `5724a10084` "converge universal memory and task authority" and this list was
+> never updated. It is removed here so the remaining guards can be verified
+> continuously; whether its coverage was absorbed elsewhere is unconfirmed and
+> belongs to the memory owner.
+
+- `backend/tests/unit/test_canonical_extraction_subject_wiring.py` and
   `backend/tests/unit/test_working_observations_extractor.py` — conversation,
   observation, explicit, and external memory writes enter Short-term
 - `backend/tests/unit/test_canonical_consolidation.py` — pending work receives
-  an exact one-route partition with authoritative subject/evidence validation
+  an exact one-route partition with authoritative subject/evidence validation;
+  owner-rejected sources and near-duplicate negative examples cannot promote
+- `backend/tests/unit/test_rejected_memory_feedback.py` — negative examples are
+  recent, bounded, sensitivity-safe, source-active, cached, and invalidatable
 - `backend/tests/unit/test_canonical_maintenance_ordering.py` — maintenance has
   one L2 route owner and blocked consolidation cannot fall through to generic
   promotion
 - `backend/tests/unit/test_canonical_short_term_maintenance_cron.py` and
   `backend/tests/unit/test_validate_memory_maintenance_scheduler.py` — the
-  scheduled runtime invokes only the canonical maintenance owner and reports
-  projection delivery failures
+  scheduled runtime invokes only the canonical maintenance owner, prioritizes
+  expiry work independently of the registry/cooldown, and reports projection
+  delivery and unadjudicated-expiry failures
 - `backend/tests/unit/test_atomic_apply.py` and
   `backend/tests/unit/test_memory_apply_store.py` — promotion atomically writes
   the item, graph assertion, ledger state, operation result, and outbox;

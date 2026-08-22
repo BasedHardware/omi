@@ -129,7 +129,7 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
                   return dynamicPadding.clamp(8.0, 24.0); // Clamp between reasonable values
                 }(),
               ),
-              itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
+              itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.white),
               maxRating: 5.0,
               onRatingUpdate: (rating) {
                 if (isLoading) return;
@@ -145,10 +145,10 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
               duration: const Duration(milliseconds: 300),
               height: showReviewField
                   ? (showButton
-                      ? (MediaQuery.sizeOf(context).height < 680
-                          ? MediaQuery.sizeOf(context).height * 0.28
-                          : MediaQuery.sizeOf(context).height * 0.2)
-                      : MediaQuery.sizeOf(context).height * 0.132)
+                        ? (MediaQuery.sizeOf(context).height < 680
+                              ? MediaQuery.sizeOf(context).height * 0.28
+                              : MediaQuery.sizeOf(context).height * 0.2)
+                        : MediaQuery.sizeOf(context).height * 0.132)
                   : 0,
               child: !showReviewField
                   ? null

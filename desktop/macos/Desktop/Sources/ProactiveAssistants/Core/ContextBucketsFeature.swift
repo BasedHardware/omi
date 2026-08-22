@@ -89,17 +89,37 @@ enum ContextBucketsFeature {
   ///
   /// Non-production dogfood defaults to on with the same inverted env override
   /// as the pipeline flag (`OMI_FORCE_DEPARTURE_EVALUATION=0` turns it off).
-  /// Production and beta stay off until the departure path is validated in
-  /// dogfood — unlike the surfaces above there is deliberately no remote stop
-  /// yet, because nothing ships dark to users this way.
+  /// Beta reads only a kill switch, fail-open, matching the retrieval hop:
+  /// the departure path is the only evaluation that sees content the user
+  /// created during the visit (a content-refresh transition hands the typed
+  /// question to extraction, and this is what acts on it), so leaving it dark
+  /// on beta left answer-delivery structurally unreachable there. Stable is
+  /// gated out by `isEnabled`.
   @MainActor static var isDepartureEvaluationEnabled: Bool {
     guard isEnabled else { return false }
     if AppBuild.isNonProduction {
       return ProcessInfo.processInfo.environment[localDepartureEvaluationOverrideName] != "0"
     }
-    return false
+    return !PostHogManager.shared.isFeatureEnabled(departureEvaluationKillSwitchFlagName)
   }
 
+  /// The keyboard-triggered dwell refresh (ContextDwellRefreshPolicy): its own
+  /// remote stop because it multiplies evaluation volume (each refresh buys a
+  /// departure extraction + departure evaluation + entry evaluation, plus a
+  /// possible forced retrieval), so it must be stoppable without taking the
+  /// whole pipeline down. Same inverted fail-open semantics as the flags above.
+  @MainActor static var isDwellRefreshEnabled: Bool {
+    guard isEnabled else { return false }
+    if AppBuild.isNonProduction {
+      return ProcessInfo.processInfo.environment[localDwellRefreshOverrideName] != "0"
+    }
+    return !PostHogManager.shared.isFeatureEnabled(dwellRefreshKillSwitchFlagName)
+  }
+
+  static let dwellRefreshKillSwitchFlagName = "context_buckets_dwell_refresh_kill"
+  private static let localDwellRefreshOverrideName = "OMI_FORCE_DWELL_REFRESH"
+
+  static let departureEvaluationKillSwitchFlagName = "context_buckets_departure_eval_kill"
   private static let localDepartureEvaluationOverrideName = "OMI_FORCE_DEPARTURE_EVALUATION"
 
   /// Quotes quality-gated validated facts from sibling buckets of the visit's
@@ -147,15 +167,20 @@ enum ContextBucketsFeature {
   ///
   /// Non-production dogfood defaults to on with the same inverted env override
   /// as the flags above (`OMI_FORCE_FACT_WRITE_POLICY=0` turns it off).
-  /// Production and beta stay off until the policy is validated in dogfood —
-  /// with the flag off the write path is byte-identical to today.
+  /// Beta reads only a kill switch, fail-open: departure evaluation triggers on
+  /// a fact validated at or above the worthiness threshold, and the speech-act
+  /// floor in this policy is what lifts "the user asked X for Y" facts (nano
+  /// scores that class 0.0 in 8 of 9 measured) over that threshold — enabling
+  /// departure evaluation on beta without this floor would fire it almost
+  /// never. Stable is gated out by `isEnabled`.
   @MainActor static var isFactWritePolicyEnabled: Bool {
     guard isEnabled else { return false }
     if AppBuild.isNonProduction {
       return ProcessInfo.processInfo.environment[localFactWritePolicyOverrideName] != "0"
     }
-    return false
+    return !PostHogManager.shared.isFeatureEnabled(factWritePolicyKillSwitchFlagName)
   }
 
+  static let factWritePolicyKillSwitchFlagName = "context_buckets_fact_write_policy_kill"
   private static let localFactWritePolicyOverrideName = "OMI_FORCE_FACT_WRITE_POLICY"
 }

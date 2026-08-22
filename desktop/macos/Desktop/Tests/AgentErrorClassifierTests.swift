@@ -251,6 +251,10 @@ final class AgentErrorClassifierTests: XCTestCase {
       ("403 \"byok_validation_failed\"", true, false),
       ("Connection error.", true, true),
       ("HTTP 402 status code (no body)", true, false),
+      // The desktop chat backend's own upstream-failure string. Unclassified,
+      // it renders as the generic "Omi couldn't answer this one", which is what
+      // the 2026-08-20 gateway-parameter outage showed users for ~19 hours.
+      ("Upstream provider error", true, true),
     ]
     for (raw, mustNotBeUnknown, expectedRetryable) in corpus {
       let c = AgentErrorClassifier.classify(raw)
@@ -259,5 +263,18 @@ final class AgentErrorClassifierTests: XCTestCase {
       }
       XCTAssertEqual(c.retryable, expectedRetryable, "retryability wrong for: \(raw)")
     }
+  }
+
+  func testUpstreamProviderErrorIsClassifiedRatherThanGeneric() {
+    let classified = AgentErrorClassifier.classify("Upstream provider error")
+
+    XCTAssertEqual(classified.code, .upstreamProviderFailed)
+    XCTAssertTrue(classified.retryable)
+    // The notice must show this rule's sentence, not the unclassified fallback.
+    let notice = ChatTurnFailureNotice.forFailure(
+      errorDescription: "Upstream provider error", presentsUserError: true)
+    XCTAssertNotNil(notice)
+    XCTAssertNotEqual(notice?.text, ChatTurnFailureNotice.unclassifiedText)
+    XCTAssertEqual(notice?.text, classified.userMessage)
   }
 }
