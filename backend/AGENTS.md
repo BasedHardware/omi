@@ -4,7 +4,7 @@ Inherits all rules from the root `../AGENTS.md`. This file adds backend-specific
 
 ## Setup
 
-Python 3.13 is required (Dockerfile pins 3.13-slim-bookworm). Backend local dev pins the exact interpreter in `.python-version` and uses `uv` (`pyproject.toml` + `uv.lock`) for reproducible dependency sync. Also needs FFmpeg, Opus (`opuslib`), Redis (optional).
+Python 3.13 is required (Dockerfile pins 3.13-slim-bookworm). Local dev pins `.python-version` and syncs deps with `uv` (`pyproject.toml` + `uv.lock`).
 
 ```bash
 cp .env.template .env          # Fill in required values (see .env.template for full list)
@@ -21,7 +21,7 @@ When intentionally changing backend Python dependencies, edit `pyproject.toml` a
 ./scripts/update-python-lock.sh
 ```
 
-By default, `uv lock` preserves already-locked package versions so unrelated transitive upgrades do not sneak into infrastructure changes. Set `UV_UPGRADE=1` (or legacy `PYLOCK_UPGRADE=1`) only when intentionally refreshing dependency versions.
+By default `uv lock` keeps existing pins; set `UV_UPGRADE=1` to refresh versions.
 
 **Parakeet exception:** the NeMo NGC image (`backend/parakeet/Dockerfile`) remains on the base image's Python 3.12; do not assume Parakeet shares the backend 3.13 pin.
 
@@ -243,7 +243,7 @@ uv run --project backend ruff format <files>
 # or: backend/.venv/bin/ruff format --config backend/pyproject.toml <files>
 ```
 
-`[tool.ruff.format] quote-style = "preserve"` keeps existing quote styles (same role as black's `--skip-string-normalization`).
+`quote-style = "preserve"` in `[tool.ruff.format]`.
 
 ## Async I/O (3-Lane Architecture)
 
