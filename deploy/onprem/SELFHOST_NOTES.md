@@ -299,7 +299,7 @@ sed -i "s|^OMI_LLM_GATEWAY_SERVICE_TOKEN=.*|OMI_LLM_GATEWAY_SERVICE_TOKEN=$TOK|"
 #   OMI_LLM_GATEWAY_FEATURE_MODE=gateway · OMI_LLM_GATEWAY_URL=http://llm_gateway:9080 ·
 #   OMI_LLM_GATEWAY_SERVICE_TOKEN=$TOK · OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true
 # Pin the chat model to one your endpoint serves (all features -> one local model):
-#   deploy/onprem/llm_gateway/generated_route_overrides.yaml   (default: qwen2.5:14b)
+#   deploy/onprem/helm/omi-oss/files/generated_route_overrides.yaml   (default: qwen2.5:14b)
 docker compose -f compose.dev.yaml --profile chat up -d
 ```
 
@@ -518,7 +518,7 @@ Requirements and gotchas:
 
 ## LLM route coverage: an omission is a vendor route (ADR-0067)
 
-`deploy/onprem/llm_gateway/generated_route_overrides.yaml` is mounted over the gateway's own copy and pins
+`deploy/onprem/helm/omi-oss/files/generated_route_overrides.yaml` is mounted over the gateway's own copy and pins
 each feature to the model your `OPENAI_BASE_URL` serves. **What an omission means there is the thing to
 know:** the gateway synthesises a lane for *every* configured feature, and a feature with no entry keeps its
 **cloud** model and provider from the QoS table. A missing line is not "unconfigured" — it is a live route
@@ -529,20 +529,31 @@ Measured here on 2026-08-21: **8 of 45** features had no entry — `app_integrat
 `web_search` (perplexity). `translation` carries transcript text. The earlier reading, "37 of 37 covered",
 compared our file against *upstream's* override file, which cannot show a lane neither file mentions.
 
-**The list is declared TWICE**, and that is the other half of the story. The chart does not mount this file:
-`templates/llm-gateway.yaml` regenerates its ConfigMap from `chat.llmGateway.features` in `values.yaml`. That
-pair had drifted from 44 to 4, and measured on the live k0s release **41 of 45 lanes did not serve** — 33 x
-400 `provider_invalid_request` (the lane kept a CLOUD model name our endpoint does not serve) and 8 x 503
-`invalid_config` (a vendor provider with no credentials). The four that worked were exactly the chat lanes,
-which is why the chat E2E passed while memories, daily summaries, notifications and translation did not.
-Unifying the two declarations is open (BACKLOG L45); keeping them in step is now mechanical.
+**The list is declared ONCE, and that is recent** (ADR-0081). It used to be declared twice: the chart did
+not mount this file, it regenerated its ConfigMap from a hand-kept `chat.llmGateway.features` in
+`values.yaml`, next to a comment asking for the two to be kept in step. They were not — that pair drifted
+from 44 to 4, and measured on the live k0s release **41 of 45 lanes did not serve** (33 x 400
+`provider_invalid_request` from a CLOUD model name our endpoint does not serve, 8 x 503 `invalid_config`
+from a vendor provider with no credentials). The four that worked were exactly the chat lanes, which is why
+the chat E2E passed while memories, daily summaries, notifications and translation did not.
+
+Now `templates/llm-gateway.yaml` renders the ConfigMap **from this file** with `.Files.Get`, which is why
+the file lives inside the chart: `.Files.Get` cannot reach outside one, so compose reaches in instead. The
+chart still decides the **model** (`chat.llmGateway.model` replaces whatever the file pins), so a k8s
+operator serving something else does not have to edit a shared file; the lanes and their
+`request_timeout_ms` come from the file. **To add or remove a lane, edit this one file.**
 
 `check_oss_llm_gateway_route_coverage.py` ratchets all of it: coverage against the configured-feature set,
-the `provider:` of every covered entry (a coverage count means nothing if an entry can name gemini), and the
-parity of the two declarations — features **and** per-feature `request_timeout_ms`, which the three `*_flex`
-lanes need or the loader caps them at 30s. `web_search` is the one written-off lane, with its reason in the
-guard's baseline: it is a search product, and a local chat model would answer it with invented results and a
-fabricated "Sources:" section.
+the `provider:` of every covered entry (a coverage count means nothing if an entry can name gemini), and
+that the list stays declared once — it fails if `chat.llmGateway.features`/`requestTimeoutMsByFeature`
+reappear in the values, or if the template stops reading the file (which would render an EMPTY ConfigMap
+and put every feature back on its cloud model). `web_search` is the one written-off lane, with its reason
+in the guard's baseline: it is a search product, and a local chat model would answer it with invented
+results and a fabricated "Sources:" section.
+
+Verified live on both targets after the unification (2026-08-22), with the lane probe below: **44 x 200 and
+`web_search` alone at 503**, on k0s (`helm upgrade` -> 44 lanes in the ConfigMap, gateway pod rolled) and on
+compose (`docker compose -f compose.prod.yaml up -d llm_gateway`, bind-mount repointed).
 
 **Verify every lane against the live gateway** — the check the guard cannot do, because it needs the network.
 Write the probe to a file and pipe it in (the caller header is required: 403 without it):

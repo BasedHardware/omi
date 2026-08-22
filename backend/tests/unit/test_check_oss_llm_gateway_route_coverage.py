@@ -42,23 +42,29 @@ _PINNED_FEATURES: Dict[str, Tuple[str, str]] = {
 }
 '''
 
+# The chart AFTER unification (ADR-0081): the lane list is gone from the values and the template reads
+# the shared file. The tests below re-introduce each half of the old shape to prove the guard catches it.
 HELM_VALUES = '''
 chat:
   enabled: false
   llmGateway:
     enabled: false
     model: "qwen2.5:14b"
-    features:
-      - chat_agent
-      - translation
-      - fair_use
-    requestTimeoutMsByFeature:
-      translation: 900000
     resources: {}
   qdrant:
     # a sibling block with its own list-shaped key: must not contribute
     features:
       - not_a_lane
+'''
+
+HELM_TEMPLATE = '''
+data:
+  generated_route_overrides.yaml: |
+    generated_route_overrides:
+    {{- $file := .Files.Get "files/generated_route_overrides.yaml" | fromYaml }}
+    {{- range $file.generated_route_overrides }}
+      - feature: {{ .feature }}
+    {{- end }}
 '''
 
 OVERRIDES = '''
@@ -123,60 +129,57 @@ def test_an_entry_with_no_readable_provider_reports_empty_not_ours():
     assert _MODULE.overridden_features(text)['translation'] == ''
 
 
-# --- the second declaration: the chart ------------------------------------------------------------
+# --- the second declaration must not come back ----------------------------------------------------
 
 
-def test_helm_features_are_read_only_from_the_gateway_block():
-    """`features:` is a generic key; a sibling component could grow one. The walk is scoped."""
-    features, timeouts = _MODULE.helm_declared(HELM_VALUES)
-    assert features == {'chat_agent', 'translation', 'fair_use'}
-    assert 'not_a_lane' not in features
-    assert timeouts == {'translation': 900000}
+def test_the_unified_chart_reports_nothing():
+    result = _MODULE.check(TABLE, OVERRIDES, {'web_search': 'note'}, HELM_VALUES, HELM_TEMPLATE)
+    assert result['second_declaration'] == []
 
 
-def test_no_helm_values_means_no_drift_verdict():
-    """Passing an empty string must not report 44 phantom drifts — the check has to be skippable."""
-    result = _MODULE.check(TABLE, OVERRIDES, {'web_search': 'note'}, '')
-    assert result['helm_drift'] == []
-    assert result['helm_timeout_drift'] == []
+def test_no_chart_text_means_no_verdict():
+    """Passing empty strings must not report a phantom problem — the check has to be skippable."""
+    assert _MODULE.check(TABLE, OVERRIDES, {'web_search': 'note'}, '', '')['second_declaration'] == []
 
 
-def test_a_lane_pinned_in_one_target_only_fails():
-    """The measured failure: this pair had drifted from 44 to 4, and 41 of 45 lanes did not serve on the
-    live k0s release while compose was fine."""
-    helm = HELM_VALUES.replace('      - translation\n', '')
-    result = _MODULE.check(TABLE, OVERRIDES, {'web_search': 'note'}, helm)
-    assert result['helm_drift'] == ['translation (compose only)']
-
-
-def test_a_lane_the_chart_pins_and_compose_does_not_also_fails():
-    """Drift has two directions and neither is acceptable."""
-    helm = HELM_VALUES.replace('      - fair_use\n', '      - fair_use\n      - web_search\n')
-    result = _MODULE.check(TABLE, OVERRIDES, {'web_search': 'note'}, helm)
-    assert result['helm_drift'] == ['web_search (helm only)']
-
-
-def test_a_timeout_set_on_one_target_only_fails():
-    """A missing request_timeout_ms caps a long extraction at 30s, so the lane fails on a local model."""
-    compose = OVERRIDES.replace(
-        '  - feature: translation\n    primary: {provider: openai, model: qwen2.5:14b}',
-        '  - feature: translation\n    primary: {provider: openai, model: qwen2.5:14b}\n    request_timeout_ms: 900000',
+def test_a_features_list_growing_back_in_the_values_fails():
+    """The exact regression this replaces: a hand-kept copy next to a comment asking someone to remember
+    to update it. It drifted from 44 lanes to 4, and 41 of 45 lanes did not serve on the live release."""
+    values = HELM_VALUES.replace(
+        '    model: "qwen2.5:14b"\n', '    model: "qwen2.5:14b"\n    features:\n      - chat_agent\n'
     )
-    assert _MODULE.compose_timeouts(compose) == {'translation': 900000}
-
-    helm = HELM_VALUES.replace('      translation: 900000\n', '')
-    result = _MODULE.check(TABLE, compose, {'web_search': 'note'}, helm)
-    assert result['helm_timeout_drift'] == ['translation: compose=900000 helm=-']
+    problems = _MODULE.check(TABLE, OVERRIDES, {'web_search': 'note'}, values, HELM_TEMPLATE)['second_declaration']
+    assert len(problems) == 1
+    assert 'chat.llmGateway.features' in problems[0]
 
 
-def test_matching_targets_report_no_drift():
-    compose = OVERRIDES.replace(
-        '  - feature: translation\n    primary: {provider: openai, model: qwen2.5:14b}',
-        '  - feature: translation\n    primary: {provider: openai, model: qwen2.5:14b}\n    request_timeout_ms: 900000',
+def test_a_timeout_map_growing_back_in_the_values_fails():
+    """The timeouts travel with the lanes; splitting them is the same defect one field smaller."""
+    values = HELM_VALUES.replace(
+        '    model: "qwen2.5:14b"\n',
+        '    model: "qwen2.5:14b"\n    requestTimeoutMsByFeature:\n      translation: 900000\n',
     )
-    result = _MODULE.check(TABLE, compose, {'web_search': 'note'}, HELM_VALUES)
-    assert result['helm_drift'] == []
-    assert result['helm_timeout_drift'] == []
+    problems = _MODULE.check(TABLE, OVERRIDES, {'web_search': 'note'}, values, HELM_TEMPLATE)['second_declaration']
+    assert len(problems) == 1
+    assert 'requestTimeoutMsByFeature' in problems[0]
+
+
+def test_a_sibling_block_with_its_own_features_key_does_not_count():
+    """`features:` is generic; the walk is scoped to the llmGateway block. HELM_VALUES already carries a
+    qdrant sibling with one, and it must stay silent."""
+    assert 'not_a_lane' in HELM_VALUES
+    assert (
+        _MODULE.check(TABLE, OVERRIDES, {'web_search': 'note'}, HELM_VALUES, HELM_TEMPLATE)['second_declaration'] == []
+    )
+
+
+def test_a_template_that_stopped_reading_the_file_fails():
+    """The subtler half: the values are clean, so nothing looks duplicated, but the ConfigMap renders
+    EMPTY and every feature silently keeps its cloud model."""
+    template = HELM_TEMPLATE.replace('.Files.Get "files/generated_route_overrides.yaml"', 'dict')
+    problems = _MODULE.check(TABLE, OVERRIDES, {'web_search': 'note'}, HELM_VALUES, template)['second_declaration']
+    assert len(problems) == 1
+    assert 'CLOUD model' in problems[0]
 
 
 # --- the ratchet --------------------------------------------------------------------------------
@@ -254,15 +257,14 @@ def test_an_empty_baseline_file_says_what_happened(tmp_path):
 def test_the_repository_is_at_or_below_its_baseline():
     """The ratchet on the real tree — the check CI runs."""
     root = Path(__file__).resolve().parents[3]
-    table_source, overrides_text, helm_values_text = _MODULE._read(root)
+    table_source, overrides_text, helm_values_text, helm_template_text = _MODULE._read(root)
     baseline = _MODULE.load_baseline(root / _MODULE.DEFAULT_BASELINE)
-    result = _MODULE.check(table_source, overrides_text, baseline, helm_values_text)
+    result = _MODULE.check(table_source, overrides_text, baseline, helm_values_text, helm_template_text)
     assert result['uncovered'] == []
     assert result['vendor_pinned'] == []
     assert result['unknown_feature'] == []
     assert result['stale_baseline'] == []
-    assert result['helm_drift'] == []
-    assert result['helm_timeout_drift'] == []
+    assert result['second_declaration'] == []
 
 
 def test_web_search_is_the_only_written_off_lane_and_it_carries_a_real_note():

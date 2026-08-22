@@ -183,7 +183,11 @@ services:
     # On-prem lane->model map (all features pinned to your single local model). Mounted OVER the
     # image's cloud config so the committed config stays untouched; edit the model in this file.
     volumes:
-      - ./llm_gateway/generated_route_overrides.yaml:/app/llm_gateway/config/generated_route_overrides.yaml:ro
+      # ONE declaration, two consumers (ADR-0081). The file lives inside the Helm chart because
+      # `.Files.Get` cannot reach outside it; compose reaches IN, which is the direction that works
+      # for both. It used to live under ./llm_gateway/ with the chart holding a second, hand-kept
+      # copy in values.yaml — that copy had drifted from 44 lanes to 4.
+      - ./helm/omi-oss/files/generated_route_overrides.yaml:/app/llm_gateway/config/generated_route_overrides.yaml:ro
     # The operator LLM endpoint (OPENAI_BASE_URL) is outside compose; reach the host with this alias.
     extra_hosts:
       - "host.docker.internal:host-gateway"

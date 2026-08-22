@@ -177,68 +177,17 @@ chat:
     # user sees as a canned apology rather than an error: generate one and set it here.
     #   openssl rand -hex 24
     serviceToken: ""
-    # Feature lanes to pin, ONE PER CONFIGURED FEATURE. Generated from — and kept in step with —
-    # deploy/onprem/llm_gateway/generated_route_overrides.yaml (what compose bind-mounts) by the guard
-    # check_oss_llm_gateway_route_coverage.py, which now reads BOTH declarations (ADR-0067).
+    # The feature lanes are NOT declared here. They live in ONE place —
+    # deploy/onprem/helm/omi-oss/files/generated_route_overrides.yaml — which compose bind-mounts and this
+    # chart renders with `.Files.Get` (ADR-0081), together with each lane's request_timeout_ms.
     #
-    # This list held FOUR entries until 2026-08-21 while the compose file held 44, and the comment here
-    # said "keep the two in step" — a hand-maintained parity that had drifted by 40. Measured on the live
-    # k0s release: 41 of 45 lanes did not serve (33 x 400 provider_invalid_request because the lane kept a
-    # CLOUD model name our endpoint does not serve, 8 x 503 invalid_config for a vendor provider with no
-    # credentials). Only app_generator/chat_agent/chat_extraction/chat_graph worked, which is why the chat
-    # E2E passed while everything else — memories, daily summaries, notifications, translation — did not.
-    features:
-      - app_generator
-      - app_integration
-      - chat_agent
-      - chat_extraction
-      - chat_graph
-      - chat_responses
-      - conv_action_items
-      - conv_app_result
-      - conv_app_select
-      - conv_discard
-      - conv_folder
-      - conv_structure
-      - daily_summary
-      - daily_summary_simple
-      - desktop_proactive_extraction
-      - desktop_proactive_reasoning
-      - external_structure
-      - fair_use
-      - followup
-      - goals
-      - goals_advice
-      - knowledge_graph
-      - learnings
-      - memories
-      - memory_category
-      - memory_conflict
-      - memory_conflict_flex
-      - memory_l2_flex
-      - onboarding
-      - session_titles
-      - translation
-      - trends
-      - wrapped_analysis
-      - x_memory_extraction_flex
-      - memory_l1
-      - memory_l2
-      - notifications
-      - openglass
-      - persona_chat
-      - persona_chat_premium
-      - persona_clone
-      - proactive_notification
-      - smart_glasses
-      - what_matters_now
-    # The three *_flex features are long-running extraction calls. Without this the loader caps them at
-    # 30s non-streaming, so they fail on a locally served model (cubic 10887). Same values as the compose
-    # file; a feature absent here just takes the default.
-    requestTimeoutMsByFeature:
-      memory_conflict_flex: 900000
-      memory_l2_flex: 900000
-      x_memory_extraction_flex: 900000
+    # They WERE declared here, as `features:` + `requestTimeoutMsByFeature:`, next to a comment asking for
+    # them to be kept in step with the compose file. They were not: this list held FOUR entries until
+    # 2026-08-21 while the compose file held 44. Measured on the live k0s release, 41 of 45 lanes did not
+    # serve (33 x 400 provider_invalid_request from a CLOUD model name our endpoint does not serve, 8 x 503
+    # invalid_config from a vendor provider with no credentials). Only app_generator/chat_agent/
+    # chat_extraction/chat_graph worked, which is why the chat E2E passed while memories, daily summaries,
+    # notifications and translation did not. To add or remove a lane, edit that file.
     resources: {}
   qdrant:
     image: qdrant/qdrant@sha256:057ee3a8da769fe7310dd3537b4dc7583bf87a95ce8ac43c0af5a46bc580d1fc  # 1.19.0
