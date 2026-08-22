@@ -10,9 +10,13 @@ final class MeetingNoteTakingNoticeTests: XCTestCase {
   @MainActor
   private final class PresentationCounter {
     private(set) var count = 0
-    private let original = MeetingNoteTakingNotice.present
+    // Captured in `init`, not as a default value: a stored property's default
+    // expression is nonisolated even when the type is @MainActor, so reading
+    // the main-actor presenter there fails under strict concurrency.
+    private let original: () -> Void
 
     init() {
+      original = MeetingNoteTakingNotice.present
       MeetingNoteTakingNotice.present = { [weak self] in self?.count += 1 }
     }
 
