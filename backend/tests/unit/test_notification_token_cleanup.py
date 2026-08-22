@@ -1,4 +1,5 @@
 import asyncio
+import threading
 from contextlib import contextmanager
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -163,10 +164,16 @@ def test_bulk_one_failing_chunk_does_not_discard_the_other_chunks_cleanup(monkey
         # 501 tokens over a 500 batch size -> two chunks: the first raises, the second reports a dead token.
         tokens = [f'token-{i}' for i in range(501)]
         calls = {'n': 0}
+        counter_lock = threading.Lock()
 
         def _send_each(messages):
-            calls['n'] += 1
-            if calls['n'] == 1:
+            # Keyed on the CHUNK, not on call order: the chunks are dispatched to a thread pool, so
+            # `if this is the first call` decided at random which chunk raised — under machine load this
+            # test failed ~3 runs in 4. `calls['n'] += 1` was not atomic either, so both threads could
+            # read 0 and both raise, leaving nothing to clean up.
+            with counter_lock:
+                calls['n'] += 1
+            if len(messages) == 500:
                 raise RuntimeError('transport rejected the whole chunk')
             return _FakeBatchResponse([_FakeResponse(success=False, exception=_FakeMessagingException('NOT_FOUND'))])
 
