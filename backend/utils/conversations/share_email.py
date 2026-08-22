@@ -41,6 +41,12 @@ class AmbiguousDeliveryError(RuntimeError):
 # blanket "send to everyone" proposal is more likely wrong than helpful.
 MAX_MEETING_PARTICIPANTS = 10
 MAX_RECIPIENTS = 5
+# Sources that mean "the user actually has this event on a calendar, with these
+# invitees". Anything else — screen-derived identity, or an unlabelled source we
+# cannot attribute — is inference, and inference must not address an email.
+CALENDAR_BACKED_SOURCES = frozenset(
+    {'system_calendar', 'macos_calendar', 'google', 'google_calendar', 'outlook_calendar'}
+)
 # Attributable but still bounded: one authenticated user may relay at most
 # this many summary emails per UTC day.
 DAILY_SEND_QUOTA = 30
@@ -77,12 +83,19 @@ def normalized_recipient_emails(values: List[str]) -> List[str]:
 
 
 def _participants_from_conversation(conversation: Dict[str, Any]) -> List[Dict[str, Optional[str]]]:
-    """All {name, email} pairs the calendar sources recorded for this conversation."""
+    """All {name, email} pairs a *calendar* recorded for this conversation.
+
+    Screen-derived identity is excluded on purpose. It is inferred from whatever
+    the conferencing window happened to show, which includes calendar tiles for
+    other meetings — one such tile put a later meeting's guest on this card and
+    offered to email him (issue #12036). An address the user actually invited is
+    the only basis for a one-click send.
+    """
     participants: List[Dict[str, Optional[str]]] = []
 
     external_data = conversation.get('external_data') or {}
     calendar_context = external_data.get('calendar_meeting_context') or conversation.get('calendar_meeting_context')
-    if isinstance(calendar_context, dict):
+    if isinstance(calendar_context, dict) and calendar_context.get('calendar_source') in CALENDAR_BACKED_SOURCES:
         for participant in calendar_context.get('participants') or []:
             if isinstance(participant, dict):
                 participants.append({'name': participant.get('name'), 'email': participant.get('email')})
@@ -96,6 +109,35 @@ def _participants_from_conversation(conversation: Dict[str, Any]) -> List[Dict[s
             participants.append({'name': name, 'email': email})
 
     return participants
+
+
+def _attendee_count(participants: List[Dict[str, Optional[str]]]) -> int:
+    """How many distinct people the sources describe.
+
+    An address is the only stable identity here. The same meeting can arrive as
+    both `calendar_meeting_context` and `calendar_event`, and each source may
+    spell one person differently ("Nik" vs "Nik Shevchenko"), so counting names
+    alongside addresses would make one attendee look like two. Conversations
+    stored before attendees were paired also carry a person's name and address
+    as separate entries, so names are counted only when no address accompanies
+    them, and the two tallies are compared rather than summed.
+
+    The gate errs toward proposing: it exists to stop a blanket proposal for a
+    large meeting, and every proposed recipient still needs a name *and* an
+    address, so a slight undercount cannot address anyone new — while an
+    overcount silently drops a legitimate proposal.
+    """
+    emails: set[str] = set()
+    unattached_names: set[str] = set()
+    for participant in participants:
+        email = _normalized_email(participant.get('email'))
+        if email:
+            emails.add(email)
+            continue
+        raw_name = participant.get('name')
+        if isinstance(raw_name, str) and raw_name.strip():
+            unattached_names.add(raw_name.strip().casefold())
+    return max(len(emails), len(unattached_names))
 
 
 def _is_captured_name(name: str, email: str) -> bool:
@@ -125,7 +167,7 @@ def extract_share_recipients(conversation: Dict[str, Any], owner_emails: List[st
     participant, or a meeting too large for a blanket proposal).
     """
     participants = _participants_from_conversation(conversation)
-    if len(participants) > MAX_MEETING_PARTICIPANTS:
+    if _attendee_count(participants) > MAX_MEETING_PARTICIPANTS:
         return []
 
     owner_set = {email for email in (_normalized_email(e) for e in owner_emails) if email}

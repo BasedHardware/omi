@@ -57,13 +57,13 @@ final class OnboardingPersistenceClearingTests: XCTestCase {
 
     defaults.set(true, forKey: DefaultsKey.hasCompletedOnboarding.rawValue)
     OnboardingFlow.markCompleted(for: "owner-a", defaults: defaults)
-    defaults.set(18, forKey: "onboardingStep")
+    defaults.set(18, forKey: DefaultsKey.onboardingStep.rawValue)
 
     XCTAssertEqual(
       OnboardingFlow.reconcileCompletionOwner(currentOwnerID: "owner-b", defaults: defaults),
       .resetForDifferentOwner)
     XCTAssertFalse(defaults.bool(forKey: DefaultsKey.hasCompletedOnboarding.rawValue))
-    XCTAssertNil(defaults.object(forKey: "onboardingStep"))
+    XCTAssertNil(defaults.object(forKey: DefaultsKey.onboardingStep.rawValue))
     XCTAssertNil(defaults.object(forKey: OnboardingFlow.completionOwnerKey))
   }
 
