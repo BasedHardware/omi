@@ -539,6 +539,7 @@ function HomeSearchField({
         styles.homeSearchDock,
         desktop && styles.macHomeQueryField,
         compact && styles.homeSearchDockCompact,
+        !compact && !desktop && styles.homeSearchDockWide,
         searchFocused && styles.focusRing,
       ]}>
       <Search
@@ -2284,11 +2285,10 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       : 'No saved conversations or memories yet.';
   const homeDesktopEmptyCopy =
     readsPhase === 'unavailable'
-      ? readOutcomes?.conversations.status === 'error'
-        ? readOutcomes.conversations.error
-        : readOutcomes?.memories.status === 'error'
-        ? readOutcomes.memories.error
-        : desktopBackendConfigurationCopy
+      ? readOutcomes?.conversations.status === 'error' &&
+        readOutcomes.conversations.error === desktopBackendConfigurationCopy
+        ? desktopBackendConfigurationCopy
+        : 'Omi could not load saved conversations or memories. Your saved data has not been changed.'
       : homeSearching
       ? 'Filter covers loaded conversations and memories only.'
       : 'Loaded conversations and memories will appear here.';
@@ -2540,6 +2540,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             style={[
               styles.paneFrame,
               !floatingPane && styles.paneFrameCompact,
+              !compact && !macDesktop && styles.paneFrameWide,
             ]}>
             {floatingPane && !macDesktop && (
               <View
@@ -2581,12 +2582,27 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                       homeDesktop
                     ) : (
                       <View style={styles.searchHome}>
+                        {!compact && (
+                          <View style={styles.homeHeading}>
+                            <Text style={styles.homeEyebrow}>HOME</Text>
+                            <Text
+                              accessibilityRole="header"
+                              style={styles.homeTitle}>
+                              Your Omi, at a glance
+                            </Text>
+                            <Text style={styles.homeSubtitle}>
+                              Device status and the conversations and memories
+                              saved for you.
+                            </Text>
+                          </View>
+                        )}
                         {!homeSearching && homeOverview}
                         {homeSearching && (
                           <Animated.View
                             accessibilityLabel="Home search results"
                             style={[
                               styles.homeResults,
+                              !compact && styles.homeResultsWide,
                               {opacity: homeResultsOpacity},
                             ]}>
                             <ProjectionList
@@ -2632,9 +2648,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                               styles.macReadStatusText,
                                           ]}>
                                           {readOutcomes?.conversations
-                                            .status === 'error'
-                                            ? readOutcomes.conversations.error
-                                            : desktopBackendConfigurationCopy}
+                                            .status === 'error' &&
+                                          readOutcomes.conversations.error ===
+                                            desktopBackendConfigurationCopy
+                                            ? desktopBackendConfigurationCopy
+                                            : 'Omi could not load saved conversations or memories. Your saved data has not been changed.'}
                                         </Text>
                                       )}
                                       {(readsPhase ===
@@ -3060,6 +3078,12 @@ const styles = StyleSheet.create({
   paneFrame: {
     flex: 1,
   },
+  paneFrameWide: {
+    alignSelf: 'center',
+    maxHeight: 760,
+    maxWidth: 1120,
+    width: '100%',
+  },
   paneFrameCompact: {},
   paneDepth: {
     bottom: 0,
@@ -3154,9 +3178,26 @@ const styles = StyleSheet.create({
   searchHome: {
     alignSelf: 'center',
     flex: 1,
-    maxWidth: 900,
+    maxWidth: 820,
+    paddingTop: 28,
     width: '100%',
   },
+  homeHeading: {paddingBottom: 22, paddingHorizontal: 2},
+  homeEyebrow: {
+    color: '#78bda5',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.6,
+  },
+  homeTitle: {
+    color: '#f5f5f2',
+    fontSize: 30,
+    fontWeight: '700',
+    letterSpacing: -0.8,
+    lineHeight: 36,
+    marginTop: 7,
+  },
+  homeSubtitle: {color: '#9b9b96', fontSize: 14, lineHeight: 21, marginTop: 5},
   homeOverview: {flex: 1, width: '100%'},
   homeOverviewContent: {paddingBottom: 28, paddingTop: 10},
   pendantHero: {alignItems: 'center', paddingBottom: 18},
@@ -3324,6 +3365,7 @@ const styles = StyleSheet.create({
   homeSpineEmptyCopy: {color: '#5a5a5a', textAlign: 'left'},
   homeSpineList: {flexGrow: 0, paddingBottom: 0},
   homeResults: {flex: 1},
+  homeResultsWide: {flex: 0, flexGrow: 0, maxHeight: 430, minHeight: 210},
   macHomeReadStatuses: {gap: 8},
   macHomeReadStatus: {
     gap: 3,
@@ -3436,6 +3478,11 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     marginBottom: 12,
     minHeight: 60,
+  },
+  homeSearchDockWide: {
+    marginBottom: 24,
+    marginTop: 22,
+    maxWidth: 560,
   },
   askOmiButton: {
     alignItems: 'center',

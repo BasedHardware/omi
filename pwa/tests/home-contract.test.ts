@@ -46,6 +46,17 @@ test("web entry renders the canonical React Native App", async () => {
   expect(entry).not.toContain("renderApp");
 });
 
+test("browser root gives the canonical RN surface the full viewport", async () => {
+  const entry = await readFile(resolve(root, "src/main.ts"), "utf8");
+  const styles = await readFile(resolve(root, "src/root.css"), "utf8");
+
+  expect(entry).toContain('import "./root.css"');
+  expect(styles).toContain("#app");
+  expect(styles).toContain("height: 100%");
+  expect(styles).toContain("min-height: 100dvh");
+  expect(styles).toContain("background: #141414");
+});
+
 test("service worker installs the built application shell for an offline first restart", async () => {
   const source = await readFile(resolve(root, "public/sw.js"), "utf8");
   const listeners = new Map<string, (event: any) => void>();
