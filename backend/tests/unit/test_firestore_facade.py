@@ -390,21 +390,74 @@ def test_get_all_batches_via_get_many_not_per_ref():
     assert calls["get"] == 0  # NOT N per-ref point reads
 
 
-def test_txn_write_conflict_at_write_time_translates_to_aborted():
-    # cubic PR 10887 goals.py:635: a MongoDB write conflict can surface at the write op (update_one/insert_one
-    # on the session), not only at commit. The facade transaction's set/update/create/delete must translate a
-    # TransientTransactionError to google's Aborted so @firestore.transactional replays apply(); before this
-    # only _commit did, and .set was not even wrapped, so a write-time conflict escaped raw and never retried.
+def _conflicting_client():
+    """A client whose first in-transaction write hits a Mongo write conflict."""
+
     class _ConflictStore(FakeDocumentStore):
         def _set(self, path, data, *, merge=False, session=None):
             exc = Exception("WriteConflict")
             exc.has_error_label = lambda label: label == "TransientTransactionError"
             raise exc
 
-    c = NeutralFirestoreClient(_ConflictStore())
+    return NeutralFirestoreClient(_ConflictStore())
+
+
+def test_txn_write_conflict_is_held_instead_of_escaping_the_body():
+    # cubic PR 10887 goals.py:635: a MongoDB write conflict can surface at the write op (update_one /
+    # insert_one on the session), not only at commit. This test used to assert that the write RAISED
+    # google's Aborted, on the stated grounds that @firestore.transactional would then replay apply().
+    #
+    # Measured on the live rig, that never happened: google's `_pre_commit` -- which runs the decorated
+    # body, and therefore the write -- sits OUTSIDE `except retryable_exceptions`, so raising here
+    # produced a bare Aborted at the caller and the body ran exactly once (ADR-0091, BACKLOG L53). The
+    # conflict is now HELD, and the assertion moves with it: the write returns, and the transaction
+    # remembers.
+    c = _conflicting_client()
     txn = c.transaction()
+
+    txn.set(c.document("users/u1/goals/reservation"), {"version": 2})  # must not raise
+
+    assert isinstance(txn._poisoned, Aborted), "the conflict must be remembered, translated"
+
+
+def test_a_held_write_conflict_is_raised_by_the_commit():
+    """Where the decorator actually retries."""
+    c = _conflicting_client()
+    txn = c.transaction()
+    txn.set(c.document("users/u1/goals/reservation"), {"version": 2})
+
     with pytest.raises(Aborted):
-        txn.set(c.document("users/u1/goals/reservation"), {"version": 2})
+        txn._commit()
+
+
+def test_a_poisoned_transaction_writes_nothing_and_reads_absent():
+    """The body runs on to the end, so it must find a transaction that answers without raising and
+    without applying anything."""
+    c = _conflicting_client()
+    ref = c.document("users/u1/goals/reservation")
+    txn = c.transaction()
+    txn.set(ref, {"version": 2})
+
+    txn.update(ref, {"version": 3})
+    txn.create(c.document("users/u1/goals/new"), {"version": 1})
+    txn.delete(ref)
+    snapshot = txn.get(ref)
+
+    assert snapshot.exists is False
+    assert snapshot.to_dict() in (None, {})
+
+
+def test_beginning_again_clears_the_held_conflict():
+    """google's decorator REUSES the transaction object across attempts: a replay that started poisoned
+    would run inert and re-raise until the attempt budget ran out."""
+    c = _conflicting_client()
+    txn = c.transaction()
+    txn.set(c.document("users/u1/goals/reservation"), {"version": 2})
+    assert txn._poisoned is not None
+
+    txn._begin()
+
+    assert txn._poisoned is None
 
 
 def test_get_all_binds_positional_transaction():

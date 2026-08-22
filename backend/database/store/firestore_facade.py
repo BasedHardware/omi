@@ -651,11 +651,18 @@ class _FacadeTransaction:
 
     _max_attempts = 5
     _read_only = False  # google's @transactional reads this to decide whether Aborted is retryable
+    # Class-level default as well as an instance one: a transaction is sometimes built with ``__new__``
+    # to drive ``_commit`` in isolation, and an attribute that only exists after ``__init__`` turns that
+    # into an AttributeError three frames from the reason.
+    _poisoned: Optional[BaseException] = None
 
     def __init__(self, client: "NeutralFirestoreClient") -> None:
         self._client = client
         self._session: Any = None
         self._id: Any = None
+        # Set when a write hits a Mongo write conflict. See _poison() for why the conflict is HELD here
+        # instead of being raised out of the body (ADR-0091, BACKLOG L53).
+        self._poisoned: Optional[BaseException] = None
 
     # --- lifecycle (driven by the decorator/wrapper) ---
     def _begin(self, retry_id: Any = None) -> None:
@@ -671,8 +678,24 @@ class _FacadeTransaction:
         # store makes "no session" a declaration instead of a guess (BACKLOG L31).
         self._session = self._client._store._begin_session()
         self._id = id(self)
+        # Clear the held conflict: google's decorator REUSES this object across attempts, so a replay
+        # that started still poisoned would run inert and re-raise the same conflict until the attempt
+        # budget ran out. Measured that way first -- the body ran twice and still failed.
+        self._poisoned = None
 
     def _commit(self) -> Any:
+        if self._poisoned is not None:
+            # A write conflicted earlier in the body. Raise it HERE, which is the one place google's
+            # decorator retries, and roll the session back first so the replay starts clean.
+            #
+            # Measured: removing these four lines still retries today, because committing an already
+            # aborted session fails with a TransientTransactionError label and the handler below turns
+            # THAT into Aborted. So this is redundant with pymongo's current reporting, and the mutation
+            # survives — said here rather than left as an unexplained survivor. It stays because the
+            # retry should be a decision of ours, not a side effect of how a driver happens to label a
+            # commit on a dead session, and because the caller then sees the ORIGINAL conflict.
+            self._rollback()
+            raise self._poisoned
         if self._session is None:
             return []
         # A commit that fails with UnknownTransactionCommitResult MAY already have succeeded on the server,
@@ -708,30 +731,78 @@ class _FacadeTransaction:
         self._session = None
         self._id = None
 
+    # --- the write conflict is HELD, not raised (ADR-0091) --------------------------------------------
+    #
+    # google's ``_Transactional.__call__`` puts only ``transaction._commit()`` inside
+    # ``except retryable_exceptions``; ``_pre_commit`` -- which runs the decorated body, and therefore
+    # every write below -- sits OUTSIDE it. Measured on the live rig: a conflict raised from a write
+    # propagated to the caller after a rollback and the body ran exactly once, while a conflict raised
+    # from the commit replayed the body and then committed. So raising a write conflict here can never
+    # produce the retry the translation was added for -- it only produces a bare ``Aborted`` where the
+    # Firestore posture would have retried and returned the module's own domain error.
+    #
+    # So the conflict is recorded and the transaction goes INERT: every later read reports "not there",
+    # every later write does nothing, and ``_commit`` raises the ``Aborted`` from the place the decorator
+    # actually watches. The body runs to the end on a transaction that will land nothing.
+    #
+    # What makes that safe is a property of this tree, measured rather than assumed: of the 155
+    # transactional bodies, NONE performs a side effect outside the store. A body that sent an email or
+    # enqueued a vector write would do it on a run whose writes are all discarded, and would then do it
+    # again on the replay. That measurement is a precondition of this design -- if it ever stops holding,
+    # this stops being correct, which is why the check lives in the unit suite and not only in a comment.
+
+    def _poison(self, exc: BaseException) -> None:
+        """Hold a write conflict until ``_commit``, where the decorator's retry can see it."""
+        if self._poisoned is None:
+            self._poisoned = exc
+
     # --- read/write within the transaction (upstream calls these with a _DocRef) ---
     def _read(self, path: str, *, fields: Any = None) -> StoredDocument:
+        if self._poisoned is not None:
+            # The Mongo session is already aborted; asking it anything raises. Report "absent" so the
+            # body can finish and reach the commit, where the conflict is re-raised for the retry.
+            return StoredDocument(id=path.rsplit("/", 1)[-1], path=path, exists=False, data=None)
         return self._client._store._get(path, fields=fields, session=self._session)
 
     def get(self, ref: _DocRef, **_: Any) -> _Snapshot:
         return _Snapshot(ref, self._read(ref.path))
 
     def set(self, ref: _DocRef, data: Dict[str, Any], merge: bool = False) -> None:
-        with _txn_write_errors():
+        if self._poisoned is not None:
+            return
+        with self._holding_conflicts():
             self._client._store._set(ref.path, _neutral_data(data), merge=merge, session=self._session)
 
     def update(self, ref: _DocRef, data: Dict[str, Any], option: Any = None) -> None:
-        with _txn_write_errors():
+        if self._poisoned is not None:
+            return
+        with self._holding_conflicts():
             self._client._store._update(
                 ref.path, _neutral_data(data), if_updated_at=_precondition_time(option), session=self._session
             )
 
     def create(self, ref: _DocRef, data: Dict[str, Any]) -> None:
-        with _txn_write_errors():
+        if self._poisoned is not None:
+            return
+        with self._holding_conflicts():
             self._client._store._create(ref.path, _neutral_data(data), session=self._session)
 
     def delete(self, ref: _DocRef, option: Any = None) -> None:
-        with _txn_write_errors():
+        if self._poisoned is not None:
+            return
+        with self._holding_conflicts():
             self._client._store._delete(ref.path, if_updated_at=_precondition_time(option), session=self._session)
+
+    @contextlib.contextmanager
+    def _holding_conflicts(self):
+        """``_txn_write_errors`` for a write issued inside THIS transaction: a transient write conflict
+        poisons instead of raising. Every other error is translated and raised as before -- a missing
+        document or a failed precondition is the body's business and must reach it."""
+        try:
+            with _txn_write_errors():
+                yield
+        except _gexc.Aborted as exc:
+            self._poison(exc)
 
 
 class _FacadeBatch:

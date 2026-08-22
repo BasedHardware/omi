@@ -858,3 +858,75 @@ def test_rest_allowed_empty_account_returns_empty_without_error(run_surface):
 @pytest.mark.parametrize('run_surface', _SSE_SURFACES)
 def test_sse_allowed_empty_account_returns_empty_without_error(run_surface):
     assert run_surface(_allowed_empty_result())["memories"] == []
+
+
+# --- a CONTESTED token exchange answers, it does not 500 (BACKLOG L56) -----------------------------
+# A connector that double-submits its token request makes two redemptions of the same authorization code
+# race. The loser's transaction aborts, and that abort surfaces from INSIDE the transaction body — where
+# google's @transactional does not retry, because `_pre_commit` sits outside its `except`. Measured on
+# both live backends before this branch existed: `Aborted` propagated out of the route and the client got
+# an HTTP 500 for the ordinary case of pressing connect twice.
+#
+# The facade now holds a Mongo write conflict until the commit so the body replays and the on-prem
+# posture returns a clean refusal (proved in tests/contract/test_facade_transaction_retry.py). The
+# Firestore posture still gives up with Aborted after its own retries, so the route answers here.
+# A lost race means somebody else spent the code, which is exactly `invalid_grant`.
+
+
+def _token_request(**fields):
+    class _Request:
+        @staticmethod
+        async def json():
+            return {'client_id': 'omi-chatgpt-prod', 'grant_type': 'authorization_code', **fields}
+
+        headers = {'content-type': 'application/json'}
+
+    return _Request()
+
+
+def _contested_token_route(target: str, **fields):
+    import asyncio
+
+    from google.api_core.exceptions import Aborted
+
+    client = {'id': 'omi-chatgpt-prod', 'token_endpoint_auth_method': 'none'}
+
+    async def run_inline(_executor, function, *args, **kwargs):
+        return function(*args, **kwargs)
+
+    with (
+        # This harness stubs utils.executors, so run_blocking is a MagicMock and awaiting it is a
+        # TypeError before the route is even reached. Inline it: what is under test is the branch the
+        # route takes when the call raises, not where it runs.
+        patch('routers.mcp_sse.run_blocking', run_inline),
+        patch('routers.mcp_sse.mcp_oauth_db.get_client', return_value=client),
+        patch('routers.mcp_sse.mcp_oauth_db.verify_client_auth', return_value=True),
+        patch('routers.mcp_sse.mcp_oauth_db.validate_resource', return_value=True),
+        patch(f'routers.mcp_sse.mcp_oauth_db.{target}', side_effect=Aborted('write conflict')),
+    ):
+        return asyncio.run(sse.mcp_token(_token_request(**fields)))
+
+
+def test_a_contested_authorization_code_answers_invalid_grant_not_a_500():
+    response = _contested_token_route(
+        'exchange_authorization_code_for_tokens',
+        code='code-1',
+        redirect_uri='https://chatgpt.com/connector_platform_oauth_redirect',
+        resource=sse.MCP_RESOURCE_URL,
+        code_verifier='v' * 64,
+    )
+
+    assert response.status_code == 400
+    assert json.loads(response.body)['error'] == 'invalid_grant'
+
+
+def test_a_contested_refresh_rotation_answers_invalid_grant_not_a_500():
+    response = _contested_token_route(
+        'rotate_refresh_token',
+        grant_type='refresh_token',
+        refresh_token='rt-1',
+        resource=sse.MCP_RESOURCE_URL,
+    )
+
+    assert response.status_code == 400
+    assert json.loads(response.body)['error'] == 'invalid_grant'

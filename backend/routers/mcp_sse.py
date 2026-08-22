@@ -20,7 +20,7 @@ from pydantic import BaseModel
 
 from utils.auth import auth_backend_name, get_auth_provider
 from utils.auth import errors as auth_errors
-from google.api_core.exceptions import FailedPrecondition
+from google.api_core.exceptions import Aborted, FailedPrecondition
 from fastapi import APIRouter, HTTPException, Header, Request, Response, Form
 from fastapi.responses import StreamingResponse, JSONResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -1774,15 +1774,25 @@ async def mcp_token(request: Request):
             return _oauth_error("invalid_request", "code, redirect_uri, resource, and code_verifier are required")
         if not await run_blocking(db_executor, mcp_oauth_db.validate_resource, client, resource):
             return _oauth_error("invalid_target", "Invalid resource")
-        token_pair = await run_blocking(
-            db_executor,
-            mcp_oauth_db.exchange_authorization_code_for_tokens,
-            code,
-            cast(str, client_id),
-            redirect_uri,
-            resource,
-            code_verifier,
-        )
+        try:
+            token_pair = await run_blocking(
+                db_executor,
+                mcp_oauth_db.exchange_authorization_code_for_tokens,
+                code,
+                cast(str, client_id),
+                redirect_uri,
+                resource,
+                code_verifier,
+            )
+        except Aborted:
+            # Somebody else redeemed this code at the same instant and won. That is a spent code, which
+            # is `invalid_grant` — not a 500. Measured before this branch existed: a connector
+            # double-submitting its token request got an unhandled exception, because the abort surfaces
+            # from INSIDE the transaction body and google's decorator only retries around the commit
+            # (BACKLOG L53/L56). The facade now holds a Mongo write conflict until the commit so the body
+            # replays and this path is not reached there; on the Firestore posture the SDK still gives up
+            # with Aborted, so the answer is given here rather than left to the client.
+            return _oauth_error("invalid_grant", "Invalid authorization code")
         if not token_pair:
             return _oauth_error("invalid_grant", "Invalid authorization code")
         return token_pair
@@ -1792,9 +1802,14 @@ async def mcp_token(request: Request):
             return _oauth_error("invalid_request", "refresh_token and resource are required")
         if not await run_blocking(db_executor, mcp_oauth_db.validate_resource, client, resource):
             return _oauth_error("invalid_target", "Invalid resource")
-        token_pair = await run_blocking(
-            db_executor, mcp_oauth_db.rotate_refresh_token, refresh_token, cast(str, client_id), resource, scope
-        )
+        try:
+            token_pair = await run_blocking(
+                db_executor, mcp_oauth_db.rotate_refresh_token, refresh_token, cast(str, client_id), resource, scope
+            )
+        except Aborted:
+            # Same as the authorization-code branch above: a lost race means the token was already
+            # rotated by the concurrent request, which is `invalid_grant`.
+            return _oauth_error("invalid_grant", "Invalid refresh token")
         if not token_pair:
             return _oauth_error("invalid_grant", "Invalid refresh token")
         return token_pair
