@@ -13,7 +13,7 @@ source .venv/bin/activate
 uvicorn main:app --host 0.0.0.0 --port 8080
 ```
 
-**Env stages** (`OMI_ENV_STAGE`): `local` (emulator harness, `.env.local-dev`), `offline` (fake providers, `.env.offline`), `dev` (remote dev GCP, `.env.dev`), `prod` (reference only, `.env.prod`). `load_backend_env()` loads the stage file then `backend/.env` overrides. Templates: `backend/.env.*.template`. Harness: `PROVIDER_MODE=offline make dev-up` or `OMI_ENV_STAGE=offline`. Dev skips the startup-only Stripe price validation; plan catalog and checkout calls still require mode-matched Stripe credentials.
+**Env stages** (`OMI_ENV_STAGE`): `local` (emulator harness, `.env.local-dev`), `offline` (fake providers, `.env.offline`), `dev` (remote dev GCP, `.env.dev`), `prod` (reference only, `.env.prod`). `load_backend_env()` loads the stage file then `backend/.env` overrides. Templates: `backend/.env.*.template`. Harness: `PROVIDER_MODE=offline make dev-up` or `OMI_ENV_STAGE=offline`; both modes use instance-scoped filesystem storage under the owned harness state root, so GCS-backed uploads work without cloud credentials. Dev skips the startup-only Stripe price validation; plan catalog and checkout calls still require mode-matched Stripe credentials.
 
 When intentionally changing backend Python dependencies, edit the relevant `requirements*.txt` input file and refresh the lock:
 
