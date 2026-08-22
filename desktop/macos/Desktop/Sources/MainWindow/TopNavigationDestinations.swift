@@ -226,7 +226,7 @@ enum TopNavigationRoutes {
     // page's own chip row, which is the mechanism `ShellDestination.reach` records for them.
     // The glyph is deliberately not `clock.arrow.circlepath`: that is Rewind's, two pills away.
     TopNavigationItem(
-      index: SidebarNavItem.conversations.rawValue, title: "Brain", icon: "square.stack",
+      index: SidebarNavItem.conversations.rawValue, title: "Brain", icon: "brain",
       tooltip: "Brain — everything Omi captured, newest first"),
     TopNavigationItem(
       index: SidebarNavItem.tasks.rawValue, title: "Tasks", icon: "checklist",
