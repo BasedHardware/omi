@@ -628,7 +628,10 @@ def _validate_firestore_readiness_workflow_contract(
     )
     is_manual_deploy = Path(workflow_file).name == 'gcp_backend.yml'
     permissions = _as_config_dict(readiness_job.get('permissions')) or {}
-    expected_permissions = {'actions': 'read', 'contents': 'read'} if is_manual_deploy else {'contents': 'read'}
+    # Both lanes resolve their source from the Release Eligibility run listing,
+    # which needs actions:read. Neither may hold anything beyond that and the
+    # repository read its checkouts require.
+    expected_permissions = {'actions': 'read', 'contents': 'read'}
     if permissions != expected_permissions:
         errors.append(
             ValidationError(scope, 'Firestore readiness job permissions must be limited to its release-proof boundary')
