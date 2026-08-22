@@ -68,6 +68,7 @@ import {
   loadDesktopReads,
   loadMemories,
   desktopBackendConfigurationCopy,
+  desktopBackendServiceCopy,
   taskGroup,
   type DesktopReadOutcomes,
   type DesktopReadProjection,
@@ -2286,8 +2287,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const homeDesktopEmptyCopy =
     readsPhase === 'unavailable'
       ? readOutcomes?.conversations.status === 'error' &&
-        readOutcomes.conversations.error === desktopBackendConfigurationCopy
-        ? desktopBackendConfigurationCopy
+        (readOutcomes.conversations.error === desktopBackendConfigurationCopy ||
+          readOutcomes.conversations.error === desktopBackendServiceCopy)
+        ? readOutcomes.conversations.error
         : 'Omi could not load saved conversations or memories. Your saved data has not been changed.'
       : homeSearching
       ? 'Filter covers loaded conversations and memories only.'
@@ -2649,9 +2651,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                           ]}>
                                           {readOutcomes?.conversations
                                             .status === 'error' &&
-                                          readOutcomes.conversations.error ===
-                                            desktopBackendConfigurationCopy
-                                            ? desktopBackendConfigurationCopy
+                                          (readOutcomes.conversations.error ===
+                                            desktopBackendConfigurationCopy ||
+                                            readOutcomes.conversations.error ===
+                                              desktopBackendServiceCopy)
+                                            ? readOutcomes.conversations.error
                                             : 'Omi could not load saved conversations or memories. Your saved data has not been changed.'}
                                         </Text>
                                       )}

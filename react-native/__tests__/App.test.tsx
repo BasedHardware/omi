@@ -1539,6 +1539,33 @@ test('presents a bounded, truthful wide Home unavailable state without leaking e
   );
 });
 
+test('shows actionable service-unavailable copy when the local backend transport fails', async () => {
+  const transportError = Object.assign(
+    new Error('Native HTTP transport failed'),
+    {code: 'OMI_HTTP_TRANSPORT'},
+  );
+  mockBackend.request.mockRejectedValue(transportError);
+
+  const renderer = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Search Home')
+      .props.onChangeText('morning');
+  });
+
+  const output = JSON.stringify(renderer.toJSON());
+  expect(output).toContain(
+    'Trusted local Omi service at 127.0.0.1:8787 is unavailable. Start it, then retry.',
+  );
+  expect(output).not.toContain('Native HTTP transport failed');
+  expect(output).not.toContain('desktop-conversations-read failed');
+
+  const retry = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Retry saved data',
+  );
+  expect(retry.props.onPress).toEqual(expect.any(Function));
+});
+
 test('uses a full, navigation-free pane on mobile', async () => {
   mockViewportWidth = 390;
   const renderer = await renderApp();
