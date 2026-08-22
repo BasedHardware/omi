@@ -454,9 +454,7 @@ def test_a_deferral_that_is_not_due_yet_is_left_alone(chat_first):
     _record_deferral(chat_first, f"d-{chat_first['run']}")
 
     assert (
-        intents_db.release_due_deferrals(
-            chat_first['uid'], account_generation=GENERATION, now=NOW + timedelta(hours=1)
-        )
+        intents_db.release_due_deferrals(chat_first['uid'], account_generation=GENERATION, now=NOW + timedelta(hours=1))
         == []
     )
     assert _intents(chat_first) == []

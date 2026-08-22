@@ -57,12 +57,12 @@ def test_collect_counts_excludes_boundary_and_allowlisted_dirs(tmp_path):
         (backend / rel).mkdir(parents=True)
     leak = 'from firebase_admin import auth\nuid = auth.verify_id_token(t)["uid"]\n'
     (backend / 'utils' / 'auth' / 'adapters.py').write_text(leak)  # boundary: allowed
-    (backend / 'tests' / 'test_x.py').write_text(leak)             # tests: allowed
-    (backend / 'testing' / 'harness.py').write_text(leak)          # testing: allowed
-    (backend / 'scripts' / 'oneoff.py').write_text(leak)           # scripts: allowed
-    (backend / 'agent-proxy' / 'main.py').write_text(leak)         # separate service: allowed
-    (backend / 'pusher' / 'main.py').write_text(leak)              # separate service: allowed
-    (backend / 'routers' / 'leaky.py').write_text(leak)            # runtime router: FLAGGED
+    (backend / 'tests' / 'test_x.py').write_text(leak)  # tests: allowed
+    (backend / 'testing' / 'harness.py').write_text(leak)  # testing: allowed
+    (backend / 'scripts' / 'oneoff.py').write_text(leak)  # scripts: allowed
+    (backend / 'agent-proxy' / 'main.py').write_text(leak)  # separate service: allowed
+    (backend / 'pusher' / 'main.py').write_text(leak)  # separate service: allowed
+    (backend / 'routers' / 'leaky.py').write_text(leak)  # runtime router: FLAGGED
 
     counts = _MODULE.collect_counts(tmp_path, Path('backend'))
     assert counts == {'backend/routers/leaky.py': 1}
@@ -196,9 +196,7 @@ def test_every_realistic_shape_is_seen():
         ),
         'from..import auth as alias': 'from firebase_admin import auth as fa\nfa.verify_id_token(t)\n',
         'module-level indirection': 'import firebase_admin\n_FB = firebase_admin\n_FB.auth.verify_id_token(t)\n',
-        'literal importlib': (
-            "import importlib\nimportlib.import_module('firebase_admin.auth').verify_id_token(t)\n"
-        ),
+        'literal importlib': ("import importlib\nimportlib.import_module('firebase_admin.auth').verify_id_token(t)\n"),
         'walrus': 'import firebase_admin\nif (fb := firebase_admin):\n    fb.auth.verify_id_token(t)\n',
     }
     invisible = [name for name, source in seen.items() if _MODULE.count_boundary_violations(source) == 0]

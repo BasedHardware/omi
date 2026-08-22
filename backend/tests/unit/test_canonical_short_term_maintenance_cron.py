@@ -573,13 +573,13 @@ def test_the_graph_enrichment_call_injects_its_db_client(monkeypatch):
 
     monkeypatch.setattr(cron, "run_enrichment", _capture)
     monkeypatch.setattr(
-        cron, "run_canonical_short_term_maintenance", lambda uid, **_kw: cron.CanonicalShortTermMaintenanceReport(uid=uid)
+        cron,
+        "run_canonical_short_term_maintenance",
+        lambda uid, **_kw: cron.CanonicalShortTermMaintenanceReport(uid=uid),
     )
 
     injected = object()
-    cron.run_universal_short_term_maintenance(
-        db_client=injected, now=NOW, uid_inventory=lambda _db, _limit: ["uid-a"]
-    )
+    cron.run_universal_short_term_maintenance(db_client=injected, now=NOW, uid_inventory=lambda _db, _limit: ["uid-a"])
 
     assert captured, 'the graph-enrichment branch did not run: this test would prove nothing'
     assert 'db_client' in captured, 'run_enrichment was called without db_client: raw Firestore is back'

@@ -308,7 +308,9 @@ class FakeDocumentStore:
             keep = set(fields)
             rows = [(p, {k: v for k, v in d.items() if k in keep}) for p, d in rows]
         return [
-            StoredDocument.present(p, copy.deepcopy(d), updated_at=self._updated.get(p), created_at=self._created.get(p))
+            StoredDocument.present(
+                p, copy.deepcopy(d), updated_at=self._updated.get(p), created_at=self._created.get(p)
+            )
             for p, d in rows
         ]
 
@@ -325,9 +327,7 @@ class FakeDocumentStore:
                 # Nested (dotted) field path, e.g. ``subject.kind`` — resolve like the real
                 # adapters so domain queries filtering on embedded fields are emulated.
                 rows = [
-                    (p, d)
-                    for p, d in rows
-                    if (nested := _get_path(d, field)) is not None and _OPS[op](nested, value)
+                    (p, d) for p, d in rows if (nested := _get_path(d, field)) is not None and _OPS[op](nested, value)
                 ]
             else:
                 rows = [(p, d) for p, d in rows if field in d and _OPS[op](d[field], value)]
@@ -358,7 +358,9 @@ class FakeDocumentStore:
             elif "." in field:
                 # Resolve dotted paths (e.g. ``subject.kind``) like the real adapters and ``query()``,
                 # so collection-group filters on embedded fields are emulated faithfully (not top-level only).
-                rows = [(p, d) for p, d in rows if (nested := _get_path(d, field)) is not None and _OPS[op](nested, value)]
+                rows = [
+                    (p, d) for p, d in rows if (nested := _get_path(d, field)) is not None and _OPS[op](nested, value)
+                ]
             else:
                 rows = [(p, d) for p, d in rows if field in d and _OPS[op](d[field], value)]
         # A __name__ order on a collection group is the implicit document-name (path) keyset — strip it so
@@ -396,7 +398,9 @@ class FakeDocumentStore:
         if limit is not None:
             rows = rows[:limit]
         return [
-            StoredDocument.present(p, copy.deepcopy(d), updated_at=self._updated.get(p), created_at=self._created.get(p))
+            StoredDocument.present(
+                p, copy.deepcopy(d), updated_at=self._updated.get(p), created_at=self._created.get(p)
+            )
             for p, d in rows
         ]
 
@@ -406,18 +410,12 @@ class FakeDocumentStore:
             path = f"{collection}/{doc_id}"
             if path in self._docs:
                 result.append(
-                    StoredDocument.present(
-                        path, copy.deepcopy(self._docs[path]), updated_at=self._updated.get(path)
-                    )
+                    StoredDocument.present(path, copy.deepcopy(self._docs[path]), updated_at=self._updated.get(path))
                 )
         return result
 
     def list_ids(self, collection: str) -> List[str]:
-        return [
-            path.rsplit("/", 1)[-1]
-            for path in self._docs
-            if path.rsplit("/", 1)[0] == collection
-        ]
+        return [path.rsplit("/", 1)[-1] for path in self._docs if path.rsplit("/", 1)[0] == collection]
 
     def list_subcollections(self, doc_path: str) -> List[str]:
         base = doc_path.split("/")

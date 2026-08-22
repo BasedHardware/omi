@@ -52,6 +52,7 @@ def _admin_path_segment(uid: str) -> str:
     """
     return quote(uid, safe='')
 
+
 _jwks_lock = threading.Lock()
 _jwks_client: Any = None
 
@@ -198,7 +199,9 @@ class OIDCAuthProvider:
         """
         import httpx
 
-        url = (os.getenv("OIDC_INTROSPECTION_URL") or "").strip() or f"{_issuer()}/protocol/openid-connect/token/introspect"
+        url = (
+            os.getenv("OIDC_INTROSPECTION_URL") or ""
+        ).strip() or f"{_issuer()}/protocol/openid-connect/token/introspect"
         client_id = (os.getenv("OIDC_ADMIN_CLIENT_ID") or "").strip()
         client_secret = (os.getenv("OIDC_ADMIN_CLIENT_SECRET") or "").strip()
         if not (client_id and client_secret):
@@ -272,7 +275,11 @@ class OIDCAuthProvider:
             display_name=name,
             photo_url=None,
             disabled=not bool(rep.get("enabled", True)),
-            providers=[fi.get("identityProvider") for fi in (rep.get("federatedIdentities") or []) if fi.get("identityProvider")],
+            providers=[
+                fi.get("identityProvider")
+                for fi in (rep.get("federatedIdentities") or [])
+                if fi.get("identityProvider")
+            ],
             created_at=rep.get("createdTimestamp"),  # Keycloak exposes account creation as epoch ms
         )
 

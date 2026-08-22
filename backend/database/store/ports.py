@@ -97,13 +97,18 @@ class DocumentStore(Protocol):
     # ``timeout`` (seconds) bounds the read so a slow backend fails instead of holding a request
     # worker: the Firestore adapter passes it to the RPC, the Mongo adapter maps it to ``maxTimeMS``.
     # ``None`` means no deadline. The in-memory fake ignores it (a local dict read cannot block).
-    def get(self, path: str, *, fields: Optional[Sequence[str]] = None, timeout: Optional[float] = None) -> StoredDocument: ...
+    def get(
+        self, path: str, *, fields: Optional[Sequence[str]] = None, timeout: Optional[float] = None
+    ) -> StoredDocument: ...
     def exists(self, path: str) -> bool: ...
     def set(self, path: str, data: Dict[str, Any], *, merge: bool = False) -> None: ...
+
     # ``if_updated_at`` is an optimistic-concurrency precondition: apply the write only if the stored
     # document's revision (its ``StoredDocument.updated_at``) still equals the passed value; otherwise
     # raise ``errors.PreconditionFailed``. It is the neutral form of a Firestore ``LastUpdateOption``.
-    def update(self, path: str, data: Dict[str, Any], *, if_updated_at: Optional[datetime] = None) -> None: ...  # dotted keys + neutral sentinels
+    def update(
+        self, path: str, data: Dict[str, Any], *, if_updated_at: Optional[datetime] = None
+    ) -> None: ...  # dotted keys + neutral sentinels
     def create(self, path: str, data: Dict[str, Any]) -> None: ...  # raises errors.AlreadyExists on conflict
     def delete(self, path: str, *, if_updated_at: Optional[datetime] = None) -> None: ...
 

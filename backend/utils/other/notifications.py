@@ -308,9 +308,7 @@ async def _get_users_in_timezone(target_time: str, backend: str) -> Any:
         if backend == UNIFIEDPUSH
         else notification_db.get_users_token_in_timezones
     )
-    chunk_results = await asyncio.gather(
-        *[run_blocking(db_executor, fetch, chunk) for chunk in timezone_chunks]
-    )
+    chunk_results = await asyncio.gather(*[run_blocking(db_executor, fetch, chunk) for chunk in timezone_chunks])
     return [recipient for chunk in chunk_results for recipient in chunk]
 
 

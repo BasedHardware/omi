@@ -120,13 +120,12 @@ def test_cli_rejects_an_unknown_job():
 def test_cli_runs_once_by_default(monkeypatch):
     seen: list[tuple[str, bool]] = []
     monkeypatch.setattr(onprem_scheduled, 'run_once', lambda job: seen.append((job, False)) or 0)
-    monkeypatch.setattr(
-        onprem_scheduled, 'run_loop', lambda job, **_kw: seen.append((job, True)) or 0
-    )
+    monkeypatch.setattr(onprem_scheduled, 'run_loop', lambda job, **_kw: seen.append((job, True)) or 0)
     assert onprem_scheduled.main(['--job', 'notifications']) == 0
     assert seen == [('notifications', False)]
     assert onprem_scheduled.main(['--job', 'notifications', '--loop']) == 0
     assert seen[-1] == ('notifications', True)
+
 
 def test_memory_maintenance_refuses_to_report_success_when_its_switch_is_off(monkeypatch):
     """A scheduled tick that drains nothing must not exit 0.

@@ -69,9 +69,9 @@ def test_the_reachable_set_is_what_the_source_says():
 
 @pytest.mark.parametrize('guard', GUARDS)
 def test_every_boundary_guard_scans_exactly_those(guard):
-    assert _declared(guard) == tuple(sorted(_runtime_reachable())), (
-        f'{guard} scans a different set of scripts than the runtime actually imports'
-    )
+    assert _declared(guard) == tuple(
+        sorted(_runtime_reachable())
+    ), f'{guard} scans a different set of scripts than the runtime actually imports'
 
 
 def test_the_guards_still_exclude_the_rest_of_scripts():
