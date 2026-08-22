@@ -245,7 +245,11 @@ class ChatToolExecutor {
         expectedOwnerID: expectedOwnerID)
 
     case .getDailyRecap:
-      return await executeDailyRecap(toolCall.arguments, expectedOwnerID: expectedOwnerID)
+      return await executeDailyRecap(
+        toolCall.arguments,
+        runID: originatingRunId,
+        attemptID: originatingAttemptId,
+        expectedOwnerID: expectedOwnerID)
 
     case .searchTasks:
       return await executeSearchTasks(toolCall.arguments, expectedOwnerID: expectedOwnerID)
@@ -1210,46 +1214,7 @@ class ChatToolExecutor {
     let query = finalQuery
     let formatted = try await dbQueue.read { db -> (text: String, count: Int) in
       let rows = try Row.fetchAll(db, sql: query, arguments: StatementArguments(parameters))
-
-      if rows.isEmpty {
-        return ("No results", 0)
-      }
-
-      // Get column names from first row
-      let columns = Array(rows[0].columnNames)
-      var lines: [String] = []
-
-      // Header
-      lines.append(columns.joined(separator: " | "))
-      lines.append(String(repeating: "-", count: min(columns.count * 20, 120)))
-
-      // Rows (max 200) — Row is RandomAccessCollection of (String, DatabaseValue)
-      for row in rows.prefix(200) {
-        let values = row.map { (_, dbValue) -> String in
-          let value: String
-          switch dbValue.storage {
-          case .null:
-            value = "NULL"
-          case .int64(let i):
-            value = String(i)
-          case .double(let d):
-            value = String(d)
-          case .string(let s):
-            value = s
-          case .blob(let data):
-            value = "<\(data.count) bytes>"
-          }
-          // Truncate long cell values
-          if value.count > 500 {
-            return String(value.prefix(500)) + "..."
-          }
-          return value
-        }
-        lines.append(values.joined(separator: " | "))
-      }
-
-      lines.append("\n\(rows.count) row(s)")
-      return (lines.joined(separator: "\n"), rows.count)
+      return SQLQueryResultProjection.format(rows: rows, query: query)
     }
     guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
 
@@ -1442,6 +1407,8 @@ class ChatToolExecutor {
   /// Get a pre-formatted daily activity recap
   private static func executeDailyRecap(
     _ args: [String: Any],
+    runID: String?,
+    attemptID: String?,
     expectedOwnerID: String?
   ) async -> String {
     guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
@@ -1478,7 +1445,7 @@ class ChatToolExecutor {
         let convos = try Row.fetchAll(
           db,
           sql: """
-            SELECT title, overview, emoji, category, startedAt, finishedAt,
+            SELECT backendId, title, overview, emoji, category, startedAt, finishedAt,
                 ROUND((julianday(finishedAt) - julianday(startedAt)) * 1440, 1) as duration_min
             FROM transcription_sessions
             WHERE startedAt >= datetime('now', 'start of day', '-\(daysAgo) day', 'localtime')
@@ -1491,7 +1458,7 @@ class ChatToolExecutor {
         let tasks = try Row.fetchAll(
           db,
           sql: """
-            SELECT description, completed, priority, createdAt FROM action_items
+            SELECT backendId, description, completed, priority, createdAt FROM action_items
             WHERE createdAt >= datetime('now', 'start of day', '-\(daysAgo) day', 'localtime')
                 AND createdAt < \(upperBound)
                 AND deleted = 0
@@ -1512,7 +1479,7 @@ class ChatToolExecutor {
         let memories = try Row.fetchAll(
           db,
           sql: """
-            SELECT content, category, source FROM memories
+            SELECT backendId, content, category, source FROM memories
             WHERE createdAt >= datetime('now', 'start of day', '-\(daysAgo) day', 'localtime')
                 AND createdAt < \(upperBound)
                 AND deleted = 0
@@ -1532,6 +1499,27 @@ class ChatToolExecutor {
 
         // Format compact markdown
         var out = "# \(dateLabel) Recap\n\n"
+        var sources = [APIClient.ToolSource]()
+        func note(
+          kind: ChatCitationReference.Kind,
+          sourceID: String?,
+          title: String,
+          preview: String
+        ) -> String {
+          let trimmed = sourceID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+          guard !trimmed.isEmpty else { return "" }
+          sources.append(
+            APIClient.ToolSource(
+              kind: kind.rawValue,
+              sourceID: trimmed,
+              title: title,
+              preview: preview,
+              createdAt: nil,
+              momentTimestampMs: nil,
+              appName: nil,
+              url: nil))
+          return " {{cite:\(sources.count)}}"
+        }
 
         out += "## Apps (\(apps.count) apps)\n"
         if apps.isEmpty {
@@ -1559,7 +1547,12 @@ class ChatToolExecutor {
             let emoji = convo["emoji"] as? String ?? ""
             let durMin = convo["duration_min"] as? Double ?? 0
             let dur = durMin > 0 ? " (\(durMin) min)" : ""
-            out += "- \(emoji) **\(title)**\(dur): \(overview)\n"
+            let marker = note(
+              kind: .conversation,
+              sourceID: convo["backendId"] as? String,
+              title: title,
+              preview: overview)
+            out += "- \(emoji) **\(title)**\(dur): \(overview)\(marker)\n"
           }
         }
 
@@ -1573,7 +1566,12 @@ class ChatToolExecutor {
             let priority = task["priority"] as? String ?? ""
             let check = completed ? "[x]" : "[ ]"
             let pri = priority.isEmpty ? "" : " (\(priority))"
-            out += "- \(check) \(desc)\(pri)\n"
+            let marker = note(
+              kind: .task,
+              sourceID: task["backendId"] as? String,
+              title: desc,
+              preview: desc)
+            out += "- \(check) \(desc)\(pri)\(marker)\n"
           }
         }
 
@@ -1602,8 +1600,13 @@ class ChatToolExecutor {
           for memory in memories.prefix(10) {
             let content = memory["content"] as? String ?? ""
             let category = memory["category"] as? String ?? ""
-            let catStr = category.isEmpty ? "" : " [\(category)]"
-            out += "- \(content)\(catStr)\n"
+            let catStr = category.isEmpty ? "" : " (\(category))"
+            let marker = note(
+              kind: .memory,
+              sourceID: memory["backendId"] as? String,
+              title: content,
+              preview: content)
+            out += "- \(content)\(catStr)\(marker)\n"
           }
           if memories.count > 10 { out += "- ...and \(memories.count - 10) more\n" }
         }
@@ -1624,10 +1627,25 @@ class ChatToolExecutor {
         log(
           "Tool get_daily_recap: \(apps.count) apps, \(convos.count) convos, \(tasks.count) tasks, \(focusSessions.count) focus, \(memories.count) memories, \(observations.count) observations"
         )
-        return out
+        return (out, sources)
       }
       guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
-      return result
+      let references = await ChatCitationProvenanceRegistry.shared.register(
+        result.1, runID: runID, attemptID: attemptID)
+      var recap = result.0
+      if references.isEmpty {
+        recap = recap.replacingOccurrences(
+          of: #" \{\{cite:\d+\}\}"#,
+          with: "",
+          options: .regularExpression)
+      } else {
+        for (index, reference) in references.enumerated() {
+          recap = recap.replacingOccurrences(
+            of: " {{cite:\(index + 1)}}",
+            with: " [\(reference.ordinal)]")
+        }
+      }
+      return ChatCitationProvenanceRegistry.annotatedToolResult(recap, references: references)
     } catch {
       logError("Tool get_daily_recap failed", error: error)
       return "Error: \(error.localizedDescription)"
@@ -1737,7 +1755,8 @@ class ChatToolExecutor {
 
     } catch {
       logError("Tool semantic_search failed", error: error)
-      return "Failed to search: \(error.localizedDescription)"
+      return "Failed to search: \(error.localizedDescription). "
+        + "For recent-work or document/page/file location, call get_work_context instead of querying screenshots.ocrText."
     }
   }
 
@@ -1758,12 +1777,12 @@ class ChatToolExecutor {
       }
       if stats.indexed == 0 {
         return """
-          Omi has \(stats.total) screenshot(s), but they are not ready to search yet. Keep Omi Desktop running and try again in a bit, or use SQL for exact local checks.
+          Omi has \(stats.total) screenshot(s), but they are not ready to search yet. Use get_work_context for recent work, or SQL only for counts and exact structured checks.
           """
       }
       let appText = appFilter.map { " with app filter \"\($0)\"" } ?? ""
       return """
-        No matching screen-history results for "\(query)" in the last \(days) day(s)\(appText). Local history exists (\(stats.total) screenshot(s), \(stats.indexed) indexed), so try a broader query, a wider days window, or use execute_sql for exact app/window/OCR filters.
+        No matching screen-history results for "\(query)" in the last \(days) day(s)\(appText). Local history exists (\(stats.total) screenshot(s), \(stats.indexed) indexed), so use get_work_context for recent work or try broader semantic terms; use execute_sql only for counts and exact structured filters.
         """
     } catch {
       return
@@ -2311,7 +2330,15 @@ class ChatToolExecutor {
 
     let screenRecordingGranted = ScreenCaptureService.checkPermission()
     let microphoneGranted = AudioCaptureService.checkPermission()
-    let accessibilityGranted = AXIsProcessTrusted()
+    // `AXIsProcessTrusted()` alone is only half the accessibility answer: it goes stale after a
+    // re-sign, and it cannot see the stuck grant where TCC reports yes while AX calls are
+    // refused. Take the same projection the Permissions page uses, so this tool and that page
+    // can never disagree — and so writing the flag here cannot leave `isAccessibilityBroken`
+    // describing a different machine than `hasAccessibilityPermission`.
+    let accessibilitySignals = AppState.probeAccessibilitySignals(
+      targets: AppState.accessibilityProbeTargets())
+    let accessibilityProjection = AppState.accessibilityProjection(accessibilitySignals)
+    let accessibilityGranted = accessibilityProjection.hasPermission
     let automationStatus = AppState.queryAutomationPermissionStatus()
     let fullDiskAccessGranted = checkFullDiskAccessDirectly()
     guard
@@ -2325,6 +2352,7 @@ class ChatToolExecutor {
     appState?.hasMicrophonePermission = microphoneGranted
     appState?.hasNotificationPermission = notificationsGranted
     appState?.hasAccessibilityPermission = accessibilityGranted
+    appState?.isAccessibilityBroken = accessibilityProjection.isBroken
     appState?.hasAutomationPermission = automationStatus == noErr
     appState?.automationPermissionError = automationPermissionError(for: automationStatus)
     appState?.hasFullDiskAccess = fullDiskAccessGranted

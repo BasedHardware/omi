@@ -2,53 +2,64 @@ import XCTest
 
 @testable import Omi_Computer
 
-/// Regression coverage for `FloatingBarNotificationPreviewPolicy` (issue #6765).
+/// Regression coverage for `FloatingBarNotificationPreviewPolicy` (issue #6765
+/// plus the bar-disabled temp-show contract).
 ///
-/// Proactive notifications default to `deliverSystemBanner: false`, so the
-/// Floating Bar in-app preview is their only delivery path today. Muting that
-/// preview without a fallback would silence those notifications entirely.
-/// These tests pin the policy that keeps a notification delivered via the
-/// native system banner only when the user *explicitly* muted in-bar previews
-/// while the Floating Bar stayed enabled. Merely disabling the Floating Bar
-/// must not force a banner: `NotificationService.sendNotification` documents
-/// that a contentless system banner (no conversation context) was previously
-/// reported as confusing, which is why floating-bar-only notifications stay
-/// silent when the bar itself is off — same as before this policy existed.
+/// Only the Notifications master toggle (and frequency gate in
+/// `NotificationService`) decide whether a notification is owed. The Ask Omi
+/// enable toggle controls persistent bar UI only: a disabled bar still presents
+/// via temp-show, then re-hides. Muting in-bar previews while the bar stays
+/// enabled is the one case that falls back to a native system banner so the
+/// notification is never fully silenced.
 final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
   func testPreviewsAndBarEnabledShowsPreviewWithNoForcedBanner() {
     XCTAssertTrue(
       FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
-        previewsEnabled: true, floatingBarEnabled: true))
+        previewsEnabled: true, floatingBarEnabled: true, deliverSystemBanner: false))
     XCTAssertFalse(
       FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBanner(
         previewsEnabled: true, floatingBarEnabled: true, deliverSystemBanner: false))
   }
 
-  func testFloatingBarDisabledSkipsPreviewWithNoForcedBanner() {
-    XCTAssertFalse(
+  func testFloatingBarDisabledPresentsViaTempShowWithNoForcedBanner() {
+    XCTAssertTrue(
       FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
-        previewsEnabled: true, floatingBarEnabled: false))
+        previewsEnabled: true, floatingBarEnabled: false, deliverSystemBanner: false),
+      "bar disabled + notifications owed must still present the in-bar card via temp-show")
     XCTAssertFalse(
       FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBanner(
-        previewsEnabled: true, floatingBarEnabled: false, deliverSystemBanner: false))
+        previewsEnabled: true, floatingBarEnabled: false, deliverSystemBanner: false),
+      "disabling the bar must not force a contentless system banner")
   }
 
   func testPreviewsMutedSkipsPreviewAndFallsBackToBanner() {
     XCTAssertFalse(
       FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
-        previewsEnabled: false, floatingBarEnabled: true))
+        previewsEnabled: false, floatingBarEnabled: true, deliverSystemBanner: false))
     XCTAssertTrue(
       FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBanner(
         previewsEnabled: false, floatingBarEnabled: true, deliverSystemBanner: false))
   }
 
-  func testFloatingBarDisabledStillNoForcedBannerEvenWithPreviewsMuted() {
-    XCTAssertFalse(
+  func testFloatingBarDisabledAndPreviewsMutedStillTempShowsTheCard() {
+    XCTAssertTrue(
       FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
-        previewsEnabled: false, floatingBarEnabled: false))
+        previewsEnabled: false, floatingBarEnabled: false, deliverSystemBanner: false),
+      "previews muted + bar disabled must still temp-show the card; only the notification toggle silences")
     XCTAssertFalse(
       FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBanner(
-        previewsEnabled: false, floatingBarEnabled: false, deliverSystemBanner: false))
+        previewsEnabled: false, floatingBarEnabled: false, deliverSystemBanner: false),
+      "the combined muted+disabled case uses the card, not a system banner")
+  }
+
+  func testBarDisabledDoesNotSilenceWhenMasterNotificationsAreOffTheMasterGateDoes() {
+    XCTAssertTrue(
+      FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
+        previewsEnabled: true, floatingBarEnabled: false, deliverSystemBanner: false))
+    XCTAssertEqual(
+      InsightAssistantTelemetry.Reason.masterNotificationsDisabled.rawValue,
+      "master_notifications_disabled",
+      "bar disabled + notifications off is suppressed by NotificationService's master toggle, not by preview policy")
   }
 
   func testExplicitSystemBannerAlwaysDeliversRegardlessOfPreviewState() {
@@ -75,16 +86,204 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
         floatingBarAccepted: false))
   }
 
+  /// A functional caller (`deliverSystemBanner: true`) with the bar disabled must keep the
+  /// persistent banner it asked for. Routing it through the temp-show card marks the
+  /// floating bar as having accepted delivery, which suppresses the banner — and the
+  /// screen-recording repair notice is one-per-episode, so the seconds-long card is the
+  /// only notice the user ever gets while capture stays broken.
+  func testFunctionalBannerWithBarDisabledKeepsItsBannerInsteadOfTheTempShowCard() {
+    XCTAssertFalse(
+      FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
+        previewsEnabled: true, floatingBarEnabled: false, deliverSystemBanner: true),
+      "a functional notice with the bar disabled must not be swallowed by the temp-show card")
+    XCTAssertTrue(
+      FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBannerAfterFloatingBar(
+        previewsEnabled: true,
+        floatingBarEnabled: false,
+        deliverSystemBanner: true,
+        floatingBarAccepted: false),
+      "skipping the card must leave the explicit system banner as the delivered surface")
+  }
+
+  /// The muted-previews variant of the same case: still no card, still the banner.
+  func testFunctionalBannerWithBarDisabledAndPreviewsMutedStillDeliversTheBanner() {
+    XCTAssertFalse(
+      FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
+        previewsEnabled: false, floatingBarEnabled: false, deliverSystemBanner: true))
+    XCTAssertTrue(
+      FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBannerAfterFloatingBar(
+        previewsEnabled: false,
+        floatingBarEnabled: false,
+        deliverSystemBanner: true,
+        floatingBarAccepted: false))
+  }
+
+  /// The bar-enabled contract is untouched: the card stays authoritative and an explicit
+  /// banner request does not duplicate it.
+  func testFunctionalBannerWithBarEnabledStillPresentsTheCardAndNoDuplicateBanner() {
+    XCTAssertTrue(
+      FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
+        previewsEnabled: true, floatingBarEnabled: true, deliverSystemBanner: true))
+    XCTAssertFalse(
+      FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBannerAfterFloatingBar(
+        previewsEnabled: true,
+        floatingBarEnabled: true,
+        deliverSystemBanner: true,
+        floatingBarAccepted: true))
+  }
+
+  /// Proactive delivery with the bar disabled keeps the temp-show card (the #11636 fix).
+  func testProactiveDeliveryWithBarDisabledStillUsesTheTempShowCard() {
+    XCTAssertTrue(
+      FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
+        previewsEnabled: true, floatingBarEnabled: false, deliverSystemBanner: false))
+    XCTAssertFalse(
+      FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBannerAfterFloatingBar(
+        previewsEnabled: true,
+        floatingBarEnabled: false,
+        deliverSystemBanner: false,
+        floatingBarAccepted: true))
+  }
+
   func testDirectorMutedPreviewFallsBackToBannerInsteadOfSilentQuotaBurn() {
     // Context-director presentation must use this policy: muted previews with
     // the floating bar still enabled keep a visible system-banner surface.
     XCTAssertFalse(
       FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
-        previewsEnabled: false, floatingBarEnabled: true))
+        previewsEnabled: false, floatingBarEnabled: true, deliverSystemBanner: false))
     XCTAssertTrue(
       FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBanner(
         previewsEnabled: false, floatingBarEnabled: true, deliverSystemBanner: false),
       "muted in-bar preview must keep a banner surface so director delivery is visible")
+  }
+
+  /// Behavioral guard for the category taxonomy: the director's real entry point must
+  /// refuse a delivery whose category toggle is off. A "suggest" decision is a generic
+  /// tip, which the taxonomy files under Insight. Every upstream gate is pinned open
+  /// (owner seeded, master on, frequency Maximum, not paywalled) and the surface is
+  /// pinned to the deterministic banner path (bar enabled, previews muted), so the
+  /// Insight toggle is the only closed gate: removing the category guard from
+  /// `presentContextDirectorNotification` makes this call return `.queued` from the
+  /// banner path instead of `.suppressed`, failing the test.
+  @MainActor
+  func testDirectorDeliveryWithDisabledCategoryToggleIsSuppressedAtTheEntryPoint() throws {
+    let defaults = UserDefaults.standard
+    let pinnedKeys = [
+      DefaultsKey.authUserId.rawValue,
+      DefaultsKey.automationOwnerOverride.rawValue,
+      NotificationService.masterEnabledDefaultsKey,
+      NotificationService.frequencyDefaultsKey,
+      DefaultsKey.desktopIsPaywalled.rawValue,
+      DefaultsKey.askOmiBarEnabled.rawValue,
+    ]
+    let savedValues = pinnedKeys.map { ($0, defaults.object(forKey: $0)) }
+    let savedInsightEnabled = InsightAssistantSettings.shared.notificationsEnabled
+    let savedPreviewsEnabled = ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled
+    defer {
+      for (key, value) in savedValues {
+        if let value {
+          defaults.set(value, forKey: key)
+        } else {
+          defaults.removeObject(forKey: key)
+        }
+      }
+      InsightAssistantSettings.shared.notificationsEnabled = savedInsightEnabled
+      ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled = savedPreviewsEnabled
+    }
+
+    let owner = "owner-category-gate-\(UUID().uuidString)"
+    defaults.set(owner, forKey: DefaultsKey.authUserId.rawValue)
+    defaults.removeObject(forKey: DefaultsKey.automationOwnerOverride.rawValue)
+    defaults.set(true, forKey: NotificationService.masterEnabledDefaultsKey)
+    defaults.set(5, forKey: NotificationService.frequencyDefaultsKey)
+    defaults.set(false, forKey: DefaultsKey.desktopIsPaywalled.rawValue)
+    defaults.set(true, forKey: DefaultsKey.askOmiBarEnabled.rawValue)
+    ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled = false
+    InsightAssistantSettings.shared.notificationsEnabled = false
+    let liveOwner = try XCTUnwrap(RuntimeOwnerIdentity.currentOwnerId())
+    XCTAssertEqual(liveOwner, owner)
+
+    var droppedCount = 0
+    let service = NotificationService(registerWithSystemNotificationCenter: false)
+    let result = service.presentContextDirectorNotification(
+      ownerID: liveOwner,
+      title: "PR #11937 blocked",
+      message: "The merge is waiting on a re-run of the flaky suite.",
+      decisionType: "suggest",
+      context: FloatingBarNotificationContext(
+        sourceTitle: "Context director",
+        assistantId: "context-director"),
+      onDropped: { droppedCount += 1 })
+
+    XCTAssertEqual(result, .suppressed)
+    XCTAssertEqual(droppedCount, 1)
+  }
+
+  /// The category toggles bind every proactive producer at the shared
+  /// `sendNotification` boundary — including the dedicated producers that never
+  /// consulted a toggle before generating: goals (Insight) and meeting action items
+  /// (Task). Same construction as the director test: every upstream gate is pinned
+  /// open and the surface pinned to the banner path, so with the category gate
+  /// removed these calls fall through to a delivery dispatch this bundle-less test
+  /// host cannot perform, failing the test; with the gate present they return
+  /// before any surface and leave the presentation ledger untouched.
+  @MainActor
+  func testGoalAndMeetingProducersHonorTheirCategoryTogglesAtTheSharedBoundary() throws {
+    let defaults = UserDefaults.standard
+    let pinnedKeys = [
+      DefaultsKey.authUserId.rawValue,
+      DefaultsKey.automationOwnerOverride.rawValue,
+      NotificationService.masterEnabledDefaultsKey,
+      NotificationService.frequencyDefaultsKey,
+      DefaultsKey.desktopIsPaywalled.rawValue,
+      DefaultsKey.askOmiBarEnabled.rawValue,
+    ]
+    let savedValues = pinnedKeys.map { ($0, defaults.object(forKey: $0)) }
+    let savedInsightEnabled = InsightAssistantSettings.shared.notificationsEnabled
+    let savedTaskEnabled = TaskAssistantSettings.shared.notificationsEnabled
+    let savedPreviewsEnabled = ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled
+    defer {
+      for (key, value) in savedValues {
+        if let value {
+          defaults.set(value, forKey: key)
+        } else {
+          defaults.removeObject(forKey: key)
+        }
+      }
+      InsightAssistantSettings.shared.notificationsEnabled = savedInsightEnabled
+      TaskAssistantSettings.shared.notificationsEnabled = savedTaskEnabled
+      ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled = savedPreviewsEnabled
+    }
+
+    let owner = "owner-producer-gate-\(UUID().uuidString)"
+    defaults.set(owner, forKey: DefaultsKey.authUserId.rawValue)
+    defaults.removeObject(forKey: DefaultsKey.automationOwnerOverride.rawValue)
+    defaults.set(true, forKey: NotificationService.masterEnabledDefaultsKey)
+    defaults.set(5, forKey: NotificationService.frequencyDefaultsKey)
+    defaults.set(false, forKey: DefaultsKey.desktopIsPaywalled.rawValue)
+    defaults.set(true, forKey: DefaultsKey.askOmiBarEnabled.rawValue)
+    ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled = false
+    InsightAssistantSettings.shared.notificationsEnabled = false
+    TaskAssistantSettings.shared.notificationsEnabled = false
+    let liveOwner = try XCTUnwrap(RuntimeOwnerIdentity.currentOwnerId())
+    XCTAssertEqual(liveOwner, owner)
+
+    let service = NotificationService(registerWithSystemNotificationCenter: false)
+    service.sendNotification(
+      ownerID: liveOwner,
+      title: "New Goal",
+      message: "Ship the four-type notification taxonomy",
+      assistantId: "goals")
+    service.sendNotification(
+      ownerID: liveOwner,
+      title: "Meeting notes ready",
+      message: "2 action items from standup",
+      assistantId: "meeting-notes",
+      deliveryMode: .systemBannerOnly)
+
+    XCTAssertNil(
+      service.lastProactivePresentationAtForCurrentOwner(),
+      "a category-suppressed delivery must never advance the proactive presentation ledger")
   }
 
   @MainActor
@@ -103,5 +302,73 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
 
     XCTAssertEqual(result, .rejectedOwnerChange)
     XCTAssertEqual(droppedCount, 1)
+  }
+
+  // MARK: - Persistent card queue policy
+
+  /// A persistent card (meeting summary share) has no timeout, so a newcomer
+  /// must displace it — with the persistent card requeued at the front — or a
+  /// single un-acted card would starve every later proactive notification.
+  func testPersistentCardIsDisplacedByNewcomerExceptDuringAIConversation() {
+    XCTAssertTrue(
+      FloatingBarNotificationQueuePolicy.shouldDisplacePersistentCard(
+        currentIsPersistent: true, showingAIConversation: false))
+    XCTAssertFalse(
+      FloatingBarNotificationQueuePolicy.shouldDisplacePersistentCard(
+        currentIsPersistent: true, showingAIConversation: true))
+    XCTAssertFalse(
+      FloatingBarNotificationQueuePolicy.shouldDisplacePersistentCard(
+        currentIsPersistent: false, showingAIConversation: false))
+  }
+
+  @MainActor
+  func testNotificationsAreNotPersistentByDefault() {
+    let plain = FloatingBarNotification(
+      ownerID: "owner", title: "t", message: "m", assistantId: "default")
+    XCTAssertFalse(plain.isPersistent)
+    let share = FloatingBarNotification(
+      ownerID: "owner", title: "t", message: "m",
+      assistantId: MeetingActionItemBannerPolicy.assistantID,
+      action: .meetingSummaryShare(conversationID: "c1", recipients: []),
+      isPersistent: true)
+    XCTAssertTrue(share.isPersistent)
+  }
+
+  @MainActor
+  func testSeeSummaryNavigationDrivesConversationOpenContract() {
+    final class Captured: @unchecked Sendable {
+      var navigatePayload: Int?
+      var openRequested = false
+    }
+    let conversationID = "conv-see-summary-\(UUID().uuidString)"
+    let captured = Captured()
+    let center = NotificationCenter.default
+    let navToken = center.addObserver(
+      forName: .navigateToSidebarItem, object: nil, queue: nil
+    ) { note in
+      captured.navigatePayload = note.userInfo?["rawValue"] as? Int
+    }
+    let openToken = center.addObserver(
+      forName: .desktopAutomationOpenConversationRequested, object: nil, queue: nil
+    ) { _ in captured.openRequested = true }
+    defer {
+      center.removeObserver(navToken)
+      center.removeObserver(openToken)
+    }
+
+    MeetingSummaryShareActions.postOpenSignals(conversationID: conversationID)
+
+    XCTAssertEqual(captured.navigatePayload, SidebarNavItem.conversations.rawValue)
+    XCTAssertTrue(captured.openRequested)
+    let pending = ConversationDetailAutomationState.shared.takePendingOpenRequest()
+    XCTAssertEqual(pending?.conversationId, conversationID)
+    XCTAssertEqual(pending?.showTranscript, false)
+  }
+
+  /// Multiple notifications arriving during displacement present before the
+  /// persistent card returns: it always rejoins at the tail of the queue.
+  func testDisplacedPersistentCardRequeuesBehindEverythingAlreadyQueued() {
+    XCTAssertEqual(FloatingBarNotificationQueuePolicy.requeueIndex(queueCount: 0), 0)
+    XCTAssertEqual(FloatingBarNotificationQueuePolicy.requeueIndex(queueCount: 3), 3)
   }
 }

@@ -15,24 +15,46 @@ struct ContextDirectorDecision: Codable, Equatable, Sendable {
   /// keeps the memberwise initializer source-compatible for existing callers
   /// (same pattern as `BucketExtraction.destination`).
   var lookupQuery: String? = nil
+  /// Open tasks this notification is about, as supplied `task:<id>` handles.
+  ///
+  /// Optional for the same reason as `lookupQuery`: a response predating the
+  /// field still decodes. Always filtered through
+  /// `ContextDirectorTaskRefs.resolvable` before it is stored or rendered.
+  var taskRefs: [String]? = nil
 
   enum CodingKeys: String, CodingKey {
     case decision, title, message, reasoning
     case bucketEntryRefs = "bucket_entry_refs"
     case factIDs = "fact_ids"
     case lookupQuery = "lookup_query"
+    case taskRefs = "task_refs"
+  }
+
+  /// Retrieved-ref citations belong in `bucket_entry_refs`; the model
+  /// occasionally inlines them into the visible text ("... omi.me/desktop.
+  /// [memory:3fe5b70f-...]"), where they read as debris. Stripped
+  /// deterministically rather than re-prompted.
+  private static func strippingInlineRefs(_ text: String) -> String {
+    text.replacingOccurrences(
+      of: #"\s*\[(?:memory|conversation|chunk|entry|fact|task):[^\]]{1,200}\]"#,
+      with: "",
+      options: .regularExpression
+    ).trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
   func clamped() -> ContextDirectorDecision {
     ContextDirectorDecision(
       decision: decision,
-      title: String(title.prefix(120)),
-      message: String(message.prefix(600)),
+      title: String(Self.strippingInlineRefs(title).prefix(120)),
+      message: String(Self.strippingInlineRefs(message).prefix(600)),
       reasoning: String(reasoning.prefix(1_200)),
       bucketEntryRefs: bucketEntryRefs.prefix(20).map { String($0.prefix(200)) },
       factIDs: factIDs.prefix(20).map { String($0.prefix(200)) },
       lookupQuery: lookupQuery.map {
         String($0.prefix(ContextDirectorRetrievalHop.maximumQueryLength))
+      },
+      taskRefs: taskRefs.map {
+        $0.prefix(ContextDirectorTaskRefs.maximumCount).map { String($0.prefix(200)) }
       })
   }
 }
@@ -44,8 +66,47 @@ enum ContextDirectorEligibility {
 }
 
 enum ContextDirectorGrounding {
-  static func permitsNonSilence(entryRefs: [String], factIDs: [String]) -> Bool {
-    !entryRefs.isEmpty && !factIDs.isEmpty
+  /// Grounding requirement, per decision type.
+  ///
+  /// The old rule demanded a bucket-entry ref AND a validated-fact ref for every
+  /// non-silence decision. But a resurface grounds on an *open task* — supplied
+  /// in the prompt, not citable as a bucket entry — connected to the current
+  /// context, so its natural citation is the validated fact(s) evidencing the
+  /// connection, with no entry ref at all. Measured on two independent
+  /// installations: every suppressed row with non-empty fact_ids is a decision
+  /// the model made to speak that this guard overrode (the silence path forcibly
+  /// empties fact_ids), and there were 9 of them in our dogfood window and 7 of
+  /// 76 on an independent beta install — including "This is an overdue open task
+  /// with a timely connection to the active overnight fleetctl workflow", the
+  /// exact class resurface exists for. Cross-workstream pooling being enabled
+  /// did not prevent the vetoes, so the guard itself was the cause.
+  ///
+  /// Deliberately NOT relaxed to a blanket OR: insight, suggest, and
+  /// task_candidate make new claims about bucket content and keep the full
+  /// anti-hallucination invariant (at least one entry ref and one fact ref).
+  /// Resurface requires at least one citation of either kind — never zero.
+  ///
+  /// Retrieved refs are the one exception, for insight and suggest only. A
+  /// retrieved ref validates against the allowlist of items the retrieval hop
+  /// quoted to this very call, so it carries the same anti-hallucination
+  /// guarantee as a bucket citation — but for content that by construction has
+  /// no bucket entry or fact (the answer to a question the user is writing
+  /// lives in their history, not in this screen's bucket). Before this
+  /// exception, every retrieval-hop answer was structurally undeliverable:
+  /// 10 of 10 hop evaluations in one 48h dogfood window ended suppressed,
+  /// including one whose reasoning said the retrieved context "directly helps".
+  /// task_candidate and resurface stay bucket-grounded: neither is the
+  /// answer-delivery case, so each keeps its existing invariant unchanged.
+  static func permitsNonSilence(
+    decision: String, entryRefs: [String], factIDs: [String], retrievedRefs: [String] = []
+  ) -> Bool {
+    if decision == "resurface" {
+      return !entryRefs.isEmpty || !factIDs.isEmpty
+    }
+    if decision == "insight" || decision == "suggest", !retrievedRefs.isEmpty {
+      return true
+    }
+    return !entryRefs.isEmpty && !factIDs.isEmpty
   }
 }
 
@@ -70,7 +131,7 @@ enum ContextDirectorTaskSelection {
         return lhs.createdAt > rhs.createdAt
       }
       .prefix(maximumCount)
-      .map { ContextDirectorTaskContext(description: $0.description, dueAt: $0.dueAt) }
+      .map { ContextDirectorTaskContext(id: $0.id, description: $0.description, dueAt: $0.dueAt) }
   }
 }
 
@@ -174,8 +235,14 @@ actor ContextProactivityEngine {
   /// the same visit.
   func evaluateAfterDeparture(fence: ContextVisitFence, departingFrame: CapturedFrame) async {
     guard fence.bucketID != nil else { return }
-    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else { return }
-    guard dwellAdmission.begin(visitID: fence.visitID) else { return }
+    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+      log("DepartureEvalDebug: no authorization snapshot")
+      return
+    }
+    guard dwellAdmission.begin(visitID: fence.visitID) else {
+      log("DepartureEvalDebug: dwell admission refused for visit \(fence.visitID)")
+      return
+    }
     defer { dwellAdmission.finish(visitID: fence.visitID) }
     let gate = await MainActor.run { Self.liveDeliveryGateInput() }
     let preflightReason = ContextDeliveryBudget.freeGate(input: gate)
@@ -184,12 +251,25 @@ actor ContextProactivityEngine {
       return
     }
     let freshness = await store.fenceFreshness(fence)
-    guard
-      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
-      freshness.fresh,
-      let snapshot = await store.snapshot(for: fence)
-    else { return }
-    guard ContextDirectorEligibility.permitsEvaluation(of: snapshot) else { return }
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+      log("DepartureEvalDebug: authorization changed")
+      return
+    }
+    guard freshness.fresh else {
+      log("DepartureEvalDebug: fence stale")
+      return
+    }
+    guard let snapshot = await store.snapshot(for: fence) else {
+      log("DepartureEvalDebug: no snapshot")
+      return
+    }
+    guard ContextDirectorEligibility.permitsEvaluation(of: snapshot) else {
+      log(
+        "DepartureEvalDebug: ineligible snapshot worthiness=\(snapshot.notifyWorthiness) facts=\(snapshot.validatedFacts.count)"
+      )
+      return
+    }
+    log("DepartureEvalDebug: proceeding to evaluateAndDeliver")
     await evaluateAndDeliver(
       fence: fence,
       snapshot: snapshot,
@@ -257,6 +337,7 @@ actor ContextProactivityEngine {
     }
     var workstreamSection: String? = nil
     var workstreamProvenance: [String: Any]? = nil
+    var pooledFactIDs: Set<String> = []
     if workstreamPoolingEnabled,
       let liveTag = await store.liveWorkstreamTag(for: fence, now: currentFrame.captureTime)
     {
@@ -267,6 +348,7 @@ actor ContextProactivityEngine {
       if !selected.isEmpty {
         workstreamSection = ContextWorkstreamPooling.promptSection(
           tag: liveTag, items: selected, now: currentFrame.captureTime)
+        pooledFactIDs = Set(selected.map(\.factID))
         workstreamProvenance = [
           "tag": liveTag,
           "pooled_fact_ids": selected.map(\.factID),
@@ -282,18 +364,103 @@ actor ContextProactivityEngine {
           .sorted { $0.deliveredAt > $1.deliveredAt }
           .prefix(ContextBucketRecentDelivery.promptCap))
     }
+    let candidatesEnabled = await MainActor.run {
+      ContextBucketsFeature.isProactiveCandidatesEnabled
+    }
+    if candidatesEnabled {
+      let tags = await store.workstreamTags(for: snapshot.bucketID)
+      if !tags.isEmpty {
+        // Lookup is cross-bucket by durable assignment; bucket-scoped delivery
+        // memory would re-send a sibling's already-shown point.
+        let assignedDeliveries = await store.recentDeliveredForAssignedWorkstreams(
+          tags: tags, excludingBucketID: snapshot.bucketID, now: currentFrame.captureTime)
+        recentDeliveries = Array(
+          (recentDeliveries + assignedDeliveries)
+            .sorted { $0.deliveredAt > $1.deliveredAt }
+            .prefix(ContextBucketRecentDelivery.promptCap))
+      }
+      let armed = await store.armedCandidates(
+        bucketID: snapshot.bucketID, tags: tags, now: currentFrame.captureTime)
+      // A candidate can sit armed for up to 12 hours; the fact(s) it was
+      // grounded in at write time may since have expired, been rejected, or
+      // been superseded. Revalidate every grounding id against the current
+      // bucket_facts state before treating a candidate as deliverable, so a
+      // decayed candidate falls through to the director instead of gating
+      // and presenting stale text with stale citations. Decline the stale
+      // row so it cannot block the reconciler from writing a replacement.
+      var grounded: [ContextProactiveCandidate] = []
+      for candidate in armed {
+        if await store.groundingFactIDsAreCurrentlyValid(
+          candidate.groundingFactIDs, bucketID: candidate.bucketID, now: currentFrame.captureTime)
+        {
+          grounded.append(candidate)
+        } else {
+          await store.declineCandidate(id: candidate.id, now: currentFrame.captureTime)
+        }
+      }
+      let recentMessages = recentDeliveries.compactMap(\.message)
+      // A question the user is typing RIGHT NOW outranks resurfacing an armed
+      // candidate: the candidate short-circuit used to consume the evaluation
+      // (and with the candidate show ceiling exhausted, silence it), so the
+      // typed question never reached the director or its forced retrieval —
+      // the bucket went permanently mute for answers while any candidate
+      // stayed armed. The candidate stays armed for the next quiet evaluation.
+      let pendingUserQuestion =
+        await MainActor.run { ContextBucketsFeature.isRetrievalHopEnabled }
+        && ContextDirectorRetrievalHop.forcedLookupQuery(
+          validatedFacts: snapshot.validatedFacts) != nil
+      if !pendingUserQuestion,
+        let candidate = ContextProactiveCandidateLookup.firstDeliverable(
+          candidates: grounded, recentMessages: recentMessages)
+      {
+        await evaluateCandidateAndDeliver(
+          candidate: candidate,
+          deliveryID: deliveryID,
+          fence: fence,
+          snapshot: snapshot,
+          currentFrame: currentFrame,
+          recentDeliveries: recentDeliveries,
+          authorizationSnapshot: authorizationSnapshot,
+          ownerID: ownerID)
+        return
+      }
+    }
     // Read once and use for the whole visit: schema, prompt, and hop admission
     // must agree, and a mid-visit flag flip must not desynchronize them. With
     // the flag off, schema and prompt are byte-identical to the pre-hop build.
     let retrievalHopEnabled = await MainActor.run { ContextBucketsFeature.isRetrievalHopEnabled }
+    if !retrievalHopEnabled {
+      let diag = await MainActor.run {
+        "enabled=\(ContextBucketsFeature.isEnabled) nonprod=\(AppBuild.isNonProduction) env=\(ProcessInfo.processInfo.environment["OMI_FORCE_BUCKET_RETRIEVAL"] ?? "unset")"
+      }
+      log("ForcedLookupDebug: retrieval hop DISABLED (\(diag))")
+    }
     let prompt = ContextProactivityPromptBuilder.directorStablePrompt(
       snapshot: snapshot, allowLookup: retrievalHopEnabled)
+    let envSignal = await MainActor.run {
+      EnvironmentalSpeakerAnalyzer.analyze(segments: LiveTranscriptMonitor.shared.segments)
+    }
+    var volatileExtras = workstreamSection.map { "\n\n" + $0 } ?? ""
+    if candidatesEnabled {
+      let selected = ContextWorkstreamPooling.selectRecent(
+        await store.recentContextPool(
+          excludingBucketID: snapshot.bucketID, now: currentFrame.captureTime),
+        now: currentFrame.captureTime)
+      let fresh = selected.filter { !pooledFactIDs.contains($0.factID) }
+      if let section = ContextWorkstreamPooling.recentContextPromptSection(
+        items: fresh, now: currentFrame.captureTime)
+      {
+        volatileExtras += "\n\n" + section
+      }
+    }
     let uncachedPrompt =
       ContextProactivityPromptBuilder.directorVolatilePrompt(
         tasks: taskContext,
         frame: currentFrame,
-        recentDeliveries: recentDeliveries)
-      + (workstreamSection.map { "\n\n" + $0 } ?? "")
+        recentDeliveries: recentDeliveries,
+        visitCount: snapshot.visitCount,
+        environmentalSignal: envSignal)
+      + volatileExtras
     guard
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
       await store.fenceFreshness(fence).fresh
@@ -320,12 +487,57 @@ actor ContextProactivityEngine {
         state: "suppressed")
       return
     }
-    let cacheKey = "bucket:\(snapshot.bucketID):v\(snapshot.version)"
+    let cacheKey = ContextPromptCacheKey.director
+    // Forced retrieval: a validated user-authored-question fact skips the
+    // first bare call and evaluates once WITH the retrieved answer attached.
+    // The bare first call proved stochastically willing to silence a typed
+    // question on the repetition/already-visible checks across live runs,
+    // while the retrieval-attached form delivered every time — so when the
+    // client can already see the question in the validated facts, asking the
+    // model whether to look it up is a coin flip that costs the delivery.
+    var forcedRetrievalAllowlist: Set<String> = []
+    var forcedRetrievalItems: [ContextRetrievedItem] = []
+    var forcedRetrievalProvenance: [String: Any]? = nil
+    var forcedLookup: ContextDirectorRetrievalHop.ForcedLookup? = nil
+    var effectiveUncachedPrompt = uncachedPrompt
+    if retrievalHopEnabled {
+      log("ForcedLookupDebug: facts=\(snapshot.validatedFacts.count)")
+    }
+    if retrievalHopEnabled,
+      let lookup = ContextDirectorRetrievalHop.forcedLookupQuery(
+        validatedFacts: snapshot.validatedFacts)
+    {
+      log(
+        "ForcedLookupDebug: firing queryChars=\(lookup.query.count) questionFacts=\(lookup.questionFactIDs.count)"
+      )
+      forcedLookup = lookup
+      let items = await retrieve(lookup.query, authorizationSnapshot)
+      if let section = ContextDirectorRetrievalHop.promptSection(query: lookup.query, items: items) {
+        // A direct question invalidates the anti-nagging guard by design, and
+        // in live runs the model kept reading the identical answer cards in
+        // the recent-deliveries list as "delivered repeatedly" and silencing.
+        // The forced evaluation therefore omits that list mechanically instead
+        // of asking the model to discount it. Every other volatile section
+        // (workstream, recent-context pool) is preserved so pooling context
+        // and its provenance stay truthful.
+        let answerPrompt = ContextProactivityPromptBuilder.directorVolatilePrompt(
+          tasks: taskContext,
+          frame: currentFrame,
+          recentDeliveries: [],
+          visitCount: snapshot.visitCount,
+          environmentalSignal: envSignal)
+        effectiveUncachedPrompt = answerPrompt + volatileExtras + "\n\n" + section
+        forcedRetrievalAllowlist = Set(items.map(\.ref))
+        forcedRetrievalItems = items
+        forcedRetrievalProvenance = ContextDirectorRetrievalHop.provenance(
+          query: lookup.query, items: items, citedRefs: [], hopCompleted: true, failure: nil)
+      }
+    }
     do {
       var result = try await client.complete(
         operation: ModelQoS.Proactivity.reasoningOperation,
         prompt: prompt,
-        uncachedPrompt: uncachedPrompt,
+        uncachedPrompt: effectiveUncachedPrompt,
         imageData: currentFrame.jpegData,
         jsonSchema: Self.schema(allowLookup: retrievalHopEnabled),
         cacheKey: cacheKey,
@@ -347,8 +559,8 @@ actor ContextProactivityEngine {
         ContextDirectorDecision.self, from: Data(result.content.utf8)
       ).clamped()
       var decision = firstDecision
-      var retrievedRefAllowlist: Set<String> = []
-      var retrievalProvenance: [String: Any]? = nil
+      var retrievedRefAllowlist: Set<String> = forcedRetrievalAllowlist
+      var retrievalProvenance: [String: Any]? = forcedRetrievalProvenance
       // The single bounded retrieval hop: at most one retrieval and one further
       // director call per visit, and only when the director asked for one.
       // `plan` is the sole admission and this is the sole second call site, so
@@ -356,7 +568,7 @@ actor ContextProactivityEngine {
       if let lookupQuery = ContextDirectorRetrievalHop.plan(
         lookupQuery: firstDecision.lookupQuery,
         flagEnabled: retrievalHopEnabled,
-        priorHops: 0)
+        priorHops: forcedLookup == nil ? 0 : 1)
       {
         let hop = await performRetrievalHop(
           query: lookupQuery,
@@ -398,8 +610,17 @@ actor ContextProactivityEngine {
       let citedRefs = ContextDirectorRetrievalHop.partitionCitedRefs(decision.bucketEntryRefs)
       let entryRefs = await store.validatedEntryRefs(
         citedRefs.bucket, bucketID: snapshot.bucketID)
-      let retrievedRefs = ContextDirectorRetrievalHop.validatedRetrievedRefs(
+      var retrievedRefs = ContextDirectorRetrievalHop.validatedRetrievedRefs(
         citedRefs.retrieved, allowed: retrievedRefAllowlist)
+      // Forced-question answers: attribute the citation the model omitted when
+      // the message provably carries retrieved content (see impliedCitations).
+      if retrievedRefs.isEmpty, !forcedRetrievalItems.isEmpty,
+        decision.decision == "insight" || decision.decision == "suggest"
+      {
+        retrievedRefs = ContextDirectorRetrievalHop.impliedCitations(
+          message: decision.message, items: forcedRetrievalItems,
+          question: forcedLookup?.query ?? "")
+      }
       let factIDs =
         decision.decision == "silence"
         ? []
@@ -407,11 +628,20 @@ actor ContextProactivityEngine {
           decision.factIDs,
           snapshotFacts: snapshot.validatedFacts,
           bucketID: snapshot.bucketID)
+      // Filtered against the tasks actually supplied on this visit. An invented
+      // handle would render in chat as a "Task is no longer available"
+      // tombstone instead of failing visibly, so an unresolvable ref is dropped
+      // here rather than stored. Silence carries none, matching `factIDs`.
+      let taskRefs =
+        decision.decision == "silence"
+        ? []
+        : ContextDirectorTaskRefs.resolvable(decision.taskRefs ?? [], supplied: taskContext)
       var provenance: [String: Any] = [
         "bucket_id": snapshot.bucketID,
         "bucket_version_id": snapshot.versionID,
         "bucket_entry_refs": entryRefs,
         "fact_ids": factIDs,
+        "task_refs": taskRefs,
         "reasoning": decision.reasoning,
         "provider_model": ContextProactivityTelemetry.boundedProviderModel(result.providerModel),
         "cached_tokens": result.usage.cachedTokens,
@@ -434,15 +664,36 @@ actor ContextProactivityEngine {
         try await store.completeDelivery(
           id: deliveryID, decisionType: decision.decision, provenanceJSON: provenanceJSON,
           message: nil, state: "suppressed")
+        if forcedLookup == nil {
+          // Silence with no forced lookup right after typing is the signature
+          // of an extraction that missed the typed question; the plugin may
+          // grant one re-extraction for the burst (see
+          // ContextDwellRefreshPolicy.questionRescueGrant).
+          await MainActor.run {
+            NotificationCenter.default.post(
+              name: ProactiveAssistantsPlugin.contextEvalSilentWithoutLookup, object: nil)
+          }
+        }
         return
       }
-      // Deliberately evaluated on bucket refs alone: a delivery must still stand
-      // on at least one bucket entry and one validated bucket fact, exactly as
-      // before the retrieval hop existed. Retrieved refs are additive citations
-      // and can never substitute for bucket grounding.
-      guard ContextDirectorGrounding.permitsNonSilence(entryRefs: entryRefs, factIDs: factIDs) else {
+      // Retrieved refs are hop-allowlist-validated above, so an insight or
+      // suggest citing one is grounded in content actually quoted to the model
+      // — the answer-delivery case bucket refs cannot cover. When the guard
+      // vetoes, the row records what the model actually decided and why it was
+      // suppressed — a forced silence was previously indistinguishable from a
+      // model-chosen one, which made the veto rate invisible until it was
+      // recovered from the fact_ids side effect.
+      guard
+        ContextDirectorGrounding.permitsNonSilence(
+          decision: decision.decision, entryRefs: entryRefs, factIDs: factIDs,
+          retrievedRefs: retrievedRefs)
+      else {
+        provenance["suppression_reason"] = "grounding_veto"
+        provenance["model_decision"] = decision.decision
+        let vetoData = try JSONSerialization.data(withJSONObject: provenance, options: [.sortedKeys])
         try await store.completeDelivery(
-          id: deliveryID, decisionType: "silence", provenanceJSON: provenanceJSON,
+          id: deliveryID, decisionType: "silence",
+          provenanceJSON: String(data: vetoData, encoding: .utf8) ?? provenanceJSON,
           message: nil, state: "suppressed")
         return
       }
@@ -523,6 +774,10 @@ actor ContextProactivityEngine {
       // the settled value rather than this actor's mutable binding: the callbacks
       // below outlive the handoff, and capturing the variable makes their reads
       // race with any later write to it.
+      let answeredQuestionFactIDs = ContextDirectorRetrievalHop.consumableQuestionFacts(
+        forced: forcedLookup,
+        retrievalCompleted: forcedRetrievalProvenance != nil,
+        citedRetrievedRefs: retrievedRefs)
       let presentedDecision = decision
       let presentation = await MainActor.run {
         let context = FloatingBarNotificationContext(
@@ -545,7 +800,8 @@ actor ContextProactivityEngine {
                 decisionType: presentedDecision.decision,
                 provenanceJSON: provenanceJSON,
                 message: presentedDecision.message,
-                authorizationSnapshot: authorizationSnapshot)
+                authorizationSnapshot: authorizationSnapshot,
+                consumeFactIDs: answeredQuestionFactIDs)
             }
           },
           onDropped: { [weak self] in
@@ -573,6 +829,255 @@ actor ContextProactivityEngine {
     } catch {
       await recordDirectorFailure(deliveryID: deliveryID, error: error)
       // Network and model failures stay user-silent; provenance carries the class.
+    }
+  }
+
+  /// Deterministic candidate + small yes/no gate. `show == false` (or a
+  /// malformed/failed gate) suppresses and returns — the director is not also
+  /// run, so one visit never pays for two decisions.
+  private func evaluateCandidateAndDeliver(
+    candidate: ContextProactiveCandidate,
+    deliveryID: String,
+    fence: ContextVisitFence,
+    snapshot: ContextBucketSnapshot,
+    currentFrame: CapturedFrame,
+    recentDeliveries: [ContextBucketRecentDelivery],
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    ownerID: String
+  ) async {
+    let evaluationGate = await MainActor.run { Self.liveDeliveryGateInput() }
+    let evaluationReason = ContextDeliveryBudget.freeGate(input: evaluationGate)
+    guard evaluationReason == .allowed else {
+      log("Context candidate gate suppressed before model: \(evaluationReason.rawValue)")
+      await ContextProactivityTelemetry.recordGateRejection(reason: evaluationReason, stage: .preModel)
+      await terminalize(
+        deliveryID: deliveryID,
+        decisionType: "silence",
+        provenanceJSON: "{\"failure\":\"pre_model_gate\"}",
+        state: "suppressed")
+      return
+    }
+    // Candidate-mix ceiling, checked before the gate's model call so a capped
+    // candidate costs no tokens. The candidate is deliberately NOT declined:
+    // it stays armed for a window with headroom, unlike a gate refusal, which
+    // retires it. The visit's delivery row still terminates as suppressed.
+    let candidateShows = await store.candidateDeliveriesInWindow(now: currentFrame.captureTime)
+    guard candidateShows < ContextDeliveryBudget.candidateDailyShowCeiling else {
+      log("Context candidate suppressed before model: candidate_show_ceiling")
+      await terminalize(
+        deliveryID: deliveryID,
+        decisionType: "silence",
+        provenanceJSON: "{\"failure\":\"candidate_show_ceiling\"}",
+        state: "suppressed")
+      // A ceiling-capped candidate consumed an evaluation that may have been
+      // owed to a typed question the extraction missed — the same rescue as a
+      // silent director evaluation applies.
+      await MainActor.run {
+        NotificationCenter.default.post(
+          name: ProactiveAssistantsPlugin.contextEvalSilentWithoutLookup, object: nil)
+      }
+      return
+    }
+    guard
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+      await store.fenceFreshness(fence).fresh
+    else {
+      await terminalize(
+        deliveryID: deliveryID,
+        decisionType: "silence",
+        provenanceJSON: "{\"failure\":\"stale_visit\"}",
+        state: "failed")
+      return
+    }
+    // The facts the candidate was written from, not just this visit's facts:
+    // the gate is judging a claim made at write time, and without its original
+    // evidence it could only compare the claim against the current screen —
+    // which is how 13 of 14 live rejections came to read "not supported by the
+    // current screen" for candidates that were correct when written.
+    let groundingFacts = await store.groundingFactStatements(
+      candidate.groundingFactIDs, bucketID: candidate.bucketID)
+    do {
+      let result = try await client.complete(
+        operation: ModelQoS.Proactivity.reasoningOperation,
+        prompt: ContextProactiveCandidateGate.prompt(
+          message: candidate.message,
+          groundingFacts: groundingFacts,
+          validatedFacts: snapshot.validatedFacts,
+          recentDeliveries: recentDeliveries),
+        imageData: currentFrame.jpegData,
+        jsonSchema: ContextProactiveCandidateGate.schema,
+        // 400, not 120: the reasoning model bills its thinking into completion
+        // tokens. Measured directly against the same model with this exact
+        // prompt shape: at 120 the call finished with `finish_reason=length`,
+        // 120/120 tokens spent on reasoning, and EMPTY content in 2 of 3
+        // attempts — which parses as malformed and silently suppresses the
+        // candidate. At 400 every attempt finished clean (33-174 reasoning
+        // tokens plus the small JSON body). Live provenance shows the same
+        // degenerate shape (a bare "false" reason) at the old cap.
+        maxCompletionTokens: 400,
+        authorizationSnapshot: authorizationSnapshot)
+      await ContextProactivityTelemetry.record(result)
+      // The gate awaited the model; ownership can be revoked or the visit can
+      // end inside that window, exactly as for the director's own call.
+      // Re-check before parsing or persisting anything.
+      guard
+        RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+        await store.fenceFreshness(fence).fresh
+      else {
+        await terminalize(
+          deliveryID: deliveryID,
+          decisionType: "silence",
+          provenanceJSON: "{\"failure\":\"stale_visit\"}",
+          state: "failed")
+        return
+      }
+      // An unparseable body is not a decision. The reasoning model bills its
+      // thinking into completion tokens, so a budget that runs out returns
+      // `finish_reason=length` with empty content — which is silence about the
+      // question, not an answer of "no". Treating it as "no" retired the
+      // candidate permanently (`declineCandidate` below), so one truncated call
+      // destroyed a notification that no later visit could ever recover.
+      // Suppress this visit, leave the candidate armed, and let a later visit
+      // ask again or let it expire on its own.
+      guard let decision = ContextProactiveCandidateGate.parse(result.content) else {
+        try await store.completeDelivery(
+          id: deliveryID, decisionType: "silence",
+          provenanceJSON: "{\"reason\":\"malformed_gate_response\",\"source\":\"candidate\"}",
+          message: nil, state: "suppressed")
+        return
+      }
+      let reason = String(decision.reason.prefix(1_200))
+      var provenance: [String: Any] = [
+        "source": "candidate",
+        "candidate_id": candidate.id,
+        "reason": reason,
+      ]
+      if let tag = candidate.workstreamTag {
+        provenance["workstream"] = tag
+      } else {
+        provenance["workstream"] = NSNull()
+      }
+      let provenanceData = try JSONSerialization.data(
+        withJSONObject: provenance, options: [.sortedKeys])
+      let provenanceJSON = String(data: provenanceData, encoding: .utf8) ?? "{}"
+      guard decision.show else {
+        // A declined candidate must not be re-selected (and re-billed for
+        // another paid gate call) on every later visit until it naturally
+        // expires: retire it now instead of leaving it armed.
+        await store.declineCandidate(id: candidate.id, now: currentFrame.captureTime)
+        try await store.completeDelivery(
+          id: deliveryID, decisionType: "silence", provenanceJSON: provenanceJSON,
+          message: nil, state: "suppressed")
+        return
+      }
+      let message = String(candidate.message.prefix(600))
+      let title = String(message.prefix(120))
+      try await store.completeDelivery(
+        id: deliveryID, decisionType: "insight", provenanceJSON: provenanceJSON,
+        message: message, state: "model_completed")
+      await ContextProactivityTelemetry.recordDirectorDecision("insight")
+      try await store.completeDelivery(
+        id: deliveryID, decisionType: "insight", provenanceJSON: provenanceJSON,
+        message: message, state: "policy_approved")
+      guard
+        RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+        await store.fenceFreshness(fence).fresh
+      else {
+        await terminalize(
+          deliveryID: deliveryID,
+          decisionType: "silence",
+          provenanceJSON: "{\"failure\":\"stale_visit\"}",
+          state: "failed")
+        return
+      }
+      let presentationGate = await MainActor.run { Self.liveDeliveryGateInput() }
+      let presentationReason = ContextDeliveryBudget.freeGate(input: presentationGate)
+      guard presentationReason == .allowed else {
+        log("Context candidate suppressed before presentation: \(presentationReason.rawValue)")
+        await ContextProactivityTelemetry.recordGateRejection(
+          reason: presentationReason, stage: .presentation)
+        try await store.completeDelivery(
+          id: deliveryID, decisionType: "insight", provenanceJSON: provenanceJSON,
+          message: message, state: "suppressed")
+        return
+      }
+      let finalPresentationPreflight = await presentationPreflight(ownerID)
+      guard finalPresentationPreflight == .queued else {
+        log("Context candidate suppressed before graduation: presentation_unavailable")
+        try await store.completeDelivery(
+          id: deliveryID, decisionType: "insight", provenanceJSON: provenanceJSON,
+          message: message, state: "suppressed")
+        return
+      }
+      let handoffGate = await MainActor.run { Self.liveDeliveryGateInput() }
+      let handoffReason = ContextDeliveryBudget.freeGate(input: handoffGate)
+      guard handoffReason == .allowed else {
+        await ContextProactivityTelemetry.recordGateRejection(reason: handoffReason, stage: .handoff)
+        try await store.completeDelivery(
+          id: deliveryID, decisionType: "insight", provenanceJSON: provenanceJSON,
+          message: message, state: "suppressed")
+        return
+      }
+      // Every gate between the model's `show` decision and here can still
+      // suppress the delivery. Consume the candidate only now, once nothing
+      // ahead of the actual presentation call can drop it silently — so a
+      // suppression above this line leaves the candidate armed for the next
+      // visit instead of losing it for its whole remaining lifetime.
+      let consumed = await store.consumeCandidate(id: candidate.id, now: currentFrame.captureTime)
+      guard consumed else {
+        try await store.completeDelivery(
+          id: deliveryID, decisionType: "silence", provenanceJSON: provenanceJSON,
+          message: nil, state: "suppressed")
+        return
+      }
+      let factIDs = candidate.groundingFactIDs.map { "fact:\($0)" }
+      let presentation = await MainActor.run {
+        let context = FloatingBarNotificationContext(
+          sourceTitle: title,
+          assistantId: "context-director",
+          contextSummary: reason,
+          detail: factIDs.joined(separator: ", "),
+          provenanceRef: deliveryID)
+        return NotificationService.shared.presentContextDirectorNotification(
+          ownerID: ownerID,
+          title: title,
+          message: message,
+          decisionType: "insight",
+          context: context,
+          onPresented: { [weak self] in
+            guard let self else { return }
+            Task {
+              await self.completePresentedDelivery(
+                deliveryID: deliveryID,
+                decisionType: "insight",
+                provenanceJSON: provenanceJSON,
+                message: message,
+                authorizationSnapshot: authorizationSnapshot)
+            }
+          },
+          onDropped: { [weak self] in
+            guard let self else { return }
+            Task {
+              // Claimed at consume time; this callback means it was never shown.
+              await self.store.restoreCandidate(
+                id: candidate.id, now: currentFrame.captureTime)
+              await self.terminalize(
+                deliveryID: deliveryID,
+                decisionType: "silence",
+                provenanceJSON: "{\"failure\":\"notification_dropped\"}",
+                state: "failed")
+            }
+          })
+      }
+      switch presentation {
+      case .presented, .queued:
+        return
+      case .suppressed, .windowUnavailable, .rejectedOwnerChange:
+        // onDropped already ran (and restores) for these refusal paths.
+        return
+      }
+    } catch {
+      await recordDirectorFailure(deliveryID: deliveryID, error: error)
     }
   }
 
@@ -681,7 +1186,7 @@ actor ContextProactivityEngine {
       "Context director \(ModelQoS.Proactivity.reasoningOperation) failed: \(classification.logDescription)")
     await terminalize(
       deliveryID: deliveryID,
-      decisionType: "silence",
+      decisionType: ContextDeliveryLifecycle.unresolvedDecisionType,
       provenanceJSON: classification.provenanceJSON,
       state: "failed")
   }
@@ -712,7 +1217,8 @@ actor ContextProactivityEngine {
     decisionType: String,
     provenanceJSON: String,
     message: String,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    consumeFactIDs: [String] = []
   ) async {
     // onPresented is the authoritative observation that the interruption became
     // visible. A queued card can legitimately paint after its source visit has
@@ -732,6 +1238,14 @@ actor ContextProactivityEngine {
       // A late onPresented after failed/suppressed must not revive delivery state.
       // task_candidate graduation already ran before presentation.
       guard advanced else { return }
+      // A delivered answer consumes its question fact: an unanswered fact
+      // re-forces retrieval on every dwell refresh with the anti-repetition
+      // list omitted, repeating the identical card until the fact expired.
+      // Expiring it also lets a RE-typed question re-validate (the duplicate
+      // check ignores expired facts), so asking again still gets an answer.
+      for factID in consumeFactIDs {
+        try? await store.expireFact(id: factID)
+      }
     } catch {
       await terminalize(
         deliveryID: deliveryID,
@@ -757,16 +1271,50 @@ actor ContextProactivityEngine {
 
   static var schema: [String: Any] { schema(allowLookup: false) }
 
+  /// `title` and `message` are the only two fields the user ever reads, and they
+  /// were the only two declared as bare strings. A delivered notification read
+  /// "Insight / PR blocked, needs review" — the decision type answered back as a
+  /// title, and a body naming no pull request — which nothing in the schema or
+  /// the prompt forbade.
+  ///
+  /// These descriptions were measured together with the prompt's naming rule
+  /// (see `ContextProactivityPromptBuilder.directorStablePrompt`). Alone they
+  /// took title naming from 34/58 to 60/61 spoken runs but cost body naming
+  /// (58/58 → 57/61): the model moved the identifier into the title instead of
+  /// carrying it in both. The prompt rule is what holds both at 67/67, so the two
+  /// halves ship together and neither should be removed on its own.
   static func schema(allowLookup: Bool) -> [String: Any] {
     var properties: [String: Any] = [
       "decision": ["type": "string", "enum": ["suggest", "insight", "task_candidate", "resurface", "silence"]],
-      "title": ["type": "string"],
-      "message": ["type": "string"],
+      "title": [
+        "type": "string",
+        "description":
+          "The specific thing this is about, as the supplied context names it: the pull request "
+          + "number and repository, the sender and subject of the thread, the title of the "
+          + "document, the file and branch, the name and time of the meeting. Never a category "
+          + "word such as \"Insight\", \"Suggestion\", or \"Task\". Empty only when the decision "
+          + "is silence.",
+      ],
+      "message": [
+        "type": "string",
+        "description":
+          "What the user should know or do, written so it still makes sense away from the screen "
+          + "that produced it. Name the same specific thing the title names, then say what "
+          + "changed or what to do about it. A message that identifies only a category -- \"PR "
+          + "blocked\", \"respond to the email\", \"document needs review\" -- is useless. Empty "
+          + "only when the decision is silence.",
+      ],
       "reasoning": ["type": "string"],
       "bucket_entry_refs": ["type": "array", "items": ["type": "string"]],
       "fact_ids": ["type": "array", "items": ["type": "string"]],
+      // Strict structured output requires every declared property to be
+      // required, so the contract tells the model to answer [] for "about none
+      // of the listed tasks" rather than omitting the key.
+      "task_refs": ["type": "array", "items": ["type": "string"]],
     ]
-    var required = ["decision", "title", "message", "reasoning", "bucket_entry_refs", "fact_ids"]
+    var required = [
+      "decision", "title", "message", "reasoning", "bucket_entry_refs", "fact_ids", "task_refs",
+    ]
     if allowLookup {
       // Strict structured output requires every declared property to be listed
       // as required, so the prompt tells the model to answer "" for no lookup.

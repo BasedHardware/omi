@@ -323,7 +323,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get searchApps => 'Hľadať aplikácie...';
 
   @override
-  String get myApps => 'Moje aplikácie';
+  String get myApps => 'Vytvorené mnou';
 
   @override
   String get installedApps => 'Nainštalované aplikácie';
@@ -9833,6 +9833,19 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Otevřít obchod';
+
+  @override
+  String get sendRawAudioToOmi => 'Odosielať nespracovaný zvuk do Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Vypnutím zabránite odosielaniu nespracovaného zvuku do Omi. Prepisy a údaje potrebné pre cloudové funkcie sa môžu naďalej odosielať do Omi.';
+
+  @override
+  String get findDevice => 'Nájsť';
+
+  @override
+  String get diagnosticsShareFailed => 'Diagnostiku sa nepodarilo zdieľať. Skús to znova.';
 
   @override
   String get appDisabledTitle => 'Táto aplikácia je vypnutá a nedá sa nainštalovať.';

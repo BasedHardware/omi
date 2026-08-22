@@ -30,6 +30,57 @@ or `cancelled`; its terminal `phase` is exactly `transcript_delivery`,
 `unknown`. There are no user, conversation, request, error-text, revision,
 image, provider-model, or content labels.
 
+## Client-segmented journey foundation
+
+The existing `omi_journey_*` family above is intentionally unchanged. It is a
+closed, alert-backed contract with historical `stale` semantics. New semantic
+journeys use a separate family so adding client segmentation does not silently
+rewrite that contract:
+
+| Metric | Labels | Meaning |
+| --- | --- | --- |
+| `omi_client_journey_accepted_total` | `journey`, `client_kind` | A semantic journey was accepted. |
+| `omi_client_journey_terminal_total` | `journey`, `client_kind`, `outcome` | Its one-shot coarse terminal result. |
+| `omi_client_journey_issues_total` | `journey`, `client_kind`, `issue_class` | One bounded detail for a failed, degraded, or unknown terminal. |
+| `omi_client_journey_duration_seconds` | `journey`, `outcome` | Acceptance-to-terminal duration. |
+
+`outcome` is `success`, `failure`, `degraded`, `cancelled`, or the coercion
+sentinel `unknown`. `degraded` means the request completed but did not deliver
+the requested primary product result. `canned_fallback` and `quota_capped` stay
+separate `issue_class` values; they must not be inferred from the coarse
+outcome. Failure/degradation detail is a separate counter, and `client_kind` is
+omitted from the histogram, to avoid multiplying every histogram bucket.
+
+`client_kind` prefers the bounded `X-App-Platform` value, then recognizes only
+known User-Agent families. Headerless CFNetwork and Electron clients resolve to
+macOS and Windows respectively; headerless Dart resolves to
+`dart_mobile_unknown_os`. Both pi-mono extensions currently send the same
+`OpenAI/JS 6.26.0` User-Agent, so both resolve to `pi_mono_unknown_os`. The
+server cannot separate them until the clients send `X-App-Platform`; it must not
+guess an operating system.
+
+The family is zero-initialized but has no per-journey call sites or alerts yet.
+A zero is meaningful only with the owning scrape job/revision selected; an
+unrelated healthy exporter also exposes the bounded zero children. Its closed
+cartesian product is capped at 3,915 Prometheus series per process with the
+pinned client's `_created` series enabled: 180 accepted, 900 terminal, 1,980
+issue, and 855 histogram series.
+
+Streaming callers must pass their source through
+`ClientJourneyAttempt.observe_stream` and provide both semantic predicates. A
+`[DONE]` frame is only a success candidate; `failure_when` must recognize every
+in-band error frame and assign its bounded `failure_class`. A detected error
+terminalizes immediately and cannot be overwritten by a later `[DONE]` or clean
+stream exhaustion. This is what detects failures emitted after HTTP 200 headers
+have already been committed.
+
+Acceptance and terminal counters are event rates, not an in-flight gauge.
+Never subtract them to infer backlog across processes or restarts. A journey
+accepted in one process and completed in another must persist its acceptance
+time for duration, export both sides to the same telemetry backend, and use a
+durable lifecycle projection/queue gauge for outstanding work. Capture
+finalization's `listen_finalization_durable_jobs` is the existing pattern.
+
 ## Boundary semantics
 
 - `chat_response` is accepted after `/v2/messages` has persisted the human

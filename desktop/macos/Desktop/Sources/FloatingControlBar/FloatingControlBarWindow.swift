@@ -2619,7 +2619,7 @@ enum OwnerBoundNotificationPresentationResult: Equatable {
 class FloatingControlBarManager {
   static let shared = FloatingControlBarManager()
 
-  private static let kAskOmiEnabled = "askOmiBarEnabled"
+  private static let kAskOmiEnabled = DefaultsKey.askOmiBarEnabled.rawValue
   private static let kSnoozedUntil = "floatingBar_snoozedUntil"
   private static let recentNotificationReuseInterval: TimeInterval = 60
   private static let durableProvenanceReuseInterval: TimeInterval = 30 * 24 * 60 * 60
@@ -3386,6 +3386,7 @@ class FloatingControlBarManager {
     suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
     insightDeliveryID: UUID? = nil,
     screenshotData: Data? = nil,
+    isPersistent: Bool = false,
     authorizationSnapshot suppliedAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     onPresented: (() -> Void)? = nil,
     onDropped: (() -> Void)? = nil
@@ -3410,7 +3411,8 @@ class FloatingControlBarManager {
       action: action,
       suggestionTelemetryIdentity: suggestionTelemetryIdentity,
       insightDeliveryID: insightDeliveryID,
-      screenshotData: screenshotData
+      screenshotData: screenshotData,
+      isPersistent: isPersistent
     )
     guard let window else {
       log("FloatingControlBarManager: dropping notification because window is not set up")
@@ -3422,6 +3424,34 @@ class FloatingControlBarManager {
 
     if !window.state.showingAIConversation {
       persistNotificationMessageIfNeeded(notification)
+    }
+
+    if let current = window.state.currentNotification,
+      FloatingBarNotificationQueuePolicy.shouldDisplacePersistentCard(
+        currentIsPersistent: current.isPersistent,
+        showingAIConversation: window.state.showingAIConversation)
+    {
+      // A persistent card waits for the user's decision, but it must not
+      // starve later notifications: the newcomer presents now and the
+      // persistent card is requeued at the TAIL, so everything that queued
+      // while it was visible presents before it returns — still awaiting its
+      // Copy/Send/close decision. Its authorization snapshot stays registered
+      // for the re-present, and no dismissal is tracked because the user
+      // never acted on it.
+      window.dismissNotification(animated: false)
+      pendingNotifications.insert(
+        current,
+        at: FloatingBarNotificationQueuePolicy.requeueIndex(queueCount: pendingNotifications.count))
+      if let onPresented {
+        notificationPresentationCallbacks[notification.id] = NotificationPresentationCallbacks(
+          onPresented: onPresented,
+          onDropped: onDropped ?? {}
+        )
+      }
+      guard presentNotification(notification, in: window) else {
+        return .rejectedOwnerChange
+      }
+      return .presented
     }
 
     if window.state.currentNotification != nil || window.state.showingAIConversation {
@@ -3465,10 +3495,24 @@ class FloatingControlBarManager {
     return .queued
   }
 
+  /// Let a card own the keyboard. The bar is ordinarily a non-activating
+  /// panel, so a text field inside a notification would silently swallow every
+  /// keystroke; the Share card's address field needs the panel to be key while
+  /// the owner types, and only while they type.
+  func focusBarWindowForTextEntry() {
+    guard let window else { return }
+    NSApp.activate(ignoringOtherApps: true)
+    window.makeKeyAndOrderFront(nil)
+  }
+
   func dismissCurrentNotification() {
+    dismissCurrentNotification(kind: .user)
+  }
+
+  func dismissCurrentNotification(kind: NotificationDismissalKind) {
     notificationDismissWorkItem?.cancel()
     notificationDismissWorkItem = nil
-    dismissNotificationAndAdvanceQueue(trackDismissal: true)
+    dismissNotificationAndAdvanceQueue(trackDismissal: true, kind: kind)
   }
 
   func flushQueuedNotificationsIfPossible() {
@@ -4045,10 +4089,26 @@ class FloatingControlBarManager {
 
     notificationDismissWorkItem?.cancel()
     notificationDismissWorkItem = nil
-    dismissNotificationAndAdvanceQueue(trackDismissal: false)
-    if case .openWhatMattersNow(let recommendationID) = notification.action {
+    dismissNotificationAndAdvanceQueue(trackDismissal: false, kind: .user)
+    switch notification.action {
+    case .openWhatMattersNow(let recommendationID):
       ContextualTaskNavigationRouter.shared.request(recommendationID: recommendationID)
       return
+    case .connectIntegration(let telemetryID, let triggerID):
+      IntegrationNudgeCoordinator.shared.acceptPresentedNudge(
+        telemetryID: telemetryID,
+        triggerID: triggerID
+      )
+      return
+    case .meetingSummaryShare(let conversationID, _):
+      // The share card's chips own Copy/Send; any other click on the card
+      // opens the summary's own conversation detail — the card is not
+      // journaled, so the generic open-notification-chat fallthrough would
+      // have nothing to resolve.
+      MeetingSummaryShareActions.openSummary(conversationID: conversationID)
+      return
+    case nil:
+      break
     }
     _ = openNotificationConversation(notificationID: notification.id, in: window)
   }
@@ -4068,6 +4128,22 @@ class FloatingControlBarManager {
       return false
     }
     persistNotificationMessageIfNeeded(notification)
+
+    if let existing = window.state.currentNotification, existing.id != notification.id {
+      notificationDismissWorkItem?.cancel()
+      notificationDismissWorkItem = nil
+      AnalyticsManager.shared.notificationDismissed(
+        notificationId: existing.id.uuidString,
+        title: existing.title,
+        assistantId: existing.assistantId,
+        surface: "floating_bar",
+        dismissalKind: .replaced,
+        suggestionIdentity: existing.suggestionTelemetryIdentity
+      )
+      notificationPresentationCallbacks.removeValue(forKey: existing.id)?.onDropped()
+      notificationAuthorizationSnapshots.removeValue(forKey: existing.id)
+      window.dismissNotification(animated: false)
+    }
 
     // A live voice session has no eyes. Hand it the card as silent context so a spoken
     // follow-up has a referent; the typed path gets the same thing via
@@ -4110,15 +4186,28 @@ class FloatingControlBarManager {
       suggestionIdentity: notification.suggestionTelemetryIdentity
     )
 
-    let dismissWorkItem = DispatchWorkItem { [weak self] in
-      self?.dismissNotificationAndAdvanceQueue(trackDismissal: true)
+    // A persistent card (meeting summary share) stays until the user acts on
+    // it — Copy/Send/close are its only exits, all of which route through
+    // dismissCurrentNotification so queue advancement and bar re-hide stay
+    // owned by dismissNotificationAndAdvanceQueue.
+    if !notification.isPersistent {
+      let dismissWorkItem = DispatchWorkItem { [weak self] in
+        self?.dismissNotificationAndAdvanceQueue(trackDismissal: true, kind: .timeout)
+      }
+      notificationDismissWorkItem = dismissWorkItem
+      Task { @MainActor in
+        try? await Task.sleep(nanoseconds: 6_000_000_000)
+        guard !dismissWorkItem.isCancelled else { return }
+        dismissWorkItem.perform()
+      }
     }
-    notificationDismissWorkItem = dismissWorkItem
-    DispatchQueue.main.asyncAfter(deadline: .now() + 6.0, execute: dismissWorkItem)
     return true
   }
 
-  private func dismissNotificationAndAdvanceQueue(trackDismissal: Bool) {
+  private func dismissNotificationAndAdvanceQueue(
+    trackDismissal: Bool,
+    kind: NotificationDismissalKind
+  ) {
     guard let window else { return }
 
     let dismissedNotification = window.state.currentNotification
@@ -4134,6 +4223,7 @@ class FloatingControlBarManager {
         title: dismissedNotification.title,
         assistantId: dismissedNotification.assistantId,
         surface: "floating_bar",
+        dismissalKind: kind,
         suggestionIdentity: dismissedNotification.suggestionTelemetryIdentity
       )
     }
@@ -4171,6 +4261,17 @@ class FloatingControlBarManager {
     let ownerID = notification.ownerID
     guard !ownerID.isEmpty,
       RuntimeOwnerIdentity.currentOwnerId() == ownerID,
+      // A proactive card is journaled because it is something Omi observed and
+      // the user may want to follow up on in chat. An integration offer is
+      // neither — it is product copy about a connector, and writing "Omi can
+      // read your inbox…" into the user's conversation history as though it
+      // were an observation is noise they cannot act on there.
+      notification.assistantId != IntegrationNudgeCoordinator.assistantID,
+      // The meeting summary share card must not journal either: the durable
+      // Chat surface for a finished meeting is the conversation-link card the
+      // backend already materializes, and journaling here would produce a
+      // second Chat row for the same meeting.
+      notification.assistantId != MeetingActionItemBannerPolicy.assistantID,
       let provider = historyChatProvider
     else { return }
     let surface = provider.mainChatSurfaceReference()
@@ -4182,8 +4283,9 @@ class FloatingControlBarManager {
     // Notifications become chat-visible only after canonical journal
     // admission. The notification card itself remains an independent
     // presentation surface while this async write is pending.
-    let bodyText = notification.message.trimmingCharacters(in: .whitespacesAndNewlines)
-    let messageText = bodyText.isEmpty ? notification.title : bodyText
+    let messageText = Self.notificationJournalText(
+      title: notification.title,
+      body: notification.message)
     let continuityKey = ChatContinuityInvariants.proactiveNotificationContinuityKey(
       id: notification.id,
       kind: notification.kind)

@@ -13,7 +13,7 @@ def test_v3_memories_route_uses_canonical_response_builders_for_public_egress():
     assert 'from utils.memory.memory_api_response import memory_item_response, memory_list_response' in source
     assert 'jsonable_encoder(' not in source
     assert 'return memory_item_response(memory, MemoryApiExposure.CANONICAL)' in source
-    assert 'memory_list_response(\n        memories,\n        MemoryApiExposure.CANONICAL' in source
+    assert 'memory_list_response(\n            page_memories,\n            MemoryApiExposure.CANONICAL' in source
     assert 'MemoryApiExposure.LEGACY' not in source
 
 
@@ -34,5 +34,5 @@ def test_external_memory_surfaces_use_exposure_aware_projection_before_returning
     # compatibility adapter; external writes must enter canonical authority.
     external_writes = memory_service_source[memory_service_source.index('def create_external_memory(') :]
     assert 'memory_write_payload(' not in external_writes
-    assert 'return self._canonical_write(' in external_writes
+    assert '_canonical_write(' in external_writes
     assert 'self._canonical.write_batch(' in external_writes

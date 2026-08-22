@@ -150,14 +150,61 @@ final class ContextProactivityEngineTests: XCTestCase {
     }
   }
 
-  func testNonSilenceGroundingRequiresBothValidatedEntryAndFactCitations() {
+  func testNonSilenceGroundingIsPerDecisionType() {
+    // insight/suggest/task_candidate make new claims about bucket content and
+    // keep the full anti-hallucination invariant: one entry ref AND one fact ref.
+    for decision in ["insight", "suggest", "task_candidate"] {
+      XCTAssertTrue(
+        ContextDirectorGrounding.permitsNonSilence(
+          decision: decision, entryRefs: ["entry:one"], factIDs: ["fact:one"]))
+      XCTAssertFalse(
+        ContextDirectorGrounding.permitsNonSilence(
+          decision: decision, entryRefs: ["entry:one"], factIDs: []))
+      XCTAssertFalse(
+        ContextDirectorGrounding.permitsNonSilence(
+          decision: decision, entryRefs: [], factIDs: ["fact:one"]))
+    }
+    // A resurface grounds on an open task connected to current context; its
+    // citable half is the validated fact evidencing the connection. Nine of
+    // these were vetoed in one dogfood window by the old unconditional AND.
     XCTAssertTrue(
       ContextDirectorGrounding.permitsNonSilence(
-        entryRefs: ["entry:one"], factIDs: ["fact:one"]))
+        decision: "resurface", entryRefs: [], factIDs: ["fact:one"]))
+    XCTAssertTrue(
+      ContextDirectorGrounding.permitsNonSilence(
+        decision: "resurface", entryRefs: ["entry:one"], factIDs: []))
     XCTAssertFalse(
-      ContextDirectorGrounding.permitsNonSilence(entryRefs: ["entry:one"], factIDs: []))
+      ContextDirectorGrounding.permitsNonSilence(
+        decision: "resurface", entryRefs: [], factIDs: []),
+      "a resurface with no citation of either kind stays vetoed")
+  }
+
+  func testRetrievedRefsGroundInsightAndSuggestOnly() {
+    // The answer to a question the user is writing lives in retrieved history,
+    // not in this screen's bucket — an insight/suggest citing a hop-validated
+    // retrieved ref must survive the veto even with no bucket grounding.
+    for decision in ["insight", "suggest"] {
+      XCTAssertTrue(
+        ContextDirectorGrounding.permitsNonSilence(
+          decision: decision, entryRefs: [], factIDs: [],
+          retrievedRefs: ["memory:abc"]))
+    }
+    // task_candidate keeps the strict bucket invariant regardless of retrieval.
     XCTAssertFalse(
-      ContextDirectorGrounding.permitsNonSilence(entryRefs: [], factIDs: ["fact:one"]))
+      ContextDirectorGrounding.permitsNonSilence(
+        decision: "task_candidate", entryRefs: [], factIDs: [],
+        retrievedRefs: ["memory:abc"]))
+    // No retrieved refs -> unchanged behavior for every type.
+    for decision in ["insight", "suggest", "task_candidate"] {
+      XCTAssertFalse(
+        ContextDirectorGrounding.permitsNonSilence(
+          decision: decision, entryRefs: [], factIDs: [], retrievedRefs: []))
+    }
+    // resurface keeps its bucket/fact-only rule: retrieval never grounds it.
+    XCTAssertFalse(
+      ContextDirectorGrounding.permitsNonSilence(
+        decision: "resurface", entryRefs: [], factIDs: [],
+        retrievedRefs: ["conversation:xyz"]))
   }
 
   @MainActor
@@ -569,10 +616,32 @@ final class ContextProactivityDirectorFailureTests: XCTestCase {
 
     let row = try await fetchDelivery(id: deliveryID)
     XCTAssertEqual(row["lifecycleState"] as String?, "failed")
-    XCTAssertEqual(row["decisionType"] as String?, "silence")
+    XCTAssertEqual(
+      row["decisionType"] as String?, ContextDeliveryLifecycle.unresolvedDecisionType,
+      "a transport failure never produced a director decision")
     let provenance = try provenanceObject(try XCTUnwrap(row["provenanceJson"] as String?))
     XCTAssertEqual(provenance["failure"] as? String, "http_error")
     XCTAssertEqual((provenance["status"] as? NSNumber)?.intValue, 429)
+  }
+
+  func testEngineRecordsHttp502AsUnresolvedRatherThanSilence() async throws {
+    let deliveryID = try await seedAttemptedDelivery()
+    let engine = ContextProactivityEngine(
+      client: ProactiveLaneClient(authorization: { "Bearer test" }),
+      store: .shared,
+      dwellNanoseconds: 0)
+
+    await engine.recordDirectorFailure(
+      deliveryID: deliveryID,
+      error: ProactiveLaneClientError.http(status: 502, retryAfterSeconds: nil))
+
+    let row = try await fetchDelivery(id: deliveryID)
+    XCTAssertEqual(row["lifecycleState"] as String?, "failed")
+    XCTAssertEqual(row["decisionType"] as String?, ContextDeliveryLifecycle.unresolvedDecisionType)
+    XCTAssertNotEqual(row["decisionType"] as String?, "silence")
+    let provenance = try provenanceObject(try XCTUnwrap(row["provenanceJson"] as String?))
+    XCTAssertEqual(provenance["failure"] as? String, "http_error")
+    XCTAssertEqual((provenance["status"] as? NSNumber)?.intValue, 502)
   }
 
   func testEngineRecordsQuotaCooldownProvenanceOnSelfSuppressedLaneError() async throws {
@@ -588,7 +657,9 @@ final class ContextProactivityDirectorFailureTests: XCTestCase {
 
     let row = try await fetchDelivery(id: deliveryID)
     XCTAssertEqual(row["lifecycleState"] as String?, "failed")
-    XCTAssertEqual(row["decisionType"] as String?, "silence")
+    XCTAssertEqual(
+      row["decisionType"] as String?, ContextDeliveryLifecycle.unresolvedDecisionType,
+      "quota cooldown is a lane skip, not a silence decision")
     let provenance = try provenanceObject(try XCTUnwrap(row["provenanceJson"] as String?))
     XCTAssertEqual(provenance["failure"] as? String, "quota_cooldown")
     XCTAssertEqual((provenance["status"] as? NSNumber)?.intValue, 429)
@@ -613,6 +684,7 @@ final class ContextProactivityDirectorFailureTests: XCTestCase {
 
     let row = try await fetchDelivery(id: deliveryID)
     XCTAssertEqual(row["lifecycleState"] as String?, "failed")
+    XCTAssertEqual(row["decisionType"] as String?, ContextDeliveryLifecycle.unresolvedDecisionType)
     let provenance = try provenanceObject(try XCTUnwrap(row["provenanceJson"] as String?))
     XCTAssertEqual(provenance["failure"] as? String, "decode")
     XCTAssertNil(provenance["status"])
@@ -776,43 +848,52 @@ final class ContextDepartureEvaluationStoreTests: XCTestCase {
       visitID: 2, contextGeneration: 1, poolEpoch: poolEpoch, bucketID: "bucket-b",
       startedAt: now.addingTimeInterval(-60))
 
-    func fact(_ statement: String, workstream: String?, worthiness: Double, visit: Int64)
-      -> BucketExtraction.Fact
-    {
+    func fact(_ statement: String, worthiness: Double, visit: Int64) -> BucketExtraction.Fact {
       BucketExtraction.Fact(
         statement: statement,
         identifiers: ["identity"],
-        evidenceText: "evidence",
+        evidenceText: "identity",
         evidenceRefs: ["visit:\(visit)"],
         confidence: 1,
-        notifyWorthiness: worthiness,
-        workstream: workstream)
+        notifyWorthiness: worthiness)
     }
-    // "Omi App" must survive sanitization as "omi-app"; the sibling writes one
-    // poolable fact, one below the worthiness floor, and one scaffolding-shaped
-    // statement that the selector must drop.
+    // Extraction no longer writes workstream tags. Stamp historically tagged
+    // rows so pooling — still wired, now dormant for new facts — stays covered.
     _ = try await ContextBucketStore.shared.writeExtraction(
       BucketExtraction(
         narrative: "own narrative",
-        facts: [fact("own visit fact", workstream: "Omi App", worthiness: 0.7, visit: 1)]),
+        facts: [fact("own visit fact", worthiness: 0.7, visit: 1)]),
       for: fence, appName: "Test App", rawContextKey: "raw", normalizedContextKey: "normalized",
       now: now)
     _ = try await ContextBucketStore.shared.writeExtraction(
       BucketExtraction(
         narrative: "sibling narrative",
         facts: [
-          fact("sibling poolable fact", workstream: "omi app", worthiness: 0.8, visit: 2),
-          fact("sibling weak fact", workstream: "omi-app", worthiness: 0.1, visit: 2),
-          fact(
-            "Identifier proposal: visit:2", workstream: "omi-app", worthiness: 0.9, visit: 2),
+          fact("sibling poolable fact", worthiness: 0.8, visit: 2),
+          fact("sibling weak fact", worthiness: 0.1, visit: 2),
+          fact("Identifier proposal: visit:2", worthiness: 0.9, visit: 2),
         ]),
       for: siblingFence, appName: "Sibling App", rawContextKey: "raw",
       normalizedContextKey: "normalized", now: now.addingTimeInterval(-30))
 
+    let storedStatements = try await pool.read { db in
+      try String.fetchAll(db, sql: "SELECT statement FROM bucket_facts ORDER BY statement")
+    }
+    XCTAssertEqual(
+      storedStatements,
+      ["own visit fact", "sibling poolable fact", "sibling weak fact"])
+    let tagsBeforeStamp = try await pool.read { db in
+      try String.fetchAll(
+        db, sql: "SELECT workstreamTag FROM bucket_facts WHERE workstreamTag IS NOT NULL")
+    }
+    XCTAssertEqual(tagsBeforeStamp, [])
+
+    try await pool.write { db in
+      try db.execute(sql: "UPDATE bucket_facts SET workstreamTag = 'omi-app'")
+    }
+
     let liveTag = await ContextBucketStore.shared.liveWorkstreamTag(for: fence, now: now)
     XCTAssertEqual(liveTag, "omi-app")
-    let activeTags = await ContextBucketStore.shared.activeWorkstreamTags(now: now)
-    XCTAssertEqual(activeTags, ["omi-app"])
 
     let candidates = await ContextBucketStore.shared.workstreamPool(
       tag: "omi-app", excludingBucketID: "bucket", now: now)
@@ -850,12 +931,14 @@ final class ContextDepartureEvaluationStoreTests: XCTestCase {
           BucketExtraction.Fact(
             statement: "validated commitment",
             identifiers: ["deadline"],
-            evidenceText: "evidence",
+            evidenceText: "deadline evidence",
             evidenceRefs: ["visit:1"],
             confidence: 1,
             notifyWorthiness: 0.6),
-          // Higher worthiness, but no identifier: needs_review, so it must not
-          // count toward the departure-evaluation admission signal.
+          // No identifier, but resolvable evidence: validates under
+          // evidence-only validity, so its 0.9 IS the admission signal. (The
+          // old identifier gate demoted this shape to needs_review and zeroed
+          // it — measured at zero discriminative value on live data.)
           BucketExtraction.Fact(
             statement: "unidentified claim",
             identifiers: [],
@@ -863,6 +946,14 @@ final class ContextDepartureEvaluationStoreTests: XCTestCase {
             evidenceRefs: ["visit:1"],
             confidence: 1,
             notifyWorthiness: 0.9),
+          // Unresolvable evidence still demotes and must not count.
+          BucketExtraction.Fact(
+            statement: "evidence-free claim",
+            identifiers: ["handle"],
+            evidenceText: " ",
+            evidenceRefs: ["visit:1"],
+            confidence: 1,
+            notifyWorthiness: 1.0),
         ]),
       for: fence,
       appName: "Test App",
@@ -871,7 +962,7 @@ final class ContextDepartureEvaluationStoreTests: XCTestCase {
       now: now)
 
     let writeResult = try XCTUnwrap(result)
-    XCTAssertEqual(writeResult.maximumValidatedWorthiness, 0.6, accuracy: 0.000_001)
+    XCTAssertEqual(writeResult.maximumValidatedWorthiness, 0.9, accuracy: 0.000_001)
     XCTAssertTrue(
       ContextDepartureEvaluationPolicy.triggers(
         maximumValidatedWorthiness: writeResult.maximumValidatedWorthiness, flagEnabled: true))
@@ -883,7 +974,7 @@ final class ContextDepartureEvaluationStoreTests: XCTestCase {
           BucketExtraction.Fact(
             statement: "mild update",
             identifiers: ["status"],
-            evidenceText: "evidence",
+            evidenceText: "status evidence",
             evidenceRefs: ["visit:1"],
             confidence: 1,
             notifyWorthiness: 0.59)
@@ -897,6 +988,147 @@ final class ContextDepartureEvaluationStoreTests: XCTestCase {
     XCTAssertFalse(
       ContextDepartureEvaluationPolicy.triggers(
         maximumValidatedWorthiness: belowResult.maximumValidatedWorthiness, flagEnabled: true))
+  }
+
+  func testWriteExtractionDropsScaffoldingGatesIdentifiersAndLeavesWorkstreamNull() async throws {
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let (database, poolEpoch) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    let pool = try XCTUnwrap(database)
+    try await seedBucket(in: pool, now: now)
+    try await pool.write { db in
+      try Self.insertVisit(
+        db, id: 1, poolEpoch: poolEpoch, outcome: "completed",
+        startedAt: now.addingTimeInterval(-13), endedAt: now)
+    }
+    let fence = ContextVisitFence(
+      visitID: 1, contextGeneration: 1, poolEpoch: poolEpoch, bucketID: "bucket",
+      startedAt: now.addingTimeInterval(-13))
+
+    _ = try await ContextBucketStore.shared.writeExtraction(
+      BucketExtraction(
+        narrative: "narrative",
+        facts: [
+          BucketExtraction.Fact(
+            statement: "Ambient narrative: A Finder window labeled Downloads sits in the foreground",
+            identifiers: ["Downloads"],
+            evidenceText: "A Finder window labeled Downloads sits in the foreground",
+            evidenceRefs: ["visit:1"],
+            confidence: 1,
+            notifyWorthiness: 0.9),
+          BucketExtraction.Fact(
+            statement: "Proposed fact 1 — The board was lying",
+            identifiers: ["board"],
+            evidenceText: "The board was lying",
+            evidenceRefs: ["visit:1"],
+            confidence: 1,
+            notifyWorthiness: 0.8),
+          BucketExtraction.Fact(
+            statement: "Nik asked for the demo recording before tomorrow's launch video.",
+            identifiers: ["fact-001", "f-002", "ftn-003", "visit:9", "screenshot:42", "Nik"],
+            evidenceText: "Nik asked for the demo recording before tomorrow's launch video.",
+            evidenceRefs: ["visit:1"],
+            confidence: 1,
+            notifyWorthiness: 0.7),
+        ]),
+      for: fence, appName: "Test App", rawContextKey: "raw", normalizedContextKey: "normalized",
+      now: now)
+
+    let rows = try await pool.read { db in
+      try Row.fetchAll(
+        db,
+        sql: """
+          SELECT statement, identifiersJson, workstreamTag FROM bucket_facts
+          ORDER BY statement
+          """)
+    }
+    XCTAssertEqual(rows.count, 1)
+    XCTAssertEqual(
+      rows.first?["statement"] as String?,
+      "Nik asked for the demo recording before tomorrow's launch video.")
+    XCTAssertNil(rows.first?["workstreamTag"] as String?)
+    let encoded = try XCTUnwrap(rows.first?["identifiersJson"] as String?)
+    let identifiers = try JSONDecoder().decode([String].self, from: Data(encoded.utf8))
+    XCTAssertEqual(identifiers, ["Nik"])
+  }
+
+  func testWriteExtractionAppliesWritePolicyOnlyWhenEnabled() async throws {
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let (database, poolEpoch) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    let pool = try XCTUnwrap(database)
+    try await seedBucket(in: pool, now: now)
+    try await pool.write { db in
+      try Self.insertVisit(
+        db, id: 1, poolEpoch: poolEpoch, outcome: "completed",
+        startedAt: now.addingTimeInterval(-13), endedAt: now)
+    }
+    let fence = ContextVisitFence(
+      visitID: 1, contextGeneration: 1, poolEpoch: poolEpoch, bucketID: "bucket",
+      startedAt: now.addingTimeInterval(-13))
+    let extraction = BucketExtraction(
+      narrative: "narrative",
+      facts: [
+        // Machinery echo: must not be stored at all when the policy applies.
+        BucketExtraction.Fact(
+          statement: "The destination is unknown/.",
+          identifiers: ["unknown"],
+          evidenceText: "The destination is unknown/.",
+          evidenceRefs: ["visit:1"],
+          confidence: 1,
+          notifyWorthiness: 0.6),
+        // Scenery: stored, worthiness capped to 0 so it can never arm.
+        BucketExtraction.Fact(
+          statement: "A Google Sheets document named Combined_Cap_Table is open in a tab.",
+          identifiers: ["Combined_Cap_Table"],
+          evidenceText: "Combined_Cap_Table is open in a tab.",
+          evidenceRefs: ["visit:1"],
+          confidence: 1,
+          notifyWorthiness: 0.8),
+        // Named-person speech act: floored to arming eligibility from nano's 0.0.
+        BucketExtraction.Fact(
+          statement: "Mihir Malde thanked flagging the issue and said the team is fixing it.",
+          identifiers: ["Mihir Malde"],
+          evidenceText: "Mihir Malde thanked flagging the issue and said the team is fixing it.",
+          evidenceRefs: ["visit:1"],
+          confidence: 1,
+          notifyWorthiness: 0.0),
+      ])
+
+    let result = try await ContextBucketStore.shared.writeExtraction(
+      extraction, for: fence, appName: "Test App", rawContextKey: "raw",
+      normalizedContextKey: "normalized", applyWritePolicy: true, now: now)
+    let rows = try await pool.read { db in
+      try Row.fetchAll(
+        db, sql: "SELECT statement, notifyWorthiness FROM bucket_facts ORDER BY statement")
+    }
+    XCTAssertEqual(rows.count, 2, "the machinery echo must not be stored")
+    XCTAssertEqual(
+      rows.first?["statement"] as String?,
+      "A Google Sheets document named Combined_Cap_Table is open in a tab.")
+    XCTAssertEqual(rows.first?["notifyWorthiness"] as Double? ?? -1, 0, "scenery must not arm")
+    XCTAssertEqual(
+      rows.last?["notifyWorthiness"] as Double? ?? -1,
+      ContextFactWritePolicy.humanEventWorthinessFloor,
+      "a named-person speech act must reach arming eligibility")
+    // The floored human event is what departure evaluation should key on.
+    XCTAssertEqual(
+      try XCTUnwrap(result).maximumValidatedWorthiness,
+      ContextFactWritePolicy.humanEventWorthinessFloor, accuracy: 0.000_001)
+
+    // Policy off: the same extraction stores all three facts with nano's raw
+    // scores — byte-identical to the pre-policy write path.
+    try await pool.write { db in
+      try db.execute(sql: "DELETE FROM bucket_facts")
+      try db.execute(sql: "DELETE FROM bucket_entries")
+    }
+    _ = try await ContextBucketStore.shared.writeExtraction(
+      extraction, for: fence, appName: "Test App", rawContextKey: "raw",
+      normalizedContextKey: "normalized", now: now.addingTimeInterval(1))
+    let unfiltered = try await pool.read { db in
+      try Row.fetchAll(
+        db, sql: "SELECT statement, notifyWorthiness FROM bucket_facts ORDER BY statement")
+    }
+    XCTAssertEqual(unfiltered.count, 3)
+    XCTAssertEqual(unfiltered.map { $0["notifyWorthiness"] as Double? ?? -1 }, [0.8, 0.0, 0.6])
   }
 
   private func seedBucket(in pool: DatabasePool, now: Date) async throws {
@@ -921,5 +1153,39 @@ final class ContextDepartureEvaluationStoreTests: XCTestCase {
         VALUES (?, 1, ?, 'bucket', 'Test App', 'raw', 'normalized', ?, ?, ?, ?, ?, ?)
         """,
       arguments: [id, poolEpoch, "reference-\(id)", startedAt, endedAt, outcome, startedAt, startedAt])
+  }
+
+  func testClampedStripsInlineRefTokensFromVisibleText() {
+    let decision = ContextDirectorDecision(
+      decision: "insight",
+      title: "Download link [memory:abc-123]",
+      message: "The link is omi.me/desktop. [memory:3fe5b70f-f445-4580-b353-7b0d2560de3f]",
+      reasoning: "r",
+      bucketEntryRefs: ["memory:abc-123"],
+      factIDs: []
+    ).clamped()
+    XCTAssertEqual(decision.title, "Download link")
+    XCTAssertEqual(decision.message, "The link is omi.me/desktop.")
+    XCTAssertEqual(decision.bucketEntryRefs, ["memory:abc-123"], "citations stay citations")
+  }
+
+  @MainActor
+  func testDwellCaptureGuardRejectsSameAppTitleSwitch() async {
+    // Prime the tracker (buckets disabled so no store writes), then a same-app
+    // title switch must invalidate the old context for the dwell capture guard.
+    _ = await AssistantCoordinator.shared.checkContextSwitch(
+      newApp: "GuardTestApp", newWindowTitle: "Original Title", bucketsEnabled: false)
+    XCTAssertTrue(
+      AssistantCoordinator.shared.isTracking(app: "GuardTestApp", windowTitle: "Original Title"))
+    _ = await AssistantCoordinator.shared.checkContextSwitch(
+      newApp: "GuardTestApp", newWindowTitle: "Different Document", bucketsEnabled: false)
+    XCTAssertFalse(
+      AssistantCoordinator.shared.isTracking(app: "GuardTestApp", windowTitle: "Original Title"),
+      "a same-app title switch during the async capture must drop the stale frame")
+    XCTAssertFalse(
+      AssistantCoordinator.shared.isTracking(app: "OtherApp", windowTitle: "Different Document"))
+    XCTAssertTrue(
+      AssistantCoordinator.shared.isTracking(
+        app: "GuardTestApp", windowTitle: "Different Document"))
   }
 }

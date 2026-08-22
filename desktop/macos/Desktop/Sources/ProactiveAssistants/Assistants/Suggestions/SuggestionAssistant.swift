@@ -16,7 +16,7 @@ actor SuggestionAssistant: ProactiveAssistant {
   // MARK: - ProactiveAssistant Protocol
 
   nonisolated let identifier = "suggestion"
-  nonisolated let displayName = "Live Suggestions"
+  nonisolated let displayName = "Focus Notifications"
 
   var isEnabled: Bool {
     get async {
@@ -96,7 +96,8 @@ actor SuggestionAssistant: ProactiveAssistant {
     self.geminiClient = try GeminiClient(
       apiKey: apiKey,
       model: model,
-      fallbackModel: "gemini-2.5-flash"
+      fallbackModel: "gemini-2.5-flash",
+      workload: .maintenance
     )
     telemetryModel = SuggestionAssistantTelemetry.Model(configuredModel: model)
   }
@@ -429,7 +430,8 @@ actor SuggestionAssistant: ProactiveAssistant {
         AnalyticsManager.shared.suggestionAssistantEvaluationFailed(
           identity: identity,
           shape: shape,
-          latency: Date().timeIntervalSince(startedAt)
+          latency: Date().timeIntervalSince(startedAt),
+          reason: SuggestionAssistantTelemetry.EvaluationFailureReason(error)
         )
       }
       throw error
@@ -596,7 +598,7 @@ actor SuggestionAssistant: ProactiveAssistant {
     telemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity?
   ) async {
     let context = FloatingBarNotificationContext(
-      sourceTitle: "Suggestion",
+      sourceTitle: "Focus",
       assistantId: identifier,
       sourceApp: nil,
       windowTitle: nil,
@@ -611,7 +613,7 @@ actor SuggestionAssistant: ProactiveAssistant {
     await MainActor.run {
       NotificationService.shared.sendNotification(
         ownerID: ownerID,
-        title: "Suggestion",
+        title: "Focus",
         message: suggestion.suggestion,
         assistantId: identifier,
         context: context,

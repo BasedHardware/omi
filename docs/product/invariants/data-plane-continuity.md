@@ -1,6 +1,6 @@
 # INV-DATA-1: Production-family customer data-plane continuity
 
-**Status:** proposed
+**Status:** locked
 
 This revision is proposed as of 2026-08-01. It must remain unchanged for seven
 days, with its routing and qualification guards, before a follow-up can lock it.
@@ -36,7 +36,6 @@ The routing authority matrix is:
 | Surface | Production-family authority |
 | --- | --- |
 | Flutter API | `https://api.omi.me/` |
-| Flutter agent WebSocket | `wss://agent.omi.me/v1/agent/ws` |
 | macOS Stable Python / desktop API | `https://api.omi.me/` / `https://desktop-backend-hhibjajaja-uc.a.run.app/` |
 | macOS Beta Python / desktop API | `https://api.omiapi.com/` / `https://desktop-backend-dt5lrfkkoa-uc.a.run.app/` |
 | macOS Beta OAuth API | `https://api.omi.me/` |
@@ -74,7 +73,7 @@ reuse a production-family identity.
 ## Guard tests
 
 - `app/test/unit/env_test.dart` — production startup rejects non-canonical API
-  and agent routing; `local_prod` is rejected in release builds.
+  routing; `local_prod` is rejected in release builds.
 - `desktop/macos/Desktop/Tests/APIClientRoutingTests.swift` — Stable remains
   production-routed; Beta resolves only its fixed development serving endpoints
   and production auth despite contaminated values.
@@ -104,8 +103,9 @@ reuse a production-family identity.
 - `desktop/macos/Desktop/Sources/AppBuild.swift`
 - `desktop/macos/Desktop/Sources/DesktopBackendEnvironment.swift`
 - `desktop/macos/Desktop/Sources/GoogleService-Info*.plist`
-- `backend/charts/**` (retired: no GKE desktop-backend chart may return)
-- `.github/workflows/**` (retired: no GKE desktop-backend deployment authority may return)
+- `backend/charts/desktop-backend/**` (retired: this chart may not return)
+- `.github/workflows/gcp_*.yml` (retired: no GKE desktop-backend deployment authority may return)
+- `.github/workflows/desktop_backend_*.yml`
 - `.github/scripts/check-mobile-production-routing.py`
 - `.github/scripts/test_check_mobile_production_routing.py`
 - `docs/runbooks/desktop-backend-cloud-run-ownership.md`

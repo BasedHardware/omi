@@ -14,7 +14,12 @@ from database import review_queue
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.memory_imports import MemoryImportBatchRequest, MemoryImportBatchResponse
 from utils.apps import update_personas_async
-from utils.memory.memory_service import MemoryPayload, MemoryService, fetch_memory_dict
+from utils.memory.memory_service import (
+    MEMORY_LIST_SCAN_BUDGET_DETAIL,
+    MemoryPayload,
+    MemoryService,
+    fetch_memory_dict,
+)
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.memory.import_write_guard import (
     import_write_block_mode,
@@ -24,6 +29,11 @@ from utils.memory.import_write_guard import (
 from utils.memory.memory_api_contract import MemoryApiExposure
 from utils.memory.memory_api_response import memory_item_response, memory_list_response
 from utils.memory.memory_system import MemorySystem
+from utils.other.list_budget import (
+    OMI_LIST_TRUNCATED_HEADER,
+    OMI_LIST_TRUNCATED_VALUE,
+    list_read_budget_for_request,
+)
 from utils.client_device import DeviceScopeRequest, DeviceScopeValidationError, resolve_client_device_from_request
 from utils.memory.device_scope_filter import device_scope_validation_error
 from utils.other import endpoints as auth
@@ -505,13 +515,12 @@ async def create_memory_import_batch(
         logger.exception("Memory import ingest failed uid=%s source_type=%s", uid, request.source_type)
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
     parity_capture.observe("inbound", {"type": "memory_import_result", **result.response.model_dump(mode="json")})
-    parity_capture.persist()
-    return result.response
 
 
 @router.get('/v3/memories', tags=['memories'], response_model=List[MemoryDB])
 def get_memories(
     response: Response,
+    request: Request = None,  # type: ignore[assignment]
     limit: int = 100,
     offset: int = 0,
     cursor: Optional[str] = None,
@@ -525,6 +534,12 @@ def get_memories(
     x_app_platform: str = Header(None, alias='X-App-Platform'),
     x_device_id_hash: str = Header(None, alias='X-Device-Id-Hash'),
 ):
+    """List memories, newest first, as a bare JSON array.
+
+    Large accounts can outrun the request budget; such reads return an honest
+    partial array with the ``X-Omi-List-Truncated: true`` header and no
+    ``X-Omi-Memory-Next-Cursor`` instead of a bare middleware 504 (#11831).
+    """
     scope_request = _resolve_get_memories_device_scope(
         device_scope,
         client_device_id,
@@ -539,12 +554,28 @@ def get_memories(
     bounded_limit = max(1, min(limit, 500))
     bounded_offset = max(0, offset)
 
+    # One request-scoped budget across the keyset scan and any offset fallback
+    # so neither leg can consume the whole HTTP_GET_TIMEOUT by itself (#11831).
+    budget = list_read_budget_for_request(request, route='memories')
+
     response_headers = {
         _MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER: 'true',
         _MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER: 'true',
         _MEMORY_DEFAULT_DELETE_SUPPORTED_HEADER: 'true',
         'Cache-Control': 'no-store',
     }
+
+    def _finalize(page_memories: List[MemoryDB], *, truncated: bool, next_cursor: Optional[str]) -> JSONResponse:
+        if next_cursor and not truncated:
+            response_headers[_MEMORY_NEXT_CURSOR_HEADER] = next_cursor
+        if truncated:
+            response_headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
+        budget.observe('truncated' if truncated else 'complete')
+        return memory_list_response(
+            page_memories,
+            MemoryApiExposure.CANONICAL,
+            headers=response_headers,
+        )
 
     # Cursor and legacy offset paging are mutually exclusive. Cursor mode owns
     # accounts beyond the bounded offset compatibility window.
@@ -563,14 +594,9 @@ def get_memories(
             device_scope_request=scope_request,
             include_pending_processing=True,
             include_archive=include_archive,
+            request_budget=budget,
         )
-        if page.next_cursor:
-            response_headers[_MEMORY_NEXT_CURSOR_HEADER] = page.next_cursor
-        return memory_list_response(
-            page.memories,
-            MemoryApiExposure.CANONICAL,
-            headers=response_headers,
-        )
+        return _finalize(page.memories, truncated=page.truncated or budget.truncated, next_cursor=page.next_cursor)
 
     if bounded_offset == 0:
         # Prefer the composite cursor on the first page so sync/export can continue
@@ -583,25 +609,37 @@ def get_memories(
                 device_scope_request=scope_request,
                 include_pending_processing=True,
                 include_archive=include_archive,
+                request_budget=budget,
             )
         except HTTPException as exc:
             # First page must succeed whenever the legacy offset read can serve
             # it. The cursor path 503s on a missing cursor secret
             # ("Memory cursor unavailable"); the canonical keyset scan wraps any
-            # underlying failure as "Canonical memory unavailable". Both fall
-            # back to read(); unrelated errors (4xx, other 503s) propagate.
+            # underlying failure as "Canonical memory unavailable"; the
+            # historical keyset scan wraps its own as "Historical memory
+            # unavailable". The keyset scans order by (updated_at DESC,
+            # __name__) and so fail while that composite index is building,
+            # which the offset read's single-field order does not — so all three
+            # fall back to read(). The keyset scans also walk past every row they
+            # must not emit before they can fill the page, so an account whose
+            # historical set is fully suppressed by canonical exhausts the scan
+            # row budget ("Memory scan budget exceeded") — that walk is what took
+            # the first page past the 30s edge timeout in prod on 2026-08-18, and
+            # the offset read serves it without the walk.
+            # Unrelated errors (4xx, other 503s) propagate. The fallback runs on
+            # the SAME request budget, never a fresh unbudgeted window (#11831).
             if exc.status_code != 503 or exc.detail not in (
                 "Memory cursor unavailable",
                 "Canonical memory unavailable",
+                "Historical memory unavailable",
+                MEMORY_LIST_SCAN_BUDGET_DETAIL,
             ):
                 raise
         else:
-            if page.next_cursor:
-                response_headers[_MEMORY_NEXT_CURSOR_HEADER] = page.next_cursor
-            return memory_list_response(
+            return _finalize(
                 page.memories,
-                MemoryApiExposure.CANONICAL,
-                headers=response_headers,
+                truncated=page.truncated or budget.truncated,
+                next_cursor=page.next_cursor,
             )
 
     memories = MemoryService(db_client=db_client).read(
@@ -611,12 +649,9 @@ def get_memories(
         device_scope_request=scope_request,
         include_pending_processing=True,
         include_archive=include_archive,
+        budget=budget,
     )
-    return memory_list_response(
-        memories,
-        MemoryApiExposure.CANONICAL,
-        headers=response_headers,
-    )
+    return _finalize(memories, truncated=budget.truncated, next_cursor=None)
 
 
 @router.get('/v3/memories/review-queue', tags=['memories'], response_model=List[Dict[str, Any]])

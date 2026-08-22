@@ -323,7 +323,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get searchApps => 'Tìm kiếm ứng dụng...';
 
   @override
-  String get myApps => 'Ứng dụng của tôi';
+  String get myApps => 'Do tôi tạo';
 
   @override
   String get installedApps => 'Ứng dụng đã cài đặt';
@@ -9836,6 +9836,19 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Mở cửa hàng';
+
+  @override
+  String get sendRawAudioToOmi => 'Gửi âm thanh thô đến Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Tắt để ngăn âm thanh thô được gửi đến Omi. Bản chép lời và dữ liệu cần cho các tính năng đám mây vẫn có thể được gửi đến Omi.';
+
+  @override
+  String get findDevice => 'Tìm';
+
+  @override
+  String get diagnosticsShareFailed => 'Không thể chia sẻ chẩn đoán. Vui lòng thử lại.';
 
   @override
   String get appDisabledTitle => 'Ứng dụng này đã bị vô hiệu hoá và không thể cài đặt.';

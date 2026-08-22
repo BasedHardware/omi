@@ -13,6 +13,7 @@ from pydantic import ValidationError
 from database.cache import get_memory_cache, get_pubsub_manager
 from database.redis_db import delete_generic_cache
 from database.apps import (
+    PUBLIC_APPROVED_APPS_CACHE_KEY,
     get_private_apps_db,
     get_public_unapproved_apps_db,
     get_public_approved_apps_db,
@@ -329,7 +330,7 @@ def get_popular_apps() -> List[App]:
 
 
 def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
-    cache_key = 'get_public_approved_apps_data'
+    cache_key = PUBLIC_APPROVED_APPS_CACHE_KEY
     memory_cache = get_memory_cache()
 
     # Cache tester flag per user (30s TTL) to avoid Firestore lookup every 1s (#5439 sub-task 3)
@@ -483,14 +484,14 @@ def invalidate_approved_apps_cache() -> None:
     pubsub_manager = get_pubsub_manager()
 
     # Invalidate both cache key variants (with and without reviews)
-    cache_keys = ['get_public_approved_apps_data:reviews=0', 'get_public_approved_apps_data:reviews=1']
+    cache_keys = [f'{PUBLIC_APPROVED_APPS_CACHE_KEY}:reviews={n}' for n in (0, 1)]
 
     # Clear local memory cache
     for key in cache_keys:
         memory_cache.delete(key)
 
     # Clear Redis cache
-    delete_generic_cache('get_public_approved_apps_data')
+    delete_generic_cache(PUBLIC_APPROVED_APPS_CACHE_KEY)
 
     # Notify all other instances to clear their memory cache
     pubsub_manager.publish_invalidation(cache_keys)
@@ -498,8 +499,8 @@ def invalidate_approved_apps_cache() -> None:
 
 def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
     # Use separate cache keys for with/without reviews
-    cache_key = f'get_public_approved_apps_data:reviews={int(include_reviews)}'
-    redis_cache_key = 'get_public_approved_apps_data'
+    cache_key = f'{PUBLIC_APPROVED_APPS_CACHE_KEY}:reviews={int(include_reviews)}'
+    redis_cache_key = PUBLIC_APPROVED_APPS_CACHE_KEY
     memory_cache = get_memory_cache()
 
     def fetch_and_process() -> List[App]:

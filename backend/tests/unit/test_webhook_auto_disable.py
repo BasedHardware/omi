@@ -8,6 +8,7 @@ Verifies:
 - Circuit breaker + health tracking in chat tool endpoints
 """
 
+import json
 import os
 from types import ModuleType
 from unittest.mock import MagicMock, AsyncMock, patch
@@ -313,6 +314,69 @@ class TestDevWebhookAutoDisable:
         idempotency_keys = [call.kwargs["headers"]["Idempotency-Key"] for call in mock_client.post.await_args_list]
         assert len(set(idempotency_keys)) == 1
         assert idempotency_keys[0]
+
+    @pytest.mark.asyncio
+    async def test_post_dev_webhook_enqueues_exhausted_delivery_without_blocking_event_loop(self):
+        from utils.webhooks import _post_dev_webhook, db_executor, enqueue_dev_webhook_dlq
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=MagicMock(status_code=503))
+        mock_sem = AsyncMock()
+        mock_sem.__aenter__ = AsyncMock()
+        mock_sem.__aexit__ = AsyncMock()
+
+        with (
+            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
+            patch("utils.webhooks.run_blocking", new_callable=AsyncMock) as mock_run_blocking,
+        ):
+            response = await _post_dev_webhook(
+                "test_webhook",
+                "https://example.com/webhook",
+                retry_delays=(),
+                idempotency_key="event-123",
+                dlq_uid="uid-1",
+                json={"hello": "world"},
+            )
+
+        assert response.status_code == 503
+        mock_run_blocking.assert_awaited_once_with(
+            db_executor,
+            enqueue_dev_webhook_dlq,
+            webhook_name="test_webhook",
+            webhook_url="https://example.com/webhook",
+            status_code=503,
+            error="HTTP 503",
+            idempotency_key="event-123",
+            uid="uid-1",
+            payload={"hello": "world"},
+        )
+
+    def test_enqueue_dev_webhook_dlq_caps_entries_and_sets_ttl(self, monkeypatch):
+        from database import webhook_health
+
+        mock_redis = MagicMock()
+        monkeypatch.setattr(webhook_health, "r", mock_redis)
+
+        webhook_health.enqueue_dev_webhook_dlq(
+            webhook_name="memory_created_webhook",
+            webhook_url="https://example.com/webhook",
+            status_code=502,
+            error="HTTP 502",
+            idempotency_key="event-123",
+            uid="uid-1",
+            payload={"conversation_id": "conversation-1"},
+        )
+
+        key, raw_entry = mock_redis.lpush.call_args.args
+        entry = json.loads(raw_entry)
+        assert key == "dev_webhook_dlq:uid-1"
+        assert entry["webhook_name"] == "memory_created_webhook"
+        assert entry["idempotency_key"] == "event-123"
+        assert entry["status_code"] == 502
+        assert entry["payload"] == {"conversation_id": "conversation-1"}
+        mock_redis.ltrim.assert_called_once_with(key, 0, webhook_health._DLQ_MAX - 1)
+        mock_redis.expire.assert_called_once_with(key, webhook_health._DLQ_TTL)
 
     @pytest.mark.asyncio
     async def test_dev_webhook_disabled_on_threshold(self):

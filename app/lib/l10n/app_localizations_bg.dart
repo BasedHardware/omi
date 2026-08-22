@@ -323,7 +323,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get searchApps => 'Търсене на приложения...';
 
   @override
-  String get myApps => 'Моите приложения';
+  String get myApps => 'Създадени от мен';
 
   @override
   String get installedApps => 'Инсталирани приложения';
@@ -9877,6 +9877,19 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Открыть магазин';
+
+  @override
+  String get sendRawAudioToOmi => 'Изпращане на необработен звук към Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Изключете, за да спрете изпращането на необработен звук към Omi. Транскрипции и данни, нужни за облачните функции, все още може да се изпращат към Omi.';
+
+  @override
+  String get findDevice => 'Намери';
+
+  @override
+  String get diagnosticsShareFailed => 'Диагностиката не можа да бъде споделена. Опитайте отново.';
 
   @override
   String get appDisabledTitle => 'Това приложение е деактивирано и не може да бъде инсталирано.';

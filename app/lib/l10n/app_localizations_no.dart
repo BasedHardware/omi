@@ -323,7 +323,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get searchApps => 'Søk apper...';
 
   @override
-  String get myApps => 'Mine apper';
+  String get myApps => 'Laget av meg';
 
   @override
   String get installedApps => 'Installerte apper';
@@ -9839,6 +9839,19 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Öppna butik';
+
+  @override
+  String get sendRawAudioToOmi => 'Send rå lyd til Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Slå av for å hindre at rå lyd sendes til Omi. Transkripsjoner og data som skyfunksjoner trenger, kan fortsatt bli sendt til Omi.';
+
+  @override
+  String get findDevice => 'Finn';
+
+  @override
+  String get diagnosticsShareFailed => 'Kunne ikke dele diagnostikken. Prøv igjen.';
 
   @override
   String get appDisabledTitle => 'Denne appen er deaktivert og kan ikke installeres.';

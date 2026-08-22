@@ -1,5 +1,20 @@
 import Foundation
 
+/// Whether capture may continue while the meeting gate has not yet answered.
+///
+/// Only Meetings is a *closed* gate that a detected call opens, so "we do not know yet" has to be
+/// treated as "not in a call". Selecting Only Meetings from a live Always session builds a fresh
+/// detector, so its first reconcile pass runs with `hasObservedState == false`; leaving capture
+/// alone until the first probe lands would keep the microphone the previous mode opened running
+/// after the user asked for it to be closed.
+enum MeetingGateReadinessPolicy {
+  static func shouldPauseCapture(
+    mode: AssistantSettings.AudioRecordingMode, meetingStateReady: Bool
+  ) -> Bool {
+    mode == .onlyMeetings && !meetingStateReady
+  }
+}
+
 enum MeetingConversationBoundaryPolicy {
   typealias Role = TranscriptionConversationRole
 
@@ -24,6 +39,16 @@ enum MeetingConversationBoundaryPolicy {
 
   static func committedRole(previousRole: Role, transition: Transition, rotationSucceeded: Bool) -> Role {
     rotationSucceeded ? transition.nextRole : previousRole
+  }
+
+  /// Whether to tell the owner that note-taking started.
+  ///
+  /// The card states a fact, so it is owed only when the rotation actually
+  /// committed the meeting role. A failed rotation leaves capture on the
+  /// previous role — announcing there would claim notes that are not being
+  /// taken — and a rotation *out* of a meeting is the end, not the start.
+  static func shouldAnnounceNoteTaking(committedRole: Role, rotationSucceeded: Bool) -> Bool {
+    rotationSucceeded && committedRole == .meeting
   }
 
   static func shouldFinishConversation(

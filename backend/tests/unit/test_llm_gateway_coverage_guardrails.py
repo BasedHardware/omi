@@ -48,11 +48,11 @@ class DirectUse:
 
 
 DIRECT_PROVIDER_ALLOWLIST = {
-    DirectUse('agent_vm/main.py', 'GEMINI_API_KEY'),
     DirectUse('llm_gateway/routers/openai_compatible.py', 'OPENAI_API_KEY'),
     DirectUse('llm_gateway/routers/anthropic_messages.py', 'ANTHROPIC_API_KEY'),
     DirectUse('llm_gateway/routers/health.py', 'ANTHROPIC_API_KEY'),
     DirectUse('llm_gateway/routers/health.py', 'OPENAI_API_KEY'),
+    DirectUse('llm_gateway/routers/health.py', 'PERPLEXITY_API_KEY'),
     DirectUse('routers/desktop_proxy.py', 'GEMINI_API_KEY'),
     DirectUse('routers/desktop_realtime.py', 'GEMINI_API_KEY'),
     DirectUse('routers/desktop_realtime.py', 'OPENAI_API_KEY'),
@@ -120,6 +120,15 @@ def test_persona_auth_tiers_resolve_to_fixed_gateway_models():
 
     assert overrides['persona_chat'].primary.model == 'gpt-5-nano'
     assert overrides['persona_chat_premium'].primary.model == 'gpt-5.6-luna'
+
+
+def test_only_background_flex_routes_allow_the_documented_flex_timeout():
+    config = load_gateway_config(prod_mode=True)
+
+    assert config.route_artifacts['route.memory_conflict.model_config.001'].timeouts.request_ms == 120_000
+    assert config.route_artifacts['route.memory_conflict_flex.model_config.001'].timeouts.request_ms == 900_000
+    assert config.route_artifacts['route.memory_l2_flex.model_config.001'].timeouts.request_ms == 900_000
+    assert config.route_artifacts['route.x_memory_extraction_flex.model_config.001'].timeouts.request_ms == 900_000
 
 
 def test_anthropic_generated_lanes_do_not_advertise_streaming_without_adapter_support():

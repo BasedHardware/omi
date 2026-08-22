@@ -9,6 +9,7 @@ Covers:
 5. Batch limit (commit triggers at BATCH_LIMIT=500)
 """
 
+import importlib.util
 import os
 import sys
 import types
@@ -174,9 +175,20 @@ endpoints_stub.get_current_user_uid = MagicMock()
 endpoints_stub.with_rate_limit = lambda dep, policy: dep
 endpoints_stub.with_rate_limit_context = lambda dep, policy: dep
 endpoints_stub.timeit = lambda f: f
-_stub_module("utils.observability")
-fallback_stub = _stub_module("utils.observability.fallback")
-fallback_stub.record_fallback = MagicMock()
+list_budget_stub = _stub_module("utils.other.list_budget")
+_list_budget_path = Path(__file__).resolve().parents[2] / "utils" / "other" / "list_budget.py"
+_list_budget_spec = importlib.util.spec_from_file_location("_omi_real_list_budget", _list_budget_path)
+_list_budget_real = importlib.util.module_from_spec(_list_budget_spec)
+_list_budget_spec.loader.exec_module(_list_budget_real)
+
+
+def _list_budget_getattr(name):
+    # Delegate every symbol to the real module so tests collected after this
+    # hermetic stubber still exercise the real budget seam.
+    return getattr(_list_budget_real, name)
+
+
+list_budget_stub.__getattr__ = _list_budget_getattr
 task_intelligence_stub = _stub_package("utils.task_intelligence")
 candidate_service_stub = _stub_module("utils.task_intelligence.candidate_service")
 candidate_service_stub.create_candidate = MagicMock()
@@ -234,7 +246,7 @@ class RecordLlmUsageBucketRequest(BaseModel):
     cache_read_tokens: int = Field(0, ge=0)
     cache_write_tokens: int = Field(0, ge=0)
     total_tokens: int = Field(0, ge=0)
-    cost_usd: float = Field(0.0, ge=0.0)
+    cost_usd: float | None = Field(None, ge=0.0)
     account: str = Field('omi', max_length=100)
 
 
@@ -326,14 +338,14 @@ class TestRecordDesktopLlmUsageValidation:
         r = RecordLlmUsageBucketRequest()
         assert r.account == 'omi'
 
-    def test_all_defaults_zero(self):
-        """All token fields default to 0."""
+    def test_cost_defaults_to_unmeasured(self):
+        """Missing cost is distinct from a measured zero."""
         r = RecordLlmUsageBucketRequest()
         assert r.input_tokens == 0
         assert r.output_tokens == 0
         assert r.cache_read_tokens == 0
         assert r.total_tokens == 0
-        assert r.cost_usd == 0.0
+        assert r.cost_usd is None
 
 
 class TestCreateFocusSessionValidation:
@@ -827,33 +839,20 @@ class TestAcquireChatSession:
 
     def test_reuses_existing_session(self):
         """acquire_chat_session returns existing session ID when one exists."""
-        mock_doc = MagicMock()
-        mock_doc.id = 'existing-session-id'
-        mock_query = MagicMock()
-        mock_query.limit.return_value = mock_query
-        mock_query.stream.return_value = [mock_doc]
-
-        with patch.object(chat_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value.where.return_value = (
-                mock_query
-            )
+        with patch.object(chat_db, 'get_chat_session', return_value={'id': 'existing-session-id'}) as mock_get_session:
             result = chat_db.acquire_chat_session('uid', app_id='my-app')
 
         assert result == 'existing-session-id'
+        mock_get_session.assert_called_once_with('uid', app_id='my-app')
 
     def test_creates_new_session_when_none_exists(self):
         """acquire_chat_session creates a new session when no matching session found."""
-        mock_query = MagicMock()
-        mock_query.limit.return_value = mock_query
-        mock_query.stream.return_value = []  # No existing sessions
-
         with (
-            patch.object(chat_db, 'db') as patched_db,
-            patch.object(chat_db, 'create_chat_session', return_value={'id': 'new-session-id'}) as mock_create,
+            patch.object(chat_db, 'get_chat_session', return_value=None),
+            patch.object(  # No existing sessions
+                chat_db, 'create_chat_session', return_value={'id': 'new-session-id'}
+            ) as mock_create,
         ):
-            patched_db.collection.return_value.document.return_value.collection.return_value.where.return_value = (
-                mock_query
-            )
             result = chat_db.acquire_chat_session('uid', app_id='my-app')
 
         assert result == 'new-session-id'
@@ -1037,6 +1036,10 @@ class TestSaveMessageSessionBehavior:
                 sender='ai',
                 session_id='session-1',
                 metadata=enriched_metadata,
+                content_blocks=[
+                    {'type': 'agentSpawn', 'id': 'spawn-1'},
+                    {'type': 'agentCompletion', 'id': 'completion-1'},
+                ],
                 client_message_id='turn-1',
                 journal_revision=11,
             )
@@ -1047,6 +1050,10 @@ class TestSaveMessageSessionBehavior:
         patched_db.transaction.return_value.update.assert_called_once()
         update = patched_db.transaction.return_value.update.call_args.args[1]
         assert update['metadata'] == enriched_metadata
+        assert update['content_blocks'] == [
+            {'type': 'agentSpawn', 'id': 'spawn-1'},
+            {'type': 'agentCompletion', 'id': 'completion-1'},
+        ]
         assert update['journal_revision'] == 11
 
     def test_equal_journal_revision_with_different_payload_fails_closed(self):

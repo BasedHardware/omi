@@ -8,6 +8,9 @@ overlay:
   gke:
     backend-listen:
       env:
+        REFERRAL_PUBLIC_BASE_URL:
+          value: https://omi.me
+          category: service_discovery
         ACCOUNT_DELETION_DISPATCH_MODE:
           value: cloud_tasks
           category: reliability
@@ -59,7 +62,7 @@ overlay:
           value: gateway
           category: rollout
         MEMORY_ENABLED:
-          value: 'off'
+          value: 'on'
         # Canonical graph and /v3/memories first-page cursors fail closed without this HMAC.
         MEMORY_V3_CURSOR_SECRET:
           secret:
@@ -194,7 +197,7 @@ overlay:
             value: gateway
             category: rollout
           MEMORY_ENABLED:
-            value: 'off'
+            value: 'on'
           # `/v1/knowledge-graph` and signed memory cursors fail closed until this binding is present.
           MEMORY_V3_CURSOR_SECRET_VERSION:
             value: prod-v1
@@ -273,7 +276,7 @@ overlay:
             value: gateway
             category: rollout
           MEMORY_ENABLED:
-            value: 'off'
+            value: 'on'
       backend-sync-backfill:
         env:
           LISTEN_FINALIZATION_DISPATCH_MODE:
@@ -326,7 +329,7 @@ overlay:
             value: gateway
             category: rollout
           MEMORY_ENABLED:
-            value: 'off'
+            value: 'on'
       backend-integration:
         env:
           ACCOUNT_DELETION_DISPATCH_MODE:
@@ -361,13 +364,19 @@ overlay:
             value: gateway
             category: rollout
           MEMORY_ENABLED:
-            value: 'off'
+            value: 'on'
     jobs:
       notifications-job:
+        flags:
+          --task-timeout: 3600s
         env:
+          OMI_BACKGROUND_FLEX_CAPABLE:
+            value: 'true'
           PINECONE_INDEX_NAME:
             value: memories-backend
       memory-maintenance-job:
+        flags:
+          --task-timeout: 3600s
         env:
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
@@ -376,10 +385,14 @@ overlay:
             value: gateway
             category: rollout
           MEMORY_ENABLED:
-            value: 'off'
+            value: 'on'
           MEMORY_CANONICAL_MAINTENANCE_ENABLED:
-            value: 'false'
+            value: 'true'
+          MEMORY_CANONICAL_MAINTENANCE_FLEX:
+            value: 'true'
           MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
             value: 'false'
+          OMI_BACKGROUND_FLEX_CAPABLE:
+            value: 'true'
           PINECONE_INDEX_NAME:
             value: memories-backend

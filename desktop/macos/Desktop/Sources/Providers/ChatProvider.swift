@@ -315,6 +315,11 @@ enum AgentTimelineOpenFeedback {
   }
 }
 
+struct ConversationLinkActionItem: Equatable {
+  let description: String
+  let taskID: String?
+}
+
 enum ChatContentBlock: Identifiable {
   case text(id: String, text: String)
   case toolCall(
@@ -337,7 +342,12 @@ enum ChatContentBlock: Identifiable {
   case taskCard(id: String, taskId: String)
   case goalLink(id: String, goalId: String, summary: String)
   case captureLink(id: String, conversationId: String, momentTimestampMs: Int?, summary: String)
-  case conversationLink(id: String, conversationId: String, summary: String)
+  case conversationLink(
+    id: String,
+    conversationId: String,
+    summary: String,
+    recommendedActionItems: [ConversationLinkActionItem]
+  )
   case memoryLink(id: String, memoryId: String, summary: String)
   /// Answer-level provenance. Unlike a rich link card, this is rendered at the matching inline
   /// numeric marker and is otherwise invisible in the transcript.
@@ -372,7 +382,7 @@ enum ChatContentBlock: Identifiable {
     case .taskCard(let id, _): return id
     case .goalLink(let id, _, _): return id
     case .captureLink(let id, _, _, _): return id
-    case .conversationLink(let id, _, _): return id
+    case .conversationLink(let id, _, _, _): return id
     case .memoryLink(let id, _, _): return id
     case .citation(let id, _): return id
     case .agentSpawn(let id, _, _, _, _, _, _): return id
@@ -785,23 +795,17 @@ struct ChatQuestionCardContinuation: Sendable {
 }
 
 extension ChatMessage {
+  /// User-visible answer, excluding pre-tool commentary the model streamed before tools.
+  var visibleAnswerText: String {
+    ChatAssistantAnswerText.visible(
+      contentBlocks: contentBlocks,
+      fallback: text,
+      isStreaming: isStreaming
+    )
+  }
+
   var copyableText: String {
-    // A completed assistant turn can contain internal reasoning and transient
-    // tool/lifecycle blocks alongside its user-visible answer. The message
-    // copy affordance promises the answer, so retain only final text blocks.
-    let finalOutput =
-      contentBlocks
-      .compactMap { block -> String? in
-        guard case .text(_, let text) = block else { return nil }
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-      }
-      .joined(separator: "\n")
-      .trimmingCharacters(in: .whitespacesAndNewlines)
-    if !finalOutput.isEmpty {
-      return finalOutput
-    }
-    return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    visibleAnswerText
   }
 
   var displayResources: [ChatResource] {
@@ -830,7 +834,7 @@ extension ChatContentBlock {
     case .taskCard:
       return nil
     case .goalLink(_, _, let summary), .captureLink(_, _, _, let summary),
-      .conversationLink(_, _, let summary), .memoryLink(_, _, let summary):
+      .conversationLink(_, _, let summary, _), .memoryLink(_, _, let summary):
       let trimmed = summary.trimmingCharacters(in: .whitespacesAndNewlines)
       return trimmed.isEmpty ? nil : trimmed
     case .citation:
@@ -895,7 +899,9 @@ extension ChatMessage {
   /// Convert a backend message to a local ChatMessage
   init(from db: ChatMessageDB) {
     let resources = ChatResource.decodeResourcesFromMessageMetadata(db.metadata)
-    let contentBlocks = ChatContentBlockCodec.decodeFromMessageMetadata(db.metadata)
+    let contentBlocks =
+      db.contentBlocksJSON.flatMap(ChatContentBlockCodec.decode)
+      ?? ChatContentBlockCodec.decodeFromMessageMetadata(db.metadata)
     self.init(
       id: db.id,
       text: db.text,
@@ -2499,7 +2505,8 @@ class ChatProvider: ObservableObject {
     var lines: [String] = ["<user_facts>", "Facts about \(userName):"]
     for memory in cachedMemories.prefix(30) {  // Limit to 30 most relevant
       let marker = citations.marker(kind: .memory, sourceID: memory.id).map { " \($0)" } ?? ""
-      lines.append("- [memory] \(memory.content)\(marker)")
+      // Kind labels in square brackets get copied as fake citations (`[memory]`, `[memory 5023]`).
+      lines.append("- \(memory.content)\(marker)")
     }
     lines.append("</user_facts>")
 
@@ -3195,7 +3202,9 @@ class ChatProvider: ObservableObject {
       )
       for entry in importPlan {
         let row = entry.row
-        let blocks = ChatContentBlockCodec.decodeFromMessageMetadata(row.metadata)
+        let blocks =
+          row.contentBlocksJSON.flatMap(ChatContentBlockCodec.decode)
+          ?? ChatContentBlockCodec.decodeFromMessageMetadata(row.metadata)
         let resources = ChatResource.decodeResourcesFromMessageMetadata(row.metadata)
         let accepted = await kernelTurnProjection.importRemoteTurn(
           surface: surface,
@@ -3479,7 +3488,8 @@ class ChatProvider: ObservableObject {
   /// written to the kernel journal, so `KernelJournalTurn.chatMessage()` cannot
   /// reconstruct them and a journal projection can never be their authority:
   /// `rating` (user-set), `metadata` (model/token/cost stats attached at
-  /// completion, rendered in the message footer) and `notificationScreenshot`.
+  /// completion, rendered in the message footer), `notificationScreenshot`,
+  /// and in-memory kind-only citation rewrites until the journal catches up.
   /// Replacing a row wholesale with the projection would drop them, so carry
   /// them forward from the row being replaced. A field the projection *does*
   /// carry (non-nil) wins, so this stays correct if the journal schema later
@@ -3489,6 +3499,13 @@ class ChatProvider: ObservableObject {
     if merged.rating == nil { merged.rating = existing.rating }
     if merged.metadata == nil { merged.metadata = existing.metadata }
     if merged.notificationScreenshot == nil { merged.notificationScreenshot = existing.notificationScreenshot }
+    // Kind-only binding rewrites markers and appends citation blocks in memory.
+    // A stale journal echo still has `[memory]` and no citation blocks; keep the
+    // already-bound row so chips do not vanish between hydrate and the next bind.
+    if existing.hasPersistedCitationBlocks, !projected.hasPersistedCitationBlocks {
+      merged.text = existing.text
+      merged.contentBlocks = existing.contentBlocks
+    }
     return merged
   }
 
@@ -4806,8 +4823,16 @@ class ChatProvider: ObservableObject {
             )
           }
           self.addToolResult(messageId: aiMessageId, toolUseId: toolUseId, name: name, output: output)
-          let durableReferences = ChatCitationProvenanceRegistry.references(
+          var durableReferences = ChatCitationProvenanceRegistry.references(
             fromAnnotatedToolOutput: output)
+          if durableReferences.isEmpty,
+            let provenance = ChatCitationProvenanceRegistry.provenanceIDs(fromToolOutput: output)
+          {
+            durableReferences = await ChatCitationProvenanceRegistry.shared.peekSnapshot(
+              runID: provenance.runID,
+              attemptID: provenance.attemptID
+            ).references
+          }
           if !durableReferences.isEmpty,
             let messageIndex = self.messages.firstIndex(where: { $0.id == aiMessageId })
           {
@@ -5078,63 +5103,33 @@ class ChatProvider: ObservableObject {
           toolName: "get_work_context"
         )
       }
-      if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
-        // Message still in memory — update it in-place
-        let durableToolReferences = messages[index].contentBlocks.compactMap {
-          block -> ChatCitationReference? in
-          guard case .citation(_, let reference) = block else { return nil }
-          return reference
-        }
-        let allTerminalCitationReferences =
-          terminalCitationReferences
-          + durableToolReferences.filter { reference in
-            !terminalCitationReferences.contains(where: {
-              $0.ordinal == reference.ordinal && $0.kind == reference.kind
-                && $0.sourceID == reference.sourceID
-            })
-          }
-        let resolvedMessageText = ChatCitationMarkup.appendingSelectedSources(
-          to: messages[index].text.isEmpty ? queryResult.text : messages[index].text,
+      if messages.contains(where: { $0.id == aiMessageId }) {
+        messageText = await finalizeAssistantMessageCitations(
+          messageId: aiMessageId,
+          queryText: queryResult.text,
           selectedReferences: toolCitationSnapshot.selectedReferences,
           requestedSources: ChatCitationMarkup.explicitlyRequestsSources(effectivePrompt),
-          retrievedReferences: allTerminalCitationReferences)
-        messageText = resolvedMessageText
-        messages[index].text = messageText
-        messages[index].isStreaming = false
-        let citedOrdinals = Set(ChatCitationMarkup.ordinals(in: messageText))
-        let citedReferences = allTerminalCitationReferences.filter {
-          citedOrdinals.contains($0.ordinal)
+          terminalCitationReferences: terminalCitationReferences)
+        if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
+          let deltaResources = queryResult.completionDeltaArtifacts.map(ChatResource.artifact)
+          messages[index].resources = mergedResources(
+            existing: messages[index].resources,
+            adding: queryResult.artifacts.map(ChatResource.artifact) + deltaResources
+          )
+          messages[index].metadata = MessageMetadata.fromCompletedTurn(
+            snapshot: kernelContext.snapshot,
+            profile: kernelContext.session.profile,
+            imageByteCount: effectiveImageData?.count,
+            toolNames: toolTiming.toolNames,
+            sqlRowsReturned: metricsSnapshot.sqlRowsReturned,
+            sqlQueryCount: metricsSnapshot.sqlQueryCount
+          )
+          completeRemainingToolCalls(
+            messageId: aiMessageId,
+            terminalStatus: .completed,
+            scheduleJournal: false
+          )
         }
-        let alreadyPersistedCitationOrdinals = Set(durableToolReferences.map(\.ordinal))
-        messages[index].contentBlocks.append(
-          contentsOf: citedReferences.filter {
-            !alreadyPersistedCitationOrdinals.contains($0.ordinal)
-          }.map { reference in
-            .citation(
-              id: "citation-\(reference.ordinal)-\(UUID().uuidString)",
-              reference: reference)
-          })
-        // Merge the parent agent's own artifacts with any produced by
-        // sub-agents that completed since the last coordinator check, so
-        // a finished sub-agent's file surfaces as a card on this response.
-        let deltaResources = queryResult.completionDeltaArtifacts.map(ChatResource.artifact)
-        messages[index].resources = mergedResources(
-          existing: messages[index].resources,
-          adding: queryResult.artifacts.map(ChatResource.artifact) + deltaResources
-        )
-        messages[index].metadata = MessageMetadata.fromCompletedTurn(
-          snapshot: kernelContext.snapshot,
-          profile: kernelContext.session.profile,
-          imageByteCount: effectiveImageData?.count,
-          toolNames: toolTiming.toolNames,
-          sqlRowsReturned: metricsSnapshot.sqlRowsReturned,
-          sqlQueryCount: metricsSnapshot.sqlQueryCount
-        )
-        completeRemainingToolCalls(
-          messageId: aiMessageId,
-          terminalStatus: .completed,
-          scheduleJournal: false
-        )
       } else {
         // The assistant row this turn owns is gone from the transcript while
         // the turn is still authoritative. A session switch is only one way to

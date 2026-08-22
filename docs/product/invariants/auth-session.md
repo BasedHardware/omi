@@ -118,7 +118,7 @@ rejected before any owner-B lookup, render, or journal mutation.
 - `desktop/macos/Desktop/Tests/AuthSessionAttemptFenceTests.swift`
 - `desktop/macos/Desktop/Tests/EffectiveOwnerDatabaseBoundaryTests.swift`
 - `desktop/macos/Desktop/Tests/RuntimeOwnerIdentityTests.swift`
-- `desktop/macos/Desktop/Tests/PushToTalkStateMachineTests.swift`
+- `desktop/macos/Desktop/Tests/VoiceTurnDomainTests/PushToTalkStateMachineTests.swift`
 - `desktop/macos/Desktop/Tests/RewindDatabaseLifecycleTests.swift`
 - `desktop/macos/Desktop/Tests/AgentSyncBatchQueryTests.swift`
 - `desktop/macos/tests/test-signed-artifact-smoke.sh`

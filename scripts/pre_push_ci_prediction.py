@@ -66,6 +66,27 @@ WINDOWS_KGWORKER_NATIVE_CLOSURE_INPUTS = {
     "desktop/windows/pnpm-lock.yaml",
 }
 
+# Every value a caller may pass to `--event`. "local" is the pre-push hook; the rest
+# are GitHub event names, and each one is a trigger some workflow that reaches this
+# script actually declares.
+#
+# This is a hard-failure surface, not a hint: argparse rejects an unlisted value and
+# exits 2, so the calling step dies before it writes a single detect-changes output and
+# every job gated on those outputs is skipped. `desktop-swift-ci.yml` declares
+# `workflow_dispatch` and forwards `${{ github.event_name }}` straight through, so every
+# manual run of it failed at "Detect changed paths" — including the recovery hatch that
+# workflow's own `on:` comment documents as the only way to re-mint exact-SHA release
+# evidence for a commit already on main.
+# `test_every_declared_workflow_trigger_is_an_accepted_event` derives the required set
+# from the workflows' own `on:` blocks, so adding a trigger without adding it here fails
+# that test instead of failing the first manual run.
+ACCEPTED_EVENTS = (
+    "local",
+    "pull_request",
+    "push",
+    "workflow_dispatch",
+)
+
 ROUTING_INPUTS = {
     ".github/checks-manifest.yaml",
     ".github/scripts/run_checks.py",
@@ -78,6 +99,12 @@ ROUTING_INPUTS = {
     "scripts/pre_push_ci_prediction.py",
     ".github/scripts/test_pre_push_ci_prediction.py",
 }
+
+FLUTTER_GENERATION_DEFINITION_INPUTS = {
+    ".github/workflows/mobile-app-checks.yml",
+}
+
+FLUTTER_GENERATION_DEFINITION_PREFIXES = (".github/actions/detect-changes/",)
 
 DESKTOP_SWIFT_TEST_INPUTS = {
     "desktop/macos/Desktop/Package.swift",
@@ -197,6 +224,13 @@ def _is_codegen_input(
 
 def _is_app_l10n_input(path: str) -> bool:
     return (path.startswith("app/lib/l10n/") and path.endswith(".arb")) or path == "app/l10n.yaml"
+
+
+def _defines_flutter_generation(path: str) -> bool:
+    # Routing metadata cannot make a committed generated file stale, but the
+    # files that define the regeneration commands or forward their outputs can:
+    # they must keep waking the regeneration lanes they own.
+    return path in FLUTTER_GENERATION_DEFINITION_INPUTS or path.startswith(FLUTTER_GENERATION_DEFINITION_PREFIXES)
 
 
 def _is_app_compile_smoke_input(path: str) -> bool:
@@ -326,16 +360,21 @@ def resolve_impact(
         if path in WINDOWS_KGWORKER_NATIVE_CLOSURE_INPUTS:
             selected.add("windows-kgworker-native-closure")
 
+    if any(_defines_flutter_generation(path) for path in normalized_paths):
+        selected.update({"flutter-codegen", "flutter-l10n"})
+
     if selector_changed:
-        # The selector is the boundary. A change to it runs all of its fixtures
-        # and conservatively wakes each component lane it can influence.
+        # The selector is the boundary. A change to it conservatively wakes each
+        # component lane it can influence. It deliberately excludes the
+        # generated-artifact regeneration lanes (flutter-codegen, flutter-l10n):
+        # editing routing metadata cannot make a committed generated file stale,
+        # and waking build_runner from a manifest-only diff costs ~17 minutes at
+        # push time. Those lanes stay owned by their real generator inputs.
         selected.update(
             {
                 "app-ci-only",
                 "app-analysis-tests",
                 "app-compile-smoke",
-                "flutter-l10n",
-                "flutter-codegen",
                 "desktop-ci-only",
                 "desktop-flow-lint",
                 "desktop-swift-tests",
@@ -391,7 +430,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--changed-files", type=Path, required=True)
     parser.add_argument("--base", help="Optional Git revision used to detect deleted inputs and marker removals.")
-    parser.add_argument("--event", choices=("local", "pull_request", "push"), default="local")
+    parser.add_argument("--event", choices=ACCEPTED_EVENTS, default="local")
     parser.add_argument("--github-output", type=Path, help="Append established detect-changes outputs to this file.")
     parser.add_argument("--output", choices=("lines", "json"), default="lines")
     args = parser.parse_args()

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -64,6 +66,49 @@ void main() {
     expect(analytics.personProperties.any((properties) => properties['device_vendor'] == 'fieldlabs'), isTrue);
   });
 
+  test('find device coalesces overlapping provider requests', () async {
+    final completion = Completer<bool>();
+    var runnerCalls = 0;
+    final provider = DeviceProvider(
+      findDeviceRunner: (_) {
+        runnerCalls++;
+        return completion.future;
+      },
+    );
+    addTearDown(provider.dispose);
+    provider.connectedDevice = BtDevice(id: 'omi-1', name: 'Omi', type: DeviceType.omi, rssi: -40);
+    provider.isConnected = true;
+
+    final first = provider.findDevice();
+    final second = provider.findDevice();
+
+    expect(identical(first, second), isTrue);
+    expect(runnerCalls, 1);
+
+    completion.complete(true);
+    expect(await first, isTrue);
+    expect(await second, isTrue);
+
+    expect(await provider.findDevice(), isTrue);
+    expect(runnerCalls, 2);
+  });
+
+  test('find device rejects OmiGlass devices before invoking the runner', () async {
+    var runnerCalls = 0;
+    final provider = DeviceProvider(
+      findDeviceRunner: (_) async {
+        runnerCalls++;
+        return true;
+      },
+    );
+    addTearDown(provider.dispose);
+    provider.connectedDevice = BtDevice(id: 'glass-1', name: 'OmiGlass', type: DeviceType.omi, rssi: -40);
+    provider.isConnected = true;
+
+    expect(await provider.findDevice(), isFalse);
+    expect(runnerCalls, 0);
+  });
+
   test('Device Paired is deduped by user and device while connections recur', () async {
     SharedPreferences.setMockInitialValues({'uid': 'user-a'});
     await SharedPreferencesUtil.init();
@@ -119,6 +164,8 @@ void main() {
             rssiTrend: 'falling',
           ),
         ],
+        nativeBackgroundBytesConsumed: 0,
+        nativeBackgroundPacketsConsumed: 0,
         reconnectionCount: 0,
         connectedAt: 0,
         failToConnectCount: 0,

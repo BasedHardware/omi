@@ -26,6 +26,18 @@ enum NotificationSound {
 
 }
 
+/// Named delivery intent for notifications that must not become Chat rows.
+/// The default preserves the existing floating-bar presentation and journaling
+/// path; system-banner-only callers still pass every owner, toggle, and
+/// frequency gate in `NotificationService` before reaching UserNotifications.
+enum NotificationDeliveryMode: Equatable {
+  case standard
+  case systemBannerOnly
+
+  var presentsInFloatingBar: Bool { self == .standard }
+  var requiresSystemBanner: Bool { self == .systemBannerOnly }
+}
+
 @MainActor
 class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   static let shared = NotificationService(registerWithSystemNotificationCenter: true)
@@ -266,7 +278,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
           notificationId: notificationId,
           title: title,
           assistantId: assistantId,
-          surface: "system_notification"
+          surface: "system_notification",
+          dismissalKind: .user
         )
 
       case Self.resetNowActionId:
@@ -329,21 +342,25 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   /// Send a notification via the floating bar, and optionally as a native macOS system banner.
   ///
   /// `deliverSystemBanner` defaults to `false` because proactive AI notifications are
-  /// floating-bar only by default — users who disabled the floating bar reported clicking
-  /// the top-right system banner and getting no conversation context, which was confusing.
-  /// Functional notifications (screen-recording permission
-  /// prompts with a repair action) must pass `deliverSystemBanner: true` so they
+  /// floating-bar cards by default — a bare top-right system banner with no conversation
+  /// context was previously reported as confusing. Functional notifications (screen-recording
+  /// permission prompts with a repair action) must pass `deliverSystemBanner: true` so they
   /// still surface as a system banner — they either have no floating-bar equivalent
   /// or must reach the user even when the floating bar is hidden/snoozed.
   ///
-  /// That default is no longer absolute: `FloatingBarNotificationPreviewPolicy` forces a
-  /// system banner anyway once the user has explicitly muted in-bar previews
-  /// (`ShortcutSettings.floatingBarNotificationPreviewsEnabled == false`) while the Floating
-  /// Bar is still enabled, so the notification is never fully silenced (#6765). That banner
-  /// still lacks the in-bar conversation context noted above — the tradeoff is accepted only
-  /// for that explicit opt-out, not by default. Disabling the Floating Bar itself does
-  /// *not* force a banner: floating-bar-only notifications stay silent in that case, same
-  /// as before this policy existed, per the contentless-banner confusion noted above.
+  /// Only the Notifications master toggle (and frequency gate) decide whether a
+  /// notification is owed. Disabling the Ask Omi bar (`askOmiBarEnabled`) hides the
+  /// persistent bar UI only: delivery still uses the existing temp-show path, which
+  /// pops the card and re-hides afterwards. `FloatingBarNotificationPreviewPolicy`
+  /// forces a system banner once the user has explicitly muted in-bar previews
+  /// (`ShortcutSettings.floatingBarNotificationPreviewsEnabled == false`) while the
+  /// Floating Bar is still enabled, so that opt-out is never fully silenced (#6765).
+  /// Previews muted *and* the bar disabled still temp-shows the card rather than
+  /// going silent or falling back to a contentless banner. That temp-show is a
+  /// proactive-notification surface only: a caller passing `deliverSystemBanner: true`
+  /// while the bar is disabled keeps its banner instead, because a card on a bar the
+  /// user turned off auto-dismisses in seconds and cannot carry a functional notice
+  /// (the screen-recording repair prompt is delivered once per broken-capture episode).
   /// `insightDeliveryID`, when present, is an opaque Advice correlation key. It records only
   /// bounded delivery outcomes and never carries notification text or window context.
   func sendNotification(
@@ -358,7 +375,9 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     insightDeliveryID: UUID? = nil,
     screenshotData: Data? = nil,
     deliverSystemBanner: Bool = false,
+    deliveryMode: NotificationDeliveryMode = .standard,
     respectFrequency: Bool = true,
+    isPersistent: Bool = false,
     authorizationSnapshot suppliedAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) {
     guard !ownerID.isEmpty,
@@ -395,10 +414,10 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       return
     }
 
-    // Hiding the floating bar ("Hide for 2 hours") is a statement about the BAR, not
-    // about notifications: an hour of a movie with the bar hidden must still nudge.
-    // Delivery while hidden goes through the existing temp-show path, which pops the
-    // card and re-hides the bar afterwards. It deliberately does not gate here.
+    // Hiding the floating bar ("Hide for 2 hours") and disabling it are both statements
+    // about the BAR, not about notifications: an hour of a movie with the bar hidden or
+    // off must still nudge. Delivery goes through the existing temp-show path, which pops
+    // the card and re-hides the bar afterwards. It deliberately does not gate here.
 
     // Proactive notifications honor the master Notifications toggle. When the user
     // turns Notifications off in Settings, suppress the floating-bar popup and the
@@ -415,10 +434,38 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       return
     }
 
+    // Every proactive notification belongs to one of the five user-facing categories
+    // (Focus, Task, Insight, Memory, Integration), and this shared boundary is where a category's
+    // Settings toggle binds every producer — goals and meeting action items included,
+    // not just the assistants that consult their own toggle before generating.
+    // Functional notices (`respectFrequency: false`) map to `.general` and stay ungated.
+    if respectFrequency,
+      !Self.categoryToggleAllows(
+        kind: ProactiveNotificationKind.from(assistantId: assistantId),
+        focusEnabled: SuggestionAssistantSettings.shared.isEnabled,
+        taskEnabled: TaskAssistantSettings.shared.notificationsEnabled,
+        insightEnabled: InsightAssistantSettings.shared.notificationsEnabled,
+        memoryEnabled: MemoryAssistantSettings.shared.notificationsEnabled,
+        integrationEnabled: IntegrationNudgeCoordinator.isFeatureEnabled,
+        meetingSummaryEnabled: MeetingSummaryNotificationSettings.isEnabled)
+    {
+      log("NotificationService: suppressing \(assistantId) notification because its category toggle is off")
+      recordInsightDeliveryOutcome(
+        insightDeliveryID,
+        outcome: .suppressed,
+        reason: .assistantNotificationsDisabled
+      )
+      return
+    }
+
     // Proactive notifications honor the user's frequency setting. Functional
     // notifications (Crisp support replies, screen-recording permission prompts,
     // onboarding test) pass `respectFrequency: false` to bypass the gate.
+    // The meeting summary share card is exempt: it is a direct receipt of the
+    // user's own meeting ending, so it must appear after every meeting — the
+    // master toggle and its own category toggle above remain its only gates.
     if respectFrequency
+      && assistantId != MeetingActionItemBannerPolicy.assistantID
       && !isProactiveNotificationEligible(
         assistantId: assistantId,
         now: Date(),
@@ -462,9 +509,12 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
 
     let previewsEnabled = ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled
     let floatingBarEnabled = FloatingControlBarManager.shared.isEnabled
-    let floatingBarPreviewEnabled = FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
-      previewsEnabled: previewsEnabled, floatingBarEnabled: floatingBarEnabled
-    )
+    let floatingBarPreviewEnabled =
+      deliveryMode.presentsInFloatingBar
+      && FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
+        previewsEnabled: previewsEnabled, floatingBarEnabled: floatingBarEnabled,
+        deliverSystemBanner: deliverSystemBanner
+      )
 
     var floatingBarMayDeliver = false
     var floatingBarQueued = false
@@ -480,6 +530,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         suggestionTelemetryIdentity: suggestionTelemetryIdentity,
         insightDeliveryID: insightDeliveryID,
         screenshotData: screenshotData,
+        isPersistent: isPersistent,
         onPresented: recordPresentation
       )
       switch presentation {
@@ -490,8 +541,9 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         // later presentation boundary (or a system-banner fallback) can emit the terminal event.
         floatingBarQueued = true
       case .suppressed:
-        // Unreachable today (a hidden bar presents via temp-show instead of suppressing),
-        // kept for the shared result type; label with the surface, not a retired reason.
+        // Unreachable today (a hidden or disabled bar presents via temp-show instead of
+        // suppressing), kept for the shared result type; label with the surface, not a
+        // retired reason.
         recordInsightDeliveryOutcome(insightDeliveryID, outcome: .suppressed, reason: .floatingBarUnavailable)
         return
       case .rejectedOwnerChange:
@@ -506,23 +558,25 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       }
     }
 
-    // Default path: floating-bar only. Functional callers opt-in via
-    // `deliverSystemBanner: true` (see the parameter doc above). When the user
-    // explicitly muted in-bar previews (bar still enabled), fall back to the
-    // system banner so the notification is never fully silenced. Disabling the
-    // Floating Bar itself does not force a banner — see the parameter doc.
+    // Default path: floating-bar card (including temp-show when the bar is disabled).
+    // Functional callers opt-in via `deliverSystemBanner: true` (see the parameter
+    // doc above). When the user explicitly muted in-bar previews (bar still enabled),
+    // fall back to the system banner so the notification is never fully silenced.
     let shouldDeliverSystemBanner =
-      FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBannerAfterFloatingBar(
+      deliveryMode.requiresSystemBanner
+      || FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBannerAfterFloatingBar(
         previewsEnabled: previewsEnabled, floatingBarEnabled: floatingBarEnabled,
         deliverSystemBanner: deliverSystemBanner,
         floatingBarAccepted: floatingBarMayDeliver || floatingBarQueued
       )
     guard shouldDeliverSystemBanner else {
       if !floatingBarMayDeliver && !floatingBarQueued {
+        // Genuine no-surface failure (window creation / presentation never started).
+        // Bar-disabled is no longer a suppression reason; that path temp-shows.
         recordInsightDeliveryOutcome(
           insightDeliveryID,
-          outcome: floatingBarPreviewEnabled ? .failed : .suppressed,
-          reason: floatingBarPreviewEnabled ? .floatingBarUnavailable : .noDeliverySurface
+          outcome: .failed,
+          reason: .noDeliverySurface
         )
       }
       return
@@ -574,7 +628,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
 
   /// Presentation seam for the flag-on context director. Budget/dedup live in the
   /// durable ledger; this method still re-checks floating-preview policy so a muted
-  /// in-bar preview falls back to a system banner instead of burning quota invisibly.
+  /// in-bar preview (bar still enabled) falls back to a system banner, and a
+  /// disabled bar still temp-shows the card, instead of burning quota invisibly.
   @discardableResult
   func contextDirectorPresentationPreflight(ownerID: String) async -> OwnerBoundNotificationPresentationResult {
     guard !ownerID.isEmpty,
@@ -589,7 +644,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     let floatingBarEnabled = FloatingControlBarManager.shared.isEnabled
     if FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
       previewsEnabled: previewsEnabled,
-      floatingBarEnabled: floatingBarEnabled)
+      floatingBarEnabled: floatingBarEnabled,
+      deliverSystemBanner: false)
     {
       return FloatingControlBarManager.shared.contextNotificationPreflight(
         ownerID: ownerID,
@@ -636,11 +692,29 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       onDropped?()
       return .suppressed
     }
+    // The director's decisions ride the same category toggles as the dedicated
+    // assistants. Settings promises exactly five notification types — Focus, Task,
+    // Insight, Memory, Integration — and a toggle that silences only some producers
+    // of its category would make that promise a lie.
+    guard
+      Self.categoryToggleAllows(
+        kind: ProactiveNotificationKind.from(decisionType: decisionType),
+        focusEnabled: SuggestionAssistantSettings.shared.isEnabled,
+        taskEnabled: TaskAssistantSettings.shared.notificationsEnabled,
+        insightEnabled: InsightAssistantSettings.shared.notificationsEnabled,
+        memoryEnabled: MemoryAssistantSettings.shared.notificationsEnabled,
+        integrationEnabled: IntegrationNudgeCoordinator.isFeatureEnabled,
+        meetingSummaryEnabled: MeetingSummaryNotificationSettings.isEnabled)
+    else {
+      onDropped?()
+      return .suppressed
+    }
 
     let previewsEnabled = ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled
     let floatingBarEnabled = FloatingControlBarManager.shared.isEnabled
     let showInBar = FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
-      previewsEnabled: previewsEnabled, floatingBarEnabled: floatingBarEnabled)
+      previewsEnabled: previewsEnabled, floatingBarEnabled: floatingBarEnabled,
+      deliverSystemBanner: false)
     let deliverSystemBanner = FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBanner(
       previewsEnabled: previewsEnabled, floatingBarEnabled: floatingBarEnabled, deliverSystemBanner: false)
 
@@ -694,6 +768,32 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       )
     }
     return .queued
+  }
+
+  /// Maps every proactive notification kind to its user-facing category — Focus, Task,
+  /// Insight, Memory, or Integration — and answers whether that category's Settings
+  /// toggle allows delivery. Focus is the focus-nudge assistant alone; generic tips,
+  /// resurfaced items, and generated goals are all insights; meeting action items are
+  /// tasks; connect-an-app offers are integrations. `.general` is functional system
+  /// alerting outside the taxonomy and is never category-gated.
+  nonisolated static func categoryToggleAllows(
+    kind: ProactiveNotificationKind,
+    focusEnabled: Bool,
+    taskEnabled: Bool,
+    insightEnabled: Bool,
+    memoryEnabled: Bool,
+    integrationEnabled: Bool,
+    meetingSummaryEnabled: Bool = true
+  ) -> Bool {
+    switch kind {
+    case .suggestion: return focusEnabled
+    case .task: return taskEnabled
+    case .meetingNotes: return meetingSummaryEnabled
+    case .insight, .resurface, .goal: return insightEnabled
+    case .memory: return memoryEnabled
+    case .integration: return integrationEnabled
+    case .general: return true
+    }
   }
 
   private func contextDirectorMayPresent(
@@ -914,7 +1014,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   /// notifications-off-by-default migration (`48239de8`) turned off. A user at Off — or a
   /// fresh install with no stored level — moves to Balanced; a user who opted in to any
   /// other level keeps it. Per-assistant toggles are not touched, so only the categories
-  /// that default on (Live Suggestions, Insight) fire; Task and Memory stay opt-in.
+  /// that default on (Focus, Insight) fire; Task and Memory stay opt-in.
   /// Because it is guarded by `balancedByDefaultMigrationKey`, a user who turns
   /// notifications off after the migration is never re-enabled on subsequent launches.
   /// Call early at launch, before any proactive assistant can fire.

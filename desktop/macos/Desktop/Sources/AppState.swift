@@ -390,6 +390,10 @@ class AppState: ObservableObject {
   @Published var hasAccessibilityPermission = false
   // TCC says yes but AX calls actually fail (common after macOS updates/app re-signs).
   @Published var isAccessibilityBroken = false
+
+  /// Token for the `com.apple.accessibility.api` observer, so the live permission refresh is
+  /// installed exactly once. See `startAccessibilityChangeObserver()`.
+  var accessibilityChangeObserver: NSObjectProtocol?
   @Published var hasFullDiskAccess = false
 
   /// Usage-limit popup state. Set by `triggerUsageLimitPopup(reason:)` when the
@@ -1003,6 +1007,15 @@ extension Notification.Name {
   static let desktopAutomationNavigateRequested = Notification.Name(
     "desktopAutomationNavigateRequested")
   /// Posted by the local desktop automation bridge to open a specific conversation detail.
+  /// Submits the meeting-summary card's Share field with the address in the
+  /// notification object, driving the same handler the Send button calls.
+  static let meetingSummaryShareSubmit = Notification.Name("meetingSummaryShareSubmit")
+
+  /// Opens the meeting-summary card's Share address field. Posted by the
+  /// automation bridge so the field can be exercised without a cursor.
+  static let meetingSummaryShareBeginAddressing = Notification.Name(
+    "meetingSummaryShareBeginAddressing")
+
   static let desktopAutomationOpenConversationRequested = Notification.Name(
     "desktopAutomationOpenConversationRequested")
   static let desktopAutomationSetConversationsSearchRequested = Notification.Name(

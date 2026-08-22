@@ -1,12 +1,12 @@
 ---
 title: "Listen + Pusher Pipeline"
 icon: "tower-broadcast"
-description: "Sequence diagrams for the /v4/listen WebSocket and Pusher processing pipeline"
+description: "Sequence diagrams and finalization policy for the /v4/listen WebSocket and Pusher pipeline"
 ---
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-07-26 (bounded Pusher delivery, validated frames, and durable finalization ownership)
+> Last updated: 2026-08-20 (end-of-conversation wake-word command adjudication)
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, STT providers, embedding API). Update when the
@@ -61,9 +61,22 @@ resource before it creates or resumes a conversation. A client-generated
 clients receive a server-generated UUID. The optional
 `conversation_role=meeting` marker is supplied by desktop after a
 machine-observed call-start boundary; omitted or invalid values remain
-`ambient`. That bounded marker is persisted with the conversation so the
-post-finalization Chat receipt can distinguish meeting notes from ordinary
-always-on ambient chunks without inspecting transcript text.
+`ambient`. That bounded marker is durable session provenance committed at
+OPEN; finalization does not rewrite it based on how long the session lasted.
+
+Meeting treatment is a separate finalization decision. A desktop meeting that
+was neither discarded nor created by a maximum-duration rotation is eligible
+only when its durable `started_at` and `finished_at` span at least five minutes
+and its non-empty transcript covers at least 60 seconds of speech. Speech time
+is the union of valid segment intervals, so overlapping microphone and system-
+audio transcriptions of the same remote speech count once. The backend uses the
+result to gate the meeting Chat receipt and records the verdict, reason,
+duration, and deduplicated speech input on the durable finalization job. The
+conversation document carries only a read projection. Desktop completion
+notifications consume that projection. The synchronous desktop upload route
+writes the same deterministic completed-job receipt and returns its projection.
+Short or mostly silent calls still finalize as ordinary conversations, with
+their original role and provenance unchanged.
 
 The resource atomically binds the recording to exactly one conversation, so
 reconnects return the original canonical mapping rather than falling back to a
@@ -139,7 +152,7 @@ sequenceDiagram
     Backend-->>Client: {type: "conversation_session", conversation_id, recording_session_id, lifecycle_version, lifecycle_phase, lifecycle_sequence}
     Backend->>STT: Open STT WebSocket
     Backend->>Pusher: Open Pusher WebSocket
-    Backend-->>Client: {type: "service_status", status: "ready"}
+    Backend-->>Client: {type: "service_status", status: "ready", provider, reason?}
 
     Note over Backend: Start background tasks:<br/>conversation_lifecycle_manager (5s poll)<br/>speaker_identification_task<br/>stream_transcript_process
 
@@ -178,6 +191,14 @@ environment, outcome, and phase labels. They do not include transcript content,
 user IDs, model revisions, or other high-cardinality request data. Custom-STT
 sessions are excluded because the backend does not own their provider socket or
 provider attempt lifecycle.
+
+The same authoritative attempt emits fail-open PostHog product events:
+`Transcript Started` at first nontrivial audio and exactly one of `Transcript
+Completed`, `Transcript Failed`, or `Transcript Cancelled`. Those events carry
+the durable recording/conversation IDs, selected provider/model/language,
+bounded source/platform, terminal phase, and session duration. The user
+ID is used only as PostHog's `distinct_id`; transcript content and raw provider
+errors are never included.
 
 ### Dev-only parity-pack capture
 
@@ -290,6 +311,26 @@ sequenceDiagram
     end
 ```
 
+Before discard and structured extraction, the finalizer renders a separate
+segment-ID-labelled task transcript. A pure matcher marks evidence-backed
+English `Hey Omi` / `Hey Omie` / `Hey Omni` forms inline, including adjacent segments within
+two seconds and tokens welded to following words. The discard model still
+adjudicates whether a short marked utterance is meaningful, and the structured
+extractor still decides whether it is a concrete command; the marker never
+creates a task by itself.
+
+When and only when the matcher found a phrase, a separately framed,
+extended-reasoning classifier receives the full marked transcript, matched
+segment IDs, content-free extraction references, and speaker labels. Its
+validated discrete verdict and the extractor must agree before an intersecting
+item keeps `explicit_command`; rejection demotes the item to the confidence
+floor and review path. A `task_command` verdict can promote an intersecting
+non-explicit extraction, but it never synthesizes a missing item or changes
+capture confidence. Non-intersecting ambient items are untouched. Question
+verdicts are measured but deliberately produce nothing in v1 because the task
+extractor and capture policy have no question-routing destination. This path
+has no realtime wake-word state or notification surface.
+
 ### 2.1 Durable finalization ownership
 
 `conversation_finalization_jobs/{job_id}` is the finalization ledger. It is
@@ -315,6 +356,14 @@ The job and task payload never contain transcript text, raw BYOK keys, headers,
 or raw exception text. `blocked_byok` is an explicit recovery state: durable
 offline BYOK is not supported without a separately reviewed credential broker;
 the worker must never silently use Omi keys.
+
+Eligible meeting receipts also carry the stable Chat intent ID and, after the
+desktop kernel acknowledges its journal write, the materialization time. With
+`MEETING_RECEIPT_RECONCILER_ENABLED=true`, the existing five-minute
+finalization sweep re-drives receipts that are at least ten minutes old and
+still lack an intent ID. The same sweep pages through historical completed
+desktop meetings to seed missing receipts. The flag defaults off and is
+declared on both backend-listen and Cloud Run backend.
 
 See [Listen finalization jobs](./listen_finalization_jobs) for configuration,
 replay, metrics, and the operational runbook.
@@ -478,7 +527,7 @@ Staleness is fingerprint-driven: when late chunks change `audio_files` (pusher b
 
 | Event | Fields | When |
 |-------|--------|------|
-| `service_status` | `{type, status: "ready"}` | After WS connect, services initialized |
+| `service_status` | `{type, status: "ready", provider?, reason?}` | After WS connect, services initialized. `provider` names the STT provider actually serving (absent for custom-STT sessions); `reason` is `fallback_from_<selected>` only when the fallback chain moved the session off the selected provider |
 | `conversation_session` | `{type, conversation_id, recording_session_id?, status}` | Exact recording-to-conversation binding; identified clients require IDs to match |
 | `memory_processing_started` | `{type, recording_session_id?, memory: {id, ...}}` | Conversation sent to pusher for LLM; only emitted for the listen session's current conversation |
 | `memory_created` | `{type, recording_session_id?, memory: {id, structured: {title, overview, ...}}}` | LLM processing complete; only emitted for the listen session's current conversation |

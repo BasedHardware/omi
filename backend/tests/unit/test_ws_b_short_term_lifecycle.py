@@ -561,6 +561,31 @@ def test_required_processing_failures_back_off_then_quarantine_and_new_revision_
     assert db.docs[f"users/{uid}/memory_items/{memory_id}"]["processing_state"] == ProcessingState.processed.value
 
 
+def test_required_processing_flex_deferral_releases_lease_without_spending_quality_attempt(monkeypatch):
+    from utils.memory.promotion_flex import PromotionFlexDeferred
+
+    uid = "uid-required-flex-deferred"
+    db = _Db(uid)
+    memory_id = _write_required(monkeypatch, uid, db, "manual-flex", "remember tea")
+
+    deferred = process_required_memory_item(
+        uid,
+        memory_id,
+        db_client=db,
+        processor=lambda _item: (_ for _ in ()).throw(PromotionFlexDeferred("capacity")),
+        now=NOW,
+        attempt_lease_seconds=1_200,
+    )
+    recovered = _process(uid, memory_id, db, content="User prefers tea")
+
+    stored = db.docs[f"users/{uid}/memory_items/{memory_id}"]
+    assert deferred.attempted is True
+    assert deferred.retryable is True
+    assert deferred.error_code == "flex_deferred"
+    assert recovered.processed is True
+    assert stored["promotion"]["attempt_count"] == 1
+
+
 def test_required_processing_scan_skips_backoff_rows_without_exceeding_call_budget(
     monkeypatch,
 ):
@@ -719,7 +744,7 @@ def test_negative_user_review_is_authoritative_during_processing_race(monkeypatc
     assert all(doc["payload"]["content_hash"] == stored["content_hash"] for doc in review_events)
 
 
-def test_expired_short_term_is_default_hidden_and_ttl_audited(monkeypatch):
+def test_expired_short_term_remains_visible_until_ttl_disposition_is_applied(monkeypatch, caplog):
     uid = "uid-expired"
     _set_canonical(monkeypatch, uid)
     db = _Db(uid)
@@ -754,6 +779,8 @@ def test_expired_short_term_is_default_hidden_and_ttl_audited(monkeypatch):
     )
     db.docs[f"users/{uid}/memory_items/{item.memory_id}"] = item.model_dump(mode="json")
     db.docs[f"users/{uid}/memory_evidence/{evidence.evidence_id}"] = evidence.model_dump(mode="json")
+    assert [memory.id for memory in read_canonical_memories(uid, db_client=db, now=NOW)] == [item.memory_id]
+    caplog.set_level("INFO", logger="utils.memory.short_term_promotion")
 
     with pytest.MonkeyPatch.context() as local_patch:
         local_patch.setattr(
@@ -770,6 +797,8 @@ def test_expired_short_term_is_default_hidden_and_ttl_audited(monkeypatch):
     assert read_canonical_memories(uid, db_client=db, now=NOW) == []
     assert report.lifecycle_created_count == 1
     assert report.lifecycle_terminal_count == 1
+    assert "expired_without_recorded_disposition" in caplog.text
+    assert "expired_terminal_disposition_applied" in caplog.text
     settled = db.docs[f"users/{uid}/memory_items/{item.memory_id}"]
     assert settled["tier"] == MemoryTier.archive.value
     assert settled["status"] == MemoryItemStatus.hidden.value

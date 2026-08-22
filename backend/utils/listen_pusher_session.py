@@ -45,6 +45,10 @@ PUSHER_RECONNECT_MAX_DELAY = 60.0
 PENDING_REQUEST_TIMEOUT = 120
 MAX_RETRIES_PER_REQUEST = 3
 PENDING_REQUEST_RECOVERY_COOLDOWN = 300
+# Wire contract with utils.pusher_finalization: a claim rejected because a live
+# lease is already finalizing this job reports the non-terminal `job_leased`
+# error. That is healthy in-flight work, not a failed attempt.
+FINALIZATION_IN_FLIGHT_ERROR = 'job_leased'
 
 
 @dataclass
@@ -317,6 +321,15 @@ class ListenPusherSession:
                             self.pending_conversation_requests.pop(conversation_id, None)
                             logger.error(
                                 f"Conversation processing failed terminally: {conversation_id} {self.uid} {self.session_id}"
+                            )
+                        elif result.get("error") == FINALIZATION_IN_FLIGHT_ERROR:
+                            # Another dispatch of this same job holds a live lease
+                            # and is finalizing right now. Re-requesting it can only
+                            # be rejected again, so leave the pending entry on its
+                            # normal timeout instead of spending the session's whole
+                            # retry burst against healthy work.
+                            logger.info(
+                                f"Conversation finalization already in flight: {conversation_id} {self.uid} {self.session_id}"
                             )
                         else:
                             pending = self.pending_conversation_requests.get(conversation_id)

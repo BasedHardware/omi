@@ -490,8 +490,8 @@ final class QueryShellTests: XCTestCase {
     for route in QueryShellRoute.allCases {
       guard let hubView = route.memoryDestination else { continue }
       XCTAssertTrue(
-        MemoryHubDestination.switcherOrder.contains(hubView),
-        "\(route) selects a hub view the hub's own switcher does not show")
+        ActivityDestinationChip.reachableHubDestinations.contains(hubView),
+        "\(route) selects a hub view Activity's chip row has no chip for")
     }
   }
 

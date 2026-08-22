@@ -114,7 +114,7 @@ struct AIResponseView: View {
         return ["chatFirstGoal", id].joined(separator: "\u{1E}")
       case .captureLink(let id, _, _, _):
         return ["chatFirstCapture", id].joined(separator: "\u{1E}")
-      case .conversationLink(let id, _, _):
+      case .conversationLink(let id, _, _, _):
         return ["chatFirstConversation", id].joined(separator: "\u{1E}")
       case .memoryLink(let id, _, _):
         return ["chatFirstMemory", id].joined(separator: "\u{1E}")
@@ -195,8 +195,12 @@ struct AIResponseView: View {
       ForEach(grouped) { group in
         switch group {
         case .text(_, let text):
-          OmiMarkdown(text: text, sender: .ai)
+          OmiMarkdown(text: text, sender: .ai, citations: message.inlineCitationReferences)
             .textSelection(.enabled)
+            .environment(\.colorScheme, .dark)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        case .commentary(_, let text):
+          TurnCommentaryRow(text: text)
             .environment(\.colorScheme, .dark)
             .frame(maxWidth: .infinity, alignment: .leading)
         case .toolCalls(_, let calls):
@@ -245,7 +249,7 @@ struct AIResponseView: View {
         }
       }
     } else if !message.text.isEmpty {
-      OmiMarkdown(text: message.text, sender: .ai)
+      OmiMarkdown(text: message.text, sender: .ai, citations: message.inlineCitationReferences)
         .textSelection(.enabled)
         .environment(\.colorScheme, .dark)
         .frame(maxWidth: .infinity, alignment: .leading)

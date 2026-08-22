@@ -27,6 +27,7 @@ from database import short_term_memories as short_term_db
 from ._client import get_firestore_client
 from models.memories import confidence_fields_for_evidence, merge_evidence_sets
 from utils import encryption
+from utils.other.list_budget import ListReadBudget, budgeted_get_all, budgeted_stream_list
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
 import logging
 
@@ -180,9 +181,156 @@ def _prepare_memory_for_read(memory_data: Optional[Dict[str, Any]], uid: str) ->
     return memory_data
 
 
+def prepare_memory_for_read(memory_data: Optional[Dict[str, Any]], uid: str) -> Optional[Dict[str, Any]]:
+    """Decrypt one historical memory document for non-decorated readers."""
+    return _prepare_memory_for_read(memory_data, uid)
+
+
 # *****************************
 # ********** CRUD *************
 # *****************************
+
+
+# Dual-window list order is ``updated_at`` with ``created_at`` fallback. The
+# released collection is missing ``updated_at`` on a material slice, so there is
+# no single index for that key. Stream two already-indexed windows, merge in
+# Python, then hydrate only the returned page. Content decrypt via
+# ``prepare_for_read`` must not run on the prefix an offset skips — that prefix
+# decrypt is what took GET /v3/memories past HTTP_GET_TIMEOUT on 2026-08-18.
+_MEMORY_LIST_INDEX_FIELDS = (
+    'updated_at',
+    'created_at',
+    'user_review',
+    'invalid_at',
+    'visibility',
+    'capture_device_ids',
+)
+_MEMORY_LIST_CANDIDATE_WINDOW_MAX = 5000
+
+
+def _memory_passes_list_visibility(memory: Dict[str, Any], *, include_invalidated: bool) -> bool:
+    """Return whether a historical memory row should appear in list/read results.
+
+    Product rule: exclude user-rejected rows (``user_review is False``) and, unless
+    ``include_invalidated``, exclude superseded/retracted rows (``invalid_at`` set).
+
+    This cannot be expressed as a Firestore ``where`` without changing results for
+    legacy documents: inequality / ``not-in`` / ``!=`` exclude docs missing the
+    field, while ``== None`` only matches an explicit null — not a missing field.
+    Missing ``user_review`` and missing ``invalid_at`` both mean "still visible"
+    (see #4498). Closest safe query: omit those predicates and filter here.
+    """
+    return memory.get('user_review') is not False and (include_invalidated or memory.get('invalid_at') is None)
+
+
+def _memory_list_sort_key(memory: Dict[str, Any]) -> tuple[float, str]:
+    value = memory.get('updated_at') or memory.get('created_at')
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        except ValueError:
+            value = None
+    if not isinstance(value, datetime):
+        timestamp = float('-inf')
+    else:
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        timestamp = value.timestamp()
+    return (-timestamp, str(memory.get('id') or ''))
+
+
+def _stream_memory_list_index_window(
+    memories_ref: Any,
+    order_field: str,
+    candidate_limit: int,
+    *,
+    budget: Optional[ListReadBudget] = None,
+) -> List[Any]:
+    query = memories_ref.select(list(_MEMORY_LIST_INDEX_FIELDS)).order_by(
+        order_field, direction=firestore.Query.DESCENDING
+    )
+    return budgeted_stream_list(query.limit(candidate_limit), budget)
+
+
+def _merge_memory_list_index_docs(
+    candidate_docs: List[Any],
+    *,
+    include_invalidated: bool,
+) -> List[Dict[str, Any]]:
+    by_id: Dict[str, Dict[str, Any]] = {}
+    for doc in candidate_docs:
+        payload = _typed_doc(doc)
+        doc_id = getattr(doc, 'id', None) or payload.get('id')
+        if not isinstance(doc_id, str) or not doc_id:
+            continue
+        payload.setdefault('id', doc_id)
+        by_id.setdefault(doc_id, payload)
+    return sorted(
+        (
+            memory
+            for memory in by_id.values()
+            if _memory_passes_list_visibility(memory, include_invalidated=include_invalidated)
+        ),
+        key=_memory_list_sort_key,
+    )
+
+
+def list_memory_updated_or_created_index(
+    uid: str,
+    limit: int = 100,
+    offset: int = 0,
+    categories: List[str] = [],
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    include_invalidated: bool = False,
+    *,
+    firestore_client: Any = None,
+    budget: Optional[ListReadBudget] = None,
+) -> List[Dict[str, Any]]:
+    """Newest-first historical index rows without content or decrypt.
+
+    Streams two candidate windows of ``min(limit+offset, 5000)`` metadata
+    documents (``updated_at`` DESC and ``created_at`` DESC), merges them, and
+    returns the requested slice. Callers hydrate only the page they will emit.
+    With a ``budget`` both windows charge their fetched rows and each stream
+    gets the budget's per-RPC timeout (#11831).
+    """
+    database = _get_db(firestore_client)
+    memories_ref = database.collection(users_collection).document(uid).collection(memories_collection)
+    if categories:
+        memories_ref = memories_ref.where(filter=FieldFilter('category', 'in', categories))
+    if start_date:
+        memories_ref = memories_ref.where(filter=FieldFilter('created_at', '>=', start_date))
+    if end_date:
+        memories_ref = memories_ref.where(filter=FieldFilter('created_at', '<=', end_date))
+    candidate_limit = max(1, min(int(limit) + max(int(offset), 0), _MEMORY_LIST_CANDIDATE_WINDOW_MAX))
+    candidate_docs = _stream_memory_list_index_window(memories_ref, 'updated_at', candidate_limit, budget=budget)
+    candidate_docs.extend(_stream_memory_list_index_window(memories_ref, 'created_at', candidate_limit, budget=budget))
+    memories = _merge_memory_list_index_docs(candidate_docs, include_invalidated=include_invalidated)
+    return memories[max(0, int(offset)) : max(0, int(offset)) + max(1, int(limit))]
+
+
+def _fetch_memory_docs_by_ids(
+    uid: str, memory_ids: List[str], *, firestore_client: Any = None, budget: Optional[ListReadBudget] = None
+) -> Dict[str, Dict[str, Any]]:
+    """Batch-get full historical docs. Does not decrypt — callers that need
+    plaintext go through ``prepare_for_read`` or ``_prepare_memory_for_read``."""
+    if not memory_ids:
+        return {}
+    database = _get_db(firestore_client)
+    memories_ref = database.collection(users_collection).document(uid).collection(memories_collection)
+    doc_refs = [memories_ref.document(memory_id) for memory_id in memory_ids]
+    by_id: Dict[str, Dict[str, Any]] = {}
+    for doc in budgeted_get_all(database, doc_refs, budget):
+        if getattr(doc, 'exists', True) is False:
+            continue
+        payload = _typed_doc(doc)
+        doc_id = getattr(doc, 'id', None) or payload.get('id')
+        if not isinstance(doc_id, str) or not doc_id:
+            continue
+        payload.setdefault('id', doc_id)
+        by_id[doc_id] = payload
+    return by_id
 
 
 @prepare_for_read(decrypt_func=cast(_DecryptFunc, _prepare_memory_for_read))
@@ -219,49 +367,25 @@ def get_memories(
         # Python. A row in the final top-N must occur in the corresponding top-N
         # source window (updated rows in updated order, legacy rows in created
         # order), so this remains bounded without dropping old data.
-        candidate_limit = max(1, min(limit + max(offset, 0), 5000))
-
-        def _ordered_query(order_fields: tuple[str, ...]) -> Any:
-            query = memories_ref
-            for field in order_fields:
-                query = query.order_by(field, direction=firestore.Query.DESCENDING)
-            return query.limit(candidate_limit).stream()
-
-        candidate_docs = list(_ordered_query(('updated_at',)))
-        candidate_docs.extend(_ordered_query(('created_at',)))
-        by_id: Dict[str, Dict[str, Any]] = {}
-        for doc in candidate_docs:
-            payload = _typed_doc(doc)
-            doc_id = getattr(doc, 'id', None) or payload.get('id')
-            if not isinstance(doc_id, str) or not doc_id:
-                continue
-            payload.setdefault('id', doc_id)
-            by_id.setdefault(doc_id, payload)
-
-        def _sort_key(memory: Dict[str, Any]) -> tuple[float, str]:
-            value = memory.get('updated_at') or memory.get('created_at')
-            if isinstance(value, str):
-                try:
-                    value = datetime.fromisoformat(value.replace('Z', '+00:00'))
-                except ValueError:
-                    value = None
-            if not isinstance(value, datetime):
-                timestamp = float('-inf')
-            else:
-                if value.tzinfo is None:
-                    value = value.replace(tzinfo=timezone.utc)
-                timestamp = value.timestamp()
-            return (-timestamp, str(memory.get('id') or ''))
-
-        memories = sorted(
-            (
-                memory
-                for memory in by_id.values()
-                if memory.get('user_review') is not False and (include_invalidated or memory.get('invalid_at') is None)
-            ),
-            key=_sort_key,
+        #
+        # The two windows are metadata-only. Full documents (and therefore
+        # ``prepare_for_read`` decrypt) are fetched only for the returned page,
+        # not for the offset prefix. Dual 5000-doc full-document streams plus
+        # prefix decrypt is what 504'd GET /v3/memories at HTTP_GET_TIMEOUT on
+        # 2026-08-18 after the first-page keyset scan fell back here.
+        page_index = list_memory_updated_or_created_index(
+            uid,
+            limit=limit,
+            offset=offset,
+            categories=categories,
+            start_date=start_date,
+            end_date=end_date,
+            include_invalidated=include_invalidated,
+            firestore_client=firestore_client,
         )
-        return memories[max(0, offset) : max(0, offset) + max(1, limit)]
+        page_ids = [str(row['id']) for row in page_index if isinstance(row.get('id'), str) and row.get('id')]
+        by_id = _fetch_memory_docs_by_ids(uid, page_ids, firestore_client=firestore_client)
+        return [by_id[memory_id] for memory_id in page_ids if memory_id in by_id]
 
     # Keep the default query on the existing indexed scoring order. Unrelated
     # legacy callers retain their released order and pagination semantics.
@@ -269,18 +393,18 @@ def get_memories(
         'created_at', direction=firestore.Query.DESCENDING
     )
 
+    # Closest safe Firestore query for this path: category / created_at bounds
+    # (applied above) plus scoring+created_at order, limit, and offset. Do not add
+    # ``user_review`` / ``invalid_at`` FieldFilters — see
+    # ``_memory_passes_list_visibility``. A server-side ``user_review != False``
+    # (or ``not-in [False]``) would also need a new composite index with scoring
+    # and still drop legacy docs missing the field (#4498).
     memories_ref = memories_ref.limit(limit).offset(offset)
 
-    # TODO: put user review to firestore query
     memories: List[Dict[str, Any]] = [_typed_doc(doc) for doc in memories_ref.stream()]
     logger.info(f"get_memories {len(memories)}")
-    # Exclude user-rejected memories, and (by default) superseded/retracted ones.
-    # invalid_at is filtered in Python: old docs lack the field (-> None -> active),
-    # which a Firestore `== None` filter would wrongly drop.
     result: List[Dict[str, Any]] = [
-        memory
-        for memory in memories
-        if memory.get('user_review') is not False and (include_invalidated or memory.get('invalid_at') is None)
+        memory for memory in memories if _memory_passes_list_visibility(memory, include_invalidated=include_invalidated)
     ]
     return result
 
@@ -303,12 +427,17 @@ def _historical_scan_page(
     limit: int,
     start_after: Optional[HistoricalScanCursor],
     firestore_client: Any,
+    budget: Optional[ListReadBudget] = None,
 ) -> tuple[list[dict[str, Any]], list[HistoricalScanCursor], bool]:
     """Shared bounded keyset scan for one historical order field.
 
-    Returns decrypted payloads (snapshot.id as ``id`` authority), the raw scan
+    Returns payloads (snapshot.id as ``id`` authority), the raw scan
     cursors aligned 1:1 with those payloads, and whether the underlying query
-    is exhausted. Callers filter duplicates / visibility into None slots.
+    is exhausted. Callers filter duplicates / visibility into None slots and
+    decrypt only rows they may emit — decrypting the skipped prefix here is
+    what left first-page ``read_page`` with no time for the offset fallback.
+    With a ``budget`` the page's stream gets the per-RPC timeout and its rows
+    are charged (#11831).
     """
     database = _get_db(firestore_client)
     memories_ref = database.collection(users_collection).document(uid).collection(memories_collection)
@@ -325,7 +454,7 @@ def _historical_scan_page(
                 '__name__': memories_ref.document(cursor_memory_id),
             }
         )
-    snapshots = list(query.limit(bounded_limit).stream())
+    snapshots = budgeted_stream_list(query.limit(bounded_limit), budget)
     payloads: list[dict[str, Any]] = []
     cursors: list[HistoricalScanCursor] = []
     for snapshot in snapshots:
@@ -339,10 +468,7 @@ def _historical_scan_page(
             order_time = _coerce_historical_scan_time(order_raw)
         else:
             order_time = datetime.fromtimestamp(0, tz=timezone.utc)
-        decrypted = _prepare_memory_for_read(payload, uid) or payload
-        decrypted = dict(decrypted)
-        decrypted['id'] = doc_id
-        payloads.append(decrypted)
+        payloads.append(payload)
         cursors.append((order_time, doc_id))
     exhausted = len(snapshots) < bounded_limit
     return payloads, cursors, exhausted
@@ -354,6 +480,7 @@ def scan_memories_updated_at_page(
     limit: int = 100,
     start_after: Optional[HistoricalScanCursor] = None,
     firestore_client: Any = None,
+    budget: Optional[ListReadBudget] = None,
 ) -> tuple[list[dict[str, Any]], list[HistoricalScanCursor], bool]:
     """Bounded updated_at-present historical keyset page (updated_at DESC, __name__ ASC)."""
     return _historical_scan_page(
@@ -363,6 +490,7 @@ def scan_memories_updated_at_page(
         limit=limit,
         start_after=start_after,
         firestore_client=firestore_client,
+        budget=budget,
     )
 
 
@@ -372,12 +500,9 @@ def scan_memories_created_at_page(
     limit: int = 100,
     start_after: Optional[HistoricalScanCursor] = None,
     firestore_client: Any = None,
+    budget: Optional[ListReadBudget] = None,
 ) -> tuple[list[dict[str, Any]], list[HistoricalScanCursor], bool]:
-    """Bounded created_at historical keyset page (created_at DESC, __name__ ASC).
-
-    Callers must filter updated_at-present duplicates so each document is owned
-    by exactly one of the dual streams.
-    """
+    """Bounded created_at historical keyset page with updated_at-present rows filtered by the caller."""
     return _historical_scan_page(
         uid,
         order_field='created_at',
@@ -385,6 +510,7 @@ def scan_memories_created_at_page(
         limit=limit,
         start_after=start_after,
         firestore_client=firestore_client,
+        budget=budget,
     )
 
 
@@ -594,7 +720,13 @@ def get_memory(uid: str, memory_id: str, *, firestore_client: Any = None) -> Opt
     return memory_data
 
 
-def get_memories_by_ids(uid: str, memory_ids: List[str], *, firestore_client: Any = None) -> List[Dict[str, Any]]:
+def get_memories_by_ids(
+    uid: str,
+    memory_ids: List[str],
+    *,
+    firestore_client: Any = None,
+    budget: Optional[ListReadBudget] = None,
+) -> List[Dict[str, Any]]:
     """
     Batch fetch multiple memories by their IDs.
     Uses Firestore's get_all for efficient batch retrieval.
@@ -607,7 +739,7 @@ def get_memories_by_ids(uid: str, memory_ids: List[str], *, firestore_client: An
     memories_ref = user_ref.collection(memories_collection)
 
     doc_refs = [memories_ref.document(memory_id) for memory_id in memory_ids]
-    docs = database.get_all(doc_refs)
+    docs = budgeted_get_all(database, doc_refs, budget)
 
     memories: List[Dict[str, Any]] = []
     for doc in docs:

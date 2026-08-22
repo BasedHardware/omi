@@ -51,3 +51,28 @@ int? _annualMonthsFree(List<Map<String, dynamic>> plans) {
   if (monthlyAmount == null || yearlyAmount == null || monthlyAmount <= 0) return null;
   return (monthlyAmount, yearlyAmount);
 }
+
+/// Whether the mobile plans sheet should show Continue / Upgrade.
+///
+/// Locked (docs/agents/plan-catalog.md) — do not restore `!isOnAnnualPlan`:
+/// that hid Continue for every annual subscriber and blocked Plus → Unlimited.
+/// Hide only when the user is already on the selected tier's annual price.
+/// Desktop-entitled plans are manage-only on this sheet: same-tier
+/// monthly→annual is still a management action; switching onto Plus /
+/// Unlimited / Neo is not.
+bool shouldShowPlanContinueButton({
+  required bool isOnAnnualPlan,
+  required bool hasScheduledUpgrade,
+  required bool isCancelled,
+  required bool plansLoaded,
+  String? selectedTierId,
+  String? currentTierId,
+  bool currentGrantsDesktop = false,
+}) {
+  if (!plansLoaded || isCancelled || hasScheduledUpgrade) return false;
+  if (currentGrantsDesktop && selectedTierId != null && currentTierId != null && selectedTierId != currentTierId) {
+    return false;
+  }
+  if (isOnAnnualPlan && (selectedTierId == null || selectedTierId == currentTierId)) return false;
+  return true;
+}

@@ -93,6 +93,14 @@ final class ContextBucketPurgerTests: XCTestCase {
         sql:
           "INSERT INTO proactive_deliveries (id, bucketID, decisionType, lifecycleState, provenanceJson, attemptedAt, expiresAt, createdAt) VALUES ('delivery', 'bucket', 'suggest', 'delivered', ?, ?, ?, ?)",
         arguments: ["{\"excluded narrative\":true}", now, now.addingTimeInterval(60), now])
+      try database.execute(
+        sql: """
+          INSERT INTO proactive_candidates
+            (id, bucketID, message, groundingFactIDsJson, triggerNote, state, createdAt, expiresAt)
+          VALUES ('candidate', 'bucket', 'excluded narrative still needs review', '[]',
+                  'when relevant', 'armed', ?, ?)
+          """,
+        arguments: [now, now.addingTimeInterval(12 * 60 * 60)])
 
       let result = try ContextBucketPurger.deleteWithArtifacts(
         appName: "Secret", in: database, now: now)
@@ -101,6 +109,7 @@ final class ContextBucketPurgerTests: XCTestCase {
       XCTAssertEqual(try Int.fetchOne(database, sql: "SELECT COUNT(*) FROM context_visits WHERE appName = 'Keep'"), 1)
       XCTAssertEqual(try Int.fetchOne(database, sql: "SELECT COUNT(*) FROM bucket_versions"), 0)
       XCTAssertEqual(try Int.fetchOne(database, sql: "SELECT COUNT(*) FROM proactive_deliveries"), 0)
+      XCTAssertEqual(try Int.fetchOne(database, sql: "SELECT COUNT(*) FROM proactive_candidates"), 0)
       XCTAssertEqual(
         try String.fetchAll(database, sql: "SELECT narrative FROM bucket_entries"), ["surviving narrative"])
       XCTAssertEqual(

@@ -323,7 +323,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get searchApps => 'Cerca aplicacions...';
 
   @override
-  String get myApps => 'Les meves aplicacions';
+  String get myApps => 'Creat per mi';
 
   @override
   String get installedApps => 'Aplicacions instal·lades';
@@ -9896,6 +9896,19 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Abrir tienda';
+
+  @override
+  String get sendRawAudioToOmi => 'Envia l\'àudio sense processar a Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Desactiva-ho per impedir que l\'àudio sense processar s\'enviï a Omi. Les transcripcions i les dades necessàries per a les funcions al núvol encara es poden enviar a Omi.';
+
+  @override
+  String get findDevice => 'Troba';
+
+  @override
+  String get diagnosticsShareFailed => 'No s\'ha pogut compartir el diagnòstic. Torna-ho a provar.';
 
   @override
   String get appDisabledTitle => 'Aquesta app està desactivada i no es pot instal·lar.';

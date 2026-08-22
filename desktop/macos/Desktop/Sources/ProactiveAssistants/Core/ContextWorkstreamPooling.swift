@@ -58,6 +58,12 @@ enum ContextWorkstreamPooling {
   static let recencyHalfLifeHours = 6.0
   /// Bound on candidates fetched from SQL before in-memory scoring.
   static let candidateFetchLimit = 200
+  /// Cross-app facts too new for the reconciler to have tagged: last 15 minutes,
+  /// high-worthiness only, one per source bucket, three total.
+  static let recentContextWindow: TimeInterval = 15 * 60
+  static let recentContextWorthinessFloor = 0.6
+  static let recentContextMaximumItems = 3
+  static let recentContextMaximumPerBucket = 1
   /// A bucket majority tag only stands in for a missing own-visit tag when it
   /// is this dominant among the bucket's tagged facts…
   static let bucketMajorityShare = 0.8
@@ -66,7 +72,7 @@ enum ContextWorkstreamPooling {
 
   private static let scaffoldingPrefixes = [
     "identifier", "ambient narrative", "evidence fragment", "evidence record",
-    "proposed record", "proposal ",
+    "proposed record", "proposed fact", "proposal ", "proposal:",
   ]
 
   /// Extraction-model scaffolding re-copied into `statement` reads as prose but
@@ -98,11 +104,19 @@ enum ContextWorkstreamPooling {
   /// Quality gate and ranking: worthiness floor, scaffolding filter, then
   /// worthiness plus a recency half-life, capped per source bucket.
   static func select(
-    _ candidates: [ContextWorkstreamPoolItem], now: Date
+    _ candidates: [ContextWorkstreamPoolItem],
+    now: Date,
+    worthinessFloor: Double = Self.worthinessFloor,
+    maximumItems: Int = Self.maximumItems,
+    maximumPerBucket: Int = Self.maximumPerBucket,
+    createdAfter: Date? = nil
   ) -> [ContextWorkstreamPoolItem] {
     let scored =
       candidates
-      .filter { $0.notifyWorthiness >= worthinessFloor && !isScaffolding($0.statement) }
+      .filter { item in
+        item.notifyWorthiness >= worthinessFloor && !isScaffolding(item.statement)
+          && (createdAfter.map { item.createdAt >= $0 } ?? true)
+      }
       .map { item -> (score: Double, item: ContextWorkstreamPoolItem) in
         let ageHours = max(0, now.timeIntervalSince(item.createdAt)) / 3600
         return (item.notifyWorthiness + pow(0.5, ageHours / recencyHalfLifeHours), item)
@@ -122,23 +136,66 @@ enum ContextWorkstreamPooling {
     return selected
   }
 
+  /// Newest high-worthiness facts from other windows, too fresh for tagging.
+  static func selectRecent(
+    _ candidates: [ContextWorkstreamPoolItem], now: Date
+  ) -> [ContextWorkstreamPoolItem] {
+    select(
+      candidates,
+      now: now,
+      worthinessFloor: recentContextWorthinessFloor,
+      maximumItems: recentContextMaximumItems,
+      maximumPerBucket: recentContextMaximumPerBucket,
+      createdAfter: now.addingTimeInterval(-recentContextWindow))
+  }
+
   /// The section rides in the uncached volatile suffix, below the untrusted
   /// preamble that opens the stable prompt, exactly like the retrieval hop's
   /// section. Pooled facts are printed without their ids on purpose: the
   /// director cannot cite what it was never handed a ref for, so delivery
   /// grounding remains own-bucket by construction.
   static func promptSection(tag: String, items: [ContextWorkstreamPoolItem], now: Date) -> String? {
+    formattedSection(
+      header: "RELATED WORKSTREAM CONTEXT (\(tag))",
+      intro: """
+        Validated facts from other buckets in the same workstream, most relevant first.
+        Context only: use them to connect what the user is doing across apps.
+        They are not citable: never place them in bucket_entry_refs or fact_ids.
+        Do not re-deliver a point they already cover from this bucket.
+        """,
+      items: items,
+      now: now)
+  }
+
+  static func recentContextPromptSection(
+    items: [ContextWorkstreamPoolItem], now: Date
+  ) -> String? {
+    formattedSection(
+      header: "RECENT CONTEXT FROM OTHER WINDOWS (last 15 min)",
+      intro: """
+        Validated facts from other windows in the last 15 minutes, most relevant first.
+        Context only: use them to connect what the user is doing across apps.
+        They are not citable: never place them in bucket_entry_refs or fact_ids.
+        Do not re-deliver a point they already cover from this bucket.
+        """,
+      items: items,
+      now: now)
+  }
+
+  private static func formattedSection(
+    header: String,
+    intro: String,
+    items: [ContextWorkstreamPoolItem],
+    now: Date
+  ) -> String? {
     guard !items.isEmpty else { return nil }
     let lines = items.map { item in
       "- [\(String(item.appName.prefix(24))), \(relativeAge(from: item.createdAt, now: now))] "
         + String(item.statement.prefix(300))
     }
     return """
-      == RELATED WORKSTREAM CONTEXT (\(tag)) ==
-      Validated facts from other buckets in the same workstream, most relevant first.
-      Context only: use them to connect what the user is doing across apps. They are
-      not citable — never place them in bucket_entry_refs or fact_ids — and a point
-      they already cover must not be re-delivered from this bucket.
+      == \(header) ==
+      \(intro)
       \(lines.joined(separator: "\n"))
       """
   }

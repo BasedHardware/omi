@@ -317,6 +317,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     publishNamedBundleRuntimeManifest()
 
     runStartupSystemMaintenance()
+    pruneExpiredAgentToolOutputs()
 
     log("AppDelegate: applicationDidFinishLaunching started (mode: \(OMIApp.launchMode.rawValue))")
     log("AppDelegate: AuthState.isSignedIn=\(AuthState.shared.isSignedIn)")
@@ -522,7 +523,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // Route completed background-agent results into live voice sessions.
     AgentCompletionVoiceDelivery.shared.start()
 
+    Task { await ContextWorkstreamReconciler.shared.start() }
+
     scheduleAppLifecycleMaintenance()
+
+    // Offer an integration when the user opens an app Omi can connect to.
+    //
+    // Deliberately outside the signed-in branch below: at launch, auth is often
+    // still being restored, so that branch is skipped for exactly the users who
+    // are signed in — the observer would then never be installed for the life of
+    // the process. The policy checks sign-in at decision time instead, and the
+    // coordinator re-scopes its history on `runtimeOwnerDidChange`.
+    IntegrationNudgeCoordinator.shared.start()
 
     // Identify user if already signed in
     if AuthState.shared.isSignedIn {
@@ -749,6 +761,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
           executable: command.executable,
           arguments: command.arguments
         )
+      }
+    }
+  }
+
+  /// Expire leftover agent `tool-output` JSON so existing installs reclaim disk
+  /// on the next launch, without waiting for a chat that starts the Node runtime.
+  private func pruneExpiredAgentToolOutputs() {
+    let artifactsDirectory = URL(
+      fileURLWithPath: AgentRuntimeProcess.defaultArtifactsDirectory())
+    DispatchQueue.global(qos: .utility).async {
+      let deleted = AgentArtifactRetention.pruneExpiredToolOutputs(in: artifactsDirectory)
+      if deleted > 0 {
+        log("AppDelegate: pruned \(deleted) expired agent tool-output files")
       }
     }
   }
@@ -1253,8 +1278,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
   }
 
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-    let shouldTerminate = !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
-    if shouldTerminate {
+    let isSuspendedForPermissionPrompt = ShellSummon.isSuspendedForPermissionPrompt
+    let shouldTerminate = ShellSummon.shouldTerminateAfterLastWindowClosed(
+      hasCompletedOnboarding: UserDefaults.standard.bool(forKey: DefaultsKey.hasCompletedOnboarding.rawValue),
+      isSuspendedForPermissionPrompt: isSuspendedForPermissionPrompt)
+    if isSuspendedForPermissionPrompt {
+      log("AppDelegate: Last window closed for a permission prompt — staying alive to receive the answer")
+    } else if shouldTerminate {
       log(
         "AppDelegate: Last onboarding window closed — terminating instead of keeping a background menu bar process"
       )
@@ -1344,6 +1374,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
 
     // Stop recurring task scheduler
     RecurringTaskScheduler.shared.stop()
+    Task { await ContextWorkstreamReconciler.shared.stop() }
 
     // Finalize the active Rewind MP4 chunk while the app is still alive.
     // AVAssetWriter files are not readable until finishWriting writes the trailer.

@@ -21,7 +21,10 @@ from pydantic import BaseModel, Field, model_validator
 
 from database._client import db as default_db_client
 from database.firestore_index_registry import CANONICAL_CONSOLIDATION_QUERY
-from database.memory_apply_store import MissingMemoryDocument, apply_long_term_patch_firestore
+from database.memory_apply_store import (
+    MissingMemoryDocument,
+    apply_long_term_patch_firestore,
+)
 from database.memory_collections import MemoryCollections
 from database.vector_db import query_memory_vector_candidates
 from models.memory_evidence import SourceState
@@ -31,7 +34,11 @@ from models.memory_apply import (
     build_patch_mutation_identity,
     memory_content_hash,
 )
-from models.memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
+from models.memory_contracts import (
+    DurablePatchDecision,
+    LifecycleState,
+    deterministic_contract_id,
+)
 from models.memory_operations import MemoryOperation, MemoryOperationType
 from models.memory_promotion import (
     PromotionGraphPlan,
@@ -45,21 +52,40 @@ from models.product_memory import (
     MemoryItemStatus,
     MemoryLayer,
     ProcessingState,
+    effective_short_term_expiry,
 )
+from langchain_core.messages import HumanMessage, SystemMessage
+
 from utils.executors import llm_executor, submit_with_context
 from utils.llm.clients import get_llm
+from utils.llm.prompt_cache import EXPLICIT_CACHE_OPTIONS, has_cacheable_prefix
 from utils.log_sanitizer import sanitize_pii
 from utils.memory.memory_system import (
     MemorySystem as MemorySystem,  # compatibility export for older test doubles; never used for routing
     ensure_canonical_apply_control_state,
     resolve_memory_system as resolve_memory_system,  # compatibility export; universal routing does not call it
 )
+from utils.memory.canonical_required_processing import (
+    ProcessedRequiredMemory,
+    commit_required_processing,
+    is_pending_required_processing,
+    list_pending_required_processing_items,
+)
+from utils.memory.decision_path_telemetry import emit_memory_promotion_decision, emit_memory_promotion_failure
+from utils.memory.rejected_memory_feedback import (
+    RejectedMemoryFeedback,
+    get_recent_rejected_memory_feedback,
+)
+from utils.memory.promotion_flex import (
+    PromotionFlexControlChanged,
+    PromotionFlexDeferred,
+)
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
 CONSOLIDATION_BY = "canonical_batched_consolidation"
-DEFAULT_CONSOLIDATION_BATCH_THRESHOLD = 10
+DEFAULT_CONSOLIDATION_BATCH_THRESHOLD = 20
 DEFAULT_CANDIDATES_PER_ITEM = 8
 DEFAULT_CONSOLIDATION_QUERY_LIMIT = 250
 MAX_CONSOLIDATION_QUERY_LIMIT = 500
@@ -243,6 +269,7 @@ def _claim_retry_state_transaction(
     item: MemoryItem,
     lease_owner: str,
     now: datetime,
+    lease_seconds: int,
 ) -> tuple[ConsolidationRetryState, bool]:
     ref = db_client.document(_retry_state_document_path(uid, item))
     snapshot = ref.get(transaction=transaction)
@@ -279,7 +306,7 @@ def _claim_retry_state_transaction(
         last_error_code=prior.last_error_code if prior is not None else "attempt_claimed",
         last_attempt_at=now,
         lease_owner=lease_owner,
-        lease_expires_at=now + timedelta(seconds=CONSOLIDATION_ATTEMPT_LEASE_SECONDS),
+        lease_expires_at=now + timedelta(seconds=lease_seconds),
     )
     transaction.set(ref, state.model_dump(mode="python"))
     return state, True
@@ -292,9 +319,10 @@ def _claim_retry_state(
     lease_owner: str,
     now: datetime,
     db_client: Any,
+    lease_seconds: int = CONSOLIDATION_ATTEMPT_LEASE_SECONDS,
 ) -> tuple[ConsolidationRetryState, bool]:
     transaction = db_client.transaction()
-    return _claim_retry_state_transaction(transaction, db_client, uid, item, lease_owner, now)
+    return _claim_retry_state_transaction(transaction, db_client, uid, item, lease_owner, now, lease_seconds)
 
 
 @transactional
@@ -410,13 +438,15 @@ def _is_promotable_for_consolidation(item: MemoryItem, *, now: datetime) -> bool
         return False
     if item.status != MemoryItemStatus.active:
         return False
-    if item.processing_state != ProcessingState.processed:
-        return False
     if item.source_state != SourceState.active:
         return False
-    if item.expires_at is not None and item.expires_at <= current_time:
+    if is_pending_required_processing(item):
+        # Explicit submissions must still reach the planner. Conversation STM
+        # expires at 48h; required rows stay eligible until they get a route.
+        return True
+    if item.processing_state != ProcessingState.processed:
         return False
-    return True
+    return effective_short_term_expiry(item) > current_time
 
 
 def consolidation_enabled() -> bool:
@@ -425,7 +455,10 @@ def consolidation_enabled() -> bool:
 
 
 def consolidation_batch_threshold() -> int:
-    raw = os.getenv("MEMORY_CANONICAL_CONSOLIDATION_BATCH_THRESHOLD", str(DEFAULT_CONSOLIDATION_BATCH_THRESHOLD))
+    raw = os.getenv(
+        "MEMORY_CANONICAL_CONSOLIDATION_BATCH_THRESHOLD",
+        str(DEFAULT_CONSOLIDATION_BATCH_THRESHOLD),
+    )
     try:
         return max(1, int(raw))
     except ValueError:
@@ -443,16 +476,24 @@ def consolidation_batch_cap() -> int:
 
 
 def max_consolidation_batches_per_pass() -> int:
-    """Upper bound on LLM consolidation calls per maintenance pass."""
-    raw = os.getenv("MEMORY_CANONICAL_CONSOLIDATION_MAX_BATCHES_PER_PASS", "10")
+    """Upper bound on LLM consolidation calls per maintenance pass.
+
+    Default 25 * batch cap 20 drains 500 pending Short-term rows, which is the
+    consolidation query window ceiling. Flex job-budget deferral still
+    stops the loop before the Cloud Run hour expires.
+    """
+    raw = os.getenv("MEMORY_CANONICAL_CONSOLIDATION_MAX_BATCHES_PER_PASS", "25")
     try:
         return max(1, int(raw))
     except ValueError:
-        return 10
+        return 25
 
 
 def candidates_per_item_limit() -> int:
-    raw = os.getenv("MEMORY_CANONICAL_CONSOLIDATION_CANDIDATES_PER_ITEM", str(DEFAULT_CANDIDATES_PER_ITEM))
+    raw = os.getenv(
+        "MEMORY_CANONICAL_CONSOLIDATION_CANDIDATES_PER_ITEM",
+        str(DEFAULT_CANDIDATES_PER_ITEM),
+    )
     try:
         return max(1, min(20, int(raw)))
     except ValueError:
@@ -460,7 +501,11 @@ def candidates_per_item_limit() -> int:
 
 
 def _is_active_consolidation_item(item: MemoryItem) -> bool:
-    return item.status == MemoryItemStatus.active and item.processing_state == ProcessingState.processed
+    if item.status != MemoryItemStatus.active:
+        return False
+    if item.processing_state == ProcessingState.processed:
+        return True
+    return is_pending_required_processing(item)
 
 
 def list_pending_consolidation_items(
@@ -477,6 +522,11 @@ def list_pending_consolidation_items(
     if limit <= 0:
         raise ValueError("consolidation query limit must be positive")
     effective_limit = min(limit, MAX_CONSOLIDATION_QUERY_LIMIT)
+    required_items = list_pending_required_processing_items(
+        uid,
+        db_client=client,
+        limit=min(effective_limit, 100),
+    )
     query = CANONICAL_CONSOLIDATION_QUERY.build(
         client.collection(MemoryCollections(uid=uid).memory_items),
         {
@@ -503,12 +553,22 @@ def list_pending_consolidation_items(
     for item in items:
         if item.uid != uid:
             raise ValueError(f"consolidation query uid mismatch for {item.memory_id}")
+    if start_after is not None:
+        cursor_time, cursor_memory_id = start_after
+        cursor_time = _coerce_aware_utc(cursor_time)
+        required_items = [
+            item for item in required_items if (item.captured_at, item.memory_id) > (cursor_time, cursor_memory_id)
+        ]
+    merged: Dict[str, MemoryItem] = {item.memory_id: item for item in required_items}
+    merged.update({item.memory_id: item for item in items})
     pending = [
         item
-        for item in items
-        if _is_active_consolidation_item(item) and _is_promotable_for_consolidation(item, now=current_time)
+        for item in merged.values()
+        if item.uid == uid
+        and _is_active_consolidation_item(item)
+        and _is_promotable_for_consolidation(item, now=current_time)
     ]
-    return sorted(pending, key=lambda item: (item.captured_at, item.memory_id))
+    return sorted(pending, key=lambda item: (item.captured_at, item.memory_id))[:effective_limit]
 
 
 def consolidation_trigger_reason(
@@ -529,6 +589,7 @@ class ConsolidationCandidate:
     tier: str
     captured_at: str
     sensitivity_labels: tuple[str, ...] = ()
+    user_rejected: bool = False
 
 
 @dataclass
@@ -536,6 +597,7 @@ class ConsolidationContext:
     uid: str
     pending_items: List[MemoryItem]
     candidates_by_anchor: Dict[str, List[ConsolidationCandidate]] = field(default_factory=_empty_candidate_map)
+    owner_rejected_examples: List[RejectedMemoryFeedback] = field(default_factory=list)
 
     @property
     def hydrated_memory_ids(self) -> Set[str]:
@@ -543,6 +605,7 @@ class ConsolidationContext:
         for candidates in self.candidates_by_anchor.values():
             for candidate in candidates:
                 ids.add(candidate.memory_id)
+        ids.update(feedback.memory_id for feedback in self.owner_rejected_examples)
         return ids
 
 
@@ -576,6 +639,22 @@ def gather_consolidation_candidates(
     per_item = candidate_limit if candidate_limit is not None else candidates_per_item_limit()
     context = ConsolidationContext(uid=uid, pending_items=list(pending_items))
     cache: Dict[str, Optional[MemoryItem]] = {item.memory_id: item for item in pending_items}
+    try:
+        pending_ids = set(cache)
+        context.owner_rejected_examples = [
+            feedback
+            for feedback in get_recent_rejected_memory_feedback(uid, db_client=client)
+            if feedback.memory_id not in pending_ids
+        ]
+    except Exception as exc:
+        logger.warning("consolidation rejection feedback unavailable uid=%s reason=%s", uid, type(exc).__name__)
+        record_fallback(
+            component="other",
+            from_mode="canonical_consolidation_rejection_feedback",
+            to_mode="consolidation_without_rejection_feedback",
+            reason="other",
+            outcome="degraded",
+        )
 
     for anchor in pending_items:
         content = (anchor.content or "").strip()
@@ -601,6 +680,7 @@ def gather_consolidation_candidates(
                     tier=item.tier.value,
                     captured_at=item.captured_at.isoformat(),
                     sensitivity_labels=tuple(item.sensitivity_labels),
+                    user_rejected=(item.promotion or {}).get("user_review") is False,
                 )
             )
             if len(candidates) >= per_item:
@@ -721,7 +801,19 @@ def format_consolidation_llm_context(context: ConsolidationContext) -> str:
     """Serialize a bounded, sensitivity-aware batch for the consolidation agent."""
     memories: List[Payload] = []
     candidate_groups: List[Payload] = []
-    payload: Payload = {"memories": memories, "candidate_groups": candidate_groups}
+    payload: Payload = {
+        "memories": memories,
+        "candidate_groups": candidate_groups,
+        "owner_rejected_examples": [
+            {
+                "memory_id": feedback.memory_id,
+                "content": feedback.content,
+                "updated_at": feedback.updated_at.isoformat(),
+                "user_rejected": True,
+            }
+            for feedback in context.owner_rejected_examples
+        ],
+    }
     for item in context.pending_items:
         restricted = _has_restricted_sensitivity(item.sensitivity_labels)
         content = item.content or ""
@@ -764,6 +856,7 @@ def format_consolidation_llm_context(context: ConsolidationContext) -> str:
                     )
                 ),
                 "sensitivity_labels": item.sensitivity_labels,
+                "requires_normalization": is_pending_required_processing(item),
             }
         )
     for anchor_id, candidates in context.candidates_by_anchor.items():
@@ -787,6 +880,7 @@ def format_consolidation_llm_context(context: ConsolidationContext) -> str:
                         "tier": c.tier,
                         "captured_at": c.captured_at,
                         "sensitivity_labels": list(c.sensitivity_labels),
+                        "user_rejected": c.user_rejected,
                     }
                     for c in candidates[:CONSOLIDATION_CONTEXT_CANDIDATES_PER_ANCHOR_MAX_COUNT]
                 ],
@@ -820,7 +914,13 @@ class ConsolidationAgentDecision(BaseModel):
         "other_speaker",
         "unclear",
     ] = "unclear"
-    aboutness: Literal["primary_user", "user_owned_project", "user_relationship", "third_party", "unclear"] = "unclear"
+    aboutness: Literal[
+        "primary_user",
+        "user_owned_project",
+        "user_relationship",
+        "third_party",
+        "unclear",
+    ] = "unclear"
     basis_for_memory: Literal["explicit", "recurring", "inferred_pattern", "weak_or_none"] = "weak_or_none"
     confidence: Literal["high", "medium", "low"] = "medium"
     rationale: str = ""
@@ -890,15 +990,26 @@ Rules:
   an adopted user preference or commitment.
 - For promote, emit concise memory_text plus a structured assertion:
   subject_entity_id, snake_case predicate, and at least one named argument.
+- Items with requires_normalization=true are raw explicit submissions. Normalize
+  them into memory_text, snake_case predicate, and arguments as part of this
+  same decision. Archive/reject remain valid terminal routes; do not leave them
+  without a durable outcome.
 - Use supersedes only when older active facts are outdated/false or when this
   synthesized item intentionally replaces/merges them.
 - Duplicate candidates route archive or reject; do not promote another copy.
+- owner_rejected_examples and vector candidates with user_rejected=true are
+  owner-rejected negative examples. A near-duplicate of an owner-rejected item
+  MUST NOT route promote; route it archive or reject with
+  reconciliation=duplicate and target_memory_id set.
+- A pending memory whose promotion.user_review=false was itself rejected by
+  the owner and MUST NOT route promote.
 - Compatible facts use reconciliation=keep_both and supersedes=[].
 - evidence_ids must be a subset of the source item's evidence IDs.
 - review/archive/reject are terminal outcomes and must never silently promote.
 - sensitivity_labels are authoritative. A source with any restricted label
   ({restricted_sensitivity_labels}) MUST NOT route promote.
-- aboutness=third_party or unclear MUST NOT route promote.
+- aboutness=third_party MUST NOT route promote. aboutness=unclear is not a veto;
+  apply the relationship, usefulness, and authoritative source-attribution rules.
 - relationship_to_user asking_about, encountered, or unclear MUST NOT route
   promote. other_speaker is promotable only for recurring user_relationship
   context; otherwise route archive/review/reject.
@@ -919,35 +1030,62 @@ Reference conflict-resolution patterns (adapt for batch reasoning):
   this observation; workflow derives enduring loop identity from canonical time
   and that first evidence anchor rather than trusting model-authored identity.
 
-Batch JSON:
-{context_json}
-
 {format_instructions}
 """
 
+CONSOLIDATION_CACHE_KEY = "omi-canonical-consolidation-v2"
 
-def _invoke_consolidation_llm(prompt: str) -> str:
-    response = get_llm("memory_conflict").invoke(prompt)
+
+def build_consolidation_llm_messages(context: ConsolidationContext) -> list[Any]:
+    """Stable cached prefix + volatile batch JSON on a message boundary.
+
+    GPT-5.6 only serves a cache read when the stable text ends on an explicit
+    breakpoint. Putting Batch JSON in the same message as the planner rules
+    would force a unique write on every 20-item call.
+    """
+    parser = PydanticOutputParser(pydantic_object=ConsolidationAgentBatch)
+    prefix = CONSOLIDATION_AGENT_PROMPT.format(
+        format_instructions=parser.get_format_instructions(),
+        restricted_sensitivity_labels=", ".join(sorted(RESTRICTED_SENSITIVITY_LABELS)),
+    )
+    suffix = f"Batch JSON:\n{format_consolidation_llm_context(context)}"
+    block: Dict[str, Any] = {"type": "text", "text": prefix}
+    if has_cacheable_prefix(prefix):
+        block["prompt_cache_breakpoint"] = {"mode": "explicit"}
+    return [SystemMessage(content=[block]), HumanMessage(content=suffix)]
+
+
+def _invoke_consolidation_llm(messages: list[Any]) -> str:
+    cache_enabled = False
+    if messages:
+        content = getattr(messages[0], "content", None)
+        if isinstance(content, list) and content:
+            first = content[0]
+            cache_enabled = isinstance(first, dict) and "prompt_cache_breakpoint" in first
+    llm = get_llm(
+        "memory_conflict",
+        cache_key=CONSOLIDATION_CACHE_KEY if cache_enabled else None,
+        prompt_cache_options=EXPLICIT_CACHE_OPTIONS if cache_enabled else None,
+    )
+    response = llm.invoke(messages)
     return cast(str, getattr(response, "content", str(response)))
 
 
 def invoke_consolidation_agent(
     context: ConsolidationContext,
     *,
-    llm_invoke: Optional[Callable[[str], str]] = None,
+    llm_invoke: Optional[Callable[[Any], str]] = None,
 ) -> ConsolidationAgentBatch:
     """Single batched LLM call — sole decider for consolidation outcomes."""
     parser = PydanticOutputParser(pydantic_object=ConsolidationAgentBatch)
-    prompt = CONSOLIDATION_AGENT_PROMPT.format(
-        context_json=format_consolidation_llm_context(context),
-        format_instructions=parser.get_format_instructions(),
-        restricted_sensitivity_labels=", ".join(sorted(RESTRICTED_SENSITIVITY_LABELS)),
-    )
+    messages = build_consolidation_llm_messages(context)
     try:
         if llm_invoke is not None:
-            raw = llm_invoke(prompt)
+            raw = llm_invoke(messages)
         else:
-            raw = submit_with_context(llm_executor, _invoke_consolidation_llm, prompt).result()
+            raw = submit_with_context(llm_executor, _invoke_consolidation_llm, messages).result()
+    except (PromotionFlexControlChanged, PromotionFlexDeferred):
+        raise
     except Exception as exc:
         logger.warning(
             "consolidation_agent_invoke_failed uid=%s error=%s",
@@ -977,6 +1115,12 @@ class ConsolidationApplySkipped(Exception):
 def _agent_batch_blocks_watermark(agent_batch: ConsolidationAgentBatch) -> bool:
     """True when agent output is unusable (invoke/parse failure)."""
     return agent_batch.reasoning.startswith(("parse_failed:", "invoke_failed:", "output_invalid:"))
+
+
+def _stable_decision_failure_reason(error_code: str) -> str:
+    """Drop item IDs and free-form tails while retaining an aggregatable class."""
+    parts = (error_code or "unknown").split(":")
+    return ":".join(parts[:2])
 
 
 def _consolidation_decision_identity(
@@ -1025,11 +1169,17 @@ def _validate_agent_batch(
     for decision in agent_batch.decisions:
         source = pending_by_id[decision.source_memory_id]
         if decision.route == "promote":
+            if (source.promotion or {}).get("user_review") is False:
+                return f"output_invalid:user_rejected_promotion:{source.memory_id}"
             if set(source.sensitivity_labels).intersection(RESTRICTED_SENSITIVITY_LABELS):
                 return f"output_invalid:restricted_sensitivity_promotion:{source.memory_id}"
-            if decision.aboutness in {"third_party", "unclear"}:
+            if decision.aboutness == "third_party":
                 return f"output_invalid:unsafe_aboutness_promotion:{source.memory_id}"
-            relationship_is_durable = decision.relationship_to_user in {"self", "owned_work", "adopted"} or (
+            relationship_is_durable = decision.relationship_to_user in {
+                "self",
+                "owned_work",
+                "adopted",
+            } or (
                 decision.relationship_to_user == "other_speaker"
                 and decision.aboutness == "user_relationship"
                 and decision.basis_for_memory == "recurring"
@@ -1049,14 +1199,25 @@ def _validate_agent_batch(
                 attribution_is_unknown = attribution in {"unknown", "legacy_assumed"} or not source_subject_id
                 if attribution_is_unknown and not source.user_asserted:
                     return f"output_invalid:unknown_source_subject_promotion:{source.memory_id}"
-                if attribution not in {"user", "third_party", "unknown", "legacy_assumed"}:
+                if attribution not in {
+                    "user",
+                    "third_party",
+                    "unknown",
+                    "legacy_assumed",
+                }:
                     return f"output_invalid:unknown_source_subject_promotion:{source.memory_id}"
                 if source_subject_id and decision.subject_entity_id != source_subject_id:
                     return f"output_invalid:source_subject_contradiction:{source.memory_id}"
-                if attribution == "user" and not (
-                    (decision.relationship_to_user == "self" and decision.aboutness == "primary_user")
-                    or (decision.relationship_to_user == "owned_work" and decision.aboutness == "user_owned_project")
-                    or (decision.relationship_to_user == "adopted" and decision.aboutness == "user_relationship")
+                if (
+                    attribution == "user"
+                    and decision.aboutness != "unclear"
+                    and not (
+                        (decision.relationship_to_user == "self" and decision.aboutness == "primary_user")
+                        or (
+                            decision.relationship_to_user == "owned_work" and decision.aboutness == "user_owned_project"
+                        )
+                        or (decision.relationship_to_user == "adopted" and decision.aboutness == "user_relationship")
+                    )
                 ):
                     return f"output_invalid:source_subject_contradiction:{source.memory_id}"
                 third_party_is_person = attribution == "third_party" and subject_kind in {
@@ -1247,6 +1408,48 @@ def _promotion_audit(
     return audit
 
 
+def _processed_from_consolidation_decision(
+    source: MemoryItem,
+    decision: ConsolidationAgentDecision,
+) -> ProcessedRequiredMemory:
+    content = (decision.memory_text or source.content or "").strip()
+    if not content:
+        raise ConsolidationApplySkipped(f"required source has no normalizable content: {source.memory_id}")
+    predicate = (decision.predicate or source.predicate or "remembered_fact").strip()
+    subject = (decision.subject_entity_id or source.subject_entity_id or "user").strip()
+    try:
+        return ProcessedRequiredMemory(
+            content=content[:1000],
+            subject_entity_id=subject,
+            predicate=predicate,
+            arguments=dict(decision.arguments or source.arguments or {}),
+            sensitivity_labels=list(source.sensitivity_labels or []),
+            rationale=(decision.rationale or "normalized during consolidation")[:500],
+        )
+    except Exception as exc:
+        raise ConsolidationApplySkipped(
+            f"required source could not be normalized from the consolidation decision: {source.memory_id}"
+        ) from exc
+
+
+def _bind_required_promote_memory_text(
+    source: MemoryItem,
+    decision: ConsolidationAgentDecision,
+) -> ConsolidationAgentDecision:
+    """Keep promote text identical to L2 content so INV-MEM-4 receipt hashes match.
+
+    L2 commit and the promote patch are separate ledger applies. After a successful
+    L2 write the item is already processed with ``required=True``; a later pass or
+    mixed batch must still bind ``memory_text`` to that stored content, not a
+    rewritten planner string.
+    """
+    if decision.route != "promote":
+        return decision
+    if not (source.promotion or {}).get("required"):
+        return decision
+    return decision.model_copy(update={"memory_text": source.content})
+
+
 def apply_consolidation_decision(
     uid: str,
     *,
@@ -1262,6 +1465,17 @@ def apply_consolidation_decision(
     source = pending_by_id.get(decision.source_memory_id)
     if source is None:
         raise ConsolidationApplySkipped(f"missing pending source: {decision.source_memory_id}")
+    if is_pending_required_processing(source):
+        processed = _processed_from_consolidation_decision(source, decision)
+        try:
+            source = commit_required_processing(source, processed, db_client=db_client, now=now)
+        except Exception as exc:
+            raise ConsolidationApplySkipped(
+                f"required processing apply failed for {decision.source_memory_id}"
+            ) from exc
+        pending_by_id[source.memory_id] = source
+        control = _read_control_state(uid, db_client=db_client)
+    decision = _bind_required_promote_memory_text(source, decision)
     if (
         source.tier != MemoryLayer.short_term
         or source.status != MemoryItemStatus.active
@@ -1367,7 +1581,12 @@ def _safe_consolidation_failure_code(reason: str) -> str:
         return ":".join(segments[:2])[:120]
     if segments[0] == "output_invalid":
         return ":".join(segments[:2])[:120]
-    if segments[0] in {"candidate_hydration", "recurrence_handoff", "apply_blocked", "retry_state"}:
+    if segments[0] in {
+        "candidate_hydration",
+        "recurrence_handoff",
+        "apply_blocked",
+        "retry_state",
+    }:
         return ":".join(segments[:2])[:120]
     return segments[0][:120]
 
@@ -1437,9 +1656,7 @@ def _escalate_to_terminal_review(
                 report.retryable_memory_ids.append(item.memory_id)
             _append_report_error(
                 report,
-                f"consolidation_terminal_route_failed:"
-                f"{type(review_exc).__name__}:"
-                f"{type(quarantine_exc).__name__}",
+                f"consolidation_terminal_route_failed:{type(review_exc).__name__}:{type(quarantine_exc).__name__}",
             )
             try:
                 _transition_retry_state(
@@ -1569,6 +1786,79 @@ def _record_batch_failure(
     )
 
 
+@transactional
+def _release_deferred_retry_state_transaction(
+    transaction: Any,
+    db_client: Any,
+    uid: str,
+    item: MemoryItem,
+    error_code: str,
+    now: datetime,
+    expected_lease_owner: str,
+) -> ConsolidationRetryState:
+    ref = db_client.document(_retry_state_document_path(uid, item))
+    snapshot = ref.get(transaction=transaction)
+    payload = _snapshot_payload(snapshot)
+    if not payload:
+        raise ValueError("consolidation retry state is missing")
+    prior = ConsolidationRetryState.model_validate(payload)
+    if (
+        prior.uid != uid
+        or prior.memory_id != item.memory_id
+        or prior.source_item_revision != item.item_revision
+        or prior.source_content_hash != item.content_hash
+    ):
+        raise ValueError("consolidation retry state identity mismatch")
+    if prior.lease_owner != expected_lease_owner:
+        raise ValueError("consolidation retry lease ownership changed")
+    state = prior.model_copy(
+        update={
+            "attempt_count": max(prior.attempt_count - 1, 0),
+            "status": "retryable",
+            "last_error_code": error_code,
+            "last_attempt_at": now,
+            "lease_owner": None,
+            "lease_expires_at": None,
+        }
+    )
+    transaction.set(ref, state.model_dump(mode="python"))
+    return state
+
+
+def _record_deferred_batch_failure(
+    uid: str,
+    items: List[MemoryItem],
+    *,
+    claimed_states: Dict[str, ConsolidationRetryState],
+    error_code: str,
+    report: ConsolidationReport,
+    now: datetime,
+    db_client: Any,
+) -> None:
+    safe_code = _safe_consolidation_failure_code(error_code)
+    _append_report_error(report, safe_code)
+    for item in items:
+        state = claimed_states.get(item.memory_id)
+        if state is None or state.lease_owner is None:
+            _append_report_error(report, "retry_state:missing_claim")
+            continue
+        try:
+            transaction = db_client.transaction()
+            _release_deferred_retry_state_transaction(
+                transaction,
+                db_client,
+                uid,
+                item,
+                safe_code,
+                now,
+                state.lease_owner,
+            )
+        except Exception as exc:
+            _append_report_error(report, f"retry_state:deferred_release_{type(exc).__name__}")
+        if item.memory_id not in report.retryable_memory_ids:
+            report.retryable_memory_ids.append(item.memory_id)
+
+
 def run_canonical_consolidation(
     uid: str,
     *,
@@ -1577,6 +1867,8 @@ def run_canonical_consolidation(
     run_id: str,
     llm_invoke: Optional[Callable[[str], str]] = None,
     recurrence_signal_sink: Optional[Callable[..., int]] = None,
+    attempt_lease_seconds: int = CONSOLIDATION_ATTEMPT_LEASE_SECONDS,
+    result_guard: Optional[Callable[[], None]] = None,
 ) -> ConsolidationReport:
     """Batched consolidation entry point for one canonical user."""
     client: Any = db_client if db_client is not None else default_db_client
@@ -1710,6 +2002,7 @@ def run_canonical_consolidation(
                     lease_owner=attempt_lease_owner,
                     now=current_time,
                     db_client=client,
+                    lease_seconds=attempt_lease_seconds,
                 )
             except Exception as exc:
                 watermark_blocked = True
@@ -1724,7 +2017,10 @@ def run_canonical_consolidation(
                 elif claimed_state.status == "quarantined":
                     if item.memory_id not in report.quarantined_memory_ids:
                         report.quarantined_memory_ids.append(item.memory_id)
-                    _append_report_error(report, f"consolidation_quarantined:{claimed_state.last_error_code}")
+                    _append_report_error(
+                        report,
+                        f"consolidation_quarantined:{claimed_state.last_error_code}",
+                    )
                 elif (
                     claimed_state.status == "in_progress"
                     and claimed_state.lease_expires_at is not None
@@ -1765,6 +2061,14 @@ def run_canonical_consolidation(
                 uid,
                 type(exc).__name__,
             )
+            for item in llm_pending_batch:
+                emit_memory_promotion_failure(
+                    logger,
+                    uid=uid,
+                    memory_id=item.memory_id,
+                    status="candidate_hydration_failed",
+                    reason_code=f"candidate_hydration:{type(exc).__name__}",
+                )
             _record_batch_failure(
                 uid,
                 llm_pending_batch,
@@ -1778,7 +2082,29 @@ def run_canonical_consolidation(
             )
             offset += effective_batch_cap
             continue
-        agent_batch = invoke_consolidation_agent(context, llm_invoke=llm_invoke)
+        try:
+            agent_batch = invoke_consolidation_agent(context, llm_invoke=llm_invoke)
+        except (PromotionFlexControlChanged, PromotionFlexDeferred) as exc:
+            watermark_blocked = True
+            for item in llm_pending_batch:
+                emit_memory_promotion_failure(
+                    logger,
+                    uid=uid,
+                    memory_id=item.memory_id,
+                    status="flex_deferred",
+                    reason_code=f"flex_deferred:{type(exc).__name__}",
+                )
+            _record_deferred_batch_failure(
+                uid,
+                llm_pending_batch,
+                claimed_states=claimed_states,
+                error_code=f"flex_deferred:{type(exc).__name__}",
+                report=report,
+                now=current_time,
+                db_client=client,
+            )
+            offset += effective_batch_cap
+            continue
         batches_run += 1
         pending_by_id = {item.memory_id: item for item in llm_pending_batch}
 
@@ -1790,6 +2116,17 @@ def run_canonical_consolidation(
                 uid,
                 output_error,
             )
+            decisions_by_id = {decision.source_memory_id: decision for decision in agent_batch.decisions}
+            for item in llm_pending_batch:
+                planned = decisions_by_id.get(item.memory_id)
+                emit_memory_promotion_failure(
+                    logger,
+                    uid=uid,
+                    memory_id=item.memory_id,
+                    route=planned.route if planned is not None else "none",
+                    status="decision_invalid",
+                    reason_code=_stable_decision_failure_reason(output_error),
+                )
             _record_batch_failure(
                 uid,
                 llm_pending_batch,
@@ -1804,6 +2141,34 @@ def run_canonical_consolidation(
             offset += effective_batch_cap
             continue
 
+        if result_guard is not None:
+            try:
+                result_guard()
+            except PromotionFlexControlChanged as exc:
+                watermark_blocked = True
+                decisions_by_id = {decision.source_memory_id: decision for decision in agent_batch.decisions}
+                for item in llm_pending_batch:
+                    planned = decisions_by_id.get(item.memory_id)
+                    emit_memory_promotion_failure(
+                        logger,
+                        uid=uid,
+                        memory_id=item.memory_id,
+                        route=planned.route if planned is not None else "none",
+                        status="flex_deferred",
+                        reason_code=f"flex_deferred:{type(exc).__name__}",
+                    )
+                _record_deferred_batch_failure(
+                    uid,
+                    llm_pending_batch,
+                    claimed_states=claimed_states,
+                    error_code=f"flex_deferred:{type(exc).__name__}",
+                    report=report,
+                    now=current_time,
+                    db_client=client,
+                )
+                offset += effective_batch_cap
+                continue
+
         for signal in agent_batch.recurrence_signals:
             recurrence_signals_by_id[signal.stable_loop_key] = signal
         if recurrence_signal_sink is not None and agent_batch.recurrence_signals:
@@ -1816,10 +2181,21 @@ def run_canonical_consolidation(
             except Exception as exc:
                 watermark_blocked = True
                 logger.warning(
-                    'consolidation_recurrence_handoff_blocked uid=%s reason=%s',
+                    "consolidation_recurrence_handoff_blocked uid=%s reason=%s",
                     uid,
                     type(exc).__name__,
                 )
+                decisions_by_id = {decision.source_memory_id: decision for decision in agent_batch.decisions}
+                for item in llm_pending_batch:
+                    planned = decisions_by_id.get(item.memory_id)
+                    emit_memory_promotion_failure(
+                        logger,
+                        uid=uid,
+                        memory_id=item.memory_id,
+                        route=planned.route if planned is not None else "none",
+                        status="recurrence_handoff_failed",
+                        reason_code=f"recurrence_handoff:{type(exc).__name__}",
+                    )
                 _record_batch_failure(
                     uid,
                     llm_pending_batch,
@@ -1861,6 +2237,25 @@ def run_canonical_consolidation(
                     pending_decision.source_memory_id for pending_decision in ordered_decisions[decision_index:]
                 }
                 unresolved_items = [item for item in llm_pending_batch if item.memory_id in unresolved_ids]
+                unresolved_decisions = {
+                    pending_decision.source_memory_id: pending_decision
+                    for pending_decision in ordered_decisions[decision_index:]
+                }
+                for item in unresolved_items:
+                    planned = unresolved_decisions[item.memory_id]
+                    is_failed_decision = item.memory_id == decision.source_memory_id
+                    emit_memory_promotion_failure(
+                        logger,
+                        uid=uid,
+                        memory_id=item.memory_id,
+                        route=planned.route,
+                        status="apply_failed" if is_failed_decision else "batch_aborted",
+                        reason_code=(
+                            f"apply_blocked:{type(exc).__name__}"
+                            if is_failed_decision
+                            else "batch_aborted:prior_apply_failure"
+                        ),
+                    )
                 _record_batch_failure(
                     uid,
                     unresolved_items,
@@ -1875,6 +2270,18 @@ def run_canonical_consolidation(
                 batch_apply_failed = True
                 break
             if applied_ids:
+                emit_memory_promotion_decision(
+                    logger,
+                    uid=uid,
+                    memory_id=decision.source_memory_id,
+                    route=decision.route,
+                    reconciliation=decision.reconciliation,
+                    relationship_to_user=decision.relationship_to_user,
+                    aboutness=decision.aboutness,
+                    basis_for_memory=decision.basis_for_memory,
+                    confidence=decision.confidence,
+                    status="applied",
+                )
                 report.decisions_applied += 1
                 if decision.source_memory_id not in batched_ids:
                     batched_ids.append(decision.source_memory_id)
@@ -1918,7 +2325,10 @@ def run_canonical_consolidation(
 
     if batched_ids and not watermark_blocked:
         updated_control = _read_control_state(uid, db_client=client).model_copy(
-            update={"last_consolidation_run_at": current_time, "updated_at": current_time}
+            update={
+                "last_consolidation_run_at": current_time,
+                "updated_at": current_time,
+            }
         )
         _persist_control_state(updated_control, db_client=client)
         report.last_consolidation_run_at = current_time

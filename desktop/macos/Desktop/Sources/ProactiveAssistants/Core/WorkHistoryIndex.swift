@@ -10,10 +10,19 @@ struct WorkHistoryVisitRecord: Equatable, Sendable {
   var bucketID: String?
   var outcome: String
 
-  func jsonObject(clock: (Date) -> String) -> [String: Any] {
+  /// - Parameter now: the instant `minutes_ago` is measured against — the same `generated_at`
+  ///   the payload reports, so every visit in one payload is anchored to one clock.
+  func jsonObject(clock: (Date) -> String, now: Date) -> [String: Any] {
+    // A bare "15:25" cannot be turned into "how long ago" by anything reading this payload, which
+    // is how a visit that had not yet ended got reported as hours old. Two ISO-8601 strings per
+    // visit fixed that and cost ~50 tokens each — up to 724 on a full 20-visit payload, most of
+    // the saving the handles-first path exists to produce. One integer says the same thing in
+    // four, and says it more directly than a timestamp the reader has to subtract.
+    let minutesAgo = max(0, Int(now.timeIntervalSince(endedAt ?? startedAt) / 60))
     var object: [String: Any] = [
       "start": clock(startedAt),
       "end": clock(endedAt ?? startedAt),
+      "minutes_ago": minutesAgo,
       "app": appName,
       "title": title,
       "handles": handles.map { $0.jsonObject() },
@@ -21,6 +30,11 @@ struct WorkHistoryVisitRecord: Equatable, Sendable {
     ]
     if let bucketID {
       object["bucket_id"] = bucketID
+    }
+    if endedAt == nil {
+      // An open visit is the answer to "what am I in right now". Saying so beats letting a
+      // reader infer that it ended the moment it started.
+      object["ongoing"] = true
     }
     return object
   }

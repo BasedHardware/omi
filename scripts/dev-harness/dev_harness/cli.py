@@ -222,6 +222,7 @@ def _stop_single_service(cfg: config.HarnessConfig, record: dict[str, object]) -
     service = str(record.get("service"))
     if not safety.process_exists(pid):
         return
+    descendants = safety.descendant_pids(pid)
     try:
         safety.validate_owned_pid(pid, process_manifest=cfg.layout.process_manifest, service=service)
         _signal_owned_process_group(pid, service)
@@ -238,6 +239,7 @@ def _stop_single_service(cfg: config.HarnessConfig, record: dict[str, object]) -
             os.killpg(pid, signal.SIGTERM)
         except (ProcessLookupError, PermissionError):
             pass
+    _reap_detached_port_holders(record, descendants)
     remaining = [entry for entry in _process_records(cfg) if entry.get("service") != service]
     _save_manifests(cfg, remaining)
 
@@ -370,6 +372,8 @@ def print_config(cfg: config.HarnessConfig) -> None:
     print(f"llm_gateway: {cfg.llm_gateway_url}")
     print(f"backend: {cfg.backend_url}")
     print(f"desktop_backend: {cfg.desktop_backend_url}")
+    if cfg.dev_bind_host != "127.0.0.1":
+        print(f"dev_bind_host: {cfg.dev_bind_host} (set via {config.DEV_BIND_HOST_ENV} or {config.APP_DEV_HOST_ENV})")
 
 
 def print_provider_status(cfg: config.HarnessConfig) -> providers.ProviderPreflight:
@@ -604,7 +608,10 @@ def _firebase_command(cfg: config.HarnessConfig) -> list[str]:
     emulators = payload.setdefault("emulators", {})
     for name, port in (("firestore", cfg.firestore_port), ("auth", cfg.auth_port)):
         emulator = emulators.setdefault(name, {})
-        emulator["host"] = "127.0.0.1"
+        # The Auth emulator is what a physical device's Firebase SDK connects to
+        # directly (not through the backend), so it must bind wherever the
+        # backend does for device reachability to work at all (#11774).
+        emulator["host"] = cfg.dev_bind_host
         emulator["port"] = port
     firestore = payload.setdefault("firestore", {})
     firestore["rules"] = str(cfg.repo_root / "firestore.rules")
@@ -751,7 +758,7 @@ def _start_app_services(cfg: config.HarnessConfig) -> None:
             "uvicorn",
             "llm_gateway.main:app",
             "--host",
-            "127.0.0.1",
+            cfg.dev_bind_host,
             "--port",
             str(cfg.llm_gateway_port),
         ],
@@ -762,7 +769,7 @@ def _start_app_services(cfg: config.HarnessConfig) -> None:
     _start_process(
         cfg,
         "backend",
-        [sys.executable, "-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", str(cfg.backend_port)],
+        [sys.executable, "-m", "uvicorn", "main:app", "--host", cfg.dev_bind_host, "--port", str(cfg.backend_port)],
         cwd=cfg.repo_root / "backend",
         log_name="backend.log",
         port=cfg.backend_port,
@@ -776,7 +783,7 @@ def _start_app_services(cfg: config.HarnessConfig) -> None:
             "uvicorn",
             "desktop_backend:app",
             "--host",
-            "127.0.0.1",
+            cfg.dev_bind_host,
             "--port",
             str(cfg.desktop_backend_port),
         ],
@@ -1023,8 +1030,51 @@ def _signal_owned_process_group(pid: int, service: str) -> None:
         raise safety.SafetyError(f"Cannot signal process group {pid}: {exc}") from exc
 
 
+def _reap_detached_port_holders(record: dict[str, object], descendants: tuple[int, ...]) -> None:
+    """Stop a detached child that survived the group signal and still owns the service port.
+
+    Ownership is proven twice over: the PID was a descendant of the manifest-validated
+    supervisor before any signal was sent, and it is still holding the port this service
+    recorded. Anything else on the port is left alone.
+    """
+
+    service = str(record.get("service"))
+    port = int(record.get("port", 0) or 0)
+    if port <= 0 or not descendants:
+        return
+    try:
+        holders = safety.listening_pids(port)
+    except safety.SafetyError as exc:
+        print(f"{service}: cannot inspect port {port} after stop: {exc}")
+        return
+    owned = [pid for pid in holders if pid in descendants]
+    for pid in holders:
+        if pid not in descendants:
+            print(f"{service}: port {port} held by unowned pid {pid}; leaving it for safety inspection")
+    for pid in owned:
+        try:
+            os.kill(pid, signal.SIGTERM)
+            print(f"{service}: sent SIGTERM to detached child {pid} still holding port {port}")
+        except (ProcessLookupError, PermissionError) as exc:
+            print(f"{service}: cannot stop detached child {pid} on port {port}: {exc}")
+    deadline = time.time() + 5
+    while time.time() < deadline and any(safety.process_exists(pid) for pid in owned):
+        time.sleep(0.25)
+    for pid in owned:
+        if not safety.process_exists(pid):
+            continue
+        try:
+            os.kill(pid, signal.SIGKILL)
+            print(f"{service}: sent SIGKILL to detached child {pid} still holding port {port}")
+        except (ProcessLookupError, PermissionError) as exc:
+            print(f"{service}: detached child {pid} still holds port {port}: {exc}")
+
+
 def _stop_owned(cfg: config.HarnessConfig) -> None:
     records = _process_records(cfg)
+    # Capture the tree while the supervisors are alive; detached children (the
+    # Firestore emulator JVM) are unreachable through the process group.
+    descendants = {int(record.get("pid", -1)): safety.descendant_pids(int(record.get("pid", -1))) for record in records}
     for record in records:
         pid = int(record.get("pid", -1))
         service = str(record.get("service"))
@@ -1055,6 +1105,7 @@ def _stop_owned(cfg: config.HarnessConfig) -> None:
         pid = int(record.get("pid", -1))
         if safety.process_exists(pid):
             print(f"{record.get('service')}: still running pid={pid}; leaving it for safety inspection")
+        _reap_detached_port_holders(record, descendants.get(pid, ()))
     _save_manifests(cfg, records)
 
 

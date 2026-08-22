@@ -297,6 +297,8 @@ class BleDeviceDiagnostics {
     required this.reconnectionCount,
     required this.connectedAt,
     required this.failToConnectCount,
+    required this.nativeBackgroundBytesConsumed,
+    required this.nativeBackgroundPacketsConsumed,
   });
 
   List<BleDisconnectEvent> disconnectHistory;
@@ -309,12 +311,21 @@ class BleDeviceDiagnostics {
   /// silent-failure path separately from established-then-dropped disconnects.
   int failToConnectCount;
 
+  /// BLE bytes consumed by native offline writers since the app most recently
+  /// entered the background. These packets intentionally never reach Dart.
+  int nativeBackgroundBytesConsumed;
+
+  /// BLE notification packets represented by [nativeBackgroundBytesConsumed].
+  int nativeBackgroundPacketsConsumed;
+
   List<Object?> _toList() {
     return <Object?>[
       disconnectHistory,
       reconnectionCount,
       connectedAt,
       failToConnectCount,
+      nativeBackgroundBytesConsumed,
+      nativeBackgroundPacketsConsumed,
     ];
   }
 
@@ -329,6 +340,8 @@ class BleDeviceDiagnostics {
       reconnectionCount: result[1]! as int,
       connectedAt: result[2]! as int,
       failToConnectCount: result[3]! as int,
+      nativeBackgroundBytesConsumed: result[4]! as int,
+      nativeBackgroundPacketsConsumed: result[5]! as int,
     );
   }
 

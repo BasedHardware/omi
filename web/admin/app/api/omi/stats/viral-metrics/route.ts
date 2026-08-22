@@ -1,10 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth";
+import {
+  applyFirestoreActivationCompat,
+  type FirestoreActivationCompat,
+} from "@/lib/activation-compat";
+import { activationCacheKey } from "@/app/api/omi/stats/activation/route";
+import { getPayload } from "@/lib/payload-cache";
 import { posthogResults } from "@/lib/posthog";
+import {
+  summarizeActivation,
+  type DailyActivationPoint,
+} from "@/lib/growth-metrics";
+import { parsePlatformScope, scopeFilterAnd } from "@/lib/platform-scope";
 
 export const dynamic = "force-dynamic";
 
-let cache: { data: any; days: number; timestamp: number } | null = null;
+/**
+ * First desktop build that emits `Memory Created` on the normal durable-session
+ * path. Before 98f1ee7c7f the event only fired for recordings that failed to
+ * bind a local session, so activation was structurally unreportable.
+ */
+const MIN_ACTIVATION_TELEMETRY_VERSION = [0, 12, 167] as const;
+
+let cache: { data: any; days: number; platform: string; timestamp: number } | null = null;
 const CACHE_TTL = 30 * 60 * 1000;
 
 async function hogql(apiKey: string, projectId: string, host: string, query: string) {
@@ -29,9 +47,26 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams;
     const days = Math.min(parseInt(searchParams.get("days") || "60", 10), 90);
+    // Default macos preserves the legacy meaning for existing callers.
+    const platform = parsePlatformScope(searchParams.get("platform") ?? "macos");
+    const os = scopeFilterAnd(platform);
+    // Mobile never emits `Sign In Completed`, so non-macOS activation cohorts
+    // anchor on the user's first-ever event instead. Acquisition series
+    // (weekly/daily new, cumulative, ticker) all use first-seen so every
+    // panel agrees on one "new user" definition per platform.
+    const activationAnchor = platform === "macos" ? `AND event = 'Sign In Completed' ${os}` : os;
+    // The Firestore activation overlay is macOS-scoped by construction
+    // (conversation-within-7-days of a macOS signup) — never smear it over
+    // mobile or all-platform telemetry.
+    const activationOverlay = async () =>
+      platform === "macos"
+        ? (await getPayload<FirestoreActivationCompat>(activationCacheKey(days)))?.data ?? null
+        : null;
 
-    if (cache && cache.days === days && Date.now() - cache.timestamp < CACHE_TTL) {
-      return NextResponse.json(cache.data);
+    if (cache && cache.days === days && cache.platform === platform && Date.now() - cache.timestamp < CACHE_TTL) {
+      return NextResponse.json(
+        applyFirestoreActivationCompat(cache.data, await activationOverlay()),
+      );
     }
 
     // Run all queries in parallel - each is lightweight
@@ -44,18 +79,25 @@ export async function GET(request: NextRequest) {
       activationResults,
       wauResult,
       mauResult,
+      allTimeResult,
+      userGrowthResult,
+      rolling24hDauResult,
+      rolling24hNewResult,
+      rolling7dNewResult,
+      rollingRetentionResult,
     ] = await Promise.all([
-      // 1. New users per week (first-ever Sign In Completed)
+      // 1. New users per week — first-seen on this platform, the same
+      // person-deduped population as the daily userGrowth series.
       hogql(apiKey, projectId, host, `
         SELECT
           toMonday(toDate(toString(min_ts))) as week,
           count(*) as new_users
         FROM (
-          SELECT distinct_id, min(timestamp) as min_ts
+          SELECT COALESCE(person_id, distinct_id) as actor, min(timestamp) as min_ts
           FROM events
-          WHERE event = 'Sign In Completed'
-            AND properties.$os_name = 'macOS'
-          GROUP BY distinct_id
+          WHERE 1 = 1
+            ${os}
+          GROUP BY actor
         )
         WHERE min_ts >= now() - interval ${days} day
         GROUP BY week
@@ -68,8 +110,8 @@ export async function GET(request: NextRequest) {
           toMonday(toDate(timestamp)) as week,
           count(DISTINCT distinct_id) as active_users
         FROM events
-        WHERE properties.$os_name = 'macOS'
-          AND timestamp >= now() - interval ${days} day
+        WHERE timestamp >= now() - interval ${days} day
+          ${os}
         GROUP BY week
         ORDER BY week
       `),
@@ -83,15 +125,15 @@ export async function GET(request: NextRequest) {
         FROM (
           SELECT distinct_id as did, toMonday(toDate(timestamp)) as week
           FROM events
-          WHERE properties.$os_name = 'macOS'
-            AND timestamp >= now() - interval ${days} day
+          WHERE timestamp >= now() - interval ${days} day
+            ${os}
           GROUP BY did, week
         ) curr
         INNER JOIN (
           SELECT distinct_id as did, toMonday(toDate(timestamp)) as week
           FROM events
-          WHERE properties.$os_name = 'macOS'
-            AND timestamp >= now() - interval ${days + 7} day
+          WHERE timestamp >= now() - interval ${days + 7} day
+            ${os}
           GROUP BY did, week
         ) prev ON curr.did = prev.did AND prev.week = curr.week - interval 7 day
         GROUP BY curr_week
@@ -104,8 +146,8 @@ export async function GET(request: NextRequest) {
           toDate(timestamp) as day,
           count(DISTINCT distinct_id) as dau
         FROM events
-        WHERE properties.$os_name = 'macOS'
-          AND timestamp >= now() - interval ${days} day
+        WHERE timestamp >= now() - interval ${days} day
+          ${os}
         GROUP BY day
         ORDER BY day
       `),
@@ -120,48 +162,68 @@ export async function GET(request: NextRequest) {
             distinct_id,
             count(DISTINCT toDate(timestamp)) as days_active
           FROM events
-          WHERE properties.$os_name = 'macOS'
-            AND timestamp >= now() - interval 30 day
+          WHERE timestamp >= now() - interval 30 day
+            ${os}
           GROUP BY distinct_id
         )
         GROUP BY days_active
         ORDER BY days_active
       `),
 
-      // 6. Activation: signups who created a Memory within 7 days
+      // 6. Activation: new signups who created a Memory within 7 days.
+      //
+      // Three things this query has to get right, each of which silently
+      // understated the rate before:
+      //   - The cohort is the user's FIRST-EVER sign-in, matching query 1.
+      //     Filtering by timestamp *before* the min() made every returning user
+      //     who re-authenticated inside the window look like a new signup.
+      //   - Activation tests for ANY memory inside the window. Keying off the
+      //     user's earliest memory marked a returning user unactivated because
+      //     their first-ever memory predates their window.
+      //   - `reports_activation` records whether the build they signed up on can
+      //     emit `Memory Created` at all. Desktop only began emitting it on the
+      //     normal (durable-session) path in 98f1ee7c7f, first shipped in
+      //     ${MIN_ACTIVATION_TELEMETRY_VERSION.join(".")}. Users on older builds
+      //     cannot activate no matter what they do, so pooling them reports a
+      //     rollout gap as a product failure.
       hogql(apiKey, projectId, host, `
         SELECT
-          toDate(toString(signup_ts)) as day,
+          toDate(toString(s_ts)) as day,
           count(*) as signups,
-          countIf(has_memory = 1) as activated
+          countIf(memories_in_window > 0) as activated,
+          countIf(reports_activation) as capable_signups,
+          countIf(reports_activation AND memories_in_window > 0) as capable_activated
         FROM (
           SELECT
-            s_id,
-            s_ts as signup_ts,
-            if(m_count > 0, 1, 0) as has_memory
+            signups.s_id as s_id,
+            signups.s_ts as s_ts,
+            signups.reports_activation as reports_activation,
+            countIf(
+              memories.m_ts >= signups.s_ts
+              AND memories.m_ts <= signups.s_ts + interval 7 day
+            ) as memories_in_window
           FROM (
             SELECT
               distinct_id as s_id,
-              min(timestamp) as s_ts
+              min(timestamp) as s_ts,
+              arrayMap(
+                part -> toIntOrZero(part),
+                splitByChar('.', coalesce(argMin(properties.$app_version, timestamp), '0'))
+              ) >= [${MIN_ACTIVATION_TELEMETRY_VERSION.join(", ")}] as reports_activation
             FROM events
-            WHERE event = 'Sign In Completed'
-              AND properties.$os_name = 'macOS'
-              AND timestamp >= now() - interval ${days} day
+            WHERE 1 = 1
+              ${activationAnchor}
             GROUP BY distinct_id
           ) signups
           LEFT JOIN (
-            SELECT
-              distinct_id as m_id,
-              min(timestamp) as m_ts,
-              count(*) as m_count
+            SELECT distinct_id as m_id, timestamp as m_ts
             FROM events
             WHERE event = 'Memory Created'
-              AND properties.$os_name = 'macOS'
+              ${os}
               AND timestamp >= now() - interval ${days + 7} day
-            GROUP BY distinct_id
           ) memories ON signups.s_id = memories.m_id
-            AND memories.m_ts >= signups.s_ts
-            AND memories.m_ts <= signups.s_ts + interval 7 day
+          WHERE signups.s_ts >= now() - interval ${days} day
+          GROUP BY s_id, s_ts, reports_activation
         )
         GROUP BY day
         ORDER BY day
@@ -171,16 +233,96 @@ export async function GET(request: NextRequest) {
       hogql(apiKey, projectId, host, `
         SELECT count(DISTINCT distinct_id)
         FROM events
-        WHERE properties.$os_name = 'macOS'
-          AND timestamp >= now() - interval 7 day
+        WHERE timestamp >= now() - interval 7 day
+          ${os}
       `),
 
       // 8. MAU (current month)
       hogql(apiKey, projectId, host, `
         SELECT count(DISTINCT distinct_id)
         FROM events
-        WHERE properties.$os_name = 'macOS'
-          AND timestamp >= now() - interval 30 day
+        WHERE timestamp >= now() - interval 30 day
+          ${os}
+      `),
+
+      // 9. All-time users on this platform (person-deduped, counted since
+      // each platform's PostHog instrumentation began)
+      hogql(apiKey, projectId, host, `
+        SELECT uniq(COALESCE(person_id, distinct_id))
+        FROM events
+        WHERE 1 = 1
+          ${os}
+      `),
+
+      // 10. Daily new users by first-seen date, same person-deduped
+      // population as query 9 — its running sum must end at allTimeUsers so
+      // the cumulative chart and the all-time ticker agree by construction.
+      hogql(apiKey, projectId, host, `
+        SELECT first_day, count(*) as new_users
+        FROM (
+          SELECT COALESCE(person_id, distinct_id) as actor,
+                 toDate(min(timestamp)) as first_day
+          FROM events
+          WHERE 1 = 1
+            ${os}
+          GROUP BY actor
+        )
+        GROUP BY first_day
+        ORDER BY first_day
+      `),
+
+      // 11. Rolling last-24h DAU — the trailing daily bucket must not look
+      // like a crash just because the day started.
+      hogql(apiKey, projectId, host, `
+        SELECT count(DISTINCT distinct_id)
+        FROM events
+        WHERE timestamp >= now() - interval 24 hour
+          ${os}
+      `),
+
+      // 12. Rolling last-24h new users (first-seen).
+      hogql(apiKey, projectId, host, `
+        SELECT count(*)
+        FROM (
+          SELECT COALESCE(person_id, distinct_id) as actor, min(timestamp) as min_ts
+          FROM events
+          WHERE 1 = 1
+            ${os}
+          GROUP BY actor
+        )
+        WHERE min_ts >= now() - interval 24 hour
+      `),
+
+      // 13. Rolling last-7d new users (first-seen) for the trailing weekly bucket.
+      hogql(apiKey, projectId, host, `
+        SELECT count(*)
+        FROM (
+          SELECT COALESCE(person_id, distinct_id) as actor, min(timestamp) as min_ts
+          FROM events
+          WHERE 1 = 1
+            ${os}
+          GROUP BY actor
+        )
+        WHERE min_ts >= now() - interval 7 day
+      `),
+
+      // 14. Rolling 7d retention pair: retained (active both in the last 7d
+      // and the 7d before) and prior-window active, for the trailing
+      // growth-accounting bucket.
+      hogql(apiKey, projectId, host, `
+        SELECT
+          countIf(cur = 1 AND prev = 1) as retained,
+          countIf(prev = 1) as prev_active
+        FROM (
+          SELECT
+            distinct_id,
+            maxIf(1, timestamp >= now() - interval 7 day) as cur,
+            maxIf(1, timestamp < now() - interval 7 day) as prev
+          FROM events
+          WHERE timestamp >= now() - interval 14 day
+            ${os}
+          GROUP BY distinct_id
+        )
       `),
     ]);
 
@@ -220,6 +362,22 @@ export async function GET(request: NextRequest) {
       };
     });
 
+    // Trailing weekly bucket = the rolling last 7 days (the partial
+    // calendar week always under-reported until Sunday).
+    if (growthAccounting.length > 0) {
+      const rollingWau = Number((wauResult as any[])[0]?.[0] ?? 0);
+      const rolling7dNew = Number((rolling7dNewResult as any[])[0]?.[0] ?? 0);
+      const rollingPair = (rollingRetentionResult as any[])[0] ?? [0, 0];
+      const retained7 = Number(rollingPair[0] ?? 0);
+      const prevActive7 = Number(rollingPair[1] ?? 0);
+      const lastGA = growthAccounting[growthAccounting.length - 1];
+      lastGA.active = rollingWau;
+      lastGA.newUsers = rolling7dNew;
+      lastGA.retained = retained7;
+      lastGA.resurrected = Math.max(0, rollingWau - rolling7dNew - retained7);
+      lastGA.churned = -Math.max(0, prevActive7 - retained7);
+    }
+
     // ── Process DAU for Stickiness ──
     const dailyDau: { date: string; dau: number }[] = [];
     for (const [day, dau] of dailyDauResults as any[]) {
@@ -227,9 +385,35 @@ export async function GET(request: NextRequest) {
     }
     dailyDau.sort((a, b) => a.date.localeCompare(b.date));
 
+    // Trailing daily bucket = the last 24 hours, not since-midnight.
+    const rolling24hDau = Number((rolling24hDauResult as any[])[0]?.[0] ?? 0);
+    const todayUtc = new Date().toISOString().slice(0, 10);
+    if (dailyDau.length > 0 && dailyDau[dailyDau.length - 1].date === todayUtc) {
+      dailyDau[dailyDau.length - 1].dau = rolling24hDau;
+    } else {
+      dailyDau.push({ date: todayUtc, dau: rolling24hDau });
+    }
+
     // Weekly stickiness: avg DAU / WAU for each week
     const wau = (wauResult as any[])[0]?.[0] ?? 0;
     const mau = (mauResult as any[])[0]?.[0] ?? 0;
+    const allTimeUsers = (allTimeResult as any[])[0]?.[0] ?? 0;
+
+    // ── User growth (first-seen daily + cumulative) ──
+    const userGrowth: { date: string; users: number; cumulative: number }[] = [];
+    let cumulative = 0;
+    for (const [day, users] of userGrowthResult as any[]) {
+      cumulative += users;
+      userGrowth.push({ date: day, users, cumulative });
+    }
+    // Trailing bucket shows first-seen users of the last 24 hours; the
+    // cumulative line stays calendar-exact (ends at allTimeUsers).
+    const rolling24hNew = Number((rolling24hNewResult as any[])[0]?.[0] ?? 0);
+    if (userGrowth.length > 0 && userGrowth[userGrowth.length - 1].date === todayUtc) {
+      userGrowth[userGrowth.length - 1].users = rolling24hNew;
+    } else if (userGrowth.length > 0) {
+      userGrowth.push({ date: todayUtc, users: rolling24hNew, cumulative });
+    }
     const recentDau = dailyDau.slice(-7);
     const avgDau = recentDau.length > 0
       ? Math.round(recentDau.reduce((s, d) => s + d.dau, 0) / recentDau.length)
@@ -263,6 +447,18 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // Trailing stickiness point uses the rolling windows too.
+    if (stickinessTrend.length > 0) {
+      const lastStick = stickinessTrend[stickinessTrend.length - 1];
+      const recent = dailyDau.slice(-7);
+      const rollingAvgDau = recent.length > 0
+        ? Math.round(recent.reduce((s2, d) => s2 + d.dau, 0) / recent.length)
+        : 0;
+      lastStick.avgDau = rollingAvgDau;
+      lastStick.wau = wau;
+      lastStick.dauWau = wau > 0 ? Math.round((rollingAvgDau / wau) * 1000) / 10 : 0;
+    }
+
     // ── Process Power User Curve ──
     const powerUserMap: Record<number, number> = {};
     let totalPowerUsers = 0;
@@ -293,21 +489,22 @@ export async function GET(request: NextRequest) {
       : 0;
 
     // ── Process Activation ──
-    const activation: { date: string; signups: number; activated: number; rate: number }[] = [];
-    for (const [day, signups, activated] of activationResults as any[]) {
+    const activation: (DailyActivationPoint & { rate: number })[] = [];
+    for (const [day, signups, activated, capableSignups, capableActivated] of
+      activationResults as any[]) {
       activation.push({
         date: day,
         signups,
         activated,
+        capableSignups,
+        capableActivated,
         rate: signups > 0 ? Math.round((activated / signups) * 1000) / 10 : 0,
       });
     }
 
-    const totalSignups = activation.reduce((s, d) => s + d.signups, 0);
-    const totalActivated = activation.reduce((s, d) => s + d.activated, 0);
-    const overallActivationRate = totalSignups > 0
-      ? Math.round((totalActivated / totalSignups) * 1000) / 10
-      : null;
+    // Pooling every signup, including yesterday's, counts a guaranteed-zero
+    // numerator against a real denominator; only matured days are summarised.
+    const activationSummary = summarizeActivation(activation);
 
     // ── Quick Ratio ──
     const recentGA = growthAccounting.slice(-4);
@@ -318,26 +515,37 @@ export async function GET(request: NextRequest) {
       ? Math.round(((totalNewGA + totalResurrectedGA) / totalChurnedGA) * 100) / 100
       : null;
 
-    const result = {
-      growthAccounting,
-      stickinessTrend,
-      dailyDau,
-      powerUserCurve,
-      activation,
-      summary: {
-        quickRatio,
-        activationRate: overallActivationRate,
-        dauMau,
-        dauWau,
-        dau: avgDau,
-        wau,
-        mau,
-        l5PlusPct,
-        totalUsers: totalPowerUsers,
+    const result = applyFirestoreActivationCompat(
+      {
+        userGrowth,
+        growthAccounting,
+        stickinessTrend,
+        dailyDau,
+        powerUserCurve,
+        activation,
+        summary: {
+          quickRatio,
+          // Capability-aware until the Firestore activation cache exists. The
+          // one-release compat shim below overlays the conversation-derived
+          // rate so live Infinity panels do not stay blank.
+          activationRate: activationSummary.capableRate,
+          activationTelemetryCoverage: activationSummary.telemetryCoverage,
+          activationSignups: activationSummary.capableSignups,
+          activationPooledRate: activationSummary.rate,
+          dauMau,
+          dauWau,
+          dau: avgDau,
+          wau,
+          mau,
+          l5PlusPct,
+          totalUsers: totalPowerUsers,
+          allTimeUsers,
+        },
       },
-    };
+      await activationOverlay(),
+    );
 
-    cache = { data: result, days, timestamp: Date.now() };
+    cache = { data: result, days, platform, timestamp: Date.now() };
     return NextResponse.json(result);
   } catch (error: any) {
     console.error("Viral metrics error:", error);

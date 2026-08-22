@@ -2577,11 +2577,31 @@ actor RewindDatabase {
 
     RewindAbandonedVideoChunkQuarantine.registerMigration(on: &migrator)
 
+    // Keep new migrations after every previously registered component migration. Existing rows
+    // deliberately start pending so a dark-launched lossless sweep can recover history later.
+    migrator.registerMigration("addScreenActivitySyncState") { db in
+      try Self.installScreenActivitySyncStateSchema(db)
+    }
+
     try migrator.migrate(queue)
     try ContextBucketSchema.removeMigratedLegacyDefaults(
       afterMigrating: queue,
       defaults: .standard,
       ownerID: contextBucketOwnerID)
+  }
+
+  /// Kept as one callable migration boundary so a populated legacy table can be exercised in a
+  /// focused test without reproducing the entire historical migration ledger.
+  static func installScreenActivitySyncStateSchema(_ db: Database) throws {
+    try db.alter(table: "screenshots") { t in
+      t.add(column: "screenActivitySyncState", .integer).notNull().defaults(to: 0)
+    }
+    try db.execute(
+      sql: """
+        CREATE INDEX idx_screenshots_screen_activity_sync
+        ON screenshots(screenActivitySyncState, id)
+        WHERE screenActivitySyncState IN (0, 1)
+        """)
   }
 
   // MARK: - OCR Precision Reduction Migration
@@ -2778,7 +2798,7 @@ actor RewindDatabase {
         // unrelated screenshot.
         record.id = nil
         if record.imagePath == nil { record.imagePath = "" }
-        try record.insert(db)
+        _ = try record.inserted(db)
       }
 
       return screenshots.count
@@ -3132,8 +3152,13 @@ actor RewindDatabase {
     let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return "" }
 
-    // Split query into words
-    let words = trimmed.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
+    // Split on anything that is not alphanumeric, not just whitespace. FTS5 gives punctuation
+    // its own meaning, so a bare `2.1.220*` built from a Cursor version title is
+    // `fts5: syntax error near "."` and fails the whole search. Callers that sanitize first
+    // (the suggestion grounding path) never saw this; the Rewind search UI passes raw titles
+    // and did. Splitting here makes the expansion safe for both rather than relying on every
+    // caller to clean up first.
+    let words = trimmed.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
 
     let expandedWords = words.compactMap { word -> String? in
       var parts: [String] = [word]
@@ -3165,7 +3190,13 @@ actor RewindDatabase {
       }
     }
 
-    return expandedWords.joined(separator: " ")
+    // Joined with an explicit AND, not a space. FTS5 only accepts implicit AND between bare
+    // terms: the moment one word expands into a parenthesised `(a* OR b*)` group, a
+    // space-joined query fails whole with `fts5: syntax error near "("` — so a two-word title
+    // where either word splits on camelCase or a number boundary returned nothing at all.
+    // Observed 45 times across 13 sessions, silently emptying screen-history grounding and
+    // the Rewind search UI alike. AND is what the space already meant.
+    return expandedWords.joined(separator: " AND ")
   }
 
   /// Split camelCase string into parts

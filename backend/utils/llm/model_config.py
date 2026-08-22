@@ -56,16 +56,20 @@ RouteRef = Union[ExplicitRouteRef, AutoLaneRouteRef]
 _TWO_TIER_MODEL_PROFILE: Dict[str, Tuple[str, str]] = {
     # OpenAI — default intelligence
     'conv_action_items': ('gpt-5.6-luna', 'openai'),
+    'wake_word_adjudication': ('gpt-5.6-luna', 'openai'),
     'conv_structure': ('gpt-5.6-luna', 'openai'),
     'conv_app_result': ('gpt-5.6-luna', 'openai'),
     'daily_summary': ('gpt-5.6-luna', 'openai'),
     'external_structure': ('gpt-5.6-luna', 'openai'),
     'memories': ('gpt-5.6-luna', 'openai'),
+    'x_memory_extraction_flex': ('gpt-5.6-luna', 'openai'),
     'learnings': ('gpt-5.6-luna', 'openai'),
     'memory_conflict': ('gpt-5.6-luna', 'openai'),
+    'memory_conflict_flex': ('gpt-5.6-luna', 'openai'),
     'knowledge_graph': ('gpt-5.6-luna', 'openai'),
     'memory_l1': ('gpt-5.6-luna', 'openai'),
     'memory_l2': ('gpt-5.6-luna', 'openai'),
+    'memory_l2_flex': ('gpt-5.6-luna', 'openai'),
     'chat_responses': ('gpt-5.6-luna', 'openai'),
     'chat_extraction': ('gpt-5.6-luna', 'openai'),
     'chat_graph': ('gpt-5.6-luna', 'openai'),
@@ -141,7 +145,9 @@ _OPENROUTER_TEMPERATURES: Dict[str, float] = {
 #   prompt_cache_key             — prefix-cache request routing. Supported by the gpt-4o,
 #                                  gpt-4o, gpt-5.x and o-series families.
 #   prompt_cache_retention='24h' — extended (24h) cache retention. Supported by the
-#                                  gpt-5.x and o-series families.
+#                                  gpt-5.x and o-series families, except gpt-5.6, which
+#                                  uses the explicit prompt_cache_options contract instead
+#                                  (see supports_cache_retention).
 _CACHE_KEY_MODEL_PREFIXES = ('gpt-5', 'gpt-4o', 'o1', 'o3', 'o4')
 _CACHE_RETENTION_MODEL_PREFIXES = ('gpt-5', 'o1', 'o3', 'o4')
 
@@ -256,7 +262,10 @@ def supports_prompt_cache(model: str) -> bool:
 
 def supports_cache_retention(model: str) -> bool:
     """Whether a model supports 24h OpenAI prompt-cache retention (prompt_cache_retention='24h')."""
-    return bool(model) and model.startswith(_CACHE_RETENTION_MODEL_PREFIXES)
+    # GPT-5.6 uses the explicit cache contract (prompt_cache_options + a
+    # breakpoint) rather than the legacy prompt_cache_retention field. Sending
+    # both contracts in the same request is rejected by the provider.
+    return bool(model) and not model.startswith('gpt-5.6') and model.startswith(_CACHE_RETENTION_MODEL_PREFIXES)
 
 
 def is_structured_output_feature(feature: str) -> bool:

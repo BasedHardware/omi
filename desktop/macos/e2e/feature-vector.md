@@ -69,7 +69,7 @@ Prioritized feature map to guide desktop E2E coverage. Uses the same two-dimensi
 | 25 | Plan / usage (billing) | — | 5 | 2 | 1 | ✅ flow: `plan-usage.yaml` (subscription snapshot) |
 | 26 | Apps / integrations catalog | retrieval-action (3) | 6 | 2 | 2 | ✅ flow: `apps-marketplace.yaml` + ⚠️ manual: `apps.yaml` |
 | 27 | Connector import (progress persistence) | retrieval-action (3) | 6 | 3 | 2 | ✅ flow: `connector-import.yaml` + ⚠️ manual: `connector-import-progress.yaml` |
-| 28 | Refer a Friend (external affiliate URL) | retrieval-action (3) | 6 | 0 | 2 | ⚠️ manual: `refer-external.yaml` (profile menu → browser) |
+| 28 | Refer a Friend (one month of Operator) | retrieval-action (3) | 6 | 0 | 2 | ⚠️ manual: `refer-external.yaml` (top bar + Settings → copy link) |
 | 29 | Delete account (confirmation only) | — | 5 | 0 | 2 | ⚠️ manual: `delete-account.yaml` (never confirms) |
 | 30 | Logout (local auth / emulator) | — | 5 | 1 | 2 | ⚠️ manual: `logout.yaml` (`sign_out` bridge; not prod OAuth) |
 | 31 | Onboarding (first launch / reset) | — | 5 | 1 | 1 | ⚠️ manual: `onboarding-smoke.yaml` — reset fix landed; keep manual until 2× local green |
@@ -98,7 +98,7 @@ Agent-local flows with `tier: manual` — **not** qualification-tier (T2). Run i
 
 | Flow | Why manual | Destructive? |
 |------|------------|--------------|
-| `refer-external.yaml` | Opens `https://affiliate.omi.me` in the default browser | No |
+| `refer-external.yaml` | Copies the unique Operator referral link from the top bar and Settings | No |
 | `delete-account.yaml` | Exercises confirmation sheet only; **never** taps Delete Permanently | Yes (gated) |
 | `logout.yaml` | Sign out via Settings; requires **local Auth emulator** (`make desktop-run-local`), not prod OAuth | No |
 | `onboarding-smoke.yaml` | `reset_onboarding` restarts app; Wave 7 fix landed — manual until 2× local green | Yes (local reset) |
@@ -136,7 +136,7 @@ Do **not** promote destructive flows (`delete-account`, `onboarding-smoke`) to t
 | settings-basic | 9/9 | PASS | flow-walker.beastoin.workers.dev/runs/RoTW8GeljN.html |
 | rewind | 4/4 | PASS | flow-walker.beastoin.workers.dev/runs/1HE5OsPOOy.html |
 | apps | 6/6 | PASS | flow-walker.beastoin.workers.dev/runs/VDGw-wbHqa.html |
-| refer-external | — | — | superseded old `refer.yaml` (profile menu, not sidebar page) |
+| refer-external | — | — | top-bar sheet plus Settings page |
 | screen-recording-permission | 7/7 | PASS | flow-walker.beastoin.workers.dev/runs/3WoXUG6xkT.html |
 | audio-recording | 7/7 | PASS | flow-walker.beastoin.workers.dev/runs/UdkzB-dYG_.html |
 

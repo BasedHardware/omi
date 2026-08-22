@@ -74,6 +74,7 @@ from models.users import (
     Subscription,
     SubscriptionPlan,
     SubscriptionStatus,
+    PlanLimits,
     PlanType,
     PricingOption,
     PhoneCallQuota,
@@ -86,6 +87,7 @@ from utils.apps import get_available_app_by_id
 from utils.subscription import (
     enforce_chat_quota,
     get_chat_quota_snapshot,
+    get_default_basic_subscription,
     get_paid_plan_definitions,
     get_plan_display_name,
     get_plan_limits,
@@ -95,7 +97,6 @@ from utils.subscription import (
     neo_grandfather_until,
     reconcile_basic_plan_with_stripe,
     filter_plans_for_user,
-    has_ever_purchased,
     should_show_new_plans,
     adapt_plans_for_legacy_client,
     wire_plan_for_client,
@@ -613,7 +614,7 @@ def get_private_cloud_sync(uid: str = Depends(auth.get_current_user_uid)):
 # ****************************************
 
 
-# TODO: consider adding person photo.
+# Person photo deferred — see models.other.Person (no photo field / storage yet).
 @router.post('/v1/users/people', tags=['v1'], response_model=Person)
 def get_or_create_person(data: CreatePerson, uid: str = Depends(auth.get_current_user_uid)):
     """Create a new person or return existing one with same name (idempotent by name).
@@ -1249,7 +1250,23 @@ def get_user_subscription_endpoint(
     words_transcribed_used = usage.get('words_transcribed', 0)
     insights_gained_used = usage.get('insights_gained', 0)
 
-    # Get limits from subscription (0 means unlimited)
+    # WIRE BRIDGE: the backend has retired the `0 == unlimited` sentinel — the catalog
+    # represents unlimited as typed `{"kind": "unlimited"}`, projected as `None`. The wire
+    # has NOT been migrated: shipped clients still read `0` as unlimited (e.g. web
+    # SettingsPage `limit <= 0`, macOS `decodeIfPresent(...) ?? 0`), so `None -> 0` here is
+    # deliberate and load-bearing, not a leftover coercion.
+    #
+    # Retiring the wire sentinel is a breaking client change and belongs to work item W1
+    # in docs/agents/plan-source-of-truth.md, gated on released tolerant decoders. Do not
+    # "fix" this to emit None/-1 without that sequence: it silently reinterprets every
+    # unlimited plan as a zero allowance on clients already in the field.
+    #
+    # The inverse hazard, for whoever does W1: `or 0` also launders a *finite zero* into
+    # the unlimited sentinel. No plan declares a finite-zero transcription/words/insights
+    # allowance today (phone-call zero travels a separate has_access=False path), so this
+    # is latent rather than live -- but a catalog that ever declares one would silently
+    # grant unlimited to a plan entitled to nothing. W1 must distinguish the two zeros,
+    # not just move the sentinel.
     transcription_seconds_limit = subscription.limits.transcription_seconds or 0
     words_transcribed_limit = subscription.limits.words_transcribed or 0
     insights_gained_limit = subscription.limits.insights_gained or 0
@@ -1260,10 +1277,7 @@ def get_user_subscription_endpoint(
     if not new_plans_enabled:
         all_definitions = adapt_plans_for_legacy_client(all_definitions)
     available_plans: List[SubscriptionPlan] = []
-    ever_purchased = has_ever_purchased(uid, raw_subscription)
-    definitions_for_user = filter_plans_for_user(
-        all_definitions, subscription.plan, platform=x_app_platform, ever_purchased=ever_purchased
-    )
+    definitions_for_user = filter_plans_for_user(all_definitions, subscription.plan, platform=x_app_platform)
     for definition in definitions_for_user:
         plan_prices: List[PricingOption] = []
         monthly_price_id = definition["monthly_price_id"]
@@ -2151,7 +2165,7 @@ class RecordLlmUsageBucketRequest(BaseModel):
     cache_read_tokens: int = Field(0, ge=0)
     cache_write_tokens: int = Field(0, ge=0)
     total_tokens: int = Field(0, ge=0)
-    cost_usd: float = Field(0.0, ge=0.0)
+    cost_usd: float | None = Field(None, ge=0.0)
     account: str = Field('omi', max_length=100)
 
 

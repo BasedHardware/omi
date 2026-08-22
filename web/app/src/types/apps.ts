@@ -41,6 +41,8 @@ export interface App {
   description: string;
   image?: string;
   author?: string;
+  /** Set for personas; backs their public personas.omi.me URL. */
+  username?: string;
   email?: string;
   uid?: string;
   category: string;

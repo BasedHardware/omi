@@ -38,6 +38,46 @@ final class PageGlassLaneTests: XCTestCase {
     }
   }
 
+  /// **The hub is one rail index wearing four pages, and only one of them brings its own glass.**
+  ///
+  /// Activity is Home's column — a search bar and a results panel, each already an `inkGlassPanel`.
+  /// Wrapping the hub wholesale nested both inside a third panel, which does not stack two materials
+  /// but takes a second copy of the desktop and doubles the scrim, so Activity read visibly muddier
+  /// than Chat and its two panels lost their separation. The hub's list pages paint no ground of
+  /// their own and must keep the lane.
+  func testOnlyTheActivityHubPageBringsItsOwnPanels() {
+    let hubIndex = SidebarNavItem.conversations.rawValue
+    XCTAssertTrue(
+      PageGlassLanePolicy.ownsItsPanels(
+        selectedIndex: hubIndex,
+        memoryDestinationRawValue: MemoryHubDestination.activity.rawValue),
+      "Activity builds Home's own two panels and must not be wrapped in a third")
+
+    for destination in MemoryHubDestination.allCases where destination != .activity {
+      XCTAssertFalse(
+        PageGlassLanePolicy.ownsItsPanels(
+          selectedIndex: hubIndex, memoryDestinationRawValue: destination.rawValue),
+        "\(destination.title) paints no ground of its own and must be given the lane's")
+    }
+
+    // **The standalone Memories page is not the hub.** `SidebarNavItem.memories` renders
+    // `MemoriesPage` directly in this shell, and nothing resets the persisted hub destination on
+    // the way there — so answering this question off that value stripped a page that paints no
+    // ground of its own and drew its rows onto the user's wallpaper.
+    for destination in MemoryHubDestination.allCases {
+      XCTAssertFalse(
+        PageGlassLanePolicy.ownsItsPanels(
+          selectedIndex: SidebarNavItem.memories.rawValue,
+          memoryDestinationRawValue: destination.rawValue),
+        "the standalone Memories page must keep the lane whatever the hub last showed")
+    }
+
+    // A caller that does not know which hub page is mounted keeps the wrap: the list pages are the
+    // majority and an unwrapped list page has no ground at all.
+    XCTAssertFalse(
+      PageGlassLanePolicy.ownsItsPanels(selectedIndex: SidebarNavItem.conversations.rawValue))
+  }
+
   /// The router sends every unrecognised index to Home through its `default:` branch. An index the
   /// nav enum does not carry must therefore resolve to Home here too, or those routes wrap Home's
   /// two panels inside a third one.

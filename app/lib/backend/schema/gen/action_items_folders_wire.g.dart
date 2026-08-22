@@ -431,16 +431,19 @@ class GeneratedActionItemUpdateRequest {
 class GeneratedActionItemsResponse {
   final List<GeneratedActionItemResponse> actionItems;
   final bool hasMore;
+  final bool truncated;
 
   const GeneratedActionItemsResponse({
     required this.actionItems,
     this.hasMore = false,
+    this.truncated = false,
   });
 
   factory GeneratedActionItemsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedActionItemsResponse(
       actionItems: _required(_readFieldValue<List<GeneratedActionItemResponse>>(_readField(json, const ["action_items"]), "action_items", (value) => _readObjectList(value, GeneratedActionItemResponse.fromJson), requiredField: true, nullable: false), "action_items"),
       hasMore: _required(_readFieldValue<bool>(_readField(json, const ["has_more"]), "has_more", _readBool, requiredField: false, nullable: false, defaultValue: false), "has_more"),
+      truncated: _required(_readFieldValue<bool>(_readField(json, const ["truncated"]), "truncated", _readBool, requiredField: false, nullable: false, defaultValue: false), "truncated"),
     );
   }
 
@@ -448,6 +451,7 @@ class GeneratedActionItemsResponse {
     return {
       'action_items': actionItems.map((value) => value.toJson()).toList(),
       'has_more': hasMore,
+      'truncated': truncated,
     };
   }
 }

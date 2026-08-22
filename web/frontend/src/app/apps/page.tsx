@@ -31,8 +31,8 @@ async function getPluginsData() {
 
 export async function generateMetadata(): Promise<Metadata> {
   const appsCount = await getAppsCount();
-  const title = 'OMI Apps Marketplace - AI-Powered Apps for Your OMI Necklace';
-  const description = `Discover and install ${appsCount}+ AI-powered apps for your OMI Necklace. Browse apps across productivity, entertainment, health, and more. Transform your OMI experience with voice-controlled applications.`;
+  const title = 'OMI Apps Marketplace - AI-Powered Apps for Your Omi';
+  const description = `Discover and install ${appsCount}+ AI-powered apps for your Omi. Browse apps across productivity, entertainment, health, and more. Transform your OMI experience with voice-controlled applications.`;
 
   return {
     title,

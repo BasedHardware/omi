@@ -8,10 +8,10 @@ from typing import Any
 import httpx
 from fastapi import APIRouter, Depends, Response
 from fastapi.responses import JSONResponse
-from google.cloud import firestore
 from pydantic import BaseModel, StrictInt, StrictStr
 
 from database._client import get_customer_firestore_client
+from database import llm_usage as llm_usage_db
 from utils.executors import db_executor, run_blocking
 from utils.other.endpoints import get_current_user_uid
 from utils.subscription import enforce_desktop_chat_quota
@@ -20,6 +20,8 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 _OPENAI_CLIENT_SECRETS_URL = "https://api.openai.com/v1/realtime/client_secrets"
+# Leftover AI Studio Live token mint. Vertex Live is not wired here; this is
+# not the $1k/day Flash text bill. See backend/docs/vertex-pt-flash.md.
 _GEMINI_AUTH_TOKENS_URL = "https://generativelanguage.googleapis.com/v1alpha/auth_tokens"
 _OPENAI_REALTIME_MODEL = "gpt-realtime-2"
 _GEMINI_LIVE_MODEL = "models/gemini-3.1-flash-live-preview"
@@ -197,25 +199,19 @@ def _record_usage(
     total_tokens: int,
     cost: float,
 ) -> None:
-    date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    account = "desktop_chat_realtime"
-    updates: dict[str, Any] = {"date": date, "last_updated": datetime.now(timezone.utc)}
-    for prefix in ("desktop_chat", account):
-        updates.update(
-            {
-                f"{prefix}.input_tokens": firestore.Increment(input_tokens),
-                f"{prefix}.output_tokens": firestore.Increment(output_tokens),
-                f"{prefix}.cache_read_tokens": firestore.Increment(cached_tokens),
-                f"{prefix}.cache_write_tokens": firestore.Increment(0),
-                f"{prefix}.total_tokens": firestore.Increment(total_tokens),
-                f"{prefix}.cost_usd": firestore.Increment(cost),
-                f"{prefix}.call_count": firestore.Increment(1),
-            }
-        )
-    updates["desktop_chat.quota_questions"] = firestore.Increment(1)
-    updates[f"{account}.quota_questions"] = firestore.Increment(1)
-    get_customer_firestore_client().collection("users").document(uid).collection("llm_usage").document(date).set(
-        updates, merge=True
+    llm_usage_db.record_llm_usage_bucket(
+        uid,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cache_read_tokens=cached_tokens,
+        cache_write_tokens=0,
+        total_tokens=total_tokens,
+        cost_usd=cost,
+        bucket='desktop_chat',
+        account='desktop_chat_realtime',
+        cost_status='complete',
+        quota_questions=1,
+        firestore_client=get_customer_firestore_client(),
     )
 
 

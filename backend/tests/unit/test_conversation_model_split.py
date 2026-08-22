@@ -566,6 +566,66 @@ class TestAsDictCleanedDates:
         assert isinstance(d['finished_at'], str)
 
 
+class TestImportedFlag:
+    """imported marks ZIP/external imports; default False for normal captures."""
+
+    def test_defaults_to_false(self):
+        from models.conversation import Conversation
+        from models.conversation_enums import ConversationSource
+        from models.structured import Structured
+
+        now = datetime.now(timezone.utc)
+        conv = Conversation(
+            id="imported-default",
+            created_at=now,
+            started_at=now,
+            finished_at=now,
+            source=ConversationSource.limitless,
+            structured=Structured(title="Pendant sync"),
+        )
+        assert conv.imported is False
+
+    def test_limitless_import_sets_true_and_serializes(self):
+        from models.conversation import Conversation
+        from models.conversation_enums import ConversationSource
+        from models.structured import Structured
+
+        now = datetime.now(timezone.utc)
+        conv = Conversation(
+            id="imported-true",
+            created_at=now,
+            started_at=now,
+            finished_at=now,
+            source=ConversationSource.limitless,
+            structured=Structured(title="ZIP import"),
+            imported=True,
+        )
+        assert conv.imported is True
+        dumped = conv.model_dump()
+        cleaned = conv.as_dict_cleaned_dates()
+        assert dumped['imported'] is True
+        assert cleaned['imported'] is True
+
+    def test_missing_firestore_field_defaults_false(self):
+        from models.conversation import Conversation
+        from models.conversation_enums import ConversationSource
+        from models.structured import Structured
+
+        now = datetime.now(timezone.utc)
+        # Construct from a dict that omits the field (legacy docs).
+        from_legacy = Conversation.model_validate(
+            {
+                'id': 'legacy-no-imported',
+                'created_at': now,
+                'started_at': now,
+                'finished_at': now,
+                'source': ConversationSource.omi,
+                'structured': Structured(title='Legacy'),
+            }
+        )
+        assert from_legacy.imported is False
+
+
 class TestConversationSummaryWithTranscript:
     """ConversationSummary.from_conversation with real data."""
 
