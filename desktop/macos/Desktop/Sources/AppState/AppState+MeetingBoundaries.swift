@@ -117,7 +117,9 @@ extension AppState {
       rotationSucceeded: rotationSucceeded)
     meetingBoundaryInProgress = false
 
-    if currentConversationRole == .meeting {
+    if MeetingConversationBoundaryPolicy.shouldAnnounceNoteTaking(
+      committedRole: currentConversationRole, rotationSucceeded: rotationSucceeded)
+    {
       MeetingNoteTakingNotice.present()
     }
 
