@@ -191,6 +191,38 @@ INDEX_ONLY_REQUIREMENTS = (
         'COLLECTION',
         (_asc('status'), _asc('finished_at'), _asc('__name__')),
     ),
+    # Several conversations.py serving reads filter by `status` alone and sort by
+    # `created_at` descending (get_in_progress_conversation, get_action_items,
+    # get_last_completed_conversation, and the default `GET /v1/conversations`
+    # call with include_discarded=True). Production has this index only because
+    # it was created by hand; a fresh self-host 400s with FailedPrecondition the
+    # first time any of those paths runs.
+    FirestoreIndexRequirement(
+        'conversations_status_created',
+        'conversations',
+        'COLLECTION',
+        (_asc('status'), _desc('created_at'), _desc('__name__')),
+    ),
+    # `get_conversations`/`get_conversations_count`/`get_conversations_without_photos`
+    # called with include_discarded=False and a `statuses` filter (no source/category)
+    # produce this shape. Same story as above: hand-created in production, never
+    # declared here.
+    FirestoreIndexRequirement(
+        'conversations_discarded_status_created',
+        'conversations',
+        'COLLECTION',
+        (_asc('discarded'), _asc('status'), _desc('created_at'), _desc('__name__')),
+    ),
+    # `get_memories`' default path (no category/date filters, default
+    # sort='scoring_desc') orders by `scoring` then `created_at`, both descending,
+    # with zero `where` filters. Firestore still needs a composite for a bare
+    # multi-field sort. Hand-created in production, never declared here.
+    FirestoreIndexRequirement(
+        'memories_scoring_created',
+        'memories',
+        'COLLECTION',
+        (_desc('scoring'), _desc('created_at'), _desc('__name__')),
+    ),
     FirestoreIndexRequirement(
         'memory_items_tier_status_updated',
         'memory_items',
@@ -821,6 +853,18 @@ FINALIZATION_OLDEST_NONTERMINAL_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('status'), _asc('created_at'), _asc('__name__')),
 )
 
+# get_messages' session-scoped branch filters by chat_session_id instead of
+# plugin_id, same created_at descending order. Same missing-declaration story
+# as the app-scoped shape, and it 500s independently because a chat session's
+# first page of messages hits this branch, not the app-scoped one.
+MESSAGES_BY_SESSION_ORDERED_QUERY = FirestoreQuerySpec(
+    identifier='messages_by_session_created_at',
+    collection_group='messages',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('chat_session_id', '==', 'chat_session_id'),),
+    index_fields=(_asc('chat_session_id'), _desc('created_at'), _desc('__name__')),
+)
+
 QUERY_SPECS = (
     ACTION_ITEMS_COMPLETION_ID_SCAN_QUERY,
     ACTION_ITEMS_COMPLETED_DUE_RANGE_QUERY,
@@ -859,6 +903,7 @@ QUERY_SPECS = (
     MEETING_RECEIPTS_DUE_QUERY,
     HOURLY_USAGE_PLAN_ATTRIBUTION_QUERY,
     MESSAGES_BY_APP_ORDERED_QUERY,
+    MESSAGES_BY_SESSION_ORDERED_QUERY,
     CONVERSATIONS_ACTIVE_ORDERED_QUERY,
     FINALIZATION_OLDEST_NONTERMINAL_QUERY,
 )
