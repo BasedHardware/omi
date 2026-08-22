@@ -24,7 +24,7 @@ void main() {
       provider = AppProvider();
       provider.enableAppOverride = (String id) async {
         expect(id, equals('app_123'));
-        return false;
+        return (false, '');
       };
 
       final result = await provider.toggleApp('app_123', true, null);
@@ -59,7 +59,7 @@ void main() {
       provider.enableAppOverride = (String id) async {
         enableCalled = true;
         expect(id, equals('app_123'));
-        return true;
+        return (true, '');
       };
 
       final result = await provider.toggleApp('app_123', true, null);
@@ -73,7 +73,7 @@ void main() {
       var enableCalled = false;
       provider.enableAppOverride = (String id) async {
         enableCalled = true;
-        return true;
+        return (true, '');
       };
       provider.disableAppOverride = (String id) async {
         expect(id, equals('app_456'));

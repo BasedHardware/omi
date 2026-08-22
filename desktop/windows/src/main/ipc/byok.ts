@@ -10,6 +10,7 @@
 import { ipcMain, webContents } from 'electron'
 import { ByokKeyStore } from '../agentKernel/byokStore'
 import { deactivateByok, enrollByok, type ByokEnrollResult } from '../agentKernel/byokEnroll'
+import { notifyPiMonoByokChanged } from '../codingAgent/piMonoSession'
 import type { ByokKeys, ByokProvider } from '../../shared/byok'
 
 let store: ByokKeyStore | null = null
@@ -34,6 +35,9 @@ function broadcastByokChanged(): void {
   for (const wc of webContents.getAllWebContents()) {
     if (!wc.isDestroyed()) wc.send('byok:changed')
   }
+  // pi-mono bakes OMI_BYOK_* at spawn; a live worker would otherwise keep
+  // sending the previous key set (or none) until it happened to restart.
+  notifyPiMonoByokChanged()
 }
 
 /** Registers the `byok:*` IPC handlers backing the ByokKeyStore. */

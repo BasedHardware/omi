@@ -3218,5 +3218,14 @@
     "sendRawAudioToOmi": "Trimite sunetul brut către Omi",
     "sendRawAudioToOmiDescription": "Dezactivează pentru a împiedica trimiterea sunetului brut către Omi. Transcrierile și datele necesare funcțiilor cloud pot fi trimise în continuare către Omi.",
     "findDevice": "Găsește",
-    "diagnosticsShareFailed": "Diagnosticul nu a putut fi partajat. Încearcă din nou."
+    "diagnosticsShareFailed": "Diagnosticul nu a putut fi partajat. Încearcă din nou.",
+    "appDisabledTitle": "Această aplicație este dezactivată și nu poate fi instalată.",
+    "appDisabledWebhookFailures": "Endpointul ei a eșuat 72 de ore la rând, așa că livrările au fost oprite.",
+    "appDisabledGeneric": "A fost dezactivată de Omi.",
+    "appDisabledOwnerHint": "Repară mai întâi endpointul — reactivarea verifică din nou fiecare URL configurat.",
+    "appReEnable": "Reactivează",
+    "appReEnableFailedTitle": "Reactivarea a eșuat",
+    "appReEnableFailedBody": "Această aplicație nu a putut fi reactivată. Încearcă din nou.",
+    "appDisabledOn": "Dezactivată pe {date}.",
+    "appDisabledLastError": "Ultima eroare: {error}."
 }

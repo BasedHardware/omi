@@ -1697,6 +1697,41 @@ final class DesktopAutomationActionRegistry {
       return ["posted": conversationID]
     }
 
+    // Reads whatever notch card is on screen, so a flow can assert the card a
+    // person actually sees rather than trusting that a trigger fired.
+    register(
+      name: "notification_state",
+      summary: "Read the notch notification currently on screen (title, message, persistence).",
+      params: []
+    ) { _ in
+      guard let bar = FloatingControlBarManager.shared.barState,
+        let notification = bar.currentNotification
+      else {
+        return ["present": "false"]
+      }
+      return [
+        "present": "true",
+        "title": notification.title,
+        "message": notification.message,
+        "persistent": notification.isPersistent ? "true" : "false",
+      ]
+    }
+
+    // Presents the same "Omi is taking notes" notice the meeting boundary
+    // posts once a detected meeting has rotated into its recording session.
+    register(
+      name: "trigger_meeting_started_notice",
+      summary:
+        "Present the meeting-started note-taking notice (the card shown when a meeting is detected). Non-prod only.",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "trigger_meeting_started_notice is disabled on production bundles"]
+      }
+      MeetingNoteTakingNotice.present()
+      return ["presented": "true"]
+    }
+
     // Cursor-free driver for the meeting summary share card: `state` reads the
     // presented card, `copy`/`send` run the same MeetingSummaryShareActions the
     // card's buttons call, `close` is the user dismissal path.
@@ -1731,18 +1766,28 @@ final class DesktopAutomationActionRegistry {
         let feedback = await MeetingSummaryShareActions.copyLink(conversationID: conversationID)
         return ["copied": feedback == .copied ? "true" : "false"]
       case "send":
-        do {
-          let sent = try await MeetingSummaryShareActions.sendSummary(
-            conversationID: conversationID, recipients: recipients)
-          return ["sent_to": sent.joined(separator: ",")]
-        } catch {
-          return ["error": "send failed: \(error.localizedDescription)"]
+        // `email` mirrors what the owner types into the Share field; with no
+        // address supplied the detected suggestion is used, which is exactly
+        // what the field prefills with.
+        // Drive the card's own Send handler so its phase (sending → sent /
+        // failed) is exercised, not just the network call underneath it.
+        let typed = params["email"]?.trimmingCharacters(in: .whitespaces) ?? ""
+        let address = typed.isEmpty ? (recipients.first?.email ?? "") : typed
+        guard !address.isEmpty else {
+          return ["error": "no recipient: pass email=<address>"]
         }
+        NotificationCenter.default.post(
+          name: .meetingSummaryShareSubmit, object: address)
+        return ["submitted": address]
+      case "share":
+        NotificationCenter.default.post(name: .meetingSummaryShareBeginAddressing, object: nil)
+        return ["addressing": "true"]
       case "close":
         mgr.dismissCurrentNotification()
         return ["closed": "true"]
       default:
-        throw DesktopAutomationActionError.invalidParams("action must be state, copy, send, or close")
+        throw DesktopAutomationActionError.invalidParams(
+          "action must be state, share, copy, send, or close")
       }
     }
 

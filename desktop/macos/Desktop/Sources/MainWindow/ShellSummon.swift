@@ -317,6 +317,30 @@ enum ShellSummon {
     summon()
   }
 
+  /// Whether the shell is currently ordered out to make room for macOS permission UI.
+  ///
+  /// The window being gone is not the user closing it, and `applicationShouldTerminateAfterLastWindowClosed`
+  /// cannot tell the difference on its own.
+  static var isSuspendedForPermissionPrompt: Bool { permissionSuspendedFrame != nil }
+
+  /// Whether losing the last window should end the process.
+  ///
+  /// Pure so the decision is provable without AppKit: the delegate hook it serves runs inside a
+  /// live `NSApplication` during a system permission prompt, which no hermetic test can stand up.
+  ///
+  /// Before onboarding completes there is no menu-bar residency to fall back on, so a closed last
+  /// window really does mean "quit". A permission prompt is the one case where the window is gone
+  /// because *we* took it away — `suspendForPermissionPrompt` orders it out so macOS can present
+  /// the dialog — and quitting there kills the app at the instant the user is granting the
+  /// permission onboarding just asked for. Every one of the eight callers reaches this path.
+  nonisolated static func shouldTerminateAfterLastWindowClosed(
+    hasCompletedOnboarding: Bool,
+    isSuspendedForPermissionPrompt: Bool
+  ) -> Bool {
+    guard !isSuspendedForPermissionPrompt else { return false }
+    return !hasCompletedOnboarding
+  }
+
   /// Temporarily remove the main Omi surface before handing control to macOS permission UI.
   ///
   /// This does not deactivate the application: callers may be about to trigger an in-process

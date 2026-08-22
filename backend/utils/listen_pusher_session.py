@@ -63,6 +63,7 @@ class ListenPusherSessionConfig:
     max_audio_buffer_size: int
     max_pending_requests: int
     max_pending_speaker_sample_requests: int
+    client_kind: str = 'unknown'
 
 
 @dataclass
@@ -517,7 +518,11 @@ class ListenPusherSession:
         try:
             pusher_sample_rate = TARGET_SAMPLE_RATE if self.config.is_multi_channel else self.config.sample_rate
             self.pusher_ws = await self.deps.connect_to_pusher(
-                self.uid, pusher_sample_rate, retries=5, is_active=self.deps.is_active
+                self.uid,
+                pusher_sample_rate,
+                retries=5,
+                is_active=self.deps.is_active,
+                client_kind=self.config.client_kind,
             )
             if self.pusher_ws is None:
                 return

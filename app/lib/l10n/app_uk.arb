@@ -3218,5 +3218,14 @@
     "sendRawAudioToOmi": "Надсилати необроблений звук до Omi",
     "sendRawAudioToOmiDescription": "Вимкніть, щоб необроблений звук не надсилався до Omi. Транскрипти й дані, потрібні хмарним функціям, усе ще можуть надсилатися до Omi.",
     "findDevice": "Знайти",
-    "diagnosticsShareFailed": "Не вдалося поділитися діагностикою. Спробуйте ще раз."
+    "diagnosticsShareFailed": "Не вдалося поділитися діагностикою. Спробуйте ще раз.",
+    "appDisabledTitle": "Цей застосунок вимкнено, і його не можна встановити.",
+    "appDisabledWebhookFailures": "Його endpoint не працював 72 години поспіль, тому доставку зупинено.",
+    "appDisabledGeneric": "Його вимкнула Omi.",
+    "appDisabledOwnerHint": "Спершу виправте endpoint — повторне ввімкнення перевіряє кожну налаштовану URL-адресу.",
+    "appReEnable": "Увімкнути знову",
+    "appReEnableFailedTitle": "Не вдалося ввімкнути знову",
+    "appReEnableFailedBody": "Не вдалося повторно ввімкнути цей застосунок. Спробуйте ще раз.",
+    "appDisabledOn": "Вимкнено {date}.",
+    "appDisabledLastError": "Остання помилка: {error}."
 }

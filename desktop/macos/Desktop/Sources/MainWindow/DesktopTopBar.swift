@@ -4,22 +4,23 @@ import SwiftUI
 /// The constant floating top bar.
 ///
 /// **It carries the destinations flat, and nothing opens.** On the left, one pill per destination:
-/// `Home`, `Library`, `Tasks`, `Rewind`, `Apps`. On the right, the referral action sits immediately
+/// `Home`, `Activity`, `Tasks`, `Rewind`, `Apps`. On the right, the referral action sits immediately
 /// before the microphone, followed by screen capture and settings.
 ///
 /// The bar used to spell out `Home · Memory · Tasks · Apps` beside `Listening` and `Capture`, and both
 /// halves were wrong once Home became a search surface. A **`Memory` destination sitting next to a
 /// field that already returns memories is a contradiction** — the user reads it as two different
-/// memories — so the destinations that search absorbs are reached through `Library`, which is where
+/// memories — so the destinations that search absorbs are reached through `Activity`, which is where
 /// the whole corpus lives when you want to browse it rather than ask for it. The right-hand pills,
 /// meanwhile, were two labels permanently occupying the corner of a window whose point is the field in
 /// the middle of it; `ShellStatusIcons` carries the same state in a dot and the same sentence in a
 /// tooltip, at a third of the width.
 ///
-/// `Library` then briefly opened a **hover menu** of seven destinations, and that was the worse
-/// mistake: a control that opens because the pointer crossed it and closes because the pointer left on
-/// the way to the row you wanted. It is gone. Three of its seven entries were the Memory hub's own
-/// views and now live on the hub's page (`MemoryHubSwitcher`); the rest are the flat pills above. See
+/// That pill — then labelled `Library` — briefly opened a **hover menu** of seven destinations, and
+/// that was the worse mistake: a control that opens because the pointer crossed it and closes because
+/// the pointer left on the way to the row you wanted. It is gone. Three of its seven entries were the
+/// Memory hub's own views and now live as chips on the page this pill opens
+/// (`ActivityDestinationChip`); the rest are the flat pills above. See
 /// `TopNavigationDestinations.swift` for the full argument and `ShellDestination` for the
 /// reachability contract that keeps it honest.
 ///
@@ -164,7 +165,16 @@ struct DesktopTopBar: View {
       onRewind()
       return
     }
-    OmiMotion.withGated(.easeOut(duration: 0.08)) { selectedIndex = index }
+    OmiMotion.withGated(.easeOut(duration: 0.08)) {
+      // The pill says `Activity`, so it opens Activity rather than whichever hub page was persisted
+      // last. `memoryDestinationRawValue` was declared here and never written — which is why this
+      // shell used to land on Memories with no chip row and no switcher: a dead end reachable from
+      // a cold launch, since the stored default is `.memories`.
+      if index == SidebarNavItem.conversations.rawValue {
+        memoryDestinationRawValue = MemoryHubDestination.activity.rawValue
+      }
+      selectedIndex = index
+    }
   }
 }
 

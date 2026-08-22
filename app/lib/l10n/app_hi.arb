@@ -3219,5 +3219,14 @@
     "sendRawAudioToOmi": "Omi को कच्चा ऑडियो भेजें",
     "sendRawAudioToOmiDescription": "Omi को कच्चा ऑडियो भेजे जाने से रोकने के लिए इसे बंद करें। ट्रांसक्रिप्ट और क्लाउड सुविधाओं के लिए आवश्यक डेटा अभी भी Omi को भेजा जा सकता है।",
     "findDevice": "ढूँढें",
-    "diagnosticsShareFailed": "डायग्नोस्टिक्स साझा नहीं किया जा सका। कृपया पुनः प्रयास करें।"
+    "diagnosticsShareFailed": "डायग्नोस्टिक्स साझा नहीं किया जा सका। कृपया पुनः प्रयास करें।",
+    "appDisabledTitle": "यह ऐप अक्षम है और इंस्टॉल नहीं किया जा सकता।",
+    "appDisabledWebhookFailures": "इसका एंडपॉइंट लगातार 72 घंटे तक विफल रहा, इसलिए डिलीवरी रोक दी गई।",
+    "appDisabledGeneric": "इसे Omi ने अक्षम कर दिया था।",
+    "appDisabledOwnerHint": "पहले एंडपॉइंट ठीक करें — फिर से सक्षम करने पर हर कॉन्फ़िगर किया गया URL दोबारा जाँचा जाता है।",
+    "appReEnable": "फिर से सक्षम करें",
+    "appReEnableFailedTitle": "फिर से सक्षम नहीं हो सका",
+    "appReEnableFailedBody": "इस ऐप को फिर से सक्षम नहीं किया जा सका। कृपया पुनः प्रयास करें।",
+    "appDisabledOn": "{date} को अक्षम किया गया।",
+    "appDisabledLastError": "अंतिम त्रुटि: {error}"
 }

@@ -1366,8 +1366,18 @@ public class ProactiveAssistantsPlugin: NSObject {
 
   // MARK: - CLI Test Triggers
 
-  /// Listen for distributed notifications from CLI to trigger test runs
+  /// Listen for distributed notifications from CLI to trigger test runs.
+  ///
+  /// Local development bundles only. `DistributedNotificationCenter` is a machine-wide bus with
+  /// no sender authentication, so a registered observer lets any local process deliver an
+  /// arbitrary proactive notification — floating-bar card, optional system banner — and journal
+  /// it into the signed-in user's real backend chat. `allowsLocalAutomation` (not the broader
+  /// `isNonProduction`) is the correct gate: external preview bundles ship to users outside the
+  /// team and share the non-production namespace, so they must ignore CLI triggers exactly as
+  /// the shipped apps do. Same predicate `DesktopAutomationBridge` uses for its debug surface.
   private func setupTestNotificationListeners() {
+    guard AppBuild.allowsLocalAutomation else { return }
+
     // Distributed notifications may arrive on the posting thread, so entering a selector on this
     // MainActor-isolated plugin can trap before a Task-based actor hop executes.
     let observers = [

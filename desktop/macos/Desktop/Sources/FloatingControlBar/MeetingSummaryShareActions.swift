@@ -39,12 +39,14 @@ enum MeetingSummaryShareActions {
     NotificationCenter.default.post(name: .desktopAutomationOpenConversationRequested, object: nil)
   }
 
+  /// Email these notes to the addresses the owner typed (detection only
+  /// prefilled the field, so the address is theirs, not ours).
   static func sendSummary(
-    conversationID: String, recipients: [ConversationShareRecipient]
+    conversationID: String, recipientEmails: [String]
   ) async throws -> [String] {
     try await APIClient.shared.sendConversationSummaryEmail(
       id: conversationID,
-      recipientEmails: recipients.map(\.email)
+      recipientEmails: recipientEmails
     )
   }
 }

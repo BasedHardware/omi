@@ -3495,6 +3495,16 @@ class FloatingControlBarManager {
     return .queued
   }
 
+  /// Let a card own the keyboard. The bar is ordinarily a non-activating
+  /// panel, so a text field inside a notification would silently swallow every
+  /// keystroke; the Share card's address field needs the panel to be key while
+  /// the owner types, and only while they type.
+  func focusBarWindowForTextEntry() {
+    guard let window else { return }
+    NSApp.activate(ignoringOtherApps: true)
+    window.makeKeyAndOrderFront(nil)
+  }
+
   func dismissCurrentNotification() {
     dismissCurrentNotification(kind: .user)
   }
