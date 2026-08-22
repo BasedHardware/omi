@@ -9929,6 +9929,20 @@ class AppLocalizationsFr extends AppLocalizations {
   String get accountCutoverOpenStore => 'Ouvrir le store';
 
   @override
+  String get chatScopeToday => 'Aujourd’hui';
+
+  @override
+  String get chatScopeThisWeek => 'Cette semaine';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'À propos de : $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Demander à ce sujet';
+
+  @override
   String get sendRawAudioToOmi => 'Envoyer l\'audio brut à Omi';
 
   @override

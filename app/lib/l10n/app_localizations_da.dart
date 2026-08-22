@@ -9827,6 +9827,20 @@ class AppLocalizationsDa extends AppLocalizations {
   String get accountCutoverOpenStore => 'Åbn butik';
 
   @override
+  String get chatScopeToday => 'I dag';
+
+  @override
+  String get chatScopeThisWeek => 'Denne uge';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Om: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Spørg om dette';
+
+  @override
   String get sendRawAudioToOmi => 'Send rå lyd til Omi';
 
   @override

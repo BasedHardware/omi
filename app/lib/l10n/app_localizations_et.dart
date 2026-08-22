@@ -9836,6 +9836,20 @@ class AppLocalizationsEt extends AppLocalizations {
   String get accountCutoverOpenStore => 'Avaa kauppa';
 
   @override
+  String get chatScopeToday => 'Täna';
+
+  @override
+  String get chatScopeThisWeek => 'Sel nädalal';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Teave: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Küsi selle kohta';
+
+  @override
   String get sendRawAudioToOmi => 'Saada töötlemata heli Omisse';
 
   @override

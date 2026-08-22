@@ -2683,7 +2683,9 @@ export interface OverageInfoResponse {
 }
 
 export interface PageContext {
+  end_date?: string | null;
   id?: string | null;
+  start_date?: string | null;
   title?: string | null;
   type: "conversation" | "task" | "memory" | "recap";
 }

@@ -9854,6 +9854,20 @@ class AppLocalizationsUr extends AppLocalizations {
   String get accountCutoverOpenStore => 'فتح المتجر';
 
   @override
+  String get chatScopeToday => 'آج';
+
+  @override
+  String get chatScopeThisWeek => 'اس ہفتے';
+
+  @override
+  String chatScopeAbout(String title) {
+    return '$title کے بارے میں';
+  }
+
+  @override
+  String get askAboutThisConversation => 'اس کے بارے میں پوچھیں';
+
+  @override
   String get sendRawAudioToOmi => 'خام آڈیو Omi کو بھیجیں';
 
   @override

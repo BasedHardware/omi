@@ -9932,6 +9932,20 @@ class AppLocalizationsTl extends AppLocalizations {
   String get accountCutoverOpenStore => 'Buka toko';
 
   @override
+  String get chatScopeToday => 'Ngayon';
+
+  @override
+  String get chatScopeThisWeek => 'Ngayong linggo';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Tungkol sa: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Itanong tungkol dito';
+
+  @override
   String get sendRawAudioToOmi => 'Ipadala ang raw na audio sa Omi';
 
   @override

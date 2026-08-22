@@ -9911,6 +9911,20 @@ class AppLocalizationsTa extends AppLocalizations {
   String get accountCutoverOpenStore => 'स्टोर खोलें';
 
   @override
+  String get chatScopeToday => 'இன்று';
+
+  @override
+  String get chatScopeThisWeek => 'இந்த வாரம்';
+
+  @override
+  String chatScopeAbout(String title) {
+    return '$title பற்றி';
+  }
+
+  @override
+  String get askAboutThisConversation => 'இதைப் பற்றி கேள்';
+
+  @override
   String get sendRawAudioToOmi => 'மூல ஆடியோவை Omi-க்கு அனுப்பவும்';
 
   @override

@@ -9838,6 +9838,20 @@ class AppLocalizationsVi extends AppLocalizations {
   String get accountCutoverOpenStore => 'Mở cửa hàng';
 
   @override
+  String get chatScopeToday => 'Hôm nay';
+
+  @override
+  String get chatScopeThisWeek => 'Tuần này';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Về: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Hỏi về điều này';
+
+  @override
   String get sendRawAudioToOmi => 'Gửi âm thanh thô đến Omi';
 
   @override
