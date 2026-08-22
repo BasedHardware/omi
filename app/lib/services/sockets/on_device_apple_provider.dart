@@ -46,7 +46,10 @@ class OnDeviceAppleProvider implements ISttProvider {
         }
 
         final duration = audioData.lengthInBytes / 32000.0;
-        final filteredText = _qualityGate.filter(result, audioData: audioData);
+        final filteredText = _qualityGate.filter(
+          result,
+          audioData: audioData,
+        );
         if (filteredText == null) {
           CustomSttLogService.instance.warning('OnDeviceApple', 'Dropped low-quality local transcript: $result');
           return null;
