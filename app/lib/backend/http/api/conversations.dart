@@ -298,12 +298,14 @@ class TranscriptsResponse {
   List<TranscriptSegment> soniox;
   List<TranscriptSegment> whisperx;
   List<TranscriptSegment> speechmatics;
+  List<TranscriptSegment> prerecorded;
 
   TranscriptsResponse({
     this.deepgram = const [],
     this.soniox = const [],
     this.whisperx = const [],
     this.speechmatics = const [],
+    this.prerecorded = const [],
   });
 
   factory TranscriptsResponse.fromJson(Map<String, dynamic> json) {
@@ -328,6 +330,7 @@ class TranscriptsResponse {
       soniox: readSegments('soniox'),
       whisperx: readSegments('whisperx'),
       speechmatics: readSegments('speechmatics'),
+      prerecorded: readSegments('prerecorded'),
     );
   }
 }
@@ -562,10 +565,10 @@ int? _parseRetryAfterSeconds(http.Response response) {
 ///
 /// The application-generated restriction response carries this bounded header.
 /// Everything else remains a generic backend-capacity limit.
-SyncRateLimitKind syncRateLimitKindForResponse(http.Response response) =>
-    response.headers['x-omi-rate-limit-reason']?.trim().toLowerCase() == 'fair_use'
-        ? SyncRateLimitKind.fairUse
-        : SyncRateLimitKind.backendCapacity;
+SyncRateLimitKind syncRateLimitKindForResponse(http.Response response) {
+  final reason = response.headers['x-omi-rate-limit-reason']?.trim().toLowerCase();
+  return reason == 'fair_use' ? SyncRateLimitKind.fairUse : SyncRateLimitKind.backendCapacity;
+}
 
 /// Upload-only: POST files and return as soon as the server acknowledges
 /// (HTTP 202 with a job_id, or the 200 fast-path with a finished result).
