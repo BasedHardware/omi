@@ -564,7 +564,10 @@ check_backend_unit_tests_if_needed() {
     : > "$FAST_BACKEND_TESTS"
     for file in "${CHANGED_FILES[@]}"; do
       case "$file" in
-        backend/tests/*.py|backend/tests/**/*.py)
+        backend/tests/unit/*.py|backend/tests/unit/**/*.py|\
+        backend/tests/services/*.py|backend/tests/services/**/*.py|\
+        backend/tests/routers/*.py|backend/tests/routers/**/*.py|\
+        backend/tests/test_*.py)
           if [ -f "$file" ]; then
             printf '%s\n' "${file#backend/}" >> "$FAST_BACKEND_TESTS"
           fi
