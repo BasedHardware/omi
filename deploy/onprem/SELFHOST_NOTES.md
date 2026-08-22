@@ -975,7 +975,19 @@ Include `testing/e2e/test_*.py` in the glob: port residuals (`db_client=`, chang
 in E2E suites that a `tests/unit`-only sweep never runs — two such residuals shipped past earlier
 audits before this was added (ADR-0040 rule 7).
 
-**First, empty `backend/_temp/`.** It is gitignored scratch that the speech-profile and audio suites
+**Always run the sweep under `time`.** It is the only reason the 14 GB below was ever found: the sweep
+had been getting slower for weeks and nothing said so, because a duration nobody records is a regression
+nobody can see. A wall-clock figure in the same place as the FAIL set makes "it got slower" a fact you
+notice on the next run instead of a feeling.
+
+```bash
+time docker run --rm -v $(git rev-parse --show-toplevel):/repo ...   # the sweep below
+```
+
+Reference on 20 cores, after the cleanup: **~3 min** for the full unit sweep, **~2m40s** with the
+one-container runner. Twice that means something changed — look at `_temp` first.
+
+**Second, empty `backend/_temp/`.** It is gitignored scratch that the speech-profile and audio suites
 write into, it is never cleaned, and `test_runtime_image_contracts` copies the whole backend tree **once
 per image contract** — so whatever has piled up there gets copied several times, over a bind mount, on
 every sweep.
