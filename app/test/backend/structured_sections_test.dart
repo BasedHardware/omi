@@ -7,19 +7,23 @@ import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 import 'package:omi/backend/schema/structured.dart';
 
 Map<String, dynamic> _structuredJson() => {
-  'title': 'Sprint sync',
-  'overview': 'Short compatibility paragraph.',
-  'emoji': '🧠',
-  'category': 'business',
-  'sections': [
-    {
-      'heading': 'Decisions',
-      'body_markdown': '- Ship the **beta** on Friday',
-      'source_segment_ids': ['seg-1', 'seg-2'],
-    },
-    {'heading': 'Risks', 'body_markdown': 'Backend migration is not started yet.', 'source_segment_ids': <String>[]},
-  ],
-};
+      'title': 'Sprint sync',
+      'overview': 'Short compatibility paragraph.',
+      'emoji': '🧠',
+      'category': 'business',
+      'sections': [
+        {
+          'heading': 'Decisions',
+          'body_markdown': '- Ship the **beta** on Friday',
+          'source_segment_ids': ['seg-1', 'seg-2'],
+        },
+        {
+          'heading': 'Risks',
+          'body_markdown': 'Backend migration is not started yet.',
+          'source_segment_ids': <String>[],
+        },
+      ],
+    };
 
 void main() {
   group('Structured sections', () {

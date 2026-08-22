@@ -11,7 +11,12 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/backend/schema/app.dart';
 
-Map<String, dynamic> _appJson({bool? disabled, String? disabledReason, String? disabledAt, String? disabledError}) {
+Map<String, dynamic> _appJson({
+  bool? disabled,
+  String? disabledReason,
+  String? disabledAt,
+  String? disabledError,
+}) {
   return {
     'id': 'app_123',
     'name': 'Test App',
@@ -35,20 +40,15 @@ Map<String, dynamic> _appJson({bool? disabled, String? disabledReason, String? d
 void main() {
   group('App disabled state', () {
     test('survives the wire to domain conversion', () {
-      final app = App.fromJson(
-        _appJson(
-          disabled: true,
-          disabledReason: 'webhook_failures',
-          disabledAt: '2026-05-30T16:06:32+00:00',
-          disabledError: 'HTTP 307',
-        ),
-      );
+      final app = App.fromJson(_appJson(
+        disabled: true,
+        disabledReason: 'webhook_failures',
+        disabledAt: '2026-05-30T16:06:32+00:00',
+        disabledError: 'HTTP 307',
+      ));
 
-      expect(
-        app.isDisabled(),
-        isTrue,
-        reason: 'the field was previously dropped at fromGeneratedDetail, so no screen could show it',
-      );
+      expect(app.isDisabled(), isTrue,
+          reason: 'the field was previously dropped at fromGeneratedDetail, so no screen could show it');
       expect(app.disabledReason, equals('webhook_failures'));
       expect(app.disabledAt, equals('2026-05-30T16:06:32+00:00'));
       expect(app.disabledError, equals('HTTP 307'));
@@ -80,14 +80,12 @@ void main() {
     });
 
     test('round-trips through toJson so cached apps keep the state', () {
-      final app = App.fromJson(
-        _appJson(
-          disabled: true,
-          disabledReason: 'webhook_failures',
-          disabledAt: '2026-05-30T16:06:32+00:00',
-          disabledError: 'HTTP 307',
-        ),
-      );
+      final app = App.fromJson(_appJson(
+        disabled: true,
+        disabledReason: 'webhook_failures',
+        disabledAt: '2026-05-30T16:06:32+00:00',
+        disabledError: 'HTTP 307',
+      ));
 
       final restored = App.fromJson(app.toJson());
 
