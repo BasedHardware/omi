@@ -1601,221 +1601,172 @@ class TestDailyScoreWireCompat:
         assert result['score'] == 50
 
 
-class TestScoreComputation:
-    """Verify score computation logic."""
+class _ScoreDoc:
+    def __init__(self, doc_id, data):
+        self.id = doc_id
+        self._data = data
 
-    def _make_mock_doc(self, data):
-        doc = MagicMock()
-        doc.to_dict.return_value = data
-        doc.id = data.get('id', 'doc-1')
-        return doc
+    def to_dict(self):
+        return self._data
 
-    def test_weekly_uses_created_at_not_due_at(self):
-        """get_scores weekly query uses created_at field, not due_at."""
-        mock_col = MagicMock()
 
-        # Daily query (due_at) returns empty
-        daily_query = MagicMock()
-        daily_query.where.return_value = daily_query
-        daily_query.stream.return_value = []
+class _ScoreFilter:
+    def __init__(self, field_path, op_string, value):
+        self.field_path = field_path
+        self.op_string = op_string
+        self.value = value
 
-        # Weekly query (created_at) returns 1 completed task
-        weekly_query = MagicMock()
-        weekly_query.where.return_value = weekly_query
-        weekly_doc = self._make_mock_doc({'completed': True, 'created_at': datetime.now(timezone.utc)})
-        weekly_query.stream.return_value = [weekly_doc]
 
-        # Overall stream returns same
-        mock_col.stream.return_value = [weekly_doc]
+class _ScoreCount:
+    def __init__(self, value):
+        self.value = value
 
-        # Track which field filters are created
-        captured_filters = []
-        original_ff = action_items_db.FieldFilter
 
-        def tracking_filter(field, op, value):
-            captured_filters.append(field)
-            return original_ff(field, op, value)
+class _ScoreAggregation:
+    def __init__(self, query):
+        self.query = query
 
-        call_count = [0]
+    def get(self):
+        return [[_ScoreCount(len(self.query._matching_docs()))]]
 
-        def col_where(**kwargs):
-            call_count[0] += 1
-            if call_count[0] <= 1:
-                return daily_query
+
+class _ScoreQuery:
+    def __init__(self, docs, filters=(), tracker=None, cursor=None, page_limit=None):
+        self.docs = docs
+        self.filters = filters
+        self.tracker = tracker if tracker is not None else {'filters': [], 'streams': []}
+        self.cursor = cursor
+        self.page_limit = page_limit
+
+    def where(self, *, filter):
+        self.tracker['filters'].append((filter.field_path, filter.op_string, filter.value))
+        return _ScoreQuery(
+            self.docs,
+            self.filters + ((filter.field_path, filter.op_string, filter.value),),
+            self.tracker,
+            self.cursor,
+            self.page_limit,
+        )
+
+    def order_by(self, *_args, **_kwargs):
+        return self
+
+    def limit(self, value):
+        return _ScoreQuery(self.docs, self.filters, self.tracker, self.cursor, value)
+
+    def start_after(self, cursor):
+        return _ScoreQuery(self.docs, self.filters, self.tracker, cursor, self.page_limit)
+
+    def _matching_docs(self):
+        docs = self.docs
+        for field, op, value in self.filters:
+            if op == '==':
+                docs = [
+                    doc for doc in docs if type(doc._data.get(field)) is type(value) and doc._data.get(field) == value
+                ]
+            elif op == '>=':
+                docs = [doc for doc in docs if doc._data.get(field) is not None and doc._data[field] >= value]
+            elif op == '<':
+                docs = [doc for doc in docs if doc._data.get(field) is not None and doc._data[field] < value]
             else:
-                return weekly_query
+                raise AssertionError(f'unsupported fake filter: {op}')
+        if self.cursor is not None:
+            cursor_index = next(index for index, doc in enumerate(docs) if doc.id == self.cursor.id)
+            docs = docs[cursor_index + 1 :]
+        return docs[: self.page_limit]
 
-        mock_col.where = col_where
+    def count(self):
+        return _ScoreAggregation(self)
 
-        with (
-            patch.object(action_items_db, 'db') as patched_db,
-            patch.object(action_items_db, 'FieldFilter', side_effect=tracking_filter),
-        ):
-            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
-            result = action_items_db.get_scores('test-uid', date='2025-01-15')
+    def stream(self):
+        self.tracker['streams'].append(self.filters)
+        return self._matching_docs()
 
-        # Verify created_at was used in filter calls (for weekly query)
-        assert 'created_at' in captured_filters, f"Expected created_at in filters, got: {captured_filters}"
 
-    def test_weekly_window_spans_seven_days_ending_on_date(self):
-        """The weekly window is the 7 days ending on `date`, i.e. [date-6, date+1).
+class _ScoreFirestore:
+    def __init__(self, rows):
+        self.query = _ScoreQuery([_ScoreDoc(f'task-{index}', row) for index, row in enumerate(rows)])
 
-        Regression: it was [date-7, date+1) — 8 calendar days — which over-counted
-        every task created on the date-7 day, inconsistent with the docstring and
-        with the one-day daily window [date, date+1).
-        """
+    def collection(self, _name):
+        if _name == action_items_db.action_items_collection:
+            return self.query
+        return self
+
+    def document(self, _doc_id):
+        return self
+
+
+class TestScoreComputation:
+    """Verify score computation logic through aggregate-query semantics."""
+
+    @pytest.fixture(autouse=True)
+    def _use_evaluable_field_filters(self, monkeypatch):
+        monkeypatch.setattr(action_items_db, 'FieldFilter', _ScoreFilter)
+
+    def test_weekly_uses_created_at_and_seven_day_window(self):
         from datetime import timedelta
 
-        mock_col = MagicMock()
-        empty = MagicMock()
-        empty.where.return_value = empty
-        empty.stream.return_value = []
-        mock_col.where.return_value = empty
-        mock_col.stream.return_value = []
-
-        captured = []  # (field, op, value)
-        original_ff = action_items_db.FieldFilter
-
-        def tracking_filter(field, op, value):
-            captured.append((field, op, value))
-            return original_ff(field, op, value)
-
-        with (
-            patch.object(action_items_db, 'db') as patched_db,
-            patch.object(action_items_db, 'FieldFilter', side_effect=tracking_filter),
-        ):
-            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
-            action_items_db.get_scores('test-uid', date='2026-07-19')
+        client = _ScoreFirestore([])
+        action_items_db.get_scores('test-uid', date='2026-07-19', firestore_client=client)
 
         day = datetime(2026, 7, 19, tzinfo=timezone.utc)
-        created_at_lower = [v for (f, op, v) in captured if f == 'created_at' and op == '>=']
-        assert created_at_lower, f"no created_at >= filter captured: {captured}"
-        # 7 days ending on 2026-07-19 -> lower bound is 2026-07-13 (day-6), not 2026-07-12 (day-7).
-        assert created_at_lower[0] == day - timedelta(days=6), created_at_lower[0]
+        filters = client.query.tracker['filters']
+        created_at_lower = [value for field, op, value in filters if field == 'created_at' and op == '>=']
+        assert created_at_lower == [day - timedelta(days=6)] * 2
 
     def test_default_tab_daily_when_highest(self):
-        """default_tab is 'daily' when daily has tasks and highest score."""
-        mock_col = MagicMock()
+        day = datetime(2025, 1, 15, 12, tzinfo=timezone.utc)
+        client = _ScoreFirestore(
+            [
+                {'completed': True, 'due_at': day, 'created_at': day},
+                {'completed': True, 'due_at': day, 'created_at': day},
+            ]
+        )
 
-        # Daily: 2/2 completed = 100%
-        daily_docs = [
-            self._make_mock_doc({'completed': True}),
-            self._make_mock_doc({'completed': True}),
-        ]
-        daily_query = MagicMock()
-        daily_query.where.return_value = daily_query
-        daily_query.stream.return_value = daily_docs
-
-        # Weekly: 1/2 = 50%
-        weekly_docs = [
-            self._make_mock_doc({'completed': True}),
-            self._make_mock_doc({'completed': False}),
-        ]
-        weekly_query = MagicMock()
-        weekly_query.where.return_value = weekly_query
-        weekly_query.stream.return_value = weekly_docs
-
-        # Overall: same as weekly
-        mock_col.stream.return_value = weekly_docs
-
-        call_count = [0]
-
-        def col_where(**kwargs):
-            call_count[0] += 1
-            if call_count[0] <= 1:
-                return daily_query
-            else:
-                return weekly_query
-
-        mock_col.where = col_where
-
-        with patch.object(action_items_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
-            result = action_items_db.get_scores('test-uid', date='2025-01-15')
+        result = action_items_db.get_scores('test-uid', date='2025-01-15', firestore_client=client)
 
         assert result['default_tab'] == 'daily'
 
     def test_default_tab_weekly_when_no_daily_tasks(self):
-        """default_tab is 'weekly' when daily has no tasks."""
-        mock_col = MagicMock()
+        day = datetime(2025, 1, 15, 12, tzinfo=timezone.utc)
+        client = _ScoreFirestore(
+            [
+                {'completed': True, 'created_at': day},
+                {'completed': False, 'created_at': day},
+            ]
+        )
 
-        # Daily: 0 tasks
-        daily_query = MagicMock()
-        daily_query.where.return_value = daily_query
-        daily_query.stream.return_value = []
-
-        # Weekly: 1/1 = 100%
-        weekly_doc = self._make_mock_doc({'completed': True})
-        weekly_query = MagicMock()
-        weekly_query.where.return_value = weekly_query
-        weekly_query.stream.return_value = [weekly_doc]
-
-        # Overall: 1/2 = 50%
-        overall_docs = [
-            self._make_mock_doc({'completed': True}),
-            self._make_mock_doc({'completed': False}),
-        ]
-        mock_col.stream.return_value = overall_docs
-
-        call_count = [0]
-
-        def col_where(**kwargs):
-            call_count[0] += 1
-            if call_count[0] <= 1:
-                return daily_query
-            else:
-                return weekly_query
-
-        mock_col.where = col_where
-
-        with patch.object(action_items_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
-            result = action_items_db.get_scores('test-uid', date='2025-01-15')
+        result = action_items_db.get_scores('test-uid', date='2025-01-15', firestore_client=client)
 
         assert result['default_tab'] == 'weekly'
 
-    def test_default_tab_overall_when_lowest_weekly(self):
-        """default_tab is 'overall' when overall score exceeds weekly."""
+    def test_default_tab_overall_when_weekly_is_lower(self):
+        client = _ScoreFirestore(
+            [
+                {'completed': False, 'created_at': datetime(2025, 1, 15, 12, tzinfo=timezone.utc)},
+                {'completed': True, 'created_at': datetime(2024, 1, 1, tzinfo=timezone.utc)},
+            ]
+        )
 
-        def _agg(n):
-            # Firestore count() aggregation shape: q.count().get()[0][0].value
-            m = MagicMock()
-            m.get.return_value = [[MagicMock(value=n)]]
-            return m
-
-        mock_col = MagicMock()
-        # Daily/weekly are filtered streams; overall is count()-based (total, completed, and the deleted
-        # subset all via aggregations, cubic 10887 E3). Route col.where by filter field so the counts are
-        # unambiguous: no deleted docs, overall total=2/completed=1 (50%), weekly one incomplete (0%).
-        daily_q = MagicMock()
-        daily_q.where.return_value = daily_q
-        daily_q.stream.return_value = []
-        weekly_q = MagicMock()
-        weekly_q.where.return_value = weekly_q
-        weekly_q.stream.return_value = [self._make_mock_doc({'completed': False})]
-        completed_q = MagicMock()
-        completed_q.count.return_value = _agg(1)  # overall completed = 1
-        deleted_q = MagicMock()
-        deleted_q.where.return_value = deleted_q
-        deleted_q.count.return_value = _agg(0)  # no deleted docs (deleted_total and deleted_completed = 0)
-
-        # FieldFilter is stubbed in this file's import setup, so route by call ORDER (as the sibling
-        # default_tab tests do), not by filter field. get_scores calls col.where in this order: daily
-        # (1), weekly (2), overall-completed (3), deleted-subset (4).
-        calls = [0]
-
-        def col_where(**kwargs):
-            calls[0] += 1
-            return {1: daily_q, 2: weekly_q, 3: completed_q}.get(calls[0], deleted_q)
-
-        mock_col.where = col_where
-        mock_col.count.return_value = _agg(2)  # overall total = 2
-
-        with patch.object(action_items_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
-            result = action_items_db.get_scores('test-uid', date='2025-01-15')
+        result = action_items_db.get_scores('test-uid', date='2025-01-15', firestore_client=client)
 
         assert result['default_tab'] == 'overall'
+
+    def test_soft_deleted_tasks_are_subtracted_without_full_document_scans(self):
+        day = datetime(2025, 1, 15, 12, tzinfo=timezone.utc)
+        client = _ScoreFirestore(
+            [
+                {'completed': True, 'due_at': day, 'created_at': day},
+                {'completed': True, 'deleted': True, 'due_at': day, 'created_at': day},
+            ]
+        )
+
+        result = action_items_db.get_scores('test-uid', date='2025-01-15', firestore_client=client)
+
+        assert result['daily'] == {'score': 100.0, 'completed_tasks': 1, 'total_tasks': 1}
+        assert result['weekly'] == {'score': 100.0, 'completed_tasks': 1, 'total_tasks': 1}
+        assert result['overall'] == {'score': 100.0, 'completed_tasks': 1, 'total_tasks': 1}
+        assert client.query.tracker['streams'] == [(('deleted', '==', True),)]
 
 
 # ===========================================================================

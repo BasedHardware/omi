@@ -3219,5 +3219,14 @@
     "sendRawAudioToOmi": "Sūtīt neapstrādātu audio uz Omi",
     "sendRawAudioToOmiDescription": "Izslēdziet, lai neapstrādāts audio netiktu sūtīts uz Omi. Transkripcijas un mākoņfunkcijām nepieciešamie dati joprojām var tikt sūtīti uz Omi.",
     "findDevice": "Atrast",
-    "diagnosticsShareFailed": "Neizdevās kopīgot diagnostiku. Mēģiniet vēlreiz."
+    "diagnosticsShareFailed": "Neizdevās kopīgot diagnostiku. Mēģiniet vēlreiz.",
+    "appDisabledTitle": "Šī lietotne ir atspējota, un to nevar instalēt.",
+    "appDisabledWebhookFailures": "Tās galapunkts neizdevās 72 stundas pēc kārtas, tāpēc piegādes tika apturētas.",
+    "appDisabledGeneric": "To atspējoja Omi.",
+    "appDisabledOwnerHint": "Vispirms izlabojiet galapunktu — atkārtoti iespējojot, katrs konfigurētais URL tiek pārbaudīts vēlreiz.",
+    "appReEnable": "Iespējot atkārtoti",
+    "appReEnableFailedTitle": "Neizdevās iespējot atkārtoti",
+    "appReEnableFailedBody": "Šo lietotni neizdevās iespējot atkārtoti. Mēģiniet vēlreiz.",
+    "appDisabledOn": "Atspējota {date}.",
+    "appDisabledLastError": "Pēdējā kļūda: {error}."
 }

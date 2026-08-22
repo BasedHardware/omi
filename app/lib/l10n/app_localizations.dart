@@ -18362,6 +18362,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Couldn\'t share diagnostics. Please try again.'**
   String get diagnosticsShareFailed;
+
+  /// Heading of the notice shown on an app the backend has automatically disabled
+  ///
+  /// In en, this message translates to:
+  /// **'This app is disabled and cannot be installed.'**
+  String get appDisabledTitle;
+
+  /// Explains that an app was auto-disabled because its webhook endpoint kept failing
+  ///
+  /// In en, this message translates to:
+  /// **'Its endpoint failed for 72 hours in a row, so deliveries were stopped.'**
+  String get appDisabledWebhookFailures;
+
+  /// Explains that an app was disabled for a reason other than webhook failures
+  ///
+  /// In en, this message translates to:
+  /// **'It was disabled by Omi.'**
+  String get appDisabledGeneric;
+
+  /// Hint telling the app owner to repair their endpoint before re-enabling the app
+  ///
+  /// In en, this message translates to:
+  /// **'Fix the endpoint first — re-enabling re-checks every configured URL.'**
+  String get appDisabledOwnerHint;
+
+  /// Button that clears the disabled flag on an app the owner has repaired
+  ///
+  /// In en, this message translates to:
+  /// **'Re-enable'**
+  String get appReEnable;
+
+  /// Title of the dialog shown when re-enabling a disabled app is rejected
+  ///
+  /// In en, this message translates to:
+  /// **'Could not re-enable'**
+  String get appReEnableFailedTitle;
+
+  /// Body of the dialog shown when re-enabling fails and the server gave no reason
+  ///
+  /// In en, this message translates to:
+  /// **'This app could not be re-enabled. Please try again.'**
+  String get appReEnableFailedBody;
+
+  /// States the date an app was automatically disabled
+  ///
+  /// In en, this message translates to:
+  /// **'Disabled on {date}.'**
+  String appDisabledOn(String date);
+
+  /// States the last error recorded from the app's endpoint before it was disabled
+  ///
+  /// In en, this message translates to:
+  /// **'Last error: {error}.'**
+  String appDisabledLastError(String error);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

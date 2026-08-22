@@ -9689,4 +9689,35 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get diagnosticsShareFailed => '診断情報を共有できませんでした。もう一度お試しください。';
+
+  @override
+  String get appDisabledTitle => 'このアプリは無効化されているため、インストールできません。';
+
+  @override
+  String get appDisabledWebhookFailures => 'エンドポイントが72時間連続で失敗したため、配信が停止されました。';
+
+  @override
+  String get appDisabledGeneric => 'Omi によって無効化されました。';
+
+  @override
+  String get appDisabledOwnerHint => '先にエンドポイントを修正してください。再有効化すると、設定済みのすべての URL が再確認されます。';
+
+  @override
+  String get appReEnable => '再有効化';
+
+  @override
+  String get appReEnableFailedTitle => '再有効化できませんでした';
+
+  @override
+  String get appReEnableFailedBody => 'このアプリを再有効化できませんでした。もう一度お試しください。';
+
+  @override
+  String appDisabledOn(String date) {
+    return '$date に無効化されました。';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return '最後のエラー: $error';
+  }
 }

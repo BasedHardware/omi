@@ -3196,5 +3196,14 @@
     "sendRawAudioToOmi": "Roh-Audio an Omi senden",
     "sendRawAudioToOmiDescription": "Deaktivieren, damit kein Roh-Audio an Omi gesendet wird. Transkripte und für Cloud-Funktionen benötigte Daten können weiterhin an Omi gesendet werden.",
     "findDevice": "Finden",
-    "diagnosticsShareFailed": "Diagnose konnte nicht geteilt werden. Bitte versuche es erneut."
+    "diagnosticsShareFailed": "Diagnose konnte nicht geteilt werden. Bitte versuche es erneut.",
+    "appDisabledTitle": "Diese App ist deaktiviert und kann nicht installiert werden.",
+    "appDisabledWebhookFailures": "Ihr Endpunkt ist 72 Stunden lang fehlgeschlagen, daher wurden die Zustellungen gestoppt.",
+    "appDisabledGeneric": "Sie wurde von Omi deaktiviert.",
+    "appDisabledOwnerHint": "Behebe zuerst den Endpunkt – beim Reaktivieren wird jede konfigurierte URL erneut geprüft.",
+    "appReEnable": "Reaktivieren",
+    "appReEnableFailedTitle": "Reaktivieren fehlgeschlagen",
+    "appReEnableFailedBody": "Diese App konnte nicht reaktiviert werden. Bitte versuche es erneut.",
+    "appDisabledOn": "Deaktiviert am {date}.",
+    "appDisabledLastError": "Letzter Fehler: {error}."
 }

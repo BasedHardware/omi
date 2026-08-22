@@ -3219,5 +3219,14 @@
     "sendRawAudioToOmi": "Siųsti neapdorotą garsą į Omi",
     "sendRawAudioToOmiDescription": "Išjunkite, kad neapdorotas garsas nebūtų siunčiamas į Omi. Transkripcijos ir debesies funkcijoms reikalingi duomenys vis tiek gali būti siunčiami į Omi.",
     "findDevice": "Rasti",
-    "diagnosticsShareFailed": "Nepavyko bendrinti diagnostikos. Bandykite dar kartą."
+    "diagnosticsShareFailed": "Nepavyko bendrinti diagnostikos. Bandykite dar kartą.",
+    "appDisabledTitle": "Ši programėlė išjungta ir jos įdiegti negalima.",
+    "appDisabledWebhookFailures": "Jos galinis taškas nepavyko 72 valandas iš eilės, todėl pristatymai buvo sustabdyti.",
+    "appDisabledGeneric": "Ją išjungė „Omi“.",
+    "appDisabledOwnerHint": "Pirmiausia pataisykite galinį tašką — įjungiant iš naujo kiekvienas sukonfigūruotas URL tikrinamas dar kartą.",
+    "appReEnable": "Įjungti iš naujo",
+    "appReEnableFailedTitle": "Nepavyko įjungti iš naujo",
+    "appReEnableFailedBody": "Šios programėlės nepavyko įjungti iš naujo. Bandykite dar kartą.",
+    "appDisabledOn": "Išjungta {date}.",
+    "appDisabledLastError": "Paskutinė klaida: {error}."
 }

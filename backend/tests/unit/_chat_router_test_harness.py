@@ -146,7 +146,54 @@ def wire_common_stubs(install) -> SimpleNamespace:
             self.finished = True
             self.outcomes.append(outcome)
 
+    class ClientJourneyAttempt:
+        """Stream-aware spy for the client-segmented journey wired by the router."""
+
+        instances = []
+
+        def __init__(self, journey, client_kind):
+            self.journey = journey
+            self.client_kind = client_kind
+            self.finished = False
+            self.outcome = None
+            self.issue_class = None
+            self.__class__.instances.append(self)
+
+        def finish(self, outcome, *, issue_class=None):
+            if self.finished:
+                return
+            self.finished = True
+            self.outcome = outcome
+            self.issue_class = issue_class
+
+        def observe_stream(
+            self,
+            source,
+            *,
+            success_when,
+            failure_when,
+            failure_class='provider_error',
+            missing_success_class='empty_answer',
+        ):
+            async def observed():
+                success_observed = False
+                async for item in source:
+                    if not self.finished:
+                        if failure_when(item):
+                            self.finish('failure', issue_class=failure_class)
+                        elif success_when(item):
+                            success_observed = True
+                    yield item
+                if not self.finished:
+                    if success_observed:
+                        self.finish('success')
+                    else:
+                        self.finish('failure', issue_class=missing_success_class)
+
+            return observed()
+
     journey_observability.JourneyAttempt = JourneyAttempt
+    journey_observability.ClientJourneyAttempt = ClientJourneyAttempt
     transcription_observability = install(
         'utils.observability.transcription', ModuleType('utils.observability.transcription')
     )

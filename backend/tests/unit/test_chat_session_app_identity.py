@@ -24,6 +24,7 @@ from fastapi import HTTPException
 
 import routers.chat as chat_router
 import utils.chat_session_target as chat_target
+from starlette.requests import Request
 
 APP_SESSION = {
     'id': 'sess-app',
@@ -164,8 +165,13 @@ def test_over_quota_turn_in_a_named_session_carries_session_and_app(monkeypatch,
 
     from models.chat import SendMessageRequest
 
+    # The over-quota path resolves the client population from request headers,
+    # so this turn needs a real request rather than a bare payload.
+    request = Request({'type': 'http', 'headers': [(b'x-app-platform', b'ios')]})
+
     chat_router.send_message(
         SendMessageRequest(text='hi'),
+        request,
         plugin_id=None,
         app_id=None,
         chat_session_id='sess-app',

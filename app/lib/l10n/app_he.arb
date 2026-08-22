@@ -10785,5 +10785,14 @@
     "sendRawAudioToOmi": "שליחת שמע גולמי ל-Omi",
     "sendRawAudioToOmiDescription": "כבו כדי למנוע שליחת שמע גולמי ל-Omi. תמלילים ונתונים הדרושים לתכונות הענן עדיין עשויים להישלח ל-Omi.",
     "findDevice": "איתור",
-    "diagnosticsShareFailed": "לא ניתן היה לשתף את האבחון. נסה שוב."
+    "diagnosticsShareFailed": "לא ניתן היה לשתף את האבחון. נסה שוב.",
+    "appDisabledTitle": "האפליקציה הזו מושבתת ולא ניתן להתקין אותה.",
+    "appDisabledWebhookFailures": "נקודת הקצה שלה נכשלה 72 שעות ברציפות, ולכן המשלוחים הופסקו.",
+    "appDisabledGeneric": "היא הושבתה על ידי Omi.",
+    "appDisabledOwnerHint": "תקן קודם את נקודת הקצה — הפעלה מחדש בודקת שוב כל כתובת URL מוגדרת.",
+    "appReEnable": "הפעל מחדש",
+    "appReEnableFailedTitle": "ההפעלה מחדש נכשלה",
+    "appReEnableFailedBody": "לא ניתן היה להפעיל מחדש את האפליקציה הזו. נסה שוב.",
+    "appDisabledOn": "הושבתה בתאריך {date}.",
+    "appDisabledLastError": "השגיאה האחרונה: {error}"
 }

@@ -3255,5 +3255,14 @@
     "sendRawAudioToOmi": "Enviar áudio em bruto para o Omi",
     "sendRawAudioToOmiDescription": "Desative para impedir o envio de áudio em bruto para o Omi. As transcrições e os dados necessários às funcionalidades na nuvem ainda podem ser enviados para o Omi.",
     "findDevice": "Encontrar",
-    "diagnosticsShareFailed": "Não foi possível partilhar o diagnóstico. Tente novamente."
+    "diagnosticsShareFailed": "Não foi possível partilhar o diagnóstico. Tente novamente.",
+    "appDisabledTitle": "Esta app está desativada e não pode ser instalada.",
+    "appDisabledWebhookFailures": "O endpoint falhou durante 72 horas seguidas, por isso os envios foram interrompidos.",
+    "appDisabledGeneric": "Foi desativada pela Omi.",
+    "appDisabledOwnerHint": "Corrija primeiro o endpoint: ao reativar, cada URL configurado é verificado novamente.",
+    "appReEnable": "Reativar",
+    "appReEnableFailedTitle": "Não foi possível reativar",
+    "appReEnableFailedBody": "Não foi possível reativar esta app. Tente novamente.",
+    "appDisabledOn": "Desativada em {date}.",
+    "appDisabledLastError": "Último erro: {error}."
 }

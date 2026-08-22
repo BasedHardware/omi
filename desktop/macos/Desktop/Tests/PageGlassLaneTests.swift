@@ -46,19 +46,30 @@ final class PageGlassLaneTests: XCTestCase {
   /// than Chat and its two panels lost their separation. The hub's list pages paint no ground of
   /// their own and must keep the lane.
   func testOnlyTheActivityHubPageBringsItsOwnPanels() {
-    for hubIndex in [SidebarNavItem.conversations.rawValue, SidebarNavItem.memories.rawValue] {
-      XCTAssertTrue(
-        PageGlassLanePolicy.ownsItsPanels(
-          selectedIndex: hubIndex,
-          memoryDestinationRawValue: MemoryHubDestination.activity.rawValue),
-        "Activity builds Home's own two panels and must not be wrapped in a third")
+    let hubIndex = SidebarNavItem.conversations.rawValue
+    XCTAssertTrue(
+      PageGlassLanePolicy.ownsItsPanels(
+        selectedIndex: hubIndex,
+        memoryDestinationRawValue: MemoryHubDestination.activity.rawValue),
+      "Activity builds Home's own two panels and must not be wrapped in a third")
 
-      for destination in MemoryHubDestination.allCases where destination != .activity {
-        XCTAssertFalse(
-          PageGlassLanePolicy.ownsItsPanels(
-            selectedIndex: hubIndex, memoryDestinationRawValue: destination.rawValue),
-          "\(destination.title) paints no ground of its own and must be given the lane's")
-      }
+    for destination in MemoryHubDestination.allCases where destination != .activity {
+      XCTAssertFalse(
+        PageGlassLanePolicy.ownsItsPanels(
+          selectedIndex: hubIndex, memoryDestinationRawValue: destination.rawValue),
+        "\(destination.title) paints no ground of its own and must be given the lane's")
+    }
+
+    // **The standalone Memories page is not the hub.** `SidebarNavItem.memories` renders
+    // `MemoriesPage` directly in this shell, and nothing resets the persisted hub destination on
+    // the way there — so answering this question off that value stripped a page that paints no
+    // ground of its own and drew its rows onto the user's wallpaper.
+    for destination in MemoryHubDestination.allCases {
+      XCTAssertFalse(
+        PageGlassLanePolicy.ownsItsPanels(
+          selectedIndex: SidebarNavItem.memories.rawValue,
+          memoryDestinationRawValue: destination.rawValue),
+        "the standalone Memories page must keep the lane whatever the hub last showed")
     }
 
     // A caller that does not know which hub page is mounted keeps the wrap: the list pages are the

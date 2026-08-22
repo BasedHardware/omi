@@ -3219,5 +3219,14 @@
     "sendRawAudioToOmi": "원본 오디오를 Omi로 보내기",
     "sendRawAudioToOmiDescription": "끄면 원본 오디오가 Omi로 전송되지 않습니다. 텍스트 변환 결과와 클라우드 기능에 필요한 데이터는 계속 Omi로 전송될 수 있습니다.",
     "findDevice": "찾기",
-    "diagnosticsShareFailed": "진단 정보를 공유하지 못했습니다. 다시 시도해 주세요."
+    "diagnosticsShareFailed": "진단 정보를 공유하지 못했습니다. 다시 시도해 주세요.",
+    "appDisabledTitle": "이 앱은 비활성화되어 설치할 수 없습니다.",
+    "appDisabledWebhookFailures": "엔드포인트가 72시간 연속으로 실패하여 전송이 중단되었습니다.",
+    "appDisabledGeneric": "Omi에 의해 비활성화되었습니다.",
+    "appDisabledOwnerHint": "먼저 엔드포인트를 수정하세요. 다시 활성화하면 설정된 모든 URL을 다시 확인합니다.",
+    "appReEnable": "다시 활성화",
+    "appReEnableFailedTitle": "다시 활성화할 수 없음",
+    "appReEnableFailedBody": "이 앱을 다시 활성화하지 못했습니다. 다시 시도해 주세요.",
+    "appDisabledOn": "{date}에 비활성화되었습니다.",
+    "appDisabledLastError": "마지막 오류: {error}"
 }

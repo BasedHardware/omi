@@ -9,6 +9,12 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database.firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode, record_firestore_read
+from database.firestore_index_registry import (
+    ACTION_ITEMS_COMPLETED_CREATED_RANGE_QUERY,
+    ACTION_ITEMS_COMPLETED_DUE_RANGE_QUERY,
+    ACTION_ITEMS_COMPLETION_ID_SCAN_QUERY,
+    ACTION_ITEMS_CREATED_RANGE_QUERY,
+)
 from ._client import db, get_firestore_client
 from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted
 
@@ -19,6 +25,7 @@ logger = logging.getLogger(__name__)
 action_items_collection = 'action_items'
 TASK_INTELLIGENCE_CONTROL_COLLECTION = 'task_intelligence_control'
 TASK_INTELLIGENCE_CONTROL_DOCUMENT = 'state'
+_ACTION_ITEM_SCAN_PAGE_SIZE = 500
 
 
 class TaskRelationshipConflictError(ValueError):
@@ -101,12 +108,28 @@ class BatchMutationResult:
         }
 
 
-def get_action_item_ids(uid: str) -> List[str]:
+def _iter_query_pages(query: Any, *, page_size: int = _ACTION_ITEM_SCAN_PAGE_SIZE) -> Iterable[Any]:
+    """Yield a complete query result through bounded snapshot-cursor pages."""
+    cursor = None
+    while True:
+        page_query = query.limit(page_size)
+        if cursor is not None:
+            page_query = page_query.start_after(cursor)
+        page = list(page_query.stream())
+        yield from page
+        if len(page) < page_size:
+            return
+        cursor = page[-1]
+
+
+def get_action_item_ids(uid: str, *, firestore_client: Any = None) -> List[str]:
     """Return all action item document IDs for a user (IDs-only projection, no field reads).
 
     Used for bulk operations like account deletion (e.g. to purge derived Pinecone vectors)."""
-    coll = db.collection('users').document(uid).collection(action_items_collection)
-    return [doc.id for doc in coll.select([]).stream()]
+    client = firestore_client or get_firestore_client()
+    coll = client.collection('users').document(uid).collection(action_items_collection)
+    query = coll.select([]).order_by('__name__')
+    return [doc.id for doc in _iter_query_pages(query)]
 
 
 def get_visible_action_item_ids(
@@ -135,10 +158,14 @@ def get_visible_action_item_ids(
     """
     client = firestore_client or get_firestore_client()
     coll = client.collection('users').document(uid).collection(action_items_collection)
-    query = coll.select(['completed', 'deleted']).where(filter=FieldFilter('completed', '==', completed))
+    query = ACTION_ITEMS_COMPLETION_ID_SCAN_QUERY.build(
+        coll.select(['completed', 'deleted']),
+        {'completed': completed},
+        field_filter_factory=FieldFilter,
+    ).order_by('__name__')
     visible_ids: List[str] = []
     doc_count = 0
-    for doc in query.stream():
+    for doc in _iter_query_pages(query):
         doc_count += 1
         data = _typed_doc(doc)
         if data.get('deleted'):
@@ -146,7 +173,7 @@ def get_visible_action_item_ids(
         visible_ids.append(doc.id)
     record_firestore_read(
         FirestoreReadFamily.ACTION_ITEMS_VISIBLE_IDS,
-        FirestoreReadMode.UNBOUNDED,
+        FirestoreReadMode.BOUNDED,
         doc_count,
     )
     return visible_ids
@@ -805,9 +832,13 @@ def get_active_action_item_by_description(uid: str, description: str) -> Optiona
         return None
 
     user_ref = db.collection('users').document(uid)
-    query = user_ref.collection(action_items_collection).where(filter=FieldFilter('completed', '==', False))
+    query = ACTION_ITEMS_COMPLETION_ID_SCAN_QUERY.build(
+        user_ref.collection(action_items_collection),
+        {'completed': False},
+        field_filter_factory=FieldFilter,
+    ).order_by('__name__')
 
-    for doc in query.stream():
+    for doc in _iter_query_pages(query):
         data: Dict[str, Any] = _typed_doc(doc)
         if data.get('deleted'):
             continue
@@ -1318,7 +1349,7 @@ def get_daily_score(uid: str, date: Optional[str] = None) -> Dict[str, Any]:
     return {'date': day.strftime('%Y-%m-%d'), 'score': score, 'completed_tasks': completed, 'total_tasks': total}
 
 
-def get_scores(uid: str, date: Optional[str] = None) -> Dict[str, Any]:
+def get_scores(uid: str, date: Optional[str] = None, *, firestore_client: Any = None) -> Dict[str, Any]:
     """Compute daily, weekly, and overall scores (matching Rust backend behavior).
 
     Takes a single date (or defaults to today) and returns:
@@ -1338,60 +1369,73 @@ def get_scores(uid: str, date: Optional[str] = None) -> Dict[str, Any]:
     # day-7 spanned 8 calendar days and over-counted the weekly totals.
     week_start = day - timedelta(days=6)
 
-    col = db.collection('users').document(uid).collection(action_items_collection)
+    client = firestore_client or get_firestore_client()
+    col = client.collection('users').document(uid).collection(action_items_collection)
 
     def _score(completed: int, total: int) -> float:
         return round((completed / total * 100) if total > 0 else 0, 1)
 
+    def _count(query: Any) -> int:
+        return int(query.count().get()[0][0].value)
+
+    # Count aggregation reads scale per 1,000 index entries instead of materializing
+    # every task document. Soft-deleted rows are rare and cannot be excluded with a
+    # Firestore equality predicate without also dropping legacy rows where ``deleted``
+    # is absent, so read only that small subset once and subtract it below.
+    deleted_items = [
+        _typed_doc(doc)
+        for doc in _iter_query_pages(col.where(filter=FieldFilter('deleted', '==', True)).order_by('__name__'))
+    ]
+
     # Daily: tasks due today
     daily_q = col.where(filter=FieldFilter('due_at', '>=', day_start)).where(filter=FieldFilter('due_at', '<', day_end))
-    # Exact-boolean (`is True`) across all three buckets: the overall bucket uses count() aggregations
-    # (which can only filter `== True`), so daily/weekly must agree or a non-canonical truthy value would
-    # count differently across buckets (cubic PR 10887 E2). Every in-tree writer stores real booleans
-    # (the only ``deleted`` write in this module is ``'deleted': True``), so this matches today's data.
-    # KNOWN, DELIBERATE DIVERGENCE (cubic review 4939247683): the list/count helpers elsewhere use a
-    # truthy check (``if data.get('deleted')``), so a NON-canonical truthy ``deleted`` (e.g. an external
-    # writer storing ``1``) counts as active HERE but is hidden there. This is forced by the count()
-    # aggregation's ``== True`` limit and cannot be unified without either a data migration to bool or
-    # regressing those helpers to unhide such legacy rows; it is latent because in-tree data is always bool.
-    daily_completed = daily_total = 0
-    for doc in daily_q.stream():
-        data: Dict[str, Any] = _typed_doc(doc)
-        if data.get('deleted') is True:
-            continue
-        daily_total += 1
-        if data.get('completed') is True:
-            daily_completed += 1
+    daily_total = _count(daily_q)
+    daily_completed = _count(
+        ACTION_ITEMS_COMPLETED_DUE_RANGE_QUERY.build(
+            col,
+            {'start': day_start, 'end': day_end, 'completed': True},
+            field_filter_factory=FieldFilter,
+        )
+    )
 
     # Weekly: tasks created in last 7 days (matches Rust backend which uses created_at)
-    weekly_q = col.where(filter=FieldFilter('created_at', '>=', week_start)).where(
-        filter=FieldFilter('created_at', '<', day_end)
+    weekly_q = ACTION_ITEMS_CREATED_RANGE_QUERY.build(
+        col,
+        {'start': week_start, 'end': day_end},
+        field_filter_factory=FieldFilter,
     )
-    weekly_completed = weekly_total = 0
-    for doc in weekly_q.stream():
-        data = _typed_doc(doc)
-        if data.get('deleted') is True:
-            continue
-        weekly_total += 1
-        if data.get('completed') is True:
-            weekly_completed += 1
+    weekly_total = _count(weekly_q)
+    weekly_completed = _count(
+        ACTION_ITEMS_COMPLETED_CREATED_RANGE_QUERY.build(
+            col,
+            {'start': week_start, 'end': day_end, 'completed': True},
+            field_filter_factory=FieldFilter,
+        )
+    )
 
-    # Overall: all non-deleted tasks. Use count() aggregation with a deleted-subset subtraction
-    # (mirroring get_action_items_count_by_conversation) rather than streaming the whole collection
-    # into process, which is unbounded in memory/latency for large accounts.
-    overall_total = int(col.count().get()[0][0].value)
-    overall_completed = int(col.where(filter=FieldFilter('completed', '==', True)).count().get()[0][0].value)
-    # Count the deleted subset with aggregations too — streaming it (cubic PR 10887 E3) re-materialized
-    # every soft-deleted task, keeping the exact unbounded memory/latency this block set out to avoid for
-    # large accounts. A single-field filtered count() needs no composite index; the composite
-    # deleted&completed count matches the facade's query support.
-    deleted_q = col.where(filter=FieldFilter('deleted', '==', True))
-    deleted_total = int(deleted_q.count().get()[0][0].value)
-    deleted_completed = int(deleted_q.where(filter=FieldFilter('completed', '==', True)).count().get()[0][0].value)
-    overall_total = max(0, overall_total - deleted_total)
-    # total and completed come from separate (non-atomic) aggregations, so cap completed at total to
-    # keep the pair internally consistent under a concurrent write.
-    overall_completed = min(max(0, overall_completed - deleted_completed), overall_total)
+    # Overall: all non-deleted tasks
+    overall_total = _count(col)
+    overall_completed = _count(col.where(filter=FieldFilter('completed', '==', True)))
+
+    for data in deleted_items:
+        completed = data.get('completed') is True
+        due_at = data.get('due_at')
+        if isinstance(due_at, datetime) and day_start <= due_at < day_end:
+            daily_total -= 1
+            daily_completed -= int(completed)
+        created_at = data.get('created_at')
+        if isinstance(created_at, datetime) and week_start <= created_at < day_end:
+            weekly_total -= 1
+            weekly_completed -= int(completed)
+        overall_total -= 1
+        overall_completed -= int(completed)
+
+    daily_total = max(0, daily_total)
+    daily_completed = max(0, daily_completed)
+    weekly_total = max(0, weekly_total)
+    weekly_completed = max(0, weekly_completed)
+    overall_total = max(0, overall_total)
+    overall_completed = max(0, overall_completed)
 
     daily: Dict[str, Any] = {
         'score': _score(daily_completed, daily_total),

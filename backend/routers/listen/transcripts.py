@@ -350,6 +350,7 @@ class TranscriptProcessor:
                         [segment.model_dump() for segment in transcript_segments],
                         self.host.state.current_conversation_id,
                         source=self.host.request.source,
+                        client_kind=self.host.client_kind,
                     )
                 except Exception as error:
                     logger.error('Realtime integration trigger failed type=%s', type(error).__name__)

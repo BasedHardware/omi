@@ -10785,5 +10785,14 @@
     "sendRawAudioToOmi": "Šalji sirovi zvuk u Omi",
     "sendRawAudioToOmiDescription": "Isključite da spriječite slanje sirovog zvuka u Omi. Transkripti i podaci potrebni za funkcije u oblaku i dalje se mogu slati u Omi.",
     "findDevice": "Pronađi",
-    "diagnosticsShareFailed": "Dijagnostiku nije bilo moguće podijeliti. Pokušaj ponovo."
+    "diagnosticsShareFailed": "Dijagnostiku nije bilo moguće podijeliti. Pokušaj ponovo.",
+    "appDisabledTitle": "Ova aplikacija je onemogućena i ne može se instalirati.",
+    "appDisabledWebhookFailures": "Njena krajnja tačka nije radila 72 sata zaredom, pa je isporuka zaustavljena.",
+    "appDisabledGeneric": "Onemogućila ju je Omi.",
+    "appDisabledOwnerHint": "Prvo popravi krajnju tačku — ponovno omogućavanje iznova provjerava svaki podešeni URL.",
+    "appReEnable": "Ponovo omogući",
+    "appReEnableFailedTitle": "Ponovno omogućavanje nije uspjelo",
+    "appReEnableFailedBody": "Ovu aplikaciju nije bilo moguće ponovo omogućiti. Pokušaj ponovo.",
+    "appDisabledOn": "Onemogućeno {date}.",
+    "appDisabledLastError": "Posljednja greška: {error}."
 }

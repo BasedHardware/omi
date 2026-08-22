@@ -9938,4 +9938,37 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get diagnosticsShareFailed => 'Diagnose konnte nicht geteilt werden. Bitte versuche es erneut.';
+
+  @override
+  String get appDisabledTitle => 'Diese App ist deaktiviert und kann nicht installiert werden.';
+
+  @override
+  String get appDisabledWebhookFailures =>
+      'Ihr Endpunkt ist 72 Stunden lang fehlgeschlagen, daher wurden die Zustellungen gestoppt.';
+
+  @override
+  String get appDisabledGeneric => 'Sie wurde von Omi deaktiviert.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Behebe zuerst den Endpunkt – beim Reaktivieren wird jede konfigurierte URL erneut geprüft.';
+
+  @override
+  String get appReEnable => 'Reaktivieren';
+
+  @override
+  String get appReEnableFailedTitle => 'Reaktivieren fehlgeschlagen';
+
+  @override
+  String get appReEnableFailedBody => 'Diese App konnte nicht reaktiviert werden. Bitte versuche es erneut.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Deaktiviert am $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Letzter Fehler: $error.';
+  }
 }

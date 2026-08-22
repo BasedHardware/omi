@@ -9878,4 +9878,36 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get diagnosticsShareFailed => 'Не вдалося поділитися діагностикою. Спробуйте ще раз.';
+
+  @override
+  String get appDisabledTitle => 'Цей застосунок вимкнено, і його не можна встановити.';
+
+  @override
+  String get appDisabledWebhookFailures => 'Його endpoint не працював 72 години поспіль, тому доставку зупинено.';
+
+  @override
+  String get appDisabledGeneric => 'Його вимкнула Omi.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Спершу виправте endpoint — повторне ввімкнення перевіряє кожну налаштовану URL-адресу.';
+
+  @override
+  String get appReEnable => 'Увімкнути знову';
+
+  @override
+  String get appReEnableFailedTitle => 'Не вдалося ввімкнути знову';
+
+  @override
+  String get appReEnableFailedBody => 'Не вдалося повторно ввімкнути цей застосунок. Спробуйте ще раз.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Вимкнено $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Остання помилка: $error.';
+  }
 }
