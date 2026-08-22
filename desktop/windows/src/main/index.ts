@@ -1048,6 +1048,11 @@ app.whenReady().then(async () => {
       surfaceMainWindow()
       withMainWindow((win) => win.webContents.send('tray:open-settings'))
     },
+    // Manual bar fallback: the bar is otherwise summon-only via the global
+    // hotkey (see bar/window.ts), which can't register on native Wayland
+    // (no XWayland grab semantics) — see AGENTS.md's Linux dev environment
+    // section. Fires the same gesture a hotkey tap would (toggles open/closed).
+    openBar: () => handleSummonPress(),
     // Manual update check (mirrors Settings → About and Mac's "Check for Updates").
     // checkForUpdatesNow never throws; log the outcome for a manual tester.
     checkForUpdates: () => {
