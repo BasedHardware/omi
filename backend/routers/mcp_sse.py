@@ -730,6 +730,33 @@ MCP_TOOLS: List[Dict[str, Any]] = [
 ]
 
 
+def _protected_resource_identity() -> str:
+    """The ``resource`` to advertise: the URL of THIS deployment's MCP endpoint.
+
+    Symmetric with :func:`_protected_resource_authorization_servers`, which already refuses rather than
+    mislead. This half did not: ``MCP_RESOURCE_URL`` falls back to ``PRODUCTION_MCP_RESOURCE_URL``
+    (``https://api.omi.me/v1/mcp/sse``), so a deployment that never declared it served UPSTREAM's endpoint
+    beside its OWN authorization server — telling a client to ask our IdP for a token audienced to
+    somebody else's resource. Measured on a self-host (BACKLOG L48).
+
+    The default stays for ``AUTH_BACKEND=firebase``, which IS that deployment. Under any other backend it
+    is a misconfiguration, and the same rule applies as one function below: surface it.
+    """
+    configured = (os.getenv("MCP_RESOURCE_URL") or "").strip()
+    if configured:
+        return configured
+    if auth_backend_name() == "firebase":
+        return MCP_RESOURCE_URL
+    raise HTTPException(
+        status_code=501,
+        detail=(
+            "MCP discovery unavailable: AUTH_BACKEND is not firebase, so MCP_RESOURCE_URL must name this "
+            "deployment's MCP endpoint (e.g. https://<your-host>/v1/mcp/sse). Unset it would advertise "
+            "the upstream Omi endpoint next to your own authorization server."
+        ),
+    )
+
+
 def _protected_resource_authorization_servers() -> list:
     """The ``authorization_servers`` to advertise for MCP protected-resource discovery. Shared by GET and
     HEAD so a probe (HEAD) and a client (GET) see the SAME availability — HEAD must not 200 while GET 501s
@@ -759,7 +786,7 @@ def oauth_protected_resource_metadata():
     # mcp_sse.py:735 — a prior refactor moved them onto the helper, so GET returned a bare list and broke discovery).
     authorization_servers = _protected_resource_authorization_servers()
     return {
-        "resource": MCP_RESOURCE_URL,
+        "resource": _protected_resource_identity(),
         "authorization_servers": authorization_servers,
         "scopes_supported": MCP_SCOPES_SUPPORTED,
         "bearer_methods_supported": ["header"],
@@ -771,8 +798,10 @@ def oauth_protected_resource_metadata():
 @router.head("/.well-known/oauth-protected-resource/v1/mcp/sse", tags=["mcp"])
 def oauth_protected_resource_metadata_head():
     # Same availability check as GET: 501 when OIDC discovery is misconfigured, so a HEAD probe does not
-    # report the resource as available when GET would 501 (cubic PR 10887 mcp_sse.py:745).
+    # report the resource as available when GET would 501 (cubic PR 10887 mcp_sse.py:745). BOTH halves,
+    # or HEAD would report available while GET 501s on the resource identity (BACKLOG L48).
     _protected_resource_authorization_servers()
+    _protected_resource_identity()
     return Response(status_code=200)
 
 

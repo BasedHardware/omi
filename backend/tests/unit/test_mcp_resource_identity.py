@@ -30,12 +30,62 @@ def test_the_document_reports_the_configured_resource(monkeypatch):
 
     monkeypatch.setenv('AUTH_BACKEND', 'oidc')
     monkeypatch.setenv('OIDC_ISSUER', 'https://auth.omi.internal/realms/omi')
-    monkeypatch.setattr(mcp_sse, 'MCP_RESOURCE_URL', 'https://omi.internal/v1/mcp/sse')
+    monkeypatch.setenv('MCP_RESOURCE_URL', 'https://omi.internal/v1/mcp/sse')
 
     document = mcp_sse.oauth_protected_resource_metadata()
 
     assert document['resource'] == 'https://omi.internal/v1/mcp/sse'
     assert document['authorization_servers'] == ['https://auth.omi.internal/realms/omi']
+
+
+def test_an_undeclared_resource_refuses_instead_of_advertising_upstream(monkeypatch):
+    """The half that used to mislead. Its sibling, authorization_servers, has always returned 501 on a
+    missing OIDC_ISSUER — "a misconfiguration should surface, not silently mislead". Falling back to
+    https://api.omi.me/v1/mcp/sse under a non-firebase backend is that same misconfiguration, told to a
+    client as if it were the answer."""
+    from fastapi import HTTPException
+
+    from routers import mcp_sse
+
+    monkeypatch.setenv('AUTH_BACKEND', 'oidc')
+    monkeypatch.setenv('OIDC_ISSUER', 'https://auth.omi.internal/realms/omi')
+    monkeypatch.delenv('MCP_RESOURCE_URL', raising=False)
+
+    with pytest.raises(HTTPException) as raised:
+        mcp_sse.oauth_protected_resource_metadata()
+
+    assert raised.value.status_code == 501
+    assert 'MCP_RESOURCE_URL' in raised.value.detail
+
+
+def test_the_upstream_default_still_stands_for_the_deployment_it_describes(monkeypatch):
+    """AUTH_BACKEND=firebase IS upstream's deployment. Refusing there would break the configuration the
+    default was written for — the divergence is scoped to the posture upstream does not run."""
+    from routers import mcp_sse
+
+    monkeypatch.setenv('AUTH_BACKEND', 'firebase')
+    monkeypatch.delenv('MCP_RESOURCE_URL', raising=False)
+
+    assert mcp_sse.oauth_protected_resource_metadata()['resource'] == mcp_sse.MCP_RESOURCE_URL
+
+
+def test_head_and_get_agree_on_availability(monkeypatch):
+    """A HEAD probe must not report the resource available while GET 501s — the rule the sibling half
+    already carried, now covering both."""
+    from fastapi import HTTPException
+
+    from routers import mcp_sse
+
+    monkeypatch.setenv('AUTH_BACKEND', 'oidc')
+    monkeypatch.setenv('OIDC_ISSUER', 'https://auth.omi.internal/realms/omi')
+    monkeypatch.delenv('MCP_RESOURCE_URL', raising=False)
+
+    with pytest.raises(HTTPException) as raised:
+        mcp_sse.oauth_protected_resource_metadata_head()
+    assert raised.value.status_code == 501
+
+    monkeypatch.setenv('MCP_RESOURCE_URL', 'https://omi.internal/v1/mcp/sse')
+    assert mcp_sse.oauth_protected_resource_metadata_head().status_code == 200
 
 
 def test_the_code_default_is_upstreams_endpoint():

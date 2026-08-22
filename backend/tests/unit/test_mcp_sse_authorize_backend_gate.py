@@ -46,6 +46,10 @@ def test_protected_resource_points_at_oidc_issuer_on_oidc(monkeypatch):
     # discovers the working authorization server, not the dead built-in one.
     monkeypatch.setenv("AUTH_BACKEND", "oidc")
     monkeypatch.setenv("OIDC_ISSUER", "https://idp.example/realms/omi")
+    # The resource half now also has to be declared under a non-firebase backend, or the whole document
+    # 501s rather than advertise upstream's endpoint (BACKLOG L48). This test is about the OTHER half, so
+    # it declares it and keeps asserting exactly what it always did.
+    monkeypatch.setenv("MCP_RESOURCE_URL", "https://omi.example/v1/mcp/sse")
     meta = oauth_protected_resource_metadata()
     assert meta["authorization_servers"] == ["https://idp.example/realms/omi"]
 
@@ -95,6 +99,9 @@ def test_protected_resource_head_matches_get_availability_under_misconfig(monkey
 
     monkeypatch.setenv("AUTH_BACKEND", "oidc")
     monkeypatch.delenv("OIDC_ISSUER", raising=False)
+    # Same note as above: the resource half is declared so this test still isolates the ISSUER
+    # misconfiguration it was written for (BACKLOG L48).
+    monkeypatch.setenv("MCP_RESOURCE_URL", "https://omi.example/v1/mcp/sse")
     with pytest.raises(HTTPException) as exc:
         oauth_protected_resource_metadata_head()
     assert exc.value.status_code == 501
