@@ -184,3 +184,7 @@ The Windows app is *better* than Mac in a few places; a naive port would be a do
 - **UI file 13** left 5 Mac visual files not fully read (CitationCardView, SpeakerBubbleView, AudioLevelWaveformView, Glow*Window mechanics, SpatialOverlayRenderGeometry) — listed in its "Follow-up needed" section; the highest-value items were covered directly.
 - **`OMI_BYOK_*` plumbing** in the agent runtime appears unconsumed — possibly not-yet-wired or dead (file 04).
 - This audit does **not** rank, sequence, or estimate. That is the next session's job (Fable 5 planning).
+
+## Sequencing & effort plan
+
+[`14-sequencing-plan.md`](14-sequencing-plan.md) is that next-session job: a wave-by-wave build order (quick wins → assistant-coordinator framework → the four proactive assistants in parallel → independent chat/voice/onboarding/rewind/app-shell tracks → deferred BLE), each item sized (XS–XL) and traced back to its finding above.
