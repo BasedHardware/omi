@@ -975,10 +975,32 @@ Include `testing/e2e/test_*.py` in the glob: port residuals (`db_client=`, chang
 in E2E suites that a `tests/unit`-only sweep never runs — two such residuals shipped past earlier
 audits before this was added (ADR-0040 rule 7).
 
-**De-flake before trusting a FAIL.** Docker-per-file startup contention makes a high `-P` produce
-false failures on a loaded box (observed: `-P 16` yielded ~90 false FAILs that all passed at `-P 3`).
-Re-run the FAIL set at low parallelism (`-P 3`) and diff against a pre-change baseline worktree before
-calling anything a regression.
+**First, empty `backend/_temp/`.** It is gitignored scratch that the speech-profile and audio suites
+write into, it is never cleaned, and `test_runtime_image_contracts` copies the whole backend tree **once
+per image contract** — so whatever has piled up there gets copied several times, over a bind mount, on
+every sweep.
+
+Measured on 2026-08-22, when that directory had reached **14 GB in 896 WAV files** (the rest of
+`backend/` is 100 MB):
+
+| | with 14 GB in `_temp` | after emptying it |
+|---|---|---|
+| `test_runtime_image_contracts.py` alone | **4 min 12 s** | **7 s** |
+| full unit sweep | **7 min 22 s** | **3 min 11 s** |
+
+Same verdicts in both cases — it is pure I/O. The files are written by root inside the containers, so a
+plain `rm -rf` fails with *Permission denied* and the directory keeps growing unnoticed:
+
+```bash
+sudo rm -rf backend/_temp && mkdir -p backend/_temp
+```
+
+**De-flake before trusting a FAIL** — and know what the flakiness actually is. An earlier note here
+blamed "docker-per-file startup contention" for `-P 16` yielding ~90 false FAILs that passed at `-P 3`.
+Measured, that was mostly the `_temp` copy above saturating disk I/O: one file was stalling all sixteen
+lanes, and unrelated suites showed identical ~84 s timings that are **1.3 s** when run alone. Empty
+`_temp` first; if a FAIL set still looks suspicious, re-run it at low parallelism (`-P 3`) and diff
+against a pre-change baseline worktree before calling anything a regression.
 
 To gate a change, **diff the FAIL set against a baseline worktree at the commit you started from** —
 not against the residual list below, which drifts (it said three files while the sweep failed eight).
