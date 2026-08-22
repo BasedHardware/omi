@@ -20,6 +20,9 @@ export interface TrayDeps {
   toggleListening: () => void
   /** Settings menu item — show the window and route to Settings. */
   openSettings: () => void
+  /** "Open Bar" menu item — manually summon the companion bar (fallback for
+   *  when the global hotkey can't register, e.g. native Wayland). */
+  openBar: () => void
   /** "Check for Updates" — run a manual update check (see updater.ts). */
   checkForUpdates: () => void
   /** "Screen Analysis" checkbox — flip the screenAnalysisEnabled master. The tray

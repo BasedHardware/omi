@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Added an \"Open Bar\" tray menu item to manually summon the companion bar — a fallback for when the global hotkey can't register (e.g. native Wayland on Linux)."
+  ]
+}
