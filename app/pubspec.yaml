@@ -45,11 +45,11 @@ dependencies:
   firebase_crashlytics: 4.3.2
 
   # Auth
-  google_sign_in: 6.2.2
-  sign_in_with_apple: ^6.1.1
+  google_sign_in: 7.2.0
+  sign_in_with_apple: ^8.1.0
 
   # Analytics and Support
-  intercom_flutter: 9.4.22
+  intercom_flutter: 9.6.22
   posthog_flutter: ^5.24.0
 
   # Logging
@@ -77,7 +77,7 @@ dependencies:
   # data above is only the picker's names, flags and dial codes.
   phone_numbers_parser: ^9.0.25
   share_plus: 11.0.0
-  shared_preferences: 2.5.3
+  shared_preferences: 2.5.5
   url_launcher: ^6.3.0
   wav: ^1.4.0
   path: ^1.9.0
@@ -95,7 +95,7 @@ dependencies:
   package_info_plus: ^8.0.1
   device_info_plus: ^11.5.0
   path_provider: 2.1.5
-  flutter_foreground_task: 9.1.0
+  flutter_foreground_task: 11.0.1
   upgrader: 11.4.0
   crypto: ^3.0.3
   flutter_markdown: ^0.7.7
@@ -108,14 +108,14 @@ dependencies:
     git:
       url: https://github.com/mdmohsin7/opus_dart.git
       ref: dev
-  flutter_timezone: 3.0.1
+  flutter_timezone: 5.1.0
   cached_network_image: 3.4.1
   map_launcher: ^3.5.0
   internet_connection_checker_plus: ^2.7.2
   geolocator: 14.0.1
   version: ^3.0.2
   webview_flutter: 4.13.0
-  flutter_sound: 9.25.1
+  flutter_sound: 9.30.0
   just_audio: ^0.9.39
   audio_session: ^0.1.21
   flutter_tts: ^4.2.0
@@ -137,7 +137,7 @@ dependencies:
       url: https://github.com/BasedHardware/whisper_flutter_new.git
       ref: af6b457cca4cdd6c97cc2dfa8557333ee09c81f1
   disk_space_2: ^1.0.11
-  pasteboard: ^0.4.0
+  pasteboard: ^0.5.0
   vector_math: ^2.2.0
   marionette_flutter: ^0.3.0
   quick_actions: ^1.0.0
@@ -157,7 +157,7 @@ dependency_overrides:
 
 dev_dependencies:
   flutter_launcher_icons: 0.13.1
-  google_sign_in_ios: 5.7.5
+  google_sign_in_ios: 6.3.0
   flutter_lints: ^4.0.0
   integration_test:
     sdk: flutter

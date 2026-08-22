@@ -671,10 +671,10 @@ packages:
     dependency: "direct main"
     description:
       name: flutter_foreground_task
-      sha256: "9f1b25a81db95d7119d2c5cffc654048cbdd49d4056183e1beadc1a6a38f3e29"
+      sha256: "6aea09d5539f8e21499185edd2e8d4998daf5d5eaba3db70edc682925287d96f"
       url: "https://pub.dev"
     source: hosted
-    version: "9.1.0"
+    version: "11.0.1"
   flutter_gen_core:
     dependency: transitive
     description:
@@ -764,26 +764,26 @@ packages:
     dependency: "direct main"
     description:
       name: flutter_sound
-      sha256: ac0bee62b9255014aa1ce629dbbc8e8bab40337403ec405213c0d7848ff9ad49
+      sha256: "77f0252a2f08449d621f68b8fd617c3b391e7f862eaa94bb32f53cc2dc3bbe85"
       url: "https://pub.dev"
     source: hosted
-    version: "9.25.1"
+    version: "9.30.0"
   flutter_sound_platform_interface:
     dependency: transitive
     description:
       name: flutter_sound_platform_interface
-      sha256: c57f996bd8049c71ac744b84439a951ea0bf495f6a229f3981dceb4dde0176a1
+      sha256: "5ffc858fd96c6fa277e3bb25eecc100849d75a8792b1f9674d1ba817aea9f861"
       url: "https://pub.dev"
     source: hosted
-    version: "9.25.1"
+    version: "9.30.0"
   flutter_sound_web:
     dependency: transitive
     description:
       name: flutter_sound_web
-      sha256: "2fcedb2291a465e3bebc1f3dd680ffeb4efe2a3d5fedd06d2f75701ede5de722"
+      sha256: "3af46f45f44768c01c83ba260855c956d0963673664947926d942aa6fbf6f6fb"
       url: "https://pub.dev"
     source: hosted
-    version: "9.25.1"
+    version: "9.30.0"
   flutter_svg:
     dependency: "direct main"
     description:
@@ -801,10 +801,10 @@ packages:
     dependency: "direct main"
     description:
       name: flutter_timezone
-      sha256: ea53c61c9152f271a5e30624a624184804947b6a733ff2b64186bb2579446892
+      sha256: "869677426fde92dbe170fb7d2d4929f2a8343c2f5f62f08b0bb64f908630b073"
       url: "https://pub.dev"
     source: hosted
-    version: "3.0.1"
+    version: "5.1.0"
   flutter_tts:
     dependency: "direct main"
     description:
@@ -907,42 +907,42 @@ packages:
     dependency: "direct main"
     description:
       name: google_sign_in
-      sha256: fad6ddc80c427b0bba705f2116204ce1173e09cf299f85e053d57a55e5b2dd56
+      sha256: "521031b65853b4409b8213c0387d57edaad7e2a949ce6dea0d8b2afc9cb29763"
       url: "https://pub.dev"
     source: hosted
-    version: "6.2.2"
+    version: "7.2.0"
   google_sign_in_android:
     dependency: transitive
     description:
       name: google_sign_in_android
-      sha256: d5e23c56a4b84b6427552f1cf3f98f716db3b1d1a647f16b96dbb5b93afa2805
+      sha256: "57782125965ca87b03d42a147d40b046f1fd6a09141a58913e1b86671a5ef22e"
       url: "https://pub.dev"
     source: hosted
-    version: "6.2.1"
+    version: "7.2.16"
   google_sign_in_ios:
     dependency: "direct dev"
     description:
       name: google_sign_in_ios
-      sha256: "1e0d4fde6cc07a8ff423f6bc931e83a74163d6af702004bacaee752649fdd2e7"
+      sha256: ac1e4c1205267cb7999d1d81333fccffdfda29e853f434bbaf71525498bb6950
       url: "https://pub.dev"
     source: hosted
-    version: "5.7.5"
+    version: "6.3.0"
   google_sign_in_platform_interface:
     dependency: transitive
     description:
       name: google_sign_in_platform_interface
-      sha256: "5f6f79cf139c197261adb6ac024577518ae48fdff8e53205c5373b5f6430a8aa"
+      sha256: "7f59208c42b415a3cca203571128d6f84f885fead2d5b53eb65a9e27f2965bb5"
       url: "https://pub.dev"
     source: hosted
-    version: "2.5.0"
+    version: "3.1.0"
   google_sign_in_web:
     dependency: transitive
     description:
       name: google_sign_in_web
-      sha256: "460547beb4962b7623ac0fb8122d6b8268c951cf0b646dd150d60498430e4ded"
+      sha256: d473003eeca892f96a01a64fc803378be765071cb0c265ee872c7f8683245d14
       url: "https://pub.dev"
     source: hosted
-    version: "0.12.4+4"
+    version: "1.1.3"
   googleapis_auth:
     dependency: "direct main"
     description:
@@ -1136,26 +1136,26 @@ packages:
     dependency: "direct main"
     description:
       name: intercom_flutter
-      sha256: "525f0fcab7571b838dc016f40e9993c6d611bda78843a453bce84865620eaf66"
+      sha256: "6e70a3c9ace52c3c6bbc294c5dd07eb434ba4ec7310241610af92a8b4a9a5c1a"
       url: "https://pub.dev"
     source: hosted
-    version: "9.4.22"
+    version: "9.6.22"
   intercom_flutter_platform_interface:
     dependency: transitive
     description:
       name: intercom_flutter_platform_interface
-      sha256: "18d250b81dad83ff3ff6f6f9c3f62ab30b6550e6ac5d2618330900e14107ae66"
+      sha256: cc2538eed1b665f3b1baf2fa0bcee99f1d5a1c700eec5bf70cc4a9c13fbe7c08
       url: "https://pub.dev"
     source: hosted
-    version: "2.0.6"
+    version: "2.0.8"
   intercom_flutter_web:
     dependency: transitive
     description:
       name: intercom_flutter_web
-      sha256: "957cf017a1e9286ea16e0f9538108f39a81dc10dbd94add5b91b241a182d5039"
+      sha256: ef2f065b22b3b585e16eb3e78e96d37e8ef3c66e8f543cd6211719d48aa26cc9
       url: "https://pub.dev"
     source: hosted
-    version: "1.1.11"
+    version: "1.1.13"
   internet_connection_checker_plus:
     dependency: "direct main"
     description:
@@ -1516,10 +1516,10 @@ packages:
     dependency: "direct main"
     description:
       name: pasteboard
-      sha256: "9ff73ada33f79a59ff91f6c01881fd4ed0a0031cfc4ae2d86c0384471525fca1"
+      sha256: fedbe8da188d2f713aa8b01260737342e6e1087534a3ab26e1a719f8d3e8f32f
       url: "https://pub.dev"
     source: hosted
-    version: "0.4.0"
+    version: "0.5.0"
   path:
     dependency: "direct main"
     description:
@@ -1860,10 +1860,10 @@ packages:
     dependency: "direct main"
     description:
       name: shared_preferences
-      sha256: "6e8bf70b7fef813df4e9a36f658ac46d107db4b4cfe1048b477d4e453a8159f5"
+      sha256: c3025c5534b01739267eb7d76959bbc25a6d10f6988e1c2a3036940133dd10bf
       url: "https://pub.dev"
     source: hosted
-    version: "2.5.3"
+    version: "2.5.5"
   shared_preferences_android:
     dependency: transitive
     description:
@@ -1940,26 +1940,26 @@ packages:
     dependency: "direct main"
     description:
       name: sign_in_with_apple
-      sha256: e84a62e17b7e463abf0a64ce826c2cd1f0b72dff07b7b275e32d5302d76fb4c5
+      sha256: d284f8e235ab0c5be09a1e9146466912bae8f15f0bd5eb3c4cb999b57cd5c3f9
       url: "https://pub.dev"
     source: hosted
-    version: "6.1.4"
+    version: "8.1.0"
   sign_in_with_apple_platform_interface:
     dependency: transitive
     description:
       name: sign_in_with_apple_platform_interface
-      sha256: c2ef2ce6273fce0c61acd7e9ff5be7181e33d7aa2b66508b39418b786cca2119
+      sha256: "981bca52cf3bb9c3ad7ef44aace2d543e5c468bb713fd8dda4275ff76dfa6659"
       url: "https://pub.dev"
     source: hosted
-    version: "1.1.0"
+    version: "2.0.0"
   sign_in_with_apple_web:
     dependency: transitive
     description:
       name: sign_in_with_apple_web
-      sha256: "2f7c38368f49e3f2043bca4b46a4a61aaae568c140a79aa0675dc59ad0ca49bc"
+      sha256: f316400827f52cafcf50d00e1a2e8a0abc534ca1264e856a81c5f06bd5b10fed
       url: "https://pub.dev"
     source: hosted
-    version: "2.1.1"
+    version: "3.0.0"
   skeletonizer:
     dependency: "direct main"
     description:
