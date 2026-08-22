@@ -341,7 +341,7 @@ def test_get_llm_feature_gateway_mode_bypasses_lane_for_provider_switch(monkeypa
     assert result.content == 'byok-direct response'
 
 
-def test_get_llm_prefers_openrouter_when_multiple_byok_keys_are_present(monkeypatch):
+def test_get_llm_uses_feature_profile_when_multiple_byok_keys_are_present(monkeypatch):
     legacy = FakeChatModel(name='byok-direct', calls=[])
     captured = {}
 
@@ -349,6 +349,31 @@ def test_get_llm_prefers_openrouter_when_multiple_byok_keys_are_present(monkeypa
         clients,
         'get_byok_key',
         lambda provider: {'openrouter': 'sk-test-openrouter', 'openai': 'sk-test-openai'}.get(provider),
+    )
+    monkeypatch.setattr(clients, 'should_route_features_through_gateway', lambda: False)
+
+    def create_client(*args, **kwargs):
+        captured['args'] = args
+        captured['kwargs'] = kwargs
+        return legacy
+
+    monkeypatch.setattr(clients, '_create_byok_client', create_client)
+
+    clients.get_llm('conv_discard')
+
+    assert legacy.name == 'byok-direct'
+    assert captured['args'][:2] == ('gpt-5-nano', 'openai')
+    assert captured['args'][2] == 'sk-test-openai'
+
+
+def test_get_llm_falls_back_to_openrouter_when_profile_key_is_missing(monkeypatch):
+    legacy = FakeChatModel(name='byok-direct', calls=[])
+    captured = {}
+
+    monkeypatch.setattr(
+        clients,
+        'get_byok_key',
+        lambda provider: 'sk-test-openrouter' if provider == 'openrouter' else None,
     )
     monkeypatch.setattr(clients, 'should_route_features_through_gateway', lambda: False)
 
