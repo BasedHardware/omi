@@ -101,4 +101,3 @@ quote-style = "preserve"
 
 [tool.ty.environment]
 python-version = "3.13"
-
