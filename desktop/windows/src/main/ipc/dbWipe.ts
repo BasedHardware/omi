@@ -37,6 +37,11 @@ export const USER_DATA_TABLES = [
   // The vectors themselves — derived from the user's screen content, so they must
   // go on an account switch just like the frame->content mapping above.
   'rewind_embedding_vectors',
+  // Chunk tombstones name `<day>/<firstFrameTs>-<lastFrameTs>.omichunk` files,
+  // so each row states when the previous account was at its screen. Derived
+  // from their data and must go with it. (The drift guard in dbWipe.test.ts
+  // caught this one missing too.)
+  'rewind_abandoned_chunks',
   'file_index_meta',
   // Track 2's voice-turn outbox holds queued user voice-message data; it must be
   // cleared on account switch (drift-guard caught it missing — see dbWipe.test.ts).

@@ -134,6 +134,7 @@ import {
 import { startRewindOcr } from './rewind/ocrService'
 import { startRewindEmbedding } from './rewind/embeddingService'
 import { startRewindRetention } from './rewind/retentionRunner'
+import { startRewindCompaction } from './rewind/chunks/compactionRunner'
 import { startOrphanSweep } from './rewind/orphanSweep'
 import { prewarmPrimarySourceId } from './rewind/sourceId'
 import { perfMark, flushPerfMarks } from '../shared/perf'
@@ -1194,6 +1195,11 @@ app.whenReady().then(async () => {
           }
         },
         { name: 'rewindRetention', run: () => startRewindRetention() },
+        // Pack older JPEGs into inter-frame-compressed chunks. Measured 51x on a
+        // real 60-second run of this app's own capture; see
+        // rewind/chunks/ARCHITECTURE.md. Starts late and runs every 30 minutes
+        // so it never competes with capture.
+        { name: 'rewindCompaction', run: () => startRewindCompaction() },
         // Delete JPEGs orphaned by a crash between the file write and the DB insert
         // (Windows-specific — frames are per-file). Startup pass + every 6h.
         { name: 'orphanSweep', run: () => startOrphanSweep() },

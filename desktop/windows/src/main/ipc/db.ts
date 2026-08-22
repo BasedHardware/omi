@@ -6,6 +6,17 @@ import { isNewLocalDay } from '../usage/usageDay'
 import { buildRewindFtsMatch } from '../rewind/rewindSearchQuery'
 import { addColumnIfMissing as ensureColumn, runMigrations } from './dbMigrations'
 import { applyRewindEmbeddingSchema } from './rewindEmbeddingSchema'
+import {
+  CHUNK_BACKED_FRAME_COUNT_SQL,
+  CLAIM_FRAME_INTO_CHUNK_SQL,
+  COMPACTABLE_FRAMES_SQL,
+  DELETE_FRAMES_IN_CHUNK_SQL,
+  FRAMES_IN_CHUNK_SQL,
+  IS_CHUNK_ABANDONED_SQL,
+  REFERENCED_CHUNK_PATHS_SQL,
+  TOMBSTONE_CHUNK_SQL
+} from '../rewind/chunks/chunkSql'
+import type { CompactableFrame } from '../rewind/chunks/compactionPlan'
 import { LOCAL_CONVERSATION_SCHEMA } from './localConversationSchema'
 import {
   clearCorruptionFlags,
@@ -680,6 +691,12 @@ function get(): Database.Database {
   // --- Track 4: additive columns on existing tables ---
   // Per-line OCR bounding boxes (JSON) for a future on-image highlight overlay.
   ensureColumn(db, 'rewind_frames', 'ocr_lines_json', 'TEXT')
+  // Video-chunk locator. Also added by migration 3 (which owns the matching
+  // index and the abandoned-chunk table); repeated here so the additive
+  // baseline stays a complete description of the table, as it is for every
+  // other column above.
+  ensureColumn(db, 'rewind_frames', 'chunk_path', 'TEXT')
+  ensureColumn(db, 'rewind_frames', 'chunk_offset', 'INTEGER')
   // Conversation starring + folder assignment (local mirror of the cloud fields).
   ensureColumn(db, 'local_conversation', 'starred', 'INTEGER NOT NULL DEFAULT 0')
   ensureColumn(db, 'local_conversation', 'folder_id', 'TEXT')
@@ -1436,14 +1453,31 @@ export function clearLocalGraph(): void {
 // --- Rewind: screen-history timeline ---
 
 const REWIND_COLUMNS =
-  'id, ts, app, window_title AS windowTitle, process_name AS processName, ocr_text AS ocrText, image_path AS imagePath, width, height, indexed'
+  'id, ts, app, window_title AS windowTitle, process_name AS processName, ocr_text AS ocrText, image_path AS imagePath, width, height, indexed, chunk_path AS chunkPath, chunk_offset AS chunkOffset'
 
 export function insertRewindFrame(f: Omit<RewindFrame, 'id'>): number {
   const r = cachedStmt(
     get(),
-    `INSERT INTO rewind_frames (ts, app, window_title, process_name, ocr_text, image_path, width, height, indexed)
-       VALUES (@ts, @app, @windowTitle, @processName, @ocrText, @imagePath, @width, @height, @indexed)`
-  ).run(f)
+    `INSERT INTO rewind_frames (ts, app, window_title, process_name, ocr_text, image_path, width, height, indexed, chunk_path, chunk_offset)
+       VALUES (@ts, @app, @windowTitle, @processName, @ocrText, @imagePath, @width, @height, @indexed, @chunkPath, @chunkOffset)`
+    // Bound explicitly rather than spreading `f`: better-sqlite3 rejects an
+    // object carrying names the statement does not declare, so a caller that
+    // read a frame back out and passed it straight in would throw. Every field
+    // the statement wants is listed, and the chunk locator defaults to NULL for
+    // the capture path, which is every caller except chunk recovery.
+  ).run({
+    ts: f.ts,
+    app: f.app,
+    windowTitle: f.windowTitle,
+    processName: f.processName,
+    ocrText: f.ocrText,
+    imagePath: f.imagePath,
+    width: f.width,
+    height: f.height,
+    indexed: f.indexed,
+    chunkPath: f.chunkPath ?? null,
+    chunkOffset: f.chunkOffset ?? null
+  })
   return r.lastInsertRowid as number
 }
 
@@ -1555,6 +1589,67 @@ export function getRewindFrameOcrLines(id: number): OcrLine[] {
   } catch {
     return []
   }
+}
+
+// --- Video chunks (see main/rewind/chunks/ARCHITECTURE.md) ---
+// Every statement below is imported from chunkSql.ts rather than written here,
+// so the SQL tests run the same text production does.
+
+/** Frames eligible for compaction: OCR'd, still JPEG-backed, older than the delay. */
+export function compactableRewindFrames(olderThanMs: number, limit: number): CompactableFrame[] {
+  return cachedStmt(get(), COMPACTABLE_FRAMES_SQL).all(olderThanMs, limit) as CompactableFrame[]
+}
+
+/**
+ * Point a frame at its slot in a chunk, giving up its JPEG path.
+ *
+ * Returns false when the frame was already claimed, which is the signal the
+ * compactor uses to abort a chunk rather than leave it half-owned. Refuses
+ * outright if the chunk has been tombstoned: an abandoned chunk's file may
+ * already be gone, and a frame pointed into it would be unreadable forever.
+ */
+export function claimFrameIntoChunk(id: number, chunkPath: string, offset: number): boolean {
+  const d = get()
+  const abandoned = cachedStmt(d, IS_CHUNK_ABANDONED_SQL).get(chunkPath) as { abandoned: number }
+  if (abandoned.abandoned) return false
+  const r = cachedStmt(d, CLAIM_FRAME_INTO_CHUNK_SQL).run(chunkPath, offset, id)
+  return r.changes === 1
+}
+
+/** Frames a chunk owns, in offset order. */
+export function framesInChunk(chunkPath: string): { id: number; ts: number; chunkOffset: number }[] {
+  return cachedStmt(get(), FRAMES_IN_CHUNK_SQL).all(chunkPath) as {
+    id: number
+    ts: number
+    chunkOffset: number
+  }[]
+}
+
+/** Every chunk path still referenced by a frame. */
+export function referencedChunkPaths(): string[] {
+  return (cachedStmt(get(), REFERENCED_CHUNK_PATHS_SQL).all() as { chunk_path: string }[]).map(
+    (r) => r.chunk_path
+  )
+}
+
+/**
+ * Tombstone a chunk and drop the frames pointing into it, in one transaction.
+ *
+ * Ported from macOS' `abandonVideoChunk`. The tombstone is inserted first so a
+ * crash between the two statements still leaves the chunk quarantined and a
+ * re-run finishes the job; both statements are idempotent.
+ */
+export function abandonChunk(chunkPath: string): number {
+  const d = get()
+  const run = d.transaction(() => {
+    cachedStmt(d, TOMBSTONE_CHUNK_SQL).run(chunkPath)
+    return cachedStmt(d, DELETE_FRAMES_IN_CHUNK_SQL).run(chunkPath).changes as number
+  })
+  return run()
+}
+
+export function chunkBackedFrameCount(): number {
+  return (cachedStmt(get(), CHUNK_BACKED_FRAME_COUNT_SQL).get() as { n: number }).n
 }
 
 /** Image paths of frames captured in [fromMs, toMs) — used by the orphaned-JPEG

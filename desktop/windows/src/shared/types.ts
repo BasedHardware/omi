@@ -1005,6 +1005,14 @@ export type OmiBridgeApi = {
     session: { desktopApiBase: string; token: string } | null
   ) => Promise<void>
   rewindFrameImage: (imagePath: string) => Promise<string>
+  /** Raw bytes of one `.omichunk`, for the renderer to decode a frame out of. */
+  rewindChunkBytes: (chunkPath: string) => Promise<Uint8Array>
+  /** Run a compaction pass now. Returns what it wrote and what it skipped. */
+  rewindCompactNow: () => Promise<RewindCompactionResult>
+  /** The compactor asking this renderer to encode a run of frames. */
+  onRewindEncodeChunk: (cb: (request: RewindEncodeChunkRequest) => void) => () => void
+  /** This renderer's answer to that request. */
+  rewindChunkEncoded: (response: RewindEncodeChunkResponse) => void
   // --- Track 4 --- per-line OCR bounding boxes (normalized 0..1) for the
   // on-image search highlight overlay in the Rewind frame viewer.
   rewindFrameOcrLines: (frameId: number) => Promise<OcrLine[]>
@@ -2030,10 +2038,38 @@ export type RewindFrame = {
   windowTitle: string
   processName: string
   ocrText: string
+  /** Path to this frame's own JPEG, or `''` once it has been compacted. */
   imagePath: string
   width: number
   height: number
   indexed: number // 0 = not yet OCR'd, 1 = OCR done
+  /**
+   * Set once the frame has been compacted into a video chunk: the chunk's
+   * `<day>/<name>.omichunk` relative path and this frame's position inside it.
+   * Exactly one of `imagePath` / `chunkPath` locates a frame's pixels — see
+   * `main/rewind/chunks/ARCHITECTURE.md`.
+   */
+  chunkPath?: string | null
+  chunkOffset?: number | null
+}
+
+/** One run of frames the compactor wants turned into a chunk. */
+export type RewindEncodeChunkRequest = {
+  requestId: string
+  width: number
+  height: number
+  frames: { captureTsMs: number; jpeg: Uint8Array }[]
+}
+
+export type RewindEncodeChunkResponse =
+  | { requestId: string; ok: true; bytes: Uint8Array }
+  | { requestId: string; ok: false; error: string }
+
+export type RewindCompactionResult = {
+  chunksWritten: number
+  framesCompacted: number
+  bytesReclaimed: number
+  skipped: { chunk: string; reason: string }[]
 }
 
 export type RewindSearchGroup = {

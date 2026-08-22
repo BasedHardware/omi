@@ -27,6 +27,9 @@ import { pruneRewindOnce } from '../rewind/retentionRunner'
 import { rebuildRewindIndexFromDisk } from '../rewind/rebuildIndex'
 import { rewindRoot } from '../rewind/paths'
 import { readRewindFrame } from '../rewind/frameFile'
+import { readChunkFile } from '../rewind/chunks/chunkFiles'
+import { compactRewindOnce, settleChunkEncode } from '../rewind/chunks/compactionRunner'
+import type { EncodeResponse } from '../rewind/chunks/chunkBroker'
 import type { RewindSettings } from '../../shared/types'
 
 /** How many semantic neighbours to pull before the similarity floor + the
@@ -126,6 +129,24 @@ export function registerRewindHandlers(): void {
     const buf = await readRewindFrame(rewindRoot(), imagePath)
     return `data:image/jpeg;base64,${buf.toString('base64')}`
   })
+  // --- Video chunks (main/rewind/chunks/ARCHITECTURE.md) ---
+  // A compacted frame has no JPEG; its pixels are one frame inside a chunk.
+  // Main hands over the chunk's bytes and the renderer decodes, because the
+  // cursor that keeps a scrub linear has to live next to the scrubber. The path
+  // is validated by resolveChunkPath before anything is read, so a corrupt row
+  // cannot address a file outside the Rewind root.
+  ipcMain.handle('rewind:chunkBytes', async (_e, chunkPath: string) => {
+    const bytes = await readChunkFile(rewindRoot(), chunkPath)
+    // Returned as a plain buffer; structured clone moves it without a base64
+    // round trip, which matters because a chunk is read once per scrub, not
+    // once per frame.
+    return bytes
+  })
+  // The renderer's answer to an encode request the compactor sent it.
+  ipcMain.on('rewind:chunk-encoded', (_e, response: EncodeResponse) => {
+    settleChunkEncode(response)
+  })
+  ipcMain.handle('rewind:compactNow', async () => compactRewindOnce())
   ipcMain.handle('rewind:getSettings', async () => getRewindSettings())
   ipcMain.handle('rewind:setSettings', async (_e, next: RewindSettings) => {
     updateRewindSettings(next)
