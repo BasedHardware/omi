@@ -508,9 +508,7 @@ def find_similar_memories(
     vector = embeddings.embed_query(content)
     filter_data = build_legacy_memory_vector_filter(uid, subject_entity_id=subject_entity_id)
 
-    matches = _vector_store().query(
-        MEMORIES_NAMESPACE, vector, top_k=limit, include_metadata=True, filter=filter_data
-    )
+    matches = _vector_store().query(MEMORIES_NAMESPACE, vector, top_k=limit, include_metadata=True, filter=filter_data)
 
     results: List[Dict[str, Any]] = []
     for match in matches:
@@ -551,9 +549,7 @@ def search_memories_by_vector(uid: str, query: str, limit: int = 10) -> List[str
     vector = embeddings.embed_query(query)
     filter_data = build_legacy_memory_vector_filter(uid)
 
-    matches = _vector_store().query(
-        MEMORIES_NAMESPACE, vector, top_k=limit, include_metadata=True, filter=filter_data
-    )
+    matches = _vector_store().query(MEMORIES_NAMESPACE, vector, top_k=limit, include_metadata=True, filter=filter_data)
 
     return [match['metadata'].get('memory_id') for match in matches]
 
@@ -771,9 +767,7 @@ def find_similar_x_posts(uid: str, content: str, limit: int = 10) -> List[Dict[s
         logger.warning('Pinecone index not initialized, skipping x_post similarity search')
         return []
     vector = embeddings.embed_query(content)
-    matches = _vector_store().query(
-        X_POSTS_NAMESPACE, vector, top_k=limit, include_metadata=True, filter={'uid': uid}
-    )
+    matches = _vector_store().query(X_POSTS_NAMESPACE, vector, top_k=limit, include_metadata=True, filter={'uid': uid})
     return [
         {
             'post_id': m['metadata'].get('post_id'),
@@ -896,6 +890,18 @@ def delete_screen_activity_vectors(uid: str, ids: List[str]) -> None:
 ACTION_ITEMS_NAMESPACE = "ns4"
 
 
+def _record_action_item_vector_fallback(from_mode: str, to_mode: str) -> None:
+    """One place for the action-item vector fail-opens, so the three cannot drift on their labels."""
+    record_fallback(
+        component='vector_store',
+        from_mode=from_mode,
+        to_mode=to_mode,
+        reason='other',
+        outcome='degraded',
+        log=logger,
+    )
+
+
 def upsert_action_item_vector(uid: str, action_item_id: str, description: str) -> List[float] | None:
     """Index one action item for semantic search.
 
@@ -928,6 +934,10 @@ def upsert_action_item_vector(uid: str, action_item_id: str, description: str) -
             f'upsert_action_item_vector failed uid={uid} action_item_id={action_item_id} '
             f'(task saved, vector missing): {e}'
         )
+        # The task is saved and permanently absent from semantic search until something indexes it
+        # again — and nothing does. Counted, not just logged: an embeddings endpoint that has been down
+        # for a day leaves a day of tasks unsearchable with no other trace (BACKLOG L20).
+        _record_action_item_vector_fallback('action_item_index', 'unindexed')
         return None
 
 
@@ -967,6 +977,9 @@ def upsert_action_item_vectors_batch(uid: str, items: List[Dict[str, Any]]) -> i
             f'upsert_action_item_vectors_batch failed uid={uid} count={len(items)} '
             f'(tasks saved, vectors missing): {e}'
         )
+        # Same loss as the single-item path, in bulk. One event per failed batch, not per item: the
+        # counter answers "is indexing broken", and per-item would let one bad batch drown the signal.
+        _record_action_item_vector_fallback('action_item_index', 'unindexed')
         return 0
 
 
@@ -1034,6 +1047,12 @@ def find_similar_action_items(uid: str, query: str, threshold: float = 0.6, limi
         return kept
     except Exception as e:
         logger.exception(f'find_similar_action_items failed uid={uid}: {e}')
+        # The most insidious of the three, because the fail-open value is ALSO the most common honest
+        # answer. This feeds the extraction prompt with the user's open tasks so the LLM can suppress
+        # duplicates; an empty list means "you have nothing relevant", so a failed search produces
+        # duplicate tasks rather than an error. It is the semantic half of the same invariant the unique
+        # index guards structurally (ADR-0085).
+        _record_action_item_vector_fallback('similarity_search', 'no_candidates')
         return []
 
 
