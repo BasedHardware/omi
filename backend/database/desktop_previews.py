@@ -198,7 +198,15 @@ def _publish_preview_transaction(
     manifest: dict[str, Any],
     expected_generation: int | None,
 ) -> dict[str, Any]:
+    # Both reads first. Firestore's Python SDK enforces "all reads before writes" CLIENT-side, so
+    # creating the manifest before reading the pointer made the first publish of any new artifact die
+    # with ReadAfterWriteError before a byte reached the server -- i.e. on the Firestore posture a
+    # preview could never be registered at all, only re-published once the manifest already existed.
+    # The neutral facade applies the write in the Mongo session and lets the read through, which is
+    # why on-prem never saw it. Same constraint database/memory_ledger.py records twice in comments.
     manifest_snapshot = manifest_ref.get(transaction=transaction)
+    pointer_snapshot = pointer_ref.get(transaction=transaction)
+
     if getattr(manifest_snapshot, "exists", False):
         raw_existing: object = manifest_snapshot.to_dict()
         existing_data = cast(dict[str, Any], raw_existing) if isinstance(raw_existing, dict) else {}
@@ -208,7 +216,6 @@ def _publish_preview_transaction(
     else:
         transaction.create(manifest_ref, {**manifest, "created_at": datetime.now(timezone.utc)})
 
-    pointer_snapshot = pointer_ref.get(transaction=transaction)
     raw_current: object = pointer_snapshot.to_dict() if getattr(pointer_snapshot, "exists", False) else {}
     current = cast(dict[str, Any], raw_current) if isinstance(raw_current, dict) else {}
     pointer = _build_preview_pointer(current, manifest, expected_generation=expected_generation)
