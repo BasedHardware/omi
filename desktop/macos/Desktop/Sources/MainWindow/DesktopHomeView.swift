@@ -100,6 +100,8 @@ struct DesktopHomeView: View {
     selectedIndex == SidebarNavItem.settings.rawValue
   }
 
+  private var homeOwnsItsPanels: Bool { !useLegacyHomeDesign }
+
   private var shouldShowAuthEntryShell: Bool {
     authState.isRestoringAuth || authState.sessionPhase == .recoveryRequired || !authState.isSignedIn
       || !hasCompletedOnboardingAtAuthorityRead
@@ -529,13 +531,10 @@ struct DesktopHomeView: View {
     }
   }
 
-  /// Pins the hugged glass: not smaller than the destinations, not wider than the
-  /// readable lane plus its page margins. Height stays display-limited.
+  /// Pins the shell between the destination minimum and the visible display frame.
   private static func pinShellWindowSizeLimits(_ window: NSWindow, resizeFrame: Bool = true) {
     let minimumContentSize = DesktopWindowLayoutPolicy.minimumContentSize
-    let maximumContentSize = NSSize(
-      width: DesktopWindowLayoutPolicy.maximumContentWidth,
-      height: 10_000)
+    let maximumContentSize = DesktopWindowLayoutPolicy.maximumContentSize(for: window)
     window.contentMinSize = minimumContentSize
     window.minSize = window.frameRect(forContentRect: NSRect(origin: .zero, size: minimumContentSize)).size
     window.contentMaxSize = maximumContentSize
@@ -1385,7 +1384,10 @@ struct DesktopHomeView: View {
 
       // One panel per destination — see `PageGlassLane`. Settings' own section list rides inside it
       // so the page is one object rather than a panel with its nav stranded on the wallpaper.
-      PageGlassLane(selectedIndex: selectedIndex) {
+      PageGlassLane(
+        selectedIndex: selectedIndex,
+        homeOwnsItsPanels: homeOwnsItsPanels
+      ) {
         HStack(spacing: 0) {
           if isInSettings && !showsPrimarySidebar { settingsSidebar }
           PageContentView(
