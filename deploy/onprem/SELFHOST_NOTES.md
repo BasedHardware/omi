@@ -1578,6 +1578,16 @@ Why MELD (Friends): multi-party dialogue with NAMED, recurring speakers (Ross, R
 maps 1:1 onto Omi's identified-person model (segment `person_id` → `Person(name)`). MELD is **not
 committed** (TV-derived, research-use only) — the seeder's header shows how to download `train_sent_emo.csv`.
 
+**What five users means here, and what it does not.** They are five INDEPENDENT accounts, each with its
+own conversations, memories, action items and vectors. Nothing is shared between them: the backend has
+no cross-user memory, no shared conversation and no notion of a team, so "multi-user" in this section
+means five parallel single-user datasets and nothing more. Said plainly because the shape invites the
+other reading — the seeded people (Ross, Rachel, …) appear across several accounts' transcripts, which
+looks like sharing and is not: each account identified them independently, from its own audio.
+
+Worth knowing before designing a demo on top of it: a scenario that needs one user to SEE another's
+memory has no backend to run on today. That is a product question, not a gap in the seed (BACKLOG L29).
+
 Dedicated declarative config (per ADR-0043, layered over the common base):
 - `compose.seed.yaml` — dev-posture (backend reaches HOST inference via `host.docker.internal`) **plus**
   real OIDC auth (`AUTH_BACKEND=oidc`, `LOCAL_DEVELOPMENT=false`) so multiple Keycloak users drive the API.
