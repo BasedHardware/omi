@@ -109,6 +109,7 @@
     "koffi": "^3.0.2",
     "lucide-react": "^1.16.0",
     "onnxruntime-web": "1.27.0",
+    "pose-viewer": "^1.2.0",
     "react-router-dom": "~7.18.2",
     "tailwind-merge": "^3.6.0",
     "three": "^0.184.0",
