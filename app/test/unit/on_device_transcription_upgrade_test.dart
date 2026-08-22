@@ -80,7 +80,10 @@ void main() {
         pathProviderChannel,
         null,
       );
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(speechChannel, null);
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        speechChannel,
+        null,
+      );
       if (await tempDir.exists()) await tempDir.delete(recursive: true);
     }
   });

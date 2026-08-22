@@ -54,8 +54,8 @@ class Structured {
         final Map<String, dynamic>? sectionJson = section is Map<String, dynamic>
             ? section
             : section is Map
-            ? Map<String, dynamic>.from(section)
-            : null;
+                ? Map<String, dynamic>.from(section)
+                : null;
         if (sectionJson == null) continue;
         // Section.fromJson throws a FormatException on a missing or mistyped
         // `heading` / `body_markdown`. Skip the bad entry the way the
@@ -172,7 +172,11 @@ class ActionItem {
 
   static fromJson(Map<String, dynamic> json) {
     final generated = wire.GeneratedActionItem.fromJson(json);
-    return ActionItem(generated.description, completed: generated.completed, deleted: json['deleted'] ?? false);
+    return ActionItem(
+      generated.description,
+      completed: generated.completed,
+      deleted: json['deleted'] ?? false,
+    );
   }
 
   wire.GeneratedActionItem toGenerated() {

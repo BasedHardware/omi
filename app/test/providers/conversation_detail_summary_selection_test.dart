@@ -12,7 +12,9 @@ import 'package:omi/providers/conversation_provider.dart';
 /// whatever app results the case under test needs.
 ServerConversation _conversation({List<AppResponse> appResults = const []}) {
   final structured = Structured('Sprint sync', 'Short compatibility paragraph.', emoji: '🧠');
-  structured.sections = [const wire.GeneratedSection(heading: 'Decisions', bodyMarkdown: 'Ship the beta on Friday')];
+  structured.sections = [
+    const wire.GeneratedSection(heading: 'Decisions', bodyMarkdown: 'Ship the beta on Friday'),
+  ];
   return ServerConversation(
     id: 'conv-1',
     createdAt: DateTime(2026, 7, 1, 9).toUtc(),
@@ -52,12 +54,10 @@ void main() {
   });
 
   test('the first app result that carries content is the summary', () {
-    final conversation = _conversation(
-      appResults: [
-        AppResponse('', appId: 'empty-app'),
-        AppResponse('App summary', appId: 'app-2'),
-      ],
-    );
+    final conversation = _conversation(appResults: [
+      AppResponse('', appId: 'empty-app'),
+      AppResponse('App summary', appId: 'app-2'),
+    ]);
 
     final summary = _providerFor(conversation).getSummarizedApp();
 
