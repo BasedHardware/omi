@@ -16,6 +16,7 @@
 import { startAiProfileHost } from './aiProfileHost'
 import { startRewindEmbedHost } from './rewindEmbedHost'
 import { startPiMonoAuthHost } from './piMonoAuthHost'
+import { startContextProjectionHost } from './intelligence/contextProjectionHost'
 
 let started = false
 
@@ -25,4 +26,5 @@ export function maybeStartInsightEngine(): void {
   startAiProfileHost()
   startRewindEmbedHost()
   startPiMonoAuthHost()
+  startContextProjectionHost()
 }

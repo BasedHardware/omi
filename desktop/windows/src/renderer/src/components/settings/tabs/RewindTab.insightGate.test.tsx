@@ -29,7 +29,8 @@ const ASSISTANTS: AssistantSettingsView = {
   focusNotificationsEnabled: true,
   memoryEnabled: false,
   glowOverlayEnabled: true,
-  screenAnalysisEnabled: true
+  screenAnalysisEnabled: true,
+  contextDirectorEnabled: false
 }
 
 function mockBridge(

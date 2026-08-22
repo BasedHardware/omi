@@ -453,9 +453,7 @@ export function useChat(): UseChat {
   // Snapshots the last non-Omi foreground window so we plan against the app the
   // user was actually using, not Omi itself.
   type PlanVerdict =
-    | { kind: 'planned'; plan: AutomationPlan }
-    | { kind: 'error' }
-    | { kind: 'chat' }
+    { kind: 'planned'; plan: AutomationPlan } | { kind: 'error' } | { kind: 'chat' }
   const tryPlan = async (text: string): Promise<PlanVerdict> => {
     // Desktop automation requires BOTH the OMI_AUTOMATION env kill-switch (on
     // unless OMI_AUTOMATION=0) and the user's onboarding opt-in. Until the user
