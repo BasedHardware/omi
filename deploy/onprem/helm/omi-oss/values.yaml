@@ -103,6 +103,12 @@ mongo:
   storage: 2Gi
   resources: {}
 
+# Public identity of the API itself, for the URLs we PUBLISH to clients (today the MCP
+# protected-resource document). Leave EMPTY to derive it from the pinned LoadBalancer IP, like
+# auth.hostname; set it when the API answers on a different name than the auth host.
+api:
+  hostname: ""
+
 # Feature profiles (compose parity) — OFF for the core milestone. Enabling them lands with their
 # templates in later steps (auth=Keycloak, chat=Qdrant, objstore=RustFS, push=ntfy, inference=GPU/k0s).
 auth:

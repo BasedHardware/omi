@@ -40,3 +40,17 @@ value, ingress.loadBalancerIP, fixes the issuer + TLS SAN without repeating the 
 {{- define "omi-oss.authHostname" -}}
 {{- .Values.auth.hostname | default (printf "https://%s" .Values.ingress.loadBalancerIP) -}}
 {{- end -}}
+
+{{/*
+Public base URL of THIS deployment's API, for identities we publish to clients (today: the MCP
+protected-resource document). Same derivation as authHostname — the HTTPRoute is hostname-agnostic and
+the API answers on the pinned LoadBalancer IP — but a separate value, because an operator may terminate
+auth and API on different names.
+*/}}
+{{- define "omi-oss.apiHostname" -}}
+{{- if .Values.api.hostname -}}
+{{- .Values.api.hostname -}}
+{{- else if .Values.ingress.loadBalancerIP -}}
+{{- printf "https://%s" .Values.ingress.loadBalancerIP -}}
+{{- end -}}
+{{- end -}}

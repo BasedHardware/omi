@@ -62,6 +62,15 @@ data:
   PUSH_NOTIFICATION_BACKEND: "unifiedpush"
   UNIFIEDPUSH_INTERNAL_BASE_URL: "http://ntfy:80"
   {{- end }}
+  {{- with (include "omi-oss.apiHostname" .) }}
+  # The MCP protected-resource identity (BACKLOG L48). Unset, the code default is upstream's OWN endpoint
+  # (https://api.omi.me/v1/mcp/sse, database/mcp_oauth.py), so this deployment's discovery document names
+  # OUR authorization server and UPSTREAM's URL as the resource — an MCP client would ask our IdP for a
+  # token audienced to Omi's cloud. Declared outside the auth profile on purpose: the API's public
+  # identity is not an auth concern, and a firebase-backed self-host would advertise it just the same.
+  # Emitted only when a hostname can be derived; "https:///v1/mcp/sse" would be worse than the default.
+  MCP_RESOURCE_URL: "{{ . }}/v1/mcp/sse"
+  {{- end }}
   {{- if .Values.auth.enabled }}
   # auth profile: OIDC (Keycloak) instead of Firebase (ADR-0034). OIDC_ISSUER is the public HTTPS issuer
   # (token `iss`); OIDC_JWKS_URL is the INTERNAL keycloak endpoint (keys fetched in-cluster, no edge

@@ -661,6 +661,56 @@ docker compose -f compose.prod.yaml exec -e OMI_VENDOR_EGRESS=allow backend /opt
 > this yet: there is no Prometheus in the compose or the chart, so today it is manual inspection (BACKLOG
 > L43, second half).
 
+## Configuration that only LOOKS set (ADR-0083) — and the MCP identity it hid
+
+Two checks now run before the backend serves anything, and one declaration exists because of what they
+found.
+
+**The boot gate.** `config/placeholder_values.py` refuses a value that was meant to be replaced, and the
+process stops with the variable named. Two tiers, deliberately:
+
+| pattern | scope | why |
+|---|---|---|
+| `CHANGE_ME` / `changeme` / `change-me` | **every** variable | no real value looks like that, and the examples ship it on FIVE secrets (`ENCRYPTION_SECRET`, `OMI_LLM_GATEWAY_SERVICE_TOKEN`, `METRICS_SECRET`, `MEMORY_V3_CURSOR_SECRET`, `TYPESENSE_API_KEY`). Miss one and you are not running with a weak secret, you are running with a **published** one |
+| `<...>`, `your-`, `example.com`, `TODO` | the site-specific list in `MUST_BE_SUBSTITUTED` | these CAN occur inside a legitimate value; applying them everywhere would make the gate cry wolf, and a gate that cries wolf gets an escape hatch |
+
+Also refused: `ADMIN_KEY` declared **empty**. Unset is fail-closed (every admin route requires the header
+and no string equals `None`); empty is not — the routes comparing `secret_key != os.getenv('ADMIN_KEY')`
+then accept an empty header. Leave the line out.
+
+The gateway runs the same gate: it is a separate process with its own env file, and gating only the
+backend would leave half the stack on a published token. The message names the **pattern**, never the
+value.
+
+What it does not do: reachability. A syntactically plausible issuer that no Keycloak serves passes.
+
+**`MCP_RESOURCE_URL`** is declared by both targets because of what the gate exposed on the way. Unset, the
+code default is upstream's own endpoint (`https://api.omi.me/v1/mcp/sse`), so a self-host served this:
+
+```json
+{"resource": "https://api.omi.me/v1/mcp/sse",
+ "authorization_servers": ["https://<your-issuer>/realms/omi"]}
+```
+
+— our authorization server, upstream's resource. An MCP client following it asks our Keycloak for a token
+audienced to Omi's cloud. Note that the *other half* of the same document already refuses to mislead:
+`authorization_servers` returns **501** when `OIDC_ISSUER` is missing under `AUTH_BACKEND=oidc`.
+
+Compose declares it in `backend.env.prod`; the chart derives it from `omi-oss.apiHostname`
+(`api.hostname`, or the pinned LoadBalancer IP), **outside** the auth profile — a firebase-backed
+self-host advertises upstream's URL just the same. Verify it on either target:
+
+```bash
+# compose
+docker compose -f compose.prod.yaml exec -T backend \
+  curl -s http://localhost:8080/.well-known/oauth-protected-resource | python3 -m json.tool
+# k0s
+POD=$(kubectl -n omi get pods -l app.kubernetes.io/component=backend -o jsonpath='{.items[0].metadata.name}')
+kubectl -n omi exec $POD -c backend -- curl -s http://localhost:8080/.well-known/oauth-protected-resource
+```
+
+`resource` and `authorization_servers` must both name **your** deployment.
+
 ## Scheduled work: ONE compose service, several cadences (ADR-0062/0065)
 
 `--profile jobs` brings up a single `scheduled_jobs` container. Which jobs it ticks, and how often, is
