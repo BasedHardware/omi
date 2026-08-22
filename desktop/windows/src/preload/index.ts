@@ -20,6 +20,8 @@ import type {
   ListenMessage,
   CaptureCommand,
   CaptureEvent,
+  OfflineCaptureSettings,
+  WalSyncSnapshot,
   ExportMemory,
   GoogleSource,
   KnowledgeGraph,
@@ -141,6 +143,20 @@ const omi: OmiBridgeApi = {
   },
   captureEmit: (event: CaptureEvent, ownerId?: number) =>
     ipcRenderer.send('omi-capture:event', { event, ownerId }),
+  walSnapshot: () => ipcRenderer.invoke('omi-wal:snapshot'),
+  walStorageBytes: () => ipcRenderer.invoke('omi-wal:storage-bytes'),
+  walRetry: (id: string) => ipcRenderer.invoke('omi-wal:retry', id),
+  walDiscard: (id: string) => ipcRenderer.invoke('omi-wal:discard', id),
+  walReleaseConfirmed: () => ipcRenderer.invoke('omi-wal:release-confirmed'),
+  walGetSettings: () => ipcRenderer.invoke('omi-wal:get-settings'),
+  walSetSettings: (patch: Partial<OfflineCaptureSettings>) =>
+    ipcRenderer.invoke('omi-wal:set-settings', patch),
+  onWalSnapshot: (cb: (snapshot: WalSyncSnapshot) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, snapshot: WalSyncSnapshot): void =>
+      cb(snapshot)
+    ipcRenderer.on('omi-wal:snapshot', listener)
+    return () => ipcRenderer.removeListener('omi-wal:snapshot', listener)
+  },
   onCaptureEvent: (cb: (e: CaptureEvent) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, ev: CaptureEvent): void => cb(ev)
     ipcRenderer.on('omi-capture:event', listener)

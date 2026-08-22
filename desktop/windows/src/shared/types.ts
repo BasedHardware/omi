@@ -127,7 +127,12 @@ export type ChatMessage = {
  * See lib/sync/outbox.ts for the transition rules and dedupe strategy.
  */
 export type ConversationSyncState =
-  'local_only' | 'pending' | 'posting' | 'done' | 'failed' | 'unconfirmed'
+  | 'local_only'
+  | 'pending'
+  | 'posting'
+  | 'done'
+  | 'failed'
+  | 'unconfirmed'
 
 /** One transcript segment in the `/v1/conversations/from-segments` request shape
  * (snake_case matches the wire verbatim). `start`/`end` are WALL-CLOCK
@@ -754,6 +759,23 @@ export type OmiBridgeApi = {
   /** Subscribe to events from the capture window (audio errors, live-store ops,
    *  PTT chunks/levels). Returns an unsubscribe fn. */
   onCaptureEvent: (cb: (e: CaptureEvent) => void) => () => void
+  // --- Offline audio capture ---
+  /** Current state of the offline-audio log. */
+  walSnapshot: () => Promise<WalSyncSnapshot | null>
+  /** Bytes the stored audio occupies on disk. */
+  walStorageBytes: () => Promise<number>
+  /** Retry one recording now, clearing its attempt history. */
+  walRetry: (id: string) => Promise<void>
+  /** Delete one recording and its audio. */
+  walDiscard: (id: string) => Promise<void>
+  /** Release every recording the server has confirmed. */
+  walReleaseConfirmed: () => Promise<number>
+  /** Subscribe to log changes. Returns an unsubscribe fn. */
+  onWalSnapshot: (cb: (snapshot: WalSyncSnapshot) => void) => () => void
+  /** Read the offline-capture preferences. */
+  walGetSettings: () => Promise<OfflineCaptureSettings>
+  /** Patch them; returns the sanitized result. */
+  walSetSettings: (patch: Partial<OfflineCaptureSettings>) => Promise<OfflineCaptureSettings>
   /** True when OMI_ALLOW_VIRTUAL_MIC=1 — lets test harnesses feed a VB-Cable as
    *  the mic. When false, capture steers away from virtual/loopback default
    *  inputs (see lib/audio acquireMicStream). */
@@ -1709,7 +1731,13 @@ export type MemoryExportResult = {
 }
 
 export type IndexedFileType =
-  'document' | 'code' | 'image' | 'media' | 'archive' | 'application' | 'other'
+  | 'document'
+  | 'code'
+  | 'image'
+  | 'media'
+  | 'archive'
+  | 'application'
+  | 'other'
 
 export type IndexedFileRecord = {
   path: string
@@ -1803,7 +1831,14 @@ export type RebuildResult = {
 // the macOS-parity local graph synthesized from indexed_files + memories and
 // consumed by the chat pre-step. Never conflate the two mechanisms.
 export type LocalKGNodeType =
-  'project' | 'app' | 'technology' | 'person' | 'org' | 'interest' | 'file_group' | 'card' // background-synthesized natural-language overview served to the chat floor
+  | 'project'
+  | 'app'
+  | 'technology'
+  | 'person'
+  | 'org'
+  | 'interest'
+  | 'file_group'
+  | 'card' // background-synthesized natural-language overview served to the chat floor
 
 export type LocalKGNode = {
   id: string // `${slug(label)}:${nodeType}` — stable across re-synthesis
@@ -2703,4 +2738,54 @@ export interface VoiceTurnOutboxEntry {
   attempts: number
   lastError: string | null
   updatedAtMs: number
+}
+
+// --- Offline audio capture (write-ahead log) ---------------------------------
+
+/** One stored recording as the sync UI sees it. */
+export type WalRecordingView = {
+  id: string
+  /** Capture start, unix seconds. */
+  timerStart: number
+  seconds: number
+  /** Capture source the audio came from. */
+  device: string
+  sizeBytes: number
+  /** Explicit sync state; every value gets its own label in the UI. */
+  state:
+    | 'syncing'
+    | 'uploaded'
+    | 'synced'
+    | 'waiting'
+    | 'retrying'
+    | 'failed'
+    | 'corrupted'
+    | 'outsideRecoveryWindow'
+  retryCount: number
+}
+
+export type WalSyncSnapshot = {
+  stats: {
+    total: number
+    pending: number
+    uploaded: number
+    synced: number
+    failed: number
+    bytes: number
+  }
+  /** True while the backend has asked sync to pause. */
+  paused: boolean
+  recordings: WalRecordingView[]
+}
+
+/** Offline-capture preferences (main owns them: capture runs with no UI open). */
+export type OfflineCaptureSettings = {
+  /** Upload stored recordings automatically. */
+  autoSync: boolean
+  /** Keep every window, not only the ones that lost audio. */
+  retainEverything: boolean
+  /** Confirmed recordings older than this are released. */
+  retentionDays: number
+  /** Bytes the stored audio may occupy. */
+  maxBytes: number
 }
