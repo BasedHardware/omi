@@ -59,11 +59,7 @@ Future<GetMemoriesResult> getMemoriesResult({int limit = 100, int offset = 0, bo
   }
   if (response.statusCode == 200) {
     try {
-      return GetMemoriesResult(
-        _decodeMemoriesResponse(response.body),
-        true,
-        truncated: isOmiListTruncated(response),
-      );
+      return GetMemoriesResult(_decodeMemoriesResponse(response.body), true, truncated: isOmiListTruncated(response));
     } catch (e) {
       Logger.error('Failed to decode memories 200 response: $e');
       return const GetMemoriesResult([], true);

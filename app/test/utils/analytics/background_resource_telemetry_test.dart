@@ -30,30 +30,28 @@ void main() {
     now = now.add(const Duration(seconds: 30));
     telemetry.onPaused(startSnapshot);
     now = now.add(const Duration(seconds: 90));
-    await telemetry.onResumed(
-      (_, start) async {
-        expect(start.diagnosticsDeviceId, 'device-1');
-        return const BackgroundResourceSnapshot(
-          bleBytesReceived: 1300,
-          websocketBytesSent: 650,
-          recordingState: 'deviceRecord',
-          deviceConnected: true,
-          deviceType: 'omi',
-          batchModeEnabled: false,
-          foregroundTaskRunning: false,
-          backgroundDisconnectCount: 3,
-          connectionTimeoutCount: 2,
-          failToConnectCount: 1,
-          reconnectCount: 2,
-          maxReconnectDurationMs: 4200,
-          reconnectionCountTotal: 11,
-          failToConnectCountTotal: 5,
-          bleHistorySaturated: true,
-          nativeBackgroundBytesConsumed: 4200,
-          nativeBackgroundPacketsConsumed: 42,
-        );
-      },
-    );
+    await telemetry.onResumed((_, start) async {
+      expect(start.diagnosticsDeviceId, 'device-1');
+      return const BackgroundResourceSnapshot(
+        bleBytesReceived: 1300,
+        websocketBytesSent: 650,
+        recordingState: 'deviceRecord',
+        deviceConnected: true,
+        deviceType: 'omi',
+        batchModeEnabled: false,
+        foregroundTaskRunning: false,
+        backgroundDisconnectCount: 3,
+        connectionTimeoutCount: 2,
+        failToConnectCount: 1,
+        reconnectCount: 2,
+        maxReconnectDurationMs: 4200,
+        reconnectionCountTotal: 11,
+        failToConnectCountTotal: 5,
+        bleHistorySaturated: true,
+        nativeBackgroundBytesConsumed: 4200,
+        nativeBackgroundPacketsConsumed: 42,
+      );
+    });
 
     expect(emittedName, BackgroundResourceTelemetry.eventName);
     expect(emittedProperties, {
@@ -123,10 +121,7 @@ void main() {
 
     telemetry.onPaused(startSnapshot);
     now = now.add(const Duration(minutes: 2));
-    await expectLater(
-      telemetry.onResumed((_, __) async => throw StateError('snapshot unavailable')),
-      completes,
-    );
+    await expectLater(telemetry.onResumed((_, __) async => throw StateError('snapshot unavailable')), completes);
 
     telemetry.onPaused(startSnapshot);
     now = now.add(const Duration(minutes: 2));

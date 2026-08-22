@@ -2,9 +2,7 @@ import 'dart:math' as math;
 
 typedef BackgroundResourceEventEmitter = void Function(String eventName, Map<String, dynamic> properties);
 typedef BackgroundResourceSnapshotLoader = Future<BackgroundResourceSnapshot> Function(
-  DateTime backgroundStartedAt,
-  BackgroundResourceSnapshot startSnapshot,
-);
+    DateTime backgroundStartedAt, BackgroundResourceSnapshot startSnapshot);
 
 class BackgroundResourceSnapshot {
   const BackgroundResourceSnapshot({
@@ -75,11 +73,7 @@ class BackgroundResourceTelemetry {
 
   void onPaused(BackgroundResourceSnapshot snapshot) {
     if (_activeSession != null) return;
-    _activeSession = _BackgroundSessionStart(
-      id: _sessionIdFactory(),
-      startedAt: _now(),
-      snapshot: snapshot,
-    );
+    _activeSession = _BackgroundSessionStart(id: _sessionIdFactory(), startedAt: _now(), snapshot: snapshot);
   }
 
   Future<void> onResumed(BackgroundResourceSnapshotLoader loadSnapshot) async {

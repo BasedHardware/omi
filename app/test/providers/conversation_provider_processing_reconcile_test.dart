@@ -604,15 +604,12 @@ void main() {
           50,
           (index) => _conversation('page-$index', status: ConversationStatus.completed),
         ),
-        ok: true
+        ok: true,
       ),
       isSignedIn: () => true,
     );
-    provider.conversationPageFetcherOverride = () async => (
-          items: [_conversation('page-50', status: ConversationStatus.completed)],
-          ok: true,
-          truncated: true,
-        );
+    provider.conversationPageFetcherOverride = () async =>
+        (items: [_conversation('page-50', status: ConversationStatus.completed)], ok: true, truncated: true);
     addTearDown(provider.dispose);
 
     await provider.fetchConversations();
@@ -873,8 +870,11 @@ void main() {
 
     final more = provider.getMoreConversationsFromServer();
     final refresh = provider.fetchConversations();
-    page.complete(
-        (items: [_conversation('page-50', status: ConversationStatus.completed)], ok: true, truncated: false));
+    page.complete((
+      items: [_conversation('page-50', status: ConversationStatus.completed)],
+      ok: true,
+      truncated: false,
+    ));
     await more;
     expect(provider.isLoadingConversations, isTrue);
     lifecycle.complete((item: _conversation('c1', status: ConversationStatus.processing), ok: true));

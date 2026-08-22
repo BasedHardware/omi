@@ -20,11 +20,7 @@ Memory _mem(String id, {String content = 'text'}) {
 }
 
 ActionItemWithMetadata _item(String id, {String description = 'task'}) {
-  return ActionItemWithMetadata(
-    id: id,
-    description: description,
-    completed: false,
-  );
+  return ActionItemWithMetadata(id: id, description: description, completed: false);
 }
 
 void main() {
@@ -61,10 +57,7 @@ void main() {
     }
 
     test('deleteMemory removes item optimistically and sets pending state', () {
-      final provider = MemoriesProvider(
-        fetchMemoriesRequest: emptyFetcher(),
-        deleteMemoryRequest: (_) async => true,
-      );
+      final provider = MemoriesProvider(fetchMemoriesRequest: emptyFetcher(), deleteMemoryRequest: (_) async => true);
       memoryProviders.add(provider);
 
       provider.deleteMemory(_mem('mem-1'));
@@ -75,10 +68,7 @@ void main() {
     });
 
     test('restoreLastDeletedMemory brings the memory back and clears pending state', () async {
-      final provider = MemoriesProvider(
-        fetchMemoriesRequest: emptyFetcher(),
-        deleteMemoryRequest: (_) async => true,
-      );
+      final provider = MemoriesProvider(fetchMemoriesRequest: emptyFetcher(), deleteMemoryRequest: (_) async => true);
       memoryProviders.add(provider);
 
       provider.deleteMemory(_mem('mem-2'));
@@ -92,10 +82,7 @@ void main() {
     });
 
     test('consecutive deletions replace pending state correctly', () {
-      final provider = MemoriesProvider(
-        fetchMemoriesRequest: emptyFetcher(),
-        deleteMemoryRequest: (_) async => true,
-      );
+      final provider = MemoriesProvider(fetchMemoriesRequest: emptyFetcher(), deleteMemoryRequest: (_) async => true);
       memoryProviders.add(provider);
 
       provider.deleteMemory(_mem('mem-3'));
@@ -138,13 +125,19 @@ void main() {
       await provider.confirmPendingDeletion();
       deletionFinalized = true;
 
-      expect(deletedIds, contains('mem-4a'),
-          reason: 'confirmPendingDeletion must finalize the current pending deletion');
+      expect(
+        deletedIds,
+        contains('mem-4a'),
+        reason: 'confirmPendingDeletion must finalize the current pending deletion',
+      );
 
       // The finalized second memory must not reappear after refresh.
       await provider.loadMemories();
-      expect(provider.memories.where((m) => m.id == 'mem-4a'), isEmpty,
-          reason: 'The finalized deletion must remain suppressed after refresh');
+      expect(
+        provider.memories.where((m) => m.id == 'mem-4a'),
+        isEmpty,
+        reason: 'The finalized deletion must remain suppressed after refresh',
+      );
     });
 
     test('loadMemories filters out a pending-deletion memory returned by the server', () async {
@@ -166,9 +159,12 @@ void main() {
 
       await provider.loadMemories();
 
-      expect(provider.memories, isEmpty,
-          reason: 'loadMemories must filter out the pending-deletion memory even '
-              'when the server response still contains it');
+      expect(
+        provider.memories,
+        isEmpty,
+        reason: 'loadMemories must filter out the pending-deletion memory even '
+            'when the server response still contains it',
+      );
     });
 
     test('undo window keeps pending state until explicit confirmation or restore', () async {
@@ -215,9 +211,12 @@ void main() {
       fetchCompleter.complete(GetMemoriesResult([victim], true));
       await loadFuture;
 
-      expect(provider.memories.where((m) => m.id == 'mem-7'), isEmpty,
-          reason: 'loadMemories must re-check _pendingDeletionId at apply time '
-              'and suppress items deleted after the snapshot was taken');
+      expect(
+        provider.memories.where((m) => m.id == 'mem-7'),
+        isEmpty,
+        reason: 'loadMemories must re-check _pendingDeletionId at apply time '
+            'and suppress items deleted after the snapshot was taken',
+      );
     });
 
     test('loadMemories stops paging when the server signals truncation', () async {
@@ -229,13 +228,14 @@ void main() {
           return GetMemoriesResult(
             [
               Memory(
-                  id: 'm-$calls',
-                  uid: 'u1',
-                  content: 'c',
-                  category: MemoryCategory.manual,
-                  createdAt: DateTime.now(),
-                  updatedAt: DateTime.now(),
-                  visibility: MemoryVisibility.public)
+                id: 'm-$calls',
+                uid: 'u1',
+                content: 'c',
+                category: MemoryCategory.manual,
+                createdAt: DateTime.now(),
+                updatedAt: DateTime.now(),
+                visibility: MemoryVisibility.public,
+              ),
             ],
             true,
             truncated: true,
@@ -253,26 +253,21 @@ void main() {
   });
 
   group('ActionItemsProvider deletion eventual consistency', () {
-    ActionItemsProvider newProvider({
-      required ActionItemsFetcher fetcher,
-      DeleteActionItemRequest? deleter,
-    }) {
-      final p = ActionItemsProvider(
-        getActionItems: fetcher,
-        deleteActionItemRequest: deleter ?? (_) async => true,
-      );
+    ActionItemsProvider newProvider({required ActionItemsFetcher fetcher, DeleteActionItemRequest? deleter}) {
+      final p = ActionItemsProvider(getActionItems: fetcher, deleteActionItemRequest: deleter ?? (_) async => true);
       actionItemProviders.add(p);
       return p;
     }
 
     ActionItemsFetcher emptyFetcher() {
-      return (
-              {int limit = 100,
-              int offset = 0,
-              bool? completed,
-              String? conversationId,
-              DateTime? startDate,
-              DateTime? endDate}) async =>
+      return ({
+        int limit = 100,
+        int offset = 0,
+        bool? completed,
+        String? conversationId,
+        DateTime? startDate,
+        DateTime? endDate,
+      }) async =>
           const ActionItemsResponse(actionItems: []);
     }
 
@@ -293,13 +288,14 @@ void main() {
       final deleted = _item('task-2', description: 'should not reappear');
 
       final provider = newProvider(
-        fetcher: (
-                {int limit = 100,
-                int offset = 0,
-                bool? completed,
-                String? conversationId,
-                DateTime? startDate,
-                DateTime? endDate}) async =>
+        fetcher: ({
+          int limit = 100,
+          int offset = 0,
+          bool? completed,
+          String? conversationId,
+          DateTime? startDate,
+          DateTime? endDate,
+        }) async =>
             ActionItemsResponse(actionItems: [deleted]),
       );
 
@@ -310,9 +306,12 @@ void main() {
       await provider.deleteActionItem(deleted);
       await provider.fetchActionItems();
 
-      expect(provider.actionItems.where((i) => i.id == 'task-2'), isEmpty,
-          reason: 'fetchActionItems must filter out the pending-deletion item even '
-              'when the server response still contains it');
+      expect(
+        provider.actionItems.where((i) => i.id == 'task-2'),
+        isEmpty,
+        reason: 'fetchActionItems must filter out the pending-deletion item even '
+            'when the server response still contains it',
+      );
     });
 
     test('tombstone is lazily cleared once the server confirms deletion', () async {
@@ -320,13 +319,14 @@ void main() {
 
       var staleMode = false;
       final provider = newProvider(
-        fetcher: (
-            {int limit = 100,
-            int offset = 0,
-            bool? completed,
-            String? conversationId,
-            DateTime? startDate,
-            DateTime? endDate}) async {
+        fetcher: ({
+          int limit = 100,
+          int offset = 0,
+          bool? completed,
+          String? conversationId,
+          DateTime? startDate,
+          DateTime? endDate,
+        }) async {
           // In stale mode the server still returns the deleted item; once
           // cleared, the server response omits it.
           if (staleMode) {
@@ -358,13 +358,14 @@ void main() {
       final deleted = _item('task-4');
 
       final provider = newProvider(
-        fetcher: (
-            {int limit = 100,
-            int offset = 0,
-            bool? completed,
-            String? conversationId,
-            DateTime? startDate,
-            DateTime? endDate}) async {
+        fetcher: ({
+          int limit = 100,
+          int offset = 0,
+          bool? completed,
+          String? conversationId,
+          DateTime? startDate,
+          DateTime? endDate,
+        }) async {
           if (offset == 0) {
             return ActionItemsResponse(actionItems: [deleted], hasMore: true);
           }
@@ -382,8 +383,11 @@ void main() {
       // loadMore — the stale page must not reinsert the deleted item.
       await provider.loadMoreActionItems();
 
-      expect(provider.actionItems.where((i) => i.id == 'task-4'), isEmpty,
-          reason: 'loadMoreActionItems must filter out pending-deletion items');
+      expect(
+        provider.actionItems.where((i) => i.id == 'task-4'),
+        isEmpty,
+        reason: 'loadMoreActionItems must filter out pending-deletion items',
+      );
     });
   });
 }

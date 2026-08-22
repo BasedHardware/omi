@@ -12,12 +12,10 @@ from database.redis_db import (
     user_webhook_status_db,
     disable_user_webhook_db,
     enable_user_webhook_db,
-    set_user_webhook_db,
 )
 from database.webhook_health import record_dev_webhook_failure, record_dev_webhook_success, _DEV_FAILURE_THRESHOLD
 from models.conversation import Conversation
 from models.users import WebhookType, webhook_url_from_setting
-import database.notifications as notification_db
 from utils.conversations.render import populate_speaker_names, populate_folder_names
 from utils.conversations.render import conversation_to_dict
 from utils.executors import db_executor, run_blocking
@@ -357,12 +355,13 @@ def get_audio_bytes_webhook_seconds(uid: str):
     toggled = user_webhook_status_db(uid, WebhookType.audio_bytes)
     if toggled:
         webhook_url = get_user_webhook_db(uid, WebhookType.audio_bytes)
-        if not webhook_url:
+        url = webhook_url_from_setting(WebhookType.audio_bytes, webhook_url)
+        if not url:
             return
         parts = webhook_url.split(',')
         if len(parts) == 2:
             try:
-                return int(parts[1])
+                return int(parts[1].strip())
             except ValueError:
                 pass
         return 5

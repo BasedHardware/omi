@@ -10,7 +10,12 @@ interface PageHeaderProps {
   onBack?: () => void;
 }
 
-export function PageHeader({ title, icon: Icon, showBackButton, onBack }: PageHeaderProps) {
+export function PageHeader({
+  title,
+  icon: Icon,
+  showBackButton,
+  onBack,
+}: PageHeaderProps) {
   const router = useRouter();
 
   const handleBack = () => {

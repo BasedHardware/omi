@@ -45,7 +45,7 @@ export function PlansSheet({
   const [isCanceling, setIsCanceling] = useState(false);
 
   const planIdentity = subscription
-    ? subscription.plan_identity ?? decodePlan(subscription.plan)
+    ? (subscription.plan_identity ?? decodePlan(subscription.plan))
     : null;
   const isUnlimited = planIdentity ? planGrantsPaidCapability(planIdentity) : false;
   const isUnknownPlan = planIdentity?.kind === 'unknown';
@@ -275,8 +275,8 @@ export function PlansSheet({
                           {isUnknownPlan
                             ? 'Plan unavailable'
                             : isUnlimited && !isCanceling_
-                            ? 'Manage Your Plan'
-                            : 'Choose Your Plan'}
+                              ? 'Manage Your Plan'
+                              : 'Choose Your Plan'}
                         </Dialog.Title>
                         {isUnlimited && subscription?.current_period_end && (
                           <p className="text-xs text-text-quaternary">
