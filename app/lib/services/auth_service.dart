@@ -133,6 +133,7 @@ class AuthService {
   final StreamController<AuthSessionExpiredEvent> _sessionExpiredController =
       StreamController<AuthSessionExpiredEvent>.broadcast(sync: true);
   Future<AuthTokenResult>? _refreshInFlight;
+  Future<void>? _googleSignInInit;
   Future<void>? _expireSessionInFlight;
   bool _sessionExpired = false;
   int _sessionGeneration = 0;
@@ -161,25 +162,38 @@ class AuthService {
 
   /// Google Sign In using the standard google_sign_in package (iOS, Android)
   Future<UserCredential?> signInWithGoogleMobile() async {
-    // Trigger the authentication flow
-    final GoogleSignInAccount? googleUser = await GoogleSignIn(scopes: ['profile', 'email']).signIn();
+    await _ensureGoogleSignInInitialized();
 
-    // Obtain the auth details from the request
-    final GoogleSignInAuthentication? googleAuth = await googleUser?.authentication;
-    if (googleAuth == null) {
+    final GoogleSignInAccount googleUser;
+    try {
+      googleUser = await GoogleSignIn.instance.authenticate(scopeHint: const ['profile', 'email']);
+    } on GoogleSignInException catch (e) {
+      if (e.code == GoogleSignInExceptionCode.canceled) {
+        return null;
+      }
+      rethrow;
+    }
+
+    final idToken = googleUser.authentication.idToken;
+    if (idToken == null) {
       return null;
     }
 
-    // Create a new credential
-    if (googleAuth.accessToken == null && googleAuth.idToken == null) {
-      return null;
-    }
-    final credential = GoogleAuthProvider.credential(accessToken: googleAuth.accessToken, idToken: googleAuth.idToken);
+    final credential = GoogleAuthProvider.credential(idToken: idToken);
 
-    // Once signed in, return the UserCredential
     final result = await FirebaseAuth.instance.signInWithCredential(credential);
     await _updateUserPreferences(result, 'google');
     return result;
+  }
+
+  Future<void> _ensureGoogleSignInInitialized() async {
+    final pending = _googleSignInInit ??= GoogleSignIn.instance.initialize();
+    try {
+      await pending;
+    } catch (_) {
+      _googleSignInInit = null;
+      rethrow;
+    }
   }
 
   /// Generates a cryptographically secure random nonce, to be included in a
