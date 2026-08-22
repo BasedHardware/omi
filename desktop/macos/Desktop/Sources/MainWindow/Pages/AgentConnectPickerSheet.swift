@@ -152,7 +152,7 @@ private struct ConnectOptionCard: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.md) {
+    let content = VStack(alignment: .leading, spacing: OmiSpacing.md) {
       HStack(spacing: OmiSpacing.md) {
         ConnectorBrandIcon(brand: destination.brand, size: 38, cornerRadius: SettingsGlassMetrics.cardRadius)
         VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
@@ -237,12 +237,17 @@ private struct ConnectOptionCard: View {
       statuses[destination] = await MemoryExportService.shared.refreshCloudGrantConnectionStatus(for: destination)
       await prepareMCPKeyIfNeeded()
     }
-    .onReceive(permissionRefreshTimer) { _ in
-      refreshPermissionStateIfNeeded()
-    }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       refreshPermissionStateIfNeeded()
       refreshCloudGrantConnectionIfNeeded()
+    }
+
+    if MemoryExportExecutor.accessibilityPreflightMissing(for: destination) {
+      content.onReceive(permissionRefreshTimer) { _ in
+        refreshPermissionStateIfNeeded()
+      }
+    } else {
+      content
     }
   }
 
