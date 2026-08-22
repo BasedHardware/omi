@@ -49,10 +49,46 @@ import logging
 import sys
 import time
 from datetime import datetime, timedelta, timezone
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any, Awaitable, Callable, Dict, Optional, Tuple
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s %(message)s')
+# Which job's tick is running, for the log filter below. A ContextVar rather than a global because each
+# job's loop is its own asyncio task and context propagates per task — a global would race the moment two
+# ticks overlap, which is the normal case here.
+_current_job: ContextVar[str] = ContextVar('onprem_scheduled_job', default='-')
+
+
+class _JobTag(logging.Filter):
+    """Stamp the running job onto EVERY record, not just this module's.
+
+    The runner already wrote `job=<name>` into its own lines, but the work itself logs through the
+    modules that do it — `utils.other.jobs`, the memory maintenance planner, the search reconciler — and
+    those lines carried no marker at all. Three jobs share one process by design, so `docker logs` was a
+    single interleaved stream that could not be read per job (BACKLOG L39, point 3).
+
+    Attached to the ROOT handler, so a library's logger is tagged too.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.job = _current_job.get()
+        return True
+
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s [%(job)s] %(name)s %(message)s')
+for _handler in logging.getLogger().handlers:
+    _handler.addFilter(_JobTag())
 logger = logging.getLogger('onprem_scheduled')
+
+
+@contextmanager
+def _running(job: str):
+    """Mark this job as the one whose tick is running, for the duration of the tick."""
+    token = _current_job.set(job)
+    try:
+        yield
+    finally:
+        _current_job.reset(token)
 
 
 async def _run_notifications() -> None:
@@ -140,15 +176,60 @@ def seconds_to_next_hour(now: datetime) -> float:
     return max(1.0, (next_hour - now.astimezone(timezone.utc)).total_seconds())
 
 
+# How long the event loop may go unserved before a job body is called out. Generous: this is not a
+# latency budget, it is a "this body is doing blocking I/O in the loop" alarm, and a noisy alarm gets
+# muted. One second is far beyond any scheduling jitter and far below anything a synchronous network
+# call or a large synchronous read would take.
+_LOOP_STALL_WARNING_SECONDS = 1.0
+_LOOP_STALL_PROBE_SECONDS = 0.2
+
+
+async def _heartbeat(beat: Dict[str, float]) -> None:
+    """Touch a timestamp on every loop iteration we are given. The GAP is the measurement."""
+    while True:
+        await asyncio.sleep(_LOOP_STALL_PROBE_SECONDS)
+        beat['at'] = time.monotonic()
+
+
+def _warn_if_the_loop_stalled(job: str, beat: Dict[str, float]) -> None:
+    """Say so when a job body blocked the shared event loop (BACKLOG L39, point 5).
+
+    Three jobs share one process and one loop, so a body that does synchronous I/O in the loop instead
+    of offloading it does not just slow itself down — it stops the other two from ticking, and nothing
+    reported that. The three current bodies are clean (they offload to `db_executor` or
+    `asyncio.to_thread`); this makes the constraint mechanical instead of a docstring, so a fourth job
+    cannot break it quietly.
+
+    Measured from the heartbeat's LAST successful beat rather than from the watchdog waking up. Two
+    earlier attempts read nothing at all: a task created but never given a loop iteration never starts,
+    and a task cancelled in the same synchronous step never resumes to take its own measurement. The gap
+    to the last beat needs neither.
+    """
+    starved = time.monotonic() - beat['at']
+    if starved >= _LOOP_STALL_WARNING_SECONDS:
+        logger.warning(
+            'job=%s blocked the shared event loop for %.1fs — offload synchronous work '
+            '(db_executor / asyncio.to_thread), or the other jobs in this process cannot tick',
+            job,
+            starved,
+        )
+
+
 async def run_once_async(job: str) -> int:
     """Run one tick inside an existing event loop. Returns 0/1; never raises."""
     started = time.monotonic()
-    try:
-        await JOBS[job]()
-    except Exception:
-        logger.exception('job=%s FAILED after %.1fs', job, time.monotonic() - started)
-        return 1
-    logger.info('job=%s ok in %.1fs', job, time.monotonic() - started)
+    with _running(job):
+        beat = {'at': time.monotonic()}
+        heartbeat = asyncio.create_task(_heartbeat(beat))
+        try:
+            await JOBS[job]()
+        except Exception:
+            logger.exception('job=%s FAILED after %.1fs', job, time.monotonic() - started)
+            return 1
+        finally:
+            heartbeat.cancel()
+            _warn_if_the_loop_stalled(job, beat)
+        logger.info('job=%s ok in %.1fs', job, time.monotonic() - started)
     return 0
 
 

@@ -9,7 +9,9 @@ with OIDC and no service account. That is the assertion this suite exists to hol
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
+from unittest.mock import patch
 
 import pytest
 
@@ -308,3 +310,117 @@ def test_the_cli_refuses_both_or_neither():
         onprem_scheduled.main([])
     with pytest.raises(SystemExit):
         onprem_scheduled.main(['--job', 'notifications', '--schedule', 'notifications=hourly'])
+
+
+# --- one process, three jobs: the log must still be readable per job (BACKLOG L39, point 3) ---------
+
+
+def test_the_tag_filter_stamps_the_running_job_onto_any_record():
+    """The filter itself. `_running` is what a tick installs; the filter is what carries it onto a record
+    emitted by code that knows nothing about jobs."""
+    import logging
+
+    from jobs import onprem_scheduled as jobs
+
+    record = logging.LogRecord('some.library.deep.inside', logging.INFO, __file__, 1, 'work', None, None)
+
+    with jobs._running('memory-maintenance'):
+        assert jobs._JobTag().filter(record) is True
+
+    assert record.job == 'memory-maintenance'
+
+
+def test_the_filter_is_attached_to_the_root_handlers_not_just_this_module():
+    """Where it is attached IS the fix. The runner already wrote `job=<name>` into its own lines; the
+    work logs through the modules that do it — `utils.other.jobs`, the maintenance planner, the search
+    reconciler — and those lines had no marker, so `docker logs` on a process running three jobs was one
+    interleaved stream nobody could split. Attaching to this module's logger would have changed nothing.
+
+    An earlier version of this test computed the tag inside its own sink instead of reading what the
+    filter had put there, so removing the attachment entirely left it green.
+    """
+    import logging
+
+    from jobs import onprem_scheduled as jobs
+
+    handlers = logging.getLogger().handlers
+    assert handlers, 'no root handler — the format and the filter both hang off it'
+    # `any`, not `all`: under pytest the root also carries the framework's own capture handlers, which
+    # are not what this pins. What it pins is that the handler this module configured got the filter —
+    # delete the attachment loop and nothing on the root has it.
+    assert any(
+        isinstance(f, jobs._JobTag) for handler in handlers for f in handler.filters
+    ), 'no root handler carries the job tag — records from the work itself go out unattributed'
+
+
+def test_outside_a_tick_the_tag_is_not_some_other_job():
+    """A stale tag is worse than none: it attributes a line to a job that is not running.
+
+    Both ticks run inside ONE event loop and one context. An earlier version called `asyncio.run` per
+    tick, which starts a fresh context — the variable could never have leaked, so the test passed with
+    the reset deleted.
+    """
+    from jobs import onprem_scheduled as jobs
+
+    seen: list = []
+
+    async def watcher():
+        pass
+
+    async def scenario():
+        with patch.dict(jobs.JOBS, {'first': watcher, 'second': watcher}):
+            await jobs.run_once_async('first')
+            seen.append(jobs._current_job.get())
+            await jobs.run_once_async('second')
+            seen.append(jobs._current_job.get())
+
+    asyncio.run(scenario())
+
+    assert seen == ['-', '-'], f'the tag outlived its tick: {seen}'
+
+
+def test_a_job_that_blocks_the_shared_loop_is_named(caplog):
+    """THE CONSTRAINT MADE MECHANICAL (point 5). Three jobs share one loop, so a body doing synchronous
+    I/O in the loop stops the other two from ticking — and nothing reported it. The three current bodies
+    are clean; this is what stops a fourth from breaking it silently."""
+    import logging
+    import time as real_time
+
+    from jobs import onprem_scheduled as jobs
+
+    async def blocking_body():
+        real_time.sleep(jobs._LOOP_STALL_WARNING_SECONDS + jobs._LOOP_STALL_PROBE_SECONDS + 0.3)
+
+    with caplog.at_level(logging.WARNING), patch.dict(jobs.JOBS, {'greedy': blocking_body}):
+        assert asyncio.run(jobs.run_once_async('greedy')) == 0
+
+    stalls = [r for r in caplog.records if 'blocked the shared event loop' in r.getMessage()]
+    assert stalls, 'a body that blocked the loop for over a second was not reported'
+    assert 'job=greedy' in stalls[0].getMessage()
+
+
+def test_a_well_behaved_job_is_not_accused():
+    """An alarm that fires on a job doing its work properly gets muted, and then it protects nothing."""
+    import logging
+
+    from jobs import onprem_scheduled as jobs
+
+    async def polite_body():
+        await asyncio.sleep(jobs._LOOP_STALL_PROBE_SECONDS * 3)
+
+    warnings: list = []
+
+    class _Sink(logging.Handler):
+        def emit(self, record):
+            if record.levelno >= logging.WARNING:
+                warnings.append(record.getMessage())
+
+    sink = _Sink()
+    logging.getLogger('onprem_scheduled').addHandler(sink)
+    try:
+        with patch.dict(jobs.JOBS, {'polite': polite_body}):
+            assert asyncio.run(jobs.run_once_async('polite')) == 0
+    finally:
+        logging.getLogger('onprem_scheduled').removeHandler(sink)
+
+    assert not [w for w in warnings if 'blocked the shared event loop' in w]
