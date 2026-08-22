@@ -2277,6 +2277,8 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "fake-firestore" },
+    { name = "fakeredis", extra = ["lua"] },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-xdist" },
@@ -2593,6 +2595,8 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "fake-firestore", specifier = "==0.13.1" },
+    { name = "fakeredis", extras = ["lua"], specifier = "==2.36.2" },
     { name = "pytest", specifier = ">=8.4.1" },
     { name = "pytest-asyncio", specifier = "==1.4.0" },
     { name = "pytest-xdist", specifier = "==3.8.0" },

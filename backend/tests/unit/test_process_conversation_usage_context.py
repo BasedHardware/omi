@@ -581,8 +581,9 @@ def test_discard_call_uses_discard_feature_tracking():
     conversation.photos = []
     conversation.get_person_ids.return_value = []
     conversation.external_data = None  # Prevent CalendarMeetingContext parsing
-    conversation.started_at = None
-    conversation.finished_at = None
+    conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
+    conversation.finished_at = datetime(2026, 8, 4, 0, 5, tzinfo=timezone.utc)
+    conversation.transcript_segments = []
 
     # Mock notification_db
     notifications_mod = sys.modules["database.notifications"]
@@ -687,7 +688,8 @@ def test_byok_rate_limit_reaches_conversation_composition_as_safe_actionable_429
     conversation.photos = []
     conversation.external_data = None
     conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
-    conversation.finished_at = datetime(2026, 8, 4, 0, 1, tzinfo=timezone.utc)
+    conversation.finished_at = datetime(2026, 8, 4, 0, 5, tzinfo=timezone.utc)
+    conversation.transcript_segments = []
 
     monkeypatch.setattr(process_conversation, 'should_discard_conversation', MagicMock(return_value=False))
     monkeypatch.setattr(
@@ -722,7 +724,8 @@ def test_unwrapped_openai_byok_rate_limit_reaches_conversation_composition(monke
     conversation.photos = []
     conversation.external_data = None
     conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
-    conversation.finished_at = datetime(2026, 8, 4, 0, 1, tzinfo=timezone.utc)
+    conversation.finished_at = datetime(2026, 8, 4, 0, 5, tzinfo=timezone.utc)
+    conversation.transcript_segments = []
 
     sdk_error = openai.RateLimitError(
         sensitive_provider_body,
@@ -762,7 +765,8 @@ def test_non_byok_rate_limit_failures_keep_generic_processing_error(monkeypatch,
     conversation.photos = []
     conversation.external_data = None
     conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
-    conversation.finished_at = datetime(2026, 8, 4, 0, 1, tzinfo=timezone.utc)
+    conversation.finished_at = datetime(2026, 8, 4, 0, 5, tzinfo=timezone.utc)
+    conversation.transcript_segments = []
 
     monkeypatch.setattr(process_conversation, 'should_discard_conversation', MagicMock(return_value=False))
     monkeypatch.setattr(process_conversation, 'get_transcript_structure', MagicMock(side_effect=error))
@@ -789,7 +793,8 @@ def test_byok_rate_limit_in_action_item_extraction_reaches_composition_boundary(
     conversation.photos = []
     conversation.external_data = None
     conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
-    conversation.finished_at = datetime(2026, 8, 4, 0, 1, tzinfo=timezone.utc)
+    conversation.finished_at = datetime(2026, 8, 4, 0, 5, tzinfo=timezone.utc)
+    conversation.transcript_segments = []
 
     monkeypatch.setattr(process_conversation, 'should_discard_conversation', MagicMock(return_value=False))
     monkeypatch.setattr(
@@ -839,8 +844,9 @@ def test_no_umbrella_conversation_processing_tracking():
     conversation.photos = []
     conversation.get_person_ids.return_value = []
     conversation.external_data = None
-    conversation.started_at = None
-    conversation.finished_at = None
+    conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
+    conversation.finished_at = datetime(2026, 8, 4, 0, 5, tzinfo=timezone.utc)
+    conversation.transcript_segments = []
 
     notifications_mod = sys.modules["database.notifications"]
     notifications_mod.get_user_time_zone = MagicMock(return_value="UTC")
@@ -886,8 +892,9 @@ def test_action_items_tracked_separately_from_structure():
     conversation.photos = []
     conversation.get_person_ids.return_value = []
     conversation.external_data = None
-    conversation.started_at = None
-    conversation.finished_at = None
+    conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
+    conversation.finished_at = datetime(2026, 8, 4, 0, 5, tzinfo=timezone.utc)
+    conversation.transcript_segments = []
 
     notifications_mod = sys.modules["database.notifications"]
     notifications_mod.get_user_time_zone = MagicMock(return_value="UTC")
@@ -933,8 +940,9 @@ def test_structure_and_apps_tracked_at_runtime():
     conversation.photos = []
     conversation.get_person_ids.return_value = []
     conversation.external_data = None
-    conversation.started_at = None
-    conversation.finished_at = None
+    conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
+    conversation.finished_at = datetime(2026, 8, 4, 0, 5, tzinfo=timezone.utc)
+    conversation.transcript_segments = []
     conversation.structured = MagicMock()
     conversation.structured.title = "Test"
     conversation.structured.overview = "Test overview"
@@ -991,8 +999,9 @@ def test_action_items_skipped_on_discard():
     conversation.photos = []
     conversation.get_person_ids.return_value = []
     conversation.external_data = None
-    conversation.started_at = None
-    conversation.finished_at = None
+    conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
+    conversation.finished_at = datetime(2026, 8, 4, 0, 5, tzinfo=timezone.utc)
+    conversation.transcript_segments = []
 
     notifications_mod = sys.modules["database.notifications"]
     notifications_mod.get_user_time_zone = MagicMock(return_value="UTC")
