@@ -276,6 +276,18 @@ struct FinishedRecordingEnvelope: Equatable, Sendable {
 }
 
 @MainActor
+protocol DesktopAlertPresenting: AnyObject {
+  func present(title: String, message: String, completion: (@MainActor () -> Void)?)
+}
+
+@MainActor
+extension DesktopAlertPresenting {
+  func present(title: String, message: String) {
+    present(title: title, message: message, completion: nil)
+  }
+}
+
+@MainActor
 class AppState: ObservableObject {
   /// Weak reference to the current AppState instance, set on init.
   /// Used by background services (e.g. TranscriptionRetryService) to check recording state.
@@ -298,6 +310,7 @@ class AppState: ObservableObject {
   /// continue into the WAL while the transport reconnects, so this stays
   /// visible until the backend is ready or the active session is reset.
   @Published var transcriptionServiceError: String?
+  var alertPresenter: any DesktopAlertPresenting = AppKitSheetAlertPresenter()
   /// Monotonically increasing counter — incremented for each recording start or stop request.
   /// Used to prevent asynchronous work from mutating a newer recording decision.
   var recordingGeneration: UInt64 = 0
