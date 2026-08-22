@@ -95,11 +95,13 @@ def test_set_merge_deep_merges_nested_maps(store, uid):
     got = store.get(base).to_dict()
     assert got == {
         "grants": {
-            "c1": {"apps": {
-                "a1": {"keys": {"k1": {"role": "r1"}, "k4": {"role": "r4"}}},  # k1 survived the k4 merge
-                "a3": {"keys": {"k3": {"role": "r3"}}},                          # a1 survived the a3 merge
-            }},
-            "c2": {"apps": {"a2": {"keys": {"k2": {"role": "r2"}}}}},            # c1 survived the c2 merge
+            "c1": {
+                "apps": {
+                    "a1": {"keys": {"k1": {"role": "r1"}, "k4": {"role": "r4"}}},  # k1 survived the k4 merge
+                    "a3": {"keys": {"k3": {"role": "r3"}}},  # a1 survived the a3 merge
+                }
+            },
+            "c2": {"apps": {"a2": {"keys": {"k2": {"role": "r2"}}}}},  # c1 survived the c2 merge
         }
     }
 
@@ -112,7 +114,10 @@ def test_query_group_excludes_docs_missing_ordered_field(store, uid):
     store.set(f"users/{uid}/fair/x1", {"stage": uid, "updated_at": 2})
     store.set(f"users/{uid}/fair/x2", {"stage": uid, "updated_at": 1})
     store.set(f"users/{uid}/fair/x3", {"stage": uid})  # no updated_at -> excluded by an ordered query
-    ids = [d.path.rsplit("/", 1)[1] for d in store.query_group("fair", filters=[("stage", "==", uid)], order_by="updated_at", direction="asc")]
+    ids = [
+        d.path.rsplit("/", 1)[1]
+        for d in store.query_group("fair", filters=[("stage", "==", uid)], order_by="updated_at", direction="asc")
+    ]
     assert ids == ["x2", "x1"]  # x3 (missing the order field) is excluded, both backends
 
 
@@ -462,8 +467,12 @@ def test_query_multi_field_composite_cursor_paginates(store, uid):
     # cubic PR 10887 #4: list_review_conflicts orders by impact DESC, created_at DESC, __name__ DESC and
     # paginates -> the store must support a composite (multi-field) keyset cursor, not reject page 2.
     base = f"users/{uid}/conflicts"
-    for doc_id, d in [("c1", {"impact": 3, "created_at": 20}), ("c2", {"impact": 3, "created_at": 10}),
-                      ("c3", {"impact": 2, "created_at": 50}), ("c4", {"impact": 3, "created_at": 20})]:
+    for doc_id, d in [
+        ("c1", {"impact": 3, "created_at": 20}),
+        ("c2", {"impact": 3, "created_at": 10}),
+        ("c3", {"impact": 2, "created_at": 50}),
+        ("c4", {"impact": 3, "created_at": 20}),
+    ]:
         store.set(f"{base}/{doc_id}", d)
     order = [("impact", "desc"), ("created_at", "desc"), ("__name__", "desc")]
     assert [d.id for d in store.query(base, order_by=order)] == ["c4", "c1", "c2", "c3"]
@@ -866,6 +875,7 @@ def test_a_query_inside_a_transaction_runs_inside_it(store, uid):
 def test_a_transactional_query_sees_a_row_written_before_the_transaction(store, uid):
     """The de-dup case in one line: a row committed a moment earlier must be found, or the read that is
     supposed to prevent a duplicate does not see the thing it is checking for."""
+
     def create_then_read(tx):
         return [row.id for row in tx.query(f"users/{uid}/action_items", filters=[("key", "==", "k9")])]
 

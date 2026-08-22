@@ -225,9 +225,9 @@ def test_a_stale_write_precondition_fails_loudly(chat, bind_store):
     bind_store.update(f"users/{uid}/chat_sessions/{session_id}", {"title": "renamed by a racer"})
 
     batch = db.batch()
-    batch.update(session_ref, {"title": "based on a stale read"}, option=db.write_option(
-        last_update_time=snapshot.update_time
-    ))
+    batch.update(
+        session_ref, {"title": "based on a stale read"}, option=db.write_option(last_update_time=snapshot.update_time)
+    )
     with pytest.raises(FailedPrecondition):
         batch.commit()
     assert bind_store.get(f"users/{uid}/chat_sessions/{session_id}").data["title"] == "renamed by a racer"

@@ -76,8 +76,7 @@ def test_semantic_search_ranks_the_right_document_first(live_store, query, expec
     assert hits, 'expected at least one hit'
     top = hits[0]
     assert top['id'] == expected_top, (
-        f"query {query!r}: expected {expected_top!r} first, got "
-        f"{[(h['id'], round(h['score'], 3)) for h in hits]}"
+        f"query {query!r}: expected {expected_top!r} first, got " f"{[(h['id'], round(h['score'], 3)) for h in hits]}"
     )
     # Scores must be ordered (descending similarity).
     scores = [h['score'] for h in hits]
