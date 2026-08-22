@@ -24,7 +24,7 @@ from utils.account_cutover.access import (
 from utils.api_key_families import FIREBASE_FAMILY, wrong_key_family_detail
 from utils.client_device import resolve_client_device
 from utils.byok import extract_byok_from_websocket, set_byok_keys, validate_byok_request, validate_byok_websocket
-from utils.executors import critical_executor, db_executor, run_blocking
+from utils.executors import ExecutorSaturatedError, critical_executor, db_executor, run_blocking
 from utils.rate_limit_config import RATE_POLICIES, RATE_LIMIT_SHADOW, get_effective_limit
 
 logger = logging.getLogger(__name__)
@@ -33,6 +33,23 @@ WS_AUTH_CODE_TOKEN_REFRESH = 4001
 WS_AUTH_CODE_RELOGIN_REQUIRED = 4004
 WS_AUTH_CODE_ACCOUNT_DELETION = 4005
 WS_AUTH_CODE_ACCOUNT_CUTOVER = 4006
+
+
+def _executor_saturated_http_exception(error: ExecutorSaturatedError) -> HTTPException:
+    """Return the retryable HTTP response for bounded critical-work overload."""
+    return HTTPException(
+        status_code=503,
+        detail='Service temporarily unavailable. Try again shortly.',
+        headers={'Retry-After': '1'},
+    )
+
+
+async def run_critical_ws(fn: Callable[..., Any], *args: Any) -> Any:
+    """Run critical WebSocket work and turn overload into a retryable close frame."""
+    try:
+        return await run_blocking(critical_executor, fn, *args)
+    except ExecutorSaturatedError as error:
+        raise WebSocketException(code=1013, reason='Service temporarily unavailable; retry shortly.') from error
 
 
 def get_user_deletion_wipe_status(uid: str) -> str | None:
@@ -308,6 +325,11 @@ def _verify_ws_auth(authorization: str) -> str:
         raise WebSocketException(code=1008, reason="Auth error")
 
 
+def verify_ws_auth(authorization: str) -> str:
+    """Public WebSocket-auth boundary for routers that share this policy."""
+    return _verify_ws_auth(authorization)
+
+
 def _get_ws_auth_close(error: Exception) -> 'tuple[int, str]':
     if isinstance(error, RevokedIdTokenError):
         return WS_AUTH_CODE_RELOGIN_REQUIRED, "Token revoked; re-login required"
@@ -345,7 +367,7 @@ async def get_current_user_uid_ws_listen(
     the mutation in the handler's context; the blocking Firebase and
     Firestore calls are offloaded via ``run_blocking``.
     """
-    uid = await run_blocking(critical_executor, _verify_ws_auth, authorization)
+    uid = await run_critical_ws(_verify_ws_auth, authorization)
     await run_blocking(db_executor, enforce_account_deletion_ws_access, uid)
     if cutover_enforcement_enabled() and websocket is not None:  # pyright: ignore[reportUnnecessaryComparison]
         await run_blocking(
@@ -361,7 +383,7 @@ async def get_current_user_uid_ws_listen(
         byok_keys = extract_byok_from_websocket(websocket)
         if byok_keys:
             set_byok_keys(byok_keys)
-        error = await run_blocking(critical_executor, validate_byok_websocket, uid)
+        error = await run_critical_ws(validate_byok_websocket, uid)
         if error:
             raise WebSocketException(code=4003, reason=error)
 
@@ -445,7 +467,7 @@ async def get_current_user_uid_from_ws_message(
     Pass ``websocket`` so account-cutover enforcement can fence product surfaces
     such as ``/v4/web/listen`` the same way header-auth listen does.
     """
-    uid = await run_blocking(critical_executor, _verify_user_uid_from_ws_message, message)
+    uid = await run_critical_ws(_verify_user_uid_from_ws_message, message)
     await run_blocking(db_executor, enforce_account_deletion_ws_access, uid)
     if cutover_enforcement_enabled() and websocket is not None:
         await run_blocking(
@@ -597,7 +619,10 @@ def with_rate_limit(auth_dependency: Callable[..., Any], policy_name: str) -> Ca
         raise ValueError(f"Unknown rate limit policy: {policy_name}")
 
     async def dependency(uid: str = Depends(auth_dependency)) -> str:
-        await run_blocking(critical_executor, _enforce_rate_limit, uid, policy_name)
+        try:
+            await run_blocking(critical_executor, _enforce_rate_limit, uid, policy_name)
+        except ExecutorSaturatedError as error:
+            raise _executor_saturated_http_exception(error) from error
         return uid
 
     return dependency
@@ -620,7 +645,10 @@ def with_rate_limit_context(auth_context_dependency: Callable[..., Any], policy_
 
     async def dependency(auth_context: Any = Depends(auth_context_dependency)) -> Any:
         key = rate_limit_key_for_context(auth_context)
-        await run_blocking(critical_executor, _enforce_rate_limit, key, policy_name, fail_closed=True)
+        try:
+            await run_blocking(critical_executor, _enforce_rate_limit, key, policy_name, fail_closed=True)
+        except ExecutorSaturatedError as error:
+            raise _executor_saturated_http_exception(error) from error
         return auth_context
 
     return dependency

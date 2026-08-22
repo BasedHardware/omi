@@ -14,9 +14,9 @@ from utils.byok import (
     set_byok_keys,
     validate_byok_websocket,
 )
-from utils.executors import critical_executor, db_executor, run_blocking
+from utils.executors import db_executor, run_blocking
 from utils.llm.gateway_client import raise_if_gateway_feature_mode_blocks_direct_model_surface
-from utils.other.endpoints import _verify_ws_auth  # type: ignore[reportPrivateUsage]  # shared WS auth helper, intentionally reused cross-module
+from utils.other.endpoints import run_critical_ws, verify_ws_auth
 import database.users as users_db
 from models.users import PlanType
 from utils.subscription import get_chat_quota_snapshot, is_trial_paywalled
@@ -85,7 +85,7 @@ async def omni_relay(websocket: WebSocket):
         f"provider={websocket.query_params.get('provider')}"
     )
     try:
-        uid = await run_blocking(critical_executor, _verify_ws_auth, cast(str, authz))
+        uid = await run_critical_ws(verify_ws_auth, cast(str, authz))
     except WebSocketException as e:
         logger.warning(f"omni relay auth rejected: code={e.code} reason={e.reason}")
         await websocket.close(code=e.code, reason=e.reason or "unauthorized")
@@ -95,7 +95,7 @@ async def omni_relay(websocket: WebSocket):
     byok = extract_byok_from_websocket(websocket)
     if byok:
         set_byok_keys(byok)
-        byok_err = await run_blocking(critical_executor, validate_byok_websocket, uid)
+        byok_err = await run_critical_ws(validate_byok_websocket, uid)
         if byok_err:
             logger.warning(f"omni relay BYOK invalid uid={uid}: {byok_err}")
             await websocket.close(code=4003, reason=byok_err)
