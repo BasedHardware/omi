@@ -1518,11 +1518,14 @@ SHARE_EMAIL_CLAIM_TTL_SECONDS = 180
 def _in_flight_field(email: str) -> str:
     """Field path for one recipient's dispatch claim.
 
-    Dots inside the address would otherwise read as nesting, so they are
-    escaped for Firestore's field-path syntax.
+    An address contains characters (dots, `@`) that Firestore's field-path
+    syntax reads as structure, so the segment is quoted by the client's own
+    FieldPath rather than by hand — escaping only the dots still left `@`
+    unparseable and failed the write.
     """
-    escaped = email.replace('.', '\\.')
-    return f'share_email_in_flight.{escaped}'
+    from google.cloud.firestore_v1.field_path import FieldPath
+
+    return FieldPath('share_email_in_flight', email).to_api_repr()
 
 
 def reserve_share_email_recipients(
