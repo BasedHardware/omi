@@ -34,6 +34,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
 
 from pymongo import ASCENDING, DESCENDING, DeleteOne, InsertOne, MongoClient, ReplaceOne, UpdateOne
+from contextlib import contextmanager
+
 from pymongo.errors import DuplicateKeyError, OperationFailure
 
 from utils.observability.fallback import record_fallback
@@ -52,8 +54,15 @@ logger = logging.getLogger(__name__)
 # semantics diverge — Firestore ``in`` compares the whole field value, Mongo ``$in`` matches individual
 # elements — so ``in`` must not be used against an array field on this port (use array_contains* instead).
 _OP = {
-    "<": "$lt", "<=": "$lte", ">": "$gt", ">=": "$gte", "in": "$in", "==": "$eq", "!=": "$ne",
-    "not-in": "$nin", "array_contains_any": "$in",
+    "<": "$lt",
+    "<=": "$lte",
+    ">": "$gt",
+    ">=": "$gte",
+    "in": "$in",
+    "==": "$eq",
+    "!=": "$ne",
+    "not-in": "$nin",
+    "array_contains_any": "$in",
 }
 
 
@@ -115,6 +124,24 @@ def _build_update_ops(data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     for key, value in data.items():
         _apply_field_op(ops, "d." + key, value)
     return ops
+
+
+@contextmanager
+def _as_already_exists(path: str):
+    """Translate a unique-index violation into the port's ``AlreadyExists``, wherever it happens.
+
+    ``create`` already did this for its ``insert_one``. Every other write path did not, and that was fine
+    while no collection carried a unique index other than ``_id``. It stopped being fine with the partial
+    unique index on action-item idempotency keys (ADR-0085): the domain code writes with ``set`` inside a
+    transaction, so a genuine duplicate surfaced as a raw ``pymongo.errors.DuplicateKeyError`` through the
+    neutral port — a 500 instead of the behaviour the transaction already intends.
+
+    A unique-index violation IS ``AlreadyExists`` in the port's vocabulary, on every path.
+    """
+    try:
+        yield
+    except DuplicateKeyError as exc:
+        raise AlreadyExists(path) from exc
 
 
 def _apply_field_op(ops: Dict[str, Dict[str, Any]], field: str, value: Any) -> None:
@@ -339,7 +366,11 @@ class _MongoBatch:
                 # Ordered: within one collection, queued writes to the SAME document must apply in order
                 # (a set then update, or set then delete) — ordered=False lets Mongo reorder and lose the
                 # later write or resurrect a deleted doc.
-                coll.bulk_write([op for op, _, _ in ops], ordered=True, session=session)
+                # The path in the error is the COLLECTION, not a document: bulk_write's aggregate result
+                # cannot attribute a duplicate-key failure to one queued op. Better a neutral error naming
+                # the collection than a raw pymongo one naming nothing (ADR-0085).
+                with _as_already_exists(collection_name):
+                    coll.bulk_write([op for op, _, _ in ops], ordered=True, session=session)
 
     def commit(self) -> None:
         """Apply every queued write inside ONE transaction: a batch is all-or-nothing (BACKLOG L25).
@@ -478,7 +509,8 @@ class MongoDocumentStore:
             # in one update, so stamp it via a second pipeline bump (below) rather than a colliding raw now.
             update: Dict[str, Any] = _build_merge_update_ops(data)  # deep-merge nested maps (cubic mongo.py:389)
             update.setdefault("$setOnInsert", {}).update({"_parent": parent, "_key": key, "_created_at": now})
-            collection.update_one({"_id": path}, update, upsert=True, session=session)
+            with _as_already_exists(path):
+                collection.update_one({"_id": path}, update, upsert=True, session=session)
             self._bump_updated_at(collection, path, now, session)
             return
         # merge=False -> full payload replace via a pipeline update: ``$set`` the whole ``d`` field
@@ -486,25 +518,26 @@ class MongoDocumentStore:
         # immutable ``_created_at`` with ``$ifNull`` (pipeline updates have no ``$setOnInsert``) (cubic
         # PR 10887 #1 + mongo.py:161). Any transforms (rare on a non-merge set) apply right after.
         plain = {k: v for k, v in data.items() if not _is_sentinel(v)}
-        collection.update_one(
-            {"_id": path},
-            [
-                {
-                    "$set": {
-                        # $literal so ``d`` REPLACES (a pipeline $set of a bare object deep-MERGES into the
-                        # existing d — non-merge semantics need a literal replacement); it also keeps any
-                        # $-prefixed payload keys literal instead of evaluating them as field paths.
-                        "d": {"$literal": plain},
-                        "_parent": parent,
-                        "_key": key,
-                        "_updated_at": _monotonic_updated_at(now),
-                        "_created_at": {"$ifNull": ["$_created_at", now]},
+        with _as_already_exists(path):
+            collection.update_one(
+                {"_id": path},
+                [
+                    {
+                        "$set": {
+                            # $literal so ``d`` REPLACES (a pipeline $set of a bare object deep-MERGES into
+                            # the existing d — non-merge semantics need a literal replacement); it also keeps
+                            # any $-prefixed payload keys literal instead of evaluating them as field paths.
+                            "d": {"$literal": plain},
+                            "_parent": parent,
+                            "_key": key,
+                            "_updated_at": _monotonic_updated_at(now),
+                            "_created_at": {"$ifNull": ["$_created_at", now]},
+                        }
                     }
-                }
-            ],
-            upsert=True,
-            session=session,
-        )
+                ],
+                upsert=True,
+                session=session,
+            )
         transforms = {k: v for k, v in data.items() if _is_sentinel(v)}
         if transforms:
             collection.update_one({"_id": path}, _build_update_ops(transforms), session=session)
@@ -534,7 +567,9 @@ class MongoDocumentStore:
         # The bump also enforces existence: on a missing doc both the ops and the bump no-op -> NotFound.
         if update:
             collection.update_one({"_id": path}, update, session=session)
-        result = collection.update_one({"_id": path}, [{"$set": {"_updated_at": _monotonic_updated_at(now)}}], session=session)
+        result = collection.update_one(
+            {"_id": path}, [{"$set": {"_updated_at": _monotonic_updated_at(now)}}], session=session
+        )
         if result.matched_count == 0:
             raise NotFound(path)
 
@@ -544,9 +579,7 @@ class MongoDocumentStore:
             # Precondition delete: remove only the revision the caller read. A no-match means the row
             # changed or is already gone — either way the caller's read-modify-delete lost the race,
             # so surface PreconditionFailed (parity with a Firestore delete carrying LastUpdateOption).
-            result = self._db[collection_name].delete_one(
-                {"_id": path, "_updated_at": if_updated_at}, session=session
-            )
+            result = self._db[collection_name].delete_one({"_id": path, "_updated_at": if_updated_at}, session=session)
             if result.deleted_count == 0:
                 raise PreconditionFailed(path)
             return
@@ -582,9 +615,7 @@ class MongoDocumentStore:
             raise AlreadyExists(path) from exc
         transforms = {k: v for k, v in data.items() if _is_sentinel(v)}
         if transforms:
-            self._db[collection_name].update_one(
-                {"_id": path}, _build_update_ops(transforms), session=session
-            )
+            self._db[collection_name].update_one({"_id": path}, _build_update_ops(transforms), session=session)
 
     def delete(self, path: str, *, if_updated_at: Any = None) -> None:
         self._delete(path, if_updated_at=if_updated_at)
@@ -676,7 +707,9 @@ class MongoDocumentStore:
             # Map ``__name__`` order to _id (the document name); other fields sort by their payload key.
             # Append an _id tiebreak only when _id is not already an order key (mirrors Firestore's
             # implicit __name__ ordering) so tie order is stable across pages.
-            sort_spec = [("_id" if f == "__name__" else "d." + f, ASCENDING if d == "asc" else DESCENDING) for f, d in specs]
+            sort_spec = [
+                ("_id" if f == "__name__" else "d." + f, ASCENDING if d == "asc" else DESCENDING) for f, d in specs
+            ]
             if not any(f == "__name__" for f, _ in specs):
                 sort_spec.append(("_id", ASCENDING if specs[-1][1] == "asc" else DESCENDING))
             cursor = cursor.sort(sort_spec)

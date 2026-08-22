@@ -6,6 +6,7 @@ instead of a collection scan; the mapping is pure and tested here without a live
 
 import pytest
 
+import scripts.reconcile_mongo_indexes as _MODULE
 from scripts.reconcile_mongo_indexes import (
     create_planned_indexes,
     firestore_index_to_mongo_keys,
@@ -144,3 +145,93 @@ def test_reconcile_mongo_indexes_requires_mongo_uri(monkeypatch):
     monkeypatch.delenv("MONGO_URI", raising=False)
     with pytest.raises(RuntimeError, match="MONGO_URI"):
         reconcile_mongo_indexes()
+
+
+# --- unique partial indexes (ADR-0085, BACKLOG L46) -------------------------------------------------
+#
+# Not a performance mirror of firestore.indexes.json but an INVARIANT the database enforces, so they are
+# declared and created separately. Measured: Firestore locks what a transaction reads and Mongo does not,
+# so the in-transaction dedup read protects the action-item idempotency key on one backend and not the
+# other. On Mongo the index is what makes a duplicate impossible.
+
+
+def test_the_action_item_key_index_is_unique_and_scoped_to_live_rows():
+    """The filter is the whole design. `completed == false` alone would refuse a create the product makes
+    ON PURPOSE — the retire path marks `deleted: true, completed: false`, and the next create with that
+    key is intended. Mongo cannot express "and not deleted" in a partialFilterExpression ($exists:false
+    and $ne are not allowed), so the retire path clears the key and the filter demands a string."""
+    (collection, keys, partial) = _MODULE._UNIQUE_INDEXES[0]
+
+    assert collection == 'action_items'
+    assert keys == [('_parent', 1), ('d.idempotency_key', 1)], 'scoped per user: _parent carries the uid'
+    assert partial['d.completed'] is False, 'a completed task may legitimately reuse its key'
+    assert partial['d.idempotency_key'] == {
+        '$exists': True,
+        '$type': 'string',
+    }, 'a cleared (null) key must fall OUT of the index, which is what makes the retire path safe'
+
+
+def test_creating_a_unique_index_passes_unique_and_the_filter_through():
+    calls = []
+
+    class _Collection:
+        def create_index(self, keys, **kwargs):
+            calls.append((keys, kwargs))
+
+    class _Db:
+        def __getitem__(self, _name):
+            return _Collection()
+
+    ensured = _MODULE.create_unique_indexes(_Db())
+
+    assert len(calls) == len(_MODULE._UNIQUE_INDEXES) and ensured
+    (_keys, kwargs) = calls[0]
+    assert kwargs['unique'] is True
+    assert kwargs['partialFilterExpression'] == _MODULE._UNIQUE_INDEXES[0][2]
+
+
+def test_data_that_already_violates_the_index_is_NAMED_not_a_raw_crash(capsys):
+    """What an operator meets. pymongo's DuplicateKeyError names one value with no context, and a boot
+    that dies that way says nothing about what to fix. Creation is skipped, not retried: the index cannot
+    exist until somebody resolves the duplicates, and the boot must not be blocked by a data problem it
+    cannot fix itself."""
+    from pymongo.errors import DuplicateKeyError
+
+    class _Collection:
+        def create_index(self, *_a, **_k):
+            raise DuplicateKeyError('E11000 duplicate key error')
+
+        def aggregate(self, _pipeline):
+            return [{'_id': {'_parent': 'users/u1/action_items', 'd_idempotency_key': 'k1'}, 'n': 2}]
+
+    class _Db:
+        def __getitem__(self, _name):
+            return _Collection()
+
+    ensured = _MODULE.create_unique_indexes(_Db())
+
+    output = capsys.readouterr().out
+    assert ensured == [], 'a blocked index must not be reported as ensured'
+    assert 'SKIPPED unique index' in output
+    assert 'k1' in output and '2 live rows' in output, 'the operator must be told WHAT to resolve'
+
+
+def test_the_duplicate_report_never_becomes_the_failure(capsys):
+    """The report is a courtesy on an error path; if the aggregation itself fails it must not replace one
+    unhelpful error with another."""
+    from pymongo.errors import DuplicateKeyError
+
+    class _Collection:
+        def create_index(self, *_a, **_k):
+            raise DuplicateKeyError('E11000')
+
+        def aggregate(self, _pipeline):
+            raise RuntimeError('aggregation unavailable')
+
+    class _Db:
+        def __getitem__(self, _name):
+            return _Collection()
+
+    _MODULE.create_unique_indexes(_Db())  # must not raise
+
+    assert 'SKIPPED unique index' in capsys.readouterr().out

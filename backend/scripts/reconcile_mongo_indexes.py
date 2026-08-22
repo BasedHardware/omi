@@ -29,7 +29,8 @@ import hashlib
 import json
 import os
 from pathlib import Path
-from typing import Any, List, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
+
 
 def _resolve_manifest_path() -> Path:
     """Locate ``firestore.indexes.json``. Running from the source tree it sits at the repo root
@@ -134,6 +135,81 @@ def planned_indexes(manifest: Mapping[str, Any]) -> List[Tuple[str, MongoIndexKe
     return plan
 
 
+# Unique indexes: not a performance mirror of firestore.indexes.json but an INVARIANT the database
+# enforces, so they are declared separately and created separately (ADR-0085).
+#
+# Measured on both backends: the create path for an action item reads by idempotency key inside a
+# transaction and then writes. Firestore LOCKS what a transaction reads, so a concurrent writer gets
+# 409 Aborted and only one row is created. Mongo takes no read lock: both transactions commit and the
+# user ends up with two identical tasks. The read being inside the transaction was never what protected
+# the invariant — the lock was — so on our default backend it has to be the index.
+#
+# The filter is where the care is. It CANNOT simply be ``completed == false``: the retire path marks
+# ``deleted: true, completed: false`` and the create path deliberately makes a NEW item with the same
+# key once a row is retired, so a retired row still holding the key would collide with a create the
+# product makes on purpose. Mongo's partialFilterExpression admits equality, $exists, the ordering
+# comparators, $type, $and/$or/$in — but NOT $exists:false and NOT $ne — so "and not deleted" is not
+# expressible. It is handled in the data instead: the retire path now clears the key, and the filter
+# requires the key to be a string, which a cleared (null) one is not.
+_UNIQUE_INDEXES: List[Tuple[str, "MongoIndexKeys", Dict[str, Any]]] = [
+    (
+        "action_items",
+        [("_parent", 1), ("d.idempotency_key", 1)],
+        {"d.completed": False, "d.idempotency_key": {"$exists": True, "$type": "string"}},
+    ),
+]
+
+
+def create_unique_indexes(db: Any) -> List[str]:
+    """Create the unique partial indexes. Idempotent; reports a blocking duplicate instead of dying.
+
+    ``create_index`` raises ``DuplicateKeyError`` when the data ALREADY violates the constraint, and the
+    raw pymongo message names one offending value with no context. A boot that fails that way tells an
+    operator nothing about what to fix, so the duplicates are looked up and named. Creation is skipped,
+    not retried: the index cannot exist until somebody resolves them, and the boot must not be blocked
+    by a data problem it cannot fix itself.
+    """
+    from pymongo.errors import DuplicateKeyError
+
+    ensured: List[str] = []
+    for collection, keys, partial in _UNIQUE_INDEXES:
+        name = f"uniq_{_index_name(keys)[6:]}"
+        try:
+            db[collection].create_index(keys, name=name, unique=True, partialFilterExpression=partial)
+            ensured.append(f"{collection}.{name}")
+        except DuplicateKeyError:
+            offenders = _duplicate_groups(db, collection, keys, partial)
+            print(
+                f"SKIPPED unique index {collection}.{name}: the data already violates it. "
+                f"Resolve these first, then restart:"
+            )
+            for group, count in offenders:
+                print(f"  {group} -> {count} live rows")
+            if not offenders:
+                print("  (the duplicates were resolved between the failure and the lookup)")
+    return ensured
+
+
+def _duplicate_groups(
+    db: Any, collection: str, keys: "MongoIndexKeys", partial: Mapping[str, Any], limit: int = 20
+) -> List[Tuple[str, int]]:
+    """The key groups that already have more than one matching document, so the failure can name them."""
+    group_id = {key.replace(".", "_"): f"${key}" for key, _ in keys}
+    pipeline = [
+        {"$match": dict(partial)},
+        {"$group": {"_id": group_id, "n": {"$sum": 1}}},
+        {"$match": {"n": {"$gt": 1}}},
+        {"$limit": limit},
+    ]
+    try:
+        return [
+            (json.dumps(row["_id"], default=str, sort_keys=True), row["n"])
+            for row in db[collection].aggregate(pipeline)
+        ]
+    except Exception:  # pragma: no cover - the report must never be the thing that fails
+        return []
+
+
 def create_planned_indexes(db: Any, plan: Optional[List[Tuple[str, MongoIndexKeys, str]]] = None) -> List[str]:
     """Create every planned index on ``db`` (a pymongo Database). Idempotent — ``create_index`` is a
     no-op when the index already exists — so this is safe to re-run every deploy/boot. Returns the
@@ -157,7 +233,8 @@ def reconcile_mongo_indexes(db_name: Optional[str] = None) -> List[str]:
 
     client = MongoClient(uri)
     try:
-        return create_planned_indexes(client[db_name or os.getenv("MONGO_DB", "omi")])
+        db = client[db_name or os.getenv("MONGO_DB", "omi")]
+        return create_planned_indexes(db) + create_unique_indexes(db)
     finally:
         client.close()
 
