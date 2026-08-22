@@ -55,12 +55,18 @@ enum PageGlassLanePolicy {
     switch SidebarNavItem(rawValue: selectedIndex) ?? .dashboard {
     case .dashboard, .rewind:
       return true
-    case .conversations, .memories:
-      // The Memory hub is one rail index wearing four different pages, and only one of them builds
-      // its own glass. Activity is Home's column — a search bar and a results panel, each already
-      // an `inkGlassPanel` — so wrapping the hub wholesale nested those two inside a third and
-      // double-scrimmed both, which is exactly the muddier-than-its-neighbours failure this policy
-      // exists to prevent. The hub's list pages paint no ground and still need the lane.
+    case .conversations:
+      // **Only this index is the Memory hub.** It is one rail slot wearing four different pages, and
+      // only one of them builds its own glass: Activity is Home's column — a search bar and a
+      // results panel, each already an `inkGlassPanel` — so wrapping the hub wholesale nested those
+      // two inside a third and double-scrimmed both, the muddier-than-its-neighbours failure this
+      // policy exists to prevent. The hub's list pages paint no ground and still need the lane.
+      //
+      // `SidebarNavItem.memories` is deliberately NOT here. In this shell that index is the
+      // *standalone* `MemoriesPage`, not the hub, and it paints no ground of its own — answering
+      // for it off a persisted hub destination stripped its panel and drew its rows onto the
+      // wallpaper. The chat-first shell reaches the hub through `ChatFirstPageGlassLanePolicy`,
+      // which never constructs this view for Activity at all.
       return MemoryHubDestination(rawValue: memoryDestinationRawValue ?? -1) == .activity
     default:
       return false

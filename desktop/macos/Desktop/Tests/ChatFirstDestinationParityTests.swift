@@ -24,7 +24,7 @@ final class ChatFirstDestinationParityTests: XCTestCase {
   /// **The regression this policy actually shipped.** The memory route used to preserve `.brainMap`
   /// by name, so `.activity` — added later as a fourth hub view sharing that route — was rewritten
   /// to `.memories` by the route sync that runs right after the click. Pressing Activity landed on
-  /// Memories, from the pill and from the hub's own switcher alike. Every view whose route is the
+  /// Memories, from the pill and from Activity's own chip row alike. Every view whose route is the
   /// memory route must survive it, not just the two that were there when the policy was written.
   func testActivitySelectionSurvivesTheMemoryRouteTransition() {
     XCTAssertEqual(
@@ -41,15 +41,6 @@ final class ChatFirstDestinationParityTests: XCTestCase {
     }
   }
 
-  /// The hub's switcher replaced the top bar's hover menu, so it has to offer all three of the hub's
-  /// views — a switcher missing one is exactly the "reduced copy" INV-NAV-1 forbids.
-  func testTheMemoryHubSwitcherOffersEveryHubView() {
-    XCTAssertEqual(
-      Set(MemoryHubDestination.switcherOrder), Set(MemoryHubDestination.allCases),
-      "the hub's switcher must offer every hub view")
-    XCTAssertEqual(MemoryHubDestination.switcherOrder, [.activity, .conversations, .memories, .brainMap])
-  }
-
   /// Selecting a hub view in the chat-first shell has to move its typed route as well as the
   /// persisted destination. Conversations has its own route (it carries capture-archive focus);
   /// Memories and Brain Map are both the Memory route, which is where `MemoryHubPage` is mounted.
@@ -61,6 +52,34 @@ final class ChatFirstDestinationParityTests: XCTestCase {
     XCTAssertEqual(MemoryHubSelectionPolicy.chatFirstRoute(for: .memories), .memories)
     XCTAssertEqual(MemoryHubSelectionPolicy.chatFirstRoute(for: .brainMap), .memories)
     XCTAssertEqual(MemoryHubSelectionPolicy.chatFirstRoute(for: .activity), .memories)
+  }
+
+  /// **The chip row is the door, so its contents are a contract.**
+  ///
+  /// The hub's switcher was deleted and this row replaced it. `ShellDestination.Reach.activityChipRow`
+  /// claims the row reaches Conversations, Memories and Brain Map; that claim is only true while the
+  /// row actually offers every hub page. Tasks and Rewind were removed from the row deliberately —
+  /// each already has its own pill in the bar directly above it — and neither is a hub page, so
+  /// neither may come back here without the reachability model being revisited. That every chip
+  /// opens *some* hub page is held by the type — `hubDestination` is not optional — rather than by
+  /// an assertion here.
+  func testTheActivityChipRowOffersEveryHubPageAndNothingElse() {
+    XCTAssertEqual(
+      ActivityDestinationChip.allCases.map(\.title),
+      ["Activity", "Conversations", "Memories", "Brain Map"])
+
+    XCTAssertEqual(
+      Set(ActivityDestinationChip.reachableHubDestinations), Set(MemoryHubDestination.allCases),
+      "a hub page the chip row does not offer has no door")
+  }
+
+  /// The row's word for itself has to follow what the row does. Home's chips narrow results in
+  /// place and are a filter; Activity's open pages and are a view.
+  func testThePanelHeaderNamesWhatTheChipRowActuallyDoes() {
+    XCTAssertEqual(QueryPanelChipBehavior.filterKinds.disclosureLabel, "Filter")
+    XCTAssertEqual(
+      QueryPanelChipBehavior.openDestinations(selected: .activity, open: { _ in }).disclosureLabel,
+      "View")
   }
 
   /// Every flat pill the bar now shows must resolve to a chat-first route, both ways. `Focus` did

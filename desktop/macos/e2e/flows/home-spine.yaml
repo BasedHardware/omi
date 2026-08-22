@@ -76,7 +76,8 @@ steps:
     name: Starring a conversation writes through
     do: >-
       Hover a conversation row and click its star. The star fills immediately. Navigate to
-      Library → Conversations and confirm the same conversation is starred there.
+      Activity → Conversations (the Activity pill, then the Conversations chip in its row) and
+      confirm the same conversation is starred there.
 
   - id: S7
     name: Rows hand off to the page that owns them
