@@ -33,6 +33,7 @@ DIRECTOR_CASES = {
     "worthy-new-actionable-fact",
     "silence-ambient-narrative",
     "silence-user-own-completed-work",
+    "silence-continue-current-investigation",
     "silence-record-correction-no-next-step",
     "silence-low-confidence-fact",
     "identity-same-numbered-context",

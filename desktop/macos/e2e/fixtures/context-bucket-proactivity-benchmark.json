@@ -2628,6 +2628,70 @@
       "rootCauseLabel": "narrated_the_users_own_completed_action"
     },
     {
+      "id": "silence-continue-current-investigation",
+      "category": "silence",
+      "synthetic": {
+        "bucket": {
+          "id": "bucket-ongoing-probe-102",
+          "subjectKind": "context",
+          "subjectId": "context-ongoing-probe-102",
+          "workstreamId": "workstream-alpha",
+          "displayLabel": "Synthetic capacity investigation",
+          "version": 3,
+          "notifyWorthiness": 0.85,
+          "entries": [
+            {
+              "id": "entry-ongoing-probe-102",
+              "reference": "entry:ongoing-probe-102",
+              "appName": "SyntheticTerminal",
+              "contextKey": "context:ongoing-probe-102",
+              "narrative": "The user is running the capacity investigation this window is named for.",
+              "evidenceRefs": [
+                "evidence:ongoing-probe-102"
+              ],
+              "facts": [
+                {
+                  "id": "fact-ongoing-probe-102",
+                  "statement": "The data volume is at 99% with 40 million inodes, so the shortage is a file-count explosion rather than a few large files.",
+                  "validityState": "validated",
+                  "confidence": 0.92,
+                  "notifyWorthiness": 0.85,
+                  "expiresAt": "2026-08-30T12:00:00Z",
+                  "evidenceRefs": [
+                    "evidence:ongoing-probe-102"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "frames": [
+          {
+            "id": "frame-ongoing-probe-102",
+            "capturedAt": "2026-08-22T06:15:00Z",
+            "appName": "SyntheticTerminal",
+            "windowTitle": "Disk capacity investigation and cleanup",
+            "contextKey": "context:ongoing-probe-102",
+            "textSummary": "Investigating why the data volume is full; inode count is unusually high."
+          }
+        ],
+        "tasks": []
+      },
+      "expectedAction": "silence",
+      "expectedEvidenceRefs": [],
+      "expectedSubject": {
+        "kind": "context",
+        "id": "context-ongoing-probe-102",
+        "workstreamId": "workstream-alpha"
+      },
+      "expectedMaxAge": 0,
+      "forbidden": [
+        "notify_from_narrative_only",
+        "create_task"
+      ],
+      "rootCauseLabel": "restated_the_investigation_already_in_progress"
+    },
+    {
       "id": "silence-record-correction-no-next-step",
       "category": "silence",
       "synthetic": {
