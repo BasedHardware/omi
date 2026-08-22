@@ -164,7 +164,16 @@ struct DesktopTopBar: View {
       onRewind()
       return
     }
-    OmiMotion.withGated(.easeOut(duration: 0.08)) { selectedIndex = index }
+    OmiMotion.withGated(.easeOut(duration: 0.08)) {
+      // The pill says `Activity`, so it opens Activity rather than whichever hub page was persisted
+      // last. `memoryDestinationRawValue` was declared here and never written — which is why this
+      // shell used to land on Memories with no chip row and no switcher: a dead end reachable from
+      // a cold launch, since the stored default is `.memories`.
+      if index == SidebarNavItem.conversations.rawValue {
+        memoryDestinationRawValue = MemoryHubDestination.activity.rawValue
+      }
+      selectedIndex = index
+    }
   }
 }
 

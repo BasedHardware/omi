@@ -14,7 +14,12 @@ from database.redis_db import (
     enable_user_webhook_db,
     set_user_webhook_db,
 )
-from database.webhook_health import record_dev_webhook_failure, record_dev_webhook_success, _DEV_FAILURE_THRESHOLD
+from database.webhook_health import (
+    record_dev_webhook_failure,
+    record_dev_webhook_success,
+    enqueue_dev_webhook_dlq,
+    _DEV_FAILURE_THRESHOLD,
+)
 from models.conversation import Conversation
 from models.users import WebhookType, webhook_url_from_setting
 import database.notifications as notification_db
@@ -117,6 +122,7 @@ async def _post_dev_webhook(
     *,
     retry_delays: Optional[tuple[float, ...]] = None,
     idempotency_key: Optional[str] = None,
+    dlq_uid: Optional[str] = None,
     **request_kwargs,
 ):
     if retry_delays is None:
@@ -163,11 +169,33 @@ async def _post_dev_webhook(
         logger.error(
             f'{webhook_name}: delivery failed status={last_response.status_code} attempts={attempts} url={webhook_url}'
         )
+        await run_blocking(
+            db_executor,
+            enqueue_dev_webhook_dlq,
+            webhook_name=webhook_name,
+            webhook_url=webhook_url,
+            status_code=last_response.status_code,
+            error=f'HTTP {last_response.status_code}',
+            idempotency_key=headers.get('Idempotency-Key'),
+            uid=dlq_uid,
+            payload=request_kwargs.get('json'),
+        )
         return last_response
 
     if last_exception is None:
         raise RuntimeError(f'{webhook_name}: delivery failed without a response or exception')
     logger.error(f'{webhook_name}: delivery failed error={type(last_exception).__name__} attempts={attempts}')
+    await run_blocking(
+        db_executor,
+        enqueue_dev_webhook_dlq,
+        webhook_name=webhook_name,
+        webhook_url=webhook_url,
+        status_code=0,
+        error=type(last_exception).__name__,
+        idempotency_key=headers.get('Idempotency-Key'),
+        uid=dlq_uid,
+        payload=request_kwargs.get('json'),
+    )
     raise last_exception
 
 
@@ -217,6 +245,7 @@ async def conversation_created_webhook(uid, memory: Conversation):
                 webhook_url,
                 json=payload,
                 headers={'Content-Type': 'application/json'},
+                dlq_uid=uid,
             )
             if response.status_code >= 200 and response.status_code < 300:
                 cb.record_success()
@@ -272,6 +301,7 @@ async def day_summary_webhook(uid, summary: str, summary_json: Optional[dict] = 
                     'created_at': datetime.now(timezone.utc).isoformat(),
                 },
                 headers={'Content-Type': 'application/json'},
+                dlq_uid=uid,
             )
             if response.status_code >= 200 and response.status_code < 300:
                 cb.record_success()
@@ -317,6 +347,7 @@ async def realtime_transcript_webhook(uid, segments: List[dict]):
                 webhook_url,
                 json={'segments': segments, 'session_id': uid},
                 headers={'Content-Type': 'application/json'},
+                dlq_uid=uid,
             )
             if response.status_code >= 200 and response.status_code < 300:
                 cb.record_success()
@@ -407,6 +438,7 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
                     webhook_url,
                     content=chunk,
                     headers={'Content-Type': 'application/octet-stream'},
+                    dlq_uid=uid,
                 )
                 if not (200 <= response.status_code < 300):
                     cb.record_failure()

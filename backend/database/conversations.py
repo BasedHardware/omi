@@ -1509,15 +1509,44 @@ def update_conversation_segments(
 # ***********************************
 
 
-def reserve_share_email_recipients(uid: str, conversation_id: str, emails: list[str]) -> list[str]:
-    """Atomically claim not-yet-emailed recipients for this request.
+# A claim this old is treated as abandoned: the process that took it died
+# mid-dispatch, and holding the recipient hostage forever would make the send
+# unretryable. Comfortably longer than the provider request timeout.
+SHARE_EMAIL_CLAIM_TTL_SECONDS = 180
 
-    A Firestore transaction reads the sent ledger and writes the claimed
-    subset in one step, so two concurrent requests can never both claim the
-    same recipient. Returns the subset this caller owns dispatching.
+
+def _in_flight_field(email: str) -> str:
+    """Field path for one recipient's dispatch claim.
+
+    An address contains characters (dots, `@`) that Firestore's field-path
+    syntax reads as structure, so the segment is quoted by the client's own
+    FieldPath rather than by hand — escaping only the dots still left `@`
+    unparseable and failed the write.
     """
+    from google.cloud.firestore_v1.field_path import FieldPath
+
+    return FieldPath('share_email_in_flight', email).to_api_repr()
+
+
+def reserve_share_email_recipients(
+    uid: str, conversation_id: str, emails: list[str], *, now_epoch: float | None = None
+) -> tuple[list[str], list[str], list[str]]:
+    """Atomically decide who this request owns dispatching.
+
+    Returns ``(to_dispatch, already_sent, in_flight_elsewhere)``.
+
+    Two ledgers, deliberately distinct. ``share_email_sent_to`` means an email
+    definitively went out; ``share_email_in_flight`` means some request is
+    dispatching right now. Collapsing them lets a concurrent duplicate report
+    success for a send that is still in flight — and if that send then fails and
+    releases its claim, nobody sent anything while somebody was told otherwise.
+    A caller that finds a live claim it does not own is told so, not lied to.
+    """
+    import time as _time
+
     from google.cloud import firestore as gc_firestore
 
+    stamp = now_epoch if now_epoch is not None else _time.time()
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
 
@@ -1525,24 +1554,60 @@ def reserve_share_email_recipients(uid: str, conversation_id: str, emails: list[
     def _reserve(transaction):
         snapshot = conversation_ref.get(transaction=transaction)
         data = snapshot.to_dict() or {}
-        already = {e for e in (data.get('share_email_sent_to') or []) if isinstance(e, str)}
-        claimed = [e for e in emails if e not in already]
-        if claimed:
-            transaction.update(conversation_ref, {'share_email_sent_to': gc_firestore.ArrayUnion(claimed)})
-        return claimed
+        sent = {e for e in (data.get('share_email_sent_to') or []) if isinstance(e, str)}
+        raw_in_flight = data.get('share_email_in_flight')
+        in_flight = raw_in_flight if isinstance(raw_in_flight, dict) else {}
+
+        to_dispatch: list[str] = []
+        already_sent: list[str] = []
+        in_flight_elsewhere: list[str] = []
+        claims: dict[str, float] = {}
+        for email in emails:
+            if email in sent:
+                already_sent.append(email)
+                continue
+            claimed_at = in_flight.get(email)
+            fresh = isinstance(claimed_at, (int, float)) and (stamp - claimed_at) < SHARE_EMAIL_CLAIM_TTL_SECONDS
+            if fresh:
+                in_flight_elsewhere.append(email)
+                continue
+            to_dispatch.append(email)
+            claims[_in_flight_field(email)] = stamp
+
+        if claims:
+            transaction.update(conversation_ref, claims)
+        return to_dispatch, already_sent, in_flight_elsewhere
 
     return run_transactional(db, _reserve)
 
 
-def release_share_email_recipients(uid: str, conversation_id: str, emails: list[str]) -> None:
-    """Release a reservation after a definitive send failure so retries work."""
+def confirm_share_email_recipients(uid: str, conversation_id: str, emails: list[str]) -> None:
+    """Record a definitive send and drop its in-flight claim, in that order."""
     from google.cloud import firestore as gc_firestore
 
     if not emails:
         return
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    conversation_ref.update({'share_email_sent_to': gc_firestore.ArrayRemove(emails)})
+    update: dict[str, object] = {'share_email_sent_to': gc_firestore.ArrayUnion(emails)}
+    for email in emails:
+        update[_in_flight_field(email)] = gc_firestore.DELETE_FIELD
+    conversation_ref.update(update)
+
+
+def release_share_email_recipients(uid: str, conversation_id: str, emails: list[str]) -> None:
+    """Drop claims after a definitive failure so a retry can dispatch again.
+
+    Only the in-flight claim is dropped; nothing is removed from the sent
+    ledger, because a recipient only lands there once delivery was definitive.
+    """
+    from google.cloud import firestore as gc_firestore
+
+    if not emails:
+        return
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    conversation_ref.update({_in_flight_field(email): gc_firestore.DELETE_FIELD for email in emails})
 
 
 def set_conversation_visibility(uid: str, conversation_id: str, visibility: str):

@@ -152,6 +152,25 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
     XCTAssertTrue(PostOnboardingPromptSuggestions.shouldShowPopup)
   }
 
+  func testCaptureChoiceAdvancesToOptionalReferralBeforeCompletion() {
+    let model = makeConfiguredModel()
+    let previousMode = AssistantSettings.shared.audioRecordingMode
+    let previousCompletion = appState?.hasCompletedOnboarding ?? false
+    appState?.hasCompletedOnboarding = false
+    defer {
+      AssistantSettings.shared.audioRecordingMode = previousMode
+      appState?.hasCompletedOnboarding = previousCompletion
+    }
+
+    model.capture(SBOnboardingModel.defaultCaptureSelection)
+
+    XCTAssertEqual(model.step, .referral)
+    XCTAssertEqual(
+      UserDefaults.standard.integer(forKey: SBOnboardingModel.resumeStepKey),
+      SBOnboardingModel.Step.referral.rawValue)
+    XCTAssertFalse(try XCTUnwrap(appState).hasCompletedOnboarding)
+  }
+
   func testSkippedSetupStillProducesAnswerableGuidance() {
     let model = makeModel()
 

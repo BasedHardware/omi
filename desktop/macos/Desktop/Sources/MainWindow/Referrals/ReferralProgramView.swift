@@ -38,35 +38,40 @@ final class ReferralViewModel: ObservableObject {
 struct ReferralProgramView: View {
   @StateObject private var viewModel: ReferralViewModel
   @State private var copied = false
+  private let showsIntroduction: Bool
 
-  init() {
+  init(showsIntroduction: Bool = true) {
+    self.showsIntroduction = showsIntroduction
     _viewModel = StateObject(wrappedValue: ReferralViewModel())
   }
 
-  init(viewModel: ReferralViewModel) {
+  init(viewModel: ReferralViewModel, showsIntroduction: Bool = true) {
+    self.showsIntroduction = showsIntroduction
     _viewModel = StateObject(wrappedValue: viewModel)
   }
 
   var body: some View {
     VStack(spacing: OmiSpacing.xl) {
-      Image(systemName: "gift")
-        .scaledFont(size: 28, weight: .semibold)
-        .foregroundColor(Ink.primary)
-        .frame(width: 52, height: 52)
-        .background(Circle().fill(Ink.wash))
-        .accessibilityHidden(true)
-
-      VStack(spacing: OmiSpacing.sm) {
-        Text("Give a friend one free month of Operator")
-          .scaledFont(size: OmiType.title, weight: .semibold)
+      if showsIntroduction {
+        Image(systemName: "gift")
+          .scaledFont(size: 28, weight: .semibold)
           .foregroundColor(Ink.primary)
-          .multilineTextAlignment(.center)
+          .frame(width: 52, height: 52)
+          .background(Circle().fill(Ink.wash))
+          .accessibilityHidden(true)
 
-        Text("Share your unique link. When a friend joins Omi, they'll get one month of Operator free.")
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(Ink.secondary)
-          .multilineTextAlignment(.center)
-          .fixedSize(horizontal: false, vertical: true)
+        VStack(spacing: OmiSpacing.sm) {
+          Text("Give a friend one free month of Operator")
+            .scaledFont(size: OmiType.title, weight: .semibold)
+            .foregroundColor(Ink.primary)
+            .multilineTextAlignment(.center)
+
+          Text("Share your unique link. When a friend joins Omi, they'll get one month of Operator free.")
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(Ink.secondary)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+        }
       }
 
       referralControl

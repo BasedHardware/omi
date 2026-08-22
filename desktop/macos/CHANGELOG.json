@@ -2,6 +2,58 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.206",
+      "date": "2026-08-22",
+      "changes": [
+        "Fixed the app quitting during onboarding when you granted microphone or screen recording permission",
+        "Fixed screen-history search returning nothing for multi-word titles and titles containing version numbers",
+        "Activity now opens from its own pill and stays put, its rows open the exact conversation or memory you clicked, its chips reach Conversations, Memories, Brain Map, Tasks and Rewind directly, and conversation summaries show the full written notes again instead of a one-line stub.",
+        "Fixed meetings-only listening missing Google Meet calls, where a joined tab is titled with just the meeting code"
+      ]
+    },
+    {
+      "version": "0.12.205",
+      "date": "2026-08-22",
+      "changes": [
+        "Proactive insights no longer recap what you just did, tell you to keep doing what you're already doing, or report a record change you can't act on — a notification now has to answer your question or change your next step"
+      ]
+    },
+    {
+      "version": "0.12.204",
+      "date": "2026-08-22",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.203",
+      "date": "2026-08-22",
+      "changes": [
+        "The meeting notes card now has a Share button that opens an address field — prefilled with the detected participant, but yours to change — plus a link button to copy, and Omi tells you it is taking notes when it detects a meeting"
+      ]
+    },
+    {
+      "version": "0.12.202",
+      "date": "2026-08-22",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.201",
+      "date": "2026-08-22",
+      "changes": [
+        "Fixed released builds accepting local CLI test triggers, which let any process on your Mac deliver a fake Omi notification and save it to your chat"
+      ]
+    },
+    {
+      "version": "0.12.200",
+      "date": "2026-08-21",
+      "changes": [
+        "Added an optional referral link as the final onboarding step and kept onboarding completion scoped to each signed-in account"
+      ]
+    },
+    {
       "version": "0.12.199",
       "date": "2026-08-21",
       "changes": [

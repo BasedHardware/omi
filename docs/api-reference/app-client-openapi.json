@@ -36356,7 +36356,7 @@
     },
     "/v1/conversations/{conversation_id}/share-email": {
       "post": {
-        "description": "One-click send of the meeting summary to detected participants.\n\nRecipients are validated against the calendar-detected set so this can\nnever relay to arbitrary addresses. Sending makes the conversation\nlink-visible first (same contract as copying the share link) so the\nemailed link resolves.",
+        "description": "Send the meeting summary to the addresses the owner chose.\n\nThe card lets the owner type a recipient, so the address is theirs to pick\nrather than something we detected; detection only prefills the field. What\nkeeps this from being an open relay is unchanged: the sender must own the\nconversation, the mail carries only that conversation's own summary and\nshare link with the owner as reply-to, the request schema caps how many\naddresses one send may carry, and a per-owner daily quota bounds the total.\nSending\nmakes the conversation link-visible first (same contract as copying the\nshare link) so the emailed link resolves.",
         "operationId": "send_conversation_share_email_v1_conversations__conversation_id__share_email_post",
         "parameters": [
           {

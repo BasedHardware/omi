@@ -200,6 +200,35 @@ with patch.object(
     else:
         raise AssertionError("HTTP probe failure must carry the scenario ID")
 
+
+class UnreadableBody:
+    """An error body whose read() raises, like an HTTPError carrying no body.
+
+    On Python 3.9 (macOS /usr/bin/python3) `HTTPError(..., fp=None).read()`
+    raises KeyError('file') out of tempfile's __getattr__; newer versions return
+    b''. Raising here pins the degrade-safely contract on every version instead
+    of only on the interpreters that happen to reproduce it.
+    """
+
+    def read(self, *_args):
+        raise KeyError("file")
+
+    def close(self):
+        """urllib wraps the body in a tempfile closer that closes it on GC."""
+
+
+with patch.object(
+    benchmark.request,
+    "urlopen",
+    side_effect=error.HTTPError("http://127.0.0.1", 400, "Bad Request", None, UnreadableBody()),
+):
+    try:
+        benchmark.invoke_case(case, 47910)
+    except RuntimeError as exc:
+        assert str(exc) == "synthetic-text-output: probe returned HTTP 400"
+    else:
+        raise AssertionError("an unreadable error body must not mask the HTTP failure")
+
 stable_error_body = io.BytesIO(
     b'{"ok":false,"error":"action failed: proactive_http_error status=429"}'
 )

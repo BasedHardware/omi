@@ -30,7 +30,9 @@ vi.mock('electron', () => ({
     handle: (channel: string, fn: (event: unknown, ...args: unknown[]) => unknown): void => {
       handlers.set(channel, fn)
     }
-  }
+  },
+  BrowserWindow: { getAllWindows: (): unknown[] => [] },
+  webContents: { getAllWebContents: (): unknown[] => [] }
 }))
 vi.mock('../agentKernel/store', () => ({ SqliteAgentStore: class {} }))
 vi.mock('../agentKernel/kernel', () => ({ AgentRuntimeKernel: class {} }))
@@ -50,6 +52,8 @@ vi.mock('../agentKernel/toolRelayBridge', () => ({
 vi.mock('../codingAgent/piMono', () => ({
   PiMonoAdapter: vi.fn(function (this: Record<string, unknown>) {
     this.updateAuthToken = vi.fn(() => Promise.resolve(true))
+    this.updateByokEnv = vi.fn(() => Promise.resolve(true))
+    this.revokeAndStop = vi.fn(() => Promise.resolve())
   }),
   PiMonoRuntimeAdapter: vi.fn(function (this: Record<string, unknown>) {
     this.adapterId = 'pi-mono'
