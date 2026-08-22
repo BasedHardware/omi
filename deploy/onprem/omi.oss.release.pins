@@ -13,8 +13,19 @@
 #         - omi.oss.release.pins
 #
 # Each variable holds the WHOLE image reference, not a version number, so a pin may be a tag, a
-# tag@digest, or a bare digest — the form is a per-line choice and changes nothing else. Tightening a
-# floating tag into a digest is one line here.
+# tag@digest, or a bare digest — the form is a per-line choice and changes nothing else.
+#
+# EVERY pin here is now tag@digest, and the digest is the multi-arch MANIFEST LIST digest, not one
+# platform's: pinning a platform digest would make the release amd64-only without saying so. A bare tag
+# means two installs of the same release can have different bits (BACKLOG L28), which is the thing this
+# file exists to prevent — a tag is a name, not a version.
+#
+# REFRESHING a pin is the cost of this, and it is deliberate: a tag like `nginx:stable-alpine` stops
+# receiving security patches the moment it is pinned. Resolve the new digest and verify it in one step:
+#
+#     docker buildx imagetools inspect nginx:stable-alpine | sed -n 's/^Digest:[[:space:]]*//p'
+#
+# then update the line, and update the Helm mirror in helm/omi-oss/values.yaml (a check compares them).
 #
 # Names are namespaced OMI_OSS_* on purpose: the shell environment takes PRECEDENCE over an env_file,
 # so a stray MONGO_IMAGE exported in the operator's shell would silently override a pin. Do not export
@@ -24,11 +35,11 @@
 # Registry prefix / mirroring is per-INSTALLATION, not per-release: it does not belong in this file.
 
 # --- shared by compose and Helm ---------------------------------------------------------------
-OMI_OSS_VALKEY_IMAGE=valkey/valkey:8-alpine
+OMI_OSS_VALKEY_IMAGE=valkey/valkey:8-alpine@sha256:e0eb7c480958d32bdc4357a74bdd70653ae15f2f9b4c93c4a5a9fad1dc471c84
 # major-pin (currently v7.0.40; gets 7.x security patches, not :latest)
-OMI_OSS_MONGO_IMAGE=mongo:7
-OMI_OSS_KEYCLOAK_IMAGE=quay.io/keycloak/keycloak:26.0
-OMI_OSS_NTFY_IMAGE=binwiederhier/ntfy:v2.11.0
+OMI_OSS_MONGO_IMAGE=mongo:7@sha256:b6421fd6d1c5ded6377b397d8983e2f82e2100dc5123332dcfda2065a472be5b
+OMI_OSS_KEYCLOAK_IMAGE=quay.io/keycloak/keycloak:26.0@sha256:09a381c715ab0b111835b70f2905955274843a219c6f27efb348e4d9f4086858
+OMI_OSS_NTFY_IMAGE=binwiederhier/ntfy:v2.11.0@sha256:4a7d0f0adc6d5d9fc36e64ab55ef676e76e124a2bdd50ce115b6d9c1c7430294
 # qdrant 1.19.0 (registry digest, verified)
 OMI_OSS_QDRANT_IMAGE=qdrant/qdrant@sha256:057ee3a8da769fe7310dd3537b4dc7583bf87a95ce8ac43c0af5a46bc580d1fc
 # tag@digest (verified: tag resolves to this digest)
@@ -40,11 +51,11 @@ OMI_OSS_TYPESENSE_IMAGE=typesense/typesense:27.1@sha256:5c12af89130b8ee0be115413
 # --- compose only ------------------------------------------------------------------------------
 # TLS-terminating reverse proxies (api-proxy, kc-proxy, ntfy-proxy). The Helm target terminates TLS at
 # the Envoy Gateway instead, so it has no equivalent.
-OMI_OSS_NGINX_IMAGE=nginx:stable-alpine
+OMI_OSS_NGINX_IMAGE=nginx:stable-alpine@sha256:97d490c12ba55b4946b01546d1c3ed324e8d41ab1c9fcb2a616aa470620e5b46
 
 # --- Helm only ---------------------------------------------------------------------------------
 # Keycloak's database (compose runs Keycloak on its dev-mode embedded store) and the bucket-init job
 # for RustFS. Pinned here so the whole third-party surface of a release lives in one place, even where
 # only one deployment target uses it.
-OMI_OSS_POSTGRES_IMAGE=postgres:16-alpine
+OMI_OSS_POSTGRES_IMAGE=postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
 OMI_OSS_MC_IMAGE=minio/mc:latest@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727

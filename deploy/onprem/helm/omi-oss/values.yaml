@@ -85,7 +85,7 @@ backend:
   resources: {}
 
 valkey:
-  image: valkey/valkey:8-alpine
+  image: valkey/valkey:8-alpine@sha256:e0eb7c480958d32bdc4357a74bdd70653ae15f2f9b4c93c4a5a9fad1dc471c84
   # Public image: the node pulls it once from the registry. (Only the locally-built backend image, which
   # is on no registry, needs `kind load` + Never.) For a fully air-gapped node, pre-seed a local registry.
   imagePullPolicy: IfNotPresent
@@ -95,7 +95,7 @@ valkey:
   resources: {}
 
 mongo:
-  image: mongo:7
+  image: mongo:7@sha256:b6421fd6d1c5ded6377b397d8983e2f82e2100dc5123332dcfda2065a472be5b
   # Public image: pulled by the node (see valkey note). backend stays Never (local-only image).
   imagePullPolicy: IfNotPresent
   replicaSetName: rs0
@@ -122,7 +122,7 @@ auth:
   # Keycloak bootstrap admin password — set per environment (dev overlay uses a throwaway value).
   adminPassword: ""
   keycloak:
-    image: quay.io/keycloak/keycloak:26.0
+    image: quay.io/keycloak/keycloak:26.0@sha256:09a381c715ab0b111835b70f2905955274843a219c6f27efb348e4d9f4086858
     imagePullPolicy: IfNotPresent
     storage: 1Gi
     resources: {}
@@ -130,7 +130,7 @@ auth:
     # a keycloak-postgres StatefulSet is created and Keycloak runs --db=postgres.
     db: dev-file
     postgres:
-      image: postgres:16-alpine
+      image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
       storage: 2Gi
       password: ""   # required when db=postgres (dev overlay sets a throwaway value)
 # Scheduled work (ADR-0062). Upstream runs exactly two periodic jobs, both HOURLY, as Cloud Run Jobs
@@ -252,7 +252,7 @@ push:
   # ingress/TLS phase gives ntfy a real host; the backend reaches ntfy via http://ntfy:80 regardless.
   baseUrl: "http://ntfy"
   ntfy:
-    image: binwiederhier/ntfy:v2.11.0
+    image: binwiederhier/ntfy:v2.11.0@sha256:4a7d0f0adc6d5d9fc36e64ab55ef676e76e124a2bdd50ce115b6d9c1c7430294
     imagePullPolicy: IfNotPresent
     storage: 1Gi
     resources: {}
