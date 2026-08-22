@@ -52,6 +52,12 @@ flowchart LR
 
 These apps are activated when Omi creates a new memory, allowing you to process or store the data externally.
 
+<Note>
+  This trigger also covers conversations uploaded from a Limitless Pendant. If an
+  initial short fragment is discarded, Omi sends the event once later uploaded
+  speech makes the conversation visible.
+</Note>
+
 <AccordionGroup>
   <Accordion title="How It Works" icon="gear">
     1. User completes a conversation
@@ -148,6 +154,12 @@ Check out the [Notion CRM Example](https://github.com/BasedHardware/Omi/blob/mai
 
 Process conversation transcripts as they occur, enabling real-time analysis and actions.
 
+<Note>
+  This trigger requires an active live-listen session. Historical or
+  store-and-forward uploads, including Limitless Pendant WAL uploads, do not
+  replay transcript segments through the real-time webhook.
+</Note>
+
 <AccordionGroup>
   <Accordion title="How It Works" icon="gear">
     1. User starts speaking
@@ -231,6 +243,11 @@ Real-time processors require careful design to avoid performance issues.
 ## Real-Time Audio Bytes
 
 Stream raw audio bytes from Omi directly to your endpoint for custom audio processing.
+
+<Note>
+  Audio-byte delivery requires an active live-listen session. Historical or
+  store-and-forward uploads do not replay their audio through this webhook.
+</Note>
 
 <AccordionGroup>
   <Accordion title="How It Works" icon="gear">
