@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Mapping
 from urllib.parse import urlparse
 
+from utils.object_store import get_object_store
 from .parity_telemetry import record_parity_capture_event, record_parity_capture_lifecycle
 
 logger = logging.getLogger(__name__)
@@ -66,30 +67,10 @@ def _object_name(prefix: str, local_path: Path, root: Path) -> str:
     return f"{prefix.rstrip('/')}/{rel_s}"
 
 
-_client = None
-_client_lock = threading.Lock()
-
-
-def _storage_client():
-    """Lazy GCS client using the same credential sources as backend storage."""
-    global _client
-    if _client is not None:
-        return _client
-    with _client_lock:
-        if _client is not None:
-            return _client
-        from google.cloud import storage
-        from google.oauth2 import service_account
-        import json
-
-        if os.environ.get("SERVICE_ACCOUNT_JSON"):
-            info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
-            credentials = service_account.Credentials.from_service_account_info(info)
-            _client = storage.Client(credentials=credentials)
-        else:
-            project = (os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("FIREBASE_PROJECT_ID") or "").strip()
-            _client = storage.Client(project=project) if project else storage.Client()
-        return _client
+def _object_store():
+    """The neutral object-store port (ADR-0032). Parity-pack export honors OBJECT_STORE_BACKEND like
+    the rest of storage; the configured credentials/endpoint are shared with backend storage."""
+    return get_object_store()
 
 
 def _record_export_failure(*, reason: str) -> None:
@@ -147,9 +128,7 @@ def export_cassette_file(local_path: Path, *, environ: Mapping[str, str] | None 
     record_parity_capture_event('export', 'attempted', 'configured', environ=env)
     record_parity_capture_lifecycle('export', 'attempted', environ=env)
     try:
-        client = _storage_client()
-        blob = client.bucket(bucket_name).blob(object_name)
-        blob.upload_from_filename(str(path), content_type="application/json")
+        _object_store().put_from_file(bucket_name, object_name, str(path), content_type="application/json")
         record_parity_capture_event('export', 'succeeded', 'none', environ=env)
         record_parity_capture_lifecycle('export', 'succeeded', environ=env)
         return True

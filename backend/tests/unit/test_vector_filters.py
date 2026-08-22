@@ -48,6 +48,42 @@ class _FakeIndex:
         }
 
 
+class _PortOverIndex:
+    """Adapt the neutral vector-store port (ADR-0033) onto a Pinecone-index-shaped fake."""
+
+    def __init__(self, index):
+        self._i = index
+
+    def upsert(self, namespace, records):
+        recs = list(records)
+        self._i.upsert(vectors=recs, namespace=namespace)
+        return len(recs)
+
+    def query(self, namespace, vector, *, top_k, filter=None, include_metadata=True, include_values=False):
+        return self._i.query(
+            vector=vector,
+            top_k=top_k,
+            include_metadata=include_metadata,
+            include_values=include_values,
+            filter=filter,
+            namespace=namespace,
+        )["matches"]
+
+    def update_metadata(self, namespace, id, set_metadata):
+        self._i.update(id, set_metadata=set_metadata, namespace=namespace)
+
+    def delete_by_ids(self, namespace, ids):
+        ids = list(ids)
+        self._i.delete(ids=ids, namespace=namespace)
+        return len(ids)
+
+    def delete_by_filter(self, namespace, filter):
+        self._i.delete(filter=filter, namespace=namespace)
+
+    def list_ids(self, namespace, *, prefix):
+        yield from self._i.list(prefix=prefix, namespace=namespace)
+
+
 def _load_vector_db_with_stubs():
     pinecone_module = types.ModuleType("pinecone")
     setattr(pinecone_module, "Pinecone", lambda api_key: None)
@@ -74,7 +110,8 @@ def _load_vector_db_with_stubs():
 def test_query_memory_vector_candidates_uses_ns2_strict_default_filter_and_parses_hits(monkeypatch):
     vector_db = _load_vector_db_with_stubs()
     fake_index = _FakeIndex()
-    monkeypatch.setattr(vector_db, "index", fake_index)
+    monkeypatch.setattr(vector_db, "_vector_store", lambda: _PortOverIndex(fake_index))
+    monkeypatch.setattr(vector_db, "is_vector_available", lambda: True)
     monkeypatch.setattr(vector_db, "embeddings", _FakeEmbeddings())
 
     parsed = vector_db.query_memory_vector_candidates("uid-1", "query text", mode=SearchMode.default, limit=20)
@@ -91,7 +128,8 @@ def test_query_memory_vector_candidates_uses_ns2_strict_default_filter_and_parse
 def test_query_memory_vector_candidates_requires_explicit_archive_mode_for_archive_filter(monkeypatch):
     vector_db = _load_vector_db_with_stubs()
     fake_index = _FakeIndex()
-    monkeypatch.setattr(vector_db, "index", fake_index)
+    monkeypatch.setattr(vector_db, "_vector_store", lambda: _PortOverIndex(fake_index))
+    monkeypatch.setattr(vector_db, "is_vector_available", lambda: True)
     monkeypatch.setattr(vector_db, "embeddings", _FakeEmbeddings())
 
     vector_db.query_memory_vector_candidates("uid-1", "query text", mode=SearchMode.archive_explicit)

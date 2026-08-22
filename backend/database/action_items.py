@@ -3,7 +3,7 @@ from datetime import datetime, timezone, timedelta
 import logging
 from typing import Any, Dict, Iterable, List, Optional, Protocol, cast
 
-from google.api_core.exceptions import DeadlineExceeded as FirestoreDeadlineExceeded, NotFound
+from google.api_core.exceptions import AlreadyExists, DeadlineExceeded as FirestoreDeadlineExceeded, NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -268,6 +268,32 @@ def _prepare_action_item_for_read(action_item_data: Dict[str, Any]) -> Dict[str,
 # *****************************
 
 
+def _existing_live_id_in_transaction(
+    action_items_ref: Any, idempotency_key: str, account_generation: int, write_transaction: Any
+) -> Optional[str]:
+    """The live action item already holding this key, read INSIDE the transaction.
+
+    Extracted so the transaction's own dedup read has a name and a seam. On Firestore this read takes a
+    lock and is what makes the invariant hold; on Mongo it takes none, so a concurrent writer can commit
+    between this read and the write below — which is precisely why the unique partial index exists
+    (ADR-0085). A test can patch this to return None on both callers and reproduce that stale read
+    deterministically, instead of hoping two threads collide.
+    """
+    existing_query = action_items_ref.where(filter=FieldFilter('idempotency_key', '==', idempotency_key)).where(
+        filter=FieldFilter('completed', '==', False)
+    )
+    if account_generation > 0:
+        existing_query = existing_query.where(filter=FieldFilter('account_generation', '==', account_generation))
+    existing_query = existing_query.limit(5)
+    for existing in existing_query.stream(transaction=write_transaction):
+        data = _typed_doc(existing)
+        if account_generation == 0 and int(data.get('account_generation', 0)) != 0:
+            continue
+        if not data.get('deleted'):
+            return existing.id
+    return None
+
+
 def create_action_item(
     uid: str,
     action_item_data: Dict[str, Any],
@@ -330,20 +356,11 @@ def create_action_item(
         control = _typed_doc(control_snapshot) if control_snapshot.exists else {}
         account_generation = int(control.get('account_generation', 0))
         if idempotency_key:
-            existing_query = action_items_ref.where(filter=FieldFilter('idempotency_key', '==', idempotency_key)).where(
-                filter=FieldFilter('completed', '==', False)
+            adopted = _existing_live_id_in_transaction(
+                action_items_ref, idempotency_key, account_generation, write_transaction
             )
-            if account_generation > 0:
-                existing_query = existing_query.where(
-                    filter=FieldFilter('account_generation', '==', account_generation)
-                )
-            existing_query = existing_query.limit(5)
-            for existing in existing_query.stream(transaction=write_transaction):
-                data = _typed_doc(existing)
-                if account_generation == 0 and int(data.get('account_generation', 0)) != 0:
-                    continue
-                if not data.get('deleted'):
-                    return existing.id
+            if adopted is not None:
+                return adopted
         if document_id is not None:
             existing_document = doc_ref.get(transaction=write_transaction)
             if existing_document.exists:
@@ -365,14 +382,52 @@ def create_action_item(
         write_transaction.set(doc_ref, payload)
         return doc_ref.id
 
-    return cast(
-        str,
-        run_with_transaction_contention_retry(
-            db.transaction,
-            create_in_generation,
-            operation_name="action_item_create",
-        ),
+    try:
+        return cast(
+            str,
+            run_with_transaction_contention_retry(
+                db.transaction,
+                create_in_generation,
+                operation_name="action_item_create",
+            ),
+        )
+    except AlreadyExists:
+        # The unique partial index refused a second live row for this key (ADR-0085). The error arrives
+        # Firestore-shaped: the facade translates the port's AlreadyExists into the google.api_core one,
+        # because every domain module here is written against the Firestore SDK. Catching the port's
+        # error instead would never fire — measured, by a test that failed for exactly that reason. That is the race
+        # the transaction's read cannot win on Mongo, which takes no lock on what it reads: both callers
+        # read "nothing there" and both write. The index is what makes the duplicate impossible; this
+        # turns its refusal into the answer the transaction already intends — the id of the row that won.
+        if idempotency_key:
+            existing_id = _live_action_item_id_for_key(uid, idempotency_key)
+            if existing_id:
+                return existing_id
+        raise
+
+
+def _live_action_item_id_for_key(uid: str, idempotency_key: str) -> Optional[str]:
+    """The id of the live action item holding this key, read after a failed create.
+
+    A SEPARATE read from the in-transaction one, on purpose and twice over. First because it asks a
+    different question — not "may I create?" but "who won?" — and it has to run precisely when the
+    in-transaction read was stale, so sharing that function would make it inherit the staleness (measured:
+    it did, and this suite caught it). Second because it deliberately uses a SINGLE-field equality and
+    filters the rest in Python: a second compound shape would need its own Firestore composite index, and
+    the query-coverage ratchet is right to ask for one rather than let it appear silently.
+    """
+    query = (
+        db.collection('users')
+        .document(uid)
+        .collection(action_items_collection)
+        .where(filter=FieldFilter('idempotency_key', '==', idempotency_key))
+        .limit(10)
     )
+    for doc in query.stream():
+        data = _typed_doc(doc)
+        if not data.get('completed') and not data.get('deleted'):
+            return doc.id
+    return None
 
 
 def create_action_items_batch(
@@ -1130,6 +1185,13 @@ def retire_action_items_for_conversation(
                 'completed_at': None,
                 'superseded_by': replacement_id,
                 'updated_at': now,
+                # A retired row is no longer a dedup target — the create path already skips `deleted`
+                # rows when it looks for an existing key. Clearing the key makes that true in the DATA
+                # too, which is what lets the unique index be filtered on `completed == false` alone
+                # (ADR-0085): Mongo's partialFilterExpression cannot express "and not deleted", so a
+                # retired row keeping its key would collide with the very next create the product makes
+                # on purpose.
+                'idempotency_key': None,
             },
         )
         count += 1

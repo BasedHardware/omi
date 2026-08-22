@@ -1,0 +1,90 @@
+{{/*
+Scheduled work (ADR-0062). Upstream hosts these two as HOURLY Cloud Run Jobs driven by Cloud
+Scheduler; this chart had no CronJob at all, so neither ran and two product surfaces were absent: the
+daily summary is a PERSISTED document (so /v1/users/daily-summaries stayed empty forever, rather than a
+push being missed), and the canonical memory outbox was never drained (each memory write queues a
+projection_sync and a vector_sync event that nothing consumed).
+
+Same image and the same envFrom as the backend Deployment, with a different command — the llm-gateway
+pattern. The runner is jobs/onprem_scheduled.py, which calls upstream's own function bodies without the
+firebase_admin.initialize_app() its Cloud Run entrypoints open with. Here it runs WITHOUT --loop: one
+process per tick, and the exit code is what Kubernetes reports.
+
+The pod label is deliberately `component: backend`. NetworkPolicy is an allow-list applied only to the
+pods its selector matches, so a job pod carrying any other component label would get UNRESTRICTED
+egress instead of the restricted set — the opposite of the intent, and silently.
+
+concurrencyPolicy: Forbid — a tick that outruns its hour must not double up. Upstream calls the
+maintenance ops idempotent and defers a distributed lease "if overlap becomes observable"; not
+overlapping in the first place is cheaper than relying on that.
+*/}}
+{{/*
+Upgrade note: use `helm upgrade --reset-then-reuse-values`, NOT `--reuse-values`. The latter reuses the
+previous release's computed values and DROPS new chart defaults, so on a release predating this section
+it fails with "nil pointer evaluating interface {}.notifications". The defaults are NOT duplicated here
+to paper over that: values.yaml is the one source of truth, and a wrong flag failing loudly beats two
+places to change a default. See MANUAL-prod-k0s.md.
+*/}}
+{{- range $job := list
+      (dict "name" "scheduled-notifications"
+            "arg"  "notifications"
+            "cfg"  $.Values.scheduledJobs.notifications)
+      (dict "name" "scheduled-memory-maintenance"
+            "arg"  "memory-maintenance"
+            "cfg"  $.Values.scheduledJobs.memoryMaintenance)
+      (dict "name" "scheduled-conversation-search-index"
+            "arg"  "conversation-search-index"
+            "cfg"  $.Values.scheduledJobs.conversationSearchIndex) }}
+{{- if $job.cfg.enabled }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $job.name }}
+  labels:
+    {{- include "omi-oss.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: backend
+    omi.oss.scheduled-job: {{ $job.arg }}
+spec:
+  schedule: {{ $job.cfg.schedule | quote }}
+  concurrencyPolicy: Forbid
+  # A missed window (node down, upgrade) is skipped rather than fired late in a burst: both jobs are
+  # hourly and self-catching — the notifications job buckets by local hour, the maintenance job drains
+  # whatever is in the outbox — so a late duplicate buys nothing.
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            {{- include "omi-oss.labels" $ | nindent 12 }}
+            app.kubernetes.io/component: backend
+            omi.oss.scheduled-job: {{ $job.arg }}
+          annotations:
+            # Same reason as the backend Deployment: pick up a plain-env change on the next tick.
+            checksum/config: {{ include (print $.Template.BasePath "/backend-configmap.yaml") $ | sha256sum }}
+        spec:
+          restartPolicy: OnFailure
+          {{- with $.Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: {{ $job.name }}
+              image: {{ include "omi-oss.image" (dict "root" $ "image" $.Values.backend.image) }}
+              imagePullPolicy: {{ $.Values.backend.imagePullPolicy }}
+              command: ["python", "-m", "jobs.onprem_scheduled", "--job", {{ $job.arg | quote }}]
+              envFrom:
+                - configMapRef:
+                    name: backend-env
+                - secretRef:
+                    name: backend-secret
+              {{- with $job.cfg.resources }}
+              resources:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+{{- end }}
+{{- end }}

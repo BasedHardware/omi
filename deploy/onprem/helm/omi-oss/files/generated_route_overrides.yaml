@@ -1,0 +1,119 @@
+# On-prem LLM gateway route overrides (D32, ADR-0035).
+# Mounted OVER backend/llm_gateway/config/generated_route_overrides.yaml so the cloud
+# config stays untouched. Every chat/product feature is pinned to the SINGLE local model
+# your OPENAI_BASE_URL (Ollama/vLLM) serves. Change `model:` below to your served model
+# (its /v1/chat/completions name). provider stays `openai` (OpenAI-compatible wire).
+#
+# COVERAGE IS THE POINT (ADR-0067). The gateway synthesises a lane for EVERY configured feature, and a
+# feature with no entry here keeps its **cloud** model/provider from the QoS table — so an omission is not
+# "unconfigured", it is a live route to a vendor through our own gateway. Measured before this file was
+# completed: 8 of 45 configured features were uncovered (6 -> gemini, 1 -> perplexity, 1 -> openrouter),
+# `translation` among them, and they answered 503 invalid_config only because no credentials for those
+# providers exist here. check_oss_llm_gateway_route_coverage.py now ratchets this file against the
+# configured-feature set — which is the right base: comparing it against upstream's own override file
+# (37 entries) reported "37/37 covered" while eight lanes were open.
+#
+# `web_search` is the ONE deliberate omission: it is Perplexity-only, i.e. a search PRODUCT, not an LLM
+# lane. Pinning it to a local chat model would return invented "Web Search Results" complete with a
+# "Sources:" section. Its caller fails soft on a non-200 ("Web search is temporarily unavailable"), which is
+# the honest on-prem answer. The guard's baseline records that decision instead of hiding it.
+generated_route_overrides:
+  - feature: app_generator
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: app_integration
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: chat_agent
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: chat_extraction
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: chat_graph
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: chat_responses
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: conv_action_items
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: conv_app_result
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: conv_app_select
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: conv_discard
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: conv_folder
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: conv_structure
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: daily_summary
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: daily_summary_simple
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: desktop_proactive_extraction
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: desktop_proactive_reasoning
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: external_structure
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: fair_use
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: followup
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: goals
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: goals_advice
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: knowledge_graph
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: learnings
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: memories
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: memory_category
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: memory_conflict
+    primary: {provider: openai, model: qwen2.5:14b}
+  # The three *_flex features are long-running extraction calls: the cloud config sets request_timeout_ms:
+  # 900000 (config_loader defaults would otherwise cap them at 30s non-streaming / 120s streaming). On a
+  # locally served model they run at least as long, so preserve the explicit 900s timeout (cubic 10887).
+  - feature: memory_conflict_flex
+    primary: {provider: openai, model: qwen2.5:14b}
+    request_timeout_ms: 900000
+  - feature: memory_l2_flex
+    primary: {provider: openai, model: qwen2.5:14b}
+    request_timeout_ms: 900000
+  - feature: onboarding
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: session_titles
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: translation
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: trends
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: wrapped_analysis
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: x_memory_extraction_flex
+    primary: {provider: openai, model: qwen2.5:14b}
+    request_timeout_ms: 900000
+  - feature: memory_l1
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: memory_l2
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: notifications
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: openglass
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: persona_chat
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: persona_chat_premium
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: persona_clone
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: proactive_notification
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: smart_glasses
+    primary: {provider: openai, model: qwen2.5:14b}
+  # Arrived with upstream (wake-word adjudication for conversation capture). Upstream routes it to a
+  # cloud model with `reasoning_effort: high`; the option is dropped here because the local
+  # OpenAI-compatible servers do not take it, and an unpinned lane would have kept the CLOUD route.
+  - feature: wake_word_adjudication
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: what_matters_now
+    primary: {provider: openai, model: qwen2.5:14b}

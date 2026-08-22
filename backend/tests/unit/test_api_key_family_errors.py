@@ -58,7 +58,10 @@ def _loaded_dependencies() -> Iterator[tuple[ModuleType, _KeyLookupSpy, _KeyLook
 
     with stub_modules(
         {
-            'firebase_admin.auth': _module('firebase_admin.auth', verify_id_token=lambda _token: {'uid': 'user-1'}),
+            # Bare module, no behaviour: nothing on this path calls firebase_admin.auth (production
+            # imports it only in utils/auth/adapters/firebase.py). Proved by replacing the behaviour
+            # with a raiser and finding this file still green (BACKLOG L15).
+            'firebase_admin.auth': _module('firebase_admin.auth'),
             'database.mcp_api_key': _module('database.mcp_api_key', get_api_key_auth_result=mcp_lookup),
             'database.dev_api_key': _module('database.dev_api_key', get_api_key_auth_result=dev_lookup),
             'utils.other.endpoints': _module('utils.other.endpoints', check_api_key_rate_limit=lambda **_kwargs: None),

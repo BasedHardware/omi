@@ -2,6 +2,7 @@ import os
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 import httpx
+from urllib.parse import quote
 import logging
 
 logger = logging.getLogger(__name__)
@@ -170,7 +171,28 @@ class HumeClient:
         self.api_key = api_key
         self.callback_url = callback_url
 
-    def request_user_expression_mersurement(self, urls: List[str]) -> Dict[str, Any]:
+    def _callback_url_for(self, callback_token: Optional[str]) -> Optional[str]:
+        """The URL Hume is told to call back on, carrying this submission's signed token.
+
+        The callback route cannot be authenticated the usual way -- Hume holds no user token -- so the
+        proof that a callback belongs to a job we submitted travels in the URL we hand Hume
+        (utils/other/hume_callback_token.py, BACKLOG L42).
+        """
+        if not self.callback_url or not callback_token:
+            return self.callback_url
+        separator = '&' if '?' in self.callback_url else '?'
+        return f'{self.callback_url}{separator}t={quote(callback_token)}'
+
+    def request_user_expression_mersurement(
+        self, urls: List[str], *, callback_token: Optional[str] = None
+    ) -> Dict[str, Any]:
+        # Vendor egress (ADR-0057). Gated HERE, at the door, so any caller is covered — and because until
+        # now the POST went out even with no key at all ('X-Hume-Api-Key': ... else ''), i.e. the only thing
+        # standing between a conversation's audio URL and api.hume.ai was Hume's own 401.
+        from config.vendor_egress import vendor_egress_denied
+
+        if vendor_egress_denied('hume_prosody', log=logger):
+            return {"error": {"message": "vendor egress denied by policy"}}
         err: Optional[Dict[str, Any]] = None
         resp: Optional[httpx.Response] = None
 
@@ -178,7 +200,7 @@ class HumeClient:
         data = {
             "models": {"prosody": {"granularity": "utterance"}},
             "urls": urls,
-            "callback_url": self.callback_url,
+            "callback_url": self._callback_url_for(callback_token),
         }
         try:
             resp = httpx.post(

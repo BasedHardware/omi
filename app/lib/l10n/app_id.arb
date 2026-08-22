@@ -3257,6 +3257,7 @@
     "accountCutoverMigrationInProgressMessage": "Akun Anda sedang dimigrasi. Fitur produk dijeda hingga migrasi selesai.",
     "accountCutoverMigrationRollbackMessage": "Akun Anda dalam pemeliharaan setelah rollback migrasi. Beberapa data yang lebih baru mungkin terisolasi.",
     "accountCutoverOpenStore": "Buka toko",
+    "signInWithSSO": "Masuk dengan SSO",
     "sendRawAudioToOmi": "Kirim audio mentah ke Omi",
     "sendRawAudioToOmiDescription": "Nonaktifkan agar audio mentah tidak dikirim ke Omi. Transkrip dan data yang diperlukan fitur cloud mungkin tetap dikirim ke Omi.",
     "findDevice": "Temukan",

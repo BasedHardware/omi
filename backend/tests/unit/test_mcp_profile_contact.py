@@ -148,11 +148,11 @@ def _firebase_user(display_name=None, email=None, phone_number=None):
 
 class TestProfileContact:
     @patch('routers.mcp.phone_calls_db')
-    @patch('routers.mcp.firebase_auth')
+    @patch('routers.mcp.get_auth_provider')
     @patch('routers.mcp.users_db')
     def test_includes_name_email_phone_from_auth(self, mock_users, mock_auth, mock_phone):
         mock_users.get_ai_user_profile.return_value = {'profile_text': 'builds AI', 'data_sources_used': 3}
-        mock_auth.get_user.return_value = _firebase_user('Nik Shevchenko', 'nik@example.com', '+15551234567')
+        mock_auth.return_value.get_user_profile.return_value = _firebase_user('Nik Shevchenko', 'nik@example.com', '+15551234567')
         result = rest.get_user_profile(uid=UID)
         assert result.name == 'Nik Shevchenko'
         assert result.email == 'nik@example.com'
@@ -162,22 +162,22 @@ class TestProfileContact:
         mock_phone.get_phone_numbers.assert_not_called()
 
     @patch('routers.mcp.phone_calls_db')
-    @patch('routers.mcp.firebase_auth')
+    @patch('routers.mcp.get_auth_provider')
     @patch('routers.mcp.users_db')
     def test_phone_falls_back_to_subcollection(self, mock_users, mock_auth, mock_phone):
         mock_users.get_ai_user_profile.return_value = {}
-        mock_auth.get_user.return_value = _firebase_user('Nik', 'nik@example.com', None)
+        mock_auth.return_value.get_user_profile.return_value = _firebase_user('Nik', 'nik@example.com', None)
         mock_phone.get_phone_numbers.return_value = [{'phone_number': '+15559998888'}]
         result = rest.get_user_profile(uid=UID)
         assert result.email == 'nik@example.com'
         assert result.phone_number == '+15559998888'
 
     @patch('routers.mcp.phone_calls_db')
-    @patch('routers.mcp.firebase_auth')
+    @patch('routers.mcp.get_auth_provider')
     @patch('routers.mcp.users_db')
     def test_phone_fallback_prefers_primary(self, mock_users, mock_auth, mock_phone):
         mock_users.get_ai_user_profile.return_value = {}
-        mock_auth.get_user.return_value = _firebase_user('Nik', 'nik@example.com', None)
+        mock_auth.return_value.get_user_profile.return_value = _firebase_user('Nik', 'nik@example.com', None)
         mock_phone.get_phone_numbers.return_value = [
             {'phone_number': '+15550000000', 'is_primary': False},
             {'phone_number': '+15551111111', 'is_primary': True},
@@ -186,11 +186,11 @@ class TestProfileContact:
         assert result.phone_number == '+15551111111'
 
     @patch('routers.mcp.phone_calls_db')
-    @patch('routers.mcp.firebase_auth')
+    @patch('routers.mcp.get_auth_provider')
     @patch('routers.mcp.users_db')
     def test_contact_failure_does_not_break_profile(self, mock_users, mock_auth, mock_phone):
         mock_users.get_ai_user_profile.return_value = {'profile_text': 'still here'}
-        mock_auth.get_user.side_effect = RuntimeError("firebase down")
+        mock_auth.return_value.get_user_profile.side_effect = RuntimeError("firebase down")
         mock_phone.get_phone_numbers.side_effect = RuntimeError("firestore down")
         result = rest.get_user_profile(uid=UID)
         # Contact lookups failed, but the profile itself still returns cleanly.
@@ -200,11 +200,11 @@ class TestProfileContact:
         assert result.phone_number is None
 
     @patch('routers.mcp.phone_calls_db')
-    @patch('routers.mcp.firebase_auth')
+    @patch('routers.mcp.get_auth_provider')
     @patch('routers.mcp.users_db')
     def test_empty_strings_become_none(self, mock_users, mock_auth, mock_phone):
         mock_users.get_ai_user_profile.return_value = {}
-        mock_auth.get_user.return_value = _firebase_user('', '', '')
+        mock_auth.return_value.get_user_profile.return_value = _firebase_user('', '', '')
         mock_phone.get_phone_numbers.return_value = []
         result = rest.get_user_profile(uid=UID)
         assert result.name is None

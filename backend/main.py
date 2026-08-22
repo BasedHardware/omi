@@ -103,16 +103,33 @@ from utils.executors import (
 )
 from utils.executors import start_background_task
 from utils.cloud_tasks import validate_account_deletion_dispatch_configuration
+from config.placeholder_values import validate_configuration_values
+from utils.push.selector import validate_push_configuration
+from utils.vector.factory import validate_vector_dimension
 from services.conversation_finalization import reconcile_listen_finalization_jobs
 from services.conversation_finalization import reconcile_meeting_receipts
 from services.conversation_finalization import reconcile_stale_processing_conversations
 from services.users.account_deletion import reconcile_pending_deletion_wipes
+from scripts.reconcile_mongo_indexes import reconcile_mongo_indexes
 
 # Log LangSmith tracing status at startup
 log_langsmith_status()
 
 # Validate Stripe price IDs so misconfigured plans fail loud
 validate_stripe_price_ids()
+
+# Before anything reads a value: refuse configuration that only LOOKS set. A CHANGE_ME secret is a
+# PUBLISHED secret, and an unsubstituted <host> in OIDC_ISSUER boots fine and fails at the first
+# authenticated request (BACKLOG L49/L48).
+validate_configuration_values()
+
+# Same idea for the push transport: a declared UnifiedPush with no internal base URL delivers nothing,
+# and used to say so only as one ERROR per endpoint on the first notification (BACKLOG L18).
+validate_push_configuration()
+
+# And for the vector store: QDRANT_VECTOR_DIM is read only when a COLLECTION IS CREATED, so a value the
+# embeddings model contradicts does nothing until some feature first touches a new namespace (BACKLOG L19).
+validate_vector_dimension()
 
 _auth_emulator_host = os.environ.get("FIREBASE_AUTH_EMULATOR_HOST", "").strip()
 _firebase_admin_options = firebase_admin_options()
@@ -285,6 +302,24 @@ async def startup_event():
         name='startup_meeting_receipt_reconcile',
     )
     start_background_task(_periodic_listen_finalization_reconcile(), name='periodic_listen_finalization_reconcile')
+    # On the on-prem Mongo backend (ADR-0046), the store adapter has no auto-created indexes, so scoped
+    # queries/counts would collection-scan at any real size (cubic PR 10887 #6). Provision the indexes
+    # mirroring firestore.indexes.json at boot — idempotent (createIndex is a no-op once they exist) and
+    # best-effort (a broken/slow Mongo must not block startup). No-op on the Firestore backend.
+    if (os.environ.get("STORAGE_BACKEND") or "firestore").strip().lower() == "mongo":
+        start_background_task(
+            run_blocking(db_executor, _reconcile_mongo_indexes_on_startup),
+            name='startup_mongo_index_reconcile',
+        )
+
+
+def _reconcile_mongo_indexes_on_startup():
+    """Best-effort provisioning of the Mongo secondary indexes on startup (STORAGE_BACKEND=mongo)."""
+    try:
+        ensured = reconcile_mongo_indexes()
+        logger.info(f"Startup Mongo index reconciliation ensured {len(ensured)} indexes")
+    except Exception as e:
+        logger.error(f"Startup Mongo index reconciliation failed: {e}")
 
 
 def _drain_pending_deletion_wipes():

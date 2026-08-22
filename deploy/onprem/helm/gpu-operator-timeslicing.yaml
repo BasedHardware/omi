@@ -1,0 +1,23 @@
+# GPU time-slicing for the NVIDIA GPU Operator, so several inference pods share one physical GPU (a plain
+# install advertises nvidia.com/gpu=1 = one exclusive pod). `replicas: 4` advertises nvidia.com/gpu=4 — four
+# pods may request 1 unit each and share the card. Raise/lower to match how many GPU services you run at once
+# and how much VRAM they need together (whisper int8 ~1.5G + nllb ~1G + diarizer ~1-2G fit in 16G).
+#
+# Apply this ConfigMap, then point the Operator's ClusterPolicy at it:
+#   kubectl apply -f gpu-operator-timeslicing.yaml
+#   kubectl patch clusterpolicy cluster-policy --type merge \
+#     -p '{"spec":{"devicePlugin":{"config":{"name":"time-slicing-config","default":"any"}}}}'
+#   kubectl get node -o jsonpath='{.items[0].status.allocatable.nvidia\.com/gpu}{"\n"}'   # -> 4
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: time-slicing-config
+  namespace: gpu-operator
+data:
+  any: |
+    version: v1
+    sharing:
+      timeSlicing:
+        resources:
+          - name: nvidia.com/gpu
+            replicas: 4

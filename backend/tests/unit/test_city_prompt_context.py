@@ -15,7 +15,13 @@ def test_city_context_uses_cached_value_without_calling_maps():
         client.assert_not_called()
 
 
-def test_city_context_uses_locality_and_never_returns_coordinates():
+def test_city_context_uses_locality_and_never_returns_coordinates(monkeypatch):
+    # A configured key is this test's precondition: reverse geocoding is gated on GOOGLE_MAPS_API_KEY
+    # so an unconfigured deployment cannot leak coordinates to maps.googleapis.com
+    # (tests/unit/test_geocode_requires_a_key.py). Patching the client is no longer enough — the gate
+    # returns before the client is reached, and the offline sweep runs with no key in the environment.
+    monkeypatch.setenv('GOOGLE_MAPS_API_KEY', 'test-key')
+
     @asynccontextmanager
     async def semaphore():
         yield

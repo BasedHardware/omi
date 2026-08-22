@@ -1873,6 +1873,9 @@ class AppLocalizationsNo extends AppLocalizations {
   String get signInWithGoogle => 'Logg inn med Google';
 
   @override
+  String get signInWithSSO => 'Logg inn med SSO';
+
+  @override
   String get byContinuingAgree => 'Ved å fortsette godtar du vår ';
 
   @override

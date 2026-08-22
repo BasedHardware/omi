@@ -1,0 +1,124 @@
+{{- /*
+In-cluster inference (phase C, ADR-0053): run the on-prem GPU inference servers INSIDE the cluster
+instead of pointing the backend at an external endpoint (ADR-0035). One generic Deployment+Service per
+entry in `inference.inCluster.services`, so whisper/parakeet/diarizer/nllb all follow the same shape —
+add a service by adding a values entry, not a template. GPU is requested via the standard
+`nvidia.com/gpu` resource (NVIDIA device plugin); on a single-GPU node enable only what fits at once.
+Model weights are mounted read-only from `modelsHostPath` (single-node: reuse the pre-provisioned
+compose models volume) or an emptyDir placeholder. Wire the backend to the resulting Services with the
+matching HOSTED_*_API_URL env in `backend.env`.
+*/}}
+{{- if .Values.inference.inCluster.enabled }}
+{{- $root := . }}
+{{- $ic := .Values.inference.inCluster }}
+{{- range $name, $svc := $ic.services }}
+{{- if $svc.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "omi-oss.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: {{ $name }}
+spec:
+  replicas: 1
+  # One GPU per service, time-sliced on a shared card: use Recreate so an upgrade terminates the old pod
+  # before starting the new one. A rolling update would need 2x the GPU units at once and deadlock (the new
+  # pod stays Pending on insufficient nvidia.com/gpu while the old one holds it).
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: {{ $name }}
+  template:
+    metadata:
+      labels:
+        {{- include "omi-oss.labels" $root | nindent 8 }}
+        app.kubernetes.io/component: {{ $name }}
+    spec:
+      {{- with $.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $ic.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if $ic.models.provision.enabled }}
+      # When the chart provisions the weights, wait for the Job's marker so the server starts only once its
+      # model is on the volume — no crash-loop while the download is still running. (With a pre-populated
+      # existingClaim, provisioning is off and this wait is skipped.)
+      initContainers:
+        - name: wait-for-models
+          image: {{ include "omi-oss.image" (dict "root" $root "image" (required (printf "inference.inCluster.services.%s.image is required" $name) $svc.image)) }}
+          imagePullPolicy: {{ $svc.imagePullPolicy | default "IfNotPresent" }}
+          command: ["sh", "-c", "until [ -f /models/.provisioned ]; do echo 'waiting for model weights...'; sleep 5; done"]
+          volumeMounts:
+            - { name: models, mountPath: /models, readOnly: true }
+      {{- end }}
+      containers:
+        - name: {{ $name }}
+          image: {{ include "omi-oss.image" (dict "root" $root "image" (required (printf "inference.inCluster.services.%s.image is required" $name) $svc.image)) }}
+          imagePullPolicy: {{ $svc.imagePullPolicy | default "IfNotPresent" }}
+          ports:
+            - name: http
+              containerPort: {{ $svc.port }}
+          {{- with $svc.env }}
+          env:
+            {{- range $k, $v := . }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+          {{- end }}
+          {{- if $svc.healthPath }}
+          # Model load is eager on some servers and can take a while — gate readiness behind a generous
+          # startup probe so the Service never routes before the model is resident.
+          startupProbe:
+            httpGet: { path: {{ $svc.healthPath | quote }}, port: http }
+            periodSeconds: 5
+            failureThreshold: 120
+          readinessProbe:
+            httpGet: { path: {{ $svc.healthPath | quote }}, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 5
+          {{- end }}
+          {{- if $svc.gpu }}
+          # GPU services request `nvidia.com/gpu` units (time-sliced on a shared card, see
+          # nvidia-device-plugin-k0s.yaml). A CPU-only service (e.g. the parakeet NIM gateway) sets no gpu.
+          resources:
+            limits:
+              nvidia.com/gpu: {{ $svc.gpu }}
+          {{- else if $svc.resources }}
+          resources:
+            {{- toYaml $svc.resources | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: models
+              mountPath: /models
+              readOnly: true
+      volumes:
+        - name: models
+          # Portable across any Kubernetes (incl. multi-node): the weights live on a PVC, mounted read-only.
+          # Not a hostPath — that would only work on the node that happens to hold the files.
+          persistentVolumeClaim:
+            claimName: {{ $ic.models.existingClaim | default (printf "%s-inference-models" $root.Release.Name) }}
+            readOnly: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "omi-oss.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: {{ $name }}
+spec:
+  selector:
+    app.kubernetes.io/component: {{ $name }}
+  ports:
+    - name: http
+      port: {{ $svc.port }}
+      targetPort: http
+{{- end }}
+{{- end }}
+{{- end }}

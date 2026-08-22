@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional, cast
 
 import httpx
 import numpy as np
+from prometheus_client import Counter
 import torch  # type: ignore[reportMissingImports]
 from langdetect import detect as langdetect_detect  # type: ignore[reportUnknownVariableType]  # langdetect ships no py.typed marker
 from langdetect.lang_detect_exception import LangDetectException
@@ -77,6 +78,14 @@ MIN_EMBEDDING_AUDIO_S = 0.5
 
 
 _vad_model: Any = None
+
+# The sidecar does not ship the backend package, so `record_fallback` is not importable here; it has its
+# own prometheus registry (prometheus_client is in parakeet/requirements.txt) and that is where a lost
+# capability belongs. Counted per session, which is what "how often did a stream start blind" needs.
+VAD_UNAVAILABLE_TOTAL = Counter(
+    'parakeet_vad_unavailable_total',
+    'Streams that started without the Silero VAD (every chunk treated as speech, no silence endpointing)',
+)
 _vad_lock = threading.Lock()
 _asr_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="parakeet_asr")
 _rnnt_model_initialized = False
@@ -366,7 +375,18 @@ def _get_vad_model() -> Any:
             logger.info("Silero VAD model loaded")
             return _vad_model
         except Exception as e:
-            logger.warning(f"Could not load Silero VAD: {e}")
+            # This load reaches github.com at RUNTIME (torch.hub clones the repo), so on an internal
+            # network it cannot succeed and only a pre-seeded TORCH_HOME cache makes it work. The failure
+            # used to be a warning, which undersold it: `_run_vad` returns True for every chunk when the
+            # model is missing, so silence-based endpointing is OFF and the stream is never endpointed by
+            # silence — a quality change, not a missing extra (BACKLOG L23).
+            VAD_UNAVAILABLE_TOTAL.inc()
+            logger.error(
+                "Silero VAD unavailable (%s): every chunk will be treated as SPEECH, so silence-based "
+                "endpointing is disabled for this session. torch.hub fetches this model from github at "
+                "runtime — pre-seed TORCH_HOME (see SELFHOST_NOTES) on a network-restricted deployment.",
+                e,
+            )
             return None
 
 

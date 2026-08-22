@@ -1,0 +1,16 @@
+{{- if .Values.search.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: typesense
+  labels:
+    {{- include "omi-oss.labels" . | nindent 4 }}
+    app.kubernetes.io/component: typesense
+spec:
+  selector:
+    app.kubernetes.io/component: typesense
+  ports:
+    - name: http
+      port: 8108
+      targetPort: 8108
+{{- end }}

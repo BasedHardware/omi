@@ -54,6 +54,9 @@ MEMORY_VECTOR_REPAIR_OUTBOX_MAX_ATTEMPTS_ENV = "MEMORY_VECTOR_REPAIR_OUTBOX_MAX_
 PINECONE_API_KEY_ENV = "PINECONE_API_KEY"
 PINECONE_INDEX_NAME_ENV = "PINECONE_INDEX_NAME"
 OPENAI_API_KEY_ENV = "OPENAI_API_KEY"
+VECTOR_STORE_BACKEND_ENV = "VECTOR_STORE_BACKEND"
+QDRANT_URL_ENV = "QDRANT_URL"
+EMBEDDINGS_BASE_URL_ENV = "OMI_EMBEDDINGS_BASE_URL"
 
 
 @dataclass(frozen=True)
@@ -160,6 +163,38 @@ def parse_vector_repair_outbox_worker_entrypoint_config(
     )
 
 
+def _require_embeddings_config(env: Mapping[str, str]) -> None:
+    """Validate the embeddings credential the SELECTED embeddings backend actually reads.
+
+    Embeddings run through ``utils.llm.clients.embeddings``. With an ``OMI_EMBEDDINGS_BASE_URL``
+    OpenAI-compatible endpoint (Ollama/vLLM/TEI) the key is optional — the local server ignores it and
+    the client defaults it (utils/llm/clients.py) — so only the cloud OpenAI default needs
+    ``OPENAI_API_KEY``. Requiring ``OPENAI_API_KEY`` unconditionally broke the documented on-prem
+    embeddings path; validate the key the configured path actually uses.
+    """
+    if not (env.get(EMBEDDINGS_BASE_URL_ENV) or "").strip():
+        _required_dependency_env(env, OPENAI_API_KEY_ENV)
+
+
+def _require_vector_backend_config(env: Mapping[str, str]) -> str:
+    """Resolve + validate the vector backend the store factory will select (ADR-0033).
+
+    Mirrors ``utils.vector.factory.get_vector_store`` selection (``VECTOR_STORE_BACKEND``, default
+    ``pinecone``) and validates the connection env the chosen adapter needs, so an enabled worker fails
+    deterministically before leasing rather than deep inside client construction — and an on-prem
+    Qdrant deployment is not forced to set Pinecone credentials it never uses.
+    """
+    backend = (env.get(VECTOR_STORE_BACKEND_ENV) or "pinecone").strip().lower() or "pinecone"
+    if backend == "pinecone":
+        _required_dependency_env(env, PINECONE_API_KEY_ENV)
+        _required_dependency_env(env, PINECONE_INDEX_NAME_ENV)
+    elif backend == "qdrant":
+        _required_dependency_env(env, QDRANT_URL_ENV)
+    else:
+        raise ValueError(f"{VECTOR_STORE_BACKEND_ENV} must be 'pinecone' or 'qdrant' (got {backend!r})")
+    return backend
+
+
 def build_vector_repair_outbox_production_dependencies(
     env: Mapping[str, str],
     *,
@@ -169,34 +204,52 @@ def build_vector_repair_outbox_production_dependencies(
 
     This resolver is deliberately called only after wrapper config has enabled the
     worker. Disabled/default CLI smoke therefore avoids importing or initializing
-    Pinecone, embedding, or Firestore client singletons. Required secret/config
-    env is validated before importing network clients so enabled misconfiguration
-    fails deterministically before leasing any outbox record.
-    """
-    pinecone_api_key = _required_dependency_env(env, PINECONE_API_KEY_ENV)
-    pinecone_index_name = _required_dependency_env(env, PINECONE_INDEX_NAME_ENV)
-    _required_dependency_env(env, OPENAI_API_KEY_ENV)
+    the vector, embedding, or Firestore client singletons. Required secret/config
+    env is validated for the SELECTED vector + embeddings backend — not a fixed
+    cloud Pinecone/OpenAI pair — before importing network clients, so enabled
+    misconfiguration fails deterministically before leasing any outbox record.
 
-    pinecone_module = module_loader("pinecone")
+    The worker runs against whatever ``VECTOR_STORE_BACKEND`` (pinecone|qdrant) is
+    configured, through the neutral vector port (ADR-0033) rather than a raw
+    Pinecone client, and embeddings through ``utils.llm.clients`` (cloud OpenAI or
+    an ``OMI_EMBEDDINGS_BASE_URL`` endpoint) — so an on-prem Qdrant + local
+    embeddings deployment is a first-class path. The delete/repair adapters below
+    are backend-agnostic (they take injected callables); here those callables are
+    bound to the neutral store, so the same seam serves both backends.
+    """
+    _require_vector_backend_config(env)
+    _require_embeddings_config(env)
+
     firestore_client_module = module_loader("database._client")
     llm_clients_module = module_loader("utils.llm.clients")
+    vector_factory_module = module_loader("utils.vector.factory")
 
-    pinecone_client = pinecone_module.Pinecone(api_key=pinecone_api_key)
-    pinecone_index = pinecone_client.Index(pinecone_index_name)
     db_client = firestore_client_module.db
     embeddings = llm_clients_module.embeddings
+    # Select the SAME backend we just validated. get_vector_store reads the backend from ``env`` and its
+    # connection config from os.environ (in production the two are the same object) — see the factory.
+    vector_store = vector_factory_module.get_vector_store(env)
+
+    def delete_vectors(*, filter: Dict[str, Any], namespace: str) -> Dict[str, Any]:
+        # The repair filter is already the neutral ``$``-DSL (build_canonical_memory_vector_delete_filter),
+        # which the port maps to Pinecone or Qdrant — no per-backend filter here.
+        vector_store.delete_by_filter(namespace, filter)
+        return {"namespace": namespace, "filter": filter}
+
+    def upsert_vectors(*, vectors: list[Dict[str, Any]], namespace: str) -> Dict[str, Any]:
+        return {"namespace": namespace, "upserted": vector_store.upsert(namespace, vectors)}
 
     return VectorRepairOutboxProductionDependencies(
         db_client=db_client,
         authoritative_item_loader=make_authoritative_item_loader(db_client=db_client),
         vector_deleter=make_pinecone_vector_deleter(
-            delete_vectors=pinecone_index.delete,
+            delete_vectors=delete_vectors,
             namespace=VECTOR_REPAIR_PINECONE_NAMESPACE,
         ),
         vector_repairer=make_pinecone_vector_repairer(
             embed_text=embeddings.embed_query,
-            delete_vectors=pinecone_index.delete,
-            upsert_vectors=pinecone_index.upsert,
+            delete_vectors=delete_vectors,
+            upsert_vectors=upsert_vectors,
             namespace=VECTOR_REPAIR_PINECONE_NAMESPACE,
         ),
     )

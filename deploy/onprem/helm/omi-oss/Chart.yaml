@@ -1,0 +1,12 @@
+apiVersion: v2
+name: omi-oss
+description: >-
+  Omi self-hosted backend on Kubernetes. Milestone "core": backend + valkey + mongo replica-set
+  (STORAGE_BACKEND=mongo), feature profiles (auth/chat/objstore/push/inference) off by default —
+  the Helm mirror of the compose stack (study: docs/analysis/kubernetes-onprem-helm-kind-k0s.md).
+type: application
+# appVersion is this chart's PROJECTION of the stack release (deploy/onprem/omi.oss.release.env,
+# ADR-0054): it is the default tag of every image we build, and a CI check fails if the two drift.
+# Bump both together with the release; `version` also moves on template-only changes.
+version: 0.3.0
+appVersion: "0.3.0"

@@ -17,6 +17,7 @@ from ._client import db
 logger = logging.getLogger(__name__)
 
 BATCH_LIMIT = 500  # Firestore hard limit
+_MAX_MARK_READ_PAGES = 1000  # safety bound for mark_all_advice_read: 1000 * BATCH_LIMIT docs
 
 
 def _user_col(uid: str, collection: str) -> Any:
@@ -103,18 +104,29 @@ def delete_advice(uid: str, advice_id: str) -> bool:
 
 def mark_all_advice_read(uid: str) -> int:
     col = _user_col(uid, 'advice')
-    query = col.where(filter=FieldFilter('is_read', '==', False))
-    batch = db.batch()
     total = 0
-    batch_count = 0
-    for doc in query.stream():
-        batch.update(col.document(doc.id), {'is_read': True, 'updated_at': datetime.now(timezone.utc)})
-        total += 1
-        batch_count += 1
-        if batch_count >= BATCH_LIMIT:
-            batch.commit()
-            batch = db.batch()
-            batch_count = 0
-    if batch_count > 0:
+    # Page the unread set instead of materializing the whole backlog before the first commit
+    # (unbounded memory for a large account). Each committed page flips its docs to is_read=True, so
+    # the same bounded is_read==False query self-drains: no cursor needed, the mutation advances it.
+    # A hard page cap bounds the loop (cubic PR 10887 E4): termination otherwise depends on the mutation
+    # outpacing concurrent unread-advice creation; if a burst kept every page full the loop could spin
+    # holding the request. _MAX_MARK_READ_PAGES * BATCH_LIMIT is far beyond any real advice backlog.
+    for _ in range(_MAX_MARK_READ_PAGES):
+        page = list(col.where(filter=FieldFilter('is_read', '==', False)).limit(BATCH_LIMIT).stream())
+        if not page:
+            break
+        batch = db.batch()
+        for doc in page:
+            batch.update(col.document(doc.id), {'is_read': True, 'updated_at': datetime.now(timezone.utc)})
         batch.commit()
+        total += len(page)
+        if len(page) < BATCH_LIMIT:
+            break
+    else:
+        # for-else: the page budget was exhausted without an early break. That is a FALSE alarm when the
+        # unread count was an exact multiple of BATCH_LIMIT (every page full, yet the last commit still
+        # drained the set) — probe for a genuinely-remaining unread doc before warning (review 4939247683).
+        remaining = list(col.where(filter=FieldFilter('is_read', '==', False)).limit(1).stream())
+        if remaining:
+            logger.warning(f"mark_all_advice_read({uid}) hit the {_MAX_MARK_READ_PAGES}-page cap; stopped at {total}")
     return total

@@ -152,18 +152,6 @@ def _send_byok_llm_error_notification(uid: str, provider: str, reason: str) -> N
         body = f'Your {provider_name} BYOK key was rejected. Update it in Omi settings to restore AI features.'
 
     try:
-        tokens = notification_db.get_all_tokens(uid)
-    except Exception as e:
-        logger.error(
-            'BYOK LLM notification token lookup failed uid=%s provider=%s reason=%s: %s', uid, provider, reason, e
-        )
-        return
-
-    if not tokens:
-        logger.info('No tokens found for BYOK LLM notification uid=%s provider=%s reason=%s', uid, provider, reason)
-        return
-
-    try:
         acquired = try_acquire_byok_llm_error_notification_lock(uid, provider, reason)
     except Exception as e:
         logger.error('BYOK LLM notification lock failed uid=%s provider=%s reason=%s: %s', uid, provider, reason, e)
@@ -173,47 +161,27 @@ def _send_byok_llm_error_notification(uid: str, provider: str, reason: str) -> N
         logger.info('BYOK LLM notification already sent recently uid=%s provider=%s reason=%s', uid, provider, reason)
         return
 
-    notification = messaging.Notification(title='omi', body=body)
     data = {'type': 'byok_llm_error', 'provider': provider, 'reason': reason}
-    messages = [messaging.Message(token=token, notification=notification, data=data) for token in tokens]
+    try:
+        # Lazy import breaks the utils.notifications <-> byok_errors cycle and routes through the
+        # active push backend (FCM or UnifiedPush) — so token-less UnifiedPush users are reached and
+        # the per-token FCM taxonomy/cleanup is owned by the channel, not duplicated here.
+        from utils.notifications import send_user_notification
 
-    invalid_tokens = []
-    success_count = 0
-    # Firebase rejects send_each() with more than 500 messages, so send in batches.
-    for start in range(0, len(messages), _FCM_SEND_EACH_LIMIT):
-        batch_tokens = tokens[start : start + _FCM_SEND_EACH_LIMIT]
-        batch_messages = messages[start : start + _FCM_SEND_EACH_LIMIT]
-        try:
-            response = messaging.send_each(batch_messages)
-        except Exception as e:
-            logger.error('BYOK LLM notification send failed uid=%s provider=%s reason=%s: %s', uid, provider, reason, e)
-            continue
-        for idx, result in enumerate(response.responses):
-            if result.success:
-                success_count += 1
-            elif result.exception:
-                error_code = getattr(result.exception, 'code', None)
-                if error_code in _PERMANENT_FAILURE_CODES:
-                    invalid_tokens.append(batch_tokens[idx])
-                else:
-                    logger.error('BYOK LLM notification FCM send failed uid=%s error=%s', uid, result.exception)
-
-    if invalid_tokens:
-        try:
-            notification_db.remove_bulk_tokens(invalid_tokens)
-        except Exception as e:
-            logger.error('BYOK LLM notification invalid token cleanup failed uid=%s: %s', uid, e)
+        success_count = send_user_notification(uid, 'omi', body, data)
+    except Exception as e:
+        logger.error('BYOK LLM notification send failed uid=%s provider=%s reason=%s: %s', uid, provider, reason, e)
+        success_count = 0
 
     if success_count == 0:
-        # No device actually received the notification — release the dedupe lock so
-        # the next occurrence retries rather than being suppressed for 24h.
+        # Nothing delivered — release the dedupe lock so the next occurrence retries rather than
+        # being suppressed for 24h.
         _release_byok_llm_error_lock(uid, provider, reason)
 
     logger.info(
-        'BYOK LLM notification sent uid=%s provider=%s reason=%s success=%s total=%s',
+        'BYOK LLM notification sent uid=%s provider=%s reason=%s success=%s',
         uid,
         provider,
         reason,
         success_count,
-        len(tokens),
     )

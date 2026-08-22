@@ -1,0 +1,153 @@
+# Omi self-host — COMPOSE BASE (common services). NOT run directly (ADR-0043). Use an environment
+# entrypoint that `include`s this base:
+#   compose.prod.yaml  — on-prem prod, BRIDGED omi network (ADR-0048): data sovereignty by configuration,
+#                        not network isolation (no `internal:true`); ADR-0001's no-egress line was dropped
+#   compose.dev.yaml   — non-hermetic dev (host access + published API)
+# This base intentionally leaves the `omi` network WITHOUT `internal` — the posture is set by the
+# environment file, not here. The `edge` network + the profiles (mongo/objstore/push/chat/inference/
+# auth, feature toggles selected per-run) live here. See docs studio compose-environments-onprem.
+# The build (liblc3, deps, emulator jar) runs on the daemon network, so it works offline at runtime.
+
+name: omi-oss
+
+services:
+
+  valkey:
+    image: ${OMI_OSS_VALKEY_IMAGE:?pin missing — see omi.oss.release.pins (ADR-0055)}
+    # Durable, NOT pure cache: the backend stores non-cache app state here (username ownership, webhook
+    # config, data-protection level, subscription customer IDs) that is NOT mirrored to the document store,
+    # so it must survive `docker compose down/up`. Enable AOF persistence + a named /data volume; without it
+    # a container recreation silently lost that state (cubic PR 10887 compose.base.yaml:16).
+    command: ["valkey-server", "--appendonly", "yes", "--dir", "/data"]
+    volumes:
+      - valkey-data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [omi]
+    restart: unless-stopped
+
+  backend:
+    # Tagged with the release (ADR-0054): the name used to be implicit (compose's <project>-<service>,
+    # i.e. omi-oss-backend:latest), which made every build overwrite the same mutable tag.
+    image: omi-oss-backend:${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
+    build:
+      context: ../../
+      dockerfile: backend/Dockerfile
+      # :latest stays as a DEV alias (Kind loads it with `kind load`); prod/k0s must use the release.
+      tags:
+        - omi-oss-backend:latest
+      labels:
+        # Provenance without touching the Dockerfiles (three of the five are upstream):
+        # `docker inspect` on any image says which release it belongs to. Pass
+        # OMI_OSS_REVISION=$(git rev-parse HEAD) at build time to record the commit too.
+        omi.oss.release: ${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
+        org.opencontainers.image.version: ${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
+        org.opencontainers.image.revision: ${OMI_OSS_REVISION:-}
+      args:
+        # override the repo's PRIVATE base image with a public one (see SELFHOST_NOTES, Risks)
+        PYTHON_BASE_IMAGE: python:3.11-slim
+    env_file:
+      - ./backend.env.base
+    # Defensive/parity mkdir of the runtime temp dirs before uvicorn — main.py DOES create them at import
+    # (_temp/_samples/_segments/_speech_profiles), so this is belt-and-suspenders, not a gap (cubic :34).
+    command:
+      - sh
+      - -c
+      - mkdir -p _temp _samples _segments _speech_profiles && exec uvicorn main:app --host 0.0.0.0 --port 8080 --loop uvloop
+    depends_on:
+      # base depends only on valkey (shared by every posture). The datastore dependency is added by
+      # the posture overlay: compose.selfhost.yaml adds ``mongo`` for on-prem; the cloud posture adds
+      # none (cloud Firestore/Pinecone/etc. are external, nothing to wait on locally).
+      valkey:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    networks: [omi]
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------------------------
+  # Scheduled work — ONE service, several cadences (ADR-0062/0065).
+  #
+  # Upstream runs its two periodic jobs as HOURLY Cloud Run Jobs driven by Cloud Scheduler; compose has
+  # no scheduler at all, and before this nothing periodic ran here: the daily summary is a PERSISTED
+  # document, so /v1/users/daily-summaries stayed empty forever (a missing feature, not a missed push),
+  # the canonical memory outbox was never drained, and the Typesense conversation index stayed empty so
+  # the app's search bar and date browse found nothing.
+  #
+  # Three containers for three jobs meant three copies of the same image, env and restart policy for
+  # fifteen lines of sleeping. `--schedule` runs them in one process, one task per job, each on its own
+  # cadence and isolated from the others: a failing tick is logged and only that job's loop continues.
+  # Kubernetes keeps a native CronJob PER JOB instead — there a scheduler exists, and per-job history and
+  # retry are worth having.
+  #
+  # Cadences: upstream's two are hourly (its own schedule, and the notifications job buckets users by
+  # local hour). The conversation index is every 5 minutes because search freshness is user-visible.
+  #
+  # WHICH jobs run is configuration, not an edited command: set OMI_SCHEDULED_JOBS in the deploy/onprem
+  # .env. The default is the notifications job alone, because the other two FAIL BY DESIGN without their
+  # prerequisites (MEMORY_ENABLED + MEMORY_CANONICAL_MAINTENANCE_ENABLED for memory-maintenance, Typesense
+  # for conversation-search-index) and a job that fails every tick is worse than one not running. With
+  # memory on and `--profile search` up, the full set is:
+  #   OMI_SCHEDULED_JOBS=notifications=hourly,memory-maintenance=hourly,conversation-search-index=300
+  scheduled_jobs:
+    image: omi-oss-backend:${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
+    profiles: ["jobs"]
+    env_file:
+      - ./backend.env.base
+    environment:
+      # Needed only by the conversation-search-index schedule; harmless otherwise. Same shared value as
+      # the backend and the typesense service (see compose.selfhost.yaml).
+      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY:-}
+    command:
+      - python
+      - -m
+      - jobs.onprem_scheduled
+      - --schedule
+      - ${OMI_SCHEDULED_JOBS:-notifications=hourly}
+    depends_on:
+      valkey:
+        condition: service_healthy
+    networks: [omi]
+    restart: unless-stopped
+
+  # TLS-terminating reverse proxy for the backend API (conf: api-proxy.conf). The mobile app sends
+  # the Bearer token to the API, so on-prem serves it over HTTPS (same posture as the OIDC issuer).
+  # Set the app's API_BASE_URL to https://<host>:${API_HTTPS_PORT}. Generate certs: ./gen-dev-certs.sh
+  api-proxy:
+    image: ${OMI_OSS_NGINX_IMAGE:?pin missing — see omi.oss.release.pins (ADR-0055)}
+    profiles: ["auth"]
+    # Long-form like valkey/mongo: wait for the backend to be HEALTHY, not merely started, so the proxy
+    # doesn't briefly 502 on boot (the app retries, but keep parity with the rest of the suite).
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${API_HTTPS_PORT:-8444}:8443"
+    volumes:
+      - ./api-proxy.conf:/etc/nginx/conf.d/default.conf:ro
+      # Mount ONLY the server cert+key, never the whole ./certs dir — that also holds ca.key, and a
+      # network-facing proxy has no need for the CA private key (a compromised proxy could mint
+      # device-trusted certs). Least-privilege (cubic PR 10887 gen-dev-certs.sh:32).
+      - ./certs/server.crt:/certs/server.crt:ro
+      - ./certs/server.key:/certs/server.key:ro
+    networks: [omi, edge]
+    restart: unless-stopped
+
+volumes:
+  valkey-data:  # durable valkey AOF (username ownership / webhook / subscription state — cubic 10887)
+
+networks:
+  omi:
+    driver: bridge  # bridged (ADR-0048): on-prem is local-services, not air-gapped; data sovereignty is
+                    # by config (local backends), not network isolation. Services reach each other by name.
+  # The TLS reverse proxies also join `edge` so their published ports have host ingress; `edge` is where
+  # the device/host connects, `omi` is service-to-service (keycloak/backend by name).
+  edge:
+    driver: bridge

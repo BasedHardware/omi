@@ -16,7 +16,7 @@ import database.screen_activity as screen_activity_db
 import database.daily_summaries as daily_summaries_db
 from database._client import db
 import database.phone_calls as phone_calls_db
-from firebase_admin import auth as firebase_auth
+from utils.auth import get_auth_provider
 
 # from database.redis_db import get_filter_category_items
 # from database.vector_db import query_vectors_by_metadata
@@ -210,7 +210,7 @@ def _get_user_contact(uid: str) -> dict:
     lookup failure must not break the profile response."""
     name = email = phone_number = None
     try:
-        user = firebase_auth.get_user(uid)
+        user = get_auth_provider().get_user_profile(uid)
         name = user.display_name or None
         email = user.email or None
         phone_number = user.phone_number or None

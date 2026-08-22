@@ -33,6 +33,15 @@ async def get_omi_github_releases(
     if cached_releases is not None:
         return cached_releases
 
+    # Vendor egress (ADR-0057): what leaves is the fact that this deployment exists, polled by every client
+    # checking for an update. Gated AFTER the cache read, like the docs fetch in utils/app_integrations.py:
+    # what is governed is the request, not the feature, and serving a value already on this box sends
+    # nothing anywhere. An empty list is what every caller already handles for "no release found".
+    from config.vendor_egress import vendor_egress_denied
+
+    if vendor_egress_denied('github_releases', log=logger):
+        return []
+
     headers = {
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",

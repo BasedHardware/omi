@@ -556,11 +556,17 @@ def get_stt_service_for_language(
         record_selected_fallback(selected, used_default=True, parakeet_fallback_reason=parakeet_fallback_reason)
         return selected
 
+    # `capability_mismatch` was the only reason this branch could report, and under
+    # OMI_VENDOR_EGRESS=deny that is a misattribution: nothing is missing a capability, a vendor was
+    # refused on purpose (ADR-0057). A wrong reason on an exhausted session sends whoever reads the
+    # counter looking for a language-coverage bug.
+    from config.vendor_egress import vendor_egress_allowed
+
     record_fallback(
         component='stt_selection',
         from_mode=_stt_selection_from_mode(language or '', base_lang),
         to_mode='unavailable',
-        reason='capability_mismatch',
+        reason='capability_mismatch' if vendor_egress_allowed() else 'policy',
         outcome='exhausted',
     )
     return None, None, None

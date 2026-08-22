@@ -1,0 +1,117 @@
+{{- /*
+One-time Job that DOWNLOADS the inference model weights into the models PVC, so the whole thing is portable
+(no host directory to pre-seed). Each step uses the inference image that owns the model, on CPU, so it needs
+no GPU and can run alongside a live cluster. Needs internet + a Hugging Face token (the pyannote diarization
+model is license-gated). Enable with inference.inCluster.models.provision.enabled=true. Re-runs on each
+`helm upgrade` (revision-suffixed) but skips models already present, so it is cheap to leave on.
+*/}}
+{{- if and .Values.inference.inCluster.enabled .Values.inference.inCluster.models.provision.enabled }}
+{{- $root := . }}
+{{- $ic := .Values.inference.inCluster }}
+{{- $claim := $ic.models.existingClaim | default (printf "%s-inference-models" .Release.Name) }}
+{{- $hftok := required "inference.inCluster.models.provision.huggingFaceToken is required to download the gated pyannote model" $ic.models.provision.huggingFaceToken }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-inference-models-provision-{{ .Release.Revision }}
+  labels:
+    {{- include "omi-oss.labels" . | nindent 4 }}
+    app.kubernetes.io/component: inference-models-provision
+spec:
+  backoffLimit: 4
+  ttlSecondsAfterFinished: 900
+  template:
+    metadata:
+      labels:
+        {{- include "omi-oss.labels" $root | nindent 8 }}
+        app.kubernetes.io/component: inference-models-provision
+    spec:
+      {{- with $.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      restartPolicy: Never
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: {{ $claim }}
+      initContainers:
+        # STT engine — faster-whisper large-v3 (public). Download on CPU into the HF cache on the PVC.
+        - name: whisper
+          image: {{ include "omi-oss.image" (dict "root" $root "image" $ic.services.whisper.image) }}
+          imagePullPolicy: {{ $ic.services.whisper.imagePullPolicy | default "IfNotPresent" }}
+          env:
+            - name: HF_HOME
+              value: /models/hf
+            - name: HF_TOKEN               # authenticated downloads (higher rate limits than anonymous)
+              value: {{ $hftok | quote }}
+          # The whisper image installs faster_whisper for python3.11 (its server runs `python3.11 -m uvicorn`).
+          command:
+            - python3.11
+            - -c
+            - |
+              from faster_whisper import WhisperModel
+              WhisperModel("large-v3", device="cpu", compute_type="int8")
+              print("whisper large-v3 ready")
+          volumeMounts:
+            - { name: models, mountPath: /models }
+        # Speaker diarization — pyannote (GATED: needs a Hugging Face token that accepted the model terms).
+        - name: diarizer
+          image: {{ include "omi-oss.image" (dict "root" $root "image" $ic.services.diarizer.image) }}
+          imagePullPolicy: {{ $ic.services.diarizer.imagePullPolicy | default "IfNotPresent" }}
+          env:
+            - name: HF_HOME
+              value: /models/hf
+            - name: HUGGINGFACE_TOKEN     # pyannote reads this specific var
+              value: {{ $hftok | quote }}
+            - name: HF_TOKEN              # huggingface_hub reads this (authenticated download)
+              value: {{ $hftok | quote }}
+          command:
+            - python3
+            - -c
+            - |
+              import os
+              from pyannote.audio import Model, Pipeline
+              tok = os.environ["HUGGINGFACE_TOKEN"]
+              Pipeline.from_pretrained("pyannote/speaker-diarization-community-1", token=tok)
+              Model.from_pretrained("pyannote/embedding", token=tok)
+              Model.from_pretrained("pyannote/wespeaker-voxceleb-resnet34-LM", token=tok)
+              print("pyannote models ready")
+          volumeMounts:
+            - { name: models, mountPath: /models }
+        # Translation — convert facebook/nllb-200-distilled-600M to the CTranslate2 int8 format on the PVC.
+        - name: nllb
+          image: {{ include "omi-oss.image" (dict "root" $root "image" $ic.services.nllb.image) }}
+          imagePullPolicy: {{ $ic.services.nllb.imagePullPolicy | default "IfNotPresent" }}
+          env:
+            - name: HF_HOME
+              value: /models/hf
+            - name: HF_TOKEN               # authenticated download of facebook/nllb-200-distilled-600M
+              value: {{ $hftok | quote }}
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              if [ ! -d /models/nllb-200-distilled-600M-ct2-int8 ]; then
+                # ct2-transformers-converter needs BOTH transformers and torch — converter-only deps that the
+                # lean nllb runtime image (ctranslate2 only) doesn't ship. It imports them together in one
+                # try-block, so both must be present. Install them here, just for this Job (CPU torch).
+                pip install --no-cache-dir transformers
+                pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+                ct2-transformers-converter --model facebook/nllb-200-distilled-600M --quantization int8 \
+                  --output_dir /models/nllb-200-distilled-600M-ct2-int8 --copy_files sentencepiece.bpe.model
+              fi
+              echo "nllb ct2 model ready"
+          volumeMounts:
+            - { name: models, mountPath: /models }
+      containers:
+        - name: done
+          image: {{ include "omi-oss.image" (dict "root" $root "image" $ic.services.nllb.image) }}
+          imagePullPolicy: {{ $ic.services.nllb.imagePullPolicy | default "IfNotPresent" }}
+          # Write the readiness marker the inference pods wait for (see inference-incluster.yaml), so they
+          # start only once every model is present instead of crash-looping against an empty volume.
+          command: ["sh", "-c", "echo done > /models/.provisioned; echo 'model weights provisioned:'; ls -la /models"]
+          volumeMounts:
+            - { name: models, mountPath: /models }
+{{- end }}

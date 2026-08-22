@@ -4,7 +4,6 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set, Tuple, cast
 
 from fastapi import HTTPException
-from firebase_admin import auth as firebase_auth
 import stripe
 
 import database.users as users_db
@@ -34,7 +33,9 @@ logger = logging.getLogger(__name__)
 
 
 def _get_user(uid: str) -> Any:
-    return firebase_auth.get_user(uid)  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
+    from utils.auth import get_auth_provider
+
+    return get_auth_provider().get_user_profile(uid)
 
 
 # Effective desktop tiers are used for Desktop-specific admission decisions.
@@ -250,7 +251,7 @@ def _is_trial_expired_uncached(uid: str, *, firestore_client: Any | None = None,
         if users_db.is_byok_active(uid, firestore_client=firestore_client):
             return False
         user_record = _get_user(uid)
-        creation_ms: int = cast(int, user_record.user_metadata.creation_timestamp)
+        creation_ms = user_record.created_at  # neutral epoch-ms field (was Firebase-only user_metadata)
         if not creation_ms:
             return False
         age_seconds = time.time() - (creation_ms / 1000)
@@ -384,7 +385,7 @@ def get_trial_metadata(uid: str) -> TrialMetadata:
             )
 
         user_record = _get_user(uid)
-        creation_ms: int = cast(int, user_record.user_metadata.creation_timestamp)
+        creation_ms = user_record.created_at  # neutral epoch-ms field (was Firebase-only user_metadata)
         if not creation_ms:
             # No creation timestamp — treat as active trial (fail-open).
             return TrialMetadata(

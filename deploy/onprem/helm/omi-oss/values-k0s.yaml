@@ -1,0 +1,82 @@
+# k0s (real single-node bare-metal) overlay — the on-prem PROD posture. Same chart as Kind; this turns on
+# what a real cluster provides that Kind fakes: images pulled from a local registry, a MetalLB LoadBalancer,
+# and IN-CLUSTER GPU inference — the on-prem default: STT (whisper + parakeet gateway), speaker diarization
+# and translation (nllb) run inside the cluster; only the LLM + embeddings are external. The 4 inference
+# services and their backend wiring live in values.yaml; here we just switch the posture on.
+#
+# Parameters YOU pass at install (kept OUT of this file so no site IP or secret is committed) — see
+# MANUAL-prod-k0s.md for the full step-by-step:
+#   --set imageRegistry=<host:port>                       registry the node pulls our images from
+#   --set ingress.loadBalancerIP=<free LAN IP>            MetalLB gives the edge this IP (OIDC issuer + TLS SAN)
+#   --set backend.encryptionSecret="$(openssl rand -hex 32)"
+#   --set inference.openai.baseUrl=<http://your-llm/v1>   external LLM (operator-provided)
+#   --set inference.embeddings.baseUrl=<http://your-llm/v1> --set inference.embeddings.model=<bge-m3>
+# (admin/db/S3 below are throwaway DEV values, like values-dev.yaml — replace for real production.)
+
+storageClassName: "openebs-hostpath"
+
+backend:
+  imagePullPolicy: IfNotPresent
+  replicas: 1
+  resources:
+    requests: { cpu: "500m", memory: "1Gi" }
+    limits: { memory: "2Gi" }
+  env:
+    # auth is on (real Keycloak OIDC) -> NO dev-auth bypass; the backend validates real tokens.
+    LOCAL_DEVELOPMENT: "false"
+
+mongo:
+  imagePullPolicy: IfNotPresent
+  storage: 20Gi
+
+valkey:
+  imagePullPolicy: IfNotPresent
+  storage: 5Gi
+
+chat:
+  enabled: true
+  qdrant:
+    imagePullPolicy: IfNotPresent
+    storage: 20Gi
+
+objstore:
+  enabled: true
+  accessKey: "rustfsadmin"      # throwaway dev
+  secretKey: "rustfsadmin"      # throwaway dev
+  rustfs:
+    imagePullPolicy: IfNotPresent
+    storage: 20Gi
+
+push:
+  enabled: true
+  ntfy:
+    imagePullPolicy: IfNotPresent
+
+# Edge: MetalLB LoadBalancer. The IP is passed at install (--set ingress.loadBalancerIP=...) so no address
+# is committed here; auth.hostname (OIDC issuer) + the TLS SAN derive from it.
+ingress:
+  enabled: true
+  service:
+    type: LoadBalancer
+  loadBalancerIP: ""            # REQUIRED via --set (a FREE address on the node's LAN)
+
+auth:
+  enabled: true
+  adminPassword: "admin"        # throwaway dev
+  keycloak:
+    db: postgres
+    postgres:
+      password: "keycloak-dev"  # throwaway dev
+
+# Inference: LLM + embeddings EXTERNAL (operator-provided, set via --set below); everything else IN-CLUSTER
+# on GPU (inCluster.enabled). Needs the NVIDIA device plugin (+ time-slicing on a single card) and the model
+# weights present at inference.inCluster.modelsHostPath (default = the compose models volume on the host).
+inference:
+  enabled: true
+  openai:
+    baseUrl: ""                 # REQUIRED via --set (external OpenAI-compatible LLM)
+  embeddings:
+    baseUrl: ""                 # REQUIRED via --set
+    model: ""                   # REQUIRED via --set (e.g. bge-m3)
+  inCluster:
+    enabled: true               # STT (whisper+parakeet) · diarization · translation (nllb) as GPU pods

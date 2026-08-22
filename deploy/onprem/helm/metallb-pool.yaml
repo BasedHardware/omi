@@ -1,0 +1,24 @@
+# MetalLB address pool for the Kind dev cluster (phase B3). MetalLB gives Service type=LoadBalancer a
+# real IP so the Envoy Gateway edge works like bare-metal (instead of the Kind NodePort). Apply AFTER
+# installing MetalLB, then it backs the chart's `ingress.service.type=LoadBalancer`.
+#
+# The range is from Kind's default docker network 172.18.0.0/16 — high addresses that don't collide with
+# the low-numbered container IPs Kind hands out. On a different kind network subnet, adjust to match
+# (`docker network inspect kind`). On real bare-metal (k0s) use a LAN range the operator owns.
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: omi-pool
+  namespace: metallb-system
+spec:
+  addresses:
+    - 172.18.255.200-172.18.255.250
+---
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: omi-l2
+  namespace: metallb-system
+spec:
+  ipAddressPools:
+    - omi-pool

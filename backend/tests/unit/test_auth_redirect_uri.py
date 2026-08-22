@@ -76,8 +76,11 @@ _ensure_package("firebase_admin", BACKEND_DIR / "tests")
 
 firebase_admin_stub = _install_module("firebase_admin")
 firebase_admin_stub.__path__ = []
+# Bare module, no behaviour: production imports firebase_admin.auth ONLY in
+# utils/auth/adapters/firebase.py (enforced by check_oss_auth_boundary), so nothing on this path
+# calls it. The stub exists to let the import graph load. Proved rather than assumed: replacing
+# verify_id_token with a raiser left this file green (BACKLOG L15).
 firebase_auth_stub = _install_module("firebase_admin.auth")
-firebase_auth_stub.verify_id_token = MagicMock()
 
 jwt_stub = _install_module("jwt")
 jwt_stub.__path__ = []

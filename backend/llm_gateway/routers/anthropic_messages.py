@@ -24,6 +24,7 @@ from llm_gateway.gateway.accounting import (
 )
 from llm_gateway.gateway.accounting_sink import schedule_attempt_trace
 from llm_gateway.gateway.auth import ServiceAuthDependency
+from llm_gateway.gateway.providers import ANTHROPIC_BASE_URL_DEFAULT
 from llm_gateway.gateway.config_loader import GatewayConfig
 from llm_gateway.gateway.metrics import (
     observe_request_rejection,
@@ -38,7 +39,9 @@ from llm_gateway.routers.dependencies import get_gateway_config
 
 router = APIRouter()
 
-ANTHROPIC_MESSAGES_BASE_URL = 'https://api.anthropic.com/v1'
+# The second of the two independent copies of this literal (BACKLOG L4). Now the same resolved value the
+# provider uses, so ANTHROPIC_BASE_URL moves both and neither can drift.
+ANTHROPIC_MESSAGES_BASE_URL = ANTHROPIC_BASE_URL_DEFAULT
 AUTO_LANE_PREFIX = 'omi:auto:'
 ANTHROPIC_BETA_HEADER = 'anthropic-beta'
 ANTHROPIC_VERSION_HEADER = 'anthropic-version'

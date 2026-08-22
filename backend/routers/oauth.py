@@ -7,7 +7,8 @@ from fastapi import APIRouter, Cookie, Request, HTTPException, Form
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
-import firebase_admin.auth
+from utils.auth import auth_backend_name, get_auth_provider
+from utils.auth import errors as auth_errors
 import httpx
 
 from database.apps import get_app_by_id_db
@@ -50,6 +51,20 @@ templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 # handling, which Omi's server has no way to verify.
 OAUTH_CSRF_COOKIE_NAME = 'omi_oauth_csrf'
 
+# This external-app authorize/token flow is Firebase-only: the authorize page is a hardwired FirebaseUI
+# login (loads the Firebase JS SDK, mints a Firebase ID token client-side) and /token verifies THAT token.
+# Under AUTH_BACKEND=oidc there is no Firebase project and the selected provider would reject the Firebase
+# token against the OIDC issuer — a confusing 401. On-prem OIDC brokers third-party apps at the provider
+# (standard Auth-Code+PKCE), not through this page (ADR-0034 §3), so we gate the whole flow off cleanly
+# rather than render a page that cannot work. If/when a provider-neutral external-app consent page exists,
+# this guard is where it gets routed.
+_OAUTH_FIREBASE_ONLY_DETAIL = "External-app OAuth is only available on the Firebase auth backend."
+
+
+def _guard_firebase_oauth_backend() -> None:
+    if auth_backend_name() != "firebase":
+        raise HTTPException(status_code=501, detail=_OAUTH_FIREBASE_ONLY_DETAIL)
+
 
 @router.get("/v1/oauth/authorize", response_class=HTMLResponse)
 def oauth_authorize(
@@ -57,6 +72,7 @@ def oauth_authorize(
     app_id: str,
     state: Optional[str] = None,
 ):
+    _guard_firebase_oauth_backend()
     app_data = get_app_by_id_db(app_id)
     if not app_data:
         raise HTTPException(status_code=404, detail="App not found")
@@ -171,22 +187,19 @@ async def oauth_token(
     csrf_token: str = Form(...),
     oauth_csrf_cookie: Optional[str] = Cookie(default=None, alias=OAUTH_CSRF_COOKIE_NAME),
 ):
+    _guard_firebase_oauth_backend()
     if not oauth_csrf_cookie or not hmac.compare_digest(csrf_token, oauth_csrf_cookie):
         raise HTTPException(
             status_code=403,
             detail='This authorization request is invalid or expired. Please restart the connection from the app.',
         )
     try:
-        decoded_token = await run_blocking(
-            critical_executor,
-            firebase_admin.auth.verify_id_token,
-            firebase_id_token,
-        )
-        uid = decoded_token['uid']
-    except firebase_admin.auth.InvalidIdTokenError as e:
-        raise HTTPException(status_code=401, detail=f"Invalid Firebase ID token: {e}")
+        principal = await run_blocking(critical_executor, get_auth_provider().verify_token, firebase_id_token)
+        uid = principal.uid
+    except auth_errors.InvalidToken as e:
+        raise HTTPException(status_code=401, detail=f"Invalid sign-in token: {e}")
     except Exception as e:
-        raise HTTPException(status_code=401, detail=f"Error verifying Firebase ID token: {e}")
+        raise HTTPException(status_code=401, detail=f"Error verifying sign-in token: {e}")
 
     await run_blocking(db_executor, enforce_account_deletion_http_access, uid)
 

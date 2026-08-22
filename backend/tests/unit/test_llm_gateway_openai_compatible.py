@@ -896,3 +896,58 @@ def valid_request(**overrides):
     }
     request.update(overrides)
     return request
+
+
+def test_image_generation_honours_OPENAI_BASE_URL(monkeypatch):
+    """The images route hardcoded api.openai.com while every chat call honours OPENAI_BASE_URL (BACKLOG L4).
+
+    Same provider, same file family, opposite behaviour: `OpenAICompatibleChatCompletionProvider` resolves
+    `base_url or os.getenv(OPENAI_BASE_URL_ENV_VAR, ...)`, and this route posted to a literal URL. It is
+    reachable from a product feature — app icon generation
+    (`routers/apps.py` -> `generate_app_icon` -> `generate_image_via_gateway`) — so on an on-prem stack the
+    prompt went to OpenAI no matter what the operator configured, and only the absence of a real key
+    stopped it.
+    """
+    posted = []
+
+    class FakeImageClient:
+        async def post(self, url, *_args, **_kwargs):
+            posted.append(url)
+            return httpx.Response(200, json={'created': 1, 'data': [{'b64_json': 'aGk='}]})
+
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    monkeypatch.setenv('OPENAI_API_KEY', 'omi-openai-key')
+    monkeypatch.setenv('OPENAI_BASE_URL', 'http://192.168.1.10:11434/v1')
+    monkeypatch.setattr(openai_compatible, '_get_image_generation_client', lambda: FakeImageClient())
+    monkeypatch.setattr(openai_compatible, 'schedule_attempt_trace', lambda context, trace: None)
+
+    response = TestClient(app).post(
+        '/v1/images/generations',
+        json={'model': 'gpt-image-1', 'prompt': 'an icon'},
+        headers=auth_headers(),
+    )
+
+    assert response.status_code == 200
+    assert posted == ['http://192.168.1.10:11434/v1/images/generations']
+
+
+def test_image_generation_still_defaults_to_openai(monkeypatch):
+    """The legacy principal: unset means api.openai.com, exactly as before."""
+    posted = []
+
+    class FakeImageClient:
+        async def post(self, url, *_args, **_kwargs):
+            posted.append(url)
+            return httpx.Response(200, json={'created': 1, 'data': [{'b64_json': 'aGk='}]})
+
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    monkeypatch.setenv('OPENAI_API_KEY', 'omi-openai-key')
+    monkeypatch.delenv('OPENAI_BASE_URL', raising=False)
+    monkeypatch.setattr(openai_compatible, '_get_image_generation_client', lambda: FakeImageClient())
+    monkeypatch.setattr(openai_compatible, 'schedule_attempt_trace', lambda context, trace: None)
+
+    TestClient(app).post(
+        '/v1/images/generations', json={'model': 'gpt-image-1', 'prompt': 'an icon'}, headers=auth_headers()
+    )
+
+    assert posted == ['https://api.openai.com/v1/images/generations']

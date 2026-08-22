@@ -18,8 +18,9 @@ from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qsl
 
 from pydantic import BaseModel
 
-import firebase_admin.auth
-from google.api_core.exceptions import FailedPrecondition
+from utils.auth import auth_backend_name, get_auth_provider
+from utils.auth import errors as auth_errors
+from google.api_core.exceptions import Aborted, FailedPrecondition
 from fastapi import APIRouter, HTTPException, Header, Request, Response, Form
 from fastapi.responses import StreamingResponse, JSONResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -729,12 +730,64 @@ MCP_TOOLS: List[Dict[str, Any]] = [
 ]
 
 
+def _protected_resource_identity() -> str:
+    """The ``resource`` to advertise: the URL of THIS deployment's MCP endpoint.
+
+    Symmetric with :func:`_protected_resource_authorization_servers`, which already refuses rather than
+    mislead. This half did not: ``MCP_RESOURCE_URL`` falls back to ``PRODUCTION_MCP_RESOURCE_URL``
+    (``https://api.omi.me/v1/mcp/sse``), so a deployment that never declared it served UPSTREAM's endpoint
+    beside its OWN authorization server — telling a client to ask our IdP for a token audienced to
+    somebody else's resource. Measured on a self-host (BACKLOG L48).
+
+    The default stays for ``AUTH_BACKEND=firebase``, which IS that deployment. Under any other backend it
+    is a misconfiguration, and the same rule applies as one function below: surface it.
+    """
+    configured = (os.getenv("MCP_RESOURCE_URL") or "").strip()
+    if configured:
+        return configured
+    if auth_backend_name() == "firebase":
+        return MCP_RESOURCE_URL
+    raise HTTPException(
+        status_code=501,
+        detail=(
+            "MCP discovery unavailable: AUTH_BACKEND is not firebase, so MCP_RESOURCE_URL must name this "
+            "deployment's MCP endpoint (e.g. https://<your-host>/v1/mcp/sse). Unset it would advertise "
+            "the upstream Omi endpoint next to your own authorization server."
+        ),
+    )
+
+
+def _protected_resource_authorization_servers() -> list:
+    """The ``authorization_servers`` to advertise for MCP protected-resource discovery. Shared by GET and
+    HEAD so a probe (HEAD) and a client (GET) see the SAME availability — HEAD must not 200 while GET 501s
+    for the same misconfiguration (cubic PR 10887 mcp_sse.py:745)."""
+    if auth_backend_name() == "firebase":
+        return [MCP_AUTHORIZATION_SERVER_URL]
+    # Non-firebase (OIDC): the built-in authorization server (authorize/consent/token) is unavailable,
+    # so point clients at the configured OIDC issuer — they discover the real IdP's own metadata
+    # instead of the built-in /authorize that 501s (cubic PR 10887 mcp_sse.py:1584). If OIDC_ISSUER is
+    # not configured, FAIL rather than fall back to the Firebase-only server (which would send clients
+    # to a dead endpoint) — a misconfiguration should surface, not silently mislead (cubic mcp_sse.py:743).
+    issuer = (os.getenv("OIDC_ISSUER") or "").strip().rstrip("/")
+    if not issuer:
+        raise HTTPException(
+            status_code=501,
+            detail="MCP OAuth discovery unavailable: AUTH_BACKEND=oidc requires OIDC_ISSUER to be set",
+        )
+    return [issuer]
+
+
 @router.get("/.well-known/oauth-protected-resource", tags=["mcp"])
 @router.get("/.well-known/oauth-protected-resource/v1/mcp/sse", tags=["mcp"])
 def oauth_protected_resource_metadata():
+    # RFC 9728 protected-resource metadata (NOT a bare authorization-server list): MCP clients parse this
+    # object for `resource`/`authorization_servers`/`scopes_supported` to run OAuth discovery. The GET
+    # decorators MUST sit here, not on the _protected_resource_authorization_servers helper (cubic PR 10887
+    # mcp_sse.py:735 — a prior refactor moved them onto the helper, so GET returned a bare list and broke discovery).
+    authorization_servers = _protected_resource_authorization_servers()
     return {
-        "resource": MCP_RESOURCE_URL,
-        "authorization_servers": [MCP_AUTHORIZATION_SERVER_URL],
+        "resource": _protected_resource_identity(),
+        "authorization_servers": authorization_servers,
         "scopes_supported": MCP_SCOPES_SUPPORTED,
         "bearer_methods_supported": ["header"],
         "resource_documentation": "https://docs.omi.me/doc/developer/mcp/setup",
@@ -744,11 +797,29 @@ def oauth_protected_resource_metadata():
 @router.head("/.well-known/oauth-protected-resource", tags=["mcp"])
 @router.head("/.well-known/oauth-protected-resource/v1/mcp/sse", tags=["mcp"])
 def oauth_protected_resource_metadata_head():
+    # Same availability check as GET: 501 when OIDC discovery is misconfigured, so a HEAD probe does not
+    # report the resource as available when GET would 501 (cubic PR 10887 mcp_sse.py:745). BOTH halves,
+    # or HEAD would report available while GET 501s on the resource identity (BACKLOG L48).
+    _protected_resource_authorization_servers()
+    _protected_resource_identity()
     return Response(status_code=200)
+
+
+def _guard_builtin_oauth_server() -> None:
+    # The built-in OAuth authorization server (authorize/consent/token) loads the Firebase JS SDK and
+    # mints tokens against the Firebase project, so it only works under AUTH_BACKEND=firebase. Under OIDC
+    # a client must use its IdP's own /.well-known/oauth-authorization-server; advertising the built-in
+    # one here would point it at an authorization_endpoint that then 501s (cubic PR 10887 mcp_sse.py:1584).
+    if auth_backend_name() != "firebase":
+        raise HTTPException(
+            status_code=404,
+            detail="Built-in MCP OAuth server is only available with AUTH_BACKEND=firebase; use the OIDC issuer",
+        )
 
 
 @router.get("/.well-known/oauth-authorization-server", tags=["mcp"])
 def oauth_authorization_server_metadata():
+    _guard_builtin_oauth_server()
     return {
         "issuer": MCP_AUTHORIZATION_SERVER_URL,
         "authorization_endpoint": MCP_AUTHORIZATION_ENDPOINT,
@@ -763,6 +834,7 @@ def oauth_authorization_server_metadata():
 
 @router.head("/.well-known/oauth-authorization-server", tags=["mcp"])
 def oauth_authorization_server_metadata_head():
+    _guard_builtin_oauth_server()
     return Response(status_code=200)
 
 
@@ -1485,7 +1557,9 @@ class McpSseAuthMethodResponse(BaseModel):
 class McpSseAuthenticationResponse(BaseModel):
     methods: list[str]
     api_key: McpSseAuthMethodResponse
-    oauth2: McpSseAuthMethodResponse
+    # Optional: the built-in OAuth flow is Firebase-only, so it is omitted under non-firebase backends
+    # rather than advertising endpoints that 501 under OIDC (cubic PR 10887 mcp_sse.py:1889).
+    oauth2: Optional[McpSseAuthMethodResponse] = None
 
 
 class McpSseInstructionsResponse(BaseModel):
@@ -1559,6 +1633,14 @@ async def _get_token_request_data(request: Request) -> Dict[str, Any]:
     return dict(form_data)
 
 
+def _guard_firebase_authorize_backend() -> None:
+    # The MCP /authorize consent UX loads the Firebase JS SDK and posts a firebase_id_token, so it
+    # only works under AUTH_BACKEND=firebase. Under OIDC there is no Firebase project and serving this
+    # page would dead-end the flow — fail 501 like /v1/oauth/authorize (cubic review 4939247683).
+    if auth_backend_name() != "firebase":
+        raise HTTPException(status_code=501, detail="MCP OAuth authorize is only available with AUTH_BACKEND=firebase")
+
+
 @router.get("/authorize", response_class=HTMLResponse, tags=["mcp"])
 def mcp_authorize(
     request: Request,
@@ -1572,6 +1654,7 @@ def mcp_authorize(
     code_challenge_method: Optional[str] = None,
 ):
     """OAuth authorize endpoint."""
+    _guard_firebase_authorize_backend()
     try:
         client, scopes = _validate_authorize_request(
             response_type, client_id, redirect_uri, resource, scope, code_challenge, code_challenge_method
@@ -1618,6 +1701,7 @@ async def mcp_authorize_consent(
     code_challenge: Optional[str] = Form(None),
     code_challenge_method: Optional[str] = Form(None),
 ):
+    _guard_firebase_authorize_backend()
     try:
         _, scopes = await run_blocking(
             db_executor,
@@ -1630,11 +1714,12 @@ async def mcp_authorize_consent(
             code_challenge,
             code_challenge_method,
         )
-        decoded_token: Dict[str, Any] = await run_blocking(
-            critical_executor, firebase_admin.auth.verify_id_token, firebase_id_token
-        )  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
-        uid = cast(str, decoded_token["uid"])
-    except firebase_admin.auth.InvalidIdTokenError:
+        # Identity-provider verification is a blocking network call; offload it to critical_executor
+        # so a slow Firebase/OIDC check can't stall the SSE/health event loop, and go through the
+        # neutral auth port (ADR-0034) rather than firebase_admin directly.
+        principal = await run_blocking(critical_executor, get_auth_provider().verify_token, firebase_id_token)
+        uid = cast(str, principal.uid)
+    except auth_errors.InvalidToken:
         return _oauth_error("access_denied", "Invalid Omi sign-in token", status_code=401)
     except Exception as e:
         if isinstance(e, ValueError):
@@ -1689,15 +1774,25 @@ async def mcp_token(request: Request):
             return _oauth_error("invalid_request", "code, redirect_uri, resource, and code_verifier are required")
         if not await run_blocking(db_executor, mcp_oauth_db.validate_resource, client, resource):
             return _oauth_error("invalid_target", "Invalid resource")
-        token_pair = await run_blocking(
-            db_executor,
-            mcp_oauth_db.exchange_authorization_code_for_tokens,
-            code,
-            cast(str, client_id),
-            redirect_uri,
-            resource,
-            code_verifier,
-        )
+        try:
+            token_pair = await run_blocking(
+                db_executor,
+                mcp_oauth_db.exchange_authorization_code_for_tokens,
+                code,
+                cast(str, client_id),
+                redirect_uri,
+                resource,
+                code_verifier,
+            )
+        except Aborted:
+            # Somebody else redeemed this code at the same instant and won. That is a spent code, which
+            # is `invalid_grant` — not a 500. Measured before this branch existed: a connector
+            # double-submitting its token request got an unhandled exception, because the abort surfaces
+            # from INSIDE the transaction body and google's decorator only retries around the commit
+            # (BACKLOG L53/L56). The facade now holds a Mongo write conflict until the commit so the body
+            # replays and this path is not reached there; on the Firestore posture the SDK still gives up
+            # with Aborted, so the answer is given here rather than left to the client.
+            return _oauth_error("invalid_grant", "Invalid authorization code")
         if not token_pair:
             return _oauth_error("invalid_grant", "Invalid authorization code")
         return token_pair
@@ -1707,9 +1802,14 @@ async def mcp_token(request: Request):
             return _oauth_error("invalid_request", "refresh_token and resource are required")
         if not await run_blocking(db_executor, mcp_oauth_db.validate_resource, client, resource):
             return _oauth_error("invalid_target", "Invalid resource")
-        token_pair = await run_blocking(
-            db_executor, mcp_oauth_db.rotate_refresh_token, refresh_token, cast(str, client_id), resource, scope
-        )
+        try:
+            token_pair = await run_blocking(
+                db_executor, mcp_oauth_db.rotate_refresh_token, refresh_token, cast(str, client_id), resource, scope
+            )
+        except Aborted:
+            # Same as the authorization-code branch above: a lost race means the token was already
+            # rotated by the concurrent request, which is `invalid_grant`.
+            return _oauth_error("invalid_grant", "Invalid refresh token")
         if not token_pair:
             return _oauth_error("invalid_grant", "Invalid refresh token")
         return token_pair
@@ -1858,20 +1958,28 @@ def mcp_sse_info(request: Request):
     Get information about the pre-hosted MCP server.
     """
     base_url = str(request.base_url).rstrip("/")
-    return {
-        "endpoint": "/v1/mcp/sse",
-        "transport": "streamable-http",
-        "protocol_version": "2025-03-26",
-        "authentication": {
+    api_key_method = {"header": "Authorization", "format": "Bearer <api_key>"}
+    if auth_backend_name() == "firebase":
+        authentication: Dict[str, Any] = {
             "methods": ["oauth2", "api_key"],
-            "api_key": {"header": "Authorization", "format": "Bearer <api_key>"},
+            "api_key": api_key_method,
             "oauth2": {
                 "authorization_endpoint": MCP_AUTHORIZATION_ENDPOINT,
                 "token_endpoint": MCP_TOKEN_ENDPOINT,
                 "resource": MCP_RESOURCE_URL,
                 "scopes": MCP_SCOPES_SUPPORTED,
             },
-        },
+        }
+    else:
+        # Non-firebase (OIDC): the built-in OAuth flow is unavailable (authorize/token 501), so advertise
+        # only api_key here — clients use an Omi MCP API key; OIDC discovery lives at the issuer (cubic
+        # PR 10887 mcp_sse.py:1889).
+        authentication = {"methods": ["api_key"], "api_key": api_key_method}
+    return {
+        "endpoint": "/v1/mcp/sse",
+        "transport": "streamable-http",
+        "protocol_version": "2025-03-26",
+        "authentication": authentication,
         "instructions": {
             "step1": "Create an MCP API key in the Omi app (Settings > Developer > MCP)",
             "step2": f"Set Server URL to: {base_url}/v1/mcp/sse",

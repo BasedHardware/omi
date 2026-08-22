@@ -1,0 +1,560 @@
+name: omi-oss
+# Self-hosted datastore overlay (ADR-0046). The durable, no-Google on-prem store (Mongo, ADR-0002).
+# Included by the on-prem postures — compose.prod.yaml (hermetic) and compose.dev.yaml — on top of
+# compose.base.yaml, so the backend waits for a healthy Mongo. The CLOUD posture
+# (compose.prod.cloud.yaml) does NOT include this file: there no Mongo is run and STORAGE_BACKEND=firestore
+# points at a real Firestore. Keeping mongo out of base is what lets a posture skip the datastore it
+# does not use (the mirror of keeping the Firestore emulator out of base/prod).
+services:
+  # The scheduled runner talks to the datastore and, for the conversation index, to Typesense — so the
+  # posture overlay adds the dependencies here for the same reason it does for `backend`: base knows only
+  # about valkey. `required: false` on typesense so the runner still starts with only the `jobs` profile
+  # active (the conversation-index schedule is the one that needs it, and it is opt-in).
+  scheduled_jobs:
+    depends_on:
+      mongo:
+        condition: service_healthy
+      typesense:
+        condition: service_healthy
+        required: false
+  mongo:
+    image: ${OMI_OSS_MONGO_IMAGE:?pin missing — see omi.oss.release.pins (ADR-0055)}
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    healthcheck:
+      # Initiate the one-member replica set on first probe, then report healthy once primary.
+      test:
+        - CMD-SHELL
+        - >-
+          mongosh --quiet --eval "try { rs.status() } catch (e) {
+          rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]}) }
+          db.hello().isWritablePrimary" | grep -q true
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    volumes:
+      # Persist the replica-set data across `down`/`up` (ADR-0002 PROD datastore; without a named
+      # volume the seed/user data lives in the container layer and is lost on recreate).
+      - mongo-data:/data/db
+    networks: [omi]
+    restart: unless-stopped
+
+  # Merge the datastore dependency onto the base backend (long-form depends_on merges by key, so this
+  # adds ``mongo`` alongside base's ``valkey``): on-prem the backend waits for a healthy Mongo.
+  backend:
+    depends_on:
+      mongo:
+        condition: service_healthy
+    # The S3 adapter (client) MUST share credentials with the RustFS service (server) below. Both
+    # interpolate the SAME compose-level ${S3_ACCESS_KEY}/${S3_SECRET_KEY} (set in the deploy/onprem
+    # .env, default rustfsadmin), so they can never diverge — the backend's env_file cannot reach the
+    # rustfs container, so putting S3 creds only in backend.env left RustFS on the default while the
+    # backend used the operator value (cubic review PR 10887, review 4939247683). ``environment``
+    # overrides env_file, so set S3_ACCESS_KEY/S3_SECRET_KEY in the .env, not backend.env.
+    environment:
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-rustfsadmin}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-rustfsadmin}
+      # Same reasoning as the S3 credentials: the Typesense server and this client must share ONE key,
+      # and backend.env cannot reach the typesense container. Set it in the deploy/onprem .env.
+      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY:?set TYPESENSE_API_KEY in the deploy/onprem .env (openssl rand -hex 24)}
+
+  # Alternate object-store backend (ADR-0032/0004). Opt-in via the `objstore` profile so the default
+  # on-prem baseline stays GCS-shaped (ADR-0003). RustFS is one S3-compatible product; the S3 adapter
+  # is generic (MinIO/SeaweedFS/Ceph/AWS work the same by changing S3_ENDPOINT/credentials). To use it:
+  #   OBJECT_STORE_BACKEND=s3 + S3_ENDPOINT=http://rustfs:9000 in backend.env; put S3_ACCESS_KEY/S3_SECRET_KEY
+  #   in the deploy/onprem .env (NOT backend.env — the backend `environment:` block above interpolates them
+  #   from the compose .env and overrides env_file, so both client and server always share one value),
+  #   then: docker compose --profile objstore up -d --build
+  # Buckets are provisioning (ADR-0032 §5): create them out-of-band before first use.
+  rustfs:
+    image: ${OMI_OSS_RUSTFS_IMAGE:?pin missing — see omi.oss.release.pins (ADR-0055)}
+    profiles: ["objstore"]
+    environment:
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:-rustfsadmin}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:-rustfsadmin}
+    healthcheck:
+      # curl (no -f): any HTTP reply, incl. the 403 S3 AccessDenied, means the S3 API is serving.
+      test: ["CMD", "curl", "-s", "-o", "/dev/null", "http://localhost:9000/"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+    volumes:
+      # Persist S3 objects across `down`/`up` (RUSTFS_VOLUMES=/data; ADR-0032 PROD object store).
+      - rustfs-data:/data
+    networks: [omi]
+    restart: unless-stopped
+
+  # Self-hosted push server for UnifiedPush (ADR-0011). Opt-in via the `push` profile; the default
+  # baseline sends push over FCM. With PUSH_NOTIFICATION_BACKEND=unifiedpush the backend POSTs
+  # notifications to endpoints on this ntfy server, reached internally via
+  # UNIFIEDPUSH_INTERNAL_BASE_URL=http://ntfy:80. The phone's UnifiedPush distributor (the ntfy app)
+  # subscribes to the SAME server on its host-facing URL (NTFY_BASE_URL). ntfy joins `edge` so its
+  # published port has host ingress for the device, and `omi` so the backend reaches it by name. To
+  # use it: set PUSH_NOTIFICATION_BACKEND=unifiedpush in backend.env, then:
+  #   docker compose --profile push up -d
+  # See SELFHOST_NOTES "Push notifications (UnifiedPush/ntfy)".
+  ntfy:
+    image: ${OMI_OSS_NTFY_IMAGE:?pin missing — see omi.oss.release.pins (ADR-0055)}
+    profiles: ["push"]
+    command: ["serve"]
+    environment:
+      # Public https URL the phone's UnifiedPush distributor uses (served by ntfy-proxy). It must be
+      # the address the DEVICE reaches (HOST_IP) and match the cert SAN. ntfy itself stays internal;
+      # the backend reaches it via UNIFIEDPUSH_INTERNAL_BASE_URL=http://ntfy:80, so it needs no egress.
+      NTFY_BASE_URL: https://${HOST_IP:-localhost}:${NTFY_HTTPS_PORT:-8455}
+      NTFY_LISTEN_HTTP: ":80"
+      NTFY_BEHIND_PROXY: "true"
+      # Durable message cache: without a cache file ntfy keeps messages in memory only, so a restart
+      # drops any notification a device has not yet fetched. Persist them to a SQLite file on the
+      # ntfy-cache volume (retained NTFY_CACHE_DURATION, ntfy default 12h) so they survive down/up.
+      NTFY_CACHE_FILE: /var/cache/ntfy/cache.db
+      # Message size limit. ntfy's default is 4096 bytes and an over-limit body is treated as an
+      # ATTACHMENT — with attachments off (the default) it answers `400 invalid request: attachments not
+      # allowed` and the notification is gone. Our bodies are bigger than they look: the WebPush
+      # ciphertext is HEX-ARMORED for this text-only transport, which doubles it. Measured with the real
+      # crypto: the 100-id bulk action-item delete is 3850 B of plaintext and **7906 B on the wire**, and
+      # ntfy v2.11.0 answered 200 / 400 / 400 for 3466 / 4206 / 7906 B on the default limit (BACKLOG L17).
+      # 16 KiB carries every BOUNDED payload with headroom (and ~50 items of the unbounded Apple-Reminders
+      # sync, which exceeds FCM's own 4 KB limit at 30 — that one is upstream's bound, not ours).
+      NTFY_MESSAGE_SIZE_LIMIT: "16384"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:80/v1/health | grep -q '\"healthy\":true'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+    volumes:
+      - ntfy-cache:/var/cache/ntfy
+    networks: [omi]
+    restart: unless-stopped
+
+  # TLS-terminating reverse proxy for ntfy — the UnifiedPush distributor (ntfy app) refuses a
+  # cleartext server. Same posture as api-proxy/kc-proxy: ntfy stays internal (omi), only this proxy
+  # is on `edge` with host ingress. Uses the same self-signed certs (gen-dev-certs.sh, SAN=HOST_IP).
+  ntfy-proxy:
+    image: ${OMI_OSS_NGINX_IMAGE:?pin missing — see omi.oss.release.pins (ADR-0055)}
+    profiles: ["push"]
+    depends_on: [ntfy]
+    ports:
+      - "${NTFY_HTTPS_PORT:-8455}:8443"
+    volumes:
+      - ./ntfy-proxy.conf:/etc/nginx/conf.d/default.conf:ro
+      # Only the server cert+key — never the whole ./certs (which holds ca.key). Least-privilege: a
+      # network-facing proxy must not be able to read the CA private key (cubic PR 10887 gen-dev-certs.sh:32).
+      - ./certs/server.crt:/certs/server.crt:ro
+      - ./certs/server.key:/certs/server.key:ro
+    networks: [omi, edge]
+    restart: unless-stopped
+
+  # LLM gateway (D32, ADR-0035) — REQUIRED for on-prem chat. The backend never talks to Ollama/vLLM
+  # directly: it sends the gateway an omi:auto:* LANE id (not a model name), and only this service
+  # resolves the lane -> concrete model and forwards OpenAI-compatibly to the operator's endpoint
+  # (OPENAI_BASE_URL). Reuses the backend image (llm_gateway ships inside it). Joins `edge` because
+  # the operator's LLM host is outside the internal `omi` net (reached via host.docker.internal).
+  # Opt-in with the `chat` profile so the hermetic baseline (no egress) stays the default:
+  #   docker compose --profile chat up -d
+  # Point the backend at it in backend.env: OMI_LLM_GATEWAY_FEATURE_MODE=gateway +
+  # OMI_LLM_GATEWAY_URL=http://llm_gateway:9080 + a matching OMI_LLM_GATEWAY_SERVICE_TOKEN.
+  llm_gateway:
+    # Same image as the backend (the gateway ships inside it), so the same release tag.
+    image: omi-oss-backend:${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
+    build:
+      context: ../../
+      dockerfile: backend/Dockerfile
+      tags:
+        - omi-oss-backend:latest
+      labels:
+        # Provenance without touching the Dockerfiles (three of the five are upstream):
+        # `docker inspect` on any image says which release it belongs to. Pass
+        # OMI_OSS_REVISION=$(git rev-parse HEAD) at build time to record the commit too.
+        omi.oss.release: ${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
+        org.opencontainers.image.version: ${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
+        org.opencontainers.image.revision: ${OMI_OSS_REVISION:-}
+      args:
+        PYTHON_BASE_IMAGE: python:3.11-slim
+    profiles: ["chat"]
+    command:
+      - sh
+      - -c
+      - exec uvicorn llm_gateway.main:app --host 0.0.0.0 --port 9080 --loop uvloop
+    env_file:
+      - ./llm_gateway.env
+    # On-prem lane->model map (all features pinned to your single local model). Mounted OVER the
+    # image's cloud config so the committed config stays untouched; edit the model in this file.
+    volumes:
+      # ONE declaration, two consumers (ADR-0081). The file lives inside the Helm chart because
+      # `.Files.Get` cannot reach outside it; compose reaches IN, which is the direction that works
+      # for both. It used to live under ./llm_gateway/ with the chart holding a second, hand-kept
+      # copy in values.yaml — that copy had drifted from 44 lanes to 4.
+      - ./helm/omi-oss/files/generated_route_overrides.yaml:/app/llm_gateway/config/generated_route_overrides.yaml:ro
+    # The operator LLM endpoint (OPENAI_BASE_URL) is outside compose; reach the host with this alias.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [omi, edge]
+    restart: unless-stopped
+
+  # Self-hosted vector store (ADR-0033/0004) — the on-prem alternative to Pinecone, same opt-in shape
+  # as `mongo` (ADR-0002) and `rustfs` (ADR-0032). Stays on the internal `omi` net: the backend reaches
+  # it by name, no egress. The Qdrant adapter auto-creates each collection at QDRANT_VECTOR_DIM (cosine)
+  # on first upsert. Enable with the `chat` profile (RAG needs it) and set in backend.env:
+  #   VECTOR_STORE_BACKEND=qdrant + QDRANT_URL=http://qdrant:6333 + QDRANT_VECTOR_DIM=<embedding dim>.
+  # Keyword search (ADR-0063). Two consumers, and they are NOT symmetric:
+  #   * memory atoms  — the backend CREATES the collection and UPSERTS documents itself
+  #     (utils/memory/atom_keyword_index.py), so this service alone makes the feature work end to end.
+  #     It is also what the canonical memory outbox calls its "projection": without Typesense every
+  #     projection_sync event stays retryable_failure forever, one stuck event per memory written.
+  #   * conversations — READ ONLY here. The only reference to that collection in the whole repo is a
+  #     search(); upstream feeds it from a Firestore -> Typesense pipeline that is not in the codebase.
+  #     So this service does NOT restore conversation search: that needs an indexer of ours (BACKLOG L37).
+  # Version = the one upstream's own dev harness pins, so we run what they develop against.
+  # NOTE: Typesense keeps its indices in RAM; size the host accordingly for large accounts.
+  typesense:
+    image: ${OMI_OSS_TYPESENSE_IMAGE:?pin missing — see omi.oss.release.pins (ADR-0055)}
+    profiles: ["search"]
+    # The key goes through the ENVIRONMENT, not `--api-key`: an argv flag shows the secret in
+    # `docker inspect` and in every process listing inside the container. Verified that Typesense reads
+    # TYPESENSE_API_KEY from the environment and enforces it (wrong key -> 401).
+    environment:
+      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY:?set TYPESENSE_API_KEY in the deploy/onprem .env (openssl rand -hex 24)}
+    command:
+      - --data-dir=/data
+      - --enable-cors
+    volumes:
+      - typesense-data:/data
+    healthcheck:
+      # /health needs no API key. Same shape as qdrant's probe: the image ships bash but no curl/wget,
+      # and /bin/sh has no /dev/tcp, so run bash and require a 200 status line. Verified live.
+      test:
+        - CMD
+        - bash
+        - -c
+        - "exec 3<>/dev/tcp/localhost/8108; printf 'GET /health HTTP/1.0\r\n\r\n' >&3; head -n1 <&3 | grep -q 200"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    networks: [omi]
+    restart: unless-stopped
+
+  qdrant:
+    image: ${OMI_OSS_QDRANT_IMAGE:?pin missing — see omi.oss.release.pins (ADR-0055)}
+    profiles: ["chat"]
+    volumes:
+      - qdrant-storage:/qdrant/storage
+    healthcheck:
+      # Probe /readyz (not just a TCP open): Qdrant accepts connections before storage is ready to serve, so
+      # a bare TCP check reports healthy too early and the first writes/queries can fail transiently (cubic
+      # 10887). No curl in the image and /bin/sh (dash) has no /dev/tcp, so run bash: send a raw HTTP GET and
+      # require a 200 status line. Validated live against the pinned image (returns "HTTP/1.0 200 OK").
+      test:
+        - CMD
+        - bash
+        - -c
+        - "exec 3<>/dev/tcp/localhost/6333; printf 'GET /readyz HTTP/1.0\\r\\n\\r\\n' >&3; head -n1 <&3 | grep -q 200"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks: [omi]
+    restart: unless-stopped
+
+  # ---- Optional local inference (ADR-0035) — GPU services, opt-in via the `inference` profile.
+  # These are the in-repo GPU servers (STT / diarization / translation). LLM + embeddings are
+  # deliberately NOT here: they are an operator-provided OpenAI-compatible endpoint (Ollama/vLLM)
+  # pointed at via backend.env (OPENAI_BASE_URL / OMI_EMBEDDINGS_BASE_URL), typically a dedicated
+  # GPU host. To turn these on:
+  #   docker compose --profile inference up -d --build
+  # Requirements:
+  #   - NVIDIA Container Toolkit on the host (the `deploy.resources` GPU reservation below).
+  #   - Pre-provisioned models: the `omi` network is internal (no egress), so weights cannot be
+  #     downloaded at runtime. Populate the `inference-models` volume first — see SELFHOST_NOTES
+  #     "Local inference (WP5)". Point the backend at them in backend.env:
+  #       HOSTED_PARAKEET_API_URL=http://parakeet:8080
+  #       HOSTED_SPEAKER_EMBEDDING_API_URL=http://diarizer:8080
+  #       HOSTED_TRANSLATION_API_URL=http://nllb:8080   + TRANSLATION_SERVICE_MODELS=nllb
+  # STT gateway. DEFAULT = thin gateway to the whisper service (ADR-0037 default engine): in NIM mode
+  # main.py starts NO GPU worker / loads NO NeMo model, so this needs neither GPU nor the models volume;
+  # it just forwards to whisper (multilingual, 99 languages, commodity GPU).
+  #
+  # HIGH-PERFORMANCE DATACENTER ALTERNATIVE — Parakeet on NeMo (needs a GPU with Riva support + the
+  # models pre-provisioned into the volume). Swap the environment/volumes/devices for:
+  #   environment: { HF_HOME: /models/hf, PARAKEET_MODEL: nvidia/parakeet-tdt-0.6b-v3,
+  #                  PARAKEET_STREAM_MODEL: nvidia/parakeet-rnnt-1.1b,
+  #                  PARAKEET_STREAM_CAPACITY: "4", PARAKEET_STREAM_ALLOCATION_PERCENT: "100" }
+  #   volumes: [inference-models:/models] ; devices: ["nvidia.com/gpu=all"]
+  # (The image still ships the ~76GB NeMo base even as a gateway — a thin-gateway image is a tracked
+  # follow-up, like the diarizer slimming in D17.)
+  parakeet:
+    image: omi-oss-parakeet:${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
+    build:
+      tags:
+        - omi-oss-parakeet:latest
+      labels:
+        # Provenance without touching the Dockerfiles (three of the five are upstream):
+        # `docker inspect` on any image says which release it belongs to. Pass
+        # OMI_OSS_REVISION=$(git rev-parse HEAD) at build time to record the commit too.
+        omi.oss.release: ${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
+        org.opencontainers.image.version: ${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
+        org.opencontainers.image.revision: ${OMI_OSS_REVISION:-}
+      context: ../../
+      # On-prem SLIM build: NIM gateway (forwards to whisper), no NeMo, no GPU -> ~2.9GB instead of 76GB
+      # (backend/parakeet/Dockerfile.oss). The NeMo `Dockerfile` stays for the datacenter direct-NeMo
+      # STT path (mode != nim), which on-prem does not use.
+      dockerfile: backend/parakeet/Dockerfile.oss
+    profiles: ["inference"]
+    # NIM mode forwards to whisper — wait until whisper's model is resident (its /health readiness), so the
+    # first /v3/stream transcriptions don't fail against a not-yet-ready backend (cubic PR 10887 :207).
+    depends_on:
+      whisper:
+        condition: service_healthy
+    environment:
+      # Model provisioning is an explicit STEP, never a runtime fetch (ADR-0048/0076). `torch.hub.load`
+      # in stream_handler.py clones snakers4/silero-vad from github the first time a stream needs the
+      # VAD: on this internal network that cannot succeed, and the failure means every chunk is treated
+      # as speech (no silence endpointing) — so the cache gets a home on the models volume and the
+      # HF/transformers offline flags make a cache miss immediate instead of a network timeout.
+      TORCH_HOME: /models/torch
+      HF_HOME: /models/hf
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      PARAKEET_INFERENCE_MODE: nim
+      NIM_INFERENCE_URL: http://whisper:8000   # gateway appends /v1/audio/transcriptions (no /v1 here)
+      NIM_LANGUAGE: auto                        # "auto" => omit language => whisper multilingual auto-detect
+      # Still REQUIRED by StreamAdmissionController.from_env even in NIM mode (parsed before the mode branch).
+      PARAKEET_STREAM_CAPACITY: "1"
+      PARAKEET_STREAM_ALLOCATION_PERCENT: "0"
+    volumes:
+      # Same volume the other inference services use: TORCH_HOME/HF_HOME above need somewhere that
+      # survives a recreate, and a pre-seeded cache is what makes the offline flags workable.
+      - inference-models:/models
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks: [omi]
+    restart: unless-stopped
+
+  diarizer:
+    image: omi-oss-diarizer:${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
+    build:
+      tags:
+        - omi-oss-diarizer:latest
+      labels:
+        # Provenance without touching the Dockerfiles (three of the five are upstream):
+        # `docker inspect` on any image says which release it belongs to. Pass
+        # OMI_OSS_REVISION=$(git rev-parse HEAD) at build time to record the commit too.
+        omi.oss.release: ${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
+        org.opencontainers.image.version: ${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
+        org.opencontainers.image.revision: ${OMI_OSS_REVISION:-}
+      context: ../../
+      dockerfile: backend/diarizer/Dockerfile
+      args:
+        # override the repo's PRIVATE base image with a public one (see SELFHOST_NOTES, Risks)
+        PYTHON_BASE_IMAGE: python:3.11-slim
+        # skip the ~3GB system CUDA 13.2 install: torch bundles its own cu12.8 runtime libraries,
+        # so on-prem needs only the host driver (via CDI). Halves the image (~24.8GB -> ~12.5GB).
+        INSTALL_SYSTEM_CUDA: "0"
+    profiles: ["inference"]
+    environment:
+      HF_HOME: /models/hf
+      # `Model.from_pretrained("pyannote/embedding")` runs at MODULE level (diarizer/embedding.py), so a
+      # missing cache is a process that never starts. Offline makes that immediate and unambiguous
+      # instead of a huggingface.co timeout at import (ADR-0076).
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+    volumes:
+      - inference-models:/models
+    # GPU via CDI (recommended, Docker >=25, Default Runtime runc) — resolves the CDI device the
+    # same way `docker run --device nvidia.com/gpu=all` does. Legacy nvidia-runtime hosts instead
+    # want `deploy.resources.reservations.devices: [{driver: nvidia, count: all, capabilities: [gpu]}]`
+    # (needs `nvidia-ctk runtime configure` + daemon restart). See SELFHOST_NOTES "GPU passthrough".
+    devices:
+      - "nvidia.com/gpu=all"
+    networks: [omi]
+    restart: unless-stopped
+
+  nllb:
+    image: omi-oss-nllb:${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
+    build:
+      tags:
+        - omi-oss-nllb:latest
+      labels:
+        # Provenance without touching the Dockerfiles (three of the five are upstream):
+        # `docker inspect` on any image says which release it belongs to. Pass
+        # OMI_OSS_REVISION=$(git rev-parse HEAD) at build time to record the commit too.
+        omi.oss.release: ${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
+        org.opencontainers.image.version: ${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
+        org.opencontainers.image.revision: ${OMI_OSS_REVISION:-}
+      # This Dockerfile COPYs main.py/requirements.txt from the context root, so the context is the
+      # service dir (unlike diarizer/parakeet, whose Dockerfiles COPY backend/<svc>/ from repo root).
+      context: ../../backend/nllb_translation
+      # Base nvidia/cuda:12.4.1-runtime — public, builds directly.
+      dockerfile: Dockerfile
+    profiles: ["inference"]
+    environment:
+      # CTranslate2 model dir (pre-provisioned into the volume; not baked into the image).
+      NLLB_MODEL_DIR: /models/nllb-200-distilled-600M-ct2-int8
+    volumes:
+      - inference-models:/models
+    # GPU via CDI — see the note on the diarizer service (legacy nvidia-runtime hosts use the
+    # deploy.resources form instead). CPU-only smoke: set CT2_DEVICE=cpu and drop this stanza.
+    devices:
+      - "nvidia.com/gpu=all"
+    networks: [omi]
+    restart: unless-stopped
+
+  # Multilingual STT (faster-whisper / CTranslate2) — the ADR-0037 DEFAULT on-prem engine (99
+  # languages, commodity GPU incl. Blackwell/sm_120). It is an OpenAI-compatible ASR server; the
+  # backend reaches it through the parakeet gateway in NIM mode: set on the `parakeet` service
+  #   PARAKEET_INFERENCE_MODE=nim, NIM_INFERENCE_URL=http://whisper:8000, NIM_LANGUAGE=auto
+  # (the gateway appends /v1/audio/transcriptions, so NIM_INFERENCE_URL must NOT include /v1; and no
+  # NeMo is loaded in NIM mode — main.py only starts the GPU worker when mode != nim). The
+  # Parakeet-NeMo path stays available for datacenter GPUs; pick one per ADR-0037's matrix.
+  whisper:
+    image: omi-oss-whisper:${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
+    build:
+      tags:
+        - omi-oss-whisper:latest
+      labels:
+        # Provenance without touching the Dockerfiles (three of the five are upstream):
+        # `docker inspect` on any image says which release it belongs to. Pass
+        # OMI_OSS_REVISION=$(git rev-parse HEAD) at build time to record the commit too.
+        omi.oss.release: ${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
+        org.opencontainers.image.version: ${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
+        org.opencontainers.image.revision: ${OMI_OSS_REVISION:-}
+      context: ../../backend/whisper
+      dockerfile: Dockerfile
+    profiles: ["inference"]
+    environment:
+      HF_HOME: /models/hf                 # model pre-provisioned into the volume (internal network = no egress)
+      # The comment above was the only thing saying so. These make it true by construction: a cache miss
+      # fails immediately rather than waiting out a DNS timeout to huggingface.co (ADR-0076).
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      WHISPER_MODEL: large-v3
+      WHISPER_COMPUTE_TYPE: int8_float16   # ~1.5GB on GPU; CTranslate2 mode validated on sm_120
+    healthcheck:
+      # /health reports ready only once large-v3 is resident (main.py loads eagerly at import), so the
+      # parakeet NIM gateway can gate on this and never forward before whisper can serve (cubic PR 10887
+      # compose.selfhost.yaml:207). Long start_period: model load on first boot.
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 60
+      start_period: 120s
+    volumes:
+      - inference-models:/models
+    # GPU via CDI — see the diarizer service note. CPU-only smoke: WHISPER_DEVICE=cpu + drop this stanza.
+    devices:
+      - "nvidia.com/gpu=all"
+    networks: [omi]
+    restart: unless-stopped
+
+  # On-prem OIDC issuer (ADR-0034/0038). Opt-in via the `auth` profile so the default baseline
+  # stays Firebase (ADR-0003). Keycloak is one OIDC provider; any compliant IdP works by pointing
+  # the backend's OIDC_ISSUER/OIDC_JWKS_URL and the app's OIDC_ISSUER at it.
+  #   docker compose --profile auth up -d
+  # TLS is mandatory for the deployed issuer (the mobile client refuses non-loopback http — see
+  # SELFHOST_NOTES §OIDC client). kc-proxy mounts ./certs:/certs and serves /certs/server.crt +
+  # /certs/server.key (kc-proxy.conf); generate them with `./gen-dev-certs.sh` (self-signed for testing)
+  # or drop your real cert at ./certs/server.{crt,key}, reachable at the hostname the DEVICE uses.
+  # Realm is imported from the committed example (realm `omi` + public PKCE client `omi-app`).
+  # Issuer consistency (proven live): the token `iss` = KC_HOSTNAME; the backend must validate that
+  # same value. Set KC_HOSTNAME to the device-reachable https URL, and give the backend a
+  # backchannel JWKS URL it can reach on the internal net:
+  #   backend.env: OIDC_ISSUER=${KC_HOSTNAME}/realms/omi
+  #                OIDC_JWKS_URL=http://keycloak:8090/realms/omi/protocol/openid-connect/certs
+  # `--hostname-backchannel-dynamic=true` lets that internal http backchannel coexist with the
+  # fixed public https hostname.
+  keycloak:
+    image: ${OMI_OSS_KEYCLOAK_IMAGE:?pin missing — see omi.oss.release.pins (ADR-0055)}
+    profiles: ["auth"]
+    command:
+      # Production mode with a PERSISTENT H2 dev-file DB on the keycloak-data volume, so realm state
+      # — including the imported omi-backend-admin service-account client — survives `down`/`up`.
+      # start-dev kept H2 under /opt/keycloak/data/h2 but, without a named volume, it was lost on
+      # recreate. dev-file H2 is enough for single-node on-prem; switch to --db=postgres + a DB
+      # service for HA. kc-proxy terminates TLS, so KC serves plain HTTP internally (--http-enabled).
+      - start
+      - --db=dev-file
+      - --http-enabled=true
+      - --http-port=8090
+      - --proxy-headers=xforwarded
+      - --hostname=${KC_HOSTNAME:-https://localhost:8443}
+      # false: backchannel endpoints (token/userinfo/jwks in the discovery doc) use KC_HOSTNAME too,
+      # not a value derived from the proxy's X-Forwarded-Port. With `true` the mobile OIDC client's
+      # token exchange went to the proxy's INTERNAL port instead of the public issuer port. The
+      # backend is unaffected — it validates tokens with an explicit internal OIDC_JWKS_URL, not the
+      # discovery doc.
+      - --hostname-backchannel-dynamic=false
+      - --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_ADMIN_USER:-admin}
+      # No silent default: an unset password never bootstraps a publicly-reachable Keycloak admin with a
+      # trivial admin/admin credential. We use ``:-`` (empty when unset), NOT ``:?`` — compose-spec
+      # interpolates the WHOLE merged config BEFORE profile filtering, so a mandatory ``:?`` here aborted
+      # `docker compose config`/`up` for EVERY posture, even those that never start keycloak (it is gated
+      # behind the `auth` profile) (cubic PR 10887 compose.selfhost.yaml:340). Safety is preserved by
+      # Keycloak itself: an empty KC_BOOTSTRAP_ADMIN_PASSWORD fails startup loudly ("bootstrap admin
+      # username available only when bootstrap admin password is set", verified), and only when the auth
+      # profile actually runs. Dev sets it in .env.dev; prod supplies a strong operator secret.
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD:-}
+    volumes:
+      # Persist H2 (realm + imported omi-backend-admin) across `down`/`up`. --import-realm seeds a
+      # FRESH volume from the imported realm; on an existing volume KC keeps the persisted realm (a
+      # changed realm JSON needs `down -v` to re-import).
+      #
+      # The realm JSON itself is mounted PER-ENVIRONMENT, not here (cubic review 4909186286 #5):
+      #   prod -> keycloak/omi-realm.example.json      (no test principals)
+      #   dev  -> keycloak/omi-realm.dev.example.json  (adds omi-test client + testuser)
+      # so the direct-access test client/user never reach a production realm. Two files cannot both
+      # declare realm "omi" in one import dir (collision), so exactly one is mounted per environment.
+      - keycloak-data:/opt/keycloak/data
+    # http-only behind kc-proxy; no published ports (the backend + the proxy reach it via
+    # `keycloak:8090` on the internal net). TLS is terminated by kc-proxy below.
+    networks: [omi]
+    restart: unless-stopped
+
+  # TLS-terminating reverse proxy in front of Keycloak (conf: keycloak/kc-proxy.conf). It publishes
+  # the public https issuer port; Keycloak stays http-only on the internal network. Point KC_HOSTNAME
+  # and the app/backend OIDC_ISSUER at this proxy's https URL.
+  kc-proxy:
+    image: ${OMI_OSS_NGINX_IMAGE:?pin missing — see omi.oss.release.pins (ADR-0055)}
+    profiles: ["auth"]
+    depends_on: [keycloak]
+    # 8443 is the conventional https port; override KC_HTTPS_PORT if it collides on the host
+    # (then set KC_HOSTNAME to the same port, e.g. https://<ip>:8453).
+    ports:
+      - "${KC_HTTPS_PORT:-8443}:8443"
+    volumes:
+      - ./keycloak/kc-proxy.conf:/etc/nginx/conf.d/default.conf:ro
+      # Only the server cert+key — never the whole ./certs (which holds ca.key). Least-privilege: a
+      # network-facing proxy must not be able to read the CA private key (cubic PR 10887 gen-dev-certs.sh:32).
+      - ./certs/server.crt:/certs/server.crt:ro
+      - ./certs/server.key:/certs/server.key:ro
+    networks: [omi, edge]
+    restart: unless-stopped
+
+volumes:
+  typesense-data:  # keyword index (rebuildable from the store, but a rebuild costs a full re-index)
+  mongo-data:
+  # Pre-provisioned inference model weights (HF cache + NLLB CTranslate2 dir). Populated
+  # out-of-band before first `--profile inference` run — the internal network has no egress.
+  inference-models:
+  # Qdrant vector-store persistence (self-hosted vector backend, ADR-0033; `chat` profile).
+  qdrant-storage:
+  # RustFS S3 objects (ADR-0032 PROD object store; `objstore` profile).
+  rustfs-data:
+  # Keycloak realm/H2 persistence incl. the imported omi-backend-admin client (`auth` profile).
+  keycloak-data:
+  # ntfy message cache (SQLite) so undelivered UnifiedPush notifications survive restart (`push` profile).
+  ntfy-cache:

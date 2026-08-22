@@ -32,6 +32,7 @@ from config.stt_provider_policy import (
 )
 from models.transcript_segment import TranscriptSegment
 from utils.byok import get_byok_key
+from utils.observability.fallback import record_fallback
 from utils.other.endpoints import timeit
 from utils.stt.outcomes import TranscriptionFailure
 from utils.stt.speaker_embedding import SPEAKER_MATCH_THRESHOLD, compare_embeddings, extract_embedding_from_bytes
@@ -116,7 +117,20 @@ def get_prerecorded_service(language: Optional[str] = 'en') -> Tuple[str, Option
     if provider_is_enabled(MODULATE_PROVIDER, STTServingSurface.PRERECORDED):
         return PrerecordedSTTService.MODULATE, 'multi', 'velma-2'
 
-    # Only reachable with every pre-recorded provider disabled, which no retry resolves.
+    # Only reachable with every pre-recorded provider disabled, which no retry resolves. Reachable on
+    # purpose under OMI_VENDOR_EGRESS=deny (ADR-0057, BACKLOG L40): a language the local provider cannot
+    # serve used to select Modulate, and the audio itself is what goes to a vendor. Failing closed is the
+    # right answer, but it must be a LOUD one — an operator sees "no transcript" and needs the reason.
+    from config.vendor_egress import vendor_egress_allowed
+
+    if not vendor_egress_allowed():
+        logger.error(
+            'prerecorded STT unavailable for language=%s: no local provider serves it and '
+            'OMI_VENDOR_EGRESS=deny withholds the vendor ones (set STT_PRERECORDED_MODEL, or allow egress)',
+            base_lang,
+        )
+    else:
+        logger.error('prerecorded STT unavailable for language=%s: every provider is disabled', base_lang)
     raise TranscriptionFailure(TranscriptionOutcome.CONFIG_ERROR, retryable=False)
 
 
@@ -988,6 +1002,16 @@ def _parakeet_assign_speaker_sync(
         return f'SPEAKER_{len(centroids) - 1:02d}'
     except Exception as e:
         logger.warning(f'Parakeet batch diarization failed, defaulting to SPEAKER_00: {e}')
+        # Every segment collapsing onto one label turns a conversation into a monologue. Worth counting:
+        # a diarizer whose model failed to load does this for EVERY conversation, silently (BACKLOG L20).
+        record_fallback(
+            component='speaker',
+            from_mode='diarization',
+            to_mode='single_speaker',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
         return 'SPEAKER_00'
 
 

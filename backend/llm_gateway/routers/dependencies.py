@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from functools import lru_cache
 
 from llm_gateway.gateway.config_loader import GatewayConfig, load_gateway_config
@@ -21,14 +23,18 @@ def get_provider_registry() -> ProviderRegistry:
     return ProviderRegistry(
         {
             'openai': OpenAICompatibleChatCompletionProvider(),
+            # The vendor URL is the DEFAULT, not the only option: the constructor already takes a
+            # base_url, and the openai provider already reads OPENAI_BASE_URL — these two were the only
+            # ones a self-hosted deployment could not point at its own endpoint (BACKLOG L4). Unset
+            # behaves exactly as before.
             'openrouter': OpenAICompatibleChatCompletionProvider(
                 api_key_env='OPENROUTER_API_KEY',
-                base_url='https://openrouter.ai/api/v1',
+                base_url=os.getenv('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1'),
                 default_headers={'X-Title': 'Omi Chat'},
             ),
             'perplexity': OpenAICompatibleChatCompletionProvider(
                 api_key_env='PERPLEXITY_API_KEY',
-                base_url='https://api.perplexity.ai',
+                base_url=os.getenv('PERPLEXITY_BASE_URL', 'https://api.perplexity.ai'),
             ),
             'gemini': VertexGeminiProvider(),
             'anthropic': AnthropicMessagesProvider(),

@@ -1,0 +1,32 @@
+# Kind cluster for the on-prem Helm dev/CI target (study: kubernetes-onprem-helm-kind-k0s §7).
+#
+# Declarative, reproducible cluster definition — created ONLY via this file, never ad-hoc
+# `kind create cluster` (same discipline as the compose stack): create with
+#   kind create cluster --config deploy/onprem/helm/kind-cluster.yaml
+# and tear down with
+#   kind delete cluster --name omi-dev
+#
+# Single control-plane node (untainted by Kind, so it schedules workloads) — enough to validate the
+# CORE chart (backend + valkey + mongo replica-set) with inference OFF. GPU/inference stays on k0s in
+# prod (§6.2): Kind runs nodes as containers, GPU passthrough is unofficial, and ADR-0035 makes
+# inference an external endpoint anyway.
+#
+# extraPortMappings expose the future edge (Gateway API / Ingress) on the host so the app/device can
+# reach the cluster the same way it reaches the compose `edge` network. The CORE smoke uses
+# `kubectl port-forward` and does not need them yet; they are here so the dev cluster is edge-ready
+# without an ad-hoc recreate when the ingress profile lands.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: omi-dev
+nodes:
+  - role: control-plane
+    # Pin the node image by digest (reproducibility, same discipline as the compose image pins). This is
+    # kind v0.24.0's default node (Kubernetes v1.31.2); bump it together with the kind binary version.
+    image: kindest/node:v1.31.2@sha256:18fbefc20a7113353c7b75b5c869d7145a6abd6269154825872dc59c1329912e
+    extraPortMappings:
+      - containerPort: 30080   # HTTP edge (Gateway/Ingress) -> host:8080
+        hostPort: 8080
+        protocol: TCP
+      - containerPort: 30443   # HTTPS edge (Gateway/Ingress) -> host:8443
+        hostPort: 8443
+        protocol: TCP

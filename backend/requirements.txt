@@ -231,3 +231,12 @@ pycountry==24.6.1
 langdetect==1.0.9
 lc3py==1.1.3; sys_platform == "linux" and platform_machine == "x86_64"
 twilio==9.5.0
+# On-prem selectable-backend runtime deps (ADR-0046/0032/0011). Lazily imported by their adapters
+# (mongo store / s3 object store / UnifiedPush webpush encryption), but must be present in the RUNTIME
+# image or the on-prem default (Mongo) crashes with ModuleNotFoundError — they were previously only in
+# Dockerfile.test (cubic PR 10887 reconcile_mongo_indexes.py:156). Regenerate pylock.runtime.toml
+# (scripts/update-python-lock.sh) after changing these.
+pymongo==4.10.1
+boto3==1.35.36
+botocore==1.35.36  # pin to boto3's matching release (cubic 10887): uv otherwise floats it to a newer, never-paired botocore
+http-ece==1.2.1

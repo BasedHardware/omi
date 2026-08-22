@@ -1241,25 +1241,16 @@ class TestEntrypoint:
             def document(self, path):
                 return Document(path)
 
-        class Index:
-            def delete(self, **kwargs):
-                calls.append(("delete", kwargs))
-                return {"deleted": 1}
+        class VectorStore:
+            # Neutral vector-store port stand-in (ADR-0033): delete-by-neutral-filter + upsert(records).
+            def delete_by_filter(self, namespace, filter):
+                calls.append(("delete", {"namespace": namespace, "filter": filter}))
 
-            def upsert(self, **kwargs):
-                calls.append(("upsert", kwargs))
-                return {"upserted": 1}
+            def upsert(self, namespace, records):
+                calls.append(("upsert", {"namespace": namespace, "records": records}))
+                return len(records)
 
-        class PineconeClient:
-            def __init__(self, api_key):
-                calls.append(("pinecone", api_key))
-
-            def Index(self, name):
-                calls.append(("index", name))
-                return Index()
-
-        class PineconeModule:
-            Pinecone = PineconeClient
+        store = VectorStore()
 
         class ClientModule:
             db = DB()
@@ -1272,21 +1263,30 @@ class TestEntrypoint:
         class LlmClientsModule:
             embeddings = Embeddings()
 
+        class VectorFactoryModule:
+            @staticmethod
+            def get_vector_store(env):
+                calls.append(("get_vector_store", env.get("VECTOR_STORE_BACKEND")))
+                return store
+
         def module_loader(name):
             calls.append(("import", name))
-            if name == "pinecone":
-                return PineconeModule
             if name == "database._client":
                 return ClientModule
             if name == "utils.llm.clients":
                 return LlmClientsModule
+            if name == "utils.vector.factory":
+                return VectorFactoryModule
             raise AssertionError(name)
 
+        # On-prem posture: Qdrant + an OpenAI-compatible local embeddings endpoint — no OPENAI_API_KEY,
+        # no PINECONE_*; the resolver must build the neutral store for the selected backend and route
+        # delete/upsert through it (no raw Pinecone client).
         deps = entrypoint.build_vector_repair_outbox_production_dependencies(
             {
-                "PINECONE_API_KEY": "pc-key",
-                "PINECONE_INDEX_NAME": "memory-index",
-                "OPENAI_API_KEY": "openai-key",
+                "VECTOR_STORE_BACKEND": "qdrant",
+                "QDRANT_URL": "http://qdrant:6333",
+                "OMI_EMBEDDINGS_BASE_URL": "http://ollama:11434/v1",
             },
             module_loader=module_loader,
         )
@@ -1295,16 +1295,16 @@ class TestEntrypoint:
         deps.vector_deleter({"vector_id": "vec1", "uid": "u1", "memory_id": "mem1"})
         deps.vector_repairer({"required_projection_commit_id": "projection-1"}, item)
 
-        assert ("pinecone", "pc-key") in calls
-        assert ("index", "memory-index") in calls
+        assert ("get_vector_store", "qdrant") in calls
+        assert not any(call[0] == "import" and call[1] == "pinecone" for call in calls)
         assert ("get", "users/u1/memory_items/mem1") in calls
         assert (
             calls.count(
                 (
                     "delete",
                     {
-                        "filter": build_canonical_memory_vector_delete_filter("u1", "mem1"),
                         "namespace": "ns2",
+                        "filter": build_canonical_memory_vector_delete_filter("u1", "mem1"),
                     },
                 )
             )

@@ -1,0 +1,393 @@
+# omi-oss — default values (= compose "base" posture: backend + valkey + mongo replica-set).
+# Overlays: values-dev.yaml (Kind) / values-prod.yaml + values-k0s.yaml (k0s). Feature profiles mirror
+# compose profiles and are OFF here; each guards its own templates with `{{- if .Values.<feature>.enabled }}`.
+
+# Registry prefix for the images WE build (backend + in-cluster inference). Empty = the image is present on
+# the node already (Kind: `kind load` + imagePullPolicy Never). Set to your registry host:port on a real
+# cluster (k0s) where the node pulls them, e.g. `--set imageRegistry=192.168.1.50:5000`. Public third-party
+# images (mongo/valkey/qdrant/…) are unaffected — the node always pulls those from their upstream registry.
+imageRegistry: ""
+
+# Pull secrets for a PRIVATE/authenticated registry (Harbor, GitLab, ECR, …). Empty = anonymous pull
+# (the default local registry needs none). To use an authenticated registry, pre-create a
+# `kubernetes.io/dockerconfigjson` Secret in the release namespace and name it here — it is attached to
+# EVERY pod the chart runs, so it covers our omi-oss-* images and any third-party images you mirror:
+#   kubectl -n <ns> create secret docker-registry regcred \
+#     --docker-server=<host:port> --docker-username=<user> --docker-password=<pw>
+#   helm install ... --set imagePullSecrets[0].name=regcred
+imagePullSecrets: []
+
+# Secrets: dev lets the chart build `backend-secret` from values. Prod sets create=false and supplies a
+# Secret named `backend-secret` out-of-band (External Secrets / Sealed Secrets / vault) — see A2.
+secrets:
+  create: true
+
+# NetworkPolicy air-gap posture (study §6.5): default-deny egress + targeted allows. OFF by default; needs
+# a policy-enforcing CNI (Calico/Cilium on k0s — kindnet on Kind does NOT enforce it).
+networkPolicy:
+  enabled: false
+
+# Optional storage class for every PVC (empty = the cluster default; Kind uses local-path). Set on k0s.
+storageClassName: ""
+
+backend:
+  # Repository + tag are separate so the tag can default to the release (Chart.AppVersion, ADR-0054)
+  # instead of being welded into the string. Empty tag = use the release; the dev overlay sets `latest`.
+  image:
+    repository: omi-oss-backend
+    tag: ""
+  # Kind loads images with `kind load docker-image` (no registry, study §4.3) — Never avoids any pull.
+  imagePullPolicy: Never
+  replicas: 1
+  # Canonical memory intake. `false` is a legitimate choice, but it must be a CHOSEN one: with the
+  # variable unset the code defaults to off and every memory write answers 503 with readiness green.
+  # `true` requires the memory-maintenance CronJob (scheduledJobs.memoryMaintenance) so the outbox
+  # drains, and wants an LLM endpoint for the consolidation step (it degrades, not fails, without one).
+  memory:
+    # HELD at false pending a decision (BACKLOG L33/L37): `true` is wanted, but the canonical memory
+    # outbox's "projection" event IS the Typesense keyword index, and with no Typesense deployed every
+    # projection_sync stays retryable_failure forever — one permanently stuck event per memory written.
+    enabled: false
+    # Signs the memory-list keyset cursor: `openssl rand -hex 32`. Required when enabled — see the
+    # Secret template for what breaks without it.
+    cursorSecret: ""
+  service:
+    port: 8080
+  # Bearer token for GET /metrics, on the backend AND the llm-gateway (two processes, same check).
+  # Empty = the endpoint answers 401 to everyone, which is upstream's default — and which makes
+  # `omi_fallback_total` unreachable, so every fallback this fork records (vendor_egress, vector_store,
+  # object_store, stt_selection) lives only in the log (BACKLOG L43). `openssl rand -hex 32` to read them.
+  # Scrape:  curl -H "Authorization: Bearer <this>" http://<pod>:8080/metrics
+  metricsSecret: ""
+  # ENCRYPTION_SECRET lives in a Secret; the dev overlay sets a throwaway value, prod injects a real one.
+  encryptionSecret: ""
+  # Plain (non-secret) backend env — the Helm mirror of backend.env.base. MONGO_URI/REDIS host are
+  # derived from the in-cluster service names by the configmap template, not set here.
+  env:
+    # `selfhost` = a real deployment, not a developer's machine (ADR-0058). NOT "offline"/air-gapped:
+    # the network is bridged and the operator's LLM endpoint is expected to be reachable. `prod` would
+    # demand Google Cloud Tasks at startup; `dev`/`local` would enable a fallback to api.openai.com.
+    # PROVIDER_MODE is intentionally absent — upstream uses it for "fake providers".
+    OMI_ENV_STAGE: selfhost
+    # Egress toward a third-party VENDOR (ADR-0057). The code default is `allow`, so a self-hosted stack
+    # that says nothing permits it by omission — hence declared here. Governs three surfaces: Hume prosody,
+    # LangSmith tracing, and the GitHub release/docs fetches. It does NOT govern the operator's own
+    # inference endpoint (ADR-0035), image/model provisioning (ADR-0048), or push (ADR-0011, own flag).
+    # All three degrade and record component=vendor_egress; an unknown value fails closed.
+    OMI_VENDOR_EGRESS: deny
+    STORAGE_BACKEND: mongo
+    FIREBASE_PROJECT_ID: demo-omi-local
+    FIREBASE_AUTH_PROJECT_ID: demo-omi-local
+    GOOGLE_CLOUD_PROJECT: demo-omi-local
+    REDIS_DB_HOST: valkey
+    REDIS_DB_PORT: "6379"
+    CORS_ALLOWED_ORIGINS: ""
+  resources: {}
+
+valkey:
+  image: valkey/valkey:8-alpine@sha256:e0eb7c480958d32bdc4357a74bdd70653ae15f2f9b4c93c4a5a9fad1dc471c84
+  # Public image: the node pulls it once from the registry. (Only the locally-built backend image, which
+  # is on no registry, needs `kind load` + Never.) For a fully air-gapped node, pre-seed a local registry.
+  imagePullPolicy: IfNotPresent
+  # Durable, NOT pure cache (username ownership / webhook / subscription state) — AOF + a PVC, same
+  # reason as compose.base.yaml.
+  storage: 1Gi
+  resources: {}
+
+mongo:
+  image: mongo:7@sha256:b6421fd6d1c5ded6377b397d8983e2f82e2100dc5123332dcfda2065a472be5b
+  # Public image: pulled by the node (see valkey note). backend stays Never (local-only image).
+  imagePullPolicy: IfNotPresent
+  replicaSetName: rs0
+  # Stable identity via StatefulSet + PVC so the single-member replica set survives pod restarts (§6.1).
+  storage: 2Gi
+  resources: {}
+
+# Public identity of the API itself, for the URLs we PUBLISH to clients (today the MCP
+# protected-resource document). Leave EMPTY to derive it from the pinned LoadBalancer IP, like
+# auth.hostname; set it when the API answers on a different name than the auth host.
+api:
+  hostname: ""
+
+# Feature profiles (compose parity) — OFF for the core milestone. Enabling them lands with their
+# templates in later steps (auth=Keycloak, chat=Qdrant, objstore=RustFS, push=ntfy, inference=GPU/k0s).
+auth:
+  enabled: false
+  # Public HTTPS issuer base (the Gateway's HTTPS host) — the token `iss` is this + /realms/omi. Leave EMPTY
+  # to derive it from the pinned LoadBalancer IP (https://<ingress.loadBalancerIP>), so a single value fixes
+  # the issuer + TLS SAN (k0s). Set it explicitly for a hostname/port that isn't the LB IP (e.g. Kind: https://localhost:8443).
+  hostname: ""
+  audience: omi-backend
+  adminUser: admin
+  # Keycloak bootstrap admin password — set per environment (dev overlay uses a throwaway value).
+  adminPassword: ""
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0@sha256:09a381c715ab0b111835b70f2905955274843a219c6f27efb348e4d9f4086858
+    imagePullPolicy: IfNotPresent
+    storage: 1Gi
+    resources: {}
+    # Backing DB: "dev-file" (single-node H2, simple) or "postgres" (production-grade, B5). With postgres
+    # a keycloak-postgres StatefulSet is created and Keycloak runs --db=postgres.
+    db: dev-file
+    postgres:
+      image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+      storage: 2Gi
+      password: ""   # required when db=postgres (dev overlay sets a throwaway value)
+# Scheduled work (ADR-0062). Upstream runs exactly two periodic jobs, both HOURLY, as Cloud Run Jobs
+# driven by Cloud Scheduler. This chart ran none, so two product surfaces were absent: the daily
+# summary (a PERSISTED document — /v1/users/daily-summaries stayed empty forever, not merely a push
+# missed) and the canonical memory outbox drain (a written memory never got its projection or vector).
+# One CronJob per job, same image as the backend with a different command.
+scheduledJobs:
+  notifications:
+    # Daily notifications + the daily summary, plus a weekly read-only health verdict and the X
+    # connector sync (both self-gating). Inert when the push transport is `disabled`, which is why it
+    # is safe to have on by default: the cost of it being off is a missing product feature.
+    enabled: true
+    schedule: "0 * * * *"
+    resources: {}
+  conversationSearchIndex:
+    # The writer for the Typesense `conversations` collection (ADR-0064) — ours, because upstream fills it
+    # from a pipeline that is not in the codebase. Needs search.enabled; without Typesense the job refuses.
+    # Every 5 minutes, not hourly: search freshness is user-visible. The pass is a bounded full reconcile.
+    enabled: false
+    schedule: "*/5 * * * *"
+    resources: {}
+  memoryMaintenance:
+    # Drains the canonical memory outbox (projections + vectors), consolidates ("dreaming" — wants an
+    # LLM endpoint; without one it degrades with a recorded fallback), audits short-term TTL and drains
+    # the recurrence inbox. Pointless unless MEMORY_ENABLED=on, which backend-configmap sets from
+    # backend.memory.enabled — keep the two together, and both are HELD at false pending L33/L37.
+    enabled: false
+    schedule: "0 * * * *"
+    resources: {}
+
+chat:
+  # Brings up the vector store (Qdrant) AND, with llmGateway below, the on-prem chat LLM path — the
+  # compose parity that used to be missing here. The backend only ever emits `omi:auto:<feature>` lane
+  # ids; the gateway is what resolves a lane to a concrete model, so without it the backend falls back
+  # to its built-in CLOUD model table (gpt-*, gemini via Vertex, openrouter, perplexity — and three of
+  # those have no base-URL override at all). The LLM itself stays the operator's (ADR-0035): the
+  # gateway forwards to inference.openai.baseUrl.
+  enabled: false
+  # Embedding dimension — MUST match the operator's embeddings model (compose default 1024, e.g. bge-m3).
+  vectorDim: 1024
+  llmGateway:
+    # The chat completion path. Needs inference.openai.baseUrl (the operator's OpenAI-compatible
+    # endpoint) and chat.llmGateway.serviceToken. Off by default like every other profile switch.
+    enabled: false
+    # The single model your endpoint serves, by its /v1/chat/completions name. Every feature lane is
+    # pinned to it — the on-prem posture is one local model, not a per-feature vendor mix.
+    model: "qwen2.5:14b"
+    # Shared secret between backend and gateway. A mismatch is a 401 on every chat turn, which the
+    # user sees as a canned apology rather than an error: generate one and set it here.
+    #   openssl rand -hex 24
+    serviceToken: ""
+    # The feature lanes are NOT declared here. They live in ONE place —
+    # deploy/onprem/helm/omi-oss/files/generated_route_overrides.yaml — which compose bind-mounts and this
+    # chart renders with `.Files.Get` (ADR-0081), together with each lane's request_timeout_ms.
+    #
+    # They WERE declared here, as `features:` + `requestTimeoutMsByFeature:`, next to a comment asking for
+    # them to be kept in step with the compose file. They were not: this list held FOUR entries until
+    # 2026-08-21 while the compose file held 44. Measured on the live k0s release, 41 of 45 lanes did not
+    # serve (33 x 400 provider_invalid_request from a CLOUD model name our endpoint does not serve, 8 x 503
+    # invalid_config from a vendor provider with no credentials). Only app_generator/chat_agent/
+    # chat_extraction/chat_graph worked, which is why the chat E2E passed while memories, daily summaries,
+    # notifications and translation did not. To add or remove a lane, edit that file.
+    resources: {}
+  qdrant:
+    image: qdrant/qdrant@sha256:057ee3a8da769fe7310dd3537b4dc7583bf87a95ce8ac43c0af5a46bc580d1fc  # 1.19.0
+    imagePullPolicy: IfNotPresent
+    storage: 2Gi
+    resources: {}
+# Keyword search (ADR-0063). Mirrors compose's `search` profile. Two consumers, NOT symmetric: the
+# memory keyword index is written by the backend itself (so this makes it work end to end), while the
+# `conversations` collection is READ ONLY here — upstream feeds it from a pipeline that is not in the
+# codebase, so enabling this does not restore conversation search (BACKLOG L37).
+# Required by memory intake: the canonical memory outbox's "projection" IS this index, so with
+# backend.memory.enabled and no Typesense every projection_sync stays retryable_failure forever.
+# NOTE: Typesense keeps its indices in RAM; size `resources` for the expected corpus.
+search:
+  enabled: false
+  typesense:
+    # Mirrors OMI_OSS_TYPESENSE_IMAGE in deploy/onprem/omi.oss.release.pins (ADR-0055).
+    image: typesense/typesense:27.1@sha256:5c12af89130b8ee0be11541321ba8a3a7c7a538d7c6cd95e0409dc2d75ca6455
+    imagePullPolicy: IfNotPresent
+    storage: 5Gi
+    resources: {}
+  # Shared by the Typesense server and its clients (the backend and the memory-maintenance CronJob).
+  # `openssl rand -hex 24`. Required when enabled.
+  apiKey: ""
+
+objstore:
+  enabled: false
+  rustfs:
+    image: rustfs/rustfs:1.0.0-beta.12@sha256:41fe89380f4120a337790c02af192c3fe7bb55c3edc2e6e9357b487b47c6ab21
+    imagePullPolicy: IfNotPresent
+    storage: 5Gi
+    resources: {}
+  # S3 client image for the bucket-provisioning Job (pinned by digest, like the others).
+  mcImage: minio/mc:latest@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
+  # S3 credentials, shared by the RustFS server and the backend client. Set per environment; dev
+  # overlay uses throwaway values.
+  accessKey: ""
+  secretKey: ""
+  # Public base for object URLs — the s3 adapter requires it (no fallback). Dev = the internal endpoint
+  # (public URLs aren't exercised in-cluster yet; the ingress phase gives it a real host).
+  publicEndpoint: "http://rustfs:9000"
+  # Buckets to provision, keyed by the BUCKET_<KEY> env-var suffix the backend reads.
+  buckets:
+    SPEECH_PROFILES: speech-profiles
+    POSTPROCESSING: postprocessing
+    PRIVATE_CLOUD_SYNC: private-cloud-sync
+    TEMPORAL_SYNC_LOCAL: sync-temporal
+    MEMORIES_RECORDINGS: memories-recordings
+    APP_THUMBNAILS: app-thumbnails
+    CHAT_FILES: chat-files
+    DESKTOP_UPDATES: desktop-updates
+    PLUGINS_LOGOS: plugins-logos
+push:
+  enabled: false
+  # Device-facing public URL (used by the phone's UnifiedPush distributor). Internal-only until the
+  # ingress/TLS phase gives ntfy a real host; the backend reaches ntfy via http://ntfy:80 regardless.
+  baseUrl: "http://ntfy"
+  ntfy:
+    image: binwiederhier/ntfy:v2.11.0@sha256:4a7d0f0adc6d5d9fc36e64ab55ef676e76e124a2bdd50ce115b6d9c1c7430294
+    imagePullPolicy: IfNotPresent
+    storage: 1Gi
+    resources: {}
+inference:
+  # LLM + embeddings via an EXTERNAL OpenAI-compatible endpoint, OUTSIDE the cluster (ADR-0035) — NOT
+  # in-cluster GPU pods (GPU on Kind is fragile; that stays a k0s concern). The operator points these at
+  # their own OpenAI/vLLM/Ollama/TEI endpoint. Empty values are simply not rendered.
+  enabled: false
+  openai:
+    baseUrl: ""   # e.g. https://api.openai.com/v1  OR  an operator vLLM/Ollama /v1 endpoint
+    apiKey: ""
+  embeddings:
+    baseUrl: ""   # OpenAI-compatible embeddings endpoint; dim MUST equal chat.vectorDim
+    model: ""     # e.g. bge-m3
+    apiKey: ""
+  # On-prem inference IN-CLUSTER on GPU (the on-prem default in prod): STT (whisper + parakeet gateway),
+  # speaker diarization, and translation (nllb) run as pods in the cluster; only the LLM (openai, above)
+  # and embeddings stay external. One generic Deployment+Service per entry (templates/inference-incluster.yaml);
+  # each entry's `backendEnv` auto-wires the backend to its Service. GPU services request `nvidia.com/gpu`
+  # units — on a single card, time-slice them (nvidia-device-plugin-k0s.yaml advertises several units).
+  # OFF here (Kind's GPU is fragile); values-k0s.yaml turns it ON for prod.
+  inCluster:
+    enabled: false
+    # Model weights: portable, on a PVC (NOT a hostPath) — mounted read-only into every inference pod, so it
+    # works on ANY Kubernetes including multi-node. The chart creates the PVC unless you point at your own.
+    models:
+      existingClaim: ""              # use a PVC you already created + populated; else the chart creates one
+      storageClassName: ""           # empty = the chart's storageClassName / cluster default
+      size: 40Gi
+      accessModes: ["ReadWriteOnce"] # multi-node (inference pods on different nodes): ["ReadOnlyMany"] + an RWX/ROX class
+      # One-time Job that DOWNLOADS the weights into the PVC (internet + a HF token for the gated pyannote
+      # model). Leave off if you populate the PVC yourself. Uses the inference images on CPU (no GPU needed).
+      provision:
+        enabled: false
+        huggingFaceToken: ""
+    nodeSelector: {}   # pin GPU pods to the GPU node(s) on a multi-node cluster
+    services:
+      # STT engine (faster-whisper, 99 languages) — GPU. Reached by the parakeet gateway, not the backend.
+      whisper:
+        enabled: true
+        image:
+          repository: omi-oss-whisper
+          tag: ""      # empty = the release (Chart.AppVersion)
+        port: 8000
+        gpu: 1
+        healthPath: /health
+        env:
+          HF_HOME: /models/hf
+          # Provisioning is the Job (inference-models-provision-job.yaml), never the runtime: offline makes
+          # a cache miss immediate and unambiguous instead of a huggingface.co timeout (ADR-0076).
+          HF_HUB_OFFLINE: "1"
+          TRANSFORMERS_OFFLINE: "1"
+          WHISPER_MODEL: large-v3
+          WHISPER_COMPUTE_TYPE: int8_float16
+      # STT gateway (NIM mode) — CPU only: keeps the Parakeet protocol the backend speaks and forwards
+      # transcription to whisper. This is what the backend calls for STT.
+      parakeet:
+        enabled: true
+        image:
+          repository: omi-oss-parakeet
+          tag: ""      # empty = the release (Chart.AppVersion)
+        port: 8080
+        env:
+          # stream_handler.py fetches the Silero VAD with `torch.hub.load` — a github clone at RUNTIME the
+          # first time a stream needs it. Give the cache a home on the models volume and declare offline:
+          # a failed load means every chunk counts as speech (no silence endpointing), and until ADR-0076
+          # that was a warning nobody saw. `parakeet_vad_unavailable_total` counts it now.
+          TORCH_HOME: /models/torch
+          HF_HOME: /models/hf
+          HF_HUB_OFFLINE: "1"
+          TRANSFORMERS_OFFLINE: "1"
+          PARAKEET_INFERENCE_MODE: nim
+          NIM_INFERENCE_URL: http://whisper:8000
+          NIM_LANGUAGE: auto
+          # Required by the stream admission controller even in NIM mode (parsed before the mode branch).
+          PARAKEET_STREAM_CAPACITY: "1"
+          PARAKEET_STREAM_ALLOCATION_PERCENT: "0"
+        backendEnv:
+          HOSTED_PARAKEET_API_URL: http://parakeet:8080
+          STT_SERVICE_MODELS: parakeet
+          # Pre-recorded has its OWN preference variable, and it was missing here: unset, the policy default
+          # is `parakeet, modulate-velma-2`, so a language Parakeet does not serve selected the vendor
+          # (BACKLOG L40). OMI_VENDOR_EGRESS=deny refuses it now, but the preference belongs in the file too.
+          STT_PRERECORDED_MODEL: parakeet
+      # Speaker diarization / embeddings — GPU.
+      diarizer:
+        enabled: true
+        image:
+          repository: omi-oss-diarizer
+          tag: ""      # empty = the release (Chart.AppVersion)
+        port: 8080
+        gpu: 1
+        env:
+          # Use the pyannote model cached in the models volume (the repo is gated on HF — no runtime download).
+          HF_HOME: /models/hf
+          # `Model.from_pretrained` runs at MODULE level here, so a missing cache is a pod that never
+          # starts. Offline makes that immediate rather than a timeout at import (ADR-0076).
+          HF_HUB_OFFLINE: "1"
+          TRANSFORMERS_OFFLINE: "1"
+        backendEnv:
+          HOSTED_SPEAKER_EMBEDDING_API_URL: http://diarizer:8080
+      # Translation (NLLB, CTranslate2) — GPU.
+      nllb:
+        enabled: true
+        image:
+          repository: omi-oss-nllb
+          tag: ""      # empty = the release (Chart.AppVersion)
+        port: 8080
+        gpu: 1
+        env:
+          NLLB_MODEL_DIR: /models/nllb-200-distilled-600M-ct2-int8
+        backendEnv:
+          HOSTED_TRANSLATION_API_URL: http://nllb:8080
+          TRANSLATION_SERVICE_MODELS: nllb
+
+# Edge ingress. Default type "gateway" = Gateway API via Envoy Gateway (ADR-0049 Q3): the modern
+# replacement for the compose TLS reverse-proxies. Envoy Gateway itself is a cluster-level prerequisite
+# (installed separately); this chart provides the GatewayClass/Gateway/HTTPRoute. The classic Ingress
+# path (type "ingress") is a later fallback.
+ingress:
+  enabled: false
+  type: gateway
+  gatewayClassName: omi-envoy
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+  # Envoy proxy Service exposure: NodePort (plain Kind + host port-mappings) or LoadBalancer (MetalLB on
+  # Kind/bare-metal, or a cloud LB). LoadBalancer ignores the nodePort pins below.
+  service:
+    type: NodePort
+  # When service.type=LoadBalancer, request a specific IP (MetalLB metallb.io/loadBalancerIPs). Empty =
+  # let the LB assign one. Pinning lets the OIDC issuer host + TLS SAN be fixed before install.
+  loadBalancerIP: ""
+  # The Envoy proxy Service is exposed as NodePort; kind-cluster.yaml maps containerPort 30080 -> host
+  # 8080 (and 30443 -> 8443), so `curl http://localhost:8080` reaches the gateway. On k0s/bare-metal use
+  # MetalLB + a LoadBalancer instead (later phase).
+  httpNodePort: 30080
+  # HTTPS edge (used when auth.enabled): nodePort mapped by kind-cluster.yaml to host 8443.
+  httpsNodePort: 30443
+  tlsSecretName: omi-tls

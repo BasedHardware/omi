@@ -1,0 +1,41 @@
+{{- if .Values.networkPolicy.enabled }}
+# Air-gap posture (study §6.5): deny the backend all egress except in-cluster DNS and the on-prem data
+# services. This is the K8s equivalent of compose's dropped `internal: true` — data sovereignty enforced
+# at the network layer, not just by config.
+#
+# NOTE: needs a policy-enforcing CNI (Calico/Cilium on k0s). Kind's default kindnet does NOT enforce
+# NetworkPolicy, so on Kind this renders but is a no-op.
+# NOTE: incompatible with EXTERNAL inference (ADR-0035) — an air-gapped backend cannot reach an outside
+# OpenAI endpoint. Run inference in-cluster (k0s GPU) or leave it off when networkPolicy.enabled.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend-egress
+  labels:
+    {{- include "omi-oss.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: backend
+  policyTypes: [Egress]
+  egress:
+    # DNS (kube-dns) — resolve the in-cluster service names.
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # The on-prem data services in this namespace (mongo/valkey + the enabled profiles).
+    - to:
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/component
+                operator: In
+                # llm-gateway was missing: with this policy on, the backend could not reach the
+                # in-cluster gateway, so every chat turn came back as the canned apology. Dormant only
+                # because the policy is off by default (BACKLOG L36).
+                values: ["mongo", "valkey", "qdrant", "rustfs", "ntfy", "keycloak", "llm-gateway", "typesense"]
+{{- end }}

@@ -1,0 +1,77 @@
+# Production overlay (k0s / bare-metal). NOT for Kind. Pairs with the phase-B work in the K8s roadmap
+# (docs/BACKLOG): a real storage class, MetalLB for the L4 LoadBalancer, real-SAN TLS, Keycloak on
+# Postgres. Rendered/validated with `helm template -f values-prod.yaml`; installed on a real k0s cluster.
+
+# Secrets come from outside the chart (External Secrets Operator / Sealed Secrets / a vault): provide a
+# Secret named "backend-secret" with ENCRYPTION_SECRET + the per-profile keys the enabled profiles need.
+secrets:
+  create: false
+
+# Air-gap posture at the network layer (needs a policy-enforcing CNI: Calico/Cilium). Incompatible with
+# EXTERNAL inference — on an air-gapped prod, run inference in-cluster (k0s GPU) or leave it off.
+networkPolicy:
+  enabled: true
+
+# The cluster's durable storage class. The chart is provisioner-agnostic — it only sets storageClassName
+# + the PVC size; the provisioner is a cluster prerequisite the operator installs (like Envoy Gateway).
+# Reference example uses OpenEBS on both Kind and k0s (e.g. "openebs-hostpath" for local PV, or a
+# replicated OpenEBS class); set whatever your cluster provides.
+storageClassName: "openebs-hostpath"
+
+backend:
+  imagePullPolicy: IfNotPresent
+  replicas: 2
+  resources:
+    requests: { cpu: "500m", memory: "1Gi" }
+    limits: { memory: "2Gi" }
+
+mongo:
+  imagePullPolicy: IfNotPresent
+  storage: 20Gi
+  resources:
+    requests: { cpu: "500m", memory: "1Gi" }
+
+valkey:
+  imagePullPolicy: IfNotPresent
+  storage: 5Gi
+
+# Edge: on bare-metal the Envoy proxy Service should be a MetalLB LoadBalancer (phase B3); the Kind
+# NodePort pins are irrelevant there. Keep the Gateway API surface (Envoy Gateway) unchanged.
+ingress:
+  enabled: true
+  type: gateway
+
+# Real OIDC issuer host — the TLS cert (omi-tls Secret) SAN MUST match. gen-certs.sh with the real host:
+#   ./gen-certs.sh <ns> omi-tls kc.omi.example
+auth:
+  enabled: true
+  hostname: "https://kc.omi.example"
+
+chat:
+  enabled: true
+  qdrant:
+    imagePullPolicy: IfNotPresent
+    storage: 20Gi
+
+objstore:
+  enabled: true
+  publicEndpoint: "https://files.omi.example"
+  rustfs:
+    imagePullPolicy: IfNotPresent
+    storage: 100Gi
+
+push:
+  enabled: true
+  baseUrl: "https://ntfy.omi.example"
+  ntfy:
+    imagePullPolicy: IfNotPresent
+
+# Inference: operator-provided external OpenAI-compatible endpoint (ADR-0035). Keys via the external
+# Secret. Turn OFF (or run in-cluster) if networkPolicy.enabled air-gaps the backend.
+inference:
+  enabled: true
+  openai:
+    baseUrl: "https://llm.omi.example/v1"
+  embeddings:
+    baseUrl: "https://llm.omi.example/v1"
+    model: "bge-m3"

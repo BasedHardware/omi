@@ -25,6 +25,10 @@ MODULATE_PROVIDER: Final = 'modulate'
 PARAKEET_PROVIDER: Final = 'parakeet'
 
 DEEPGRAM_PROVIDERS: Final[tuple[str, ...]] = (DEEPGRAM_CLOUD_PROVIDER, DEEPGRAM_SELF_HOSTED_PROVIDER)
+
+# Providers served by a third party, i.e. the ones that receive the conversation audio at somebody else's
+# address. Self-hosted Deepgram and Parakeet are the operator's own services and are absent on purpose.
+VENDOR_PROVIDERS: Final[tuple[str, ...]] = (DEEPGRAM_CLOUD_PROVIDER, MODULATE_PROVIDER)
 DEEPGRAM_MODEL_TOKENS: Final[frozenset[str]] = frozenset({'deepgram', 'nova-2', 'nova-3', 'dg-nova-2', 'dg-nova-3'})
 
 # Velma-2 is the live fallback for every language we can safely send to its
@@ -232,7 +236,23 @@ def deepgram_provider_for_runtime(self_hosted: bool) -> str:
 
 
 def provider_is_enabled(provider: str, surface: STTServingSurface) -> bool:
-    """Return whether a provider may serve the specified product surface."""
+    """Return whether a provider may serve the specified product surface.
+
+    A VENDOR provider additionally requires vendor egress to be permitted (ADR-0057, BACKLOG L40). What
+    an STT provider receives is the conversation audio itself — a public URL to it, or the bytes — so a
+    deployment that declares ``OMI_VENDOR_EGRESS=deny`` must not be able to select one, not even as the
+    fallback under an ordered preference list. This is the seam because it is the question every selector
+    and every mid-session fallback predicate already asks; gating here is one guard surface instead of an
+    exception at each call site.
+
+    ``deepgram_self_hosted`` is deliberately NOT a vendor: it is the operator's own endpoint (ADR-0035),
+    and ``_require_self_hosted_deepgram_endpoint`` already refuses to let it point at api.deepgram.com.
+    """
+    if provider in VENDOR_PROVIDERS:
+        from config.vendor_egress import vendor_egress_allowed
+
+        if not vendor_egress_allowed():
+            return False
     return surface in PROVIDER_SERVING_SURFACES.get(provider, frozenset())
 
 

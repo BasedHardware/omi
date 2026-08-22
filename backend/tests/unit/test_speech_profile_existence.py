@@ -9,34 +9,43 @@ users with older, actively-used profiles to be re-prompted to
 
 import inspect
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from utils.other import storage as storage_mod
+from tests.object_store_fakes import FakeObjectStore
 
 
 class TestGetUserHasSpeechProfile:
-    def _bucket_with_blob(self, exists: bool):
-        blob = MagicMock()
-        blob.exists.return_value = exists
-        bucket = MagicMock()
-        bucket.blob.return_value = blob
-        return bucket, blob
+    """get_user_has_speech_profile now checks existence through the neutral object-store port
+    (_object_store().exists on _speech_profiles_bucket_name()), not a raw GCS bucket.blob().exists."""
+
+    _BUCKET = "speech-profiles"
+
+    def _store_with(self, exists: bool):
+        store = FakeObjectStore()
+        if exists:
+            store.put(self._BUCKET, "uid1/speech_profile.wav", b"x")
+        return store
 
     def test_existing_profile_counts_regardless_of_age(self):
         """An existing profile is reported as present — no age cutoff (#5128)."""
-        bucket, blob = self._bucket_with_blob(exists=True)
-        with patch.object(storage_mod, "_get_speech_profiles_bucket", return_value=bucket):
+        store = self._store_with(exists=True)
+        with (
+            patch.object(storage_mod, "_speech_profiles_bucket_name", return_value=self._BUCKET),
+            patch.object(storage_mod, "_object_store", return_value=store),
+        ):
             assert storage_mod.get_user_has_speech_profile("uid1") is True
-        # No metadata fetch for age checks — the old expiry code called blob.reload()
-        blob.reload.assert_not_called()
 
     def test_missing_profile(self):
-        bucket, _ = self._bucket_with_blob(exists=False)
-        with patch.object(storage_mod, "_get_speech_profiles_bucket", return_value=bucket):
+        store = self._store_with(exists=False)
+        with (
+            patch.object(storage_mod, "_speech_profiles_bucket_name", return_value=self._BUCKET),
+            patch.object(storage_mod, "_object_store", return_value=store),
+        ):
             assert storage_mod.get_user_has_speech_profile("uid1") is False
 
     def test_missing_bucket(self):
-        with patch.object(storage_mod, "_get_speech_profiles_bucket", return_value=None):
+        with patch.object(storage_mod, "_speech_profiles_bucket_name", return_value=None):
             assert storage_mod.get_user_has_speech_profile("uid1") is False
 
     def test_no_age_parameter_in_signature(self):

@@ -35,10 +35,10 @@ from utils.other.storage import (
     delete_conversation_audio_files,
     enqueue_conversation_artifact_build,
     list_audio_chunks,
-    _get_storage_client,
     private_cloud_sync_bucket,
     _get_extension_for_path,
 )
+from utils.object_store import get_object_store
 import logging
 
 logger = logging.getLogger(__name__)
@@ -520,7 +520,7 @@ def _copy_audio_chunks_for_merge(
     Returns:
         List of AudioFile objects
     """
-    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
+    store = get_object_store()
     has_chunks = False
 
     for conv in conversations:
@@ -538,8 +538,7 @@ def _copy_audio_chunks_for_merge(
             # Preserve original filename (handles both single and batch blob naming)
             original_filename = chunk["path"].split("/")[-1]
             new_path = f"chunks/{uid}/{new_conversation_id}/{original_filename}"
-            source_blob = bucket.blob(chunk["path"])
-            bucket.copy_blob(source_blob, bucket, new_path)
+            store.copy(private_cloud_sync_bucket, chunk["path"], private_cloud_sync_bucket, new_path)
 
     # Create AudioFile records from copied chunks
     if has_chunks:

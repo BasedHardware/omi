@@ -1886,6 +1886,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get signInWithGoogle => 'Google உடன் உள்நுழையவும்';
 
   @override
+  String get signInWithSSO => 'SSO உடன் உள்நுழையவும்';
+
+  @override
   String get byContinuingAgree => 'தொடர்ந்து செல்வதன் மூலம், நீங்கள் எங்கள் ';
 
   @override

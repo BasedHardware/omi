@@ -1,0 +1,86 @@
+{{- if .Values.search.enabled }}
+# Keyword search (ADR-0063), the on-prem half of upstream's Typesense dependency. Two consumers, and
+# they are NOT symmetric:
+#   * memory atoms  — the backend CREATES the collection and UPSERTS documents itself
+#     (utils/memory/atom_keyword_index.py). It is also what the canonical memory outbox calls its
+#     "projection": without Typesense every projection_sync event stays retryable_failure forever.
+#   * conversations — READ ONLY here. The only reference to that collection in the whole repo is a
+#     search(); upstream feeds it from a Firestore -> Typesense pipeline that is not in the codebase.
+#     So this does NOT restore conversation search — that needs an indexer of ours (BACKLOG L37).
+# Version = the one upstream's own dev harness pins, so we run what they develop against.
+# NOTE: Typesense keeps its indices in RAM; size requests/limits for the expected corpus.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: typesense
+  labels:
+    {{- include "omi-oss.labels" . | nindent 4 }}
+    app.kubernetes.io/component: typesense
+spec:
+  serviceName: typesense
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: typesense
+  template:
+    metadata:
+      labels:
+        {{- include "omi-oss.labels" . | nindent 8 }}
+        app.kubernetes.io/component: typesense
+    spec:
+      {{- with $.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: typesense
+          image: {{ .Values.search.typesense.image }}
+          imagePullPolicy: {{ .Values.search.typesense.imagePullPolicy }}
+          # The API key is read from the Secret rather than passed as an argv flag: `--api-key` would
+          # show the secret in `kubectl describe pod` and in every process listing in the container.
+          env:
+            - name: TYPESENSE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secret
+                  key: TYPESENSE_API_KEY
+          args:
+            - --data-dir=/data
+            - --enable-cors
+          ports:
+            - name: http
+              containerPort: 8108
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          # /health needs no API key and reports {"ok":true} only once the store is loaded.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 5
+          {{- with .Values.search.typesense.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- with .Values.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.search.typesense.storage }}
+{{- end }}

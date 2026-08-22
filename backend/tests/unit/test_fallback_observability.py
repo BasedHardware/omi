@@ -216,3 +216,44 @@ def test_hosted_vad_fallback_reason_buckets(monkeypatch):
     assert vad_mod._hosted_vad_fallback_reason(requests.HTTPError(response=response429)) == 'provider_429'
 
     assert vad_mod._hosted_vad_fallback_reason(RuntimeError('boom')) == 'other'
+
+
+def test_the_push_transport_is_a_bounded_component():
+    """`push` is the transport SELECTION (ADR-0011); `pusher` is the websocket service. Two things.
+
+    utils/push/selector.py had recorded under `component='push'` since it was written, and the name was
+    not in the allow-list — so every push degradation (a typo in PUSH_NOTIFICATION_BACKEND, or a declared
+    UnifiedPush with no base URL) bucketed to `other` and was indistinguishable from anything else
+    unlabelled. Measured live before the fix (BACKLOG L18).
+    """
+    assert fallback_mod.bucket_component('push') == 'push'
+    assert fallback_mod.bucket_component('pusher') == 'pusher'
+
+
+def test_every_component_name_used_in_the_backend_is_allowed():
+    """STATIC TRIPWIRE (not behavioural coverage): scans the source for `component='...'` literals and
+    requires each to be in ALLOWED_COMPONENTS.
+
+    It exists because the failure is silent by construction: `bucket_component` maps an unknown name to
+    `other` on purpose (a label must never break a metric), so a new `record_fallback` call with a fresh
+    component name records something — just not the thing its author meant. That is how `push` stayed
+    invisible. A merge that adds a component name now fails here instead of quietly widening `other`.
+
+    Deliberately a test and not a guard script: no baseline to rot, and it runs in the normal suite.
+    """
+    import re
+    from pathlib import Path
+
+    backend = Path(__file__).resolve().parents[2]
+    used: dict[str, str] = {}
+    for directory in ('utils', 'database', 'routers', 'services', 'jobs', 'config', 'syncing'):
+        for path in (backend / directory).rglob('*.py'):
+            for name in re.findall(r"""component=['"]([a-z_]+)['"]""", path.read_text(encoding='utf-8')):
+                used.setdefault(name, str(path.relative_to(backend)))
+
+    assert used, 'the scan found no component literals at all — the pattern or the tree moved'
+    unlisted = {name: where for name, where in used.items() if name not in fallback_mod.ALLOWED_COMPONENTS}
+    assert unlisted == {}, (
+        'these component names bucket to "other" and lose their signal; add them to ALLOWED_COMPONENTS '
+        f'with a note saying what they are: {unlisted}'
+    )

@@ -18,14 +18,19 @@ def _retryable(error: Exception) -> bool:
 def prewarm(
     load_encoding: Callable[[str], Any],
     *,
+    token: str = 'gpt-4',
     attempts: int = 3,
     sleep: Callable[[float], None] = time.sleep,
 ) -> None:
-    """Load cl100k_base from the configured cache, retrying only transient HTTP failures."""
+    """Load ``token`` from the configured cache, retrying only transient HTTP failures.
+
+    ``token`` is whatever ``load_encoding`` expects — a model name for
+    ``tiktoken.encoding_for_model`` (default ``'gpt-4'`` → cl100k_base) or an encoding name for
+    ``tiktoken.get_encoding`` (e.g. ``'o200k_base'``)."""
     for attempt in range(1, attempts + 1):
         try:
-            load_encoding('gpt-4')
-            print(f'tiktoken cl100k_base cache is ready (attempt {attempt}/{attempts}).')
+            load_encoding(token)
+            print(f'tiktoken {token} cache is ready (attempt {attempt}/{attempts}).')
             return
         except Exception as error:
             if attempt == attempts or not _retryable(error):
@@ -41,11 +46,18 @@ def prewarm(
             sleep(delay)
 
 
-def main() -> int:
+# The encodings the backend actually requests at runtime (utils/llm/clients.py `encoding_for_model`
+# -> cl100k_base; utils/llm/conversation_processing.py `get_encoding('o200k_base')`). Baking exactly
+# these keeps the no-egress on-prem runtime from fetching them on first use.
+BAKED_ENCODINGS: tuple[str, ...] = ('cl100k_base', 'o200k_base')
+
+
+def main(encodings: tuple[str, ...] = BAKED_ENCODINGS) -> int:
     try:
         import tiktoken
 
-        prewarm(tiktoken.encoding_for_model)
+        for encoding in encodings:
+            prewarm(tiktoken.get_encoding, token=encoding)
     except Exception as error:
         print(f'ERROR: {error}', flush=True)
         return 1
@@ -53,4 +65,6 @@ def main() -> int:
 
 
 if __name__ == '__main__':
-    raise SystemExit(main())
+    import sys
+
+    raise SystemExit(main(tuple(sys.argv[1:]) or BAKED_ENCODINGS))

@@ -3215,6 +3215,7 @@
     "accountCutoverMigrationInProgressMessage": "Ваш обліковий запис мігрує. Функції продукту призупинено до завершення міграції.",
     "accountCutoverMigrationRollbackMessage": "Ваш обліковий запис на обслуговуванні після відкату міграції. Частина новіших даних може бути ізольована.",
     "accountCutoverOpenStore": "Відкрити магазин",
+    "signInWithSSO": "Увійти через SSO",
     "sendRawAudioToOmi": "Надсилати необроблений звук до Omi",
     "sendRawAudioToOmiDescription": "Вимкніть, щоб необроблений звук не надсилався до Omi. Транскрипти й дані, потрібні хмарним функціям, усе ще можуть надсилатися до Omi.",
     "findDevice": "Знайти",

@@ -414,6 +414,51 @@ checks:
     triggers: ["backend/database/**/*.py", ".github/scripts/check_firestore_model_read_boundary.py", ".github/scripts/firestore_model_read_boundary_baseline.json"]
     lanes: ["local", "ci"]
     reason: "#9494 -> #9696 malformed Firestore documents must use the shared read boundary"
+  - id: firestore-persistence-boundary
+    command: ["python3", ".github/scripts/check_oss_firestore_persistence_boundary.py"]
+    triggers: ["backend/**/*.py", ".github/scripts/check_oss_firestore_persistence_boundary.py", ".github/scripts/firestore_persistence_boundary_baseline.json", "backend/tests/unit/test_check_oss_firestore_persistence_boundary.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "WP1 seal (ADR-0002/0004/0044): the forbidden leaks are raw Firestore/Firebase SDK CLIENT construction (Client/AsyncClient/firebase_admin.firestore.client()) and importing database.sentinels (raw SDK sentinels) outside database/, so the storage layer stays swappable (Firestore | Mongo | ArcadeDB). Importing database._client for the injected db_client and running ops on that facade (.document()/.collection()/.collection_group()/.transaction()) are ALLOWED — that is the ADR-0044 seam. Catches a raw Firestore client reintroduced by an upstream merge (ADR-0029/0030)"
+  - id: object-store-boundary
+    command: ["python3", ".github/scripts/check_oss_object_store_boundary.py"]
+    triggers: ["backend/**/*.py", ".github/scripts/check_oss_object_store_boundary.py", ".github/scripts/object_store_boundary_baseline.json", "backend/tests/unit/test_check_oss_object_store_boundary.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "WP6 seal (ADR-0032/0004): utils/object_store/ is the only door to object storage — no google.cloud.storage import and no raw .upload_from_*/.download_as_bytes/.copy_blob/.make_public/.list_blobs/.generate_signed_url op outside it, so the backend stays swappable (GCS | S3-compatible). Analogue of firestore-persistence-boundary; catches raw-GCS reintroduced by an upstream merge (ADR-0029/0030)"
+  - id: vector-store-boundary
+    command: ["python3", ".github/scripts/check_oss_vector_store_boundary.py"]
+    triggers: ["backend/**/*.py", ".github/scripts/check_oss_vector_store_boundary.py", ".github/scripts/vector_store_boundary_baseline.json", "backend/tests/unit/test_check_oss_vector_store_boundary.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "WP4 seal (ADR-0033/0004): utils/vector/ is the only door to vector search — no pinecone/langchain_pinecone import outside it, so the backend stays swappable (Pinecone | Qdrant). Analogue of firestore/object-store boundary guards; catches a raw Pinecone client reintroduced by an upstream merge (ADR-0029/0030)"
+  - id: auth-boundary
+    command: ["python3", ".github/scripts/check_oss_auth_boundary.py"]
+    triggers: ["backend/**/*.py", ".github/scripts/check_oss_auth_boundary.py", ".github/scripts/auth_boundary_baseline.json", "backend/tests/unit/test_check_oss_auth_boundary.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "WP3 seal (ADR-0034/0004): utils/auth/ is the only door to Firebase Auth — no firebase_admin.auth import or attribute access outside it (initialize_app/messaging/firestore stay allowed), so the backend stays swappable (Firebase | OIDC/Keycloak). Analogue of firestore/object-store/vector boundary guards; catches a raw Firebase-auth call reintroduced by an upstream merge (ADR-0029/0030)"
+  - id: oss-runtime-env-parity
+    command: ["python3", ".github/scripts/check_oss_runtime_env_parity.py"]
+    triggers: ["backend/deploy/runtime_env.yaml", "deploy/onprem/backend.env.*.example", "deploy/onprem/compose.*.yaml", "deploy/onprem/helm/omi-oss/templates/backend-configmap.yaml", "deploy/onprem/helm/omi-oss/templates/backend-secret.yaml", ".github/scripts/check_oss_runtime_env_parity.py", ".github/scripts/runtime_env_parity_baseline.json", "backend/tests/unit/test_check_oss_runtime_env_parity.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "ADR-0061: upstream declares its runtime environment in backend/deploy/runtime_env.yaml and refuses to deploy a service whose required vars are missing (scripts/runtime_env_validation/manifest.py); our compose/Helm environment was assembled by discovery and never walked that list, so every variable upstream declares and we do not silently takes the code default. Measured cost on this stack: MEMORY_ENABLED unset makes every memory write answer 503 while readiness passes (10 tests in 4 upstream E2E files go green when set), and MEMORY_V3_CURSOR_SECRET unset breaks list pagination past the first page. Each variable must be declared by us or carry a written note; the baseline also reports notes that are no longer needed, so it cannot rot into the stale residual list that already cost us three real failures read as known noise"
+  - id: oss-llm-gateway-route-coverage
+    command: ["python3", ".github/scripts/check_oss_llm_gateway_route_coverage.py"]
+    triggers: ["backend/utils/llm/model_config.py", "deploy/onprem/helm/omi-oss/files/generated_route_overrides.yaml", "deploy/onprem/helm/omi-oss/values.yaml", "deploy/onprem/helm/omi-oss/templates/llm-gateway.yaml", ".github/scripts/check_oss_llm_gateway_route_coverage.py", ".github/scripts/llm_gateway_route_coverage_baseline.json", "backend/tests/unit/test_check_oss_llm_gateway_route_coverage.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "ADR-0067: the gateway synthesises a lane for EVERY configured feature and a feature with no entry in deploy/onprem/helm/omi-oss/files/generated_route_overrides.yaml keeps its CLOUD provider, so an omission there is a live vendor route through our own gateway, not an unconfigured feature. Measured 2026-08-21: 8 of 45 features were uncovered (app_integration/followup/onboarding/session_titles/translation/trends to gemini, wrapped_analysis to openrouter, web_search to perplexity) — translation carries transcript text — and they answered 503 only for lack of those providers' credentials. The earlier '37/37 covered' reading used upstream's own override file as the base, which cannot show a lane neither file mentions. Also checks the PROVIDER of every covered entry (a coverage count means nothing if an entry can name gemini) and that the list stays declared ONCE (ADR-0081): the chart used to render its ConfigMap from a hand-kept chat.llmGateway.features in values.yaml instead of the file, and that pair had drifted from 44 to 4 — measured on the live k0s release, 41 of 45 lanes did not serve (33 x 400 because the lane kept a cloud model name our endpoint does not serve, 8 x 503 for a vendor provider without credentials), which is why the chat E2E passed while memories, daily summaries, notifications and translation did not. The chart now renders from the same file compose mounts, and the guard fails if a second declaration reappears or the template stops reading it"
+  - id: oss-store-contract-coverage
+    command: ["python3", ".github/scripts/check_oss_store_contract_coverage.py"]
+    triggers: ["backend/database/*.py", "backend/tests/contract/test_*.py", ".github/scripts/check_oss_store_contract_coverage.py", ".github/scripts/store_contract_coverage_baseline.json", "backend/tests/unit/test_check_oss_store_contract_coverage.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "ADR-0060: a database/ module using a shape the ADR-0044 facade must TRANSLATE (composite filter, cursor, projection, aggregation, transaction, batch, atomic field op, collection group) while no dual-backend contract test drives it. That exact combination made every /v1/apps marketplace read 500 under our own STORAGE_BACKEND=mongo default from the day the facade landed (closed 2026-08-21, commit 2cc74d8b4e) with the whole suite green. Static inventory with a ratchet, not behavioral coverage: it proves nothing about assertions, only that the blind spot cannot grow unnoticed"
+  - id: oss-release
+    command: ["python3", ".github/scripts/check_oss_release.py"]
+    triggers: ["deploy/onprem/omi.oss.release.env", "deploy/onprem/compose.base.yaml", "deploy/onprem/compose.selfhost.yaml", "deploy/onprem/.gitignore", "deploy/onprem/helm/omi-oss/Chart.yaml", "deploy/onprem/helm/omi-oss/values-prod.yaml", "deploy/onprem/helm/omi-oss/values-k0s.yaml", ".github/scripts/check_oss_release.py", "backend/tests/unit/test_check_oss_release.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "ADR-0054: the images we build carry the release from one source (deploy/onprem/omi.oss.release.env), so a rebuild yields a NEW reference instead of overwriting a mutable :latest that `helm upgrade`/`up` then serve stale from cache. Also asserts the release file stays TRACKED — the repo-wide *.env ignore rule would otherwise make the release silently local to one machine"
+  - id: oss-image-pins
+    command: ["python3", ".github/scripts/check_oss_image_parity.py"]
+    triggers: ["deploy/onprem/omi.oss.release.pins", "deploy/onprem/compose.base.yaml", "deploy/onprem/compose.selfhost.yaml", "deploy/onprem/helm/omi-oss/values.yaml", ".github/scripts/check_oss_image_parity.py", "backend/tests/unit/test_check_oss_image_parity.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "ADR-0055 (supersedes ADR-0050): every third-party image pin comes from deploy/onprem/omi.oss.release.pins — compose references it (so drift is impossible, not merely detected) and the Helm values mirror it, covering the 9 components including the mono-target ones the old parity check excluded by design"
   - id: lifecycle-header-checker-tests
     command: ["python3", ".github/scripts/test_check_lifecycle_headers.py"]
     triggers: [".github/scripts/check_lifecycle_headers.py", ".github/scripts/test_check_lifecycle_headers.py", ".github/checks-manifest.yaml"]

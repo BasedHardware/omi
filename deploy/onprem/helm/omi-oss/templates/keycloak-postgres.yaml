@@ -1,0 +1,86 @@
+{{- if and .Values.auth.enabled (eq .Values.auth.keycloak.db "postgres") }}
+# Postgres backing store for Keycloak (B5): production-grade instead of the single-node dev-file H2.
+# Opt-in via auth.keycloak.db=postgres. Password shared with Keycloak via backend-secret (KC_DB_PASSWORD).
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak-postgres
+  labels:
+    {{- include "omi-oss.labels" . | nindent 4 }}
+    app.kubernetes.io/component: keycloak-postgres
+spec:
+  selector:
+    app.kubernetes.io/component: keycloak-postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: keycloak-postgres
+  labels:
+    {{- include "omi-oss.labels" . | nindent 4 }}
+    app.kubernetes.io/component: keycloak-postgres
+spec:
+  serviceName: keycloak-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: keycloak-postgres
+  template:
+    metadata:
+      labels:
+        {{- include "omi-oss.labels" . | nindent 8 }}
+        app.kubernetes.io/component: keycloak-postgres
+    spec:
+      {{- with $.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: postgres
+          image: {{ .Values.auth.keycloak.postgres.image }}
+          imagePullPolicy: {{ .Values.auth.keycloak.imagePullPolicy }}
+          env:
+            - name: POSTGRES_DB
+              value: keycloak
+            - name: POSTGRES_USER
+              value: keycloak
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secret
+                  key: KC_DB_PASSWORD
+            # keep PGDATA in a subdir so the PVC root (lost+found on some volumes) is not the data dir
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - name: postgres
+              containerPort: 5432
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "keycloak", "-d", "keycloak"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "keycloak", "-d", "keycloak"]
+            initialDelaySeconds: 20
+            periodSeconds: 15
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- with .Values.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.auth.keycloak.postgres.storage }}
+{{- end }}

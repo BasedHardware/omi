@@ -1,0 +1,39 @@
+# omi.oss.cluster.prereqs — the cluster-level components a Kubernetes target needs BEFORE the chart.
+#
+# These are installed by the OPERATOR, once per cluster, and they are outside `omi.oss.release` by
+# construction: the chart does not deploy them and cannot. That is exactly why they were the last
+# unpinned surface (BACKLOG L26) — they lived only as literal versions inside two manuals, so "the same
+# release" could mean two different clusters, and nothing said so.
+#
+# Declared HERE, once, and the manuals source this file instead of repeating a version. Repeating it is
+# the failure this repo has already paid for: the LLM lane list was declared twice, drifted from 44 to 4,
+# and 41 of 45 lanes stopped serving on a release that looked healthy (ADR-0081).
+#
+#   source omi.oss.cluster.prereqs
+#   helm install eg oci://docker.io/envoyproxy/gateway-helm --version "$OMI_OSS_ENVOY_GATEWAY_CHART" ...
+#
+# The recorded versions are the ones MEASURED on the live k0s release (2026-08-22), read back from the
+# cluster's own helm metadata and running images rather than from what a manual once said:
+#
+#     kubectl get secret -n <ns> -l owner=helm,name=<release> -o jsonpath='{.items[-1].data.release}' \
+#       | base64 -d | base64 -d | gunzip | python3 -c 'import sys,json; d=json.load(sys.stdin); \
+#         print(d["chart"]["metadata"]["name"], d["chart"]["metadata"]["version"])'
+#
+# UPGRADING one of these is an operator decision, not a release decision — but it stops being invisible:
+# change the line, and say so in the release notes.
+
+# k0s itself. The installer script takes a version; unset, it takes the newest, which is how two
+# installations of one release end up on different control planes.
+OMI_OSS_K0S_VERSION=v1.36.3+k0s.2
+
+# HTTPS entry point (Gateway API). The one prerequisite that was already pinned.
+OMI_OSS_ENVOY_GATEWAY_CHART=v1.2.1
+
+# NVIDIA GPU Operator: container toolkit + device plugin + the k0s containerd wiring.
+OMI_OSS_GPU_OPERATOR_CHART=v26.3.3
+
+# Local persistent storage — provides the `openebs-hostpath` storage class the chart's PVCs ask for.
+OMI_OSS_OPENEBS_CHART=4.5.1
+
+# Lets the cluster own ENTRY_IP on the LAN.
+OMI_OSS_METALLB_CHART=0.16.1

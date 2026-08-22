@@ -9,6 +9,7 @@ import numpy as np
 from database import conversations as conversations_db
 from database import users as users_db
 from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
+from utils.observability.fallback import record_fallback
 from utils.other.storage import (
     download_audio_chunks_and_merge,
     upload_person_speech_sample_from_bytes,
@@ -321,6 +322,35 @@ def detect_speaker_from_text(text: str) -> Optional[str]:
     return None
 
 
+async def _store_person_speaker_embedding(uid: str, person_id: str, wav_bytes: bytes, conversation_id: str) -> bool:
+    """Store the speaker embedding for a person we just collected a sample for. Returns whether it landed.
+
+    The person twin of the enrolment path in routers/speech_profile.py: the sample is saved either way, so
+    the failure is not fatal, but without the embedding this person can never be matched in a future
+    conversation. Same silent, permanent, per-principal loss of a capability (BACKLOG L20).
+    """
+    try:
+        embedding = await run_blocking(sync_executor, extract_embedding_from_bytes, wav_bytes, "sample.wav")
+        # Convert numpy array to list for Firestore storage
+        embedding_list = embedding.flatten().tolist()
+        await run_blocking(db_executor, users_db.set_person_speaker_embedding, uid, person_id, embedding_list)
+        logger.info(
+            f"Stored speaker embedding for person {person_id} (dim={len(embedding_list)}) {uid} {conversation_id}"
+        )
+        return True
+    except Exception as emb_err:
+        logger.error(f"Failed to extract/store speaker embedding: {emb_err} {uid} {conversation_id}")
+        record_fallback(
+            component='speaker',
+            from_mode='enrolled',
+            to_mode='no_embedding',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
+        return False
+
+
 async def extract_speaker_samples(
     uid: str,
     person_id: str,
@@ -521,18 +551,7 @@ async def extract_speaker_samples(
                 )
 
                 # Extract and store speaker embedding (reuse wav_bytes from verification)
-                try:
-                    embedding = await run_blocking(sync_executor, extract_embedding_from_bytes, wav_bytes, "sample.wav")
-                    # Convert numpy array to list for Firestore storage
-                    embedding_list = embedding.flatten().tolist()
-                    await run_blocking(
-                        db_executor, users_db.set_person_speaker_embedding, uid, person_id, embedding_list
-                    )
-                    logger.info(
-                        f"Stored speaker embedding for person {person_id} (dim={len(embedding_list)}) {uid} {conversation_id}"
-                    )
-                except Exception as emb_err:
-                    logger.error(f"Failed to extract/store speaker embedding: {emb_err} {uid} {conversation_id}")
+                await _store_person_speaker_embedding(uid, person_id, wav_bytes, conversation_id)
             else:
                 logger.error(f"Failed to add speech sample for person {person_id} {uid} {conversation_id}")
                 break  # Likely hit limit

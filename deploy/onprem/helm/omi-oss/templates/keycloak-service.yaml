@@ -1,0 +1,16 @@
+{{- if .Values.auth.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  labels:
+    {{- include "omi-oss.labels" . | nindent 4 }}
+    app.kubernetes.io/component: keycloak
+spec:
+  selector:
+    app.kubernetes.io/component: keycloak
+  ports:
+    - name: http
+      port: 8090
+      targetPort: 8090
+{{- end }}

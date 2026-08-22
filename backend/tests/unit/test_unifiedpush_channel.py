@@ -1,0 +1,379 @@
+"""UnifiedPush send channel (ADR-0011): payload shape, addressing, dead-endpoint cleanup, routing.
+
+The channel POSTs a neutral PushMessage to each registered endpoint and treats HTTP 404/410 as a
+permanently-dead endpoint (parity with the FCM invalid-token taxonomy). A final routing test proves
+that with PUSH_NOTIFICATION_BACKEND=unifiedpush the public sender reaches this channel and never
+touches Firebase.
+"""
+
+import asyncio
+import json
+import os
+from contextlib import contextmanager
+from pathlib import Path
+from types import ModuleType, SimpleNamespace
+from typing import Any, Iterator
+
+os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
+os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
+
+import pytest  # noqa: E402
+
+from database.notifications import UnifiedPushEndpoint  # noqa: E402
+from testing.import_isolation import load_module_fresh, stub_modules  # noqa: E402
+from utils.push import unifiedpush as up  # noqa: E402
+from utils.push.base import PushMessage  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _require_internal_base(monkeypatch):
+    # UnifiedPush is now fail-closed: it POSTs only through the operator-configured internal base,
+    # never to a user-registered endpoint verbatim (SSRF). Default it here so the send tests exercise
+    # the real path; the addressing tests override via setenv (rewrite) / delenv (fail-closed).
+    # The test endpoints use host `ntfy` with no port, so base `http://ntfy` rewrites to identity.
+    monkeypatch.setenv('UNIFIEDPUSH_INTERNAL_BASE_URL', 'http://ntfy')
+
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+
+def _ep(url: str, *, p256dh=None, auth=None) -> UnifiedPushEndpoint:
+    return UnifiedPushEndpoint(url=url, p256dh=p256dh, auth=auth)
+
+
+def test_render_payload_visible_carries_notification():
+    payload = up.render_payload(PushMessage(tag='t', title='omi', body='hi', data={'type': 'x'}, priority='high'))
+    assert payload == {
+        'tag': 't',
+        'priority': 'high',
+        'is_background': False,
+        'data': {'type': 'x'},
+        'notification': {'title': 'omi', 'body': 'hi'},
+    }
+
+
+def test_render_payload_data_only_omits_notification():
+    payload = up.render_payload(PushMessage(tag='t', data={'type': 'action_item_reminder'}, is_background=True))
+    assert 'notification' not in payload
+    assert payload['is_background'] is True
+    assert payload['data'] == {'type': 'action_item_reminder'}
+
+
+def test_target_url_fails_closed_without_internal_base(monkeypatch):
+    # Fail-closed: without an internal base URL the backend must refuse to POST to the
+    # user-registered endpoint verbatim (SSRF), not send to it. Changed from the previous
+    # verbatim behavior per the cubic review (PR 10887) that flagged it as an SSRF primitive.
+    monkeypatch.delenv('UNIFIEDPUSH_INTERNAL_BASE_URL', raising=False)
+    with pytest.raises(ValueError):
+        up._target_url('http://10.0.2.2:8090/topicA?up=1')
+
+
+def test_target_url_rewrites_host_via_internal_base(monkeypatch):
+    monkeypatch.setenv('UNIFIEDPUSH_INTERNAL_BASE_URL', 'http://ntfy:80')
+    # The phone-facing host is dropped; only the path+query survive onto the internal base.
+    assert up._target_url('http://10.0.2.2:8090/topicA?up=1') == 'http://ntfy:80/topicA?up=1'
+
+
+def test_target_url_rejects_non_absolute_endpoint(monkeypatch):
+    # cubic PR 10887 unifiedpush.py:77: a malformed (non-absolute) stored endpoint must be rejected BEFORE
+    # path extraction, so a bare/protocol-relative/non-http value can't steer the rewrite authority (SSRF).
+    monkeypatch.setenv('UNIFIEDPUSH_INTERNAL_BASE_URL', 'http://ntfy:80')
+    for bad in ('/just/a/path', '//evil.com/x', 'evil.com/x', 'ftp://evil.com/x', ''):
+        with pytest.raises(ValueError):
+            up._target_url(bad)
+    assert up._target_url('http://phone-host:8090/topicA?up=1') == 'http://ntfy:80/topicA?up=1'  # absolute still ok
+
+
+def test_send_all_bounded_caps_concurrency(monkeypatch):
+    # cubic PR 10887 unifiedpush.py:225: a large fan-out must not run all sends at once (unbounded crypto/HTTP
+    # backlog). _send_all_bounded caps in-flight coroutines at _MAX_CONCURRENT_SENDS.
+    monkeypatch.setattr(up, '_MAX_CONCURRENT_SENDS', 3)
+    live = {'now': 0, 'max': 0}
+
+    async def _fake_send_one(ep, plaintext):
+        live['now'] += 1
+        live['max'] = max(live['max'], live['now'])
+        await asyncio.sleep(0.005)
+        live['now'] -= 1
+        return 200
+
+    monkeypatch.setattr(up, '_send_one_async', _fake_send_one)
+    eps = [_ep(f'http://ntfy/t{i}?up=1') for i in range(12)]
+    statuses = asyncio.run(up._send_all_bounded(eps, b'payload'))
+    assert statuses == [200] * 12  # all complete, order preserved
+    assert live['max'] <= 3  # never more than the cap concurrent
+
+
+def _endpoints(monkeypatch, values):
+    # Accept URL strings (plaintext, keyless) or UnifiedPushEndpoint records.
+    records = [v if isinstance(v, UnifiedPushEndpoint) else _ep(v) for v in values]
+    monkeypatch.setattr(up.notification_db, 'get_all_endpoints', lambda _uid: list(records))
+    removed = []
+    monkeypatch.setattr(up.notification_db, 'remove_bulk_endpoints', lambda eps: removed.append(list(eps)))
+    return removed
+
+
+def test_send_to_user_counts_success_and_drops_dead(monkeypatch):
+    removed = _endpoints(monkeypatch, ['http://ntfy/live?up=1', 'http://ntfy/dead?up=1', 'http://ntfy/flaky?up=1'])
+    statuses = {'http://ntfy/live?up=1': 200, 'http://ntfy/dead?up=1': 410, 'http://ntfy/flaky?up=1': 503}
+    monkeypatch.setattr(up, '_post_sync', lambda url, _body, _headers: statuses[url])
+
+    sent = up.send_to_user('u1', PushMessage(tag='t', title='omi', body='hi'))
+
+    assert sent == 1  # only the 2xx endpoint
+    assert removed == [['http://ntfy/dead?up=1']]  # 410 dropped; 503 kept as transient
+
+
+def test_send_to_user_preserves_count_when_cleanup_fails(monkeypatch):
+    # A dead-endpoint cleanup failure must NOT abort a confirmed delivery: BYOK gates its 24h dedupe lock on
+    # the returned count, so raising past it would re-alert on the next error (cubic PR 10887 notifications.py:238).
+    _endpoints(monkeypatch, ['http://ntfy/live?up=1', 'http://ntfy/dead?up=1'])
+    statuses = {'http://ntfy/live?up=1': 200, 'http://ntfy/dead?up=1': 410}
+    monkeypatch.setattr(up, '_post_sync', lambda url, _body, _headers: statuses[url])
+
+    def _boom(_eps):
+        raise RuntimeError('store unavailable')
+
+    monkeypatch.setattr(up.notification_db, 'remove_bulk_endpoints', _boom)
+    assert up.send_to_user('u1', PushMessage(tag='t', title='omi', body='hi')) == 1  # delivered count survives
+
+
+def test_send_to_user_network_error_keeps_endpoint(monkeypatch):
+    removed = _endpoints(monkeypatch, ['http://ntfy/x?up=1'])
+    monkeypatch.setattr(up, '_post_sync', lambda _url, _body, _headers: None)  # network error → None
+
+    assert up.send_to_user('u1', PushMessage(tag='t', title='omi', body='hi')) == 0
+    assert removed == []  # transient, not dropped
+
+
+def test_send_to_user_no_endpoints_is_noop(monkeypatch):
+    _endpoints(monkeypatch, [])
+    called = []
+    monkeypatch.setattr(up, '_post_sync', lambda url, body, headers: called.append(url) or 200)
+    assert up.send_to_user('u1', PushMessage(tag='t', title='omi', body='hi')) == 0
+    assert called == []
+
+
+def test_keyless_endpoint_posts_plaintext_json(monkeypatch):
+    _endpoints(monkeypatch, ['http://ntfy/plain?up=1'])
+    captured = {}
+    monkeypatch.setattr(
+        up, '_post_sync', lambda url, body, headers: captured.update(url=url, body=body, headers=headers) or 200
+    )
+
+    up.send_to_user('u1', PushMessage(tag='t', title='omi', body='hi', data={'type': 'x'}))
+
+    assert captured['headers']['Content-Type'] == 'application/json'
+    assert 'Content-Encoding' not in captured['headers']
+    assert json.loads(captured['body'])['notification'] == {'title': 'omi', 'body': 'hi'}
+
+
+def test_keyed_endpoint_posts_hex_armored_encrypted_body(monkeypatch):
+    import base64
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    import http_ece
+
+    private_key = ec.generate_private_key(ec.SECP256R1())
+    p256dh = (
+        base64.urlsafe_b64encode(
+            private_key.public_key().public_bytes(
+                serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint
+            )
+        )
+        .rstrip(b'=')
+        .decode()
+    )
+    auth_bytes = os.urandom(16)
+    auth = base64.urlsafe_b64encode(auth_bytes).rstrip(b'=').decode()
+
+    _endpoints(monkeypatch, [_ep('http://ntfy/enc?up=1', p256dh=p256dh, auth=auth)])
+    captured = {}
+    monkeypatch.setattr(up, '_post_sync', lambda url, body, headers: captured.update(body=body, headers=headers) or 200)
+
+    up.send_to_user('u1', PushMessage(tag='t', title='omi', body='secret', data={'type': 'merge_completed'}))
+
+    # ntfy is a text transport: the body is a lowercase-hex UTF-8 string, not raw binary.
+    assert captured['headers']['Content-Type'] == 'text/plain'
+    assert 'Content-Encoding' not in captured['headers']
+    hex_text = captured['body'].decode('ascii')
+    assert all(c in '0123456789abcdef' for c in hex_text)
+    assert b'secret' not in captured['body']  # confidential on the wire
+    # The app hex-decodes then decrypts (RFC 8291) back to the exact JSON payload.
+    ciphertext = bytes.fromhex(hex_text)
+    decrypted = http_ece.decrypt(ciphertext, private_key=private_key, auth_secret=auth_bytes, version='aes128gcm')
+    assert json.loads(decrypted)['notification'] == {'title': 'omi', 'body': 'secret'}
+
+
+def test_send_to_user_async_drops_dead(monkeypatch):
+    removed = _endpoints(monkeypatch, ['http://ntfy/live?up=1', 'http://ntfy/dead?up=1'])
+    statuses = {'http://ntfy/live?up=1': 202, 'http://ntfy/dead?up=1': 404}
+
+    async def _post(url, _body, _headers):
+        return statuses[url]
+
+    monkeypatch.setattr(up, '_post_async', _post)
+
+    sent = asyncio.run(up.send_to_user_async('u1', PushMessage(tag='t', title='omi', body='hi')))
+    assert sent == 1
+    assert removed == [['http://ntfy/dead?up=1']]
+
+
+def test_send_bulk_posts_all_and_drops_dead(monkeypatch):
+    removed = []
+    monkeypatch.setattr(up.notification_db, 'remove_bulk_endpoints', lambda eps: removed.append(list(eps)))
+    statuses = {'http://ntfy/a?up=1': 200, 'http://ntfy/b?up=1': 410}
+
+    async def _post(url, _body, _headers):
+        return statuses[url]
+
+    monkeypatch.setattr(up, '_post_async', _post)
+    asyncio.run(
+        up.send_bulk(
+            [_ep('http://ntfy/a?up=1'), _ep('http://ntfy/b?up=1')], PushMessage(tag='t', title='omi', body='hi')
+        )
+    )
+    assert removed == [['http://ntfy/b?up=1']]  # 410 dropped
+
+
+def test_send_bulk_empty_is_noop(monkeypatch):
+    posted = []
+
+    async def _post(url, _body, _headers):
+        posted.append(url)
+        return 200
+
+    monkeypatch.setattr(up, '_post_async', _post)
+    asyncio.run(up.send_bulk([], PushMessage(tag='t', title='x', body='y')))
+    assert posted == []
+
+
+# --- routing: public sender -> unifiedpush channel, never Firebase --------------------------------
+
+
+def _module(name: str, **attributes: Any) -> ModuleType:
+    module = ModuleType(name)
+    for key, value in attributes.items():
+        setattr(module, key, value)
+    return module
+
+
+@contextmanager
+def _loaded_notifications() -> Iterator[ModuleType]:
+    def _unexpected_send(_messages: Any) -> Any:
+        raise AssertionError('messaging.send_each must not be called in unifiedpush mode')
+
+    messaging = _module(
+        'firebase_admin.messaging',
+        Notification=lambda title, body: SimpleNamespace(title=title, body=body),
+        AndroidConfig=lambda **k: SimpleNamespace(**k),
+        AndroidNotification=lambda **k: SimpleNamespace(**k),
+        APNSConfig=lambda **k: SimpleNamespace(**k),
+        APNSPayload=lambda **k: SimpleNamespace(**k),
+        Aps=lambda **k: SimpleNamespace(**k),
+        WebpushConfig=lambda **k: SimpleNamespace(**k),
+        WebpushNotification=lambda **k: SimpleNamespace(**k),
+        WebpushFCMOptions=lambda **k: SimpleNamespace(**k),
+        Message=lambda **k: SimpleNamespace(**k),
+        send_each=_unexpected_send,
+    )
+    # Bare module, no behaviour: production imports firebase_admin.auth ONLY in
+    # utils/auth/adapters/firebase.py (enforced by check_oss_auth_boundary), so nothing on this
+    # path calls it. The stub exists to let the import graph load. Proved rather than assumed:
+    # replacing the behaviour with a raiser left this file green (BACKLOG L15).
+    auth = _module('firebase_admin.auth')
+    stubs = {
+        'firebase_admin': _module('firebase_admin', messaging=messaging, auth=auth),
+        'firebase_admin.messaging': messaging,
+        'firebase_admin.auth': auth,
+        'database.redis_db': _module(
+            'database.redis_db',
+            set_credit_limit_notification_sent=lambda _uid: None,
+            has_credit_limit_notification_been_sent=lambda _uid: False,
+            set_silent_user_notification_sent=lambda _uid: None,
+            has_silent_user_notification_been_sent=lambda _uid: False,
+        ),
+        'database.auth': _module('database.auth', get_user_from_uid=lambda _uid: None),
+        'utils.llm.notifications': _module(
+            'utils.llm.notifications',
+            generate_notification_message=lambda *_a, **_k: ('t', 'b'),
+            generate_credit_limit_notification=lambda *_a, **_k: ('t', 'b'),
+            generate_silent_user_notification=lambda *_a, **_k: ('t', 'b'),
+        ),
+    }
+    with stub_modules(stubs):
+        notifications = load_module_fresh('utils.notifications', str(BACKEND_DIR / 'utils' / 'notifications.py'))
+        yield notifications
+
+
+def test_send_notification_routes_to_unifiedpush(monkeypatch):
+    monkeypatch.setenv('PUSH_NOTIFICATION_BACKEND', 'unifiedpush')
+    monkeypatch.setattr(up.notification_db, 'get_all_endpoints', lambda _uid: [_ep('http://ntfy/t?up=1')])
+    posted = []
+    monkeypatch.setattr(up, '_post_sync', lambda url, body, _headers: posted.append((url, json.loads(body))) or 200)
+
+    with _loaded_notifications() as notifications:
+        notifications.send_notification('user-1', 'omi', 'hello')
+
+    assert len(posted) == 1
+    url, payload = posted[0]
+    assert url == 'http://ntfy/t?up=1'
+    assert payload['notification'] == {'title': 'omi', 'body': 'hello'}
+
+
+def test_send_bulk_notification_routes_to_unifiedpush(monkeypatch):
+    monkeypatch.setenv('PUSH_NOTIFICATION_BACKEND', 'unifiedpush')
+    captured = {}
+
+    async def _spy(endpoints, msg):
+        captured['endpoints'] = list(endpoints)
+        captured['title'] = msg.title
+
+    monkeypatch.setattr(up, 'send_bulk', _spy)
+
+    with _loaded_notifications() as notifications:
+        # Bare URL strings (the pre-key-set recipient shape) are normalized to UnifiedPushEndpoint
+        # records before reaching send_bulk, so bulk delivery is resilient to caller shape.
+        asyncio.run(notifications.send_bulk_notification(['http://ntfy/a?up=1', 'http://ntfy/b?up=1'], 'omi', 'hi'))
+
+    assert captured['endpoints'] == [_ep('http://ntfy/a?up=1'), _ep('http://ntfy/b?up=1')]
+    assert captured['title'] == 'omi'
+
+
+def test_resolve_push_backend_normalizes_whitespace_and_case(monkeypatch):
+    # The flag is read at call time; whitespace/case around a valid value must normalize, not coerce.
+    from utils.push.selector import resolve_push_backend
+
+    monkeypatch.setenv('PUSH_NOTIFICATION_BACKEND', '  UnifiedPush\n')
+    assert resolve_push_backend() == 'unifiedpush'
+
+
+def test_resolve_push_backend_coerces_unknown_to_fcm(monkeypatch):
+    # A non-blank typo is coerced to the FCM default (logged), never raised — a typo must not take
+    # push delivery down.
+    from utils.push.selector import resolve_push_backend
+
+    monkeypatch.setenv('PUSH_NOTIFICATION_BACKEND', 'bogus')
+    assert resolve_push_backend() == 'fcm'
+
+
+def test_resolve_push_backend_records_a_fallback_on_invalid_value(monkeypatch):
+    # The silent degrade to FCM on a typo must be visible in omi_fallback_total (record_fallback).
+    import utils.push.selector as selector_mod
+
+    recorded = {}
+    monkeypatch.setattr(selector_mod, 'record_fallback', lambda **kw: recorded.update(kw))
+    monkeypatch.setenv('PUSH_NOTIFICATION_BACKEND', 'bogus')
+    assert selector_mod.resolve_push_backend() == 'fcm'
+    assert recorded['component'] == 'push'
+    assert recorded['to_mode'] == 'fcm'
+    assert recorded['outcome'] == 'degraded'
+
+
+def test_send_one_sync_skips_endpoint_with_invalid_key_set():
+    # A single malformed persisted key set must not abort the fan-out: _send_one_sync returns None
+    # (like a transient failure) instead of raising, so other endpoints still receive the push.
+    from utils.push import unifiedpush
+
+    bad = UnifiedPushEndpoint(url='http://ntfy/x?up=1', p256dh='!!!bad!!!', auth='@@@bad@@@')
+    assert unifiedpush._send_one_sync(bad, b'{"body":"hi"}') is None

@@ -35,6 +35,26 @@ def is_langsmith_enabled() -> bool:
     return False
 
 
+def vendor_tracing_denied() -> bool:
+    """Whether LangSmith tracing must stay off, per OMI_VENDOR_EGRESS (ADR-0057).
+
+    This gate used to hang on ``OMI_ENV_STAGE=selfhost``. That worked, but by coincidence: the stage means
+    "a real deployment, not a developer's machine", NOT "data may leave the premises" — and appending a
+    sovereignty guard to it is exactly the mistake that produced the reverted `ba986abdb4`. The traces carry
+    the prompts themselves plus uid/app_id, so this is conversation content leaving the premises.
+
+    The tracing FLAG is deliberately not the gate, and that has not changed: the tracer path below is gated
+    on one condition — "is an API key present?" — and this module's own startup log spells out the
+    consequence ("Global tracing off but API key present -> per-request tracing enabled"), so
+    LANGCHAIN_TRACING_V2=false plus an inherited key still exports chat traces. Upstream ships exactly that
+    combination in its cloud values and relies on per-request tracing, so honouring the flag here would
+    change upstream product behaviour instead of adding the abstraction this fork carries.
+    """
+    from config.vendor_egress import vendor_egress_denied
+
+    return vendor_egress_denied('langsmith_tracing', log=logger)
+
+
 def get_langsmith_project() -> str:
     """
     Get the configured LangSmith project name.
@@ -82,6 +102,17 @@ def log_langsmith_status() -> None:
     project = get_langsmith_project()
     endpoint = get_langsmith_endpoint()
 
+    # Checked with the plain predicate, NOT vendor_tracing_denied(): a status line is not a lost
+    # capability, and recording a fallback for it would put one event per boot in the counter.
+    from config.vendor_egress import vendor_egress_allowed
+
+    if not vendor_egress_allowed():
+        # Without this branch the startup log states "Per-request tracing (chat only) / Prompt Hub:
+        # enabled" whenever a key is present — while both paths are gated off. The one line an operator
+        # reads at boot must not contradict the posture (ADR-0057).
+        logger.info("📊 LangSmith: DISABLED by policy (OMI_VENDOR_EGRESS=deny) — no tracer, no Prompt Hub")
+        return
+
     if global_enabled and has_key:
         logger.info(f"🔍 LangSmith: GLOBAL tracing ENABLED")
         logger.info(f"   Project: {project}")
@@ -117,6 +148,8 @@ def get_chat_tracer_callbacks(
     Returns:
         List containing LangChainTracer callback if API key is set, else empty list
     """
+    if vendor_tracing_denied():
+        return []
     if not has_langsmith_api_key():
         return []
 

@@ -1,0 +1,216 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "omi-oss values",
+  "type": "object",
+  "properties": {
+    "secrets": {
+      "type": "object",
+      "properties": {
+        "create": {
+          "type": "boolean"
+        }
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "storageClassName": {
+      "type": "string"
+    },
+    "backend": {
+      "type": "object",
+      "properties": {
+        "image": {
+          "type": "object",
+          "description": "repository + tag; an empty tag means the release (Chart.appVersion, ADR-0054)",
+          "properties": {
+            "repository": {
+              "type": "string",
+              "minLength": 1
+            },
+            "tag": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "repository"
+          ]
+        },
+        "replicas": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "encryptionSecret": {
+          "type": "string"
+        },
+        "memory": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "cursorSecret": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "chat": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "vectorDim": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "objstore": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "push": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "auth": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "hostname": {
+          "type": "string"
+        },
+        "audience": {
+          "type": "string"
+        }
+      }
+    },
+    "inference": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "ingress": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "gateway",
+            "ingress"
+          ]
+        },
+        "httpNodePort": {
+          "type": "integer"
+        },
+        "httpsNodePort": {
+          "type": "integer"
+        }
+      }
+    },
+    "scheduledJobs": {
+      "type": "object",
+      "properties": {
+        "notifications": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "schedule": {
+              "type": "string",
+              "minLength": 9
+            },
+            "resources": {
+              "type": "object"
+            }
+          }
+        },
+        "memoryMaintenance": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "schedule": {
+              "type": "string",
+              "minLength": 9
+            },
+            "resources": {
+              "type": "object"
+            }
+          }
+        },
+        "conversationSearchIndex": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "schedule": {
+              "type": "string",
+              "minLength": 9
+            },
+            "resources": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "search": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "apiKey": {
+          "type": "string"
+        },
+        "typesense": {
+          "type": "object",
+          "properties": {
+            "image": {
+              "type": "string",
+              "minLength": 1
+            },
+            "imagePullPolicy": {
+              "type": "string"
+            },
+            "storage": {
+              "type": "string",
+              "minLength": 1
+            },
+            "resources": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -16,37 +16,37 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from utils.other import storage as storage_mod
+from tests.object_store_fakes import FakeObjectStore
 
 
 class TestDeleteAllConversationRecordings:
     def test_unconfigured_bucket_is_a_no_op(self):
         """Before the fix this raised ValueError and blocked the whole account wipe."""
+        store = MagicMock()
         with patch.object(storage_mod, "memories_recordings_bucket", None), patch.object(
-            storage_mod, "_get_storage_client"
-        ) as get_client:
+            storage_mod, "_object_store", return_value=store
+        ):
             assert storage_mod.delete_all_conversation_recordings("uid1") == 0
-        get_client.assert_not_called()
+        store.list.assert_not_called()  # returns before ever reaching the store
 
     def test_configured_bucket_purges_the_uid_prefix(self):
-        blob = MagicMock()
-        bucket = MagicMock()
-        bucket.list_blobs.return_value = [blob]
-        client = MagicMock()
-        client.bucket.return_value = bucket
+        store = FakeObjectStore()
+        store.put("memories-recordings", "uid1/conv-a.wav", b"x")
+        store.put("memories-recordings", "uid1/conv-b.wav", b"x")
+        store.put("memories-recordings", "uid2/other.wav", b"x")  # different uid: must survive
         with patch.object(storage_mod, "memories_recordings_bucket", "memories-recordings"), patch.object(
-            storage_mod, "_get_storage_client", return_value=client
+            storage_mod, "_object_store", return_value=store
         ):
-            assert storage_mod.delete_all_conversation_recordings("uid1") == 1
-        client.bucket.assert_called_once_with("memories-recordings")
-        bucket.list_blobs.assert_called_once_with(prefix="uid1/")
-        blob.delete.assert_called_once()
+            assert storage_mod.delete_all_conversation_recordings("uid1") == 2
+        assert store.list("memories-recordings", "uid1/") == []  # purged
+        assert store.exists("memories-recordings", "uid2/other.wav")  # untouched
 
     def test_real_gcs_failure_still_raises(self):
-        """The purge is required: a genuine GCS error must keep blocking the irreversible wipe."""
-        client = MagicMock()
-        client.bucket.side_effect = RuntimeError("gcs down")
+        """The purge is required: a genuine storage error must keep blocking the irreversible wipe."""
+        store = MagicMock()
+        store.list.side_effect = RuntimeError("gcs down")
         with patch.object(storage_mod, "memories_recordings_bucket", "memories-recordings"), patch.object(
-            storage_mod, "_get_storage_client", return_value=client
+            storage_mod, "_object_store", return_value=store
         ):
             with pytest.raises(RuntimeError):
                 storage_mod.delete_all_conversation_recordings("uid1")

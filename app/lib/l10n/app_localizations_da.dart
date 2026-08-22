@@ -1863,6 +1863,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get signInWithGoogle => 'Log ind med Google';
 
   @override
+  String get signInWithSSO => 'Log ind med SSO';
+
+  @override
   String get byContinuingAgree => 'Ved at fortsætte accepterer du';
 
   @override

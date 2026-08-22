@@ -26,6 +26,42 @@ class _FakeIndex:
         return {'matches': []}
 
 
+class _PortOverIndex:
+    """Adapt the neutral vector-store port (ADR-0033) onto a Pinecone-index-shaped fake."""
+
+    def __init__(self, index):
+        self._i = index
+
+    def upsert(self, namespace, records):
+        recs = list(records)
+        self._i.upsert(vectors=recs, namespace=namespace)
+        return len(recs)
+
+    def query(self, namespace, vector, *, top_k, filter=None, include_metadata=True, include_values=False):
+        return self._i.query(
+            vector=vector,
+            top_k=top_k,
+            include_metadata=include_metadata,
+            include_values=include_values,
+            filter=filter,
+            namespace=namespace,
+        )["matches"]
+
+    def update_metadata(self, namespace, id, set_metadata):
+        self._i.update(id, set_metadata=set_metadata, namespace=namespace)
+
+    def delete_by_ids(self, namespace, ids):
+        ids = list(ids)
+        self._i.delete(ids=ids, namespace=namespace)
+        return len(ids)
+
+    def delete_by_filter(self, namespace, filter):
+        self._i.delete(filter=filter, namespace=namespace)
+
+    def list_ids(self, namespace, *, prefix):
+        yield from self._i.list(prefix=prefix, namespace=namespace)
+
+
 def test_relax_retry_fires_without_date_filter(monkeypatch):
     fake = _FakeIndex(
         [
@@ -33,7 +69,8 @@ def test_relax_retry_fires_without_date_filter(monkeypatch):
             {'matches': [{'id': 'u1-conv1', 'metadata': {'memory_id': 'conv1'}}]},  # uid-only retry -> hit
         ]
     )
-    monkeypatch.setattr(vdb, 'index', fake)
+    monkeypatch.setattr(vdb, '_vector_store', lambda: _PortOverIndex(fake))
+    monkeypatch.setattr(vdb, 'is_vector_available', lambda: True)
 
     result = vdb.query_vectors_by_metadata('u1', [0.0] * 8, [], ['alice'], [], [], [], limit=5)
 
@@ -43,7 +80,8 @@ def test_relax_retry_fires_without_date_filter(monkeypatch):
 
 def test_no_retry_when_structured_query_hits(monkeypatch):
     fake = _FakeIndex([{'matches': [{'id': 'u1-conv2', 'metadata': {'memory_id': 'conv2'}}]}])
-    monkeypatch.setattr(vdb, 'index', fake)
+    monkeypatch.setattr(vdb, '_vector_store', lambda: _PortOverIndex(fake))
+    monkeypatch.setattr(vdb, 'is_vector_available', lambda: True)
 
     result = vdb.query_vectors_by_metadata('u1', [0.0] * 8, [], ['alice'], [], [], [], limit=5)
 
@@ -54,7 +92,8 @@ def test_no_retry_when_structured_query_hits(monkeypatch):
 def test_no_retry_for_date_only_query(monkeypatch):
     # uid + date range only (no structured $or): a no-match must NOT pop the date clause; returns [].
     fake = _FakeIndex([{'matches': []}])
-    monkeypatch.setattr(vdb, 'index', fake)
+    monkeypatch.setattr(vdb, '_vector_store', lambda: _PortOverIndex(fake))
+    monkeypatch.setattr(vdb, 'is_vector_available', lambda: True)
     d0 = datetime(2024, 1, 1, tzinfo=timezone.utc)
     d1 = datetime(2024, 1, 2, tzinfo=timezone.utc)
 
