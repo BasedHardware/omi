@@ -11,9 +11,9 @@
 //
 //  - **Three of them are one page.** Conversations, Memories and Brain Map are three of the Memory
 //    hub's four views (`MemoryHubDestination`). The bar was carrying a page's internal tabs, which is
-//    why it needed a menu to hold them. The bar keeps one pill, `Activity`, which opens the hub's
+//    why it needed a menu to hold them. The bar keeps one pill, `Brain`, which opens the hub's
 //    fourth view — the chronological spine — and the other three are chips in that page's own
-//    navigating row (`ActivityDestinationChip`), with a `‹ Activity` control on each of them for the
+//    navigating row (`ActivityDestinationChip`), with a `‹ Brain` control on each of them for the
 //    way back (`ActivityBackButton`).
 //  - **The rest are genuinely separate views**, so they are flat pills: `Tasks`, `Rewind`, `Apps`.
 //    Always visible, one click, no disclosure, no hover.
@@ -102,7 +102,7 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
     case .rewind: return "Rewind"
     case .apps: return "Apps"
     case .permissions: return "Permissions"
-    case .activity: return "Activity"
+    case .activity: return "Brain"
     }
   }
 
@@ -221,13 +221,13 @@ enum TopNavigationRoutes {
       tooltip: "Chat — talk to Omi about everything you've seen and heard"),
     // The hub's pill names the view it opens. It used to say `Memories` while opening whichever hub
     // view was last persisted, so the word on the bar and the page you landed on were only
-    // sometimes the same thing. It opens `Activity` — the chronological spine over everything
+    // sometimes the same thing. It opens `Brain` — the chronological spine over everything
     // captured — and says so; Conversations, Memories and Brain Map stay one click away in that
     // page's own chip row, which is the mechanism `ShellDestination.reach` records for them.
     // The glyph is deliberately not `clock.arrow.circlepath`: that is Rewind's, two pills away.
     TopNavigationItem(
-      index: SidebarNavItem.conversations.rawValue, title: "Activity", icon: "square.stack",
-      tooltip: "Activity — everything Omi captured, newest first"),
+      index: SidebarNavItem.conversations.rawValue, title: "Brain", icon: "square.stack",
+      tooltip: "Brain — everything Omi captured, newest first"),
     TopNavigationItem(
       index: SidebarNavItem.tasks.rawValue, title: "Tasks", icon: "checklist",
       tooltip: "Tasks — everything Omi heard you commit to"),
