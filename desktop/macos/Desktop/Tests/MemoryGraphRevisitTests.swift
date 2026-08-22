@@ -42,7 +42,7 @@ final class MemoryGraphRevisitTests: XCTestCase {
     // Storage identity, pinned: these raw values are persisted, so the enum may not be reordered.
     // Reading order is a different list and lives with the control that presents it — see
     // `ChatFirstDestinationParityTests.testTheActivityChipRowOffersEveryHubPageAndNothingElse`.
-    XCTAssertEqual(MemoryHubDestination.activity.title, "Activity")
+    XCTAssertEqual(MemoryHubDestination.activity.title, "Brain")
     XCTAssertEqual(MemoryHubDestination.memories.title, "Memories")
     XCTAssertEqual(MemoryHubDestination.conversations.title, "Conversations")
     XCTAssertEqual(MemoryHubDestination.brainMap.title, "Brain Map")

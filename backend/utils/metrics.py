@@ -1,5 +1,9 @@
-from prometheus_client import Counter, Gauge, Histogram, generate_latest, CONTENT_TYPE_LATEST
+import os
+import threading
+from typing import Any
+
 from fastapi import Response
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest, start_http_server
 
 from utils.journey_metrics_contract import (
     CLIENT_JOURNEY_ISSUE_CLASSES,
@@ -430,3 +434,42 @@ PUSHER_DRAIN_IN_PROGRESS.set(0)
 
 def metrics_response() -> Response:
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+_sidecar_server_lock = threading.Lock()
+_sidecar_server: Any | None = None
+_sidecar_server_thread: threading.Thread | None = None
+
+
+def start_metrics_sidecar_server() -> None:
+    """Expose the process registry only on loopback for the Cloud Run sidecar."""
+    raw_port = os.environ.get('PROMETHEUS_SIDECAR_PORT', '').strip()
+    if not raw_port:
+        return
+    try:
+        port = int(raw_port)
+    except ValueError as exc:
+        raise RuntimeError('PROMETHEUS_SIDECAR_PORT must be an integer') from exc
+    if not 1 <= port <= 65535:
+        raise RuntimeError('PROMETHEUS_SIDECAR_PORT must be between 1 and 65535')
+
+    global _sidecar_server, _sidecar_server_thread
+    with _sidecar_server_lock:
+        if _sidecar_server is not None:
+            return
+        _sidecar_server, _sidecar_server_thread = start_http_server(port, addr='127.0.0.1')
+
+
+def stop_metrics_sidecar_server() -> None:
+    global _sidecar_server, _sidecar_server_thread
+    with _sidecar_server_lock:
+        server = _sidecar_server
+        thread = _sidecar_server_thread
+        _sidecar_server = None
+        _sidecar_server_thread = None
+    if server is None:
+        return
+    server.shutdown()
+    server.server_close()
+    if thread is not None:
+        thread.join(timeout=5)

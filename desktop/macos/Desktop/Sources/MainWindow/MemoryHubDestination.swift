@@ -27,7 +27,7 @@ enum MemoryHubDestination: Int, CaseIterable, Identifiable {
     case .memories: return "Memories"
     case .conversations: return "Conversations"
     case .brainMap: return "Brain Map"
-    case .activity: return "Activity"
+    case .activity: return "Brain"
     }
   }
 

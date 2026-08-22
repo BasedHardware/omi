@@ -102,7 +102,7 @@ def _admit_finalization(_conversation_data: dict) -> jobs.FinalizationAdmission:
 
 def test_intent_persists_outbox_before_any_live_handoff_and_omits_byok_material():
     transaction = _Transaction()
-    conversation_ref = _conversation()
+    conversation_ref = _conversation({'client_platform': 'android'})
     collection = _Collection({})
 
     intent = jobs._create_or_get_finalization_intent_txn(
@@ -125,7 +125,7 @@ def test_intent_persists_outbox_before_any_live_handoff_and_omits_byok_material(
     assert job['dispatch_generation'] == 1
     assert job['status'] == 'queued'
     assert job['fanout_key'] == 'fanout-key'
-    assert job['fanout_status'] == 'pending'
+    assert (job['fanout_status'], job['client_platform']) == ('pending', 'android')
     forbidden = {'byok_keys', 'transcript', 'transcript_segments', 'authorization', 'raw_error'}
     assert forbidden.isdisjoint(job)
     assert transaction.updates[0][1]['status'] == 'processing'

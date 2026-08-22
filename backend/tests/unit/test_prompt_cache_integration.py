@@ -311,9 +311,10 @@ _load_module_from_file("utils.retrieval.safety", BACKEND_DIR / "utils" / "retrie
 # Real (import-light) fallback telemetry: agentic.py imports record_fallback from it.
 _load_module_from_file("utils.observability.fallback", BACKEND_DIR / "utils" / "observability" / "fallback.py")
 
-# Real (import-light) journey metrics: agentic.py imports ClientJourneyAttempt to record the
-# memory_retrieval journey. utils.observability is stubbed with an empty __path__, so like
-# fallback above this must be loaded from file or the import fails at agentic import time.
+# Real (import-light) journey metrics: routers/chat.py imports ClientJourneyAttempt to record
+# the realtime voice journey, and agentic.py imports it to record the memory_retrieval journey.
+# utils.observability is stubbed with an empty __path__, so like fallback above this must be
+# loaded from file or those imports fail.
 _load_module_from_file("utils.observability.journeys", BACKEND_DIR / "utils" / "observability" / "journeys.py")
 
 # Real (import-light) web_search gate. agentic.py now imports WEB_SEARCH_TOOL and

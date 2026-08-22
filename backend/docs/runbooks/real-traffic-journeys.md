@@ -59,9 +59,10 @@ macOS and Windows respectively; headerless Dart resolves to
 server cannot separate them until the clients send `X-App-Platform`; it must not
 guess an operating system.
 
-The family is zero-initialized but has no per-journey call sites or alerts yet.
-A zero is meaningful only with the owning scrape job/revision selected; an
-unrelated healthy exporter also exposes the bounded zero children. Its closed
+The family is zero-initialized; only the wired journeys below emit real traffic,
+and no client-segmented alerts exist yet. A zero is meaningful only with the
+owning scrape job/revision selected; an unrelated healthy exporter also exposes
+the bounded zero children. Its closed
 cartesian product is capped at 3,915 Prometheus series per process with the
 pinned client's `_created` series enabled: 180 accepted, 900 terminal, 1,980
 issue, and 855 histogram series.
@@ -98,6 +99,24 @@ accepted in one process and completed in another must persist its acceptance
 time for duration, export both sides to the same telemetry backend, and use a
 durable lifecycle projection/queue gauge for outstanding work. Capture
 finalization's `listen_finalization_durable_jobs` is the existing pattern.
+
+The wired client-segmented boundaries are:
+
+- `live_transcription`: accepted with the existing live-STT attempt after the
+  first nontrivial audio frame; succeeds after the first nonempty transcript is
+  sent, fails on a provider/live-session terminal, and otherwise cancels. The
+  existing `omi_live_stt_*` contract remains authoritative and unchanged.
+- `realtime_voice`: accepted after the voice-message WebSocket is admitted;
+  succeeds after a nonempty transcript is sent, fails on provider setup/send or
+  an empty finalized answer, and cancels on client disconnect.
+- `conversation_finalization`: accepted only when the Firestore outbox creates
+  a new job; succeeds only after durable finalization completes, fails when the
+  job dead-letters, and cancels when lifecycle fencing makes the job stale. The
+  existing `capture_finalization` journey remains unchanged.
+- `app_webhook_delivery`: one attempt per eligible app or developer webhook;
+  succeeds only on a 2xx response and fails on rejection, timeout, invalid
+  target, circuit-open dependency, or transport/provider error. Enqueueing or
+  scheduling a send is not success.
 
 ## Boundary semantics
 

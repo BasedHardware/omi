@@ -83,7 +83,7 @@ from utils.users import get_user_display_name
 from utils.log_sanitizer import sanitize_pii
 from utils.observability import submit_langsmith_feedback
 from utils.observability.fallback import record_fallback
-from utils.journey_metrics_contract import resolve_client_kind_from_headers
+from utils.journey_metrics_contract import resolve_client_kind, resolve_client_kind_from_headers
 from utils.observability.journeys import ClientJourneyAttempt, JourneyAttempt
 from utils.voice_duration_limiter import (
     compute_pcm_duration_ms,
@@ -1324,13 +1324,23 @@ async def transcribe_voice_message_stream(
     # A terminal provider failure after either audio handoff or finalization.
     stt_send_failed = False
     stt_drained = False
+    finalization_requested = False
+    client_disconnected = False
     usage_recorded = False
     # 30ms flush threshold for the live-STT transport (16-bit PCM = 2 bytes per sample per channel).
     bytes_per_second = sample_rate * channels * 2
     stt_buffer_flush_size = int(bytes_per_second * 0.03)
 
+    journey_attempt = ClientJourneyAttempt(
+        'realtime_voice',
+        resolve_client_kind(
+            x_app_platform=x_app_platform,
+            user_agent=websocket.headers.get('user-agent'),
+        ),
+    )
     stt_service, stt_language, stt_model = get_stt_service_for_language(language, surface=STTServingSurface.PTT)
     if stt_service is None or stt_language is None or stt_model is None:
+        journey_attempt.fail('dependency_unavailable')
         await websocket.close(code=1011, reason='Transcription service unavailable')
         return
     context_keywords = _parse_context_keywords(keywords)
@@ -1363,17 +1373,22 @@ async def transcribe_voice_message_stream(
 
     async def segment_sender():
         """Forward segments from the thread-safe queue to the WebSocket."""
-        nonlocal websocket_active
+        nonlocal client_disconnected, websocket_active
         while websocket_active:
             try:
                 segments = await asyncio.wait_for(segment_queue.get(), timeout=0.5)
                 if segments is _SENTINEL:
                     break
                 await websocket.send_json(segments)
+                if isinstance(segments, list) and any(
+                    isinstance(segment, dict) and str(segment.get('text') or '').strip() for segment in segments
+                ):
+                    journey_attempt.succeed()
             except asyncio.TimeoutError:
                 continue
             except Exception as e:
                 logger.warning(f'transcribe-stream: segment_sender error uid={uid}: {e}')
+                client_disconnected = True
                 websocket_active = False
                 break
 
@@ -1384,6 +1399,7 @@ async def transcribe_voice_message_stream(
             return
         stt_send_failed = True
         websocket_active = False
+        journey_attempt.fail('provider_error')
         logger.error('event=ptt_transcription_stream outcome=provider_terminal_failure')
         try:
             await websocket.close(code=1011, reason='Transcription service unavailable')
@@ -1452,6 +1468,7 @@ async def transcribe_voice_message_stream(
             raise RuntimeError(f'Unsupported serving STT provider {stt_service!r}')
 
         if dg_socket is None:
+            journey_attempt.fail('dependency_unavailable')
             logger.error(
                 'transcribe-stream: failed to connect to STT provider uid=%s provider=%s', uid, stt_service.value
             )
@@ -1481,9 +1498,11 @@ async def transcribe_voice_message_stream(
                 await websocket.close(code=1008, reason=f'Idle timeout: no audio for {_WS_IDLE_TIMEOUT_S}s')
                 break
             except WebSocketDisconnect:
+                client_disconnected = True
                 break
 
             if message.get("type") == "websocket.disconnect":
+                client_disconnected = True
                 break
 
             # Handle text "finalize" message: flush remaining audio and await the provider's
@@ -1491,6 +1510,7 @@ async def transcribe_voice_message_stream(
             # Note: text frames do NOT reset the audio-idle timer.
             text_data = message.get("text")
             if text_data and text_data.strip() == "finalize":
+                finalization_requested = True
                 if dg_socket and not stt_send_failed:
                     if len(stt_audio_buffer) > 0:
                         if not await send_stt_audio_or_close(bytes(stt_audio_buffer)):
@@ -1542,7 +1562,7 @@ async def transcribe_voice_message_stream(
                 accepted_audio_bytes += len(chunk)
 
     except WebSocketDisconnect:
-        pass
+        client_disconnected = True
     except Exception as e:
         logger.error(f'transcribe-stream: error uid={uid}: {e}')
         await close_stt_failure()
@@ -1580,6 +1600,16 @@ async def transcribe_voice_message_stream(
                     await sender_task
                 except asyncio.CancelledError:
                     pass
+
+        if not journey_attempt.finished:
+            if client_disconnected:
+                journey_attempt.cancel()
+            elif stt_send_failed:
+                journey_attempt.fail('provider_error')
+            elif finalization_requested:
+                journey_attempt.fail('empty_answer')
+            else:
+                journey_attempt.cancel()
 
         del stt_audio_buffer
         parity_capture.persist()
