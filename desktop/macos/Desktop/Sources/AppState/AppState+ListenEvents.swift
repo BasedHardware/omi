@@ -532,6 +532,42 @@ extension AppState {
     case "photo_described":
       log("Transcription: Photo described event (not used on desktop)")
 
+    case "proactive_message":
+      let appId = event.raw["app_id"] as? String ?? ""
+      let title = event.raw["title"] as? String ?? "Omi"
+      let message = event.raw["message"] as? String ?? ""
+      let conversationId = event.raw["conversation_id"] as? String
+      guard !message.isEmpty else {
+        log("Transcription: Ignoring proactive_message with empty message body")
+        break
+      }
+      log("Transcription: Proactive message from \(appId): \(title) — \(message.prefix(80))")
+
+      // Deliver via the floating bar (visual card + optional TTS), the same
+      // surface used by context-director proactive notifications.  Gate on the
+      // current runtime owner so a stale listen session cannot deliver to a
+      // different user.
+      guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+        log("Transcription: Dropping proactive_message — no runtime owner")
+        break
+      }
+      let speech = NotificationSpeechOnDelivery(message: message, isProactive: true)
+      FloatingControlBarManager.shared.showNotification(
+        ownerID: authorizationSnapshot.ownerID,
+        title: title,
+        message: message,
+        assistantId: appId.isEmpty ? "proactive-listen" : appId,
+        sound: .default,
+        kind: .general,
+        authorizationSnapshot: authorizationSnapshot,
+        onPresented: { speech.notificationWasPresented() }
+      )
+
+      // Refresh conversations if the message is tied to a specific conversation
+      if let conversationId, !conversationId.isEmpty {
+        log("Transcription: Proactive message references conversation \(conversationId)")
+      }
+
     default:
       log("Transcription: Unhandled event type: \(event.type)")
     }

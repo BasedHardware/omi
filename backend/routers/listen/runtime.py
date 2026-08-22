@@ -72,6 +72,8 @@ from .conversations import LiveConversationController
 from .persistence import ListenPersistence
 from .parity_capture import ListenParityCapture
 from .receiver import ListenReceiver
+from .registry import register as register_listen_session
+from .registry import unregister as unregister_listen_session
 from .speakers import SpeakerMatcher
 from .transcripts import TranscriptProcessor
 from utils.listen_audio import build_channel_config
@@ -627,6 +629,7 @@ class ListenSessionRuntime:
     async def run(self) -> None:
         if not await self._admit() or not await self._bootstrap():
             return
+        register_listen_session(self)
         try:
             self.receiver.initialize_decoders()
         except Exception as error:
@@ -713,6 +716,7 @@ class ListenSessionRuntime:
                     logger.warning('Listen parity capture teardown failed type=%s', type(error).__name__)
 
     async def _teardown_components(self) -> None:
+        unregister_listen_session(self)
         self.state.shutdown_event.set()
         self.task_supervisor.end_session()
         owner_persistence_blocked = self.request.owner_persistence_blocked.is_set()
