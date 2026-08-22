@@ -24,6 +24,7 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.containsKey('authToken'), isFalse);
     expect(prefs.getBool('authTokenSecureMigrated'), isTrue);
+    expect(prefs.getString('nativeAuthToken'), 'legacy-session-token');
     // Non-secret expiry stays in SharedPreferences.
     expect(SharedPreferencesUtil().tokenExpirationTime, 42);
     expect(SharedPreferencesUtil().uid, 'user-1');
@@ -64,6 +65,7 @@ void main() {
 
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.containsKey('authToken'), isFalse);
+    expect(prefs.getString('nativeAuthToken'), 'fresh-token');
 
     await SharedPreferencesUtil().clear();
     expect(SharedPreferencesUtil().authToken, isEmpty);

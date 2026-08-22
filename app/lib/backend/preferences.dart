@@ -31,6 +31,9 @@ class SharedPreferencesUtil {
   static const String _authTokenSecureKey = 'authToken';
   static const String _authTokenMigratedPrefsKey = 'authTokenSecureMigrated';
 
+  /// Plain prefs mirror for in-tree native readers (Android background socket).
+  static const String _nativeAuthTokenPrefsKey = 'nativeAuthToken';
+
   factory SharedPreferencesUtil() {
     return _instance;
   }
@@ -52,11 +55,17 @@ class SharedPreferencesUtil {
     } else {
       _secureStorage = const FlutterSecureStorage(
         aOptions: AndroidOptions(encryptedSharedPreferences: true),
+        iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
       );
       _testSecureFallback = null;
     }
     await migrateAuthTokenFromPrefs();
     _authTokenCache = await _readSecureAuthToken() ?? '';
+    // Codex P2: a failed secure write leaves the legacy prefs token; still use it.
+    if (_authTokenCache.isEmpty) {
+      _authTokenCache = _preferences?.getString('authToken') ?? '';
+    }
+    await _syncNativeAuthToken(_authTokenCache);
   }
 
   /// One-time move of `authToken` from SharedPreferences into secure storage.
@@ -111,9 +120,22 @@ class SharedPreferencesUtil {
     final fallback = _testSecureFallback;
     if (fallback != null) {
       fallback.remove(_authTokenSecureKey);
-      return;
+    } else {
+      await _secureStorage?.delete(key: _authTokenSecureKey);
     }
-    await _secureStorage?.delete(key: _authTokenSecureKey);
+    await _syncNativeAuthToken('');
+  }
+
+  /// Native Android still reads SharedPreferences. Mirror the live token there
+  /// under a dedicated key so background streaming survives the secure migration.
+  static Future<void> _syncNativeAuthToken(String value) async {
+    final prefs = _preferences;
+    if (prefs == null) return;
+    if (value.isEmpty) {
+      await prefs.remove(_nativeAuthTokenPrefsKey);
+    } else {
+      await prefs.setString(_nativeAuthTokenPrefsKey, value);
+    }
   }
 
   /// Picks up values written natively (the Dart cache doesn't see those otherwise).
@@ -771,6 +793,7 @@ class SharedPreferencesUtil {
       unawaited(_deleteSecureAuthToken());
     } else {
       unawaited(_writeSecureAuthToken(value));
+      unawaited(_syncNativeAuthToken(value));
     }
   }
 
