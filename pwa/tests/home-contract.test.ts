@@ -45,3 +45,81 @@ test("web entry renders the canonical React Native App", async () => {
   expect(entry).not.toContain("innerHTML");
   expect(entry).not.toContain("renderApp");
 });
+
+test("service worker installs the built application shell for an offline first restart", async () => {
+  const source = await readFile(resolve(root, "public/sw.js"), "utf8");
+  const listeners = new Map<string, (event: any) => void>();
+  const added: string[][] = [];
+  const stored: string[] = [];
+  let offline = false;
+  const worker = {
+    addEventListener: (name: string, listener: (event: any) => void) =>
+      listeners.set(name, listener),
+    clients: { claim: async () => undefined },
+    location: { origin: "https://omi.test" },
+    skipWaiting: () => undefined,
+  };
+  const cache = {
+    addAll: async (paths: string[]) => added.push(paths),
+    put: async (path: string) => stored.push(path),
+  };
+  const cacheStorage = {
+    delete: async () => true,
+    keys: async () => [],
+    match: async (request: Request | string) =>
+      request === "/" ? new Response("cached shell") : undefined,
+    open: async () => cache,
+  };
+  const fetchShell = async () => {
+    if (offline) throw new Error("offline");
+    return new Response(
+      '<link rel="stylesheet" href="/assets/index-abc.css"><script src="/assets/index-def.js"></script>',
+      { status: 200 }
+    );
+  };
+
+  new Function("self", "caches", "fetch", source)(
+    worker,
+    cacheStorage,
+    fetchShell
+  );
+  let installation: Promise<unknown> | undefined;
+  listeners.get("install")?.({
+    waitUntil: (promise: Promise<unknown>) => {
+      installation = promise;
+    },
+  });
+  await installation;
+
+  expect(stored).toEqual(["/"]);
+  expect(added).toEqual([
+    [
+      "/manifest.webmanifest",
+      "/omi-mark.svg",
+      "/assets/index-abc.css",
+      "/assets/index-def.js",
+    ],
+  ]);
+  offline = true;
+  const fetchListener = listeners.get("fetch")!;
+  const fetchOffline = (mode: string, path: string) => {
+    let response: Promise<Response | undefined> | undefined;
+    fetchListener({
+      request: {
+        method: "GET",
+        mode,
+        url: `https://omi.test${path}`,
+      },
+      respondWith: (promise: Promise<Response | undefined>) => {
+        response = promise;
+      },
+    });
+    return response!;
+  };
+  await expect(
+    fetchOffline("same-origin", "/assets/missing.js")
+  ).rejects.toThrow("PWA resource is unavailable offline");
+  await expect(
+    fetchOffline("navigate", "/memories").then((value) => value?.text())
+  ).resolves.toBe("cached shell");
+});

@@ -98,10 +98,12 @@ const accountStub = {
     return { ...admission, created: true };
   },
   cancel: async (_accountId: string, _generationId: string) => cancellation,
-  fetch: async () =>
-    new Response(
-      'id: 1\nevent: snapshot\ndata: {"kind":"snapshot","text":""}\n\n'
-    ),
+  fetch: async (request: Request) =>
+    new URL(request.url).searchParams.get("generationId") === "missing"
+      ? new Response(null, { status: 404 })
+      : new Response(
+          'id: 1\nevent: snapshot\ndata: {"kind":"snapshot","text":""}\n\n'
+        ),
 };
 
 const env = {
@@ -723,6 +725,22 @@ describe("ratified generation wire", () => {
     expect(parseChatGenerationEventStream(await response.text())).toEqual([
       { kind: "snapshot", text: "" },
     ]);
+  });
+
+  test("generation endpoint returns the fixed typed refusal before SSE begins", async () => {
+    const response = await fetchWorker("/v1/chat-generations/missing/events", {
+      headers: authenticatedHeaders,
+    });
+
+    expect(response.status).toBe(404);
+    expect((await response.json()) as unknown).toEqual({
+      error: {
+        code: "not_found",
+        retryable: false,
+        action: "refresh_history",
+      },
+    });
+    expect(response.headers.get("cache-control")).toBe("no-store");
   });
 
   test("resume replays strictly after the cursor and heals terminal reconnects", () => {

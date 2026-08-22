@@ -2,7 +2,19 @@ const cacheName = "omi-v5-pwa-v1";
 const shell = ["/", "/manifest.webmanifest", "/omi-mark.svg"];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(cacheName).then((cache) => cache.addAll(shell)));
+  event.waitUntil(
+    fetch("/").then(async (response) => {
+      if (!response.ok) throw new Error("PWA shell is unavailable");
+      const html = await response.clone().text();
+      const assets = Array.from(
+        html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g),
+        (match) => match[1]
+      );
+      const cache = await caches.open(cacheName);
+      await cache.put("/", response);
+      await cache.addAll([...shell.slice(1), ...new Set(assets)]);
+    })
+  );
   self.skipWaiting();
 });
 
@@ -45,7 +57,11 @@ self.addEventListener("fetch", (event) => {
           }
           return response;
         })
-        .catch(() => caches.match("/"));
+        .catch(() =>
+          request.mode === "navigate"
+            ? caches.match("/")
+            : Promise.reject(new Error("PWA resource is unavailable offline"))
+        );
     })
   );
 });

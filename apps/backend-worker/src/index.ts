@@ -223,13 +223,16 @@ app.post("/v1/chat-messages", async (context) => {
   );
 });
 
-app.get("/v1/chat-generations/:id/events", (context) => {
+app.get("/v1/chat-generations/:id/events", async (context) => {
   const generationId = context.req.param("id");
   const target = new URL("https://account.internal/events");
   target.searchParams.set("generationId", generationId);
-  return account(context).fetch(
+  const response = await account(context).fetch(
     new Request(target, { headers: context.req.raw.headers })
   );
+  return response.status === 404
+    ? backendError("not_found", "refresh_history", 404)
+    : response;
 });
 
 app.delete("/v1/chat-generations/:id", async (context) => {
