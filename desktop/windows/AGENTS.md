@@ -85,14 +85,12 @@ real fix needs Wayland layer-shell-aware positioning, which niri supports
 
 ## Release Pipeline
 
-Full detail: `docs/release-pipeline.md` (mirrors macOS's auto-release shape;
-Windows has no external CI, so the same workflow also builds the NSIS
-installer on a `windows-latest` runner). One correction to that doc as of this
-writing: it describes the workflow as triggering "on every push to main" —
-the actual `.github/workflows/desktop_windows_release.yml` trigger is
-`workflow_dispatch` only (manual). Verify against the workflow file's `on:`
-block if this matters for what you're doing; the rest of that doc (tagging,
-signing, auto-update feed, public download links) is accurate.
+Full detail: `docs/release-pipeline.md` (mirrors macOS's auto-release shape in
+what it produces; Windows has no external CI, so the same workflow also
+builds the NSIS installer on a `windows-latest` runner). Unlike the macOS
+workflow, it's **manual only** (`workflow_dispatch`, no `push` trigger) — see
+`docs/release-pipeline.md` for tagging, signing, auto-update feed, and public
+download link detail.
 
 The version-bump "sync back to main" step is documented as best-effort and can
 leave a stale, unmerged PR behind after a release — see issue #10727. If you
