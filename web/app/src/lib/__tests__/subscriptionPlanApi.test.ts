@@ -28,19 +28,18 @@ describe('getUserSubscription plan decoding', () => {
   ])('decodes %s without capability inference', async (raw, expectedPaid) => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(
-        async () =>
-          new Response(
-            JSON.stringify({
-              subscription: {
-                plan: raw,
-                status: 'active',
-                features: [],
-                cancel_at_period_end: false,
-              },
-            }),
-            { headers: { 'content-type': 'application/json' } },
-          ),
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            subscription: {
+              plan: raw,
+              status: 'active',
+              features: [],
+              cancel_at_period_end: false,
+            },
+          }),
+          { headers: { 'content-type': 'application/json' } },
+        ),
       ),
     );
 

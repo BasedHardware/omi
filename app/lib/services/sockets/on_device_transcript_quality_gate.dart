@@ -1,7 +1,14 @@
 import 'dart:typed_data';
 
 class OnDeviceTranscriptQualityGate {
-  static const Set<String> _fillerOnlyTokens = {'no', 'nope', 'nah', 'uh', 'um', 'hmm'};
+  static const Set<String> _fillerOnlyTokens = {
+    'no',
+    'nope',
+    'nah',
+    'uh',
+    'um',
+    'hmm',
+  };
   static const int _lowEnergyAverageAbsThreshold = 180;
 
   // Each long-lived provider owns one gate. Real speech clears this state, so

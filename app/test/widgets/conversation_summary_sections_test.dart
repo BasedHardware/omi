@@ -25,7 +25,12 @@ Future<void> _pumpSummary(WidgetTester tester, ServerConversation conversation, 
       home: Scaffold(
         body: CustomScrollView(
           slivers: [
-            AppResultDetailWidget(appResponse: response, app: null, conversation: conversation, asSliver: true),
+            AppResultDetailWidget(
+              appResponse: response,
+              app: null,
+              conversation: conversation,
+              asSliver: true,
+            ),
           ],
         ),
       ),
