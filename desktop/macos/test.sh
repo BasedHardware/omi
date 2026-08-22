@@ -19,6 +19,15 @@ cd "$SCRIPT_DIR"
 # runner listed nothing, so `set -e` aborted here and the Python and Swift
 # sections below never ran. scripts/check-launcher-test-skips.py holds both loops
 # to the marked set.
+#
+# The section aggregates rather than aborting: a failure here is recorded and
+# the run continues, so one red launcher script no longer costs the whole Python
+# and Swift stages. #11747 fixed the membership that made that reachable without
+# a real failure, but any genuinely failing script reproduced the same blackout
+# — an operator saw one error and no signal at all from the suites below. The
+# aggregate is reported and exits non-zero at the very end, mirroring
+# backend/test.sh's per-file collection.
+failed_launcher_checks=()
 for t in tests/test-*.sh; do
   echo "== $t"
   skip_reason="$(sed -n '1,10s/^# discovery-skip: *//p' "$t" | head -1)"
@@ -26,9 +35,15 @@ for t in tests/test-*.sh; do
     echo "  skip: $skip_reason"
     continue
   fi
-  bash "$t"
+  if ! bash "$t"; then
+    echo "  FAIL: $t"
+    failed_launcher_checks+=("$t")
+  fi
 done
-python3 scripts/check-e2e-flow-coverage.py --strict
+if ! python3 scripts/check-e2e-flow-coverage.py --strict; then
+  echo "  FAIL: scripts/check-e2e-flow-coverage.py --strict"
+  failed_launcher_checks+=("scripts/check-e2e-flow-coverage.py --strict")
+fi
 echo ""
 
 echo "=== Python Desktop Backend Tests ==="
@@ -66,5 +81,11 @@ cd "$SCRIPT_DIR"
 # known-red tests require an explicit issue, reason, and skip-count change.
 "$SCRIPT_DIR/scripts/swift-test-suites.sh"
 echo ""
+
+if (( ${#failed_launcher_checks[@]} > 0 )); then
+  echo "FAIL: desktop launcher script checks failed:" >&2
+  printf '  %s\n' "${failed_launcher_checks[@]}" >&2
+  exit 1
+fi
 
 echo "All desktop tests passed."

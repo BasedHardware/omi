@@ -51,10 +51,17 @@ enum PageGlassLanePolicy {
   /// It takes the raw index rather than a `SidebarNavItem` because the router's `switch` sends every
   /// unrecognised index to Home through its `default:` branch. Resolving an unknown index to anything
   /// else here would wrap Home in a second panel on exactly the routes nobody tests.
-  static func ownsItsPanels(selectedIndex: Int) -> Bool {
+  static func ownsItsPanels(selectedIndex: Int, memoryDestinationRawValue: Int? = nil) -> Bool {
     switch SidebarNavItem(rawValue: selectedIndex) ?? .dashboard {
     case .dashboard, .rewind:
       return true
+    case .conversations, .memories:
+      // The Memory hub is one rail index wearing four different pages, and only one of them builds
+      // its own glass. Activity is Home's column — a search bar and a results panel, each already
+      // an `inkGlassPanel` — so wrapping the hub wholesale nested those two inside a third and
+      // double-scrimmed both, which is exactly the muddier-than-its-neighbours failure this policy
+      // exists to prevent. The hub's list pages paint no ground and still need the lane.
+      return MemoryHubDestination(rawValue: memoryDestinationRawValue ?? -1) == .activity
     default:
       return false
     }
@@ -97,10 +104,15 @@ enum PageGlassLaneLayout {
 struct PageGlassLane<Content: View>: View {
   /// The route being rendered, used only to ask `PageGlassLanePolicy` whether it already has glass.
   let selectedIndex: Int
+  /// The hub page being rendered when `selectedIndex` is the Memory hub's rail index. Nil for every
+  /// other destination, whose glass does not depend on a sub-page.
+  var memoryDestinationRawValue: Int? = nil
   @ViewBuilder var content: () -> Content
 
   var body: some View {
-    if PageGlassLanePolicy.ownsItsPanels(selectedIndex: selectedIndex) {
+    if PageGlassLanePolicy.ownsItsPanels(
+      selectedIndex: selectedIndex, memoryDestinationRawValue: memoryDestinationRawValue)
+    {
       // Handed the whole content area, so a modal dim mounted inside it has to take the lane rather
       // than the surface it was given — see `ShellModalScrim`. Published here rather than chosen at
       // each modal, because this is the one place that knows which of the two shapes it just built.

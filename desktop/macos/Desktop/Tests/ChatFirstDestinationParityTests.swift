@@ -21,6 +21,26 @@ final class ChatFirstDestinationParityTests: XCTestCase {
     )
   }
 
+  /// **The regression this policy actually shipped.** The memory route used to preserve `.brainMap`
+  /// by name, so `.activity` — added later as a fourth hub view sharing that route — was rewritten
+  /// to `.memories` by the route sync that runs right after the click. Pressing Activity landed on
+  /// Memories, from the pill and from the hub's own switcher alike. Every view whose route is the
+  /// memory route must survive it, not just the two that were there when the policy was written.
+  func testActivitySelectionSurvivesTheMemoryRouteTransition() {
+    XCTAssertEqual(
+      ChatFirstMemoryRoutePolicy.destination(afterSelecting: .memories, current: .activity),
+      .activity,
+      "the memory route rewrote Activity back to Memories, swallowing the click")
+
+    for destination in MemoryHubDestination.allCases
+    where MemoryHubSelectionPolicy.chatFirstRoute(for: destination) == .memories {
+      XCTAssertEqual(
+        ChatFirstMemoryRoutePolicy.destination(afterSelecting: .memories, current: destination),
+        destination,
+        "\(destination.title) does not survive its own route")
+    }
+  }
+
   /// The hub's switcher replaced the top bar's hover menu, so it has to offer all three of the hub's
   /// views — a switcher missing one is exactly the "reduced copy" INV-NAV-1 forbids.
   func testTheMemoryHubSwitcherOffersEveryHubView() {
@@ -40,6 +60,7 @@ final class ChatFirstDestinationParityTests: XCTestCase {
     XCTAssertEqual(MemoryHubSelectionPolicy.chatFirstRoute(for: .conversations), .conversations)
     XCTAssertEqual(MemoryHubSelectionPolicy.chatFirstRoute(for: .memories), .memories)
     XCTAssertEqual(MemoryHubSelectionPolicy.chatFirstRoute(for: .brainMap), .memories)
+    XCTAssertEqual(MemoryHubSelectionPolicy.chatFirstRoute(for: .activity), .memories)
   }
 
   /// Every flat pill the bar now shows must resolve to a chat-first route, both ways. `Focus` did

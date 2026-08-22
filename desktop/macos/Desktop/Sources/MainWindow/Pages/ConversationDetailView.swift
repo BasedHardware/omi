@@ -600,6 +600,11 @@ struct ConversationDetailView: View {
       overviewSection
     }
 
+    // The backend's headed summary blocks. `overview` is only a compatibility paragraph now, so
+    // without these the pane shows a fraction of what was actually written.
+    ConversationSummarySections(sections: displayConversation.structured.sections)
+      .padding(.horizontal, OmiSpacing.lg)
+
     // Metadata chips
     metadataSection
 
