@@ -1981,20 +1981,26 @@ class SharedAssistantSettings(BaseModel):
     screen_analysis_enabled: bool | None = None
 
 
+# Each bound must clear its own assistant's shipped desktop default. An oversized prompt is
+# omitted from the settings PATCH by `SettingsSyncManager.promptForSync` rather than
+# rejected, so a bound under the shipped default unsyncs that prompt silently (#11481);
+# `test_backend_bounds_admit_every_shipped_desktop_prompt` guards this against the Swift source.
+ASSISTANT_ANALYSIS_PROMPT_MAX_LENGTH = 10000
+# Task ships the only default over 10k: 13,120 code points, and 13k-15k since 2026-06.
+TASK_ANALYSIS_PROMPT_MAX_LENGTH = 20000
+
+
 class FocusAssistantSettings(BaseModel):
     enabled: bool | None = None
-    analysis_prompt: str | None = Field(None, max_length=10000)
+    analysis_prompt: str | None = Field(None, max_length=ASSISTANT_ANALYSIS_PROMPT_MAX_LENGTH)
     cooldown_interval: int | None = None
     notifications_enabled: bool | None = None
     excluded_apps: list[str] | None = None
 
 
-ASSISTANT_ANALYSIS_PROMPT_MAX_LENGTH = 10000
-
-
 class TaskAssistantSettings(BaseModel):
     enabled: bool | None = None
-    analysis_prompt: str | None = Field(None, max_length=ASSISTANT_ANALYSIS_PROMPT_MAX_LENGTH)
+    analysis_prompt: str | None = Field(None, max_length=TASK_ANALYSIS_PROMPT_MAX_LENGTH)
     extraction_interval: float | None = None
     min_confidence: float | None = Field(None, ge=0.0, le=1.0)
     notifications_enabled: bool | None = None
@@ -2004,7 +2010,7 @@ class TaskAssistantSettings(BaseModel):
 
 class AdviceAssistantSettings(BaseModel):
     enabled: bool | None = None
-    analysis_prompt: str | None = Field(None, max_length=10000)
+    analysis_prompt: str | None = Field(None, max_length=ASSISTANT_ANALYSIS_PROMPT_MAX_LENGTH)
     extraction_interval: float | None = None
     min_confidence: float | None = Field(None, ge=0.0, le=1.0)
     notifications_enabled: bool | None = None
@@ -2013,7 +2019,7 @@ class AdviceAssistantSettings(BaseModel):
 
 class MemoryAssistantSettings(BaseModel):
     enabled: bool | None = None
-    analysis_prompt: str | None = Field(None, max_length=10000)
+    analysis_prompt: str | None = Field(None, max_length=ASSISTANT_ANALYSIS_PROMPT_MAX_LENGTH)
     extraction_interval: float | None = None
     min_confidence: float | None = Field(None, ge=0.0, le=1.0)
     notifications_enabled: bool | None = None

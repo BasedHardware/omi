@@ -1,6 +1,7 @@
 import asyncio
 import json
 import types
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -9,6 +10,19 @@ from fastapi.testclient import TestClient
 
 from routers import users as users_router
 from services.users import data_export
+
+ROOT_DIR = Path(__file__).resolve().parents[3]
+DESKTOP_SOURCES_DIR = ROOT_DIR / 'desktop' / 'macos' / 'Desktop' / 'Sources' / 'ProactiveAssistants' / 'Assistants'
+
+# Wire section name -> the Swift file declaring that assistant's shipped default prompt.
+# `advice` is the wire key the desktop client encodes its `insight` assistant under
+# (AssistantSettingsResponse.CodingKeys). Focus ships no default prompt, and the
+# suggestion assistant has one but no synced section, so neither is under this contract.
+SHIPPED_DEFAULT_PROMPT_SOURCES = {
+    'task': 'TaskExtraction/TaskAssistantSettings.swift',
+    'advice': 'Insight/InsightAssistantSettings.swift',
+    'memory': 'MemoryExtraction/MemoryAssistantSettings.swift',
+}
 
 
 class _FakeRequest:
@@ -430,23 +444,54 @@ def test_export_all_user_data_returns_500_before_streaming_headers_when_memory_p
     assert 'content-disposition' not in response.headers
 
 
-def test_task_assistant_prompt_contract_accepts_shipped_default_size_and_rejects_oversize():
+def _shipped_default_analysis_prompt(swift_path: Path) -> str:
+    """Return the `static let defaultAnalysisPrompt` literal the desktop client ships.
+
+    These literals carry no escapes and no `\\(...)` interpolation, so the only Swift rule
+    that affects their value is that a multiline literal strips the closing delimiter's
+    indentation from every content line.
+    """
+    assert swift_path.is_file(), f'shipped prompt source moved: {swift_path}. Update SHIPPED_DEFAULT_PROMPT_SOURCES.'
+    lines = swift_path.read_text(encoding='utf-8').splitlines()
+
+    opening = next(i for i, line in enumerate(lines) if 'static let defaultAnalysisPrompt = """' in line)
+    closing = next(i for i in range(opening + 1, len(lines)) if lines[i].strip() == '"""')
+    indent = len(lines[closing]) - len(lines[closing].lstrip())
+
+    return '\n'.join(line[indent:] if len(line) >= indent else line.lstrip() for line in lines[opening + 1 : closing])
+
+
+@pytest.mark.parametrize('section,swift_relative_path', sorted(SHIPPED_DEFAULT_PROMPT_SOURCES.items()))
+def test_backend_bounds_admit_every_shipped_desktop_prompt(section, swift_relative_path):
+    # An oversized prompt does not 422 in practice: SettingsSyncManager.promptForSync omits
+    # it from the PATCH to keep partial semantics, so a bound below an assistant's own
+    # shipped default silently makes that prompt unsyncable rather than loudly rejecting
+    # it. That is how the task prompt went unsynced from 2026-06 until #11481. Validating
+    # the real Swift literal through the real request model is what closes that gap.
+    prompt = _shipped_default_analysis_prompt(DESKTOP_SOURCES_DIR / swift_relative_path)
+
+    request = users_router.UpdateAssistantSettingsRequest(**{section: {'analysis_prompt': prompt}})
+
+    assert getattr(request, section).analysis_prompt == prompt
+
+
+def test_task_assistant_prompt_contract_accepts_bound_size_and_rejects_oversize():
     accepted = users_router.UpdateAssistantSettingsRequest(
-        task={'analysis_prompt': 'x' * users_router.ASSISTANT_ANALYSIS_PROMPT_MAX_LENGTH}
+        task={'analysis_prompt': 'x' * users_router.TASK_ANALYSIS_PROMPT_MAX_LENGTH}
     )
 
-    assert len(accepted.task.analysis_prompt) == users_router.ASSISTANT_ANALYSIS_PROMPT_MAX_LENGTH
+    assert len(accepted.task.analysis_prompt) == users_router.TASK_ANALYSIS_PROMPT_MAX_LENGTH
     with pytest.raises(ValueError):
         users_router.UpdateAssistantSettingsRequest(
-            task={'analysis_prompt': 'x' * (users_router.ASSISTANT_ANALYSIS_PROMPT_MAX_LENGTH + 1)}
+            task={'analysis_prompt': 'x' * (users_router.TASK_ANALYSIS_PROMPT_MAX_LENGTH + 1)}
         )
 
 
 def test_task_assistant_prompt_contract_counts_unicode_code_points():
     flag = '🇺🇸'
-    prompt = flag * (users_router.ASSISTANT_ANALYSIS_PROMPT_MAX_LENGTH // len(flag) + 1)
+    prompt = flag * (users_router.TASK_ANALYSIS_PROMPT_MAX_LENGTH // len(flag) + 1)
 
-    assert len(prompt) == users_router.ASSISTANT_ANALYSIS_PROMPT_MAX_LENGTH + 2
+    assert len(prompt) == users_router.TASK_ANALYSIS_PROMPT_MAX_LENGTH + 2
     with pytest.raises(ValueError):
         users_router.UpdateAssistantSettingsRequest(task={'analysis_prompt': prompt})
 
