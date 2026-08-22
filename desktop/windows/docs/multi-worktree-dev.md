@@ -136,6 +136,22 @@ port in 5180-5279>` on this one.
   empty profile. Run `pnpm seed:auth` (or just sign in there once).
 - **Two windows look identical** — check the title-bar suffix (` — <worktree>`) or
   run `pnpm dev:instance` to confirm which port each is on.
+- **`OMI_OZONE=wayland` main window maps but never paints (blank; tray icon
+  works)** — `pnpm dev` forces software rendering by default
+  (`applyDevGpuStability` in `src/main/dev/bench.ts`, aimed at Windows
+  GPU-process crashes), and Chromium's software-compositing path has known
+  presentation bugs on native Wayland. Run with `OMI_DEV_HW_GPU=1` too.
+  Confirmed fix on Asahi Fedora Remix (aarch64) + niri.
+- **Two extra floating windows appear under `OMI_OZONE=wayland`** — the
+  companion bar (`src/main/bar/window.ts`) and the focus-halo glow window
+  (`src/main/glow/glowWindow.ts`, created eagerly at startup) both position
+  themselves with explicit `setBounds({ x, y, ... })` intending to stay
+  parked off-screen; native Wayland doesn't support client-requested
+  top-level placement (only XWayland does), so both float in the screen
+  center instead. Both stay functional (bar right-click menu works; glow
+  still renders its ring when triggered) — tile or ignore them. A real fix
+  needs Wayland layer-shell-aware positioning, which niri supports
+  (wlr-layer-shell) but neither window currently uses.
 
 ## Notes
 
