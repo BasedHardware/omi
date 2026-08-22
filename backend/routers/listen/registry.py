@@ -48,16 +48,14 @@ def _sessions_for(uid: str) -> List[Any]:
 
 async def proactive_message_dispatcher(client: Any = None) -> None:
     if client is None:
-        import os
-        import redis.asyncio as aioredis
+        # Must be the same Redis the publisher writes to. `publish_proactive_message`
+        # uses the shared client in database/redis_db.py (REDIS_DB_HOST / REDIS_DB_PORT /
+        # REDIS_DB_PASSWORD); a client built from REDIS_HOST on 6379 with no password
+        # subscribes to a different server, so the subscribe succeeds and no message
+        # ever arrives.
+        from database.redis_db import get_async_redis_client
 
-        redis_host = os.getenv("REDIS_HOST", "localhost")
-        client = aioredis.Redis(
-            host=redis_host,
-            port=6379,
-            db=0,
-            decode_responses=True,
-        )
+        client = await get_async_redis_client()
     pubsub = client.pubsub()
     try:
         await pubsub.subscribe(PROACTIVE_MESSAGE_CHANNEL)
