@@ -62,6 +62,7 @@ describe('buildTrayMenuTemplate', () => {
     openSettings: vi.fn(),
     checkForUpdates: vi.fn(),
     toggleScreenCapture: vi.fn(),
+    openBar: vi.fn(),
     quit: vi.fn()
   })
 
@@ -80,6 +81,7 @@ describe('buildTrayMenuTemplate', () => {
     expect(labels(items)).toEqual([
       'Screen Analysis',
       'Open Omi',
+      'Open Bar',
       'Pause listening',
       'Settings',
       'Check for Updates',
@@ -126,12 +128,14 @@ describe('buildTrayMenuTemplate', () => {
     ) as Item[]
     byLabel(items, 'Screen Analysis').click?.()
     byLabel(items, 'Open Omi').click?.()
+    byLabel(items, 'Open Bar').click?.()
     byLabel(items, 'Pause listening').click?.()
     byLabel(items, 'Settings').click?.()
     byLabel(items, 'Check for Updates').click?.()
     byLabel(items, 'Quit Omi').click?.()
     expect(actions.toggleScreenCapture).toHaveBeenCalledOnce()
     expect(actions.showMainWindow).toHaveBeenCalledOnce()
+    expect(actions.openBar).toHaveBeenCalledOnce()
     expect(actions.toggleListening).toHaveBeenCalledOnce()
     expect(actions.openSettings).toHaveBeenCalledOnce()
     expect(actions.checkForUpdates).toHaveBeenCalledOnce()
