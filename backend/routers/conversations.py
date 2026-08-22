@@ -1401,11 +1401,20 @@ def send_conversation_share_email(
 
     # Idempotency under concurrency: a Firestore transaction atomically claims
     # the not-yet-emailed recipients, so simultaneous duplicate requests can
-    # never both dispatch to the same address; repeats return success without
-    # a duplicate email.
-    to_dispatch = conversations_db.reserve_share_email_recipients(uid, conversation_id, requested)
+    # never both dispatch to the same address. A repeat of an address that was
+    # definitively sent returns success without a duplicate email; an address
+    # some other request is dispatching *right now* is not reported as sent,
+    # because that dispatch may still fail and release its claim.
+    to_dispatch, already_sent, in_flight_elsewhere = conversations_db.reserve_share_email_recipients(
+        uid, conversation_id, requested
+    )
     if not to_dispatch:
-        return {'sent_to': requested}
+        if in_flight_elsewhere:
+            raise HTTPException(
+                status_code=409,
+                detail='That summary is already being sent to this recipient — check back in a moment',
+            )
+        return {'sent_to': already_sent}
 
     if not share_email.consume_daily_send_quota(uid, len(to_dispatch)):
         conversations_db.release_share_email_recipients(uid, conversation_id, to_dispatch)
@@ -1453,12 +1462,20 @@ def send_conversation_share_email(
         redis_db.remove_public_conversation(conversation_id)
 
     def _send():
-        # The reservation above is the durable ledger entry — nothing to write
-        # after the provider accepts, so no failure after a successful dispatch
-        # can trigger the visibility rollback (a delivered email keeps a live
-        # link).
+        # The claim taken above only says "dispatching"; the sent ledger is
+        # written once the provider accepted, and it is what makes a later
+        # repeat a no-op. Recording it is the last step, so no failure after a
+        # successful dispatch can trigger the visibility rollback (a delivered
+        # email keeps a live link).
         share_email.send_summary_email(uid=uid, conversation=conversation, recipient_emails=to_dispatch)
-        return {'sent_to': requested}
+        try:
+            conversations_db.confirm_share_email_recipients(uid, conversation_id, to_dispatch)
+        except Exception:
+            # Delivery already happened; a lost ledger write can only cost a
+            # duplicate on a later retry, which is strictly better than
+            # reporting a failure for mail the recipient holds.
+            logger.exception('share email: failed to record delivered recipients')
+        return {'sent_to': sorted(set(already_sent) | set(to_dispatch))}
 
     def _release_reservation_and_quota():
         try:
@@ -1470,8 +1487,16 @@ def send_conversation_share_email(
     try:
         return share_email.publish_then_send(publish=_publish, unpublish=_unpublish, send=_send)
     except share_email.AmbiguousDeliveryError as e:
-        # Delivery may have happened: reservation and quota stand (no duplicate
-        # on retry) and the link stays published.
+        # Delivery may have happened, so the claim is promoted to the sent
+        # ledger rather than left in flight or released: a retry must not risk
+        # a duplicate in the recipient's inbox, and a claim nobody ever
+        # resolves would block the address until its TTL expires. Quota stands
+        # and the link stays published. The caller still gets 504 — we do not
+        # know that it arrived, and only the ledger pretends otherwise.
+        try:
+            conversations_db.confirm_share_email_recipients(uid, conversation_id, to_dispatch)
+        except Exception:
+            logger.exception('share email: failed to record ambiguous dispatch')
         raise HTTPException(status_code=504, detail=str(e))
     except ValueError as e:
         _release_reservation_and_quota()
