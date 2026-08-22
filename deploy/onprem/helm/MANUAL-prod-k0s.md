@@ -343,6 +343,19 @@ export KC_DB_PW=$(openssl rand -base64 24)
 export S3_KEY=omi-s3;  export S3_SECRET=$(openssl rand -base64 24)
 ```
 
+**Choose the realm before installing.** The chart does not carry one: the file it imports is a runtime
+file, gitignored, that you copy from the example for this environment (ADR-0082). **Prod is the one
+without test principals** — the chart used to ship the *dev* realm, so this very installation came up
+with an `omi-test` client and a `testuser`/`testpass` login that returned a token (BACKLOG L47).
+
+```bash
+cp ../keycloak/omi-realm.example.json omi-oss/files/omi-realm.json      # prod: no test principals
+# cp ../keycloak/omi-realm.dev.example.json omi-oss/files/omi-realm.json  # only for a throwaway cluster
+```
+
+Skip it and `helm install` fails with that instruction rather than rendering an empty ConfigMap and
+leaving Keycloak with no realm.
+
 Install. This is the **one** install command — everything site-specific and every password is passed here,
 so nothing secret or site-specific is committed in the chart files:
 ```bash

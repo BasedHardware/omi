@@ -37,4 +37,17 @@ services:
     # DEV/seed realm: the seeder (seed_meld_users.py) mints tokens via the omi-test direct-access
     # client, so the seed posture uses the dev realm variant (cubic review 4909186286 #5).
     volumes:
-      - ./keycloak/omi-realm.dev.example.json:/opt/keycloak/data/import/omi-realm.json:ro
+      # The realm this deployment RUNS is a gitignored runtime file, copied from the example for
+      # this environment (ADR-0082) — same rule as the env files. Mounting the committed .example
+      # directly made "which realm is live" a property of the repo, which is how the Helm chart
+      # came to ship the DEV realm (omi-test + testuser) on the prod installation.
+      #   cp keycloak/omi-realm.example.json      keycloak/omi-realm.json   # prod
+      #   cp keycloak/omi-realm.dev.example.json  keycloak/omi-realm.json   # dev
+      # Long syntax for create_host_path:false — a MISSING source must be an error, not a silently
+      # created empty directory that Keycloak imports nothing from. Same reason the chart `fail`s.
+      - type: bind
+        source: ./keycloak/omi-realm.json
+        target: /opt/keycloak/data/import/omi-realm.json
+        read_only: true
+        bind:
+          create_host_path: false

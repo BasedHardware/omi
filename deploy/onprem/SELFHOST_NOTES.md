@@ -148,10 +148,24 @@ a restart drops any notification a device has not yet fetched). A plain `down` k
 
 Keycloak runs in **production mode** (`start`, not `start-dev`) with a persistent `dev-file` H2 DB on
 `keycloak-data`, so realm state — including the imported `omi-backend-admin` service-account client —
-lives across restarts. `--import-realm` seeds a **fresh** volume from the per-environment realm JSON —
-`keycloak/omi-realm.example.json` for **prod** (no test principals) or `keycloak/omi-realm.dev.example.json`
-for **dev/seed** (adds the `omi-test` direct-access client + `testuser`); the base compose omits the
-realm mount so exactly one variant is bound per environment (review #5). On an existing volume KC logs
+lives across restarts. `--import-realm` seeds a **fresh** volume from `keycloak/omi-realm.json` — a **runtime file**,
+gitignored, that you produce by copying the example for this environment (ADR-0082), exactly like the env
+files:
+
+```bash
+cp keycloak/omi-realm.example.json      keycloak/omi-realm.json   # prod: no test principals
+cp keycloak/omi-realm.dev.example.json  keycloak/omi-realm.json   # dev/seed: + omi-test client, testuser
+```
+
+**The same file feeds Helm** — copy it to `helm/omi-oss/files/omi-realm.json` before `helm install`. If it
+is missing, both consumers refuse loudly: the chart `fail`s the render with this instruction, and compose
+errors on the bind (`create_host_path: false`) instead of creating an empty directory that Keycloak
+imports nothing from.
+
+Why it is not committed: the chart used to carry its own copy — of the **dev** realm — so the install we
+document as production came up with `omi-test`/`testuser`, and `testuser`/`testpass` returned a token on
+the live release (BACKLOG L47). While the executed file lives in the repository, "which realm is live" is
+a property of the repo instead of the installation. On an existing volume KC logs
 "Realm 'omi' already exists. Import skipped" and keeps the persisted realm. **To re-import after
 editing the realm JSON**, remove just that volume:
 `docker compose stop keycloak && docker volume rm <project>_keycloak-data && docker compose up -d keycloak`

@@ -97,6 +97,14 @@ into that Secret. Its arguments are `./gen-certs.sh <namespace> <secret-name> <h
 `openssl` + `kubectl`, and re-running it just replaces the Secret. Being self-signed, curl and the app show
 a trust warning — expected in dev.
 
+The chart carries no realm: copy the one for this environment first (ADR-0082). A Kind cluster is
+throwaway, so the **dev** realm — with the `omi-test` client and `testuser` — is the right choice here;
+prod is the variant without them (`omi-realm.example.json`), and getting that backwards is BACKLOG L47.
+
+```bash
+cp ../keycloak/omi-realm.dev.example.json omi-oss/files/omi-realm.json
+```
+
 ```bash
 # The cluster's entry point. On Kind this is an IP on Kind's OWN docker network (172.18.0.0/16), reachable
 # from your machine (the docker host) — NOT your LAN. It is pinned in values-dev.yaml + metallb-pool.yaml,

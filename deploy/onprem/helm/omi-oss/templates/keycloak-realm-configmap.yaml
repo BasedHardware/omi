@@ -1,7 +1,23 @@
 {{- if .Values.auth.enabled }}
-# The omi realm (dev): realm "omi" + clients omi-app / omi-test / omi-backend-admin + testuser, with the
-# omi-backend audience mapper. Mounted into Keycloak's import dir; --import-realm seeds it on a fresh
-# data volume. This is a copy of deploy/onprem/keycloak/omi-realm.dev.example.json — keep in sync.
+{{- /*
+The realm Keycloak imports, from `files/omi-realm.json` — a RUNTIME file, gitignored, produced by copying
+the example for this environment (ADR-0082):
+
+    cp ../../keycloak/omi-realm.example.json      files/omi-realm.json    # prod: no test principals
+    cp ../../keycloak/omi-realm.dev.example.json  files/omi-realm.json    # dev:  adds omi-test + testuser
+
+It used to be a committed copy of the DEV realm — so the installation we document as production
+(MANUAL-prod-k0s.md) came up with `omi-test`/`testuser`, and `testuser`/`testpass` returned a token on the
+live release (measured 2026-08-22, BACKLOG L47). The file that a deployment RUNS is not a property of the
+repository; it is a choice the installer makes, like every env file.
+
+Absent, this FAILS. A missing realm would otherwise render an empty ConfigMap and Keycloak would start
+with no realm at all — the same silent success ADR-0081 closed for the gateway lanes.
+*/}}
+{{- $realm := .Files.Get "files/omi-realm.json" }}
+{{- if not $realm }}
+{{-   fail "helm/omi-oss/files/omi-realm.json is missing. Copy the realm for this environment before installing: `cp deploy/onprem/keycloak/omi-realm.example.json deploy/onprem/helm/omi-oss/files/omi-realm.json` (prod, no test principals) or the .dev.example.json variant (adds omi-test + testuser). See ADR-0082." }}
+{{- end }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -10,5 +26,6 @@ metadata:
     {{- include "omi-oss.labels" . | nindent 4 }}
     app.kubernetes.io/component: keycloak
 data:
-{{ (.Files.Glob "files/omi-realm.dev.json").AsConfig | indent 2 }}
+  omi-realm.json: |
+{{ $realm | indent 4 }}
 {{- end }}
