@@ -511,6 +511,10 @@ test('renders the collapsed reference rail and search-first desktop Home', async
   );
 
   expect(output).toContain('Search Omi');
+  expect(output).toContain('Your Omi, at a glance');
+  expect(output).toContain(
+    'Device status and the conversations and memories saved for you.',
+  );
   expect(output).not.toContain('Search what you’ve seen and heard');
   expect(output).not.toContain('QA bridge check');
   expect(output).toContain('Open Chat');
@@ -1477,6 +1481,61 @@ test('explains local backend configuration failure with one retryable Home state
 
   expect(JSON.stringify(renderer.toJSON())).not.toContain(
     'Trusted local Omi service configuration is missing.',
+  );
+});
+
+test('presents a bounded, truthful wide Home unavailable state without leaking endpoint errors', async () => {
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/chat-messages?limit=50') {
+      return {
+        id: request.id,
+        status: 200,
+        body: '{"messages":[],"page":{"olderCursor":null,"hasOlder":false}}',
+      };
+    }
+    return {id: request.id, status: 503, body: null};
+  });
+
+  const renderer = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Search Home')
+      .props.onChangeText('morning');
+  });
+
+  const output = JSON.stringify(renderer.toJSON());
+  expect(output).toContain('Your Omi, at a glance');
+  expect(output).toContain('Saved data is unavailable.');
+  expect(output).toContain(
+    'Omi could not load saved conversations or memories. Your saved data has not been changed.',
+  );
+  expect(output).not.toContain('desktop-conversations-read failed (503)');
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Floating pane',
+    ).props.style,
+  ).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({maxHeight: 760, maxWidth: 1120}),
+    ]),
+  );
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Home search results',
+    ).props.style,
+  ).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({maxHeight: 430, minHeight: 210}),
+    ]),
+  );
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Home search dock',
+    ).props.style,
+  ).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({marginTop: 22, maxWidth: 560}),
+    ]),
   );
 });
 
