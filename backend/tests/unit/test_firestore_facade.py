@@ -88,7 +88,9 @@ def test_where_field_equals_none_maps_to_is_null():
     is_null = [s.id for s in c.collection("users/u1/goals").where(filter=FieldFilter("plugin_id", "==", None)).stream()]
     assert is_null == ["g1"]  # present-and-null only, NOT the absent g3
 
-    is_not_null = {s.id for s in c.collection("users/u1/goals").where(filter=FieldFilter("plugin_id", "!=", None)).stream()}
+    is_not_null = {
+        s.id for s in c.collection("users/u1/goals").where(filter=FieldFilter("plugin_id", "!=", None)).stream()
+    }
     assert is_not_null == {"g2"}  # present-and-not-null; null g1 and absent g3 excluded
 
 
@@ -202,7 +204,11 @@ def test_positional_list_start_after_cursor_paginates():
         c.document(f"users/u1/memory_items/m{i}").set({"updated_at": i})
 
     def page(start=None):
-        q = c.collection("users/u1/memory_items").order_by("updated_at", "DESCENDING").order_by("__name__", "DESCENDING")
+        q = (
+            c.collection("users/u1/memory_items")
+            .order_by("updated_at", "DESCENDING")
+            .order_by("__name__", "DESCENDING")
+        )
         if start is not None:
             q = q.start_after(start)
         return [s.id for s in q.limit(2).stream()]
@@ -324,12 +330,17 @@ def test_multi_field_order_composite_cursor_paginates():
     # cubic PR 10887 #4: review_queue orders by impact DESC, created_at DESC, __name__ DESC and paginates
     # via the facade. The facade must map that to the store's composite keyset, not raise on page 2.
     c = _client()
-    for doc_id, d in [("c1", {"impact": 3, "created_at": 20}), ("c2", {"impact": 3, "created_at": 10}),
-                      ("c3", {"impact": 2, "created_at": 50})]:
+    for doc_id, d in [
+        ("c1", {"impact": 3, "created_at": 20}),
+        ("c2", {"impact": 3, "created_at": 10}),
+        ("c3", {"impact": 2, "created_at": 50}),
+    ]:
         c.document(f"users/u1/conflicts/{doc_id}").set(d)
     q = (
         c.collection("users/u1/conflicts")
-        .order_by("impact", "DESCENDING").order_by("created_at", "DESCENDING").order_by("__name__", "DESCENDING")
+        .order_by("impact", "DESCENDING")
+        .order_by("created_at", "DESCENDING")
+        .order_by("__name__", "DESCENDING")
     )
     assert [s.id for s in q.stream()] == ["c1", "c2", "c3"]
     cursor = {"impact": 3, "created_at": 20, "__name__": c.document("users/u1/conflicts/c1")}
@@ -365,7 +376,10 @@ def test_get_all_batches_via_get_many_not_per_ref():
 
     calls = {"get_many": 0, "get": 0}
     real_gm, real_get = store.get_many, store.get
-    store.get_many = lambda collection, ids: (calls.__setitem__("get_many", calls["get_many"] + 1), real_gm(collection, ids))[1]
+    store.get_many = lambda collection, ids: (
+        calls.__setitem__("get_many", calls["get_many"] + 1),
+        real_gm(collection, ids),
+    )[1]
     store.get = lambda path, **kw: (calls.__setitem__("get", calls["get"] + 1), real_get(path, **kw))[1]
 
     refs = [c.document("users/u1/goals/a"), c.document("users/u1/goals/missing"), c.document("users/u1/goals/b")]
@@ -465,10 +479,7 @@ def test_name_range_filter_with_docref_bounds_matches_documents():
     usage = c.collection("users/u1/usage")
     for month in ("2026-06-01", "2026-07-01", "2026-08-01"):
         usage.document(month).set({"questions": 1})
-    q = (
-        usage.where("__name__", ">=", usage.document("2026-07-01"))
-        .where("__name__", "<", usage.document("2026-09-01"))
-    )
+    q = usage.where("__name__", ">=", usage.document("2026-07-01")).where("__name__", "<", usage.document("2026-09-01"))
     assert sorted(s.id for s in q.stream()) == ["2026-07-01", "2026-08-01"]
     # count() shares the filter path and must agree (usage aggregates via count too).
     assert q.count().get()[0][0].value == 2
@@ -623,3 +634,42 @@ def test_add_without_document_id_still_auto_ids():
     _write_time, ref = c.collection("plugins_data").add({"name": "omi-app"})
     assert ref.id and ref.id != "app-123"
     assert c.document(f"plugins_data/{ref.id}").get().exists is True
+
+
+# --- stream/get transport kwargs -----------------------------------------------------------------
+# database/trends.py:16 and :33 read with ``stream(retry=Retry())``. The facade took only
+# ``transaction``, so ``get_trends_data()`` raised TypeError on the FIRST line of its body under
+# STORAGE_BACKEND=mongo and /v1/trends was a 500 for every on-prem user — the same class as the
+# ``add(data, document_id)`` case above, and found the same way: by running the reader instead of
+# reading it. The second call sits inside ``except Exception: continue``, so a fix reaching only the
+# first line would have served every category with zero topics: an empty board, no error, nothing to
+# notice. ``retry``/``timeout`` are transport policy each adapter already owns, so they are accepted
+# and not forwarded; the behavioral pair is in tests/contract/test_trends_contract.py, on both legs.
+
+
+def test_stream_accepts_the_sdk_transport_kwargs():
+    from google.api_core.retry import Retry
+
+    c = _client()
+    c.document("trends/ceo-best").set({"id": "ceo-best", "category": "ceo"})
+
+    assert [s.id for s in c.collection("trends").stream(retry=Retry())] == ["ceo-best"]
+    assert [s.id for s in c.collection("trends").stream(retry=Retry(), timeout=30.0)] == ["ceo-best"]
+
+
+def test_get_accepts_the_sdk_transport_kwargs():
+    from google.api_core.retry import Retry
+
+    c = _client()
+    c.document("trends/ceo-best").set({"id": "ceo-best", "category": "ceo"})
+
+    assert [s.id for s in c.collection("trends").get(retry=Retry(), timeout=30.0)] == ["ceo-best"]
+
+
+def test_collection_group_stream_accepts_them_too():
+    from google.api_core.retry import Retry
+
+    c = _client()
+    c.document("users/u1/topics/t1").set({"topic": "Elon Musk"})
+
+    assert [s.id for s in c.collection_group("topics").stream(retry=Retry())] == ["t1"]

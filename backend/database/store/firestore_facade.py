@@ -237,11 +237,28 @@ def _firestore_errors():
 @contextlib.contextmanager
 def _txn_write_errors():
     """Like ``_firestore_errors()`` for writes issued INSIDE a transaction, but ALSO maps a write-time
-    MongoDB write conflict to google's ``Aborted`` so ``@firestore.transactional`` replays ``apply()``.
-    A conflict can surface at operation time (the ``update_one``/``insert_one`` on the session), not only
-    at commit — e.g. the goals ``reservation_ref`` write is DESIGNED to conflict with a concurrent focus
-    transaction. Without this the raw pymongo error escapes and the decorator never retries; only ``_commit``
-    translated conflicts before (cubic PR 10887 goals.py:635)."""
+    MongoDB write conflict to google's ``Aborted``. A conflict can surface at operation time (the
+    ``update_one``/``insert_one`` on the session), not only at commit — e.g. the goals ``reservation_ref``
+    write is DESIGNED to conflict with a concurrent focus transaction. Without this the raw pymongo error
+    escapes as itself; only ``_commit`` translated conflicts before (cubic PR 10887 goals.py:635).
+
+    **This does NOT make ``@firestore.transactional`` replay the body, and the comment here used to claim
+    it did.** Measured on the live rig: google's ``_Transactional.__call__`` puts only
+    ``transaction._commit()`` inside ``except retryable_exceptions``; ``_pre_commit`` — which runs the
+    decorated body, and therefore every ``transaction.set/update/create`` — sits outside it. So:
+
+        conflict raised at COMMIT       -> replayed. The body runs again and the facade transaction
+                                           survives the replay (verified: body ran twice, then committed).
+        conflict raised INSIDE the body -> NOT replayed. The ``Aborted`` propagates to the caller after a
+                                           rollback (verified: body ran once).
+
+    What the translation still buys is the right exception TYPE, so a caller can recognise contention
+    instead of catching a pymongo error. What it does not buy is transparency: under
+    STORAGE_BACKEND=mongo a caller of a contended transaction can see a bare ``Aborted`` where the
+    Firestore posture would have retried and surfaced the module's own domain error. Callers that catch
+    only their domain error are exposed. Making write-time conflicts replay would mean buffering
+    in-transaction writes until commit — a design change with a wide blast radius, not a fix, so it is
+    written down here and tracked rather than done in passing."""
     try:
         yield
     except _StoreNotFound as exc:
@@ -364,7 +381,9 @@ class _DocRef:
     def collections(self) -> Iterable["_CollRef"]:
         # Enumerate real subcollections so recursive-delete helpers (account / conversation deletion)
         # descend into them on Mongo instead of silently leaving orphaned descendant data.
-        return [_CollRef(self._client, f"{self.path}/{name}") for name in self._client._store.list_subcollections(self.path)]
+        return [
+            _CollRef(self._client, f"{self.path}/{name}") for name in self._client._store.list_subcollections(self.path)
+        ]
 
     def get(
         self,
@@ -444,7 +463,9 @@ class _Query:
         base.update(kw)
         return _Query(self._client, self._collection, **base)
 
-    def where(self, field_path: Any = None, op_string: Any = None, value: Any = None, *, filter: Any = None) -> "_Query":
+    def where(
+        self, field_path: Any = None, op_string: Any = None, value: Any = None, *, filter: Any = None
+    ) -> "_Query":
         if filter is not None:  # modern FieldFilter / composite form
             return self._clone(filters=self._filters + _filter_triples(filter, name_value=_name_filter_value))
         return self._clone(
@@ -542,12 +563,37 @@ class _Query:
         # Firestore's count() returns an AggregationQuery; callers do .count().get()[0][0].value.
         return _AggregationQuery(self._client._store.count(self._collection, filters=self._filters or None))
 
-    def stream(self, transaction: Optional["_FacadeTransaction"] = None) -> Iterable[_Snapshot]:
+    def stream(
+        self,
+        transaction: Optional["_FacadeTransaction"] = None,
+        *,
+        retry: Any = None,
+        timeout: Any = None,
+    ) -> Iterable[_Snapshot]:
+        # ``retry`` / ``timeout`` are accepted and not forwarded, which needs saying because the
+        # opposite choice is BACKLOG L24's defect. They are TRANSPORT policy -- how often to re-attempt
+        # a failed RPC, and how long to wait -- and every adapter already owns one: the Firestore SDK
+        # applies its default retry to a stream, pymongo retries reads by default. The neutral port
+        # deliberately does not model them, and a ``google.api_core.retry.Retry`` object has no
+        # translation into the Mongo driver's equivalent.
+        #
+        # Not academic: ``database/trends.py`` calls ``stream(retry=Retry())`` twice, so before this
+        # signature accepted the argument ``get_trends_data()`` raised TypeError on the first line of
+        # its body under STORAGE_BACKEND=mongo and /v1/trends was dead on-prem. The second call sits
+        # inside ``except Exception: continue``, so fixing only the first would have returned every
+        # category with zero topics -- an empty page instead of an error.
+        del retry, timeout
         for stored in self._run(transaction):
             yield _Snapshot(_DocRef(self._client, stored.path), stored)
 
-    def get(self, transaction: Optional["_FacadeTransaction"] = None) -> List[_Snapshot]:
-        return list(self.stream(transaction))
+    def get(
+        self,
+        transaction: Optional["_FacadeTransaction"] = None,
+        *,
+        retry: Any = None,
+        timeout: Any = None,
+    ) -> List[_Snapshot]:
+        return list(self.stream(transaction, retry=retry, timeout=timeout))
 
 
 class _CollRef(_Query):
@@ -671,9 +717,7 @@ class _FacadeTransaction:
 
     def delete(self, ref: _DocRef, option: Any = None) -> None:
         with _txn_write_errors():
-            self._client._store._delete(
-                ref.path, if_updated_at=_precondition_time(option), session=self._session
-            )
+            self._client._store._delete(ref.path, if_updated_at=_precondition_time(option), session=self._session)
 
 
 class _FacadeBatch:
@@ -816,7 +860,9 @@ class _GroupQuery:
         base.update(kw)
         return _GroupQuery(self._client, self._group, **base)
 
-    def where(self, field_path: Any = None, op_string: Any = None, value: Any = None, *, filter: Any = None) -> "_GroupQuery":
+    def where(
+        self, field_path: Any = None, op_string: Any = None, value: Any = None, *, filter: Any = None
+    ) -> "_GroupQuery":
         # group: ``__name__`` compares against the full path, not the scoped bare id.
         if filter is not None:
             return self._clone(filters=self._filters + _filter_triples(filter, name_value=_group_name_filter_value))
@@ -843,7 +889,14 @@ class _GroupQuery:
         path = getattr(getattr(cursor, "reference", None), "path", None) or getattr(cursor, "path", None) or cursor
         return self._clone(start_after=path)
 
-    def stream(self, transaction: Optional[_FacadeTransaction] = None) -> Iterable[_Snapshot]:
+    def stream(
+        self,
+        transaction: Optional[_FacadeTransaction] = None,
+        *,
+        retry: Any = None,
+        timeout: Any = None,
+    ) -> Iterable[_Snapshot]:
+        del retry, timeout  # transport policy, adapter-owned -- see _Query.stream
         if transaction is not None:
             # Refused rather than ignored. A cross-parent sweep inside a transaction is not something the
             # neutral port expresses (``query_group`` has no session-aware twin) and no caller asks for it
