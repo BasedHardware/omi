@@ -173,7 +173,9 @@ private struct SuggestedTasksSectionHeader: View {
 
 /// SwiftUI `frame(width:)` + `Color.clear` compresses to 0 next to a
 /// `maxWidth: .infinity` title. AppKit compression resistance does not.
-private struct RigidLeadingGutter: NSViewRepresentable {
+/// A fixed-width leading gutter that matches TaskRow's drag-handle column, so
+/// rows without a handle still line their checkbox up with the tasks around them.
+struct RigidLeadingGutter: NSViewRepresentable {
   var width: CGFloat
 
   func makeNSView(context: Context) -> NSView {
