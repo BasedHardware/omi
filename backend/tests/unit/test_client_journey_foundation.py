@@ -407,6 +407,24 @@ def test_a_failing_recorder_never_reaches_the_user_stream(monkeypatch):
     assert len(delivered) == 2
 
 
+def test_client_journey_metric_collector_exceptions_fail_open(monkeypatch):
+    monkeypatch.setattr(
+        journeys.OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL,
+        'labels',
+        lambda **_: (_ for _ in ()).throw(RuntimeError('accepted metric unavailable')),
+    )
+    attempt = journeys.ClientJourneyAttempt('desktop_chat', 'desktop_macos')
+
+    monkeypatch.setattr(
+        journeys.OMI_CLIENT_JOURNEY_TERMINAL_TOTAL,
+        'labels',
+        lambda **_: (_ for _ in ()).throw(RuntimeError('terminal metric unavailable')),
+    )
+    attempt.succeed()
+
+    assert attempt.outcome == 'success'
+
+
 def test_metric_recording_failure_does_not_break_the_streamed_request(monkeypatch):
     accepted, terminal, issues, duration = _install_client_journey_metrics(monkeypatch)
     for metric in (accepted, terminal, issues, duration):
