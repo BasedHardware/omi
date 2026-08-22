@@ -32,7 +32,8 @@ from utils.conversations.finalization_decision import (
     decide_finalization,
 )
 from utils.observability.fallback import record_fallback
-from utils.observability.journeys import record_journey_accepted
+from utils.journey_metrics_contract import bounded_client_kind
+from utils.observability.journeys import record_client_journey_accepted, record_journey_accepted
 
 logger = logging.getLogger(__name__)
 
@@ -677,6 +678,7 @@ def request_finalization(
     force_process: bool = False,
     extra_updates: Mapping[str, Any] | None = None,
     require_cloud_tasks: bool = False,
+    client_kind: object = 'unknown',
     firestore_client: Any = None,
 ) -> dict[str, Any]:
     """Atomically admit finalization and choose its sole durable handoff route."""
@@ -704,6 +706,7 @@ def request_finalization(
     # only newly-created jobs so an idempotent re-dispatch cannot inflate traffic.
     if intent.get('created'):
         record_journey_accepted('capture_finalization')
+        record_client_journey_accepted('conversation_finalization', bounded_client_kind(client_kind))
     status = intent['status']
     if intent['job_id'] is None or status in {'missing', 'no_content', 'deferred', 'completed', 'dead_letter'}:
         return dict(intent) | {'route': 'noop'}
