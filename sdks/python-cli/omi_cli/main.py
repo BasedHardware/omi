@@ -152,6 +152,31 @@ def version() -> None:
     typer.echo(f"omi-cli {__version__}")
 
 
+@app.command(help="Ask a natural-language question, answered from your own Omi conversations.")
+def ask(
+    typer_ctx: typer.Context,
+    question: str = typer.Argument(..., help='Your question, e.g. "what did I decide about pricing last week?"'),
+    limit: int = typer.Option(5, "--limit", min=1, max=10, help="How many conversations to ground the answer on."),
+    timezone: str = typer.Option("UTC", "--timezone", help="IANA timezone for resolving relative dates."),
+) -> None:
+    ctx: AppContext = typer_ctx.obj
+    with ctx.make_client() as client:
+        result = client.post(
+            "/v1/dev/user/ask",
+            json_body={"question": question, "limit": limit, "timezone": timezone},
+        )
+    if ctx.renderer.json_mode:
+        ctx.renderer.emit(result)
+        return
+    payload = result or {}
+    typer.echo(payload.get("answer", ""))
+    sources = payload.get("sources") or []
+    if sources:
+        typer.echo("\nSources:")
+        for s in sources:
+            typer.echo(f"  - {s.get('title') or 'Untitled'} ({s.get('created_at') or ''})  [{s.get('id')}]")
+
+
 # ---------------------------------------------------------------------------
 # Sub-command registration
 # ---------------------------------------------------------------------------
