@@ -26,8 +26,24 @@ import {
   stopTestListenSession
 } from './ipc/omiListen'
 import { registerCaptureBridge } from './ipc/captureBridge'
+import {
+  registerDeviceBridge,
+  emitDeviceEventFromMain,
+  setDeviceHostReady
+} from './ipc/deviceBridge'
+import {
+  attachBluetoothChooser,
+  getDeviceSettings,
+  registerDeviceHandlers
+} from './ipc/deviceHandlers'
 import { registerSoak } from './soak'
 import { createCaptureWindow, getCaptureWindow, getCaptureWc } from './captureWindow'
+import {
+  createDeviceWindow,
+  getDeviceWc,
+  getDeviceWindow,
+  setDeviceWindowWiring
+} from './deviceWindow'
 import { registerFileIndexHandlers } from './ipc/fileIndex'
 import { cancelStartupRescan } from './fileIndex/indexer'
 import { registerMemoryImportHandlers } from './ipc/memoryImport'
@@ -842,10 +858,37 @@ app.whenReady().then(async () => {
   // Sign-out teardown: clear every user-scoped table so a second account on this
   // machine can't see the prior user's local data (renderer authTeardown.ts).
   ipcMain.handle('db:wipeUserData', async () => wipeUserData())
+  // Per-window wiring for the device host. Registered once and run for EVERY
+  // device window, including automatic respawns, because the chooser handler
+  // lives on the webContents: an unwired respawn could not be paired.
+  setDeviceWindowWiring((win) => {
+    setDeviceHostReady(false, getDeviceWc)
+    attachBluetoothChooser(win.webContents, {
+      // A reconnect answers the chooser silently with the remembered device; a
+      // fresh pairing leaves it null so the user picks from the streamed list.
+      autoSelectId: () => getDeviceSettings().pairedDevice?.id ?? null,
+      onCandidates: (candidates) =>
+        emitDeviceEventFromMain({ type: 'device-candidates', candidates }, win.webContents.id)
+    })
+    win.on('closed', () => setDeviceHostReady(false, getDeviceWc))
+  })
+
+  // Creates the hidden WebBluetooth host on demand. Idempotent: an existing
+  // window is reused, and creation runs the wiring registered above.
+  function ensureDeviceHost(): void {
+    const existing = getDeviceWindow()
+    if (existing && !existing.isDestroyed()) return
+    createDeviceWindow()
+  }
+
   registerOmiListenHandlers((ownerId) => {
     const captureWc = getCaptureWc()
     const mainWc = mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null
-    return ownerId === mainWc?.id || ownerId === captureWc?.id
+    // The device window opens and feeds its own conversation session (wearable
+    // audio never passes through the capture window), so it needs the same
+    // permission the capture window has.
+    const deviceWc = getDeviceWc()
+    return ownerId === mainWc?.id || ownerId === captureWc?.id || ownerId === deviceWc?.id
   })
   // Capture bridge: routes commands from UI windows to the hidden capture window
   // and events back. Registered before the capture window is created so no early
@@ -854,6 +897,16 @@ app.whenReady().then(async () => {
     getCaptureWc,
     () => (mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null),
     isListenSessionOwnedBy
+  )
+  // Device bridge: same shape for the hidden WebBluetooth window. Registered
+  // before that window exists so no early command or event is missed.
+  registerDeviceBridge(
+    getDeviceWc,
+    () => (mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null),
+    ensureDeviceHost
+  )
+  registerDeviceHandlers(getDeviceWc, () =>
+    mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents.id : undefined
   )
   // Soak telemetry (inert unless OMI_SOAK=1): samples process metrics + listen
   // byte counters to userData/soak.jsonl for the 8h idle-soak verification.
@@ -1158,6 +1211,19 @@ app.whenReady().then(async () => {
           name: 'captureWindow',
           run: () => {
             if (!(import.meta.env.DEV && devBench.isBenchMode())) createCaptureWindow()
+          }
+        },
+        // The wearable host renderer. Only started when a device has actually
+        // been paired: most users have no wearable, and an idle BLE renderer is
+        // pure overhead for them.
+        {
+          name: 'deviceWindow',
+          run: () => {
+            if (import.meta.env.DEV && devBench.isBenchMode()) return
+            // Only for users who already paired a wearable; everyone else gets
+            // the window on demand when they start pairing.
+            if (getDeviceSettings().pairedDevice === null) return
+            ensureDeviceHost()
           }
         },
         // Foreground app-usage tracking. No-ops when disabled in Settings or off-Windows.

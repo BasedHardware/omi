@@ -7,9 +7,9 @@
 // stays correct for any code path they still reach.
 
 /** Hash-route prefixes for the secondary (non-main) windows sharing this bundle. */
-export const SECONDARY_HASHES = ['#/bar', '#/insight-toast', '#/capture', '#/glow']
+export const SECONDARY_HASHES = ['#/bar', '#/insight-toast', '#/capture', '#/glow', '#/device']
 
-/** True in a secondary (bar / insight-toast / capture / glow) window. */
+/** True in a secondary (bar / insight-toast / capture / glow / device) window. */
 export function isSecondaryWindow(hash = window.location.hash): boolean {
   return SECONDARY_HASHES.some((h) => hash.startsWith(h))
 }
