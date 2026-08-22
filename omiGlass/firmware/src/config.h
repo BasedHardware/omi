@@ -78,7 +78,7 @@ typedef enum {
 #define BLE_MTU_SIZE 517            // Maximum MTU for efficiency
 #define BLE_CHUNK_SIZE 500          // Safe chunk size for photo transfer
 #define BLE_PHOTO_TRANSFER_DELAY 3  // Fast transfer for connection stability
-#define BLE_TX_POWER ESP_PWR_LVL_N0 // Low power for 6+ hour battery life
+#define BLE_TX_POWER ESP_PWR_LVL_P9 // Max TX power for reliable discovery/range (applied in configure_ble)
 
 // Power-optimized BLE Advertising - Longer intervals for power savings
 #define BLE_ADV_MIN_INTERVAL 0x0140  // 200ms minimum (was 160ms)
