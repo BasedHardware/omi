@@ -41,6 +41,8 @@ extension AppState {
         translations: translations
       )
 
+      WakeWordService.shared.observe(newSeg)
+
       // Upsert: if we already have a segment with this ID, update it; otherwise append
       if let segId = segment.id,
         let existingIdx = speakerSegments.firstIndex(where: { $0.segmentId == segId })
