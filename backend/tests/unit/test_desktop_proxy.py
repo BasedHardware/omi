@@ -534,6 +534,16 @@ async def test_proxy_reports_upstream_unavailable_as_retryable(monkeypatch):
     async def route(path, _model, _action, _query, **_kwargs):
         return desktop_proxy.UpstreamRoute("https://provider.invalid", {}, {}, "ai_studio", "server_key", "global")
 
+    # Upstream's own remedy, applied to this test too: "The disconnect watcher polls a test Request
+    # whose receive() never returns, which would hold every attempt open for the full 75s provider
+    # deadline" (the comment on `passthrough` further down this file). Two tests were missing it and
+    # each waited out the real 75 seconds — 151 of this file's 154 seconds, and the reason a full sweep
+    # went from ~3m10s to over ten minutes. The watcher's real behaviour is covered by
+    # test_disconnect_cancels_in_flight_provider_call, which deliberately does NOT patch it.
+    async def _no_disconnect_watcher(_request, awaitable):
+        return await awaitable
+
+    monkeypatch.setattr(desktop_proxy, "_cancel_on_disconnect", _no_disconnect_watcher)
     monkeypatch.setattr(desktop_proxy.sys, "stdout", io.StringIO())
     monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
     monkeypatch.setattr(desktop_proxy, "_meter_server_request", meter)
@@ -644,6 +654,17 @@ async def test_proxy_dispatches_server_paid_bodies_with_the_2048_cap(monkeypatch
         return path
 
     output = io.StringIO()
+
+    # Upstream's own remedy, applied to this test too: "The disconnect watcher polls a test Request
+    # whose receive() never returns, which would hold every attempt open for the full 75s provider
+    # deadline" (the comment on `passthrough` further down this file). Two tests were missing it and
+    # each waited out the real 75 seconds — 151 of this file's 154 seconds, and the reason a full sweep
+    # went from ~3m10s to over ten minutes. The watcher's real behaviour is covered by
+    # test_disconnect_cancels_in_flight_provider_call, which deliberately does NOT patch it.
+    async def _no_disconnect_watcher(_request, awaitable):
+        return await awaitable
+
+    monkeypatch.setattr(desktop_proxy, "_cancel_on_disconnect", _no_disconnect_watcher)
     monkeypatch.setattr(desktop_proxy.sys, "stdout", output)
     monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
     monkeypatch.setattr(desktop_proxy, "_meter_server_request", meter)

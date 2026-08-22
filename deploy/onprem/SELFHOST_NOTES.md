@@ -1003,17 +1003,26 @@ stops being finishable — which is exactly what happened after the upstream mer
 went from ~3m10s to over ten minutes with no indication of why. Bounded, it is 3m38s and the reason is a
 line of output.
 
-The bound must sit ABOVE the slowest real file, or the sweep silently stops verifying it. Measured today:
+The bound must sit ABOVE the slowest real file, or the sweep silently stops verifying it — at 120s it
+KILLED a 154-second file and still reported a clean run. Measured after the fix below:
 
 | file | time | why |
 |---|---|---|
-| `tests/unit/test_desktop_proxy.py` | **154 s** | upstream. Two of its 91 tests wait out the proxy's own `_TOTAL_TIMEOUT_SECONDS = 75.0` deadline — with that constant temporarily set to 2.0 the pair passes in 3s instead of 151s |
 | `tests/integration/test_mentor_topics_eval.py` | 69 s | live tier |
-| `tests/integration/test_qos_live_cp9.py` | 44 s | live tier |
-| `tests/unit/test_subscription_restructure.py` | 43 s | |
+| `tests/integration/test_qos_live_cp9.py` | 45 s | live tier |
+| `tests/unit/test_subscription_restructure.py` | 44 s | |
 | `tests/integration/test_qos_all_features_l1.py` | 43 s | live tier |
-| `tests/integration/test_qos_real_llm.py` | 31 s | live tier |
-| `tests/unit/test_firestore_query_contract.py` | 24 s | |
+| `tests/integration/test_qos_real_llm.py` | 32 s | live tier |
+| `tests/unit/test_firestore_query_contract.py` | 25 s | |
+
+**`tests/unit/test_desktop_proxy.py` used to head that table at 154 s, and is now 1.2 s.** Two of its 91
+tests waited out the proxy's real `_TOTAL_TIMEOUT_SECONDS = 75.0` deadline. The cause is upstream's own,
+written in a comment in that same file: *"the disconnect watcher polls a test Request whose receive()
+never returns, which would hold every attempt open for the full 75s provider deadline"*. Upstream patches
+`_cancel_on_disconnect` with a passthrough where it matters — those two tests simply lacked it. It is a
+TEST artefact, not a product defect: the response they assert is produced by the upstream path and is
+ready immediately; the deadline only delays the return. Both still catch their own defects by mutation
+(rename the `provider_unavailable` class, widen the 2048 cap), so nothing was traded away for the speed.
 
 **Second, empty `backend/_temp/`.** It is gitignored scratch that the speech-profile and audio suites
 write into, it is never cleaned, and `test_runtime_image_contracts` copies the whole backend tree **once
