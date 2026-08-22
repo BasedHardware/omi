@@ -277,6 +277,68 @@ actor ContextProactivityEngine {
       authorizationSnapshot: authorizationSnapshot)
   }
 
+  /// Transcript-triggered evaluation: while a context visit is active, a fresh
+  /// user utterance (admitted by `SpeechProactivityAdmission`) evaluates the
+  /// *current* bucket grounded on the live speech window, so a question spoken
+  /// mid-context gets an answer without waiting for a dwell. The same delivery
+  /// gates and freshness window apply as for any other director evaluation; a
+  /// speech prompt is additive evidence below the untrusted preamble, never an
+  /// instruction source.
+  func evaluateFromSpeech(speech: [TranscriptSpeechSlice]) async {
+    let flagEnabled = await MainActor.run { ContextBucketsFeature.isTranscriptProactivityEnabled }
+    guard flagEnabled else { return }
+    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else { return }
+    let gate = await MainActor.run { Self.liveDeliveryGateInput() }
+    let preflightReason = ContextDeliveryBudget.freeGate(input: gate)
+    guard preflightReason == .allowed else {
+      log("Context director suppressed before speech evaluation: \(preflightReason.rawValue)")
+      await ContextProactivityTelemetry.recordGateRejection(reason: preflightReason, stage: .preflight)
+      return
+    }
+    // Speech evaluates the visit the user is in right now; with no active visit
+    // there is nothing to ground on.
+    guard let fence = await ContextVisitCoordinator.shared.activeFence() else {
+      log("Context director suppressed: speech has no active context visit")
+      return
+    }
+    guard fence.bucketID != nil else { return }
+    // Serialize against a still-running dwell or departure evaluation of the
+    // same visit, exactly like the other entry points.
+    guard dwellAdmission.begin(visitID: fence.visitID) else { return }
+    defer { dwellAdmission.finish(visitID: fence.visitID) }
+    let freshness = await store.fenceFreshness(fence)
+    guard
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+      freshness.fresh,
+      let snapshot = await store.snapshot(for: fence)
+    else { return }
+    guard ContextDirectorEligibility.permitsEvaluation(of: snapshot) else {
+      log("Context director suppressed: bucket has no notifiable memory to fuse with speech")
+      return
+    }
+    guard
+      let frameSample = await MainActor.run(body: {
+        AssistantCoordinator.shared.trackedFrameForDirector(startedAt: fence.startedAt)
+      })
+    else { return }
+    let frameFreshness = await store.fenceFreshness(fence)
+    guard
+      frameFreshness.fresh,
+      AssistantCoordinator.frameMayGroundDirector(
+        captureTime: frameSample.frame.captureTime,
+        storedAt: frameSample.storedAt,
+        startedAt: fence.startedAt,
+        endedAt: frameFreshness.endedAt)
+    else { return }
+    let speechSection = ContextProactivityPromptBuilder.liveSpeechSection(speech)
+    await evaluateAndDeliver(
+      fence: fence,
+      snapshot: snapshot,
+      currentFrame: frameSample.frame,
+      authorizationSnapshot: authorizationSnapshot,
+      speechSection: speechSection)
+  }
+
   /// The shared post-settle tail of the director pipeline: presentation
   /// preflight, gate rebuilds, budget reservation, the model call (plus the
   /// bounded retrieval hop), grounding validation, and the presentation
@@ -286,7 +348,8 @@ actor ContextProactivityEngine {
     fence: ContextVisitFence,
     snapshot: ContextBucketSnapshot,
     currentFrame: CapturedFrame,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    speechSection: String? = nil
   ) async {
     guard let ownerID = await MainActor.run(body: { RuntimeOwnerIdentity.currentOwnerId() }) else { return }
     let attemptPreflight = await presentationPreflight(ownerID)
@@ -453,6 +516,8 @@ actor ContextProactivityEngine {
         volatileExtras += "\n\n" + section
       }
     }
+    // Speech rides last, after the candidates section, so the cached stable
+    // prefix and main's volatile ordering are both preserved.
     let uncachedPrompt =
       ContextProactivityPromptBuilder.directorVolatilePrompt(
         tasks: taskContext,
@@ -461,6 +526,7 @@ actor ContextProactivityEngine {
         visitCount: snapshot.visitCount,
         environmentalSignal: envSignal)
       + volatileExtras
+      + (speechSection.map { "\n\n" + $0 } ?? "")
     guard
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
       await store.fenceFreshness(fence).fresh

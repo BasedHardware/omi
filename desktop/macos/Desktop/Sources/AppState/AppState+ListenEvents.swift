@@ -41,6 +41,12 @@ extension AppState {
         translations: translations
       )
 
+      // Transcript-driven proactivity decides on the same in-memory segment
+      // every backend slice lands through; the coordinator is a no-op while
+      // the feature is off.
+      SpeechProactivityCoordinator.shared.observe(
+        newSeg.speechProactivitySlice)
+
       // Upsert: if we already have a segment with this ID, update it; otherwise append
       if let segId = segment.id,
         let existingIdx = speakerSegments.firstIndex(where: { $0.segmentId == segId })
