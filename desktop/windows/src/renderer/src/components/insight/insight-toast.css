@@ -63,3 +63,25 @@ body.insight-toast-body { background: transparent !important; overflow: hidden; 
   overflow: hidden;
 }
 .whatsnew-list li::before { content: ''; position: absolute; left: 3px; top: 7px; width: 3px; height: 3px; border-radius: 50%; background: #9a9a9a; }
+
+/* Beeper draft card — inbound + suggested reply, matching the onboarding demo. */
+.beeper-net { font-size: 11px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: #9a9a9a; }
+.beeper-thread { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.beeper-row { display: flex; }
+.beeper-row-them { justify-content: flex-start; }
+.beeper-row-you { justify-content: flex-end; }
+.beeper-bubble {
+  max-width: 85%;
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 16px;
+  font-size: 13px;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+}
+.beeper-bubble-them { background: rgba(255, 255, 255, 0.08); color: #e8e8e8; }
+.beeper-bubble-you { background: #f5f5f5; color: #111; }
+.beeper-caption { font-size: 11px; color: #9a9a9a; }

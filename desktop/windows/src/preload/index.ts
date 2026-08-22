@@ -213,6 +213,33 @@ const omi: OmiBridgeApi = {
     ipcRenderer.invoke('integrations:x:sync', session),
   xDisconnect: (session: XConnectorSession): Promise<{ success: boolean }> =>
     ipcRenderer.invoke('integrations:x:disconnect', session),
+  beeperProbe: () => ipcRenderer.invoke('beeper:probe'),
+  beeperConnect: (token: string) => ipcRenderer.invoke('beeper:connect', token),
+  beeperDisconnect: () => ipcRenderer.invoke('beeper:disconnect'),
+  beeperStatus: () => ipcRenderer.invoke('beeper:status'),
+  beeperSetSettings: (patch) => ipcRenderer.invoke('beeper:setSettings', patch),
+  beeperListDrafts: () => ipcRenderer.invoke('beeper:listDrafts'),
+  beeperSendDraft: (id: string) => ipcRenderer.invoke('beeper:sendDraft', id),
+  beeperDismissDraft: (id: string) => ipcRenderer.invoke('beeper:dismissDraft', id),
+  beeperOpenDownload: () => ipcRenderer.invoke('beeper:openDownload'),
+  beeperPollNow: () => ipcRenderer.invoke('beeper:pollNow'),
+  beeperGetDraftToast: () => ipcRenderer.invoke('beeper:getDraftToast'),
+  onBeeperDraftToast: (cb) => {
+    const listener = (
+      _e: Electron.IpcRendererEvent,
+      draft: import('../shared/types').BeeperDraft
+    ): void => cb(draft)
+    ipcRenderer.on('beeper:draft-toast', listener)
+    return () => ipcRenderer.removeListener('beeper:draft-toast', listener)
+  },
+  onBeeperChanged: (cb) => {
+    const listener = (
+      _e: Electron.IpcRendererEvent,
+      status: import('../shared/types').BeeperStatus
+    ): void => cb(status)
+    ipcRenderer.on('beeper:changed', listener)
+    return () => ipcRenderer.removeListener('beeper:changed', listener)
+  },
   onXProgress: (cb: (state: XRunState) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, state: XRunState): void => cb(state)
     ipcRenderer.on('integrations:x:progress', listener)

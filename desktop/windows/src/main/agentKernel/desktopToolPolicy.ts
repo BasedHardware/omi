@@ -142,6 +142,9 @@ const LOCAL_READ_TOOLS = new Set([
   'search_conversations',
   'get_memories',
   'search_memories',
+  'search_beeper_chats',
+  'get_beeper_messages',
+  'draft_beeper_reply',
   'get_action_items',
   'get_email_insights',
   'get_local_status'

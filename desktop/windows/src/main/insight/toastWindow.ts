@@ -5,16 +5,14 @@
 // after a timeout (paused while hovered).
 //
 // The MEETING toast (Phase 5) reuses this same window + renderer route rather
-// than spawning a second toast surface: one acrylic notification window, two
-// payload channels ('insight:payload' / 'meeting:toast'), last-writer-wins on
-// visibility. Meeting toasts are rare and insights fire at most every 15 min,
-// so a clobber is a non-issue and we avoid ~100 lines of duplicated window
-// lifecycle + a second always-alive BrowserWindow.
+// than spawning a second toast surface: one acrylic notification window, several
+// payload channels ('insight:payload' / 'meeting:toast' / 'whatsnew:toast' /
+// 'beeper:draft-toast'), last-writer-wins on visibility.
 import { BrowserWindow, screen } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import iconPath from '../../../resources/icon.png?asset'
-import type { InsightPayload, MeetingToastPayload, WhatsNewPayload } from '../../shared/types'
+import type { BeeperDraft, InsightPayload, MeetingToastPayload, WhatsNewPayload } from '../../shared/types'
 import { rendererBaseUrl } from '../rendererServer'
 
 const WIDTH = 360
@@ -24,10 +22,13 @@ const HEIGHT = 168
 // changes each wrapping to two lines, the headline, and the release-notes button
 // all fit without clipping. Insight/meeting toasts reset the window to HEIGHT.
 const WHATS_NEW_HEIGHT = 244
+// Draft card: network label, inbound bubble, suggested reply, caption, Send/Skip.
+const BEEPER_DRAFT_HEIGHT = 300
 const MARGIN = 16
 const AUTO_DISMISS_MS = 8000
 // The ask-toast is a decision prompt — give it longer before it slips away.
 const MEETING_ASK_DISMISS_MS = 30_000
+const BEEPER_DRAFT_DISMISS_MS = 30_000
 // The what's-new card is informational (a short read + optional link) — give it
 // longer than an insight so it isn't gone before it's read.
 const WHATS_NEW_DISMISS_MS = 20_000
@@ -61,6 +62,12 @@ let currentWhatsNew: WhatsNewPayload | null = null
 
 export function getCurrentWhatsNew(): WhatsNewPayload | null {
   return currentWhatsNew
+}
+
+let currentBeeperDraft: BeeperDraft | null = null
+
+export function getCurrentBeeperDraftToast(): BeeperDraft | null {
+  return currentBeeperDraft
 }
 
 function applyMaterial(win: BrowserWindow): void {
@@ -141,10 +148,12 @@ export function showInsightToast(payload: InsightPayload): void {
   const win = ensureWindow()
   position(win)
   // An insight replaces whatever is on the shared toast — clear any meeting /
-  // what's-new payload so a later toast-window reload can't resurface a stale card
-  // via meeting:getToast / whatsnew:getPending.
+  // what's-new / Beeper-draft payload so a later toast-window reload can't
+  // resurface a stale card via meeting:getToast / whatsnew:getPending /
+  // beeper:getDraftToast.
   currentMeetingToast = null
   currentWhatsNew = null
+  currentBeeperDraft = null
   // showInactive: appear on top without taking focus from the user's current app.
   win.showInactive()
   const send = (): void => {
@@ -164,6 +173,7 @@ export function showMeetingToast(payload: MeetingToastPayload): void {
   win.showInactive()
   currentMeetingToast = payload
   currentWhatsNew = null
+  currentBeeperDraft = null
   const send = (): void => {
     if (!win.isDestroyed()) win.webContents.send('meeting:toast', payload)
   }
@@ -182,12 +192,33 @@ export function showWhatsNewToast(payload: WhatsNewPayload): void {
   win.showInactive()
   currentMeetingToast = null
   currentWhatsNew = payload
+  currentBeeperDraft = null
   const send = (): void => {
     if (!win.isDestroyed()) win.webContents.send('whatsnew:toast', payload)
   }
   if (win.webContents.isLoading()) win.webContents.once('did-finish-load', send)
   else send()
   armDismiss(WHATS_NEW_DISMISS_MS)
+}
+
+/** Voice/chat-drafted Beeper reply: inbound bubble + suggested reply + Send/Skip. */
+export function showBeeperDraftToast(payload: BeeperDraft): void {
+  const win = ensureWindow()
+  position(win, BEEPER_DRAFT_HEIGHT)
+  win.showInactive()
+  currentMeetingToast = null
+  currentWhatsNew = null
+  currentBeeperDraft = payload
+  const send = (): void => {
+    if (!win.isDestroyed()) win.webContents.send('beeper:draft-toast', payload)
+  }
+  if (win.webContents.isLoading()) win.webContents.once('did-finish-load', send)
+  else send()
+  armDismiss(BEEPER_DRAFT_DISMISS_MS)
+}
+
+export function hideBeeperDraftToastIf(id: string): void {
+  if (currentBeeperDraft?.id === id) hideInsightToast()
 }
 
 /** Hide the shared toast window (same surface as the insight toast). */
@@ -198,6 +229,7 @@ export function hideMeetingToast(): void {
 export function hideInsightToast(): void {
   currentMeetingToast = null
   currentWhatsNew = null
+  currentBeeperDraft = null
   if (dismissTimer) {
     clearTimeout(dismissTimer)
     dismissTimer = null

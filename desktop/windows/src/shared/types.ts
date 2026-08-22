@@ -975,6 +975,24 @@ export type OmiBridgeApi = {
   xSync: (session: XConnectorSession) => Promise<XSyncResult>
   xDisconnect: (session: XConnectorSession) => Promise<{ success: boolean }>
   onXProgress: (cb: (state: XRunState) => void) => () => void
+  // Beeper Desktop chat-reply: Omi drafts (or auto-sends) replies in WhatsApp /
+  // Telegram DMs using memory-grounded /v2/messages. Token stays in main
+  // safeStorage; the renderer never sees it after connect.
+  beeperProbe: () => Promise<BeeperProbe>
+  beeperConnect: (token: string) => Promise<BeeperStatus>
+  beeperDisconnect: () => Promise<BeeperStatus>
+  beeperStatus: () => Promise<BeeperStatus>
+  beeperSetSettings: (patch: BeeperSettingsPatch) => Promise<BeeperStatus>
+  beeperListDrafts: () => Promise<BeeperDraft[]>
+  beeperSendDraft: (id: string) => Promise<BeeperStatus>
+  beeperDismissDraft: (id: string) => Promise<BeeperStatus>
+  beeperOpenDownload: () => Promise<void>
+  beeperPollNow: () => Promise<BeeperStatus>
+  /** Toast renderer → main: fetch the pending Beeper draft card on mount. */
+  beeperGetDraftToast: () => Promise<BeeperDraft | null>
+  /** Toast renderer subscribes to voice/chat-drafted Beeper reply cards. */
+  onBeeperDraftToast: (cb: (p: BeeperDraft) => void) => () => void
+  onBeeperChanged: (cb: (status: BeeperStatus) => void) => () => void
   rewindFrames: (from: number, to: number) => Promise<RewindFrame[]>
   /** A day's frames, evenly down-sampled to ~500 (macOS parity). The day-scoped
    *  timeline loads through this; `rewindFrames` stays the unsampled primitive for
@@ -1907,6 +1925,52 @@ export type GoogleStatus = {
   email?: string
   /** ms epoch of the most recent successful sync (either source); undefined if never. */
   lastSyncAt?: number
+}
+
+/** Networks Omi will draft replies for via the local Beeper Desktop API. */
+export type BeeperNetwork = 'whatsapp' | 'telegram' | 'imessage'
+
+export type BeeperSendMode = 'draft' | 'auto'
+
+export type BeeperProbe = {
+  /** True when something answered on 127.0.0.1:23373 (Beeper Desktop is up). */
+  running: boolean
+}
+
+export type BeeperAccount = {
+  network: string
+  connected: boolean
+}
+
+export type BeeperSettingsPatch = {
+  enabled?: boolean
+  sendMode?: BeeperSendMode
+  networks?: BeeperNetwork[]
+}
+
+export type BeeperDraft = {
+  id: string
+  chatId: string
+  chatTitle: string
+  network: string
+  inboundText: string
+  replyText: string
+  inboundMessageId: string
+  createdAt: number
+}
+
+export type BeeperStatus = {
+  running: boolean
+  connected: boolean
+  enabled: boolean
+  sendMode: BeeperSendMode
+  networks: BeeperNetwork[]
+  accounts: BeeperAccount[]
+  draftCount: number
+  /** iMessage only works on macOS Beeper; always false on Windows. */
+  imessageSupported: boolean
+  lastError?: string
+  lastPollAt?: number
 }
 
 /** One Gmail message, metadata only — never the full body. */

@@ -22,6 +22,11 @@
 // embedding) honors ctx.signal.
 
 import type { ProductToolContext, ProductToolExecutor } from './toolRelayBridge'
+import {
+  createDraftBeeperReplyExecutor,
+  createGetBeeperMessagesExecutor,
+  createSearchBeeperChatsExecutor
+} from '../beeper/chatTools'
 import type {
   ActionItemRecord,
   FocusSessionRecord,
@@ -1178,6 +1183,9 @@ export function tierBProductToolExecutors(): [string, ProductToolExecutor][] {
     ['get_goals', createGetGoalsExecutor()],
     ['get_work_context', createGetWorkContextExecutor()],
     ['get_daily_recap', createGetDailyRecapExecutor()],
-    ['save_knowledge_graph', createSaveKnowledgeGraphExecutor()]
+    ['save_knowledge_graph', createSaveKnowledgeGraphExecutor()],
+    ['search_beeper_chats', createSearchBeeperChatsExecutor()],
+    ['get_beeper_messages', createGetBeeperMessagesExecutor()],
+    ['draft_beeper_reply', createDraftBeeperReplyExecutor()]
   ]
 }

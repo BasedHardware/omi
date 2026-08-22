@@ -23,6 +23,7 @@ import { ShortcutSetupStep } from '../components/onboarding/ShortcutSetupStep'
 import { VoiceIntroStep } from '../components/onboarding/VoiceIntroStep'
 import { AskDemoStep } from '../components/onboarding/AskDemoStep'
 import { DataSourcesStep } from '../components/onboarding/DataSourcesStep'
+import { ChatReplyStep } from '../components/onboarding/ChatReplyStep'
 import { GoalStep } from '../components/onboarding/GoalStep'
 import { createGoal } from '../lib/goals'
 // Import BrainGraph DIRECTLY (not via LazyBrainGraph) for onboarding — matches
@@ -38,7 +39,7 @@ import {
   useOnboardingGraph
 } from '../lib/onboardingGraph'
 
-const TOTAL_STEPS = 14
+const TOTAL_STEPS = 15
 
 export function Onboarding(): React.JSX.Element {
   // Resume where the user left off if they quit mid-onboarding. Clamped in case
@@ -241,7 +242,7 @@ export function Onboarding(): React.JSX.Element {
     if (step === 12) {
       // Data sources: curated OAuth-connector + memory-log import list to seed the
       // second brain with more context. Nothing required — Continue and Skip both
-      // advance to the Goal step.
+      // advance to Chat Reply.
       return (
         <DataSourcesStep
           stepIndex={step}
@@ -249,6 +250,11 @@ export function Onboarding(): React.JSX.Element {
           onContinue={next}
           onSkip={next}
         />
+      )
+    }
+    if (step === 13) {
+      return (
+        <ChatReplyStep stepIndex={step} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={next} />
       )
     }
     return (
@@ -269,20 +275,10 @@ export function Onboarding(): React.JSX.Element {
   // Steps that show the step card centered on the whole screen with NO brain
   // map: the name screen (0), the "I'm going to ask you for a few permissions"
   // screen (3, TrustStep), the background/privacy consent screen (4), the
-  // floating-bar steps (9 shortcut, 10 voice, 11 ask demo), and the final
-  // auto-created-tasks screen (14). The Data Sources (12) and Goal (13) steps keep
-  // the map — Data Sources reinforces "your 2nd brain is live" and Goal
-  // personalizes its suggestion from the revealed app nodes. The map is only
-  // hidden (display:none), never unmounted, so it persists and returns smoothly
-  // on the next steps.
+  // floating-bar steps (9 shortcut, 10 voice, 11 ask demo). Data Sources (12),
+  // Chat Reply (13), and Goal (14) keep the map.
   const hideBrainMap =
-    step === 0 ||
-    step === 3 ||
-    step === 4 ||
-    step === 9 ||
-    step === 10 ||
-    step === 11 ||
-    step === 14
+    step === 0 || step === 3 || step === 4 || step === 9 || step === 10 || step === 11
 
   return (
     <div className="app-canvas relative flex h-full">

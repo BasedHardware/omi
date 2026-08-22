@@ -39,27 +39,27 @@ const REALTIME_VOICE_ONLY_TOOLS = [
 const LOCAL_API_ONLY_TOOLS = ['get_local_status', 'get_screenshot']
 
 describe('omiToolManifest — structure', () => {
-  it('holds 33 product tools + 18 control tools = 51 entries', () => {
-    // 33 product drafts spliced around the 18 control tools.
-    expect(omiToolManifest).toHaveLength(51)
+  it('holds 36 product tools + 18 control tools = 54 entries', () => {
+    // 36 product drafts spliced around the 18 control tools.
+    expect(omiToolManifest).toHaveLength(54)
     const names = new Set(omiToolManifest.map((tool) => tool.name))
-    expect(names.size).toBe(51)
+    expect(names.size).toBe(54)
   })
 })
 
 describe('omiToolManifest — pi-mono projection counts', () => {
-  it('coordinator sees 21 product + 16 control = 37 tools', () => {
+  it('coordinator sees 24 product + 16 control = 40 tools', () => {
     const tools = toolsForAdapter('pi-mono', { executionRole: 'coordinator' })
-    expect(tools).toHaveLength(37)
+    expect(tools).toHaveLength(40)
     const controlCount = tools.filter((tool) => tool.executor.kind === 'runtimeControl').length
     const productCount = tools.filter((tool) => tool.executor.kind !== 'runtimeControl').length
     expect(controlCount).toBe(16)
-    expect(productCount).toBe(21)
+    expect(productCount).toBe(24)
   })
 
-  it('leaf sees 21 product + 13 control = 34 tools (the 3 coordinatorOnly tools drop)', () => {
+  it('leaf sees 24 product + 13 control = 37 tools (the 3 coordinatorOnly tools drop)', () => {
     const tools = toolsForAdapter('pi-mono', { executionRole: 'leaf' })
-    expect(tools).toHaveLength(34)
+    expect(tools).toHaveLength(37)
     const controlCount = tools.filter((tool) => tool.executor.kind === 'runtimeControl').length
     expect(controlCount).toBe(13)
   })
@@ -76,7 +76,7 @@ describe('omiToolManifest — pi-mono projection counts', () => {
   })
 
   it('default context (no executionRole) matches coordinator (leaf is opt-in)', () => {
-    expect(toolsForAdapter('pi-mono')).toHaveLength(37)
+    expect(toolsForAdapter('pi-mono')).toHaveLength(40)
   })
 })
 
@@ -184,8 +184,8 @@ describe('omiToolManifest — isToolAvailableForContext gate', () => {
 describe('omiToolManifest — availability snapshot', () => {
   it('reports the advertised count and canonical alias mapping for pi-mono coordinator', () => {
     const snapshot = buildToolAvailabilitySnapshot('pi-mono', { executionRole: 'coordinator' })
-    expect(snapshot.advertisedToolCount).toBe(37)
-    expect(snapshot.advertisedToolNames).toHaveLength(37)
+    expect(snapshot.advertisedToolCount).toBe(40)
+    expect(snapshot.advertisedToolNames).toHaveLength(40)
     // Alias resolution is present for advertised tools.
     expect(snapshot.aliases['search_screen_history']).toBe('semantic_search')
     expect(snapshot.aliases['mcp__omi-tools__execute_sql']).toBe('execute_sql')

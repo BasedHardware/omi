@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { StickyNote, Mail, Inbox } from 'lucide-react'
+import { StickyNote, Mail, Inbox, MessageSquare } from 'lucide-react'
 import { toast } from '../../../lib/toast'
 import { readAndExtractStickyNotes, importStickyMemories } from '../../../lib/stickyNotesImport'
 import { toastImportTally } from '../../../lib/importToast'
@@ -8,7 +8,14 @@ import { useGoogleConnection } from '../../../hooks/useGoogleConnection'
 import { GMAIL_SESSION_ENABLED } from '../../../lib/gmailSessionFeatureFlag'
 import { auth } from '../../../lib/firebase'
 import { SettingRow } from '../SettingRow'
-import type { GmailSessionStatus } from '../../../../../shared/types'
+import { Toggle } from '../Toggle'
+import type {
+  BeeperDraft,
+  BeeperNetwork,
+  BeeperSendMode,
+  BeeperStatus,
+  GmailSessionStatus
+} from '../../../../../shared/types'
 
 export function IntegrationsTab(): React.JSX.Element {
   const { memories, refresh } = useMemories()
@@ -141,6 +148,7 @@ export function IntegrationsTab(): React.JSX.Element {
 
   return (
     <>
+      <ChatReplySettings />
       <SettingRow
         icon={StickyNote}
         title="Windows Sticky Notes"
@@ -275,4 +283,258 @@ export function IntegrationsTab(): React.JSX.Element {
       )}
     </>
   )
+}
+
+const EMPTY_BEEPER: BeeperStatus = {
+  running: false,
+  connected: false,
+  enabled: false,
+  sendMode: 'draft',
+  networks: ['whatsapp', 'telegram'],
+  accounts: [],
+  draftCount: 0,
+  imessageSupported: false
+}
+
+function ChatReplySettings(): React.JSX.Element {
+  const [status, setStatus] = useState<BeeperStatus>(EMPTY_BEEPER)
+  const [drafts, setDrafts] = useState<BeeperDraft[]>([])
+  const [token, setToken] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const refresh = async (): Promise<void> => {
+    try {
+      const [next, list] = await Promise.all([
+        window.omi.beeperStatus(),
+        window.omi.beeperListDrafts()
+      ])
+      setStatus(next)
+      setDrafts(list)
+    } catch {
+      setStatus(EMPTY_BEEPER)
+    }
+  }
+
+  useEffect(() => {
+    window.omi
+      .beeperStatus()
+      .then(setStatus)
+      .catch(() => {})
+    window.omi
+      .beeperListDrafts()
+      .then(setDrafts)
+      .catch(() => {})
+    const unsub = window.omi.onBeeperChanged((next) => {
+      setStatus(next)
+      void window.omi
+        .beeperListDrafts()
+        .then(setDrafts)
+        .catch(() => {})
+    })
+    return () => unsub()
+  }, [])
+
+  const connect = async (): Promise<void> => {
+    if (busy || !token.trim()) return
+    setBusy(true)
+    try {
+      setStatus(await window.omi.beeperConnect(token.trim()))
+      setToken('')
+      toast('Beeper connected', { tone: 'success' })
+    } catch (e) {
+      toast('Could not connect Beeper', { tone: 'error', body: (e as Error).message })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const patch = async (next: {
+    enabled?: boolean
+    sendMode?: BeeperSendMode
+    networks?: BeeperNetwork[]
+  }): Promise<void> => {
+    try {
+      setStatus(await window.omi.beeperSetSettings(next))
+    } catch (e) {
+      toast('Could not update chat reply', { tone: 'error', body: (e as Error).message })
+    }
+  }
+
+  const subtitle = !status.connected
+    ? status.running
+      ? 'Beeper is running. Settings → Integrations: turn on Allow connections, scroll to Approved connections, click +.'
+      : 'Install Beeper Desktop, connect WhatsApp or Telegram, then paste an access token.'
+    : status.enabled
+      ? status.sendMode === 'auto'
+        ? 'Omi is sending drafts automatically in unread DMs.'
+        : `${status.draftCount} draft${status.draftCount === 1 ? '' : 's'} waiting. Replies use your memories.`
+      : 'Connected. Turn on to draft replies in unread DMs.'
+
+  return (
+    <>
+      <SettingRow
+        icon={MessageSquare}
+        dot={status.connected && status.enabled ? 'on' : status.connected ? 'warn' : 'off'}
+        title="Reply in your chats"
+        subtitle={subtitle}
+        keywords="beeper whatsapp telegram imessage chat reply draft"
+        control={
+          status.connected ? (
+            <Toggle
+              on={status.enabled}
+              label="Enable chat replies"
+              onChange={(on) => void patch({ enabled: on })}
+            />
+          ) : !status.running ? (
+            <button
+              type="button"
+              onClick={() => void window.omi.beeperOpenDownload()}
+              className="btn-ghost"
+            >
+              Install Beeper
+            </button>
+          ) : undefined
+        }
+      >
+        {!status.connected && (
+          <div className="mt-3 flex gap-2">
+            <input
+              type="password"
+              autoComplete="off"
+              placeholder="Paste Beeper access token"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void connect()
+              }}
+              className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-[13px] text-white placeholder:text-white/30 outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => void connect()}
+              disabled={busy || !token.trim()}
+              className="btn-primary px-3 py-2 disabled:opacity-40"
+            >
+              {busy ? 'Connecting…' : 'Connect'}
+            </button>
+          </div>
+        )}
+        {status.connected && (
+          <div className="mt-3 flex flex-col gap-3 text-[13px] text-white/70">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={status.networks.includes('whatsapp')}
+                onChange={(e) =>
+                  void patch({
+                    networks: toggleNetwork(status.networks, 'whatsapp', e.target.checked)
+                  })
+                }
+              />
+              WhatsApp
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={status.networks.includes('telegram')}
+                onChange={(e) =>
+                  void patch({
+                    networks: toggleNetwork(status.networks, 'telegram', e.target.checked)
+                  })
+                }
+              />
+              Telegram
+            </label>
+            <label className="flex items-center gap-2 opacity-50">
+              <input type="checkbox" disabled checked={false} />
+              iMessage — Mac only
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="beeper-mode"
+                checked={status.sendMode === 'draft'}
+                onChange={() => void patch({ sendMode: 'draft' })}
+              />
+              Draft only (recommended)
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="beeper-mode"
+                checked={status.sendMode === 'auto'}
+                onChange={() => void patch({ sendMode: 'auto' })}
+              />
+              Send automatically
+            </label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={() => void window.omi.beeperPollNow()}
+              >
+                Check now
+              </button>
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={() =>
+                  void window.omi
+                    .beeperDisconnect()
+                    .then(setStatus)
+                    .catch((e: Error) => {
+                      toast('Could not disconnect', { tone: 'error', body: e.message })
+                    })
+                }
+              >
+                Disconnect
+              </button>
+            </div>
+            {drafts.length > 0 && (
+              <ul className="divide-y divide-white/5 rounded-lg border border-white/5">
+                {drafts.map((d) => (
+                  <li key={d.id} className="flex flex-col gap-2 px-3 py-3">
+                    <p className="text-white/85">
+                      {d.chatTitle}
+                      <span className="ml-2 text-white/35">{d.network}</span>
+                    </p>
+                    <p className="text-white/45">In: {d.inboundText}</p>
+                    <p className="text-white/80">Out: {d.replyText}</p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        className="btn-primary px-3 py-1.5"
+                        onClick={() =>
+                          void window.omi
+                            .beeperSendDraft(d.id)
+                            .then(refresh)
+                            .catch((e: Error) => {
+                              toast('Could not send', { tone: 'error', body: e.message })
+                            })
+                        }
+                      >
+                        Send
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-ghost"
+                        onClick={() => void window.omi.beeperDismissDraft(d.id).then(refresh)}
+                      >
+                        Skip
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </SettingRow>
+    </>
+  )
+}
+
+function toggleNetwork(current: BeeperNetwork[], n: BeeperNetwork, on: boolean): BeeperNetwork[] {
+  if (on) return Array.from(new Set([...current, n]))
+  return current.filter((x) => x !== n)
 }
