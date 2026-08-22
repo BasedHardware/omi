@@ -1,8 +1,8 @@
 //
-//  ActivityBackButton.swift — the way back from a page Activity's chip row opened.
+//  ActivityBackButton.swift — the way back from a page the Brain chip row opened.
 //
-//  The chip row is a one-way door: pressing `Memories` leaves Activity, and the row goes with it,
-//  because the row lives on Activity's panel. The top-bar `Activity` pill does come back, but a pill
+//  The chip row is a one-way door: pressing `Memories` leaves Brain, and the row goes with it,
+//  because the row lives on Brain's panel. The top-bar `Brain` pill does come back, but a pill
 //  in the window's chrome is a different gesture from the control that brought you here — you have
 //  to know the pill is the answer, and nothing on the page says so.
 //
@@ -15,7 +15,7 @@
 import OmiTheme
 import SwiftUI
 
-/// A back control that returns to the Activity spine.
+/// A back control that returns to the Brain spine.
 struct ActivityBackButton: View {
   let action: () -> Void
 
@@ -26,7 +26,7 @@ struct ActivityBackButton: View {
       HStack(spacing: 5) {
         Image(systemName: "chevron.left")
           .scaledFont(size: OmiType.micro, weight: .semibold)
-        Text("Activity")
+        Text("Brain")
           .scaledFont(size: OmiType.caption, weight: .semibold)
       }
       .foregroundStyle(GlassShell.controlLabel(isProminent: isHovering))
@@ -36,8 +36,8 @@ struct ActivityBackButton: View {
     }
     .buttonStyle(.plain)
     .onHover { isHovering = $0 }
-    .help("Back to Activity")
-    .accessibilityLabel("Back to Activity")
+    .help("Back to Brain")
+    .accessibilityLabel("Back to Brain")
     .accessibilityIdentifier("activity-back-button")
   }
 }

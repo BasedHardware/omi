@@ -266,7 +266,7 @@ struct ChatFirstShell: View {
         }
         switch route {
         case .conversations:
-          // The hub's one pill says `Activity`, so it opens Activity — not whichever hub view
+          // The hub's one pill says `Brain`, so it opens the Brain spine — not whichever hub view
           // happened to be persisted last, and not the Conversations route this index maps back
           // from. Routing through the same writer the chip row uses keeps one path responsible for
           // moving both halves of the state.
