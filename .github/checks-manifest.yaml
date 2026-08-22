@@ -234,6 +234,11 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "desktop Swift sources changed; compare against the pinned macOS formatter before requiring a flow cover"
+  - id: desktop-flow-contract-tests
+    command: ["python3", "desktop/macos/tests/test_desktop_flow_contract.py"]
+    triggers: ["desktop/macos/scripts/desktop_flow_contract.py", "desktop/macos/tests/test_desktop_flow_contract.py", "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "bridge actions moved into DesktopAutomationBridge+Notifications.swift while the action-source list still named only the base file, so desktop-flow-lint called their flows unknown and failed the push gate on every branch"
   - id: desktop-proactive-notification-gate
     command: ["python3", "desktop/macos/scripts/check-proactive-notification-gate.py"]
     triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/scripts/check-proactive-notification-gate.py"]
@@ -401,6 +406,11 @@ checks:
     triggers: ["backend/**/*.py", "backend/route_policy_manifest.yaml", "backend/route_policy_legacy_missing_routes.txt", "backend/scripts/check_route_policy_baseline.py"]
     lanes: ["local", "ci"]
     reason: "new backend routes must declare reviewed policy instead of growing the legacy baseline"
+  - id: plan-catalog-contract
+    command: ["python3", "backend/scripts/generate_plan_catalog.py", "--check", "--base-ref", "{base}"]
+    triggers: ["**/*.arb", "**/*.cjs", "**/*.dart", "**/*.env", "**/*.ini", "**/*.js", "**/*.json", "**/*.jsx", "**/*.mjs", "**/*.plist", "**/*.properties", "**/*.py", "**/*.sh", "**/*.swift", "**/*.tf", "**/*.toml", "**/*.tpl", "**/*.ts", "**/*.tsx", "**/*.xml", "**/*.yaml", "**/*.yml", "**/Dockerfile*", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the plan catalog must remain valid, generated exactly, append-only for billed identities, and exhaustive for committed production Stripe object IDs; this would have prevented the f30245338-to-2e71145ab Neo revert incident"
   - id: firestore-index-manifest
     command: ["python3", "backend/scripts/generate_firestore_indexes.py"]
     triggers: ["firestore.indexes.json", "backend/database/firestore_index_registry.py", "backend/scripts/generate_firestore_indexes.py"]

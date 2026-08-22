@@ -559,8 +559,14 @@ struct StatusView: View {
             // the engine was never paused. A control that cannot work is worse than no control.
             MenuCommand(title: engine.isPaused ? "Resume" : "Pause") {
                 if engine.isPaused {
+                    // Named for what the press *did*, read off the state before it. Two cases
+                    // rather than one `captureToggled` with a bool, because the question people
+                    // ask of this row is "how many installs pause capture and never come back",
+                    // and that is a comparison of two counts.
+                    ContextAnalytics.record(.controlUsed(.captureResume))
                     engine.resume()
                 } else {
+                    ContextAnalytics.record(.controlUsed(.capturePause))
                     engine.pause()
                 }
             }
@@ -587,7 +593,7 @@ struct StatusView: View {
             // ungranted user can reach the window at all, and a dead chord beside it suggests they
             // never needed the row.
             MenuCommand(title: "Open Activity", shortcut: activityShortcut) {
-                SearchBarWindow.present()
+                SearchBarWindow.present(via: .menuBarRow)
             }
 
             // **No shortcut, because the timeline has none.** ⌘ + ⌘ opens Activity now, and printing
@@ -599,10 +605,12 @@ struct StatusView: View {
             // rebuilt here — store guard, Settings hand-off, search hand-off — and a second
             // reconstruction of three arguments is how one of them quietly stops being passed.
             MenuCommand(title: "Open Timeline") {
-                ContextAppDelegate.openTimeline()
+                ContextAppDelegate.openTimeline(via: .menuBarRow)
             }
 
-            MenuCommand(title: "Settings…", shortcut: "⌘,") { SettingsWindow.present() }
+            MenuCommand(title: "Settings…", shortcut: "⌘,") {
+                SettingsWindow.present(via: .menuBarRow)
+            }
                 .keyboardShortcut(",")
 
             // **The only way back into the walkthrough once it has been left.**
@@ -613,6 +621,7 @@ struct StatusView: View {
             // once per install. Skipping was therefore permanent, and the app's own explanation of
             // itself was unreachable for the rest of its life on that Mac.
             MenuCommand(title: "Show Me Around") {
+                ContextAnalytics.record(.controlUsed(.showMeAround))
                 Tutorial.start(store: Engine.shared.contextStore)
             }
 
@@ -626,6 +635,11 @@ struct StatusView: View {
             // straight back — an app that cannot be quit, which is worse than one that needs
             // reopening.
             MenuCommand(title: "Quit", shortcut: "⌘Q") {
+                // Before `TerminationOrigin`, because the two lines below end this process
+                // synchronously — `NSApp.terminate` runs `applicationWillTerminate` on the way
+                // through — and an emit after them would be an emit by a process that is gone.
+                // The sink is drained on `willTerminate`, so a record made here still leaves.
+                ContextAnalytics.record(.controlUsed(.quit))
                 TerminationOrigin.userAskedToQuit()
                 NSApp.terminate(nil)
             }

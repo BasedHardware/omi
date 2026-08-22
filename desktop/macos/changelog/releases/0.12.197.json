@@ -1,0 +1,7 @@
+{
+  "version": "0.12.197",
+  "date": "2026-08-21",
+  "changes": [
+    "Fixed the app quitting the moment you finished onboarding, which sent you back through onboarding on the next launch"
+  ]
+}

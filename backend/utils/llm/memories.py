@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import Any, Dict, List, Literal, Optional, cast
 
 from langchain_core.output_parsers import PydanticOutputParser
@@ -125,6 +126,7 @@ def extract_canonical_l1_memory_candidates(
     language: Optional[str] = None,
     strict: bool = False,
     prompt_prefix: Optional[ConversationPromptPrefix] = None,
+    rejected_memory_examples: Sequence[str] = (),
 ) -> List[CanonicalL1MemoryCandidate]:
     """Run the broad, source-aware L1 extractor without persisting archive routes.
 
@@ -162,6 +164,7 @@ def extract_canonical_l1_memory_candidates(
         strict=strict,
         prompt_prefix=prompt_prefix,
         prompt_cache_enabled=bool(prompt_prefix and shared_conversation_cache_supported()),
+        rejected_memory_examples=tuple(rejected_memory_examples),
     )
     return [
         CanonicalL1MemoryCandidate(

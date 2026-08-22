@@ -23,6 +23,7 @@ enum AgentErrorCode: String, CaseIterable, Sendable {
   case credentialLeakSuspected = "credential_leak_suspected"
   case planLimitReached = "plan_limit_reached"
   case agentModeUnavailable = "agent_mode_unavailable"
+  case upstreamProviderFailed = "upstream_provider_failed"
   case userInterrupted = "user_interrupted"
   case unknown
 }
@@ -109,6 +110,27 @@ enum AgentErrorClassifier {
         code: .runtimeInstallIncomplete,
         userMessage: runtimeInstallIncompleteMessage,
         retryable: false)
+    }
+
+    // Omi's own desktop chat backend reports every upstream failure as the
+    // fixed string "Upstream provider error" with code 502, delivered as an SSE
+    // error frame inside an HTTP 200 body. The corpus had no rule for it, so it
+    // fell through to `unknown` and the transcript showed the generic "Omi
+    // couldn't answer this one" — which is what users saw for ~19 hours during
+    // the 2026-08-20 gateway-parameter outage, with nothing on screen
+    // indicating the failure was ours rather than their message.
+    //
+    // Retryable: the backend emits this for transient gateway conditions
+    // (circuit open, transport failure, upstream timeout) as well as hard
+    // rejections, and it does not distinguish them on the wire. Resending is
+    // worth one attempt.
+    if lower.contains("upstream provider error") {
+      return ClassifiedAgentError(
+        code: .upstreamProviderFailed,
+        userMessage:
+          "Omi's AI service didn't respond. This is on our side, not your message. "
+          + "Try again in a moment.",
+        retryable: true)
     }
 
     // The Omi-account proxy answers an exhausted billing lane with a bare 402

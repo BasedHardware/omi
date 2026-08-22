@@ -533,7 +533,7 @@ Reference flows in `desktop/macos/e2e/flows/*.yaml` describe the app's key user 
 | `flows/language.yaml` | Settings → Transcription language config | 5 | Language mode toggle, voice assistant languages |
 | `flows/screen-recording-permission.yaml` | Rewind permission flow | 7 | Grant Permission button, Capture status |
 | `flows/audio-recording.yaml` | Audio capture, mic source, transcription | 7 | Start/Stop Recording, BT/mic selection |
-| `flows/refer-external.yaml` | Refer a Friend | 3 | Profile → affiliate URL |
+| `flows/refer-external.yaml` | Refer a Friend | 3 | Top bar + Settings → copy unique link |
 | `flows/recording-finalization.yaml` | Recording lifecycle | 7 | Transcription storage, conversation detail |
 
 When you modify a Swift file, check if any flow's `covers:` includes it. That flow describes the user journey your change affects.

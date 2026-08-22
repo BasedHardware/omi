@@ -251,7 +251,7 @@ def _global_read_gate_path():
     return memory_product.GLOBAL_READ_GATE_PATH
 
 
-def test_product_search_endpoint_uses_default_policy_and_excludes_stale_short_term_and_archive(monkeypatch):
+def test_product_search_endpoint_keeps_expired_unadjudicated_short_term_and_excludes_archive(monkeypatch):
     now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     stale_short_term = _memory_item(
@@ -285,11 +285,15 @@ def test_product_search_endpoint_uses_default_policy_and_excludes_stale_short_te
 
     assert db_client.document_paths == [_global_read_gate_path(), 'users/u1/memory_control/state']
     assert db_client.collection_paths == ['users/u1/memory_items']
-    assert [item['memory_id'] for item in response['items']] == ['fresh-short-term', 'long-term']
+    assert [item['memory_id'] for item in response['items']] == [
+        'fresh-short-term',
+        'long-term',
+        'stale-short-term',
+    ]
     assert response['uid'] == 'u1'
     assert response['query'] == 'coffee'
-    assert response['total_count'] == 2
-    assert response['returned_count'] == 2
+    assert response['total_count'] == 3
+    assert response['returned_count'] == 3
     assert response['limit'] == 25
     assert response['offset'] == 0
     assert response['policy']['consumer'] == 'omi_chat'
@@ -594,7 +598,7 @@ def test_vector_search_endpoint_requires_vector_projection_commit_before_vector_
     vector_query.assert_not_called()
 
 
-def test_vector_search_endpoint_uses_persisted_default_policy_and_excludes_stale_short_term_and_archive(monkeypatch):
+def test_vector_search_endpoint_keeps_expired_unadjudicated_short_term_and_excludes_archive(monkeypatch):
     from models.memory_search_gateway import SearchMode, SearchVectorHit
 
     now = datetime.now(timezone.utc).replace(microsecond=0)
@@ -660,9 +664,17 @@ def test_vector_search_endpoint_uses_persisted_default_policy_and_excludes_stale
     ]
     assert db_client.collection_paths == []
     assert vector_calls == [{'uid': 'u1', 'query': 'coffee', 'mode': SearchMode.default, 'limit': 30}]
-    assert [item['memory_id'] for item in response['items']] == ['long-term', 'fresh-short-term']
-    assert response['scores_by_memory_id'] == {'long-term': 0.9, 'fresh-short-term': 0.8}
-    assert response['decisions']['stale-short-term'] == 'access_denied'
+    assert [item['memory_id'] for item in response['items']] == [
+        'stale-short-term',
+        'long-term',
+        'fresh-short-term',
+    ]
+    assert response['scores_by_memory_id'] == {
+        'stale-short-term': 0.99,
+        'long-term': 0.9,
+        'fresh-short-term': 0.8,
+    }
+    assert response['decisions']['stale-short-term'] == 'allowed'
     assert response['decisions']['archive'] == 'access_denied'
     assert response['policy']['consumer'] == 'omi_chat'
     assert response['policy']['archive_capability'] is False

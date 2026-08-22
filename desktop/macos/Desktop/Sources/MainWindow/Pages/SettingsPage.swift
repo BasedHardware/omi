@@ -226,6 +226,9 @@ struct SettingsContentView: View {
   @State var insightNotificationsEnabled: Bool
   @State var insightExcludedApps: Set<String>
 
+  // Meeting summary share notification
+  @State var meetingSummaryNotificationsEnabled: Bool
+
   // Memory Assistant states
   @State var memoryEnabled: Bool
   @State var memoryExtractionInterval: Double
@@ -407,6 +410,7 @@ struct SettingsContentView: View {
     case floatingBar = "Floating Bar"
     case shortcuts = "Shortcuts"
     case advanced = "Advanced"
+    case referral = "Refer a Friend"
     case about = "About"
     /// The established page that had no door. It was only ever written by the sidebar the glass
     /// shell stopped rendering, so `PermissionsPage` kept working with nothing on screen that
@@ -593,6 +597,8 @@ struct SettingsContentView: View {
     _memoryMinConfidence = State(initialValue: MemoryAssistantSettings.shared.minConfidence)
     _memoryNotificationsEnabled = State(
       initialValue: MemoryAssistantSettings.shared.notificationsEnabled)
+    _meetingSummaryNotificationsEnabled = State(
+      initialValue: MeetingSummaryNotificationSettings.isEnabled)
     _memoryExcludedApps = State(initialValue: MemoryAssistantSettings.shared.excludedApps)
     _vadGateEnabled = State(initialValue: settings.vadGateEnabled)
     _transcriptionLanguage = State(initialValue: settings.transcriptionLanguage)
@@ -648,6 +654,8 @@ struct SettingsContentView: View {
           shortcutsSection
         case .advanced:
           advancedSection
+        case .referral:
+          referralSection
         case .about:
           aboutSection
         case .permissions:

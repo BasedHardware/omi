@@ -398,4 +398,36 @@ final class ShellSummonTests: XCTestCase {
 
     XCTAssertTrue(shellDismissed)
   }
+
+  /// A fresh install could not finish onboarding: granting the microphone quit the app.
+  ///
+  /// `requestMicrophonePermission` calls `suspendForPermissionPrompt`, which orders the only
+  /// window out so macOS can present the dialog. AppKit reports that as the last window closing,
+  /// and the handler returned `!hasCompletedOnboarding` — true during onboarding — so the process
+  /// ended before the prompt could be answered and before the completion handler restored the
+  /// shell. No crash report, because nothing crashed.
+  func testPermissionPromptDoesNotEndOnboarding() {
+    XCTAssertFalse(
+      ShellSummon.shouldTerminateAfterLastWindowClosed(
+        hasCompletedOnboarding: false, isSuspendedForPermissionPrompt: true),
+      "quitting here ends onboarding at the moment the user is granting the permission it asked for")
+  }
+
+  /// The behaviour the guard must not weaken: before onboarding completes there is no menu-bar
+  /// residency to fall back on, so a window the user actually closed still means quit.
+  func testClosingTheLastOnboardingWindowStillQuits() {
+    XCTAssertTrue(
+      ShellSummon.shouldTerminateAfterLastWindowClosed(
+        hasCompletedOnboarding: false, isSuspendedForPermissionPrompt: false))
+  }
+
+  /// After onboarding the app is a menu-bar resident, so losing the last window is never a quit —
+  /// with or without a prompt in flight.
+  func testOnboardedAppSurvivesLosingItsLastWindow() {
+    for suspended in [true, false] {
+      XCTAssertFalse(
+        ShellSummon.shouldTerminateAfterLastWindowClosed(
+          hasCompletedOnboarding: true, isSuspendedForPermissionPrompt: suspended))
+    }
+  }
 }

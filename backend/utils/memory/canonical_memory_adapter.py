@@ -40,6 +40,7 @@ from database.memory_apply_store import (
 from database.memory_vector_repair_outbox import build_vector_repair_purge_outbox_records
 from database.memory_vector_metadata import canonical_memory_provider_id
 from database.account_deletion_projection_fence import read_account_deletion_projection_fence
+from utils.other.list_budget import ListReadBudget, budgeted_document_get, budgeted_stream_list
 from models.memory_domain import (
     MemoryLayer as DomainMemoryLayer,
     MemoryProcessingState,
@@ -385,6 +386,7 @@ def read_canonical_memories(
     include_pending_processing: bool = False,
     include_archive: bool = False,
     now: Optional[datetime] = None,
+    budget: Optional[ListReadBudget] = None,
 ) -> List[MemoryDB]:
     """Read canonical items, optionally exposing explicit pending submissions.
 
@@ -395,11 +397,13 @@ def read_canonical_memories(
     Archive rows stay excluded unless ``include_archive`` is an explicit owner
     opt-in. That flag is the only way this default list gains
     ``archive_capability``; chat/MCP archive routes keep their own grants.
+    With a ``budget`` the authoritative item stream runs under the request's
+    per-RPC timeout and charges every fetched row (#11831).
     """
     client = db_client if db_client is not None else default_db_client
     device_scope = device_scope_request.device_scope if device_scope_request else "all"
     client_device_id = device_scope_request.client_device_id if device_scope_request else None
-    items = fetch_authoritative_product_memory_items(uid=uid, db_client=client)
+    items = fetch_authoritative_product_memory_items(uid=uid, db_client=client, budget=budget)
     current_time = now or datetime.now(timezone.utc)
     archive_explicit = bool(include_archive)
     policy = MemoryAccessPolicy.for_omi_chat(archive_capability=archive_explicit)
@@ -489,7 +493,13 @@ def _canonical_scan_item_visible(
     return bool(scoped)
 
 
-def _read_canonical_memory_item_for_lineage(uid: str, memory_id: str, *, db_client: Any) -> Optional[MemoryItem]:
+def _read_canonical_memory_item_for_lineage(
+    uid: str,
+    memory_id: str,
+    *,
+    db_client: Any,
+    budget: Optional[ListReadBudget] = None,
+) -> Optional[MemoryItem]:
     """Read one canonical document for lineage traversal without status filtering.
 
     Snapshot/document id is the sole identity authority. Payload ``memory_id`` or
@@ -500,7 +510,7 @@ def _read_canonical_memory_item_for_lineage(uid: str, memory_id: str, *, db_clie
     if not requested_id:
         return None
     path = f"{MemoryCollections(uid=uid).memory_items}/{requested_id}"
-    snapshot = db_client.document(path).get()
+    snapshot = budgeted_document_get(db_client.document(path), budget)
     if not getattr(snapshot, "exists", False):
         return None
     doc_id = getattr(snapshot, "id", None)
@@ -529,6 +539,7 @@ def _canonical_scan_lineage_suppressed(
     include_archive: bool,
     device_scope: str,
     client_device_id: Optional[str],
+    budget: Optional[ListReadBudget] = None,
 ) -> bool:
     """Suppress a visible alias when a visible authoritative survivor wins.
 
@@ -558,7 +569,7 @@ def _canonical_scan_lineage_suppressed(
             lineage_root = min(path[cycle_start:])
             break
         try:
-            target = _read_canonical_memory_item_for_lineage(uid, next_id, db_client=db_client)
+            target = _read_canonical_memory_item_for_lineage(uid, next_id, db_client=db_client, budget=budget)
         except ValueError:
             # Payload/id/uid mismatch fail-closed for that hop: stop walking and
             # only evaluate identity-checked nodes already in the closure.
@@ -608,6 +619,7 @@ def read_canonical_scan_page(
     include_pending_processing: bool = False,
     include_archive: bool = False,
     now: Optional[datetime] = None,
+    budget: Optional[ListReadBudget] = None,
 ) -> Tuple[List[CanonicalScanSlot], bool]:
     """Read one bounded canonical raw scan page via Firestore keyset order.
 
@@ -644,7 +656,7 @@ def read_canonical_scan_page(
                 '__name__': items_ref.document(cursor_memory_id),
             }
         )
-    snapshots = list(query.limit(bounded_limit).stream())
+    snapshots = budgeted_stream_list(query.limit(bounded_limit), budget)
     slots: List[CanonicalScanSlot] = []
     for snapshot in snapshots:
         doc_id = getattr(snapshot, 'id', None)
@@ -691,6 +703,7 @@ def read_canonical_scan_page(
             include_archive=archive_explicit,
             device_scope=device_scope,
             client_device_id=client_device_id,
+            budget=budget,
         ):
             slots.append((None, scan_cursor))
             continue

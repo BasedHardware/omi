@@ -71,8 +71,45 @@ enum AnalyticsEvent: Sendable {
     /// The ⌘ + ⌘ gesture fired. The product's one deliberate foreground interaction.
     case gestureFired
 
-    /// A surface the user opened by hand.
-    case surfaceOpened(Surface)
+    /// A surface the user opened by hand, and the route they took to it.
+    ///
+    /// **`via` is the half that was missing.** Every route below lands on the same window, so a
+    /// count without a source says a surface was opened and nothing about what opened it — and the
+    /// routes are the product decision: a chord nobody uses and a menu row everybody uses are the
+    /// same number here without it.
+    case surfaceOpened(Surface, via: OpenSource)
+
+    /// A surface the user closed, and how long it was up. **Bucketed, never a duration.**
+    ///
+    /// Dwell is the only question `surfaceOpened` structurally cannot answer: a timeline opened and
+    /// abandoned in four seconds and one read for half an hour are one event each. A raw interval
+    /// would be a per-person activity timestamp — how long somebody sat with their own recorded
+    /// screen, to the second — so the bucket is the disclosure boundary, not a rounding convenience.
+    case surfaceClosed(Surface, openFor: DurationBucket)
+
+    /// The user handed a question to Claude from the search bar. **Never the question.**
+    ///
+    /// The inverse of `tool_*` on `dailyActive`: those count Claude reaching in, this counts the
+    /// person reaching out, and until now nothing counted the second. It is a lower bound on "does
+    /// this person use Claude with our context" and always will be — somebody who opens Claude
+    /// directly is invisible to this app by construction, which is a fact about process boundaries
+    /// rather than a gap worth closing.
+    case claudeHandoff(target: ClaudeTarget, delivered: Bool)
+
+    /// A named control was used. One closed enum, not a per-button event.
+    ///
+    /// `surfaceOpened` measures four windows; this measures the decisions taken inside them. The
+    /// vocabulary is deliberately short — the controls that answer a product question, not the ~65
+    /// clickable things in the app, because a case per button is how a closed enum becomes a string
+    /// bag with extra steps.
+    case controlUsed(Control)
+
+    /// A tutorial beat was reached. Ordinal only, for the same reason as `onboardingStep`.
+    ///
+    /// Onboarding hands off to the tutorial and the tutorial is where the product is actually
+    /// taught — including the one beat gated on Claude genuinely calling a tool. The measured funnel
+    /// used to stop exactly where the interesting drop-off starts.
+    case tutorialStep(index: Int, of: Int, outcome: TutorialOutcome)
 
     /// A local search ran. Length buckets only, never the query.
     case searchRan(resultCountBucket: CountBucket)
@@ -156,9 +193,88 @@ enum AnalyticsEvent: Sendable {
     /// it" — the more dangerous of the two, because it looks like a finding.
     enum Surface: String, Sendable, CaseIterable {
         case menuBar
+        /// The Activity panel — the app's primary window, which `SearchBarWindow` presents.
         case activity
         case settings
+        /// The search bar, once a query is committed into it.
         case search
+        /// The timeline window.
+        ///
+        /// **It had no case, and `activity` was standing in for it.** `openTheTimeline()` reported
+        /// `.activity` while opening `RewindWindow`, so the series named for the primary window was
+        /// counting the demoted one, through one of its four routes. Anything read from `activity`
+        /// or `search` before this case existed is describing the other surface.
+        case rewind
+    }
+
+    /// How a surface was reached. Closed, and every case is a route that exists in the app today.
+    enum OpenSource: String, Sendable, CaseIterable {
+        /// Process launch surfaced it.
+        case launch
+        /// Already running, brought forward — Dock, `open -a`, Finder, or a second press.
+        case reopen
+        /// The ⌘ + ⌘ chord.
+        case gesture
+        /// The menu bar status item itself, which opens the popover.
+        case statusItem
+        /// A row in the menu bar popover.
+        case menuBarRow
+        /// A control inside another of our surfaces — the Timeline pill, the gear, "Search All".
+        case inAppPill
+        /// Activating a search or activity result.
+        case resultActivation
+        /// The tutorial drove it.
+        case tutorial
+        /// A bound keyboard shortcut other than the chord.
+        case shortcut
+    }
+
+    /// How long a surface was up. Buckets, never an interval — see `surfaceClosed`.
+    enum DurationBucket: String, Sendable, CaseIterable {
+        case seconds        // < 10s
+        case aMinute        // < 60s
+        case minutes        // < 10m
+        case tensOfMinutes  // < 60m
+        case hours          // 60m+
+
+        init(_ interval: TimeInterval) {
+            switch max(0, interval) {
+            case ..<10: self = .seconds
+            case ..<60: self = .aMinute
+            case ..<600: self = .minutes
+            case ..<3600: self = .tensOfMinutes
+            default: self = .hours
+            }
+        }
+    }
+
+    /// Where a handed-off question went. Mirrors `SettingsStore.claudeTarget`.
+    enum ClaudeTarget: String, Sendable, CaseIterable {
+        case claudeApp
+        case terminal
+    }
+
+    /// The controls worth counting. Short on purpose — see `controlUsed`.
+    enum Control: String, Sendable, CaseIterable {
+        case capturePause
+        case captureResume
+        case timelinePill
+        case settingsGear
+        case searchAllPill
+        case activityKindChip
+        case rewindDayStep
+        case rewindLiveText
+        case askClaude
+        case showMeAround
+        case runSetupAgain
+        case quit
+    }
+
+    /// How a tutorial beat ended.
+    enum TutorialOutcome: String, Sendable, CaseIterable {
+        case entered
+        case finished
+        case skipped
     }
 
     /// What the install first stored. **Two cases, because two things are stored**, and a case with
@@ -260,6 +376,10 @@ enum AnalyticsEvent: Sendable {
         case .captureStateChanged: return "cfc_capture_state"
         case .gestureFired: return "cfc_gesture_fired"
         case .surfaceOpened: return "cfc_surface_opened"
+        case .surfaceClosed: return "cfc_surface_closed"
+        case .claudeHandoff: return "cfc_claude_handoff"
+        case .controlUsed: return "cfc_control_used"
+        case .tutorialStep: return "cfc_tutorial_step"
         case .searchRan: return "cfc_search_ran"
         case .firstArtifact: return "cfc_first_artifact"
         case .updateOutcome: return "cfc_update_outcome"
@@ -292,8 +412,23 @@ enum AnalyticsEvent: Sendable {
         case let .captureStateChanged(source, live):
             return ["source": .string(source.rawValue), "live": .bool(live)]
 
-        case let .surfaceOpened(surface):
-            return ["surface": .string(surface.rawValue)]
+        case let .surfaceOpened(surface, via):
+            return ["surface": .string(surface.rawValue), "via": .string(via.rawValue)]
+
+        case let .surfaceClosed(surface, openFor):
+            return ["surface": .string(surface.rawValue), "open_for": .string(openFor.rawValue)]
+
+        case let .claudeHandoff(target, delivered):
+            return ["target": .string(target.rawValue), "delivered": .bool(delivered)]
+
+        case let .controlUsed(control):
+            return ["control": .string(control.rawValue)]
+
+        case let .tutorialStep(index, total, outcome):
+            return [
+                "step_index": .int(index), "step_total": .int(total),
+                "outcome": .string(outcome.rawValue),
+            ]
 
         case let .searchRan(bucket):
             return ["result_count": .string(bucket.rawValue)]
@@ -337,10 +472,20 @@ struct DailyRollup: Sendable, Equatable {
     /// always false in practice; it is here so that if the suppression is ever wrongly relaxed the
     /// evidence is in the payload rather than absent from it.
     var airgapped: Bool
+    /// Conversations this install durably closed today.
+    ///
+    /// **A count, because the minutes could not be one.** `firstArtifact` fires once per install
+    /// ever, and `captureMinutes` reads the same on the hundredth day as the first — so "how much
+    /// does this person actually produce in a day" had no answer at all. Counted at the one seam a
+    /// session closes through, so an open session and a failed insert are both excluded.
+    ///
+    /// Deliberately not the downloaded-memory cache: that is a copy of what the account already
+    /// holds, and counting it would report another device's work as this one's.
+    var conversations: Int
 
     static let empty = DailyRollup(
         toolCalls: [:], captureMinutes: 0, screenMinutes: 0, activeHours: 0,
-        signedIn: false, airgapped: false)
+        signedIn: false, airgapped: false, conversations: 0)
 
     /// Did anything actually happen? An install that ran all day and captured nothing is still a
     /// DAU, so this is not a send gate — it is a dimension, so "available" and "used" can be told
@@ -359,6 +504,7 @@ struct DailyRollup: Sendable, Equatable {
             "signed_in": .bool(signedIn),
             "airgapped": .bool(airgapped),
             "idle": .bool(isIdle),
+            "conversations": .int(conversations),
         ]
         // One property per tool, so "which tools does Claude actually reach for" is answerable
         // without a second event type. The names come from our own dispatch table and are sanitised

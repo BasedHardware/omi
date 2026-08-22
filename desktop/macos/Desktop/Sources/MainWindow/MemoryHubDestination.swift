@@ -103,3 +103,18 @@ enum MemoryHubLayoutPolicy {
     return transcriptDrawerOpen && conversationID == presentedConversationID
   }
 }
+
+/// How a hub selection is applied, per shell.
+///
+/// The chat-first shell keeps a typed route beside the persisted hub destination, so selecting a hub
+/// view has to move both or the shell renders one view while claiming to be on another — which is the
+/// state that made Brain Map unreachable from its Conversations route.
+enum MemoryHubSelectionPolicy {
+  /// The chat-first route that must be selected for a hub destination.
+  ///
+  /// `Conversations` has its own route (it carries capture-archive focus); the other two are the
+  /// Memory route, which is where `MemoryHubPage` lives.
+  static func chatFirstRoute(for destination: MemoryHubDestination) -> ChatFirstRoute {
+    destination == .conversations ? .conversations : .memories
+  }
+}

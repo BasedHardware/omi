@@ -528,7 +528,7 @@ class TestKeywordSearchAndHybrid:
         )
         monkeypatch.setattr(
             "utils.memory.canonical_memory_adapter.fetch_authoritative_product_memory_items",
-            lambda uid, db_client=None: [unique_short_term, duplicate_short_term, survivor],
+            lambda uid, db_client=None, budget=None: [unique_short_term, duplicate_short_term, survivor],
         )
 
         def _vector_query(*args, **kwargs):

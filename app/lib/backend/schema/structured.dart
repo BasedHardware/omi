@@ -12,6 +12,9 @@ import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 //  - Event: client-only `id`, field name `startsAt` (generated `start`), and fromJson
 //    epoch-int -> DateTime conversion.
 
+// Section has no client-only fields or behavior, so it stays a typedef over the wire type.
+typedef Section = wire.GeneratedSection;
+
 class Structured {
   int id = 0;
 
@@ -19,6 +22,8 @@ class Structured {
   String overview;
   String emoji;
   String category;
+
+  List<Section> sections = [];
 
   List<ActionItem> actionItems = [];
 
@@ -43,6 +48,17 @@ class Structured {
       emoji: json['emoji'] ?? '🧠',
       category: json['category'] ?? 'other',
     );
+    final sections = json['sections'];
+    if (sections is List) {
+      for (final section in sections) {
+        if (section is Map<String, dynamic>) {
+          structured.sections.add(Section.fromJson(section));
+        } else if (section is Map) {
+          structured.sections.add(Section.fromJson(Map<String, dynamic>.from(section)));
+        }
+      }
+    }
+
     final aItems = json['actionItems'] ?? json['action_items'];
     if (aItems is List) {
       for (final item in aItems) {
@@ -78,6 +94,7 @@ class Structured {
       emoji: generated.emoji,
       category: generated.category,
     );
+    structured.sections = generated.sections?.toList() ?? [];
     structured.actionItems = generated.actionItems?.map(ActionItem.fromGenerated).toList() ?? [];
     structured.events = generated.events?.map(Event.fromGenerated).toList() ?? [];
     return structured;
@@ -87,6 +104,9 @@ class Structured {
   String toString() {
     var str = '';
     str += '${getEmoji()} $title\n\n$overview\n\n'; // ($category)
+    for (var section in sections) {
+      str += '${section.heading}\n${section.bodyMarkdown}\n\n';
+    }
     if (actionItems.isNotEmpty) {
       str += 'Action Items:\n';
       for (var item in actionItems) {
@@ -108,6 +128,7 @@ class Structured {
       'overview': overview,
       'emoji': emoji,
       'category': category,
+      'sections': sections.map((section) => section.toJson()).toList(),
       'actionItems': actionItems.map((item) => item.description).toList(),
       'events': events.map((event) => event.toJson()).toList(),
     };
@@ -119,6 +140,7 @@ class Structured {
       overview: overview,
       emoji: emoji,
       category: category,
+      sections: sections.toList(),
       actionItems: actionItems.map((item) => item.toGenerated()).toList(),
       events: events.map((event) => event.toGenerated()).toList(),
     );
