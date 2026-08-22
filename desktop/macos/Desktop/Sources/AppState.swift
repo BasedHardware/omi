@@ -1007,6 +1007,11 @@ extension Notification.Name {
   static let desktopAutomationNavigateRequested = Notification.Name(
     "desktopAutomationNavigateRequested")
   /// Posted by the local desktop automation bridge to open a specific conversation detail.
+  /// Opens the meeting-summary card's Share address field. Posted by the
+  /// automation bridge so the field can be exercised without a cursor.
+  static let meetingSummaryShareBeginAddressing = Notification.Name(
+    "meetingSummaryShareBeginAddressing")
+
   static let desktopAutomationOpenConversationRequested = Notification.Name(
     "desktopAutomationOpenConversationRequested")
   static let desktopAutomationSetConversationsSearchRequested = Notification.Name(

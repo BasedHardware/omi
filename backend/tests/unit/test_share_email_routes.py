@@ -1,7 +1,7 @@
 """Route-level contract tests for the meeting-summary share endpoints.
 
 Drives the real mounted router with only the auth edge overridden, so the
-recipient-membership rejection and the publish→send→rollback ordering are
+owner-typed recipient bounds and the publish→send→rollback ordering are
 exercised through the same code paths the desktop client calls.
 """
 
@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import pytest
 from fastapi import FastAPI
+
+from utils.conversations import share_email
 from fastapi.testclient import TestClient
 
 from routers import conversations as conversations_router
@@ -123,12 +125,40 @@ def test_share_recipients_excludes_owner():
     assert response.json() == {'recipients': [{'name': 'Sarah Chen', 'email': 'sarah@acme.com'}]}
 
 
-def test_share_email_rejects_foreign_recipient(_stub_data_layer):
+def test_share_email_sends_to_an_address_the_owner_typed(monkeypatch, _stub_data_layer):
+    """The Share control lets the owner type the recipient, so detection only prefills."""
+    monkeypatch.setattr(
+        conversations_router.share_email,
+        'send_summary_email',
+        lambda *, uid, conversation, recipient_emails: {'sent_to': recipient_emails},
+    )
     response = _client().post(
         f'/v1/conversations/{CONV_ID}/share-email',
-        json={'recipient_emails': ['attacker@evil.com']},
+        json={'recipient_emails': ['someone-not-on-the-invite@acme.com']},
+    )
+    assert response.status_code == 200
+    assert response.json() == {'sent_to': ['someone-not-on-the-invite@acme.com']}
+    assert _stub_data_layer['visibility'] == 'shared'
+
+
+def test_share_email_rejects_an_unusable_address(_stub_data_layer):
+    response = _client().post(
+        f'/v1/conversations/{CONV_ID}/share-email',
+        json={'recipient_emails': ['not-an-email']},
     )
     assert response.status_code == 400
+    assert _stub_data_layer['visibility'] == 'private'
+    assert _stub_data_layer['redis'] == set()
+
+
+def test_share_email_rejects_more_than_the_per_send_cap(_stub_data_layer):
+    """The request schema owns the cap, so an oversized send never reaches the handler."""
+    too_many = [f'p{index}@acme.com' for index in range(share_email.MAX_RECIPIENTS + 1)]
+    response = _client().post(
+        f'/v1/conversations/{CONV_ID}/share-email',
+        json={'recipient_emails': too_many},
+    )
+    assert response.status_code == 422
     assert _stub_data_layer['visibility'] == 'private'
     assert _stub_data_layer['redis'] == set()
 
