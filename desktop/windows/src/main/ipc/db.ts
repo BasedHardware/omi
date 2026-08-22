@@ -3,7 +3,7 @@ import { app, BrowserWindow } from 'electron'
 import { basename, dirname, join } from 'path'
 import { categorize } from '../usage/category'
 import { isNewLocalDay } from '../usage/usageDay'
-import { buildRewindFtsMatch } from '../rewind/rewindSearchQuery'
+import { buildRewindFtsMatch, buildRewindFtsSearchSql } from '../rewind/rewindSearchQuery'
 import { addColumnIfMissing as ensureColumn, runMigrations } from './dbMigrations'
 import { applyRewindEmbeddingSchema } from './rewindEmbeddingSchema'
 import { LOCAL_CONVERSATION_SCHEMA } from './localConversationSchema'
@@ -1482,18 +1482,20 @@ export function listRewindFramesSampled(
 // REWIND_COLUMNS_QUALIFIED (columns qualified to `rewind_frames.`, so the FTS
 // join's identically named ocr_text/window_title/app aren't ambiguous) is shared
 // with the backfill work-query and now lives in rewindEmbeddingSql.ts.
-export function searchRewindFrames(query: string, limit = 500): RewindFrame[] {
+export function searchRewindFrames(
+  query: string,
+  limit = 500,
+  scope?: { from: number; to: number }
+): RewindFrame[] {
   return timed('searchRewindFrames', () => {
     const match = buildRewindFtsMatch(query)
     if (!match) return []
-    return cachedStmt(
-      get(),
-      `SELECT ${REWIND_COLUMNS_QUALIFIED} FROM rewind_frames
-           JOIN rewind_frames_fts ON rewind_frames.id = rewind_frames_fts.rowid
-          WHERE rewind_frames_fts MATCH ?
-          ORDER BY bm25(rewind_frames_fts) ASC, rewind_frames.ts DESC
-          LIMIT ?`
-    ).all(match, limit) as RewindFrame[]
+    const scoped = scope != null
+    return cachedStmt(get(), buildRewindFtsSearchSql(REWIND_COLUMNS_QUALIFIED, scoped)).all(
+      match,
+      ...(scoped ? [scope.from, scope.to] : []),
+      limit
+    ) as RewindFrame[]
   })
 }
 
@@ -1700,7 +1702,8 @@ export function linkRewindEmbedding(frameId: number, hash: string): boolean {
  */
 export async function searchRewindEmbeddings(
   query: Float32Array,
-  limit: number
+  limit: number,
+  scope?: { from: number; to: number }
 ): Promise<{ frameId: number; similarity: number }[]> {
   const d = get()
   // EXISTS against idx_rewind_embeddings_hash: skips vectors no live frame points
@@ -1712,11 +1715,16 @@ export async function searchRewindEmbeddings(
   // anywhere in the table silently truncated the scan there, and every vector past
   // it went unranked. Filtering in the query keeps LIMIT and "rows returned"
   // describing the same set.
-  const page = d.prepare(searchEmbeddingPageSql())
+  const page = d.prepare(searchEmbeddingPageSql(undefined, scope != null))
 
   const scored = await scanTopKBySimilarity(
     (offset, size) =>
-      (page.all(size, offset) as { hash: string; vec: Uint8Array }[]).map((r) => ({
+      (
+        page.all(...(scope ? [scope.from, scope.to] : []), size, offset) as {
+          hash: string
+          vec: Uint8Array
+        }[]
+      ).map((r) => ({
         hash: r.hash,
         vec: bufferToVector(r.vec)
       })),
@@ -1734,9 +1742,13 @@ export async function searchRewindEmbeddings(
     .prepare(
       `SELECT e.frame_id AS frameId, e.hash AS hash, f.ts AS ts FROM rewind_embeddings e
          JOIN rewind_frames f ON f.id = e.frame_id
-        WHERE e.hash IN (${placeholders})`
+        WHERE e.hash IN (${placeholders})${scope ? ' AND f.ts BETWEEN ? AND ?' : ''}`
     )
-    .all(...scored.map((s) => s.hash)) as { frameId: number; hash: string; ts: number }[]
+    .all(...scored.map((s) => s.hash), ...(scope ? [scope.from, scope.to] : [])) as {
+    frameId: number
+    hash: string
+    ts: number
+  }[]
 
   const similarityByHash = new Map(scored.map((s) => [s.hash, s.similarity]))
   return rows

@@ -6,7 +6,7 @@
 // (buildRewindFtsMatch) and the REAL search SQL shape are exercised.
 import { DatabaseSync } from 'node:sqlite'
 import { describe, expect, it } from 'vitest'
-import { buildRewindFtsMatch } from './rewindSearchQuery'
+import { buildRewindFtsMatch, buildRewindFtsSearchSql } from './rewindSearchQuery'
 
 // rewind_frames + the Track 4 FTS index/triggers, verbatim from db.ts get().
 const SCHEMA = `
@@ -44,13 +44,8 @@ const SCHEMA = `
 `
 
 // The exact WHERE/ORDER-BY shape searchRewindFrames() uses in db.ts.
-const SEARCH_SQL = `
-  SELECT rewind_frames.id FROM rewind_frames
-    JOIN rewind_frames_fts ON rewind_frames.id = rewind_frames_fts.rowid
-   WHERE rewind_frames_fts MATCH ?
-   ORDER BY bm25(rewind_frames_fts) ASC, rewind_frames.ts DESC
-   LIMIT ?
-`
+const SEARCH_SQL = buildRewindFtsSearchSql('rewind_frames.id', false)
+const SEARCH_IN_WINDOW_SQL = buildRewindFtsSearchSql('rewind_frames.id', true)
 
 function makeDb(): DatabaseSync {
   const db = new DatabaseSync(':memory:')
@@ -67,10 +62,19 @@ function insert(db: DatabaseSync, ts: number, app: string, title: string, ocr: s
   return Number(r.lastInsertRowid)
 }
 
-function search(db: DatabaseSync, query: string, limit = 500): number[] {
+function search(
+  db: DatabaseSync,
+  query: string,
+  limit = 500,
+  scope?: { from: number; to: number }
+): number[] {
   const match = buildRewindFtsMatch(query)
   if (!match) return []
-  return (db.prepare(SEARCH_SQL).all(match, limit) as { id: number }[]).map((r) => r.id)
+  return (
+    db
+      .prepare(scope ? SEARCH_IN_WINDOW_SQL : SEARCH_SQL)
+      .all(match, ...(scope ? [scope.from, scope.to] : []), limit) as { id: number }[]
+  ).map((r) => r.id)
 }
 
 describe('rewind FTS5 search (real index)', () => {
@@ -113,6 +117,13 @@ describe('rewind FTS5 search (real index)', () => {
     const long = insert(db, 2000, 'App', 'w', `budget ${'filler '.repeat(200)}`)
     // bm25 favors the shorter document → it sorts first under ASC ordering.
     expect(search(db, 'budget')).toEqual([short, long])
+  })
+
+  it('applies the time window before limiting FTS matches', () => {
+    const db = makeDb()
+    insert(db, 1_000, 'App', 'w', 'invoice')
+    const inWindow = insert(db, 2_000, 'App', 'w', `invoice ${'filler '.repeat(200)}`)
+    expect(search(db, 'invoice', 1, { from: 1_500, to: 2_500 })).toEqual([inWindow])
   })
 
   it('user-supplied FTS special characters cannot break the query', () => {
