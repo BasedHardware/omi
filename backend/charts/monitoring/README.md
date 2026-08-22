@@ -62,6 +62,8 @@ no-data semantics lives in [`expected-targets.prod.yaml`](./expected-targets.pro
 
 Note: Stackdriver exporter is scraped by Prometheus (job `prometheus-stackdriver-metrics`), then prometheus-adapter queries Prometheus for those metrics. The exporter does not feed the adapter directly.
 
+Cloud Run application metrics take a push-then-pull bridge because a public URL scrape reaches only one random autoscaled instance. Each `backend` and `desktop-backend` instance exposes its registry on loopback port 9090 to Google's Managed Service for Prometheus sidecar. The sidecar writes `prometheus.googleapis.com/omi_*` to Cloud Monitoring. A separate, rate-limited Stackdriver exporter imports only those two Cloud Run services, and Prometheus scrapes it as `cloud-run-application-metrics`. See [`../../docs/runbooks/cloud-run-metrics-ingestion.md`](../../docs/runbooks/cloud-run-metrics-ingestion.md).
+
 ## Components
 
 | Component | Chart | Purpose | Namespace |
@@ -82,9 +84,9 @@ Note: Stackdriver exporter is scraped by Prometheus (job `prometheus-stackdriver
 
 ### Metrics Scraping
 
-Prometheus scrapes metrics through two mechanisms:
+GKE application metrics use two pull mechanisms. Cloud Run uses a third, per-instance push bridge because its public URL is load balanced.
 
-**1. ServiceMonitor (recommended for new services)**
+**1. ServiceMonitor (recommended for new GKE services)**
 
 Used by: parakeet.
 
@@ -98,6 +100,10 @@ Pods set annotations (`prometheus.io/scrape: "true"`, `prometheus.io/port`, `pro
 
 Backend-listen, pusher, and llm-gateway require bearer token auth via the `metrics-scrape-token` secret.
 
+**3. Cloud Run GMP sidecar -> Cloud Monitoring -> isolated Stackdriver exporter**
+
+Used by: Cloud Run `backend` and `desktop-backend`. The sidecar scrapes an unauthenticated loopback-only listener on port 9090; the public port 8080 `/metrics` route remains bearer protected. The isolated exporter is intentionally separate from the 1-second load-balancer exporter so per-instance application series are read from the Cloud Monitoring API only every 30 seconds.
+
 ### Custom Scrape Jobs (prod)
 
 These are the `additionalScrapeConfigs` and ServiceMonitor targets. Built-in kube-prometheus-stack targets (kube-state-metrics, node-exporter, kubelet, Alertmanager, Prometheus itself) are not listed here.
@@ -109,7 +115,8 @@ These are the `additionalScrapeConfigs` and ServiceMonitor targets. Built-in kub
 | `llm-gateway-metrics` | llm-gateway pods `/metrics:8080` | 15s | Bearer token |
 | `dg_engine_metrics` | DG engine pods in `prod-omi-dg-self-hosted` | 2s | None |
 | `gpu-metrics` | all pods in `gke-managed-system` (includes DCGM exporter) | 1s | None |
-| `prometheus-stackdriver-metrics` | Stackdriver exporter in `prod-omi-monitoring` | 1s | None |
+| `prometheus-stackdriver-metrics` | Load-balancer Stackdriver exporter in `prod-omi-monitoring` | 1s | None |
+| `cloud-run-application-metrics` | `prometheus.googleapis.com/omi_*` for Cloud Run `backend` and `desktop-backend` via isolated exporter | 30s | None |
 | ServiceMonitor: `parakeet` | parakeet pods `/metrics:9091` | 15s | None |
 
 For llm-gateway streams, `llm_gateway_requests_total{outcome="success"}` is emitted only after the provider's
@@ -174,15 +181,18 @@ Parakeet adapter rules are defined in the parakeet chart's `values.yaml` but mus
 
 ### Stackdriver Exporter
 
-Bridges GCP Cloud Monitoring (load balancer metrics) into Prometheus. Currently exports:
-- `loadbalancing.googleapis.com/https/backend_request_count` — filtered to backend-listen NEG
-- `loadbalancing.googleapis.com/https/internal/backend_latencies` — internal LB latency histograms
+Bridges GCP Cloud Monitoring into Prometheus. Two releases share the existing Workload Identity service account (`prod-omi-prom-stackdriver-gsa`):
 
-Uses Workload Identity (`prod-omi-prom-stackdriver-gsa`).
+- `prod-omi-prometheus-stackdriver-exporter` keeps the latency-sensitive load-balancer prefixes at the existing 1-second Prometheus scrape interval.
+- `prod-omi-cloud-run-metrics-exporter` reads only `prometheus.googleapis.com/omi_*`, filtered to the Cloud Run monitored-resource namespaces `backend` and `desktop-backend`; Prometheus scrapes this release every 30 seconds.
+
+The application exporter is separate to prevent Cloud Monitoring API read cost from multiplying every per-instance application series by the legacy 1-second scrape rate. Stackdriver exporter exposes normalized names such as `stackdriver_prometheus_target_prometheus_googleapis_com_<metric>_<type>`; retain the `service_name` and `instance` labels and aggregate counters across instances in PromQL.
 
 ## Values Files
 
 Each component has dev and prod values:
+
+`.github/workflows/gcp_cloud_run_metrics_egress.yml` owns the Cloud Run application exporter and its kube-prometheus-stack scrape configuration: relevant merges auto-deploy development, while production requires a protected-environment dispatch from `main`.
 
 | Component | Dev | Prod |
 |-----------|-----|------|
@@ -191,6 +201,7 @@ Each component has dev and prod values:
 | Alloy | `alloy/dev_omi_k8s_monitoring_values.yml` | `alloy/prod_omi_k8s_monitoring_values.yml` |
 | Loki | `loki/dev_omi_loki_values.yaml` | `loki/prod_omi_loki_values.yaml` |
 | Stackdriver exporter | `prometheus-stackdriver-exporter/dev_omi_stackdriver_exporter.yaml` | `prometheus-stackdriver-exporter/prod_omi_stackdriver_exporter.yaml` |
+| Cloud Run metrics exporter | `prometheus-stackdriver-exporter/dev_omi_cloud_run_metrics_exporter.yaml` | `prometheus-stackdriver-exporter/prod_omi_cloud_run_metrics_exporter.yaml` |
 | Grafana ALB cert | `kube-prometheus-stack/dev_omi_grafana_alb_cert.yaml` | `kube-prometheus-stack/prod_omi_grafana_alb_cert.yaml` |
 
 ## Current Dashboards
@@ -771,6 +782,11 @@ helm -n prod-omi-monitoring upgrade --install prod-omi-alloy \
 helm -n prod-omi-monitoring upgrade --install prod-omi-prometheus-stackdriver-exporter \
   prometheus-community/prometheus-stackdriver-exporter \
   -f prometheus-stackdriver-exporter/prod_omi_stackdriver_exporter.yaml
+
+# Isolated Cloud Run application-metrics bridge
+helm -n prod-omi-monitoring upgrade --install prod-omi-cloud-run-metrics-exporter \
+  prometheus-community/prometheus-stackdriver-exporter \
+  -f prometheus-stackdriver-exporter/prod_omi_cloud_run_metrics_exporter.yaml
 ```
 
 **Dev** (note: kube-prometheus-stack release name is `dev-kube-prometheus-stack`, not `dev-omi-kube-prometheus-stack`):
@@ -794,6 +810,10 @@ helm -n dev-omi-monitoring upgrade --install dev-omi-alloy \
 helm -n dev-omi-monitoring upgrade --install dev-omi-prometheus-stackdriver-exporter \
   prometheus-community/prometheus-stackdriver-exporter \
   -f prometheus-stackdriver-exporter/dev_omi_stackdriver_exporter.yaml
+
+helm -n dev-omi-monitoring upgrade --install dev-omi-cloud-run-metrics-exporter \
+  prometheus-community/prometheus-stackdriver-exporter \
+  -f prometheus-stackdriver-exporter/dev_omi_cloud_run_metrics_exporter.yaml
 ```
 
 ## Troubleshooting

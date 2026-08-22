@@ -50,8 +50,16 @@ def main() -> int:
     if not args.job:
         desktop_backend = _as_config_dict(env_config.get('desktop_backend')) or {}
         desktop_env = _as_config_dict(desktop_backend.get('env')) or {}
+        desktop_secrets = _as_config_dict(desktop_backend.get('secrets')) or {}
         if desktop_env:
             rendered_outputs.append(('desktop_backend_env_vars', _render_env_vars(desktop_env)))
+        if desktop_secrets:
+            rendered_outputs.extend(
+                (
+                    ('desktop_backend_secrets', _render_secrets(desktop_secrets)),
+                    ('desktop_backend_secret_names', _render_secret_names(desktop_secrets)),
+                )
+            )
         for service, raw_service_config in services.items():
             service_config = _as_config_dict(raw_service_config)
             if service_config is None:
