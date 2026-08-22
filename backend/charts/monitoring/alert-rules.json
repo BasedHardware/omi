@@ -9418,6 +9418,147 @@
     "record": null
   },
   {
+    "uid": "omi-cloud-run-metric-names-unnormalized",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Cloud Run Ingestion",
+    "title": "Cloud Run metrics - names did not normalize",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count({job=\"cloud-run-application-metrics\", __name__=~\"stackdriver_.*_omi_.*\"}) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-08-21T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "15m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Cloud Run application metrics are arriving under Stackdriver-mangled names instead of their plain omi_ names",
+      "threshold": "> 0 un-normalized omi series on the cloud-run-application-metrics job for 15m",
+      "user_impact": "No user impact by itself, but every alert and dashboard built on these metrics is silently matching nothing, so a real user-facing failure on a Cloud Run path could pass unnoticed.",
+      "scope": "The metric_relabel_configs rewrite on the cloud-run-application-metrics scrape job.",
+      "verification": "List the raw series names on that job in Grafana Explore and compare them with the rewrite regex in the kube-prometheus-stack values.",
+      "safe_next_action": "Correct the rewrite regex to match the observed names and re-upgrade the monitoring release; do not add alerts against the mangled names.",
+      "runbook": "backend/docs/runbooks/cloud-run-metrics-ingestion.md"
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "observability",
+      "alert_identity": "omi-cloud-run-metric-names-unnormalized",
+      "component": "observability",
+      "impact": "infrastructure"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
     "uid": "omi-llm-gateway-invalid-request-rejections",
     "orgID": 1,
     "folderUID": "betdycdziadc0e",

@@ -958,6 +958,19 @@ actor ContextBucketStore {
     return citedSnapshotIDs.filter { allowed.contains($0) }.map { "fact:\($0)" }
   }
 
+  /// Consumes a fact after its delivery: a delivered forced-question answer
+  /// expires the question fact so it stops re-forcing retrieval, and the
+  /// expiry-aware duplicate check lets a re-typed question re-validate.
+  func expireFact(id: String, now: Date = Date()) async throws {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { throw ContextBucketStoreError.staleFence }
+    try await pool.write { db in
+      try db.execute(
+        sql: "UPDATE bucket_facts SET expiresAt = ?, updatedAt = ? WHERE id = ?",
+        arguments: [now, now, id])
+    }
+  }
+
   private static func snapshotFactID(_ fact: String) -> String? {
     guard fact.hasPrefix("fact:") else { return nil }
     let id = fact.dropFirst(5).prefix { !$0.isWhitespace }

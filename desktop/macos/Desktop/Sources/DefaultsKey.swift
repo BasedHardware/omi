@@ -42,6 +42,9 @@ enum DefaultsKey: String {
   case multiChatEnabled = "multiChatEnabled"
   /// Opt-in: proactive notifications are also spoken out loud on delivery.
   case speakNotificationsAloud = "speakNotificationsAloud"
+  /// Opt-out (defaults to on): the post-meeting summary share notification —
+  /// the persistent notch card offering "Copy link" / "Send to <participant>".
+  case meetingSummaryNotificationsEnabled = "meetingSummaryNotificationsEnabled"
   /// Opt-out: when you open an app Omi integrates with but have not connected,
   /// Omi offers the connection once. Defaults to on; the per-integration
   /// budgets in `IntegrationNudgePolicy` are what keep that from being noise.

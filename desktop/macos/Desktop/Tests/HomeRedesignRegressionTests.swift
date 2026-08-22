@@ -403,6 +403,32 @@ final class ChatRowPresentationTests: XCTestCase {
         title: "Ship the quarterly report",
         body: "You promised it by 5pm — draft the summary now."),
       "Ship the quarterly report\nYou promised it by 5pm — draft the summary now.")
+    // Live beta rows (Aug 21): the title's only novel tokens were prepositions
+    // ("for", "at") the body phrased differently — function words never keep a
+    // redundant headline alive.
+    XCTAssertEqual(
+      FloatingControlBarManager.notificationJournalText(
+        title: "Latest Omi desktop link for David at scalingforever.com",
+        body:
+          "The latest Omi desktop app download link is omi.me/desktop. You can paste it into the message to david@scalingforever.com."
+      ),
+      "The latest Omi desktop app download link is omi.me/desktop. You can paste it into the message to david@scalingforever.com."
+    )
+    XCTAssertEqual(
+      FloatingControlBarManager.notificationJournalText(
+        title: "Latest Omi desktop link for david@scalingforever.com",
+        body:
+          "The latest Omi desktop download link is omi.me/desktop, so you may not need to send the draft to david@scalingforever.com."
+      ),
+      "The latest Omi desktop download link is omi.me/desktop, so you may not need to send the draft to david@scalingforever.com."
+    )
+    // A title whose content genuinely differs from the body still keeps its line
+    // even when it shares function words.
+    XCTAssertEqual(
+      FloatingControlBarManager.notificationJournalText(
+        title: "Draft for the board meeting",
+        body: "You promised the revenue summary by 5pm."),
+      "Draft for the board meeting\nYou promised the revenue summary by 5pm.")
   }
 
   func testAnOrdinaryReplyAndAUserTurnAreNotPushes() {

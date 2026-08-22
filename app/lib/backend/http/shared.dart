@@ -65,9 +65,10 @@ Future<String> getAuthHeader({bool expireTerminalSession = true}) async {
   final expiry = DateTime.fromMillisecondsSinceEpoch(SharedPreferencesUtil().tokenExpirationTime);
   bool hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
 
-  bool isExpirationDateValid = !(expiry.isBefore(DateTime.now()) ||
-      expiry.isAtSameMomentAs(DateTime.fromMillisecondsSinceEpoch(0)) ||
-      (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
+  bool isExpirationDateValid =
+      !(expiry.isBefore(DateTime.now()) ||
+          expiry.isAtSameMomentAs(DateTime.fromMillisecondsSinceEpoch(0)) ||
+          (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
 
   if (!hasAuthToken || !isExpirationDateValid) {
     final refreshResult = await AuthService.instance.refreshIdToken();
@@ -270,9 +271,9 @@ Future<void> _handleAuthUnavailable(
     AuthTokenMissingUser() => null,
     AuthTokenMissingToken() => const AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.missingToken),
     AuthTokenTerminalFailure(:final code) => AuthSessionExpiredEvent(
-        reason: AuthSessionExpirationReason.terminalTokenFailure,
-        code: code,
-      ),
+      reason: AuthSessionExpirationReason.terminalTokenFailure,
+      code: code,
+    ),
     _ => null,
   };
   if (event != null) await AuthService.instance.expireSession(event);
@@ -411,6 +412,20 @@ http.Request _buildRequest(String url, Map<String, String> headers, String body,
     request.body = body;
   }
   return request;
+}
+
+/// Reads the Omi list-truncation header from a backend response.
+///
+/// The header name is case-insensitive because `package:http` may preserve
+/// the server's casing, and the value is the literal string `"true"`.
+bool isOmiListTruncated(http.Response? response) {
+  if (response == null) return false;
+  for (final entry in response.headers.entries) {
+    if (entry.key.toLowerCase() == 'x-omi-list-truncated' && entry.value == 'true') {
+      return true;
+    }
+  }
+  return false;
 }
 
 Future<http.StreamedResponse> _sendMultipartWithProgress(

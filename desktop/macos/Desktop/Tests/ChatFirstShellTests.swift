@@ -603,6 +603,18 @@ final class ChatFirstShellTests: XCTestCase {
     for route in selfContained {
       XCTAssertFalse(ChatFirstPageGlassLanePolicy.shouldWrap(route), route.stableName)
     }
+
+    // The memory route mounts the hub, whose Activity page carries Home's own two panels. Wrapping
+    // that one puts glass inside glass and doubles the scrim.
+    XCTAssertFalse(
+      ChatFirstPageGlassLanePolicy.shouldWrap(
+        .memories, memoryDestinationRawValue: MemoryHubDestination.activity.rawValue))
+    for destination in MemoryHubDestination.allCases where destination != .activity {
+      XCTAssertTrue(
+        ChatFirstPageGlassLanePolicy.shouldWrap(
+          .memories, memoryDestinationRawValue: destination.rawValue),
+        destination.title)
+    }
   }
 
   /// Only the two routes that mount `DashboardPage` have a stage. Navigating away publishes `nil`

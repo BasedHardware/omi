@@ -42,6 +42,16 @@ from testing.import_isolation import (
 
 _BACKEND = Path(__file__).resolve().parents[2]
 
+# routers.conversations imports the list-read budget seam at module level
+# (#11831). The seam is stdlib-only and budget-optional; install the real
+# module (loaded under a private name) so the from-import binds real symbols.
+import importlib.util as _importlib_util
+
+_list_budget_path = _BACKEND / "utils" / "other" / "list_budget.py"
+_list_budget_spec = _importlib_util.spec_from_file_location("_omi_real_list_budget", str(_list_budget_path))
+list_budget_real = _importlib_util.module_from_spec(_list_budget_spec)
+_list_budget_spec.loader.exec_module(list_budget_real)
+
 
 def _pkg(name):
     """AutoMockModule that also presents as a package (sets ``__path__``)."""
@@ -163,6 +173,7 @@ def router():
         # utils.* -- intermediate packages faked; ``utils`` itself stays real.
         "utils.other": _pkg("utils.other"),
         "utils.other.endpoints": endpoints,
+        "utils.other.list_budget": list_budget_real,
         "utils.other.storage": _pkg("utils.other.storage"),
         # utils.conversations.* is DERIVED, not listed: a new module in that package
         # must not break this suite at collection. See package_submodule_stubs.

@@ -85,6 +85,7 @@ def _validate_production_python_runtime(text: str, *, workflow: str) -> list[str
     )
     return errors
 
+
 def _validate_private_network_egress(text: str, *, workflow: str, request_step: str) -> list[str]:
     """Pin the desktop backend to the backend VPC that carries the LLM gateway.
 
@@ -149,6 +150,11 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
         "verify_desktop_backend_image_lineage.py",
         "voice-provider-probe.sh",
         "wait_cloud_run_candidate_readiness.py",
+        "attach_cloud_run_gmp_sidecar.py",
+        "cloud_run_gmp_sidecar.yaml",
+        "PROMETHEUS_SIDECAR_PORT=9090",
+        "METRICS_SECRET=METRICS_SECRET:latest",
+        "Attach Managed Prometheus sidecar",
         "Verify candidate image lineage",
         "@${{ steps.build-image.outputs.digest }}",
         '--build-image-ref="$BUILD_IMAGE_REF"',
@@ -197,6 +203,7 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
             text,
             (
                 "Capture current serving revision",
+                "Attach Managed Prometheus sidecar",
                 "Wait for no-traffic candidate readiness",
                 "Verify candidate image lineage",
                 "Resolve exact no-traffic candidate URL",
@@ -280,9 +287,7 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
             )
         if "FIREBASE_AUTH_PROJECT_ID: based-hardware-dev" in text or "FIREBASE_PROJECT_ID=based-hardware-dev" in text:
             errors.append(f"{workflow}: development serving must retain the production Firebase project")
-        dev_runtime_steps = (
-            "Deploy desktop-backend to Cloud Run",
-        )
+        dev_runtime_steps = ("Deploy desktop-backend to Cloud Run",)
         dev_runtime_env = (
             "FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
             "FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",

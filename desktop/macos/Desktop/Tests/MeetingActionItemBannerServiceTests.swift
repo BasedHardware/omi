@@ -87,7 +87,8 @@ final class MeetingActionItemBannerServiceTests: XCTestCase {
           ]
         )
       },
-      presentBanner: { title, body in
+      fetchShareRecipients: { _ in [] },
+      presentBanner: { title, body, _, _ in
         presented.append((title, body))
       }
     )
@@ -101,8 +102,8 @@ final class MeetingActionItemBannerServiceTests: XCTestCase {
   }
 
   @MainActor
-  func testZeroOpenUserItemsPresentsNothing() async {
-    var presentedCount = 0
+  func testZeroOpenUserItemsStillPresentsShareCardWithTitleBody() async {
+    var presented: [(title: String, body: String)] = []
     let service = MeetingActionItemBannerService(
       fetchConversation: { id in
         Self.conversation(
@@ -114,13 +115,15 @@ final class MeetingActionItemBannerServiceTests: XCTestCase {
           ]
         )
       },
-      presentBanner: { _, _ in presentedCount += 1 }
+      fetchShareRecipients: { _ in [] },
+      presentBanner: { title, body, _, _ in presented.append((title, body)) }
     )
 
     service.handleMeetingCompletion(MeetingCompletionNotification(conversationIDs: ["conv-1"]))
     await service.waitForPendingRecommendations()
 
-    XCTAssertEqual(presentedCount, 0)
+    XCTAssertEqual(presented.count, 1)
+    XCTAssertEqual(presented.first?.body, "Weekly sync")
   }
 
   @MainActor
@@ -128,7 +131,8 @@ final class MeetingActionItemBannerServiceTests: XCTestCase {
     var presentedCount = 0
     let service = MeetingActionItemBannerService(
       fetchConversation: { _ in throw URLError(.notConnectedToInternet) },
-      presentBanner: { _, _ in presentedCount += 1 }
+      fetchShareRecipients: { _ in [] },
+      presentBanner: { _, _, _, _ in presentedCount += 1 }
     )
 
     service.handleMeetingCompletion(MeetingCompletionNotification(conversationIDs: ["conv-1"]))
@@ -148,7 +152,8 @@ final class MeetingActionItemBannerServiceTests: XCTestCase {
           items: [Self.item("Send the deck to Alex", owner: "user")]
         )
       },
-      presentBanner: { _, _ in presentedCount += 1 }
+      fetchShareRecipients: { _ in [] },
+      presentBanner: { _, _, _, _ in presentedCount += 1 }
     )
 
     // A finalization retry can re-signal the same conversation, including
@@ -185,6 +190,37 @@ final class MeetingActionItemBannerServiceTests: XCTestCase {
     XCTAssertTrue(NotificationDeliveryMode.systemBannerOnly.requiresSystemBanner)
     XCTAssertTrue(NotificationDeliveryMode.standard.presentsInFloatingBar)
     XCTAssertFalse(NotificationDeliveryMode.standard.requiresSystemBanner)
+  }
+
+  @MainActor
+  func testDetectedRecipientsReachThePresenterAndFailureDegradesToEmpty() async {
+    var received: [[ConversationShareRecipient]] = []
+    let service = MeetingActionItemBannerService(
+      fetchConversation: { id in
+        Self.conversation(
+          id: id, title: "Weekly sync", items: [Self.item("Send the deck", owner: "user")])
+      },
+      fetchShareRecipients: { id in
+        if id == "conv-1" {
+          return [ConversationShareRecipient(name: "Sarah Chen", email: "sarah@acme.com")]
+        }
+        throw URLError(.notConnectedToInternet)
+      },
+      presentBanner: { _, _, _, recipients in received.append(recipients) }
+    )
+
+    service.handleMeetingCompletion(
+      MeetingCompletionNotification(conversationIDs: ["conv-1", "conv-2"]))
+    await service.waitForPendingRecommendations()
+
+    XCTAssertEqual(received.count, 2)
+    XCTAssertTrue(received.contains(where: { $0.map(\.email) == ["sarah@acme.com"] }))
+    XCTAssertTrue(received.contains(where: { $0.isEmpty }))
+  }
+
+  func testShareRecipientShortLabelPrefersFirstName() {
+    XCTAssertEqual(ConversationShareRecipient(name: "Sarah Chen", email: "sarah@acme.com").shortLabel, "Sarah")
+    XCTAssertEqual(ConversationShareRecipient(name: nil, email: "jordan@acme.com").shortLabel, "jordan")
   }
 
   // MARK: - Fixtures

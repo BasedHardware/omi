@@ -284,6 +284,10 @@ class App {
   double? score; // Computed ranking score for sorting (temporary debug field)
   bool official;
   String? sourceCodeUrl;
+  bool disabled;
+  String? disabledReason;
+  String? disabledAt;
+  String? disabledError;
 
   App({
     required this.id,
@@ -326,6 +330,10 @@ class App {
     this.score,
     this.official = false,
     this.sourceCodeUrl,
+    this.disabled = false,
+    this.disabledReason,
+    this.disabledAt,
+    this.disabledError,
   });
 
   String getName() {
@@ -444,6 +452,10 @@ class App {
       score: generated.score,
       official: generated.official ?? false,
       sourceCodeUrl: generated.sourceCodeUrl,
+      disabled: generated.disabled ?? false,
+      disabledReason: generated.disabledReason,
+      disabledAt: generated.disabledAt,
+      disabledError: generated.disabledError,
     );
   }
 
@@ -493,6 +505,10 @@ class App {
       score: generated.score,
       official: generated.official ?? false,
       sourceCodeUrl: generated.sourceCodeUrl,
+      disabled: generated.disabled ?? false,
+      disabledReason: generated.disabledReason,
+      disabledAt: generated.disabledAt,
+      disabledError: generated.disabledError,
     );
   }
 
@@ -539,6 +555,7 @@ class App {
       score: null,
       official: false,
       sourceCodeUrl: null,
+      disabled: false,
     );
   }
 
@@ -579,6 +596,13 @@ class App {
 
   bool isRejected() {
     return status == 'rejected';
+  }
+
+  /// Latched by the backend after 72h of webhook failures. Distinct from
+  /// `enabled`, which is this user's install state: a disabled app cannot be
+  /// installed by anyone until its owner re-enables it.
+  bool isDisabled() {
+    return disabled;
   }
 
   String getCategoryName() {
@@ -628,6 +652,10 @@ class App {
       'payment_link': paymentLink,
       'official': official,
       'source_code_url': sourceCodeUrl,
+      'disabled': disabled,
+      'disabled_reason': disabledReason,
+      'disabled_at': disabledAt,
+      'disabled_error': disabledError,
     };
   }
 

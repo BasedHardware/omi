@@ -1,10 +1,11 @@
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from typing import Iterator
 
 import pytest
+from fastapi import HTTPException
 
 from routers import auth
 from testing.import_isolation import load_module_fresh, stub_modules
@@ -12,6 +13,7 @@ from utils.referrals import (
     REFERRAL_COOKIE_NAME,
     ReferralCodeError,
     create_referral_code,
+    is_new_referral_account,
     referral_claim_patch,
     referrer_uid_from_code,
 )
@@ -37,7 +39,7 @@ def test_referral_code_round_trips_and_rejects_tampering():
         referrer_uid_from_code(f'{code[:-1]}x', secret=TEST_SECRET)
 
 
-def test_referral_claim_grants_exactly_30_days_of_desktop_pro():
+def test_referral_claim_grants_exactly_30_days_of_operator():
     now = datetime(2026, 8, 20, 12, 0, tzinfo=timezone.utc)
 
     patch = referral_claim_patch(
@@ -49,10 +51,11 @@ def test_referral_claim_grants_exactly_30_days_of_desktop_pro():
     )
 
     assert patch is not None
-    assert patch['subscription']['plan'] == 'architect'
+    assert patch['subscription']['plan'] == 'operator'
     assert patch['subscription']['status'] == 'active'
     assert patch['subscription']['cancel_at_period_end'] is True
     assert patch['subscription']['current_period_end'] - patch['subscription']['current_period_start'] == 30 * 86400
+    assert patch['referral']['program'] == 'desktop_operator_month_v1'
     assert patch['referral']['referrer_uid'] == 'referrer'
 
 
@@ -62,7 +65,7 @@ def test_referral_claim_grants_exactly_30_days_of_desktop_pro():
         ('same-user', 'same-user', True, {}),
         ('existing-user', 'referrer', False, {}),
         ('paid-user', 'referrer', True, {'subscription': {'plan': 'operator'}}),
-        ('claimed-user', 'referrer', True, {'referral': {'program': 'desktop_pro_month_v1'}}),
+        ('claimed-user', 'referrer', True, {'referral': {'program': 'desktop_operator_month_v1'}}),
     ],
 )
 def test_referral_claim_never_self_refers_rewards_existing_users_or_overwrites_paid_accounts(
@@ -79,15 +82,16 @@ def test_referral_claim_never_self_refers_rewards_existing_users_or_overwrites_p
     )
 
 
-def test_referral_link_captures_secure_cookie_and_opens_existing_desktop_download(monkeypatch):
+def test_referral_link_captures_secure_cookie_and_opens_signup_before_download(monkeypatch):
     monkeypatch.setenv('ENCRYPTION_SECRET', TEST_SECRET.decode())
+    monkeypatch.setenv('REFERRAL_PUBLIC_BASE_URL', 'https://omi.me')
     code = create_referral_code('referrer-123')
 
     with _loaded_referrals_router() as referrals:
         response = referrals.capture_referral(code)
 
     assert response.status_code == 302
-    assert response.headers['location'] == 'https://macos.omi.me'
+    assert response.headers['location'] == f'https://app.omi.me/login?referral={code}&environment=prod'
     cookie = response.headers['set-cookie']
     assert f'{REFERRAL_COOKIE_NAME}={code}' in cookie
     assert 'HttpOnly' in cookie
@@ -95,8 +99,92 @@ def test_referral_link_captures_secure_cookie_and_opens_existing_desktop_downloa
     assert 'SameSite=lax' in cookie
 
 
+def test_dev_referral_opens_signup_against_the_dev_backend(monkeypatch):
+    monkeypatch.setenv('ENCRYPTION_SECRET', TEST_SECRET.decode())
+    monkeypatch.setenv('REFERRAL_PUBLIC_BASE_URL', 'https://api.omiapi.com')
+    code = create_referral_code('referrer-123')
+
+    with _loaded_referrals_router() as referrals:
+        response = referrals.capture_referral(code)
+
+    assert response.headers['location'] == f'https://app.omi.me/login?referral={code}&environment=dev'
+
+
+def test_referral_claim_grants_trial_only_to_a_fresh_authenticated_account(monkeypatch):
+    monkeypatch.setenv('ENCRYPTION_SECRET', TEST_SECRET.decode())
+    code = create_referral_code('referrer-123')
+    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    claims = []
+
+    with _loaded_referrals_router() as referrals:
+        monkeypatch.setattr(
+            referrals.firebase_admin.auth,
+            'get_user',
+            lambda _uid: SimpleNamespace(user_metadata=SimpleNamespace(creation_timestamp=now_ms)),
+        )
+        monkeypatch.setattr(
+            referrals,
+            'claim_referral_trial',
+            lambda referred_uid, referrer_uid, *, is_new_user: claims.append((referred_uid, referrer_uid, is_new_user))
+            or True,
+        )
+        response = referrals.claim_referral(referrals.ReferralClaimRequest(code=code), 'new-user')
+
+    assert response.claimed is True
+    assert response.trial_days == 30
+    assert claims == [('new-user', 'referrer-123', True)]
+
+
+def test_referral_claim_marks_an_existing_authenticated_account_ineligible(monkeypatch):
+    monkeypatch.setenv('ENCRYPTION_SECRET', TEST_SECRET.decode())
+    code = create_referral_code('referrer-123')
+    old_ms = int(datetime(2025, 1, 1, tzinfo=timezone.utc).timestamp() * 1000)
+    claims = []
+
+    with _loaded_referrals_router() as referrals:
+        monkeypatch.setattr(
+            referrals.firebase_admin.auth,
+            'get_user',
+            lambda _uid: SimpleNamespace(user_metadata=SimpleNamespace(creation_timestamp=old_ms)),
+        )
+        monkeypatch.setattr(
+            referrals,
+            'claim_referral_trial',
+            lambda referred_uid, referrer_uid, *, is_new_user: claims.append((referred_uid, referrer_uid, is_new_user))
+            or False,
+        )
+        response = referrals.claim_referral(referrals.ReferralClaimRequest(code=code), 'existing-user')
+
+    assert response.claimed is False
+    assert claims == [('existing-user', 'referrer-123', False)]
+
+
+def test_referral_claim_rejects_an_invalid_code_before_loading_the_user(monkeypatch):
+    monkeypatch.setenv('ENCRYPTION_SECRET', TEST_SECRET.decode())
+
+    with _loaded_referrals_router() as referrals:
+        get_user = lambda _uid: pytest.fail('invalid referral must not load the user')
+        monkeypatch.setattr(referrals.firebase_admin.auth, 'get_user', get_user)
+
+        with pytest.raises(HTTPException) as error:
+            referrals.claim_referral(referrals.ReferralClaimRequest(code='invalid'), 'new-user')
+
+    assert error.value.status_code == 404
+    assert error.value.detail == 'Referral link not found'
+
+
+def test_referral_new_user_window_rejects_missing_future_and_old_timestamps():
+    now = datetime(2026, 8, 21, 12, 0, tzinfo=timezone.utc)
+
+    assert is_new_referral_account(int(now.timestamp() * 1000), now=now) is True
+    assert is_new_referral_account(None, now=now) is False
+    assert is_new_referral_account(int((now.timestamp() + 1) * 1000), now=now) is False
+    assert is_new_referral_account(int((now.timestamp() - 901) * 1000), now=now) is False
+
+
 def test_authenticated_referrer_receives_a_stable_unique_https_link(monkeypatch):
     monkeypatch.setenv('ENCRYPTION_SECRET', TEST_SECRET.decode())
+    monkeypatch.delenv('REFERRAL_PUBLIC_BASE_URL', raising=False)
 
     with _loaded_referrals_router() as referrals:
         first = referrals.get_referral_link('referrer-123').referral_url
@@ -105,7 +193,34 @@ def test_authenticated_referrer_receives_a_stable_unique_https_link(monkeypatch)
 
     assert first == second
     assert first != other
-    assert first.startswith('https://api.omi.me/r/ref1.')
+    assert first.startswith('https://omi.me/r/ref1.')
+
+
+def test_authenticated_referrer_uses_configured_dev_public_origin(monkeypatch):
+    monkeypatch.setenv('ENCRYPTION_SECRET', TEST_SECRET.decode())
+    monkeypatch.setenv('REFERRAL_PUBLIC_BASE_URL', 'https://api.omiapi.com/')
+
+    with _loaded_referrals_router() as referrals:
+        referral_url = referrals.get_referral_link('referrer-123').referral_url
+
+    assert referral_url.startswith('https://api.omiapi.com/r/ref1.')
+    assert referrer_uid_from_code(referral_url.rsplit('/', 1)[-1]) == 'referrer-123'
+
+
+def test_referral_link_returns_sanitized_unavailable_response_when_signing_fails(monkeypatch):
+    with _loaded_referrals_router() as referrals:
+
+        def signing_failure(_uid):
+            raise ReferralCodeError('missing_referral_signing_secret')
+
+        monkeypatch.setattr(referrals, 'referral_link', signing_failure)
+
+        with pytest.raises(HTTPException) as error:
+            referrals.get_referral_link('referrer-123')
+
+    assert error.value.status_code == 503
+    assert error.value.detail == 'Referral links are temporarily unavailable'
+    assert 'signing' not in error.value.detail
 
 
 @pytest.mark.asyncio
