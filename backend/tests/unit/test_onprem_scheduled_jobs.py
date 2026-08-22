@@ -424,3 +424,91 @@ def test_a_well_behaved_job_is_not_accused():
         logging.getLogger('onprem_scheduled').removeHandler(sink)
 
     assert not [w for w in warnings if 'blocked the shared event loop' in w]
+
+
+# --- --run-on-start: opt-in, and off by default (BACKLOG L39, point 6) ------------------------------
+
+
+def test_by_default_the_scheduler_sleeps_before_its_first_tick():
+    """The default is what protects a restart. `restart: unless-stopped` brings this process back
+    automatically after a crash, and a first tick on every start would put all three jobs on a machine
+    that may already be struggling — at the same instant."""
+    from jobs import onprem_scheduled as jobs
+
+    order: list = []
+
+    async def body():
+        order.append('tick')
+
+    async def sleeper(_delay):
+        order.append('sleep')
+
+    with patch.dict(jobs.JOBS, {'a': body}):
+        asyncio.run(jobs.run_scheduler({'a': 60}, sleeper=sleeper, ticks=1))
+
+    assert order == ['sleep', 'tick']
+
+
+def test_run_on_start_ticks_before_the_first_sleep():
+    from jobs import onprem_scheduled as jobs
+
+    order: list = []
+
+    async def body():
+        order.append('tick')
+
+    async def sleeper(_delay):
+        order.append('sleep')
+
+    with patch.dict(jobs.JOBS, {'a': body}):
+        asyncio.run(jobs.run_scheduler({'a': 60}, sleeper=sleeper, ticks=1, run_on_start=True))
+
+    assert order[0] == 'tick', 'the immediate tick must come before the first sleep'
+
+
+def test_the_immediate_tick_counts_against_the_tick_budget():
+    """Otherwise a bounded run does one more tick than it was asked for, and every test built on `ticks`
+    quietly measures something else."""
+    from jobs import onprem_scheduled as jobs
+
+    ticks: list = []
+
+    async def body():
+        ticks.append(1)
+
+    async def sleeper(_delay):
+        pass
+
+    with patch.dict(jobs.JOBS, {'a': body}):
+        asyncio.run(jobs.run_scheduler({'a': 60}, sleeper=sleeper, ticks=2, run_on_start=True))
+
+    assert len(ticks) == 2
+
+
+def test_a_failing_immediate_tick_is_reported_and_does_not_stop_the_loop():
+    from jobs import onprem_scheduled as jobs
+
+    calls: list = []
+
+    async def body():
+        calls.append(1)
+        raise RuntimeError('boom')
+
+    async def sleeper(_delay):
+        pass
+
+    with patch.dict(jobs.JOBS, {'a': body}):
+        rc = asyncio.run(jobs.run_scheduler({'a': 60}, sleeper=sleeper, ticks=2, run_on_start=True))
+
+    assert len(calls) == 2, 'the loop must continue after a failing first tick'
+    assert rc == 1
+
+
+def test_the_flag_is_off_unless_asked_for():
+    """A default that changed here would change every deploy's restart behaviour silently."""
+    from jobs import onprem_scheduled as jobs
+
+    # Through main's own parser, so a renamed flag or a flipped default fails here.
+    with patch.object(jobs, 'run_loop', lambda *a, **kw: kw.get('run_on_start')) as _:
+        assert jobs.main(['--job', 'notifications', '--loop']) is False
+        assert jobs.main(['--job', 'notifications', '--loop', '--run-on-start']) is True

@@ -244,6 +244,7 @@ def run_loop(
     sleeper: Callable[[float], None] = time.sleep,
     ticks: int | None = None,
     interval_seconds: int | None = None,
+    run_on_start: bool = False,
 ) -> int:
     """Tick forever (or ``ticks`` times, for tests).
 
@@ -256,6 +257,10 @@ def run_loop(
     """
     failures = 0
     remaining = ticks
+    if run_on_start and (remaining is None or remaining > 0):
+        failures += run_once(job)
+        if remaining is not None:
+            remaining -= 1
     while remaining is None or remaining > 0:
         if interval_seconds is None:
             delay: float = seconds_to_next_hour(datetime.now(timezone.utc))
@@ -303,10 +308,19 @@ async def _schedule_one(
     *,
     sleeper: Any,
     ticks: Optional[int],
+    run_on_start: bool = False,
 ) -> int:
     """One job's own loop. Sleeps first, so a restart does not stampede every job at once."""
     failures = 0
     remaining = ticks
+    if run_on_start and (remaining is None or remaining > 0):
+        # Opt-in, and off by default on purpose: this loop sleeps first precisely so that a restart --
+        # including the automatic one `restart: unless-stopped` performs after a crash -- does not start
+        # every job at the same instant on a machine that may already be struggling. Asking for it is a
+        # deploy-time choice; getting it on every restart is not (BACKLOG L39, point 6).
+        failures += await run_once_async(job)
+        if remaining is not None:
+            remaining -= 1
     while remaining is None or remaining > 0:
         if interval_seconds is None:
             delay: float = seconds_to_next_hour(datetime.now(timezone.utc))
@@ -326,6 +340,7 @@ async def run_scheduler(
     *,
     sleeper: Any = asyncio.sleep,
     ticks: Optional[int] = None,
+    run_on_start: bool = False,
 ) -> int:
     """Run several jobs on their own cadences in ONE process.
 
@@ -342,7 +357,10 @@ async def run_scheduler(
     )
     logger.info('scheduler starting: %s', described)
     results = await asyncio.gather(
-        *(_schedule_one(job, interval, sleeper=sleeper, ticks=ticks) for job, interval in schedules.items()),
+        *(
+            _schedule_one(job, interval, sleeper=sleeper, ticks=ticks, run_on_start=run_on_start)
+            for job, interval in schedules.items()
+        ),
         return_exceptions=True,
     )
     failed = 0
@@ -377,6 +395,14 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help='with --loop, tick every N seconds instead of at the top of the hour',
     )
+    parser.add_argument(
+        '--run-on-start',
+        action='store_true',
+        help='tick once immediately before entering the cadence. OFF by default: the loops sleep first '
+        'so a restart -- including the automatic one after a crash -- does not start every job at the '
+        'same instant. Pass it after a deploy when waiting up to an hour for the first tick is the wrong '
+        'trade.',
+    )
     args = parser.parse_args(argv)
     if bool(args.job) == bool(args.schedule):
         parser.error('pass exactly one of --job or --schedule')
@@ -390,12 +416,12 @@ def main(argv: list[str] | None = None) -> int:
             schedules = dict(parse_schedule(spec) for spec in specs)
         except ValueError as exc:
             parser.error(str(exc))
-        return asyncio.run(run_scheduler(schedules))
+        return asyncio.run(run_scheduler(schedules, run_on_start=args.run_on_start))
     if args.interval_seconds is not None and args.interval_seconds < 1:
         parser.error('--interval-seconds must be >= 1')
     if not args.loop:
         return run_once(args.job)
-    return run_loop(args.job, interval_seconds=args.interval_seconds)
+    return run_loop(args.job, interval_seconds=args.interval_seconds, run_on_start=args.run_on_start)
 
 
 if __name__ == '__main__':
