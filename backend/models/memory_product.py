@@ -88,7 +88,13 @@ class ProductMemorySearchResponse(BaseModel):
     items: List[ProductMemorySearchItem] = Field(description='Default-visible memory rows for the current page.')
     total_count: int = Field(description='Total default-visible items matching the query.')
     returned_count: int = Field(description='Number of items returned in this page.')
-    limit: int = Field(description='Bounded page size used for this response.')
+    limit: int = Field(
+        description=(
+            'Page-size output bound over the full default-visible match set, not a backend '
+            'scan cap: the read scans the tenant authoritative memory to compute matches and '
+            'total_count, so this only limits the returned page.'
+        )
+    )
     offset: int = Field(description='Offset into the result set for this page.')
     archive_default_visible: bool = Field(description='Always false; Archive is never default-visible.')
     policy: MemorySearchPolicyPayload = Field(description='Access-policy snapshot used for this read.')

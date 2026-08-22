@@ -1484,6 +1484,7 @@ def test_app_summary_results_reach_the_database(monkeypatch):
 
     monkeypatch.setattr(process_conversation, '_get_structured', lambda *a, **k: (MagicMock(), False))
     monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *a, **k: completed_conversation)
+    monkeypatch.setattr(process_conversation, 'extract_canonical_l1_memory_candidates', lambda *a, **k: [])
     monkeypatch.setattr(process_conversation.lifecycle_service, 'persist_processed_conversation', persisted)
     monkeypatch.setattr(process_conversation.lifecycle_service, 'create_completed_conversation', persisted)
     monkeypatch.setattr(process_conversation, '_trigger_apps', fake_trigger_apps)
