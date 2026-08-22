@@ -853,7 +853,11 @@ app.whenReady().then(async () => {
   registerCaptureBridge(
     getCaptureWc,
     () => (mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null),
-    isListenSessionOwnedBy
+    isListenSessionOwnedBy,
+    () => {
+      const bar = getBarWindow()
+      return bar && !bar.isDestroyed() ? bar.webContents : null
+    }
   )
   // Soak telemetry (inert unless OMI_SOAK=1): samples process metrics + listen
   // byte counters to userData/soak.jsonl for the 8h idle-soak verification.
