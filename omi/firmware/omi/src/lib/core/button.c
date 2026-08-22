@@ -12,6 +12,7 @@
 #include <zephyr/pm/device_runtime.h>
 #include <zephyr/sys/poweroff.h>
 
+#include "button_gesture.h"
 #include "haptic.h"
 #include "imu.h"
 #include "led.h"
@@ -145,115 +146,110 @@ static inline void notify_long_tap()
     }
 }
 
-#define BUTTON_PRESSED 1
-#define BUTTON_RELEASED 0
+static button_gesture_state_t gesture_state = {.tick_interval_ms = BUTTON_CHECK_INTERVAL};
 
-#define TAP_THRESHOLD 300     // 300 ms for single tap
-#define DOUBLE_TAP_WINDOW 600 // 600 ms maximum for double-tap
-#define LONG_PRESS_TIME 3000  // 3000 ms for long press (power off)
+K_THREAD_STACK_DEFINE(bond_clear_stack, 2048);
+static struct k_work_q bond_clear_work_q;
+static bool bond_clear_work_q_started;
 
-typedef enum {
-    BUTTON_EVENT_NONE,
-    BUTTON_EVENT_SINGLE_TAP,
-    BUTTON_EVENT_DOUBLE_TAP,
-    BUTTON_EVENT_LONG_PRESS,
-    BUTTON_EVENT_RELEASE
-} ButtonEvent;
+static void clear_ble_bonds(void)
+{
+    LOG_INF("User requested BLE bond clear");
 
-static uint32_t current_time = 0;
-static uint32_t btn_press_start_time;
-static uint32_t btn_release_time;
-static uint32_t btn_last_tap_time;
-static bool btn_is_pressed;
+#ifdef CONFIG_OMI_ENABLE_HAPTIC
+    play_haptic_milli(100);
+#endif
 
-static u_int8_t btn_last_event = BUTTON_EVENT_NONE;
+    set_led_blue(true);
+
+    int err = transport_clear_bonds();
+    if (err) {
+        LOG_ERR("Bond clear failed (err %d)", err);
+        set_led_red(true);
+        k_msleep(500);
+        led_off();
+        return;
+    }
+
+    for (int i = 0; i < 3; i++) {
+        set_led_blue(true);
+        k_msleep(200);
+        led_off();
+        k_msleep(200);
+    }
+
+#ifdef CONFIG_OMI_ENABLE_HAPTIC
+    play_haptic_milli(50);
+#endif
+}
+
+static void clear_ble_bonds_work(struct k_work *work)
+{
+    ARG_UNUSED(work);
+    clear_ble_bonds();
+}
+
+static K_WORK_DEFINE(bond_clear_work, clear_ble_bonds_work);
+
+static void schedule_clear_ble_bonds(void)
+{
+    if (!bond_clear_work_q_started) {
+        k_work_queue_init(&bond_clear_work_q);
+        k_work_queue_start(
+            &bond_clear_work_q, bond_clear_stack, K_THREAD_STACK_SIZEOF(bond_clear_stack), K_PRIO_PREEMPT(8), NULL);
+        k_thread_name_set(&bond_clear_work_q.thread, "bond_clear");
+        bond_clear_work_q_started = true;
+    }
+
+    if (k_work_busy_get(&bond_clear_work) != 0) {
+        LOG_WRN("Bond clear already in progress");
+        return;
+    }
+
+    (void) k_work_submit_to_queue(&bond_clear_work_q, &bond_clear_work);
+}
 
 void check_button_level(struct k_work *work_item)
 {
-    current_time = current_time + 1;
+    button_gesture_result_t gesture = button_gesture_step(&gesture_state, was_pressed, k_uptime_get());
 
-    u_int8_t btn_state = was_pressed ? BUTTON_PRESSED : BUTTON_RELEASED;
+    switch (gesture.event) {
+    case BUTTON_GESTURE_SINGLE_TAP:
+        LOG_INF("single tap detected\n");
+        notify_tap();
+        break;
 
-    ButtonEvent event = BUTTON_EVENT_NONE;
+    case BUTTON_GESTURE_DOUBLE_TAP:
+        LOG_INF("double tap detected\n");
+        notify_double_tap();
+        break;
 
-    // Debouncing pressed state
-    if (btn_state == BUTTON_PRESSED && !btn_is_pressed) {
-        btn_is_pressed = true;
-        btn_press_start_time = current_time;
-    } else if (btn_state == BUTTON_RELEASED && btn_is_pressed) {
-        btn_is_pressed = false;
-        btn_release_time = current_time;
-
-        // Check for double tap
-        uint32_t press_duration = (btn_release_time - btn_press_start_time) * BUTTON_CHECK_INTERVAL;
-        if (press_duration < TAP_THRESHOLD) {
-            if (btn_last_tap_time > 0 &&
-                (current_time - btn_last_tap_time) * BUTTON_CHECK_INTERVAL < DOUBLE_TAP_WINDOW) {
-                event = BUTTON_EVENT_DOUBLE_TAP;
-                btn_last_tap_time = 0; // Reset double-tap / single-tap detection
+    case BUTTON_GESTURE_LONG_PRESS:
+        // A completed double-tap within the arm window is what turns this long press
+        // into a bond clear; otherwise a long press is the ordinary power-off gesture.
+        if (gesture.one_shot) {
+            LOG_INF("long press detected\n");
+            if (gesture.clear_bonds) {
+                schedule_clear_ble_bonds();
             } else {
-                btn_last_tap_time = current_time;
+                turnoff_all();
             }
         }
-    }
+        break;
 
-    // Check for single tap
-    if (btn_state == BUTTON_RELEASED && !btn_is_pressed) {
-        uint32_t press_duration = (btn_release_time - btn_press_start_time) * BUTTON_CHECK_INTERVAL;
-        if (press_duration < TAP_THRESHOLD && btn_last_tap_time > 0 &&
-            (current_time - btn_press_start_time) * BUTTON_CHECK_INTERVAL > TAP_THRESHOLD) {
-            event = BUTTON_EVENT_SINGLE_TAP;
-            btn_last_tap_time = 0;
-        } else if ((current_time - btn_press_start_time) * BUTTON_CHECK_INTERVAL > TAP_THRESHOLD) {
-            event = BUTTON_EVENT_RELEASE;
+    case BUTTON_GESTURE_RELEASE:
+        if (gesture.one_shot) {
+            LOG_PRINTK("release detected\n");
+            notify_unpress();
         }
-    }
-
-    // Check for long press
-    if (btn_is_pressed && (current_time - btn_press_start_time) * BUTTON_CHECK_INTERVAL >= LONG_PRESS_TIME) {
-        event = BUTTON_EVENT_LONG_PRESS;
-    }
-
-    // Single tap
-    if (event == BUTTON_EVENT_SINGLE_TAP) {
-        LOG_INF("single tap detected\n");
-        btn_last_event = event;
-
-        notify_tap();
-    }
-
-    // Double tap
-    if (event == BUTTON_EVENT_DOUBLE_TAP) {
-        LOG_INF("double tap detected\n");
-        btn_last_event = event;
-        notify_double_tap();
-    }
-
-    // Long press, one time event
-    if (event == BUTTON_EVENT_LONG_PRESS && btn_last_event != BUTTON_EVENT_LONG_PRESS) {
-        LOG_INF("long press detected\n");
-        btn_last_event = event;
-        turnoff_all();
-    }
-
-    // Releases, one time event
-    if (event == BUTTON_EVENT_RELEASE && btn_last_event != BUTTON_EVENT_RELEASE) {
-        LOG_PRINTK("release detected\n");
-        btn_last_event = event;
-        notify_unpress();
-
-        // Reset
-        current_time = 0;
-        btn_press_start_time = 0;
-        btn_release_time = 0;
-        btn_last_tap_time = 0;
-    }
-    if (event == BUTTON_EVENT_RELEASE) {
         current_button_state = GRACE;
+        break;
+
+    default:
+        break;
     }
 
     k_work_reschedule(&button_work, K_MSEC(BUTTON_CHECK_INTERVAL));
-    return 0;
 }
 
 static ssize_t button_data_read_characteristic(struct bt_conn *conn,

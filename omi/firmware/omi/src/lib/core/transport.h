@@ -23,6 +23,18 @@ int transport_start();
 int transport_off();
 
 /**
+ * @brief Clear all stored BLE bonds and resume connectable advertising.
+ *
+ * Disconnects the active central (if any), removes every paired device via
+ * bt_unpair(BT_ID_DEFAULT, NULL), and restarts advertising so a new phone
+ * can pair. Required before shipping CONFIG_OMI_REQUIRE_BLE_ENCRYPTION with
+ * CONFIG_BT_MAX_PAIRED=1.
+ *
+ * @return 0 on success, negative errno on failure
+ */
+int transport_clear_bonds(void);
+
+/**
  * @brief Broadcast audio packets over BLE
  *
  * @param buffer Buffer containing audio data
