@@ -1697,6 +1697,21 @@ final class DesktopAutomationActionRegistry {
       return ["posted": conversationID]
     }
 
+    // Presents the same "Omi is taking notes" notice the meeting boundary
+    // posts once a detected meeting has rotated into its recording session.
+    register(
+      name: "trigger_meeting_started_notice",
+      summary:
+        "Present the meeting-started note-taking notice (the card shown when a meeting is detected). Non-prod only.",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "trigger_meeting_started_notice is disabled on production bundles"]
+      }
+      MeetingNoteTakingNotice.present()
+      return ["presented": "true"]
+    }
+
     // Cursor-free driver for the meeting summary share card: `state` reads the
     // presented card, `copy`/`send` run the same MeetingSummaryShareActions the
     // card's buttons call, `close` is the user dismissal path.
@@ -1731,18 +1746,30 @@ final class DesktopAutomationActionRegistry {
         let feedback = await MeetingSummaryShareActions.copyLink(conversationID: conversationID)
         return ["copied": feedback == .copied ? "true" : "false"]
       case "send":
+        // `email` mirrors what the owner types into the Share field; with no
+        // address supplied the detected suggestion is used, which is exactly
+        // what the field prefills with.
+        let typed = params["email"]?.trimmingCharacters(in: .whitespaces) ?? ""
+        let addresses = typed.isEmpty ? recipients.map(\.email) : [typed]
+        guard !addresses.isEmpty else {
+          return ["error": "no recipient: pass email=<address>"]
+        }
         do {
           let sent = try await MeetingSummaryShareActions.sendSummary(
-            conversationID: conversationID, recipients: recipients)
+            conversationID: conversationID, recipientEmails: addresses)
           return ["sent_to": sent.joined(separator: ",")]
         } catch {
           return ["error": "send failed: \(error.localizedDescription)"]
         }
+      case "share":
+        NotificationCenter.default.post(name: .meetingSummaryShareBeginAddressing, object: nil)
+        return ["addressing": "true"]
       case "close":
         mgr.dismissCurrentNotification()
         return ["closed": "true"]
       default:
-        throw DesktopAutomationActionError.invalidParams("action must be state, copy, send, or close")
+        throw DesktopAutomationActionError.invalidParams(
+          "action must be state, share, copy, send, or close")
       }
     }
 

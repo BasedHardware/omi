@@ -1382,19 +1382,22 @@ def get_conversation_share_recipients(conversation_id: str, uid: str = Depends(a
 def send_conversation_share_email(
     conversation_id: str, request: SendShareEmailRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
-    """One-click send of the meeting summary to detected participants.
+    """Send the meeting summary to the addresses the owner chose.
 
-    Recipients are validated against the calendar-detected set so this can
-    never relay to arbitrary addresses. Sending makes the conversation
-    link-visible first (same contract as copying the share link) so the
-    emailed link resolves.
+    The card lets the owner type a recipient, so the address is theirs to pick
+    rather than something we detected; detection only prefills the field. What
+    keeps this from being an open relay is unchanged: the sender must own the
+    conversation, the mail carries only that conversation's own summary and
+    share link with the owner as reply-to, the request schema caps how many
+    addresses one send may carry, and a per-owner daily quota bounds the total.
+    Sending
+    makes the conversation link-visible first (same contract as copying the
+    share link) so the emailed link resolves.
     """
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
-    detected = {recipient['email'] for recipient in share_email.get_share_recipients(uid, conversation)}
     requested = share_email.normalized_recipient_emails(request.recipient_emails)
-    unknown = [email for email in requested if email not in detected]
-    if unknown:
-        raise HTTPException(status_code=400, detail='Recipients must be detected meeting participants')
+    if not requested:
+        raise HTTPException(status_code=400, detail='A valid recipient email is required')
 
     # Idempotency under concurrency: a Firestore transaction atomically claims
     # the not-yet-emailed recipients, so simultaneous duplicate requests can

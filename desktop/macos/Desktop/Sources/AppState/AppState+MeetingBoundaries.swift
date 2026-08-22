@@ -117,6 +117,10 @@ extension AppState {
       rotationSucceeded: rotationSucceeded)
     meetingBoundaryInProgress = false
 
+    if currentConversationRole == .meeting {
+      MeetingNoteTakingNotice.present()
+    }
+
     if let pending = pendingMeetingState {
       pendingMeetingState = nil
       await handleMeetingObservation(active: pending)
