@@ -529,26 +529,30 @@ extension AppState {
         log("Transcription: Ignoring proactive_message with empty message body")
         break
       }
-      log("Transcription: Proactive message from \(appId): \(title) — \(message.prefix(80))")
+      // The message body is user conversation content; log only its provenance.
+      log("Transcription: Proactive message from \(appId.isEmpty ? "unknown-app" : appId)")
 
-      // Deliver via the floating bar (visual card + optional TTS), the same
-      // surface used by context-director proactive notifications.  Gate on the
-      // current runtime owner so a stale listen session cannot deliver to a
-      // different user.
+      // Gate on the current runtime owner so a stale listen session cannot
+      // deliver to a different user.
       guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
         log("Transcription: Dropping proactive_message — no runtime owner")
         break
       }
-      let speech = NotificationSpeechOnDelivery(message: message, isProactive: true)
-      FloatingControlBarManager.shared.showNotification(
+      // Deliver through NotificationService rather than the floating-bar primitive.
+      // A cloud interjection is proactive in exactly the sense the user's controls
+      // mean: routing it here keeps the master toggle, the off-by-default migration,
+      // the frequency throttle, and the snooze/presence withholding on one door,
+      // instead of giving the cloud a path that ignores all of them. It also owns
+      // the spoken delivery (`isProactive: respectFrequency`), so the caller does
+      // not need its own NotificationSpeechOnDelivery.
+      NotificationService.shared.sendNotification(
         ownerID: authorizationSnapshot.ownerID,
         title: title,
         message: message,
         assistantId: appId.isEmpty ? "proactive-listen" : appId,
         sound: .default,
-        kind: .general,
-        authorizationSnapshot: authorizationSnapshot,
-        onPresented: { speech.notificationWasPresented() }
+        respectFrequency: true,
+        authorizationSnapshot: authorizationSnapshot
       )
 
       // Refresh conversations if the message is tied to a specific conversation
