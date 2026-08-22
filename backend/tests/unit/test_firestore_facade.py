@@ -673,3 +673,82 @@ def test_collection_group_stream_accepts_them_too():
     c.document("users/u1/topics/t1").set({"topic": "Elon Musk"})
 
     assert [s.id for s in c.collection_group("topics").stream(retry=Retry())] == ["t1"]
+
+
+# --- transport-kwarg parity with the SDK ----------------------------------------------------------
+# The /v1/trends outage was one method missing `retry`. The instance is fixed above; this closes the
+# CLASS, because the same shape is one keyword away on every other method: `doc_ref.delete(retry=...)`
+# or `batch.commit(timeout=...)` is ordinary SDK usage that upstream may add at any time, and it would
+# fail the same way -- TypeError under STORAGE_BACKEND=mongo only, on a line that looks fine.
+#
+# The rule is narrow on purpose. It is NOT full signature parity (the SDK's positional parameter names
+# differ from ours by design, and mirroring them would be noise): only `retry` and `timeout`, only on
+# methods the facade already claims to mirror. Whether they are honored is a separate question --
+# `_DocRef.get` threads `timeout` to the store as a real read deadline, everything else drops both,
+# which the code says at each site.
+
+
+_SDK_PAIRS = [
+    ('_DocRef', 'DocumentReference'),
+    ('_Query', 'BaseQuery'),
+    ('_CollRef', 'BaseCollectionReference'),
+    ('_GroupQuery', 'CollectionGroup'),
+    ('NeutralFirestoreClient', 'Client'),
+    ('_FacadeTransaction', 'Transaction'),
+    ('_FacadeBatch', 'WriteBatch'),
+]
+
+
+def _keywords(cls, name):
+    """(accepted keyword names, whether it absorbs **kwargs), or None if there is no such method."""
+    import inspect
+
+    attribute = getattr(cls, name, None)
+    if attribute is None or not callable(attribute):
+        return None
+    try:
+        signature = inspect.signature(attribute)
+    except (TypeError, ValueError):
+        return None
+    named = {p.name for p in signature.parameters.values() if p.kind in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY)} - {
+        'self'
+    }
+    absorbs = any(p.kind is p.VAR_KEYWORD for p in signature.parameters.values())
+    return named, absorbs
+
+
+def test_every_mirrored_method_accepts_the_sdk_transport_kwargs():
+    from google.cloud import firestore_v1 as sdk
+    from google.cloud.firestore_v1.base_collection import BaseCollectionReference
+    from google.cloud.firestore_v1.base_query import BaseQuery
+
+    sdk_classes = {
+        'DocumentReference': sdk.DocumentReference,
+        'BaseQuery': BaseQuery,
+        'BaseCollectionReference': BaseCollectionReference,
+        'CollectionGroup': sdk.CollectionGroup,
+        'Client': sdk.Client,
+        'Transaction': sdk.Transaction,
+        'WriteBatch': sdk.WriteBatch,
+    }
+
+    gaps = []
+    checked = 0
+    for facade_name, sdk_name in _SDK_PAIRS:
+        facade_cls = getattr(ff, facade_name)
+        sdk_cls = sdk_classes[sdk_name]
+        for method in sorted(n for n in dir(facade_cls) if not n.startswith('__')):
+            facade = _keywords(facade_cls, method)
+            counterpart = _keywords(sdk_cls, method)
+            if facade is None or counterpart is None:
+                continue
+            facade_kws, absorbs = facade
+            if absorbs:
+                continue
+            checked += 1
+            missing = ({'retry', 'timeout'} & counterpart[0]) - facade_kws
+            if missing:
+                gaps.append(f'{facade_name}.{method} does not accept {sorted(missing)}')
+
+    assert checked > 20, f'the pairing found only {checked} mirrored methods — the facade or the SDK moved'
+    assert gaps == [], 'a caller passing these would get TypeError on the Mongo posture only:\n  ' + '\n  '.join(gaps)

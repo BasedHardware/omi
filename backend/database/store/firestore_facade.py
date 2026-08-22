@@ -378,7 +378,8 @@ class _DocRef:
     def collection(self, sub: str) -> "_CollRef":
         return _CollRef(self._client, f"{self.path}/{sub}")
 
-    def collections(self) -> Iterable["_CollRef"]:
+    def collections(self, *, retry: Any = None, timeout: Any = None) -> Iterable["_CollRef"]:
+        del retry, timeout  # transport policy, adapter-owned -- see the note on _Query.stream
         # Enumerate real subcollections so recursive-delete helpers (account / conversation deletion)
         # descend into them on Mongo instead of silently leaving orphaned descendant data.
         return [
@@ -405,10 +406,12 @@ class _DocRef:
             return _Snapshot(self, transaction._read(self.path, fields=fields))
         return _Snapshot(self, self._client._store.get(self.path, fields=fields, timeout=timeout))
 
-    def set(self, data: Dict[str, Any], merge: bool = False) -> None:
+    def set(self, data: Dict[str, Any], merge: bool = False, *, retry: Any = None, timeout: Any = None) -> None:
+        del retry, timeout  # transport policy, adapter-owned -- see the note on _Query.stream
         self._client._store.set(self.path, _neutral_data(data), merge=merge)
 
-    def update(self, data: Dict[str, Any], option: Any = None) -> None:
+    def update(self, data: Dict[str, Any], option: Any = None, *, retry: Any = None, timeout: Any = None) -> None:
+        del retry, timeout  # transport policy, adapter-owned -- see the note on _Query.stream
         # ``option`` (Firestore LastUpdateOption, or the facade's own write_option token) is an
         # optimistic-concurrency precondition ("only write if the doc's revision is unchanged"). It maps
         # to the store port's ``if_updated_at``; the Mongo adapter enforces it against the stored
@@ -416,11 +419,13 @@ class _DocRef:
         with _firestore_errors():
             self._client._store.update(self.path, _neutral_data(data), if_updated_at=_precondition_time(option))
 
-    def create(self, data: Dict[str, Any]) -> None:
+    def create(self, data: Dict[str, Any], *, retry: Any = None, timeout: Any = None) -> None:
+        del retry, timeout  # transport policy, adapter-owned -- see the note on _Query.stream
         with _firestore_errors():
             self._client._store.create(self.path, _neutral_data(data))
 
-    def delete(self) -> None:
+    def delete(self, *, retry: Any = None, timeout: Any = None) -> None:
+        del retry, timeout  # transport policy, adapter-owned -- see the note on _Query.stream
         with _firestore_errors():
             self._client._store.delete(self.path)
 
@@ -613,10 +618,19 @@ class _CollRef(_Query):
         doc_id = _auto_id() if doc_id is None else _validate_doc_id(doc_id)
         return _DocRef(self._client, f"{self._collection}/{doc_id}")
 
-    def list_documents(self) -> List[_DocRef]:
+    def list_documents(self, *, retry: Any = None, timeout: Any = None) -> List[_DocRef]:
+        del retry, timeout  # transport policy, adapter-owned -- see the note on _Query.stream
         return [_DocRef(self._client, s.path) for s in self._run()]
 
-    def add(self, data: Dict[str, Any], document_id: Optional[str] = None) -> Tuple[datetime, _DocRef]:
+    def add(
+        self,
+        data: Dict[str, Any],
+        document_id: Optional[str] = None,
+        *,
+        retry: Any = None,
+        timeout: Any = None,
+    ) -> Tuple[datetime, _DocRef]:
+        del retry, timeout  # transport policy, adapter-owned -- see the note on _Query.stream
         # Firestore's signature is add(document_data, document_id=None): omitting the id here made
         # ``app_ref.add(app_data, app_data['id'])`` (database/apps.py, app creation) a TypeError on
         # Mongo — and had the argument been swallowed, the app would have landed under a random
@@ -743,7 +757,8 @@ class _FacadeBatch:
     def delete(self, ref: _DocRef, option: Any = None) -> None:
         self._batch.delete(ref.path, if_updated_at=_precondition_time(option))
 
-    def commit(self) -> None:
+    def commit(self, *, retry: Any = None, timeout: Any = None) -> None:
+        del retry, timeout  # transport policy, adapter-owned -- see the note on _Query.stream
         with _firestore_errors():
             self._batch.commit()
 
@@ -896,7 +911,7 @@ class _GroupQuery:
         retry: Any = None,
         timeout: Any = None,
     ) -> Iterable[_Snapshot]:
-        del retry, timeout  # transport policy, adapter-owned -- see _Query.stream
+        del retry, timeout  # transport policy, adapter-owned -- see the note on _Query.stream
         if transaction is not None:
             # Refused rather than ignored. A cross-parent sweep inside a transaction is not something the
             # neutral port expresses (``query_group`` has no session-aware twin) and no caller asks for it
