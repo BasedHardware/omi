@@ -363,6 +363,130 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   /// (the screen-recording repair prompt is delivered once per broken-capture episode).
   /// `insightDeliveryID`, when present, is an opaque Advice correlation key. It records only
   /// bounded delivery outcomes and never carries notification text or window context.
+  /// When proactive notifications are silenced until, or `nil` when they are not.
+  ///
+  /// Deliberately distinct from `floatingBar_snoozedUntil`. That key hides the *bar* and
+  /// documents that hiding the bar must still let notifications through ("an hour of a
+  /// movie with the bar hidden or off must still nudge"). This one is the statement that
+  /// key is documented not to make: silence the nudges themselves.
+  nonisolated static let notificationsSnoozedUntilDefaultsKey = "notifications_snoozedUntil"
+
+  /// Standard silence durations offered to the user.
+  nonisolated static let snoozeDurations: [(label: String, seconds: TimeInterval)] = [
+    ("For 1 hour", 60 * 60),
+    ("For 4 hours", 4 * 60 * 60),
+    ("For 8 hours", 8 * 60 * 60),
+  ]
+
+  nonisolated static func currentSnoozeExpiry(
+    defaults: UserDefaults = .standard
+  ) -> Date? {
+    defaults.object(forKey: notificationsSnoozedUntilDefaultsKey) as? Date
+  }
+
+  /// The hour "until tomorrow" resolves to. A workday start rather than midnight:
+  /// silencing at 11pm and resuming an hour later at 00:00 is not what the phrase means
+  /// to anyone.
+  nonisolated static let snoozeUntilTomorrowHour = 9
+
+  /// Next `snoozeUntilTomorrowHour` strictly after `now`.
+  ///
+  /// Pure and calendar-supplied so the boundaries are testable: silencing at 11pm resumes
+  /// at 9am the next calendar day, and silencing at 2am — already "tomorrow" by the clock
+  /// — resumes at 9am the same morning rather than waiting 31 hours.
+  nonisolated static func snoozeUntilTomorrowExpiry(
+    now: Date,
+    calendar: Calendar = .current
+  ) -> Date {
+    if let todayAtHour = calendar.date(
+      bySettingHour: snoozeUntilTomorrowHour, minute: 0, second: 0, of: now),
+      todayAtHour > now
+    {
+      return todayAtHour
+    }
+    let tomorrow = calendar.date(byAdding: .day, value: 1, to: now) ?? now.addingTimeInterval(86_400)
+    return calendar.date(
+      bySettingHour: snoozeUntilTomorrowHour, minute: 0, second: 0, of: tomorrow)
+      ?? now.addingTimeInterval(86_400)
+  }
+
+  /// Silence until the next workday start. Separate from `snoozeNotifications(for:)`
+  /// because the expiry is a wall-clock boundary, not an offset.
+  nonisolated static func snoozeNotificationsUntilTomorrow(
+    now: Date = Date(),
+    calendar: Calendar = .current,
+    defaults: UserDefaults = .standard
+  ) {
+    let until = snoozeUntilTomorrowExpiry(now: now, calendar: calendar)
+    defaults.set(until, forKey: notificationsSnoozedUntilDefaultsKey)
+    log("NotificationService: proactive notifications silenced until \(until)")
+  }
+
+  /// Whether a delivery must be withheld because the user silenced notifications.
+  ///
+  /// Pure so the policy is testable without waiting out a real snooze. `respectFrequency`
+  /// is the existing proactive/functional split: silencing suggestions must not silence a
+  /// screen-recording repair prompt, or a user who snoozed for eight hours could not be
+  /// told why capture stopped working.
+  nonisolated static func shouldSuppressForSnooze(
+    respectFrequency: Bool,
+    snoozedUntil: Date?,
+    now: Date
+  ) -> Bool {
+    guard respectFrequency, let snoozedUntil else { return false }
+    return snoozedUntil > now
+  }
+
+  /// Silence proactive notifications for `duration`, replacing any existing snooze.
+  nonisolated static func snoozeNotifications(
+    for duration: TimeInterval,
+    now: Date = Date(),
+    defaults: UserDefaults = .standard
+  ) {
+    defaults.set(now.addingTimeInterval(duration), forKey: notificationsSnoozedUntilDefaultsKey)
+    log("NotificationService: proactive notifications silenced for \(Int(duration / 60))m")
+  }
+
+  nonisolated static func endNotificationSnooze(defaults: UserDefaults = .standard) {
+    defaults.removeObject(forKey: notificationsSnoozedUntilDefaultsKey)
+    log("NotificationService: proactive notification snooze cleared")
+  }
+
+  /// Whether a delivery must be withheld because other people are present.
+  ///
+  /// Two distinct harms, one rule. Sharing a screen makes a private nudge **visible** to
+  /// everyone on the call; being in a call at all makes it **interrupt a conversation**.
+  /// Scoping this to sharing alone was tested against a live Google Meet call and let
+  /// "Meet is fine — but you said you'd submit the SBI Hackathon prototype" through while
+  /// the user was mid-meeting, which is the disruption the guard exists to prevent.
+  ///
+  /// Pure so the policy is testable without a real call; the detection it is fed is
+  /// impure and lives in `currentPresenceDetected()`.
+  nonisolated static func shouldSuppressForPresence(
+    respectFrequency: Bool,
+    presenceDetected: Bool
+  ) -> Bool {
+    respectFrequency && presenceDetected
+  }
+
+  /// Live presence detection, kept out of the policy so the policy stays testable.
+  ///
+  /// Three complementary signals, all pre-existing and already trusted in production:
+  /// `activeScreenSharePresent()` (used to pause capture during shares, #10143),
+  /// `callAppIsUsingMicrophone()` for an active call, and `browserCallWindowPresent()`
+  /// which is the documented fallback for a *muted* browser call where mic input has
+  /// dropped. Omi's own ambient capture cannot trip the mic signal: it matches only
+  /// native call apps and browsers by bundle id.
+  nonisolated static func currentPresenceDetected() -> Bool {
+    if ConferencingApps.activeScreenSharePresent() { return true }
+    // The audio-process API this reads is macOS 14.4+. On 14.0–14.3 the browser
+    // window-title fallback below still catches browser calls; a native-app call on those
+    // versions goes undetected, which fails open — a missed suppression, never a missed
+    // notification.
+    if #available(macOS 14.4, *), ConferencingApps.callAppIsUsingMicrophone() { return true }
+    return ConferencingApps.browserCallWindowPresent()
+  }
+
   func sendNotification(
     ownerID: String,
     title: String,
@@ -477,6 +601,48 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         insightDeliveryID,
         outcome: .suppressed,
         reason: Self.currentFrequencyLevel() == 0 ? .frequencyOff : .frequencyThrottled
+      )
+      return
+    }
+
+    // A proactive notification is addressed to one person. While the user is presenting,
+    // every surface Omi draws on is broadcast to everyone on the call, so the audience for
+    // a private nudge is no longer the audience it was written for — "Submit prototype for
+    // SBI Hackathon before the deadline" is useful alone and a disclosure on a shared
+    // screen. Suppress rather than reveal.
+    //
+    // `respectFrequency` is the existing proactive/functional split: functional notices
+    // (screen-recording repair prompts, Crisp replies, onboarding test) pass false and must
+    // still reach the user, because suppressing a permission prompt during a share is how a
+    // broken capture stays broken.
+    //
+    // Placed after the cheap boolean gates deliberately: `activeScreenSharePresent()` scans
+    // the window list, so it must not run for notifications an earlier gate already refused.
+    // Checked before presence: a defaults read is far cheaper than the window scans and
+    // audio-process enumeration presence detection performs.
+    if Self.shouldSuppressForSnooze(
+      respectFrequency: respectFrequency,
+      snoozedUntil: Self.currentSnoozeExpiry(),
+      now: Date())
+    {
+      log("NotificationService: suppressing \(assistantId) notification — user silenced notifications")
+      recordInsightDeliveryOutcome(
+        insightDeliveryID,
+        outcome: .suppressed,
+        reason: .userSnoozed
+      )
+      return
+    }
+
+    if Self.shouldSuppressForPresence(
+      respectFrequency: respectFrequency,
+      presenceDetected: Self.currentPresenceDetected())
+    {
+      log("NotificationService: suppressing \(assistantId) notification while other people are present")
+      recordInsightDeliveryOutcome(
+        insightDeliveryID,
+        outcome: .suppressed,
+        reason: .presenceActive
       )
       return
     }
@@ -710,6 +876,34 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       return .suppressed
     }
 
+    // The director presents straight through `FloatingControlBarManager`, bypassing
+    // `sendNotification` and therefore both gates below it. Without this the two controls
+    // silently covered only part of the product: a user who silenced notifications for
+    // four hours, or who was mid-call, still received director cards. `isProactive: true`
+    // is set on this path a few lines down, so it is exactly the class both gates exist
+    // to withhold.
+    //
+    // Hard-codes `respectFrequency: true`: every caller of this entry point is proactive.
+    // A functional notice goes through `sendNotification` with `respectFrequency: false`.
+    if Self.shouldSuppressForSnooze(
+      respectFrequency: true,
+      snoozedUntil: Self.currentSnoozeExpiry(),
+      now: Date())
+    {
+      log("NotificationService: withholding context director card — user silenced notifications")
+      onDropped?()
+      return .suppressed
+    }
+
+    if Self.shouldSuppressForPresence(
+      respectFrequency: true,
+      presenceDetected: Self.currentPresenceDetected())
+    {
+      log("NotificationService: withholding context director card — other people are present")
+      onDropped?()
+      return .suppressed
+    }
+
     let previewsEnabled = ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled
     let floatingBarEnabled = FloatingControlBarManager.shared.isEnabled
     let showInBar = FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
@@ -768,6 +962,99 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       )
     }
     return .queued
+  }
+
+  /// The gated path for a proactive card whose point is its action button.
+  ///
+  /// `sendNotification` returns `Void` and keeps the presentation result to
+  /// itself. A caller that must know whether the card actually reached the
+  /// screen — because it spends a bounded, lifetime offer budget from
+  /// `onPresented` rather than from the call returning — cannot use it, and
+  /// `IntegrationNudgeCoordinator` reached straight for
+  /// `FloatingControlBarManager.showNotification` for exactly that reason,
+  /// skipping every control the user has along the way.
+  ///
+  /// Mirrors `presentContextDirectorNotification`: same gate order, same result
+  /// type, same callback contract. It differs only in carrying a
+  /// `FloatingBarNotificationAction`, and in throttling against the caller's own
+  /// `assistantId` instead of the context-director budget.
+  ///
+  /// A suppressed card composes correctly with a bounded budget: `onPresented`
+  /// never fires, so the offer stays unspent and the same nudge is free to be
+  /// made again once the user is no longer silenced or in company.
+  @discardableResult
+  func presentActionableProactiveNotification(
+    ownerID: String,
+    title: String,
+    message: String,
+    assistantId: String,
+    action: FloatingBarNotificationAction,
+    sound: NotificationSound = .none,
+    onPresented: (() -> Void)? = nil,
+    onDropped: (() -> Void)? = nil
+  ) -> OwnerBoundNotificationPresentationResult {
+    guard !ownerID.isEmpty,
+      let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID),
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+    else {
+      onDropped?()
+      return .rejectedOwnerChange
+    }
+
+    guard Self.areNotificationsEnabled() else {
+      onDropped?()
+      return .suppressed
+    }
+
+    guard
+      isProactiveNotificationEligible(
+        assistantId: assistantId,
+        now: Date(),
+        authorizationSnapshot: authorizationSnapshot)
+    else {
+      onDropped?()
+      return .suppressed
+    }
+
+    // Hard-codes `respectFrequency: true`: this entry point is proactive by
+    // construction. A functional notice goes through `sendNotification` with
+    // `respectFrequency: false`.
+    if Self.shouldSuppressForSnooze(
+      respectFrequency: true,
+      snoozedUntil: Self.currentSnoozeExpiry(),
+      now: Date())
+    {
+      log("NotificationService: withholding \(assistantId) card — user silenced notifications")
+      onDropped?()
+      return .suppressed
+    }
+
+    if Self.shouldSuppressForPresence(
+      respectFrequency: true,
+      presenceDetected: Self.currentPresenceDetected())
+    {
+      log("NotificationService: withholding \(assistantId) card — other people are present")
+      onDropped?()
+      return .suppressed
+    }
+
+    let recordPresented = { [weak self] in
+      self?.recordProactiveNotificationPresented(
+        assistantId: assistantId,
+        authorizationSnapshot: authorizationSnapshot)
+      onPresented?()
+    }
+
+    return FloatingControlBarManager.shared.showNotification(
+      ownerID: ownerID,
+      title: title,
+      message: message,
+      assistantId: assistantId,
+      sound: sound,
+      action: action,
+      authorizationSnapshot: authorizationSnapshot,
+      onPresented: recordPresented,
+      onDropped: onDropped)
   }
 
   /// Maps every proactive notification kind to its user-facing category — Focus, Task,

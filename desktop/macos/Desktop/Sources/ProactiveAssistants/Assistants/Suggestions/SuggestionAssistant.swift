@@ -546,7 +546,9 @@ actor SuggestionAssistant: ProactiveAssistant {
       return outcome
     case .filteredDuplicate:
       await emitDeliveryOutcome(.filteredDuplicate, identity: telemetryIdentity)
-      log("Suggestion: duplicate of a recent suggestion — \"\(suggestion.suggestion)\"")
+      log(
+        "Suggestion: duplicate of a recent suggestion [\(suggestion.category.rawValue)] — \"\(suggestion.suggestion)\""
+      )
       return outcome
     case .filteredUngroundedCommitment:
       await emitDeliveryOutcome(.filteredUngroundedCommitment, identity: telemetryIdentity)
@@ -554,6 +556,11 @@ actor SuggestionAssistant: ProactiveAssistant {
         "Suggestion: ungrounded commitment [\(percent)%] — "
           + "no open commitment matches \"\(suggestion.suggestion)\""
       )
+      return outcome
+    case .suppressedPresenting, .suppressedSnoozed:
+      // The pure decision never yields these. Presence and snooze are evaluated further
+      // down, after the owner re-check, so both are read as late as possible before the
+      // card and neither reaches the dedup window.
       return outcome
     case .delivered:
       break
@@ -564,6 +571,37 @@ actor SuggestionAssistant: ProactiveAssistant {
     guard let ownerID, RuntimeOwnerIdentity.currentOwnerId() == ownerID else {
       await emitDeliveryOutcome(.rejectedOwner, identity: telemetryIdentity)
       return .rejectedOwner
+    }
+
+    // Presenting is checked here, before the suggestion is remembered — not only at
+    // delivery. `recentSuggestions` gates every later evaluation, so recording a
+    // suggestion that the screen-share guard in NotificationService is about to withhold
+    // would retire it permanently: the user never sees it, and every regeneration after
+    // the call is filtered as a duplicate of a card that was never shown. Returning before
+    // the write leaves it eligible once the share ends.
+    if NotificationService.shouldSuppressForSnooze(
+      respectFrequency: true,
+      snoozedUntil: NotificationService.currentSnoozeExpiry(),
+      now: Date())
+    {
+      log(
+        "Suggestion: withheld while notifications are silenced [\(suggestion.category.rawValue)] — "
+          + "\"\(suggestion.suggestion)\""
+      )
+      await emitDeliveryOutcome(.suppressedSnoozed, identity: telemetryIdentity)
+      return .suppressedSnoozed
+    }
+
+    if NotificationService.shouldSuppressForPresence(
+      respectFrequency: true,
+      presenceDetected: NotificationService.currentPresenceDetected())
+    {
+      log(
+        "Suggestion: withheld while others are present [\(suggestion.category.rawValue)] — "
+          + "\"\(suggestion.suggestion)\""
+      )
+      await emitDeliveryOutcome(.suppressedPresenting, identity: telemetryIdentity)
+      return .suppressedPresenting
     }
 
     recentSuggestions = SuggestionDeduplication.remembering(
@@ -608,7 +646,12 @@ actor SuggestionAssistant: ProactiveAssistant {
       detail: suggestion.suggestion
     )
 
-    log("Suggestion: delivering [\(Int(suggestion.confidence * 100))%] \"\(suggestion.suggestion)\"")
+    // The category is model-chosen and decides the dedup depth this suggestion gets
+    // (`SuggestionPacing.dedupMemory`), so a repeat that should have been suppressed is
+    // only explainable with the label in hand.
+    log(
+      "Suggestion: delivering [\(Int(suggestion.confidence * 100))%] [\(suggestion.category.rawValue)] \"\(suggestion.suggestion)\""
+    )
 
     await MainActor.run {
       NotificationService.shared.sendNotification(

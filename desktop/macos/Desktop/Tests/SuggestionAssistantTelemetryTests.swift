@@ -177,6 +177,11 @@ final class SuggestionAssistantTelemetryTests: XCTestCase {
       Set([
         "delivered", "filtered_low_confidence", "filtered_duplicate",
         "filtered_ungrounded_commitment", "rejected_owner",
+        // Deferrals, not filters: the suggestion was deliverable and was withheld on
+        // audience or on the user's explicit silence, and is left eligible afterwards.
+        // Extending the closed set here is the review this guard exists to force — a
+        // sixth outcome added without touching this line still fails.
+        "suppressed_presenting", "suppressed_snoozed",
       ])
     )
 

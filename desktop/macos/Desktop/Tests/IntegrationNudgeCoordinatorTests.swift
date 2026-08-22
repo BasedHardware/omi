@@ -107,6 +107,36 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
     )
   }
 
+  /// Routing the nudge through `NotificationService` made `.suppressed` a
+  /// reachable outcome for the first time: the master toggle, frequency
+  /// throttle, snooze and presence gates withhold the card without the bar ever
+  /// refusing it. A withheld offer has to stay unspent — otherwise silencing
+  /// suggestions for an afternoon, or taking one call with a screen shared,
+  /// quietly costs the integration one of its three lifetime offers on a card
+  /// nobody ever saw.
+  func testASuppressedPresentationDoesNotSpendTheBudget() throws {
+    let defaults = makeDefaults()
+    let coordinator = IntegrationNudgeCoordinator(
+      store: IntegrationNudgeStore(defaults: defaults, ownerID: "user-a"),
+      now: { self.now },
+      presenter: { _, _, _, onDropped in
+        // `NotificationService` calls `onDropped` and *then* returns the
+        // suppression, matching the shape the bar uses for a refusal.
+        onDropped()
+        return .suppressed
+      },
+      ownerID: { "user-a" },
+      environment: { .init(isFeatureEnabled: true, notificationsEnabled: true, isOnboardingComplete: true) }
+    )
+
+    XCTAssertNotEqual(coordinator.offer(match: try match(), isConnected: false), .delivered)
+    XCTAssertEqual(
+      IntegrationNudgeStore(defaults: defaults, ownerID: "user-a")
+        .state(for: try match().entry.telemetryID).shownCount,
+      0
+    )
+  }
+
   /// A queued card has been admitted to a queue, not shown. Spending the budget
   /// on admission would burn one of the integration's three lifetime offers on a
   /// card that may never reach the screen — so the budget is spent from the
