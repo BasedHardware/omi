@@ -542,7 +542,7 @@ void main() {
     );
     provider.conversationPageFetcherOverride = () async {
       requestedOffset = provider.conversationServerOffset;
-      return (items: <ServerConversation>[], ok: true);
+      return (items: <ServerConversation>[], ok: true, truncated: false);
     };
     addTearDown(provider.dispose);
     provider.addProcessingConversation(_conversation('off-page', status: ConversationStatus.processing));
@@ -574,13 +574,14 @@ void main() {
     );
     provider.conversationPageFetcherOverride = () async {
       calls++;
-      if (calls == 1) return (items: <ServerConversation>[], ok: false);
+      if (calls == 1) return (items: <ServerConversation>[], ok: false, truncated: false);
       return (
         items: [
           _conversation('page-49', status: ConversationStatus.completed),
           _conversation('page-50', status: ConversationStatus.completed),
         ],
         ok: true,
+        truncated: false,
       );
     };
     addTearDown(provider.dispose);
@@ -594,6 +595,30 @@ void main() {
     expect(provider.conversationServerOffset, 52);
     expect(provider.conversations.where((conversation) => conversation.id == 'page-49'), hasLength(1));
     expect(provider.conversations.where((conversation) => conversation.id == 'page-50'), hasLength(1));
+  });
+
+  test('load-more stops and surfaces a truncated page as final', () async {
+    final provider = ConversationProvider(
+      conversationListFetcher: () async => (
+        items: List<ServerConversation>.generate(
+          50,
+          (index) => _conversation('page-$index', status: ConversationStatus.completed),
+        ),
+        ok: true,
+      ),
+      isSignedIn: () => true,
+    );
+    provider.conversationPageFetcherOverride = () async =>
+        (items: [_conversation('page-50', status: ConversationStatus.completed)], ok: true, truncated: true);
+    addTearDown(provider.dispose);
+
+    await provider.fetchConversations();
+    expect(provider.hasMoreConversations, isTrue);
+
+    await provider.getMoreConversationsFromServer();
+
+    expect(provider.conversations.where((c) => c.id == 'page-50'), hasLength(1));
+    expect(provider.hasMoreConversations, isFalse, reason: 'A truncated page must be treated as the final page');
   });
 
   test('background refresh does not rewind a loaded page cursor', () async {
@@ -616,6 +641,7 @@ void main() {
           (index) => _conversation('next-$index', status: ConversationStatus.completed),
         ),
         ok: true,
+        truncated: false,
       );
     };
     addTearDown(provider.dispose);
@@ -826,7 +852,7 @@ void main() {
   });
 
   test('full fetch owns loading over an in-flight load-more request', () async {
-    final page = Completer<({List<ServerConversation> items, bool ok})>();
+    final page = Completer<({List<ServerConversation> items, bool ok, bool truncated})>();
     final lifecycle = Completer<({ServerConversation? item, bool ok})>();
     final firstPage = List<ServerConversation>.generate(
       50,
@@ -844,7 +870,11 @@ void main() {
 
     final more = provider.getMoreConversationsFromServer();
     final refresh = provider.fetchConversations();
-    page.complete((items: [_conversation('page-50', status: ConversationStatus.completed)], ok: true));
+    page.complete((
+      items: [_conversation('page-50', status: ConversationStatus.completed)],
+      ok: true,
+      truncated: false,
+    ));
     await more;
     expect(provider.isLoadingConversations, isTrue);
     lifecycle.complete((item: _conversation('c1', status: ConversationStatus.processing), ok: true));
@@ -1035,13 +1065,12 @@ ServerConversation _conversation(
   bool starred = false,
   String? folderId,
   String title = 'Title',
-}) =>
-    ServerConversation(
-      id: id,
-      createdAt: createdAt ?? DateTime.utc(2026),
-      structured: Structured(title, 'Overview'),
-      status: status,
-      discarded: discarded,
-      starred: starred,
-      folderId: folderId,
-    );
+}) => ServerConversation(
+  id: id,
+  createdAt: createdAt ?? DateTime.utc(2026),
+  structured: Structured(title, 'Overview'),
+  status: status,
+  discarded: discarded,
+  starred: starred,
+  folderId: folderId,
+);

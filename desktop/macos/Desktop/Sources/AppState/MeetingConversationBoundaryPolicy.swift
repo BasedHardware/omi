@@ -41,6 +41,16 @@ enum MeetingConversationBoundaryPolicy {
     rotationSucceeded ? transition.nextRole : previousRole
   }
 
+  /// Whether to tell the owner that note-taking started.
+  ///
+  /// The card states a fact, so it is owed only when the rotation actually
+  /// committed the meeting role. A failed rotation leaves capture on the
+  /// previous role — announcing there would claim notes that are not being
+  /// taken — and a rotation *out* of a meeting is the end, not the start.
+  static func shouldAnnounceNoteTaking(committedRole: Role, rotationSucceeded: Bool) -> Bool {
+    rotationSucceeded && committedRole == .meeting
+  }
+
   static func shouldFinishConversation(
     mode: AssistantSettings.AudioRecordingMode,
     meetingStateReady: Bool,

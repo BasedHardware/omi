@@ -32,10 +32,12 @@ enum SettingsWindow {
     /// `ShortcutBindingsTests` pins the live provider's behaviour rather than the stand-in's.
     static var shortcutProvider: ShortcutBindingProvider = InMemoryShortcutBindings()
 
+    /// - Parameter via: the route that asked for it — the panel's gear, the menu bar's row, or ⌘,.
+    ///   Reported here rather than at those three, so a fourth cannot arrive uncounted.
     /// - Parameter pane: which pane to open on. A caller that has a reason to be specific — the
     ///   permissions row in the menu bar wanting Capture, a privacy prompt wanting Exclusions — should
     ///   say so rather than dropping the user on General to find it.
-    static func present(pane: SettingsPane = .general) {
+    static func present(via: AnalyticsEvent.OpenSource, pane: SettingsPane = .general) {
         if let window = current {
             // A re-open should reflect anything that changed outside the app — a login item removed in
             // System Settings, an exclusions file edited by hand.
@@ -43,6 +45,10 @@ enum SettingsWindow {
             selection?.pane = pane
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
+            // A window brought forward is a visit to Settings; which branch it took is a fact about
+            // this process's history rather than about the user. Reported after the window is up, so
+            // the screen guard below — which declines rather than presenting — reports nothing.
+            ContextAnalytics.record(.surfaceOpened(.settings, via: via))
             return
         }
 
@@ -113,6 +119,7 @@ enum SettingsWindow {
         current = window
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        ContextAnalytics.record(.surfaceOpened(.settings, via: via))
     }
 
     static func dismiss() {

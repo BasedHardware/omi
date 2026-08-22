@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from database._client import get_customer_firestore_client
 from database import redis_db, users as users_db
+from config.plan_catalog import DESKTOP_PROFILE_DEFAULTS
 from models.users import PlanType, Subscription
 from utils.env_loader import EnvStage, resolve_stage_from_env
 from utils.executors import critical_executor, db_executor, run_blocking
@@ -31,9 +32,7 @@ from utils.observability.fallback import record_fallback
 from utils.observability.journeys import ClientJourneyAttempt
 from utils.other.endpoints import get_current_user_uid
 from utils.subscription import (
-    DESKTOP_ACCESS_TIER_ARCHITECT,
     DESKTOP_ACCESS_TIER_FREE,
-    DESKTOP_ACCESS_TIER_FULL,
     effective_desktop_access_tier,
     is_desktop_trial_paywalled,
 )
@@ -43,18 +42,13 @@ logger = logging.getLogger(__name__)
 
 _MAX_REQUEST_BYTES = 5 * 1024 * 1024
 _QUOTA_WINDOW_SECONDS = 24 * 60 * 60
-# Explicit per-tier ceilings. These are deliberately not a constant multiple of
-# a shared base row: measured desktop dogfooding runs ~37 extraction calls per
-# hour of active use, so the architect extraction ceiling is sized for a genuine
-# 24-hour day (~888 calls) plus burst headroom, while reasoning is sized for a
-# background reconciler that batches ~2 calls per pass on top of the per-visit
-# gate and director calls. Lower tiers are sized for a partial day and stay
-# governed by the device-side frequency gate.
-_TIER_DAILY_LIMITS: dict[str, dict[str, int]] = {
-    DESKTOP_ACCESS_TIER_FREE: {"proactive_extraction": 150, "proactive_reasoning": 60},
-    DESKTOP_ACCESS_TIER_FULL: {"proactive_extraction": 1000, "proactive_reasoning": 500},
-    DESKTOP_ACCESS_TIER_ARCHITECT: {"proactive_extraction": 2000, "proactive_reasoning": 1000},
-}
+# The catalog owns these profile allocations. They are deliberately not a
+# constant multiple of a shared base row: measured desktop dogfooding runs
+# ~37 extraction calls per hour of active use, so the architect extraction
+# ceiling is sized for a genuine 24-hour day (~888 calls) plus burst headroom,
+# while reasoning is sized for a background reconciler that batches ~2 calls per
+# pass on top of the per-visit gate and director calls. Lower tiers are sized
+# for a partial day and stay governed by the device-side frequency gate.
 _OPERATION_LANES = {
     "proactive_extraction": "omi:auto:desktop-proactive-extraction",
     "proactive_reasoning": "omi:auto:desktop-proactive-reasoning",
@@ -185,10 +179,13 @@ def _quota_limit_for_subscription(operation: ProactiveOperation, subscription: S
     """Return the server-authoritative proactive ceiling for a verified plan."""
     plan = subscription.plan if subscription is not None else PlanType.basic
     tier = effective_desktop_access_tier(plan, subscription)
-    # Keep the lookup total: an unrecognised tier resolves to the free row
-    # rather than raising, so a new tier string can never 500 the lane.
-    limits = _TIER_DAILY_LIMITS.get(tier, _TIER_DAILY_LIMITS[DESKTOP_ACCESS_TIER_FREE])
-    return limits[operation.value]
+    # Keep the lookup total: an unrecognised tier resolves to the catalog's
+    # free profile rather than raising, so a new tier string can never 500 the
+    # lane. The router owns the meter and reservation mechanics; the catalog
+    # owns the per-profile allocation.
+    profile = DESKTOP_PROFILE_DEFAULTS.get(tier, DESKTOP_PROFILE_DEFAULTS[DESKTOP_ACCESS_TIER_FREE])
+    limits = profile['proactivity_daily']
+    return int(limits[operation.value])
 
 
 class ProactiveOperation(str, Enum):

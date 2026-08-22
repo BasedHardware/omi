@@ -384,4 +384,101 @@ final class ContextProactivityRetrievalHopTests: XCTestCase {
     // The whole object must serialize into the delivery's provenance JSON.
     XCTAssertNoThrow(try JSONSerialization.data(withJSONObject: provenance, options: [.sortedKeys]))
   }
+
+  func testForcedLookupQueryFromUserQuestionFact() {
+    let facts = [
+      "fact:newest The user is asking: Where is the newest Omi desktop build? [evidence: body; refs: []]",
+      "fact:older The user is asking: What is the latest omi desktop app download link? [evidence: body text; refs: []]",
+      "fact:ctx The user is drafting an email addressed to david@scalingforever.com. [evidence: To david; refs: []]",
+    ]
+    // Snapshot fact lines are newest-first; the newest question wins.
+    let lookup = ContextDirectorRetrievalHop.forcedLookupQuery(validatedFacts: facts)
+    XCTAssertEqual(lookup?.query, "The user is asking: Where is the newest Omi desktop build?")
+    XCTAssertEqual(lookup?.questionFactIDs, ["newest", "older"], "delivery consumes every question fact")
+    // No user-question fact -> no forced retrieval.
+    XCTAssertNil(ContextDirectorRetrievalHop.forcedLookupQuery(validatedFacts: [facts[2]]))
+    XCTAssertNil(ContextDirectorRetrievalHop.forcedLookupQuery(validatedFacts: []))
+    // A question someone ELSE asked never forces a lookup.
+    XCTAssertNil(
+      ContextDirectorRetrievalHop.forcedLookupQuery(validatedFacts: [
+        "fact:other David asked when the offsite is scheduled? [evidence: thread; refs: []]"
+      ]))
+  }
+
+  func testImpliedCitationsMatchOnIdentifiersOnly() {
+    let items = [
+      ContextRetrievedItem(
+        ref: "memory:dl-1", title: "Memory",
+        preview:
+          "The download link for the latest Omi desktop app (macOS) is omi.me/desktop. Share when asked.",
+        createdAt: nil),
+      ContextRetrievedItem(
+        ref: "conversation:noise", title: "Conversation",
+        preview: "Jii and Speaker 1 troubleshoot the latest Omi desktop notification issue.",
+        createdAt: nil),
+    ]
+    // A shared identifier token attributes — despite the preview's trailing period.
+    XCTAssertEqual(
+      ContextDirectorRetrievalHop.impliedCitations(
+        message: "The latest Omi desktop app download link is omi.me/desktop", items: items,
+        question: "What is the latest omi desktop app download link?"),
+      ["memory:dl-1"])
+    // Plain-word overlap with a noise item never attributes: an invented value
+    // sharing only common phrases dies at the veto.
+    XCTAssertEqual(
+      ContextDirectorRetrievalHop.impliedCitations(
+        message: "The latest Omi desktop download link is omi.me/legacy-2024", items: items,
+        question: "What is the latest omi desktop app download link?"),
+      [])
+    // Content matching nothing retrieved earns no citation.
+    XCTAssertEqual(
+      ContextDirectorRetrievalHop.impliedCitations(
+        message: "You should restart your computer.", items: items, question: ""),
+      [])
+    // A hallucinated SUPERSTRING of a retrieved identifier must not ground:
+    // substring matching let "omi.me/desktop" attribute a message pointing at
+    // "omi.me/desktop-scam.xyz". Exact token intersection rejects it.
+    XCTAssertEqual(
+      ContextDirectorRetrievalHop.impliedCitations(
+        message: "Download it at omi.me/desktop-scam.xyz today", items: items,
+        question: "What is the latest omi desktop app download link?"),
+      [])
+    // Scheme and www prefixes normalize away on both sides, so a memory that
+    // stored the full URL still grounds a message that writes it bare.
+    let schemed = [
+      ContextRetrievedItem(
+        ref: "memory:dl-2", title: "Memory",
+        preview: "Grab it from https://www.omi.me/desktop when needed.", createdAt: nil)
+    ]
+    XCTAssertEqual(
+      ContextDirectorRetrievalHop.impliedCitations(
+        message: "The link is omi.me/desktop.", items: schemed, question: ""),
+      ["memory:dl-2"])
+  }
+
+  func testQuestionFactConsumptionRequiresACitedAnswer() {
+    let forced = ContextDirectorRetrievalHop.ForcedLookup(
+      query: "The user is asking: where is the newest Omi build?",
+      questionFactIDs: ["q1", "q2"])
+    // Delivered answer citing retrieved content consumes every question fact.
+    XCTAssertEqual(
+      ContextDirectorRetrievalHop.consumableQuestionFacts(
+        forced: forced, retrievalCompleted: true, citedRetrievedRefs: ["memory:dl-1"]),
+      ["q1", "q2"])
+    // Empty/failed retrieval: the question stays armed.
+    XCTAssertEqual(
+      ContextDirectorRetrievalHop.consumableQuestionFacts(
+        forced: forced, retrievalCompleted: false, citedRetrievedRefs: []),
+      [])
+    // An unrelated bucket-grounded delivery (no retrieved citations) sharing
+    // the bucket must not consume the still-unanswered question.
+    XCTAssertEqual(
+      ContextDirectorRetrievalHop.consumableQuestionFacts(
+        forced: forced, retrievalCompleted: true, citedRetrievedRefs: []),
+      [])
+    XCTAssertEqual(
+      ContextDirectorRetrievalHop.consumableQuestionFacts(
+        forced: nil, retrievalCompleted: true, citedRetrievedRefs: ["memory:dl-1"]),
+      [])
+  }
 }

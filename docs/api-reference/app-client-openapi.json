@@ -1279,6 +1279,7 @@
         "type": "object"
       },
       "ActionItemsResponse": {
+        "description": "List envelope; ``truncated`` is set only when the request's list-read\nbudget ended the aggregate scan early (#11831) — such pages may not be a\ncomplete prefix, so ``has_more`` is forced true as well.",
         "properties": {
           "action_items": {
             "items": {
@@ -1290,6 +1291,11 @@
           "has_more": {
             "default": false,
             "title": "Has More",
+            "type": "boolean"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
             "type": "boolean"
           }
         },
@@ -17789,10 +17795,16 @@
             "type": "integer"
           },
           "cost_usd": {
-            "default": 0.0,
-            "minimum": 0.0,
-            "title": "Cost Usd",
-            "type": "number"
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Usd"
           },
           "input_tokens": {
             "default": 0,
@@ -17814,6 +17826,37 @@
           }
         },
         "title": "RecordLlmUsageBucketRequest",
+        "type": "object"
+      },
+      "ReferralClaimRequest": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "ReferralClaimRequest",
+        "type": "object"
+      },
+      "ReferralClaimResponse": {
+        "properties": {
+          "claimed": {
+            "title": "Claimed",
+            "type": "boolean"
+          },
+          "trial_days": {
+            "title": "Trial Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "claimed",
+          "trial_days"
+        ],
+        "title": "ReferralClaimResponse",
         "type": "object"
       },
       "ReferralLinkResponse": {
@@ -18752,6 +18795,40 @@
         "title": "SendMessageRequest",
         "type": "object"
       },
+      "SendShareEmailRequest": {
+        "properties": {
+          "recipient_emails": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "minItems": 1,
+            "title": "Recipient Emails",
+            "type": "array"
+          }
+        },
+        "required": [
+          "recipient_emails"
+        ],
+        "title": "SendShareEmailRequest",
+        "type": "object"
+      },
+      "SendShareEmailResponse": {
+        "properties": {
+          "sent_to": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Sent To",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sent_to"
+        ],
+        "title": "SendShareEmailResponse",
+        "type": "object"
+      },
       "SetConversationActionItemsStateRequest": {
         "properties": {
           "items_idx": {
@@ -18887,6 +18964,46 @@
           "token"
         ],
         "title": "ShareChatMessagesResponse",
+        "type": "object"
+      },
+      "ShareRecipient": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "ShareRecipient",
+        "type": "object"
+      },
+      "ShareRecipientsResponse": {
+        "properties": {
+          "recipients": {
+            "items": {
+              "$ref": "#/components/schemas/ShareRecipient"
+            },
+            "title": "Recipients",
+            "type": "array"
+          }
+        },
+        "required": [
+          "recipients"
+        ],
+        "title": "ShareRecipientsResponse",
         "type": "object"
       },
       "ShareTasksRequest": {
@@ -25302,7 +25419,7 @@
     },
     "/v1/action-items": {
       "get": {
-        "description": "Get action items for the current user.",
+        "description": "Get action items for the current user.\n\nLarge accounts can outrun the request budget; such reads return the honest\npartial page with ``truncated=true``, ``has_more=true``, and the\n``X-Omi-List-Truncated: true`` header instead of a bare middleware 504\n(#11831).",
         "operationId": "get_action_items_v1_action_items_get",
         "parameters": [
           {
@@ -33179,7 +33296,7 @@
     },
     "/v1/conversations": {
       "get": {
-        "description": "List responses may omit detail-only fields such as transcript_segments. Clients should treat omitted transcript_segments as unknown/not loaded, not as an empty transcript.",
+        "description": "List responses may omit detail-only fields such as transcript_segments. Clients should treat omitted transcript_segments as unknown/not loaded, not as an empty transcript. Large accounts can outrun the request budget; such responses return a partial newest-first array with the X-Omi-List-Truncated: true header instead of a 504 (#11831).",
         "operationId": "get_conversations_v1_conversations_get",
         "parameters": [
           {
@@ -36232,6 +36349,193 @@
           }
         ],
         "summary": "Set Assignee Conversation Segment",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/share-email": {
+      "post": {
+        "description": "Send the meeting summary to the addresses the owner chose.\n\nThe card lets the owner type a recipient, so the address is theirs to pick\nrather than something we detected; detection only prefills the field. What\nkeeps this from being an open relay is unchanged: the sender must own the\nconversation, the mail carries only that conversation's own summary and\nshare link with the owner as reply-to, the request schema caps how many\naddresses one send may carry, and a per-owner daily quota bounds the total.\nSending\nmakes the conversation link-visible first (same contract as copying the\nshare link) so the emailed link resolves.",
+        "operationId": "send_conversation_share_email_v1_conversations__conversation_id__share_email_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendShareEmailRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendShareEmailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Send Conversation Share Email",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/share-recipients": {
+      "get": {
+        "description": "Who the meeting summary could be sent to: calendar-detected participants minus the owner.",
+        "operationId": "get_conversation_share_recipients_v1_conversations__conversation_id__share_recipients_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareRecipientsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Conversation Share Recipients",
         "tags": [
           "conversations"
         ]
@@ -52399,6 +52703,93 @@
         ]
       }
     },
+    "/v1/users/me/referral/claim": {
+      "post": {
+        "operationId": "claim_referral_v1_users_me_referral_claim_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReferralClaimRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralClaimResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Claim Referral",
+        "tags": [
+          "referrals"
+        ]
+      }
+    },
     "/v1/users/me/subscription": {
       "get": {
         "description": "Gets the user's subscription plan and usage.",
@@ -58980,6 +59371,7 @@
         ]
       },
       "get": {
+        "description": "List memories, newest first, as a bare JSON array.\n\nLarge accounts can outrun the request budget; such reads return an honest\npartial array with the ``X-Omi-List-Truncated: true`` header and no\n``X-Omi-Memory-Next-Cursor`` instead of a bare middleware 504 (#11831).",
         "operationId": "get_memories_v3_memories_get",
         "parameters": [
           {

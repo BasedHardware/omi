@@ -481,6 +481,80 @@ def test_provider_timeout_has_typed_non_retryable_terminal_response(monkeypatch)
     assert "private prompt" not in output.getvalue()
 
 
+@pytest.mark.parametrize("upstream_status", [502, 503])
+def test_provider_availability_fault_authorizes_client_replay(monkeypatch, upstream_status):
+    """An upstream 502/503 delivered nothing, so the caller may re-issue it.
+
+    Both desktop clients read this decision off the wire: macOS gates
+    `shouldAutoRetry` on `X-Omi-Retryable`, and the Windows Gemini and rewind
+    embedding clients retry only on a 429 or a 503 status. Reporting a
+    non-retryable 502 revoked replay on both at once.
+    """
+    output = io.StringIO()
+    monkeypatch.setattr(desktop_proxy.sys, "stdout", output)
+    telemetry = desktop_proxy.ProxyTelemetry(make_request(), streaming=False)
+    response = httpx.Response(upstream_status, request=httpx.Request("POST", "https://provider.invalid"))
+
+    result = desktop_proxy._provider_error(response, telemetry)
+
+    assert result.status_code == 503
+    assert result.headers["x-omi-error-class"] == "provider_unavailable"
+    assert result.headers["x-omi-retryable"] == "true"
+    assert result.headers["retry-after"] == str(desktop_proxy._PROVIDER_UNAVAILABLE_RETRY_AFTER_SECONDS)
+    event = json.loads(output.getvalue())
+    assert event["outcome"] == "provider_unavailable"
+    assert event["upstream_status"] == upstream_status
+    assert event["retryable"] is True
+
+
+def test_provider_internal_error_stays_terminal(monkeypatch):
+    """500 is not an availability signal — it can be a verdict on the request,
+    so it keeps the terminal 502 rather than inviting a replay of the same body."""
+    monkeypatch.setattr(desktop_proxy.sys, "stdout", io.StringIO())
+    telemetry = desktop_proxy.ProxyTelemetry(make_request(), streaming=False)
+    response = httpx.Response(500, request=httpx.Request("POST", "https://provider.invalid"))
+
+    result = desktop_proxy._provider_error(response, telemetry)
+
+    assert result.status_code == 502
+    assert result.headers["x-omi-retryable"] == "false"
+
+
+@pytest.mark.asyncio
+async def test_proxy_reports_upstream_unavailable_as_retryable(monkeypatch):
+    """The whole non-stream route, from dispatch to the headers the client sees."""
+
+    class UnavailableClient:
+        async def post(self, *args, **kwargs):
+            return httpx.Response(
+                503,
+                json={"error": {"code": 503, "message": "The service is currently unavailable."}},
+                request=httpx.Request("POST", "https://provider.invalid"),
+            )
+
+    async def meter(_uid, path, _model, _action):
+        return path
+
+    async def route(path, _model, _action, _query, **_kwargs):
+        return desktop_proxy.UpstreamRoute("https://provider.invalid", {}, {}, "ai_studio", "server_key", "global")
+
+    monkeypatch.setattr(desktop_proxy.sys, "stdout", io.StringIO())
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    monkeypatch.setattr(desktop_proxy, "_meter_server_request", meter)
+    monkeypatch.setattr(desktop_proxy, "_upstream", route)
+    monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_client", lambda: UnavailableClient())
+    monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_semaphore", lambda: asyncio.Semaphore(1))
+
+    response = await desktop_proxy._proxy(
+        make_request(), "models/gemini-embedding-001:batchEmbedContents", False, "user"
+    )
+
+    assert response.status_code == 503
+    assert response.headers["x-omi-retryable"] == "true"
+    assert response.headers["x-omi-error-class"] == "provider_unavailable"
+    assert "currently unavailable" not in response.body.decode()
+
+
 @pytest.mark.asyncio
 async def test_proxy_dispatches_once_and_classifies_read_timeout(monkeypatch):
     calls = 0

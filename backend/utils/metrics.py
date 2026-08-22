@@ -361,6 +361,30 @@ MEMORY_HISTORICAL_SUPPRESSION_TOTAL = Counter(
     ['reason'],
 )
 
+LIST_READ_REQUEST_TOTAL = Counter(
+    'list_read_requests_total',
+    'Bounded list GET read outcomes by route',
+    ['route', 'outcome'],
+)
+
+LIST_READ_DOCUMENTS_TOTAL = Counter(
+    'list_read_documents_total',
+    'Documents scanned by bounded list GET reads by route',
+    ['route'],
+)
+
+LIST_READ_SECONDS = Histogram(
+    'list_read_seconds',
+    'Wall-clock seconds spent in bounded list GET reads by route',
+    ['route'],
+)
+
+for _list_route in ('action-items', 'conversations', 'memories'):
+    LIST_READ_DOCUMENTS_TOTAL.labels(route=_list_route)
+    LIST_READ_SECONDS.labels(route=_list_route)
+    for _list_outcome in ('complete', 'truncated'):
+        LIST_READ_REQUEST_TOTAL.labels(route=_list_route, outcome=_list_outcome)
+
 MEMORY_HISTORICAL_MATERIALIZATION_TOTAL = Counter(
     'memory_historical_materialization_total',
     'Lazy historical-memory materialization outcomes',

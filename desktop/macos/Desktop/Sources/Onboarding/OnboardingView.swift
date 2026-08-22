@@ -643,6 +643,7 @@ struct OnboardingView: View {
     // Restore the real chat projection before revealing the product UI.
     Task {
       await chatProvider.finishOnboardingJournal()
+      OnboardingFlow.markCompleted(for: RuntimeOwnerIdentity.currentOwnerId())
       appState.hasCompletedOnboarding = true
     }
 

@@ -118,6 +118,9 @@ _TOTAL_TIMEOUT_SECONDS = 75.0
 _CREDENTIAL_TIMEOUT_SECONDS = 5.0
 _POOL_WAIT_SECONDS = 5.0
 _DISCONNECT_POLL_SECONDS = 0.1
+# Both desktop clients already back off on their own (macOS 1s/2s, Windows
+# 400/800ms, two retries each), so this only floors how soon a replay may start.
+_PROVIDER_UNAVAILABLE_RETRY_AFTER_SECONDS = 1
 
 _REQUEST_ID_PATTERN = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._:-]{7,63}$')
 _REVISION_PATTERN = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,126}$')
@@ -1010,6 +1013,20 @@ def _provider_error(response: httpx.Response, telemetry: ProxyTelemetry) -> Resp
             'Gemini provider timed out before returning a terminal response',
             False,
             None,
+        )
+    elif status in {502, 503}:
+        # An upstream availability fault is a capacity signal, not a verdict on
+        # the request: nothing was delivered, so re-issuing is safe. This proxy
+        # delegates the re-issue to the caller, and both desktop clients gate on
+        # what it reports here — macOS on `X-Omi-Retryable`, Windows on seeing
+        # 503 itself. Collapsing it into a non-retryable 502 revoked that
+        # authorization on both, so one provider blip failed the user's call.
+        code, proxy_status, message, retryable, retry_after = (
+            'provider_unavailable',
+            503,
+            'Gemini provider is temporarily unavailable',
+            True,
+            _PROVIDER_UNAVAILABLE_RETRY_AFTER_SECONDS,
         )
     elif status >= 500:
         code, proxy_status, message, retryable, retry_after = (

@@ -417,14 +417,30 @@ async def test_record_usage_charges_web_search_requests(monkeypatch):
 @pytest.mark.asyncio
 async def test_record_usage_skips_byok_requests(monkeypatch):
     calls = []
+    exclusions = []
 
     async def run_blocking(_, function, *args):
         calls.append((function, args))
+        function(*args)
 
     monkeypatch.setattr(desktop_chat, 'run_blocking', run_blocking)
     monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: 'anthropic-key')
+    # The exclusion call site passes firestore_client=get_customer_firestore_client(),
+    # which is evaluated before the stubbed recorder runs and builds a real client --
+    # resolving GCP credentials and reaching the metadata server under the hermetic
+    # network guard. Production must keep using the customer client (record_llm_cost_exclusion
+    # falls back to the default `db`, not the customer client, when passed None), so stub
+    # the factory here rather than dropping the argument.
+    monkeypatch.setattr(desktop_chat, 'get_customer_firestore_client', lambda: object())
+    monkeypatch.setattr(
+        desktop_chat.llm_usage_db,
+        'record_llm_cost_exclusion',
+        lambda *args, **kwargs: exclusions.append((args, kwargs)),
+    )
     await desktop_chat._record_usage('user', {'input_tokens': 3, 'web_search_requests': 1})
-    assert calls == []
+    assert len(calls) == 1
+    assert exclusions[0][0] == ('user',)
+    assert exclusions[0][1]['cost_exclusion'] == 'byok_provider_cost'
 
 
 def test_response_preserves_openai_tool_and_cache_usage():

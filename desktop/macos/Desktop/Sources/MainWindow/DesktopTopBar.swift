@@ -4,8 +4,8 @@ import SwiftUI
 /// The constant floating top bar.
 ///
 /// **It carries the destinations flat, and nothing opens.** On the left, one pill per destination:
-/// `Home`, `Library`, `Tasks`, `Rewind`, `Apps`, then the referral action. On the right, three wordless controls:
-/// microphone, screen capture, settings.
+/// `Home`, `Library`, `Tasks`, `Rewind`, `Apps`. On the right, the referral action sits immediately
+/// before the microphone, followed by screen capture and settings.
 ///
 /// The bar used to spell out `Home · Memory · Tasks · Apps` beside `Listening` and `Capture`, and both
 /// halves were wrong once Home became a search surface. A **`Memory` destination sitting next to a
@@ -71,18 +71,16 @@ struct DesktopTopBar: View {
         Spacer(minLength: 0)
         TopNavigationBarLayout(
           expandedNavigation: {
-            HStack(spacing: TopNavigationPillMetrics.itemSpacing) {
-              TopNavigationDestinationRow(
-                selectedIndex: selectedIndex, badges: badges, onSelect: navigate)
-              ReferralTopBarButton { showingReferral = true }
-            }
+            TopNavigationDestinationRow(
+              selectedIndex: selectedIndex, badges: badges, onSelect: navigate)
           },
           compactNavigation: { compactNavigationMenu },
           persistentControls: {
-            HStack(spacing: OmiSpacing.sm) {
-              DesktopUpdateStatusChip()
-              ShellStatusIcons(appState: appState)
-            }
+            TopNavigationTrailingControlsLayout(
+              updateStatus: { DesktopUpdateStatusChip() },
+              referral: { ReferralTopBarButton { showingReferral = true } },
+              statusControls: { ShellStatusIcons(appState: appState) }
+            )
           },
           settings: { settingsButton }
         )
@@ -123,12 +121,6 @@ struct DesktopTopBar: View {
         } label: {
           Label(item.title, systemImage: item.icon)
         }
-      }
-      Divider()
-      Button {
-        showingReferral = true
-      } label: {
-        Label("Refer", systemImage: "gift")
       }
     } label: {
       Label("Navigate", systemImage: "sidebar.left")
@@ -172,7 +164,42 @@ struct DesktopTopBar: View {
       onRewind()
       return
     }
-    OmiMotion.withGated(.easeOut(duration: 0.08)) { selectedIndex = index }
+    OmiMotion.withGated(.easeOut(duration: 0.08)) {
+      // The pill says `Activity`, so it opens Activity rather than whichever hub page was persisted
+      // last. `memoryDestinationRawValue` was declared here and never written — which is why this
+      // shell used to land on Memories with no chip row and no switcher: a dead end reachable from
+      // a cold launch, since the stored default is `.memories`.
+      if index == SidebarNavItem.conversations.rawValue {
+        memoryDestinationRawValue = MemoryHubDestination.activity.rawValue
+      }
+      selectedIndex = index
+    }
+  }
+}
+
+/// The right-side controls in their visual order. Keeping Refer in this cluster makes its placement
+/// independent of navigation width and keeps it directly beside the microphone at every window size.
+struct TopNavigationTrailingControlsLayout<UpdateStatus: View, Referral: View, StatusControls: View>: View {
+  let updateStatus: UpdateStatus
+  let referral: Referral
+  let statusControls: StatusControls
+
+  init(
+    @ViewBuilder updateStatus: () -> UpdateStatus,
+    @ViewBuilder referral: () -> Referral,
+    @ViewBuilder statusControls: () -> StatusControls
+  ) {
+    self.updateStatus = updateStatus()
+    self.referral = referral()
+    self.statusControls = statusControls()
+  }
+
+  var body: some View {
+    HStack(spacing: OmiSpacing.sm) {
+      updateStatus
+      referral
+      statusControls
+    }
   }
 }
 

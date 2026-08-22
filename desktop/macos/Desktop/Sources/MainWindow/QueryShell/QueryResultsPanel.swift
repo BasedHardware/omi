@@ -76,6 +76,17 @@ struct QueryResultsPanel<Content: View, Accessory: View, Footer: View>: View {
   /// it knows there is a control there and where controls on this panel sit. The alternative was to
   /// hand this file a `HomeChatMenu`, which would make a panel that draws counts and time windows
   /// start knowing what chat is.
+  /// What the chip row does on this surface. Home narrows its search results in place; Activity's
+  /// row is navigation — see `ActivityDestinationChip`.
+  var chipBehavior: ChipBehavior = .filterKinds
+
+  /// The two things a chip row can mean. Modelled so one surface cannot quietly become the other:
+  /// a row where some chips filter and some navigate teaches a rule and then breaks it.
+  enum ChipBehavior {
+    case filterKinds
+    case openDestinations(selected: ActivityDestinationChip, open: (ActivityDestinationChip) -> Void)
+  }
+
   @ViewBuilder var headerAccessory: () -> Accessory
   /// **The slot under the body, for the composer once a conversation is open.**
   ///
@@ -85,7 +96,6 @@ struct QueryResultsPanel<Content: View, Accessory: View, Footer: View>: View {
   /// rows it filters. See `QueryComposerPlacement`.
   @ViewBuilder var footer: () -> Footer
   @ViewBuilder var content: () -> Content
-
   @State private var matching: Int = 0
   /// Whether `total` is a finished count or a running one. See `QueryShellCorpusSettled`.
   @State private var corpusSettled = false
@@ -203,15 +213,28 @@ struct QueryResultsPanel<Content: View, Accessory: View, Footer: View>: View {
 
   // MARK: - Chips
 
+  @ViewBuilder
   private var chips: some View {
     HStack(spacing: QueryShellLayout.chipSpacing) {
-      ForEach(QueryShellKind.allCases) { kind in
-        QueryTypeChip(
-          title: kind.title,
-          isActive: request.kind == kind,
-          action: { request.kind = kind }
-        )
-        .accessibilityIdentifier("query-shell-chip-\(kind.rawValue)")
+      switch chipBehavior {
+      case .filterKinds:
+        ForEach(QueryShellKind.allCases) { kind in
+          QueryTypeChip(
+            title: kind.title,
+            isActive: request.kind == kind,
+            action: { request.kind = kind }
+          )
+          .accessibilityIdentifier("query-shell-chip-\(kind.rawValue)")
+        }
+      case .openDestinations(let selected, let open):
+        ForEach(ActivityDestinationChip.allCases) { chip in
+          QueryTypeChip(
+            title: chip.title,
+            isActive: chip == selected,
+            action: { open(chip) }
+          )
+          .accessibilityIdentifier("activity-chip-\(chip.rawValue)")
+        }
       }
       Spacer(minLength: 0)
     }
