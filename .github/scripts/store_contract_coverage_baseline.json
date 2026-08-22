@@ -1,6 +1,6 @@
 {
-  "account_cutover": 1,
-  "account_deletion_transitions": 1,
+  "account_cutover": 0,
+  "account_deletion_transitions": 0,
   "advice": 1,
   "calendar_meetings": 2,
   "candidates": 2,
