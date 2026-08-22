@@ -1697,6 +1697,26 @@ final class DesktopAutomationActionRegistry {
       return ["posted": conversationID]
     }
 
+    // Reads whatever notch card is on screen, so a flow can assert the card a
+    // person actually sees rather than trusting that a trigger fired.
+    register(
+      name: "notification_state",
+      summary: "Read the notch notification currently on screen (title, message, persistence).",
+      params: []
+    ) { _ in
+      guard let bar = FloatingControlBarManager.shared.barState,
+        let notification = bar.currentNotification
+      else {
+        return ["present": "false"]
+      }
+      return [
+        "present": "true",
+        "title": notification.title,
+        "message": notification.message,
+        "persistent": notification.isPersistent ? "true" : "false",
+      ]
+    }
+
     // Presents the same "Omi is taking notes" notice the meeting boundary
     // posts once a detected meeting has rotated into its recording session.
     register(
