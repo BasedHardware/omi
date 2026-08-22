@@ -1018,6 +1018,8 @@ export type OmiBridgeApi = {
   rewindPrimarySourceId: () => Promise<string | null>
   /** Display source containing the foreground window, with cursor/primary fallbacks. */
   rewindCaptureSourceId: () => Promise<string | null>
+  /** Whether Rewind can actually get a screen source right now, and why not. */
+  rewindCaptureDiagnostics: () => Promise<RewindCaptureDiagnostics>
   rewindSaveFrame: (
     data: Uint8Array,
     sourceId: string
@@ -2074,6 +2076,19 @@ export type RewindSettings = {
    *  foreground app/process name). Empty = capture everything. */
   excludedApps: string[]
   captureQuality: RewindCaptureQuality
+}
+
+/** Whether Rewind can actually get a screen source, and why not — see
+ *  main/rewind/sourceId.ts's getRewindCaptureDiagnostics. Read once on mount
+ *  (mirrors DbRecoveryStatus's "what happened at startup" shape): the
+ *  underlying fetch is cached for the process lifetime, so this is a stable
+ *  launch-time fact, not something that needs a push channel. */
+export type RewindCaptureDiagnostics = {
+  available: boolean
+  reason: string | null
+  /** Linux-only: the dominant real-world cause is a missing/misconfigured
+   *  Wayland desktop-portal ScreenCast backend for the running compositor. */
+  likelyMissingLinuxPortal: boolean
 }
 
 /** Runtime capture directive pushed main→renderer, derived from OS power/lock state.

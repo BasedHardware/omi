@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Rewind now shows a real in-app error when it can't get a screen source (e.g. no Wayland desktop portal configured), instead of silently never starting."
+  ]
+}
