@@ -544,6 +544,78 @@ describe("worker request contract", () => {
     expect(unknown.status).toBe(400);
   });
 
+  test("pagination cursor survives a strict atob implementation (WHATWG/V8)", async () => {
+    for (let i = 1; i <= 3; i += 1) {
+      await d1Mock
+        .prepare(
+          "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, ?, ?)"
+        )
+        .bind(
+          `cursor-msg-${i}`,
+          "test-account",
+          `message ${i}`,
+          i,
+          i,
+          JSON.stringify({
+            id: `cursor-msg-${i}`,
+            text: `message ${i}`,
+            sender: "human",
+            type: "text",
+            createdAt: i,
+            updatedAt: i,
+            chatSessionId: null,
+            appId: null,
+            journalRevision: 0,
+            payloadHash: "sha256:test",
+            messageSource: "desktop_chat",
+            rating: null,
+            reported: false,
+            generationOutcome: null,
+            revision: String(i),
+            attachments: [],
+          })
+        )
+        .run();
+    }
+
+    const firstPage = await fetchWorker("/v1/chat-messages?limit=2", {
+      headers: authenticatedHeaders,
+    });
+    expect(firstPage.status).toBe(200);
+    const firstBody = (await firstPage.json()) as {
+      messages: Array<{ id: string }>;
+      page: { olderCursor: string | null; hasOlder: boolean };
+    };
+    expect(firstBody.page.hasOlder).toBe(true);
+    expect(firstBody.page.olderCursor).not.toBeNull();
+    const cursor = firstBody.page.olderCursor!;
+
+    const originalAtob = globalThis.atob;
+    globalThis.atob = ((input: string) => {
+      if (input.length % 4 !== 0)
+        throw new Error(
+          `InvalidCharacterError: base64 length ${input.length} is not a multiple of 4`
+        );
+      return originalAtob(input);
+    }) as typeof atob;
+
+    try {
+      const secondPage = await fetchWorker(
+        `/v1/chat-messages?limit=2&olderCursor=${encodeURIComponent(cursor)}`,
+        { headers: authenticatedHeaders }
+      );
+      expect(secondPage.status).toBe(200);
+      const secondBody = (await secondPage.json()) as {
+        messages: Array<{ id: string }>;
+        page: { olderCursor: string | null; hasOlder: boolean };
+      };
+      expect(secondBody.messages).toHaveLength(1);
+      expect(secondBody.page.hasOlder).toBe(false);
+    } finally {
+      globalThis.atob = originalAtob;
+    }
+  });
+
   test("cancellation distinguishes accepted from already terminal", async () => {
     const accepted = await fetchWorker("/v1/chat-generations/generation-id", {
       method: "DELETE",
