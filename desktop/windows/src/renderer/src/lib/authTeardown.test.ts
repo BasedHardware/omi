@@ -26,12 +26,14 @@ const LAST_UID_KEY = 'omi.lastSignedInUid'
 
 const wipeUserData = vi.fn(async () => {})
 const byokClearAll = vi.fn(async () => {})
+const byokClearCodex = vi.fn(async () => {})
 const mcpClearKey = vi.fn(async () => {})
 const gmailSessionDisconnect = vi.fn(async () => ({ connected: false }))
 
 beforeEach(() => {
   wipeUserData.mockClear()
   byokClearAll.mockClear()
+  byokClearCodex.mockClear()
   mcpClearKey.mockClear()
   gmailSessionDisconnect.mockClear()
   h.invalidateConversationsCache.mockClear()
@@ -41,6 +43,7 @@ beforeEach(() => {
   ;(globalThis as { window: { omi: unknown } }).window.omi = {
     wipeUserData,
     byokClearAll,
+    byokClearCodex,
     mcpClearKey,
     gmailSessionDisconnect,
     byokGetAll: vi.fn(async () => ({}))
@@ -58,6 +61,7 @@ describe('teardownUserData', () => {
     expect(wipeUserData).toHaveBeenCalledTimes(1)
     // BYOK keys must be cleared so a second account can't send them (leak fix).
     expect(byokClearAll).toHaveBeenCalledTimes(1)
+    expect(byokClearCodex).toHaveBeenCalledTimes(1)
     // Hosted MCP export key likewise — cleared on sign-out / account switch.
     expect(mcpClearKey).toHaveBeenCalledTimes(1)
     // Gmail session partition cleared so a second account can't fetch the prior
@@ -82,6 +86,14 @@ describe('teardownUserData', () => {
 
     expect(h.invalidateConversationsCache).toHaveBeenCalledTimes(1)
     expect(localStorage.getItem('omi-chat-infinite-id')).toBeNull()
+  })
+
+  it('clears Codex even if the provider-key wipe fails', async () => {
+    byokClearAll.mockRejectedValueOnce(new Error('ipc down'))
+
+    await teardownUserData()
+
+    expect(byokClearCodex).toHaveBeenCalledTimes(1)
   })
 
   it('resets the Memories module cache and purges per-uid cold-start snapshots (cross-account leak fix)', async () => {
@@ -119,6 +131,7 @@ describe('reconcileAccountForSignIn — account-switch guard', () => {
     expect(wipeUserData).toHaveBeenCalledTimes(1)
     // The prior account's BYOK keys + Gmail session are cleared before B hydrates.
     expect(byokClearAll).toHaveBeenCalledTimes(1)
+    expect(byokClearCodex).toHaveBeenCalledTimes(1)
     expect(gmailSessionDisconnect).toHaveBeenCalledTimes(1)
     expect(localStorage.getItem(LAST_UID_KEY)).toBe('userB')
     // The uid pointer must survive teardown (it's machine-scoped, not in the

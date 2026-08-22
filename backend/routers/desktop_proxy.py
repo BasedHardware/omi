@@ -1442,7 +1442,13 @@ async def _proxy(request: Request, path: str, streaming: bool, uid: str) -> Resp
 
 
 async def _authorized_desktop_user(uid: str = Depends(get_current_user_uid)) -> str:
-    if await run_blocking(db_executor, is_desktop_trial_paywalled, uid, 'desktop'):
+    if await run_blocking(
+        db_executor,
+        is_desktop_trial_paywalled,
+        uid,
+        'desktop',
+        required_byok_provider='gemini',
+    ):
         raise HTTPException(status_code=402, detail='trial_expired')
     return uid
 

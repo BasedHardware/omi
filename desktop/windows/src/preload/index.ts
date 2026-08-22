@@ -421,6 +421,7 @@ const omi: OmiBridgeApi = {
   byokSet: (provider: ByokProvider, key: string) => ipcRenderer.invoke('byok:set', provider, key),
   byokClear: (provider: ByokProvider) => ipcRenderer.invoke('byok:clear', provider),
   byokClearAll: () => ipcRenderer.invoke('byok:clearAll'),
+  byokClearCodex: () => ipcRenderer.invoke('byok:clearCodex'),
   byokIsActive: () => ipcRenderer.invoke('byok:isActive'),
   // Live-validate the stored keys and reconcile backend BYOK activation. The
   // Firebase token is relayed from the renderer (its session owns it).

@@ -51,6 +51,9 @@ export function registerByokHandlers(): void {
     getStore().clearAll()
     broadcastByokChanged()
   })
+  ipcMain.handle('byok:clearCodex', (): void => {
+    getStore().clearCodexKey()
+  })
   ipcMain.handle('byok:isActive', (): boolean => getStore().isActive())
 
   // Validate the stored keys live and reconcile the backend BYOK activation.

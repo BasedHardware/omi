@@ -71,6 +71,13 @@ class _ChatGoogleGenerativeAI(_BaseChatModel):
         self.model = self.model_name
 
 
+class _ChatAnthropic(_BaseChatModel):
+    def __init__(self, **kwargs):
+        self._constructor_kwargs = dict(kwargs)
+        self.model_name = kwargs.get('model')
+        self.model = self.model_name
+
+
 class _OpenAIEmbeddings:
     def __init__(self, **_kwargs):
         pass
@@ -105,8 +112,14 @@ _install_module('langchain_core.language_models', BaseChatModel=_BaseChatModel)
 _install_module('langchain_core.output_parsers', PydanticOutputParser=_PydanticOutputParser)
 _install_module('langchain_openai', ChatOpenAI=_ChatOpenAI, OpenAIEmbeddings=_OpenAIEmbeddings)
 _install_module('langchain_google_genai', ChatGoogleGenerativeAI=_ChatGoogleGenerativeAI)
+_install_module('langchain_anthropic', ChatAnthropic=_ChatAnthropic)
 _install_module('tiktoken', encoding_for_model=MagicMock(return_value=_Encoding()))
-_install_module('utils.byok', get_byok_key=MagicMock(return_value=None), get_byok_uid=MagicMock(return_value=None))
+_install_module(
+    'utils.byok',
+    get_byok_key=MagicMock(return_value=None),
+    get_byok_llm_provider=MagicMock(return_value=None),
+    get_byok_uid=MagicMock(return_value=None),
+)
 
 _HEAVY_MOCKS = {
     'firebase_admin': MagicMock(),
@@ -167,6 +180,7 @@ def _clients_subprocess_script(assertion: str) -> str:
         "    'langchain_core.output_parsers',",
         "    'langchain_core.outputs',",
         "    'langchain_google_genai',",
+        "    'langchain_anthropic',",
         "    'langchain_openai',",
         "    'tiktoken',",
         "    'database',",
@@ -1078,8 +1092,8 @@ class TestEffectiveBYOKProvider:
     def test_gemini_passthrough(self):
         assert _effective_byok_provider('gemini-2.5-flash', 'gemini') == 'gemini'
 
-    def test_openrouter_gemini_maps_to_gemini(self):
-        assert _effective_byok_provider('gemini-3-flash-preview', 'openrouter') == 'gemini'
+    def test_openrouter_gemini_uses_openrouter_key(self):
+        assert _effective_byok_provider('gemini-3-flash-preview', 'openrouter') == 'openrouter'
 
     def test_openrouter_non_gemini_stays_openrouter(self):
         assert _effective_byok_provider('anthropic/claude-3.5-sonnet', 'openrouter') == 'openrouter'

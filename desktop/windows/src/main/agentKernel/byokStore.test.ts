@@ -34,6 +34,21 @@ describe('ByokKeyStore', () => {
     expect(store.getKey('anthropic')).toBeNull()
   })
 
+  it('stores the Codex key separately from BYOK providers', () => {
+    store.setCodexKey('sk-codex')
+    expect(store.getCodexKey()).toBe('sk-codex')
+    expect(store.getAllKeys()).toEqual({})
+    store.clearCodexKey()
+    expect(store.getCodexKey()).toBeNull()
+  })
+
+  it('migrates a legacy OpenAI Codex key without removing the BYOK slot', () => {
+    store.setKey('openai', 'sk-legacy-codex')
+    expect(store.getCodexKey()).toBe('sk-legacy-codex')
+    store.clearKey('openai')
+    expect(store.getCodexKey()).toBe('sk-legacy-codex')
+  })
+
   it('getAllKeys returns every stored provider', () => {
     store.setKey('openai', 'sk-openai')
     store.setKey('anthropic', 'sk-ant')
@@ -62,11 +77,21 @@ describe('ByokKeyStore', () => {
     expect(store.getKey('anthropic')).toBe('sk-ant')
   })
 
-  it('clearAll removes everything', () => {
+  it('clearAll removes BYOK keys while preserving the Codex key', () => {
     store.setKey('openai', 'sk-openai')
     store.setKey('anthropic', 'sk-ant')
+    store.setCodexKey('sk-codex')
     store.clearAll()
     expect(store.getAllKeys()).toEqual({})
+    expect(store.getCodexKey()).toBe('sk-codex')
+  })
+
+  it('does not restore an OpenAI BYOK key after Codex is explicitly cleared', () => {
+    store.setKey('openai', 'sk-openai')
+    store.setCodexKey('sk-codex')
+    store.clearCodexKey()
+    expect(store.getCodexKey()).toBeNull()
+    expect(store.getKey('openai')).toBe('sk-openai')
   })
 
   it('after sign-out (clearAll on a full set) getAllKeys is empty AND isActive is false', () => {
@@ -82,12 +107,13 @@ describe('ByokKeyStore', () => {
     expect(store.isActive()).toBe(false)
   })
 
-  it('isActive is true only at 4/4 providers', () => {
+  it('isActive is true with a configured LLM provider', () => {
     expect(store.isActive()).toBe(false)
     store.setKey('openai', 'sk-openai')
+    expect(store.isActive()).toBe(true)
     store.setKey('anthropic', 'sk-ant')
     store.setKey('gemini', 'gm-key')
-    expect(store.isActive()).toBe(false)
+    expect(store.isActive()).toBe(true)
     store.setKey('deepgram', 'dg-key')
     expect(store.isActive()).toBe(true)
   })

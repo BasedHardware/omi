@@ -2,8 +2,8 @@ import XCTest
 
 @testable import Omi_Computer
 
-/// Verifies the BYOK-vs-paywall precedence fix: a user with all four BYOK
-/// keys configured locally is never paywalled, regardless of the persisted
+/// Verifies the BYOK-vs-paywall precedence fix: a user with a configured BYOK
+/// key locally is never paywalled, regardless of the persisted
 /// `desktop_isPaywalled` flag.
 @MainActor final class BYOKPaywallTests: XCTestCase {
   private let paywallKey = "desktop_isPaywalled"
@@ -24,24 +24,34 @@ import XCTest
     CredentialHealthManager.shared.reset()
     clearAllBYOKKeys()
     UserDefaults.standard.removeObject(forKey: paywallKey)
+    UserDefaults.standard.removeObject(forKey: .byokLLMProvider)
   }
 
-  func testByokActiveRequiresAllFourKeys() {
+  func testByokActiveRequiresSelectedLLMKey() {
     clearAllBYOKKeys()
     XCTAssertFalse(APIKeyService.isByokActive)
 
-    // Three of four → still not active
+    // A selected LLM key activates BYOK without the optional providers.
+    UserDefaults.standard.set(BYOKLLMProvider.openrouter.rawValue, forKey: .byokLLMProvider)
     for p in BYOKProvider.allCases.dropLast() {
       UserDefaults.standard.set("k", forKey: p.storageKey)
     }
-    XCTAssertFalse(APIKeyService.isByokActive, "3/4 keys must not count as BYOK")
+    XCTAssertTrue(APIKeyService.isByokActive)
 
-    // All four → active
+    // All configured providers remain active.
     setAllBYOKKeys()
     XCTAssertTrue(APIKeyService.isByokActive)
   }
 
-  func testBuildHeadersDoesNotAttachPartialByokKeys() async throws {
+  func testLegacyLLMSelectionInfersStoredProvider() {
+    clearAllBYOKKeys()
+    UserDefaults.standard.removeObject(forKey: .byokLLMProvider)
+    UserDefaults.standard.set("sk-test-openai", forKey: BYOKProvider.openai.storageKey)
+
+    XCTAssertEqual(APIKeyService.selectedBYOKLLMProvider, .openai)
+  }
+
+  func testBuildHeadersAttachSelectedLLMByokKey() async throws {
     clearAllBYOKKeys()
     UserDefaults.standard.set("sk-test-openai", forKey: BYOKProvider.openai.storageKey)
 
@@ -49,7 +59,7 @@ import XCTest
     await client.setTestAuthHeader("Bearer test-token")
     let headers = try await client.buildHeaders()
 
-    XCTAssertNil(headers[BYOKProvider.openai.headerName])
+    XCTAssertEqual(headers[BYOKProvider.openai.headerName], "sk-test-openai")
   }
 
   func testBuildHeadersCanExplicitlyExcludeByokKeys() async throws {
@@ -78,6 +88,7 @@ import XCTest
 
   func testBuildHeadersSuppressesOnlyInvalidByokHeader() async throws {
     setAllBYOKKeys()
+    UserDefaults.standard.set(BYOKLLMProvider.openai.rawValue, forKey: .byokLLMProvider)
     let openAIKey = try XCTUnwrap(APIKeyService.byokKey(.openai))
     CredentialHealthManager.shared.recordProviderFailure(
       .providerAuthFailed(provider: .openai, mode: .byok),
@@ -91,13 +102,14 @@ import XCTest
     let headers = try await client.buildHeaders()
 
     XCTAssertNil(headers[BYOKProvider.openai.headerName])
-    for provider in BYOKProvider.allCases where provider != .openai {
-      XCTAssertEqual(headers[provider.headerName], "sk-test-\(provider.rawValue)")
-    }
+    XCTAssertEqual(headers[BYOKProvider.deepgram.headerName], "sk-test-deepgram")
+    XCTAssertNil(headers[BYOKProvider.openrouter.headerName])
+    XCTAssertNil(headers[BYOKProvider.anthropic.headerName])
+    XCTAssertNil(headers[BYOKProvider.gemini.headerName])
   }
 
   func testPaywallFlagSuppressedWhenByokActive() {
-    // The exact bug: trial-expired flag set, then user adds all 4 BYOK keys.
+    // The exact bug: trial-expired flag set, then user configures BYOK keys.
     UserDefaults.standard.set(true, forKey: paywallKey)
     setAllBYOKKeys()
     XCTAssertFalse(
@@ -119,13 +131,13 @@ import XCTest
     XCTAssertFalse(AppState.isPaywalledEffective)
   }
 
-  func testRemovingOneByokKeyReappliesPaywall() {
+  func testRemovingDeepgramKeyLeavesSelectedLLMByokActive() {
     UserDefaults.standard.set(true, forKey: paywallKey)
     setAllBYOKKeys()
     XCTAssertFalse(AppState.isPaywalledEffective)
 
-    // User clears their Deepgram key → no longer fully BYOK → paywall returns.
+    // Deepgram is optional when a selected LLM key remains configured.
     UserDefaults.standard.removeObject(forKey: BYOKProvider.deepgram.storageKey)
-    XCTAssertTrue(AppState.isPaywalledEffective)
+    XCTAssertFalse(AppState.isPaywalledEffective)
   }
 }

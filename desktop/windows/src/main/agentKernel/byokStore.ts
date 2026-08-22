@@ -12,7 +12,9 @@ import { join } from 'path'
 import { BYOK_PROVIDERS, isByokActive, type ByokKeys, type ByokProvider } from '../../shared/byok'
 
 /** On-disk shape: provider → base64-encoded safeStorage ciphertext. */
-type StoredFile = Partial<Record<ByokProvider, string>>
+type StoredFile = Partial<Record<ByokProvider | 'codex', string>> & {
+  codexMigrationComplete?: boolean
+}
 
 /**
  * Encrypted-at-rest store for the four BYOK provider keys. Reads/writes are
@@ -58,6 +60,24 @@ export class ByokKeyStore {
     }
   }
 
+  getCodexKey(): string | null {
+    const stored = this.readFile()
+    const enc = stored.codex ?? (stored.codexMigrationComplete ? undefined : stored.openai)
+    if (!enc) return null
+    try {
+      this.requireEncryption()
+      const key = safeStorage.decryptString(Buffer.from(enc, 'base64'))
+      if (!stored.codex && stored.openai && !stored.codexMigrationComplete) {
+        stored.codex = stored.openai
+        stored.codexMigrationComplete = true
+        this.writeFile(stored)
+      }
+      return key
+    } catch {
+      return null
+    }
+  }
+
   /** Decrypt and return every stored provider key. */
   getAllKeys(): ByokKeys {
     const stored = this.readFile()
@@ -91,6 +111,18 @@ export class ByokKeyStore {
     this.writeFile(data)
   }
 
+  setCodexKey(key: string): void {
+    const trimmed = key.trim()
+    if (!trimmed) {
+      this.clearCodexKey()
+      return
+    }
+    this.requireEncryption()
+    const data = this.readFile()
+    data.codex = safeStorage.encryptString(trimmed).toString('base64')
+    this.writeFile(data)
+  }
+
   /** Remove one provider's key. */
   clearKey(provider: ByokProvider): void {
     const data = this.readFile()
@@ -99,16 +131,27 @@ export class ByokKeyStore {
     this.writeFile(data)
   }
 
+  clearCodexKey(): void {
+    const data = this.readFile()
+    if (!('codex' in data) && data.codexMigrationComplete) return
+    delete data.codex
+    data.codexMigrationComplete = true
+    this.writeFile(data)
+  }
+
   /** Remove all stored keys (deletes the backing file). */
   clearAll(): void {
     try {
-      rmSync(this.filePath, { force: true })
+      const data = this.readFile()
+      for (const provider of BYOK_PROVIDERS) delete data[provider]
+      if (Object.keys(data).length === 0) rmSync(this.filePath, { force: true })
+      else this.writeFile(data)
     } catch {
       /* best-effort */
     }
   }
 
-  /** True when all four providers have a stored key (backend all-or-nothing). */
+  /** True when a configured LLM provider has a stored key. */
   isActive(): boolean {
     return isByokActive(this.getAllKeys())
   }

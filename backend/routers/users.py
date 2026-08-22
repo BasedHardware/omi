@@ -125,7 +125,13 @@ from utils.other.storage import (
     delete_user_person_speech_sample,
 )
 from utils.webhooks import webhook_first_time_setup
-from utils.byok import has_byok_keys, invalidate_byok_state_cache, peppered_fingerprint
+from utils.byok import (
+    get_byok_key,
+    has_byok_keys,
+    has_validated_byok_keys,
+    invalidate_byok_state_cache,
+    peppered_fingerprint,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -1096,7 +1102,7 @@ def get_user_usage_stats_endpoint(
 
 
 _SHA256_HEX_RE = re.compile(r'^[a-f0-9]{64}$')
-_BYOK_REQUIRED_PROVIDERS = {'openai', 'anthropic', 'gemini', 'deepgram'}
+_BYOK_ALLOWED_PROVIDERS = {'openai', 'anthropic', 'gemini', 'openrouter', 'deepgram'}
 
 
 class BYOKActivateRequest(BaseModel):
@@ -1115,14 +1121,14 @@ def activate_byok_endpoint(data: BYOKActivateRequest, uid: str = Depends(auth.ge
     detect rotation without ever seeing the keys. The live keys themselves
     travel on every request as headers; they are never persisted.
     """
-    missing = _BYOK_REQUIRED_PROVIDERS - set(data.fingerprints.keys())
-    if missing:
+    providers = set(data.fingerprints.keys())
+    if not providers - {'deepgram'}:
         raise HTTPException(
             status_code=400,
-            detail=f"Missing fingerprints for providers: {sorted(missing)}",
+            detail='At least one LLM provider fingerprint is required',
         )
     for provider, fp in data.fingerprints.items():
-        if provider not in _BYOK_REQUIRED_PROVIDERS:
+        if provider not in _BYOK_ALLOWED_PROVIDERS:
             raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
         if not _SHA256_HEX_RE.match(fp):
             raise HTTPException(
@@ -1173,7 +1179,7 @@ def get_user_subscription_endpoint(
     # these users aren't surprised by a disabled phone-call feature.
     unlimited_phone_quota = PhoneCallQuota(has_access=True, is_paid=True)
 
-    if users_db.is_byok_active(uid) and has_byok_keys():
+    if users_db.is_byok_active(uid) and has_validated_byok_keys() and get_byok_key('deepgram'):
         return UserSubscriptionResponse(
             subscription=_byok_unlimited_subscription(),
             transcription_seconds_used=0,
