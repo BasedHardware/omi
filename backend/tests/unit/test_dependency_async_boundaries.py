@@ -47,7 +47,11 @@ def _build_mcp_context(auth: _McpVerifiedAuth, *, surface: str) -> _ProductAutho
 
 @contextmanager
 def _loaded_dependencies() -> Iterator[tuple[ModuleType, ModuleType, ModuleType, ModuleType]]:
-    firebase_auth = _module('firebase_admin.auth', verify_id_token=lambda _token, **_kw: {'uid': 'user-1'})
+    # Bare module, no behaviour: production imports firebase_admin.auth ONLY in
+    # utils/auth/adapters/firebase.py (enforced by check_oss_auth_boundary), so nothing on this
+    # path calls it. The stub exists to let the import graph load. Proved rather than assumed:
+    # replacing the behaviour with a raiser left this file green (BACKLOG L15).
+    firebase_auth = _module('firebase_admin.auth')
     mcp_api_key_db = _module(
         'database.mcp_api_key',
         get_api_key_auth_result=lambda _token: SimpleNamespace(context=None, repairs=frozenset()),

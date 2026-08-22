@@ -33,6 +33,7 @@ def _require_internal_base(monkeypatch):
     # The test endpoints use host `ntfy` with no port, so base `http://ntfy` rewrites to identity.
     monkeypatch.setenv('UNIFIEDPUSH_INTERNAL_BASE_URL', 'http://ntfy')
 
+
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 
@@ -156,7 +157,9 @@ def test_send_to_user_no_endpoints_is_noop(monkeypatch):
 def test_keyless_endpoint_posts_plaintext_json(monkeypatch):
     _endpoints(monkeypatch, ['http://ntfy/plain?up=1'])
     captured = {}
-    monkeypatch.setattr(up, '_post_sync', lambda url, body, headers: captured.update(url=url, body=body, headers=headers) or 200)
+    monkeypatch.setattr(
+        up, '_post_sync', lambda url, body, headers: captured.update(url=url, body=body, headers=headers) or 200
+    )
 
     up.send_to_user('u1', PushMessage(tag='t', title='omi', body='hi', data={'type': 'x'}))
 
@@ -172,11 +175,15 @@ def test_keyed_endpoint_posts_hex_armored_encrypted_body(monkeypatch):
     import http_ece
 
     private_key = ec.generate_private_key(ec.SECP256R1())
-    p256dh = base64.urlsafe_b64encode(
-        private_key.public_key().public_bytes(
-            serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint
+    p256dh = (
+        base64.urlsafe_b64encode(
+            private_key.public_key().public_bytes(
+                serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint
+            )
         )
-    ).rstrip(b'=').decode()
+        .rstrip(b'=')
+        .decode()
+    )
     auth_bytes = os.urandom(16)
     auth = base64.urlsafe_b64encode(auth_bytes).rstrip(b'=').decode()
 
@@ -222,7 +229,9 @@ def test_send_bulk_posts_all_and_drops_dead(monkeypatch):
 
     monkeypatch.setattr(up, '_post_async', _post)
     asyncio.run(
-        up.send_bulk([_ep('http://ntfy/a?up=1'), _ep('http://ntfy/b?up=1')], PushMessage(tag='t', title='omi', body='hi'))
+        up.send_bulk(
+            [_ep('http://ntfy/a?up=1'), _ep('http://ntfy/b?up=1')], PushMessage(tag='t', title='omi', body='hi')
+        )
     )
     assert removed == [['http://ntfy/b?up=1']]  # 410 dropped
 
@@ -268,7 +277,11 @@ def _loaded_notifications() -> Iterator[ModuleType]:
         Message=lambda **k: SimpleNamespace(**k),
         send_each=_unexpected_send,
     )
-    auth = _module('firebase_admin.auth', get_user=lambda _uid: SimpleNamespace(display_name='Ada'))
+    # Bare module, no behaviour: production imports firebase_admin.auth ONLY in
+    # utils/auth/adapters/firebase.py (enforced by check_oss_auth_boundary), so nothing on this
+    # path calls it. The stub exists to let the import graph load. Proved rather than assumed:
+    # replacing the behaviour with a raiser left this file green (BACKLOG L15).
+    auth = _module('firebase_admin.auth')
     stubs = {
         'firebase_admin': _module('firebase_admin', messaging=messaging, auth=auth),
         'firebase_admin.messaging': messaging,

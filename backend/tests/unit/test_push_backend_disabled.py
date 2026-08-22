@@ -55,7 +55,11 @@ def _messaging_module() -> ModuleType:
 @contextmanager
 def _loaded_notifications() -> Iterator[tuple[ModuleType, dict[str, int]]]:
     messaging = _messaging_module()
-    auth = _module('firebase_admin.auth', get_user=lambda _uid: SimpleNamespace(display_name='Ada'))
+    # Bare module, no behaviour: production imports firebase_admin.auth ONLY in
+    # utils/auth/adapters/firebase.py (enforced by check_oss_auth_boundary), so nothing on this
+    # path calls it. The stub exists to let the import graph load. Proved rather than assumed:
+    # replacing the behaviour with a raiser left this file green (BACKLOG L15).
+    auth = _module('firebase_admin.auth')
     # Legacy principal: a user WITH a registered device token. Disabled must still send nothing;
     # the counter proves the flag short-circuits before the token store is even read.
     reads = {'get_all_tokens': 0, 'remove_bulk_tokens': 0}

@@ -63,7 +63,11 @@ def _messaging_module() -> ModuleType:
 @contextmanager
 def _loaded_notifications() -> Iterator[tuple[ModuleType, ModuleType, ModuleType]]:
     messaging = _messaging_module()
-    auth = _module('firebase_admin.auth', get_user=MagicMock())
+    # Bare module, no behaviour: production imports firebase_admin.auth ONLY in
+    # utils/auth/adapters/firebase.py (enforced by check_oss_auth_boundary), so nothing on this
+    # path calls it. The stub exists to let the import graph load. Proved rather than assumed:
+    # replacing the behaviour with a raiser left this file green (BACKLOG L15).
+    auth = _module('firebase_admin.auth')
     notification_db = _module(
         'database.notifications',
         get_all_tokens=MagicMock(),
