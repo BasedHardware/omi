@@ -19,6 +19,7 @@ from langchain_core.messages import SystemMessage, AIMessage, HumanMessage, Base
 
 from models.app import App
 from models.chat import ChatSession, Message, PageContext
+from utils.journey_metrics_contract import ClientKind
 from utils.llm.chat import get_current_datetime_block, get_user_timezone, retrieve_is_file_question
 from utils.llm.clients import get_llm
 from utils.llm.gateway_client import GatewayDirectModelSurfaceBlocked
@@ -335,6 +336,7 @@ async def execute_chat_stream(
     chat_session: Optional[ChatSession] = None,
     context: Optional[PageContext] = None,
     platform: Optional[str] = None,
+    client_kind: Optional[ClientKind] = None,
 ) -> AsyncGenerator[Optional[str], None]:
     """Route chat requests to the appropriate handler.
 
@@ -411,6 +413,7 @@ async def execute_chat_stream(
         chat_session=chat_session,
         context=context,
         platform=platform,
+        client_kind=client_kind,
         current_datetime_block=current_datetime_block,
         tz=tz,
         setup_deadline_at=setup_deadline_at,
