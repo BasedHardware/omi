@@ -404,6 +404,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
             transaction.set(conversation_ref, write_data, merge=True)
             return
 
+        write_data.setdefault('has_photos', False)
         transaction.set(conversation_ref, write_data)
 
     _write_processing_result(transaction)
@@ -494,6 +495,7 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
         del conversation_data['audio_base64_url']
     if 'photos' in conversation_data:
         del conversation_data['photos']
+    conversation_data.setdefault('has_photos', False)
 
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
@@ -748,18 +750,21 @@ def iter_all_conversations(uid: str, batch_size: int = 400, include_discarded: b
     if not include_discarded:
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
     conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
-    offset = 0
+    cursor = None
     while True:
-        batch_ref = conversations_ref.limit(batch_size).offset(offset)
+        batch_ref = conversations_ref.limit(batch_size)
+        if cursor is not None:
+            batch_ref = batch_ref.start_after(cursor)
         batch = []
-        for doc in batch_ref.stream():
+        snapshots = list(batch_ref.stream())
+        for doc in snapshots:
             conv = doc.to_dict()
             conv = _prepare_conversation_for_read(conv, uid) or conv
             batch.append(conv)
         yield from batch
-        if len(batch) < batch_size:
+        if len(snapshots) < batch_size:
             break
-        offset += batch_size
+        cursor = snapshots[-1]
 
 
 def update_conversation(uid: str, conversation_id: str, update_data: dict) -> bool:
@@ -1818,7 +1823,7 @@ def store_conversation_photos(
             data = photo.model_dump()
             data['id'] = photo_id
             transaction.set(photo_ref, _prepare_photo_for_write(data, uid, level))
-        transaction.update(conversation_ref, {'has_content': True})
+        transaction.update(conversation_ref, {'has_content': True, 'has_photos': True})
         return True
 
     return _store(transaction)
