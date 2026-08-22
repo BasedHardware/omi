@@ -1513,27 +1513,58 @@ def get_app_thumbnail_url(thumbnail_id: str) -> str:
 # ************* CHAT FILES **************
 # **********************************
 def upload_multi_chat_files(files_name: List[str], uid: str) -> Dict[str, str]:
-    """
-    Upload multiple files to Google Cloud Storage in the chat files bucket.
+    """Upload chat image thumbnails and return {file name: object KEY}.
 
-    Args:
-        files_name: List of file paths to upload
-        uid: User ID to use as part of the storage path
+    Keys, not URLs (ADR-0087). The value goes into the chat message document and is re-served on every
+    later read, so a signed URL stored here would become a deferred 403 the day it expired — which is why
+    the other five audio surfaces could switch outright and this one could not. Storing the key and
+    minting the URL at read time is the shape the codebase already uses for APP thumbnails
+    (``models/app.py`` keeps ids, ``routers/conversations.py`` mints ``thumbnail_urls``).
 
-    Returns:
-        dict: A dictionary mapping original filenames to their Google Cloud Storage URLs
+    ``public=True`` is kept on the upload: it is inert on RustFS (the ACL is not honoured) and correct on
+    MinIO/GCS, and removing it would change the object's ACL on the backends that DO honour it — a
+    separate decision from where the URL comes from.
     """
-    dictFiles: Dict[str, str] = {}
+    keys: Dict[str, str] = {}
     for name in files_name:
         try:
             path = f'{uid}/{name}'
             _object_store().put_from_file(
                 chat_files_bucket, path, f'./{name}', cache_control='public, no-cache', public=True
             )
-            dictFiles[name] = _object_store().public_url(chat_files_bucket, path)
+            keys[name] = path
         except Exception as e:
             logger.error("Failed to upload {} due to exception: {}".format(name, e))
-    return dictFiles
+    return keys
+
+
+def resolve_chat_thumbnail(stored: str) -> str:
+    """Turn what is stored in ``FileChat.thumbnail`` into a URL the client can fetch.
+
+    Two shapes reach this, and both must work:
+
+      * an object KEY (``{uid}/{name}``) — everything written since ADR-0087 — which is signed here;
+      * a full URL — every message written BEFORE it. Passed through untouched. Without this branch the
+        change would turn every image already in a user's chat history into a broken link, which is the
+        legacy-principal rule in AGENTS.md and the whole reason the field is not simply re-typed.
+
+    Empty stays empty: a non-image file has no thumbnail and must not acquire a URL to nothing.
+    """
+    if not stored or '://' in stored:
+        return stored
+    return _signed_url(chat_files_bucket, stored, USER_AUDIO_URL_MINUTES)
+
+
+def resolve_chat_file_thumbnails(files: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Resolve ``thumbnail`` on each stored chat-file record, in place, and return the list.
+
+    One place, called where the records leave the database, so every consumer that builds a ``FileChat``
+    downstream gets a fetchable URL without knowing any of this.
+    """
+    for record in files:
+        if isinstance(record, dict) and record.get('thumbnail'):
+            record['thumbnail'] = resolve_chat_thumbnail(record['thumbnail'])
+    return files
 
 
 # **************************************************

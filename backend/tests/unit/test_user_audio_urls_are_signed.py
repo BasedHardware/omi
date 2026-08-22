@@ -161,19 +161,23 @@ def test_the_app_thumbnail_keeps_a_public_url(store, tmp_path):
     assert len(store.public) == 1
 
 
-# --- the one still undecided --------------------------------------------------------------------
+# --- chat attachments: decided, and decided differently ---------------------------------------------
 
 
-def test_chat_files_are_left_exactly_as_found():
-    """STATIC CHECK, and deliberately so. Chat attachments are the only producer that uploads with
-    `public=True`, and whether an attachment is the user's content or a shareable link is a product
-    decision nobody has taken (ADR-0087). Pinned so it is taken on purpose, not by someone editing the
-    neighbouring lines."""
-    import inspect
-
+def test_chat_thumbnails_store_a_key_rather_than_either_kind_of_url(store, tmp_path, monkeypatch):
+    """This pin used to assert that chat files were LEFT AS FOUND, because the decision was open. It is
+    taken now (ADR-0087) and it went a third way: the thumbnail is the user's content, so it must not be
+    public — but its URL is PERSISTED in the message document, so a signed one would expire in place.
+    The key is stored and the URL is minted at read time. Re-expressed rather than deleted, so the
+    property it guards moves with the decision instead of disappearing with it; the read path has its
+    own suite in test_chat_thumbnail_urls.py."""
     from utils.other import storage
 
-    source = inspect.getsource(storage.upload_multi_chat_files)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / 'thumb.png').write_bytes(b'\x89PNG')
 
-    assert 'public_url(chat_files_bucket' in source, 'the chat-files decision is still open — see L6'
-    assert 'public=True' in source, 'and it is still the one producer that asks for a public object'
+    keys = storage.upload_multi_chat_files(['thumb.png'], 'u1')
+
+    assert keys == {'thumb.png': 'u1/thumb.png'}
+    assert store.public == [], 'no public URL: the thumbnail is the user\'s content'
+    assert store.signed == [], 'and no signed one either at write time: it would expire in the document'

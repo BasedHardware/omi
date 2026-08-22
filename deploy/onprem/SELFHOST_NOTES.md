@@ -623,11 +623,18 @@ the exposure instead of closing it.
 |---|---|---|
 | user audio | speech profile, post-processing, sd-card, conversation recording, syncing temporal | **signed, 60 min** (`presign_get`) |
 | marketplace assets | app logo, app thumbnail | **public**, via a bucket policy on `plugins-logos` and `app-thumbnails` |
-| chat attachments | chat files | **unchanged** — the one producer uploading with `public=True`; the decision is open (L6) |
+| chat attachments | chat files (image thumbnails) | the object **key** is stored, the signed URL is minted at read time |
 
-A signed URL expires, so every consumer was checked before the change: none of the five URLs is
+A signed URL expires, so every consumer was checked before the change: none of the five audio URLs is
 persisted. Two have no caller, one has its return value discarded, one is fetched immediately by the STT
 provider, one goes straight back to the client in the upload response.
+
+**The chat thumbnail is the exception, and it is why the third row looks different.** That URL *is*
+persisted — it goes into the chat message document and is re-served on every later read — so a signed
+one would become a deferred 403 the day it expired. The object key is stored instead and the URL is
+minted where the record leaves the database (`get_messages`, `get_chat_files`, `get_chat_files_desc`) and
+in the upload response. Messages written before this hold a full URL and pass through untouched; without
+that branch the change would have turned every image already in a user's history into a broken link.
 
 **Applying the asset policy.** On k0s the buckets Job does it (`mc anonymous set download`, on those two
 buckets only). Compose creates buckets out-of-band, so do the same by hand once:

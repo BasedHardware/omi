@@ -1594,6 +1594,9 @@ def upload_file_chat(
                 temp_file.unlink()
 
     if len(thumbs_name) > 0:
+        # `thumbs_path` now holds object KEYS, not URLs (ADR-0087): what is stored here is re-served on
+        # every later read of the message, so a signed URL would expire inside the document. The URL is
+        # minted when the record leaves the database (database/chat.py).
         thumbs_path = storage.upload_multi_chat_files(thumbs_name, uid)
         for fc in files_chat:
             if not fc.is_image():
@@ -1605,11 +1608,15 @@ def upload_file_chat(
             if thumb_file.exists():
                 thumb_file.unlink()
 
-    # save db
+    # save db — the STORED record keeps the object key
     files_chat_dict = [fc.model_dump() for fc in files_chat]
 
     chat_db.add_multi_files(uid, files_chat_dict)
 
+    # ...and the RESPONSE carries a URL, exactly like a later read of the same message would. Resolved
+    # after the write on purpose: the key is what must persist, the URL is what the client needs now.
+    for fc in files_chat:
+        fc.thumbnail = storage.resolve_chat_thumbnail(fc.thumbnail or '')
     response = [fc.model_dump() for fc in files_chat]
 
     return response
@@ -1662,6 +1669,9 @@ def upload_file_chat_v1(
                 temp_file.unlink()
 
     if len(thumbs_name) > 0:
+        # `thumbs_path` now holds object KEYS, not URLs (ADR-0087): what is stored here is re-served on
+        # every later read of the message, so a signed URL would expire inside the document. The URL is
+        # minted when the record leaves the database (database/chat.py).
         thumbs_path = storage.upload_multi_chat_files(thumbs_name, uid)
         for fc in files_chat:
             if not fc.is_image():
@@ -1672,11 +1682,15 @@ def upload_file_chat_v1(
             thumb_file = Path(fc.thumb_name)
             thumb_file.unlink()
 
-    # save db
+    # save db — the STORED record keeps the object key
     files_chat_dict = [fc.model_dump() for fc in files_chat]
 
     chat_db.add_multi_files(uid, files_chat_dict)
 
+    # ...and the RESPONSE carries a URL, exactly like a later read of the same message would. Resolved
+    # after the write on purpose: the key is what must persist, the URL is what the client needs now.
+    for fc in files_chat:
+        fc.thumbnail = storage.resolve_chat_thumbnail(fc.thumbnail or '')
     response = [fc.model_dump() for fc in files_chat]
 
     return response
