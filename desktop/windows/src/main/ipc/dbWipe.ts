@@ -11,6 +11,8 @@
 // DROP), so the next session reuses the already-migrated tables.
 
 export const USER_DATA_TABLES = [
+  // Offline audio belongs to the account that captured it.
+  'audio_wal',
   'caption_event',
   'local_conversation',
   'indexed_files',

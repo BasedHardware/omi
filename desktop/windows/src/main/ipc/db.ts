@@ -89,6 +89,7 @@ import {
   listLiveNotesOn,
   type LiveNotesDb
 } from './liveNotesStore'
+import { WAL_SCHEMA, type WalDb } from '../wal/walStore'
 import {
   listConversationFoldersOn,
   replaceConversationFoldersOn,
@@ -665,6 +666,7 @@ function get(): Database.Database {
   // DDL lives in liveNotesStore.ts so prod and the CRUD tests run the same SQL;
   // the drop-if-old above recreated any FK-less PR0 table before this runs.
   db.exec(LIVE_NOTES_SCHEMA)
+  db.exec(WAL_SCHEMA)
   // Proactive Insights history. DDL lives in insightStore.ts so prod and the
   // node:sqlite CRUD tests run the same SQL.
   db.exec(INSIGHTS_SCHEMA)
@@ -880,6 +882,13 @@ export function updateLocalConversationTitle(id: string, title: string): void {
 // LiveNotesDb shape structurally — same cast idiom as the folder wrappers.
 function liveNotesDb(): LiveNotesDb {
   return get() as unknown as LiveNotesDb
+}
+
+/** Handle for the offline-audio index. Same shape as liveNotesDb: the CRUD is
+ *  driver-agnostic and lives in wal/walStore.ts so prod and its tests run the
+ *  same SQL. */
+export function walDb(): WalDb {
+  return get() as unknown as WalDb
 }
 
 export function createTranscriptionSession(session: {
