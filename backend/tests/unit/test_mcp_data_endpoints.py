@@ -8,12 +8,14 @@ stubbing pattern in test_mcp_search_memories.py.
 
 from datetime import datetime, timezone
 import json
-from unittest.mock import patch, MagicMock
+from unittest.mock import AsyncMock, patch, MagicMock
 import os
 import sys
 from types import ModuleType, SimpleNamespace
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
@@ -454,6 +456,65 @@ def test_authorize_redirect_builder_preserves_existing_query():
         'https://chatgpt.com/connector_platform_oauth_redirect?client=chatgpt', 'code-1', 's1'
     )
     assert redirect_uri == 'https://chatgpt.com/connector_platform_oauth_redirect?client=chatgpt&code=code-1&state=s1'
+
+
+def test_authorization_metadata_advertises_dynamic_registration():
+    metadata = sse.oauth_authorization_server_metadata()
+
+    assert metadata['registration_endpoint'] == f'{sse.MCP_AUTHORIZATION_SERVER_URL}/api/oauth/register'
+
+
+def test_dynamic_registration_returns_public_pkce_client_over_http():
+    created_at = datetime(2026, 8, 21, tzinfo=timezone.utc)
+    registered = {
+        'id': 'omi-dcr-test',
+        'name': 'Gemini Spark',
+        'allowed_redirect_uris': ['https://accounts.google.com/gemini-oauth-cb'],
+        'created_at': created_at,
+    }
+    app = FastAPI()
+    app.include_router(sse.router)
+
+    with (
+        patch.object(sse, 'run_blocking', new=AsyncMock(side_effect=[None, registered])) as run_blocking,
+        patch.object(sse.mcp_oauth_db, 'register_dynamic_public_client'),
+    ):
+        response = TestClient(app).post(
+            '/api/oauth/register',
+            json={
+                'redirect_uris': ['https://accounts.google.com/gemini-oauth-cb'],
+                'client_name': 'Gemini Spark',
+                'grant_types': ['authorization_code', 'refresh_token'],
+            },
+        )
+
+    assert response.status_code == 201
+    assert response.json() == {
+        'client_id': 'omi-dcr-test',
+        'client_id_issued_at': int(created_at.timestamp()),
+        'redirect_uris': ['https://accounts.google.com/gemini-oauth-cb'],
+        'client_name': 'Gemini Spark',
+        'token_endpoint_auth_method': 'none',
+        'grant_types': ['authorization_code', 'refresh_token'],
+        'response_types': ['code'],
+    }
+    assert run_blocking.await_args_list[0].args[2:] == ('testclient', 'mcp:client_registration')
+
+
+@pytest.mark.asyncio
+async def test_dynamic_registration_rejects_confidential_clients_before_write():
+    request = SimpleNamespace(client=SimpleNamespace(host='203.0.113.10'))
+    payload = sse.McpClientRegistrationRequest(
+        redirect_uris=['https://accounts.google.com/gemini-oauth-cb'],
+        token_endpoint_auth_method='client_secret_post',
+    )
+
+    with patch.object(sse, 'run_blocking', new=AsyncMock(return_value=None)) as run_blocking:
+        response = await sse.mcp_register_client(request, payload)
+
+    assert response.status_code == 400
+    assert json.loads(response.body)['error'] == 'invalid_client_metadata'
+    assert run_blocking.await_count == 1
 
 
 def test_authorize_request_accepts_chatgpt_public_client():

@@ -8,6 +8,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict, cast
 import re
+import ipaddress
 from urllib.parse import unquote, urlsplit
 
 from google.cloud import firestore
@@ -48,6 +49,8 @@ AUTH_CODE_TTL_SECONDS = int(os.getenv("MCP_OAUTH_AUTH_CODE_TTL_SECONDS", "600"))
 REFRESH_TOKEN_TTL_DAYS = int(os.getenv("MCP_OAUTH_REFRESH_TOKEN_TTL_DAYS", "365"))
 PKCE_ALLOWED_RE = re.compile(r"^[A-Za-z0-9._~-]{43,128}$")
 SUPPORTED_TOKEN_AUTH_METHODS = ["client_secret_post", "none"]
+DYNAMIC_CLIENT_REDIRECT_URI_LIMIT = 10
+DYNAMIC_CLIENT_REDIRECT_URI_MAX_LENGTH = 2048
 PUBLIC_CHATGPT_CLIENT_IDS = {"omi-chatgpt-prod", "omi-chatgpt-dev"}
 PRODUCTION_CROSS_PLANE_CLIENT_IDS = {"omi-chatgpt-prod", "omi-claude-prod"}
 CHATGPT_CONNECTOR_REDIRECT_URI_PREFIX = "https://chatgpt.com/connector/oauth/"
@@ -329,6 +332,70 @@ def get_client(client_id: str) -> Optional[Dict[str, Any]]:
         else:
             client = _builtin_public_chatgpt_client(client_id)
     return _finalize_client(client)
+
+
+def validate_dynamic_redirect_uris(redirect_uris: object) -> List[str]:
+    """Validate exact redirect URIs for a dynamically registered public client."""
+    if not isinstance(redirect_uris, list) or not redirect_uris:
+        raise ValueError("redirect_uris must be a non-empty array")
+    if len(redirect_uris) > DYNAMIC_CLIENT_REDIRECT_URI_LIMIT:
+        raise ValueError(f"redirect_uris supports at most {DYNAMIC_CLIENT_REDIRECT_URI_LIMIT} entries")
+
+    validated: List[str] = []
+    for value in cast(List[Any], redirect_uris):
+        if not isinstance(value, str) or not value or value != value.strip():
+            raise ValueError("redirect_uris must contain non-empty URI strings")
+        if len(value) > DYNAMIC_CLIENT_REDIRECT_URI_MAX_LENGTH:
+            raise ValueError("redirect_uri is too long")
+        try:
+            parts = urlsplit(value)
+            _ = parts.port
+        except ValueError as exc:
+            raise ValueError("redirect_uri is invalid") from exc
+        if not parts.hostname or parts.username or parts.password or parts.fragment:
+            raise ValueError("redirect_uri must be an absolute URI without credentials or a fragment")
+        if parts.scheme == "https":
+            pass
+        elif parts.scheme == "http":
+            is_loopback = parts.hostname == "localhost"
+            if not is_loopback:
+                try:
+                    is_loopback = ipaddress.ip_address(parts.hostname).is_loopback
+                except ValueError:
+                    is_loopback = False
+            if not is_loopback:
+                raise ValueError("http redirect_uri must use localhost or a loopback IP address")
+        else:
+            raise ValueError("redirect_uri must use https or loopback http")
+        if value not in validated:
+            validated.append(value)
+    return validated
+
+
+def register_dynamic_public_client(client_name: Optional[str], redirect_uris: object) -> Dict[str, Any]:
+    """Persist an RFC 7591 public PKCE client using exact redirect matching."""
+    validated_redirect_uris = validate_dynamic_redirect_uris(redirect_uris)
+    resolved_name = (client_name or "MCP client").strip()
+    if not resolved_name or len(resolved_name) > 100:
+        raise ValueError("client_name must be between 1 and 100 characters")
+
+    client_id = f"omi-dcr-{secrets.token_urlsafe(24)}"
+    now = _now()
+    client: Dict[str, Any] = {
+        "id": client_id,
+        "name": resolved_name,
+        "registration_mode": "dynamic_public_pkce",
+        "allowed_redirect_uris": validated_redirect_uris,
+        "allowed_redirect_uri_prefixes": [],
+        "allowed_resources": [MCP_RESOURCE_URL],
+        "allowed_scopes": SUPPORTED_SCOPES,
+        "token_endpoint_auth_method": "none",
+        "client_secret_hash": "",
+        "created_at": now,
+        "disabled_at": None,
+    }
+    db.collection("mcp_oauth_clients").document(client_id).set(client)
+    return client
 
 
 def verify_client_secret(client: Dict[str, Any], client_secret: Optional[str]) -> bool:
