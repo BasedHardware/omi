@@ -616,7 +616,9 @@ def run_universal_short_term_maintenance(
             else (
                 "expiry_ordered+bounded_registry"
                 if expiry_inventory.uids and registry_uids
-                else "expiry_ordered" if expiry_inventory.uids else "bounded_registry"
+                else "expiry_ordered"
+                if expiry_inventory.uids
+                else "bounded_registry"
             )
         ),
         inventory_complete=not inventory_errors,

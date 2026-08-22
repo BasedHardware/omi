@@ -125,8 +125,9 @@ def test_referral_claim_grants_trial_only_to_a_fresh_authenticated_account(monke
         monkeypatch.setattr(
             referrals,
             'claim_referral_trial',
-            lambda referred_uid, referrer_uid, *, is_new_user: claims.append((referred_uid, referrer_uid, is_new_user))
-            or True,
+            lambda referred_uid, referrer_uid, *, is_new_user: (
+                claims.append((referred_uid, referrer_uid, is_new_user)) or True
+            ),
         )
         response = referrals.claim_referral(referrals.ReferralClaimRequest(code=code), 'new-user')
 
@@ -150,8 +151,9 @@ def test_referral_claim_marks_an_existing_authenticated_account_ineligible(monke
         monkeypatch.setattr(
             referrals,
             'claim_referral_trial',
-            lambda referred_uid, referrer_uid, *, is_new_user: claims.append((referred_uid, referrer_uid, is_new_user))
-            or False,
+            lambda referred_uid, referrer_uid, *, is_new_user: (
+                claims.append((referred_uid, referrer_uid, is_new_user)) or False
+            ),
         )
         response = referrals.claim_referral(referrals.ReferralClaimRequest(code=code), 'existing-user')
 

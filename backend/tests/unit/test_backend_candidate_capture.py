@@ -609,8 +609,9 @@ def test_rejected_policy_uses_no_drop_compatibility_writer_without_candidate(mon
     monkeypatch.setattr(
         conversation_capture,
         '_capture_decision',
-        lambda action_item, conversation_id, **_kwargs: decisions.append((action_item.description, conversation_id))
-        or _NoCandidateDecision(),
+        lambda action_item, conversation_id, **_kwargs: (
+            decisions.append((action_item.description, conversation_id)) or _NoCandidateDecision()
+        ),
     )
     monkeypatch.setattr(
         conversation_capture.candidate_service,

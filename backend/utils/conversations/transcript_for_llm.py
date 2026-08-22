@@ -92,7 +92,7 @@ def conversation_transcript_for_action_items(
             speaker_name = escape_spoken_wake_word_marker(speaker_name)
             segment_text = escape_spoken_wake_word_marker(segment_text)
         lines.append(
-            f'[segment:{segment_id} {segment.start:.3f}-{segment.end:.3f}] {marker}' f'{speaker_name}: {segment_text}'
+            f'[segment:{segment_id} {segment.start:.3f}-{segment.end:.3f}] {marker}{speaker_name}: {segment_text}'
         )
     return '\n\n'.join(lines)
 
