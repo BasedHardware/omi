@@ -46,7 +46,7 @@ export function McpCloudConnectorCard({ id }: { id: McpCloudConnectorId }): Reac
     setOpen(true)
     markCloudConnectorOpened(id)
     setOpened(true)
-    if (info) void openCloudConnector(info.connectorUrl)
+    if (info) void openCloudConnector(info.id)
   }
 
   const description = opened

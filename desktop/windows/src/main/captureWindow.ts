@@ -60,7 +60,7 @@ export function createCaptureWindow(): BrowserWindow {
     // and the Rewind <video> decode run exactly as they would in a UI window.
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      sandbox: true,
       // webSecurity stays ON (default). The capture window talks to the Omi API
       // only through the main-process WebSocket (omi-listen:*), so it never needs
       // the CORS workaround the UI windows historically used.

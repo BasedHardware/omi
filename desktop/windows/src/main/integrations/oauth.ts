@@ -54,7 +54,8 @@ function focusOmi(): void {
 
 function clientId(): string {
   const id = import.meta.env.MAIN_VITE_GOOGLE_CLIENT_ID
-  if (!id) throw new Error('Google client id not configured (set MAIN_VITE_GOOGLE_CLIENT_ID in .env)')
+  if (!id)
+    throw new Error('Google client id not configured (set MAIN_VITE_GOOGLE_CLIENT_ID in .env)')
   return id
 }
 
@@ -97,7 +98,7 @@ export async function connect(): Promise<{ email: string }> {
   accessExpiryMs = Date.now() + tokens.expires_in * 1000
   const email = await fetchEmail(tokens.access_token)
   saveRefreshToken(tokens.refresh_token, email)
-  oauthLog('connected', { email: email || '(email unavailable)' })
+  oauthLog('connected', { hasEmail: !!email })
   return { email }
 }
 

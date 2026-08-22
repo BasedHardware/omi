@@ -49,7 +49,13 @@ vi.mock('electron', () => ({
 }))
 vi.mock('./tray', () => ({ setTrayUpdateReady: vi.fn() }))
 
-import { checkForUpdatesNow, getPendingUpdate, initAutoUpdater, installUpdateNow } from './updater'
+import {
+  checkForUpdatesNow,
+  getPendingUpdate,
+  initAutoUpdater,
+  installUpdateNow,
+  shouldForceDevUpdater
+} from './updater'
 import { setAppSettings } from './appSettings'
 
 function deferred<T>(): {
@@ -68,6 +74,11 @@ afterAll(() => {
 })
 
 describe('updater feed and beta channel wiring', () => {
+  it('never enables the developer feed in a packaged build', () => {
+    expect(shouldForceDevUpdater(true, { OMI_UPDATER_DEV: '1' })).toBe(false)
+    expect(shouldForceDevUpdater(false, { OMI_UPDATER_DEV: '1' })).toBe(true)
+  })
+
   it('stays Windows-only and switches immutable feeds on live beta changes', async () => {
     vi.useFakeTimers()
 

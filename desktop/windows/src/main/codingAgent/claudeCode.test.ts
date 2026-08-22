@@ -18,6 +18,7 @@ describe('ClaudeCodeRuntimeAdapter spawn contract', () => {
   })
 
   it('spawns the bundled ACP entry with the app binary running as Node, no shell', async () => {
+    process.env.CLAUDE_CONFIG_DIR = 'C:\\omi-test-claude'
     const proc = createMockProcess()
     vi.mocked(spawn).mockReturnValue(proc as never)
 
@@ -46,8 +47,10 @@ describe('ClaudeCodeRuntimeAdapter spawn contract', () => {
     expect(env.ANTHROPIC_API_KEY).toBeUndefined()
     expect(env.CLAUDE_CODE_USE_VERTEX).toBeUndefined()
     expect(env.CLAUDECODE).toBeUndefined()
+    expect(env.CLAUDE_CONFIG_DIR).toBe('C:\\omi-test-claude')
 
     await adapter.stop()
+    delete process.env.CLAUDE_CONFIG_DIR
   })
 
   it('is always activated: constructing without options resolves a bundled entry path', () => {
