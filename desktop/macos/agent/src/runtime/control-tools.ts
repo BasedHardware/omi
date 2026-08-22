@@ -15,6 +15,7 @@ import type {
   RunAttempt,
 } from "./types.js";
 import { AgentRuntimeKernel, type DesktopAwarenessSnapshot, type ExecuteAgentRunInput } from "./kernel.js";
+import { AGENT_FALLBACK_CHAIN_KEY } from "./agent-fallback.js";
 import { serializeArtifact } from "./artifact-serialization.js";
 import { defaultArtifactRoot, maybePruneExpiredToolOutputs, TOOL_OUTPUT_DIRECTORY_NAME } from "./artifact-storage.js";
 import { assertToolResultEnvelope, makeToolResultEnvelope, type ToolResultEnvelope } from "./tool-result-envelope.js";
@@ -1074,6 +1075,28 @@ export async function handleAgentControlToolCall(
         const parsed = agentControlToolSchemas.send_agent_message.parse(input);
         const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
         const targetPolicy = context.kernel.executionPolicyForOwnedSession(parsed.sessionId, ownerId);
+        // A follow-up that names an agent this runtime doesn't have should say
+        // how to install it, exactly as the spawn path does — otherwise "now try
+        // it with codex" continues silently on the session's agent and the user
+        // never learns why nothing changed.
+        //
+        // This reports only; it never reroutes. A session's adapter is fixed for
+        // its lifetime (assertAdapterAllowedForDirectSessionContinuation resolves
+        // every continuation within the session's own provider boundary), so
+        // switching agents mid-session is a new spawn, not a message.
+        if (!parsed.adapterId) {
+          const namedRoute = context.kernel.resolveAgentRoute(parsed.prompt, { needsTools: true });
+          if (namedRoute.kind === "install_required") {
+            return stringifyToolResult({
+              agentUnavailable: {
+                adapterId: namedRoute.adapterId,
+                message: namedRoute.guidance.message,
+                commands: namedRoute.guidance.commands,
+                docsUrl: namedRoute.guidance.docsUrl,
+              },
+            });
+          }
+        }
         const adapterId = parsed.adapterId ?? targetPolicy.defaultAdapterId;
         assertAdapterAllowedForDirectSessionContinuation(context, adapterId, targetPolicy);
         rejectSynchronousNestedRun(context, adapterId, parsed.sessionId);
@@ -1129,7 +1152,37 @@ export async function handleAgentControlToolCall(
         const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
         const requestId = parsed.requestId ?? `background-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         const spawnProfile = controlSpawnProfile(context, ownerId);
-        const adapterId = parsed.adapterId ?? parsed.defaultAdapterId ?? spawnProfile.adapterId;
+        // When the caller names no adapter, the utterance gets a say before the
+        // surface default does — otherwise "use codex to fix this" silently ran
+        // on whatever the profile happened to point at. A named-but-unregistered
+        // agent answers with install guidance instead of spawning.
+        const namedAdapterId = parsed.adapterId ?? parsed.defaultAdapterId;
+        const utteranceRoute = namedAdapterId
+          ? null
+          : context.kernel.resolveAgentRoute(parsed.prompt, { needsTools: true });
+        if (utteranceRoute?.kind === "install_required") {
+          return stringifyToolResult({
+            agentUnavailable: {
+              adapterId: utteranceRoute.adapterId,
+              message: utteranceRoute.guidance.message,
+              commands: utteranceRoute.guidance.commands,
+              docsUrl: utteranceRoute.guidance.docsUrl,
+            },
+          });
+        }
+        const adapterId =
+          namedAdapterId ??
+          (utteranceRoute?.kind === "route" ? utteranceRoute.adapterId : undefined) ??
+          spawnProfile.adapterId;
+        // The agents ranked behind this one ride along on the run's metadata.
+        // A spawn returns before its adapter executes, so nothing here can see a
+        // failure; the fallback supervisor reads this chain off the terminal
+        // run event and retries on the next agent. A caller that named an
+        // adapter explicitly gets no chain — its choice is not substituted.
+        const fallbackChain =
+          !namedAdapterId && utteranceRoute?.kind === "route"
+            ? utteranceRoute.chain.slice(1)
+            : [];
         const cwd = parsed.cwd ?? spawnProfile.workingDirectory;
         const model = parsed.model ?? spawnProfile.modelProfile ?? undefined;
         assertAdapterAllowedForTopLevelLocalProviderSpawn(context, adapterId);
@@ -1158,7 +1211,10 @@ export async function handleAgentControlToolCall(
             ownerId,
             requestId,
             surfaceKind: parsed.surfaceKind ?? "floating_bar",
-            metadata: { ...(parsed.metadata ?? {}) },
+            metadata: {
+              ...(parsed.metadata ?? {}),
+              ...(fallbackChain.length ? { [AGENT_FALLBACK_CHAIN_KEY]: fallbackChain } : {}),
+            },
             authoritySignal: context.executionLease?.signal,
             mcpServers: buildControlRunMcpServers(context, {
               mode: parsed.mode,
