@@ -399,6 +399,10 @@ def test_memories_wire_dart_is_generated_from_app_client_openapi():
     assert MEMORIES_DART_PATH.read_text() == generated
     assert 'class GeneratedEvidence' in generated
     assert 'class GeneratedMemoryDB' in generated
+    assert 'class GeneratedMemoryEditResponse' in generated
+    assert 'class GeneratedMemoryRevertRequest' in generated
+    assert 'final GeneratedMemoryDB? memory;' in generated
+    assert 'final String operationId;' in generated
     assert 'final String? layer;' in generated
     assert 'final String? memoryTier;' in generated
     assert 'layer: _readFieldValue<String>' in generated

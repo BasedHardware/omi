@@ -2520,6 +2520,10 @@ export interface MemoryReadStatusRequest {
   is_read?: boolean | null;
 }
 
+export interface MemoryRevertRequest {
+  operation_id: string;
+}
+
 export interface MemoryReviewItemResponse {
   review_id: string;
   status?: string;
@@ -4545,6 +4549,7 @@ export interface OmiApiSchemas {
   "MemoryLinkSpec": MemoryLinkSpec;
   "MemoryMutationResponse": MemoryMutationResponse;
   "MemoryReadStatusRequest": MemoryReadStatusRequest;
+  "MemoryRevertRequest": MemoryRevertRequest;
   "MemoryReviewItemResponse": MemoryReviewItemResponse;
   "MemorySubjectScope": MemorySubjectScope;
   "MemorySummaryRatingResponse": MemorySummaryRatingResponse;
@@ -8802,6 +8807,16 @@ export interface OmiApiPaths {
         "200": MemoryDB;
         "401": void;
         "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v3/memories/{memory_id}/revert": {
+    post: {
+      operationId: "revert_memory_v3_memories__memory_id__revert_post";
+      responses: {
+        "200": MemoryEditResponse;
+        "401": void;
         "422": HTTPValidationError;
       };
     };
@@ -16776,6 +16791,27 @@ export async function update_memory_read_status_v3_memories__memory_id__read_pat
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function revert_memory_v3_memories__memory_id__revert_post(path: { memory_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: MemoryRevertRequest, init?: OmiApiClientInit): Promise<MemoryEditResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v3/memories/${path.memory_id}/revert`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function review_memory_v3_memories__memory_id__review_post(path: { memory_id: string }, query: { value: boolean }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<MemoryMutationResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v3/memories/${path.memory_id}/review`;
@@ -16942,4 +16978,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 407 client methods generated.
+// Total: 408 client methods generated.

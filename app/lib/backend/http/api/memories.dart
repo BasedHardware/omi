@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/gen/memories_wire.g.dart' as wire;
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
@@ -163,19 +164,17 @@ Future<RevertMemoryResult> revertMemoryServer(String memoryId, String operationI
     url: '${Env.apiBaseUrl}v3/memories/$memoryId/revert',
     headers: {},
     method: 'POST',
-    body: json.encode({'operation_id': operationId}),
+    body: json.encode(wire.GeneratedMemoryRevertRequest(operationId: operationId).toJson()),
   );
   if (response == null || response.statusCode != 200) {
     return const RevertMemoryResult(persisted: false);
   }
   try {
-    final payload = json.decode(response.body) as Map<String, dynamic>;
-    if (payload['status'] != 'ok') {
+    final payload = wire.GeneratedMemoryEditResponse.fromJson(json.decode(response.body) as Map<String, dynamic>);
+    if (payload.status != 'ok') {
       return const RevertMemoryResult(persisted: false);
     }
-    final rawMemory = payload['memory'];
-    final authoritativeMemory =
-        rawMemory is Map ? Memory.fromGeneratedWireJson(Map<String, dynamic>.from(rawMemory)) : null;
+    final authoritativeMemory = payload.memory == null ? null : Memory.fromGeneratedWireJson(payload.memory!.toJson());
     return RevertMemoryResult(
       persisted: authoritativeMemory != null,
       authoritativeMemory: authoritativeMemory,

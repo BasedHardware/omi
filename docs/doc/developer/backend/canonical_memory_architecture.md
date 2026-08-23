@@ -139,6 +139,13 @@ the universal authoritative reader before return. Restricted, archived,
 superseded, and tombstoned items remain excluded even while provider cleanup
 lags.
 
+User review preserves that same append-only boundary. Restoring a superseded
+`knowledge_ledger.v1` fact does not reopen or mutate its historical row. The
+authenticated memories API follows the selected fact's bounded successor chain
+to the current fact, then appends a fresh replacement with retry-stable explicit
+user evidence. Malformed, cross-identity, restricted, locked, or no-longer-current
+chains fail closed.
+
 `projection_sync` and `vector_sync` outbox events are the retry authority.
 Restricted items are delete-only. `memory_graph_assertions/{memory_id}` is the
 graph authority; retained historical graph data is a bounded read overlay and
