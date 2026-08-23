@@ -33,6 +33,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 DELETION_WIPE_RUNNING_STALE_AFTER = timedelta(hours=6)
+# A wipe that fails for a persistent reason (a missing queue, a dependency that is down) is
+# re-selected by every reconciler tick on every pod. Without a delay that is one claim
+# transaction per pod per tick, forever, against a record that cannot make progress. The
+# delay backs off per attempt and stops there: it never gives up on an accepted deletion.
+DELETION_WIPE_RETRY_BASE_DELAY = timedelta(minutes=5)
+DELETION_WIPE_RETRY_MAX_DELAY = timedelta(hours=1)
 _DELETION_WIPE_TERMINAL_STATUSES = frozenset({'completed', 'cancelled'})
 _DELETION_WIPE_LEGACY_ACTIONABLE_STATUSES = frozenset({'pending', 'retrying', 'running', 'failed'})
 LOCATION_CONTEXT_CONSENT_TTL = timedelta(days=30)
@@ -438,7 +444,11 @@ def mark_user_deletion_wipe_completed(uid: str) -> bool:
 def mark_user_deletion_wipe_failed(uid: str):
     """Mark the background data wipe as failed so a reconciliation worker can retry."""
     db.collection('account_deletions').document(uid).set(
-        {'wipe_status': 'failed', 'wipe_failed_at': datetime.now(timezone.utc)},
+        {
+            'wipe_status': 'failed',
+            'wipe_failed_at': datetime.now(timezone.utc),
+            'wipe_attempts': firestore.Increment(1),
+        },
         merge=True,
     )
 
@@ -604,6 +614,20 @@ def cancel_user_deletion_wipe(uid: str):
     )
 
 
+def deletion_wipe_retry_delay(attempts: int) -> timedelta:
+    """How long a ``failed`` wipe waits before it is selected again.
+
+    Doubles per recorded attempt and saturates at ``DELETION_WIPE_RETRY_MAX_DELAY``. The first
+    failure still retries on the next tick, so a transient error costs nothing.
+    """
+    if attempts <= 1:
+        return timedelta(0)
+    # Clamp the exponent before applying it: ``timedelta * 2 ** large`` overflows, and any
+    # exponent past the cap is the same answer anyway.
+    doublings = min(attempts - 2, 20)
+    return min(DELETION_WIPE_RETRY_BASE_DELAY * (2**doublings), DELETION_WIPE_RETRY_MAX_DELAY)
+
+
 def get_pending_deletion_wipes(
     limit: int = 100,
     stale_after: timedelta = timedelta(minutes=10),
@@ -611,7 +635,7 @@ def get_pending_deletion_wipes(
 ) -> list[dict]:
     """Return account_deletions documents whose wipe needs retry.
 
-    Queries ``failed`` records (always actionable), stale ``pending`` records
+    Queries ``failed`` records whose per-attempt backoff has elapsed, stale ``pending`` records
     (queued more than ``stale_after`` ago), stale ``deleting_auth`` records
     (intent written but never transitioned to ``pending`` — usually a crash
     after ``auth.delete_account()`` succeeded), stale ``running`` records (worker
@@ -632,8 +656,22 @@ def get_pending_deletion_wipes(
     running_cutoff = datetime.now(timezone.utc) - running_stale_after
     budget = limit
 
-    failed_docs = db.collection('account_deletions').where('wipe_status', '==', 'failed').limit(budget).stream()
-    result = [doc.to_dict() | {'uid': doc.id} for doc in failed_docs]
+    # Over-fetch *all* failed docs and back-off-filter in Python, for the same reason the
+    # ``pending`` branch below does: a tight ``.limit(budget)`` could return a page made
+    # entirely of records still inside their backoff window and starve one that is ready.
+    now = datetime.now(timezone.utc)
+    result: list[dict] = []
+    failed_docs = db.collection('account_deletions').where('wipe_status', '==', 'failed').stream()
+    for doc in failed_docs:
+        if len(result) >= limit:
+            break
+        data = doc.to_dict()
+        failed_at = data.get('wipe_failed_at')
+        # A record with no ``wipe_failed_at`` predates the backoff and stays immediately
+        # actionable: a missing timestamp must never be a reason to stop retrying a wipe.
+        if failed_at and failed_at + deletion_wipe_retry_delay(data.get('wipe_attempts') or 1) > now:
+            continue
+        result.append(data | {'uid': doc.id})
 
     if len(result) < limit:
         # Over-fetch *all* pending docs and age-filter in Python. A tight
