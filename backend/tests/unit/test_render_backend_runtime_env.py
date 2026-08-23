@@ -428,3 +428,55 @@ def test_desktop_backend_compose_pins_vertex_pt(env, project):
     assert _MODULE['_render_secrets'](desktop['secrets']) == 'METRICS_SECRET=METRICS_SECRET:latest'
     docs = Path(__file__).resolve().parents[2] / 'docs' / 'vertex-pt-flash.md'
     assert VERTEX_PT_CONTRACT.split(',')[0] in docs.read_text(encoding='utf-8')
+
+
+def test_state_output_carries_cloud_run_jobs(tmp_path, monkeypatch):
+    env_config = {
+        'cloud_run': {
+            'network': {'flags': {'--vpc-egress': 'private-ranges-only'}},
+            'services': {'backend': {'env': {'OMI_ENV_STAGE': {'value': 'dev'}}, 'secrets': {}}},
+            'jobs': {
+                'notifications-job': {
+                    'flags': {'--task-timeout': '3600s'},
+                    'env': {'OMI_ENV_STAGE': {'value': 'dev'}},
+                    'secrets': {'OPENAI_API_KEY': {'secret': 'OPENAI_API_KEY', 'version': 'latest'}},
+                }
+            },
+        }
+    }
+    state_path = tmp_path / 'runtime-env-state.json'
+    monkeypatch.setitem(_MODULE['main'].__globals__, '_load_yaml', lambda _path: {'environments': {'dev': env_config}})
+    monkeypatch.setattr(
+        'sys.argv',
+        ['render_backend_runtime_env.py', '--env', 'dev', '--state-output', str(state_path)],
+    )
+
+    assert _MODULE['main']() == 0
+
+    state = json.loads(state_path.read_text(encoding='utf-8'))
+
+    assert state['jobs'] == {
+        'notifications-job': {
+            'env': [
+                {'name': 'OMI_ENV_STAGE', 'value': 'dev'},
+                {
+                    'name': 'OPENAI_API_KEY',
+                    'valueFrom': {'secretKeyRef': {'name': 'OPENAI_API_KEY', 'key': 'latest'}},
+                },
+            ],
+            'flags': {'--task-timeout': '3600s'},
+        }
+    }
+
+
+@pytest.mark.parametrize('env', ['dev', 'prod'])
+def test_state_output_covers_every_declared_job(env, monkeypatch):
+    monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-vpc-1')
+    monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-subnet-1')
+    env_config = _MANIFEST['environments'][env]
+    cloud_run = env_config['cloud_run']
+
+    # Services need the deploy workflow's environment; the job contract does not.
+    state = _MODULE['_render_cloud_run_state']({'cloud_run': {**cloud_run, 'services': {}}})
+
+    assert set(state['jobs']) == set(cloud_run['jobs'])
