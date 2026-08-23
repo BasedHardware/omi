@@ -2750,9 +2750,10 @@ workflows:
           fi
           set -euo pipefail
 
-          # Symbolication is a release requirement, not best-effort publishing.
-          # Upload the UUID-verified dSYM before creating the immutable candidate.
-          scripts/publish-desktop-debug-symbols.sh upload \
+          # Keep symbol publication repairable: a Sentry credential outage must not
+          # strand an otherwise signed and smoke-tested candidate. The exact,
+          # UUID-verified dSYM is retained as a GitHub release artifact below.
+          scripts/publish-desktop-debug-symbols.sh upload-best-effort \
             --binary "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" \
             --dsym "$DSYM_PATH"
 
