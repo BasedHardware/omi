@@ -57,23 +57,24 @@ def _preference_tools_module():
         return module
 
 
-def _preference_duplicate_message():
-    return _preference_tools_module().preference_duplicate_message
+@pytest.fixture(scope="module")
+def preference_tools_module():
+    """Amortize the intentionally isolated module load across focused tests."""
+
+    return _preference_tools_module()
 
 
-def test_preference_tool_ignores_scoreless_unrelated_hits():
+def test_preference_tool_ignores_scoreless_unrelated_hits(preference_tools_module):
     """Scoreless/synthetic search hits must not suppress unrelated preferences."""
-    preference_duplicate_message = _preference_duplicate_message()
-    message = preference_duplicate_message(
+    message = preference_tools_module.preference_duplicate_message(
         "Prefers Google Calendar over Outlook",
         [{"memory_id": "other", "content": "Prefers Outlook calendar"}],
     )
     assert message is None
 
 
-def test_preference_tool_blocks_exact_normalized_duplicate():
-    preference_duplicate_message = _preference_duplicate_message()
-    message = preference_duplicate_message(
+def test_preference_tool_blocks_exact_normalized_duplicate(preference_tools_module):
+    message = preference_tools_module.preference_duplicate_message(
         "Prefers Google Calendar over Outlook",
         [{"memory_id": "dup", "content": "  Prefers Google Calendar over Outlook "}],
     )
@@ -81,9 +82,8 @@ def test_preference_tool_blocks_exact_normalized_duplicate():
     assert message.startswith("Similar preference already exists:")
 
 
-def test_preference_tool_honors_real_relevance_score():
-    preference_duplicate_message = _preference_duplicate_message()
-    message = preference_duplicate_message(
+def test_preference_tool_honors_real_relevance_score(preference_tools_module):
+    message = preference_tools_module.preference_duplicate_message(
         "Prefers Google Calendar over Outlook",
         [{"memory_id": "near", "content": "Uses Google Calendar", "score": 0.95}],
     )
@@ -91,19 +91,21 @@ def test_preference_tool_honors_real_relevance_score():
     assert "Uses Google Calendar" in message
 
 
-def test_preference_tool_writes_retry_stable_agent_conclusion_to_ledger():
-    module = _preference_tools_module()
+def test_preference_tool_writes_retry_stable_agent_conclusion_to_ledger(preference_tools_module, monkeypatch):
+    module = preference_tools_module
 
     class Provenance:
         def __init__(self, **kwargs):
             for key, value in kwargs.items():
                 setattr(self, key, value)
 
-    module.LedgerProvenance = Provenance
-    module.save_fact = MagicMock(return_value="mem_ledger")
-    module.capture_memory_write = MagicMock()
+    save_fact = MagicMock(return_value="mem_ledger")
+    capture_memory_write = MagicMock()
     firestore_client = object()
-    module.get_firestore_client = MagicMock(return_value=firestore_client)
+    monkeypatch.setattr(module, "LedgerProvenance", Provenance)
+    monkeypatch.setattr(module, "save_fact", save_fact)
+    monkeypatch.setattr(module, "capture_memory_write", capture_memory_write)
+    monkeypatch.setattr(module, "get_firestore_client", MagicMock(return_value=firestore_client))
     config = {
         "configurable": {
             "user_id": "user-1",
@@ -116,16 +118,16 @@ def test_preference_tool_writes_retry_stable_agent_conclusion_to_ledger():
     second = module.save_user_preference_tool("Prefers metric units", config=config)
 
     assert first == second == "Preference saved: Prefers metric units"
-    assert module.save_fact.call_count == 2
-    first_call = module.save_fact.call_args_list[0]
-    second_call = module.save_fact.call_args_list[1]
+    assert save_fact.call_count == 2
+    first_call = save_fact.call_args_list[0]
+    second_call = save_fact.call_args_list[1]
     assert first_call.kwargs["write_reason"].value == "agent_reusable_conclusion"
     assert first_call.kwargs["provenance"].source_id == "chat-1"
     assert first_call.kwargs["provenance"].source_type == "agent_chat"
     assert first_call.kwargs["provenance"].action_id == second_call.kwargs["provenance"].action_id
     assert first_call.kwargs["provenance"].artifact_ref == {"chat_session_id": "chat-1"}
     assert first_call.kwargs["db_client"] is firestore_client
-    module.capture_memory_write.assert_called_with(
+    capture_memory_write.assert_called_with(
         principal_id="user-1",
         source="agent_preference_ledger_write",
         session_id="chat-1",
@@ -140,20 +142,22 @@ def test_preference_tool_writes_retry_stable_agent_conclusion_to_ledger():
     )
 
 
-def test_preference_tool_does_not_write_without_user_authority():
-    module = _preference_tools_module()
-    module.save_fact = MagicMock()
+def test_preference_tool_does_not_write_without_user_authority(preference_tools_module, monkeypatch):
+    module = preference_tools_module
+    save_fact = MagicMock()
+    monkeypatch.setattr(module, "save_fact", save_fact)
 
     result = module.save_user_preference_tool("Prefers metric units", config={"configurable": {}})
 
     assert result == "Error: Could not determine user ID"
-    module.save_fact.assert_not_called()
+    save_fact.assert_not_called()
 
 
-def test_preference_tool_fails_closed_when_storage_authority_is_unavailable():
-    module = _preference_tools_module()
-    module.get_firestore_client = MagicMock(side_effect=RuntimeError("credential detail"))
-    module.save_fact = MagicMock()
+def test_preference_tool_fails_closed_when_storage_authority_is_unavailable(preference_tools_module, monkeypatch):
+    module = preference_tools_module
+    save_fact = MagicMock()
+    monkeypatch.setattr(module, "get_firestore_client", MagicMock(side_effect=RuntimeError("credential detail")))
+    monkeypatch.setattr(module, "save_fact", save_fact)
 
     result = module.save_user_preference_tool(
         "Prefers metric units",
@@ -161,7 +165,7 @@ def test_preference_tool_fails_closed_when_storage_authority_is_unavailable():
     )
 
     assert result == "Error saving preference"
-    module.save_fact.assert_not_called()
+    save_fact.assert_not_called()
 
 
 def test_explicit_integration_memories_keep_required_processing_contract():
