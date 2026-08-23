@@ -1,12 +1,13 @@
 """Memory routing seam — surfaces route reads/writes/search through MemoryService (WS-L)."""
 
+import hashlib
 import json
 import logging
 import re
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Iterator, List, NoReturn, Optional, Set, Tuple, cast
+from typing import Any, Callable, Dict, Iterator, List, Literal, NoReturn, Optional, Set, Tuple, cast
 
 from fastapi import HTTPException
 from pydantic import ValidationError
@@ -23,7 +24,9 @@ from models.product_memory import (
     MemoryItem,
     MemoryItemStatus,
     MemoryKind,
+    LedgerWriteReason,
     MemoryTier,
+    MemorySubjectScope,
     ProcessingState,
     RESTRICTED_SENSITIVITY_LABELS,
     SourceState,
@@ -57,7 +60,7 @@ from utils.memory.product_memory_read_service import (
     iter_authoritative_product_memory_items,
     iter_authoritative_product_memory_items_newest_first,
 )
-from utils.memory.knowledge_ledger import LEDGER_SCHEMA_VERSION
+from utils.memory.knowledge_ledger import LEDGER_SCHEMA_VERSION, LedgerProvenance, amend_fact
 from utils.memory.rejected_memory_feedback import clear_rejected_memory_feedback_cache
 from utils.memory.required_promotion import required_processing_payload
 from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
@@ -1553,6 +1556,133 @@ class MemoryService:
                 pass
             raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
 
+    def _canonical_item_for_lineage(self, uid: str, memory_id: str) -> Optional[MemoryItem]:
+        """Read one identity-checked canonical row, including closed history."""
+        client = self.db_client if self.db_client is not None else default_db_client
+        try:
+            snapshot = client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").get()
+            if getattr(snapshot, "exists", False) is not True:
+                return None
+            payload = snapshot.to_dict()
+            if not isinstance(payload, dict):
+                raise ValueError("canonical memory payload is malformed")
+            item = MemoryItem.model_validate(payload)
+            if item.uid != uid or item.memory_id != memory_id or str(getattr(snapshot, "id", memory_id)) != memory_id:
+                raise ValueError("canonical memory identity mismatch")
+            return item
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
+
+    @staticmethod
+    def _ledger_correction_action_id(item: MemoryItem, content: str) -> str:
+        identity = f"{item.memory_id}\0{item.item_revision}\0{content}".encode("utf-8")
+        return f"memory_ui_correction:{hashlib.sha256(identity).hexdigest()}"
+
+    def _retry_ledger_fact_correction(
+        self,
+        uid: str,
+        prior: MemoryItem,
+        content: str,
+    ) -> Optional[MemoryDB]:
+        """Return the exact prior correction on an HTTP retry, without rewriting history."""
+        replacement_id = (prior.superseded_by or "").strip()
+        if prior.status != MemoryItemStatus.superseded or not replacement_id:
+            return None
+        replacement = self._canonical_item_for_lineage(uid, replacement_id)
+        if replacement is None:
+            return None
+        if not self._is_exact_ledger_fact_correction(prior, replacement, content):
+            return None
+        return memory_item_to_memorydb(replacement)
+
+    @staticmethod
+    def _is_exact_ledger_fact_correction(prior: MemoryItem, replacement: MemoryItem, content: str) -> bool:
+        # The atomic supersession commit advances the closed source row by one
+        # revision.  Its correction evidence intentionally names the revision
+        # that was active when the user edited it, which remains the current
+        # revision on immediate readback and is ``closed_revision - 1`` on an
+        # HTTP retry after the commit succeeded.
+        source_revision = prior.item_revision
+        if prior.status == MemoryItemStatus.superseded:
+            source_revision -= 1
+        if source_revision < 1:
+            return False
+        expected_source_version = f"item_revision:{source_revision}"
+        has_correction_evidence = any(
+            evidence.source_type == "explicit_user_correction"
+            and evidence.source_id == prior.memory_id
+            and evidence.source_version == expected_source_version
+            for evidence in replacement.evidence
+        )
+        return not (
+            replacement.status != MemoryItemStatus.active
+            or replacement.ledger_schema_version != LEDGER_SCHEMA_VERSION
+            or replacement.kind != MemoryKind.fact
+            or replacement.valid_to is not None
+            or bool((replacement.superseded_by or "").strip())
+            or not replacement.intent_backed
+            or replacement.write_reason != LedgerWriteReason.direct_user_statement
+            or not replacement.user_asserted
+            or (replacement.content or "").strip() != content
+            or replacement.slot != prior.slot
+            or replacement.subject_scope != prior.subject_scope
+            or replacement.subject_entity_id != prior.subject_entity_id
+            or replacement.curation_weight != prior.curation_weight
+            or replacement.visibility != prior.visibility
+            or not has_correction_evidence
+        )
+
+    def _correct_ledger_fact(self, uid: str, prior: MemoryItem, content: str) -> MemoryDB:
+        normalized = (content or "").strip()
+        if not normalized:
+            raise HTTPException(status_code=422, detail="Memory correction must not be blank")
+        if prior.ledger_schema_version != LEDGER_SCHEMA_VERSION or prior.kind != MemoryKind.fact:
+            raise HTTPException(status_code=409, detail="Only knowledge ledger facts may be corrected")
+        if memory_item_to_memorydb(prior).is_locked:
+            raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
+        if prior.visibility not in {"private", "public", "shared"}:
+            raise HTTPException(status_code=503, detail="Canonical memory unavailable")
+        if prior.status != MemoryItemStatus.active or prior.valid_to is not None or prior.superseded_by:
+            retried = self._retry_ledger_fact_correction(uid, prior, normalized)
+            if retried is not None:
+                self._invalidate_prompt_cache(uid)
+                return retried
+            raise HTTPException(status_code=409, detail="Historical knowledge ledger rows are read-only")
+
+        provenance = LedgerProvenance(
+            source_id=prior.memory_id,
+            source_type="explicit_user_correction",
+            source_version=f"item_revision:{prior.item_revision}",
+            action_id=self._ledger_correction_action_id(prior, normalized),
+            artifact_ref={"surface": "memory_edit_api"},
+        )
+        try:
+            replacement_id = amend_fact(
+                uid,
+                prior.memory_id,
+                normalized,
+                provenance=provenance,
+                write_reason=LedgerWriteReason.direct_user_statement,
+                slot=prior.slot,
+                subject_scope=prior.subject_scope or MemorySubjectScope.primary_user,
+                subject_entity_id=prior.subject_entity_id,
+                curation_weight=prior.curation_weight,
+                visibility=cast(Literal["private", "public", "shared"], prior.visibility),
+                db_client=self.db_client,
+            )
+        except (RuntimeError, ValueError) as exc:
+            raise HTTPException(status_code=409, detail="Knowledge ledger correction conflicted") from exc
+        # The append/supersede transaction is already durable once amend_fact
+        # returns. Invalidate before readback so a transient readback failure
+        # cannot leave a successfully corrected fact in a stale prompt cache.
+        self._invalidate_prompt_cache(uid)
+        replacement = self._canonical_item_for_lineage(uid, replacement_id)
+        if replacement is None or not self._is_exact_ledger_fact_correction(prior, replacement, normalized):
+            raise HTTPException(status_code=503, detail="Knowledge ledger correction readback unavailable")
+        return memory_item_to_memorydb(replacement)
+
     @staticmethod
     def _status_from_snapshot(snapshot: Any) -> Optional[MemoryItemStatus]:
         if getattr(snapshot, "exists", False) is not True:
@@ -2705,6 +2835,9 @@ class MemoryService:
 
     def update_content(self, uid: str, memory_id: str, content: str) -> MemoryDB:
         self.ensure_canonical_mutation_ready(uid)
+        canonical_item = self._canonical_item_for_lineage(uid, memory_id)
+        if canonical_item is not None and canonical_item.ledger_schema_version == LEDGER_SCHEMA_VERSION:
+            return self._correct_ledger_fact(uid, canonical_item, content)
         materialized = self._ensure_canonical_target(uid, memory_id)
         try:
             updated = self._canonical.update_content(uid, memory_id, content)

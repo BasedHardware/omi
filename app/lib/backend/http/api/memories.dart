@@ -139,16 +139,34 @@ Future<bool> deleteAllMemoriesServer() async {
   return response.statusCode == 200;
 }
 
-Future<bool> editMemoryServer(String memoryId, String value) async {
+class EditMemoryResult {
+  final bool persisted;
+  final Memory? authoritativeMemory;
+
+  const EditMemoryResult({required this.persisted, this.authoritativeMemory});
+}
+
+Future<EditMemoryResult> editMemoryServer(String memoryId, String value) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v3/memories/$memoryId?value=$value',
+    url: '${Env.apiBaseUrl}v3/memories/$memoryId',
     headers: {},
     method: 'PATCH',
-    body: '',
+    body: json.encode({'value': value}),
   );
-  if (response == null) return false;
-  Logger.debug('editMemory response: ${response.body}');
-  return response.statusCode == 200;
+  if (response == null || response.statusCode != 200) {
+    return const EditMemoryResult(persisted: false);
+  }
+  try {
+    final payload = json.decode(response.body) as Map<String, dynamic>;
+    final rawMemory = payload['memory'];
+    final authoritativeMemory =
+        rawMemory is Map ? Memory.fromGeneratedWireJson(Map<String, dynamic>.from(rawMemory)) : null;
+    Logger.debug('editMemory persisted; authoritativeReplacement=${authoritativeMemory != null}');
+    return EditMemoryResult(persisted: true, authoritativeMemory: authoritativeMemory);
+  } catch (error) {
+    Logger.warning('editMemory response decode failed: $error');
+    return const EditMemoryResult(persisted: false);
+  }
 }
 
 Future<bool> updateMemoryBaselineServer(String memoryId, bool value) async {

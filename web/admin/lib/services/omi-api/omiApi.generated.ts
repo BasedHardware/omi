@@ -2496,6 +2496,11 @@ export interface MemoryDB {
   write_reason?: LedgerWriteReason | null;
 }
 
+export interface MemoryEditResponse {
+  memory?: MemoryDB | null;
+  status: string;
+}
+
 export type MemoryKind = "fact" | "document" | "trigger";
 
 export type MemoryLayer = "short_term" | "long_term" | "archive";
@@ -4534,6 +4539,7 @@ export interface OmiApiSchemas {
   "MemoryAssistantSettings": MemoryAssistantSettings;
   "MemoryCategory": MemoryCategory;
   "MemoryDB": MemoryDB;
+  "MemoryEditResponse": MemoryEditResponse;
   "MemoryKind": MemoryKind;
   "MemoryLayer": MemoryLayer;
   "MemoryLinkSpec": MemoryLinkSpec;
@@ -8762,7 +8768,7 @@ export interface OmiApiPaths {
     patch: {
       operationId: "edit_memory_v3_memories__memory_id__patch";
       responses: {
-        "200": MemoryMutationResponse;
+        "200": MemoryEditResponse;
         "401": void;
         "404": void;
         "422": HTTPValidationError;
@@ -16684,7 +16690,7 @@ export async function resolve_memory_review_item_v3_memories_review_queue__revie
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function edit_memory_v3_memories__memory_id__patch(path: { memory_id: string }, query: { value?: string | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: MemoryValueRequest | null, init?: OmiApiClientInit): Promise<MemoryMutationResponse> {
+export async function edit_memory_v3_memories__memory_id__patch(path: { memory_id: string }, query: { value?: string | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: MemoryValueRequest | null, init?: OmiApiClientInit): Promise<MemoryEditResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v3/memories/${path.memory_id}`;
   const _params = query ? Object.entries(query)

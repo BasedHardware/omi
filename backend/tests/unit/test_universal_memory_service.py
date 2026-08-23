@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from models.memory_evidence import SourceState
+from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.product_memory import (
     LedgerWriteReason,
     MemoryItem,
@@ -789,6 +789,194 @@ def test_legacy_mutation_materializes_stable_id_then_cleans_up(service_mod, monk
     cleanup.assert_called_once()
     legacy_edit.assert_not_called()
     assert db.docs["users/uid-test/memory_historical_overrides/legacy-id"]["status"] == "active"
+
+
+def test_current_rejected_ledger_fact_correction_appends_and_preserves_authority(service_mod, monkeypatch):
+    now = datetime(2026, 8, 23, tzinfo=timezone.utc)
+    prior = _ledger_item(service_mod, "prior", updated_at=now, user_review=False).model_copy(
+        update={
+            "content": "Lives in Boston",
+            "visibility": "public",
+            "curation_weight": 7,
+            "subject_scope": MemorySubjectScope.third_party,
+            "subject_entity_id": "person:sam",
+            "item_revision": 4,
+        }
+    )
+    correction_evidence = MemoryEvidence(
+        evidence_id="correction-evidence",
+        source_type="explicit_user_correction",
+        source_id="prior",
+        source_version="item_revision:4",
+        artifact_preservation=ArtifactPreservationState.preserved,
+    )
+    replacement = prior.model_copy(
+        update={
+            "memory_id": "replacement",
+            "content": "Lives in Brooklyn",
+            "visibility": "public",
+            "promotion": {},
+            "item_revision": 1,
+            "write_reason": LedgerWriteReason.direct_user_statement,
+            "evidence": [correction_evidence],
+        }
+    )
+    db = _Db({"users/uid-test/memory_items/prior": prior.model_dump(mode="python")})
+    service = service_mod.MemoryService(db_client=db)
+    amend = MagicMock(return_value="replacement")
+    monkeypatch.setattr(service_mod, "amend_fact", amend)
+
+    monkeypatch.setattr(service, "_canonical_item_for_lineage", MagicMock(side_effect=[prior, replacement]))
+    invalidate = MagicMock()
+    monkeypatch.setattr(service, "_invalidate_prompt_cache", invalidate)
+    service._canonical.update_content = MagicMock()
+
+    corrected = service.update_content("uid-test", "prior", "  Lives in Brooklyn  ")
+
+    assert corrected.id == "replacement"
+    assert corrected.content == "Lives in Brooklyn"
+    assert corrected.visibility == "public"
+    amend.assert_called_once()
+    assert amend.call_args.args[:3] == ("uid-test", "prior", "Lives in Brooklyn")
+    assert amend.call_args.kwargs["slot"] == "home_city"
+    assert amend.call_args.kwargs["subject_scope"] == MemorySubjectScope.third_party
+    assert amend.call_args.kwargs["subject_entity_id"] == "person:sam"
+    assert amend.call_args.kwargs["curation_weight"] == 7
+    assert amend.call_args.kwargs["visibility"] == "public"
+    provenance = amend.call_args.kwargs["provenance"]
+    assert provenance.source_type == "explicit_user_correction"
+    assert provenance.source_id == "prior"
+    assert provenance.source_version == "item_revision:4"
+    assert provenance.artifact_ref == {"surface": "memory_edit_api"}
+    invalidate.assert_called_once_with("uid-test")
+    service._canonical.update_content.assert_not_called()
+
+
+def test_ledger_fact_correction_retry_returns_exact_replacement_without_another_write(service_mod, monkeypatch):
+    now = datetime(2026, 8, 23, tzinfo=timezone.utc)
+    prior = _ledger_item(
+        service_mod,
+        "prior",
+        updated_at=now,
+        status=MemoryItemStatus.superseded,
+        valid_to=now,
+        superseded_by="replacement",
+    ).model_copy(update={"item_revision": 5})
+    evidence = MemoryEvidence(
+        evidence_id="correction-evidence",
+        source_type="explicit_user_correction",
+        source_id="prior",
+        source_version="item_revision:4",
+        artifact_preservation=ArtifactPreservationState.preserved,
+    )
+    replacement = _ledger_item(service_mod, "replacement", updated_at=now + timedelta(seconds=1)).model_copy(
+        update={
+            "content": "Lives in Brooklyn",
+            "evidence": [evidence],
+            "write_reason": LedgerWriteReason.direct_user_statement,
+        }
+    )
+    service = service_mod.MemoryService(db_client=_Db())
+    monkeypatch.setattr(service, "_canonical_item_for_lineage", MagicMock(side_effect=[prior, replacement]))
+    amend = MagicMock()
+    monkeypatch.setattr(service_mod, "amend_fact", amend)
+
+    corrected = service.update_content("uid-test", "prior", "Lives in Brooklyn")
+
+    assert corrected.id == "replacement"
+    amend.assert_not_called()
+
+
+def test_ledger_fact_correction_rejects_mismatched_authoritative_readback(service_mod, monkeypatch):
+    now = datetime(2026, 8, 23, tzinfo=timezone.utc)
+    prior = _ledger_item(service_mod, "prior", updated_at=now)
+    evidence = MemoryEvidence(
+        evidence_id="correction-evidence",
+        source_type="explicit_user_correction",
+        source_id="prior",
+        source_version=f"item_revision:{prior.item_revision}",
+        artifact_preservation=ArtifactPreservationState.preserved,
+    )
+    mismatched = _ledger_item(service_mod, "replacement", updated_at=now + timedelta(seconds=1)).model_copy(
+        update={
+            "content": "Lives in Brooklyn",
+            "evidence": [evidence],
+            "visibility": "shared",
+            "write_reason": LedgerWriteReason.direct_user_statement,
+        }
+    )
+    service = service_mod.MemoryService(db_client=_Db())
+    monkeypatch.setattr(service, "_canonical_item_for_lineage", MagicMock(side_effect=[prior, mismatched]))
+    monkeypatch.setattr(service_mod, "amend_fact", MagicMock(return_value="replacement"))
+    invalidate = MagicMock()
+    monkeypatch.setattr(service, "_invalidate_prompt_cache", invalidate)
+
+    with pytest.raises(service_mod.HTTPException) as exc_info:
+        service.update_content("uid-test", "prior", "Lives in Brooklyn")
+
+    assert exc_info.value.status_code == 503
+    invalidate.assert_called_once_with("uid-test")
+
+
+def test_ledger_correction_fails_closed_on_canonical_identity_mismatch(service_mod, monkeypatch):
+    prior = _ledger_item(
+        service_mod,
+        "prior",
+        updated_at=datetime(2026, 8, 23, tzinfo=timezone.utc),
+    ).model_copy(update={"uid": "foreign-user"})
+    db = _Db({"users/uid-test/memory_items/prior": prior.model_dump(mode="python")})
+    amend = MagicMock()
+    monkeypatch.setattr(service_mod, "amend_fact", amend)
+
+    with pytest.raises(service_mod.HTTPException) as exc_info:
+        service_mod.MemoryService(db_client=db).update_content("uid-test", "prior", "corrected")
+
+    assert exc_info.value.status_code == 503
+    amend.assert_not_called()
+
+
+def test_ledger_correction_fails_closed_on_invalid_visibility(service_mod, monkeypatch):
+    prior = _ledger_item(
+        service_mod,
+        "prior",
+        updated_at=datetime(2026, 8, 23, tzinfo=timezone.utc),
+    ).model_copy(update={"visibility": "unknown"})
+    service = service_mod.MemoryService(db_client=_Db())
+    monkeypatch.setattr(service, "_canonical_item_for_lineage", MagicMock(return_value=prior))
+    amend = MagicMock()
+    monkeypatch.setattr(service_mod, "amend_fact", amend)
+
+    with pytest.raises(service_mod.HTTPException) as exc_info:
+        service.update_content("uid-test", "prior", "corrected")
+
+    assert exc_info.value.status_code == 503
+    amend.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "item_update",
+    [
+        {"kind": MemoryKind.document, "body": "playbook"},
+        {"kind": MemoryKind.trigger, "trigger_condition": {"keyword": "hello"}},
+        {"status": MemoryItemStatus.superseded, "valid_to": datetime(2026, 8, 23, tzinfo=timezone.utc)},
+    ],
+)
+def test_ledger_correction_rejects_non_fact_or_historical_rows(service_mod, monkeypatch, item_update):
+    prior = _ledger_item(
+        service_mod,
+        "prior",
+        updated_at=datetime(2026, 8, 23, tzinfo=timezone.utc),
+    ).model_copy(update=item_update)
+    service = service_mod.MemoryService(db_client=_Db())
+    monkeypatch.setattr(service, "_canonical_item_for_lineage", MagicMock(return_value=prior))
+    amend = MagicMock()
+    monkeypatch.setattr(service_mod, "amend_fact", amend)
+
+    with pytest.raises(service_mod.HTTPException) as exc_info:
+        service.update_content("uid-test", "prior", "corrected")
+
+    assert exc_info.value.status_code == 409
+    amend.assert_not_called()
 
 
 @pytest.mark.parametrize(
