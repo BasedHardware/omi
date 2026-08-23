@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   CHAT_EVIDENCE_MAX_IDENTIFIER_CHARS,
@@ -23,7 +25,54 @@ const baseMemory = {
   ledger_schema_version: 'knowledge_ledger.v1'
 }
 
+type JitRuntimeMatrix = {
+  memory_rows: Array<Record<string, unknown>>
+  chat_records: Record<'legacy' | 'v1' | 'future', Record<string, unknown>>
+  expected: {
+    memory_ids: string[]
+    authoritative_ledger_ids: string[]
+    readable_text_by_id: Record<string, string>
+    v1_evidence_kind: string
+    future_evidence_kind: string
+    future_evidence_state: string
+  }
+}
+
+const jitRuntimeMatrix = (): JitRuntimeMatrix => {
+  const path = fileURLToPath(
+    new URL('../../../../contracts/parity/jit_runtime_contract_matrix.json', import.meta.url)
+  )
+  return JSON.parse(readFileSync(path, 'utf8')) as JitRuntimeMatrix
+}
+
 describe('knowledge_ledger.v1 memory adapter', () => {
+  it('runs the shared mixed-version JIT contract through the Windows runtime adapters', () => {
+    const matrix = jitRuntimeMatrix()
+    const memories = matrix.memory_rows.map((row) => {
+      const parsed = parseKnowledgeLedgerMemory(row)
+      if (!parsed) throw new Error(`shared fixture row failed Windows decode: ${String(row.id)}`)
+      return parsed
+    })
+
+    expect(memories.map((memory) => memory.id)).toEqual(matrix.expected.memory_ids)
+    expect(Object.fromEntries(memories.map((memory) => [memory.id, memory.content]))).toEqual(
+      matrix.expected.readable_text_by_id
+    )
+    expect(
+      memories
+        .filter((memory) => memory.ledger_schema_version === 'knowledge_ledger.v1')
+        .map((memory) => memory.id)
+    ).toEqual(matrix.expected.authoritative_ledger_ids)
+
+    expect(parseChatEvidenceFromRecord(matrix.chat_records.legacy)).toBeNull()
+    const current = parseChatEvidenceFromRecord(matrix.chat_records.v1)
+    const future = parseChatEvidenceFromRecord(matrix.chat_records.future)
+    expect(current?.references[0]?.kind).toBe(matrix.expected.v1_evidence_kind)
+    expect(future?.references[0]?.kind).toBe(matrix.expected.future_evidence_kind)
+    expect(future?.references[0]?.state).toBe(matrix.expected.future_evidence_state)
+    expect(matrix.chat_records.future.text).toBeTruthy()
+  })
+
   it('uses authoritative content and does not invent a kind or lifecycle state', () => {
     const parsed = parseKnowledgeLedgerMemory({
       ...baseMemory,
