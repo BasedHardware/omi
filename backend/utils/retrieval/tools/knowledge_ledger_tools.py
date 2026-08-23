@@ -72,6 +72,7 @@ def _is_current_ledger_memory(memory: MemoryDB, *, kinds: frozenset[str]) -> boo
     return (
         memory.ledger_schema_version == LEDGER_SCHEMA_VERSION
         and kind in kinds
+        and memory.intent_backed
         and memory.invalid_at is None
         and memory.user_review is not False
         and not memory.is_locked
