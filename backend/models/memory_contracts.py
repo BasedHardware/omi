@@ -6,7 +6,17 @@ from typing import Literal
 
 from pydantic import AliasChoices, AwareDatetime, BaseModel, Field, field_validator, model_validator
 
-from models.product_memory import MemoryTier
+from models.product_memory import (
+    MAX_LEDGER_CONTENT_CHARACTERS,
+    MAX_LEDGER_PLAYBOOK_BODY_CHARACTERS,
+    MAX_LEDGER_SLOT_CHARACTERS,
+    MAX_LEDGER_TRIGGER_CONDITION_KEYS,
+    MAX_LEDGER_TRIGGER_CONDITION_CHARACTERS,
+    LedgerWriteReason,
+    MemoryKind,
+    MemorySubjectScope,
+    MemoryTier,
+)
 
 # Neutral fact-source string for new durable-memory patch ledger writes (schema literal unchanged).
 DURABLE_MEMORY_PATCH_FACT_SOURCE = "durable_memory_patch"
@@ -496,6 +506,17 @@ class DurableMemoryPatch(BaseModel):
     mutation_metadata: Optional[Dict[str, Any]] = None
     visibility: str = "private"
     user_asserted: bool = False
+    ledger_schema_version: Optional[str] = None
+    kind: MemoryKind = MemoryKind.fact
+    subject_scope: MemorySubjectScope = MemorySubjectScope.primary_user
+    slot: Optional[str] = None
+    body: Optional[str] = None
+    valid_from: Optional[AwareDatetime] = None
+    valid_to: Optional[AwareDatetime] = None
+    curation_weight: int = 0
+    trigger_condition: Dict[str, Any] = Field(default_factory=dict)
+    intent_backed: bool = False
+    write_reason: Optional[LedgerWriteReason] = None
 
     @field_validator("target_visibility")
     @classmethod
@@ -506,7 +527,7 @@ class DurableMemoryPatch(BaseModel):
 
     @model_validator(mode="after")
     def validate_decision_contract(self):
-        if self.initial_tier == MemoryTier.long_term:
+        if self.initial_tier == MemoryTier.long_term and self.ledger_schema_version != "knowledge_ledger.v1":
             raise ValueError("Long-term memory cannot be created directly; promote an existing Short-term item")
         if (
             self.decision
@@ -527,6 +548,40 @@ class DurableMemoryPatch(BaseModel):
             and not self.evidence_refs
         ):
             raise ValueError("active/review patches require exact supporting evidence ids or refs")
+        if self.ledger_schema_version == "knowledge_ledger.v1":
+            if self.decision == DurablePatchDecision.add and self.initial_tier != MemoryTier.long_term:
+                raise ValueError("knowledge ledger rows use the long_term compatibility projection")
+            if self.decision == DurablePatchDecision.update and self.target_tier not in {None, MemoryTier.long_term}:
+                raise ValueError("knowledge ledger updates may not enter the short_term lifecycle")
+            if self.write_reason is None or (
+                not self.intent_backed and self.write_reason != LedgerWriteReason.legacy_migration
+            ):
+                raise ValueError("knowledge ledger rows require an intent-backed write reason")
+            if len(self.memory_text or "") > MAX_LEDGER_CONTENT_CHARACTERS:
+                raise ValueError("knowledge ledger content exceeds the ledger limit")
+            if len(self.slot or "") > MAX_LEDGER_SLOT_CHARACTERS:
+                raise ValueError("knowledge ledger slot exceeds the ledger limit")
+            if self.kind == MemoryKind.document:
+                if not (self.body or "").strip():
+                    raise ValueError("ledger documents require a non-empty body")
+                if len(self.body or "") > MAX_LEDGER_PLAYBOOK_BODY_CHARACTERS:
+                    raise ValueError("ledger document body exceeds the ledger limit")
+            elif self.body is not None:
+                raise ValueError("ledger body is only valid for document rows")
+            if self.kind != MemoryKind.fact and self.slot is not None:
+                raise ValueError("only fact ledger rows may define a slot")
+            if self.kind == MemoryKind.trigger and not self.trigger_condition:
+                raise ValueError("trigger ledger rows require trigger_condition")
+            if self.kind != MemoryKind.trigger and self.trigger_condition:
+                raise ValueError("trigger_condition is only valid for trigger ledger rows")
+            if len(self.trigger_condition) > MAX_LEDGER_TRIGGER_CONDITION_KEYS:
+                raise ValueError("ledger trigger condition exceeds the ledger key limit")
+            try:
+                serialized_trigger = json.dumps(self.trigger_condition, sort_keys=True, separators=(",", ":"))
+            except (TypeError, ValueError) as exc:
+                raise ValueError("trigger_condition must be JSON serializable") from exc
+            if len(serialized_trigger) > MAX_LEDGER_TRIGGER_CONDITION_CHARACTERS:
+                raise ValueError("ledger trigger condition exceeds the serialized limit")
         return self
 
 

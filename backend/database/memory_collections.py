@@ -40,6 +40,11 @@ class MemoryCollections:
         return f"{self.user_root}/memory_control/legacy_canonical_backfill"
 
     @property
+    def knowledge_ledger_migration_state(self) -> str:
+        """Per-user cutover proof; never a second memory authority."""
+        return f"{self.user_root}/memory_control/knowledge_ledger_migration"
+
+    @property
     def historical_graph_enrichment_cursor(self) -> str:
         return f"{self.user_root}/memory_control/historical_graph_enrichment"
 

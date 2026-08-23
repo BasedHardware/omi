@@ -35,7 +35,6 @@ from database.memory_apply_store import (
     apply_long_term_patch_firestore,
     replace_conversation_source_firestore,
     tombstone_memory_items_firestore,
-    transactional,
 )
 from database.memory_vector_repair_outbox import build_vector_repair_purge_outbox_records
 from database.memory_vector_metadata import canonical_memory_provider_id
@@ -48,10 +47,9 @@ from models.memory_domain import (
     physical_status_to_record_status,
 )
 from models.memory_evidence import (
+    ArtifactRef,
     ArtifactPreservationState,
     MemoryEvidence,
-    ProvenanceVisibility,
-    RedactionStatus,
     SourceState,
 )
 from models.memories import Evidence, MemoryDB, MemoryCategory, SubjectAttribution, decide_initial_memory_tier
@@ -98,6 +96,7 @@ _ALLOWED_MEMORY_VISIBILITIES = {"private", "public", "shared"}
 Payload = Dict[str, Any]
 SortKey = tuple[int, datetime | int]
 UserMutationPatchBuilder = Callable[[MemoryItem, datetime], Tuple[Payload, Payload]]
+_LEDGER_WRITE_AUTHORITY = object()
 
 # Concurrent same-account canonical writes race the account-global control
 # CAS inside the conversation source replacement. Retraction — the delete and
@@ -223,6 +222,13 @@ def search_result_to_memorydb(uid: str, item: Dict[str, Any]) -> MemoryDB:
         visibility=item.get("visibility") or "private",
         memory_tier=tier,
         valid_at=updated_at,
+        ledger_schema_version=item.get("ledger_schema_version"),
+        kind=item.get("kind"),
+        subject_scope=item.get("subject_scope"),
+        slot=item.get("slot"),
+        curation_weight=int(item.get("curation_weight") or 0),
+        intent_backed=bool(item.get("intent_backed", False)),
+        write_reason=item.get("write_reason"),
     )
 
 
@@ -294,11 +300,22 @@ def memory_item_to_memorydb(item: MemoryItem) -> MemoryDB:
         visibility=item.visibility,
         evidence=evidence_payload,
         memory_tier=item.tier,
-        valid_at=item.captured_at,
         primary_capture_device=item.primary_capture_device,
         capture_device_ids=item.capture_device_ids or [],
         subject_entity_id=item.subject_entity_id,
         subject_attribution=subject_attribution,
+        ledger_schema_version=item.ledger_schema_version,
+        kind=item.kind if item.ledger_schema_version else None,
+        subject_scope=item.subject_scope if item.ledger_schema_version else None,
+        slot=item.slot,
+        body=item.body,
+        valid_at=item.valid_from or item.captured_at,
+        invalid_at=item.valid_to,
+        superseded_by=item.superseded_by,
+        curation_weight=item.curation_weight,
+        trigger_condition=item.trigger_condition,
+        intent_backed=item.intent_backed,
+        write_reason=item.write_reason,
     )
 
 
@@ -811,6 +828,13 @@ def search_canonical_memories(
                 "date": item.updated_at.isoformat(),
                 "visibility": item.visibility,
                 "is_locked": bool((item.promotion or {}).get("is_locked", False)),
+                "ledger_schema_version": item.ledger_schema_version,
+                "kind": item.kind.value if item.ledger_schema_version else None,
+                "subject_scope": item.subject_scope.value if item.ledger_schema_version else None,
+                "slot": item.slot,
+                "curation_weight": item.curation_weight,
+                "intent_backed": item.intent_backed,
+                "write_reason": item.write_reason.value if item.write_reason else None,
             }
         )
     return results
@@ -875,6 +899,17 @@ def _legacy_evidence_to_memory(evidence_data: Dict[str, Any], *, conversation_id
         for raw_quote_ref in cast(List[object], raw_quote_refs):
             if isinstance(raw_quote_ref, dict):
                 quote_refs.append(dict(cast(Dict[str, Any], raw_quote_ref)))
+    raw_artifacts = evidence_data.get("artifact_refs")
+    if not isinstance(raw_artifacts, list):
+        raw_artifact = evidence_data.get("artifact_ref")
+        raw_artifacts = [raw_artifact] if isinstance(raw_artifact, dict) and raw_artifact else []
+    artifact_refs: List[ArtifactRef] = []
+    for raw_artifact in cast(List[object], raw_artifacts):
+        if not isinstance(raw_artifact, dict):
+            continue
+        artifact_payload = dict(cast(Dict[str, Any], raw_artifact))
+        artifact_payload.setdefault("preservation", ArtifactPreservationState.preserved.value)
+        artifact_refs.append(ArtifactRef(**artifact_payload))
     return MemoryEvidence(
         evidence_id=evidence_data["evidence_id"],
         source_type=evidence_data.get("source_type") or "conversation",
@@ -884,62 +919,17 @@ def _legacy_evidence_to_memory(evidence_data: Dict[str, Any], *, conversation_id
             conversation_id if (evidence_data.get("source_type") or "conversation") == "conversation" else None
         ),
         artifact_preservation=ArtifactPreservationState.preserved,
+        artifact_refs=artifact_refs,
         quote_refs=quote_refs,
         client_device_id=client_device_id,
     )
 
 
-_PRESERVED_EVIDENCE_SECURITY_FIELDS = (
-    "redaction_status",
-    "provenance_visibility",
-    "encryption_or_redaction_status",
-)
-
-
-def _preserved_evidence_security_fields(existing_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Carry forward security/redaction fields when refreshing active evidence."""
-    preserved: Dict[str, Any] = {}
-    for field in _PRESERVED_EVIDENCE_SECURITY_FIELDS:
-        value = existing_data.get(field)
-        if value is None:
-            continue
-        if field == "redaction_status":
-            preserved[field] = value if isinstance(value, RedactionStatus) else RedactionStatus(value)
-        elif field == "provenance_visibility":
-            preserved[field] = value if isinstance(value, ProvenanceVisibility) else ProvenanceVisibility(value)
-        elif field == "encryption_or_redaction_status":
-            preserved[field] = value if isinstance(value, RedactionStatus) else RedactionStatus(value)
-    return preserved
-
-
-def _persist_evidence(uid: str, evidence: MemoryEvidence, *, db_client: Any) -> None:
-    collections = MemoryCollections(uid=uid)
-    path = f"{collections.memory_evidence}/{evidence.evidence_id}"
-    ref = db_client.document(path)
-    transaction = db_client.transaction()
-
-    @transactional
-    def persist(write_transaction: Any) -> None:
-        snapshot = ref.get(transaction=write_transaction)
-        refresh_updates: Dict[str, Any] = {
-            "source_state": SourceState.active,
-            "source_state_reason": None,
-        }
-        if getattr(snapshot, "exists", False):
-            existing_data = _snapshot_payload(snapshot)
-            existing_source_state = SourceState(existing_data.get("source_state", SourceState.active.value))
-            if existing_source_state != SourceState.active:
-                # Source state is monotonic for one evidence identity. A later
-                # authorized extraction must use a fresh evidence_id.
-                return
-            refresh_updates.update(_preserved_evidence_security_fields(existing_data))
-        active_evidence = evidence.model_copy(update=refresh_updates)
-        write_transaction.set(ref, active_evidence.model_dump(mode="json"))
-
-    persist(transaction)
-
-
 def _resolve_initial_tier_value(data: Dict[str, Any]) -> str:
+    if data.get("ledger_schema_version") == "knowledge_ledger.v1":
+        # ``tier`` is retained only as a released-client projection. Ledger
+        # rows are durable at creation and never enter the ST promotion loop.
+        return MemoryLayer.long_term.value
     raw_tier = data.get("memory_tier")
     if raw_tier is not None:
         if hasattr(raw_tier, "value"):
@@ -1098,6 +1088,12 @@ def _canonical_extraction_apply_write(
         subject_entity_id=subject_entity_id,
     )
     idempotency_identity = {"uid": uid, "source_id": source_id, "content": content}
+    if data.get("ledger_schema_version") == "knowledge_ledger.v1":
+        # Ledger row identity includes the intent-serving action. Two distinct
+        # actions may validly derive the same text from one source; collapsing
+        # them at the older extraction idempotency key would commit the wrong
+        # row id and lose provenance.
+        idempotency_identity["ledger_memory_id"] = memory_id
     if subject_entity_id and subject_entity_id != "user":
         idempotency_identity["subject_entity_id"] = subject_entity_id
     idempotency_key = deterministic_contract_id(
@@ -1114,6 +1110,7 @@ def _canonical_extraction_apply_write(
     promotion_metadata = dict(data["promotion"]) if isinstance(data.get("promotion"), dict) else {}
     promotion_metadata.update(_product_metadata_from_payload(data))
 
+    ledger_schema_version = data.get("ledger_schema_version")
     patch_payload = {
         "patch_id": f"patch_{idempotency_key[:24]}",
         "packet_id": source_id,
@@ -1131,6 +1128,24 @@ def _canonical_extraction_apply_write(
         "visibility": _visibility_from_payload(data),
         "user_asserted": _user_asserted_from_payload(data),
     }
+    for ledger_key in (
+        "ledger_schema_version",
+        "kind",
+        "subject_scope",
+        "slot",
+        "body",
+        "valid_from",
+        "valid_to",
+        "curation_weight",
+        "trigger_condition",
+        "intent_backed",
+        "write_reason",
+    ):
+        if ledger_key in data and data[ledger_key] is not None:
+            patch_payload[ledger_key] = data[ledger_key]
+    supersedes = [str(value).strip() for value in (data.get("supersedes") or []) if str(value).strip()]
+    if supersedes:
+        patch_payload["supersedes"] = sorted(set(supersedes))
     if promotion_metadata:
         patch_payload["promotion"] = promotion_metadata
     if data.get("subject_entity_id"):
@@ -1154,11 +1169,16 @@ def _canonical_extraction_apply_write(
         "subject_entity_id": data.get("subject_entity_id"),
         "predicate": data.get("predicate"),
         "arguments": data.get("arguments") or {},
+        "supersedes": patch_payload.get("supersedes") or [],
         "mutation_metadata": mutation_identity,
     }
     operation = MemoryOperation.new(
         uid=uid,
-        operation_type=MemoryOperationType.source_candidate,
+        operation_type=(
+            MemoryOperationType.ledger_mutation
+            if ledger_schema_version == "knowledge_ledger.v1"
+            else MemoryOperationType.source_candidate
+        ),
         source_packet_id=source_id,
         target_memory_id=None,
         evidence_ids=[item.evidence_id for item in evidence_items],
@@ -1183,8 +1203,11 @@ def write_canonical_extraction_memory(
     *,
     db_client: Any = None,
     evidence_items: Optional[List[MemoryEvidence]] = None,
+    _ledger_authority: object | None = None,
 ) -> str:
     """Persist one memory to memory_items + ledger (extraction or external/manual writes)."""
+    if data.get("ledger_schema_version") is not None and _ledger_authority is not _LEDGER_WRITE_AUTHORITY:
+        raise ValueError("knowledge ledger writes require the dedicated ledger authority")
     client = db_client if db_client is not None else default_db_client
     control = _ensure_control_state(uid, db_client=client)
     write, memory_id = _canonical_extraction_apply_write(
@@ -1193,9 +1216,6 @@ def write_canonical_extraction_memory(
         control=control,
         evidence_items=evidence_items,
     )
-    for evidence in write.evidence:
-        _persist_evidence(uid, evidence, db_client=client)
-
     result = None
     for _attempt in range(3):
         result = apply_long_term_patch_firestore(
@@ -1203,6 +1223,7 @@ def write_canonical_extraction_memory(
             operation_id=write.operation.operation_id,
             patch_payload=write.patch_payload,
             proposed_operation=write.operation,
+            proposed_evidence=write.evidence,
             db_client=client,
         )
         if result.status != ApplyStatus.retryable_head_mismatch:
@@ -1281,8 +1302,15 @@ def _reissued_external_evidence(
     return reissued
 
 
-def write_canonical_external_memory(uid: str, data: Dict[str, Any], *, db_client: Any = None) -> str:
+def write_canonical_external_memory(
+    uid: str,
+    data: Dict[str, Any],
+    *,
+    db_client: Any = None,
+) -> str:
     """Persist a manual/API/integration memory via the canonical apply path."""
+    if data.get("ledger_schema_version") is not None:
+        raise ValueError("knowledge ledger writes require the dedicated ledger authority")
     client = db_client if db_client is not None else default_db_client
     return write_canonical_extraction_memory(
         uid,
@@ -1294,6 +1322,80 @@ def write_canonical_external_memory(uid: str, data: Dict[str, Any], *, db_client
             db_client=client,
         ),
     )
+
+
+def write_canonical_knowledge_ledger_memory(uid: str, data: Dict[str, Any], *, db_client: Any = None) -> str:
+    """Dedicated canonical boundary for exactly ``knowledge_ledger.v1`` rows."""
+    if data.get("ledger_schema_version") != "knowledge_ledger.v1":
+        raise ValueError("dedicated ledger writes require knowledge_ledger.v1")
+    client = db_client if db_client is not None else default_db_client
+    return write_canonical_extraction_memory(
+        uid,
+        data,
+        db_client=client,
+        _ledger_authority=_LEDGER_WRITE_AUTHORITY,
+        evidence_items=_reissued_external_evidence(
+            uid,
+            _evidence_items_from_payload(data),
+            db_client=client,
+        ),
+    )
+
+
+def close_canonical_ledger_item(
+    uid: str,
+    memory_id: str,
+    *,
+    valid_to: Optional[datetime] = None,
+    db_client: Any = None,
+) -> MemoryItem:
+    """Close one ledger row while preserving it as searchable history."""
+    client = db_client if db_client is not None else default_db_client
+
+    def already_closed() -> Optional[MemoryItem]:
+        existing = _read_canonical_memory_item_for_lineage(uid, memory_id, db_client=client)
+        if existing is None or existing.ledger_schema_version != "knowledge_ledger.v1":
+            return None
+        if existing.status != MemoryItemStatus.superseded or existing.valid_to is None:
+            return None
+        if valid_to is not None and existing.valid_to != valid_to:
+            raise ValueError("ledger row was already closed at a different valid_to")
+        return existing
+
+    closed = already_closed()
+    if closed is not None:
+        return closed
+
+    def build_patch(item: MemoryItem, now: datetime) -> Tuple[Payload, Payload]:
+        if item.ledger_schema_version != "knowledge_ledger.v1":
+            raise ValueError("only knowledge ledger rows may be closed with this operation")
+        closed_at = valid_to or now
+        if closed_at.tzinfo is None or closed_at.utcoffset() is None:
+            raise ValueError("valid_to must be timezone-aware")
+        if closed_at < (item.valid_from or item.captured_at):
+            raise ValueError("valid_to must not precede valid_from")
+        return (
+            {"result_status": LifecycleState.superseded.value},
+            {"valid_to": closed_at},
+        )
+
+    try:
+        _, updated = _apply_canonical_user_mutation(
+            uid,
+            memory_id,
+            mutation_kind="ledger_close",
+            build_patch=build_patch,
+            operation_type=MemoryOperationType.ledger_mutation,
+            db_client=client,
+        )
+    except ValueError as exc:
+        # A concurrent close may win after our initial active read. Re-read
+        # non-active history and accept only the identical terminal outcome.
+        closed = already_closed()
+        if closed is None:
+            raise exc
+        return closed
+    return updated
 
 
 def _read_replacement_control(uid: str, *, db_client: Any) -> MemoryControlState:
@@ -1588,6 +1690,7 @@ def _apply_canonical_user_mutation(
     *,
     mutation_kind: str,
     build_patch: UserMutationPatchBuilder,
+    operation_type: MemoryOperationType = MemoryOperationType.user_mutation,
     review_resolution: Optional[CanonicalReviewResolution] = None,
     db_client: Any,
 ) -> Tuple[MemoryItem, MemoryItem]:
@@ -1628,7 +1731,7 @@ def _apply_canonical_user_mutation(
         )
         operation = MemoryOperation.new(
             uid=uid,
-            operation_type=MemoryOperationType.user_mutation,
+            operation_type=operation_type,
             source_packet_id=(
                 f"user_mutation:{mutation_kind}:{memory_id}:r{item.item_revision}:" f"{idempotency_key[:16]}"
             ),
@@ -1675,6 +1778,64 @@ def _apply_canonical_user_mutation(
             continue
         raise RuntimeError(f"canonical user mutation failed: {result.status} ({result.reason})")
     raise RuntimeError("canonical user mutation conflicted repeatedly")
+
+
+def adapt_canonical_memory_to_knowledge_ledger(
+    uid: str,
+    memory_id: str,
+    *,
+    expected_item_revision: int,
+    updates: Dict[str, Any],
+    db_client: Any = None,
+) -> MemoryItem:
+    """Idempotently adapt one active Long-term row in place to ledger metadata.
+
+    This is a migration primitive, not a scanner or rollout switch. Callers
+    must authorize and bound the cohort separately, then write the per-user
+    completion marker only after every blocking row is adjudicated.
+    """
+    client = db_client if db_client is not None else default_db_client
+    expected_updates = dict(updates)
+    if expected_updates.get("ledger_schema_version") != "knowledge_ledger.v1":
+        raise ValueError("ledger migration requires knowledge_ledger.v1 updates")
+
+    def matches_existing(item: MemoryItem) -> bool:
+        for key, expected in expected_updates.items():
+            actual = getattr(item, key)
+            if hasattr(actual, "value"):
+                actual = actual.value
+            if hasattr(expected, "value"):
+                expected = expected.value
+            if actual != expected:
+                return False
+        return True
+
+    existing = _read_canonical_memory_item_for_lineage(uid, memory_id, db_client=client)
+    if existing is None:
+        raise ValueError(f"canonical memory not found: {memory_id}")
+    if existing.ledger_schema_version == "knowledge_ledger.v1":
+        if not matches_existing(existing):
+            raise ValueError("existing ledger migration metadata conflicts with the requested plan")
+        return existing
+
+    def build_patch(item: MemoryItem, _now: datetime) -> Tuple[Payload, Payload]:
+        if item.item_revision != expected_item_revision:
+            raise ValueError("ledger migration source revision changed")
+        if item.tier != MemoryLayer.long_term or item.status != MemoryItemStatus.active:
+            raise ValueError("ledger migration only adapts active Long-term rows")
+        if item.ledger_schema_version is not None:
+            raise ValueError("canonical row already belongs to another ledger schema")
+        return ({"result_status": LifecycleState.active.value}, expected_updates)
+
+    _, updated = _apply_canonical_user_mutation(
+        uid,
+        memory_id,
+        mutation_kind=f"knowledge_ledger_migration:r{expected_item_revision}",
+        build_patch=build_patch,
+        operation_type=MemoryOperationType.ledger_mutation,
+        db_client=client,
+    )
+    return updated
 
 
 def update_canonical_memory_content(uid: str, memory_id: str, content: str, *, db_client: Any = None) -> MemoryItem:

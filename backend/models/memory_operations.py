@@ -20,6 +20,7 @@ class MemoryOperationType(str, Enum):
     vector_sync = "vector_sync"
     graph_enrichment = "graph_enrichment"
     deletion = "deletion"
+    ledger_mutation = "ledger_mutation"
 
 
 class MemoryOperationStatus(str, Enum):

@@ -1386,6 +1386,7 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
 
     # Conversations collected by tools for citation
     conversations_collected = []
+    evidence_references = []
 
     # Safety guard
     safety_guard = AgentSafetyGuard(max_tool_calls=25, max_context_tokens=500000)
@@ -1400,6 +1401,7 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
         "user_id": uid,
         "thread_id": str(uuid.uuid4()),
         "conversations_collected": conversations_collected,
+        "evidence_references": evidence_references,
         "safety_guard": safety_guard,
         "chat_session_id": chat_session.id if chat_session else None,
         "client_kind": client_kind,
@@ -1418,6 +1420,14 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
 
     full_response = []
     tool_usage_count = 0
+
+    def attach_evidence_to_callback() -> None:
+        """Expose only the bounded references collected by successful JIT tools."""
+        if callback_data is not None and evidence_references:
+            callback_data['evidence'] = {
+                'schema_version': 1,
+                'references': evidence_references[:24],
+            }
 
     # Start the provider-specific agent task. Direct mode retains the native Anthropic
     # Messages contract for BYOK/specialist callers; managed feature mode uses the gateway's
@@ -1451,6 +1461,7 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
         callback_data['answer'] = streamed
         callback_data['memories_found'] = conversations_collected if conversations_collected else []
         callback_data['ask_for_nps'] = tool_usage_count > 0
+        attach_evidence_to_callback()
         chart_data_from_config = configurable.get('chart_data')
         if chart_data_from_config:
             callback_data['chart_data'] = chart_data_from_config
@@ -1505,6 +1516,7 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
                 callback_data['error'] = producer_failure
             callback_data['memories_found'] = conversations_collected if conversations_collected else []
             callback_data['ask_for_nps'] = tool_usage_count > 0
+            attach_evidence_to_callback()
             chart_data_from_config = configurable.get('chart_data')
             if chart_data_from_config:
                 callback_data['chart_data'] = chart_data_from_config

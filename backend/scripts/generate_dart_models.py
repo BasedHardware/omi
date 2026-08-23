@@ -56,6 +56,8 @@ SCHEMA_GROUPS = {
             'ChartDataPoint',
             'ChartDataset',
             'ChartData',
+            'ChatEvidenceReference',
+            'ChatEvidenceEnvelope',
             'Message',
             'ResponseMessage',
             'MessageReportResponse',

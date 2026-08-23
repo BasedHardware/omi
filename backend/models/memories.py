@@ -14,7 +14,7 @@ from config.memory_confidence import (
 )
 from database._client import document_id_from_seed
 from models.memory_domain import tier_to_layer
-from models.product_memory import MemoryTier
+from models.product_memory import LedgerWriteReason, MemoryKind, MemorySubjectScope, MemoryTier
 
 
 def decide_initial_memory_tier(manually_added: bool, durability: Optional[str]) -> MemoryTier:
@@ -599,6 +599,15 @@ class MemoryDB(Memory):
 
     primary_capture_device: Optional[str] = None
     capture_device_ids: List[str] = Field(default_factory=list)
+    ledger_schema_version: Optional[str] = None
+    kind: Optional[MemoryKind] = None
+    subject_scope: Optional[MemorySubjectScope] = None
+    slot: Optional[str] = None
+    body: Optional[str] = None
+    curation_weight: int = 0
+    trigger_condition: Dict[str, Any] = Field(default_factory=dict)
+    intent_backed: bool = False
+    write_reason: Optional[LedgerWriteReason] = None
 
     def __init__(self, **data: Any) -> None:
         super().__init__(**data)

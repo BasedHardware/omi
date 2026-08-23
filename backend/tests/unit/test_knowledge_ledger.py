@@ -1,0 +1,442 @@
+from datetime import datetime, timedelta, timezone
+
+import pytest
+
+from models.memory_apply import (
+    ApplyStatus,
+    MemoryControlState,
+    apply_long_term_patch_transaction,
+    build_patch_mutation_identity,
+)
+from models.memory_contracts import DurablePatchDecision, LifecycleState
+from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
+from models.memory_operations import MemoryOperation, MemoryOperationType
+from models.product_memory import (
+    LedgerWriteReason,
+    MemoryItem,
+    MemoryItemStatus,
+    MemoryKind,
+    MemoryLayer,
+    MemorySubjectScope,
+    ProcessingState,
+)
+from utils.memory import canonical_memory_adapter
+from utils.memory.canonical_memory_adapter import _canonical_extraction_apply_write
+from utils.memory.knowledge_ledger import (
+    LedgerProvenance,
+    LedgerWrite,
+    close_fact,
+    render_playbook_index,
+    render_profile,
+)
+
+NOW = datetime(2026, 8, 23, 12, 0, tzinfo=timezone.utc)
+
+
+def _evidence() -> MemoryEvidence:
+    return MemoryEvidence(
+        evidence_id="ev-ledger-1",
+        source_type="chat_turn",
+        source_id="turn-1",
+        source_version="v1",
+        artifact_preservation=ArtifactPreservationState.preserved,
+    )
+
+
+def _item(memory_id: str, **updates) -> MemoryItem:
+    data = {
+        "memory_id": memory_id,
+        "uid": "u1",
+        "version": 1,
+        "tier": MemoryLayer.long_term,
+        "status": MemoryItemStatus.active,
+        "processing_state": ProcessingState.processed,
+        "content": "Lives in Brooklyn",
+        "evidence": [_evidence()],
+        "source_state": SourceState.active,
+        "sensitivity_labels": [],
+        "visibility": "private",
+        "user_asserted": True,
+        "captured_at": NOW,
+        "updated_at": NOW,
+        "ledger_commit_id": "commit-1",
+        "ledger_sequence": 1,
+        "content_hash": "hash-1",
+        "ledger_schema_version": "knowledge_ledger.v1",
+        "kind": MemoryKind.fact,
+        "subject_scope": MemorySubjectScope.primary_user,
+        "slot": "home_city",
+        "valid_from": NOW,
+        "intent_backed": True,
+        "write_reason": LedgerWriteReason.direct_user_statement,
+    }
+    data.update(updates)
+    return MemoryItem(**data)
+
+
+def test_ledger_create_is_durable_without_short_term_promotion():
+    control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
+    patch = {
+        "patch_id": "patch-ledger-1",
+        "packet_id": "turn-1",
+        "run_id": "run-1",
+        "observed_head_commit_id": "head0",
+        "idempotency_key": "idem-ledger-1",
+        "decision": DurablePatchDecision.add.value,
+        "result_status": LifecycleState.active.value,
+        "evidence_ids": ["ev-ledger-1"],
+        "new_memory_id": "mem-ledger-1",
+        "memory_text": "Lives in Brooklyn",
+        "initial_tier": MemoryLayer.long_term.value,
+        "ledger_schema_version": "knowledge_ledger.v1",
+        "kind": MemoryKind.fact.value,
+        "subject_scope": MemorySubjectScope.primary_user.value,
+        "slot": "home_city",
+        "valid_from": NOW,
+        "intent_backed": True,
+        "write_reason": LedgerWriteReason.direct_user_statement.value,
+        "user_asserted": True,
+    }
+    mutation_identity = build_patch_mutation_identity(patch)
+    patch["mutation_metadata"] = mutation_identity
+    logical_payload = {
+        "decision": DurablePatchDecision.add.value,
+        "memory_text": "Lives in Brooklyn",
+        "result_status": LifecycleState.active.value,
+        "supersedes": [],
+        "mutation_metadata": mutation_identity,
+    }
+    operation = MemoryOperation.new(
+        uid="u1",
+        operation_type=MemoryOperationType.ledger_mutation,
+        source_packet_id="turn-1",
+        target_memory_id=None,
+        evidence_ids=["ev-ledger-1"],
+        logical_payload=logical_payload,
+        account_generation=1,
+        source_generation=2,
+        observed_head_commit_id="head0",
+    )
+    patch["evidence"] = [_evidence()]
+
+    result = apply_long_term_patch_transaction(
+        control_state=control,
+        operation=operation,
+        patch_payload=patch,
+    )
+
+    assert result.status == ApplyStatus.committed
+    item = result.memory_items[0]
+    assert item.tier == MemoryLayer.long_term
+    assert item.expires_at is None
+    assert item.kind == MemoryKind.fact
+    assert item.slot == "home_city"
+
+    wrong_operation = MemoryOperation.new(
+        uid="u1",
+        operation_type=MemoryOperationType.source_candidate,
+        source_packet_id="turn-1",
+        target_memory_id=None,
+        evidence_ids=["ev-ledger-1"],
+        logical_payload=logical_payload,
+        account_generation=1,
+        source_generation=2,
+        observed_head_commit_id="head0",
+    )
+    wrong_authority = apply_long_term_patch_transaction(
+        control_state=control,
+        operation=wrong_operation,
+        patch_payload=patch,
+    )
+    assert wrong_authority.status == ApplyStatus.invalid_patch
+    assert "ledger_mutation authority" in (wrong_authority.reason or "")
+
+
+def test_ledger_amendment_appends_and_supersedes_in_one_commit():
+    control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
+    prior = _item("prior", content="Boston")
+    write, replacement_id = _canonical_extraction_apply_write(
+        "u1",
+        {
+            "id": "replacement",
+            "content": "Brooklyn",
+            "ledger_schema_version": "knowledge_ledger.v1",
+            "kind": MemoryKind.fact.value,
+            "subject_scope": MemorySubjectScope.primary_user.value,
+            "slot": "home_city",
+            "valid_from": NOW + timedelta(days=1),
+            "intent_backed": True,
+            "write_reason": LedgerWriteReason.direct_user_statement.value,
+            "user_asserted": True,
+            "supersedes": [prior.memory_id],
+        },
+        control=control,
+        evidence_items=[_evidence()],
+    )
+    patch = {
+        **write.patch_payload,
+        "evidence": write.evidence,
+        "superseded_items": [prior.model_dump(mode="python")],
+    }
+
+    result = apply_long_term_patch_transaction(
+        control_state=control,
+        operation=write.operation,
+        patch_payload=patch,
+    )
+
+    assert result.status == ApplyStatus.committed
+    replacement = next(item for item in result.memory_items if item.memory_id == replacement_id)
+    historical = next(item for item in result.memory_items if item.memory_id == prior.memory_id)
+    assert replacement.status == MemoryItemStatus.active
+    assert replacement.content == "Brooklyn"
+    assert historical.status == MemoryItemStatus.superseded
+    assert historical.superseded_by == replacement.memory_id
+    assert historical.valid_to is not None
+    assert historical.valid_to >= replacement.valid_from
+    assert {event.payload["action"] for event in result.outbox_events} == {"upsert", "delete"}
+
+
+def test_generic_external_writer_cannot_forge_ledger_authority():
+    with pytest.raises(ValueError, match="dedicated ledger authority"):
+        canonical_memory_adapter.write_canonical_external_memory(
+            "u1",
+            {
+                "id": "forged",
+                "content": "Bypass promotion",
+                "ledger_schema_version": "knowledge_ledger.v1",
+            },
+            db_client=object(),
+        )
+
+
+def test_distinct_ledger_actions_with_same_source_and_text_do_not_collapse():
+    control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
+
+    def build(memory_id: str):
+        return _canonical_extraction_apply_write(
+            "u1",
+            {
+                "id": memory_id,
+                "content": "Lives in Brooklyn",
+                "ledger_schema_version": "knowledge_ledger.v1",
+                "kind": MemoryKind.fact.value,
+                "subject_scope": MemorySubjectScope.primary_user.value,
+                "slot": "home_city",
+                "valid_from": NOW,
+                "intent_backed": True,
+                "write_reason": LedgerWriteReason.agent_reusable_conclusion.value,
+                "conversation_id": "conversation-1",
+            },
+            control=control,
+            evidence_items=[_evidence()],
+        )[0]
+
+    first = build("mem-action-1")
+    retry = build("mem-action-1")
+    second_action = build("mem-action-2")
+
+    assert first.patch_payload["idempotency_key"] == retry.patch_payload["idempotency_key"]
+    assert first.operation.operation_id == retry.operation.operation_id
+    assert first.patch_payload["idempotency_key"] != second_action.patch_payload["idempotency_key"]
+    assert first.operation.operation_id != second_action.operation.operation_id
+
+
+def test_ledger_amendment_cannot_supersede_a_different_subject():
+    control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
+    prior = _item(
+        "prior-third-party",
+        subject_scope=MemorySubjectScope.third_party,
+        subject_entity_id="person:sarah",
+    )
+    write, _ = _canonical_extraction_apply_write(
+        "u1",
+        {
+            "id": "replacement-user",
+            "content": "Lives in Brooklyn",
+            "ledger_schema_version": "knowledge_ledger.v1",
+            "kind": MemoryKind.fact.value,
+            "subject_scope": MemorySubjectScope.primary_user.value,
+            "slot": "home_city",
+            "valid_from": NOW + timedelta(days=1),
+            "intent_backed": True,
+            "write_reason": LedgerWriteReason.direct_user_statement.value,
+            "user_asserted": True,
+            "supersedes": [prior.memory_id],
+        },
+        control=control,
+        evidence_items=[_evidence()],
+    )
+
+    result = apply_long_term_patch_transaction(
+        control_state=control,
+        operation=write.operation,
+        patch_payload={
+            **write.patch_payload,
+            "evidence": write.evidence,
+            "superseded_items": [prior.model_dump(mode="python")],
+        },
+    )
+
+    assert result.status == ApplyStatus.invalid_patch
+    assert "preserve kind and subject identity" in (result.reason or "")
+
+
+def test_ledger_contract_rejects_unbacked_or_third_party_profile_rows():
+    provenance = LedgerProvenance(
+        source_id="turn-1",
+        source_type="chat_turn",
+        action_id="action-1",
+    )
+    with pytest.raises(ValueError, match="subject_entity_id"):
+        LedgerWrite(
+            kind=MemoryKind.fact,
+            content="Sarah lives in Queens",
+            provenance=provenance,
+            write_reason=LedgerWriteReason.agent_reusable_conclusion,
+            subject_scope=MemorySubjectScope.third_party,
+        )
+
+    with pytest.raises(ValueError, match="write reason"):
+        _item("invalid", intent_backed=False, write_reason=None)
+
+    with pytest.raises(ValueError, match="non-empty body"):
+        LedgerWrite(
+            kind=MemoryKind.document,
+            content="Release playbook",
+            body="",
+            provenance=provenance,
+            write_reason=LedgerWriteReason.recurring_workflow,
+        )
+
+    with pytest.raises(ValueError, match="serialized limit"):
+        LedgerProvenance(
+            source_id="turn-1",
+            source_type="chat_turn",
+            action_id="action-oversized",
+            artifact_ref={"uri": "x" * 2_100},
+        )
+
+    with pytest.raises(ValueError, match="serialized limit"):
+        LedgerWrite(
+            kind=MemoryKind.trigger,
+            content="When the release window appears",
+            provenance=provenance,
+            write_reason=LedgerWriteReason.standing_trigger,
+            trigger_condition={"keyword": "x" * 8_100},
+        )
+
+
+def test_profile_renderer_is_current_user_only_deterministic_and_bounded():
+    current = _item("current", content="Brooklyn", curation_weight=5)
+    older = _item(
+        "older",
+        content="Boston",
+        status=MemoryItemStatus.superseded,
+        valid_to=NOW + timedelta(days=1),
+    )
+    third_party = _item(
+        "third-party",
+        content="Queens",
+        subject_scope=MemorySubjectScope.third_party,
+        subject_entity_id="person-sarah",
+    )
+    episodic = _item("episodic", content="Went to a concert", slot=None)
+
+    assert render_profile([episodic, third_party, older, current]) == "home_city: Brooklyn"
+    assert render_profile([current], character_budget=10) == ""
+
+
+def test_playbook_index_never_injects_body():
+    playbook = _item(
+        "playbook-1",
+        kind=MemoryKind.document,
+        slot=None,
+        content="Release the macOS beta",
+        body="secret implementation detail",
+        write_reason=LedgerWriteReason.recurring_workflow,
+    )
+
+    rendered = render_playbook_index([playbook])
+
+    assert rendered == "playbook-1: Release the macOS beta"
+    assert "secret implementation detail" not in rendered
+
+
+def test_close_fact_retry_returns_identical_closed_history(monkeypatch):
+    closed_at = NOW + timedelta(hours=1)
+    closed = _item(
+        "closed",
+        status=MemoryItemStatus.superseded,
+        valid_to=closed_at,
+    )
+    monkeypatch.setattr(
+        canonical_memory_adapter,
+        "_read_canonical_memory_item_for_lineage",
+        lambda *_args, **_kwargs: closed,
+    )
+    monkeypatch.setattr(
+        canonical_memory_adapter,
+        "_apply_canonical_user_mutation",
+        lambda *_args, **_kwargs: pytest.fail("idempotent close must not write again"),
+    )
+
+    assert close_fact("u1", "closed", valid_to=closed_at, db_client=object()) == closed
+
+
+def test_close_fact_retry_rejects_a_different_close_time(monkeypatch):
+    closed = _item(
+        "closed",
+        status=MemoryItemStatus.superseded,
+        valid_to=NOW + timedelta(hours=1),
+    )
+    monkeypatch.setattr(
+        canonical_memory_adapter,
+        "_read_canonical_memory_item_for_lineage",
+        lambda *_args, **_kwargs: closed,
+    )
+
+    with pytest.raises(ValueError, match="different valid_to"):
+        close_fact("u1", "closed", valid_to=NOW + timedelta(hours=2), db_client=object())
+
+
+def test_ledger_migration_adapter_retry_is_a_noop(monkeypatch):
+    adapted = _item(
+        "legacy",
+        item_revision=5,
+        user_asserted=False,
+        intent_backed=False,
+        write_reason=LedgerWriteReason.legacy_migration,
+    )
+    updates = {
+        "ledger_schema_version": "knowledge_ledger.v1",
+        "kind": MemoryKind.fact.value,
+        "subject_scope": MemorySubjectScope.primary_user.value,
+        "slot": "home_city",
+        "valid_from": NOW,
+        "valid_to": None,
+        "curation_weight": 0,
+        "trigger_condition": {},
+        "intent_backed": False,
+        "write_reason": LedgerWriteReason.legacy_migration.value,
+    }
+    monkeypatch.setattr(
+        canonical_memory_adapter,
+        "_read_canonical_memory_item_for_lineage",
+        lambda *_args, **_kwargs: adapted,
+    )
+    monkeypatch.setattr(
+        canonical_memory_adapter,
+        "_apply_canonical_user_mutation",
+        lambda *_args, **_kwargs: pytest.fail("adapted rows must not be rewritten"),
+    )
+
+    result = canonical_memory_adapter.adapt_canonical_memory_to_knowledge_ledger(
+        "u1",
+        "legacy",
+        expected_item_revision=4,
+        updates=updates,
+        db_client=object(),
+    )
+
+    assert result == adapted

@@ -36,6 +36,9 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
   var currentActivity: String?
   var inputDeviceName: String?
   var headline: String?
+  /// Additive canonical-ledger metadata mirrored from the server. Legacy rows
+  /// remain decodable with nil metadata and are fail-closed for prompt use.
+  var ledgerMetadataJson: String?
 
   // Capture-device provenance (preserved through SQLite cache round-trip)
   var primaryCaptureDevice: String?
@@ -79,6 +82,7 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
     currentActivity: String? = nil,
     inputDeviceName: String? = nil,
     headline: String? = nil,
+    ledgerMetadataJson: String? = nil,
     primaryCaptureDevice: String? = nil,
     captureDeviceIdsJson: String? = nil,
     isRead: Bool = false,
@@ -111,6 +115,7 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
     self.currentActivity = currentActivity
     self.inputDeviceName = inputDeviceName
     self.headline = headline
+    self.ledgerMetadataJson = ledgerMetadataJson
     self.primaryCaptureDevice = primaryCaptureDevice
     self.captureDeviceIdsJson = captureDeviceIdsJson
     self.isRead = isRead
@@ -234,6 +239,7 @@ extension MemoryRecord {
       currentActivity: memory.currentActivity,
       inputDeviceName: memory.inputDeviceName,
       headline: memory.headline,
+      ledgerMetadataJson: Self.encodeLedgerMetadata(memory.ledgerMetadata),
       primaryCaptureDevice: memory.primaryCaptureDevice,
       captureDeviceIdsJson: encodeCaptureDeviceIds(memory.captureDeviceIds),
       isRead: memory.isRead,
@@ -298,6 +304,7 @@ extension MemoryRecord {
     if let headline = memory.headline {
       self.headline = headline
     }
+    self.ledgerMetadataJson = Self.encodeLedgerMetadata(memory.ledgerMetadata)
 
     // Preserve capture-device provenance through cache sync/reload
     self.primaryCaptureDevice = memory.primaryCaptureDevice
@@ -394,9 +401,26 @@ extension MemoryRecord {
       inputDeviceName: inputDeviceName,
       windowTitle: windowTitle,
       headline: headline,
+      ledgerMetadata: ledgerMetadata,
       primaryCaptureDevice: primaryCaptureDevice,
       captureDeviceIds: captureDeviceIds
     )
+  }
+
+  private static func encodeLedgerMetadata(_ metadata: [String: String]) -> String? {
+    guard !metadata.isEmpty,
+      let data = try? JSONEncoder().encode(metadata),
+      let json = String(data: data, encoding: .utf8)
+    else { return nil }
+    return json
+  }
+
+  private var ledgerMetadata: [String: String] {
+    guard let json = ledgerMetadataJson,
+      let data = json.data(using: .utf8),
+      let metadata = try? JSONDecoder().decode([String: String].self, from: data)
+    else { return [:] }
+    return metadata
   }
 }
 
@@ -437,6 +461,7 @@ extension ServerMemory {
       inputDeviceName: inputDeviceName,
       windowTitle: windowTitle,
       headline: headline,
+      ledgerMetadata: ledgerMetadata,
       primaryCaptureDevice: primaryCaptureDevice,
       captureDeviceIds: captureDeviceIds
     )
@@ -471,6 +496,7 @@ extension ServerMemory {
     inputDeviceName: String?,
     windowTitle: String? = nil,
     headline: String? = nil,
+    ledgerMetadata: [String: String] = [:],
     primaryCaptureDevice: String? = nil,
     captureDeviceIds: [String] = []
   ) {
@@ -501,6 +527,7 @@ extension ServerMemory {
     self.inputDeviceName = inputDeviceName
     self.windowTitle = windowTitle
     self.headline = headline
+    self.ledgerMetadata = ledgerMetadata
     self.primaryCaptureDevice = primaryCaptureDevice
     self.captureDeviceIds = captureDeviceIds
   }

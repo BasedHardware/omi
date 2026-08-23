@@ -30,11 +30,14 @@ from models.memory_contracts import DurablePatchDecision, LifecycleState
 from models.memory_operations import MemoryOperation, MemoryOperationStatus, MemoryOperationType
 from models.memory_promotion import PromotionGraphPlan, build_promotion_admission_receipt
 from models.product_memory import (
+    LedgerWriteReason,
     MemoryAccessPolicy,
+    MemoryItem,
     MemoryItemStatus,
+    MemoryKind,
+    MemorySubjectScope,
     MemoryTier,
     ProcessingState,
-    MemoryItem,
     is_default_access_eligible,
 )
 
@@ -350,6 +353,17 @@ def _assert_privacy_scrubbed_item_semantics(raw):
     assert raw["subject_entity_id"] is None
     assert raw["predicate"] is None
     assert raw["arguments"] == {}
+    assert raw["ledger_schema_version"] is None
+    assert raw["kind"] == MemoryKind.fact.value
+    assert raw["subject_scope"] == MemorySubjectScope.primary_user.value
+    assert raw["slot"] is None
+    assert raw["body"] is None
+    assert raw["valid_from"] is None
+    assert raw["valid_to"] is None
+    assert raw["curation_weight"] == 0
+    assert raw["trigger_condition"] == {}
+    assert raw["intent_backed"] is False
+    assert raw["write_reason"] is None
 
 
 def _db_with(control=None, operation=None, evidence=None, target_items=None):
@@ -1480,6 +1494,160 @@ def test_firestore_apply_creates_operation_inside_transaction_and_never_overwrit
     assert replay.status == ApplyStatus.idempotent_skip
     assert replay.control_state.commit_sequence == first_sequence
     assert db.docs[operation_path]["status"] == MemoryOperationStatus.committed.value
+
+
+def test_firestore_apply_stages_new_evidence_in_the_same_commit(store):
+    operation = _operation()
+    evidence = _evidence()
+    db = _db_with(operation=operation)
+    evidence_path = "users/u1/memory_evidence/ev1"
+    db.docs.pop(evidence_path)
+
+    result = store.apply_long_term_patch_firestore(
+        uid="u1",
+        operation_id=operation.operation_id,
+        patch_payload=_patch(),
+        proposed_operation=operation,
+        proposed_evidence=[evidence],
+        db_client=db,
+    )
+
+    assert result.status == ApplyStatus.committed
+    assert db.docs[evidence_path]["evidence_id"] == evidence.evidence_id
+    assert evidence_path in [path for path, _ in db.transaction_obj.sets]
+
+
+def test_firestore_apply_does_not_orphan_proposed_evidence_when_patch_fails(store):
+    evidence = _evidence(evidence_id="ev-ledger-failed", source_version="v2")
+    operation = _operation(
+        operation_type=MemoryOperationType.long_term_apply,
+        evidence_ids=[evidence.evidence_id],
+    )
+    patch = _patch(
+        evidence_ids=[evidence.evidence_id],
+        ledger_schema_version="knowledge_ledger.v1",
+        initial_tier=MemoryTier.long_term,
+        intent_backed=True,
+        write_reason="agent_reusable_conclusion",
+    )
+    db = _db_with(operation=operation)
+    evidence_path = f"users/u1/memory_evidence/{evidence.evidence_id}"
+
+    result = store.apply_long_term_patch_firestore(
+        uid="u1",
+        operation_id=operation.operation_id,
+        patch_payload=patch,
+        proposed_operation=operation,
+        proposed_evidence=[evidence],
+        db_client=db,
+    )
+
+    assert result.status == ApplyStatus.invalid_patch
+    assert evidence_path not in db.docs
+    assert evidence_path not in [path for path, _ in db.transaction_obj.sets]
+
+
+def test_firestore_apply_rejects_changed_source_version_for_existing_evidence_identity(store):
+    operation = _operation()
+    db = _db_with(operation=operation, evidence=_evidence(source_version="v1"))
+
+    with pytest.raises(store.MemoryFirestoreApplyError, match="conflicts with existing evidence identity"):
+        store.apply_long_term_patch_firestore(
+            uid="u1",
+            operation_id=operation.operation_id,
+            patch_payload=_patch(),
+            proposed_operation=operation,
+            proposed_evidence=[_evidence(source_version="v2")],
+            db_client=db,
+        )
+
+    assert db.docs["users/u1/memory_evidence/ev1"]["source_version"] == "v1"
+    assert db.transaction_obj.mutations == []
+
+
+@pytest.mark.parametrize("source_state", [SourceState.tombstoned, SourceState.purged])
+def test_firestore_apply_never_resurrects_inactive_proposed_evidence(store, source_state):
+    operation = _operation()
+    db = _db_with(operation=operation)
+    evidence_path = "users/u1/memory_evidence/ev1"
+    db.docs.pop(evidence_path)
+
+    with pytest.raises(store.MemoryFirestoreApplyError, match="proposed evidence must be active"):
+        store.apply_long_term_patch_firestore(
+            uid="u1",
+            operation_id=operation.operation_id,
+            patch_payload=_patch(),
+            proposed_operation=operation,
+            proposed_evidence=[
+                _evidence(
+                    source_state=source_state,
+                    source_state_reason=(
+                        SourceStateReason.deleted_by_user
+                        if source_state == SourceState.tombstoned
+                        else SourceStateReason.account_purged
+                    ),
+                )
+            ],
+            db_client=db,
+        )
+
+    assert evidence_path not in db.docs
+    assert db.transaction_obj.mutations == []
+
+
+def test_firestore_add_rejects_new_operation_that_collides_with_existing_ledger_row_id(store):
+    first_evidence = _evidence(evidence_id="ev-ledger-v1", source_version="v1")
+    first_operation = _operation(
+        operation_type=MemoryOperationType.ledger_mutation,
+        evidence_ids=[first_evidence.evidence_id],
+    )
+    patch = _patch(
+        new_memory_id="mem-ledger-stable-action",
+        evidence_ids=[first_evidence.evidence_id],
+        ledger_schema_version="knowledge_ledger.v1",
+        initial_tier=MemoryTier.long_term,
+        intent_backed=True,
+        write_reason=LedgerWriteReason.agent_reusable_conclusion,
+    )
+    db = _db_with(operation=first_operation)
+    db.docs.pop("users/u1/memory_evidence/ev1")
+
+    first = store.apply_long_term_patch_firestore(
+        uid="u1",
+        operation_id=first_operation.operation_id,
+        patch_payload=patch,
+        proposed_operation=first_operation,
+        proposed_evidence=[first_evidence],
+        db_client=db,
+    )
+    assert first.status == ApplyStatus.committed
+    original = copy.deepcopy(db.docs["users/u1/memory_items/mem-ledger-stable-action"])
+
+    second_evidence = _evidence(evidence_id="ev-ledger-v2", source_version="v2")
+    second_operation = _operation(
+        operation_type=MemoryOperationType.ledger_mutation,
+        evidence_ids=[second_evidence.evidence_id],
+        observed_head_commit_id=first.control_state.head_commit_id,
+    )
+    second_patch = {
+        **patch,
+        "observed_head_commit_id": first.control_state.head_commit_id,
+        "evidence_ids": [second_evidence.evidence_id],
+    }
+
+    collision = store.apply_long_term_patch_firestore(
+        uid="u1",
+        operation_id=second_operation.operation_id,
+        patch_payload=second_patch,
+        proposed_operation=second_operation,
+        proposed_evidence=[second_evidence],
+        db_client=db,
+    )
+
+    assert collision.status == ApplyStatus.invalid_patch
+    assert collision.reason == "add patch new_memory_id already exists"
+    assert db.docs["users/u1/memory_items/mem-ledger-stable-action"] == original
+    assert "users/u1/memory_evidence/ev-ledger-v2" not in db.docs
 
 
 def test_firestore_promotion_persists_long_term_item_and_structured_graph_assertion_atomically(store):

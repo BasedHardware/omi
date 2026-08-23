@@ -42,7 +42,13 @@ from models.memory_operations import MemoryOperation, MemoryOperationType
 from models.memory_promotion import MemoryGraphAssertion, PromotionGraphPlan, build_memory_graph_assertion
 from models.memory_review import build_memory_review_conflict
 from models.memory_source_replacement import ConversationSourceReplacementReceipt
-from models.product_memory import RESTRICTED_SENSITIVITY_LABELS, MemoryItemStatus, MemoryItem
+from models.product_memory import (
+    RESTRICTED_SENSITIVITY_LABELS,
+    MemoryItem,
+    MemoryItemStatus,
+    MemoryKind,
+    MemorySubjectScope,
+)
 from models.memory_state_head import trusted_memory_state_head_fields
 
 
@@ -287,6 +293,7 @@ def apply_long_term_patch_firestore(
     operation_id: str,
     patch_payload: Dict[str, Any],
     proposed_operation: Optional[MemoryOperation] = None,
+    proposed_evidence: Optional[List[MemoryEvidence]] = None,
     review_resolution: Optional[CanonicalReviewResolution] = None,
     db_client: Any = db,
 ) -> ApplyResult:
@@ -305,6 +312,7 @@ def apply_long_term_patch_firestore(
         operation_id,
         patch_payload,
         proposed_operation,
+        proposed_evidence,
         review_resolution,
     )
 
@@ -697,6 +705,17 @@ def _tombstone_memory_items_firestore_transaction(
                 "subject_entity_id": None,
                 "predicate": None,
                 "arguments": {},
+                "ledger_schema_version": None,
+                "kind": MemoryKind.fact,
+                "subject_scope": MemorySubjectScope.primary_user,
+                "slot": None,
+                "body": None,
+                "valid_from": None,
+                "valid_to": None,
+                "curation_weight": 0,
+                "trigger_condition": {},
+                "intent_backed": False,
+                "write_reason": None,
                 "updated_at": max(now, item.updated_at),
                 "version": item.version + 1,
                 "item_revision": item.item_revision + 1,
@@ -1571,6 +1590,7 @@ def _apply_long_term_patch_firestore_transaction(
     operation_id: str,
     patch_payload: Dict[str, Any],
     proposed_operation: Optional[MemoryOperation],
+    proposed_evidence: Optional[List[MemoryEvidence]],
     review_resolution: Optional[CanonicalReviewResolution],
 ) -> ApplyResult:
     collections = MemoryCollections(uid=uid)
@@ -1630,11 +1650,32 @@ def _apply_long_term_patch_firestore_transaction(
         )
         return committed_replay
 
-    evidence_items = _read_authoritative_evidence(
+    if operation.logical_payload.decision == DurablePatchDecision.add.value:
+        new_memory_id = patch_payload.get("new_memory_id")
+        if isinstance(new_memory_id, str) and new_memory_id.strip():
+            new_item_ref = db_client.document(f"{collections.memory_items}/{new_memory_id}")
+            if getattr(new_item_ref.get(transaction=transaction), "exists", False):
+                collision = ApplyResult(
+                    status=ApplyStatus.invalid_patch,
+                    control_state=control_state,
+                    operation=operation,
+                    reason="add patch new_memory_id already exists",
+                )
+                _write_apply_result(
+                    transaction=transaction,
+                    db_client=db_client,
+                    collections=collections,
+                    operation_ref=operation_ref,
+                    result=collision,
+                )
+                return collision
+
+    evidence_items, staged_evidence = _read_or_stage_authoritative_evidence(
         db_client=db_client,
         transaction=transaction,
         collections=collections,
         evidence_ids=operation.evidence_ids,
+        proposed_evidence=proposed_evidence,
     )
     target_validation = _validate_authoritative_targets(
         db_client=db_client,
@@ -1689,6 +1730,9 @@ def _apply_long_term_patch_firestore_transaction(
         operation=operation,
         patch_payload=authoritative_payload,
     )
+    if result.status == ApplyStatus.committed:
+        for evidence_ref, evidence in staged_evidence:
+            transaction.set(evidence_ref, _firestore_data(evidence))
     _write_apply_result(
         transaction=transaction,
         db_client=db_client,
@@ -1709,24 +1753,53 @@ def _apply_long_term_patch_firestore_transaction(
     return result
 
 
-def _read_authoritative_evidence(
+_EVIDENCE_SEMANTIC_EXCLUDES = {
+    "created_at",
+    "source_state",
+    "source_state_reason",
+    "provenance_visibility",
+    "redaction_status",
+    "encryption_or_redaction_status",
+}
+
+
+def _evidence_semantic_payload(evidence: MemoryEvidence) -> Dict[str, Any]:
+    return evidence.model_dump(mode="json", exclude=_EVIDENCE_SEMANTIC_EXCLUDES)
+
+
+def _read_or_stage_authoritative_evidence(
     *,
     db_client: Any,
     transaction: Any,
     collections: MemoryCollections,
     evidence_ids: Iterable[str],
-) -> List[MemoryEvidence]:
+    proposed_evidence: Optional[List[MemoryEvidence]],
+) -> tuple[List[MemoryEvidence], List[tuple[Any, MemoryEvidence]]]:
+    proposed_by_id = {evidence.evidence_id: evidence for evidence in proposed_evidence or []}
+    if len(proposed_by_id) != len(proposed_evidence or []):
+        raise MemoryFirestoreApplyError("proposed evidence contains duplicate ids")
+    expected_ids = list(evidence_ids)
+    if proposed_evidence is not None and set(proposed_by_id) != set(expected_ids):
+        raise MemoryFirestoreApplyError("proposed evidence ids do not match the operation")
     evidence_items: List[MemoryEvidence] = []
-    for evidence_id in evidence_ids:
+    staged: List[tuple[Any, MemoryEvidence]] = []
+    for evidence_id in expected_ids:
         evidence_ref = db_client.document(f"{collections.memory_evidence}/{evidence_id}")
-        evidence = _required_model(
-            ref=evidence_ref,
-            transaction=transaction,
-            model=MemoryEvidence,
-            label="memory evidence",
-        )
+        snapshot = evidence_ref.get(transaction=transaction)
+        proposed = proposed_by_id.get(evidence_id)
+        if getattr(snapshot, "exists", False):
+            evidence = parse_snapshot_strict(MemoryEvidence, snapshot, payload_from_snapshot=_typed_doc)
+            if proposed is not None and _evidence_semantic_payload(evidence) != _evidence_semantic_payload(proposed):
+                raise MemoryFirestoreApplyError("proposed evidence conflicts with existing evidence identity")
+        elif proposed is not None:
+            if proposed.source_state != SourceState.active:
+                raise MemoryFirestoreApplyError("proposed evidence must be active")
+            evidence = proposed
+            staged.append((evidence_ref, evidence))
+        else:
+            raise MissingMemoryDocument(f"missing memory evidence: {evidence_ref.path}")
         evidence_items.append(evidence)
-    return evidence_items
+    return evidence_items, staged
 
 
 def _read_authoritative_target_item(

@@ -2742,6 +2742,24 @@ public enum OmiAPI {
   }
 
 
+  public enum LedgerWriteReason: String, Codable, CaseIterable {
+    case direct_user_statement
+    case explicit_remember
+    case agent_reusable_conclusion
+    case recurring_workflow
+    case standing_trigger
+    case onboarding
+    case daily_reconciliation
+    case legacy_migration
+    case _unknown = "__unknown__"
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.singleValueContainer()
+      let raw = try c.decode(String.self)
+      self = LedgerWriteReason(rawValue: raw) ?? ._unknown
+    }
+  }
+
+
   public enum MemoryCategory: String, Codable, CaseIterable {
     case interesting
     case system
@@ -2769,25 +2787,30 @@ public enum OmiAPI {
   public struct MemoryDB: Codable {
     public let appId: String?
     public let arguments: [String: OmiAnyCodable]?
+    public let body: String?
     public let captureConfidence: Double?
     public let captureDeviceIds: [String]?
     public let category: MemoryCategory?
     public let content: String
     public let conversationId: String?
     public let createdAt: String
+    public let curationWeight: Int?
     public let dataProtectionLevel: String?
     public let durability: String?
     public let edited: Bool?
     public let evidence: [Evidence]?
     public let headline: String?
     public let id: String
+    public let intentBacked: Bool?
     public let invalidAt: String?
     public let isBaseline: Bool?
     public let isDismissed: Bool?
     public let isLocked: Bool?
     public let isRead: Bool?
     public let kgExtracted: Bool?
+    public let kind: MemoryKind?
     public let layer: String?
+    public let ledgerSchemaVersion: String?
     public let manuallyAdded: Bool?
     public let memoryId: String?
     public let memoryTier: MemoryLayer?
@@ -2797,10 +2820,13 @@ public enum OmiAPI {
     public let qualifiers: [String: OmiAnyCodable]?
     public let reviewed: Bool?
     public let scoring: String?
+    public let slot: String?
     public let subjectAttribution: SubjectAttribution?
     public let subjectEntityId: String?
+    public let subjectScope: MemorySubjectScope?
     public let supersededBy: String?
     public let tags: [String]?
+    public let triggerCondition: [String: OmiAnyCodable]?
     public let uid: String
     public let uncertaintyReasons: [String]?
     public let updatedAt: String
@@ -2808,29 +2834,35 @@ public enum OmiAPI {
     public let validAt: String?
     public let veracity: Double?
     public let visibility: String?
+    public let writeReason: LedgerWriteReason?
 
     private enum CodingKeys: String, CodingKey {
       case appId = "app_id"
       case arguments
+      case body
       case captureConfidence = "capture_confidence"
       case captureDeviceIds = "capture_device_ids"
       case category
       case content
       case conversationId = "conversation_id"
       case createdAt = "created_at"
+      case curationWeight = "curation_weight"
       case dataProtectionLevel = "data_protection_level"
       case durability
       case edited
       case evidence
       case headline
       case id
+      case intentBacked = "intent_backed"
       case invalidAt = "invalid_at"
       case isBaseline = "is_baseline"
       case isDismissed = "is_dismissed"
       case isLocked = "is_locked"
       case isRead = "is_read"
       case kgExtracted = "kg_extracted"
+      case kind
       case layer
+      case ledgerSchemaVersion = "ledger_schema_version"
       case manuallyAdded = "manually_added"
       case memoryId = "memory_id"
       case memoryTier = "memory_tier"
@@ -2840,10 +2872,13 @@ public enum OmiAPI {
       case qualifiers
       case reviewed
       case scoring
+      case slot
       case subjectAttribution = "subject_attribution"
       case subjectEntityId = "subject_entity_id"
+      case subjectScope = "subject_scope"
       case supersededBy = "superseded_by"
       case tags
+      case triggerCondition = "trigger_condition"
       case uid
       case uncertaintyReasons = "uncertainty_reasons"
       case updatedAt = "updated_at"
@@ -2851,31 +2886,37 @@ public enum OmiAPI {
       case validAt = "valid_at"
       case veracity
       case visibility
+      case writeReason = "write_reason"
     }
 
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       appId = try c.decodeIfPresent(String.self, forKey: .appId)
       arguments = try c.decodeIfPresent([String: OmiAnyCodable].self, forKey: .arguments)
+      body = try c.decodeIfPresent(String.self, forKey: .body)
       captureConfidence = try c.decodeIfPresent(Double.self, forKey: .captureConfidence)
       captureDeviceIds = try c.decodeIfPresent([String].self, forKey: .captureDeviceIds)
       category = try c.decodeIfPresent(MemoryCategory.self, forKey: .category)
       content = try c.decode(String.self, forKey: .content)
       conversationId = try c.decodeIfPresent(String.self, forKey: .conversationId)
       createdAt = try c.decode(String.self, forKey: .createdAt)
+      curationWeight = try c.decodeIfPresent(Int.self, forKey: .curationWeight)
       dataProtectionLevel = try c.decodeIfPresent(String.self, forKey: .dataProtectionLevel)
       durability = try c.decodeIfPresent(String.self, forKey: .durability)
       edited = try c.decodeIfPresent(Bool.self, forKey: .edited)
       evidence = try c.decodeIfPresent([Evidence].self, forKey: .evidence)
       headline = try c.decodeIfPresent(String.self, forKey: .headline)
       id = try c.decode(String.self, forKey: .id)
+      intentBacked = try c.decodeIfPresent(Bool.self, forKey: .intentBacked)
       invalidAt = try c.decodeIfPresent(String.self, forKey: .invalidAt)
       isBaseline = try c.decodeIfPresent(Bool.self, forKey: .isBaseline)
       isDismissed = try c.decodeIfPresent(Bool.self, forKey: .isDismissed)
       isLocked = try c.decodeIfPresent(Bool.self, forKey: .isLocked)
       isRead = try c.decodeIfPresent(Bool.self, forKey: .isRead)
       kgExtracted = try c.decodeIfPresent(Bool.self, forKey: .kgExtracted)
+      kind = try c.decodeIfPresent(MemoryKind.self, forKey: .kind)
       layer = try c.decodeIfPresent(String.self, forKey: .layer)
+      ledgerSchemaVersion = try c.decodeIfPresent(String.self, forKey: .ledgerSchemaVersion)
       manuallyAdded = try c.decodeIfPresent(Bool.self, forKey: .manuallyAdded)
       memoryId = try c.decodeIfPresent(String.self, forKey: .memoryId)
       memoryTier = try c.decodeIfPresent(MemoryLayer.self, forKey: .memoryTier)
@@ -2885,10 +2926,13 @@ public enum OmiAPI {
       qualifiers = try c.decodeIfPresent([String: OmiAnyCodable].self, forKey: .qualifiers)
       reviewed = try c.decodeIfPresent(Bool.self, forKey: .reviewed)
       scoring = try c.decodeIfPresent(String.self, forKey: .scoring)
+      slot = try c.decodeIfPresent(String.self, forKey: .slot)
       subjectAttribution = try c.decodeIfPresent(SubjectAttribution.self, forKey: .subjectAttribution)
       subjectEntityId = try c.decodeIfPresent(String.self, forKey: .subjectEntityId)
+      subjectScope = try c.decodeIfPresent(MemorySubjectScope.self, forKey: .subjectScope)
       supersededBy = try c.decodeIfPresent(String.self, forKey: .supersededBy)
       tags = try c.decodeIfPresent([String].self, forKey: .tags)
+      triggerCondition = try c.decodeIfPresent([String: OmiAnyCodable].self, forKey: .triggerCondition)
       uid = try c.decode(String.self, forKey: .uid)
       uncertaintyReasons = try c.decodeIfPresent([String].self, forKey: .uncertaintyReasons)
       updatedAt = try c.decode(String.self, forKey: .updatedAt)
@@ -2896,30 +2940,36 @@ public enum OmiAPI {
       validAt = try c.decodeIfPresent(String.self, forKey: .validAt)
       veracity = try c.decodeIfPresent(Double.self, forKey: .veracity)
       visibility = try c.decodeIfPresent(String.self, forKey: .visibility)
+      writeReason = try c.decodeIfPresent(LedgerWriteReason.self, forKey: .writeReason)
     }
 
-    public init(appId: String? = nil, arguments: [String: OmiAnyCodable]? = nil, captureConfidence: Double? = nil, captureDeviceIds: [String]? = nil, category: MemoryCategory? = nil, content: String, conversationId: String? = nil, createdAt: String, dataProtectionLevel: String? = nil, durability: String? = nil, edited: Bool? = nil, evidence: [Evidence]? = nil, headline: String? = nil, id: String, invalidAt: String? = nil, isBaseline: Bool? = nil, isDismissed: Bool? = nil, isLocked: Bool? = nil, isRead: Bool? = nil, kgExtracted: Bool? = nil, layer: String? = nil, manuallyAdded: Bool? = nil, memoryId: String? = nil, memoryTier: MemoryLayer? = nil, objectEntityIds: [String]? = nil, predicate: String? = nil, primaryCaptureDevice: String? = nil, qualifiers: [String: OmiAnyCodable]? = nil, reviewed: Bool? = nil, scoring: String? = nil, subjectAttribution: SubjectAttribution? = nil, subjectEntityId: String? = nil, supersededBy: String? = nil, tags: [String]? = nil, uid: String, uncertaintyReasons: [String]? = nil, updatedAt: String, userReview: Bool? = nil, validAt: String? = nil, veracity: Double? = nil, visibility: String? = nil) {
+    public init(appId: String? = nil, arguments: [String: OmiAnyCodable]? = nil, body: String? = nil, captureConfidence: Double? = nil, captureDeviceIds: [String]? = nil, category: MemoryCategory? = nil, content: String, conversationId: String? = nil, createdAt: String, curationWeight: Int? = nil, dataProtectionLevel: String? = nil, durability: String? = nil, edited: Bool? = nil, evidence: [Evidence]? = nil, headline: String? = nil, id: String, intentBacked: Bool? = nil, invalidAt: String? = nil, isBaseline: Bool? = nil, isDismissed: Bool? = nil, isLocked: Bool? = nil, isRead: Bool? = nil, kgExtracted: Bool? = nil, kind: MemoryKind? = nil, layer: String? = nil, ledgerSchemaVersion: String? = nil, manuallyAdded: Bool? = nil, memoryId: String? = nil, memoryTier: MemoryLayer? = nil, objectEntityIds: [String]? = nil, predicate: String? = nil, primaryCaptureDevice: String? = nil, qualifiers: [String: OmiAnyCodable]? = nil, reviewed: Bool? = nil, scoring: String? = nil, slot: String? = nil, subjectAttribution: SubjectAttribution? = nil, subjectEntityId: String? = nil, subjectScope: MemorySubjectScope? = nil, supersededBy: String? = nil, tags: [String]? = nil, triggerCondition: [String: OmiAnyCodable]? = nil, uid: String, uncertaintyReasons: [String]? = nil, updatedAt: String, userReview: Bool? = nil, validAt: String? = nil, veracity: Double? = nil, visibility: String? = nil, writeReason: LedgerWriteReason? = nil) {
       self.appId = appId
       self.arguments = arguments
+      self.body = body
       self.captureConfidence = captureConfidence
       self.captureDeviceIds = captureDeviceIds
       self.category = category
       self.content = content
       self.conversationId = conversationId
       self.createdAt = createdAt
+      self.curationWeight = curationWeight
       self.dataProtectionLevel = dataProtectionLevel
       self.durability = durability
       self.edited = edited
       self.evidence = evidence
       self.headline = headline
       self.id = id
+      self.intentBacked = intentBacked
       self.invalidAt = invalidAt
       self.isBaseline = isBaseline
       self.isDismissed = isDismissed
       self.isLocked = isLocked
       self.isRead = isRead
       self.kgExtracted = kgExtracted
+      self.kind = kind
       self.layer = layer
+      self.ledgerSchemaVersion = ledgerSchemaVersion
       self.manuallyAdded = manuallyAdded
       self.memoryId = memoryId
       self.memoryTier = memoryTier
@@ -2929,10 +2979,13 @@ public enum OmiAPI {
       self.qualifiers = qualifiers
       self.reviewed = reviewed
       self.scoring = scoring
+      self.slot = slot
       self.subjectAttribution = subjectAttribution
       self.subjectEntityId = subjectEntityId
+      self.subjectScope = subjectScope
       self.supersededBy = supersededBy
       self.tags = tags
+      self.triggerCondition = triggerCondition
       self.uid = uid
       self.uncertaintyReasons = uncertaintyReasons
       self.updatedAt = updatedAt
@@ -2940,6 +2993,20 @@ public enum OmiAPI {
       self.validAt = validAt
       self.veracity = veracity
       self.visibility = visibility
+      self.writeReason = writeReason
+    }
+  }
+
+
+  public enum MemoryKind: String, Codable, CaseIterable {
+    case fact
+    case document
+    case trigger
+    case _unknown = "__unknown__"
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.singleValueContainer()
+      let raw = try c.decode(String.self)
+      self = MemoryKind(rawValue: raw) ?? ._unknown
     }
   }
 
@@ -2953,6 +3020,20 @@ public enum OmiAPI {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
       self = MemoryLayer(rawValue: raw) ?? ._unknown
+    }
+  }
+
+
+  public enum MemorySubjectScope: String, Codable, CaseIterable {
+    case primary_user
+    case user_owned_project
+    case user_relationship
+    case third_party
+    case _unknown = "__unknown__"
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.singleValueContainer()
+      let raw = try c.decode(String.self)
+      self = MemorySubjectScope(rawValue: raw) ?? ._unknown
     }
   }
 
