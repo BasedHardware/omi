@@ -18,7 +18,7 @@ class ConversationSearchUnavailableError(Exception):
 
 
 _EXACT_CONVERSATION_PATH_PREFIX = '/conversations/'
-_OWNER_SCOPED_CONVERSATION_REFERENCE = re.compile(r'conversation:([A-Za-z0-9][A-Za-z0-9_-]{0,127})\Z')
+_OWNER_SCOPED_CONVERSATION_REFERENCE = re.compile(r'conversation:([A-Za-z0-9][A-Za-z0-9._~-]{0,95})\Z')
 
 
 def _canonical_conversation_uuid(value: str) -> Optional[str]:

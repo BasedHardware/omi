@@ -1364,7 +1364,9 @@ def test_enabled_jit_prompt_requires_bounded_summary_triage_reformulation_and_hy
         *golden_shape_markers.values(),
         "hydrate only the relevant conversation IDs",
         "at most 24 transcript segments",
-        "Missing or partial evidence must degrade honestly",
+        "released [index] inline syntax",
+        "structured evidence envelope",
+        "degrade honestly when evidence is missing or partial",
     ):
         assert required_contract in normalized_section
 
