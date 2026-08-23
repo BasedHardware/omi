@@ -2998,6 +2998,23 @@ public enum OmiAPI {
   }
 
 
+  public struct MemoryEditResponse: Codable {
+    public let memory: MemoryDB?
+    public let status: String
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      memory = try c.decodeIfPresent(MemoryDB.self, forKey: .memory)
+      status = try c.decode(String.self, forKey: .status)
+    }
+
+    public init(memory: MemoryDB? = nil, status: String) {
+      self.memory = memory
+      self.status = status
+    }
+  }
+
+
   public enum MemoryKind: String, Codable, CaseIterable {
     case fact
     case document
@@ -3020,6 +3037,24 @@ public enum OmiAPI {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
       self = MemoryLayer(rawValue: raw) ?? ._unknown
+    }
+  }
+
+
+  public struct MemoryRevertRequest: Codable {
+    public let operationId: String
+
+    private enum CodingKeys: String, CodingKey {
+      case operationId = "operation_id"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      operationId = try c.decode(String.self, forKey: .operationId)
+    }
+
+    public init(operationId: String) {
+      self.operationId = operationId
     }
   }
 
@@ -15142,7 +15177,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func editMemoryV3MemoriesMemoryIdPatch(client: OmiApiClient, memoryId: String, value: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable? = nil) async throws -> OmiAnyCodable {
+  public static func editMemoryV3MemoriesMemoryIdPatch(client: OmiApiClient, memoryId: String, value: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable? = nil) async throws -> MemoryEditResponse {
     let _path = "/v3/memories/\(memoryId)"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -15170,7 +15205,7 @@ public enum OmiAPI {
     guard (200..<300).contains(http.statusCode) else {
       throw OmiApiError.httpError(status: http.statusCode, data: data)
     }
-    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+    return try JSONDecoder().decode(MemoryEditResponse.self, from: data)
   }
 
   public static func deleteMemoryV3MemoriesMemoryIdDelete(client: OmiApiClient, memoryId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
@@ -15250,7 +15285,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(MemoryDB.self, from: data)
   }
 
-  public static func revertMemoryV3MemoriesMemoryIdRevertPost(client: OmiApiClient, memoryId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
+  public static func revertMemoryV3MemoriesMemoryIdRevertPost(client: OmiApiClient, memoryId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: MemoryRevertRequest) async throws -> MemoryEditResponse {
     let _path = "/v3/memories/\(memoryId)/revert"
     guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -15273,7 +15308,7 @@ public enum OmiAPI {
     guard (200..<300).contains(http.statusCode) else {
       throw OmiApiError.httpError(status: http.statusCode, data: data)
     }
-    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+    return try JSONDecoder().decode(MemoryEditResponse.self, from: data)
   }
 
   public static func reviewMemoryV3MemoriesMemoryIdReviewPost(client: OmiApiClient, memoryId: String, value: Bool, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
