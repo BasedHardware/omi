@@ -2,10 +2,9 @@ import Foundation
 
 /// The client-side prompt view of `knowledge_ledger.v1`.
 ///
-/// This is a projection over the released memory mirror, not a second storage
-/// authority. Rows without the canonical schema or required policy fields are
-/// intentionally ignored during the migration window; treating an old row as
-/// a current profile fact would be less safe than omitting it.
+/// This is a pure projection over a caller-proven authoritative snapshot, not a
+/// second storage authority. A bounded local cache can never prove completeness
+/// and therefore cannot activate this renderer during the migration window.
 struct KnowledgeLedgerPromptProjection: Equatable, Sendable {
   static let schemaVersion = "knowledge_ledger.v1"
   static let profileCharacterBudget = 2_400
@@ -16,12 +15,20 @@ struct KnowledgeLedgerPromptProjection: Equatable, Sendable {
     let content: String
     let createdAt: Date
     let metadata: [String: String]
+    let userReview: Bool?
 
-    init(id: String, content: String, createdAt: Date = Date(), metadata: [String: String] = [:]) {
+    init(
+      id: String,
+      content: String,
+      createdAt: Date = Date(),
+      metadata: [String: String] = [:],
+      userReview: Bool? = nil
+    ) {
       self.id = id
       self.content = content
       self.createdAt = createdAt
       self.metadata = metadata
+      self.userReview = userReview
     }
 
     init(memory: ServerMemory) {
@@ -29,7 +36,8 @@ struct KnowledgeLedgerPromptProjection: Equatable, Sendable {
         id: memory.id,
         content: memory.content,
         createdAt: memory.createdAt,
-        metadata: memory.ledgerMetadata
+        metadata: memory.ledgerMetadata,
+        userReview: memory.userReview
       )
     }
 
@@ -65,20 +73,26 @@ struct KnowledgeLedgerPromptProjection: Equatable, Sendable {
   }
 
   let rows: [Row]
+  private let hasAuthoritativeSnapshot: Bool
 
-  /// A mixed snapshot is not migration proof. Falling back preserves the
-  /// released prompt until every row in this bounded cache is ledger-shaped;
-  /// one newly written ledger fact must never hide historical memories.
+  /// Ledger-shaped rows alone are not migration proof. Rendering requires an
+  /// explicit completeness proof from the owning storage boundary as well as a
+  /// homogeneous schema, so a truncated local prefix cannot hide older facts.
   var isCompleteLedgerSnapshot: Bool {
-    !rows.isEmpty && rows.allSatisfy { $0.schemaVersion == Self.schemaVersion }
+    hasAuthoritativeSnapshot
+      && !rows.isEmpty
+      && rows.allSatisfy { $0.schemaVersion == Self.schemaVersion }
   }
 
-  init(memories: [ServerMemory]) {
-    self.init(rows: memories.map(Row.init(memory:)))
+  init(memories: [ServerMemory], hasAuthoritativeSnapshot: Bool) {
+    self.init(
+      rows: memories.map(Row.init(memory:)),
+      hasAuthoritativeSnapshot: hasAuthoritativeSnapshot)
   }
 
-  init(rows: [Row]) {
+  init(rows: [Row], hasAuthoritativeSnapshot: Bool) {
     self.rows = rows
+    self.hasAuthoritativeSnapshot = hasAuthoritativeSnapshot
   }
 
   /// Render the complete bounded context, or nil when no canonical row is
@@ -149,6 +163,7 @@ struct KnowledgeLedgerPromptProjection: Equatable, Sendable {
           && $0.kind == "fact"
           && $0.subjectScope == "primary_user"
           && $0.intentBacked
+          && $0.userReview != false
           && $0.isOpen
           && $0.slot != nil
           && !$0.trimmedContent.isEmpty
@@ -166,6 +181,7 @@ struct KnowledgeLedgerPromptProjection: Equatable, Sendable {
       .filter {
         $0.schemaVersion == Self.schemaVersion
           && $0.kind == "document"
+          && $0.userReview != false
           && $0.isOpen
           && !$0.trimmedContent.isEmpty
       }

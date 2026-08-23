@@ -40,7 +40,8 @@ extension DesktopAutomationActionRegistry {
                 "status": "active",
               ]
             )
-          ]
+          ],
+          hasAuthoritativeSnapshot: true
         ).render(userName: "Test")
         let triggerCondition: [String: Any] = [
           "schema_version": "jit_trigger.v1",

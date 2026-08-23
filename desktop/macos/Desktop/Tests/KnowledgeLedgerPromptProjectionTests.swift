@@ -4,18 +4,19 @@ import XCTest
 
 final class KnowledgeLedgerPromptProjectionTests: XCTestCase {
   func testCurrentProfileAndPlaybookHandlesAreBoundedAndDeterministic() {
-    let projection = KnowledgeLedgerPromptProjection(rows: [
-      row(
-        id: "playbook-1",
-        content: "Release the macOS beta",
-        kind: "document",
-        body: "private full workflow body"
-      ),
-      row(id: "city", content: "Brooklyn", slot: "home_city", curationWeight: 5),
-      row(id: "older-city", content: "Boston", slot: "home_city", curationWeight: 4, status: "superseded"),
-      row(id: "third-party", content: "Queens", subjectScope: "third_party", slot: "home_city"),
-      row(id: "episodic", content: "Went to a concert", kind: "fact"),
-    ])
+    let projection = KnowledgeLedgerPromptProjection(
+      rows: [
+        row(
+          id: "playbook-1",
+          content: "Release the macOS beta",
+          kind: "document",
+          body: "private full workflow body"
+        ),
+        row(id: "city", content: "Brooklyn", slot: "home_city", curationWeight: 5),
+        row(id: "older-city", content: "Boston", slot: "home_city", curationWeight: 4, status: "superseded"),
+        row(id: "third-party", content: "Queens", subjectScope: "third_party", slot: "home_city"),
+        row(id: "episodic", content: "Went to a concert", kind: "fact"),
+      ], hasAuthoritativeSnapshot: true)
 
     let rendered = projection.render(userName: "David")
 
@@ -34,20 +35,22 @@ final class KnowledgeLedgerPromptProjectionTests: XCTestCase {
   }
 
   func testLegacyAndUnknownRowsFailClosedWithoutPromptInjection() {
-    let projection = KnowledgeLedgerPromptProjection(rows: [
-      row(id: "legacy", content: "Legacy wholesale memory", schemaVersion: nil),
-      row(id: "future", content: "Future row", schemaVersion: "knowledge_ledger.v2"),
-    ])
+    let projection = KnowledgeLedgerPromptProjection(
+      rows: [
+        row(id: "legacy", content: "Legacy wholesale memory", schemaVersion: nil),
+        row(id: "future", content: "Future row", schemaVersion: "knowledge_ledger.v2"),
+      ], hasAuthoritativeSnapshot: true)
 
     XCTAssertNil(projection.render(userName: "David"))
     XCTAssertTrue(projection.citationSources.isEmpty)
   }
 
   func testOneLedgerRowCannotHideLegacySnapshot() {
-    let projection = KnowledgeLedgerPromptProjection(rows: [
-      row(id: "ledger", content: "Brooklyn", slot: "home_city"),
-      row(id: "legacy", content: "Historical released memory", schemaVersion: nil),
-    ])
+    let projection = KnowledgeLedgerPromptProjection(
+      rows: [
+        row(id: "ledger", content: "Brooklyn", slot: "home_city"),
+        row(id: "legacy", content: "Historical released memory", schemaVersion: nil),
+      ], hasAuthoritativeSnapshot: true)
 
     XCTAssertFalse(projection.isCompleteLedgerSnapshot)
     XCTAssertNil(projection.render(userName: "David"))
@@ -55,23 +58,25 @@ final class KnowledgeLedgerPromptProjectionTests: XCTestCase {
   }
 
   func testSupersededAndUnslottedFactsCannotBecomeCitations() {
-    let projection = KnowledgeLedgerPromptProjection(rows: [
-      row(id: "active", content: "Brooklyn", slot: "home_city"),
-      row(id: "superseded", content: "Boston", slot: "home_city", supersededBy: "active"),
-      row(id: "unslotted", content: "Private observation", kind: "fact"),
-    ])
+    let projection = KnowledgeLedgerPromptProjection(
+      rows: [
+        row(id: "active", content: "Brooklyn", slot: "home_city"),
+        row(id: "superseded", content: "Boston", slot: "home_city", supersededBy: "active"),
+        row(id: "unslotted", content: "Private observation", kind: "fact"),
+      ], hasAuthoritativeSnapshot: true)
 
     XCTAssertEqual(projection.citationSources.map(\.sourceID), ["active"])
   }
 
   func testProfileAndPlaybookOrderingUsesStableCanonicalTieBreakers() {
-    let projection = KnowledgeLedgerPromptProjection(rows: [
-      row(id: "fact-b", content: "B", slot: "home_city", curationWeight: 4, validAt: "2026-08-02"),
-      row(id: "fact-a", content: "A", slot: "home_city", curationWeight: 4, validAt: "2026-08-02"),
-      row(id: "fact-high", content: "High", slot: "work_city", curationWeight: 5, validAt: "2026-08-03"),
-      row(id: "playbook-z", content: "Zeta workflow", kind: "document", curationWeight: 3),
-      row(id: "playbook-a", content: "Alpha workflow", kind: "document", curationWeight: 3),
-    ])
+    let projection = KnowledgeLedgerPromptProjection(
+      rows: [
+        row(id: "fact-b", content: "B", slot: "home_city", curationWeight: 4, validAt: "2026-08-02"),
+        row(id: "fact-a", content: "A", slot: "home_city", curationWeight: 4, validAt: "2026-08-02"),
+        row(id: "fact-high", content: "High", slot: "work_city", curationWeight: 5, validAt: "2026-08-03"),
+        row(id: "playbook-z", content: "Zeta workflow", kind: "document", curationWeight: 3),
+        row(id: "playbook-a", content: "Alpha workflow", kind: "document", curationWeight: 3),
+      ], hasAuthoritativeSnapshot: true)
 
     let rendered = projection.render(userName: "David", marker: { "[\($0)]" })
     XCTAssertEqual(
@@ -94,12 +99,13 @@ final class KnowledgeLedgerPromptProjectionTests: XCTestCase {
   func testProfileAndPlaybookBudgetsAreIndependentAndBodiesStayOutOfPrompt() throws {
     let longFact = String(repeating: "f", count: 1_000)
     let longPlaybook = String(repeating: "p", count: 500)
-    let projection = KnowledgeLedgerPromptProjection(rows: [
-      row(id: "fact-one", content: longFact, slot: "one"),
-      row(id: "fact-two", content: longFact, slot: "two"),
-      row(id: "playbook-one", content: longPlaybook, kind: "document", body: "secret body"),
-      row(id: "playbook-two", content: longPlaybook, kind: "document", body: "another secret body"),
-    ])
+    let projection = KnowledgeLedgerPromptProjection(
+      rows: [
+        row(id: "fact-one", content: longFact, slot: "one"),
+        row(id: "fact-two", content: longFact, slot: "two"),
+        row(id: "playbook-one", content: longPlaybook, kind: "document", body: "secret body"),
+        row(id: "playbook-two", content: longPlaybook, kind: "document", body: "another secret body"),
+      ], hasAuthoritativeSnapshot: true)
 
     let rendered = try XCTUnwrap(projection.render(userName: "David"))
     let profile = try XCTUnwrap(rendered.components(separatedBy: "\n\n").first)
@@ -110,6 +116,32 @@ final class KnowledgeLedgerPromptProjectionTests: XCTestCase {
       800 + "Available playbooks (call read_playbook for the body; do not infer it from the title):\n".count)
     XCTAssertFalse(rendered.contains("secret body"))
     XCTAssertFalse(rendered.contains("another secret body"))
+  }
+
+  func testLedgerShapedBoundedPrefixCannotClaimCompleteness() {
+    let projection = KnowledgeLedgerPromptProjection(
+      rows: [row(id: "bounded", content: "Brooklyn", slot: "home_city")],
+      hasAuthoritativeSnapshot: false)
+
+    XCTAssertFalse(projection.isCompleteLedgerSnapshot)
+    XCTAssertNil(projection.render(userName: "David"))
+    XCTAssertTrue(projection.citationSources.isEmpty)
+  }
+
+  func testRejectedFactsAndPlaybooksCannotEnterPromptOrCitations() throws {
+    let projection = KnowledgeLedgerPromptProjection(
+      rows: [
+        row(id: "accepted", content: "Brooklyn", slot: "home_city", userReview: true),
+        row(id: "rejected", content: "Boston", slot: "work_city", userReview: false),
+        row(id: "rejected-playbook", content: "Private workflow", kind: "document", userReview: false),
+      ],
+      hasAuthoritativeSnapshot: true)
+
+    let rendered = try XCTUnwrap(projection.render(userName: "David"))
+    XCTAssertTrue(rendered.contains("Brooklyn"))
+    XCTAssertFalse(rendered.contains("Boston"))
+    XCTAssertFalse(rendered.contains("Private workflow"))
+    XCTAssertEqual(projection.citationSources.map(\.sourceID), ["accepted"])
   }
 
   private func row(
@@ -124,7 +156,8 @@ final class KnowledgeLedgerPromptProjectionTests: XCTestCase {
     curationWeight: Int = 0,
     validAt: String? = nil,
     status: String? = "active",
-    supersededBy: String? = nil
+    supersededBy: String? = nil,
+    userReview: Bool? = nil
   ) -> KnowledgeLedgerPromptProjection.Row {
     var metadata: [String: String] = [
       "kind": kind,
@@ -138,6 +171,10 @@ final class KnowledgeLedgerPromptProjectionTests: XCTestCase {
     if let validAt { metadata["valid_at"] = validAt }
     if let status { metadata["status"] = status }
     if let supersededBy { metadata["superseded_by"] = supersededBy }
-    return KnowledgeLedgerPromptProjection.Row(id: id, content: content, metadata: metadata)
+    return KnowledgeLedgerPromptProjection.Row(
+      id: id,
+      content: content,
+      metadata: metadata,
+      userReview: userReview)
   }
 }
