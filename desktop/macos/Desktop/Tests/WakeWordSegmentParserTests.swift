@@ -120,4 +120,43 @@ final class WakeWordSegmentParserTests: XCTestCase {
     XCTAssertNil(WakeWordSegmentParser.command(after: "Omnibus schedule changed", wakePhrase: "Omi"))
     XCTAssertNil(WakeWordSegmentParser.command(after: "Oh me", wakePhrase: "Omi"))
   }
+
+  // MARK: - The wake phrase later in a multi-sentence segment
+
+  /// Captured live and missed: a literal wake phrase with a valid command, in a segment
+  /// that also carried what the user said just before it. Windows now close on the
+  /// speaker's pause rather than a fixed boundary, so a segment is no longer one utterance.
+  func testWakePhraseOpeningALaterSentenceFires() {
+    XCTAssertEqual(
+      WakeWordSegmentParser.command(
+        after: "It's not working man. Omi what time it is?", wakePhrase: "Omi"),
+      "what time it is?")
+  }
+
+  /// The phrase has to *open* an utterance, not merely appear in one.
+  func testWakePhraseMidSentenceIsIgnored() {
+    XCTAssertNil(
+      WakeWordSegmentParser.command(after: "I told Omi to order food", wakePhrase: "Omi"))
+  }
+
+  /// The corroboration rules still apply at a later sentence — a bare homophone there
+  /// needs its punctuation break exactly as it does at the start.
+  func testBareHomophoneOpeningALaterSentenceStillNeedsAPause() {
+    XCTAssertNil(
+      WakeWordSegmentParser.command(
+        after: "That was strange. Oh me and my friend went hiking", wakePhrase: "Omi"))
+    XCTAssertEqual(
+      WakeWordSegmentParser.command(
+        after: "That was strange. Oh me, what time is it?", wakePhrase: "Omi"),
+      "what time is it?")
+  }
+
+  /// The first sentence that carries a command wins, so an earlier one being ordinary
+  /// speech does not consume the utterance.
+  func testFirstMatchingSentenceSuppliesTheCommand() {
+    XCTAssertEqual(
+      WakeWordSegmentParser.command(
+        after: "Nothing here. Omi open my tasks. Omi close my tasks.", wakePhrase: "Omi"),
+      "open my tasks. Omi close my tasks.")
+  }
 }

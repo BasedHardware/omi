@@ -29,8 +29,7 @@ final class WakeWordService {
 
   func observe(
     _ segment: SpeakerSegment,
-    isConversationActive: Bool = WakeWordService.defaultIsConversationActive(),
-    isSpeakingAnswer: Bool = WakeWordService.defaultIsSpeakingAnswer()
+    isConversationActive: Bool = WakeWordService.defaultIsConversationActive()
   ) {
     let parsed = WakeWordSegmentParser.command(
       after: segment.text,
@@ -45,15 +44,6 @@ final class WakeWordService {
 
     guard AssistantSettings.shared.wakeWordEnabled else { return ignore("disabled in settings") }
     guard !isConversationActive else { return ignore("assistant already busy") }
-    // Now that the answer is spoken aloud, the microphone hears it and it lands in the
-    // transcript as the user's own speech — observed live: `Transcript [ADD] Speaker 0:
-    // It's 8 57 p.m. on Sunday...` was Omi, not a person. An answer containing the wake
-    // phrase would command the assistant with its own words, indefinitely.
-    //
-    // This is not a wall in front of the user: `VoiceBargeInPolicy` halts playback the
-    // moment the user actually speaks, so `isSpeaking` is already false by the time their
-    // transcript arrives. Only Omi's own voice is caught here.
-    guard !isSpeakingAnswer else { return ignore("assistant is speaking its answer") }
     // Diarization only sets `isUser` once a speech profile is enrolled, so requiring
     // it alone makes the wake word silently dead for every user who has not enrolled
     // one. Speaker 0 is the primary user everywhere else in this feature set —
@@ -106,10 +96,6 @@ final class WakeWordService {
 
   static func wordCount(_ text: String) -> Int {
     text.split(whereSeparator: \.isWhitespace).count
-  }
-
-  static func defaultIsSpeakingAnswer() -> Bool {
-    FloatingBarVoicePlaybackService.shared.isSpeaking
   }
 
   static func defaultIsConversationActive() -> Bool {

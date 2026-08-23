@@ -40,6 +40,10 @@ enum VoicePlaybackEchoPolicy {
   /// matched run and to the surviving residue alike.
   static let minimumWordCount = 4
 
+  /// Share of an utterance the matched run must cover before the whole thing is discarded.
+  /// Measured on captured echoes: 0.80–1.00.
+  static let minimumCoverageToDrop = 0.8
+
   /// How far ahead in the playback history a word may be found and still continue the run.
   /// Absorbs words speech-to-text drops or splits — "8:57 PM" came back as "8 57 p.m."
   static let alignmentLookahead = 5
@@ -61,7 +65,14 @@ enum VoicePlaybackEchoPolicy {
 
     let leading = matchedPrefixLength(incoming, against: spokenWords)
     guard leading >= minimumWordCount else { return .keep }
-    guard tokens.count - leading >= minimumWordCount else { return .drop }
+    guard tokens.count - leading >= minimumWordCount else {
+      // Discarding the whole segment needs the match to actually account for the whole
+      // segment. Several sentences of playback history contain enough ordinary words that
+      // a short utterance can align with four of them by chance — live, "Sorry, my mistake
+      // it's taking" was deleted that way, which is the failure this policy must never
+      // have. A real echo covers essentially all of itself: measured 0.80–1.00.
+      return Double(leading) / Double(tokens.count) >= minimumCoverageToDrop ? .drop : .keep
+    }
 
     // Playback continues past the interruption, so it bookends the user's words as often
     // as it precedes them — measured, the same sentence appeared on both sides of a

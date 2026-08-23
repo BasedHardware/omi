@@ -4,9 +4,19 @@ enum WakeWordSegmentParser {
   static func command(after segmentText: String, wakePhrase: String) -> String? {
     let phrase = configuredPhrase(wakePhrase)
     guard !phrase.isEmpty else { return nil }
-    let raw = dropLeadingPunctuationAndWhitespace(segmentText)
+    let candidates = self.candidates(for: phrase)
+    for sentence in sentences(in: segmentText) {
+      if let command = self.command(startingAt: sentence, candidates: candidates) {
+        return command
+      }
+    }
+    return nil
+  }
+
+  private static func command(startingAt text: String, candidates: [Candidate]) -> String? {
+    let raw = dropLeadingPunctuationAndWhitespace(text)
     let normalized = normalize(raw)
-    for candidate in candidates(for: phrase) where normalized.hasPrefix(candidate.text) {
+    for candidate in candidates where normalized.hasPrefix(candidate.text) {
       guard
         hasBoundary(
           after: candidate.text,
@@ -24,6 +34,34 @@ enum WakeWordSegmentParser {
       return command
     }
     return nil
+  }
+
+  /// The segment text, then each sentence inside it that a wake word could open.
+  ///
+  /// A segment is no longer one utterance. Windows now close on the speaker's pause rather
+  /// than a fixed boundary, so whatever was said in the same breath shares the window with
+  /// the command — observed live, `It's not working man. Omi what time it is?` carried a
+  /// literal wake phrase and a valid command and matched nothing, because matching only
+  /// looked at the start of the segment.
+  ///
+  /// A sentence boundary, not any position: the phrase has to *open* an utterance. That is
+  /// the same class of evidence the punctuation-break rule already relies on — the
+  /// recognizer's own sentence segmentation — and it keeps `I told Omi to order food` from
+  /// parsing to the command "to order food".
+  static func sentences(in text: String) -> [String] {
+    var result: [String] = [text]
+    var index = text.startIndex
+    while index < text.endIndex {
+      defer { index = text.index(after: index) }
+      guard text[index] == "." || text[index] == "?" || text[index] == "!" else { continue }
+      let next = text.index(after: index)
+      guard next < text.endIndex, text[next].isWhitespace else { continue }
+      let remainder = String(text[next...])
+      if !dropLeadingPunctuationAndWhitespace(remainder).isEmpty {
+        result.append(remainder)
+      }
+    }
+    return result
   }
 
   static func configuredPhrase(_ raw: String) -> String {

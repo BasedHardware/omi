@@ -84,23 +84,29 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   /// coming back through the microphone instead of treating it as the user
   /// (`VoicePlaybackEchoPolicy`). Kept for a window *after* playback ends, because the
   /// transcript of the last words arrives about a second behind the audio.
-  private var spokenWordHistory: [String] = []
-  private var lastSpokeAt: Date?
+  private var spokenWordHistory: [(word: String, at: Date)] = []
   private static let spokenHistoryWordCap = 300
-  private static let spokenHistoryLifetime: TimeInterval = 20
 
-  /// Recent playback text, or nothing once it is too old to explain an incoming segment.
+  /// Each word expires on its own clock rather than the history being kept alive as a
+  /// block. Extending one shared deadline on every chunk left several turns of speech
+  /// matchable at once, and a few hundred words of ordinary English will align with almost
+  /// any short sentence — live, "Sorry my mistake it's taking" was deleted that way. An
+  /// echo arrives a second or two behind the audio, so this only has to outlive that.
+  private static let spokenWordLifetime: TimeInterval = 15
+
+  /// Playback from the last few seconds, which is all an echo can be an echo of.
   var recentlySpokenWords: [String] {
-    guard let lastSpokeAt, Date().timeIntervalSince(lastSpokeAt) <= Self.spokenHistoryLifetime
-    else { return [] }
-    return spokenWordHistory
+    let cutoff = Date().addingTimeInterval(-Self.spokenWordLifetime)
+    return spokenWordHistory.filter { $0.at > cutoff }.map(\.word)
   }
 
   private func recordSpokenText(_ text: String) {
     let words = VoicePlaybackEchoPolicy.words(text)
     guard !words.isEmpty else { return }
-    lastSpokeAt = Date()
-    spokenWordHistory.append(contentsOf: words)
+    let now = Date()
+    let cutoff = now.addingTimeInterval(-Self.spokenWordLifetime)
+    spokenWordHistory.removeAll { $0.at <= cutoff }
+    spokenWordHistory.append(contentsOf: words.map { (word: $0, at: now) })
     if spokenWordHistory.count > Self.spokenHistoryWordCap {
       spokenWordHistory.removeFirst(spokenWordHistory.count - Self.spokenHistoryWordCap)
     }
