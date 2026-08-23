@@ -34,8 +34,13 @@ private final class CloudOAuthDisconnectURLProtocol: URLProtocol, @unchecked Sen
       ? Data("{\"grants\":[{\"id\":\"grant-123\",\"client_id\":\"omi-chatgpt-prod\",\"status\":\"active\"}]}".utf8)
       : Data()
     let statusCode = method == "DELETE" ? 204 : 200
-    let response = HTTPURLResponse(
-      url: request.url!, statusCode: statusCode, httpVersion: nil, headerFields: nil)!
+    guard let requestURL = request.url,
+      let response = HTTPURLResponse(
+        url: requestURL, statusCode: statusCode, httpVersion: nil, headerFields: nil)
+    else {
+      client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+      return
+    }
     client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
     if !body.isEmpty {
       client?.urlProtocol(self, didLoad: body)
@@ -146,16 +151,18 @@ final class MemoryExportStatusTests: XCTestCase {
     let apiClient = APIClient(session: URLSession(configuration: configuration))
     await apiClient.setTestAuthHeaderForMemoryExportTests("Bearer test-token")
     let service = MemoryExportService(apiClient: apiClient)
+    let connectedAtKey = memoryExportDefaultsKey("memoryExportConnectedAt", destination: .chatgpt)
+    let detailKey = memoryExportDefaultsKey("memoryExportDetail", destination: .chatgpt)
 
-    UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "memoryExportConnectedAt.chatgpt")
-    UserDefaults.standard.set("Authorized through ChatGPT (cloud)", forKey: "memoryExportDetail.chatgpt")
+    UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: connectedAtKey)
+    UserDefaults.standard.set("Authorized through ChatGPT (cloud)", forKey: detailKey)
 
     let status = try await service.disconnectCloudOAuthConnection(for: .chatgpt)
 
     XCTAssertFalse(status.hasConnection)
     XCTAssertFalse(status.isConfigured)
-    XCTAssertNil(UserDefaults.standard.object(forKey: "memoryExportConnectedAt.chatgpt"))
-    XCTAssertNil(UserDefaults.standard.object(forKey: "memoryExportDetail.chatgpt"))
+    XCTAssertNil(UserDefaults.standard.object(forKey: connectedAtKey))
+    XCTAssertNil(UserDefaults.standard.object(forKey: detailKey))
     let requests = CloudOAuthDisconnectURLProtocol.capturedRequests
     XCTAssertEqual(requests.count, 2)
     XCTAssertEqual(requests[0].method, "GET")
@@ -562,6 +569,10 @@ final class MemoryExportStatusTests: XCTestCase {
       defaults.removeObject(forKey: "memoryExportLastExportPath.\(destination.rawValue)")
       defaults.removeObject(forKey: "memoryExportConnectedAt.\(destination.rawValue)")
     }
+  }
+
+  private func memoryExportDefaultsKey(_ prefix: String, destination: MemoryExportDestination) -> String {
+    "\(prefix).\(destination.rawValue)"
   }
 
   private func storeOwnedMCPKey(userId: String = "test-user", key: String = "test-key") {
