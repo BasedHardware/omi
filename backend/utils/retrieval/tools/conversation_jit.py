@@ -331,9 +331,7 @@ def format_jit_results(
     candidates: List[Tuple[Dict[str, Any], Dict[str, Any]]] = []
     seen_conversation_ids: set[str] = set()
     collected_conversation_ids = {
-        item.get("id")
-        for item in conversations_collected or []
-        if isinstance(item, dict) and isinstance(item.get("id"), str)
+        item.get("id") for item in conversations_collected or [] if isinstance(item.get("id"), str)
     }
     rejected_or_duplicate = False
     for data in bounded_conversations:
