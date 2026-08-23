@@ -37,7 +37,6 @@ TASK_INTELLIGENCE_CONTROL_DOCUMENT = 'state'
 PENDING_CANDIDATE_SEMANTIC_VERSION = 'task-create.v1'
 WORKSTREAM_CANDIDATE_SEMANTIC_VERSION = 'workstream-create.v1'
 MAX_CANDIDATE_EVIDENCE_REFS = 20
-PENDING_CANDIDATE_REUSE_WINDOW = timedelta(days=14)
 # A suggestion the user does not act on expires and is gone. This is a real
 # stored deadline, not a display filter: every read treats a lapsed pending
 # Candidate as expired.
@@ -559,7 +558,10 @@ def create_candidate(
             claimed_candidate is not None
             and claimed_candidate.status == CandidateStatus.pending
             and claimed_candidate.created_at.tzinfo is not None
-            and claimed_candidate.created_at >= now_value - PENDING_CANDIDATE_REUSE_WINDOW
+            # Reuse is bounded by the suggestion's own life, not by a separate
+            # window: a lapsed pending Candidate is unreadable, so merging a new
+            # capture into it would store a proposal the user can never see.
+            and not candidate_has_lapsed(claimed_candidate, now=now_value)
         )
         if (
             claimed_candidate is not None
