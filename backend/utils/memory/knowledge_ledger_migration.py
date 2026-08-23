@@ -120,6 +120,8 @@ def plan_ledger_migration(item: MemoryItem) -> LedgerMigrationPlan:
             reason="short_term_requires_explicit_adjudication",
             requires_human_or_policy_adjudication=True,
         )
+    # archive_requires_explicit_query: archive history is never a default-read
+    # migration candidate and requires an explicit adjudication capability.
     if item.tier == MemoryLayer.archive:
         return LedgerMigrationPlan(
             memory_id=item.memory_id,

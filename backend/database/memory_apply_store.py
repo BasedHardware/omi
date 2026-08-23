@@ -1650,26 +1650,6 @@ def _apply_long_term_patch_firestore_transaction(
         )
         return committed_replay
 
-    if operation.logical_payload.decision == DurablePatchDecision.add.value:
-        new_memory_id = patch_payload.get("new_memory_id")
-        if isinstance(new_memory_id, str) and new_memory_id.strip():
-            new_item_ref = db_client.document(f"{collections.memory_items}/{new_memory_id}")
-            if getattr(new_item_ref.get(transaction=transaction), "exists", False):
-                collision = ApplyResult(
-                    status=ApplyStatus.invalid_patch,
-                    control_state=control_state,
-                    operation=operation,
-                    reason="add patch new_memory_id already exists",
-                )
-                _write_apply_result(
-                    transaction=transaction,
-                    db_client=db_client,
-                    collections=collections,
-                    operation_ref=operation_ref,
-                    result=collision,
-                )
-                return collision
-
     evidence_items, staged_evidence = _read_or_stage_authoritative_evidence(
         db_client=db_client,
         transaction=transaction,
@@ -1730,6 +1710,21 @@ def _apply_long_term_patch_firestore_transaction(
         operation=operation,
         patch_payload=authoritative_payload,
     )
+    # Validate the authoritative source before reporting a row-id collision so
+    # a delayed replay from deleted evidence remains fail-closed as
+    # ``source_not_active``. A valid add still cannot overwrite any existing
+    # row, including non-active history.
+    if result.status == ApplyStatus.committed and operation.logical_payload.decision == DurablePatchDecision.add.value:
+        new_memory_id = patch_payload.get("new_memory_id")
+        if isinstance(new_memory_id, str) and new_memory_id.strip():
+            new_item_ref = db_client.document(f"{collections.memory_items}/{new_memory_id}")
+            if getattr(new_item_ref.get(transaction=transaction), "exists", False):
+                result = ApplyResult(
+                    status=ApplyStatus.invalid_patch,
+                    control_state=control_state,
+                    operation=operation,
+                    reason="add patch new_memory_id already exists",
+                )
     if result.status == ApplyStatus.committed:
         for evidence_ref, evidence in staged_evidence:
             transaction.set(evidence_ref, _firestore_data(evidence))
@@ -1755,6 +1750,7 @@ def _apply_long_term_patch_firestore_transaction(
 
 _EVIDENCE_SEMANTIC_EXCLUDES = {
     "created_at",
+    "artifact_preservation",
     "source_state",
     "source_state_reason",
     "provenance_visibility",

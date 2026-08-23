@@ -385,7 +385,14 @@ def _mark_account_deletion_fenced(db, uid: str) -> None:
 
 def _sample_memory_payload(*, uid: str, conversation_id: str, content: str) -> dict:
     now = datetime(2026, 6, 1, tzinfo=timezone.utc)
-    evidence_id = "ev_ws_j_1"
+    evidence_id = (
+        "ev_ws_j_"
+        + extraction_memory_id(
+            uid=uid,
+            source_id=conversation_id,
+            content="test-evidence",
+        )[4:20]
+    )
     memory_id = extraction_memory_id(uid=uid, source_id=conversation_id, content=content)
     return {
         "id": memory_id,
@@ -890,9 +897,10 @@ def test_readding_a_deleted_manual_memory_lands_on_a_fresh_evidence_identity(mon
     retired_evidence = _tombstoned_evidence_paths(canonical_db, uid)
     assert retired_evidence
 
-    write_canonical_external_memory(uid, _external_memory_payload(uid, content), db_client=canonical_db)
+    second_id = write_canonical_external_memory(uid, _external_memory_payload(uid, content), db_client=canonical_db)
 
     live = read_canonical_memories(uid, db_client=canonical_db, include_pending_processing=True)
+    assert second_id != first_id
     assert content in [memory.content for memory in live]
     # The deleted submission's evidence identity stays retired: the re-add is a
     # new source artifact, not a resurrection of the deleted one.
