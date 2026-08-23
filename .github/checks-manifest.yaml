@@ -642,6 +642,16 @@ checks:
     triggers: ["desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift", "desktop/macos/scripts/check-hub-controller-ratchet.py"]
     lanes: ["local", "ci"]
     reason: "realtime hub extracted-type ownership anti-regrowth ratchet"
+  - id: task-capture-authority
+    command: ["python3", ".github/scripts/check_task_capture_authority.py"]
+    triggers: ["backend/utils/task_intelligence/**", "backend/utils/conversations/process_conversation.py", "backend/config/task_intelligence_sources_v1.json", "desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/**", ".github/scripts/check_task_capture_authority.py"]
+    lanes: ["local", "ci"]
+    reason: "INV-TASK-2: automatic capture proposes; four shipped paths wrote tasks the user never asked for"
+  - id: task-capture-authority-tests
+    command: ["python3", ".github/scripts/test_check_task_capture_authority.py"]
+    triggers: [".github/scripts/check_task_capture_authority.py", ".github/scripts/test_check_task_capture_authority.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the guard must still fail on each shape it was written for"
   - id: desktop-auth-session-ratchet
     command: ["python3", ".github/scripts/check_desktop_auth_session.py"]
     triggers: ["desktop/macos/Desktop/Sources/APIClient.swift", "desktop/macos/Desktop/Sources/AuthService.swift", "desktop/macos/Desktop/Sources/AuthSessionCoordinator.swift", "desktop/macos/Desktop/Sources/DesktopKeychainStore.swift", "desktop/macos/Desktop/Sources/OmiApp.swift", "desktop/macos/Desktop/Sources/Auth/**/*.swift", ".github/scripts/check_desktop_auth_session.py"]

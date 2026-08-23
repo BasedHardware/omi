@@ -156,10 +156,12 @@ def test_backend_adapter_maps_frozen_policy_outcomes_to_typed_candidates():
 
     assert pending.policy.outcome == 'pending_candidate'
     assert pending.candidate is not None
-    assert accepted.policy.outcome == 'auto_accept_silent'
+    # I1: even a high-confidence first-person commitment only proposes.
+    assert accepted.policy.outcome == 'pending_candidate'
     assert accepted.policy.interruption == 'none'
     assert accepted.candidate.capture_confidence == 0.95
-    assert low_confidence.policy.outcome == 'pending_candidate'
+    # Below the floor the Suggested surface would hide it, so it is not admitted.
+    assert low_confidence.policy.outcome == 'ignore'
     assert low_confidence.policy.interruption == 'none'
     assert without_deliverable.policy.outcome == 'ignore'
     assert without_deliverable.policy.interruption == 'none'
@@ -191,7 +193,7 @@ def test_conversation_adapter_defaults_concrete_deliverable_false_and_honors_exp
             ),
             'conversation-1',
         ).policy.outcome
-        == 'auto_accept_silent'
+        == 'pending_candidate'
     )
     assert (
         conversation_capture._capture_decision(
@@ -204,7 +206,7 @@ def test_conversation_adapter_defaults_concrete_deliverable_false_and_honors_exp
             ),
             'conversation-1',
         ).policy.outcome
-        == 'pending_candidate'
+        == 'ignore'
     )
     assert (
         conversation_capture._capture_decision(
@@ -285,7 +287,10 @@ def test_wake_word_task_verdict_promotes_non_explicit_extraction_without_changin
     assert signals.explicit_command is True
     assert signals.direct_request is False
     assert signals.capture_confidence == 0.42
-    assert run_capture_policy(signals.policy_signals()).outcome == 'create_direct'
+    # Wake-word promotion still only proposes, and every kind clears the 0.8
+    # visibility floor — 0.42 is below it, so the policy ignores rather than
+    # writing a task (#11980's create_direct outcome is gone).
+    assert run_capture_policy(signals.policy_signals()).outcome == 'ignore'
 
 
 @pytest.mark.parametrize(
@@ -594,38 +599,50 @@ def test_canonical_prompt_and_parser_preserve_no_deadline_requests_and_completio
     assert items[1].target_task_id == 'task-budget'
 
 
-def test_rejected_policy_uses_no_drop_compatibility_writer_without_candidate(monkeypatch):
+def test_rejected_item_is_dropped_alone_and_never_falls_back_to_a_writer(monkeypatch):
+    """I1: an ignored item must not drag its siblings onto the legacy writer."""
     _enable_canonical(monkeypatch)
     monkeypatch.setattr(
         conversation_capture.task_control_db,
         'get_task_workflow_control',
         lambda uid: TaskWorkflowControl(workflow_mode='shadow', account_generation=3),
     )
-    decisions = []
+    seen = []
+    created = []
 
     class _NoCandidateDecision:
         candidate = None
 
-    monkeypatch.setattr(
-        conversation_capture,
-        '_capture_decision',
-        lambda action_item, conversation_id, **_kwargs: decisions.append((action_item.description, conversation_id))
-        or _NoCandidateDecision(),
-    )
+    class _CandidateDecision:
+        candidate = object()
+
+    def decide(action_item, conversation_id, *args, **kwargs):
+        seen.append((action_item.description, conversation_id))
+        return _NoCandidateDecision() if action_item.description == 'Ignore me' else _CandidateDecision()
+
+    monkeypatch.setattr(conversation_capture, '_capture_decision', decide)
     monkeypatch.setattr(
         conversation_capture.candidate_service,
         'create_candidate',
-        lambda *a, **kw: pytest.fail('should not create candidate when decision.candidate is None'),
+        lambda uid, proposal, **kw: created.append(proposal) or SimpleNamespace(candidate_id='candidate-1'),
     )
 
     assert conversation_capture.capture_enabled('user-1') is True
-    # A rejected extraction item has no Candidate representation. Returning
-    # False delegates the complete extraction to the compatibility writer.
-    assert conversation_capture.process_before_legacy('user-1', 'conversation-1', [_action('Send budget')]) is False
-    assert decisions == [('Send budget', 'conversation-1')]
+    handled = conversation_capture.process_before_legacy(
+        'user-1',
+        'conversation-1',
+        [_action('Ignore me'), _action('Send budget')],
+    )
+
+    # Always handled: there is no path back to a writer that bypasses the user.
+    assert handled is True
+    assert seen == [('Ignore me', 'conversation-1'), ('Send budget', 'conversation-1')]
+    # Only the admitted item was proposed; the ignored one was dropped alone.
+    assert len(created) == 1
 
 
-def test_conversation_capture_resolves_every_create_without_notifications(monkeypatch):
+def test_extraction_only_proposes_and_never_accepts_or_writes_a_task(monkeypatch):
+    """I1: conversation extraction creates pending Candidates and nothing else."""
     _enable_canonical(monkeypatch)
     monkeypatch.setattr(
         conversation_capture.task_control_db,
@@ -633,7 +650,6 @@ def test_conversation_capture_resolves_every_create_without_notifications(monkey
         lambda uid: TaskWorkflowControl(workflow_mode='read', account_generation=3),
     )
     records = []
-    accepted = []
 
     def create(uid, proposal, **kwargs):
         record = _record(proposal, len(records) + 1)
@@ -644,7 +660,7 @@ def test_conversation_capture_resolves_every_create_without_notifications(monkey
     monkeypatch.setattr(
         conversation_capture.candidate_service,
         'accept_candidate',
-        lambda uid, candidate_id, **kwargs: accepted.append(candidate_id),
+        lambda *a, **kw: pytest.fail('extraction must never accept a candidate'),
     )
     monkeypatch.setattr(
         process_conversation,
@@ -654,7 +670,12 @@ def test_conversation_capture_resolves_every_create_without_notifications(monkey
     monkeypatch.setattr(
         process_conversation.action_items_db,
         'create_action_items_batch',
-        lambda *args: pytest.fail('read mode cannot use legacy batch writer'),
+        lambda *args, **kwargs: pytest.fail('extraction must never write an action item'),
+    )
+    monkeypatch.setattr(
+        process_conversation.action_items_db,
+        'create_action_item',
+        lambda *args, **kwargs: pytest.fail('extraction must never write an action item'),
     )
     emitted = []
     monkeypatch.setattr(process_conversation, 'emit_product_event', lambda **event: emitted.append(event))
@@ -678,10 +699,7 @@ def test_conversation_capture_resolves_every_create_without_notifications(monkey
     )
 
     assert len(records) == 2
-    # Both creates resolve here: the direct_request item is policy-tier
-    # 'pending_candidate', and parking it would hide the task from every client
-    # except macOS.
-    assert accepted == ['candidate-1', 'candidate-2']
+    assert [record.status for record in records] == ['pending', 'pending']
     assert emitted == [
         {
             'uid': 'user-1',
@@ -696,8 +714,10 @@ def test_conversation_capture_resolves_every_create_without_notifications(monkey
     ]
 
 
-def test_off_mode_is_behaviorally_legacy_and_canonical_route_bypasses_legacy_writer(monkeypatch):
-    # Workflow mode is diagnostic; every authenticated UID uses Candidate.
+def test_off_mode_still_only_proposes_and_never_reaches_a_writer(monkeypatch):
+    # Workflow mode is diagnostic; every authenticated UID uses Candidate. `off`
+    # is what the control endpoint reports on its own read failure, and it must
+    # not become a route into the task list (I1).
     monkeypatch.setattr(
         conversation_capture.task_control_db,
         'get_task_workflow_control',
@@ -719,8 +739,6 @@ def test_off_mode_is_behaviorally_legacy_and_canonical_route_bypasses_legacy_wri
         'create_action_items_batch',
         write,
     )
-    monkeypatch.setattr(process_conversation, 'upsert_action_item_vectors_batch', lambda *args, **kwargs: None)
-    monkeypatch.setattr(process_conversation, 'delete_action_item_vectors_batch', lambda *args, **kwargs: None)
     monkeypatch.setattr(process_conversation, 'submit_with_context', lambda *args, **kwargs: None)
 
     conversation = _conversation(
@@ -744,7 +762,7 @@ def test_off_mode_is_behaviorally_legacy_and_canonical_route_bypasses_legacy_wri
     monkeypatch.setattr(
         conversation_capture.candidate_service,
         'accept_candidate',
-        lambda uid, candidate_id, **kwargs: None,
+        lambda *a, **kw: pytest.fail('extraction must never accept a candidate'),
     )
     assert conversation_capture.capture_enabled('user-1') is True
     result = conversation_capture.process_before_legacy(
@@ -923,7 +941,14 @@ def test_capture_survives_negative_segment_offsets():
     assert evidence.transcript_segment_ids == ['segment-1', 'segment-2']
 
 
-def test_pending_tier_create_is_accepted_so_the_task_is_visible(monkeypatch):
+def test_pending_tier_create_stays_pending_for_the_user(monkeypatch):
+    """I1: a create from conversation extraction is a suggestion, never a task.
+
+    #12014 auto-accepted conversation creates because only macOS read the
+    Candidate surface. This branch makes that surface the product: the user
+    adds the suggestion, extraction does not.
+    """
+
     monkeypatch.setattr(
         conversation_capture.task_control_db,
         'get_task_workflow_control',
@@ -952,7 +977,8 @@ def test_pending_tier_create_is_accepted_so_the_task_is_visible(monkeypatch):
 
     assert conversation_capture._capture_decision(action, 'conversation-1').policy.outcome == 'pending_candidate'
     assert conversation_capture.process_before_legacy('user-1', 'conversation-1', [action]) is True
-    assert accepted == ['candidate-1']
+    assert [record.status for record in records] == ['pending']
+    assert accepted == []
 
 
 def test_task_mutation_still_waits_for_review(monkeypatch):
@@ -989,19 +1015,16 @@ def test_task_mutation_still_waits_for_review(monkeypatch):
     assert accepted == []
 
 
-def test_capture_exception_falls_back_to_the_compatibility_writer(monkeypatch):
-    """A raising capture adapter must not swallow the conversation's tasks."""
+def test_capture_exception_does_not_fall_back_to_a_writer(monkeypatch):
+    """INV-TASK-2: a raising capture adapter must not write tasks behind the user."""
 
-    def boom(uid, conversation):
+    def boom(uid, conversation, *args, **kwargs):
         raise ValueError('capture adapter exploded')
 
     monkeypatch.setattr(process_conversation.conversation_capture, 'process_conversation_before_legacy', boom)
-    monkeypatch.setattr(process_conversation.action_items_db, 'get_action_items_by_conversation', lambda *args: [])
-    monkeypatch.setattr(process_conversation.action_items_db, 'delete_action_items_for_conversation', lambda *args: 0)
-    monkeypatch.setattr(process_conversation, 'upsert_action_item_vectors_batch', lambda *args, **kwargs: None)
-    monkeypatch.setattr(process_conversation, 'delete_action_item_vectors_batch', lambda *args, **kwargs: None)
-    monkeypatch.setattr(process_conversation, 'submit_with_context', lambda *args, **kwargs: None)
-    monkeypatch.setattr(process_conversation, 'emit_product_event', lambda **event: None)
+    monkeypatch.setattr(
+        process_conversation.conversation_capture, 'prepare_wake_word_capture_gate', lambda *args, **kwargs: None
+    )
     fallbacks = []
     monkeypatch.setattr(process_conversation, 'record_fallback', lambda **event: fallbacks.append(event))
     writes = []
@@ -1011,6 +1034,11 @@ def test_capture_exception_falls_back_to_the_compatibility_writer(monkeypatch):
         return [f'task-{index + 1}' for index in range(len(rows))]
 
     monkeypatch.setattr(process_conversation.action_items_db, 'create_action_items_batch', write)
+    monkeypatch.setattr(
+        process_conversation.action_items_db,
+        'create_action_item',
+        lambda *args, **kwargs: pytest.fail('extraction must never write an action item'),
+    )
 
     conversation = _conversation(
         _action('Send the budget', capture_kind='explicit_command', capture_owner='user', concrete_deliverable=True)
@@ -1019,12 +1047,12 @@ def test_capture_exception_falls_back_to_the_compatibility_writer(monkeypatch):
 
     process_conversation._save_action_items('user-1', conversation)
 
-    assert [row['description'] for rows in writes for row in rows] == ['Send the budget']
+    assert writes == []
     assert fallbacks == [
         {
             'component': 'other',
             'from_mode': 'canonical_task_capture',
-            'to_mode': 'legacy_action_items',
+            'to_mode': 'defer_retry',
             'reason': 'other',
             'outcome': 'degraded',
         }

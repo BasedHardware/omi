@@ -5634,6 +5634,18 @@
             "title": "Evidence Refs",
             "type": "array"
           },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
           "goal_id": {
             "anyOf": [
               {

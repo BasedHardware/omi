@@ -407,32 +407,6 @@ final class TaskChatCoordinator: ObservableObject {
     if activeTaskId == taskId { closeChat() }
   }
 
-  // MARK: - Background work
-
-  func investigateInBackground(for task: TaskActionItem) async {
-    guard let lease = captureOwnerLease() else { return }
-    await openThread(for: task, createIfNeeded: true, revealPanel: false, lease: lease)
-    guard isCurrent(lease) else { return }
-    // openThread can early-exit (isOpening) or fail without resetting state when
-    // revealPanel is false — activeTaskState may still belong to a previous task.
-    // Never send this task's prompt into another task's thread.
-    guard activeTaskId == task.id, let state = activeTaskState, !state.isSending else { return }
-    // Stamp before sending: RecurringTaskScheduler gates re-investigation on this.
-    try? await ActionItemStorage.shared.updateAgentStartedAt(
-      taskId: task.id,
-      startedAt: Date(),
-      authorization: LocalMutationAuthorization {
-        RuntimeOwnerIdentity.isAuthorizationCurrent(lease.authorizationSnapshot)
-      }
-    )
-    await state.sendMessage(
-      TaskAgentSettings.shared.buildCanonicalTaskPrompt(for: task),
-      taskContext: activeContextPacket
-    )
-    guard isCurrent(lease) else { return }
-    await refreshActiveThread()
-  }
-
   // MARK: - Resolution
 
   private func openThread(
