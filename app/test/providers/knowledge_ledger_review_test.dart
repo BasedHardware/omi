@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -14,23 +16,61 @@ Memory _ledgerMemory({
   DateTime? invalidAt,
   DateTime? validAt,
   String? slot,
+  String? supersededBy,
+  String content = '',
+  String uid = 'ledger-review-user',
+  String schemaVersion = 'knowledge_ledger.v1',
+  bool intentBacked = true,
+  bool isLocked = false,
 }) {
   return Memory(
     id: id,
-    uid: 'ledger-review-user',
-    content: id,
+    uid: uid,
+    content: content.isEmpty ? id : content,
     category: MemoryCategory.system,
     createdAt: DateTime.utc(2026, 8, 23),
     updatedAt: DateTime.utc(2026, 8, 23),
     visibility: MemoryVisibility.private,
     userReview: review,
-    ledgerSchemaVersion: 'knowledge_ledger.v1',
+    ledgerSchemaVersion: schemaVersion,
     ledgerKind: kind,
     ledgerSlot: kind == KnowledgeLedgerKind.fact ? (slot ?? id) : null,
     invalidAt: invalidAt,
     validAt: validAt,
-    intentBacked: true,
+    supersededBy: supersededBy,
+    intentBacked: intentBacked,
     curationWeight: weight,
+    isLocked: isLocked,
+  );
+}
+
+Memory _revertReplacement(
+  Memory source, {
+  String id = 'restored-fact',
+  String? uid,
+  String? content,
+  MemoryVisibility? visibility,
+}) {
+  return Memory(
+    id: id,
+    uid: uid ?? source.uid,
+    content: content ?? source.content,
+    category: source.category,
+    createdAt: DateTime.utc(2026, 8, 24),
+    updatedAt: DateTime.utc(2026, 8, 24),
+    visibility: visibility ?? source.visibility,
+    ledgerSchemaVersion: 'knowledge_ledger.v1',
+    ledgerKind: KnowledgeLedgerKind.fact,
+    ledgerSlot: source.ledgerSlot,
+    subjectScope: source.subjectScope,
+    subjectEntityId: source.subjectEntityId,
+    validAt: DateTime.utc(2026, 8, 24),
+    intentBacked: true,
+    curationWeight: source.curationWeight,
+    writeReason: 'direct_user_statement',
+    evidence: [
+      {'source_type': 'explicit_user_revert', 'source_id': source.id},
+    ],
   );
 }
 
@@ -210,5 +250,217 @@ void main() {
     expect(provider.historicalLedgerRows.map((row) => row.id), ['rejected']);
     expect(provider.ledgerHistorySupported, isTrue);
     expect(provider.ledgerHistoryTruncated, isTrue);
+  });
+
+  test('superseded fact revert is non-optimistic, debounced, and appends the authoritative replacement', () async {
+    final source = _ledgerMemory(
+      id: 'superseded',
+      kind: KnowledgeLedgerKind.fact,
+      content: 'Lives in Brooklyn',
+      slot: 'home_city',
+      supersededBy: 'newer-fact',
+      invalidAt: DateTime.utc(2026, 8, 24),
+      weight: 4,
+    );
+    final response = Completer<RevertMemoryResult>();
+    final operationIds = <String>[];
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+          const GetMemoriesResult([], true),
+      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+          GetLedgerHistoryResult([source], supported: true),
+      revertMemoryRequest: (id, operationId) {
+        operationIds.add(operationId);
+        return response.future;
+      },
+    );
+    addTearDown(provider.dispose);
+    await provider.loadMemories();
+
+    final firstTap = provider.revertSupersededFact(source);
+    expect(provider.isRevertingMemory(source.id), isTrue);
+    expect(provider.memories.map((memory) => memory.id), ['superseded']);
+    expect(await provider.revertSupersededFact(source), isFalse);
+    expect(operationIds, hasLength(1));
+    expect(operationIds.single, matches(RegExp(r'^[0-9a-f-]{36}$')));
+
+    response.complete(
+      RevertMemoryResult(persisted: true, authoritativeMemory: _revertReplacement(source)),
+    );
+    expect(await firstTap, isTrue);
+    expect(provider.isRevertingMemory(source.id), isFalse);
+    expect(provider.historicalLedgerRows.map((memory) => memory.id), ['superseded']);
+    expect(provider.currentLedgerFacts.map((memory) => memory.id), ['restored-fact']);
+    expect(provider.canRevertSupersededFact(source), isFalse);
+  });
+
+  test('each completed revert tap uses a distinct operation id', () async {
+    final source = _ledgerMemory(
+      id: 'superseded',
+      kind: KnowledgeLedgerKind.fact,
+      supersededBy: 'newer-fact',
+    );
+    final operationIds = <String>[];
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+          const GetMemoriesResult([], true),
+      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+          GetLedgerHistoryResult([source], supported: true),
+      revertMemoryRequest: (id, operationId) async {
+        operationIds.add(operationId);
+        return const RevertMemoryResult(persisted: false);
+      },
+    );
+    addTearDown(provider.dispose);
+    await provider.loadMemories();
+
+    expect(await provider.revertSupersededFact(source), isFalse);
+    expect(await provider.revertSupersededFact(source), isFalse);
+    expect(operationIds, hasLength(2));
+    expect(operationIds.toSet(), hasLength(2));
+  });
+
+  test('revert rejects malformed authoritative replacements without local mutation', () async {
+    final source = _ledgerMemory(
+      id: 'superseded',
+      kind: KnowledgeLedgerKind.fact,
+      content: 'Lives in Brooklyn',
+      supersededBy: 'newer-fact',
+    );
+    final invalidReplacements = [
+      _revertReplacement(source, id: source.id),
+      _revertReplacement(source, uid: 'different-user'),
+      _revertReplacement(source, content: 'Lives in Queens'),
+    ];
+
+    for (final replacement in invalidReplacements) {
+      final provider = MemoriesProvider(
+        fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+            const GetMemoriesResult([], true),
+        fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+            GetLedgerHistoryResult([source], supported: true),
+        revertMemoryRequest: (id, operationId) async =>
+            RevertMemoryResult(persisted: true, authoritativeMemory: replacement),
+      );
+      await provider.loadMemories();
+
+      expect(await provider.revertSupersededFact(source), isFalse);
+      expect(provider.memories.map((memory) => memory.id), ['superseded']);
+      provider.dispose();
+    }
+  });
+
+  test('revert validates replacement visibility against the current chain tail', () async {
+    final source = _ledgerMemory(
+      id: 'superseded',
+      kind: KnowledgeLedgerKind.fact,
+      content: 'Lives in Brooklyn',
+      slot: 'home_city',
+      supersededBy: 'current-tail',
+    );
+    final tail = _ledgerMemory(
+      id: 'current-tail',
+      kind: KnowledgeLedgerKind.fact,
+      content: 'Lives in Queens',
+      slot: 'home_city',
+    )..visibility = MemoryVisibility.public;
+    final responses = [
+      RevertMemoryResult(
+        persisted: true,
+        authoritativeMemory: _revertReplacement(source, id: 'wrong-visibility'),
+      ),
+      RevertMemoryResult(
+        persisted: true,
+        authoritativeMemory: _revertReplacement(
+          source,
+          id: 'matching-visibility',
+          visibility: MemoryVisibility.public,
+        ),
+      ),
+    ];
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+          GetMemoriesResult([tail], true),
+      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+          GetLedgerHistoryResult([source], supported: true),
+      revertMemoryRequest: (id, operationId) async => responses.removeAt(0),
+    );
+    addTearDown(provider.dispose);
+    await provider.loadMemories();
+
+    expect(await provider.revertSupersededFact(source), isFalse);
+    expect(provider.memories.any((memory) => memory.id == 'wrong-visibility'), isFalse);
+    expect(await provider.revertSupersededFact(source), isTrue);
+    expect(provider.currentLedgerFacts.any((memory) => memory.id == 'matching-visibility'), isTrue);
+  });
+
+  test('session generation change discards a late authoritative revert response', () async {
+    final source = _ledgerMemory(
+      id: 'superseded',
+      kind: KnowledgeLedgerKind.fact,
+      supersededBy: 'newer-fact',
+    );
+    final response = Completer<RevertMemoryResult>();
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+          const GetMemoriesResult([], true),
+      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+          GetLedgerHistoryResult([source], supported: true),
+      revertMemoryRequest: (id, operationId) => response.future,
+    );
+    addTearDown(provider.dispose);
+    await provider.loadMemories();
+
+    final pending = provider.revertSupersededFact(source);
+    provider.clearUserData();
+    response.complete(
+      RevertMemoryResult(persisted: true, authoritativeMemory: _revertReplacement(source)),
+    );
+
+    expect(await pending, isFalse);
+    expect(provider.memories, isEmpty);
+  });
+
+  test('revert excludes standalone closed, rejected-current, non-fact, future, and legacy rows', () async {
+    final rows = [
+      _ledgerMemory(
+        id: 'closed',
+        kind: KnowledgeLedgerKind.fact,
+        invalidAt: DateTime.utc(2026, 8, 24),
+      ),
+      _ledgerMemory(id: 'rejected', kind: KnowledgeLedgerKind.fact, review: false),
+      _ledgerMemory(id: 'playbook', kind: KnowledgeLedgerKind.document, supersededBy: 'replacement'),
+      _ledgerMemory(
+        id: 'future',
+        kind: KnowledgeLedgerKind.fact,
+        supersededBy: 'replacement',
+        schemaVersion: 'knowledge_ledger.v2',
+      ),
+      _ledgerMemory(
+        id: 'legacy',
+        kind: KnowledgeLedgerKind.fact,
+        supersededBy: 'replacement',
+        schemaVersion: '',
+      ),
+    ];
+    var requests = 0;
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+          const GetMemoriesResult([], true),
+      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+          GetLedgerHistoryResult(rows, supported: true),
+      revertMemoryRequest: (id, operationId) async {
+        requests++;
+        return const RevertMemoryResult(persisted: false);
+      },
+    );
+    addTearDown(provider.dispose);
+    await provider.loadMemories();
+
+    for (final row in rows) {
+      expect(provider.canRevertSupersededFact(row), isFalse, reason: row.id);
+      expect(await provider.revertSupersededFact(row), isFalse, reason: row.id);
+    }
+    expect(requests, 0);
   });
 }
