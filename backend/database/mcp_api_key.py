@@ -6,6 +6,7 @@ from typing import Any, Dict, Optional, Tuple, cast
 from google.cloud import firestore
 
 import database.redis_db as redis_db
+from database.mcp_auth_read import mcp_auth_stream
 from database._client import get_firestore_client
 from database.api_key_metadata import (
     MCP_API_KEY_AUTH_CONTEXT_VERSION,
@@ -316,7 +317,10 @@ def get_api_key_auth_result(api_key: str) -> ApiKeyAuthLookupResult:
 
     firestore_client = _db()
     keys_ref = firestore_client.collection("mcp_api_keys").where("hashed_key", "==", hashed_key).limit(1)
-    docs = list(keys_ref.stream())
+    # Bounded deadline: this lookup gates the request and runs on a shared thread
+    # pool, so a Firestore outage must not park a worker for the client's default
+    # 300-second retry deadline (rationale in database/mcp_auth_read.py).
+    docs = list(mcp_auth_stream(keys_ref))
 
     if not docs:
         return ApiKeyAuthLookupResult(context=None)
