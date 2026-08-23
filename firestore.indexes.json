@@ -939,7 +939,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "plugin_id",
+          "fieldPath": "app_id",
           "order": "ASCENDING"
         },
         {
