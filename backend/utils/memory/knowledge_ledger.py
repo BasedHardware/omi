@@ -160,6 +160,17 @@ def _evidence_id(uid: str, provenance: LedgerProvenance) -> str:
     )
 
 
+def evidence_id_for_ledger_provenance(uid: str, provenance: LedgerProvenance) -> str:
+    """Return the stable evidence identity used by one ledger write.
+
+    Retry-aware product mutations use this to recognize their own already
+    committed append without relying on content equality or mutable lineage
+    position.
+    """
+
+    return _evidence_id(uid, provenance)
+
+
 def save_ledger_write(uid: str, write: LedgerWrite, *, db_client: Any = None) -> str:
     """Commit one idempotent semantic row through canonical apply."""
     memory_id = _row_id(uid, write)
@@ -402,6 +413,7 @@ __all__ = [
     "amend_fact",
     "close_fact",
     "create_trigger",
+    "evidence_id_for_ledger_provenance",
     "read_playbook",
     "render_playbook_index",
     "render_profile",

@@ -125,12 +125,14 @@ def test_knowledge_ledger_correction_emulator_harness_is_wired_to_real_service()
         "FIRESTORE_EMULATOR_HOST",
         "MemoryService",
         "service.update_content",
+        "service.revert_superseded_ledger_fact",
         "explicit_user_correction",
+        "explicit_user_revert",
         "memory_operations",
         "memory_commits",
         "memory_outbox",
         "item_revision",
-        "PASS: Firestore emulator explicit ledger correction proof",
+        "PASS: Firestore emulator explicit ledger correction and revert proof",
     ):
         assert required in script
 

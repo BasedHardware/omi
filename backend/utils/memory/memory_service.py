@@ -8,6 +8,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Iterator, List, Literal, NoReturn, Optional, Set, Tuple, cast
+from uuid import UUID
 
 from fastapi import HTTPException
 from pydantic import ValidationError
@@ -60,7 +61,12 @@ from utils.memory.product_memory_read_service import (
     iter_authoritative_product_memory_items,
     iter_authoritative_product_memory_items_newest_first,
 )
-from utils.memory.knowledge_ledger import LEDGER_SCHEMA_VERSION, LedgerProvenance, amend_fact
+from utils.memory.knowledge_ledger import (
+    LEDGER_SCHEMA_VERSION,
+    LedgerProvenance,
+    amend_fact,
+    evidence_id_for_ledger_provenance,
+)
 from utils.memory.rejected_memory_feedback import clear_rejected_memory_feedback_cache
 from utils.memory.required_promotion import required_processing_payload
 from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
@@ -88,6 +94,7 @@ MemoryPayload = Dict[str, Any]
 McpSearchPayload = Dict[str, Any]
 
 MAX_LEDGER_HISTORY_PROVIDER_WINDOW = 500
+MAX_LEDGER_REVERT_CHAIN_LENGTH = 64
 _LEDGER_QUERY_TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9']{1,63}")
 
 
@@ -1681,6 +1688,191 @@ class MemoryService:
         replacement = self._canonical_item_for_lineage(uid, replacement_id)
         if replacement is None or not self._is_exact_ledger_fact_correction(prior, replacement, normalized):
             raise HTTPException(status_code=503, detail="Knowledge ledger correction readback unavailable")
+        return memory_item_to_memorydb(replacement)
+
+    @staticmethod
+    def _normalized_revert_operation_id(operation_id: str) -> str:
+        try:
+            normalized = str(UUID(str(operation_id or "").strip()))
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail="Invalid memory revert operation id") from exc
+        return normalized
+
+    @staticmethod
+    def _ledger_revert_identity(
+        item: MemoryItem,
+    ) -> Tuple[MemoryKind, Optional[str], Optional[MemorySubjectScope], Optional[str]]:
+        return item.kind, item.slot, item.subject_scope, item.subject_entity_id
+
+    @staticmethod
+    def _validate_ledger_revert_item(item: MemoryItem, *, identity: Tuple[Any, ...]) -> None:
+        if (
+            item.ledger_schema_version != LEDGER_SCHEMA_VERSION
+            or item.kind != MemoryKind.fact
+            or not item.intent_backed
+            or item.processing_state != ProcessingState.processed
+            or item.source_state != SourceState.active
+            or set(item.sensitivity_labels).intersection(RESTRICTED_SENSITIVITY_LABELS)
+            or MemoryService._ledger_revert_identity(item) != identity
+        ):
+            raise HTTPException(status_code=409, detail="Knowledge ledger history cannot be restored")
+
+    @staticmethod
+    def _is_exact_ledger_fact_revert(
+        selected: MemoryItem,
+        prior_tail: MemoryItem,
+        replacement: MemoryItem,
+        *,
+        evidence_id: str,
+    ) -> bool:
+        expected_source_version = f"item_revision:{selected.item_revision}"
+        has_revert_evidence = any(
+            evidence.evidence_id == evidence_id
+            and evidence.source_type == "explicit_user_revert"
+            and evidence.source_id == selected.memory_id
+            and evidence.source_version == expected_source_version
+            for evidence in replacement.evidence
+        )
+        return not (
+            replacement.ledger_schema_version != LEDGER_SCHEMA_VERSION
+            or replacement.kind != MemoryKind.fact
+            or not replacement.intent_backed
+            or replacement.write_reason != LedgerWriteReason.direct_user_statement
+            or not replacement.user_asserted
+            or (replacement.content or "").strip() != (selected.content or "").strip()
+            or replacement.slot != selected.slot
+            or replacement.subject_scope != selected.subject_scope
+            or replacement.subject_entity_id != selected.subject_entity_id
+            or replacement.curation_weight != selected.curation_weight
+            or replacement.visibility != prior_tail.visibility
+            or not has_revert_evidence
+        )
+
+    def revert_superseded_ledger_fact(
+        self,
+        uid: str,
+        memory_id: str,
+        operation_id: str,
+    ) -> MemoryDB:
+        """Restore a superseded fact by appending a fresh authoritative tail.
+
+        Historical rows remain immutable. The selected row must lead through a
+        single well-formed v1 fact chain to one current tail. A retry with the
+        same operation id returns its still-current append; it never creates a
+        second restore.
+        """
+
+        self.ensure_canonical_mutation_ready(uid)
+        normalized_operation_id = self._normalized_revert_operation_id(operation_id)
+        selected = self._canonical_item_for_lineage(uid, memory_id)
+        if selected is None:
+            raise HTTPException(status_code=404, detail="Memory not found")
+        identity = self._ledger_revert_identity(selected)
+        self._validate_ledger_revert_item(selected, identity=identity)
+        if (
+            selected.status != MemoryItemStatus.superseded
+            or selected.valid_to is None
+            or not (selected.superseded_by or "").strip()
+        ):
+            raise HTTPException(status_code=409, detail="Only superseded knowledge ledger facts may be restored")
+        if memory_item_to_memorydb(selected).is_locked:
+            raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
+        if not (selected.content or "").strip():
+            raise HTTPException(status_code=409, detail="Knowledge ledger history cannot be restored")
+
+        provenance = LedgerProvenance(
+            source_id=selected.memory_id,
+            source_type="explicit_user_revert",
+            source_version=f"item_revision:{selected.item_revision}",
+            action_id=f"memory_ui_revert:{normalized_operation_id}",
+            artifact_ref={
+                "artifact_id": f"memory-history-revert:{normalized_operation_id}",
+                "preservation": "preserved",
+            },
+        )
+        expected_evidence_id = evidence_id_for_ledger_provenance(uid, provenance)
+
+        seen = {selected.memory_id}
+        prior = selected
+        for _ in range(MAX_LEDGER_REVERT_CHAIN_LENGTH):
+            successor_id = (prior.superseded_by or "").strip()
+            if not successor_id:
+                break
+            if (
+                prior.status != MemoryItemStatus.superseded
+                or prior.valid_to is None
+                or (prior.canonical_memory_id or successor_id).strip() != successor_id
+                or successor_id in seen
+            ):
+                raise HTTPException(status_code=409, detail="Knowledge ledger history cannot be restored")
+            successor = self._canonical_item_for_lineage(uid, successor_id)
+            if successor is None:
+                raise HTTPException(status_code=409, detail="Knowledge ledger history cannot be restored")
+            self._validate_ledger_revert_item(successor, identity=identity)
+            if any(evidence.evidence_id == expected_evidence_id for evidence in successor.evidence):
+                if (
+                    successor.status == MemoryItemStatus.active
+                    and successor.valid_to is None
+                    and not (successor.superseded_by or "").strip()
+                    and self._is_exact_ledger_fact_revert(
+                        selected,
+                        prior,
+                        successor,
+                        evidence_id=expected_evidence_id,
+                    )
+                ):
+                    self._invalidate_prompt_cache(uid)
+                    return memory_item_to_memorydb(successor)
+                raise HTTPException(status_code=409, detail="Memory revert operation is no longer current")
+            seen.add(successor_id)
+            prior = successor
+        else:
+            raise HTTPException(status_code=409, detail="Knowledge ledger history chain is too long")
+
+        tail = prior
+        if tail.status != MemoryItemStatus.active or tail.valid_to is not None or tail.superseded_by:
+            raise HTTPException(status_code=409, detail="Knowledge ledger history has no current fact")
+        if memory_item_to_memorydb(tail).is_locked:
+            raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
+        if tail.visibility not in {"private", "public", "shared"}:
+            raise HTTPException(status_code=503, detail="Canonical memory unavailable")
+
+        try:
+            replacement_id = amend_fact(
+                uid,
+                tail.memory_id,
+                (selected.content or "").strip(),
+                provenance=provenance,
+                write_reason=LedgerWriteReason.direct_user_statement,
+                slot=selected.slot,
+                subject_scope=selected.subject_scope or MemorySubjectScope.primary_user,
+                subject_entity_id=selected.subject_entity_id,
+                curation_weight=selected.curation_weight,
+                visibility=cast(Literal["private", "public", "shared"], tail.visibility),
+                db_client=self.db_client,
+            )
+        except (RuntimeError, ValueError) as exc:
+            raise HTTPException(status_code=409, detail="Knowledge ledger restore conflicted") from exc
+
+        self._invalidate_prompt_cache(uid)
+        replacement = self._canonical_item_for_lineage(uid, replacement_id)
+        closed_tail = self._canonical_item_for_lineage(uid, tail.memory_id)
+        if (
+            replacement is None
+            or closed_tail is None
+            or closed_tail.status != MemoryItemStatus.superseded
+            or closed_tail.superseded_by != replacement_id
+            or not self._is_exact_ledger_fact_revert(
+                selected,
+                tail,
+                replacement,
+                evidence_id=expected_evidence_id,
+            )
+            or replacement.status != MemoryItemStatus.active
+            or replacement.valid_to is not None
+            or replacement.superseded_by
+        ):
+            raise HTTPException(status_code=503, detail="Knowledge ledger restore readback unavailable")
         return memory_item_to_memorydb(replacement)
 
     @staticmethod
