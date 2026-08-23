@@ -202,6 +202,72 @@ def _normalize_string_mapping(raw: object) -> None:
         raw[key] = _cloud_run_string(value)
 
 
+def _expected_literal_env(state_path: Path, *, service_name: str) -> dict[str, str]:
+    try:
+        state = json.loads(state_path.read_text(encoding='utf-8'))
+        raw_entries = state['services'][service_name]['env']
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise ValueError(f'{state_path} did not contain rendered env state for {service_name}') from exc
+    if not isinstance(raw_entries, list):
+        raise ValueError(f'{state_path} rendered env state for {service_name} was not a list')
+    expected: dict[str, str] = {}
+    for raw_entry in raw_entries:
+        if not isinstance(raw_entry, dict) or not isinstance(raw_entry.get('name'), str):
+            raise ValueError(f'{state_path} rendered env state for {service_name} had an invalid entry')
+        if 'value' not in raw_entry:
+            continue
+        value = raw_entry['value']
+        if not isinstance(value, str):
+            raise ValueError(f'{state_path} rendered env {raw_entry["name"]} was not a string')
+        expected[raw_entry['name']] = value
+    return expected
+
+
+def _ingress_literal_env(service: Mapping[str, Any], *, ingress_container_name: str) -> dict[str, str]:
+    try:
+        containers = service['spec']['template']['spec']['containers']
+    except (KeyError, TypeError) as exc:
+        raise ValueError('Cloud Run service export had no container list') from exc
+    if not isinstance(containers, list):
+        raise ValueError('Cloud Run service export had no container list')
+    ingress = next(
+        (
+            container
+            for container in containers
+            if isinstance(container, dict) and container.get('name') == ingress_container_name
+        ),
+        None,
+    )
+    if ingress is None:
+        raise ValueError(f'Cloud Run service export had no ingress container named {ingress_container_name!r}')
+    raw_env = ingress.get('env', [])
+    if not isinstance(raw_env, list):
+        raise ValueError('Cloud Run ingress env was not a list')
+    actual: dict[str, str] = {}
+    for raw_entry in raw_env:
+        if isinstance(raw_entry, dict) and isinstance(raw_entry.get('name'), str) and 'value' in raw_entry:
+            actual[raw_entry['name']] = _cloud_run_string(raw_entry['value'])
+    return actual
+
+
+def _validate_expected_literal_env(
+    service: Mapping[str, Any],
+    *,
+    expected: Mapping[str, str],
+    ingress_container_name: str,
+    phase: str,
+) -> None:
+    actual = _ingress_literal_env(service, ingress_container_name=ingress_container_name)
+    for name, expected_value in expected.items():
+        actual_value = actual.get(name)
+        if actual_value != expected_value:
+            found = '<missing>' if actual_value is None else actual_value
+            raise ValueError(
+                f'{phase} env {name} mismatch before GMP sidecar replace: '
+                f'expected {expected_value!r}, found {found!r}'
+            )
+
+
 def _merge_secret_annotation(existing: object, *, project_number: str, secret: str) -> str:
     entries: dict[str, str] = {}
     if isinstance(existing, str):
@@ -324,9 +390,7 @@ def patch_service(
 
 
 def attach_sidecar(args: argparse.Namespace) -> None:
-    config_secret_version = ensure_config_secret(
-        project=args.project, secret=args.config_secret, config_path=args.config
-    )
+    expected_env = _expected_literal_env(args.expected_env_state, service_name=args.service)
     export = _run(
         [
             'gcloud',
@@ -345,6 +409,12 @@ def attach_sidecar(args: argparse.Namespace) -> None:
     service = yaml.load(_check(export, action=f'exporting {args.service}'), Loader=GcloudExportLoader)
     if not isinstance(service, dict):
         raise RuntimeError('Cloud Run service export was not a mapping')
+    _validate_expected_literal_env(
+        service,
+        expected=expected_env,
+        ingress_container_name=args.ingress_container,
+        phase='exported base revision',
+    )
     latest_created = _run(
         [
             'gcloud',
@@ -364,6 +434,9 @@ def attach_sidecar(args: argparse.Namespace) -> None:
         latest_created,
         action=f'reading the latest {args.service} revision',
     ).strip()
+    config_secret_version = ensure_config_secret(
+        project=args.project, secret=args.config_secret, config_path=args.config
+    )
     patched = patch_service(
         service,
         project_number=_project_number(args.project),
@@ -381,6 +454,16 @@ def attach_sidecar(args: argparse.Namespace) -> None:
             path = Path(handle.name)
             os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
             yaml.safe_dump(patched, handle, sort_keys=False)
+        with path.open('r', encoding='utf-8') as handle:
+            serialized = yaml.load(handle, Loader=GcloudExportLoader)
+        if not isinstance(serialized, dict):
+            raise RuntimeError('rendered Cloud Run service replacement was not a mapping')
+        _validate_expected_literal_env(
+            serialized,
+            expected=expected_env,
+            ingress_container_name=args.ingress_container,
+            phase='rendered sidecar replacement',
+        )
         replace = _run(
             [
                 'gcloud',
@@ -454,6 +537,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--ingress-container', required=True)
     parser.add_argument('--config', type=Path, required=True)
     parser.add_argument('--config-secret', default='cloud-run-gmp-config')
+    parser.add_argument('--expected-env-state', type=Path, required=True)
     parser.add_argument('--tag', default='')
     return parser.parse_args()
 

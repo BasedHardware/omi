@@ -12,7 +12,7 @@ usage() {
 Usage: backend/scripts/pre-deploy-check.sh [--live ENV PROJECT]
 
 Hermetic checks (default):
-  - validate runtime env manifest vs workflows and rendered Cloud Run shape (dev + prod)
+  - validate runtime env manifest vs workflows and exercise the renderer/state validator contract (dev + prod)
   - unit tests for deploy safety scripts
 
 Live checks (--live, requires gcloud auth):
@@ -35,8 +35,8 @@ run_hermetic() {
     echo "ERROR: missing pinned backend test dependencies; run uv pip sync pylock.toml first" >&2
     exit 1
   fi
-  python3 scripts/validate-backend-runtime-env.py --env dev --check-workflows --check-rendered-cloud-run
-  python3 scripts/validate-backend-runtime-env.py --env prod --check-workflows --check-rendered-cloud-run
+  python3 scripts/validate-backend-runtime-env.py --env dev --check-workflows
+  python3 scripts/validate-backend-runtime-env.py --env prod --check-workflows
   python3 ../.github/scripts/check_backend_deploy_source_admission.py
   python3 ../.github/scripts/test_check_backend_deploy_source_admission.py
   python3 scripts/check_mcp_oauth_deploy_contract.py

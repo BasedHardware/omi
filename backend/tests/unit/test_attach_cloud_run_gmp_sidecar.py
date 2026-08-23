@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import re
 from pathlib import Path
 from types import SimpleNamespace
@@ -303,3 +304,88 @@ def test_gcloud_export_loader_still_reads_real_booleans() -> None:
     module = _load_module()
     loaded = yaml.load('a: true\nb: false\nc: on\nd: off\ne: yes\nf: no\n', Loader=module.GcloudExportLoader)
     assert loaded == {'a': True, 'b': False, 'c': 'on', 'd': 'off', 'e': 'yes', 'f': 'no'}
+
+
+def test_attach_refuses_to_replace_when_export_retypes_expected_env(monkeypatch, tmp_path) -> None:
+    module = _load_module()
+    expected_state = tmp_path / 'runtime-env-state.json'
+    expected_state.write_text(
+        json.dumps(
+            {
+                'services': {
+                    'backend': {
+                        'env': [
+                            {'name': 'PUBLIC_SHARED_CONVERSATION_CHAT_MODE', 'value': 'off'},
+                        ]
+                    }
+                }
+            }
+        ),
+        encoding='utf-8',
+    )
+    config = tmp_path / 'cloud-run-gmp-sidecar.yaml'
+    config.write_text('kind: RunMonitoring\n', encoding='utf-8')
+    calls: list[list[str]] = []
+    secret_calls: list[dict[str, object]] = []
+
+    export = """\
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: backend
+spec:
+  template:
+    metadata: {}
+    spec:
+      containers:
+      - name: backend-1
+        env:
+        - name: PUBLIC_SHARED_CONVERSATION_CHAT_MODE
+          value: off
+  traffic:
+  - latestRevision: false
+    revisionName: backend-serving
+    percent: 100
+"""
+
+    def fake_run(args, *, capture_output=False):
+        calls.append(list(args))
+        if '--format=export' in args:
+            return module.subprocess.CompletedProcess(args, 0, export, '')
+        if '--format=value(status.latestCreatedRevisionName)' in args:
+            return module.subprocess.CompletedProcess(args, 0, 'backend-base\n', '')
+        if args[1:4] == ['run', 'services', 'replace']:
+            return module.subprocess.CompletedProcess(args, 0, '{}', '')
+        if '--format=value(status.url)' in args:
+            return module.subprocess.CompletedProcess(args, 0, 'https://backend.example\n', '')
+        raise AssertionError(args)
+
+    def fake_ensure_config_secret(**kwargs):
+        secret_calls.append(kwargs)
+        return '7'
+
+    monkeypatch.setattr(module, 'ensure_config_secret', fake_ensure_config_secret)
+    monkeypatch.setattr(module, '_project_number', lambda _project: '1031333818730')
+    monkeypatch.setattr(module, '_run', fake_run)
+    # Simulate the exact regression: parsing gcloud's YAML 1.2 export with
+    # PyYAML's YAML 1.1 resolver turns the literal string `off` into False.
+    monkeypatch.setattr(module, 'GcloudExportLoader', yaml.SafeLoader)
+
+    with pytest.raises(ValueError, match="expected 'off', found 'false'"):
+        module.attach_sidecar(
+            SimpleNamespace(
+                project='based-hardware',
+                region='us-central1',
+                service='backend',
+                base_revision='backend-base',
+                final_revision='backend-final',
+                ingress_container='backend-1',
+                config=config,
+                config_secret='cloud-run-gmp-config',
+                expected_env_state=expected_state,
+                tag='',
+            )
+        )
+
+    assert not any(args[1:4] == ['run', 'services', 'replace'] for args in calls)
+    assert secret_calls == []
