@@ -2403,10 +2403,10 @@ class ChatToolExecutor {
     let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
     let granted = AXIsProcessTrustedWithOptions(options)
     if !granted {
-      _ = openPermissionPrivacySettings(
-        pane: "Privacy_Accessibility",
-        expectedOwnerID: expectedOwnerID,
-        authorizationSnapshot: authorizationSnapshot)
+      _ = PermissionDragGuidance.openAccessibilitySettings(
+        isAuthorized: {
+          isPermissionAuthorizationCurrent(expectedOwnerID, authorizationSnapshot: authorizationSnapshot)
+        })
     }
   }
 
