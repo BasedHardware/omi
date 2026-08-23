@@ -925,6 +925,20 @@
         "title": "IntegrationNotificationResponse",
         "type": "object"
       },
+      "LedgerWriteReason": {
+        "enum": [
+          "direct_user_statement",
+          "explicit_remember",
+          "agent_reusable_conclusion",
+          "recurring_workflow",
+          "standing_trigger",
+          "onboarding",
+          "daily_reconciliation",
+          "legacy_migration"
+        ],
+        "title": "LedgerWriteReason",
+        "type": "string"
+      },
       "MemoriesResponse": {
         "properties": {
           "memories": {
@@ -982,6 +996,17 @@
             "title": "Arguments",
             "type": "object"
           },
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
           "capture_confidence": {
             "anyOf": [
               {
@@ -1026,6 +1051,11 @@
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "curation_weight": {
+            "default": 0,
+            "title": "Curation Weight",
+            "type": "integer"
           },
           "data_protection_level": {
             "anyOf": [
@@ -1078,6 +1108,11 @@
             "title": "Id",
             "type": "string"
           },
+          "intent_backed": {
+            "default": false,
+            "title": "Intent Backed",
+            "type": "boolean"
+          },
           "invalid_at": {
             "anyOf": [
               {
@@ -1115,6 +1150,16 @@
             "title": "Kg Extracted",
             "type": "boolean"
           },
+          "kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemoryKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "layer": {
             "anyOf": [
               {
@@ -1127,6 +1172,17 @@
             "description": "Canonical product lifecycle layer (Q6/WS-K); derived from memory_tier at serialization only.",
             "readOnly": true,
             "title": "Layer"
+          },
+          "ledger_schema_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ledger Schema Version"
           },
           "manually_added": {
             "default": false,
@@ -1207,6 +1263,17 @@
             ],
             "title": "Scoring"
           },
+          "slot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slot"
+          },
           "subject_attribution": {
             "$ref": "#/components/schemas/SubjectAttribution",
             "default": "unknown",
@@ -1223,6 +1290,16 @@
             ],
             "description": "Stable entity id for who/what the fact is about",
             "title": "Subject Entity Id"
+          },
+          "subject_scope": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemorySubjectScope"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "superseded_by": {
             "anyOf": [
@@ -1242,6 +1319,11 @@
             },
             "title": "Tags",
             "type": "array"
+          },
+          "trigger_condition": {
+            "additionalProperties": true,
+            "title": "Trigger Condition",
+            "type": "object"
           },
           "uid": {
             "title": "Uid",
@@ -1306,6 +1388,16 @@
             ],
             "default": "public",
             "title": "Visibility"
+          },
+          "write_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LedgerWriteReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -1319,6 +1411,16 @@
         "title": "MemoryItem",
         "type": "object"
       },
+      "MemoryKind": {
+        "description": "Semantic kind for the intent-backed knowledge ledger.\n\n``tier`` remains a storage-compatibility projection during the client\nmigration. It is not the lifecycle authority for ledger rows.",
+        "enum": [
+          "fact",
+          "document",
+          "trigger"
+        ],
+        "title": "MemoryKind",
+        "type": "string"
+      },
       "MemoryLayer": {
         "enum": [
           "short_term",
@@ -1326,6 +1428,16 @@
           "archive"
         ],
         "title": "MemoryLayer",
+        "type": "string"
+      },
+      "MemorySubjectScope": {
+        "enum": [
+          "primary_user",
+          "user_owned_project",
+          "user_relationship",
+          "third_party"
+        ],
+        "title": "MemorySubjectScope",
         "type": "string"
       },
       "SearchConversationsResponse": {
