@@ -70,6 +70,7 @@ def test_report_deduplicates_capture_and_uses_explicit_denominators() -> None:
     assert report['totals'] == {
         'capture_memories': 8,
         'capture_conversations': 7,
+        'capture_conversations_with_owner_counts': 0,
         'capture_users': 3,
         'promotion_applied_decisions': 5,
         'promotion_failure_attempts': 6,
@@ -263,3 +264,78 @@ def test_gcloud_reader_uses_text_and_json_payloads_without_shell_interpolation()
     assert 'jsonPayload.message:"canonical_memory_decision_path.v1"' in captured['command'][3]
     assert '--limit=123' in captured['command']
     assert captured['kwargs'] == {'check': False, 'capture_output': True, 'text': True}
+
+
+OWNER_FIXTURE = Path(__file__).parent / 'fixtures' / 'memory_decision_path_owner_health_events.jsonl'
+
+
+def _owner_fixture_report() -> dict[str, Any]:
+    entries, syntax_errors = measurement.load_entries(str(OWNER_FIXTURE))
+    events, invalid = measurement.parse_events(entries, syntax_errors=syntax_errors)
+    assert not invalid
+    return measurement.build_report(
+        events,
+        source={'kind': 'fixture'},
+        input_entries=len(entries),
+        invalid_entries=invalid,
+    )
+
+
+def test_missing_owner_count_is_absent_telemetry_not_an_owner_silent_conversation() -> None:
+    report = _owner_fixture_report()
+    share = report['capture']['owner_health_conversation_share']
+
+    # Five conversations, four of which carry the field. The legacy one must land in
+    # 'absent' -- folding it into 'owner_silent' would invent a diarization failure.
+    assert report['totals']['capture_conversations'] == 5
+    assert report['totals']['capture_conversations_with_owner_counts'] == 4
+    assert share['owner_silent']['event_weighted']['numerator'] == 1
+    assert share['single_owner']['event_weighted']['numerator'] == 2
+    assert share['multi_owner']['event_weighted']['numerator'] == 1
+    assert share['absent']['event_weighted']['numerator'] == 1
+    assert all(metric['event_weighted']['denominator'] == 5 for metric in share.values())
+
+
+def test_owner_health_by_regime_excludes_conversations_without_the_field() -> None:
+    capture = _owner_fixture_report()['capture']
+
+    silent = capture['owner_silent_by_regime']
+    multi = capture['multi_owner_by_regime']
+
+    # The legacy omi conversation carries no owner count, so it cannot sit in either
+    # denominator: three omi conversations qualify, not four.
+    assert (silent['omi']['event_weighted']['numerator'], silent['omi']['event_weighted']['denominator']) == (1, 3)
+    assert (multi['omi']['event_weighted']['numerator'], multi['omi']['event_weighted']['denominator']) == (1, 3)
+    assert (silent['desktop']['event_weighted']['numerator'], silent['desktop']['event_weighted']['denominator']) == (
+        0,
+        1,
+    )
+    assert (multi['desktop']['event_weighted']['numerator'], multi['desktop']['event_weighted']['denominator']) == (
+        0,
+        1,
+    )
+
+
+def test_negative_owner_count_is_invalid_but_a_missing_one_is_not() -> None:
+    legacy = _capture('u1', 'm1', disagreed=False)
+    healthy = dict(_capture('u1', 'm2', disagreed=False), owner_speaker_ids=1)
+    negative = dict(_capture('u1', 'm3', disagreed=False), owner_speaker_ids=-1)
+    boolean = dict(_capture('u1', 'm4', disagreed=False), owner_speaker_ids=True)
+
+    events, invalid = measurement.parse_events(
+        [
+            {'timestamp': '2026-08-22T00:00:01Z', 'textPayload': f'{measurement.EVENT_NAME} {json.dumps(event)}'}
+            for event in (legacy, healthy, negative, boolean)
+        ]
+    )
+
+    assert len(events) == 2
+    assert invalid == {'capture_owner_speaker_ids_invalid': 2}
+
+
+def test_human_output_reports_owner_health_coverage_when_the_field_is_present() -> None:
+    rendered = measurement.render_human(_owner_fixture_report())
+
+    assert 'Owner-speaker health (conversation grain)' in rendered
+    assert 'Owner-silent rate by capture regime' in rendered
+    assert 'Owner-health rates cover 4/5 conversations' in rendered

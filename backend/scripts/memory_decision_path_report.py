@@ -14,10 +14,11 @@ Rates are reported twice:
 * as the mean of per-user rates, with a user-clustered normal-approximation 95%
   interval. This keeps one high-volume account from becoming the population.
 
-The current event cannot identify owner-silent, multi-owner, or clean/degraded
-diarization conversations: it carries only a distinct-speaker count. The report
-therefore names its measured outcome ``attribution_disagreed`` and never treats
-that outcome as a diarization-health label.
+Owner-speaker health (owner-silent, single-owner, multi-owner) is measured only for
+events carrying ``owner_speaker_ids``; older events are reported as ``absent``,
+which is a statement about the telemetry and not about the conversation. Clean vs
+degraded diarization remains unlabelled, so the report names its measured outcome
+``attribution_disagreed`` and never treats it as a diarization-health label.
 
 Examples:
     python scripts/memory_decision_path_report.py --input events.json --format human
@@ -46,6 +47,10 @@ DEFAULT_DAYS = 7
 DEFAULT_LIMIT = 100_000
 Z_95 = 1.959963984540054
 SPEAKER_BUCKETS = ('0', '1-3', '4-6', '7-10', '11-15', '16+')
+# An account has exactly one owner, so 'multi_owner' is impossible by construction
+# and reads as shattered speaker clustering. 'absent' is telemetry emitted before
+# owner_speaker_ids shipped; it is kept visible rather than folded into a real state.
+OWNER_HEALTH_BUCKETS = ('owner_silent', 'single_owner', 'multi_owner', 'absent')
 
 Event = dict[str, Any]
 Rate = dict[str, Any]
@@ -187,6 +192,12 @@ def _validate_event(event: Mapping[str, Any]) -> str | None:
         speaker_count = event.get('distinct_speaker_ids')
         if isinstance(speaker_count, bool) or not isinstance(speaker_count, int) or speaker_count < 0:
             return 'capture_distinct_speaker_ids_invalid'
+        # Optional: events emitted before the field shipped are valid, not invalid.
+        owner_count = event.get('owner_speaker_ids')
+        if owner_count is not None and (
+            isinstance(owner_count, bool) or not isinstance(owner_count, int) or owner_count < 0
+        ):
+            return 'capture_owner_speaker_ids_invalid'
     else:
         for field in ('route', 'status', 'reason_code'):
             if not _nonempty_string(event, field):
@@ -233,6 +244,21 @@ def speaker_bucket(value: int) -> str:
     if value <= 15:
         return '11-15'
     return '16+'
+
+
+def owner_health_bucket(value: Any) -> str:
+    """Classify how many speakers diarization flagged as the account owner.
+
+    ``absent`` means the event predates the owner_speaker_ids field, not that the
+    conversation had no owner. The two are different claims and must not merge.
+    """
+    if value is None:
+        return 'absent'
+    if value == 0:
+        return 'owner_silent'
+    if value == 1:
+        return 'single_owner'
+    return 'multi_owner'
 
 
 def _wilson_interval(numerator: int, denominator: int) -> dict[str, float] | None:
@@ -338,7 +364,15 @@ def _conversation_rows(capture_events: Sequence[Event]) -> tuple[list[Event], in
         ordered = sorted(events, key=_event_order)
         latest = dict(ordered[-1])
         latest['attribution_disagreed'] = any(bool(event['attribution_disagreed']) for event in events)
-        if len({(event['capture_regime'], event['distinct_speaker_ids']) for event in events}) > 1:
+        if (
+            len(
+                {
+                    (event['capture_regime'], event['distinct_speaker_ids'], event.get('owner_speaker_ids'))
+                    for event in events
+                }
+            )
+            > 1
+        ):
             inconsistent += 1
         rows.append(latest)
     return sorted(rows, key=_event_order), inconsistent
@@ -377,12 +411,44 @@ def build_report(
         lambda event: bool(event['attribution_disagreed']),
         unit='conversations',
     )
+    # Owner health is a property of the conversation, and only conversations whose
+    # telemetry actually carries the field can contribute a denominator.
+    owner_known = [event for event in conversations if event.get('owner_speaker_ids') is not None]
+    owner_health_share = _distribution(
+        conversations, lambda event: owner_health_bucket(event.get('owner_speaker_ids')), unit='conversations'
+    )
+    disagreement_by_owner_health = _outcome_by_group(
+        captures,
+        lambda event: owner_health_bucket(event.get('owner_speaker_ids')),
+        lambda event: bool(event['attribution_disagreed']),
+        unit='memories',
+    )
+    owner_silent_by_regime = _outcome_by_group(
+        owner_known,
+        lambda event: str(event['capture_regime']),
+        lambda event: int(event['owner_speaker_ids']) == 0,
+        unit='conversations with owner counts',
+    )
+    multi_owner_by_regime = _outcome_by_group(
+        owner_known,
+        lambda event: str(event['capture_regime']),
+        lambda event: int(event['owner_speaker_ids']) > 1,
+        unit='conversations with owner counts',
+    )
     report = {
         'schema': REPORT_SCHEMA,
         'status': status,
         'source': dict(source),
         'limitations': [
-            'No owner-silent, multi-owner, or clean/degraded diarization metric is derivable from v1 telemetry.',
+            (
+                'No owner-silent or multi-owner metric is derivable: no capture event carried owner_speaker_ids.'
+                if not owner_known
+                else (
+                    f'Owner-health rates cover {len(owner_known)}/{len(conversations)} conversations; '
+                    'the rest predate owner_speaker_ids and are reported as absent, not as a health state.'
+                )
+            ),
+            'Clean/degraded diarization is still not a labelled outcome; speaker counts are not a health label.',
             'Capture disagreement is a per-memory comparison of model_about with resolved subject_attribution.',
             'Promotion failures are attempts, not rejection decisions; repeated retries can appear more than once.',
         ],
@@ -403,6 +469,7 @@ def build_report(
         'totals': {
             'capture_memories': len(captures),
             'capture_conversations': len(conversations),
+            'capture_conversations_with_owner_counts': len(owner_known),
             'capture_users': len({event['uid'] for event in captures}),
             'promotion_applied_decisions': len(applied),
             'promotion_failure_attempts': len(failures),
@@ -435,6 +502,16 @@ def build_report(
                 for bucket in SPEAKER_BUCKETS
                 if bucket in conversation_disagreement_by_speakers
             },
+            'owner_health_conversation_share': {
+                bucket: owner_health_share[bucket] for bucket in OWNER_HEALTH_BUCKETS if bucket in owner_health_share
+            },
+            'disagreement_by_owner_health': {
+                bucket: disagreement_by_owner_health[bucket]
+                for bucket in OWNER_HEALTH_BUCKETS
+                if bucket in disagreement_by_owner_health
+            },
+            'owner_silent_by_regime': owner_silent_by_regime,
+            'multi_owner_by_regime': multi_owner_by_regime,
         },
         'promotion': {
             'applied_routes': _distribution(applied, lambda event: str(event['route']), unit='applied decisions'),
@@ -530,6 +607,12 @@ def render_human(report: Mapping[str, Any]) -> str:
         'Any disagreement by distinct speaker-ID bucket (conversation grain)',
         capture['conversation_any_disagreement_by_distinct_speaker_ids'],
     )
+    _render_section(lines, 'Owner-speaker health (conversation grain)', capture['owner_health_conversation_share'])
+    _render_section(
+        lines, 'Disagreement rate by owner-speaker health (memory grain)', capture['disagreement_by_owner_health']
+    )
+    _render_section(lines, 'Owner-silent rate by capture regime', capture['owner_silent_by_regime'])
+    _render_section(lines, 'Multi-owner rate by capture regime', capture['multi_owner_by_regime'])
 
     promotion = report['promotion']
     _render_section(lines, 'Applied promotion routes', promotion['applied_routes'])
@@ -538,9 +621,17 @@ def render_human(report: Mapping[str, Any]) -> str:
     _render_section(lines, 'Operational failure statuses (attempt grain)', promotion['failure_statuses'])
     _render_section(lines, 'Operational failure reason codes (attempt grain)', promotion['failure_reason_codes'])
     lines.append('')
-    lines.append(
-        'Not measured by v1: owner-silent, multi-owner, or clean/degraded diarization; distinct speaker count is not a proxy label.'
-    )
+    owner_covered = totals['capture_conversations_with_owner_counts']
+    if owner_covered:
+        lines.append(
+            f'Owner-health rates cover {owner_covered}/{totals["capture_conversations"]} conversations; '
+            'clean/degraded diarization is still not a labelled outcome and speaker counts are not a proxy label.'
+        )
+    else:
+        lines.append(
+            'Not measured here: owner-silent, multi-owner, or clean/degraded diarization; no event carried '
+            'owner_speaker_ids and distinct speaker count is not a proxy label.'
+        )
     return '\n'.join(lines)
 
 
