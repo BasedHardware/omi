@@ -21,6 +21,9 @@ type EvidenceStatus = {
 const KIND_LABELS: Record<ChatEvidenceReference['kind'], string> = {
   conversation_summary: 'Conversation summary',
   conversation_segment: 'Conversation segment',
+  screen: 'Screen',
+  keyframe: 'Keyframe',
+  request: 'Request',
 };
 
 function statusFor(state: ChatEvidenceReference['state']): EvidenceStatus {
