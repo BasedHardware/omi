@@ -1,6 +1,8 @@
 """Memory routing seam — surfaces route reads/writes/search through MemoryService (WS-L)."""
 
+import json
 import logging
+import re
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -20,7 +22,11 @@ from models.product_memory import (
     MemoryConsumer,
     MemoryItem,
     MemoryItemStatus,
+    MemoryKind,
     MemoryTier,
+    ProcessingState,
+    RESTRICTED_SENSITIVITY_LABELS,
+    SourceState,
 )
 from utils.log_sanitizer import sanitize_validation_error
 from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_get_all
@@ -47,7 +53,11 @@ from utils.memory.canonical_memory_adapter import (
     update_canonical_memory_review,
     write_canonical_external_memory,
 )
-from utils.memory.product_memory_read_service import iter_authoritative_product_memory_items
+from utils.memory.product_memory_read_service import (
+    iter_authoritative_product_memory_items,
+    iter_authoritative_product_memory_items_newest_first,
+)
+from utils.memory.knowledge_ledger import LEDGER_SCHEMA_VERSION
 from utils.memory.rejected_memory_feedback import clear_rejected_memory_feedback_cache
 from utils.memory.required_promotion import required_processing_payload
 from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
@@ -73,6 +83,9 @@ logger = logging.getLogger(__name__)
 
 MemoryPayload = Dict[str, Any]
 McpSearchPayload = Dict[str, Any]
+
+MAX_LEDGER_HISTORY_PROVIDER_WINDOW = 500
+_LEDGER_QUERY_TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9']{1,63}")
 
 
 class DeviceScopeNotSupportedError(ValueError):
@@ -161,6 +174,24 @@ def _reject_legacy_device_scope(
 class MemorySearchMatch:
     memory: MemoryDB
     score: float
+
+
+@dataclass(frozen=True)
+class LedgerHistoryPage:
+    """Bounded canonical ledger history with an honest provider-window signal."""
+
+    memories: Tuple[MemoryDB, ...]
+    truncated: bool
+    scanned_count: int
+
+
+@dataclass(frozen=True)
+class LedgerHistorySearchPage:
+    """Historical query results plus whether the canonical provider window ended."""
+
+    matches: Tuple[MemorySearchMatch, ...]
+    truncated: bool
+    scanned_count: int
 
 
 def _validate_memory_list(memories: List[MemoryPayload]) -> List[MemoryDB]:
@@ -2259,6 +2290,152 @@ class MemoryService:
 
         results.sort(key=lambda match: (-float(match.score), -timestamp(match), match.memory.id))
         return results[:capped]
+
+    @staticmethod
+    def _is_ledger_history_item(item: MemoryItem, row: MemoryDB) -> bool:
+        """Keep history reads canonical, privacy-filtered, and wire-representable."""
+
+        if item.ledger_schema_version != LEDGER_SCHEMA_VERSION:
+            return False
+        if not item.intent_backed:
+            return False
+        if item.status in {MemoryItemStatus.hidden, MemoryItemStatus.tombstoned}:
+            return False
+        if item.processing_state != ProcessingState.processed:
+            return False
+        if item.source_state in {SourceState.tombstoned, SourceState.purged}:
+            return False
+        if set(item.sensitivity_labels).intersection(RESTRICTED_SENSITIVITY_LABELS):
+            return False
+        # Admit only states the public MemoryDB wire shape can represent. A
+        # status-only superseded row would otherwise serialize as current.
+        return row.user_review is False or row.invalid_at is not None or row.superseded_by is not None
+
+    def read_ledger_history_page(
+        self,
+        uid: str,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        budget: Optional[ListReadBudget] = None,
+    ) -> LedgerHistoryPage:
+        """Read a bounded canonical history window with truncation truth.
+
+        This is deliberately separate from ``read``: default product reads
+        must continue to hide rejected and closed facts.  The history seam is
+        for a user's review/history surfaces and admits only canonical ledger
+        rows that are either explicitly rejected or no longer current.  It
+        never exposes tombstoned/hidden rows and never consults the legacy
+        ``users/{uid}/memories`` collection.
+        """
+
+        bounded_limit = max(1, min(int(limit or 100), 500))
+        bounded_offset = max(0, int(offset or 0))
+        window = bounded_offset + bounded_limit
+        if window > HistoricalMemoryAdapter.MAX_COMPATIBILITY_WINDOW:
+            raise HTTPException(status_code=413, detail="Ledger history pagination window exceeded")
+        projected_items: List[Tuple[MemoryItem, MemoryDB]] = []
+        scanned_count = 0
+        truncated = False
+        scan_limit = MAX_LEDGER_HISTORY_PROVIDER_WINDOW + 1
+        try:
+            for item in iter_authoritative_product_memory_items_newest_first(
+                uid,
+                db_client=self.db_client,
+                limit=scan_limit,
+                budget=budget,
+            ):
+                scanned_count += 1
+                row = memory_item_to_memorydb(item)
+                if self._is_ledger_history_item(item, row):
+                    projected_items.append((item, row))
+        except ListReadBudgetExhausted:
+            truncated = True
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
+
+        # The extra provider row is a sentinel. A full window is conservatively
+        # partial even when it happens to contain exactly 501 rows.
+        truncated = truncated or scanned_count >= scan_limit
+        projected_items.sort(key=lambda pair: (-pair[0].updated_at.timestamp(), pair[0].memory_id))
+        return LedgerHistoryPage(
+            memories=tuple(row for _, row in projected_items[bounded_offset : bounded_offset + bounded_limit]),
+            truncated=truncated,
+            scanned_count=scanned_count,
+        )
+
+    def read_ledger_history(
+        self,
+        uid: str,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        budget: Optional[ListReadBudget] = None,
+    ) -> List[MemoryDB]:
+        """Compatibility list wrapper over :meth:`read_ledger_history_page`."""
+
+        return list(self.read_ledger_history_page(uid, limit=limit, offset=offset, budget=budget).memories)
+
+    def search_ledger_history_page(
+        self,
+        uid: str,
+        query: str,
+        *,
+        limit: int = 20,
+        budget: Optional[ListReadBudget] = None,
+    ) -> LedgerHistorySearchPage:
+        """Search one bounded canonical history provider window.
+
+        This is intentionally a deterministic local ranking over the
+        authoritative canonical window. It does not consult legacy vectors or
+        claim exhaustive historical retrieval; callers must surface
+        ``truncated`` when the provider window or request budget is incomplete.
+        """
+
+        normalized_query = " ".join((query or "").split()).casefold()
+        terms = tuple(dict.fromkeys(_LEDGER_QUERY_TOKEN_RE.findall(normalized_query)))
+        if not terms:
+            raise ValueError("historical ledger query must contain a searchable token")
+        bounded_limit = max(1, min(int(limit or 20), 20))
+        page = self.read_ledger_history_page(
+            uid,
+            limit=MAX_LEDGER_HISTORY_PROVIDER_WINDOW,
+            offset=0,
+            budget=budget,
+        )
+        matches: List[MemorySearchMatch] = []
+        for memory in page.memories:
+            if memory.kind != MemoryKind.fact:
+                continue
+            arguments_text = ""
+            if isinstance(memory.arguments, dict):
+                try:
+                    arguments_text = json.dumps(memory.arguments, sort_keys=True, default=str)[:4000]
+                except (TypeError, ValueError):
+                    arguments_text = ""
+            searchable = " ".join(
+                value
+                for value in (memory.content, memory.body, memory.slot, memory.subject_entity_id, arguments_text)
+                if isinstance(value, str) and value.strip()
+            ).casefold()
+            tokens = set(_LEDGER_QUERY_TOKEN_RE.findall(searchable))
+            matched = sum(term in tokens for term in terms)
+            if not matched:
+                continue
+            matches.append(MemorySearchMatch(memory=memory, score=matched / len(terms)))
+
+        def sort_key(match: MemorySearchMatch) -> Tuple[float, float, str]:
+            value = match.memory.updated_at or match.memory.created_at
+            if value.tzinfo is None:
+                value = value.replace(tzinfo=timezone.utc)
+            return (-match.score, -value.timestamp(), match.memory.id)
+
+        matches.sort(key=sort_key)
+        return LedgerHistorySearchPage(
+            matches=tuple(matches[:bounded_limit]),
+            truncated=page.truncated,
+            scanned_count=page.scanned_count,
+        )
 
     def search_mcp(self, uid: str, query: str, *, limit: int = 5) -> List[McpSearchPayload]:
         return [
