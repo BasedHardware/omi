@@ -98,7 +98,9 @@ struct QueryShellHome: View {
   @State private var caretClaims = 0
 
   private var usesLegacyPresentation: Bool {
-    useLegacyHomeDesign && !forceModernPresentation
+    !HomeDesignPresentation.queryShellOwnsItsPanels(
+      useLegacyHomeDesign: useLegacyHomeDesign,
+      forceModernPresentation: forceModernPresentation)
   }
 
   var body: some View {
