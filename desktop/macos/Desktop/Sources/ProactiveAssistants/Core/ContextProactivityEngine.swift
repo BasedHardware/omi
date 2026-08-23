@@ -651,7 +651,8 @@ actor ContextProactivityEngine {
           imageData: currentFrame.jpegData,
           cacheKey: cacheKey,
           fence: fence,
-          authorizationSnapshot: authorizationSnapshot)
+          authorizationSnapshot: authorizationSnapshot,
+          gateTrigger: gateTrigger)
         // A failed, empty, or gated hop keeps the first decision untouched:
         // retrieval may upgrade a decision, never lose one.
         decision = ContextDirectorRetrievalHop.finalDecision(
@@ -1181,7 +1182,8 @@ actor ContextProactivityEngine {
     imageData: Data?,
     cacheKey: String,
     fence: ContextVisitFence,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    gateTrigger: ContextProactivityTelemetry.GateTrigger
   ) async -> RetrievalHopOutcome {
     func abandoned(_ items: [ContextRetrievedItem], failure: String?) -> RetrievalHopOutcome {
       RetrievalHopOutcome(
@@ -1205,7 +1207,8 @@ actor ContextProactivityEngine {
     let hopGate = await MainActor.run { Self.liveDeliveryGateInput() }
     let hopReason = ContextDeliveryBudget.freeGate(input: hopGate)
     guard hopReason == .allowed else {
-      await ContextProactivityTelemetry.recordGateRejection(reason: hopReason, stage: .retrievalHop)
+      await ContextProactivityTelemetry.recordGateRejection(
+        reason: hopReason, stage: .retrievalHop, trigger: gateTrigger)
       return abandoned(items, failure: "pre_model_gate")
     }
     do {
