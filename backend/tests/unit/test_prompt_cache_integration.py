@@ -13,6 +13,7 @@ actually import and call the real production functions to verify:
 """
 
 import asyncio
+import json
 import os
 import sys
 import types
@@ -1322,6 +1323,72 @@ def test_platform_section_appended_on_langsmith_path(monkeypatch):
     assert "<user_platform>" in prompt and "Windows PC" in prompt
 
     assert fn("uid_test", platform=None) == "RENDERED PROMPT"
+
+
+def test_jit_conversation_retrieval_prompt_is_default_off_and_byte_stable():
+    chat_mod = _get_chat_module()
+    fn = chat_mod._get_agentic_qa_prompt
+
+    _set_user(chat_mod, "TestUser", "UTC")
+    baseline = fn("uid_test")
+
+    assert fn("uid_test", jit_conversation_retrieval_enabled=False) == baseline
+    assert "<jit_conversation_retrieval>" not in baseline
+
+
+def test_enabled_jit_prompt_requires_bounded_summary_triage_reformulation_and_hydration():
+    chat_mod = _get_chat_module()
+    fn = chat_mod._get_agentic_qa_prompt
+
+    _set_user(chat_mod, "TestUser", "UTC")
+    prompt = fn("uid_test", jit_conversation_retrieval_enabled=True)
+    section = prompt[prompt.index("<jit_conversation_retrieval>") :]
+    normalized_section = " ".join(section.split())
+
+    golden = json.loads(
+        (BACKEND_DIR / "testing/jit_processing/fixtures/retrieval_golden_set.json").read_text(encoding="utf-8")
+    )
+    categories = {case["category"] for case in golden["cases"]}
+    golden_shape_markers = {
+        "literal": "literal query",
+        "paraphrased": "semantic paraphrase",
+        "entity": "person/entity query",
+        "temporal": "date-only",
+        "multi-conversation": "at most four bounded summary searches in parallel",
+        "ambiguous-person": "person name is ambiguous",
+        "not-found": 'Before returning "not found", reformulate once',
+    }
+    assert categories == set(golden_shape_markers)
+
+    for required_contract in (
+        "Triage summaries before transcripts",
+        *golden_shape_markers.values(),
+        "hydrate only the relevant conversation IDs",
+        "at most 24 transcript segments",
+        "Missing or partial evidence must degrade honestly",
+    ):
+        assert required_contract in normalized_section
+
+
+def test_enabled_jit_prompt_is_appended_on_langsmith_path_before_platform(monkeypatch):
+    chat_mod = _get_chat_module()
+    fn = chat_mod._get_agentic_qa_prompt
+
+    _set_user(chat_mod, "TestUser", "UTC")
+    prompts_mod = sys.modules["utils.observability.langsmith_prompts"]
+    cached = MagicMock()
+    cached.template_text = "TEMPLATE"
+    cached.prompt_name = "test-prompt"
+    cached.prompt_commit = "abc123"
+    cached.source = "langsmith"
+    monkeypatch.setattr(prompts_mod, "get_agentic_system_prompt_template", MagicMock(return_value=cached))
+    monkeypatch.setattr(prompts_mod, "render_prompt", MagicMock(return_value="RENDERED PROMPT"))
+
+    prompt = fn("uid_test", platform="macos", jit_conversation_retrieval_enabled=True)
+
+    assert prompt.startswith("RENDERED PROMPT\n\n<jit_conversation_retrieval>")
+    assert prompt.index("</jit_conversation_retrieval>") < prompt.index("<user_platform>")
+    assert prompt.endswith("</user_platform>")
 
 
 # ---------------------------------------------------------------------------

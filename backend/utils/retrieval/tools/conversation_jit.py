@@ -1,13 +1,17 @@
 """Bounded, opt-in conversation retrieval projection for JIT chat evidence."""
 
 import hashlib
-import os
 import re
 from datetime import datetime, timezone
 from itertools import islice
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from utils.conversations.mcp_transcript_search import build_transcript_match_snippets
+from utils.retrieval.tools.conversation_jit_gate import (
+    JIT_CONVERSATION_RETRIEVAL_CONFIG_KEY,
+    JIT_CONVERSATION_RETRIEVAL_ENV,
+    is_jit_conversation_retrieval_enabled,
+)
 
 MAX_JIT_CONVERSATIONS = 20
 MAX_JIT_TRANSCRIPT_WINDOW_SEGMENTS = 24
@@ -25,33 +29,10 @@ MAX_JIT_TIMESTAMP_CHARS = 64
 MAX_JIT_PARTICIPANTS = 12
 MAX_JIT_PARTICIPANT_NAME_CHARS = 96
 JIT_TRUNCATION_MARKER = "[Bounded JIT result omitted additional evidence records.]"
-JIT_CONVERSATION_RETRIEVAL_ENV = "JIT_CONVERSATION_RETRIEVAL_ENABLED"
-JIT_CONVERSATION_RETRIEVAL_CONFIG_KEY = "jit_conversation_retrieval_enabled"
 _SAFE_IDENTITY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._~-]*$")
 _CALENDAR_BACKED_SOURCES = frozenset(
     {"system_calendar", "macos_calendar", "google", "google_calendar", "outlook_calendar"}
 )
-
-
-def _is_enabled_value(value: Any) -> bool:
-    """Accept only explicit boolean gate values and fail closed otherwise."""
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        return value.strip().lower() in {"1", "true", "yes", "on"}
-    return False
-
-
-def is_jit_conversation_retrieval_enabled(configurable: Optional[Dict[str, Any]]) -> bool:
-    """Return whether the additive JIT conversation contract is explicitly enabled.
-
-    A per-request config value wins over the environment feature flag, including an
-    explicit false. Keeping the default false preserves released tool behavior until
-    a caller or rollout configuration opts in.
-    """
-    if isinstance(configurable, dict) and JIT_CONVERSATION_RETRIEVAL_CONFIG_KEY in configurable:
-        return _is_enabled_value(configurable[JIT_CONVERSATION_RETRIEVAL_CONFIG_KEY])
-    return _is_enabled_value(os.getenv(JIT_CONVERSATION_RETRIEVAL_ENV, "false"))
 
 
 def _jit_transcript_options(max_transcript_segments: int) -> Tuple[bool, int]:
