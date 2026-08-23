@@ -1536,13 +1536,15 @@ class TestLlmUsageBucketParam:
 
         set_call = mock_ref.set.call_args
         update_data = set_call[0][0]
-        # Primary bucket
-        assert 'custom_feature.input_tokens' in update_data
-        assert 'custom_feature.output_tokens' in update_data
-        assert 'custom_feature.call_count' in update_data
+        # Primary bucket. `set(merge=True)` reads a dot as a literal character, not as a
+        # field path, so the counters must arrive already nested for a reader that walks
+        # bucket -> counter to find them.
+        assert 'input_tokens' in update_data['custom_feature']
+        assert 'output_tokens' in update_data['custom_feature']
+        assert 'call_count' in update_data['custom_feature']
         # Per-account bucket
-        assert 'custom_feature_openai.input_tokens' in update_data
-        assert 'custom_feature_openai.output_tokens' in update_data
+        assert 'input_tokens' in update_data['custom_feature_openai']
+        assert 'output_tokens' in update_data['custom_feature_openai']
 
     def test_get_total_llm_cost_custom_bucket(self):
         """get_total_llm_cost with custom bucket reads from the specified bucket only."""
@@ -1836,15 +1838,13 @@ class TestLlmUsage:
         update_data = mock_ref.set.call_args[0][0]
         assert mock_ref.set.call_args[1] == {'merge': True}
 
-        # Must have both desktop_chat and desktop_chat_anthropic keys
-        desktop_chat_keys = [k for k in update_data if k.startswith('desktop_chat.')]
-        desktop_chat_acct_keys = [k for k in update_data if k.startswith('desktop_chat_anthropic.')]
-        assert len(desktop_chat_keys) > 0, "Missing desktop_chat.* keys"
-        assert len(desktop_chat_acct_keys) > 0, "Missing desktop_chat_anthropic.* keys"
+        # Must have both desktop_chat and desktop_chat_anthropic buckets
+        assert update_data.get('desktop_chat'), "Missing desktop_chat bucket"
+        assert update_data.get('desktop_chat_anthropic'), "Missing desktop_chat_anthropic bucket"
 
         # Verify input_tokens increment is present for both buckets
-        assert 'desktop_chat.input_tokens' in update_data
-        assert 'desktop_chat_anthropic.input_tokens' in update_data
+        assert 'input_tokens' in update_data['desktop_chat']
+        assert 'input_tokens' in update_data['desktop_chat_anthropic']
 
     def test_record_default_account_omi(self):
         """Default account produces desktop_chat_omi keys."""
@@ -1856,7 +1856,7 @@ class TestLlmUsage:
             llm_usage_db.record_llm_usage_bucket('test-uid', input_tokens=10, output_tokens=5)
 
         update_data = mock_ref.set.call_args[0][0]
-        assert 'desktop_chat_omi.input_tokens' in update_data
+        assert 'input_tokens' in update_data['desktop_chat_omi']
 
     def test_get_total_cost_only_sums_desktop_chat_bucket(self):
         """get_total_llm_cost only sums the desktop_chat bucket, not desktop_chat_{account}."""
@@ -2611,8 +2611,8 @@ class TestLlmDualWritePayloadParity:
             'call_count',
         ]
         for field in expected_fields:
-            assert f'desktop_chat.{field}' in data, f"Missing desktop_chat.{field}"
-            assert f'desktop_chat_omi.{field}' in data, f"Missing desktop_chat_omi.{field}"
+            assert field in data['desktop_chat'], f"Missing desktop_chat.{field}"
+            assert field in data['desktop_chat_omi'], f"Missing desktop_chat_omi.{field}"
 
         # Verify shared metadata fields
         assert 'date' in data
