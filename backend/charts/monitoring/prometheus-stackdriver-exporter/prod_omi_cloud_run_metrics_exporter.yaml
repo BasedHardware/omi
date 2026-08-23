@@ -7,7 +7,7 @@ stackdriver:
     prefixes:
       - 'prometheus.googleapis.com/omi_'
     filters:
-      - 'prometheus.googleapis.com/omi_:resource.labels.cluster="__run__" AND (resource.labels.namespace="backend" OR resource.labels.namespace="desktop-backend")'
+      - 'prometheus.googleapis.com/omi_:resource.labels.cluster="__run__" AND resource.labels.namespace=one_of("backend","desktop-backend")'
     interval: '2m'
     offset: '1m'
 
