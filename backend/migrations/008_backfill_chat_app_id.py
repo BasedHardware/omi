@@ -8,7 +8,9 @@ plugin_id=<app_id>), so they would be invisible to the app_id-based queries
 until this backfill copies plugin_id -> app_id.
 
 Iterates all users' messages and chat_sessions subcollections and patches
-documents that have plugin_id set but no app_id field. Idempotent; safe to re-run.
+documents missing app_id. Copies plugin_id when present; otherwise writes
+explicit app_id=None so main-chat / missing-field rows become visible to
+app_id == None serving queries. Idempotent; safe to re-run.
 
 Usage:
     python 008_backfill_chat_app_id.py [--dry-run] [--uid USER_ID] [--batch-size 100]
@@ -44,10 +46,10 @@ def _firestore_client():
 
 def _backfill_collection(client, collection_name: str, dry_run: bool, batch_size: int, uid: str | None) -> int:
     """
-    Scan documents missing app_id but having plugin_id; copy plugin_id → app_id.
+    Scan documents missing app_id (including main-chat rows with no plugin_id).
 
-    Uses a cursor-based query that advances on each page so dry-run never loops
-    forever on the same batch. Honors --uid to restrict scope.
+    Uses an unfiltered, name-ordered cursor so missing-field documents are not
+    skipped by plugin_id != None. Dry-run advances each page. Honors --uid.
     """
     patched = 0
     if uid:
@@ -60,11 +62,11 @@ def _backfill_collection(client, collection_name: str, dry_run: bool, batch_size
         uid_val = user_snapshot.id
         col = client.collection('users').document(uid_val).collection(collection_name)
 
-        # cursor-based page: scan for docs where app_id is absent (missing field)
-        # and plugin_id is set. Use start_after to advance.
+        # Full-collection cursor: do not require plugin_id != None. That filter
+        # hides missing-field and main-chat (plugin_id null) rows.
         cursor = None
         while True:
-            query = col.where('plugin_id', '!=', None).limit(batch_size)
+            query = col.order_by('__name__').limit(batch_size)
             if cursor is not None:
                 query = query.start_after(cursor)
 
@@ -76,14 +78,17 @@ def _backfill_collection(client, collection_name: str, dry_run: bool, batch_size
             page_patched = 0
             for doc in docs:
                 data = doc.to_dict() or {}
-                # Only patch if app_id is MISSING (absent field), not just None.
-                # Firestore null equality does not match missing fields.
-                if 'app_id' not in data or data.get('app_id') is None:
-                    plugin_id_val = data.get('plugin_id')
-                    if plugin_id_val:
-                        logger.info('%s %s/%s plugin_id=%s -> app_id', collection_name, uid_val, doc.id, plugin_id_val)
-                        batch.update(doc.reference, {'app_id': plugin_id_val})
-                        page_patched += 1
+                plugin_id_val = data.get('plugin_id')
+                if 'app_id' not in data:
+                    # Missing field is invisible to app_id == None queries.
+                    app_id_val = plugin_id_val if plugin_id_val else None
+                    logger.info('%s %s/%s missing app_id -> %s', collection_name, uid_val, doc.id, app_id_val)
+                    batch.update(doc.reference, {'app_id': app_id_val})
+                    page_patched += 1
+                elif data.get('app_id') is None and plugin_id_val:
+                    logger.info('%s %s/%s plugin_id=%s -> app_id', collection_name, uid_val, doc.id, plugin_id_val)
+                    batch.update(doc.reference, {'app_id': plugin_id_val})
+                    page_patched += 1
 
             patched += page_patched
             if not dry_run and page_patched:
