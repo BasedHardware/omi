@@ -3218,5 +3218,14 @@
     "sendRawAudioToOmi": "Onbewerkte audio naar Omi sturen",
     "sendRawAudioToOmiDescription": "Schakel uit om te voorkomen dat onbewerkte audio naar Omi wordt gestuurd. Transcripties en gegevens die cloudfuncties nodig hebben, kunnen nog steeds naar Omi worden gestuurd.",
     "findDevice": "Zoeken",
-    "diagnosticsShareFailed": "Kon de diagnostiek niet delen. Probeer het opnieuw."
+    "diagnosticsShareFailed": "Kon de diagnostiek niet delen. Probeer het opnieuw.",
+    "appDisabledTitle": "Deze app is uitgeschakeld en kan niet worden geïnstalleerd.",
+    "appDisabledWebhookFailures": "Het endpoint faalde 72 uur achter elkaar, daarom is de bezorging gestopt.",
+    "appDisabledGeneric": "De app is door Omi uitgeschakeld.",
+    "appDisabledOwnerHint": "Repareer eerst het endpoint — bij het opnieuw inschakelen wordt elke ingestelde URL opnieuw gecontroleerd.",
+    "appReEnable": "Opnieuw inschakelen",
+    "appReEnableFailedTitle": "Opnieuw inschakelen mislukt",
+    "appReEnableFailedBody": "Deze app kon niet opnieuw worden ingeschakeld. Probeer het opnieuw.",
+    "appDisabledOn": "Uitgeschakeld op {date}.",
+    "appDisabledLastError": "Laatste fout: {error}."
 }

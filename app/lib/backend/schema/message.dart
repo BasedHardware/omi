@@ -383,10 +383,50 @@ class ServerMessage {
     return value.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList(growable: false);
   }
 
+  static const _desktopChatChromeTypes = {
+    'goalLink',
+    'goal_link',
+    'taskCard',
+    'task_card',
+    'questionCard',
+    'question_card',
+  };
+
+  /// Desktop Chat-first cards (goal/task/question) are interactive shell chrome.
+  /// Mobile has no renderer for them, so fallback dumps like
+  /// `Goal - … Task Task Task` should not appear in the phone timeline.
+  bool get hideFromMobileChat {
+    if (sender != MessageSender.ai) return false;
+    if (type != MessageType.text) return false;
+    if (files.isNotEmpty || memories.isNotEmpty) return false;
+    if (contentBlocks.isEmpty) return false;
+    if (!_blocksAreDesktopChatChromeOnly(contentBlocks)) return false;
+    final fallback = _structuredFallbackText(contentBlocks);
+    if (fallback.isEmpty) return false;
+    final body = text.trim();
+    return body.isEmpty || _normalizeWhitespace(body) == _normalizeWhitespace(fallback);
+  }
+
+  static List<ServerMessage> visibleOnMobile(Iterable<ServerMessage> messages) {
+    return messages.where((message) => !message.hideFromMobileChat).toList();
+  }
+
+  static bool _blocksAreDesktopChatChromeOnly(List<Map<String, dynamic>> blocks) {
+    return blocks.every((block) => _desktopChatChromeTypes.contains(block['type']));
+  }
+
+  static String _normalizeWhitespace(String value) {
+    return value.split(RegExp(r'\s+')).where((part) => part.isNotEmpty).join(' ');
+  }
+
+  static String _structuredFallbackText(List<Map<String, dynamic>> blocks) {
+    if (blocks.isEmpty) return '';
+    return blocks.map(_blockFallbackText).where((value) => value.isNotEmpty).join('\n');
+  }
+
   static String _textWithStructuredFallback(String text, List<Map<String, dynamic>> blocks) {
     if (text.trim().isNotEmpty || blocks.isEmpty) return text;
-    final fallbacks = blocks.map(_blockFallbackText).where((value) => value.isNotEmpty).toList(growable: false);
-    return fallbacks.join('\n');
+    return _structuredFallbackText(blocks);
   }
 
   static String _blockFallbackText(Map<String, dynamic> block) {

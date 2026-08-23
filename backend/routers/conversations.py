@@ -1,7 +1,7 @@
 import asyncio
 import hashlib
 
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, BackgroundTasks
 from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 
@@ -72,7 +72,13 @@ from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
 from utils.request_validation import NonNegativeOffset, PositiveLimit
+from utils.journey_metrics_contract import resolve_client_kind
 from utils.product_telemetry import emit_product_event
+from utils.other.list_budget import (
+    OMI_LIST_TRUNCATED_HEADER,
+    OMI_LIST_TRUNCATED_VALUE,
+    list_read_budget_for_request,
+)
 from utils.conversations.calendar_linking import (
     get_overlapping_calendar_event,
     write_conversation_link_to_calendar_event,
@@ -335,6 +341,7 @@ def finalize_conversation(
             force_process=True,
             extra_updates=extra_updates or None,
             require_cloud_tasks=True,
+            client_kind=resolve_client_kind(x_app_platform=conversation.client_platform, user_agent=None),
         )
     except lifecycle_service.FinalizationDispatchUnavailable as error:
         raise HTTPException(status_code=503, detail='Conversation finalization is temporarily unavailable') from error
@@ -520,10 +527,14 @@ def _resolve_bulk_segment_indices(conversation: Conversation, requested_ids: Lis
     tags=['conversations'],
     description=(
         "List responses may omit detail-only fields such as transcript_segments. "
-        "Clients should treat omitted transcript_segments as unknown/not loaded, not as an empty transcript."
+        "Clients should treat omitted transcript_segments as unknown/not loaded, not as an empty transcript. "
+        "Large accounts can outrun the request budget; such responses return a partial "
+        "newest-first array with the X-Omi-List-Truncated: true header instead of a 504 (#11831)."
     ),
 )
 def get_conversations(
+    request: Request = None,  # type: ignore[assignment]
+    response: Response = None,  # type: ignore[assignment]
     limit: PositiveLimit = 100,
     offset: NonNegativeOffset = 0,
     statuses: Optional[str] = "processing,completed",
@@ -558,6 +569,10 @@ def get_conversations(
     _reject_oversized_filter(status_filter, "statuses")
     _reject_oversized_filter(source_list, "sources")
 
+    # Request-scoped budget: the server-side offset is charged before the
+    # query and the page stream runs under the derived per-RPC timeout, so a
+    # deep page cannot consume the whole HTTP_GET_TIMEOUT (#11831).
+    budget = list_read_budget_for_request(request, route='conversations')
     conversations = conversations_db.get_conversations_without_photos(
         uid,
         limit,
@@ -569,9 +584,13 @@ def get_conversations(
         end_date=end_date,
         folder_id=folder_id,
         starred=starred,
+        budget=budget,
     )
 
     redact_conversations_for_list(conversations)
+    if budget.truncated and response is not None:
+        response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
+    budget.observe('truncated' if budget.truncated else 'complete')
     return conversations
 
 
@@ -1365,27 +1384,39 @@ def get_conversation_share_recipients(conversation_id: str, uid: str = Depends(a
 def send_conversation_share_email(
     conversation_id: str, request: SendShareEmailRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
-    """One-click send of the meeting summary to detected participants.
+    """Send the meeting summary to the addresses the owner chose.
 
-    Recipients are validated against the calendar-detected set so this can
-    never relay to arbitrary addresses. Sending makes the conversation
-    link-visible first (same contract as copying the share link) so the
-    emailed link resolves.
+    The card lets the owner type a recipient, so the address is theirs to pick
+    rather than something we detected; detection only prefills the field. What
+    keeps this from being an open relay is unchanged: the sender must own the
+    conversation, the mail carries only that conversation's own summary and
+    share link with the owner as reply-to, the request schema caps how many
+    addresses one send may carry, and a per-owner daily quota bounds the total.
+    Sending
+    makes the conversation link-visible first (same contract as copying the
+    share link) so the emailed link resolves.
     """
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
-    detected = {recipient['email'] for recipient in share_email.get_share_recipients(uid, conversation)}
     requested = share_email.normalized_recipient_emails(request.recipient_emails)
-    unknown = [email for email in requested if email not in detected]
-    if unknown:
-        raise HTTPException(status_code=400, detail='Recipients must be detected meeting participants')
+    if not requested:
+        raise HTTPException(status_code=400, detail='A valid recipient email is required')
 
     # Idempotency under concurrency: a Firestore transaction atomically claims
     # the not-yet-emailed recipients, so simultaneous duplicate requests can
-    # never both dispatch to the same address; repeats return success without
-    # a duplicate email.
-    to_dispatch = conversations_db.reserve_share_email_recipients(uid, conversation_id, requested)
+    # never both dispatch to the same address. A repeat of an address that was
+    # definitively sent returns success without a duplicate email; an address
+    # some other request is dispatching *right now* is not reported as sent,
+    # because that dispatch may still fail and release its claim.
+    to_dispatch, already_sent, in_flight_elsewhere = conversations_db.reserve_share_email_recipients(
+        uid, conversation_id, requested
+    )
     if not to_dispatch:
-        return {'sent_to': requested}
+        if in_flight_elsewhere:
+            raise HTTPException(
+                status_code=409,
+                detail='That summary is already being sent to this recipient — check back in a moment',
+            )
+        return {'sent_to': already_sent}
 
     if not share_email.consume_daily_send_quota(uid, len(to_dispatch)):
         conversations_db.release_share_email_recipients(uid, conversation_id, to_dispatch)
@@ -1433,12 +1464,20 @@ def send_conversation_share_email(
         redis_db.remove_public_conversation(conversation_id)
 
     def _send():
-        # The reservation above is the durable ledger entry — nothing to write
-        # after the provider accepts, so no failure after a successful dispatch
-        # can trigger the visibility rollback (a delivered email keeps a live
-        # link).
+        # The claim taken above only says "dispatching"; the sent ledger is
+        # written once the provider accepted, and it is what makes a later
+        # repeat a no-op. Recording it is the last step, so no failure after a
+        # successful dispatch can trigger the visibility rollback (a delivered
+        # email keeps a live link).
         share_email.send_summary_email(uid=uid, conversation=conversation, recipient_emails=to_dispatch)
-        return {'sent_to': requested}
+        try:
+            conversations_db.confirm_share_email_recipients(uid, conversation_id, to_dispatch)
+        except Exception:
+            # Delivery already happened; a lost ledger write can only cost a
+            # duplicate on a later retry, which is strictly better than
+            # reporting a failure for mail the recipient holds.
+            logger.exception('share email: failed to record delivered recipients')
+        return {'sent_to': sorted(set(already_sent) | set(to_dispatch))}
 
     def _release_reservation_and_quota():
         try:
@@ -1450,8 +1489,16 @@ def send_conversation_share_email(
     try:
         return share_email.publish_then_send(publish=_publish, unpublish=_unpublish, send=_send)
     except share_email.AmbiguousDeliveryError as e:
-        # Delivery may have happened: reservation and quota stand (no duplicate
-        # on retry) and the link stays published.
+        # Delivery may have happened, so the claim is promoted to the sent
+        # ledger rather than left in flight or released: a retry must not risk
+        # a duplicate in the recipient's inbox, and a claim nobody ever
+        # resolves would block the address until its TTL expires. Quota stands
+        # and the link stays published. The caller still gets 504 — we do not
+        # know that it arrived, and only the ledger pretends otherwise.
+        try:
+            conversations_db.confirm_share_email_recipients(uid, conversation_id, to_dispatch)
+        except Exception:
+            logger.exception('share email: failed to record ambiguous dispatch')
         raise HTTPException(status_code=504, detail=str(e))
     except ValueError as e:
         _release_reservation_and_quota()

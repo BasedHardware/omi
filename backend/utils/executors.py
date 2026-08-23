@@ -91,12 +91,27 @@ async def run_blocking(executor: ThreadPoolExecutor, fn: Callable[P, T], *args: 
     return await loop.run_in_executor(executor, call)
 
 
+def _log_background_failure(name: str, future: "Future[Any]") -> None:
+    if future.cancelled():
+        return
+    error = future.exception()
+    if error is not None:
+        logger.error("background task %s failed: %s", name, error, exc_info=error)
+
+
 def submit_with_context(
     executor: ThreadPoolExecutor, fn: Callable[P, T], *args: P.args, **kwargs: P.kwargs
 ) -> Future[T]:
-    """Submit *fn* to *executor*, propagating the current contextvars (BYOK keys, etc.)."""
+    """Submit *fn* to *executor*, propagating the current contextvars (BYOK keys, etc.).
+
+    Callers overwhelmingly discard the Future, so a raised exception would otherwise
+    be retained on it and never surface. The done callback logs it instead; callers
+    that do read the Future keep their own handling.
+    """
     ctx = contextvars.copy_context()
-    return executor.submit(ctx.run, fn, *args, **kwargs)
+    future = executor.submit(ctx.run, fn, *args, **kwargs)
+    future.add_done_callback(functools.partial(_log_background_failure, getattr(fn, '__name__', repr(fn))))
+    return future
 
 
 def get_executor_metrics() -> List[Dict[str, Any]]:

@@ -3,13 +3,20 @@ from datetime import datetime, timezone, timedelta
 import logging
 from typing import Any, Dict, Iterable, List, Optional, Protocol, cast
 
-from google.api_core.exceptions import NotFound
+from google.api_core.exceptions import DeadlineExceeded as FirestoreDeadlineExceeded, NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database.firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode, record_firestore_read
+from database.firestore_index_registry import (
+    ACTION_ITEMS_COMPLETED_CREATED_RANGE_QUERY,
+    ACTION_ITEMS_COMPLETED_DUE_RANGE_QUERY,
+    ACTION_ITEMS_COMPLETION_ID_SCAN_QUERY,
+    ACTION_ITEMS_CREATED_RANGE_QUERY,
+)
 from ._client import db, get_firestore_client
+from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +25,7 @@ logger = logging.getLogger(__name__)
 action_items_collection = 'action_items'
 TASK_INTELLIGENCE_CONTROL_COLLECTION = 'task_intelligence_control'
 TASK_INTELLIGENCE_CONTROL_DOCUMENT = 'state'
+_ACTION_ITEM_SCAN_PAGE_SIZE = 500
 
 
 class TaskRelationshipConflictError(ValueError):
@@ -100,12 +108,28 @@ class BatchMutationResult:
         }
 
 
-def get_action_item_ids(uid: str) -> List[str]:
+def _iter_query_pages(query: Any, *, page_size: int = _ACTION_ITEM_SCAN_PAGE_SIZE) -> Iterable[Any]:
+    """Yield a complete query result through bounded snapshot-cursor pages."""
+    cursor = None
+    while True:
+        page_query = query.limit(page_size)
+        if cursor is not None:
+            page_query = page_query.start_after(cursor)
+        page = list(page_query.stream())
+        yield from page
+        if len(page) < page_size:
+            return
+        cursor = page[-1]
+
+
+def get_action_item_ids(uid: str, *, firestore_client: Any = None) -> List[str]:
     """Return all action item document IDs for a user (IDs-only projection, no field reads).
 
     Used for bulk operations like account deletion (e.g. to purge derived Pinecone vectors)."""
-    coll = db.collection('users').document(uid).collection(action_items_collection)
-    return [doc.id for doc in coll.select([]).stream()]
+    client = firestore_client or get_firestore_client()
+    coll = client.collection('users').document(uid).collection(action_items_collection)
+    query = coll.select([]).order_by('__name__')
+    return [doc.id for doc in _iter_query_pages(query)]
 
 
 def get_visible_action_item_ids(
@@ -134,10 +158,14 @@ def get_visible_action_item_ids(
     """
     client = firestore_client or get_firestore_client()
     coll = client.collection('users').document(uid).collection(action_items_collection)
-    query = coll.select(['completed', 'deleted']).where(filter=FieldFilter('completed', '==', completed))
+    query = ACTION_ITEMS_COMPLETION_ID_SCAN_QUERY.build(
+        coll.select(['completed', 'deleted']),
+        {'completed': completed},
+        field_filter_factory=FieldFilter,
+    ).order_by('__name__')
     visible_ids: List[str] = []
     doc_count = 0
-    for doc in query.stream():
+    for doc in _iter_query_pages(query):
         doc_count += 1
         data = _typed_doc(doc)
         if data.get('deleted'):
@@ -145,7 +173,7 @@ def get_visible_action_item_ids(
         visible_ids.append(doc.id)
     record_firestore_read(
         FirestoreReadFamily.ACTION_ITEMS_VISIBLE_IDS,
-        FirestoreReadMode.UNBOUNDED,
+        FirestoreReadMode.BOUNDED,
         doc_count,
     )
     return visible_ids
@@ -513,29 +541,58 @@ def _action_item_list_sort_key(item: Dict[str, Any]) -> tuple:
     )
 
 
-def _stream_action_items_bounded(query: Any, *, max_docs: int) -> tuple[List[Dict[str, Any]], int]:
+def _stream_action_items_bounded(
+    query: Any,
+    *,
+    max_docs: int,
+    budget: Optional[ListReadBudget] = None,
+) -> tuple[List[Dict[str, Any]], int]:
     """Stream at most max_docs Firestore documents; skip soft-deleted rows.
 
     Applies a field projection and a Firestore ``limit`` so the backend process
     never downloads full documents past the page budget (Python ``break`` alone
-    still lets the client library buffer the rest of the stream).
+    still lets the client library buffer the rest of the stream). With a
+    request ``budget`` the stream runs under its per-RPC timeout and charges
+    every fetched document; budget exhaustion stops the read and the partial
+    bucket is returned so the route can answer truncated (#11831).
     """
     action_items: List[Dict[str, Any]] = []
     document_count = 0
     if max_docs <= 0:
         return action_items, 0
     query = query.select(list(_ACTION_ITEMS_LIST_SELECT_FIELDS)).limit(max_docs)
-    for doc in query.stream():
-        document_count += 1
-        data: Dict[str, Any] = _typed_doc(doc)
-        if data.get('deleted'):
+    if budget is None:
+        iterator = query.stream()
+    else:
+        timeout = budget.rpc_timeout()
+        try:
+            iterator = query.stream(timeout=timeout)
+        except TypeError:
+            # Test fakes predating the budget seam do not accept a timeout kwarg.
+            iterator = query.stream()
+    try:
+        for doc in iterator:
+            if budget is not None:
+                budget.charge(1)
+            document_count += 1
+            data: Dict[str, Any] = _typed_doc(doc)
+            if data.get('deleted'):
+                if document_count >= max_docs:
+                    break
+                continue
+            data['id'] = doc.id
+            action_items.append(_prepare_action_item_for_read(data))
             if document_count >= max_docs:
                 break
-            continue
-        data['id'] = doc.id
-        action_items.append(_prepare_action_item_for_read(data))
-        if document_count >= max_docs:
-            break
+    except ListReadBudgetExhausted:
+        # Deadline/allowance ended mid-stream: keep the rows already fetched.
+        # The budget stays flagged truncated so the route marks the response.
+        return action_items, document_count
+    except FirestoreDeadlineExceeded:
+        # The per-RPC timeout derived from the budget cut a blocked stream.
+        if budget is not None:
+            budget.mark_exhausted('deadline')
+        return action_items, document_count
     return action_items, document_count
 
 
@@ -575,6 +632,7 @@ def get_action_items(
     due_end_date: Optional[datetime] = None,
     limit: Optional[int] = None,
     offset: int = 0,
+    budget: Optional[ListReadBudget] = None,
 ) -> List[Dict[str, Any]]:
     """
     Get action items for a user with optional filters.
@@ -589,6 +647,11 @@ def get_action_items(
     (not 2× the page). Offset is a live-item slice after that sort so it stays
     aligned with Windows ``offset += items.length`` — Firestore ``offset``
     counts deleted documents and would skip/duplicate across pages.
+    With a request ``budget`` the active, legacy, and completed queries share
+    that one budget — every fetched document charges it and every stream runs
+    under its per-RPC timeout — so the aggregate read cannot outlive the
+    request (#11831). Budget exhaustion stops at a bucket boundary and the
+    route reports ``truncated``/``has_more`` honestly.
     """
     offset = max(0, int(offset or 0))
     if limit is None or limit <= 0:
@@ -612,14 +675,17 @@ def get_action_items(
             due_end_date=due_end_date,
         )
 
+    def _out_of_budget() -> bool:
+        return budget is not None and budget.truncated
+
     def _fetch_filtered(completed_filter: Optional[bool], row_budget: int) -> List[Dict[str, Any]]:
         nonlocal total_docs
-        if row_budget <= 0:
+        if row_budget <= 0 or _out_of_budget():
             return []
         q = _base_query()
         if completed_filter is not None:
             q = q.where(filter=FieldFilter('completed', '==', completed_filter))
-        items, docs = _stream_action_items_bounded(q, max_docs=_list_scan_budget(row_budget))
+        items, docs = _stream_action_items_bounded(q, max_docs=_list_scan_budget(row_budget), budget=budget)
         total_docs += docs
         items.sort(key=_action_item_list_sort_key)
         return items[:row_budget]
@@ -632,14 +698,14 @@ def get_action_items(
         seen = {item['id'] for item in active}
         # Legacy/partial docs: completed missing or null. Equality filters exclude them; harvest
         # with a bounded unfiltered scan and keep only those that prepare to active and are new.
-        if len(active) < need:
+        if len(active) < need and not _out_of_budget():
             # Bound unfiltered scan generously enough to product-sort before capping:
             # early-stopping mid-stream would freeze Firestore order instead of due-date order.
             legacy_scan = min(
                 _ACTION_ITEMS_LIST_HARD_MAX,
                 max(need * 8, 128),
             )
-            raw_legacy, docs = _stream_action_items_bounded(_base_query(), max_docs=legacy_scan)
+            raw_legacy, docs = _stream_action_items_bounded(_base_query(), max_docs=legacy_scan, budget=budget)
             total_docs += docs
             for item in raw_legacy:
                 if item['id'] in seen:
@@ -652,7 +718,7 @@ def get_action_items(
             active.sort(key=_action_item_list_sort_key)
             active = active[:need]
 
-        if len(active) >= need:
+        if len(active) >= need or _out_of_budget():
             action_items = active
         else:
             done = _fetch_filtered(True, need - len(active))
@@ -711,9 +777,13 @@ def get_active_action_item_by_description(uid: str, description: str) -> Optiona
         return None
 
     user_ref = db.collection('users').document(uid)
-    query = user_ref.collection(action_items_collection).where(filter=FieldFilter('completed', '==', False))
+    query = ACTION_ITEMS_COMPLETION_ID_SCAN_QUERY.build(
+        user_ref.collection(action_items_collection),
+        {'completed': False},
+        field_filter_factory=FieldFilter,
+    ).order_by('__name__')
 
-    for doc in query.stream():
+    for doc in _iter_query_pages(query):
         data: Dict[str, Any] = _typed_doc(doc)
         if data.get('deleted'):
             continue
@@ -1217,7 +1287,7 @@ def get_daily_score(uid: str, date: Optional[str] = None) -> Dict[str, Any]:
     return {'date': day.strftime('%Y-%m-%d'), 'score': score, 'completed_tasks': completed, 'total_tasks': total}
 
 
-def get_scores(uid: str, date: Optional[str] = None) -> Dict[str, Any]:
+def get_scores(uid: str, date: Optional[str] = None, *, firestore_client: Any = None) -> Dict[str, Any]:
     """Compute daily, weekly, and overall scores (matching Rust backend behavior).
 
     Takes a single date (or defaults to today) and returns:
@@ -1237,44 +1307,73 @@ def get_scores(uid: str, date: Optional[str] = None) -> Dict[str, Any]:
     # day-7 spanned 8 calendar days and over-counted the weekly totals.
     week_start = day - timedelta(days=6)
 
-    col = db.collection('users').document(uid).collection(action_items_collection)
+    client = firestore_client or get_firestore_client()
+    col = client.collection('users').document(uid).collection(action_items_collection)
 
     def _score(completed: int, total: int) -> float:
         return round((completed / total * 100) if total > 0 else 0, 1)
 
+    def _count(query: Any) -> int:
+        return int(query.count().get()[0][0].value)
+
+    # Count aggregation reads scale per 1,000 index entries instead of materializing
+    # every task document. Soft-deleted rows are rare and cannot be excluded with a
+    # Firestore equality predicate without also dropping legacy rows where ``deleted``
+    # is absent, so read only that small subset once and subtract it below.
+    deleted_items = [
+        _typed_doc(doc)
+        for doc in _iter_query_pages(col.where(filter=FieldFilter('deleted', '==', True)).order_by('__name__'))
+    ]
+
     # Daily: tasks due today
     daily_q = col.where(filter=FieldFilter('due_at', '>=', day_start)).where(filter=FieldFilter('due_at', '<', day_end))
-    daily_completed = daily_total = 0
-    for doc in daily_q.stream():
-        data: Dict[str, Any] = _typed_doc(doc)
-        if data.get('deleted'):
-            continue
-        daily_total += 1
-        if data.get('completed'):
-            daily_completed += 1
+    daily_total = _count(daily_q)
+    daily_completed = _count(
+        ACTION_ITEMS_COMPLETED_DUE_RANGE_QUERY.build(
+            col,
+            {'start': day_start, 'end': day_end, 'completed': True},
+            field_filter_factory=FieldFilter,
+        )
+    )
 
     # Weekly: tasks created in last 7 days (matches Rust backend which uses created_at)
-    weekly_q = col.where(filter=FieldFilter('created_at', '>=', week_start)).where(
-        filter=FieldFilter('created_at', '<', day_end)
+    weekly_q = ACTION_ITEMS_CREATED_RANGE_QUERY.build(
+        col,
+        {'start': week_start, 'end': day_end},
+        field_filter_factory=FieldFilter,
     )
-    weekly_completed = weekly_total = 0
-    for doc in weekly_q.stream():
-        data = _typed_doc(doc)
-        if data.get('deleted'):
-            continue
-        weekly_total += 1
-        if data.get('completed'):
-            weekly_completed += 1
+    weekly_total = _count(weekly_q)
+    weekly_completed = _count(
+        ACTION_ITEMS_COMPLETED_CREATED_RANGE_QUERY.build(
+            col,
+            {'start': week_start, 'end': day_end, 'completed': True},
+            field_filter_factory=FieldFilter,
+        )
+    )
 
     # Overall: all non-deleted tasks
-    overall_completed = overall_total = 0
-    for doc in col.stream():
-        data = _typed_doc(doc)
-        if data.get('deleted'):
-            continue
-        overall_total += 1
-        if data.get('completed'):
-            overall_completed += 1
+    overall_total = _count(col)
+    overall_completed = _count(col.where(filter=FieldFilter('completed', '==', True)))
+
+    for data in deleted_items:
+        completed = data.get('completed') is True
+        due_at = data.get('due_at')
+        if isinstance(due_at, datetime) and day_start <= due_at < day_end:
+            daily_total -= 1
+            daily_completed -= int(completed)
+        created_at = data.get('created_at')
+        if isinstance(created_at, datetime) and week_start <= created_at < day_end:
+            weekly_total -= 1
+            weekly_completed -= int(completed)
+        overall_total -= 1
+        overall_completed -= int(completed)
+
+    daily_total = max(0, daily_total)
+    daily_completed = max(0, daily_completed)
+    weekly_total = max(0, weekly_total)
+    weekly_completed = max(0, weekly_completed)
+    overall_total = max(0, overall_total)
+    overall_completed = max(0, overall_completed)
 
     daily: Dict[str, Any] = {
         'score': _score(daily_completed, daily_total),

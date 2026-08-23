@@ -3253,5 +3253,14 @@
     "sendRawAudioToOmi": "Wysyłaj surowy dźwięk do Omi",
     "sendRawAudioToOmiDescription": "Wyłącz, aby surowy dźwięk nie był wysyłany do Omi. Transkrypcje i dane wymagane przez funkcje chmurowe mogą nadal być wysyłane do Omi.",
     "findDevice": "Znajdź",
-    "diagnosticsShareFailed": "Nie udało się udostępnić diagnostyki. Spróbuj ponownie."
+    "diagnosticsShareFailed": "Nie udało się udostępnić diagnostyki. Spróbuj ponownie.",
+    "appDisabledTitle": "Ta aplikacja jest wyłączona i nie można jej zainstalować.",
+    "appDisabledWebhookFailures": "Jej endpoint zawodził przez 72 godziny z rzędu, więc dostarczanie zostało zatrzymane.",
+    "appDisabledGeneric": "Została wyłączona przez Omi.",
+    "appDisabledOwnerHint": "Najpierw napraw endpoint — ponowne włączenie sprawdza każdy skonfigurowany adres URL.",
+    "appReEnable": "Włącz ponownie",
+    "appReEnableFailedTitle": "Nie udało się włączyć ponownie",
+    "appReEnableFailedBody": "Nie udało się ponownie włączyć tej aplikacji. Spróbuj ponownie.",
+    "appDisabledOn": "Wyłączona {date}.",
+    "appDisabledLastError": "Ostatni błąd: {error}."
 }

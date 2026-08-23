@@ -707,6 +707,10 @@ class SpeechRecognitionHandler: NSObject {
             let request = SFSpeechURLRecognitionRequest(url: fileUrl)
             request.shouldReportPartialResults = false
             request.requiresOnDeviceRecognition = true // Force on-device
+            request.taskHint = .dictation
+            if #available(iOS 16, *) {
+                request.addsPunctuation = true
+            }
             
             let task = recognizer.recognitionTask(with: request) { (recognitionResult, error) in
                 if let error = error {

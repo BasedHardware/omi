@@ -2,6 +2,101 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.209",
+      "date": "2026-08-23",
+      "changes": [
+        "Fixed the old Home design becoming transparent when enabled"
+      ]
+    },
+    {
+      "version": "0.12.208",
+      "date": "2026-08-22",
+      "changes": [
+        "Renamed the Activity tab to Brain"
+      ]
+    },
+    {
+      "version": "0.12.207",
+      "date": "2026-08-22",
+      "changes": [
+        "Activity's row is now labelled View, carries only the pages it opens, and every page it opens — Conversations, Memories and Brain Map — has a back control to return to it."
+      ]
+    },
+    {
+      "version": "0.12.206",
+      "date": "2026-08-22",
+      "changes": [
+        "Fixed the app quitting during onboarding when you granted microphone or screen recording permission",
+        "Fixed screen-history search returning nothing for multi-word titles and titles containing version numbers",
+        "Activity now opens from its own pill and stays put, its rows open the exact conversation or memory you clicked, its chips reach Conversations, Memories, Brain Map, Tasks and Rewind directly, and conversation summaries show the full written notes again instead of a one-line stub.",
+        "Fixed meetings-only listening missing Google Meet calls, where a joined tab is titled with just the meeting code"
+      ]
+    },
+    {
+      "version": "0.12.205",
+      "date": "2026-08-22",
+      "changes": [
+        "Proactive insights no longer recap what you just did, tell you to keep doing what you're already doing, or report a record change you can't act on — a notification now has to answer your question or change your next step"
+      ]
+    },
+    {
+      "version": "0.12.204",
+      "date": "2026-08-22",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.203",
+      "date": "2026-08-22",
+      "changes": [
+        "The meeting notes card now has a Share button that opens an address field — prefilled with the detected participant, but yours to change — plus a link button to copy, and Omi tells you it is taking notes when it detects a meeting"
+      ]
+    },
+    {
+      "version": "0.12.202",
+      "date": "2026-08-22",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.201",
+      "date": "2026-08-22",
+      "changes": [
+        "Fixed released builds accepting local CLI test triggers, which let any process on your Mac deliver a fake Omi notification and save it to your chat"
+      ]
+    },
+    {
+      "version": "0.12.200",
+      "date": "2026-08-21",
+      "changes": [
+        "Added an optional referral link as the final onboarding step and kept onboarding completion scoped to each signed-in account"
+      ]
+    },
+    {
+      "version": "0.12.199",
+      "date": "2026-08-21",
+      "changes": [
+        "Proactive insight cards in Chat no longer repeat their headline when the message already says the same thing",
+        "Refined the Refer button with a clean outlined treatment"
+      ]
+    },
+    {
+      "version": "0.12.198",
+      "date": "2026-08-21",
+      "changes": [
+        "Moved Refer beside the microphone and gave it a clearer neutral treatment"
+      ]
+    },
+    {
+      "version": "0.12.197",
+      "date": "2026-08-21",
+      "changes": [
+        "Fixed the app quitting the moment you finished onboarding, which sent you back through onboarding on the next launch"
+      ]
+    },
+    {
       "version": "0.12.196",
       "date": "2026-08-21",
       "changes": [
@@ -36,7 +131,7 @@
       "changes": [
         "Integration Suggestions is now the fifth notification type — a row beside Focus, Task, Insight, and Memory in Settings, with its own Integration chat badge",
         "Notification chat rows no longer repeat their content twice when the message already restates the headline",
-        "Added Refer a Friend links that give eligible new Desktop users one free month of Omi Pro"
+        "Added Refer a Friend links that give eligible new Desktop users one free month of Operator"
       ]
     },
     {

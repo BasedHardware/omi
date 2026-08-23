@@ -514,6 +514,7 @@ extension APIClient {
   private static let deviceScopeSupportedHeader = "X-Omi-Memory-Device-Scope-Supported"
   private static let defaultDeleteSupportedHeader = "X-Omi-Memory-Default-Delete-Supported"
   private static let nextCursorHeader = "X-Omi-Memory-Next-Cursor"
+  private static let listTruncatedHeader = "X-Omi-List-Truncated"
 
   struct MemoryListPage {
     let memories: [ServerMemory]
@@ -521,6 +522,7 @@ extension APIClient {
     let canonicalLifecycleExposed: Bool
     let deviceScopeSupported: Bool?
     let defaultMemoryDeleteSupported: Bool
+    let truncated: Bool
   }
 
   /// Fetches memories from the API with optional filtering
@@ -617,12 +619,14 @@ extension APIClient {
     let defaultMemoryDeleteSupported =
       httpResponse.value(forHTTPHeaderField: Self.defaultDeleteSupportedHeader) == "true"
     let nextCursor = httpResponse.value(forHTTPHeaderField: Self.nextCursorHeader)
+    let truncated = httpResponse.value(forHTTPHeaderField: Self.listTruncatedHeader) == "true"
     return MemoryListPage(
       memories: memories,
       nextCursor: nextCursor?.isEmpty == false ? nextCursor : nil,
       canonicalLifecycleExposed: canonicalLifecycleExposed,
       deviceScopeSupported: deviceScopeSupported,
-      defaultMemoryDeleteSupported: defaultMemoryDeleteSupported
+      defaultMemoryDeleteSupported: defaultMemoryDeleteSupported,
+      truncated: truncated
     )
   }
 

@@ -47,6 +47,7 @@ from utils.webhooks import (
 )
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.other.storage import maybe_invalidate_conversation_playback, upload_audio_chunks_batch
+from utils.journey_metrics_contract import ClientKind, bounded_client_kind
 from utils.metrics import (
     PUSHER_ACTIVE_WS_CONNECTIONS,
     PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS,
@@ -93,7 +94,9 @@ WS_RECEIVE_TIMEOUT = 300.0  # seconds
 BG_DRAIN_TIMEOUT = 30.0  # seconds
 
 
-async def _dispatch_transcript_item(uid: str, segments: List[Dict[str, Any]], memory_id: Optional[str]) -> None:
+async def _dispatch_transcript_item(
+    uid: str, segments: List[Dict[str, Any]], memory_id: Optional[str], client_kind: ClientKind = 'unknown'
+) -> None:
     async def run(sink: str, call: Awaitable[Any]) -> None:
         try:
             await call
@@ -101,8 +104,8 @@ async def _dispatch_transcript_item(uid: str, segments: List[Dict[str, Any]], me
             logger.error('Error processing transcript %s type=%s uid=%s', sink, type(e).__name__, uid)
 
     await asyncio.gather(
-        run('integrations', trigger_realtime_integrations(uid, segments, memory_id)),
-        run('webhook', realtime_transcript_webhook(uid, segments)),
+        run('integrations', trigger_realtime_integrations(uid, segments, memory_id, client_kind=client_kind)),
+        run('webhook', realtime_transcript_webhook(uid, segments, client_kind=client_kind)),
     )
 
 
@@ -110,8 +113,10 @@ async def _websocket_util_trigger(
     websocket: WebSocket,
     uid: str,
     sample_rate: int = 8000,
+    client_kind: str = 'unknown',
 ) -> None:
     logger.info(f'_websocket_util_trigger {uid}')
+    resolved_client_kind = bounded_client_kind(client_kind)
 
     try:
         await websocket.accept()
@@ -379,7 +384,7 @@ async def _websocket_util_trigger(
             transcript_queue.clear()
 
             for item in batch:
-                await _dispatch_transcript_item(uid, item['segments'], item['memory_id'])
+                await _dispatch_transcript_item(uid, item['segments'], item['memory_id'], resolved_client_kind)
 
     async def process_audio_bytes_queue() -> None:
         """Event-driven consumer for audio bytes triggers (app integrations + webhooks)."""
@@ -543,6 +548,7 @@ async def _websocket_util_trigger(
                                 byok_keys,
                                 finalization_job_id if isinstance(finalization_job_id, str) else None,
                                 dispatch_generation if isinstance(dispatch_generation, int) else None,
+                                resolved_client_kind,
                             ),
                             name=f'pusher_finalization:{uid}:{conversation_id}',
                         )
@@ -770,5 +776,6 @@ async def websocket_endpoint_trigger(
     websocket: WebSocket,
     uid: str,
     sample_rate: int = 8000,
+    client_kind: str = 'unknown',
 ) -> None:
-    await _websocket_util_trigger(websocket, uid, sample_rate)
+    await _websocket_util_trigger(websocket, uid, sample_rate, client_kind)

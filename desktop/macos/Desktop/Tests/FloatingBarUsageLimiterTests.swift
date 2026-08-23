@@ -179,6 +179,28 @@ final class FloatingBarUsageLimiterTests: XCTestCase {
     XCTAssertFalse(limiter.hasPaidPlan)
   }
 
+  func testApplyPlanUnknownIsNotPaidAndPreservesIdentityInCache() {
+    let cacheKey = DefaultsKey.floatingBarCachedPlan
+    let previousValue = UserDefaults.standard.object(forKey: cacheKey)
+    defer {
+      if let previousValue {
+        UserDefaults.standard.set(previousValue, forKey: cacheKey)
+      } else {
+        UserDefaults.standard.removeObject(forKey: cacheKey)
+      }
+    }
+
+    let limiter = FloatingBarUsageLimiter()
+    let unknownPlan = SubscriptionPlanType(rawValue: "future_plan_123")
+    limiter.applyPlan(plan: unknownPlan, status: .active)
+
+    XCTAssertFalse(limiter.hasPaidPlan)
+    XCTAssertEqual(
+      UserDefaults.standard.string(forKey: cacheKey),
+      unknownPlan.rawValue,
+      "an unknown plan must not be persisted as Basic")
+  }
+
   func testApplyPlanOperatorActiveIsPaid() {
     let limiter = FloatingBarUsageLimiter()
     limiter.applyPlan(plan: .operator, status: .active)

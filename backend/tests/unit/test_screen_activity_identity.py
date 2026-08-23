@@ -190,6 +190,23 @@ class TestPrecisionFirst:
         # This is exactly the shape that produced "Coinflow Portal" and "Blocked users".
         assert participants_from_ocr(['Coinflow Portal\nBlocked users\nOmi Monitor\nSpud pay']) == []
 
+    def test_a_calendar_tile_for_another_meeting_is_not_a_participant(self):
+        """#12036: 'Aryan Gupta and Nik' is an event title, not a person.
+
+        It is four capitalised tokens, so the shape filter accepted it, and the
+        token 'nik' matched the local part of an address in the same window --
+        which bound a later meeting's guest to this call and put him on the
+        post-meeting card's Send button.
+        """
+        participants = participants_from_ocr(
+            ['Aryan Gupta and Nik - New York Networking\nAryan Gupta and Nik\nnik@basedhardware.com']
+        )
+        assert [(p.name, p.email) for p in participants] == [(None, 'nik@basedhardware.com')]
+
+    def test_a_roster_sentence_still_splits_joined_names(self):
+        participants = participants_from_ocr(['Ash Kalb and Boardy Boardman are in this call'])
+        assert [p.name for p in participants] == ['Ash Kalb', 'Boardy Boardman']
+
     def test_a_name_line_is_accepted_once_an_email_corroborates_it(self):
         participants = participants_from_ocr(['Boardy Boardman\nCoinflow Portal\nboardy@boardy.ai'])
         assert [(p.name, p.email) for p in participants] == [('Boardy Boardman', 'boardy@boardy.ai')]
@@ -227,3 +244,42 @@ class TestPrecisionFirst:
     def test_participants_are_capped(self):
         roster = ', '.join(f'Person Number{index}' for index in range(20)) + ' are in this call'
         assert len(participants_from_ocr([roster])) <= 12
+
+
+class TestCalendarLinkPairing:
+    """#12036 follow-up: the link shape described every attendee twice."""
+
+    def _link(self, attendees, attendee_emails):
+        from datetime import datetime, timezone
+
+        from models.conversation import CalendarEventLink
+
+        return CalendarEventLink(
+            event_id='evt-1',
+            title='Weekly sync',
+            attendees=attendees,
+            attendee_emails=attendee_emails,
+            start_time=datetime(2026, 8, 22, 15, 0, tzinfo=timezone.utc),
+            end_time=datetime(2026, 8, 22, 15, 30, tzinfo=timezone.utc),
+        )
+
+    def test_equal_lengths_pair_each_name_with_its_address(self):
+        from utils.conversations.meeting_context import context_from_calendar_link
+
+        context = context_from_calendar_link(
+            self._link(['Nik', 'Sarah Chen'], ['nik@basedhardware.com', 'sarah@acme.com'])
+        )
+        assert [(p.name, p.email) for p in context.participants] == [
+            ('Nik', 'nik@basedhardware.com'),
+            ('Sarah Chen', 'sarah@acme.com'),
+        ]
+
+    def test_mismatched_lengths_are_left_unpaired_rather_than_mispaired(self):
+        from utils.conversations.meeting_context import context_from_calendar_link
+
+        context = context_from_calendar_link(self._link(['Nik', 'Sarah Chen'], ['sarah@acme.com']))
+        assert [(p.name, p.email) for p in context.participants] == [
+            ('Nik', None),
+            ('Sarah Chen', None),
+            (None, 'sarah@acme.com'),
+        ]

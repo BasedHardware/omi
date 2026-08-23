@@ -313,15 +313,16 @@ struct TutorialEnvironment {
             guard let store else { return }
             RewindWindow.present(
                 store: store,
-                onOpenSettings: { SettingsWindow.present() },
-                onSearch: { query in SearchBarWindow.present(prefill: query) })
+                via: .tutorial,
+                onOpenSettings: { SettingsWindow.present(via: .inAppPill) },
+                onSearch: { query in SearchBarWindow.present(via: .inAppPill, prefill: query) })
         }
         environment.dismissTimeline = { RewindWindow.dismiss() }
         environment.timelineIsVisible = { RewindWindow.isVisible }
         environment.watchSearchPanel = { happened in TutorialSearchPanelWatch.start(happened) }
         environment.stopWatchingSearchPanel = { TutorialSearchPanelWatch.stop() }
         environment.searchPanelIsVisible = { SearchBarWindow.isVisible }
-        environment.presentSearchPanel = { SearchBarWindow.present() }
+        environment.presentSearchPanel = { SearchBarWindow.present(via: .tutorial) }
         // The panel's own dismissal and not `orderOut`, because that is what announces `.closed` —
         // so a panel the tutorial takes away and one the user pressed Escape on leave every observer
         // in the same state.

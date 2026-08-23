@@ -4,6 +4,13 @@ description: >-
   surfaces, and shared release-vector evidence for manual and auto-dev deploys.
 
 inputs:
+  firebase_probe_signer_service_account:
+    description: >-
+      Optional service account for signing release-probe custom tokens when the
+      Firebase auth project differs from project_id. Requires
+      roles/iam.serviceAccountTokenCreator for the deploy identity on it.
+    required: false
+    default: ''
   deploy_profile:
     description: 'manual or auto-dev orchestration profile'
     required: true
@@ -462,7 +469,7 @@ runs:
         image: gcr.io/${{ inputs.project_id }}/${{ inputs.service }}:${{ steps.image-tag.outputs.short_sha }}
         no_traffic: true
         flags: >-
-          --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
+          --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}-base
           ${{ inputs.transcription_candidate_tag != '' && format('--tag={0}', inputs.transcription_candidate_tag) || '' }}
           ${{ inputs.deploy_profile == 'auto-dev' && format('--tag={0}', inputs.candidate_tag) || '' }}
           --remove-env-vars=MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
@@ -471,6 +478,27 @@ runs:
           ${{ steps.runtime-env.outputs.backend_env_vars }}
           OMI_BACKEND_RELEASE_SHA=${{ inputs.admitted_sha }}
         secrets: ${{ steps.runtime-env.outputs.backend_secrets }}
+
+    - name: Attach Managed Prometheus sidecar to ${{ inputs.service }} candidate
+      id: attach-backend-gmp-sidecar
+      shell: bash
+      env:
+        GMP_CANDIDATE_TAG: ${{ inputs.transcription_candidate_tag != '' && inputs.transcription_candidate_tag || (inputs.deploy_profile == 'auto-dev' && inputs.candidate_tag || '') }}
+      run: |
+        set -euo pipefail
+        args=(
+          --project="${{ inputs.project_id }}"
+          --region="${{ inputs.region }}"
+          --service="${{ inputs.service }}"
+          --base-revision="backend-${{ steps.image-tag.outputs.revision_suffix }}-base"
+          --final-revision="backend-${{ steps.image-tag.outputs.revision_suffix }}"
+          --ingress-container=backend-1
+          --config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sidecar.yaml"
+        )
+        if [[ -n "$GMP_CANDIDATE_TAG" ]]; then
+          args+=(--tag="$GMP_CANDIDATE_TAG")
+        fi
+        python3 "$DEPLOY_CONTROL_SCRIPTS/attach_cloud_run_gmp_sidecar.py" "${args[@]}"
 
     - name: Capture ${{ inputs.service }} revision
       id: capture-backend-revision
@@ -723,6 +751,12 @@ runs:
         candidate_api_url: ${{ steps.transcription-candidate.outputs.url }}
         project_id: ${{ inputs.project_id }}
         firebase_auth_project_id: based-hardware
+        # A development deploy identity cannot sign a custom token for the
+        # production Firebase project this gate authenticates against, so it
+        # failed at custom_token_signing and blocked every manual development
+        # deploy. Left empty the behaviour is unchanged; set the variable to
+        # the Firebase project's signer to make this lane usable.
+        firebase_signer_service_account: ${{ inputs.firebase_probe_signer_service_account }}
 
     - name: Accept no-traffic Cloud Run candidate
       id: verify-cloud-run-candidate

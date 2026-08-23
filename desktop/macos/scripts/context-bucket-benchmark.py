@@ -32,6 +32,9 @@ DIRECTOR_CASES = {
     "worthy-revisit-unresolved-task",
     "worthy-new-actionable-fact",
     "silence-ambient-narrative",
+    "silence-user-own-completed-work",
+    "silence-continue-current-investigation",
+    "silence-record-correction-no-next-step",
     "silence-low-confidence-fact",
     "identity-same-numbered-context",
     "identity-similar-title-isolated",
@@ -218,11 +221,18 @@ def invoke_case(case: dict, port: int, include_text: bool = False) -> dict:
     except error.HTTPError as exc:
         stable_error = None
         try:
+            # Best-effort enrichment only: the HTTP status below is the real
+            # failure, so nothing raised while reading or parsing the error body
+            # may replace it. The ways that body can be unreadable are not
+            # enumerable — an HTTPError carrying no body raises AttributeError on
+            # some Python versions and KeyError('file') from tempfile's
+            # __getattr__ on others (3.9, including macOS /usr/bin/python3) — and
+            # an enumerated tuple already let one of them mask the HTTP error.
             error_envelope = json.loads(exc.read(4096))
             match = STABLE_PROACTIVE_ERROR.search(str(error_envelope.get("error", "")))
             stable_error = match.group(0) if match else None
-        except (AttributeError, json.JSONDecodeError, UnicodeDecodeError):
-            pass
+        except Exception:  # pylint: disable=broad-except
+            stable_error = None
         suffix = f" ({stable_error})" if stable_error else ""
         raise RuntimeError(f"{case['id']}: probe returned HTTP {exc.code}{suffix}") from exc
     if envelope.get("ok") is not True:

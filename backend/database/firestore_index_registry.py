@@ -193,6 +193,12 @@ INDEX_ONLY_REQUIREMENTS = (
         (_asc('completed'), _asc('due_at'), _asc('__name__')),
     ),
     FirestoreIndexRequirement(
+        'action_items_completed_created',
+        'action_items',
+        'COLLECTION',
+        (_asc('completed'), _asc('created_at'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
         'action_items_conversation_due',
         'action_items',
         'COLLECTION',
@@ -612,6 +618,49 @@ STALE_IN_PROGRESS_CONVERSATIONS_QUERY = FirestoreQuerySpec(
     ),
 )
 
+ACTION_ITEMS_COMPLETION_ID_SCAN_QUERY = FirestoreQuerySpec(
+    identifier='action_items_completion_id_scan',
+    collection_group='action_items',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('completed', '==', 'completed'),),
+    index_fields=(_asc('completed'), _asc('__name__')),
+)
+
+ACTION_ITEMS_COMPLETED_DUE_RANGE_QUERY = FirestoreQuerySpec(
+    identifier='action_items_completed_due_range',
+    collection_group='action_items',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('due_at', '>=', 'start'),
+        FirestoreQueryFilter('due_at', '<', 'end'),
+        FirestoreQueryFilter('completed', '==', 'completed'),
+    ),
+    index_fields=(_asc('completed'), _asc('due_at'), _asc('__name__')),
+)
+
+ACTION_ITEMS_CREATED_RANGE_QUERY = FirestoreQuerySpec(
+    identifier='action_items_created_range',
+    collection_group='action_items',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('created_at', '>=', 'start'),
+        FirestoreQueryFilter('created_at', '<', 'end'),
+    ),
+    index_fields=(_asc('created_at'), _asc('__name__')),
+)
+
+ACTION_ITEMS_COMPLETED_CREATED_RANGE_QUERY = FirestoreQuerySpec(
+    identifier='action_items_completed_created_range',
+    collection_group='action_items',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('created_at', '>=', 'start'),
+        FirestoreQueryFilter('created_at', '<', 'end'),
+        FirestoreQueryFilter('completed', '==', 'completed'),
+    ),
+    index_fields=(_asc('completed'), _asc('created_at'), _asc('__name__')),
+)
+
 CHAT_FIRST_DEFERRALS_DUE_QUERY = FirestoreQuerySpec(
     identifier='chat_first_deferrals_due',
     collection_group='chat_first_deferrals',
@@ -680,7 +729,26 @@ MEETING_RECEIPTS_DUE_QUERY = FirestoreQuerySpec(
     ),
 )
 
+HOURLY_USAGE_PLAN_ATTRIBUTION_QUERY = FirestoreQuerySpec(
+    identifier='hourly_usage_plan_attribution_month',
+    collection_group='hourly_usage',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('year', '==', 'year'),
+        FirestoreQueryFilter('month', '==', 'month'),
+    ),
+    index_fields=(
+        _asc('year'),
+        _asc('month'),
+        _asc('__name__'),
+    ),
+)
+
 QUERY_SPECS = (
+    ACTION_ITEMS_COMPLETION_ID_SCAN_QUERY,
+    ACTION_ITEMS_COMPLETED_DUE_RANGE_QUERY,
+    ACTION_ITEMS_CREATED_RANGE_QUERY,
+    ACTION_ITEMS_COMPLETED_CREATED_RANGE_QUERY,
     CANDIDATES_COMPATIBILITY_QUERY,
     DUE_MEMORY_OUTBOX_QUERY,
     EXPIRED_MEMORY_OUTBOX_LEASE_QUERY,
@@ -712,6 +780,7 @@ QUERY_SPECS = (
     CURRENT_CHAT_SESSION_QUERY,
     CURRENT_CHAT_SESSION_ORDERED_QUERY,
     MEETING_RECEIPTS_DUE_QUERY,
+    HOURLY_USAGE_PLAN_ATTRIBUTION_QUERY,
 )
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)

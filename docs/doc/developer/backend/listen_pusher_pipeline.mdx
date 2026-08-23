@@ -6,7 +6,7 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-08-19 (durable meeting receipt and reconciliation)
+> Last updated: 2026-08-20 (durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication)
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, STT providers, embedding API). Update when the
@@ -17,7 +17,10 @@ Audio frames (`101`) require the four-byte opcode, an eight-byte timestamp, and
 PCM payload; JSON opcodes require an object payload, with transcript, finalization,
 and speaker-sample fields validated before they enter background queues. Malformed
 or unknown frames close the session with a protocol error instead of reaching
-application processing.
+application processing. The backend-to-Pusher WebSocket query also carries the
+bounded `client_kind` resolved from the listen connection headers. Pusher forwards
+that bounded value to webhook delivery and inline finalization journey metrics;
+it never forwards a raw client header as a metric label.
 
 Transcript, speaker-sample, audio-webhook, and private-cloud queues are bounded.
 Buffered audio also shares a per-session byte budget, so variable-size payloads
@@ -310,6 +313,26 @@ sequenceDiagram
         Note over Backend: Live request buffered in pending_conversation_requests;<br/>durable job remains recoverable by the reconciler
     end
 ```
+
+Before discard and structured extraction, the finalizer renders a separate
+segment-ID-labelled task transcript. A pure matcher marks evidence-backed
+English `Hey Omi` / `Hey Omie` / `Hey Omni` forms inline, including adjacent segments within
+two seconds and tokens welded to following words. The discard model still
+adjudicates whether a short marked utterance is meaningful, and the structured
+extractor still decides whether it is a concrete command; the marker never
+creates a task by itself.
+
+When and only when the matcher found a phrase, a separately framed,
+extended-reasoning classifier receives the full marked transcript, matched
+segment IDs, content-free extraction references, and speaker labels. Its
+validated discrete verdict and the extractor must agree before an intersecting
+item keeps `explicit_command`; rejection demotes the item to the confidence
+floor and review path. A `task_command` verdict can promote an intersecting
+non-explicit extraction, but it never synthesizes a missing item or changes
+capture confidence. Non-intersecting ambient items are untouched. Question
+verdicts are measured but deliberately produce nothing in v1 because the task
+extractor and capture policy have no question-routing destination. This path
+has no realtime wake-word state or notification surface.
 
 ### 2.1 Durable finalization ownership
 

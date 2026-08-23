@@ -125,6 +125,7 @@ class LiveConversationController:
             self.host.request.uid,
             conversation_id,
             has_byok_keys=bool(get_byok_keys()),
+            client_kind=self.host.client_kind,
         )
         route = finalization['route']
         if route == 'pusher':

@@ -41,12 +41,44 @@ final class OnboardingPersistenceClearingTests: XCTestCase {
       "sbOnboardingResumeStep",
       "sbOnboardingShortcutsCompleted",
       "onboardingRole",
+      OnboardingFlow.completionOwnerKey,
     ]
     for key in required {
       XCTAssertTrue(
         OnboardingFlow.persistedStateKeys.contains(key),
         "\(key) is account-scoped and must be in the shared clearing list")
     }
+  }
+
+  func testCompletedOnboardingResetsWhenAuthenticatedOwnerChanges() throws {
+    let suiteName = "OnboardingCompletionOwnerTests-\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    defaults.set(true, forKey: DefaultsKey.hasCompletedOnboarding.rawValue)
+    OnboardingFlow.markCompleted(for: "owner-a", defaults: defaults)
+    defaults.set(18, forKey: DefaultsKey.onboardingStep.rawValue)
+
+    XCTAssertEqual(
+      OnboardingFlow.reconcileCompletionOwner(currentOwnerID: "owner-b", defaults: defaults),
+      .resetForDifferentOwner)
+    XCTAssertFalse(defaults.bool(forKey: DefaultsKey.hasCompletedOnboarding.rawValue))
+    XCTAssertNil(defaults.object(forKey: DefaultsKey.onboardingStep.rawValue))
+    XCTAssertNil(defaults.object(forKey: OnboardingFlow.completionOwnerKey))
+  }
+
+  func testExistingInstallBackfillsCompletionOwnerWithoutRestartingOnboarding() throws {
+    let suiteName = "OnboardingCompletionOwnerMigrationTests-\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    defaults.set(true, forKey: DefaultsKey.hasCompletedOnboarding.rawValue)
+
+    XCTAssertEqual(
+      OnboardingFlow.reconcileCompletionOwner(currentOwnerID: "owner-a", defaults: defaults),
+      .backfilled)
+    XCTAssertTrue(defaults.bool(forKey: DefaultsKey.hasCompletedOnboarding.rawValue))
+    XCTAssertEqual(defaults.string(forKey: OnboardingFlow.completionOwnerKey), "owner-a")
   }
 
   /// An earlier version of this fix was silently reverted when a merge

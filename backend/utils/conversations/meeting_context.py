@@ -95,6 +95,11 @@ _NON_PERSON_WORDS = {
     'you',
 }
 
+# One person is never called "X and Y". A line joining people is a roster or an
+# event title (a calendar tile for a *different* meeting reads exactly like
+# "Aryan Gupta and Nik"); only `_split_roster` may take such a line apart.
+_JOINER_WORDS = {'and', 'with', 'vs', 'versus', 'or', 'et'}
+
 
 def _clean_line(raw_line: str) -> str:
     return re.sub(r'\s+', ' ', raw_line).strip(' •|*·-—\t')
@@ -113,6 +118,8 @@ def _looks_like_person_name(value: str) -> bool:
     if not 1 <= len(words) <= 4:
         return False
     if any(word.casefold() in _NON_PERSON_WORDS for word in words):
+        return False
+    if any(word.casefold().strip(".'’-") in _JOINER_WORDS for word in words):
         return False
     if not all(re.fullmatch(r"[A-Za-z][A-Za-z.'\u2019\-]*", word) for word in words):
         return False
@@ -300,8 +307,19 @@ def context_from_screen_activity(
 
 
 def context_from_calendar_link(link: CalendarEventLink) -> CalendarMeetingContext:
-    participants = [MeetingParticipant(name=name) for name in link.attendees]
-    participants.extend(MeetingParticipant(email=email) for email in link.attendee_emails)
+    # `extract_attendees` fills both lists in one pass over the event's
+    # attendees, so equal lengths mean entry *i* is one person's name and
+    # address. Emitting them as separate name-only and email-only participants
+    # described every attendee twice and lost which address belonged to whom.
+    # Unequal lengths mean an attendee was missing one half, and positional
+    # pairing would then attach the wrong address to a name — keep those apart.
+    if len(link.attendees) == len(link.attendee_emails):
+        participants = [
+            MeetingParticipant(name=name, email=email) for name, email in zip(link.attendees, link.attendee_emails)
+        ]
+    else:
+        participants = [MeetingParticipant(name=name) for name in link.attendees]
+        participants.extend(MeetingParticipant(email=email) for email in link.attendee_emails)
     return CalendarMeetingContext(
         calendar_event_id=link.event_id,
         title=link.title,
