@@ -36,6 +36,32 @@ enum MemoryRecordReadScope: Sendable {
   case legacyCompatibility
 }
 
+enum MemoryLedgerTriggerSnapshotError: Error, Equatable, Sendable {
+  case invalidLimit(Int)
+}
+
+enum MemoryLedgerTriggerSnapshotCompleteness: Equatable, Sendable {
+  /// The bounded local query exhausted rows currently present in SQLite. This
+  /// does not claim that the server mirror is complete: MemoryStorage has no
+  /// durable receipt proving an exhaustive canonical ledger sync.
+  case localCacheExhausted
+  /// The sentinel row proves that the local query was truncated at its bound.
+  case localCacheTruncated
+}
+
+struct MemoryLedgerTriggerSnapshotDiagnostics: Equatable, Sendable {
+  let completeness: MemoryLedgerTriggerSnapshotCompleteness
+  let localRowCount: Int
+  let hasMoreLocalRows: Bool
+  let isAuthoritative: Bool
+  let quarantined: [KnowledgeLedgerTriggerWatchlistProjection.QuarantinedRow]
+}
+
+struct MemoryLedgerTriggerSnapshot: Equatable, Sendable {
+  let projection: KnowledgeLedgerTriggerWatchlistProjection
+  let diagnostics: MemoryLedgerTriggerSnapshotDiagnostics
+}
+
 /// Actor-based storage manager for memories with bidirectional sync
 /// Provides local-first caching for fast startup and background sync with backend
 actor MemoryStorage {
@@ -177,6 +203,50 @@ actor MemoryStorage {
 
       return records.compactMap { $0.toServerMemory() }
     }
+  }
+
+  /// Read a bounded, newest-first snapshot of mirrored canonical candidates.
+  ///
+  /// The caller supplies the bound from its authoritative sync/list contract;
+  /// this seam deliberately invents no client-side cap. One sentinel row
+  /// detects local truncation. Even an exhausted local cache is marked
+  /// non-authoritative because this storage actor does not persist a proof that
+  /// the server's canonical ledger was exhaustively mirrored.
+  func getCanonicalTriggerSnapshot(limit: Int) async throws -> MemoryLedgerTriggerSnapshot {
+    guard limit > 0, limit < Int.max else {
+      throw MemoryLedgerTriggerSnapshotError.invalidLimit(limit)
+    }
+    let db = try await ensureInitialized()
+    let records = try await db.read { database in
+      try MemoryRecord.fetchAll(
+        database,
+        sql: """
+          SELECT * FROM memories
+          WHERE backendId IS NOT NULL
+            AND ledgerMetadataJson IS NOT NULL
+            AND CASE
+              WHEN json_valid(ledgerMetadataJson)
+                THEN json_extract(ledgerMetadataJson, '$.kind') = 'trigger'
+              ELSE instr(ledgerMetadataJson, '"kind":"trigger"') > 0
+            END
+          ORDER BY updatedAt DESC, backendId ASC
+          LIMIT ?
+          """,
+        arguments: [limit + 1]
+      )
+    }
+
+    let hasMoreLocalRows = records.count > limit
+    let boundedRecords = Array(records.prefix(limit))
+    let projection = KnowledgeLedgerTriggerCompiler.project(records: boundedRecords)
+    let diagnostics = MemoryLedgerTriggerSnapshotDiagnostics(
+      completeness: hasMoreLocalRows ? .localCacheTruncated : .localCacheExhausted,
+      localRowCount: boundedRecords.count,
+      hasMoreLocalRows: hasMoreLocalRows,
+      isAuthoritative: false,
+      quarantined: projection.quarantined
+    )
+    return MemoryLedgerTriggerSnapshot(projection: projection, diagnostics: diagnostics)
   }
 
   /// Get count of local memories
