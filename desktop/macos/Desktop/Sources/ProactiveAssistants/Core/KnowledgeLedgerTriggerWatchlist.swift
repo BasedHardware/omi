@@ -271,9 +271,8 @@ struct KnowledgeLedgerTriggerEvaluator {
     var results: [String: ConditionResult] = [:]
     func record(_ key: String, _ value: Bool?) {
       switch value {
-      case true: results[key] = .matched
-      case false: results[key] = .failed
-      case nil: results[key] = .missing
+      case .some(let matched): results[key] = matched ? .matched : .failed
+      case .none: results[key] = .missing
       }
     }
 
