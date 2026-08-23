@@ -330,7 +330,7 @@ final class SBOnboardingModel: ObservableObject {
       return
         "You're all set, \(name). Should I listen all the time, or only during your meetings?"
     case .referral:
-      return "Want to invite a friend? They'll get one free month of Operator."
+      return "Want to invite a friend? They'll get one free month."
     }
   }
 
