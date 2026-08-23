@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:omi/backend/schema/message.dart';
 import 'package:omi/models/chat_evidence_reference.dart';
+import 'package:omi/pages/chat/widgets/ai_message.dart';
 import 'package:omi/widgets/components/chat_evidence_card.dart';
 
 void main() {
@@ -88,21 +90,40 @@ void main() {
         ChatEvidenceReferenceState.loading,
         ChatEvidenceReferenceState.offline,
       ]) {
-        final reference = ChatEvidenceReference(
-          id: 'request-${state.wireValue}',
-          kind: ChatEvidenceReferenceKind.request,
-          state: state,
-          requestId: 'request-${state.wireValue}',
-        );
+        final message = ServerMessage.fromJson({
+          'id': 'message-${state.wireValue}',
+          'created_at': '2026-08-23T12:00:00Z',
+          'text': 'The answer remains available.',
+          'sender': 'ai',
+          'type': 'text',
+          'evidence': {
+            'schema_version': 1,
+            'request_id': 'request-${state.wireValue}',
+            'references': [
+              {
+                'id': 'request-${state.wireValue}',
+                'kind': 'request',
+                'state': state.wireValue,
+                'request_id': 'request-${state.wireValue}',
+              },
+            ],
+          },
+        });
+        final reference = message.evidenceEnvelope!.references.single;
+
+        void setMessageNps(int score, {String? reason}) {}
 
         await tester.pumpWidget(
           MaterialApp(
             home: Scaffold(
-              body: Column(
-                children: [
-                  const Text('The answer remains available.'),
-                  ChatEvidenceReferenceCard(reference: reference),
-                ],
+              body: buildMessageWidget(
+                message,
+                (_) {},
+                false,
+                false,
+                null,
+                (_) {},
+                setMessageNps,
               ),
             ),
           ),
@@ -110,8 +131,31 @@ void main() {
 
         expect(find.text('The answer remains available.'), findsOneWidget);
         expect(find.text(reference.statusLabel), findsOneWidget);
+        expect(
+          find.ancestor(
+            of: find.byKey(ValueKey('chat-evidence-${reference.id}')),
+            matching: find.byType(InkWell),
+          ),
+          findsNothing,
+        );
+
+        var opened = false;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: ChatEvidenceReferenceCard(
+                reference: reference,
+                onOpen: () => opened = true,
+              ),
+            ),
+          ),
+        );
+
+        expect(find.text(reference.statusLabel), findsOneWidget);
         expect(reference.canOpen, isFalse);
         expect(find.byType(InkWell), findsNothing);
+        await tester.tap(find.byKey(ValueKey('chat-evidence-${reference.id}')));
+        expect(opened, isFalse);
         final semantics = tester.getSemantics(
           find.byKey(ValueKey('chat-evidence-${reference.id}')),
         );
