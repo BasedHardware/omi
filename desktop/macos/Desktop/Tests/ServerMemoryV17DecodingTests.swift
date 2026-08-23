@@ -23,6 +23,35 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
     return decoder
   }()
 
+  func testSharedJITRuntimeMatrixKeepsMixedVersionTextAndOnlyV1Authority() throws {
+    let testFile = URL(fileURLWithPath: #filePath)
+    let repositoryRoot =
+      testFile
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let fixtureURL =
+      repositoryRoot
+      .appendingPathComponent("contracts/parity/jit_runtime_contract_matrix.json")
+    let fixture = try JSONSerialization.jsonObject(with: Data(contentsOf: fixtureURL)) as? [String: Any]
+    let rows = try XCTUnwrap(fixture?["memory_rows"] as? [[String: Any]])
+    let expected = try XCTUnwrap(fixture?["expected"] as? [String: Any])
+    let data = try JSONSerialization.data(withJSONObject: rows)
+    let memories = try decoder.decode([ServerMemory].self, from: data)
+
+    XCTAssertEqual(memories.map(\.id), expected["memory_ids"] as? [String])
+    XCTAssertEqual(
+      Dictionary(uniqueKeysWithValues: memories.map { ($0.id, $0.content) }),
+      expected["readable_text_by_id"] as? [String: String]
+    )
+    XCTAssertEqual(
+      memories.filter { MemoryLedgerMetadata.isSupportedVersion($0.ledgerMetadata) }.map(\.id),
+      expected["authoritative_ledger_ids"] as? [String]
+    )
+  }
+
   func testDecodesV17TierAndMemoryIdAlias() throws {
     let json = Data(
       """
