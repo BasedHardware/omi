@@ -506,15 +506,16 @@ struct OnboardingChatView: View {
   }
 
   private func openSettingsForPermission(_ type: String) {
+    if type == "notifications" {
+      appState.openNotificationPreferences()
+      return
+    }
     switch type {
     case "screen_recording":
       ScreenCaptureService.openScreenRecordingPreferences()
       return
     case "accessibility":
       appState.openAccessibilityPreferences()
-      return
-    case "notifications":
-      appState.openNotificationPreferences()
       return
     default: break
     }
