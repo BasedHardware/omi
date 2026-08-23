@@ -677,8 +677,22 @@ class SharedPreferencesUtil {
   }
 
   List<ServerMessage> get cachedMessages {
-    final messages = getStringList('cachedMessages');
-    return messages.map((e) => ServerMessage.fromJson(jsonDecode(e))).toList();
+    final raw = getStringList('cachedMessages');
+    var migrated = false;
+    final messages = <ServerMessage>[];
+    for (final encoded in raw) {
+      final decoded = jsonDecode(encoded);
+      if (decoded is! Map) continue;
+      final json = Map<String, dynamic>.from(decoded);
+      if (json['app_id'] == null && json['appId'] == null && (json['plugin_id'] != null || json['pluginId'] != null)) {
+        migrated = true;
+      }
+      messages.add(ServerMessage.fromJson(json));
+    }
+    if (migrated) {
+      cachedMessages = messages;
+    }
+    return messages;
   }
 
   set cachedMessages(List<ServerMessage> value) {

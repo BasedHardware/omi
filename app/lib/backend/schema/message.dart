@@ -264,11 +264,20 @@ class ServerMessage {
     this.contentBlocks = const [],
   });
 
+  static Map<String, dynamic> _withLegacyAppId(Map<String, dynamic> json) {
+    final existing = json['app_id'] ?? json['appId'];
+    if (existing != null) return json;
+    final legacy = json['plugin_id'] ?? json['pluginId'];
+    if (legacy == null) return json;
+    return {...json, 'app_id': legacy};
+  }
+
   static ServerMessage fromJson(Map<String, dynamic> json) {
     return ServerMessage.fromGeneratedWireJson(json);
   }
 
   static ServerMessage fromGeneratedWireJson(Map<String, dynamic> json) {
+    json = _withLegacyAppId(json);
     final generated = wire.GeneratedMessage.fromJson(json);
     final fromIntegration = (json['from_integration'] as bool?) ?? generated.fromExternalIntegration;
     return ServerMessage.fromGenerated(
@@ -279,6 +288,7 @@ class ServerMessage {
   }
 
   static ServerMessage fromResponseJson(Map<String, dynamic> json) {
+    json = _withLegacyAppId(json);
     final generated = wire.GeneratedResponseMessage.fromJson(json);
     final fromIntegration = (json['from_integration'] as bool?) ?? generated.fromExternalIntegration;
     return ServerMessage.fromGeneratedResponse(

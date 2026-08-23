@@ -177,4 +177,16 @@ void main() {
       prose,
     ]);
   });
+
+  test('accepts legacy plugin_id when app_id is absent', () {
+    final message = ServerMessage.fromJson({
+      'id': 'message-legacy',
+      'created_at': '2026-08-18T12:00:00Z',
+      'text': 'hello',
+      'sender': 'ai',
+      'type': 'text',
+      'plugin_id': 'app-legacy',
+    });
+    expect(message.appId, 'app-legacy');
+  });
 }
