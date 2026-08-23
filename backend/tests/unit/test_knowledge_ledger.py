@@ -347,6 +347,53 @@ def test_profile_renderer_is_current_user_only_deterministic_and_bounded():
     assert render_profile([current], character_budget=10) == ""
 
 
+def test_profile_renderer_rejects_promotion_without_changing_order_or_budget():
+    """A rejected high-priority row must not consume the profile projection budget."""
+    accepted_without_review = _item(
+        "accepted-without-review",
+        content="Brooklyn",
+        slot="home_city",
+        curation_weight=2,
+        promotion=None,
+    )
+    accepted_with_review = _item(
+        "accepted-with-review",
+        content="Engineer",
+        slot="occupation",
+        curation_weight=1,
+        promotion={"user_review": True},
+    )
+    rejected = _item(
+        "rejected",
+        content="Rejected",
+        slot="blocked_fact",
+        curation_weight=100,
+        promotion={"user_review": False},
+    )
+    unrelated = _item(
+        "unrelated-playbook",
+        kind=MemoryKind.document,
+        slot=None,
+        body="private body",
+        promotion={"user_review": False},
+    )
+    budget = len("home_city: Brooklyn\noccupation: Engineer")
+
+    expected = render_profile(
+        [accepted_without_review, accepted_with_review, unrelated],
+        character_budget=budget,
+    )
+    rendered = render_profile(
+        [rejected, accepted_with_review, unrelated, accepted_without_review],
+        character_budget=budget,
+    )
+
+    assert expected == "home_city: Brooklyn\noccupation: Engineer"
+    assert rendered == expected
+    assert "blocked_fact" not in rendered
+    assert len(rendered) <= budget
+
+
 def test_playbook_index_never_injects_body():
     playbook = _item(
         "playbook-1",
@@ -361,6 +408,54 @@ def test_playbook_index_never_injects_body():
 
     assert rendered == "playbook-1: Release the macOS beta"
     assert "secret implementation detail" not in rendered
+
+
+def test_playbook_index_rejects_promotion_without_changing_order_or_budget():
+    """A rejected high-priority playbook must not hide approved handles at the bound."""
+    accepted_without_review = _item(
+        "playbook-a",
+        kind=MemoryKind.document,
+        slot=None,
+        content="Alpha",
+        body="alpha body",
+        curation_weight=2,
+        promotion=None,
+    )
+    accepted_with_review = _item(
+        "playbook-b",
+        kind=MemoryKind.document,
+        slot=None,
+        content="Beta",
+        body="beta body",
+        curation_weight=1,
+        promotion={"user_review": True},
+    )
+    rejected = _item(
+        "rejected-playbook",
+        kind=MemoryKind.document,
+        slot=None,
+        content="Rejected",
+        body="private rejected workflow",
+        curation_weight=100,
+        promotion={"user_review": False},
+    )
+    unrelated = _item("unrelated-fact", content="not a playbook", promotion={"user_review": False})
+    budget = len("playbook-a: Alpha\nplaybook-b: Beta")
+
+    expected = render_playbook_index(
+        [accepted_without_review, accepted_with_review, unrelated],
+        character_budget=budget,
+    )
+    rendered = render_playbook_index(
+        [rejected, accepted_with_review, unrelated, accepted_without_review],
+        character_budget=budget,
+    )
+
+    assert expected == "playbook-a: Alpha\nplaybook-b: Beta"
+    assert rendered == expected
+    assert "rejected-playbook" not in rendered
+    assert "private rejected workflow" not in rendered
+    assert len(rendered) <= budget
 
 
 def test_close_fact_retry_returns_identical_closed_history(monkeypatch):
