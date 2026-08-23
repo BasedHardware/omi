@@ -25,14 +25,15 @@ from utils.memory.memory_system import (
 _BACKEND = Path(__file__).resolve().parents[2]
 
 
-def _preference_duplicate_message():
-    """Load preference_duplicate_message without tools/__init__ side effects."""
+def _preference_tools_module():
+    """Load preference_tools without tools/__init__ side effects."""
     tools_pkg = types.ModuleType("utils.retrieval.tools")
     tools_pkg.__path__ = [os.path.join(str(_BACKEND), "utils", "retrieval", "tools")]  # type: ignore[attr-defined]
     fakes = {
         "utils.retrieval.tools": tools_pkg,
         "database._client": AutoMockModule("database._client"),
         "utils.memory.canonical_memory_adapter": AutoMockModule("utils.memory.canonical_memory_adapter"),
+        "utils.memory.knowledge_ledger": AutoMockModule("utils.memory.knowledge_ledger"),
         "utils.memory.memory_service": AutoMockModule("utils.memory.memory_service"),
         "utils.memory.memory_system": AutoMockModule("utils.memory.memory_system"),
         "testing.parity_pack_v0.live_capture": AutoMockModule("testing.parity_pack_v0.live_capture"),
@@ -53,7 +54,11 @@ def _preference_duplicate_message():
             "utils.retrieval.tools.preference_tools",
             os.path.join(str(_BACKEND), "utils", "retrieval", "tools", "preference_tools.py"),
         )
-        return module.preference_duplicate_message
+        return module
+
+
+def _preference_duplicate_message():
+    return _preference_tools_module().preference_duplicate_message
 
 
 def test_preference_tool_ignores_scoreless_unrelated_hits():
@@ -84,6 +89,79 @@ def test_preference_tool_honors_real_relevance_score():
     )
     assert message is not None
     assert "Uses Google Calendar" in message
+
+
+def test_preference_tool_writes_retry_stable_agent_conclusion_to_ledger():
+    module = _preference_tools_module()
+
+    class Provenance:
+        def __init__(self, **kwargs):
+            for key, value in kwargs.items():
+                setattr(self, key, value)
+
+    module.LedgerProvenance = Provenance
+    module.save_fact = MagicMock(return_value="mem_ledger")
+    module.capture_memory_write = MagicMock()
+    firestore_client = object()
+    module.get_firestore_client = MagicMock(return_value=firestore_client)
+    config = {
+        "configurable": {
+            "user_id": "user-1",
+            "chat_session_id": "chat-1",
+            "thread_id": "thread-ignored",
+        }
+    }
+
+    first = module.save_user_preference_tool("Prefers metric units", config=config)
+    second = module.save_user_preference_tool("Prefers metric units", config=config)
+
+    assert first == second == "Preference saved: Prefers metric units"
+    assert module.save_fact.call_count == 2
+    first_call = module.save_fact.call_args_list[0]
+    second_call = module.save_fact.call_args_list[1]
+    assert first_call.kwargs["write_reason"].value == "agent_reusable_conclusion"
+    assert first_call.kwargs["provenance"].source_id == "chat-1"
+    assert first_call.kwargs["provenance"].source_type == "agent_chat"
+    assert first_call.kwargs["provenance"].action_id == second_call.kwargs["provenance"].action_id
+    assert first_call.kwargs["provenance"].artifact_ref == {"chat_session_id": "chat-1"}
+    assert first_call.kwargs["db_client"] is firestore_client
+    module.capture_memory_write.assert_called_with(
+        principal_id="user-1",
+        source="agent_preference_ledger_write",
+        session_id="chat-1",
+        memories=[
+            {
+                "id": "mem_ledger",
+                "content": "Prefers metric units",
+                "ledger_schema_version": "knowledge_ledger.v1",
+                "write_reason": "agent_reusable_conclusion",
+            }
+        ],
+    )
+
+
+def test_preference_tool_does_not_write_without_user_authority():
+    module = _preference_tools_module()
+    module.save_fact = MagicMock()
+
+    result = module.save_user_preference_tool("Prefers metric units", config={"configurable": {}})
+
+    assert result == "Error: Could not determine user ID"
+    module.save_fact.assert_not_called()
+
+
+def test_preference_tool_fails_closed_when_storage_authority_is_unavailable():
+    module = _preference_tools_module()
+    module.get_firestore_client = MagicMock(side_effect=RuntimeError("credential detail"))
+    module.save_fact = MagicMock()
+
+    result = module.save_user_preference_tool(
+        "Prefers metric units",
+        config={"configurable": {"user_id": "user-1"}},
+    )
+
+    assert result == "Error saving preference"
+    module.save_fact.assert_not_called()
 
 
 def test_explicit_integration_memories_keep_required_processing_contract():

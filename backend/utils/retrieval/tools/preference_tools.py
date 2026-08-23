@@ -3,19 +3,18 @@ Tools for learning and saving user preferences during conversation.
 """
 
 import contextvars
-import uuid
-from datetime import datetime, timezone
+import logging
 from typing import Any, Dict, Optional, cast
 
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from langchain_core.runnables import RunnableConfig
 
-from database._client import db
-import logging
-from models.memories import MemoryDB
+from database._client import get_firestore_client
+from models.memory_contracts import deterministic_contract_id
+from models.product_memory import LedgerWriteReason
+from utils.log_sanitizer import sanitize_pii
 from utils.memory.canonical_memory_adapter import search_canonical_memories
-from utils.memory.memory_service import MemoryService
-from utils.memory.memory_system import MemorySystem
+from utils.memory.knowledge_ledger import LedgerProvenance, save_fact
 from testing.parity_pack_v0.live_capture import capture_memory_write
 
 logger = logging.getLogger(__name__)
@@ -82,6 +81,34 @@ def _get_uid(config: RunnableConfig) -> str:
     return ''
 
 
+def _write_provenance(uid: str, preference: str, config: RunnableConfig) -> LedgerProvenance:
+    """Build retry-stable provenance without treating an inference as a user assertion."""
+    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config) or _agent_config()
+    configurable = cfg.get('configurable') if isinstance(cfg, dict) else None
+    configurable = configurable if isinstance(configurable, dict) else {}
+    source_id = str(configurable.get('chat_session_id') or configurable.get('thread_id') or 'direct-agent-tool').strip()
+    normalized_preference = ' '.join(preference.split())
+    action_id = (
+        "agent-preference:"
+        + deterministic_contract_id(
+            "agent-preference-write",
+            {
+                "uid": uid,
+                "source_id": source_id,
+                "preference": normalized_preference,
+            },
+        )[:32]
+    )
+    artifact_ref = {"chat_session_id": source_id} if configurable.get('chat_session_id') else {}
+    return LedgerProvenance(
+        source_id=source_id,
+        source_type="agent_chat",
+        source_version="save_user_preference.v1",
+        action_id=action_id,
+        artifact_ref=artifact_ref,
+    )
+
+
 @tool
 def save_user_preference_tool(preference: str, config: RunnableConfig = None) -> str:  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
     """Save a learned user preference or personal detail for future conversations.
@@ -104,54 +131,49 @@ def save_user_preference_tool(preference: str, config: RunnableConfig = None) ->
     if not uid:
         return "Error: Could not determine user ID"
 
-    # Duplicate check must not treat scoreless/synthetic positional hits as
-    # semantic matches. Canonical search currently returns no relevance score;
-    # until real scores are plumbed through, only suppress exact normalized
-    # duplicates so unrelated top hits cannot block a new preference.
     try:
-        hits = search_canonical_memories(uid, preference, limit=3, db_client=db)
+        firestore_client = get_firestore_client()
+    except Exception as e:
+        logger.error("Failed to resolve preference storage error_type=%s", type(e).__name__)
+        return "Error saving preference"
+
+    # The canonical adapter preserves whether a search provider supplied a real
+    # relevance score; the universal service currently synthesizes positional
+    # scores, which must not suppress an unrelated preference.
+    try:
+        hits = search_canonical_memories(uid, preference, limit=3, db_client=firestore_client)
         duplicate = preference_duplicate_message(preference, hits)
         if duplicate:
             content = duplicate.rsplit(": ", 1)[-1]
-            logger.info("Skipping duplicate preference: %s", content[:80])
+            logger.info("Skipping duplicate preference: %s", sanitize_pii(content))
             return duplicate
     except Exception as e:
-        logger.warning(f"Could not check for duplicate preferences: {e}")
-
-    now = datetime.now(timezone.utc)
-    memory_id = str(uuid.uuid4())
-    memory_data = {
-        "id": memory_id,
-        "uid": uid,
-        "content": preference,
-        "category": "system",
-        "manually_added": False,
-        "created_at": now,
-        "updated_at": now,
-        "reviewed": False,
-        "visibility": "private",
-        "tags": ["agent-learned"],
-    }
-    memory_data["scoring"] = MemoryDB.calculate_score(MemoryDB.model_validate(memory_data))
+        logger.warning("Could not check for duplicate preferences error_type=%s", type(e).__name__)
 
     try:
-        MemoryService(db_client=db).create_external_memory(
+        provenance = _write_provenance(uid, preference, config)
+        memory_id = save_fact(
             uid,
-            MemoryDB.model_validate(memory_data),
-            memory_system=MemorySystem.CANONICAL,
-            consumer="agent_preference",
-            operation="save_user_preference",
-            upsert_vector=False,
-            require_canonical_promotion=True,
+            preference,
+            provenance=provenance,
+            write_reason=LedgerWriteReason.agent_reusable_conclusion,
+            db_client=firestore_client,
         )
         capture_memory_write(
             principal_id=uid,
-            source="agent_preference_memory_create",
-            session_id=memory_id,
-            memories=[memory_data],
+            source="agent_preference_ledger_write",
+            session_id=provenance.source_id,
+            memories=[
+                {
+                    "id": memory_id,
+                    "content": preference,
+                    "ledger_schema_version": "knowledge_ledger.v1",
+                    "write_reason": LedgerWriteReason.agent_reusable_conclusion.value,
+                }
+            ],
         )
-        logger.info(f"Saved user preference: {preference[:80]}")
+        logger.info("Saved user preference: %s", sanitize_pii(preference))
         return f"Preference saved: {preference}"
     except Exception as e:
-        logger.error(f"Failed to save preference: {e}")
-        return f"Error saving preference: {str(e)}"
+        logger.error("Failed to save preference error_type=%s", type(e).__name__)
+        return "Error saving preference"
