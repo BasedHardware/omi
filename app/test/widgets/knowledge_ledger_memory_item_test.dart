@@ -255,6 +255,7 @@ void main() {
     expect(action, findsOneWidget);
     expect(find.byTooltip('Undo'), findsOneWidget);
     expect(find.bySemanticsLabel('Undo'), findsOneWidget);
+    expect(tester.getSize(action), const Size(48, 48));
   });
 
   testWidgets('revert action is disabled in flight and reports canonical failure', (tester) async {

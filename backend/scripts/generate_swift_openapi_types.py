@@ -50,6 +50,8 @@ TARGET_SCHEMAS = (
     'PluginResult',
     'AudioFile',
     'MemoryDB',
+    'MemoryEditResponse',
+    'MemoryRevertRequest',
     'MemoryCategory',
     'MemoryLayer',
     'SubjectAttribution',

@@ -289,7 +289,7 @@ class MemoryItem extends StatelessWidget {
                   )
                 : const Icon(Icons.restore, size: 18),
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
           ),
         );
       },
