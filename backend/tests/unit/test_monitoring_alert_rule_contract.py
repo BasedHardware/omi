@@ -56,6 +56,14 @@ PARAKEET_FATAL_CUDA_EXPR = (
 )
 
 
+# Grafana rejects a rule whose UID exceeds 40 characters with
+# "UID is longer than 40 symbols", at create time. A repo export is a mirror, so
+# an over-long UID costs nothing until someone tries to provision it -- and then
+# the rule that was written, reviewed, and merged simply cannot be made live.
+# Two rules were already past the limit before this was pinned.
+GRAFANA_MAX_UID_LENGTH = 40
+
+
 def _rules(path: Path) -> dict[str, dict]:
     rules = json.loads(path.read_text(encoding="utf-8"))
     by_uid = {rule["uid"]: rule for rule in rules}
@@ -100,6 +108,13 @@ def test_split_alert_exports_preserve_error_count_no_data_contract():
     assert ERROR_COUNT_RULES <= split.keys()
     for uid in ERROR_COUNT_RULES:
         assert combined[uid]["noDataState"] == split[uid]["noDataState"] == "OK"
+
+
+def test_alert_uids_are_short_enough_for_grafana_to_accept():
+    """Every exported rule must be creatable; Grafana caps UIDs at 40 characters."""
+    for export_name, rules in _all_rule_exports().items():
+        over = {uid: len(uid) for uid in rules if len(uid) > GRAFANA_MAX_UID_LENGTH}
+        assert not over, f"{export_name}: Grafana will reject these UIDs at create time: {over}"
 
 
 def test_managed_gke_disables_unavailable_control_plane_scrapes_and_alerts():
@@ -275,7 +290,7 @@ def test_live_transcription_alert_is_traffic_gated_and_ignores_idle_no_data():
 
 
 SILENT_FAILURE_RUNBOOK = "backend/docs/runbooks/silent-failure-detection.md"
-PRE_ROUTE_REJECTION_RULE = "omi-llm-gateway-invalid-request-rejections"
+PRE_ROUTE_REJECTION_RULE = "omi-llm-gateway-invalid-requests"
 PRE_ROUTE_REJECTION_EXPR = (
     'sum(increase(llm_gateway_request_rejections_total{error_class="invalid_request"}[30m])) or vector(0)'
 )
