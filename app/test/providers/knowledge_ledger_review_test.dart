@@ -294,7 +294,7 @@ void main() {
     expect(provider.canRevertSupersededFact(source), isFalse);
   });
 
-  test('each completed revert tap uses a distinct operation id', () async {
+  test('revert reuses its operation id after an ambiguous lost response', () async {
     final source = _ledgerMemory(
       id: 'superseded',
       kind: KnowledgeLedgerKind.fact,
@@ -302,6 +302,7 @@ void main() {
       invalidAt: DateTime.utc(2026, 8, 24),
     );
     final operationIds = <String>[];
+    var requestCount = 0;
     final provider = MemoriesProvider(
       fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
           const GetMemoriesResult([], true),
@@ -309,16 +310,20 @@ void main() {
           GetLedgerHistoryResult([source], supported: true),
       revertMemoryRequest: (id, operationId) async {
         operationIds.add(operationId);
-        return const RevertMemoryResult(persisted: false);
+        requestCount++;
+        return requestCount == 1
+            ? const RevertMemoryResult(persisted: false)
+            : RevertMemoryResult(persisted: true, authoritativeMemory: _revertReplacement(source));
       },
     );
     addTearDown(provider.dispose);
     await provider.loadMemories();
 
     expect(await provider.revertSupersededFact(source), isFalse);
-    expect(await provider.revertSupersededFact(source), isFalse);
+    expect(await provider.revertSupersededFact(source), isTrue);
     expect(operationIds, hasLength(2));
-    expect(operationIds.toSet(), hasLength(2));
+    expect(operationIds.toSet(), hasLength(1));
+    expect(provider.currentLedgerFacts.map((memory) => memory.id), ['restored-fact']);
   });
 
   test('revert rejects malformed authoritative replacements without local mutation', () async {
@@ -412,6 +417,96 @@ void main() {
     expect(provider.historicalLedgerRows.map((memory) => memory.id), containsAll(['superseded', 'current-tail']));
   });
 
+  test('revert preserves a replacement loaded by a refresh while the mutation response is in flight', () async {
+    final source = _ledgerMemory(
+      id: 'superseded',
+      kind: KnowledgeLedgerKind.fact,
+      content: 'Lives in Brooklyn',
+      slot: 'home_city',
+      supersededBy: 'current-tail',
+      invalidAt: DateTime.utc(2026, 8, 24),
+    );
+    final tail = _ledgerMemory(
+      id: 'current-tail',
+      kind: KnowledgeLedgerKind.fact,
+      content: 'Lives in Queens',
+      slot: 'home_city',
+    );
+    final replacement = _revertReplacement(source);
+    final closedTail = _ledgerMemory(
+      id: 'current-tail',
+      kind: KnowledgeLedgerKind.fact,
+      content: 'Lives in Queens',
+      slot: 'home_city',
+      supersededBy: replacement.id,
+      invalidAt: DateTime.utc(2026, 8, 24),
+    );
+    final response = Completer<RevertMemoryResult>();
+    var serverReverted = false;
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+          GetMemoriesResult(serverReverted ? [replacement] : [tail], true),
+      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+          GetLedgerHistoryResult(serverReverted ? [source, closedTail] : [source], supported: true),
+      revertMemoryRequest: (id, operationId) => response.future,
+    );
+    addTearDown(provider.dispose);
+    await provider.loadMemories();
+
+    final pendingRevert = provider.revertSupersededFact(source);
+    serverReverted = true;
+    await provider.loadMemories();
+    expect(provider.currentLedgerFacts.map((memory) => memory.id), [replacement.id]);
+
+    response.complete(RevertMemoryResult(persisted: true, authoritativeMemory: replacement));
+    expect(await pendingRevert, isTrue);
+    expect(provider.currentLedgerFacts.map((memory) => memory.id), [replacement.id]);
+  });
+
+  test('refresh started before a revert cannot overwrite its authoritative replacement', () async {
+    final source = _ledgerMemory(
+      id: 'superseded',
+      kind: KnowledgeLedgerKind.fact,
+      content: 'Lives in Brooklyn',
+      slot: 'home_city',
+      supersededBy: 'current-tail',
+      invalidAt: DateTime.utc(2026, 8, 24),
+    );
+    final tail = _ledgerMemory(
+      id: 'current-tail',
+      kind: KnowledgeLedgerKind.fact,
+      content: 'Lives in Queens',
+      slot: 'home_city',
+    );
+    final replacement = _revertReplacement(source);
+    final response = Completer<RevertMemoryResult>();
+    final staleCurrentResponse = Completer<GetMemoriesResult>();
+    var currentRequests = 0;
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) {
+        currentRequests++;
+        if (currentRequests == 1) return Future.value(GetMemoriesResult([tail], true));
+        return staleCurrentResponse.future;
+      },
+      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+          GetLedgerHistoryResult([source], supported: true),
+      revertMemoryRequest: (id, operationId) => response.future,
+    );
+    addTearDown(provider.dispose);
+    await provider.loadMemories();
+
+    final pendingRevert = provider.revertSupersededFact(source);
+    final staleRefresh = provider.loadMemories();
+    response.complete(RevertMemoryResult(persisted: true, authoritativeMemory: replacement));
+    expect(await pendingRevert, isTrue);
+    expect(provider.currentLedgerFacts.map((memory) => memory.id), [replacement.id]);
+
+    staleCurrentResponse.complete(GetMemoriesResult([tail], true));
+    await staleRefresh;
+    expect(provider.currentLedgerFacts.map((memory) => memory.id), [replacement.id]);
+    expect(provider.loading, isFalse);
+  });
+
   test('revert never removes an unrelated current fact when the local chain has a missing link', () async {
     final source = _ledgerMemory(
       id: 'superseded',
@@ -424,7 +519,7 @@ void main() {
     final unrelatedCurrent = _ledgerMemory(
       id: 'unrelated-current',
       kind: KnowledgeLedgerKind.fact,
-      content: 'Also spends summers in Boston',
+      content: 'Lives in Brooklyn',
       slot: 'home_city',
     );
     final provider = MemoriesProvider(
@@ -438,6 +533,7 @@ void main() {
     addTearDown(provider.dispose);
     await provider.loadMemories();
 
+    expect(provider.canRevertSupersededFact(source), isTrue);
     expect(await provider.revertSupersededFact(source), isTrue);
     expect(
       provider.currentLedgerFacts.map((memory) => memory.id),
