@@ -60,6 +60,14 @@ Keyword and vector providers return candidate IDs only. Authoritative rows are
 hydrated and policy-filtered before use. Current fact, historical fact,
 document, and trigger searches are semantic filters over the same authority.
 
+Omi chat currently exposes the additive `search_knowledge` and
+`read_playbook` tools. Search is owner-scoped, policy-filtered, and restricted
+to active `knowledge_ledger.v1` rows; it returns bounded handles and
+descriptions without document bodies or trigger payloads. Reading a playbook
+is an explicit second, owner-scoped lookup and admits only active primary-user
+documents. Historical ledger search remains gated on its separate retention
+and privacy policy, so these tools do not authorize a capture cutover.
+
 The deterministic prompt view sorts open, intent-backed, primary-user slotted
 facts by descending curation weight, slot, validity time, and ID, then fits
 whole lines into 2,400 characters. The playbook index fits whole one-line
@@ -86,6 +94,10 @@ Existing Long-term rows adapt in place with `write_reason=legacy_migration`
 unless already user-asserted. Existing Short-term rows require a separate,
 explicit adjudication; the migration planner never silently promotes them.
 Per-row revision markers make planning deterministic and resumable.
+The checked-in hermetic fixture proves planner counts, minimum provenance
+identity, profile rendering, and resume bookkeeping only. A migration gate
+still requires the real canonical apply transaction plus persisted readback in
+an authorized non-production store or cohort.
 
 Old clients may temporarily decode ledger rows through the Long-term
 compatibility projection. Removing that projection, historical adapters,

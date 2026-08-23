@@ -667,10 +667,10 @@ def test_static_prefix_exceeds_minimum_cache_tokens():
 # ---------------------------------------------------------------------------
 
 
-def test_core_tools_has_27_tools():
-    """CORE_TOOLS must contain exactly 27 tools (web search is a built-in server tool)."""
+def test_core_tools_has_29_tools():
+    """CORE_TOOLS must contain exactly 29 tools (web search is a built-in server tool)."""
     agentic_mod = _get_agentic_module()
-    assert len(agentic_mod.CORE_TOOLS) == 27, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 27"
+    assert len(agentic_mod.CORE_TOOLS) == 29, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 29"
 
 
 def test_core_tools_list_creates_independent_copy():
@@ -693,9 +693,9 @@ def test_core_tools_list_creates_independent_copy():
     mock_app_tool.name = "custom_app_tool"
     tools_a.append(mock_app_tool)
 
-    assert len(tools_a) == 28
-    assert len(tools_b) == 27
-    assert len(agentic_mod.CORE_TOOLS) == 27, "CORE_TOOLS was mutated!"
+    assert len(tools_a) == 30
+    assert len(tools_b) == 29
+    assert len(agentic_mod.CORE_TOOLS) == 29, "CORE_TOOLS was mutated!"
 
 
 def test_core_tools_order_matches_exports():
@@ -733,6 +733,8 @@ def test_core_tools_order_matches_exports():
         "fetch_url_tool",
         "traverse_knowledge_graph_tool",
         "get_entity_timeline_tool",
+        "search_knowledge",
+        "read_playbook",
     ]
 
     actual_names = [t.name for t in agentic_mod.CORE_TOOLS]
@@ -793,6 +795,21 @@ def test_entity_timeline_is_registered_with_schema_and_display_status():
     assert timeline_schema["input_schema"]["required"] == raw_schema["required"]
     assert tool_registry[timeline_tool.name] is timeline_tool
     assert agentic_mod.get_tool_display_name(timeline_tool.name) == "Reviewing entity timeline"
+
+
+def test_knowledge_ledger_tools_are_registered_with_progressive_disclosure_names():
+    """Ledger search and body retrieval stay in the stable cached tool prefix."""
+    agentic_mod = _get_agentic_module()
+
+    tool_schemas, tool_registry = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS)
+    schema_names = {schema.get("name") for schema in tool_schemas}
+    for name, display in (
+        ("search_knowledge", "Searching current knowledge"),
+        ("read_playbook", "Reading playbook"),
+    ):
+        assert name in schema_names
+        assert name in tool_registry
+        assert agentic_mod.get_tool_display_name(name) == display
 
 
 def test_convert_tools_defers_app_tools():

@@ -737,6 +737,7 @@ def search_canonical_memories(
     db_client: Any = None,
     vector_query: Any = None,
     device_scope_request: Optional[DeviceScopeRequest] = None,
+    item_filter: Optional[Callable[[MemoryItem], bool]] = None,
 ) -> List[Dict[str, Any]]:
     """Hybrid search over default-visible Short-term and Long-term memories."""
     client = db_client if db_client is not None else default_db_client
@@ -797,7 +798,7 @@ def search_canonical_memories(
     candidates: List[Payload] = []
     for memory_id in merged_ids:
         item = survivor_items_by_id.get(memory_id)
-        if item is None:
+        if item is None or (item_filter is not None and not item_filter(item)):
             continue
         candidates.append(
             {
@@ -1058,6 +1059,8 @@ def _read_canonical_memory_item(uid: str, memory_id: str, *, db_client: Any) -> 
         return None
     if item.memory_id != memory_id:
         raise ValueError(f"canonical memory id mismatch: requested {memory_id}, found {item.memory_id}")
+    if item.uid != uid:
+        raise ValueError(f"canonical memory uid mismatch: expected {uid}, got {item.uid}")
     return item
 
 

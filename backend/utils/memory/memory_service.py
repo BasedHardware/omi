@@ -18,6 +18,7 @@ from models.memories import MemoryDB
 from models.product_memory import (
     MemoryAccessPolicy,
     MemoryConsumer,
+    MemoryItem,
     MemoryItemStatus,
     MemoryTier,
 )
@@ -345,6 +346,7 @@ class CanonicalMemoryBackend:
         *,
         limit: int = 5,
         device_scope_request: Optional[DeviceScopeRequest] = None,
+        item_filter: Optional[Callable[[MemoryItem], bool]] = None,
     ) -> List[MemorySearchMatch]:
         items = search_canonical_memories(
             uid,
@@ -352,6 +354,7 @@ class CanonicalMemoryBackend:
             limit=limit,
             db_client=self._db_client,
             device_scope_request=device_scope_request,
+            item_filter=item_filter,
         )
         results: List[MemorySearchMatch] = []
         for rank, item in enumerate(items):
@@ -2206,6 +2209,8 @@ class MemoryService:
         limit: int = 5,
         candidate_limit: Optional[int] = None,
         device_scope_request: Optional[DeviceScopeRequest] = None,
+        canonical_item_filter: Optional[Callable[[MemoryItem], bool]] = None,
+        result_filter: Optional[Callable[[MemoryDB], bool]] = None,
     ) -> List[MemorySearchMatch]:
         capped = max(1, min(int(limit or 5), 20))
         # Default 3× oversample so dedup/canonical suppression still yields `limit` hits.
@@ -2220,6 +2225,7 @@ class MemoryService:
                 query,
                 limit=candidate_cap,
                 device_scope_request=device_scope_request,
+                item_filter=canonical_item_filter,
             )
         except HTTPException:
             raise
@@ -2241,7 +2247,7 @@ class MemoryService:
             if status is not None:
                 continue
             by_id[match.memory.id] = match
-        results = list(by_id.values())
+        results = [match for match in by_id.values() if result_filter is None or result_filter(match.memory)]
 
         def timestamp(match: MemorySearchMatch) -> float:
             value = getattr(match.memory, "updated_at", None) or getattr(match.memory, "created_at", None)

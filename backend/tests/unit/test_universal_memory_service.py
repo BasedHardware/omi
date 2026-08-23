@@ -763,6 +763,27 @@ def test_search_deduplicates_canonical_and_historical_candidates(service_mod):
     assert result[0].memory.content == "canonical"
 
 
+def test_search_applies_result_filter_before_final_limit(service_mod):
+    service = service_mod.MemoryService(db_client=_Db())
+    service._canonical.search = MagicMock(
+        return_value=[service_mod.MemorySearchMatch(_memory(service_mod, "ledger-document"), 0.5)]
+    )
+    service.history.search = MagicMock(
+        return_value=[service_mod.MemorySearchMatch(_memory(service_mod, "irrelevant-history"), 0.99)]
+    )
+
+    result = service.search(
+        "uid-test",
+        "query",
+        limit=1,
+        canonical_item_filter=lambda item: True,
+        result_filter=lambda memory: memory.id == "ledger-document",
+    )
+
+    assert [match.memory.id for match in result] == ["ledger-document"]
+    assert service._canonical.search.call_args.kwargs["item_filter"] is not None
+
+
 def test_canonical_search_preserves_order_as_relevance_when_provider_omits_score(service_mod, monkeypatch):
     rows = [
         {"memory_id": "first", "content": "first", "tier": "long_term", "date": "2025-01-01T00:00:00+00:00"},

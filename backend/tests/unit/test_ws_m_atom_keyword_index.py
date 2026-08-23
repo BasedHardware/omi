@@ -90,7 +90,7 @@ ensure_utils_memory_packages_importable(str(BACKEND_DIR))
 from database.memory_vector_metadata import canonical_memory_provider_id
 from models.memory_apply import MemoryControlState
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
-from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
+from models.product_memory import MemoryItemStatus, MemoryKind, MemoryTier, ProcessingState, MemoryItem
 from utils.memory.atom_keyword_index import (
     AtomKeywordRebuildReport,
     build_atom_keyword_document,
@@ -500,6 +500,46 @@ class TestKeywordSearchAndHybrid:
         assert [row["memory_id"] for row in results] == [short_term.memory_id, long_term.memory_id]
         assert [row["tier"] for row in results] == [MemoryTier.short_term.value, MemoryTier.long_term.value]
 
+    def test_search_applies_item_filter_before_result_limit(self, mock_typesense, monkeypatch):
+        facts = [
+            _long_term_item(memory_id=f"mem_fact_{index}").model_copy(
+                update={
+                    "ledger_schema_version": "knowledge_ledger.v1",
+                    "kind": MemoryKind.fact,
+                    "intent_backed": True,
+                }
+            )
+            for index in range(2)
+        ]
+        document = _long_term_item(memory_id="mem_document").model_copy(
+            update={
+                "ledger_schema_version": "knowledge_ledger.v1",
+                "kind": MemoryKind.document,
+                "intent_backed": True,
+                "body": "A bounded playbook body",
+            }
+        )
+        ranked_ids = [fact.memory_id for fact in facts] + [document.memory_id]
+        monkeypatch.setattr(
+            "utils.memory.atom_keyword_index.keyword_search_memory_ids",
+            lambda *args, **kwargs: ranked_ids,
+        )
+        monkeypatch.setattr(
+            "utils.memory.canonical_memory_adapter.fetch_authoritative_product_memory_items",
+            lambda uid, db_client=None: [*facts, document],
+        )
+
+        results = search_canonical_memories(
+            CANONICAL_UID,
+            "playbook",
+            limit=1,
+            vector_query=_empty_vector_query,
+            db_client=_data_protection_db(),
+            item_filter=lambda item: item.kind == MemoryKind.document,
+        )
+
+        assert [row["memory_id"] for row in results] == [document.memory_id]
+
     def test_search_prefers_long_term_canonical_survivor_and_keeps_unique_short_term(self, mock_typesense, monkeypatch):
         now = datetime.now(timezone.utc)
         survivor = _long_term_item(
@@ -578,7 +618,7 @@ class TestKeywordSearchAndHybrid:
         )
         monkeypatch.setattr(
             "utils.memory.memory_service.search_canonical_memories",
-            lambda uid, query, limit=5, db_client=None, device_scope_request=None: [
+            lambda uid, query, limit=5, db_client=None, device_scope_request=None, item_filter=None: [
                 {
                     "memory_id": item.memory_id,
                     "content": item.content,
