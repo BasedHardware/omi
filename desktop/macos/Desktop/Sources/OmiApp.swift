@@ -678,6 +678,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
       ) { _ in
         Self.recordForegroundState()
         Task { @MainActor in
+          AnalyticsManager.shared.appBecameActive()
           await AuthSessionCoordinator.shared.ensureValidSessionDebounced(
             trigger: .appBecameActive,
             auth: AuthService.shared
@@ -689,6 +690,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
         forName: NSApplication.didResignActiveNotification, object: nil, queue: .main
       ) { _ in
         Self.recordForegroundState()
+        Task { @MainActor in
+          AnalyticsManager.shared.appResignedActive()
+        }
       })
     windowObservers.append(
       center.addObserver(
