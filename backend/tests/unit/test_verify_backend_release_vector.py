@@ -287,7 +287,7 @@ def test_legacy_binding_migration_rejects_multi_container_services_without_mutat
         commands.append(command)
         return SimpleNamespace(stdout=json.dumps(multi_container_service))
 
-    with pytest.raises(ValueError, match='exactly one container'):
+    with pytest.raises(ValueError, match='exactly one application container'):
         preflight.migrate_legacy_public_bindings(
             services=('backend',), env='dev', project='based-hardware-dev', region='us-central1', runner=runner
         )
