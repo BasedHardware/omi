@@ -72,6 +72,7 @@ def test_search_current_knowledge_returns_only_requested_current_ledger_kinds(mo
         _memory("mem_locked", kind=MemoryKind.document, is_locked=True),
         _memory("mem_rejected", kind=MemoryKind.document, user_review=False),
         _memory("mem_closed", kind=MemoryKind.document, invalid_at=NOW),
+        _memory("mem_passive", kind=MemoryKind.document, intent_backed=False),
         _memory("mem_wrong_owner", kind=MemoryKind.document, uid="u2"),
     ]
 
