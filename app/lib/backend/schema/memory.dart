@@ -4,6 +4,24 @@ enum MemoryCategory { system, interesting, manual, workflow }
 
 enum MemoryVisibility { private, public }
 
+/// Semantic row kind used by the intent-backed `knowledge_ledger.v1` contract.
+enum KnowledgeLedgerKind {
+  fact('fact'),
+  document('document'),
+  trigger('trigger');
+
+  const KnowledgeLedgerKind(this.apiValue);
+  final String apiValue;
+
+  static KnowledgeLedgerKind? tryParse(String? raw) {
+    if (raw == null) return null;
+    for (final kind in KnowledgeLedgerKind.values) {
+      if (kind.apiValue == raw) return kind;
+    }
+    return null;
+  }
+}
+
 /// Canonical product lifecycle layer (WS-G/Wave 36). Same string values as API `layer` / `memory_tier`.
 enum MemoryLayer {
   shortTerm('short_term'),
@@ -65,6 +83,20 @@ class Memory {
   final bool layerIsExplicit;
   final String? primaryCaptureDevice;
   final List<String> captureDeviceIds;
+  final String? ledgerSchemaVersion;
+  final KnowledgeLedgerKind? ledgerKind;
+  final String? ledgerBody;
+  final String? ledgerSlot;
+  final String? subjectScope;
+  final String? subjectEntityId;
+  final String? supersededBy;
+  final DateTime? invalidAt;
+  final DateTime? validAt;
+  final bool intentBacked;
+  final int curationWeight;
+  final Map<String, dynamic> triggerCondition;
+  final String? writeReason;
+  final List<Map<String, dynamic>> evidence;
 
   Memory({
     required this.id,
@@ -86,7 +118,37 @@ class Memory {
     this.layerIsExplicit = false,
     this.primaryCaptureDevice,
     this.captureDeviceIds = const [],
+    this.ledgerSchemaVersion,
+    this.ledgerKind,
+    this.ledgerBody,
+    this.ledgerSlot,
+    this.subjectScope,
+    this.subjectEntityId,
+    this.supersededBy,
+    this.invalidAt,
+    this.validAt,
+    this.intentBacked = false,
+    this.curationWeight = 0,
+    this.triggerCondition = const {},
+    this.writeReason,
+    this.evidence = const [],
   });
+
+  bool get isKnowledgeLedger => ledgerSchemaVersion == 'knowledge_ledger.v1' && ledgerKind != null;
+
+  bool get isCurrentKnowledgeLedgerRow =>
+      isKnowledgeLedger &&
+      intentBacked &&
+      !deleted &&
+      invalidAt == null &&
+      (supersededBy == null || supersededBy!.trim().isEmpty) &&
+      userReview != false;
+
+  bool get isHistoricalKnowledgeLedgerRow => isKnowledgeLedger && !isCurrentKnowledgeLedgerRow;
+
+  bool get isLedgerPlaybook => isKnowledgeLedger && ledgerKind == KnowledgeLedgerKind.document;
+
+  bool get isLedgerTrigger => isKnowledgeLedger && ledgerKind == KnowledgeLedgerKind.trigger;
 
   factory Memory.fromJson(Map<String, dynamic> json) {
     return Memory.fromGeneratedWireJson(json);
@@ -130,6 +192,20 @@ class Memory {
       layerIsExplicit: layerIsExplicit,
       primaryCaptureDevice: generated.primaryCaptureDevice,
       captureDeviceIds: generated.captureDeviceIds ?? const [],
+      ledgerSchemaVersion: generated.ledgerSchemaVersion,
+      ledgerKind: KnowledgeLedgerKind.tryParse(generated.kind),
+      ledgerBody: generated.body,
+      ledgerSlot: generated.slot,
+      subjectScope: generated.subjectScope,
+      subjectEntityId: generated.subjectEntityId,
+      supersededBy: generated.supersededBy,
+      invalidAt: generated.invalidAt,
+      validAt: generated.validAt,
+      intentBacked: generated.intentBacked,
+      curationWeight: generated.curationWeight,
+      triggerCondition: generated.triggerCondition ?? const {},
+      writeReason: generated.writeReason,
+      evidence: generated.evidence?.map((item) => item.toJson()).toList(growable: false) ?? const [],
     );
   }
 
@@ -151,6 +227,20 @@ class Memory {
       'visibility': visibility.name,
       'is_locked': isLocked,
       'is_baseline': isBaseline,
+      if (ledgerSchemaVersion != null) 'ledger_schema_version': ledgerSchemaVersion,
+      if (ledgerKind != null) 'kind': ledgerKind!.apiValue,
+      if (ledgerBody != null) 'body': ledgerBody,
+      if (ledgerSlot != null) 'slot': ledgerSlot,
+      if (subjectScope != null) 'subject_scope': subjectScope,
+      if (subjectEntityId != null) 'subject_entity_id': subjectEntityId,
+      if (supersededBy != null) 'superseded_by': supersededBy,
+      if (invalidAt != null) 'invalid_at': invalidAt!.toUtc().toIso8601String(),
+      if (validAt != null) 'valid_at': validAt!.toUtc().toIso8601String(),
+      'intent_backed': intentBacked,
+      'curation_weight': curationWeight,
+      if (triggerCondition.isNotEmpty) 'trigger_condition': triggerCondition,
+      if (writeReason != null) 'write_reason': writeReason,
+      if (evidence.isNotEmpty) 'evidence': evidence,
       if (layerIsExplicit && layer != null) 'layer': layer!.apiValue,
     };
   }

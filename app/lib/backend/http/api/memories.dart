@@ -85,6 +85,27 @@ Future<List<Memory>> getMemories({int limit = 100, int offset = 0, bool thisDevi
   return result.memories;
 }
 
+/// Fetch owner-scoped, non-current canonical ledger rows for review/history.
+///
+/// Older backends do not expose this additive route; any non-200 response is
+/// therefore treated as an unavailable history projection while the current
+/// memories list remains usable.
+Future<List<Memory>> getLedgerHistory({int limit = 500, int offset = 0}) async {
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v3/memories/ledger-history?limit=$limit&offset=$offset',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null || response.statusCode != 200) return const [];
+  try {
+    return _decodeMemoriesResponse(response.body);
+  } catch (error) {
+    Logger.error('Failed to decode ledger history 200 response: $error');
+    return const [];
+  }
+}
+
 Future<bool> deleteMemoryServer(String memoryId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v3/memories/$memoryId',
@@ -125,5 +146,22 @@ Future<bool> updateMemoryBaselineServer(String memoryId, bool value) async {
   );
   if (response == null) return false;
   Logger.debug('updateMemoryBaseline response: ${response.body}');
+  return response.statusCode == 200;
+}
+
+/// Record an explicit user decision for a canonical memory/ledger row.
+///
+/// This uses the existing canonical review mutation rather than inventing a
+/// client-side ledger authority. A negative decision removes the row from
+/// prompt/search projections; a positive decision restores its review state.
+Future<bool> reviewMemoryServer(String memoryId, bool value) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v3/memories/$memoryId/review?value=$value',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  if (response == null) return false;
+  Logger.debug('reviewMemory response: ${response.body}');
   return response.statusCode == 200;
 }

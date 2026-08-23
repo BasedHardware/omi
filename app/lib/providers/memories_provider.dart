@@ -17,6 +17,10 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
 typedef FetchMemoriesRequest = Future<GetMemoriesResult> Function({int limit, int offset, bool thisDeviceOnly});
+typedef FetchLedgerHistoryRequest = Future<List<Memory>> Function({int limit, int offset});
+typedef ReviewMemoryRequest = Future<bool> Function(String memoryId, bool value);
+
+Future<List<Memory>> _noLedgerHistory({int limit = 500, int offset = 0}) async => const [];
 
 class MemoriesProvider extends ChangeNotifier {
   List<Memory> _memories = [];
@@ -35,11 +39,20 @@ class MemoriesProvider extends ChangeNotifier {
   bool _isSyncing = false;
   int _sessionGeneration = 0;
   final FetchMemoriesRequest _fetchMemoriesRequest;
+  final FetchLedgerHistoryRequest _fetchLedgerHistoryRequest;
   final Future<bool> Function(String) _deleteMemoryRequest;
+  final ReviewMemoryRequest _reviewMemoryRequest;
 
-  MemoriesProvider({FetchMemoriesRequest? fetchMemoriesRequest, Future<bool> Function(String)? deleteMemoryRequest})
-      : _fetchMemoriesRequest = fetchMemoriesRequest ?? getMemoriesResult,
-        _deleteMemoryRequest = deleteMemoryRequest ?? deleteMemoryServer;
+  MemoriesProvider({
+    FetchMemoriesRequest? fetchMemoriesRequest,
+    FetchLedgerHistoryRequest? fetchLedgerHistoryRequest,
+    Future<bool> Function(String)? deleteMemoryRequest,
+    ReviewMemoryRequest? reviewMemoryRequest,
+  })  : _fetchMemoriesRequest = fetchMemoriesRequest ?? getMemoriesResult,
+        _fetchLedgerHistoryRequest =
+            fetchLedgerHistoryRequest ?? (fetchMemoriesRequest == null ? getLedgerHistory : _noLedgerHistory),
+        _deleteMemoryRequest = deleteMemoryRequest ?? deleteMemoryServer,
+        _reviewMemoryRequest = reviewMemoryRequest ?? reviewMemoryServer;
 
   List<Memory> get memories => _memories;
   bool get loading => _loading;
@@ -49,6 +62,35 @@ class MemoriesProvider extends ChangeNotifier {
   bool get filterThisDeviceOnly => _filterThisDeviceOnly;
   bool get hasPendingMemories => SharedPreferencesUtil().pendingMemories.isNotEmpty;
   int get pendingMemoriesCount => SharedPreferencesUtil().pendingMemories.length;
+
+  List<Memory> get currentLedgerFacts => _memories
+      .where(
+        (memory) => memory.isCurrentKnowledgeLedgerRow && memory.ledgerKind == KnowledgeLedgerKind.fact,
+      )
+      .toList(growable: false)
+    ..sort(_ledgerOrder);
+
+  List<Memory> get currentLedgerPlaybooks =>
+      _memories.where((memory) => memory.isCurrentKnowledgeLedgerRow && memory.isLedgerPlaybook).toList(growable: false)
+        ..sort(_ledgerOrder);
+
+  List<Memory> get currentLedgerTriggers =>
+      _memories.where((memory) => memory.isCurrentKnowledgeLedgerRow && memory.isLedgerTrigger).toList(growable: false)
+        ..sort(_ledgerOrder);
+
+  List<Memory> get historicalLedgerRows =>
+      _memories.where((memory) => memory.isHistoricalKnowledgeLedgerRow).toList(growable: false)
+        ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+
+  static int _ledgerOrder(Memory a, Memory b) {
+    final weight = b.curationWeight.compareTo(a.curationWeight);
+    if (weight != 0) return weight;
+    final slot = (a.ledgerSlot ?? '').compareTo(b.ledgerSlot ?? '');
+    if (slot != 0) return slot;
+    final validAt = (b.validAt ?? b.updatedAt).compareTo(a.validAt ?? a.updatedAt);
+    if (validAt != 0) return validAt;
+    return a.id.compareTo(b.id);
+  }
 
   List<Memory> get filteredMemories {
     return _memories.where((memory) {
@@ -261,6 +303,16 @@ class MemoriesProvider extends ChangeNotifier {
       }
       offset += result.memories.length;
     }
+    // History is an additive owner-scoped projection, fetched independently
+    // from the current list because GET /v3/memories intentionally filters
+    // rejected and closed rows. Device-scoped history has no ratified server
+    // contract, so the "This device" view remains current-only.
+    if (!_filterThisDeviceOnly) {
+      final historical = await _fetchLedgerHistoryRequest(limit: 500, offset: 0);
+      if (generation != _sessionGeneration) return;
+      final seen = all.map((memory) => memory.id).toSet();
+      all.addAll(historical.where((memory) => seen.add(memory.id)));
+    }
     // Keep an optimistic delete hidden throughout its undo window. Use the
     // snapshot taken before the fetch so a concurrent finalization that
     // clears _pendingDeletionId mid-fetch cannot reinsert the row.
@@ -321,6 +373,37 @@ class MemoriesProvider extends ChangeNotifier {
       _isSyncing = false;
       notifyListeners();
     }
+  }
+
+  /// Apply an explicit user review through canonical backend authority.
+  ///
+  /// The local change is optimistic so the control responds immediately, but
+  /// it is rolled back if the server rejects or cannot persist the decision.
+  Future<bool> reviewMemory(Memory memory, bool value) async {
+    final index = _memories.indexWhere((candidate) => candidate.id == memory.id);
+    if (index == -1 || memory.isLocked) return false;
+    final generation = _sessionGeneration;
+    final previousReview = memory.userReview;
+    final previousReviewed = memory.reviewed;
+    memory.userReview = value;
+    memory.reviewed = true;
+    notifyListeners();
+
+    bool persisted;
+    try {
+      persisted = await _reviewMemoryRequest(memory.id, value);
+    } catch (error) {
+      Logger.warning('MemoriesProvider: review persistence failed for ${memory.id}: $error');
+      persisted = false;
+    }
+    if (generation != _sessionGeneration) return false;
+    if (!persisted) {
+      memory.userReview = previousReview;
+      memory.reviewed = previousReviewed;
+      notifyListeners();
+      return false;
+    }
+    return true;
   }
 
   Memory? _lastDeletedMemory;
