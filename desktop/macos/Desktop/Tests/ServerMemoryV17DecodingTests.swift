@@ -37,6 +37,7 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
       .appendingPathComponent("contracts/parity/jit_runtime_contract_matrix.json")
     let fixture = try JSONSerialization.jsonObject(with: Data(contentsOf: fixtureURL)) as? [String: Any]
     let rows = try XCTUnwrap(fixture?["memory_rows"] as? [[String: Any]])
+    let chatRecords = try XCTUnwrap(fixture?["chat_records"] as? [String: [String: Any]])
     let expected = try XCTUnwrap(fixture?["expected"] as? [String: Any])
     let data = try JSONSerialization.data(withJSONObject: rows)
     let memories = try decoder.decode([ServerMemory].self, from: data)
@@ -50,6 +51,17 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
       memories.filter { MemoryLedgerMetadata.isSupportedVersion($0.ledgerMetadata) }.map(\.id),
       expected["authoritative_ledger_ids"] as? [String]
     )
+
+    let chatMessages = try chatRecords.values.map { record in
+      try decoder.decode(ChatMessageDB.self, from: JSONSerialization.data(withJSONObject: record))
+    }
+    XCTAssertEqual(
+      Dictionary(uniqueKeysWithValues: chatMessages.map { ($0.id, $0.text) }),
+      expected["readable_chat_text_by_id"] as? [String: String]
+    )
+    let futureMessage = try XCTUnwrap(chatMessages.first { $0.id == "future-message" })
+    XCTAssertNil(futureMessage.metadata)
+    XCTAssertNil(futureMessage.contentBlocksJSON)
   }
 
   func testDecodesV17TierAndMemoryIdAlias() throws {
