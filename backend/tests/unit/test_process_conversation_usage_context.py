@@ -654,6 +654,46 @@ def test_wake_word_marker_reaches_discard_adjudication_without_bypassing_it(monk
     assert captured['duration_seconds'] == 5
 
 
+def test_primary_user_name_reaches_action_item_extraction(monkeypatch):
+    conversation = CreateConversation(
+        started_at=datetime(2026, 8, 20, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 8, 20, 0, 0, 5, tzinfo=timezone.utc),
+        transcript_segments=[
+            TranscriptSegment(
+                id='user-request',
+                text='Send the budget.',
+                speaker='SPEAKER_00',
+                is_user=True,
+                start=0,
+                end=5,
+            )
+        ],
+        source=ConversationSource.phone,
+    )
+    structured = Structured(title='Budget', overview='Send the budget')
+    extract_mock = MagicMock(return_value=[])
+
+    monkeypatch.setattr(process_conversation, 'get_user_name', lambda *_args, **_kwargs: 'David')
+    monkeypatch.setattr(
+        process_conversation,
+        'conversation_transcripts_for_llm',
+        lambda *_args, **_kwargs: (
+            'David: Send the budget.',
+            '[segment:user-request 0.000-5.000] David: Send the budget.',
+        ),
+    )
+    monkeypatch.setattr(process_conversation, 'should_discard_conversation', lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(process_conversation, 'get_transcript_structure', lambda *_args, **_kwargs: structured)
+    monkeypatch.setattr(process_conversation, 'extract_action_items', extract_mock)
+    monkeypatch.setattr(process_conversation, '_fetch_dedup_candidates', lambda *_args, **_kwargs: [])
+
+    result, discarded = process_conversation._get_structured('uid', 'en', conversation)
+
+    assert discarded is False
+    assert result is structured
+    assert extract_mock.call_args.kwargs['primary_user_name'] == 'David'
+
+
 def test_track_usage_context_resets_after_call():
     """Verify context is properly reset after each sub-feature tracking block."""
     assert usage_tracker.get_current_context() is None
