@@ -25,6 +25,7 @@
         "scripts/deploy_status_report.py",
         "scripts/export_openapi.py",
         "scripts/firestore_python_apply_emulator_test.py",
+        "scripts/knowledge_ledger_migration_emulator_test.py",
         "scripts/listen_lifecycle_emulator_test.py",
         "scripts/firestore_rules_iam_proof.py",
         "scripts/lint_async_blockers.py",
