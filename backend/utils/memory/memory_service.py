@@ -2400,12 +2400,10 @@ class MemoryService:
         for memory in page.memories:
             if memory.kind != MemoryKind.fact:
                 continue
-            arguments_text = ""
-            if isinstance(memory.arguments, dict):
-                try:
-                    arguments_text = json.dumps(memory.arguments, sort_keys=True, default=str)[:4000]
-                except (TypeError, ValueError):
-                    arguments_text = ""
+            try:
+                arguments_text = json.dumps(memory.arguments, sort_keys=True, default=str)[:4000]
+            except (TypeError, ValueError):
+                arguments_text = ""
             searchable = " ".join(
                 value
                 for value in (memory.content, memory.body, memory.slot, memory.subject_entity_id, arguments_text)
