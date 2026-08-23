@@ -1319,20 +1319,28 @@ def test_platform_section_appended_on_langsmith_path(monkeypatch):
 def test_jit_conversation_retrieval_prompt_is_default_off_and_byte_stable():
     chat_mod = _get_chat_module()
     fn = chat_mod._get_agentic_qa_prompt
+    gate_mod = _load_module_from_file(
+        "utils.retrieval.tools.conversation_jit_gate",
+        BACKEND_DIR / "utils" / "retrieval" / "tools" / "conversation_jit_gate.py",
+    )
 
     _set_user(chat_mod, "TestUser", "UTC")
     baseline = fn("uid_test")
 
-    assert fn("uid_test", jit_conversation_retrieval_enabled=False) == baseline
+    assert gate_mod.append_jit_conversation_retrieval_prompt(baseline, enabled=False) == baseline
     assert "<jit_conversation_retrieval>" not in baseline
 
 
 def test_enabled_jit_prompt_requires_bounded_summary_triage_reformulation_and_hydration():
     chat_mod = _get_chat_module()
     fn = chat_mod._get_agentic_qa_prompt
+    gate_mod = _load_module_from_file(
+        "utils.retrieval.tools.conversation_jit_gate",
+        BACKEND_DIR / "utils" / "retrieval" / "tools" / "conversation_jit_gate.py",
+    )
 
     _set_user(chat_mod, "TestUser", "UTC")
-    prompt = fn("uid_test", jit_conversation_retrieval_enabled=True)
+    prompt = gate_mod.append_jit_conversation_retrieval_prompt(fn("uid_test"), enabled=True)
     section = prompt[prompt.index("<jit_conversation_retrieval>") :]
     normalized_section = " ".join(section.split())
 
@@ -1361,9 +1369,13 @@ def test_enabled_jit_prompt_requires_bounded_summary_triage_reformulation_and_hy
         assert required_contract in normalized_section
 
 
-def test_enabled_jit_prompt_is_appended_on_langsmith_path_before_platform(monkeypatch):
+def test_enabled_jit_prompt_is_appended_on_langsmith_path(monkeypatch):
     chat_mod = _get_chat_module()
     fn = chat_mod._get_agentic_qa_prompt
+    gate_mod = _load_module_from_file(
+        "utils.retrieval.tools.conversation_jit_gate",
+        BACKEND_DIR / "utils" / "retrieval" / "tools" / "conversation_jit_gate.py",
+    )
 
     _set_user(chat_mod, "TestUser", "UTC")
     prompts_mod = sys.modules["utils.observability.langsmith_prompts"]
@@ -1375,11 +1387,11 @@ def test_enabled_jit_prompt_is_appended_on_langsmith_path_before_platform(monkey
     monkeypatch.setattr(prompts_mod, "get_agentic_system_prompt_template", MagicMock(return_value=cached))
     monkeypatch.setattr(prompts_mod, "render_prompt", MagicMock(return_value="RENDERED PROMPT"))
 
-    prompt = fn("uid_test", platform="macos", jit_conversation_retrieval_enabled=True)
+    prompt = gate_mod.append_jit_conversation_retrieval_prompt(fn("uid_test", platform="macos"), enabled=True)
 
-    assert prompt.startswith("RENDERED PROMPT\n\n<jit_conversation_retrieval>")
-    assert prompt.index("</jit_conversation_retrieval>") < prompt.index("<user_platform>")
-    assert prompt.endswith("</user_platform>")
+    assert prompt.startswith("RENDERED PROMPT\n\n<user_platform>")
+    assert prompt.index("</user_platform>") < prompt.index("<jit_conversation_retrieval>")
+    assert prompt.endswith("</jit_conversation_retrieval>")
 
 
 # ---------------------------------------------------------------------------

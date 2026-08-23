@@ -56,7 +56,10 @@ from utils.retrieval.tools import (
     search_knowledge,
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
-from utils.retrieval.tools.conversation_jit_gate import is_jit_conversation_retrieval_enabled
+from utils.retrieval.tools.conversation_jit_gate import (
+    append_jit_conversation_retrieval_prompt,
+    is_jit_conversation_retrieval_enabled,
+)
 from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
 from utils.retrieval.safety import (
     AgentSafetyGuard,
@@ -1284,7 +1287,9 @@ async def execute_agentic_chat_stream(
                 context=context,
                 tz=tz,
                 platform=platform,
-                jit_conversation_retrieval_enabled=jit_conversation_retrieval_enabled,
+            )
+            system_prompt = append_jit_conversation_retrieval_prompt(
+                system_prompt, enabled=jit_conversation_retrieval_enabled
             )
 
             # Get prompt metadata for tracing/versioning
