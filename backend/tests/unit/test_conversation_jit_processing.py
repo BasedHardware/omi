@@ -596,6 +596,42 @@ def test_gate_on_exact_card_hydration_uses_window_and_does_not_consume_search_bu
     assert not hasattr(config["configurable"]["safety_guard"], "_jit_conversation_summary_search_count")
 
 
+def test_gate_on_exact_hydration_reuses_a_previously_collected_card(conversation_tools_module) -> None:
+    """Summary triage may hydrate its selected card without duplicating its citation index."""
+    raw = _conversation_fixture()
+    conversation_tools_module.conversations_db.get_conversations = MagicMock(return_value=[raw])
+    conversation_tools_module.parse_exact_conversation_reference.return_value = raw["id"]
+    conversation_tools_module.conversations_db.get_conversations_by_id = MagicMock(return_value=[raw])
+    evidence: list = []
+    collected: list = []
+    config = _tool_config(enabled=True, evidence=evidence, collected=collected)
+
+    summary = _invoke_tool(
+        conversation_tools_module,
+        conversation_tools_module.get_conversations_tool,
+        {"include_transcript": False},
+        config=config,
+    )
+    hydrated = _invoke_tool(
+        conversation_tools_module,
+        conversation_tools_module.search_conversations_tool,
+        {
+            "query": f"conversation:{raw['id']}",
+            "include_transcript": True,
+            "max_transcript_segments": 1,
+        },
+        config=config,
+    )
+
+    assert "Conversation card #1" in summary
+    assert "Conversation card #2" not in hydrated
+    assert "transcript_window" in hydrated
+    assert "conversation:jit-conversation-002:segment:segment-1" in hydrated
+    assert _jit_module().JIT_TRUNCATION_MARKER not in hydrated
+    assert [item["id"] for item in collected] == [raw["id"]]
+    assert [item["kind"] for item in evidence] == ["conversation_summary", "conversation_segment"]
+
+
 def test_gate_off_owner_scoped_card_reference_remains_semantic_search(conversation_tools_module) -> None:
     raw = _conversation_fixture()
     conversation_tools_module.keyword_search_conversation_ids.return_value = [raw["id"]]
