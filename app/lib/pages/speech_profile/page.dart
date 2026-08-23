@@ -192,7 +192,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                   ),
                   barrierDismissible: false,
                 );
-              } else if (error == 'SOCKET_DISCONNECTED' || error == 'SOCKET_ERROR') {
+              } else if (error == 'SOCKET_DISCONNECTED' || error == 'SOCKET_ERROR' || error == 'STT_UNAVAILABLE') {
                 showDialog(
                   context: context,
                   builder: (c) => getDialog(

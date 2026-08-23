@@ -90,6 +90,28 @@ export function barGestureSeesOpen(s: {
   return s.visible && s.mode !== null && !s.hiding
 }
 
+/** Corroborate the OS cursor-in-footprint reading with the renderer's own
+ *  mouseenter-confirmed interactive state (`barInteractive` in window.ts, kept
+ *  live by the real `bar:setInteractive` IPC the renderer already sends on
+ *  genuine DOM mouseenter/leave). `screen.getCursorScreenPoint()` is unreliable
+ *  on native Wayland — the protocol doesn't let an app query the global pointer
+ *  position outside its own focused surface, unlike XWayland (see AGENTS.md's
+ *  Linux dev environment section) — which silently starved `hasBeenHovered` and
+ *  made every peek pill auto-retract after the fixed lingerMs regardless of a
+ *  real, ongoing hover (the window went fully invisible — opacity 0 — while
+ *  still mapped, which read as "the bar never shows anything"). OR-ing in the
+ *  renderer's own report can only make the watchdog LESS eager to retract: once
+ *  the cursor genuinely leaves, the renderer's real mouseleave flips
+ *  `barInteractive` back to false on its own, so this never wedges the pill
+ *  open past a real leave — it only rescues the case where the OS poll alone
+ *  never saw the hover at all. */
+export function corroboratedCursorInFootprint(
+  osReading: boolean,
+  rendererInteractive: boolean
+): boolean {
+  return osReading || rendererInteractive
+}
+
 /** Edge-detect a primary-button CLICK on the pill from a polled physical-button
  *  sample (main-side; the transparent overlay never receives real hardware
  *  mouse-downs for EITHER an external mouse or a touchpad — see clickTick in

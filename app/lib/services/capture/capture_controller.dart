@@ -119,6 +119,27 @@ class CaptureController extends ChangeNotifier
   MessageServiceStatusEvent? _terminalTranscriptionFailure;
   MessageServiceStatusEvent? get terminalTranscriptionFailure => _terminalTranscriptionFailure;
 
+  // When custom STT is configured, its polling socket keeps
+  // buffering audio locally and retrying instead of tearing the transcription
+  // socket down on every failure (see PurePollingSocket). Surface that local
+  // state here so the recording UI can show "offline, buffering" instead of
+  // silently showing "Listening" while nothing is actually being transcribed.
+  PurePollingSocket? get _activeCustomSttPollingSocket {
+    final socket = _socket?.socket;
+    if (socket is CompositeTranscriptionSocket) {
+      final primary = socket.primarySocket;
+      return primary is PurePollingSocket ? primary : null;
+    }
+    return socket is PurePollingSocket ? socket : null;
+  }
+
+  /// How long the custom STT endpoint has been unreachable, or null if it is
+  /// not in use or is currently healthy.
+  Duration? get customSttBufferingDuration {
+    final since = _activeCustomSttPollingSocket?.bufferingSince;
+    return since == null ? null : DateTime.now().difference(since);
+  }
+
   // Phone mic WAL: buffer for splitting variable-sized PCM chunks into fixed-size frames
   bool _phoneMicWalActive = false;
 
@@ -859,9 +880,8 @@ class CaptureController extends ChangeNotifier
       onButtonReceived: (List<int> value) {
         final snapshot = List<int>.from(value);
         if (snapshot.isEmpty || snapshot.length < 4) return;
-        var buttonState = ByteData.view(
-          Uint8List.fromList(snapshot.sublist(0, 4).reversed.toList()).buffer,
-        ).getUint32(0);
+        var buttonState =
+            ByteData.view(Uint8List.fromList(snapshot.sublist(0, 4).reversed.toList()).buffer).getUint32(0);
         Logger.debug("device button $buttonState");
 
         // Intercept for interactive device onboarding

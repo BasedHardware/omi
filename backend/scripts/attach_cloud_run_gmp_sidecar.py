@@ -14,7 +14,39 @@ import subprocess
 import tempfile
 from typing import Any, Mapping, Sequence, cast
 
+import re
 import yaml
+
+
+class GcloudExportLoader(yaml.SafeLoader):
+    """Read gcloud's YAML export under YAML 1.2 core semantics.
+
+    gcloud emits plain `on` / `off` for *string* env values -- production's
+    export literally contains `value: on` for MEMORY_ENABLED. PyYAML implements
+    YAML 1.1, where `on`/`off`/`yes`/`no` are booleans, so `yaml.safe_load`
+    turns those into True/False and dumping back through `services replace`
+    rewrites the live value to 'true'/'false'.
+
+    Nothing fails at attach time: Cloud Run stores the rewritten string happily
+    and every consumer of these three flags accepts the coerced spelling. It
+    surfaces one step later, when the post-deploy runtime-env validator compares
+    the live value against the manifest's 'on' and finds 'true' -- on a service
+    nobody edited. Restricting the bool resolver to the YAML 1.2 core set makes
+    the round trip preserve exactly what gcloud wrote. Genuine unquoted numbers
+    (containerPort, periodSeconds) and real booleans still load as themselves.
+    """
+
+
+GcloudExportLoader.yaml_implicit_resolvers = {
+    key: [(tag, regexp) for tag, regexp in resolvers if tag != 'tag:yaml.org,2002:bool']
+    for key, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
+}
+GcloudExportLoader.add_implicit_resolver(
+    'tag:yaml.org,2002:bool',
+    re.compile(r'^(?:true|True|TRUE|false|False|FALSE)$'),
+    list('tTfF'),
+)
+
 
 SIDECAR_IMAGE = (
     'us-docker.pkg.dev/cloud-ops-agents-artifacts/cloud-run-gmp-sidecar/'
@@ -40,6 +72,32 @@ def _check(result: subprocess.CompletedProcess[str], *, action: str) -> str:
         detail = (result.stderr or '').strip()
         raise RuntimeError(f'{action} failed: {detail or "gcloud returned a non-zero exit code"}')
     return result.stdout or ''
+
+
+def _project_number(project: str) -> str:
+    """Resolve a project to its number for the run.googleapis.com/secrets annotation.
+
+    gcloud parses that annotation with `^projects/[0-9]{1,19}/secrets/...`, so a
+    project ID in the path makes every later `gcloud run deploy` on the service
+    crash with "Invalid secret path". Cloud Run itself accepts either form, so
+    the breakage only surfaces on the next deploy, not on the attach.
+    """
+    if project.isdigit():
+        return project
+    result = _run(
+        [
+            'gcloud',
+            'projects',
+            'describe',
+            project,
+            '--format=value(projectNumber)',
+        ],
+        capture_output=True,
+    )
+    number = _check(result, action=f'resolving the {project} project number').strip()
+    if not number.isdigit():
+        raise RuntimeError(f'project number for {project} was not numeric')
+    return number
 
 
 def _latest_secret_version(*, project: str, secret: str) -> str:
@@ -144,14 +202,14 @@ def _normalize_string_mapping(raw: object) -> None:
         raw[key] = _cloud_run_string(value)
 
 
-def _merge_secret_annotation(existing: object, *, project: str, secret: str) -> str:
+def _merge_secret_annotation(existing: object, *, project_number: str, secret: str) -> str:
     entries: dict[str, str] = {}
     if isinstance(existing, str):
         for raw_entry in existing.split(','):
             name, separator, resource = raw_entry.strip().partition(':')
             if name and separator and resource:
                 entries[name] = resource
-    entries[secret] = f'projects/{project}/secrets/{secret}'
+    entries[secret] = f'projects/{project_number}/secrets/{secret}'
     return ','.join(f'{name}:{resource}' for name, resource in sorted(entries.items()))
 
 
@@ -175,7 +233,7 @@ def _merge_container_dependencies(existing: object, *, ingress_container_name: s
 def patch_service(
     service: Mapping[str, Any],
     *,
-    project: str,
+    project_number: str,
     base_revision: str,
     latest_created_revision: str,
     final_revision: str,
@@ -214,7 +272,7 @@ def patch_service(
     )
     template_annotations['run.googleapis.com/secrets'] = _merge_secret_annotation(
         template_annotations.get('run.googleapis.com/secrets'),
-        project=project,
+        project_number=project_number,
         secret=config_secret,
     )
 
@@ -284,7 +342,7 @@ def attach_sidecar(args: argparse.Namespace) -> None:
         ],
         capture_output=True,
     )
-    service = yaml.safe_load(_check(export, action=f'exporting {args.service}'))
+    service = yaml.load(_check(export, action=f'exporting {args.service}'), Loader=GcloudExportLoader)
     if not isinstance(service, dict):
         raise RuntimeError('Cloud Run service export was not a mapping')
     latest_created = _run(
@@ -308,7 +366,7 @@ def attach_sidecar(args: argparse.Namespace) -> None:
     ).strip()
     patched = patch_service(
         service,
-        project=args.project,
+        project_number=_project_number(args.project),
         base_revision=args.base_revision,
         latest_created_revision=latest_created_revision,
         final_revision=args.final_revision,
