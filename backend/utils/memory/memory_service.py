@@ -204,6 +204,16 @@ class LedgerHistorySearchPage:
     scanned_count: int
 
 
+@dataclass(frozen=True)
+class LedgerRevertIdentity:
+    """Canonical fact identity that every row in a revert chain must share."""
+
+    kind: MemoryKind
+    slot: Optional[str]
+    subject_scope: Optional[MemorySubjectScope]
+    subject_entity_id: Optional[str]
+
+
 def _validate_memory_list(memories: List[MemoryPayload]) -> List[MemoryDB]:
     valid_memories: List[MemoryDB] = []
     for memory in memories:
@@ -1701,11 +1711,16 @@ class MemoryService:
     @staticmethod
     def _ledger_revert_identity(
         item: MemoryItem,
-    ) -> Tuple[MemoryKind, Optional[str], Optional[MemorySubjectScope], Optional[str]]:
-        return item.kind, item.slot, item.subject_scope, item.subject_entity_id
+    ) -> LedgerRevertIdentity:
+        return LedgerRevertIdentity(
+            kind=item.kind,
+            slot=item.slot,
+            subject_scope=item.subject_scope,
+            subject_entity_id=item.subject_entity_id,
+        )
 
     @staticmethod
-    def _validate_ledger_revert_item(item: MemoryItem, *, identity: Tuple[Any, ...]) -> None:
+    def _validate_ledger_revert_item(item: MemoryItem, *, identity: LedgerRevertIdentity) -> None:
         if (
             item.ledger_schema_version != LEDGER_SCHEMA_VERSION
             or item.kind != MemoryKind.fact
