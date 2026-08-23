@@ -102,6 +102,14 @@ describe('knowledge_ledger.v1 memory adapter', () => {
       kind: 'fact',
       status: 'active',
       subject_scope: 'primary_user',
+      slot: 'legacy-slot',
+      intent_backed: true,
+      curation_weight: 3,
+      write_reason: 'direct_user_statement',
+      valid_at: '2026-08-23T00:00:00Z',
+      superseded_by: 'other',
+      subject_entity_id: 'user-1',
+      arguments: { subject: 'user' },
       body: 'must not be treated as a playbook body'
     })
 
@@ -110,6 +118,51 @@ describe('knowledge_ledger.v1 memory adapter', () => {
     expect(parsed?.status).toBeUndefined()
     expect(parsed?.subject_scope).toBeUndefined()
     expect(parsed?.body).toBeUndefined()
+    for (const field of [
+      'slot',
+      'intent_backed',
+      'curation_weight',
+      'write_reason',
+      'valid_at',
+      'superseded_by',
+      'subject_entity_id',
+      'arguments'
+    ]) {
+      expect(parsed).not.toHaveProperty(field)
+    }
+  })
+
+  it('drops wrong-kind and incorrectly typed v1 authority fields', () => {
+    const parsed = parseKnowledgeLedgerMemory({
+      ...baseMemory,
+      kind: 'fact',
+      slot: 'home_city',
+      body: 'wrong kind',
+      trigger_condition: { wrong: true },
+      intent_backed: 'true',
+      curation_weight: '3',
+      account_generation: '4',
+      valid_at: 42,
+      object_entity_ids: ['entity-1', 2],
+      uncertainty_reasons: ['reason', false],
+      evidence: [
+        { evidence_id: 'missing-group' },
+        { evidence_id: 'valid', independence_group: 'group-1', future_field: true }
+      ]
+    })
+
+    expect(parsed).toMatchObject({ kind: 'fact', slot: 'home_city' })
+    expect(parsed).not.toHaveProperty('body')
+    expect(parsed).not.toHaveProperty('trigger_condition')
+    expect(parsed).not.toHaveProperty('intent_backed')
+    expect(parsed).not.toHaveProperty('curation_weight')
+    expect(parsed).not.toHaveProperty('account_generation')
+    expect(parsed).not.toHaveProperty('valid_at')
+    expect(parsed).not.toHaveProperty('object_entity_ids')
+    expect(parsed).not.toHaveProperty('uncertainty_reasons')
+    expect(parsed?.evidence).toEqual([
+      { evidence_id: 'valid', independence_group: 'group-1', future_field: true }
+    ])
   })
 })
 
