@@ -38,7 +38,8 @@ MAX_KNOWLEDGE_RESULT_CHARACTERS = 12_000
 MAX_HISTORICAL_FACT_CONTENT_CHARACTERS = 600
 HISTORICAL_OUTPUT_TRUNCATION_NOTICE = "[Historical output is bounded; use a narrower exact-token query.]"
 HISTORICAL_PROVIDER_PARTIAL_NOTICE = (
-    "[Partial historical search: the canonical provider window or read budget ended; this is not exhaustive.]"
+    "[Partial historical search: the result limit, canonical provider window, or read budget ended; "
+    "this is not exhaustive.]"
 )
 MAX_PLAYBOOK_ID_CHARACTERS = 256
 MAX_PLAYBOOK_DESCRIPTION_CHARACTERS = 600

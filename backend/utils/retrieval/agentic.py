@@ -54,7 +54,6 @@ from utils.retrieval.tools import (
     get_entity_timeline_tool,
     read_playbook,
     search_knowledge,
-    search_historical_facts,
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
@@ -241,7 +240,6 @@ CORE_TOOLS = [
     get_entity_timeline_tool,
     search_knowledge,
     read_playbook,
-    search_historical_facts,
 ]
 
 # Standard tool names (used to detect app tools by exclusion)

@@ -362,6 +362,34 @@ def test_historical_ledger_search_is_deterministic_and_does_not_fallback_to_lega
         service.search_ledger_history_page("uid-test", "!")
 
 
+def test_historical_ledger_search_discloses_result_limit_truncation(service_mod, monkeypatch):
+    now = datetime(2026, 8, 23, tzinfo=timezone.utc)
+    rows = [
+        _ledger_item(
+            service_mod,
+            f"home-city-{index}",
+            updated_at=now - timedelta(seconds=index),
+            user_review=False,
+        )
+        for index in range(9)
+    ]
+    monkeypatch.setattr(
+        service_mod,
+        "iter_authoritative_product_memory_items_newest_first",
+        lambda *args, **kwargs: iter(rows),
+    )
+
+    page = service_mod.MemoryService(db_client=_Db()).search_ledger_history_page(
+        "uid-test",
+        "home city",
+        limit=8,
+    )
+
+    assert len(page.matches) == 8
+    assert page.truncated is True
+    assert page.scanned_count == 9
+
+
 def test_historical_ledger_search_breaks_same_timestamp_ties_by_memory_id(service_mod, monkeypatch):
     now = datetime(2026, 8, 23, tzinfo=timezone.utc)
     first = _ledger_item(service_mod, "a-memory", updated_at=now, user_review=False)

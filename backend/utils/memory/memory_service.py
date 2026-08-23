@@ -2556,7 +2556,7 @@ class MemoryService:
         matches.sort(key=sort_key)
         return LedgerHistorySearchPage(
             matches=tuple(matches[:bounded_limit]),
-            truncated=page.truncated,
+            truncated=page.truncated or len(matches) > bounded_limit,
             scanned_count=page.scanned_count,
         )
 
