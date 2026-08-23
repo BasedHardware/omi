@@ -64,6 +64,54 @@ final class KnowledgeLedgerPromptProjectionTests: XCTestCase {
     XCTAssertEqual(projection.citationSources.map(\.sourceID), ["active"])
   }
 
+  func testProfileAndPlaybookOrderingUsesStableCanonicalTieBreakers() {
+    let projection = KnowledgeLedgerPromptProjection(rows: [
+      row(id: "fact-b", content: "B", slot: "home_city", curationWeight: 4, validAt: "2026-08-02"),
+      row(id: "fact-a", content: "A", slot: "home_city", curationWeight: 4, validAt: "2026-08-02"),
+      row(id: "fact-high", content: "High", slot: "work_city", curationWeight: 5, validAt: "2026-08-03"),
+      row(id: "playbook-z", content: "Zeta workflow", kind: "document", curationWeight: 3),
+      row(id: "playbook-a", content: "Alpha workflow", kind: "document", curationWeight: 3),
+    ])
+
+    let rendered = projection.render(userName: "David", marker: { "[\($0)]" })
+    XCTAssertEqual(
+      rendered,
+      """
+      Current profile for David:
+      work_city: High [fact-high]
+      home_city: A [fact-a]
+      home_city: B [fact-b]
+
+      Available playbooks (call read_playbook for the body; do not infer it from the title):
+      playbook-a: Alpha workflow [playbook-a]
+      playbook-z: Zeta workflow [playbook-z]
+      """ + "\n")
+    XCTAssertEqual(
+      projection.citationSources.map(\.sourceID),
+      ["fact-high", "fact-a", "fact-b", "playbook-a", "playbook-z"])
+  }
+
+  func testProfileAndPlaybookBudgetsAreIndependentAndBodiesStayOutOfPrompt() throws {
+    let longFact = String(repeating: "f", count: 1_000)
+    let longPlaybook = String(repeating: "p", count: 500)
+    let projection = KnowledgeLedgerPromptProjection(rows: [
+      row(id: "fact-one", content: longFact, slot: "one"),
+      row(id: "fact-two", content: longFact, slot: "two"),
+      row(id: "playbook-one", content: longPlaybook, kind: "document", body: "secret body"),
+      row(id: "playbook-two", content: longPlaybook, kind: "document", body: "another secret body"),
+    ])
+
+    let rendered = try XCTUnwrap(projection.render(userName: "David"))
+    let profile = try XCTUnwrap(rendered.components(separatedBy: "\n\n").first)
+    let playbooks = try XCTUnwrap(rendered.components(separatedBy: "\n\n").last)
+    XCTAssertLessThanOrEqual(profile.count, 2_400 + "Current profile for David:\n".count)
+    XCTAssertLessThanOrEqual(
+      playbooks.count,
+      800 + "Available playbooks (call read_playbook for the body; do not infer it from the title):\n".count)
+    XCTAssertFalse(rendered.contains("secret body"))
+    XCTAssertFalse(rendered.contains("another secret body"))
+  }
+
   private func row(
     id: String,
     content: String,
@@ -74,6 +122,7 @@ final class KnowledgeLedgerPromptProjectionTests: XCTestCase {
     body: String? = nil,
     intentBacked: Bool = true,
     curationWeight: Int = 0,
+    validAt: String? = nil,
     status: String? = "active",
     supersededBy: String? = nil
   ) -> KnowledgeLedgerPromptProjection.Row {
@@ -86,6 +135,7 @@ final class KnowledgeLedgerPromptProjectionTests: XCTestCase {
     if let schemaVersion { metadata["ledger_schema_version"] = schemaVersion }
     if let slot { metadata["slot"] = slot }
     if let body { metadata["body"] = body }
+    if let validAt { metadata["valid_at"] = validAt }
     if let status { metadata["status"] = status }
     if let supersededBy { metadata["superseded_by"] = supersededBy }
     return KnowledgeLedgerPromptProjection.Row(id: id, content: content, metadata: metadata)
