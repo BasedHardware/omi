@@ -141,7 +141,7 @@
     "record": null
   },
   {
-    "uid": "omi-cloud-run-metrics-egress-query-rejected",
+    "uid": "omi-cloud-run-egress-query-rejected",
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Cloud Run Ingestion",
@@ -271,7 +271,7 @@
     "labels": {
       "severity": "critical",
       "instatus_component": "observability",
-      "alert_identity": "omi-cloud-run-metrics-egress-query-rejected",
+      "alert_identity": "omi-cloud-run-egress-query-rejected",
       "component": "observability",
       "impact": "infrastructure"
     },

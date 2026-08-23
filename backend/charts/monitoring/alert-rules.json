@@ -9559,7 +9559,7 @@
     "record": null
   },
   {
-    "uid": "omi-cloud-run-metrics-egress-query-rejected",
+    "uid": "omi-cloud-run-egress-query-rejected",
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Cloud Run Ingestion",
@@ -9689,7 +9689,7 @@
     "labels": {
       "severity": "critical",
       "instatus_component": "observability",
-      "alert_identity": "omi-cloud-run-metrics-egress-query-rejected",
+      "alert_identity": "omi-cloud-run-egress-query-rejected",
       "component": "observability",
       "impact": "infrastructure"
     },
@@ -9700,7 +9700,7 @@
     "record": null
   },
   {
-    "uid": "omi-llm-gateway-invalid-request-rejections",
+    "uid": "omi-llm-gateway-invalid-requests",
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "LLM Gateway",
@@ -9830,7 +9830,7 @@
       "runbook": "backend/docs/runbooks/silent-failure-detection.md"
     },
     "labels": {
-      "alert_identity": "omi-llm-gateway-invalid-request-rejections",
+      "alert_identity": "omi-llm-gateway-invalid-requests",
       "severity": "critical",
       "instatus_component": "ai-chat",
       "component": "llm-gateway",

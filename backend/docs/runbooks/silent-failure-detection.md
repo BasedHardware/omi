@@ -43,7 +43,7 @@ All five rules link to **Grafana → Resilience / Fallbacks**:
 
 ### LLM Gateway — clients rejected before routing
 
-`omi-llm-gateway-invalid-request-rejections`
+`omi-llm-gateway-invalid-requests`
 
 ```promql
 sum(increase(llm_gateway_request_rejections_total{error_class="invalid_request"}[30m])) or vector(0)
@@ -160,7 +160,7 @@ to page anyone.
 
 | Rule | Breaching evaluations | What it caught |
 |---|---|---|
-| `omi-llm-gateway-invalid-request-rejections` | 58 / 673 (8.6%) | The desktop chat outage window, and nothing after the fix deployed. |
+| `omi-llm-gateway-invalid-requests` | 58 / 673 (8.6%) | The desktop chat outage window, and nothing after the fix deployed. |
 | `omi-llm-gateway-lane-failure-ratio` | 100 / 21,314 (0.47%) | `omi:auto:translation` only. |
 | `omi-llm-gateway-lane-zero-success` | 350 / 21,472 (1.6%) | `omi:auto:translation` and `omi:auto:web-search`. |
 | `omi-journey-signal-dead` | 0 / 1,346 | No false positives on the two journeys that do report. |
