@@ -665,14 +665,22 @@ def add_chat_session(uid: str, chat_session_data: Dict[str, Any]) -> Dict[str, A
 
 
 def get_chat_session(uid: str, app_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    collection = CURRENT_CHAT_SESSION_ORDERED_QUERY.build(
-        db.collection('users').document(uid).collection('chat_sessions'),
-        {'app_id': app_id},
-        field_filter_factory=FieldFilter,
-    )
-    ordered_sessions = list(
-        collection.order_by('created_at', direction=firestore.Query.DESCENDING)
+    collection = db.collection('users').document(uid).collection('chat_sessions')
+    ordered_sessions = (
+        CURRENT_CHAT_SESSION_ORDERED_QUERY.build(
+            collection,
+            {'app_id': app_id},
+            field_filter_factory=FieldFilter,
+        )
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
         .order_by('__name__', direction=firestore.Query.DESCENDING)
+        .limit(1)
+        .stream()
+    )
+    ordered_docs = [_typed_doc(session) for session in ordered_sessions]
+    if ordered_docs:
+        return max(
+            ordered_docs,
             key=lambda data: (
                 data.get('created_at') is not None,
                 data.get('created_at') or datetime.min.replace(tzinfo=timezone.utc),
@@ -690,7 +698,6 @@ def get_chat_session(uid: str, app_id: Optional[str] = None) -> Optional[Dict[st
         .limit(1)
         .stream()
     )
-
     legacy_docs = [_typed_doc(session) for session in legacy_session]
     if len(legacy_docs) > 1:
         legacy_docs = legacy_docs[:1]
@@ -698,8 +705,6 @@ def get_chat_session(uid: str, app_id: Optional[str] = None) -> Optional[Dict[st
     newest: Optional[Dict[str, Any]] = None
     newest_key: Optional[tuple] = None
     for data in legacy_docs:
-        # `_typed_doc` returns {} for a document with no fields, which sorts as
-        # untimestamped and loses to anything real rather than being skipped.
         created = data.get('created_at')
         key = (created is not None, created or datetime.min.replace(tzinfo=timezone.utc), str(data.get('id') or ''))
         if newest_key is None or key > newest_key:
