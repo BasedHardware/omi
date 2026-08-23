@@ -37,6 +37,7 @@ from utils.conversations.meeting_receipt import (
 from utils.observability.journeys import (
     record_capture_finalization_reconciliation,
     record_capture_finalization_terminal,
+    record_conversation_finalization_client_terminal,
 )
 
 logger = logging.getLogger(__name__)
@@ -302,6 +303,8 @@ def final_attempt_failed(
             job = jobs_db.get_finalization_job(job_id, firestore_client=firestore_client)
             accepted_at = job.get('created_at') if job else None
             record_capture_finalization_terminal('failure', accepted_at)
+            if job is not None:
+                record_conversation_finalization_client_terminal('failure', job, issue_class='unknown')
         except Exception:
             # Dead-lettering is authoritative; a best-effort metric lookup must
             # never change its terminal outcome.

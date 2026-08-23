@@ -9854,4 +9854,36 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get diagnosticsShareFailed => 'Diagnostiku se nepodařilo sdílet. Zkus to znovu.';
+
+  @override
+  String get appDisabledTitle => 'Tato aplikace je vypnutá a nelze ji nainstalovat.';
+
+  @override
+  String get appDisabledWebhookFailures => 'Její endpoint selhával 72 hodin v kuse, proto bylo doručování zastaveno.';
+
+  @override
+  String get appDisabledGeneric => 'Vypnula ji Omi.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Nejprve oprav endpoint — při opětovném zapnutí se znovu ověří každá nastavená URL.';
+
+  @override
+  String get appReEnable => 'Znovu zapnout';
+
+  @override
+  String get appReEnableFailedTitle => 'Nepodařilo se znovu zapnout';
+
+  @override
+  String get appReEnableFailedBody => 'Tuto aplikaci se nepodařilo znovu zapnout. Zkus to znovu.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Vypnuto $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Poslední chyba: $error.';
+  }
 }

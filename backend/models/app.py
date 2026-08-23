@@ -164,6 +164,10 @@ class AppBaseModel(BaseModel):
     source_code_url: Optional[str] = None
     disabled: Optional[bool] = False
     disabled_reason: Optional[str] = None
+    # Diagnostics for the owner's dashboard: without them a disabled app is
+    # indistinguishable from a healthy one and the developer cannot tell what to fix.
+    disabled_at: Optional[str] = None
+    disabled_error: Optional[str] = None
 
 
 class AppCatalogItem(BaseModel):

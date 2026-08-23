@@ -174,7 +174,7 @@ def add_summary_message(text: str, uid: str) -> Message:
 
 @prepare_for_read(decrypt_func=_prepare_message_for_read)
 def get_app_messages(
-    uid: str, app_id: str, limit: int = 20, offset: int = 0, include_conversations: bool = False
+    uid: str, app_id: str, limit: int = 20, include_conversations: bool = False
 ) -> List[Dict[str, Any]]:
     user_ref = db.collection('users').document(uid)
     messages_ref = (
@@ -182,7 +182,6 @@ def get_app_messages(
         .where(filter=FieldFilter('plugin_id', '==', app_id))
         .order_by('created_at', direction=firestore.Query.DESCENDING)
         .limit(limit)
-        .offset(offset)
     )
     messages: List[Dict[str, Any]] = []
     conversations_id: set[str] = set()
@@ -461,19 +460,22 @@ def iter_all_messages(uid: str, batch_size: int = 1000) -> Iterator[Dict[str, An
     """Yield all chat messages for a user, decrypted, in batches. Used for streaming data export."""
     user_ref = db.collection('users').document(uid)
     msgs_ref = user_ref.collection('messages').order_by('created_at', direction=firestore.Query.DESCENDING)
-    offset = 0
+    cursor = None
     while True:
-        batch_ref = msgs_ref.limit(batch_size).offset(offset)
+        batch_ref = msgs_ref.limit(batch_size)
+        if cursor is not None:
+            batch_ref = batch_ref.start_after(cursor)
         batch: List[Dict[str, Any]] = []
-        for doc in batch_ref.stream():
+        snapshots = list(batch_ref.stream())
+        for doc in snapshots:
             msg: Dict[str, Any] = _typed_doc(doc)
             msg['id'] = doc.id
             msg = _prepare_message_for_read(msg, uid) or msg
             batch.append(msg)
         yield from batch
-        if len(batch) < batch_size:
+        if len(snapshots) < batch_size:
             break
-        offset += batch_size
+        cursor = snapshots[-1]
 
 
 def get_message(uid: str, message_id: str) -> tuple[Message, str] | None:

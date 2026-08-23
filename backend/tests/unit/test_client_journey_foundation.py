@@ -375,6 +375,9 @@ def test_recorders_are_fail_open_and_still_report_their_own_breakage(monkeypatch
         journeys.record_client_journey_terminal(
             'desktop_chat', 'desktop_macos', 'failure', 1.0, issue_class='provider_error'
         )
+        broken_job = MagicMock()
+        broken_job.get.side_effect = RuntimeError('provenance lookup failed')
+        journeys.record_conversation_finalization_client_terminal('success', broken_job, client_kind='mobile_ios')
 
     assert 'client_journey_metric_record_failed' in caplog.text
 
@@ -405,3 +408,45 @@ def test_a_failing_recorder_never_reaches_the_user_stream(monkeypatch):
     delivered = asyncio.run(drain())
 
     assert len(delivered) == 2
+
+
+def test_client_journey_metric_collector_exceptions_fail_open(monkeypatch):
+    monkeypatch.setattr(
+        journeys.OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL,
+        'labels',
+        lambda **_: (_ for _ in ()).throw(RuntimeError('accepted metric unavailable')),
+    )
+    attempt = journeys.ClientJourneyAttempt('desktop_chat', 'desktop_macos')
+
+    monkeypatch.setattr(
+        journeys.OMI_CLIENT_JOURNEY_TERMINAL_TOTAL,
+        'labels',
+        lambda **_: (_ for _ in ()).throw(RuntimeError('terminal metric unavailable')),
+    )
+    attempt.succeed()
+
+    assert attempt.outcome == 'success'
+
+
+def test_metric_recording_failure_does_not_break_the_streamed_request(monkeypatch):
+    accepted, terminal, issues, duration = _install_client_journey_metrics(monkeypatch)
+    for metric in (accepted, terminal, issues, duration):
+        metric.labels.side_effect = RuntimeError('metrics backend unavailable')
+
+    attempt = journeys.ClientJourneyAttempt('mobile_chat', 'mobile_ios')
+
+    async def response_stream():
+        yield 'done: renderable-answer'
+
+    async def consume():
+        return [
+            item
+            async for item in attempt.observe_stream(
+                response_stream(),
+                success_when=lambda item: item.startswith('done: '),
+                failure_when=lambda _item: False,
+            )
+        ]
+
+    assert asyncio.run(consume()) == ['done: renderable-answer']
+    assert attempt.outcome == 'success'

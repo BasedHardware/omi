@@ -3196,5 +3196,14 @@
     "sendRawAudioToOmi": "Odesílat nezpracovaný zvuk do Omi",
     "sendRawAudioToOmiDescription": "Vypnutím zabráníte odesílání nezpracovaného zvuku do Omi. Přepisy a data potřebná pro cloudové funkce se mohou do Omi nadále odesílat.",
     "findDevice": "Najít",
-    "diagnosticsShareFailed": "Diagnostiku se nepodařilo sdílet. Zkus to znovu."
+    "diagnosticsShareFailed": "Diagnostiku se nepodařilo sdílet. Zkus to znovu.",
+    "appDisabledTitle": "Tato aplikace je vypnutá a nelze ji nainstalovat.",
+    "appDisabledWebhookFailures": "Její endpoint selhával 72 hodin v kuse, proto bylo doručování zastaveno.",
+    "appDisabledGeneric": "Vypnula ji Omi.",
+    "appDisabledOwnerHint": "Nejprve oprav endpoint — při opětovném zapnutí se znovu ověří každá nastavená URL.",
+    "appReEnable": "Znovu zapnout",
+    "appReEnableFailedTitle": "Nepodařilo se znovu zapnout",
+    "appReEnableFailedBody": "Tuto aplikaci se nepodařilo znovu zapnout. Zkus to znovu.",
+    "appDisabledOn": "Vypnuto {date}.",
+    "appDisabledLastError": "Poslední chyba: {error}."
 }

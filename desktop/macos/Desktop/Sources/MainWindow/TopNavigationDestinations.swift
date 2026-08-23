@@ -9,10 +9,12 @@
 //
 //  So the disclosure is gone and the seven destinations were re-sorted by what they actually are:
 //
-//  - **Three of them are one page.** Conversations, Memories and Brain Map are the Memory hub's own
-//    three views (`MemoryHubDestination`). The bar was carrying a page's internal tabs, which is why
-//    it needed a menu to hold them. They now live on that page, in its own switcher — see
-//    `MemoryHubSwitcher`. The bar keeps one pill, `Library`, that opens the hub.
+//  - **Three of them are one page.** Conversations, Memories and Brain Map are three of the Memory
+//    hub's four views (`MemoryHubDestination`). The bar was carrying a page's internal tabs, which is
+//    why it needed a menu to hold them. The bar keeps one pill, `Brain`, which opens the hub's
+//    fourth view — the chronological spine — and the other three are chips in that page's own
+//    navigating row (`ActivityDestinationChip`), with a `‹ Brain` control on each of them for the
+//    way back (`ActivityBackButton`).
 //  - **The rest are genuinely separate views**, so they are flat pills: `Tasks`, `Rewind`, `Apps`.
 //    Always visible, one click, no disclosure, no hover.
 //
@@ -100,7 +102,7 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
     case .rewind: return "Rewind"
     case .apps: return "Apps"
     case .permissions: return "Permissions"
-    case .activity: return "Activity"
+    case .activity: return "Brain"
     }
   }
 
@@ -138,7 +140,7 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
   var reach: Reach {
     switch self {
     /// `Activity` is what the hub's pill opens, so its door is the bar itself — the other three
-    /// hub views are reached from the hub's switcher once you are there.
+    /// hub views are reached from Activity's chip row once you are there.
     case .conversations, .memories, .brainMap: return .activityChipRow
     case .permissions: return .settingsSidebar
     case .home, .tasks, .rewind, .apps, .activity: return .topBar
@@ -147,8 +149,9 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
 
   /// Every destination whose `reach` is not actually wired up — empty, or INV-NAV-1 is broken.
   ///
-  /// A `topBar` destination must have a pill; a `memoryHubView` must be one of the hub's own views
-  /// *and* the hub itself must have a pill; a `settingsSidebar` destination must be a row the
+  /// A `topBar` destination must have a pill; an `activityChipRow` destination must be a hub view
+  /// Activity's row actually offers *and* the page that carries the row must itself have a pill; a
+  /// `settingsSidebar` destination must be a row the
   /// Settings list actually shows, that row must mount the whole page rather than a summary of it,
   /// *and* the bar must still carry the gear that opens Settings.
   static func unreachable(
@@ -180,7 +183,7 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
     }
   }
 
-  /// Whether the page currently on screen is one of the hub's, so the `Library` pill can read as
+  /// Whether the page currently on screen is one of the hub's, so the `Activity` pill can read as
   /// current while you are reading a conversation rather than claiming you are nowhere.
   static func isHubPage(selectedIndex: Int) -> Bool {
     selectedIndex == SidebarNavItem.conversations.rawValue
@@ -209,22 +212,22 @@ struct TopNavigationItem: Identifiable, Equatable {
 }
 
 enum TopNavigationRoutes {
-  /// **The whole navigation, flat.** `Library` is the Memory hub — the one destination that owns
-  /// more than one view, and it shows those views itself. The other four are single pages, so they
-  /// are single pills. Nothing here opens a menu.
+  /// **The whole navigation, flat.** `Activity` is the Memory hub — the one destination that owns
+  /// more than one view, and it offers the other three from a chip row on its own page. The other
+  /// four are single pages, so they are single pills. Nothing here opens a menu.
   static let primaryItems = [
     TopNavigationItem(
       index: SidebarNavItem.dashboard.rawValue, title: "Chat", icon: "bubble.left.and.text.bubble.right",
       tooltip: "Chat — talk to Omi about everything you've seen and heard"),
     // The hub's pill names the view it opens. It used to say `Memories` while opening whichever hub
     // view was last persisted, so the word on the bar and the page you landed on were only
-    // sometimes the same thing. It opens `Activity` — the chronological spine over everything
-    // captured — and says so; Conversations, Memories and Brain Map stay one click away in the
-    // hub's own switcher, which is the mechanism `ShellDestination.reach` records for them.
+    // sometimes the same thing. It opens `Brain` — the chronological spine over everything
+    // captured — and says so; Conversations, Memories and Brain Map stay one click away in that
+    // page's own chip row, which is the mechanism `ShellDestination.reach` records for them.
     // The glyph is deliberately not `clock.arrow.circlepath`: that is Rewind's, two pills away.
     TopNavigationItem(
-      index: SidebarNavItem.conversations.rawValue, title: "Activity", icon: "square.stack",
-      tooltip: "Activity — everything Omi captured, newest first"),
+      index: SidebarNavItem.conversations.rawValue, title: "Brain", icon: "brain",
+      tooltip: "Brain — everything Omi captured, newest first"),
     TopNavigationItem(
       index: SidebarNavItem.tasks.rawValue, title: "Tasks", icon: "checklist",
       tooltip: "Tasks — everything Omi heard you commit to"),
@@ -253,9 +256,9 @@ enum TopNavigationRoutes {
 
 /// The `+N` counts the row carries, one per pill that owns them.
 ///
-/// Split rather than summed onto one pill: while `Tasks` lived inside the `Library` menu, a single
-/// badge on `Library` was the only honest place to put a task count. Now that `Tasks` is its own pill,
-/// a task counted on `Library` would send you to the wrong page.
+/// Split rather than summed onto one pill: while `Tasks` lived inside the retired `Library` menu, a
+/// single badge on that pill was the only honest place to put a task count. Now that `Tasks` is its
+/// own pill, a task counted on the hub's pill would send you to the wrong page.
 struct TopNavigationDestinationBadges: Equatable {
   var library: Int = 0
   var tasks: Int = 0

@@ -51,10 +51,20 @@ class Structured {
     final sections = json['sections'];
     if (sections is List) {
       for (final section in sections) {
-        if (section is Map<String, dynamic>) {
-          structured.sections.add(Section.fromJson(section));
-        } else if (section is Map) {
-          structured.sections.add(Section.fromJson(Map<String, dynamic>.from(section)));
+        final Map<String, dynamic>? sectionJson = section is Map<String, dynamic>
+            ? section
+            : section is Map
+                ? Map<String, dynamic>.from(section)
+                : null;
+        if (sectionJson == null) continue;
+        // Section.fromJson throws a FormatException on a missing or mistyped
+        // `heading` / `body_markdown`. Skip the bad entry the way the
+        // actionItems and events loops below do: one malformed section used to
+        // throw out of here and take the whole conversation decode with it.
+        try {
+          structured.sections.add(Section.fromJson(sectionJson));
+        } on FormatException {
+          continue;
         }
       }
     }

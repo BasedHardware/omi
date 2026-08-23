@@ -77,5 +77,37 @@ void main() {
 
       expect(Structured.fromJson(json).sections, isEmpty);
     });
+
+    test('a malformed section is skipped instead of failing the decode', () {
+      // Regression: Section.fromJson throws a FormatException on a missing or
+      // mistyped heading/body_markdown, and the sections loop let it escape
+      // Structured.fromJson — so one bad section took the whole conversation
+      // decode with it, while the neighbouring actionItems/events loops have
+      // always skipped bad entries.
+      final json = _structuredJson();
+      (json['sections'] as List).insert(1, {'heading': 'Missing body'});
+      (json['sections'] as List).add({'heading': 42, 'body_markdown': 'Wrong heading type'});
+
+      final structured = Structured.fromJson(json);
+
+      expect(structured.sections.map((s) => s.heading), ['Decisions', 'Risks']);
+      expect(structured.sections.first.bodyMarkdown, '- Ship the **beta** on Friday');
+    });
+
+    test('a conversation with one malformed section still decodes', () {
+      final conversation = ServerConversation(
+        id: 'conv-malformed-section',
+        createdAt: DateTime.utc(2026, 7, 1, 12, 0, 0),
+        structured: Structured.fromJson(_structuredJson()),
+      );
+      final json = jsonDecode(jsonEncode(conversation.toJson())) as Map<String, dynamic>;
+      (json['structured']['sections'] as List).insert(0, {'body_markdown': 'Heading is missing'});
+
+      final restored = ServerConversation.fromJson(json);
+
+      expect(restored.id, 'conv-malformed-section');
+      expect(restored.structured.title, 'Sprint sync');
+      expect(restored.structured.sections.map((s) => s.heading), ['Decisions', 'Risks']);
+    });
   });
 }

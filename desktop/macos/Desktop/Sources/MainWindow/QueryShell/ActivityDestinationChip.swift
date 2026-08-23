@@ -26,36 +26,36 @@ enum ActivityDestinationChip: String, CaseIterable, Identifiable {
   case conversations
   case memories
   case brainMap
-  case tasks
-  case rewind
 
   var id: String { rawValue }
 
   var title: String {
     switch self {
-    case .activity: return "Activity"
+    case .activity: return "Brain"
     case .conversations: return "Conversations"
     case .memories: return "Memories"
     case .brainMap: return "Brain Map"
-    case .tasks: return "Tasks"
-    case .rewind: return "Rewind"
     }
   }
 
-  /// The Memory hub page this chip opens, for the ones the hub owns. `Tasks` and `Rewind` are the
-  /// shell's own destinations and answer nil.
-  var hubDestination: MemoryHubDestination? {
+  /// The Memory hub page this chip opens. Every chip in this row is one of the hub's four pages:
+  /// `Tasks` and `Rewind` were here too and were removed, because each already has its own pill in
+  /// the bar directly above — a second control to the same place, two inches apart.
+  ///
+  /// **Not optional, and that is the reachability claim's teeth.** A chip that opens no hub page
+  /// would be a chip that reaches nothing while `reachableHubDestinations` quietly dropped it; the
+  /// type forbids adding one rather than leaving a test to notice.
+  var hubDestination: MemoryHubDestination {
     switch self {
     case .activity: return .activity
     case .conversations: return .conversations
     case .memories: return .memories
     case .brainMap: return .brainMap
-    case .tasks, .rewind: return nil
     }
   }
 
   /// Every hub page this row can reach. `ShellDestination.unreachable()` reads exactly this.
   static var reachableHubDestinations: [MemoryHubDestination] {
-    allCases.compactMap(\.hubDestination)
+    allCases.map(\.hubDestination)
   }
 }
