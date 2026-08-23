@@ -21,14 +21,23 @@ class SpeakerProviderEpoch:
         self._epoch = -1
 
     def stamp(self, segments: Iterable[MutableMapping[str, Any]], provider: Optional[str]) -> None:
-        provider_name = provider or 'unknown'
-        if provider_name != self._provider:
-            self._provider = provider_name
-            self._epoch += 1
-        scope = f'{self._connection_scope}:{self._epoch}'
+        """Scope each segment by the provider that actually served it.
+
+        A socket that knows its serving peer stamps ``stt_provider`` on the segment
+        itself, and that value is authoritative: the caller-supplied name is the
+        host's configured selection, which stays the same across a fallback to a
+        different peer. Overwriting it would erase the very transition the epoch
+        exists to separate. The epoch therefore advances per segment, so a provider
+        change inside one batch opens a new scope rather than being flattened.
+        """
+        fallback = provider or 'unknown'
         for segment in segments:
+            provider_name = segment.get('stt_provider') or fallback
+            if provider_name != self._provider:
+                self._provider = provider_name
+                self._epoch += 1
             segment['stt_provider'] = provider_name
-            segment['speaker_id_scope'] = scope
+            segment['speaker_id_scope'] = f'{self._connection_scope}:{self._epoch}'
 
 
 class ConversationSpeakerIdAllocator:
