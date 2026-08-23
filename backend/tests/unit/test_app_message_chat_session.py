@@ -44,7 +44,7 @@ def test_app_message_is_linked_to_the_apps_chat_session(monkeypatch):
 
 def test_app_message_without_a_session_is_unchanged(monkeypatch):
     # No session yet: the message still stores, and nothing is linked. get_messages falls back to
-    # its plugin_id branch in that case, which already worked.
+    # its app_id/plugin_id dual-read branch in that case, which already worked.
     stored, links = _capture(monkeypatch, None)
 
     message = chat_db.add_app_message('hello', 'app-1', 'uid-1')

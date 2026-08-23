@@ -9,6 +9,7 @@ from typing import Any, Dict, Iterator, List, Optional, cast
 from google.api_core.exceptions import AlreadyExists, Conflict, FailedPrecondition, NotFound
 from google.cloud import firestore, firestore_v1
 from google.cloud.firestore_v1 import FieldFilter
+from google.cloud.firestore_v1.base_query import Or
 
 from database.firestore_index_registry import (
     CURRENT_CHAT_SESSION_ORDERED_QUERY,
@@ -38,6 +39,25 @@ CHAT_HISTORY_APPEND_EPOCH_MESSAGES = 8
 # when a user has thousands of lifetime reported messages; the newest page
 # rarely contains more reported rows than this cap.
 CHAT_HISTORY_REPORTED_RAW_SCAN_CAP = 50
+
+
+def _app_scope_filter(app_id: Optional[str]) -> Or:
+    """Match rows written under app_id or legacy plugin_id (same value).
+
+    Dual-read keeps pre-migration documents visible until backfill is guaranteed.
+    """
+    return Or(
+        filters=[
+            FieldFilter('app_id', '==', app_id),
+            FieldFilter('plugin_id', '==', app_id),
+        ]
+    )
+
+
+def _doc_matches_app_scope(data: Dict[str, Any], app_id: Optional[str]) -> bool:
+    if 'app_id' in data:
+        return data.get('app_id') == app_id
+    return data.get('plugin_id') == app_id
 
 
 class ClientMessageIdPayloadConflict(ValueError):
@@ -179,7 +199,7 @@ def get_app_messages(
     user_ref = db.collection('users').document(uid)
     messages_ref = (
         user_ref.collection('messages')
-        .where(filter=FieldFilter('plugin_id', '==', app_id))
+        .where(filter=_app_scope_filter(app_id))
         .order_by('created_at', direction=firestore.Query.DESCENDING)
         .limit(limit)
     )
@@ -231,12 +251,12 @@ def get_messages(
     user_ref = db.collection('users').document(uid)
     messages_ref = user_ref.collection('messages')
     if chat_session_id:
-        # Session-scoped query: filter by session only, skip plugin_id filter
+        # Session-scoped query: filter by session only, skip app_id filter
         # because the session already determines which app the messages belong to.
         messages_ref = messages_ref.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
     else:
-        # App-scoped query: filter by plugin_id (None = main chat)
-        messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
+        # App-scoped query: app_id or legacy plugin_id (None = main chat)
+        messages_ref = messages_ref.where(filter=_app_scope_filter(app_id))
 
     messages_ref = messages_ref.order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit).offset(offset)
 
@@ -326,7 +346,7 @@ def get_cache_aligned_messages(
     if chat_session_id:
         scoped_ref = scoped_ref.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
     else:
-        scoped_ref = scoped_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
+        scoped_ref = scoped_ref.where(filter=_app_scope_filter(app_id))
 
     total_result = scoped_ref.count().get()
     total = int(total_result[0][0].value) if total_result and total_result[0] else 0
@@ -377,7 +397,7 @@ def get_messages_reconcile_page(
     if chat_session_id:
         query = query.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
     else:
-        query = query.where(filter=FieldFilter('plugin_id', '==', app_id))
+        query = query.where(filter=_app_scope_filter(app_id))
     query = query.order_by('created_at', direction=firestore.Query.DESCENDING)
 
     cursor_snapshot: Any = None
@@ -389,7 +409,7 @@ def get_messages_reconcile_page(
         cursor_in_scope = (
             cursor_payload.get('chat_session_id') == chat_session_id
             if chat_session_id
-            else cursor_payload.get('plugin_id') == app_id
+            else _doc_matches_app_scope(cursor_payload, app_id)
         )
         if not cursor_in_scope or cursor_payload.get('created_at') is None:
             raise MessageReconcileCursorError('message cursor is outside the requested scope')
@@ -536,7 +556,7 @@ def batch_delete_messages(
     parent_doc_ref: Any, batch_size: int = 450, app_id: Optional[str] = None, chat_session_id: Optional[str] = None
 ) -> None:
     messages_ref = parent_doc_ref.collection('messages')
-    messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
+    messages_ref = messages_ref.where(filter=_app_scope_filter(app_id))
     if chat_session_id:
         messages_ref = messages_ref.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
     logger.info(f'batch_delete_messages {app_id}')
@@ -875,6 +895,8 @@ def _normalize_chat_session(data: Optional[dict]) -> Optional[dict]:
     """
     if data is None:
         return None
+    if data.get('app_id') is None and data.get('plugin_id') is not None:
+        data['app_id'] = data.get('plugin_id')
     data.setdefault('title', 'New Chat')
     data.setdefault('preview', None)
     data.setdefault('message_count', 0)
@@ -929,7 +951,7 @@ def get_chat_sessions(
     query = col.order_by('updated_at', direction=firestore.Query.DESCENDING)
 
     # Always filter — when app_id is None this returns only default-chat sessions
-    query = query.where(filter=FieldFilter('plugin_id', '==', app_id))
+    query = query.where(filter=_app_scope_filter(app_id))
     if starred is not None:
         query = query.where(filter=FieldFilter('starred', '==', starred))
 
@@ -1286,8 +1308,8 @@ def delete_messages(uid: str, app_id: Optional[str] = None, session_id: Optional
         # Session-scoped delete: filter by session only (same logic as get_messages)
         query = col.where(filter=FieldFilter('chat_session_id', '==', session_id))
     else:
-        # App-scoped delete: filter by plugin_id (None = main chat)
-        query = col.where(filter=FieldFilter('plugin_id', '==', app_id))
+        # App-scoped delete: app_id or legacy plugin_id (None = main chat)
+        query = col.where(filter=_app_scope_filter(app_id))
 
     deleted = 0
     consecutive_conflicts = 0
