@@ -24,7 +24,8 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
   }()
 
   func testDecodesV17TierAndMemoryIdAlias() throws {
-    let json = """
+    let json = Data(
+      """
       {
         "memory_id": "mem-short-1",
         "content": "Short-term synthetic memory",
@@ -35,7 +36,7 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
         "captured_at": "2026-06-21T09:59:00Z",
         "expires_at": "2026-06-28T10:00:00Z"
       }
-      """.data(using: .utf8)!
+      """.utf8)
 
     let memory = try decoder.decode(ServerMemory.self, from: json)
 
@@ -48,7 +49,8 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
   }
 
   func testDecodesMemoryTierAlias() throws {
-    let json = """
+    let json = Data(
+      """
       {
         "id": "mem-archive-1",
         "content": "Archived synthetic memory",
@@ -57,7 +59,7 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
         "created_at": "2026-06-21T10:00:00Z",
         "updated_at": "2026-06-21T10:05:00Z"
       }
-      """.data(using: .utf8)!
+      """.utf8)
 
     let memory = try decoder.decode(ServerMemory.self, from: json)
 
@@ -68,7 +70,8 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
   }
 
   func testMissingTierDefaultsLegacyMemoryToLongTerm() throws {
-    let json = """
+    let json = Data(
+      """
       {
         "id": "legacy-1",
         "content": "Legacy memory",
@@ -76,7 +79,7 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
         "created_at": "2026-06-21T10:00:00Z",
         "updated_at": "2026-06-21T10:05:00Z"
       }
-      """.data(using: .utf8)!
+      """.utf8)
 
     let memory = try decoder.decode(ServerMemory.self, from: json)
 
@@ -87,7 +90,8 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
   }
 
   func testUnknownPresentTierFailsClosed() {
-    let json = """
+    let json = Data(
+      """
       {
         "id": "mem-future",
         "content": "Future tier",
@@ -96,13 +100,14 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
         "created_at": "2026-06-21T10:00:00Z",
         "updated_at": "2026-06-21T10:05:00Z"
       }
-      """.data(using: .utf8)!
+      """.utf8)
 
     XCTAssertThrowsError(try decoder.decode(ServerMemory.self, from: json))
   }
 
   func testConflictingTierAliasesFailClosed() {
-    let json = """
+    let json = Data(
+      """
       {
         "id": "mem-conflict",
         "content": "Conflicting tier",
@@ -112,13 +117,14 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
         "created_at": "2026-06-21T10:00:00Z",
         "updated_at": "2026-06-21T10:05:00Z"
       }
-      """.data(using: .utf8)!
+      """.utf8)
 
     XCTAssertThrowsError(try decoder.decode(ServerMemory.self, from: json))
   }
 
   func testMatchingTierAliasesDecode() throws {
-    let json = """
+    let json = Data(
+      """
       {
         "id": "mem-match",
         "content": "Matching tier",
@@ -128,7 +134,7 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
         "created_at": "2026-06-21T10:00:00Z",
         "updated_at": "2026-06-21T10:05:00Z"
       }
-      """.data(using: .utf8)!
+      """.utf8)
 
     let memory = try decoder.decode(ServerMemory.self, from: json)
     XCTAssertEqual(memory.tier, .archive)
@@ -139,7 +145,8 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
     // backend behaviour), which differs from id. Such rows must NOT fail
     // decoding — a single throw would abort the entire memories array and
     // break the desktop memories load. Prefer id when present.
-    let json = """
+    let json = Data(
+      """
       {
         "id": "mem-a",
         "memory_id": "conv-legacy-1",
@@ -149,14 +156,15 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
         "created_at": "2026-06-21T10:00:00Z",
         "updated_at": "2026-06-21T10:05:00Z"
       }
-      """.data(using: .utf8)!
+      """.utf8)
 
     let memory = try decoder.decode(ServerMemory.self, from: json)
     XCTAssertEqual(memory.id, "mem-a")
   }
 
   func testMatchingIdAliasesDecode() throws {
-    let json = """
+    let json = Data(
+      """
       {
         "id": "mem-a",
         "memory_id": "mem-a",
@@ -166,14 +174,15 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
         "created_at": "2026-06-21T10:00:00Z",
         "updated_at": "2026-06-21T10:05:00Z"
       }
-      """.data(using: .utf8)!
+      """.utf8)
 
     let memory = try decoder.decode(ServerMemory.self, from: json)
     XCTAssertEqual(memory.id, "mem-a")
   }
 
   func testDecodesLayerFieldWithoutTierAliases() throws {
-    let json = """
+    let json = Data(
+      """
       {
         "id": "mem-layer-1",
         "content": "Canonical short-term via layer field",
@@ -183,7 +192,7 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
         "updated_at": "2026-06-21T10:05:00Z",
         "expires_at": "2026-06-28T10:00:00Z"
       }
-      """.data(using: .utf8)!
+      """.utf8)
 
     let memory = try decoder.decode(ServerMemory.self, from: json)
 
@@ -193,7 +202,8 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
   }
 
   func testLayerPreferredOverTierAlias() throws {
-    let json = """
+    let json = Data(
+      """
       {
         "id": "mem-layer-priority",
         "content": "Layer wins when all aliases agree on short_term",
@@ -204,7 +214,7 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
         "created_at": "2026-06-21T10:00:00Z",
         "updated_at": "2026-06-21T10:05:00Z"
       }
-      """.data(using: .utf8)!
+      """.utf8)
 
     let memory = try decoder.decode(ServerMemory.self, from: json)
 
@@ -213,7 +223,8 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
   }
 
   func testConflictingLayerAndTierAliasesFailClosed() {
-    let json = """
+    let json = Data(
+      """
       {
         "id": "mem-layer-conflict",
         "content": "Conflicting layer",
@@ -223,13 +234,14 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
         "created_at": "2026-06-21T10:00:00Z",
         "updated_at": "2026-06-21T10:05:00Z"
       }
-      """.data(using: .utf8)!
+      """.utf8)
 
     XCTAssertThrowsError(try decoder.decode(ServerMemory.self, from: json))
   }
 
   func testLayerOnlyLongTermSetsExplicitBadge() throws {
-    let json = """
+    let json = Data(
+      """
       {
         "id": "mem-layer-lt",
         "content": "Canonical long-term via layer field",
@@ -238,7 +250,7 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
         "created_at": "2026-06-21T10:00:00Z",
         "updated_at": "2026-06-21T10:05:00Z"
       }
-      """.data(using: .utf8)!
+      """.utf8)
 
     let memory = try decoder.decode(ServerMemory.self, from: json)
 
@@ -247,7 +259,8 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
   }
 
   func testDecodesBoundedLedgerPayloadsIntoCanonicalMirrorMetadata() throws {
-    let json = """
+    let json = Data(
+      """
       {
         "id": "mem-ledger-trigger",
         "uid": "mem-ledger-trigger",
@@ -273,7 +286,7 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
           "entity_aliases": {"release_owner": ["David", "dave"]}
         }
       }
-      """.data(using: .utf8)!
+      """.utf8)
 
     let memory = try decoder.decode(ServerMemory.self, from: json)
 
