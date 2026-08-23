@@ -592,7 +592,7 @@ def check_desktop_codemagic_release() -> list[str]:
 
     for required_fragment in (
         "publish-desktop-debug-symbols.sh generate",
-        "publish-desktop-debug-symbols.sh upload",
+        "publish-desktop-debug-symbols.sh upload-best-effort",
         '"$DSYM_ARCHIVE"',
         "- build/*.dSYM",
         "source scripts/launcher-bootstrap.sh",
