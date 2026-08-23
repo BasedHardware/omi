@@ -132,6 +132,8 @@ def test_knowledge_ledger_correction_emulator_harness_is_wired_to_real_service()
         "memory_commits",
         "memory_outbox",
         "item_revision",
+        "tombstone_memory_items_firestore",
+        "privacy_race=blocked",
         "PASS: Firestore emulator explicit ledger correction and revert proof",
     ):
         assert required in script

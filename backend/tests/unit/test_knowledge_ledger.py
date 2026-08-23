@@ -200,8 +200,15 @@ def test_ledger_amendment_appends_and_supersedes_in_one_commit():
 def test_amend_fact_carries_visibility_into_the_atomic_replacement(monkeypatch):
     captured = {}
 
-    def write_ledger(uid, payload, *, db_client=None):
-        captured.update({"uid": uid, "payload": payload, "db_client": db_client})
+    def write_ledger(uid, payload, *, db_client=None, required_source_item=None):
+        captured.update(
+            {
+                "uid": uid,
+                "payload": payload,
+                "db_client": db_client,
+                "required_source_item": required_source_item,
+            }
+        )
         return payload["id"]
 
     monkeypatch.setattr(knowledge_ledger, "write_canonical_knowledge_ledger_memory", write_ledger)
@@ -227,6 +234,7 @@ def test_amend_fact_carries_visibility_into_the_atomic_replacement(monkeypatch):
     assert captured["uid"] == "u1"
     assert captured["db_client"] == "db"
     assert captured["payload"]["visibility"] == "shared"
+    assert captured["required_source_item"] is None
     assert captured["payload"]["supersedes"] == ["prior"]
 
 

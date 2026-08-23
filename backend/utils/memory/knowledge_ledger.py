@@ -171,7 +171,13 @@ def evidence_id_for_ledger_provenance(uid: str, provenance: LedgerProvenance) ->
     return _evidence_id(uid, provenance)
 
 
-def save_ledger_write(uid: str, write: LedgerWrite, *, db_client: Any = None) -> str:
+def save_ledger_write(
+    uid: str,
+    write: LedgerWrite,
+    *,
+    db_client: Any = None,
+    required_source_item: Optional[MemoryItem] = None,
+) -> str:
     """Commit one idempotent semantic row through canonical apply."""
     memory_id = _row_id(uid, write)
     evidence_id = _evidence_id(uid, write.provenance)
@@ -209,6 +215,7 @@ def save_ledger_write(uid: str, write: LedgerWrite, *, db_client: Any = None) ->
             ],
         },
         db_client=db_client,
+        required_source_item=required_source_item,
     )
 
 
@@ -253,6 +260,7 @@ def amend_fact(
     curation_weight: int = 0,
     visibility: Literal["private", "public", "shared"] = "private",
     db_client: Any = None,
+    required_source_item: Optional[MemoryItem] = None,
 ) -> str:
     """Append a replacement and close the prior row in one canonical commit."""
     return save_ledger_write(
@@ -270,6 +278,7 @@ def amend_fact(
             supersedes=[prior_memory_id],
         ),
         db_client=db_client,
+        required_source_item=required_source_item,
     )
 
 

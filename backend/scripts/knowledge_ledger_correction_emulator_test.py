@@ -20,11 +20,14 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from google.cloud import firestore
+from fastapi import HTTPException
 
+from database.memory_apply_store import tombstone_memory_items_firestore
 from database.memory_collections import MemoryCollections
 from models.memory_apply import MemoryControlState
 from models.product_memory import MemoryItem, MemoryItemStatus, MemorySubjectScope
 from utils.memory.knowledge_ledger import LedgerProvenance, LedgerWrite, save_ledger_write
+from utils.memory import memory_service as memory_service_module
 from utils.memory.memory_service import MemoryService
 from models.product_memory import LedgerWriteReason
 
@@ -33,6 +36,7 @@ INITIAL_HEAD = "ledger-correction-emulator-head"
 ORIGINAL_CONTENT = "Lives in Boston"
 CORRECTED_CONTENT = "Lives in Brooklyn"
 REVERT_OPERATION_ID = "5f95a7a1-10c6-4ec3-946d-e76a0a2f7cc5"
+RACING_REVERT_OPERATION_ID = "e23f4058-49c3-4783-a750-377cfd9979b1"
 
 
 def _assert_emulator_only() -> None:
@@ -331,11 +335,72 @@ def main() -> int:
         if observed_invalidation.call_args_list != [((uid,), {}), ((uid,), {}), ((uid,), {}), ((uid,), {})]:
             raise AssertionError("correction/revert and their retries did not invalidate prompt caches")
 
+        before_privacy_race = _authority_snapshot(db_client, collections)
+        race_state: dict[str, Any] = {}
+        original_amend_fact = memory_service_module.amend_fact
+
+        def tombstone_selected_before_append(*args: Any, **kwargs: Any) -> str:
+            selected_before_delete = _read_item(db_client, collections, replacement_id)
+            observed_control = MemoryControlState.model_validate(
+                _required_doc(db_client, collections.memory_apply_control_state)
+            )
+            tombstone_memory_items_firestore(
+                uid=uid,
+                reason="knowledge_ledger_revert_privacy_race",
+                observed_control=observed_control,
+                expected_items=[selected_before_delete],
+                preserved_evidence_ids=[],
+                db_client=db_client,
+            )
+            race_state["after_privacy"] = _authority_snapshot(db_client, collections)
+            return original_amend_fact(*args, **kwargs)
+
+        memory_service_module.amend_fact = tombstone_selected_before_append
+        try:
+            try:
+                service.revert_superseded_ledger_fact(uid, replacement_id, RACING_REVERT_OPERATION_ID)
+            except HTTPException as exc:
+                if exc.status_code != 409:
+                    raise AssertionError(f"privacy-raced revert returned unexpected status: {exc.status_code}") from exc
+            else:
+                raise AssertionError("privacy-raced revert resurrected the selected historical content")
+        finally:
+            memory_service_module.amend_fact = original_amend_fact
+
+        after_privacy = race_state.get("after_privacy")
+        if not isinstance(after_privacy, dict):
+            raise AssertionError("privacy race did not execute the selected-row tombstone")
+        after_blocked_revert = _authority_snapshot(db_client, collections)
+        tombstoned_selected = _read_item(db_client, collections, replacement_id)
+        surviving_tail = _read_item(db_client, collections, restored_id)
+        if (
+            tombstoned_selected.status != MemoryItemStatus.tombstoned
+            or tombstoned_selected.content is not None
+            or surviving_tail.status != MemoryItemStatus.active
+            or surviving_tail.content != ORIGINAL_CONTENT
+        ):
+            raise AssertionError("privacy race did not leave the selected row tombstoned and current tail intact")
+        if set(after_privacy["items"]) != set(before_privacy_race["items"]):
+            raise AssertionError("privacy tombstone unexpectedly changed the ledger row set")
+        for authority in ("control", "items", "evidence", "commits", "outbox", "state"):
+            if after_blocked_revert[authority] != after_privacy[authority]:
+                raise AssertionError(f"blocked privacy-raced revert mutated canonical {authority}")
+        if after_blocked_revert["operations"] != after_privacy["operations"]:
+            raise AssertionError("blocked privacy-raced revert persisted stale content in an operation receipt")
+        if observed_invalidation.call_args_list != [
+            ((uid,), {}),
+            ((uid,), {}),
+            ((uid,), {}),
+            ((uid,), {}),
+        ]:
+            raise AssertionError("blocked privacy-raced revert invalidated prompt caches without a commit")
+
         print(
             "PASS: Firestore emulator explicit ledger correction and revert proof "
             f"prior={prior_id} replacement={replacement_id} correction_commit={correction_head} "
             f"restored={restored_id} revert_commit={revert_head} "
-            f"preclose_revision={prior_before.item_revision} closed_revision={prior_after.item_revision} retries=no-op"
+            f"preclose_revision={prior_before.item_revision} closed_revision={prior_after.item_revision} "
+            "retries=no-op privacy_race=blocked"
         )
         return 0
     finally:
