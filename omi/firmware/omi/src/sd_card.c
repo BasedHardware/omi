@@ -1227,8 +1227,11 @@ void sd_notify_time_synced(uint32_t utc_time)
         return;
     }
 
+    /* Callers run on the BLE RX thread (transport.c) and the system workqueue
+     * (rtc.c); never block them for a best-effort log summary. Matches the
+     * K_NO_WAIT pattern of sd_notify_ble_state below. */
     req.type = REQ_TIME_SYNCED;
-    ret = k_msgq_put(&sd_prio_msgq, &req, K_MSEC(500));
+    ret = k_msgq_put(&sd_prio_msgq, &req, K_NO_WAIT);
     if (ret != 0) {
         LOG_WRN("failed to queue RTC sync drop summary: %d", ret);
     }
