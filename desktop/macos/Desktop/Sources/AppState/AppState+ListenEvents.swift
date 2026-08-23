@@ -564,7 +564,6 @@ extension AppState {
       let appId = event.raw["app_id"] as? String ?? ""
       let title = event.raw["title"] as? String ?? "Omi"
       let message = event.raw["message"] as? String ?? ""
-      let conversationId = event.raw["conversation_id"] as? String
       // The message body is user conversation content; log only its provenance.
       let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
       let admission = ProactiveListenAdmission.decide(
@@ -597,11 +596,6 @@ extension AppState {
         respectFrequency: true,
         authorizationSnapshot: authorizationSnapshot
       )
-
-      // Refresh conversations if the message is tied to a specific conversation
-      if let conversationId, !conversationId.isEmpty {
-        log("Transcription: Proactive message references conversation \(conversationId)")
-      }
 
     default:
       log("Transcription: Unhandled event type: \(event.type)")
