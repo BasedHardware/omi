@@ -28,11 +28,7 @@ import database.action_items as action_items_db
 import database.folders as folders_db
 import database.calendar_meetings as calendar_db
 import database.screen_activity as screen_activity_db
-from database.vector_db import (
-    upsert_action_item_vectors_batch,
-    delete_action_item_vectors_batch,
-    find_similar_action_items,
-)
+from database.vector_db import find_similar_action_items
 from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_by_id_db
 from database.vector_db import upsert_vector2, update_vector_metadata, upsert_transcript_chunk_vectors
 from utils.conversations.transcript_chunks import build_transcript_chunks
@@ -122,7 +118,6 @@ from utils.other.hume import (
 from utils.retrieval.rag import retrieve_rag_conversation_context
 from utils.webhooks import conversation_created_webhook
 from utils.notifications import send_action_item_data_message
-from utils.task_sync import auto_sync_action_items_batch
 from utils.task_intelligence import conversation_capture
 from utils.conversations.calendar_linking import (
     get_overlapping_calendar_event,
@@ -275,6 +270,11 @@ def _fetch_dedup_candidates(uid: str, structured: Structured, conversation: Any 
     return _fetch_dedup_candidates_for_query(uid, structured.overview, conversation)
 
 
+def _primary_user_name(uid: str) -> Optional[str]:
+    raw_name = get_user_name(uid, use_default=False)
+    return raw_name.strip() if isinstance(raw_name, str) and raw_name.strip() else None
+
+
 def _get_structured(
     uid: str,
     language_code: str,
@@ -360,6 +360,7 @@ def _get_structured(
                         calendar_meeting_context=calendar_context,
                         output_language_code=user_language,
                         task_intelligence_capture=task_intelligence_capture,
+                        primary_user_name=_primary_user_name(uid),
                     )
                 return structured, False
 
@@ -433,6 +434,7 @@ def _get_structured(
                     output_language_code=user_language,
                     task_intelligence_capture=task_intelligence_capture,
                     trusted_wake_word_markers=has_wake_word_marker,
+                    primary_user_name=_primary_user_name(uid),
                 )
             return structured, False
 
@@ -500,6 +502,7 @@ def _get_structured(
                 output_language_code=user_language,
                 task_intelligence_capture=task_intelligence_capture,
                 trusted_wake_word_markers=has_wake_word_marker,
+                primary_user_name=_primary_user_name(uid),
             )
         return structured, False
     except Exception as e:
@@ -1475,9 +1478,12 @@ def send_new_memories_notification(user_id: str, memories: List[MemoryDB]) -> No
 
 
 def _save_action_items(uid: str, conversation: Conversation, people: Sequence[Person] = ()):
-    """
-    Save action items from a conversation to the dedicated action_items collection.
-    This runs in addition to storing them in the conversation for backward compatibility.
+    """Propose a conversation's extracted action items as Candidates.
+
+    INVARIANT I1: nothing here writes an ``action_item``. Extraction produces
+    suggestions only; a task exists when the user says so. The items also stay
+    on ``conversation.structured``, which is what the summary view renders and
+    what its "Add to Tasks" button acts on.
     """
     if not conversation.structured:
         return
@@ -1497,129 +1503,31 @@ def _save_action_items(uid: str, conversation: Conversation, people: Sequence[Pe
     if not conversation.structured.action_items:
         return
 
-    is_locked = conversation.is_locked
     try:
-        captured_canonically = conversation_capture.process_conversation_before_legacy(
-            uid, conversation, wake_word_gate
-        )
+        conversation_capture.process_conversation_before_legacy(uid, conversation, wake_word_gate)
     except Exception:
-        # Everything above the compatibility writer runs before any task row exists, so an
-        # exception here used to drop the conversation's tasks entirely: the writer below
-        # never ran and the executor discarded the traceback.
+        # INV-TASK-2: a capture failure must not fall through to a writer. Defer
+        # and retry; silence is the correct failure. #12014's evidence clamp
+        # already stops the ValidationError that used to abort this path.
         logger.exception(f"canonical task capture failed for conversation {conversation.id}")
         record_fallback(
             component='other',
             from_mode='canonical_task_capture',
-            to_mode='legacy_action_items',
+            to_mode='defer_retry',
             reason='other',
             outcome='degraded',
         )
-        captured_canonically = False
-    if captured_canonically:
-        emit_product_event(
-            uid=uid,
-            event='Task Extracted',
-            properties={
-                'task_count': len(conversation.structured.action_items),
-                'conversation_id': conversation.id,
-                'task_source': 'transcript',
-                'persistence_path': 'canonical_candidate',
-            },
-        )
         return
-
-    action_items_data: List[Dict[str, Any]] = []
-    now = datetime.now(timezone.utc)
-
-    for action_item in conversation.structured.action_items:
-        action_item_data = {
-            'description': action_item.description,
-            'completed': action_item.completed,
-            'created_at': action_item.created_at or now,
-            'updated_at': action_item.updated_at or now,
-            'due_at': action_item.due_at,
-            'completed_at': action_item.completed_at,
+    emit_product_event(
+        uid=uid,
+        event='Task Extracted',
+        properties={
+            'task_count': len(conversation.structured.action_items),
             'conversation_id': conversation.id,
-            'is_locked': is_locked,
-            **conversation_capture.canonical_conversation_fields(action_item, conversation),
-        }
-        action_items_data.append(action_item_data)
-
-    if action_items_data:
-        # Delete existing action items and their vectors first (in case of reprocessing)
-        old_items = action_items_db.get_action_items_by_conversation(uid, conversation.id)
-        old_ids = [item['id'] for item in old_items]
-        if old_ids:
-            delete_action_item_vectors_batch(uid, old_ids)
-        document_ids = conversation_capture.legacy_document_ids(
-            uid,
-            conversation.id,
-            conversation.structured.action_items,
-        )
-        if document_ids is None:
-            action_items_db.delete_action_items_for_conversation(uid, conversation.id)
-        else:
-            action_items_db.retire_action_items_for_conversation(
-                uid,
-                conversation.id,
-                active_ids=document_ids,
-                replacements=conversation_capture.legacy_replacement_map(
-                    old_items,
-                    conversation.structured.action_items,
-                    document_ids,
-                ),
-            )
-        # Save new action items
-        action_item_ids = action_items_db.create_action_items_batch(
-            uid,
-            action_items_data,
-            document_ids=document_ids,
-        )
-        logger.info(f"Saved {len(action_item_ids)} action items for conversation {conversation.id}")
-
-        conversation_capture.reconcile_after_legacy(
-            uid,
-            conversation.id,
-            conversation.structured.action_items,
-            action_item_ids,
-        )
-        emit_product_event(
-            uid=uid,
-            event='Task Extracted',
-            properties={
-                'task_count': len(action_item_ids),
-                'conversation_id': conversation.id,
-                'task_source': 'transcript',
-                'persistence_path': 'legacy_projection',
-            },
-        )
-
-        # Send FCM data messages for action items with due dates
-        for idx, action_item in enumerate(conversation.structured.action_items):
-            if action_item.due_at and idx < len(action_item_ids):
-                action_item_id = action_item_ids[idx]
-                send_action_item_data_message(
-                    user_id=uid,
-                    action_item_id=action_item_id,
-                    description=action_item.description,
-                    due_at=action_item.due_at.isoformat(),
-                )
-
-        # Auto-sync to task integration — submit before vector ops so it always runs
-        created_items = [{"id": aid, **data} for aid, data in zip(action_item_ids, action_items_data)]
-
-        def _run_auto_sync():
-            asyncio.run(auto_sync_action_items_batch(uid, created_items))
-
-        submit_with_context(postprocess_executor, _run_auto_sync)
-
-        upsert_action_item_vectors_batch(
-            uid,
-            [
-                {'action_item_id': aid, 'description': data['description']}
-                for aid, data in zip(action_item_ids, action_items_data)
-            ],
-        )
+            'task_source': 'transcript',
+            'persistence_path': 'canonical_candidate',
+        },
+    )
 
 
 # Verbatim transcript-chunk indexing (ns_tchunks). Off by default: enables semantic

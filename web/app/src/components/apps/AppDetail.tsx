@@ -21,8 +21,9 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { cn } from '@/lib/utils';
-import { getApp, enableApp, disableApp } from '@/lib/api';
+import { getApp, enableApp, disableApp, reEnableApp } from '@/lib/api';
 import type { App } from '@/types/apps';
+import { AppDisabledNotice } from '@/components/apps/AppDisabledNotice';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { MixpanelManager } from '@/lib/analytics/mixpanel';
 
@@ -69,6 +70,8 @@ export function AppDetail({ appId }: AppDetailProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [isToggling, setIsToggling] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isReEnabling, setIsReEnabling] = useState(false);
+  const [reEnableError, setReEnableError] = useState<string | null>(null);
 
   // Check if user owns this app
   const isOwner = user && app?.uid === user.uid;
@@ -77,6 +80,7 @@ export function AppDetail({ appId }: AppDetailProps) {
     async function loadApp() {
       setIsLoading(true);
       setError(null);
+      setReEnableError(null);
       try {
         const appData = await getApp(appId);
         setApp(appData);
@@ -108,6 +112,30 @@ export function AppDetail({ appId }: AppDetailProps) {
       console.error('Failed to toggle app:', err);
     } finally {
       setIsToggling(false);
+    }
+  };
+
+  const handleReEnable = async () => {
+    if (!app) return;
+
+    setIsReEnabling(true);
+    setReEnableError(null);
+    try {
+      await reEnableApp(app.id);
+      MixpanelManager.track('App Re-enabled', { app_id: app.id });
+      setApp({
+        ...app,
+        disabled: false,
+        disabled_reason: undefined,
+        disabled_at: undefined,
+        disabled_error: undefined,
+      });
+    } catch (err) {
+      setReEnableError(
+        err instanceof Error ? err.message : 'Failed to re-enable this app',
+      );
+    } finally {
+      setIsReEnabling(false);
     }
   };
 
@@ -166,6 +194,16 @@ export function AppDetail({ appId }: AppDetailProps) {
 
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-4xl mx-auto px-4 py-6">
+          {app.disabled && (
+            <AppDisabledNotice
+              app={app}
+              isOwner={!!isOwner}
+              onReEnable={handleReEnable}
+              isReEnabling={isReEnabling}
+              error={reEnableError}
+            />
+          )}
+
           {/* App Hero */}
           <div className="flex flex-col sm:flex-row gap-6 mb-8">
             {/* App icon */}
@@ -212,14 +250,21 @@ export function AppDetail({ appId }: AppDetailProps) {
               <div className="flex items-center justify-center sm:justify-start gap-3 mt-4">
                 <button
                   onClick={handleToggle}
-                  disabled={isToggling}
+                  disabled={
+                    isToggling || isReEnabling || (!!app.disabled && !app.enabled)
+                  }
+                  title={
+                    app.disabled && !app.enabled
+                      ? 'This app is disabled and cannot be installed'
+                      : undefined
+                  }
                   className={cn(
                     'px-6 py-2.5 rounded-xl font-medium',
                     'transition-colors flex items-center gap-2',
                     app.enabled
                       ? 'bg-red-500/10 text-red-500 hover:bg-red-500/20'
                       : 'bg-white text-black hover:bg-white/90',
-                    'disabled:opacity-50',
+                    'disabled:opacity-50 disabled:cursor-not-allowed',
                   )}
                 >
                   {isToggling ? (

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import copy
 import importlib.util
+import json
 import re
+import runpy
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -12,6 +14,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / 'scripts/validate-backend-runtime-env.py'
+RENDERER_SCRIPT = ROOT / 'scripts/render_backend_runtime_env.py'
 READINESS_PROPOSAL_ARGS = (
     ' --proposal-output "$FIRESTORE_PROPOSAL_PATH"'
     ' --source-commit "$FIRESTORE_SOURCE_COMMIT"'
@@ -31,6 +34,19 @@ def load_validator():
 def write_yaml(path: Path, payload: dict) -> None:
     with path.open('w', encoding='utf-8') as handle:
         yaml.safe_dump(payload, handle, sort_keys=False)
+
+
+def render_cloud_run_state(env_config: dict, monkeypatch) -> dict:
+    cloud_run = env_config.get('cloud_run') or {}
+    for raw_entry in (cloud_run.get('network') or {}).get('flags', {}).values():
+        if isinstance(raw_entry, dict) and isinstance(raw_entry.get('env_var'), str):
+            monkeypatch.setenv(raw_entry['env_var'], str(raw_entry.get('default', 'rendered-flag')))
+    for service in (cloud_run.get('services') or {}).values():
+        for raw_entry in (service.get('env') or {}).values():
+            if isinstance(raw_entry, dict) and isinstance(raw_entry.get('env_var'), str):
+                monkeypatch.setenv(raw_entry['env_var'], str(raw_entry.get('default', 'rendered-value')))
+    renderer = runpy.run_path(str(RENDERER_SCRIPT), run_name='runtime_env_state_test_renderer')
+    return renderer['_render_cloud_run_state'](env_config)
 
 
 def with_memory_env(payload: str) -> str:
@@ -737,22 +753,22 @@ def test_firestore_readiness_contract_rejects_backend_deployment_credentials(wor
     assert any('must not receive backend deployment credentials' in error.message for error in errors)
 
 
-def test_repo_prod_rendered_cloud_run_state_matches_manifest():
+def test_repo_prod_rendered_cloud_run_state_matches_manifest(monkeypatch):
     validator = load_validator()
     manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
     env_config = validator._get_env_config(manifest, 'prod')
-    rendered_state = validator._build_rendered_cloud_run_state(env_config)
+    rendered_state = render_cloud_run_state(env_config, monkeypatch)
 
     errors = validator._validate_cloud_run(env_config, rendered_state, strict_provisional=False)
 
     assert errors == []
 
 
-def test_dev_cloud_run_pusher_contract_rejects_legacy_and_non_listener_bindings():
+def test_dev_cloud_run_pusher_contract_rejects_legacy_and_non_listener_bindings(monkeypatch):
     validator = load_validator()
     manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
     env_config = validator._get_env_config(manifest, 'dev')
-    rendered_state = validator._build_rendered_cloud_run_state(env_config)
+    rendered_state = render_cloud_run_state(env_config, monkeypatch)
 
     backend_env = rendered_state['services']['backend']['env']
     next(entry for entry in backend_env if entry['name'] == 'HOSTED_PUSHER_API_URL')[
@@ -783,15 +799,25 @@ def test_dev_cloud_run_pusher_contract_rejects_legacy_and_non_listener_bindings(
     ]
 
 
-def test_dev_cloud_run_pusher_contract_rejects_job_binding():
+def test_dev_cloud_run_pusher_contract_rejects_job_binding(monkeypatch):
     validator = load_validator()
     manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
     env_config = validator._get_env_config(manifest, 'dev')
-    rendered_state = validator._build_rendered_cloud_run_state(env_config)
+    rendered_state = render_cloud_run_state(env_config, monkeypatch)
+    rendered_state['jobs'] = {
+        'notifications-job': {
+            'env': [
+                {
+                    'name': 'HOSTED_PUSHER_API_URL',
+                    'value': 'http://internal-alb.pusher-ep-dev.il7.us-central1.lb.based-hardware-dev.internal',
+                }
+            ]
+        }
+    }
     rendered_state['jobs']['notifications-job']['env'].append(
         {
-            'name': 'HOSTED_PUSHER_API_URL',
-            'value': 'http://internal-alb.pusher-ep-dev.il7.us-central1.lb.based-hardware-dev.internal',
+            'name': 'OMI_BACKGROUND_FLEX_CAPABLE',
+            'value': 'true',
         }
     )
 
@@ -1174,13 +1200,15 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
       "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
+        {"name": "PROMETHEUS_SIDECAR_PORT", "value": "9090"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
         {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
         {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET"}}},
-        {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN"}}}
+        {"name": "METRICS_SECRET", "valueFrom": {"secretKeyRef": {"name": "METRICS_SECRET"}}},
+        {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN"}}},
       ]
     },
     "backend-sync": {
@@ -1410,9 +1438,11 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
                                     'HOSTED_PARAKEET_API_URL': {'value': 'http://parakeet.omiapi.com'},
                                     'STT_PRERECORDED_MODEL': {'value': 'parakeet,modulate-velma-2'},
                                     'CUSTOM_MANIFEST_ONLY_MARKER': {'value': 'present'},
+                                    'PROMETHEUS_SIDECAR_PORT': {'value': '9090'},
                                 },
                                 'secrets': {
                                     **STANDARD_CLOUD_RUN_SECRETS,
+                                    'METRICS_SECRET': {'secret': 'METRICS_SECRET', 'version': 'latest'},
                                 },
                             }
                         },
@@ -1440,6 +1470,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
       "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
+        {"name": "PROMETHEUS_SIDECAR_PORT", "value": "9090"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
@@ -1447,7 +1478,8 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
         {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
         {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET"}}},
-        {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN"}}}
+        {"name": "METRICS_SECRET", "valueFrom": {"secretKeyRef": {"name": "METRICS_SECRET"}}},
+        {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN"}}},
       ]
     },
     "backend-sync": {
@@ -1502,6 +1534,7 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
       "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
+        {"name": "PROMETHEUS_SIDECAR_PORT", "value": "9090"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
@@ -1509,7 +1542,8 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
         {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
         {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON", "key": "1"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET", "key": "latest"}}},
-        {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "key": "latest"}}}
+        {"name": "METRICS_SECRET", "valueFrom": {"secretKeyRef": {"name": "METRICS_SECRET"}}},
+        {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "key": "latest"}}},
       ]
     },
     "backend-sync": {
@@ -1718,11 +1752,16 @@ def test_backend_listen_chart_only_workflow_preserves_runtime_project():
     assert workflow_text.count('--set runtimeGcpProjectId=${{ vars.RUNTIME_GCP_PROJECT_ID }}') == 2
 
 
-def test_repo_rendered_cloud_run_matches_manifest():
+def test_repo_rendered_cloud_run_artifact_matches_manifest(tmp_path, monkeypatch):
     validator = load_validator()
-
-    assert validator.validate_runtime_env(env='dev', check_rendered_cloud_run=True) == []
-    assert validator.validate_runtime_env(env='prod', check_rendered_cloud_run=True) == []
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    for env in ('dev', 'prod'):
+        state_path = tmp_path / f'{env}-cloud-run-state.json'
+        state_path.write_text(
+            json.dumps(render_cloud_run_state(validator._get_env_config(manifest, env), monkeypatch)),
+            encoding='utf-8',
+        )
+        assert validator.validate_runtime_env(env=env, cloud_run_state_path=state_path) == []
 
 
 # Every service that deploys the backend image (`uvicorn main:app`) runs the
@@ -1772,7 +1811,7 @@ def test_scheduler_runtime_surfaces_declare_orphan_stale_setting(env):
         ), f'{env}/{section}/{service} must classify the recovery setting as reliability'
 
 
-def test_parakeet_selected_without_endpoint_is_rejected_for_all_cloud_run_validation_modes(tmp_path):
+def test_parakeet_selected_without_endpoint_is_rejected_for_rendered_cloud_run_state(tmp_path, monkeypatch):
     validator = load_validator()
     manifest = copy.deepcopy(validator._load_yaml(ROOT / 'deploy/runtime_env.yaml'))
     services = manifest['environments']['dev']['cloud_run']['services']
@@ -1791,8 +1830,17 @@ def test_parakeet_selected_without_endpoint_is_rejected_for_all_cloud_run_valida
 
     manifest_path = tmp_path / 'runtime_env.yaml'
     write_yaml(manifest_path, manifest)
+    state_path = tmp_path / 'cloud-run-state.json'
+    state_path.write_text(
+        json.dumps(render_cloud_run_state(manifest['environments']['dev'], monkeypatch)),
+        encoding='utf-8',
+    )
 
-    errors = validator.validate_runtime_env(env='dev', manifest_path=manifest_path, check_rendered_cloud_run=True)
+    errors = validator.validate_runtime_env(
+        env='dev',
+        manifest_path=manifest_path,
+        cloud_run_state_path=state_path,
+    )
 
     missing_endpoint_messages = {
         'required Cloud Run service is missing non-empty HOSTED_PARAKEET_API_URL',
@@ -1839,6 +1887,12 @@ def test_desktop_backend_compose_requires_vertex_pt_env(env):
     assert desktop_env['USE_VERTEX_AI']['value'] == 'true'
     assert desktop_env['GOOGLE_CLOUD_PROJECT']['value'] == expected_project
     assert desktop_env['GCP_LOCATION']['value'] == 'us-central1'
+    assert desktop_env['PROMETHEUS_SIDECAR_PORT']['value'] == '9090'
+    desktop_secrets = manifest['environments'][env]['desktop_backend']['secrets']
+    assert desktop_secrets['METRICS_SECRET'] == {'secret': 'METRICS_SECRET', 'version': 'latest'}
+    backend = manifest['environments'][env]['cloud_run']['services']['backend']
+    assert backend['env']['PROMETHEUS_SIDECAR_PORT']['value'] == '9090'
+    assert backend['secrets']['METRICS_SECRET'] == {'secret': 'METRICS_SECRET', 'version': 'latest'}
 
 
 def test_desktop_backend_vertex_pt_omission_fails_loud(tmp_path):

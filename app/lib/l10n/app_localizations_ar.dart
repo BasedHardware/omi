@@ -9795,4 +9795,36 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get diagnosticsShareFailed => 'تعذّرت مشاركة التشخيص. يُرجى المحاولة مرة أخرى.';
+
+  @override
+  String get appDisabledTitle => 'هذا التطبيق معطّل ولا يمكن تثبيته.';
+
+  @override
+  String get appDisabledWebhookFailures => 'فشلت نقطة النهاية الخاصة به 72 ساعة متتالية، لذا تم إيقاف عمليات الإرسال.';
+
+  @override
+  String get appDisabledGeneric => 'تم تعطيله بواسطة Omi.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'أصلح نقطة النهاية أولاً — تؤدي إعادة التفعيل إلى فحص كل عنوان URL مُهيّأ من جديد.';
+
+  @override
+  String get appReEnable => 'إعادة التفعيل';
+
+  @override
+  String get appReEnableFailedTitle => 'تعذّرت إعادة التفعيل';
+
+  @override
+  String get appReEnableFailedBody => 'تعذّرت إعادة تفعيل هذا التطبيق. يُرجى المحاولة مرة أخرى.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'تم التعطيل في $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'آخر خطأ: $error';
+  }
 }

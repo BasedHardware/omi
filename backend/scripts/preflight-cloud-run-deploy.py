@@ -17,6 +17,7 @@ if str(BACKEND_ROOT) not in sys.path:
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import render_backend_runtime_env  # noqa: E402
 import repair_cloud_run_traffic  # noqa: E402
+from attach_cloud_run_gmp_sidecar import SIDECAR_NAME  # noqa: E402
 from runtime_env_validation.common import compute_project  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -167,7 +168,7 @@ def migrate_legacy_public_bindings(
             raise ValueError(f'Missing public environment config for {service}')
         public_binding_names = set(public_env)
         document = _describe_cloud_run_service(service=service, project=project, region=region, runner=runner)
-        containers = _single_container(document, operation='Legacy public-binding migration')
+        containers = _application_container(document, operation='Legacy public-binding migration')
         legacy_binding_names = sorted(
             entry['name']
             for entry in _container_env_entries(containers, operation='Legacy public-binding migration')
@@ -226,7 +227,7 @@ def check_runtime_bindings(
         expected = _expected_runtime_bindings(service=service, service_config=service_config)
         declared_names = expected.public_names | set(expected.secret_references)
         document = _describe_cloud_run_service(service=service, project=project, region=region, runner=runner)
-        container = _single_container(document, operation='Runtime binding check')
+        container = _application_container(document, operation='Runtime binding check')
         actual = _actual_runtime_bindings(
             service=service,
             env_entries=_container_env_entries(container, operation='Runtime binding check'),
@@ -339,14 +340,28 @@ def _describe_cloud_run_service(*, service: str, project: str, region: str, runn
     return cast(dict[str, Any], document)
 
 
-def _single_container(document: dict[str, Any], *, operation: str) -> dict[str, Any]:
+def _application_container(document: dict[str, Any], *, operation: str) -> dict[str, Any]:
+    """Return the one application container, ignoring the GMP metrics sidecar.
+
+    These checks read and rewrite the application's own runtime bindings, so
+    they need exactly one application container. The Managed Prometheus
+    collector attached after deploy is observability-only and carries none of
+    those bindings, so it is excluded by name rather than counted -- otherwise
+    every deploy after the first sidecar attach fails on a service that is
+    correctly configured.
+    """
     spec = document.get('spec')
     template = spec.get('template') if isinstance(spec, dict) else None
     template_spec = template.get('spec') if isinstance(template, dict) else None
     containers = template_spec.get('containers') if isinstance(template_spec, dict) else None
-    if not isinstance(containers, list) or len(containers) != 1 or not isinstance(containers[0], dict):
-        raise ValueError(f'{operation} requires exactly one container per Cloud Run service')
-    return cast(dict[str, Any], containers[0])
+    if not isinstance(containers, list):
+        raise ValueError(f'{operation} requires exactly one application container per Cloud Run service')
+    application = [
+        container for container in containers if isinstance(container, dict) and container.get('name') != SIDECAR_NAME
+    ]
+    if len(application) != 1:
+        raise ValueError(f'{operation} requires exactly one application container per Cloud Run service')
+    return cast(dict[str, Any], application[0])
 
 
 def _container_env_entries(container: dict[str, Any], *, operation: str) -> list[Any]:

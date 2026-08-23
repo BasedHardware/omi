@@ -256,6 +256,7 @@ struct DashboardPage: View {
   @AppStorage(AssistantSettings.audioRecordingModeDefaultsKey) private var audioRecordingModeRaw =
     AssistantSettings.AudioRecordingMode.onlyMeetings.rawValue
   @AppStorage("useLegacyHomeDesign") private var useLegacyHomeDesign = false
+  @AppStorage("useOldestHomeDesign") private var useOldestHomeDesign = false
   @State private var homeMode: HomeStageMode = .hub
   @State private var didReportChatFirstTranscriptPage = false
   @FocusState private var homeAskFieldFocused: Bool
@@ -379,14 +380,15 @@ struct DashboardPage: View {
 
   private var homeSurface: some View {
     Group {
-      if useLegacyHomeDesign && !routesChatToPrimaryShell {
+      if useLegacyHomeDesign && useOldestHomeDesign && !routesChatToPrimaryShell {
         legacyHome
       } else {
         redesignedHome
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(useLegacyHomeDesign ? Color.clear : HomePalette.paper)
+    // `PageGlassLane.panel` supplies the ground for older Home surfaces; keep this clear to match it.
+    .background(Color.clear)
   }
 
   private func applyHomeSheets<Content: View>(to content: Content) -> some View {
@@ -456,7 +458,7 @@ struct DashboardPage: View {
       .overlay {
         if isLoadingCitation {
           ZStack {
-            // Home fills the content area, so this dim was window-wide too — the sweep missed it.
+            // The lane publishes the modal bounds for this legacy Home surface.
             ShellModalScrim()
             VStack(spacing: OmiSpacing.md) {
               ProgressView()
@@ -1442,9 +1444,7 @@ struct DashboardPage: View {
   ) -> some View {
     ZStack {
       if isShowingAppsPopup {
-        // Home owns its panels, so this page is handed the whole content area — a full-bleed dim
-        // here reaches the window's edges, and the window is transparent. `ShellModalScrim` reads
-        // that from `PageGlassLane` and puts the dim on the lane Home's own panels take.
+        // `PageGlassLane` supplies legacy Home ground and bounds this scrim; do not re-derive the preference.
         ShellModalScrim(onTap: dismissAppsPopup)
           .transition(.opacity)
           .zIndex(2)

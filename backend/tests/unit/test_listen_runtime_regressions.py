@@ -406,6 +406,7 @@ def _live_transcription_runtime(*, close_code=1001, stt_terminal_failure=False, 
         stt_terminal_failure=stt_terminal_failure,
         live_transcription_failed=live_transcription_failed,
         live_transcription_attempt=None,
+        client_live_transcription_attempt=None,
     )
     runtime.stt_service = STTService.deepgram
     runtime.stt_model = 'nova-3'
@@ -414,6 +415,7 @@ def _live_transcription_runtime(*, close_code=1001, stt_terminal_failure=False, 
     runtime.request = SimpleNamespace(uid='user-123', source='phone')
     runtime.state.current_conversation_id = 'conversation-123'
     runtime.client_device_context = SimpleNamespace(platform='ios')
+    runtime.client_kind = 'mobile_ios'
     return runtime
 
 
@@ -421,7 +423,13 @@ def test_live_transcription_journey_starts_once_and_success_wins_over_teardown(m
     import routers.listen.runtime as runtime_module
 
     _LiveSTTAttempt.instances = []
+    client_attempt = MagicMock(finished=False)
+    client_attempt.succeed.side_effect = lambda: setattr(client_attempt, 'finished', True)
+    client_attempt.fail.side_effect = lambda _issue: setattr(client_attempt, 'finished', True)
+    client_attempt.cancel.side_effect = lambda: setattr(client_attempt, 'finished', True)
     monkeypatch.setattr(runtime_module, 'LiveSTTAttempt', _LiveSTTAttempt)
+    client_attempt_factory = MagicMock(return_value=client_attempt)
+    monkeypatch.setattr(runtime_module, 'ClientJourneyAttempt', client_attempt_factory)
     runtime = _live_transcription_runtime(close_code=1011, stt_terminal_failure=True)
 
     runtime.start_live_transcription()
@@ -441,6 +449,9 @@ def test_live_transcription_journey_starts_once_and_success_wins_over_teardown(m
         'language': 'en',
     }
     assert _LiveSTTAttempt.instances[0].terminals == [('success', 'transcript_delivery')]
+    client_attempt_factory.assert_called_once_with('live_transcription', 'mobile_ios')
+    client_attempt.succeed.assert_called_once_with()
+    client_attempt.fail.assert_not_called()
 
 
 def test_custom_stt_does_not_create_a_backend_provider_attempt(monkeypatch):
@@ -473,7 +484,12 @@ def test_live_transcription_teardown_classifies_unsent_attempts_once(
     import routers.listen.runtime as runtime_module
 
     _LiveSTTAttempt.instances = []
+    client_attempt = MagicMock(finished=False)
+    client_attempt.succeed.side_effect = lambda: setattr(client_attempt, 'finished', True)
+    client_attempt.fail.side_effect = lambda _issue: setattr(client_attempt, 'finished', True)
+    client_attempt.cancel.side_effect = lambda: setattr(client_attempt, 'finished', True)
     monkeypatch.setattr(runtime_module, 'LiveSTTAttempt', _LiveSTTAttempt)
+    monkeypatch.setattr(runtime_module, 'ClientJourneyAttempt', MagicMock(return_value=client_attempt))
     runtime = _live_transcription_runtime(
         close_code=close_code,
         stt_terminal_failure=stt_terminal_failure,
@@ -485,6 +501,12 @@ def test_live_transcription_teardown_classifies_unsent_attempts_once(
     runtime._finish_live_transcription()
 
     assert _LiveSTTAttempt.instances[0].terminals == [(expected, 'teardown')]
+    if expected == 'failure':
+        client_attempt.fail.assert_called_once_with('provider_error')
+        client_attempt.cancel.assert_not_called()
+    else:
+        client_attempt.cancel.assert_called_once_with()
+        client_attempt.fail.assert_not_called()
 
 
 @pytest.mark.anyio

@@ -38,6 +38,17 @@ PENDING_CANDIDATE_SEMANTIC_VERSION = 'task-create.v1'
 WORKSTREAM_CANDIDATE_SEMANTIC_VERSION = 'workstream-create.v1'
 MAX_CANDIDATE_EVIDENCE_REFS = 20
 PENDING_CANDIDATE_REUSE_WINDOW = timedelta(days=14)
+# A suggestion the user does not act on expires and is gone. This is a real
+# stored deadline, not a display filter: every read treats a lapsed pending
+# Candidate as expired.
+#
+# Storage is not reclaimed yet. A Firestore TTL policy on `expires_at` would do
+# it, but `firebase_index_manifest` can only express `ttl: false` indexing
+# exemptions, so a TTL policy cannot be declared through the generated manifest
+# today — and enabling auto-deletion on a live collection group is not a change
+# to smuggle in through a generated file. Expired Candidates therefore remain
+# stored but unreadable until that is addressed separately.
+SUGGESTION_TTL = timedelta(days=2)
 TASK_PRIORITY_RANK = {
     TaskPriority.low: 0,
     TaskPriority.medium: 1,
@@ -420,6 +431,22 @@ def _stored_task_priority(value: Any) -> Optional[TaskPriority]:
         return None
 
 
+def candidate_has_lapsed(candidate: CandidateRecord, *, now: datetime) -> bool:
+    """Whether a pending Candidate's suggestion window has closed.
+
+    Storage reclamation is asynchronous, so a lapsed Candidate can still be
+    readable. Every read path must ask this rather than trusting `status`.
+    """
+
+    if candidate.status != CandidateStatus.pending:
+        return False
+    # Candidates written before suggestions had a deadline carry no `expires_at`.
+    # Derive one from creation so the pre-existing backlog ages out too, with no
+    # backfill.
+    deadline = candidate.expires_at or (candidate.created_at + SUGGESTION_TTL)
+    return deadline <= now
+
+
 def create_candidate(
     uid: str,
     proposal: CandidateCreate,
@@ -445,6 +472,7 @@ def create_candidate(
         account_generation=account_generation,
         idempotency_key=key_hash,
         created_at=now_value,
+        expires_at=now_value + SUGGESTION_TTL,
     )
     ref = _candidate_ref(uid, candidate_id)
     alias_ref = _candidate_idempotency_alias_ref(uid, key_hash)
@@ -877,6 +905,7 @@ def resolve_task_candidate(
             'resolution_reason': 'accepted',
             'result_task_id': task_id,
             'resolved_at': resolved_at,
+            'expires_at': None,
         }
         write_transaction.update(candidate_ref, candidate_patch)
         if candidate.proposed_action == CandidateAction.create:
@@ -1067,7 +1096,12 @@ def resolve_candidate_without_mutation(
             raise CandidateConflictError('Candidate resolution is already claimed')
         write_transaction.update(
             candidate_ref,
-            {'status': status.value, 'resolution_reason': reason or status.value, 'resolved_at': resolved_at},
+            {
+                'status': status.value,
+                'resolution_reason': reason or status.value,
+                'resolved_at': resolved_at,
+                'expires_at': None,
+            },
         )
         return CandidateResolutionReceipt(
             candidate_id=candidate_id,
@@ -1133,6 +1167,7 @@ def reconcile_migrated_candidate(
             'status': status.value,
             'resolution_reason': reason or f'legacy_{status.value}',
             'resolved_at': resolution_time,
+            'expires_at': None,
         }
         if result_task_id:
             patch['result_task_id'] = result_task_id
@@ -1325,6 +1360,7 @@ __all__ = [
     'list_candidates',
     'pending_candidate_semantic_identity',
     'reconcile_migrated_candidate',
+    'candidate_has_lapsed',
     'resolve_candidate_without_mutation',
     'resolve_task_candidate',
     'task_id_for_candidate',

@@ -1172,6 +1172,10 @@ class TestTranscribeStreamWebSocket:
         """WebSocket should accept connection and forward Parakeet segments."""
         client, module, saved = _make_chat_client()
         try:
+            attempt = MagicMock(finished=False)
+            attempt.succeed.side_effect = lambda: setattr(attempt, 'finished', True)
+            attempt.fail.side_effect = lambda _issue: setattr(attempt, 'finished', True)
+            attempt.cancel.side_effect = lambda: setattr(attempt, 'finished', True)
             # Mock Parakeet to return a fake socket that captures sent audio.
             mock_dg_socket = MagicMock()
             mock_dg_socket.is_connection_dead = False
@@ -1203,9 +1207,12 @@ class TestTranscribeStreamWebSocket:
                 with patch.object(
                     module, 'get_stt_service_for_language', return_value=(module.STTService.parakeet, 'en', 'parakeet')
                 ):
-                    with patch.object(module, 'process_audio_parakeet', side_effect=mock_process_audio_parakeet):
+                    with patch.object(
+                        module, 'process_audio_parakeet', side_effect=mock_process_audio_parakeet
+                    ), patch.object(module, 'ClientJourneyAttempt', return_value=attempt) as journey_factory:
                         with client.websocket_connect(
-                            '/v2/voice-message/transcribe-stream?language=en&sample_rate=16000'
+                            '/v2/voice-message/transcribe-stream?language=en&sample_rate=16000',
+                            headers={'X-App-Platform': 'macos'},
                         ) as ws:
                             # Send enough audio to trigger a 30ms flush (16000 * 2 * 0.03 = 960 bytes)
                             ws.send_bytes(b'\x00' * 960)
@@ -1215,6 +1222,9 @@ class TestTranscribeStreamWebSocket:
                             assert len(data) == 1
                             assert data[0]['text'] == 'Hello'
                             assert data[0]['speaker'] == 'SPEAKER_00'
+                        journey_factory.assert_called_once_with('realtime_voice', 'desktop_macos')
+                        attempt.succeed.assert_called_once_with()
+                        attempt.fail.assert_not_called()
         finally:
             _cleanup_chat_client(saved)
 
@@ -1222,6 +1232,10 @@ class TestTranscribeStreamWebSocket:
         """If both serving provider connections fail, WebSocket should close with 1011."""
         client, module, saved = _make_chat_client()
         try:
+            attempt = MagicMock(finished=False)
+            attempt.succeed.side_effect = lambda: setattr(attempt, 'finished', True)
+            attempt.fail.side_effect = lambda _issue: setattr(attempt, 'finished', True)
+            attempt.cancel.side_effect = lambda: setattr(attempt, 'finished', True)
 
             async def mock_process_audio_parakeet_fail(stream_transcript, **kwargs):
                 return None
@@ -1232,11 +1246,18 @@ class TestTranscribeStreamWebSocket:
             with patch.object(
                 module, 'get_stt_service_for_language', return_value=(module.STTService.parakeet, 'en', 'parakeet')
             ):
-                with patch.object(module, 'process_audio_parakeet', side_effect=mock_process_audio_parakeet_fail):
-                    with patch.object(module, 'process_audio_modulate', side_effect=mock_process_audio_modulate_fail):
-                        with pytest.raises(Exception):
-                            with client.websocket_connect('/v2/voice-message/transcribe-stream') as ws:
-                                ws.receive_json()  # Should not get here
+                with patch.object(
+                    module, 'process_audio_parakeet', side_effect=mock_process_audio_parakeet_fail
+                ), patch.object(
+                    module, 'process_audio_modulate', side_effect=mock_process_audio_modulate_fail
+                ), patch.object(
+                    module, 'ClientJourneyAttempt', return_value=attempt
+                ):
+                    with pytest.raises(Exception):
+                        with client.websocket_connect('/v2/voice-message/transcribe-stream') as ws:
+                            ws.receive_json()  # Should not get here
+                attempt.fail.assert_called_once_with('provider_error')
+                attempt.succeed.assert_not_called()
         finally:
             _cleanup_chat_client(saved)
 

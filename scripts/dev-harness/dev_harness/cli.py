@@ -99,8 +99,14 @@ def _service_record(cfg: config.HarnessConfig, service: str) -> dict[str, object
 def _native_typesense_binary() -> str | None:
     override = os.environ.get("OMI_TYPESENSE_SERVER_BIN", "").strip()
     if override:
-        if not Path(override).is_file():
+        binary = Path(override)
+        if not binary.is_file():
             raise SystemExit(f"OMI_TYPESENSE_SERVER_BIN points to a missing binary: {override}")
+        if not os.access(binary, os.X_OK):
+            raise SystemExit(
+                f"OMI_TYPESENSE_SERVER_BIN points to a file that is not executable: {override}; "
+                "make it executable (for example, chmod +x on macOS/Linux) or choose another binary"
+            )
         return override
     return shutil.which("typesense-server")
 

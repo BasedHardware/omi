@@ -9775,4 +9775,35 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get diagnosticsShareFailed => 'לא ניתן היה לשתף את האבחון. נסה שוב.';
+
+  @override
+  String get appDisabledTitle => 'האפליקציה הזו מושבתת ולא ניתן להתקין אותה.';
+
+  @override
+  String get appDisabledWebhookFailures => 'נקודת הקצה שלה נכשלה 72 שעות ברציפות, ולכן המשלוחים הופסקו.';
+
+  @override
+  String get appDisabledGeneric => 'היא הושבתה על ידי Omi.';
+
+  @override
+  String get appDisabledOwnerHint => 'תקן קודם את נקודת הקצה — הפעלה מחדש בודקת שוב כל כתובת URL מוגדרת.';
+
+  @override
+  String get appReEnable => 'הפעל מחדש';
+
+  @override
+  String get appReEnableFailedTitle => 'ההפעלה מחדש נכשלה';
+
+  @override
+  String get appReEnableFailedBody => 'לא ניתן היה להפעיל מחדש את האפליקציה הזו. נסה שוב.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'הושבתה בתאריך $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'השגיאה האחרונה: $error';
+  }
 }

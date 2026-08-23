@@ -333,3 +333,49 @@ def test_mint_probe_token_prefers_explicit_local_signer(monkeypatch, tmp_path):
         ('local_signer', signer, 'based-hardware'),
         ('exchange', 'custom-token', 'api-key'),
     ]
+
+
+def test_explicit_signer_service_account_signs_as_the_firebase_projects_account(monkeypatch):
+    """The development lane authenticates against production Firebase.
+
+    Identity Toolkit only accepts a custom token whose signer is authorized for
+    that Firebase project, so a development deploy identity signing as itself
+    fails at custom_token_signing. Naming the Firebase project's own signer
+    makes IAM signJwt target that account instead.
+    """
+    module = _load_module()
+    requests = []
+
+    def fake_run(args, *, stage):
+        if stage == 'secret_access':
+            return 'firebase-api-key-that-must-not-leak'
+        if stage == 'service_account':
+            pytest.fail('an explicit signer must not fall back to the active identity')
+        return 'gcp-access-token-that-must-not-leak'
+
+    def fake_request(url, *, body, access_token, stage):
+        requests.append((url, stage))
+        if stage == 'custom_token_signing':
+            return {'signedJwt': 'custom-token-that-must-not-leak'}
+        return {'idToken': _id_token(), 'refreshToken': 'refresh-token-that-must-not-leak'}
+
+    monkeypatch.setattr(module, '_run_gcloud', fake_run)
+    monkeypatch.setattr(module, '_request_json', fake_request)
+    monkeypatch.setattr(module.time, 'time', lambda: 1_700_000_000)
+
+    signer = 'firebase-adminsdk-4z2mm@based-hardware.iam.gserviceaccount.com'
+    assert module.mint_probe_token('based-hardware-dev', 'based-hardware', signer_service_account=signer) == _id_token()
+    signing_url = requests[0][0]
+    assert 'firebase-adminsdk-4z2mm%40based-hardware.iam.gserviceaccount.com' in signing_url
+
+
+def test_signer_service_account_must_look_like_a_service_account(monkeypatch):
+    module = _load_module()
+
+    monkeypatch.setattr(module, '_run_gcloud', lambda args, *, stage: 'firebase-api-key')
+    monkeypatch.setattr(module, '_request_json', lambda *a, **k: pytest.fail('must reject before signing'))
+
+    for bad in ('not-an-email', 'someone@example.com', 'a@b.gserviceaccount.com\nx'):
+        with pytest.raises(module.ProbeTokenError) as caught:
+            module.mint_probe_token('based-hardware-dev', 'based-hardware', signer_service_account=bad)
+        assert caught.value.stage == 'signer_service_account'

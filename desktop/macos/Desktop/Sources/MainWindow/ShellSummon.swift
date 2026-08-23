@@ -54,7 +54,7 @@ enum ShellSummonPlacement {
   /// It stays above `DesktopWindowLayoutPolicy.minimumContentSize`, which is the floor the
   /// destinations lay out to.
   static let defaultSize = NSSize(
-    width: DesktopWindowLayoutPolicy.maximumContentWidth, height: 700)
+    width: ChatComposerLayout.contentLaneMaxWidth, height: 700)
 
   /// Where the shell lands on a given display.
   ///
@@ -123,7 +123,7 @@ enum ShellSummonPlacement {
   static func fitted(
     _ size: NSSize,
     in visibleFrame: NSRect,
-    maxWidth: CGFloat = DesktopWindowLayoutPolicy.maximumContentWidth
+    maxWidth: CGFloat = ChatComposerLayout.contentLaneMaxWidth
   ) -> NSSize {
     NSSize(
       width: min(size.width, visibleFrame.width, maxWidth),

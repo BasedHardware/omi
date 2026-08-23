@@ -193,6 +193,12 @@ INDEX_ONLY_REQUIREMENTS = (
         (_asc('completed'), _asc('due_at'), _asc('__name__')),
     ),
     FirestoreIndexRequirement(
+        'action_items_completed_created',
+        'action_items',
+        'COLLECTION',
+        (_asc('completed'), _asc('created_at'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
         'action_items_conversation_due',
         'action_items',
         'COLLECTION',
@@ -612,6 +618,49 @@ STALE_IN_PROGRESS_CONVERSATIONS_QUERY = FirestoreQuerySpec(
     ),
 )
 
+ACTION_ITEMS_COMPLETION_ID_SCAN_QUERY = FirestoreQuerySpec(
+    identifier='action_items_completion_id_scan',
+    collection_group='action_items',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('completed', '==', 'completed'),),
+    index_fields=(_asc('completed'), _asc('__name__')),
+)
+
+ACTION_ITEMS_COMPLETED_DUE_RANGE_QUERY = FirestoreQuerySpec(
+    identifier='action_items_completed_due_range',
+    collection_group='action_items',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('due_at', '>=', 'start'),
+        FirestoreQueryFilter('due_at', '<', 'end'),
+        FirestoreQueryFilter('completed', '==', 'completed'),
+    ),
+    index_fields=(_asc('completed'), _asc('due_at'), _asc('__name__')),
+)
+
+ACTION_ITEMS_CREATED_RANGE_QUERY = FirestoreQuerySpec(
+    identifier='action_items_created_range',
+    collection_group='action_items',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('created_at', '>=', 'start'),
+        FirestoreQueryFilter('created_at', '<', 'end'),
+    ),
+    index_fields=(_asc('created_at'), _asc('__name__')),
+)
+
+ACTION_ITEMS_COMPLETED_CREATED_RANGE_QUERY = FirestoreQuerySpec(
+    identifier='action_items_completed_created_range',
+    collection_group='action_items',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('created_at', '>=', 'start'),
+        FirestoreQueryFilter('created_at', '<', 'end'),
+        FirestoreQueryFilter('completed', '==', 'completed'),
+    ),
+    index_fields=(_asc('completed'), _asc('created_at'), _asc('__name__')),
+)
+
 CHAT_FIRST_DEFERRALS_DUE_QUERY = FirestoreQuerySpec(
     identifier='chat_first_deferrals_due',
     collection_group='chat_first_deferrals',
@@ -663,6 +712,19 @@ CURRENT_CHAT_SESSION_ORDERED_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('plugin_id'), _desc('created_at'), _desc('__name__')),
 )
 
+# get_app_messages and get_messages' app-scoped branch (no chat_session_id) both
+# filter messages by plugin_id and order by created_at descending. Neither built
+# this through the registry, so no composite index was ever declared for it and
+# a self-host without prod's historically hand-created index 400s with
+# FailedPrecondition on GET /v1/messages (chat.py:get_messages).
+MESSAGES_BY_APP_ORDERED_QUERY = FirestoreQuerySpec(
+    identifier='messages_by_app_created_at',
+    collection_group='messages',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('plugin_id', '==', 'app_id'),),
+    index_fields=(_asc('plugin_id'), _desc('created_at'), _desc('__name__')),
+)
+
 MEETING_RECEIPTS_DUE_QUERY = FirestoreQuerySpec(
     identifier='conversation_finalization_jobs_meeting_receipts_due',
     collection_group='conversation_finalization_jobs',
@@ -696,6 +758,10 @@ HOURLY_USAGE_PLAN_ATTRIBUTION_QUERY = FirestoreQuerySpec(
 )
 
 QUERY_SPECS = (
+    ACTION_ITEMS_COMPLETION_ID_SCAN_QUERY,
+    ACTION_ITEMS_COMPLETED_DUE_RANGE_QUERY,
+    ACTION_ITEMS_CREATED_RANGE_QUERY,
+    ACTION_ITEMS_COMPLETED_CREATED_RANGE_QUERY,
     CANDIDATES_COMPATIBILITY_QUERY,
     DUE_MEMORY_OUTBOX_QUERY,
     EXPIRED_MEMORY_OUTBOX_LEASE_QUERY,
@@ -728,6 +794,7 @@ QUERY_SPECS = (
     CURRENT_CHAT_SESSION_ORDERED_QUERY,
     MEETING_RECEIPTS_DUE_QUERY,
     HOURLY_USAGE_PLAN_ATTRIBUTION_QUERY,
+    MESSAGES_BY_APP_ORDERED_QUERY,
 )
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)

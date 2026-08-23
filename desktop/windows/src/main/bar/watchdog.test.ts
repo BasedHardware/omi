@@ -5,6 +5,7 @@ import {
   barWatchPlan,
   barGestureSeesOpen,
   clickEdge,
+  corroboratedCursorInFootprint,
   type WatchdogInput
 } from './watchdog'
 
@@ -90,6 +91,22 @@ describe('evaluatePeekWatchdog — retract grace', () => {
       expect(s.retract).toBe(false)
       expect(s.outsideSince).toBe(null)
     }
+  })
+})
+
+describe('corroboratedCursorInFootprint — native-Wayland cursor-query fallback', () => {
+  it('trusts the renderer-reported hover even when the OS reading says outside', () => {
+    // screen.getCursorScreenPoint() is unreliable on native Wayland — a live
+    // renderer mouseenter must still keep the pill from starving hasBeenHovered.
+    expect(corroboratedCursorInFootprint(false, true)).toBe(true)
+  })
+
+  it('trusts the OS reading even when the renderer has not reported hover', () => {
+    expect(corroboratedCursorInFootprint(true, false)).toBe(true)
+  })
+
+  it('is false only when BOTH signals agree nothing is hovering', () => {
+    expect(corroboratedCursorInFootprint(false, false)).toBe(false)
   })
 })
 

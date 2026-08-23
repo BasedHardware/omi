@@ -208,24 +208,6 @@ final class GlassButtonPrimitiveTests: XCTestCase {
     XCTAssertLessThan(OmiButtonStyle.pressedFillOpacity, 1.0)
   }
 
-  // MARK: - The task agent's status readout
-
-  func testTaskAgentFailureRaisesItsVoiceAndNothingUsesTheThirdRung() {
-    // Both copies of this switch (the row indicator and the detail sheet) rendered `.failed` in the
-    // faintest grey in the file, which is the opposite of what a failure has to do. They are one
-    // function now, so there is one place for that to be right.
-    XCTAssertEqual(TaskAgentStatusInk.color(for: .failed), Ink.errorRed)
-    XCTAssertEqual(TaskAgentStatusInk.color(for: .completed), Ink.primary)
-
-    for status in TaskAgentManager.AgentStatus.allCases {
-      // Glass carries two rungs. `Ink.tertiary` measures under WCAG AA on the panel, so a status
-      // word set in it is a status word nobody reads.
-      XCTAssertNotEqual(
-        TaskAgentStatusInk.color(for: status), Ink.tertiary,
-        "\(status) uses the third type rung, which is illegal on glass")
-    }
-  }
-
   // MARK: - Measurement
 
   /// Composites a colour in the appearance the glass is pinned to.

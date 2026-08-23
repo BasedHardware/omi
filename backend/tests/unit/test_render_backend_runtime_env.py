@@ -17,8 +17,8 @@ def _reuse_parsed_repo_manifest(monkeypatch):
 
 
 def _job_env_block(out: str, job_prefix: str) -> str:
-    start = out.index(f'{job_prefix}_env_vars<<')
-    end = out.index(f'{job_prefix}_secrets<<')
+    start = out.index(f'\n{job_prefix}_env_vars<<') + 1
+    end = out.index(f'\n{job_prefix}_secrets<<', start) + 1
     return out[start:end]
 
 
@@ -70,6 +70,47 @@ def test_render_env_vars_escapes_deploy_cloudrun_separators(value, expected):
     rendered = _MODULE['_render_env_vars']({'VALUE': {'value': value}})
 
     assert rendered == f'VALUE={expected}'
+
+
+def test_state_output_preserves_yaml_boolean_like_strings(tmp_path, capsys, monkeypatch):
+    env_config = {
+        'cloud_run': {
+            'network': {'flags': {'--vpc-egress': 'private-ranges-only'}},
+            'services': {
+                'backend': {
+                    'env': {
+                        'FEATURE_OFF': {'value': 'off'},
+                        'FEATURE_ON': {'value': 'on'},
+                        'FEATURE_YES': {'value': 'yes'},
+                        'FEATURE_NO': {'value': 'no'},
+                    },
+                    'secrets': {},
+                }
+            },
+        }
+    }
+    state_path = tmp_path / 'runtime-env-state.json'
+    monkeypatch.setitem(_MODULE['main'].__globals__, '_load_yaml', lambda _path: {'environments': {'dev': env_config}})
+    monkeypatch.setattr(
+        'sys.argv',
+        ['render_backend_runtime_env.py', '--env', 'dev', '--state-output', str(state_path)],
+    )
+
+    assert _MODULE['main']() == 0
+
+    state = json.loads(state_path.read_text(encoding='utf-8'))
+    rendered_env = {entry['name']: entry['value'] for entry in state['services']['backend']['env']}
+
+    assert rendered_env == {
+        'FEATURE_OFF': 'off',
+        'FEATURE_ON': 'on',
+        'FEATURE_YES': 'yes',
+        'FEATURE_NO': 'no',
+    }
+    assert all(isinstance(value, str) for value in rendered_env.values())
+    output = capsys.readouterr().out
+    assert 'FEATURE_OFF=off' in output
+    assert 'FEATURE_ON=on' in output
 
 
 def test_network_flags_still_required(monkeypatch):
@@ -383,5 +424,7 @@ def test_desktop_backend_compose_pins_vertex_pt(env, project):
     assert 'USE_VERTEX_AI=true' in rendered, VERTEX_PT_CONTRACT
     assert f'GOOGLE_CLOUD_PROJECT={project}' in rendered, VERTEX_PT_CONTRACT
     assert 'GCP_LOCATION=us-central1' in rendered, VERTEX_PT_CONTRACT
+    assert 'PROMETHEUS_SIDECAR_PORT=9090' in rendered
+    assert _MODULE['_render_secrets'](desktop['secrets']) == 'METRICS_SECRET=METRICS_SECRET:latest'
     docs = Path(__file__).resolve().parents[2] / 'docs' / 'vertex-pt-flash.md'
     assert VERTEX_PT_CONTRACT.split(',')[0] in docs.read_text(encoding='utf-8')

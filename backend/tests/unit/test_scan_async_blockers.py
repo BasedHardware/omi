@@ -550,3 +550,43 @@ def test_async_with_is_not_a_structural_finding(scanner, tmp_path):
     results = scanner.scan_dirs([str(source_path)])
 
     assert results["no_await_should_be_def"] == []
+
+
+def test_awaited_async_db_accessor_is_not_blocking(scanner, tmp_path):
+    """`await`ing an async accessor from database.* yields to the loop, so it is not blocking.
+
+    The scanner classified every `database.*` import called inside an `async def` as a sync DB
+    call without checking whether it was awaited. That made a correct fix — routing the
+    proactive dispatcher onto the publisher's shared Redis client via the async accessor —
+    fail the push gate, with no allowlist or inline waiver to say otherwise.
+    """
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        from database.redis_db import get_async_redis_client
+
+        async def dispatcher():
+            client = await get_async_redis_client()
+            return client
+        """,
+    )
+
+    assert results["async_helpers_with_blocking"] == []
+
+
+def test_unawaited_sync_db_call_is_still_blocking(scanner, tmp_path):
+    """The guard must not widen: the same import called without `await` still blocks."""
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        from database.redis_db import get_redis_client
+
+        async def dispatcher():
+            client = get_redis_client()
+            return client
+        """,
+    )
+
+    assert len(results["async_helpers_with_blocking"]) == 1

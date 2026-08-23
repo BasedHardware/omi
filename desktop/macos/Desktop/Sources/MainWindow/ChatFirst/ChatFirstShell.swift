@@ -122,7 +122,10 @@ struct ChatFirstShell: View {
     {
       PageGlassLane(
         selectedIndex: ChatFirstPageGlassLanePolicy.pageGlassLaneIndex(for: navigation.route),
-        memoryDestinationRawValue: memoryDestinationRawValue
+        memoryDestinationRawValue: memoryDestinationRawValue,
+        homeOwnsItsPanels: HomeDesignPresentation.queryShellOwnsItsPanels(
+          useLegacyHomeDesign: true,
+          forceModernPresentation: true)
       ) {
         routeDestination
       }
@@ -161,13 +164,22 @@ struct ChatFirstShell: View {
       // No switcher here either. Every hub page is reached from Activity's chip row, and the
       // `Activity` pill in the top bar is always one click away from this route, so the siblings
       // are two clicks out rather than stranded (INV-NAV-1, `ShellDestination.reach`).
-      ChatFirstConversationsHost(
-        navigation: navigation,
-        appState: appState,
-        chatProvider: viewModelContainer.chatProvider,
-        automationRuntime: automationRuntime,
-        explicitSelectionGeneration: conversationsSelectionGeneration
-      )
+      VStack(alignment: .leading, spacing: 0) {
+        HStack {
+          ActivityBackButton { selectHubDestination(.activity) }
+          Spacer(minLength: 0)
+        }
+        .padding(.top, 18)
+        .padding(.horizontal, 28)
+        .padding(.bottom, 6)
+        ChatFirstConversationsHost(
+          navigation: navigation,
+          appState: appState,
+          chatProvider: viewModelContainer.chatProvider,
+          automationRuntime: automationRuntime,
+          explicitSelectionGeneration: conversationsSelectionGeneration
+        )
+      }
       .accessibilityIdentifier("chat-first-route-conversations")
       .onAppear { navigation.markRouteVisible(.conversations) }
     case .tasks:
@@ -205,8 +217,7 @@ struct ChatFirstShell: View {
         // host as a record rather than as an id the host has to find again. `selectPrimary` — what
         // the spine used to call — is the tab-selection primitive and drops pending records by
         // design, which is why the click landed on the list.
-        onOpenConversationRecord: { navigation.open(conversation: $0) },
-        onOpenTasks: { navigation.selectPrimary(.tasks) }
+        onOpenConversationRecord: { navigation.open(conversation: $0) }
       )
       .accessibilityIdentifier("chat-first-route-memories")
       .onAppear { navigation.markRouteVisible(.memories) }
@@ -253,18 +264,17 @@ struct ChatFirstShell: View {
     Binding(
       get: { ChatFirstModernNavigationPolicy.topBarIndex(for: navigation.route) },
       set: { rawValue in
-        if rawValue == SidebarNavItem.conversations.rawValue {
-          // The pill says `Activity`, so it opens Activity — not whichever hub view happened to be
-          // persisted last. Routing through the same writer the hub's own switcher uses keeps one
-          // path responsible for moving both halves of the state.
-          selectHubDestination(.activity)
-          return
-        }
         guard let route = ChatFirstModernNavigationPolicy.route(forTopBarIndex: rawValue) else {
           return
         }
         switch route {
-        case .chat, .conversations, .tasks, .memories, .goals:
+        case .conversations:
+          // The hub's one pill says `Brain`, so it opens the Brain spine — not whichever hub view
+          // happened to be persisted last, and not the Conversations route this index maps back
+          // from. Routing through the same writer the chip row uses keeps one path responsible for
+          // moving both halves of the state.
+          selectHubDestination(.activity)
+        case .chat, .tasks, .memories, .goals:
           navigation.selectPrimary(route)
         case .more(let page):
           navigation.selectMore(page)
