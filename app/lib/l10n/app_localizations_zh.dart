@@ -2000,6 +2000,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get memoryDeleted => '记忆已删除。';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => '撤销';
 
   @override

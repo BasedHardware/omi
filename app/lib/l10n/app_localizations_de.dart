@@ -2059,6 +2059,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get memoryDeleted => 'Erinnerung gelöscht.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Rückgängig';
 
   @override

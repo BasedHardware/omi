@@ -3963,6 +3963,12 @@ abstract class AppLocalizations {
   /// **'Memory Deleted.'**
   String get memoryDeleted;
 
+  /// Notice shown when the memory history response is truncated
+  ///
+  /// In en, this message translates to:
+  /// **'Some memory history is unavailable. Showing the history received so far.'**
+  String get memoryHistoryPartial;
+
   /// Undo button text
   ///
   /// In en, this message translates to:

@@ -2054,6 +2054,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get memoryDeleted => 'பதிவு நீக்கப்பட்டுள்ளது.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'மறுசெய்க';
 
   @override

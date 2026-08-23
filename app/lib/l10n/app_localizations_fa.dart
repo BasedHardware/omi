@@ -2040,6 +2040,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get memoryDeleted => 'خاطره حذف شد.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'بازگشت';
 
   @override

@@ -2026,6 +2026,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get memoryDeleted => 'تم حذف الذكرى.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'تراجع';
 
   @override

@@ -15,6 +15,7 @@ import 'package:omi/widgets/extensions/functions.dart';
 import 'widgets/memory_dialog.dart';
 import 'widgets/memory_edit_sheet.dart';
 import 'widgets/memory_graph_page.dart';
+import 'widgets/memory_history_status_banner.dart';
 import 'widgets/memory_item.dart';
 import 'widgets/memory_management_sheet.dart';
 
@@ -330,6 +331,13 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                 ),
                               ),
                             ),
+                            if (provider.ledgerHistoryTruncated)
+                              const SliverToBoxAdapter(
+                                child: Padding(
+                                  padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
+                                  child: MemoryHistoryStatusBanner(),
+                                ),
+                              ),
                             if (provider.filteredMemories.isEmpty)
                               SliverFillRemaining(
                                 child: Center(

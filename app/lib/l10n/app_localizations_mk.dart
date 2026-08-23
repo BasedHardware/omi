@@ -2049,6 +2049,9 @@ class AppLocalizationsMk extends AppLocalizations {
   String get memoryDeleted => 'Успоменa е избришана.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Врати';
 
   @override

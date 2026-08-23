@@ -2026,6 +2026,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get memoryDeleted => 'Recuerdo borrado.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Deshacer';
 
   @override

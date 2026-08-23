@@ -2051,6 +2051,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get memoryDeleted => 'Amintire ștearsă.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Anulează';
 
   @override

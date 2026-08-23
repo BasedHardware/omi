@@ -2047,6 +2047,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get memoryDeleted => 'ಸ್ಮೃತಿ ಅಳಿಸಲಾಗಿದೆ.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'ರದ್ದುಗೊಳಿಸಿ';
 
   @override

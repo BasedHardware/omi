@@ -2040,6 +2040,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get memoryDeleted => 'স্মৃতি মুছে ফেলা হয়েছে।';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'পূর্বাবস্থা';
 
   @override

@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/memories/widgets/memory_item.dart';
+import 'package:omi/pages/memories/widgets/memory_history_status_banner.dart';
 import 'package:omi/providers/memories_provider.dart';
 
 class _ReviewProvider extends MemoriesProvider {
@@ -71,5 +72,56 @@ void main() {
 
     expect(provider.decisions, [false]);
     expect(memory.userReview, isFalse);
+  });
+
+  testWidgets('a rejected ledger row exposes the reversible accept control', (tester) async {
+    final provider = _ReviewProvider();
+    addTearDown(provider.dispose);
+    final memory = _playbook()..userReview = false;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: MemoryItem(
+            memory: memory,
+            provider: provider,
+            showDismissible: false,
+            onTap: (_, __, ___) {},
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('memory_review_accept_playbook-1')));
+    await tester.pump();
+
+    expect(provider.decisions, [true]);
+    expect(memory.userReview, isTrue);
+  });
+
+  testWidgets('partial history status is explicit and informational', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        localizationsDelegates: [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: MemoryHistoryStatusBanner()),
+      ),
+    );
+
+    expect(find.text('Some memory history is unavailable. Showing the history received so far.'), findsOneWidget);
+    expect(find.byIcon(Icons.info_outline), findsOneWidget);
+    expect(find.byType(TextButton), findsNothing);
   });
 }
