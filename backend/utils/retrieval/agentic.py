@@ -1278,7 +1278,7 @@ async def execute_agentic_chat_stream(
             gateway_feature_mode = should_route_chat_agent_through_gateway() and not bool(get_byok_key('anthropic'))
             tz = tz or await run_blocking(db_executor, get_user_timezone, uid)
             city = await get_mobile_city(uid, platform) if current_datetime_block is None else None
-            jit_conversation_retrieval_enabled = is_jit_conversation_retrieval_enabled(None)
+            jit_conversation_retrieval_enabled = is_jit_conversation_retrieval_enabled({"user_id": uid})
             system_prompt = await run_blocking(
                 db_executor,
                 _get_agentic_qa_prompt,

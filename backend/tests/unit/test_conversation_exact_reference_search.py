@@ -36,6 +36,7 @@ def test_parse_exact_conversation_reference_accepts_canonical_id_and_share_url(r
         SAFE_NON_UUID_ID,
         "A",
         "ownerScopedID-123",
+        "firestore.document~1",
     ],
 )
 def test_parse_exact_conversation_reference_round_trips_owner_scoped_card_reference(conversation_id):
@@ -60,10 +61,9 @@ def test_parse_exact_conversation_reference_round_trips_owner_scoped_card_refere
         "conversation: conversation-1",
         "conversation:conversation-1 ",
         "conversation:conversation/1",
-        "conversation:conversation.1",
         "conversation:conversation-1:summary",
         "conversation:conversation-1:segment:segment-1",
-        f"conversation:{'a' * 129}",
+        f"conversation:{'a' * 97}",
     ],
 )
 def test_parse_exact_conversation_reference_rejects_ambiguous_references(reference):

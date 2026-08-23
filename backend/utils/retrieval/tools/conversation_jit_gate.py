@@ -1,6 +1,5 @@
 """Dependency-free feature gate shared by JIT conversation prompt and tools."""
 
-import os
 from typing import Any, Dict, Optional
 
 JIT_CONVERSATION_RETRIEVAL_ENV = "JIT_CONVERSATION_RETRIEVAL_ENABLED"
@@ -24,8 +23,11 @@ For questions that require the user's conversation history:
    only when the user's wording permits it. Stop after those bounded retries.
 5. If a person name is ambiguous, preserve the distinct candidates and ask which person
    the user means instead of merging identities or inventing an answer.
-6. Cite only evidence references returned by the selected summary cards or hydrated
-   transcript windows. Missing or partial evidence must degrade honestly.
+6. Preserve the released [index] inline syntax, using the selected Conversation card #N
+   as [N]. Never print stable evidence-reference IDs in answer text; the server transports
+   those references separately in the structured evidence envelope. Use only evidence
+   from that cited card or its hydrated transcript window, and degrade honestly when
+   evidence is missing or partial.
 </jit_conversation_retrieval>
 """
 
@@ -42,13 +44,17 @@ def _is_enabled_value(value: Any) -> bool:
 def is_jit_conversation_retrieval_enabled(configurable: Optional[Dict[str, Any]]) -> bool:
     """Return whether the additive JIT conversation contract is explicitly enabled.
 
-    A per-request config value wins over the environment feature flag, including an
-    explicit false. Keeping the default false preserves released tool behavior until
-    a caller or rollout configuration opts in.
+    Only a UID-scoped request decision may opt in. The legacy process environment
+    switch is deliberately not activation authority: live rollout must first resolve
+    an approved cohort into this per-request value. Missing or malformed state fails
+    closed, so one environment flip cannot activate every chat request.
     """
-    if isinstance(configurable, dict) and JIT_CONVERSATION_RETRIEVAL_CONFIG_KEY in configurable:
-        return _is_enabled_value(configurable[JIT_CONVERSATION_RETRIEVAL_CONFIG_KEY])
-    return _is_enabled_value(os.getenv(JIT_CONVERSATION_RETRIEVAL_ENV, "false"))
+    if not isinstance(configurable, dict):
+        return False
+    uid = configurable.get("user_id")
+    if not isinstance(uid, str) or not uid.strip():
+        return False
+    return _is_enabled_value(configurable.get(JIT_CONVERSATION_RETRIEVAL_CONFIG_KEY))
 
 
 def append_jit_conversation_retrieval_prompt(prompt: str, *, enabled: bool) -> str:
