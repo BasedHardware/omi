@@ -54,6 +54,7 @@ from utils.retrieval.tools import (
     get_entity_timeline_tool,
     read_playbook,
     search_knowledge,
+    search_historical_facts,
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
@@ -240,6 +241,7 @@ CORE_TOOLS = [
     get_entity_timeline_tool,
     search_knowledge,
     read_playbook,
+    search_historical_facts,
 ]
 
 # Standard tool names (used to detect app tools by exclusion)
@@ -272,6 +274,7 @@ def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str
         'get_entity_timeline_tool': 'Reviewing entity timeline',
         'search_knowledge': 'Searching current knowledge',
         'read_playbook': 'Reading playbook',
+        'search_historical_facts': 'Searching historical facts',
         'get_action_items_tool': 'Checking action items',
         'create_action_item_tool': 'Creating action item',
         'update_action_item_tool': 'Updating action item',
