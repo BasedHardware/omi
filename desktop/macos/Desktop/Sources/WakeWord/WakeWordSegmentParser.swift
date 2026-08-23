@@ -114,10 +114,13 @@ enum WakeWordSegmentParser {
     }
     for homophone in sttHomophones[phrase] ?? [] {
       result.append(Candidate(text: homophone, requiresPunctuationBreak: true))
-      for greeting in ["hey", "ok", "okay"] {
-        result.append(
-          Candidate(text: "\(greeting) \(homophone)", requiresPunctuationBreak: false))
-      }
+      // Only "hey" corroborates a homophone. It is a vocative — "hey <name>" addresses
+      // someone, and nobody produces it before a misheard word by accident. "ok" and
+      // "okay" are discourse markers people open sentences with constantly, so
+      // "okay oh me and my friend went hiking" would have fired with the command
+      // "and my friend went hiking". They still corroborate the literal spelling above,
+      // where the phrase itself is already the evidence.
+      result.append(Candidate(text: "hey \(homophone)", requiresPunctuationBreak: false))
     }
     return result
   }

@@ -159,4 +159,25 @@ final class WakeWordSegmentParserTests: XCTestCase {
         after: "Nothing here. Omi open my tasks. Omi close my tasks.", wakePhrase: "Omi"),
       "open my tasks. Omi close my tasks.")
   }
+
+  /// Review note from @Git-on-my-level: "ok"/"okay" plus a homophone fired without a pause.
+  /// They are discourse markers people open sentences with, unlike the vocative "hey".
+  func testOkayDoesNotCorroborateABareHomophone() {
+    XCTAssertNil(
+      WakeWordSegmentParser.command(
+        after: "okay oh me and my friend went hiking", wakePhrase: "Omi"))
+    XCTAssertNil(
+      WakeWordSegmentParser.command(
+        after: "ok oh me and my friend went hiking", wakePhrase: "Omi"))
+  }
+
+  /// "hey" still corroborates, and both still corroborate the literal spelling.
+  func testHeyStillCorroboratesAHomophoneAndGreetingsStillWorkOnTheLiteralPhrase() {
+    XCTAssertEqual(
+      WakeWordSegmentParser.command(after: "hey oh me order pizza", wakePhrase: "Omi"),
+      "order pizza")
+    XCTAssertEqual(
+      WakeWordSegmentParser.command(after: "okay Omi order pizza", wakePhrase: "Omi"),
+      "order pizza")
+  }
 }
