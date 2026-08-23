@@ -81,12 +81,28 @@ describe('chat evidence parser', () => {
     ]);
   });
 
-  it('drops malformed and unsupported references before they reach the UI', () => {
+  it('admits screen, keyframe, and request references with their required identities', () => {
     const envelope = parseChatEvidenceEnvelope({
       references: [
         { id: 'screen', kind: 'screen', state: 'available', frame_id: 'frame-1' },
-        { id: 'keyframe', kind: 'keyframe', state: 'available', frame_id: 'frame-1' },
-        { id: 'request', kind: 'request', state: 'available', request_id: 'request-1' },
+        { id: 'keyframe', kind: 'keyframe', state: 'loading', frame_id: 'frame-2' },
+        { id: 'request', kind: 'request', state: 'failed', request_id: 'request-1' },
+      ],
+    });
+
+    expect(envelope?.references).toEqual([
+      expect.objectContaining({ id: 'screen', kind: 'screen', frameId: 'frame-1' }),
+      expect.objectContaining({ id: 'keyframe', kind: 'keyframe', frameId: 'frame-2' }),
+      expect.objectContaining({ id: 'request', kind: 'request', requestId: 'request-1' }),
+    ]);
+  });
+
+  it('drops malformed and unsupported references before they reach the UI', () => {
+    const envelope = parseChatEvidenceEnvelope({
+      references: [
+        { id: 'missing-screen-frame', kind: 'screen', state: 'available' },
+        { id: 'missing-keyframe-frame', kind: 'keyframe', state: 'available' },
+        { id: 'missing-request-id', kind: 'request', state: 'available' },
         {
           id: 'unknown',
           kind: 'future_kind',
@@ -100,6 +116,21 @@ describe('chat evidence parser', () => {
     });
 
     expect(envelope?.references).toEqual([]);
+  });
+
+  it('caps screen and request identities using the shared identifier limit', () => {
+    const identifier = 'x'.repeat(300);
+    const envelope = parseChatEvidenceEnvelope({
+      references: [
+        { id: 'screen', kind: 'screen', state: 'available', frame_id: identifier },
+        { id: 'request', kind: 'request', state: 'available', request_id: identifier },
+      ],
+    });
+
+    expect(envelope?.references).toMatchObject([
+      { frameId: identifier.slice(0, 256) },
+      { requestId: identifier.slice(0, 256) },
+    ]);
   });
 
   it('fails closed for future or malformed schema versions', () => {

@@ -2,8 +2,9 @@
  * Bounded, fail-soft parsing for supplemental chat evidence.
  *
  * The message text is authoritative. This adapter only admits conversation
- * summary and conversation segment references; screen, keyframe, request,
- * unknown, and future-schema references remain inert and are not rendered.
+ * summary, conversation segment, screen, keyframe, and request references.
+ * These references remain inert and are never used to navigate, fetch, or
+ * mutate anything in the client.
  */
 
 export const CHAT_EVIDENCE_SCHEMA_VERSION = 1 as const;
@@ -14,7 +15,8 @@ export const CHAT_EVIDENCE_MAX_SUMMARY_CHARS = 600;
 export const CHAT_EVIDENCE_MAX_ERROR_CODE_CHARS = 128;
 export const CHAT_EVIDENCE_MAX_ERROR_MESSAGE_CHARS = 600;
 
-export type ChatEvidenceKind = 'conversation_summary' | 'conversation_segment';
+export type ChatEvidenceKind =
+  'conversation_summary' | 'conversation_segment' | 'screen' | 'keyframe' | 'request';
 export type ChatEvidenceState =
   'available' | 'loading' | 'offline' | 'pruned' | 'failed' | 'unknown';
 
@@ -24,8 +26,10 @@ export interface ChatEvidenceReference {
   state: ChatEvidenceState;
   title?: string;
   summary?: string;
-  conversationId: string;
+  conversationId?: string;
   segmentId?: string;
+  frameId?: string;
+  requestId?: string;
   errorCode?: string;
   errorMessage?: string;
 }
@@ -92,15 +96,38 @@ function parseReference(value: unknown): ChatEvidenceReference | null {
     value.conversation_id ?? value.conversationId,
     CHAT_EVIDENCE_MAX_IDENTIFIER_CHARS,
   );
-  if (!id || !conversationId) return null;
+  if (!id) return null;
 
-  if (kind !== 'conversation_summary' && kind !== 'conversation_segment') return null;
+  if (
+    kind !== 'conversation_summary' &&
+    kind !== 'conversation_segment' &&
+    kind !== 'screen' &&
+    kind !== 'keyframe' &&
+    kind !== 'request'
+  ) {
+    return null;
+  }
 
   const segmentId = boundedString(
     value.segment_id ?? value.segmentId,
     CHAT_EVIDENCE_MAX_IDENTIFIER_CHARS,
   );
-  if (kind === 'conversation_segment' && !segmentId) return null;
+  const frameId = boundedString(
+    value.frame_id ?? value.frameId,
+    CHAT_EVIDENCE_MAX_IDENTIFIER_CHARS,
+  );
+  const requestId = boundedString(
+    value.request_id ?? value.requestId,
+    CHAT_EVIDENCE_MAX_IDENTIFIER_CHARS,
+  );
+  if (
+    (kind === 'conversation_summary' && !conversationId) ||
+    (kind === 'conversation_segment' && (!conversationId || !segmentId)) ||
+    ((kind === 'screen' || kind === 'keyframe') && !frameId) ||
+    (kind === 'request' && !requestId)
+  ) {
+    return null;
+  }
 
   const title = boundedString(value.title, CHAT_EVIDENCE_MAX_TITLE_CHARS);
   const summary = boundedString(
@@ -122,8 +149,10 @@ function parseReference(value: unknown): ChatEvidenceReference | null {
     state: parseState(value.state ?? value.status),
     ...(title ? { title } : {}),
     ...(summary ? { summary } : {}),
-    conversationId,
+    ...(conversationId ? { conversationId } : {}),
     ...(segmentId ? { segmentId } : {}),
+    ...(frameId ? { frameId } : {}),
+    ...(requestId ? { requestId } : {}),
     ...(errorCode ? { errorCode } : {}),
     ...(errorMessage ? { errorMessage } : {}),
   };
