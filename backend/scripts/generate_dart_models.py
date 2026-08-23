@@ -378,6 +378,8 @@ SCHEMA_GROUPS = {
         'schemas': (
             'Evidence',
             'MemoryDB',
+            'MemoryEditResponse',
+            'MemoryRevertRequest',
         ),
     },
     'goals': {

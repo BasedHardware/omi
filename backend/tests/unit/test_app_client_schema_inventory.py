@@ -173,6 +173,22 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
     assert any(item['function_name'] == 'parseMessageChunk' for item in message_send_route['called_function_ranges'])
     assert message_send_route['raw_decode_site_count'] == 0
     assert message_send_route['generated_backed_decode_site_count'] > 0
+    memory_revert_route = message_routes[
+        ('app/lib/backend/http/api/memories.dart', 'POST', '/v3/memories/{param}/revert')
+    ]
+    assert memory_revert_route['function_name'] == 'revertMemoryServer'
+    assert memory_revert_route['operations'] == [
+        {
+            'method': 'POST',
+            'normalized_path': '/v3/memories/{param}/revert',
+            'operation_id': 'revert_memory_v3_memories__memory_id__revert_post',
+            'path': '/v3/memories/{memory_id}/revert',
+            'request_schema': 'MemoryRevertRequest',
+            'response_schema': 'MemoryEditResponse',
+            'unmodeled_success_response': False,
+        }
+    ]
+    assert memory_revert_route['raw_response_decode_site_count'] == 0
     assert report['manual_dart_json_schema_file_count'] == (
         report['generated_backed_adapter_file_count'] + report['remaining_manual_dart_json_schema_file_count']
     )

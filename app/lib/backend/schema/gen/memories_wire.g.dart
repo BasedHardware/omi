@@ -282,6 +282,50 @@ class GeneratedMemoryDB {
   }
 }
 
+class GeneratedMemoryEditResponse {
+  final GeneratedMemoryDB? memory;
+  final String status;
+
+  const GeneratedMemoryEditResponse({
+    this.memory,
+    required this.status,
+  });
+
+  factory GeneratedMemoryEditResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedMemoryEditResponse(
+      memory: _readFieldValue<GeneratedMemoryDB>(_readField(json, const ["memory"]), "memory", (value) => _readObject(value, GeneratedMemoryDB.fromJson), requiredField: false, nullable: true),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'memory': memory?.toJson(),
+      'status': status,
+    };
+  }
+}
+
+class GeneratedMemoryRevertRequest {
+  final String operationId;
+
+  const GeneratedMemoryRevertRequest({
+    required this.operationId,
+  });
+
+  factory GeneratedMemoryRevertRequest.fromJson(Map<String, dynamic> json) {
+    return GeneratedMemoryRevertRequest(
+      operationId: _required(_readFieldValue<String>(_readField(json, const ["operation_id"]), "operation_id", _readString, requiredField: true, nullable: false), "operation_id"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'operation_id': operationId,
+    };
+  }
+}
+
 class _WireField {
   final bool present;
   final dynamic value;
