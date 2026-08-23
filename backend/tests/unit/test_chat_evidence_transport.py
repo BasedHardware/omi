@@ -61,6 +61,38 @@ def test_message_round_trips_bounded_versioned_evidence() -> None:
     }
 
 
+def test_screen_evidence_round_trips_as_metadata_only_reference() -> None:
+    envelope = ChatEvidenceEnvelope(
+        references=[
+            {
+                "id": "screen:frame-1",
+                "kind": "screen",
+                "state": "available",
+                "title": "Cursor",
+                "summary": "Bounded OCR preview",
+                "frame_id": "frame-1",
+                "captured_at_ms": 1_700_000_000_000,
+                "metadata": {
+                    "app_name": "Cursor",
+                    "window_title": "ledger.py",
+                    "ocr_preview": "Bounded OCR preview",
+                },
+            }
+        ]
+    )
+
+    payload = envelope.model_dump(mode="json")["references"][0]
+    assert payload["id"] == "screen:frame-1"
+    assert payload["frame_id"] == "frame-1"
+    assert payload["captured_at_ms"] == 1_700_000_000_000
+    assert payload["metadata"] == {
+        "app_name": "Cursor",
+        "window_title": "ledger.py",
+        "ocr_preview": "Bounded OCR preview",
+    }
+    assert not any(key in payload for key in ("image", "image_url", "pixels", "bytes"))
+
+
 @pytest.mark.parametrize(
     "reference",
     [
