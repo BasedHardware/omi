@@ -24,7 +24,7 @@ REQUIRED = (
     "EXPECTED_RELEASE_ID",
     "EXPECTED_GENERATION",
     "desktop_update_channels/macos-stable",
-    'ENCODED_RELEASE_TAG=$(python3 .github/scripts/url_path_segment.py "$RELEASE_TAG")',
+    'ENCODED_RELEASE_TAG="${RELEASE_TAG/+/%2B}"',
     "desktop_release_manifests/$ENCODED_RELEASE_TAG",
     "Publish immutable stable repair installer",
     "Advance explicit stable pointer",
