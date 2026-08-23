@@ -80,6 +80,32 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   private var activeSystemSpeechToken: SystemSpeechToken?
   private var activePTTLease: VoiceOutputLease?
 
+  /// What this service has recently said, so ambient capture can recognise Omi's own voice
+  /// coming back through the microphone instead of treating it as the user
+  /// (`VoicePlaybackEchoPolicy`). Kept for a window *after* playback ends, because the
+  /// transcript of the last words arrives about a second behind the audio.
+  private var spokenWordHistory: [String] = []
+  private var lastSpokeAt: Date?
+  private static let spokenHistoryWordCap = 300
+  private static let spokenHistoryLifetime: TimeInterval = 20
+
+  /// Recent playback text, or nothing once it is too old to explain an incoming segment.
+  var recentlySpokenWords: [String] {
+    guard let lastSpokeAt, Date().timeIntervalSince(lastSpokeAt) <= Self.spokenHistoryLifetime
+    else { return [] }
+    return spokenWordHistory
+  }
+
+  private func recordSpokenText(_ text: String) {
+    let words = VoicePlaybackEchoPolicy.words(text)
+    guard !words.isEmpty else { return }
+    lastSpokeAt = Date()
+    spokenWordHistory.append(contentsOf: words)
+    if spokenWordHistory.count > Self.spokenHistoryWordCap {
+      spokenWordHistory.removeFirst(spokenWordHistory.count - Self.spokenHistoryWordCap)
+    }
+  }
+
   /// QueryTracer for the in-flight query, handed in by the floating-bar window.
   /// Used to bracket the `tts_start` span (first real chunk → first audio out).
   var tracer: QueryTracer?
@@ -554,6 +580,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       }
       audioPlayer = player
       activePlayerFallbackText = fallbackText
+      recordSpokenText(fallbackText)
       tracer?.end("tts_start")
     } catch {
       // Don't drop the reply silently — speak this chunk with the system voice instead.
@@ -675,6 +702,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       leaseID: activePTTLease?.id,
       utterance: utterance)
     speechSynthesizer.speak(utterance)
+    recordSpokenText(text)
     tracer?.end("tts_start")
   }
 

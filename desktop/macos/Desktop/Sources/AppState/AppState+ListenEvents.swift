@@ -14,9 +14,34 @@ extension AppState {
       // Extract speaker_id from backend (e.g. "SPEAKER_00" → 0)
       let speakerId = segment.speaker_id ?? 0
 
+      // Omi speaks into a room Omi is also recording, so ambient capture returns the
+      // assistant's own voice attributed to the primary speaker. Every consumer below
+      // then acts on it as if a person had spoken: barge-in halts the very playback that
+      // produced it (observed live, three times in one six-turn session, which is why a
+      // long answer stops partway), the wake word can be commanded by an answer carrying
+      // the wake phrase, and the conversation record and memory extraction gain speech
+      // nobody said. One guard here, where all of them route through.
+      var segment = segment
+      switch VoicePlaybackEchoPolicy.classify(
+        transcript: segment.text,
+        spokenWords: FloatingBarVoicePlaybackService.shared.recentlySpokenWords
+      ) {
+      case .keep:
+        break
+      case .drop:
+        log("Transcription [ECHO]: dropped Omi's own playback heard back: \(segment.text.prefix(60))")
+        continue
+      case .keepResidue(let spoken):
+        // The user talked over the end of the playback. There is no pause to close the
+        // window on while Omi is speaking, so both land in one segment; keeping only the
+        // part Omi did not say is what lets a barge-in survive.
+        log("Transcription [ECHO]: kept the user's words from a segment Omi spoke over: \(spoken.prefix(60))")
+        segment.text = spoken
+      }
+
       // Read once, before barge-in can clear it. Barge-in halts playback, so anything
       // downstream that asks "was Omi speaking?" would be told no by the very segment
-      // that stopped it — including Omi's own voice arriving back through the microphone.
+      // that stopped it.
       let wasSpeakingAnswer = FloatingBarVoicePlaybackService.shared.isSpeaking
 
       // Barge-in interruption: if the user speaks while voice playback is active,

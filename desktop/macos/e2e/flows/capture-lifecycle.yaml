@@ -11,6 +11,7 @@ covers:
   - desktop/macos/Desktop/Sources/AppState/SharedCaptureSilentMicRecoveryPolicy.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+ListenEvents.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceBargeInPolicy.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoicePlaybackEchoPolicy.swift
   - desktop/macos/Desktop/Sources/WakeWord/WakeWordService.swift
   - desktop/macos/Desktop/Sources/WakeWord/WakeWordSegmentParser.swift
   - desktop/macos/Desktop/Sources/AppState/LocalTranscriptionDuplicatePolicy.swift
