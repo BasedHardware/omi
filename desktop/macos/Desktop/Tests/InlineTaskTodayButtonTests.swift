@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 
 @testable import Omi_Computer
@@ -23,6 +24,65 @@ final class InlineTaskTodayButtonTests: XCTestCase {
     let components = calendar.dateComponents([.hour, .minute], from: due)
     XCTAssertEqual(components.hour, 23)
     XCTAssertEqual(components.minute, 59)
+  }
+
+  func testTodaySectionRendersWhileEmptyOnlyWhileTheComposerIsOpen() {
+    let vm = TasksViewModel()
+
+    XCTAssertFalse(vm.showsTodayComposer, "the composer opens on demand, not on load")
+    XCTAssertFalse(
+      vm.rendersSection(.today, hasTasks: false),
+      "an empty Today with no composer has nothing to show")
+
+    vm.beginTopInlineCreation()
+    XCTAssertTrue(vm.showsTodayComposer)
+    XCTAssertTrue(
+      vm.rendersSection(.today, hasTasks: false),
+      "an empty Today renders while it hosts the open composer")
+    XCTAssertFalse(
+      vm.rendersSection(.tomorrow, hasTasks: false),
+      "other empty categories stay hidden")
+
+    vm.multiSelection.enter()
+    XCTAssertFalse(vm.showsTodayComposer)
+    XCTAssertFalse(
+      vm.rendersSection(.today, hasTasks: false),
+      "bulk edit has no composer, so an empty Today has nothing to show")
+    XCTAssertTrue(vm.rendersSection(.today, hasTasks: true))
+  }
+
+  func testCommandNWithEmptyTasksSurfacesTodayComposer() throws {
+    TasksStore.shared.resetSessionState()
+    let vm = TasksViewModel()
+    vm.showCompleted = true
+    let event = try XCTUnwrap(
+      NSEvent.keyEvent(
+        with: .keyDown,
+        location: .zero,
+        modifierFlags: .command,
+        timestamp: 0,
+        windowNumber: 0,
+        context: nil,
+        characters: "n",
+        charactersIgnoringModifiers: "n",
+        isARepeat: false,
+        keyCode: 45))
+
+    XCTAssertTrue(vm.displayTasks.isEmpty)
+    XCTAssertFalse(vm.showsTasksListWhenEmpty)
+    XCTAssertTrue(vm.handleKeyDown(event))
+    XCTAssertTrue(vm.isInlineCreating)
+    XCTAssertFalse(vm.showCompleted)
+    XCTAssertTrue(vm.showsTasksListWhenEmpty)
+    XCTAssertTrue(vm.rendersSection(.today, hasTasks: false))
+  }
+
+  func testAnchoredCreateSuppressesTodayComposer() {
+    let vm = TasksViewModel()
+    vm.beginTopInlineCreation()
+
+    XCTAssertTrue(vm.showsTodaySectionComposer(inlineCreateAfterTaskId: nil))
+    XCTAssertFalse(vm.showsTodaySectionComposer(inlineCreateAfterTaskId: "existing-task"))
   }
 
   func testTaskWithTodayDueAtAppearsInTodayCategory() {

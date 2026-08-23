@@ -5,6 +5,7 @@ description: Hermetic task create, reorder, toggle, dump, and delete via bridge 
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Tasks/InlineTaskCreationRow.swift
   - desktop/macos/Desktop/Sources/MainWindow/TaskSortOrderPlanner.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/ActionItemModels.swift
   - desktop/macos/Desktop/Sources/Services/LocalMutationAuthorization.swift
