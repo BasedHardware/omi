@@ -1,3 +1,0 @@
-{
-  "change": "Added a Disconnect action for ChatGPT and Claude cloud connections so Omi shows them as disconnected after authorization is revoked"
-}
