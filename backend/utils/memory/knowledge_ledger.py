@@ -27,6 +27,7 @@ from models.product_memory import (
 )
 from utils.memory.canonical_memory_adapter import (
     close_canonical_ledger_item,
+    memory_item_to_memorydb,
     read_canonical_memory_item,
     write_canonical_knowledge_ledger_memory,
 )
@@ -35,6 +36,12 @@ LEDGER_SCHEMA_VERSION = "knowledge_ledger.v1"
 DEFAULT_PROFILE_CHARACTER_BUDGET = 2_400
 MAX_PLAYBOOK_BODY_CHARACTERS = MAX_LEDGER_PLAYBOOK_BODY_CHARACTERS
 MAX_TRIGGER_CONDITION_KEYS = MAX_LEDGER_TRIGGER_CONDITION_KEYS
+
+
+def _is_review_visible(item: MemoryItem) -> bool:
+    """Reuse the canonical compatibility projection for tri-state review."""
+
+    return memory_item_to_memorydb(item).user_review is not False
 
 
 class LedgerProvenance(BaseModel):
@@ -330,7 +337,7 @@ def render_profile(
         and item.subject_scope == MemorySubjectScope.primary_user
         and item.status == MemoryItemStatus.active
         and item.intent_backed
-        and (item.promotion or {}).get("user_review") is not False
+        and _is_review_visible(item)
         and item.valid_to is None
         and item.slot
         and (item.content or "").strip()
@@ -367,7 +374,7 @@ def render_playbook_index(
         if item.ledger_schema_version == LEDGER_SCHEMA_VERSION
         and item.kind == MemoryKind.document
         and item.status == MemoryItemStatus.active
-        and (item.promotion or {}).get("user_review") is not False
+        and _is_review_visible(item)
         and item.valid_to is None
     ]
     active.sort(key=lambda item: (-(item.curation_weight), item.content or "", item.memory_id))
