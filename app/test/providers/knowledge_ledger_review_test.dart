@@ -299,6 +299,7 @@ void main() {
       id: 'superseded',
       kind: KnowledgeLedgerKind.fact,
       supersededBy: 'newer-fact',
+      invalidAt: DateTime.utc(2026, 8, 24),
     );
     final operationIds = <String>[];
     final provider = MemoriesProvider(
@@ -326,6 +327,7 @@ void main() {
       kind: KnowledgeLedgerKind.fact,
       content: 'Lives in Brooklyn',
       supersededBy: 'newer-fact',
+      invalidAt: DateTime.utc(2026, 8, 24),
     );
     final invalidReplacements = [
       _revertReplacement(source, id: source.id),
@@ -357,12 +359,21 @@ void main() {
       content: 'Lives in Brooklyn',
       slot: 'home_city',
       supersededBy: 'current-tail',
+      invalidAt: DateTime.utc(2026, 8, 24),
     );
     final tail = _ledgerMemory(
       id: 'current-tail',
       kind: KnowledgeLedgerKind.fact,
       content: 'Lives in Queens',
       slot: 'home_city',
+    )..visibility = MemoryVisibility.public;
+    final closedTail = _ledgerMemory(
+      id: 'current-tail',
+      kind: KnowledgeLedgerKind.fact,
+      content: 'Lives in Queens',
+      slot: 'home_city',
+      supersededBy: 'matching-visibility',
+      invalidAt: DateTime.utc(2026, 8, 24),
     )..visibility = MemoryVisibility.public;
     final responses = [
       RevertMemoryResult(
@@ -378,11 +389,17 @@ void main() {
         ),
       ),
     ];
+    var historyRequests = 0;
     final provider = MemoriesProvider(
       fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
           GetMemoriesResult([tail], true),
-      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
-          GetLedgerHistoryResult([source], supported: true),
+      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async {
+        historyRequests++;
+        return GetLedgerHistoryResult(
+          historyRequests < 2 ? [source] : [source, closedTail],
+          supported: true,
+        );
+      },
       revertMemoryRequest: (id, operationId) async => responses.removeAt(0),
     );
     addTearDown(provider.dispose);
@@ -391,7 +408,42 @@ void main() {
     expect(await provider.revertSupersededFact(source), isFalse);
     expect(provider.memories.any((memory) => memory.id == 'wrong-visibility'), isFalse);
     expect(await provider.revertSupersededFact(source), isTrue);
-    expect(provider.currentLedgerFacts.any((memory) => memory.id == 'matching-visibility'), isTrue);
+    expect(provider.currentLedgerFacts.map((memory) => memory.id), ['matching-visibility']);
+    expect(provider.historicalLedgerRows.map((memory) => memory.id), containsAll(['superseded', 'current-tail']));
+  });
+
+  test('revert never removes an unrelated current fact when the local chain has a missing link', () async {
+    final source = _ledgerMemory(
+      id: 'superseded',
+      kind: KnowledgeLedgerKind.fact,
+      content: 'Lives in Brooklyn',
+      slot: 'home_city',
+      supersededBy: 'missing-intermediate',
+      invalidAt: DateTime.utc(2026, 8, 24),
+    );
+    final unrelatedCurrent = _ledgerMemory(
+      id: 'unrelated-current',
+      kind: KnowledgeLedgerKind.fact,
+      content: 'Also spends summers in Boston',
+      slot: 'home_city',
+    );
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+          GetMemoriesResult([unrelatedCurrent], true),
+      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+          GetLedgerHistoryResult([source], supported: true),
+      revertMemoryRequest: (id, operationId) async =>
+          RevertMemoryResult(persisted: true, authoritativeMemory: _revertReplacement(source)),
+    );
+    addTearDown(provider.dispose);
+    await provider.loadMemories();
+
+    expect(await provider.revertSupersededFact(source), isTrue);
+    expect(
+      provider.currentLedgerFacts.map((memory) => memory.id),
+      containsAll(['unrelated-current', 'restored-fact']),
+    );
+    expect(provider.memories.any((memory) => memory.id == 'unrelated-current'), isTrue);
   });
 
   test('session generation change discards a late authoritative revert response', () async {
@@ -399,6 +451,7 @@ void main() {
       id: 'superseded',
       kind: KnowledgeLedgerKind.fact,
       supersededBy: 'newer-fact',
+      invalidAt: DateTime.utc(2026, 8, 24),
     );
     final response = Completer<RevertMemoryResult>();
     final provider = MemoriesProvider(

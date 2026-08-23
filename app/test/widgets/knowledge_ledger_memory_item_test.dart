@@ -32,6 +32,7 @@ class _RevertProvider extends MemoriesProvider {
       memory.ledgerKind == KnowledgeLedgerKind.fact &&
       memory.intentBacked &&
       memory.userReview != false &&
+      memory.invalidAt != null &&
       (memory.supersededBy ?? '').trim().isNotEmpty;
 
   @override
@@ -217,7 +218,7 @@ void main() {
     await tester.tap(find.text('Lives in Brooklyn'));
     expect(taps, 2, reason: 'review rejection must not make the active fact structurally historical');
 
-    await pump(_fact(supersededBy: 'replacement'));
+    await pump(_fact(supersededBy: 'replacement', invalidAt: DateTime.utc(2026, 8, 24)));
     await tester.tap(find.text('Lives in Brooklyn'));
     expect(taps, 2);
   });
@@ -259,7 +260,7 @@ void main() {
   testWidgets('revert action is disabled in flight and reports canonical failure', (tester) async {
     final provider = _RevertProvider();
     addTearDown(provider.dispose);
-    final memory = _fact(supersededBy: 'replacement');
+    final memory = _fact(supersededBy: 'replacement', invalidAt: DateTime.utc(2026, 8, 24));
 
     await tester.pumpWidget(
       MaterialApp(
@@ -301,6 +302,7 @@ void main() {
     addTearDown(provider.dispose);
     final excluded = [
       _fact(invalidAt: DateTime.utc(2026, 8, 24)),
+      _fact(supersededBy: 'replacement'),
       _fact(userReview: false),
       _fact(supersededBy: 'replacement', kind: KnowledgeLedgerKind.document),
       _fact(supersededBy: 'replacement', schemaVersion: 'knowledge_ledger.v2'),
