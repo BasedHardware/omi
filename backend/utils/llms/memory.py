@@ -108,6 +108,7 @@ def _render_ledger_prompt_context(user_name: Optional[str], rows: List[MemoryDB]
         if row.kind == MemoryKind.fact
         and row.subject_scope == MemorySubjectScope.primary_user
         and row.intent_backed
+        and row.user_review is not False
         and row.invalid_at is None
         and row.slot
         and row.content.strip()
@@ -118,7 +119,12 @@ def _render_ledger_prompt_context(user_name: Optional[str], rows: List[MemoryDB]
         DEFAULT_PROFILE_CHARACTER_BUDGET,
     )
     playbooks = [
-        row for row in rows if row.kind == MemoryKind.document and row.invalid_at is None and row.content.strip()
+        row
+        for row in rows
+        if row.kind == MemoryKind.document
+        and row.user_review is not False
+        and row.invalid_at is None
+        and row.content.strip()
     ]
     playbooks.sort(key=lambda row: (-row.curation_weight, row.content, row.id))
     playbook_index = _bounded_lines([f"{row.id}: {row.content.strip()}" for row in playbooks], 800)

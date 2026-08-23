@@ -29,6 +29,11 @@ def _row(memory_id: str, **updates) -> MemoryDB:
     return MemoryDB(**data)
 
 
+def _row_from_promotion(memory_id: str, promotion: dict, **updates) -> MemoryDB:
+    """Build the prompt's legacy view of canonical ``promotion.user_review``."""
+    return _row(memory_id, user_review=promotion.get("user_review"), **updates)
+
+
 def test_prompt_is_profile_not_wholesale_memory_dump():
     current = _row("current")
     episodic = _row("episodic", slot=None, content="Private episodic observation")
@@ -63,6 +68,97 @@ def test_prompt_progressively_discloses_playbook_body():
     assert "playbook-1: Release the macOS beta" in rendered
     assert "private full workflow" not in rendered
     assert "read_playbook" in rendered
+
+
+def test_prompt_projection_rejects_promotion_without_changing_order_or_bounds():
+    """Rejected canonical rows must not displace visible facts or playbook handles."""
+    accepted_fact_without_review = _row_from_promotion(
+        "accepted-fact-without-review",
+        {},
+        content="Brooklyn",
+        slot="home_city",
+        curation_weight=2,
+    )
+    accepted_fact_with_review = _row_from_promotion(
+        "accepted-fact-with-review",
+        {"user_review": True},
+        content="Engineer",
+        slot="occupation",
+        curation_weight=1,
+    )
+    rejected_fact = _row_from_promotion(
+        "rejected-fact",
+        {"user_review": False},
+        content="Rejected",
+        slot="blocked_fact",
+        curation_weight=100,
+    )
+    accepted_playbook_without_review = _row_from_promotion(
+        "playbook-a",
+        {},
+        kind=MemoryKind.document,
+        slot=None,
+        content="Alpha",
+        body="alpha body",
+        curation_weight=2,
+    )
+    accepted_playbook_with_review = _row_from_promotion(
+        "playbook-b",
+        {"user_review": True},
+        kind=MemoryKind.document,
+        slot=None,
+        content="Beta",
+        body="beta body",
+        curation_weight=1,
+    )
+    rejected_playbook = _row_from_promotion(
+        "rejected-playbook",
+        {"user_review": False},
+        kind=MemoryKind.document,
+        slot=None,
+        content="y" * 760,
+        body="private rejected workflow",
+        curation_weight=100,
+    )
+    unrelated = _row(
+        "unrelated-third-party",
+        content="Queens",
+        subject_scope=MemorySubjectScope.third_party,
+        subject_entity_id="person-sarah",
+    )
+
+    visible_rows = [
+        accepted_fact_without_review,
+        accepted_fact_with_review,
+        accepted_playbook_without_review,
+        accepted_playbook_with_review,
+        unrelated,
+    ]
+    rows_with_rejections = [
+        rejected_fact,
+        accepted_playbook_with_review,
+        unrelated,
+        rejected_playbook,
+        accepted_fact_with_review,
+        accepted_playbook_without_review,
+        accepted_fact_without_review,
+    ]
+
+    expected = _render_ledger_prompt_context("David", visible_rows)
+    rendered = _render_ledger_prompt_context("David", rows_with_rejections)
+
+    assert expected == (
+        "Current profile for David:\n"
+        "home_city: Brooklyn\n"
+        "occupation: Engineer\n\n"
+        "Available playbooks (call read_playbook for the body; do not infer it from the title):\n"
+        "playbook-a: Alpha\n"
+        "playbook-b: Beta\n"
+    )
+    assert rendered == expected
+    assert "blocked_fact:" not in rendered
+    assert "rejected-playbook" not in rendered
+    assert "private rejected workflow" not in rendered
 
 
 def test_partial_migration_keeps_legacy_knowledge_visible(monkeypatch):

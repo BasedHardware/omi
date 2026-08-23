@@ -330,6 +330,7 @@ def render_profile(
         and item.subject_scope == MemorySubjectScope.primary_user
         and item.status == MemoryItemStatus.active
         and item.intent_backed
+        and (item.promotion or {}).get("user_review") is not False
         and item.valid_to is None
         and item.slot
         and (item.content or "").strip()
@@ -366,6 +367,7 @@ def render_playbook_index(
         if item.ledger_schema_version == LEDGER_SCHEMA_VERSION
         and item.kind == MemoryKind.document
         and item.status == MemoryItemStatus.active
+        and (item.promotion or {}).get("user_review") is not False
         and item.valid_to is None
     ]
     active.sort(key=lambda item: (-(item.curation_weight), item.content or "", item.memory_id))
