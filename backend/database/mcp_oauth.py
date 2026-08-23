@@ -657,7 +657,7 @@ def exchange_authorization_code_for_tokens(
     code: str,
     client_id: str,
     redirect_uri: str,
-    resource: str,
+    resource: Optional[str],
     code_verifier: str,
 ) -> Optional[Dict[str, Any]]:
     code_ref = db.collection("mcp_oauth_authorization_codes").document(hash_secret(code))
@@ -675,7 +675,9 @@ def exchange_authorization_code_for_tokens(
         if (
             code_data.get("client_id") != client_id
             or code_data.get("redirect_uri") != redirect_uri
-            or code_data.get("resource") != resource
+            # RFC 8707: an omitted resource indicator keeps the audience the code
+            # was bound to at consent; only an explicit value must match it.
+            or (resource is not None and code_data.get("resource") != resource)
         ):
             return None
         try:
@@ -886,7 +888,7 @@ def validate_access_token(access_token: str, resource: str = MCP_RESOURCE_URL) -
 
 
 def rotate_refresh_token(
-    refresh_token: str, client_id: str, resource: str, scope: Optional[str] = None
+    refresh_token: str, client_id: str, resource: Optional[str], scope: Optional[str] = None
 ) -> Optional[Dict[str, Any]]:
     ref = db.collection("mcp_oauth_refresh_tokens").document(hash_secret(refresh_token))
     transaction = db.transaction()
@@ -906,7 +908,9 @@ def rotate_refresh_token(
         grant: Optional[Dict[str, Any]] = _typed_doc(grant_doc) if grant_doc.exists else None
         if (
             data.get("client_id") != client_id
-            or data.get("resource") != resource
+            # RFC 8707: an omitted resource indicator keeps the token family's
+            # stored audience; only an explicit value must match it.
+            or (resource is not None and data.get("resource") != resource)
             or data.get("revoked_at")
             or (expires_at and expires_at <= now)
             or not grant

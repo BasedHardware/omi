@@ -1514,6 +1514,16 @@ class McpTokenResponse(BaseModel):
     scope: str
 
 
+def _effective_resource(resource: Optional[str]) -> str:
+    # RFC 8707 resource indicators are optional; connector clients such as claude.ai
+    # omit the parameter entirely. An omitted indicator at the authorization step binds
+    # the grant to this deployment's canonical resource — the audience advertised in
+    # the protected-resource metadata. Cross-plane clients with a second allowed
+    # resource must keep sending it explicitly, and a present-but-invalid value
+    # (an empty string included) still fails validate_resource exactly as before.
+    return MCP_RESOURCE_URL if resource is None else resource
+
+
 def _validate_authorize_request(
     response_type: str,
     client_id: str,
@@ -1565,13 +1575,14 @@ def mcp_authorize(
     response_type: str,
     client_id: str,
     redirect_uri: str,
-    resource: str,
+    resource: Optional[str] = None,
     state: Optional[str] = None,
     scope: Optional[str] = None,
     code_challenge: Optional[str] = None,
     code_challenge_method: Optional[str] = None,
 ):
     """OAuth authorize endpoint."""
+    resource = _effective_resource(resource)
     try:
         client, scopes = _validate_authorize_request(
             response_type, client_id, redirect_uri, resource, scope, code_challenge, code_challenge_method
@@ -1611,13 +1622,14 @@ async def mcp_authorize_consent(
     response_type: str = Form(...),
     client_id: str = Form(...),
     redirect_uri: str = Form(...),
-    resource: str = Form(...),
+    resource: Optional[str] = Form(None),
     firebase_id_token: str = Form(...),
     state: Optional[str] = Form(None),
     scope: Optional[str] = Form(None),
     code_challenge: Optional[str] = Form(None),
     code_challenge_method: Optional[str] = Form(None),
 ):
+    resource = _effective_resource(resource)
     try:
         _, scopes = await run_blocking(
             db_executor,
@@ -1671,6 +1683,9 @@ async def mcp_token(request: Request):
     grant_type = request_data.get("grant_type")
     code = request_data.get("code")
     redirect_uri = request_data.get("redirect_uri")
+    # RFC 8707: at the token endpoint an omitted resource indicator keeps the audience
+    # stored on the code / refresh-token document, so no server-side default here —
+    # None flows through and only an explicit value is validated and matched.
     resource = request_data.get("resource")
     code_verifier = request_data.get("code_verifier")
     refresh_token = request_data.get("refresh_token")
@@ -1685,9 +1700,11 @@ async def mcp_token(request: Request):
         return _oauth_error("invalid_client", "Invalid client", status_code=401)
 
     if grant_type == "authorization_code":
-        if not code or not redirect_uri or not code_verifier or not resource:
-            return _oauth_error("invalid_request", "code, redirect_uri, resource, and code_verifier are required")
-        if not await run_blocking(db_executor, mcp_oauth_db.validate_resource, client, resource):
+        if not code or not redirect_uri or not code_verifier:
+            return _oauth_error("invalid_request", "code, redirect_uri, and code_verifier are required")
+        if resource is not None and not await run_blocking(
+            db_executor, mcp_oauth_db.validate_resource, client, resource
+        ):
             return _oauth_error("invalid_target", "Invalid resource")
         token_pair = await run_blocking(
             db_executor,
@@ -1703,9 +1720,11 @@ async def mcp_token(request: Request):
         return token_pair
 
     if grant_type == "refresh_token":
-        if not refresh_token or not resource:
-            return _oauth_error("invalid_request", "refresh_token and resource are required")
-        if not await run_blocking(db_executor, mcp_oauth_db.validate_resource, client, resource):
+        if not refresh_token:
+            return _oauth_error("invalid_request", "refresh_token is required")
+        if resource is not None and not await run_blocking(
+            db_executor, mcp_oauth_db.validate_resource, client, resource
+        ):
             return _oauth_error("invalid_target", "Invalid resource")
         token_pair = await run_blocking(
             db_executor, mcp_oauth_db.rotate_refresh_token, refresh_token, cast(str, client_id), resource, scope
