@@ -43,6 +43,8 @@ class MemoriesProvider extends ChangeNotifier {
   ConnectivityProvider? _connectivityProvider;
   bool _isSyncing = false;
   int _sessionGeneration = 0;
+  int _loadSequence = 0;
+  int _ledgerProjectionRevision = 0;
   final FetchMemoriesRequest _fetchMemoriesRequest;
   final FetchLedgerHistoryRequest _fetchLedgerHistoryRequest;
   final Future<bool> Function(String) _deleteMemoryRequest;
@@ -50,6 +52,7 @@ class MemoriesProvider extends ChangeNotifier {
   final EditMemoryRequest _editMemoryRequest;
   final RevertMemoryRequest _revertMemoryRequest;
   final Set<String> _revertingMemoryIds = {};
+  final Map<String, String> _revertOperationIds = {};
 
   MemoriesProvider({
     FetchMemoriesRequest? fetchMemoriesRequest,
@@ -81,16 +84,16 @@ class MemoriesProvider extends ChangeNotifier {
 
   bool canRevertSupersededFact(Memory memory) {
     if (!_isEligibleSupersededFact(memory)) return false;
-    return !_memories.any(
+    final alreadyRestored = _memories.any(
       (candidate) =>
-          candidate.id != memory.id &&
           candidate.isCurrentKnowledgeLedgerRow &&
-          candidate.ledgerKind == KnowledgeLedgerKind.fact &&
-          candidate.content.trim() == memory.content.trim() &&
-          candidate.ledgerSlot == memory.ledgerSlot &&
-          candidate.subjectScope == memory.subjectScope &&
-          candidate.subjectEntityId == memory.subjectEntityId,
+          candidate.evidence.any(
+            (evidence) => evidence['source_type'] == 'explicit_user_revert' && evidence['source_id'] == memory.id,
+          ),
     );
+    if (alreadyRestored) return false;
+    final currentTail = _matchingCurrentTail(memory);
+    return currentTail == null || currentTail.content.trim() != memory.content.trim();
   }
 
   static bool _isEligibleSupersededFact(Memory memory) {
@@ -237,6 +240,7 @@ class MemoriesProvider extends ChangeNotifier {
     _loading = false;
     _isSyncing = false;
     _revertingMemoryIds.clear();
+    _revertOperationIds.clear();
     _cancelDeletionTimer();
     _lastDeletedMemory = null;
     _pendingDeletionId = null;
@@ -312,6 +316,8 @@ class MemoriesProvider extends ChangeNotifier {
 
   Future<void> loadMemories({int limit = 100}) async {
     final generation = _sessionGeneration;
+    final loadSequence = ++_loadSequence;
+    final ledgerProjectionRevision = _ledgerProjectionRevision;
     // Snapshot the pending-deletion ID before any await: a refresh that
     // started during the undo window must still suppress the deleted item
     // even if _finalizeDeletion() clears the field while the fetch is in
@@ -322,7 +328,7 @@ class MemoriesProvider extends ChangeNotifier {
 
     if (_filterThisDeviceOnly) {
       await _ensureClientDeviceInitialized();
-      if (generation != _sessionGeneration) {
+      if (generation != _sessionGeneration || loadSequence != _loadSequence) {
         return;
       }
     }
@@ -333,9 +339,11 @@ class MemoriesProvider extends ChangeNotifier {
     final all = <Memory>[];
     var offset = 0;
     var deviceScopeSupported = true;
+    var ledgerHistorySupported = false;
+    var ledgerHistoryTruncated = false;
     for (var page = 0; page < maxPages; page++) {
       final result = await _fetchMemoriesRequest(limit: limit, offset: offset, thisDeviceOnly: _filterThisDeviceOnly);
-      if (generation != _sessionGeneration) {
+      if (generation != _sessionGeneration || loadSequence != _loadSequence) {
         return;
       }
       deviceScopeSupported = result.deviceScopeSupported;
@@ -360,28 +368,32 @@ class MemoriesProvider extends ChangeNotifier {
       const maxHistoryPages = 10;
       var historyOffset = 0;
       var historyRowsLoaded = 0;
-      _ledgerHistorySupported = false;
-      _ledgerHistoryTruncated = false;
       for (var page = 0; page < maxHistoryPages; page++) {
         final result = await _fetchLedgerHistoryRequest(limit: historyPageSize, offset: historyOffset);
-        if (generation != _sessionGeneration) return;
-        _ledgerHistorySupported = result.supported;
+        if (generation != _sessionGeneration || loadSequence != _loadSequence) return;
+        ledgerHistorySupported = result.supported;
         if (!result.supported) break;
         all.addAll(result.memories.where((memory) => seen.add(memory.id)));
         historyRowsLoaded += result.memories.length;
         if (result.truncated || result.memories.length < historyPageSize) {
-          _ledgerHistoryTruncated = result.truncated;
+          ledgerHistoryTruncated = result.truncated;
           break;
         }
         historyOffset += result.memories.length;
-        if (page == maxHistoryPages - 1) _ledgerHistoryTruncated = true;
+        if (page == maxHistoryPages - 1) ledgerHistoryTruncated = true;
       }
-      if (_ledgerHistoryTruncated) {
+      if (ledgerHistoryTruncated) {
         Logger.warning('MemoriesProvider: ledger history is partial; loaded $historyRowsLoaded rows');
       }
-    } else {
-      _ledgerHistorySupported = false;
-      _ledgerHistoryTruncated = false;
+    }
+    if (generation != _sessionGeneration ||
+        loadSequence != _loadSequence ||
+        ledgerProjectionRevision != _ledgerProjectionRevision) {
+      if (generation == _sessionGeneration && loadSequence == _loadSequence) {
+        _loading = false;
+        notifyListeners();
+      }
+      return;
     }
     // Keep an optimistic delete hidden throughout its undo window. Use the
     // snapshot taken before the fetch so a concurrent finalization that
@@ -393,6 +405,8 @@ class MemoriesProvider extends ChangeNotifier {
     final effectiveTombstoneId = currentTombstoneId ?? tombstoneId;
     _memories = effectiveTombstoneId != null ? all.where((memory) => memory.id != effectiveTombstoneId).toList() : all;
     _deviceScopeSupported = deviceScopeSupported;
+    _ledgerHistorySupported = ledgerHistorySupported;
+    _ledgerHistoryTruncated = ledgerHistoryTruncated;
 
     // Merge pending memories that haven't synced yet
     final pendingMemories = SharedPreferencesUtil().pendingMemories;
@@ -401,6 +415,9 @@ class MemoriesProvider extends ChangeNotifier {
         _memories.add(pending);
       }
     }
+    _revertOperationIds.removeWhere(
+      (memoryId, _) => !_memories.any((memory) => memory.id == memoryId && canRevertSupersededFact(memory)),
+    );
 
     _loading = false;
     _setCategories();
@@ -486,8 +503,11 @@ class MemoriesProvider extends ChangeNotifier {
     if (sourceIndex == -1 || !canRevertSupersededFact(memory) || isRevertingMemory(memory.id)) return false;
 
     final generation = _sessionGeneration;
-    final operationId = const Uuid().v4();
     if (!_revertingMemoryIds.add(memory.id)) return false;
+    // Retain one idempotency key across all ambiguous failures. A transport
+    // error or lost response may follow a committed append; rotating the key
+    // would let a user retry append the same historical value again.
+    final operationId = _revertOperationIds.putIfAbsent(memory.id, () => const Uuid().v4());
     notifyListeners();
 
     try {
@@ -524,11 +544,14 @@ class MemoriesProvider extends ChangeNotifier {
         return false;
       }
 
+      final staleCurrentTail = currentTail?.id == replacement.id ? null : currentTail;
+      _ledgerProjectionRevision++;
+
       // The backend atomically closes the current tail when it appends the
       // restored row. Remove that known-stale current projection before
       // exposing the replacement; do not forge lifecycle fields locally.
-      if (currentTail != null) {
-        _memories.removeWhere((candidate) => candidate.id == currentTail.id);
+      if (staleCurrentTail != null) {
+        _memories.removeWhere((candidate) => candidate.id == staleCurrentTail.id);
       }
       if (existingReplacementIndex == -1) {
         _memories.add(replacement);
@@ -536,9 +559,10 @@ class MemoriesProvider extends ChangeNotifier {
       _setCategories();
       await _refreshLedgerHistoryAfterRevert(
         generation,
-        closedTailId: currentTail?.id,
+        closedTailId: staleCurrentTail?.id,
         replacementId: replacement.id,
       );
+      _revertOperationIds.remove(memory.id);
       return true;
     } finally {
       final removed = _revertingMemoryIds.remove(memory.id);
