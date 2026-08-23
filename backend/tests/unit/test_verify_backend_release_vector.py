@@ -460,7 +460,7 @@ def test_firestore_readiness_fails_before_admitted_source_checkout_when_read_onl
             'Google Auth for read-only Firestore inventory'
         )
         if workflow.name == 'gcp_backend_auto_dev.yml':
-            assert readiness.index('Verify Release Eligibility proof is current main') < readiness.index(
+            assert readiness.index('Resolve and verify the newest proven main source') < readiness.index(
                 'Require read-only Firestore credentials'
             )
 
@@ -502,13 +502,32 @@ def test_static_firestore_index_migration_is_approved_and_main_scoped() -> None:
     assert 'git rev-parse HEAD' in text
     assert 'if [[ "$checked_sha" != "$GITHUB_SHA" ]]; then' in text
     assert 'credentials_json: ${{ secrets.GCP_CREDENTIALS }}' in text
-    composite = text.split('\n  reconcile_composite_indexes:', 1)[1].split('\n  reject_nonprod_field_exemptions:', 1)[0]
+    composite = text.split('\n  reconcile_composite_indexes:', 1)[1].split(
+        '\n  reconcile_development_composite_indexes:', 1
+    )[0]
+    # Development converges its own schema on the same merge. It is a separate
+    # job precisely so the reviewed production migration above keeps its gate;
+    # assert the two lanes stay one-apply-each rather than counting globally.
+    development = text.split('\n  reconcile_development_composite_indexes:', 1)[1].split(
+        '\n  reject_nonprod_field_exemptions:', 1
+    )[0]
     field_exemptions = text.split('\n  apply_field_exemptions:', 1)[1]
 
-    assert text.count('--provision-missing') == 1
+    assert composite.count('--provision-missing') == 1
+    assert development.count('--provision-missing') == 1
     assert '--provision-missing \\\n            --dry-run' not in text
     assert composite.count('--dry-run') == 1
+    assert development.count('--dry-run') == 1
     assert 'vars.RUNTIME_GCP_PROJECT_ID' in text
+
+    # The development lane must never bind production, and must not be able to
+    # run from a manual dispatch that selected prod.
+    assert 'environment: development' in development
+    assert 'group: firestore-schema-development' in development
+    assert "github.event_name == 'push'" in development
+    assert 'environment: prod' not in development
+    assert 'github.event.inputs.environment' not in development
+    assert 'reconcile_firestore_field_exemptions.py' not in development
 
     plan_step = '- name: Show create-only Firestore schema plan'
     apply_step = '- name: Apply approved Firestore schema plan and wait for readiness'
