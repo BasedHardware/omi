@@ -503,6 +503,7 @@ def test_gate_on_search_clamps_hydration_ids_before_database_read(conversation_t
 
 
 def test_gate_on_rejects_fifth_summary_search_before_storage_access(conversation_tools_module) -> None:
+    conversation_tools_module.parse_exact_conversation_reference.return_value = None
     conversation_tools_module.conversations_db.get_conversations = MagicMock(return_value=[])
     conversation_tools_module.keyword_search_conversation_ids = MagicMock(return_value=[])
     config = _tool_config(enabled=True)
@@ -526,6 +527,121 @@ def test_gate_on_rejects_fifth_summary_search_before_storage_access(conversation
     assert result == conversation_tools_module._JIT_SEARCH_BUDGET_EXHAUSTED
     assert conversation_tools_module.conversations_db.get_conversations.call_count == 4
     conversation_tools_module.keyword_search_conversation_ids.assert_not_called()
+
+
+def test_gate_on_transcript_requests_still_consume_shared_summary_search_budget(conversation_tools_module) -> None:
+    """Transcript snippets do not turn a candidate search into free exact hydration."""
+
+    conversation_tools_module.parse_exact_conversation_reference.return_value = None
+    conversation_tools_module.conversations_db.get_conversations = MagicMock(return_value=[])
+    conversation_tools_module.keyword_search_conversation_ids = MagicMock(return_value=[])
+    conversation_tools_module.vector_db.query_vectors = MagicMock(return_value=[])
+    conversation_tools_module.merge_conversation_search_ids.return_value = []
+    config = _tool_config(enabled=True)
+
+    for _ in range(2):
+        result = _invoke_tool(
+            conversation_tools_module,
+            conversation_tools_module.get_conversations_tool,
+            {"include_transcript": True, "max_transcript_segments": 2},
+            config=config,
+        )
+        assert result.startswith("No conversations found")
+
+    for _ in range(2):
+        result = _invoke_tool(
+            conversation_tools_module,
+            conversation_tools_module.search_conversations_tool,
+            {"query": "release", "include_transcript": True, "max_transcript_segments": 1},
+            config=config,
+        )
+        assert result.startswith("No conversations found")
+
+    result = _invoke_tool(
+        conversation_tools_module,
+        conversation_tools_module.search_conversations_tool,
+        {"query": "another candidate query", "include_transcript": True, "max_transcript_segments": 1},
+        config=config,
+    )
+
+    assert result == conversation_tools_module._JIT_SEARCH_BUDGET_EXHAUSTED
+    assert conversation_tools_module.conversations_db.get_conversations.call_count == 2
+    assert conversation_tools_module.keyword_search_conversation_ids.call_count == 2
+
+
+def test_gate_on_exact_card_hydration_uses_window_and_does_not_consume_search_budget(
+    conversation_tools_module,
+) -> None:
+    raw = _conversation_fixture()
+    conversation_tools_module.parse_exact_conversation_reference.return_value = raw["id"]
+    conversation_tools_module.conversations_db.get_conversations_by_id = MagicMock(return_value=[raw])
+    snippet_builder = sys.modules["utils.retrieval.tools.conversation_jit"].build_transcript_match_snippets
+    config = _tool_config(enabled=True)
+
+    result = _invoke_tool(
+        conversation_tools_module,
+        conversation_tools_module.search_conversations_tool,
+        {
+            "query": f"conversation:{raw['id']}",
+            "include_transcript": True,
+            "max_transcript_segments": 2,
+        },
+        config=config,
+    )
+
+    assert "transcript_window" in result
+    assert "conversation:jit-conversation-002:segment:segment-1" in result
+    assert "conversation:jit-conversation-002:segment:segment-2" in result
+    snippet_builder.assert_not_called()
+    assert not hasattr(config["configurable"]["safety_guard"], "_jit_conversation_summary_search_count")
+
+
+def test_gate_off_owner_scoped_card_reference_remains_semantic_search(conversation_tools_module) -> None:
+    raw = _conversation_fixture()
+    conversation_tools_module.keyword_search_conversation_ids.return_value = [raw["id"]]
+    conversation_tools_module.vector_db.query_vectors = MagicMock(return_value=[])
+    conversation_tools_module.merge_conversation_search_ids.return_value = [raw["id"]]
+    conversation_tools_module.conversations_db.get_conversations_by_id = MagicMock(return_value=[])
+    config = _tool_config(enabled=False)
+
+    _invoke_tool(
+        conversation_tools_module,
+        conversation_tools_module.search_conversations_tool,
+        {"query": f"conversation:{raw['id']}", "include_transcript": False},
+        config=config,
+    )
+
+    conversation_tools_module.parse_exact_conversation_reference.assert_not_called()
+    conversation_tools_module.keyword_search_conversation_ids.assert_called_once()
+    conversation_tools_module.vector_db.query_vectors.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "e8c05000-52f0-4a95-951c-ccd715523429",
+        "https://h.omi.me/conversations/e8c05000-52f0-4a95-951c-ccd715523429",
+    ],
+)
+def test_gate_off_released_exact_references_still_bypass_semantic_search(conversation_tools_module, query: str) -> None:
+    conversation_id = "e8c05000-52f0-4a95-951c-ccd715523429"
+    conversation_tools_module.parse_exact_conversation_reference.return_value = conversation_id
+    conversation_tools_module.conversations_db.get_conversations_by_id = MagicMock(return_value=[])
+    conversation_tools_module.vector_db.query_vectors = MagicMock(return_value=[])
+    config = _tool_config(enabled=False)
+
+    _invoke_tool(
+        conversation_tools_module,
+        conversation_tools_module.search_conversations_tool,
+        {"query": query, "include_transcript": False},
+        config=config,
+    )
+
+    conversation_tools_module.conversations_db.get_conversations_by_id.assert_called_once_with(
+        "jit-user-001", [conversation_id]
+    )
+    conversation_tools_module.keyword_search_conversation_ids.assert_not_called()
+    conversation_tools_module.vector_db.query_vectors.assert_not_called()
 
 
 def test_gate_on_missing_request_budget_fails_closed_before_database_read(conversation_tools_module) -> None:

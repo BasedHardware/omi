@@ -85,6 +85,18 @@ def _consume_jit_summary_search_budget(configurable: Dict[str, Any]) -> Optional
     return None
 
 
+def _parse_exact_search_reference(query: str, *, jit_enabled: bool) -> Optional[str]:
+    """Keep owner-scoped card refs additive to the gated JIT retrieval path.
+
+    Bare UUIDs and released share URLs remain exact references regardless of the
+    JIT gate. ``conversation:<id>`` is emitted by JIT cards, so gate-off requests
+    must continue treating that shape as an ordinary semantic-search query.
+    """
+    if not jit_enabled and query.startswith('conversation:'):
+        return None
+    return parse_exact_conversation_reference(query)
+
+
 def _cap_conversations_for_llm(conversations: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], int, bool]:
     """Keep at most ``MAX_CONVERSATIONS_FOR_LLM`` conversations for the chat model.
 
@@ -230,7 +242,7 @@ def get_conversations_tool(
     # reach the result. The legacy path intentionally retains its existing limit.
     limit = min(limit, MAX_JIT_CONVERSATIONS if jit_enabled else 5000)
 
-    if jit_enabled and (not include_transcript or max_transcript_segments == 0):
+    if jit_enabled:
         budget_error = _consume_jit_summary_search_budget(cast(Dict[str, Any], configurable))
         if budget_error:
             logger.warning("get_conversations_tool rejected by JIT summary-search budget")
@@ -422,12 +434,7 @@ def search_conversations_tool(
         Formatted string with matching conversations, including transcripts, summaries, action items, events, and
         metadata.
     """
-    exact_conversation_id = parse_exact_conversation_reference(query)
-    logger.info(
-        "🔧 search_conversations_tool mode=%s query_len=%s",
-        'exact-reference' if exact_conversation_id else 'semantic',
-        len(query or ''),
-    )
+    logger.info("🔧 search_conversations_tool query_len=%s", len(query or ''))
 
     # Get config from parameter or context variable (like other tools do)
     cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
@@ -451,12 +458,12 @@ def search_conversations_tool(
         logger.info(f"❌ search_conversations_tool - no user_id in config")
         return "Error: User ID not found in configuration"
     logger.info(
-        "✅ search_conversations_tool - uid=%s query_mode=%s limit=%s",
+        "✅ search_conversations_tool - uid=%s limit=%s",
         uid,
-        'exact-reference' if exact_conversation_id else 'semantic',
         limit,
     )
     jit_enabled = is_jit_conversation_retrieval_enabled(cast(Optional[Dict[str, Any]], configurable))
+    exact_conversation_id = _parse_exact_search_reference(query, jit_enabled=jit_enabled)
 
     # Cap max_transcript_segments at 1000 to prevent flooding LLM context
     if max_transcript_segments != -1:
@@ -490,7 +497,7 @@ def search_conversations_tool(
     # Limit to reasonable max
     limit = min(limit, 20)
 
-    if jit_enabled and (not include_transcript or max_transcript_segments == 0):
+    if jit_enabled and not exact_conversation_id:
         budget_error = _consume_jit_summary_search_budget(cast(Dict[str, Any], configurable))
         if budget_error:
             logger.warning("search_conversations_tool rejected by JIT summary-search budget")
@@ -560,7 +567,7 @@ def search_conversations_tool(
             return format_active_jit_conversations(
                 conversations_data,
                 configurable=cast(Dict[str, Any], configurable),
-                query=query,
+                query=None if exact_conversation_id else query,
                 max_transcript_segments=max_transcript_segments if include_transcript else 0,
             )
 
