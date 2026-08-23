@@ -20,6 +20,7 @@ def _load(name: str):
 
 APPCAST = _load("verify_stable_appcast.py")
 POINTER = _load("check_stable_pointer_precondition.py")
+URL_PATH_SEGMENT = _load("url_path_segment.py")
 
 
 def _fields(release_id: str, generation: int) -> dict:
@@ -27,6 +28,13 @@ def _fields(release_id: str, generation: int) -> dict:
 
 
 class StablePromotionVerifierTests(unittest.TestCase):
+    def test_release_tag_is_encoded_as_one_firestore_path_segment(self):
+        self.assertEqual(
+            URL_PATH_SEGMENT.encode("v0.12.208+12208-macos"),
+            "v0.12.208%2B12208-macos",
+        )
+        self.assertEqual(URL_PATH_SEGMENT.encode("nested/id"), "nested%2Fid")
+
     def test_lost_response_retry_accepts_only_the_expected_next_generation(self):
         POINTER.verify(
             beta=_fields("target", 4),
