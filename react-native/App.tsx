@@ -546,7 +546,7 @@ function HomeSearchField({
       ]}>
       <Search
         accessible={false}
-        color={desktop ? '#505050' : '#888888'}
+        color={desktop ? '#8f918f' : '#888888'}
         size={18}
         strokeWidth={2}
       />
@@ -562,7 +562,7 @@ function HomeSearchField({
         onFocus={onFocus}
         onPressIn={onPressIn}
         placeholder={desktop ? 'Filter saved…' : 'Search Omi'}
-        placeholderTextColor={desktop ? '#505050' : '#777777'}
+        placeholderTextColor={desktop ? '#8f918f' : '#777777'}
         ref={inputRef}
         showSoftInputOnFocus={searchArmed}
         style={[
@@ -1419,6 +1419,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const {width} = useWindowDimensions();
   const macDesktop = Platform.OS === 'macos';
   const compact = width < 1024;
+  const desktopWorkspace = macDesktop || width >= 1024;
   const floatingPane = width >= 640;
   const composerMaxWidth = width >= 1280 ? 820 : width >= 768 ? 720 : 640;
   const stageOpacity = useRef(new Animated.Value(0)).current;
@@ -2301,15 +2302,24 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     <View
       accessibilityLabel="Home desktop query surface"
       style={styles.macHomeSurface}>
+      <OmiGlassPanel
+        pointerEvents="none"
+        style={styles.macGlassPanel}
+        testID="home-workspace-material"
+      />
       <View accessibilityLabel="Home query lane" style={styles.macHomeLane}>
+        <View style={styles.macHomeHeading}>
+          <Text style={styles.macHomeEyebrow}>OMI</Text>
+          <Text accessibilityRole="header" style={styles.macHomeTitle}>
+            What matters now
+          </Text>
+          <Text style={styles.macHomeSubtitle}>
+            Search the conversations and memories saved for you.
+          </Text>
+        </View>
         <View
           accessibilityLabel="Home query island"
           style={styles.macHomeQueryIsland}>
-          <OmiGlassPanel
-            accessibilityLabel="Home query material"
-            pointerEvents="none"
-            style={styles.macGlassPanel}
-          />
           <HomeSearchField
             compact={false}
             desktop
@@ -2332,11 +2342,6 @@ function App({initialRoute}: AppProps): React.JSX.Element {
               ? styles.macHomeResultsPanelFilled
               : styles.macHomeResultsPanelResting,
           ]}>
-          <OmiGlassPanel
-            accessibilityLabel="Home results material"
-            pointerEvents="none"
-            style={styles.macGlassPanel}
-          />
           <ProjectionList
             accessibilityLabel="Home chronological spine"
             emptyCopy={homeDesktopEmptyCopy}
@@ -2546,7 +2551,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
               !floatingPane && styles.paneFrameCompact,
               !compact && !macDesktop && styles.paneFrameWide,
             ]}>
-            {floatingPane && !macDesktop && (
+            {floatingPane && !desktopWorkspace && (
               <View
                 accessibilityLabel="Floating pane depth"
                 pointerEvents="none"
@@ -2562,6 +2567,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                 styles.pane,
                 !floatingPane && styles.paneCompact,
                 compact && styles.paneCompactSurface,
+                desktopWorkspace && styles.desktopPane,
                 macDesktop && styles.macPane,
               ]}>
               {macDesktop && route !== 'Home' && (
@@ -2580,9 +2586,14 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                     transform: [{translateY: stageTranslateY}],
                   },
                 ]}>
-                <View style={[styles.stage, compact && styles.stageCompact]}>
+                <View
+                  style={[
+                    styles.stage,
+                    compact && styles.stageCompact,
+                    desktopWorkspace && styles.desktopStage,
+                  ]}>
                   {route === 'Home' ? (
-                    macDesktop ? (
+                    desktopWorkspace ? (
                       homeDesktop
                     ) : (
                       <View style={styles.searchHome}>
@@ -2982,23 +2993,23 @@ const styles = StyleSheet.create({
   shellCompact: {backgroundColor: '#1c1c1a'},
   shellWide: {flexDirection: 'row'},
   macShell: {
-    alignItems: 'center',
     backgroundColor: 'transparent',
-    paddingTop: 32,
+    paddingTop: 28,
   },
   macTopNavFrame: {
-    alignSelf: 'center',
-    borderRadius: 22,
-    height: 52,
+    alignSelf: 'stretch',
+    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    height: 58,
+    marginHorizontal: 18,
   },
   macTopNav: {
     alignItems: 'center',
     backgroundColor: 'transparent',
-    borderRadius: 22,
     flexDirection: 'row',
     gap: 2,
-    height: 52,
-    padding: 4,
+    height: 58,
+    paddingHorizontal: 4,
   },
   macTopNavItem: {
     alignItems: 'center',
@@ -3008,10 +3019,10 @@ const styles = StyleSheet.create({
     height: 44,
     paddingHorizontal: 14,
   },
-  macTopNavItemActive: {backgroundColor: '#ffffff'},
-  macTopNavText: {color: '#3e3e3e', fontSize: 13, fontWeight: '600'},
-  macTopNavTextActive: {color: '#141414'},
-  macPrimaryText: {color: '#141414'},
+  macTopNavItemActive: {backgroundColor: 'rgba(255, 255, 255, 0.1)'},
+  macTopNavText: {color: '#8f918f', fontSize: 13, fontWeight: '600'},
+  macTopNavTextActive: {color: '#f2f4f1'},
+  macPrimaryText: {color: '#f2f4f1'},
   navigation: {backgroundColor: '#141414'},
   rail: {paddingHorizontal: 8, paddingVertical: 24},
   railHeader: {alignItems: 'flex-start', gap: 8},
@@ -3078,18 +3089,15 @@ const styles = StyleSheet.create({
   paneInset: {flex: 1, padding: 12},
   macPaneInset: {
     alignSelf: 'stretch',
-    paddingBottom: 18,
+    paddingBottom: 0,
     paddingHorizontal: 18,
-    paddingTop: 14,
+    paddingTop: 0,
   },
   paneInsetCompact: {padding: 0},
   paneFrame: {
     flex: 1,
   },
   paneFrameWide: {
-    alignSelf: 'center',
-    maxHeight: 760,
-    maxWidth: 1120,
     width: '100%',
   },
   paneFrameCompact: {},
@@ -3120,10 +3128,16 @@ const styles = StyleSheet.create({
     flex: 1,
     overflow: 'hidden',
   },
+  desktopPane: {
+    backgroundColor: 'transparent',
+    borderColor: 'transparent',
+    borderRadius: 0,
+    borderWidth: 0,
+  },
   macPane: {
     backgroundColor: 'transparent',
     borderColor: 'transparent',
-    borderRadius: 22,
+    borderRadius: 0,
     borderWidth: 0,
   },
   macGlassPanel: {
@@ -3133,16 +3147,41 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
   },
-  macHomeSurface: {alignSelf: 'stretch', flex: 1, paddingTop: 12},
-  macHomeLane: {
-    alignSelf: 'center',
-    gap: 12,
+  macHomeSurface: {
+    alignSelf: 'stretch',
+    backgroundColor: '#171918',
     flex: 1,
-    maxWidth: 900,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  macHomeLane: {
+    flex: 1,
+    gap: 14,
+    paddingBottom: 18,
+    paddingHorizontal: 30,
+    paddingTop: 28,
     width: '100%',
   },
+  macHomeHeading: {gap: 3},
+  macHomeEyebrow: {
+    color: '#78bda5',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+  },
+  macHomeTitle: {
+    color: '#f2f4f1',
+    fontSize: 32,
+    fontWeight: '700',
+    letterSpacing: -1,
+    lineHeight: 38,
+  },
+  macHomeSubtitle: {color: '#8f918f', fontSize: 14, lineHeight: 20},
   macHomeQueryIsland: {
-    borderRadius: 22,
+    backgroundColor: '#222523',
+    borderColor: '#363a37',
+    borderRadius: 14,
+    borderWidth: 1,
     minHeight: 64,
     overflow: 'hidden',
     position: 'relative',
@@ -3150,13 +3189,12 @@ const styles = StyleSheet.create({
   },
   // Horizontal inset only: the row owns vertical centering for the icon, text baseline, and action.
   macHomeQueryField: {
-    backgroundColor: 'transparent',
+    backgroundColor: '#222523',
     borderColor: 'transparent',
     borderWidth: 0,
     gap: 14,
     marginBottom: 0,
     marginTop: 0,
-    maxWidth: 900,
     minHeight: 64,
     paddingLeft: 18,
     paddingRight: 18,
@@ -3168,20 +3206,25 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
   },
   macHomeResultsPanel: {
-    borderRadius: 22,
+    backgroundColor: '#1d201e',
+    borderColor: '#303431',
+    borderRadius: 14,
+    borderWidth: 1,
+    flex: 1,
     minHeight: 120,
     overflow: 'hidden',
     position: 'relative',
     width: '100%',
   },
-  macHomeResultsPanelFilled: {flex: 1, maxHeight: 470},
-  macHomeResultsPanelResting: {flex: 0, flexGrow: 0, flexShrink: 0},
+  macHomeResultsPanelFilled: {flex: 1},
+  macHomeResultsPanelResting: {flex: 1},
   macHomeResultsList: {flex: 1},
-  macHomeResultsListResting: {alignSelf: 'stretch', flexGrow: 0},
+  macHomeResultsListResting: {alignSelf: 'stretch', flex: 1},
   paneCompact: {borderRadius: 0, borderWidth: 0},
   paneCompactSurface: {backgroundColor: '#1c1c1a'},
   stageMotion: {flex: 1},
   stage: {flexGrow: 1, paddingBottom: 16, paddingHorizontal: 16},
+  desktopStage: {flex: 1, paddingBottom: 0, paddingHorizontal: 0},
   stageCompact: {paddingHorizontal: 12},
   searchHome: {
     alignSelf: 'center',
@@ -3349,7 +3392,7 @@ const styles = StyleSheet.create({
   homeCurrentSummary: {color: '#9a9e98', lineHeight: 18, marginTop: 6},
   homeSpineRow: {
     backgroundColor: 'transparent',
-    borderBottomColor: 'rgba(20, 20, 20, 0.12)',
+    borderBottomColor: 'rgba(255, 255, 255, 0.07)',
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: 'transparent',
     borderRadius: 0,
@@ -3357,10 +3400,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 11,
   },
-  homeSpineKind: {color: '#52615c'},
-  homeSpineMeta: {color: '#626262'},
-  homeSpineTitle: {color: '#141414', fontSize: 15, marginTop: 5},
-  homeSpineSummary: {color: '#5a5a5a', marginTop: 3},
+  homeSpineKind: {color: '#78bda5'},
+  homeSpineMeta: {color: '#818581'},
+  homeSpineTitle: {color: '#eef0ed', fontSize: 15, marginTop: 5},
+  homeSpineSummary: {color: '#999d99', marginTop: 3},
   homeSpineEmpty: {
     alignItems: 'flex-start',
     flex: 0,
@@ -3369,9 +3412,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingTop: 18,
   },
-  homeSpineEmptyTitle: {color: '#141414'},
-  homeSpineEmptyCopy: {color: '#5a5a5a', textAlign: 'left'},
-  homeSpineList: {flexGrow: 0, paddingBottom: 0},
+  homeSpineEmptyTitle: {color: '#eef0ed'},
+  homeSpineEmptyCopy: {color: '#999d99', textAlign: 'left'},
+  homeSpineList: {flexGrow: 1, paddingBottom: 0},
   homeResults: {flex: 1},
   homeResultsWide: {flex: 0, flexGrow: 0, maxHeight: 430, minHeight: 210},
   macHomeReadStatuses: {gap: 8},
@@ -3380,27 +3423,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 8,
   },
-  macHomeReadStatusText: {color: '#343434', fontSize: 12, fontWeight: '600'},
+  macHomeReadStatusText: {color: '#b1b4b0', fontSize: 12, fontWeight: '600'},
   macHomeRetryButton: {
     alignSelf: 'flex-start',
+    marginTop: 10,
     minHeight: 32,
     paddingHorizontal: 12,
   },
-  macHomeRetryButtonText: {color: '#141414', fontSize: 12, fontWeight: '600'},
+  macHomeRetryButtonText: {color: '#eef0ed', fontSize: 12, fontWeight: '600'},
   macHomeDeviceAffordance: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: 10,
     minHeight: 36,
+    borderTopColor: 'rgba(255, 255, 255, 0.07)',
+    borderTopWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 4,
-    paddingTop: 8,
+    paddingTop: 12,
   },
   macHomeDeviceStatus: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: 7,
   },
-  macHomeDeviceStatusText: {color: '#343434', fontSize: 12},
+  macHomeDeviceStatusText: {color: '#8f918f', fontSize: 12},
   macHomeDeviceActions: {
     alignItems: 'center',
     flex: 1,
@@ -3410,15 +3456,15 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   macHomeDeviceChip: {
-    borderColor: 'rgba(20, 20, 20, 0.22)',
+    borderColor: 'rgba(255, 255, 255, 0.18)',
     borderRadius: 14,
     borderWidth: 1,
     minHeight: 30,
     justifyContent: 'center',
     paddingHorizontal: 10,
   },
-  macHomeDeviceChipText: {color: '#343434', fontSize: 11, fontWeight: '600'},
-  macHomeDeviceHint: {color: '#5a5a5a', fontSize: 11},
+  macHomeDeviceChipText: {color: '#c8cbc7', fontSize: 11, fontWeight: '600'},
+  macHomeDeviceHint: {color: '#8f918f', fontSize: 11},
   deviceChip: {
     backgroundColor: '#242424',
     borderColor: '#383838',

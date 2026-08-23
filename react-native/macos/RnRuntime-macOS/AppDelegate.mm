@@ -65,6 +65,8 @@
       NSWindowStyleMaskMiniaturizable;
   window.titlebarAppearsTransparent = YES;
   window.titleVisibility = NSWindowTitleHidden;
+  window.title = @"";
+  window.toolbarStyle = NSWindowToolbarStyleUnified;
   window.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
   // The app uses a transparent full-size titlebar, so the uncovered window ground is the drag
   // region. Controls continue to receive their normal input; this restores ordinary macOS window

@@ -54,6 +54,7 @@ test("browser root gives the canonical RN surface the full viewport", async () =
   expect(styles).toContain("#app");
   expect(styles).toContain("height: 100%");
   expect(styles).toContain("min-height: 100dvh");
+  expect(styles).toContain("#app > div");
   expect(styles).toContain("background: #141414");
 });
 

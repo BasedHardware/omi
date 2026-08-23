@@ -497,7 +497,7 @@ test('opens host-selected Chat without changing the default route', async () => 
 
   const homeRenderer = await renderApp();
   const homeOutput = JSON.stringify(homeRenderer.toJSON());
-  expect(homeOutput).toContain('Search Omi');
+  expect(homeOutput).toContain('Filter saved…');
   expect(homeOutput).not.toContain('I’m ready.');
 });
 
@@ -510,13 +510,13 @@ test('renders the collapsed reference rail and search-first desktop Home', async
       node.props.accessibilityRole === 'tab',
   );
 
-  expect(output).toContain('Search Omi');
-  expect(output).toContain('Your Omi, at a glance');
+  expect(output).toContain('Filter saved…');
+  expect(output).toContain('What matters now');
   expect(output).toContain(
-    'Device status and the conversations and memories saved for you.',
+    'Search the conversations and memories saved for you.',
   );
   expect(output).not.toContain('Search what you’ve seen and heard');
-  expect(output).not.toContain('QA bridge check');
+  expect(output).toContain('QA bridge check');
   expect(output).toContain('Open Chat');
   expect(output).not.toContain('I’m ready.');
   expect(output).not.toContain('Ask anything...');
@@ -1484,7 +1484,7 @@ test('explains local backend configuration failure with one retryable Home state
   );
 });
 
-test('presents a bounded, truthful wide Home unavailable state without leaking endpoint errors', async () => {
+test('presents a full, truthful wide Home unavailable state without leaking endpoint errors', async () => {
   mockBackend.request.mockImplementation(async request => {
     if (request.path === '/v1/chat-messages?limit=50') {
       return {
@@ -1517,39 +1517,22 @@ test('presents a bounded, truthful wide Home unavailable state without leaking e
   });
 
   const output = JSON.stringify(renderer.toJSON());
-  expect(output).toContain('Your Omi, at a glance');
-  expect(output).toContain('Saved data is unavailable.');
+  expect(output).toContain('What matters now');
+  expect(output).toContain('Saved data unavailable');
   expect(output).toContain(
     'Saved conversations and memories are not available from this Omi service yet. Retry after its persisted projections are connected.',
   );
   expect(output).not.toContain('desktop-conversations-read failed (503)');
   expect(
     renderer.root.find(
-      node => node.props.accessibilityLabel === 'Floating pane',
+      node => node.props.accessibilityLabel === 'Home desktop query surface',
     ).props.style,
-  ).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({maxHeight: 760, maxWidth: 1120}),
-    ]),
-  );
+  ).toEqual(expect.objectContaining({flex: 1, backgroundColor: '#171918'}));
   expect(
     renderer.root.find(
-      node => node.props.accessibilityLabel === 'Home search results',
+      node => node.props.accessibilityLabel === 'Home results panel',
     ).props.style,
-  ).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({maxHeight: 430, minHeight: 210}),
-    ]),
-  );
-  expect(
-    renderer.root.find(
-      node => node.props.accessibilityLabel === 'Home search dock',
-    ).props.style,
-  ).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({marginTop: 22, maxWidth: 560}),
-    ]),
-  );
+  ).toEqual(expect.arrayContaining([expect.objectContaining({flex: 1})]));
 });
 
 test('shows actionable service-unavailable copy when the local backend transport fails', async () => {
@@ -1597,7 +1580,7 @@ test('uses a full, navigation-free pane on mobile', async () => {
   ).toBeDefined();
 });
 
-test('uses transparent separated macOS Home islands with a centered query lane', async () => {
+test('uses a full dark macOS Home workspace over the owned window material', async () => {
   mockPlatformOS = 'macos';
   const renderer = await renderApp();
   const navigation = renderer.root.find(
@@ -1607,7 +1590,7 @@ test('uses transparent separated macOS Home islands with a centered query lane',
     node =>
       Array.isArray(node.props.style) &&
       node.props.style.some(
-        (style: {paddingTop?: number}) => style?.paddingTop === 32,
+        (style: {paddingTop?: number}) => style?.paddingTop === 28,
       ),
   );
   const panel = renderer.root.find(
@@ -1617,15 +1600,14 @@ test('uses transparent separated macOS Home islands with a centered query lane',
     node =>
       Array.isArray(node.props.style) &&
       node.props.style.some(
-        (style: {paddingTop?: number}) => style?.paddingTop === 14,
+        (style: {paddingTop?: number}) => style?.paddingTop === 0,
       ),
   );
 
   expect(navigation.props.style).toEqual(
     expect.objectContaining({
       backgroundColor: 'transparent',
-      height: 52,
-      borderRadius: 22,
+      height: 58,
     }),
   );
   expect(
@@ -1645,7 +1627,7 @@ test('uses transparent separated macOS Home islands with a centered query lane',
       expect.objectContaining({
         backgroundColor: 'transparent',
         borderColor: 'transparent',
-        borderRadius: 22,
+        borderRadius: 0,
         borderWidth: 0,
       }),
     ]),
@@ -1667,29 +1649,20 @@ test('uses transparent separated macOS Home islands with a centered query lane',
   );
   expect(queryLane.props.style).toEqual(
     expect.objectContaining({
-      alignSelf: 'center',
-      gap: 12,
-      maxWidth: 900,
+      flex: 1,
+      gap: 14,
+      paddingHorizontal: 30,
       width: '100%',
     }),
   );
   expect(queryIsland.props.style).toEqual(
-    expect.objectContaining({minHeight: 64}),
+    expect.objectContaining({minHeight: 64, backgroundColor: '#222523'}),
   );
   expect(resultsPanel.props.style).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({flex: 1, maxHeight: 470}),
-    ]),
+    expect.arrayContaining([expect.objectContaining({flex: 1})]),
   );
   expect(
-    renderer.root.find(
-      node => node.props.accessibilityLabel === 'Home query material',
-    ),
-  ).toBeDefined();
-  expect(
-    renderer.root.find(
-      node => node.props.accessibilityLabel === 'Home results material',
-    ),
+    renderer.root.find(node => node.props.testID === 'home-workspace-material'),
   ).toBeDefined();
   expect(
     renderer.root.find(
@@ -1812,7 +1785,7 @@ test.each([800, 960, 1440])(
     );
 
     expect(homeSearch.props.style).toEqual(
-      expect.arrayContaining([expect.objectContaining({color: '#141414'})]),
+      expect.arrayContaining([expect.objectContaining({color: '#f2f4f1'})]),
     );
     expect(
       renderer.root.findAll(
@@ -1834,7 +1807,7 @@ test.each([800, 960, 1440])(
       .find(node => Array.isArray(node.props.style));
     expect(tasksTitle).toBeDefined();
     expect(tasksTitle!.props.style).toEqual(
-      expect.arrayContaining([expect.objectContaining({color: '#141414'})]),
+      expect.arrayContaining([expect.objectContaining({color: '#f2f4f1'})]),
     );
   },
 );
@@ -1924,6 +1897,7 @@ test('expands the desktop rail to 280 with visible labels and reference timing',
 });
 
 test('layers floating pane depth without native macOS shadow properties', async () => {
+  mockViewportWidth = 700;
   const renderer = await renderApp();
   const depth = renderer.root.find(
     node => node.props.accessibilityLabel === 'Floating pane depth',
