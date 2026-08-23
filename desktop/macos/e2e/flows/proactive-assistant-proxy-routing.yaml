@@ -6,6 +6,7 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/Chat/KnowledgeLedgerPromptProjection.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/GeminiClient.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/KnowledgeLedgerTriggerObservationAdapters.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/KnowledgeLedgerTriggerProjection.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/KnowledgeLedgerTriggerWatchlist.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ProactiveLaneClient.swift
