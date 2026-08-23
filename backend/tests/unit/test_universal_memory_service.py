@@ -791,6 +791,38 @@ def test_legacy_mutation_materializes_stable_id_then_cleans_up(service_mod, monk
     assert db.docs["users/uid-test/memory_historical_overrides/legacy-id"]["status"] == "active"
 
 
+@pytest.mark.parametrize(
+    ("lifecycle_field", "lifecycle_value"),
+    (
+        ("invalid_at", datetime(2026, 8, 22, tzinfo=timezone.utc)),
+        ("superseded_by", "replacement-id"),
+    ),
+)
+def test_legacy_review_does_not_materialize_closed_history(service_mod, monkeypatch, lifecycle_field, lifecycle_value):
+    """Review compatibility must not resurrect invalidated or superseded rows."""
+    service = service_mod.MemoryService(db_client=_Db())
+    historical = _historical(service_mod, "closed-legacy")
+    historical = service_mod.HistoricalMemoryRecord(
+        memory=historical.memory.model_copy(update={lifecycle_field: lifecycle_value}),
+        locator=historical.locator,
+    )
+    monkeypatch.setattr(service_mod, "read_canonical_memory_item", lambda *args, **kwargs: None)
+    monkeypatch.setattr(service, "_canonical_status", MagicMock(return_value=None))
+    monkeypatch.setattr(service.history, "get", MagicMock(return_value=historical))
+    service._canonical.write = MagicMock()
+    service._canonical.review = MagicMock()
+    override = MagicMock()
+    monkeypatch.setattr(service, "_write_historical_override", override)
+
+    with pytest.raises(service_mod.HTTPException) as exc_info:
+        service.review("uid-test", "closed-legacy", True)
+
+    assert exc_info.value.status_code == 404
+    service._canonical.write.assert_not_called()
+    service._canonical.review.assert_not_called()
+    override.assert_not_called()
+
+
 def test_legacy_review_refinement_preserves_structured_changes_in_canonical_authority(service_mod, monkeypatch):
     db = _Db()
     service = service_mod.MemoryService(db_client=db)

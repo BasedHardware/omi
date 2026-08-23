@@ -2663,6 +2663,14 @@ class MemoryService:
         record = self.history.get(uid, memory_id)
         if record is None:
             raise HTTPException(status_code=404, detail="Memory not found")
+        # Closed historical rows are read-only history, never migration input.
+        # Without this guard, the compatibility mutation path could turn an
+        # invalidated or superseded legacy row back into an active canonical
+        # item (and the superseded_by marker is not part of the legacy write
+        # payload).  Current canonical rows are still reviewable, including
+        # an explicit re-accept of a previously rejected active row.
+        if record.memory.invalid_at is not None or (record.memory.superseded_by or "").strip():
+            raise HTTPException(status_code=404, detail="Memory not found")
         if record.memory.is_locked:
             raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
         payload = memory_api_payload(record.memory, MemoryApiExposure.LEGACY)
