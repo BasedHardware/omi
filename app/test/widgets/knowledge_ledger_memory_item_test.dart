@@ -1,0 +1,75 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import 'package:omi/backend/schema/memory.dart';
+import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/pages/memories/widgets/memory_item.dart';
+import 'package:omi/providers/memories_provider.dart';
+
+class _ReviewProvider extends MemoriesProvider {
+  final List<bool> decisions = [];
+
+  @override
+  Future<bool> reviewMemory(Memory memory, bool value) async {
+    decisions.add(value);
+    memory.userReview = value;
+    return true;
+  }
+}
+
+Memory _playbook() {
+  return Memory(
+    id: 'playbook-1',
+    uid: 'user-1',
+    content: 'Release checklist',
+    category: MemoryCategory.workflow,
+    createdAt: DateTime.utc(2026, 8, 23),
+    updatedAt: DateTime.utc(2026, 8, 23),
+    visibility: MemoryVisibility.private,
+    ledgerSchemaVersion: 'knowledge_ledger.v1',
+    ledgerKind: KnowledgeLedgerKind.document,
+    ledgerBody: 'Run tests, review the diff, and publish receipts.',
+    intentBacked: true,
+  );
+}
+
+void main() {
+  testWidgets('ledger playbook renders its body and canonical review controls', (tester) async {
+    final provider = _ReviewProvider();
+    addTearDown(provider.dispose);
+    final memory = _playbook();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: MemoryItem(
+            memory: memory,
+            provider: provider,
+            showDismissible: false,
+            onTap: (_, __, ___) {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Release checklist'), findsOneWidget);
+    expect(find.text('Run tests, review the diff, and publish receipts.'), findsOneWidget);
+    expect(find.byIcon(Icons.menu_book_outlined), findsOneWidget);
+    expect(find.byKey(const Key('memory_review_accept_playbook-1')), findsOneWidget);
+    expect(find.byKey(const Key('memory_review_reject_playbook-1')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('memory_review_reject_playbook-1')));
+    await tester.pump();
+
+    expect(provider.decisions, [false]);
+    expect(memory.userReview, isFalse);
+  });
+}

@@ -68,7 +68,42 @@ class MemoryItem extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(memory.content.decodeString, style: AppStyles.body),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (memory.isKnowledgeLedger) ...[
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2, right: 8),
+                              child: Icon(
+                                _ledgerIcon(memory),
+                                size: 15,
+                                color: memory.isHistoricalKnowledgeLedgerRow
+                                    ? AppStyles.textTertiary
+                                    : Colors.deepPurpleAccent,
+                              ),
+                            ),
+                          ],
+                          Expanded(child: Text(memory.content.decodeString, style: AppStyles.body)),
+                        ],
+                      ),
+                      if (memory.ledgerSlot != null && memory.ledgerSlot!.trim().isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            memory.ledgerSlot!,
+                            style: TextStyle(fontSize: 11, color: AppStyles.textTertiary),
+                          ),
+                        ),
+                      if (memory.isLedgerPlaybook && (memory.ledgerBody ?? '').trim().isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            memory.ledgerBody!.trim(),
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 12, color: AppStyles.textSecondary),
+                          ),
+                        ),
                       if (provenanceLabel != null)
                         Padding(
                           padding: const EdgeInsets.only(top: 4),
@@ -87,6 +122,12 @@ class MemoryItem extends StatelessWidget {
                     ],
                     if (memory.conversationId != null) ...[
                       _buildConversationLinkButton(context),
+                      const SizedBox(width: AppStyles.spacingS),
+                    ],
+                    if (_canReviewLedgerRow(memory)) ...[
+                      _buildReviewButton(context, accepted: true),
+                      const SizedBox(width: AppStyles.spacingS),
+                      _buildReviewButton(context, accepted: false),
                       const SizedBox(width: AppStyles.spacingS),
                     ],
                     // _buildVisibilityButton(context),
@@ -156,6 +197,54 @@ class MemoryItem extends StatelessWidget {
         child: const Icon(Icons.delete_outline, color: Colors.white),
       ),
       child: memoryWidget,
+    );
+  }
+
+  static IconData _ledgerIcon(Memory memory) {
+    if (memory.isHistoricalKnowledgeLedgerRow) return Icons.history;
+    switch (memory.ledgerKind) {
+      case KnowledgeLedgerKind.fact:
+        return Icons.person_outline;
+      case KnowledgeLedgerKind.document:
+        return Icons.menu_book_outlined;
+      case KnowledgeLedgerKind.trigger:
+        return Icons.bolt_outlined;
+      case null:
+        return Icons.memory;
+    }
+  }
+
+  static bool _canReviewLedgerRow(Memory memory) {
+    return memory.isKnowledgeLedger &&
+        !memory.isLocked &&
+        memory.invalidAt == null &&
+        (memory.supersededBy == null || memory.supersededBy!.trim().isEmpty);
+  }
+
+  Widget _buildReviewButton(BuildContext context, {required bool accepted}) {
+    final selected = memory.userReview == accepted;
+    return IconButton(
+      key: Key('memory_review_${accepted ? 'accept' : 'reject'}_${memory.id}'),
+      onPressed: selected
+          ? null
+          : () async {
+              final persisted = await provider.reviewMemory(memory, accepted);
+              if (!persisted && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(context.l10n.somethingWentWrong)),
+                );
+              }
+            },
+      tooltip: accepted
+          ? MaterialLocalizations.of(context).okButtonLabel
+          : MaterialLocalizations.of(context).cancelButtonLabel,
+      icon: Icon(
+        accepted ? Icons.thumb_up_outlined : Icons.thumb_down_outlined,
+        size: 17,
+        color: selected ? Colors.deepPurpleAccent : AppStyles.textTertiary,
+      ),
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
     );
   }
 
