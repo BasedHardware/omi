@@ -797,6 +797,15 @@ struct OnboardingVideoView: NSViewRepresentable {
       playerView.showsSharingServiceButton = false
       player.play()
 
+      // Onboarding sound must not play longer than 10s or repeat. Mute the audio
+      // once playback reaches 10s; the video keeps looping silently afterwards.
+      let muteAt = NSValue(time: CMTime(seconds: 10, preferredTimescale: 600))
+      context.coordinator.muteObserver = player.addBoundaryTimeObserver(
+        forTimes: [muteAt], queue: .main
+      ) { [weak player] in
+        player?.isMuted = true
+      }
+
       NotificationCenter.default.addObserver(
         context.coordinator,
         selector: #selector(Coordinator.playerDidFinishPlaying(_:)),
@@ -814,6 +823,13 @@ struct OnboardingVideoView: NSViewRepresentable {
 
   class Coordinator: NSObject {
     var player: AVPlayer?
+    var muteObserver: Any?
+
+    deinit {
+      if let muteObserver {
+        player?.removeTimeObserver(muteObserver)
+      }
+    }
 
     @objc func playerDidFinishPlaying(_ notification: Notification) {
       player?.seek(to: .zero)
