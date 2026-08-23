@@ -5,6 +5,7 @@ Tools for accessing user conversations.
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple, cast
 import contextvars
+import threading
 
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
@@ -23,6 +24,7 @@ from utils.conversations.search import (
     parse_exact_conversation_reference,
 )
 from utils.retrieval.tools.conversation_jit import (
+    MAX_JIT_CONVERSATIONS,
     format_active_jit_conversations,
     is_jit_conversation_retrieval_enabled,
 )
@@ -51,6 +53,36 @@ def _agent_config() -> Optional[Dict[str, Any]]:
 # information to process at once" (#4927). Bound both the count and the raw size of what we return.
 MAX_CONVERSATIONS_FOR_LLM = 100
 MAX_RESULT_CHARS = 60000
+MAX_JIT_SUMMARY_SEARCHES = 4
+_JIT_SEARCH_BUDGET_COUNT_ATTR = '_jit_conversation_summary_search_count'
+_JIT_SEARCH_BUDGET_EXHAUSTED = (
+    'JIT conversation summary search budget exhausted: at most 4 summary searches are allowed per request. '
+    'Use the candidates already returned or hydrate a bounded transcript window for one candidate.'
+)
+_jit_search_budget_lock = threading.Lock()
+
+
+def _consume_jit_summary_search_budget(configurable: Dict[str, Any]) -> Optional[str]:
+    """Atomically reserve one of the request's four JIT summary searches.
+
+    AgentSafetyGuard is already request-scoped and survives LangChain's shallow
+    config copies. Missing or malformed request state fails closed so alternate
+    callers and concurrent tool dispatch cannot silently bypass the bound.
+    """
+    with _jit_search_budget_lock:
+        safety_guard = configurable.get('safety_guard')
+        if safety_guard is None:
+            return _JIT_SEARCH_BUDGET_EXHAUSTED
+        current = getattr(safety_guard, _JIT_SEARCH_BUDGET_COUNT_ATTR, 0)
+        if type(current) is not int or current < 0 or current > MAX_JIT_SUMMARY_SEARCHES:
+            return _JIT_SEARCH_BUDGET_EXHAUSTED
+        if current >= MAX_JIT_SUMMARY_SEARCHES:
+            return _JIT_SEARCH_BUDGET_EXHAUSTED
+        try:
+            setattr(safety_guard, _JIT_SEARCH_BUDGET_COUNT_ATTR, current + 1)
+        except (AttributeError, TypeError):
+            return _JIT_SEARCH_BUDGET_EXHAUSTED
+    return None
 
 
 def _cap_conversations_for_llm(conversations: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], int, bool]:
@@ -163,6 +195,7 @@ def get_conversations_tool(
         logger.info(f"❌ get_conversations_tool - no user_id in config")
         return "Error: User ID not found in configuration"
     logger.info(f"✅ get_conversations_tool - uid: {uid}")
+    jit_enabled = is_jit_conversation_retrieval_enabled(cast(Optional[Dict[str, Any]], configurable))
 
     # Cap max_transcript_segments at 1000 to prevent flooding LLM context
     if max_transcript_segments != -1:
@@ -193,8 +226,15 @@ def get_conversations_tool(
         except ValueError as e:
             return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
 
-    # Limit to reasonable max
-    limit = min(limit, 5000)
+    # JIT renders at most MAX_JIT_CONVERSATIONS, so do not read rows that can never
+    # reach the result. The legacy path intentionally retains its existing limit.
+    limit = min(limit, MAX_JIT_CONVERSATIONS if jit_enabled else 5000)
+
+    if jit_enabled and (not include_transcript or max_transcript_segments == 0):
+        budget_error = _consume_jit_summary_search_budget(cast(Dict[str, Any], configurable))
+        if budget_error:
+            logger.warning("get_conversations_tool rejected by JIT summary-search budget")
+            return budget_error
 
     # Parse statuses if provided
     status_list: List[str] = []
@@ -238,7 +278,7 @@ def get_conversations_tool(
         logger.info(f"⚠️ get_conversations_tool - {msg}")
         return msg
 
-    if is_jit_conversation_retrieval_enabled(cast(Optional[Dict[str, Any]], configurable)):
+    if jit_enabled:
         logger.info("🔧 get_conversations_tool - using explicitly enabled JIT retrieval contract")
         return format_active_jit_conversations(
             conversations_data,
@@ -416,6 +456,7 @@ def search_conversations_tool(
         'exact-reference' if exact_conversation_id else 'semantic',
         limit,
     )
+    jit_enabled = is_jit_conversation_retrieval_enabled(cast(Optional[Dict[str, Any]], configurable))
 
     # Cap max_transcript_segments at 1000 to prevent flooding LLM context
     if max_transcript_segments != -1:
@@ -449,6 +490,12 @@ def search_conversations_tool(
     # Limit to reasonable max
     limit = min(limit, 20)
 
+    if jit_enabled and (not include_transcript or max_transcript_segments == 0):
+        budget_error = _consume_jit_summary_search_budget(cast(Dict[str, Any], configurable))
+        if budget_error:
+            logger.warning("search_conversations_tool rejected by JIT summary-search budget")
+            return budget_error
+
     try:
         keyword_ids: List[str] = []
         vector_ids: List[str] = []
@@ -462,6 +509,9 @@ def search_conversations_tool(
             )
             vector_ids = vector_db.query_vectors(query=query, uid=uid, starts_at=starts_at, ends_at=ends_at, k=limit)
             conversation_ids = merge_conversation_search_ids(keyword_ids, vector_ids)
+
+        if jit_enabled:
+            conversation_ids = conversation_ids[:MAX_JIT_CONVERSATIONS]
 
         logger.info(
             "📊 search_conversations_tool - found %s results (%s keyword, %s vector) query_mode=%s",
@@ -505,7 +555,7 @@ def search_conversations_tool(
 
         logger.info(f"🔍 search_conversations_tool - Loaded {len(conversations_data)} full conversations")
 
-        if is_jit_conversation_retrieval_enabled(cast(Optional[Dict[str, Any]], configurable)):
+        if jit_enabled:
             logger.info("🔧 search_conversations_tool - using explicitly enabled JIT retrieval contract")
             return format_active_jit_conversations(
                 conversations_data,

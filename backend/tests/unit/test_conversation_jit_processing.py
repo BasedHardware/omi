@@ -386,28 +386,62 @@ def _tool_config(*, enabled: object, evidence: list | None = None, collected: li
             "jit_conversation_retrieval_enabled": enabled,
             "evidence_references": evidence if evidence is not None else [],
             "conversations_collected": collected if collected is not None else [],
+            "safety_guard": types.SimpleNamespace(),
         }
     }
 
 
-def test_feature_gate_env_is_explicit_and_request_config_can_disable_it(
+def _invoke_tool(conversation_tools_module, tool, arguments: dict, *, config: dict) -> str:
+    """Keep the hermetic dynamic import on the production config-fallback path."""
+    token = conversation_tools_module.agent_config_context.set(config)
+    try:
+        return tool.invoke(arguments, config=config)
+    finally:
+        conversation_tools_module.agent_config_context.reset(token)
+
+
+def test_feature_gate_requires_uid_scoped_request_opt_in(
     conversation_tools_module, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv(_jit_module().JIT_CONVERSATION_RETRIEVAL_ENV, "true")
 
-    assert conversation_tools_module.is_jit_conversation_retrieval_enabled({}) is True
+    assert conversation_tools_module.is_jit_conversation_retrieval_enabled({}) is False
+    assert conversation_tools_module.is_jit_conversation_retrieval_enabled({"user_id": "jit-user-001"}) is False
     assert (
         conversation_tools_module.is_jit_conversation_retrieval_enabled(
-            {_jit_module().JIT_CONVERSATION_RETRIEVAL_CONFIG_KEY: False}
+            {
+                "user_id": "jit-user-001",
+                _jit_module().JIT_CONVERSATION_RETRIEVAL_CONFIG_KEY: True,
+            }
+        )
+        is True
+    )
+    assert (
+        conversation_tools_module.is_jit_conversation_retrieval_enabled(
+            {
+                "user_id": "jit-user-001",
+                _jit_module().JIT_CONVERSATION_RETRIEVAL_CONFIG_KEY: False,
+            }
         )
         is False
     )
     assert (
         conversation_tools_module.is_jit_conversation_retrieval_enabled(
-            {_jit_module().JIT_CONVERSATION_RETRIEVAL_CONFIG_KEY: {"unexpected": "value"}}
+            {
+                "user_id": "jit-user-001",
+                _jit_module().JIT_CONVERSATION_RETRIEVAL_CONFIG_KEY: {"unexpected": "value"},
+            }
         )
         is False
     )
+
+
+def test_feature_gate_never_activates_from_process_environment_alone(
+    conversation_tools_module, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(_jit_module().JIT_CONVERSATION_RETRIEVAL_ENV, "true")
+
+    assert conversation_tools_module.is_jit_conversation_retrieval_enabled({"user_id": "jit-user-001"}) is False
 
 
 def test_gate_off_preserves_legacy_get_tool_path(conversation_tools_module, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -420,12 +454,94 @@ def test_gate_off_preserves_legacy_get_tool_path(conversation_tools_module, monk
     conversation_tools_module.deserialize_conversation = MagicMock(return_value=legacy_conversation)
     conversation_tools_module.conversations_to_string = MagicMock(return_value="LEGACY_FORMAT_RESULT")
 
-    result = conversation_tools_module.get_conversations_tool.invoke(
-        {"include_transcript": False}, config=_tool_config(enabled=False)
+    config = _tool_config(enabled=False)
+    result = _invoke_tool(
+        conversation_tools_module,
+        conversation_tools_module.get_conversations_tool,
+        {"limit": 5000, "include_transcript": False},
+        config=config,
     )
 
     assert result == "LEGACY_FORMAT_RESULT"
+    assert conversation_tools_module.conversations_db.get_conversations.call_args.kwargs["limit"] == 5000
     conversation_tools_module.deserialize_conversation.assert_called_once_with(raw)
+
+
+def test_gate_on_get_clamps_database_read_before_jit_projection(conversation_tools_module) -> None:
+    conversation_tools_module.conversations_db.get_conversations = MagicMock(return_value=[])
+    config = _tool_config(enabled=True)
+
+    _invoke_tool(
+        conversation_tools_module,
+        conversation_tools_module.get_conversations_tool,
+        {"limit": 5000, "include_transcript": False},
+        config=config,
+    )
+
+    assert conversation_tools_module.conversations_db.get_conversations.call_args.kwargs["limit"] == 20
+
+
+def test_gate_on_search_clamps_hydration_ids_before_database_read(conversation_tools_module) -> None:
+    conversation_tools_module.parse_exact_conversation_reference.return_value = None
+    conversation_tools_module.keyword_search_conversation_ids.return_value = [f"keyword-{index}" for index in range(20)]
+    conversation_tools_module.vector_db.query_vectors = MagicMock(
+        return_value=[f"vector-{index}" for index in range(20)]
+    )
+    conversation_tools_module.merge_conversation_search_ids.return_value = [f"result-{index}" for index in range(40)]
+    conversation_tools_module.conversations_db.get_conversations_by_id = MagicMock(return_value=[])
+    config = _tool_config(enabled=True)
+
+    _invoke_tool(
+        conversation_tools_module,
+        conversation_tools_module.search_conversations_tool,
+        {"query": "release", "limit": 20, "include_transcript": False},
+        config=config,
+    )
+
+    hydrated_ids = conversation_tools_module.conversations_db.get_conversations_by_id.call_args.args[1]
+    assert hydrated_ids == [f"result-{index}" for index in range(20)]
+
+
+def test_gate_on_rejects_fifth_summary_search_before_storage_access(conversation_tools_module) -> None:
+    conversation_tools_module.conversations_db.get_conversations = MagicMock(return_value=[])
+    conversation_tools_module.keyword_search_conversation_ids = MagicMock(return_value=[])
+    config = _tool_config(enabled=True)
+
+    for _ in range(4):
+        result = _invoke_tool(
+            conversation_tools_module,
+            conversation_tools_module.get_conversations_tool,
+            {"include_transcript": False},
+            config=config,
+        )
+        assert result.startswith("No conversations found")
+
+    result = _invoke_tool(
+        conversation_tools_module,
+        conversation_tools_module.search_conversations_tool,
+        {"query": "materially different reformulation", "include_transcript": False},
+        config=config,
+    )
+
+    assert result == conversation_tools_module._JIT_SEARCH_BUDGET_EXHAUSTED
+    assert conversation_tools_module.conversations_db.get_conversations.call_count == 4
+    conversation_tools_module.keyword_search_conversation_ids.assert_not_called()
+
+
+def test_gate_on_missing_request_budget_fails_closed_before_database_read(conversation_tools_module) -> None:
+    conversation_tools_module.conversations_db.get_conversations = MagicMock(return_value=[])
+    config = _tool_config(enabled=True)
+    config["configurable"].pop("safety_guard")
+
+    result = _invoke_tool(
+        conversation_tools_module,
+        conversation_tools_module.get_conversations_tool,
+        {"include_transcript": False},
+        config=config,
+    )
+
+    assert result == conversation_tools_module._JIT_SEARCH_BUDGET_EXHAUSTED
+    conversation_tools_module.conversations_db.get_conversations.assert_not_called()
 
 
 def test_gate_off_preserves_legacy_search_tool_path(conversation_tools_module) -> None:
@@ -439,8 +555,12 @@ def test_gate_off_preserves_legacy_search_tool_path(conversation_tools_module) -
     conversation_tools_module.deserialize_conversation = MagicMock(return_value=legacy_conversation)
     conversation_tools_module.conversations_to_string = MagicMock(return_value="LEGACY_SEARCH_RESULT")
 
-    result = conversation_tools_module.search_conversations_tool.invoke(
-        {"query": "QA", "include_transcript": False}, config=_tool_config(enabled=False)
+    config = _tool_config(enabled=False)
+    result = _invoke_tool(
+        conversation_tools_module,
+        conversation_tools_module.search_conversations_tool,
+        {"query": "QA", "include_transcript": False},
+        config=config,
     )
 
     assert result == "Found 1 conversations semantically matching 'QA':\n\nLEGACY_SEARCH_RESULT"
@@ -453,9 +573,12 @@ def test_gate_on_get_tool_returns_bounded_cards_and_callback_evidence(conversati
     evidence: list = []
     collected: list = []
 
-    result = conversation_tools_module.get_conversations_tool.invoke(
+    config = _tool_config(enabled=True, evidence=evidence, collected=collected)
+    result = _invoke_tool(
+        conversation_tools_module,
+        conversation_tools_module.get_conversations_tool,
         {"include_transcript": True, "max_transcript_segments": 2},
-        config=_tool_config(enabled=True, evidence=evidence, collected=collected),
+        config=config,
     )
 
     assert "conversation:jit-conversation-002:summary" in result
@@ -499,9 +622,12 @@ def test_gate_on_search_tool_uses_query_snippets_and_stable_evidence_refs(conver
     ]
     evidence: list = []
 
-    result = conversation_tools_module.search_conversations_tool.invoke(
+    config = _tool_config(enabled=True, evidence=evidence)
+    result = _invoke_tool(
+        conversation_tools_module,
+        conversation_tools_module.search_conversations_tool,
         {"query": "QA", "max_transcript_segments": 1},
-        config=_tool_config(enabled=True, evidence=evidence),
+        config=config,
     )
 
     assert "conversation:jit-conversation-002:summary" in result
@@ -519,9 +645,12 @@ def test_gate_on_search_honors_one_segment_bound(conversation_tools_module) -> N
     snippet_builder = sys.modules["utils.retrieval.tools.conversation_jit"].build_transcript_match_snippets
     snippet_builder.return_value = [{"segment_id": "segment-1", "start_ms": 0, "end_ms": 1000, "text": "QA one"}]
 
-    result = conversation_tools_module.search_conversations_tool.invoke(
+    config = _tool_config(enabled=True)
+    result = _invoke_tool(
+        conversation_tools_module,
+        conversation_tools_module.search_conversations_tool,
         {"query": "QA", "include_transcript": True, "max_transcript_segments": 1},
-        config=_tool_config(enabled=True),
+        config=config,
     )
 
     assert "segment:segment-1" in result
