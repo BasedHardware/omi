@@ -170,3 +170,25 @@ def test_second_jit_tool_call_index_resolves_to_second_global_conversation() -> 
         assert payload['evidence']['references'][1]['conversation_id'] == payload['memories'][0]['id']
     finally:
         _cleanup(saved)
+
+
+def test_repeated_card_does_not_create_an_index_gap_for_a_later_result() -> None:
+    """A repeated candidate is omitted before numbering the next request-global card."""
+    first = _conversation(
+        'jit-conversation-001',
+        title='First review',
+        overview='The first team reviewed the launch plan.',
+    )
+    second = _conversation(
+        'jit-conversation-002',
+        title='Second review',
+        overview='The second team approved the rollback plan.',
+    )
+    tool_results, references, collected = _format_jit_card_calls([[first], [first, second]])
+
+    assert 'Conversation card #1' in tool_results[0]
+    assert 'Conversation card #1' not in tool_results[1]
+    assert 'Conversation card #2' in tool_results[1]
+    assert 'Conversation card #3' not in tool_results[1]
+    assert [item['id'] for item in collected] == ['jit-conversation-001', 'jit-conversation-002']
+    assert [item['conversation_id'] for item in references] == [item['id'] for item in collected]
