@@ -68,6 +68,7 @@ import {
   loadDesktopReads,
   loadMemories,
   desktopBackendConfigurationCopy,
+  desktopProjectionUnavailableCopy,
   desktopBackendServiceCopy,
   taskGroup,
   type DesktopReadOutcomes,
@@ -2288,7 +2289,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     readsPhase === 'unavailable'
       ? readOutcomes?.conversations.status === 'error' &&
         (readOutcomes.conversations.error === desktopBackendConfigurationCopy ||
-          readOutcomes.conversations.error === desktopBackendServiceCopy)
+          readOutcomes.conversations.error === desktopBackendServiceCopy ||
+          readOutcomes.conversations.error === desktopProjectionUnavailableCopy)
         ? readOutcomes.conversations.error
         : 'Omi could not load saved conversations or memories. Your saved data has not been changed.'
       : homeSearching
@@ -2654,7 +2656,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                           (readOutcomes.conversations.error ===
                                             desktopBackendConfigurationCopy ||
                                             readOutcomes.conversations.error ===
-                                              desktopBackendServiceCopy)
+                                              desktopBackendServiceCopy ||
+                                            readOutcomes.conversations.error ===
+                                              desktopProjectionUnavailableCopy)
                                             ? readOutcomes.conversations.error
                                             : 'Omi could not load saved conversations or memories. Your saved data has not been changed.'}
                                         </Text>

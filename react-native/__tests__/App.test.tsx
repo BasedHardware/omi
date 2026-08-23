@@ -1493,7 +1493,20 @@ test('presents a bounded, truthful wide Home unavailable state without leaking e
         body: '{"messages":[],"page":{"olderCursor":null,"hasOlder":false}}',
       };
     }
-    return {id: request.id, status: 503, body: null};
+    return request.path.startsWith('/v1/conversations') ||
+      request.path.startsWith('/v1/memories')
+      ? {
+          id: request.id,
+          status: 503,
+          body: JSON.stringify({
+            error: {
+              code: 'projection_unavailable',
+              retryable: true,
+              action: 'retry',
+            },
+          }),
+        }
+      : {id: request.id, status: 503, body: null};
   });
 
   const renderer = await renderApp();
@@ -1507,7 +1520,7 @@ test('presents a bounded, truthful wide Home unavailable state without leaking e
   expect(output).toContain('Your Omi, at a glance');
   expect(output).toContain('Saved data is unavailable.');
   expect(output).toContain(
-    'Omi could not load saved conversations or memories. Your saved data has not been changed.',
+    'Saved conversations and memories are not available from this Omi service yet. Retry after its persisted projections are connected.',
   );
   expect(output).not.toContain('desktop-conversations-read failed (503)');
   expect(

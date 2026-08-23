@@ -1,5 +1,4 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import { parseSynthesizedPageJson } from "@omi-core/ratified-contracts/projections/synthesized";
 import { parseTaskPageJson } from "@omi-core/ratified-contracts/projections/tasks";
 import {
   parseChatGenerationEventStream,
@@ -366,7 +365,14 @@ describe("worker request contract", () => {
       headers: authenticatedHeaders,
     });
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(503);
+    expect((await response.json()) as unknown).toEqual({
+      error: {
+        code: "projection_unavailable",
+        retryable: true,
+        action: "retry",
+      },
+    });
   });
 
   test("a provisioned secret still refuses the empty bearer credential", async () => {
@@ -409,7 +415,7 @@ describe("worker request contract", () => {
     expect(accountCalls).toEqual([]);
   });
 
-  test("retained projections expose canonical empty wire shapes", async () => {
+  test("unwired projections refuse instead of reporting canonical empty data", async () => {
     const conversations = await fetchWorker("/v1/conversations", {
       headers: authenticatedHeaders,
     });
@@ -420,32 +426,23 @@ describe("worker request contract", () => {
       headers: authenticatedHeaders,
     });
 
-    expect((await conversations.json()) as unknown).toEqual([]);
-    const memoriesBody = await memories.text();
-    const tasksBody = await tasks.text();
-    expect(JSON.parse(memoriesBody) as unknown).toEqual({
-      contractVersion: "1.0.0",
-      items: [],
-      window: {
-        status: "complete",
-        complete: true,
-        hasMore: false,
-        nextCursor: null,
+    expect(conversations.status).toBe(503);
+    expect(memories.status).toBe(503);
+    expect((await conversations.json()) as unknown).toEqual({
+      error: {
+        code: "projection_unavailable",
+        retryable: true,
+        action: "retry",
       },
-      completeness: {
-        version: "recall-completeness-v1",
-        status: "complete",
-        reasons: [],
-        frontiers: {
-          declaredFrontier: "frontier-v1:declared",
-          newestSearchedAcceptedFrontier: null,
-          missingAcceptedFrontierReason: "no_accepted_work",
-          newestSearchedStmFrontier: null,
-          missingStmFrontierReason: "no_eligible_stm",
-        },
-      },
-      absence: { kind: "query_gap" },
     });
+    expect((await memories.json()) as unknown).toEqual({
+      error: {
+        code: "projection_unavailable",
+        retryable: true,
+        action: "retry",
+      },
+    });
+    const tasksBody = await tasks.text();
     expect(JSON.parse(tasksBody) as unknown).toEqual({
       contractVersion: "1.0.0",
       items: [],
@@ -467,7 +464,6 @@ describe("worker request contract", () => {
       },
       absence: { kind: "query_gap" },
     });
-    expect(parseSynthesizedPageJson(memoriesBody)).not.toBeNull();
     expect(parseTaskPageJson(tasksBody)).not.toBeNull();
   });
 

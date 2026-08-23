@@ -1,6 +1,7 @@
 import {
   conversationGroupLabel,
   desktopBackendConfigurationCopy,
+  desktopProjectionUnavailableCopy,
   desktopBackendServiceCopy,
   desktopReadErrorCopy,
   loadConversations,
@@ -267,6 +268,35 @@ test.each([
     await expect(load(backend)).rejects.toThrow('failed (503)');
   },
 );
+
+test('surfaces typed unavailable projections as truthful retryable copy', async () => {
+  const body = JSON.stringify({
+    error: {
+      code: 'projection_unavailable',
+      retryable: true,
+      action: 'retry',
+    },
+  });
+  const backend = backendFor(request =>
+    request.path.startsWith('/v1/tasks')
+      ? {
+          status: 200,
+          body: JSON.stringify(page([], 'tasks-completeness-v1')),
+        }
+      : {status: 503, body},
+  );
+
+  const result = await loadDesktopReads(backend);
+  expect(result.conversations).toEqual({
+    status: 'error',
+    error: desktopProjectionUnavailableCopy,
+  });
+  expect(result.memories).toEqual({
+    status: 'error',
+    error: desktopProjectionUnavailableCopy,
+  });
+  expect(result.tasks).toEqual(expect.objectContaining({status: 'success'}));
+});
 
 test('rejects a malformed page envelope before projecting items', async () => {
   const malformed = {

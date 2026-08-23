@@ -323,8 +323,12 @@ app.post("/v1/chat-attachments/:id/complete", async (context) => {
   }
 });
 
-app.get("/v1/conversations", () => json([]));
-app.get("/v1/memories", () => json(emptyPage("recall-completeness-v1")));
+app.get("/v1/conversations", () =>
+  backendError("projection_unavailable", "retry", 503, true)
+);
+app.get("/v1/memories", () =>
+  backendError("projection_unavailable", "retry", 503, true)
+);
 app.get("/v1/tasks", async (context) => {
   const query = new URL(context.req.url).searchParams;
   if (
