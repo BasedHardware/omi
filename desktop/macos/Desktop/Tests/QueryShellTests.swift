@@ -8,6 +8,33 @@ import XCTest
 @MainActor
 final class QueryShellTests: XCTestCase {
 
+  func testHomeDesignSwitchReachesAllThreeHomePresentations() {
+    XCTAssertEqual(
+      HomeDesignPresentation.resolve(
+        useLegacyHomeDesign: false,
+        useOldestHomeDesign: false,
+        forceModernPresentation: false),
+      .queryShell)
+    XCTAssertEqual(
+      HomeDesignPresentation.resolve(
+        useLegacyHomeDesign: true,
+        useOldestHomeDesign: false,
+        forceModernPresentation: false),
+      .redesignedHub)
+    XCTAssertEqual(
+      HomeDesignPresentation.resolve(
+        useLegacyHomeDesign: true,
+        useOldestHomeDesign: true,
+        forceModernPresentation: false),
+      .oldestLegacy)
+    XCTAssertEqual(
+      HomeDesignPresentation.resolve(
+        useLegacyHomeDesign: true,
+        useOldestHomeDesign: true,
+        forceModernPresentation: true),
+      .queryShell)
+  }
+
   // MARK: - The one key
 
   /// **`⏎` sends. There is nothing else for it to mean.**

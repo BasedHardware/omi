@@ -122,7 +122,10 @@ struct ChatFirstShell: View {
     {
       PageGlassLane(
         selectedIndex: ChatFirstPageGlassLanePolicy.pageGlassLaneIndex(for: navigation.route),
-        memoryDestinationRawValue: memoryDestinationRawValue
+        memoryDestinationRawValue: memoryDestinationRawValue,
+        homeOwnsItsPanels: HomeDesignPresentation.queryShellOwnsItsPanels(
+          useLegacyHomeDesign: true,
+          forceModernPresentation: true)
       ) {
         routeDestination
       }
