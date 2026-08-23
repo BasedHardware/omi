@@ -41,6 +41,12 @@ mapping its semantics to `unknown` or omitting its references. It does not
 activate JIT retrieval, trigger evaluation, frame requests, or any production
 rollout gate.
 
+The macOS adapter exercises both sides of that boundary: `ServerMemory` keeps
+all text while recognizing only the v1 ledger authority, and `ChatMessageDB`
+keeps chat text while ignoring the unrecognized evidence envelope rather than
+projecting it into metadata or content blocks. This proves inert compatibility;
+it does not claim that macOS renders structured chat evidence.
+
 The backend suite validates every fixture file structurally (parseable, complete
 expectations, self-consistent day-key arithmetic) so a malformed fixture cannot pass
 vacuously on all clients at once, and pins the backend serialization side: due_at is

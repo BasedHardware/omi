@@ -102,6 +102,11 @@
       "v1-memory": "The user lives in New York.",
       "future-memory": "Future text remains readable but inert."
     },
+    "readable_chat_text_by_id": {
+      "legacy-message": "Legacy answer remains available.",
+      "v1-message": "Answer remains authoritative.",
+      "future-message": "Future answer remains available."
+    },
     "v1_evidence_kind": "conversation_summary",
     "future_evidence_kind": "unknown",
     "future_evidence_state": "unknown"
