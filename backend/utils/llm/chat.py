@@ -447,6 +447,30 @@ def _get_qa_rag_prompt(
 # The system prompt references this placeholder so the datetime instructions still make sense.
 CURRENT_DATETIME_PLACEHOLDER = "(see <current_datetime> in the latest user message)"
 
+JIT_CONVERSATION_RETRIEVAL_PROMPT_SECTION = """
+<jit_conversation_retrieval>
+This request is in the explicitly enabled bounded JIT conversation-retrieval cohort.
+
+For questions that require the user's conversation history:
+1. Triage summaries before transcripts. Call conversation tools with
+   max_transcript_segments=0 and include_transcript=false first.
+2. Extract any date range, literal phrase, person/entity, and semantic intent from the
+   question. When useful, issue at most four bounded summary searches in parallel: one
+   literal query, one person/entity query, one semantic paraphrase, and one date-only
+   get_conversations_tool call. Do not repeat equivalent searches.
+3. Rank the returned summary cards, then hydrate only the relevant conversation IDs by
+   exact conversation reference with include_transcript=true and at most 24 transcript
+   segments. Never hydrate every candidate wholesale.
+4. Before returning "not found", reformulate once with materially different terms. If a
+   date range was supplied, retry once without topic terms and widen the date range once
+   only when the user's wording permits it. Stop after those bounded retries.
+5. If a person name is ambiguous, preserve the distinct candidates and ask which person
+   the user means instead of merging identities or inventing an answer.
+6. Cite only evidence references returned by the selected summary cards or hydrated
+   transcript windows. Missing or partial evidence must degrade honestly.
+</jit_conversation_retrieval>
+"""
+
 # Allowlist mapping of `X-App-Platform` header values to a platform-context line for the
 # agentic system prompt. Header values are client-controlled, so only these exact values
 # ever reach the prompt — anything unrecognized adds nothing (the allowlist is the
@@ -532,6 +556,7 @@ def _get_agentic_qa_prompt(  # type: ignore[reportUnusedFunction]  # imported by
     context: Optional[PageContext] = None,
     tz: Optional[str] = None,
     platform: Optional[str] = None,
+    jit_conversation_retrieval_enabled: bool = False,
 ) -> str:
     """
     Build the system prompt for the agentic chat agent.
@@ -557,6 +582,9 @@ def _get_agentic_qa_prompt(  # type: ignore[reportUnusedFunction]  # imported by
     """
     user_name = get_user_name(uid)
     platform_section = _get_platform_context_section(platform)
+    jit_retrieval_section = (
+        "\n\n" + JIT_CONVERSATION_RETRIEVAL_PROMPT_SECTION.strip() if jit_conversation_retrieval_enabled is True else ""
+    )
 
     # Resolve timezone only — the live datetime is injected into the user turn, not here,
     # so the cached system prefix stays byte-identical across requests. A caller that already
@@ -658,7 +686,7 @@ Keep this context in mind when answering their question.
             f"📝 Using prompt: {cached_prompt.prompt_name} (commit: {cached_prompt.prompt_commit}, source: {cached_prompt.source})"
         )
 
-        return base_prompt.strip() + platform_section
+        return base_prompt.strip() + jit_retrieval_section + platform_section
 
     except Exception as e:
         logger.error(f"⚠️  Error fetching/rendering LangSmith prompt, using inline fallback: {e}")
@@ -882,7 +910,7 @@ When the user asks about specific dates/times, they are ALWAYS referring to date
 Remember: Use tools strategically to provide the best possible answers. For questions about specific EVENTS or INCIDENTS (e.g., "when did X happen?", "what happened at Y?"), use search_conversations_tool to find relevant conversations. For questions about static FACTS/PREFERENCES (e.g., "what's my favorite X?", "do I like Y?"), use get_memories_tool. Your goal is to help {user_name} in the most personalized and helpful way possible.
 """
 
-    return base_prompt.strip() + platform_section
+    return base_prompt.strip() + jit_retrieval_section + platform_section
 
 
 def _get_agentic_qa_prompt_fallback(variables: dict[str, Any]) -> str:  # type: ignore[reportUnusedFunction]  # offline/CI fallback when LangSmith prompt fetch fails

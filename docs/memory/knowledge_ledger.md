@@ -76,11 +76,15 @@ facts, document bodies, and trigger bodies are excluded.
 
 ## Capture and retrieval
 
-Conversation finalization produces the user-facing summary/action items and
-required indexes, but no memory. Conversation retrieval returns compact cards
-with stable summary evidence, then explicitly hydrates at most 24 transcript
-segments or three matched snippets per conversation. A first conversation
-open preserves the same no-memory fence.
+At the target cutover, conversation finalization produces the user-facing
+summary/action items and required indexes, but no memory. The released
+finalizer still runs memory extraction until the replacement quality gates
+pass; this contract does not authorize disabling it. Bounded JIT conversation
+retrieval remains explicitly default-off. When its gate is enabled, the agent
+prompt directs bounded literal, entity, semantic, and date-only summary
+triage, one bounded reformulation before reporting no result, and selective
+hydration of at most 24 transcript segments or three matched snippets per
+conversation. The target first-open flow preserves the same no-memory fence.
 
 Screen OCR/app/window/time/vector metadata stays local/searchable. Pixels are
 interpreted only after a relevant frame is selected, except one

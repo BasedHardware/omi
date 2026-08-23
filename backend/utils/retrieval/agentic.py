@@ -56,6 +56,7 @@ from utils.retrieval.tools import (
     search_knowledge,
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
+from utils.retrieval.tools.conversation_jit_gate import is_jit_conversation_retrieval_enabled
 from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
 from utils.retrieval.safety import (
     AgentSafetyGuard,
@@ -1273,8 +1274,17 @@ async def execute_agentic_chat_stream(
             gateway_feature_mode = should_route_chat_agent_through_gateway() and not bool(get_byok_key('anthropic'))
             tz = tz or await run_blocking(db_executor, get_user_timezone, uid)
             city = await get_mobile_city(uid, platform) if current_datetime_block is None else None
+            jit_conversation_retrieval_enabled = is_jit_conversation_retrieval_enabled(None)
             system_prompt = await run_blocking(
-                db_executor, _get_agentic_qa_prompt, uid, app, messages, context=context, tz=tz, platform=platform
+                db_executor,
+                _get_agentic_qa_prompt,
+                uid,
+                app,
+                messages,
+                context=context,
+                tz=tz,
+                platform=platform,
+                jit_conversation_retrieval_enabled=jit_conversation_retrieval_enabled,
             )
 
             # Get prompt metadata for tracing/versioning
@@ -1412,6 +1422,7 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
         "safety_guard": safety_guard,
         "chat_session_id": chat_session.id if chat_session else None,
         "client_kind": client_kind,
+        "jit_conversation_retrieval_enabled": jit_conversation_retrieval_enabled,
         "tools": core_tools + app_tools,
     }
 
