@@ -1236,6 +1236,36 @@ def test_integration_outbox_rejects_completion_from_an_expired_lease(fake_db):
     assert fake_db.rows[outbox_path]['status'] == 'completed'
 
 
+@pytest.mark.parametrize('stored_expires_at', [True, False])
+def test_the_stored_document_answers_the_deadline_exactly_like_the_record(fake_db, stored_expires_at):
+    """The raw-document twin exists so readers that never parse a record can still
+    ask the deadline question. It has to answer identically, or a Candidate is live
+    on one surface and gone on another."""
+
+    record = create_record(fake_db)
+    path = candidate_paths(fake_db)[0]
+    stored = deepcopy(fake_db.rows[path])
+    if not stored_expires_at:
+        # The backlog that predates the deadline carries no `expires_at`; both
+        # readers must derive the same one from creation.
+        stored.pop('expires_at')
+        record = record.model_copy(update={'expires_at': None})
+
+    deadline = record.created_at + candidates_db.SUGGESTION_TTL
+    for now in (deadline - timedelta(seconds=1), deadline, deadline + timedelta(days=30)):
+        assert candidates_db.stored_candidate_has_lapsed(stored, now=now) == candidates_db.candidate_has_lapsed(
+            record, now=now
+        ), now
+
+    candidates_db.resolve_task_candidate('user-1', record.candidate_id, account_generation=3)
+    resolved = candidates_db.get_candidate('user-1', record.candidate_id)
+    resolved_stored = deepcopy(fake_db.rows[path])
+    far_future = deadline + timedelta(days=365)
+    assert resolved is not None and resolved.status != CandidateStatus.pending
+    assert candidates_db.stored_candidate_has_lapsed(resolved_stored, now=far_future) is False
+    assert candidates_db.candidate_has_lapsed(resolved, now=far_future) is False
+
+
 def test_candidate_queries_have_required_firestore_composite_indexes():
     config = json.loads((Path(__file__).resolve().parents[3] / 'firestore.indexes.json').read_text())
     signatures = {
