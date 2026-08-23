@@ -42,16 +42,88 @@ extension DesktopAutomationActionRegistry {
             )
           ]
         ).render(userName: "Test")
-        let row = try KnowledgeLedgerTriggerRow(
-          id: "trigger_focus",
-          triggerCondition: [
-            "schema_version": "jit_trigger.v1",
-            "keywords": ["focus"],
-          ]
-        )
-        guard case .success(let trigger) = KnowledgeLedgerTriggerCompiler.compile(row) else {
-          return ["error": "knowledge ledger trigger fixture did not compile"]
+        let triggerCondition: [String: Any] = [
+          "schema_version": "jit_trigger.v1",
+          "keywords": ["focus"],
+        ]
+        guard
+          let triggerConditionJSON = MemoryLedgerMetadata.canonicalJSONString(
+            triggerCondition,
+            maximumCharacters: MemoryLedgerMetadata.maxTriggerConditionCharacters)
+        else {
+          return ["error": "knowledge ledger trigger fixture was not canonical JSON"]
         }
+        var triggerMetadata = [
+          MemoryLedgerMetadata.schemaVersionKey: KnowledgeLedgerTriggerRow.schemaVersion,
+          "kind": "trigger",
+          "subject_scope": "primary_user",
+          "intent_backed": "true",
+          "status": "active",
+          MemoryLedgerMetadata.triggerConditionJSONKey: triggerConditionJSON,
+        ]
+        let triggerMemory = ServerMemory(
+          id: "trigger_focus",
+          content: "Focus trigger",
+          category: .workflow,
+          tier: .longTerm,
+          tierIsExplicit: true,
+          createdAt: Date(timeIntervalSince1970: 1),
+          updatedAt: Date(timeIntervalSince1970: 2),
+          conversationId: nil,
+          reviewed: false,
+          userReview: nil,
+          visibility: "private",
+          manuallyAdded: false,
+          scoring: nil,
+          source: "desktop",
+          confidence: nil,
+          sourceApp: nil,
+          contextSummary: nil,
+          isRead: false,
+          isDismissed: false,
+          tags: [],
+          reasoning: nil,
+          currentActivity: nil,
+          inputDeviceName: nil,
+          windowTitle: nil,
+          headline: nil,
+          ledgerMetadata: triggerMetadata
+        )
+        triggerMetadata[MemoryLedgerMetadata.schemaVersionKey] = "knowledge_ledger.v2"
+        let futureMemory = ServerMemory(
+          id: "trigger_future",
+          content: "Future trigger",
+          category: .workflow,
+          tier: .longTerm,
+          tierIsExplicit: true,
+          createdAt: Date(timeIntervalSince1970: 1),
+          updatedAt: Date(timeIntervalSince1970: 3),
+          conversationId: nil,
+          reviewed: false,
+          userReview: nil,
+          visibility: "private",
+          manuallyAdded: false,
+          scoring: nil,
+          source: "desktop",
+          confidence: nil,
+          sourceApp: nil,
+          contextSummary: nil,
+          isRead: false,
+          isDismissed: false,
+          tags: [],
+          reasoning: nil,
+          currentActivity: nil,
+          inputDeviceName: nil,
+          windowTitle: nil,
+          headline: nil,
+          ledgerMetadata: triggerMetadata
+        )
+        let projection = KnowledgeLedgerTriggerCompiler.project(memories: [triggerMemory, futureMemory])
+        guard let trigger = projection.entries.first else {
+          return ["error": "knowledge ledger trigger projection did not compile"]
+        }
+        let mirroredTriggerCondition = MemoryLedgerMetadata.triggerConditionJSON(
+          from: triggerMemory.ledgerMetadata)
         let decision = KnowledgeLedgerTriggerEvaluator.evaluate(
           trigger,
           observation: .init(text: "focus now"),
@@ -59,6 +131,11 @@ extension DesktopAutomationActionRegistry {
         )
         return [
           "prompt_contains_profile_fact": prompt?.contains("home_city: Paris") == true ? "true" : "false",
+          "trigger_metadata_roundtrip":
+            mirroredTriggerCondition.flatMap { String(data: $0, encoding: .utf8) } == triggerConditionJSON
+            ? "true" : "false",
+          "trigger_projection_count": "\(projection.entries.count)",
+          "trigger_projection_quarantine_count": "\(projection.quarantined.count)",
           "trigger_status": decision.status.rawValue,
           "trigger_wakeups_used": "\(decision.wakeupsUsed)",
         ]
