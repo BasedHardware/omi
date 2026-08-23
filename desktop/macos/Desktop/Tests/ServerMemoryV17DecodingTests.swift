@@ -246,4 +246,49 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
     XCTAssertTrue(memory.tierIsExplicit)
   }
 
+  func testDecodesBoundedLedgerPayloadsIntoCanonicalMirrorMetadata() throws {
+    let json = """
+      {
+        "id": "mem-ledger-trigger",
+        "uid": "mem-ledger-trigger",
+        "content": "When release work is active",
+        "category": "workflow",
+        "created_at": "2026-06-21T10:00:00Z",
+        "updated_at": "2026-06-21T10:05:00Z",
+        "ledger_schema_version": "knowledge_ledger.v1",
+        "kind": "trigger",
+        "subject_scope": "primary_user",
+        "subject_entity_id": "user",
+        "intent_backed": true,
+        "curation_weight": 4,
+        "status": "active",
+        "valid_at": "2026-06-21T10:00:00Z",
+        "write_reason": "standing_trigger",
+        "object_entity_ids": ["project-release"],
+        "qualifiers": {"source": "user"},
+        "arguments": {"owner": "user"},
+        "trigger_condition": {
+          "schema_version": "jit_trigger.v1",
+          "keywords": ["release"],
+          "entity_aliases": {"release_owner": ["David", "dave"]}
+        }
+      }
+      """.data(using: .utf8)!
+
+    let memory = try decoder.decode(ServerMemory.self, from: json)
+
+    XCTAssertEqual(memory.ledgerMetadata["ledger_schema_version"], "knowledge_ledger.v1")
+    XCTAssertEqual(memory.ledgerMetadata["kind"], "trigger")
+    XCTAssertEqual(memory.ledgerMetadata["subject_scope"], "primary_user")
+    XCTAssertEqual(memory.ledgerMetadata["subject_entity_id"], "user")
+    XCTAssertEqual(memory.ledgerMetadata["write_reason"], "standing_trigger")
+    XCTAssertEqual(memory.ledgerMetadata["object_entity_ids_json"], "[\"project-release\"]")
+    XCTAssertEqual(memory.ledgerMetadata["qualifiers_json"], "{\"source\":\"user\"}")
+    XCTAssertEqual(memory.ledgerMetadata["arguments_json"], "{\"owner\":\"user\"}")
+    XCTAssertEqual(
+      memory.ledgerMetadata["trigger_condition_json"],
+      "{\"entity_aliases\":{\"release_owner\":[\"David\",\"dave\"]},\"keywords\":[\"release\"],\"schema_version\":\"jit_trigger.v1\"}"
+    )
+  }
+
 }

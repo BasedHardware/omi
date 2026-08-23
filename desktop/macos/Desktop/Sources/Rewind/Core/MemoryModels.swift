@@ -341,6 +341,16 @@ extension MemoryRecord {
     return changed
   }
 
+  /// Ledger lifecycle metadata is server-authoritative even when an unrelated
+  /// local edit makes this row newer. Keeping stale trigger/fact metadata would
+  /// let a closed server row remain locally eligible after a conflict.
+  @discardableResult
+  mutating func mergeAuthoritativeLedgerMetadataFrom(_ memory: ServerMemory) -> Bool {
+    guard ledgerMetadata != memory.ledgerMetadata else { return false }
+    ledgerMetadataJson = Self.encodeLedgerMetadata(memory.ledgerMetadata)
+    return true
+  }
+
   /// Convert to ServerMemory for UI display
   /// Uses backendId if available, otherwise generates a local ID for unsynced memories
   func toServerMemory() -> ServerMemory? {
@@ -408,11 +418,8 @@ extension MemoryRecord {
   }
 
   private static func encodeLedgerMetadata(_ metadata: [String: String]) -> String? {
-    guard !metadata.isEmpty,
-      let data = try? JSONEncoder().encode(metadata),
-      let json = String(data: data, encoding: .utf8)
-    else { return nil }
-    return json
+    guard !metadata.isEmpty else { return nil }
+    return MemoryLedgerMetadata.canonicalJSONString(metadata)
   }
 
   private var ledgerMetadata: [String: String] {
@@ -421,6 +428,13 @@ extension MemoryRecord {
       let metadata = try? JSONDecoder().decode([String: String].self, from: data)
     else { return [:] }
     return metadata
+  }
+
+  /// Structured trigger data remains inert until a caller explicitly validates
+  /// the canonical schema and compiles the bounded payload.
+  var ledgerTriggerConditionJSON: Data? {
+    guard !deleted, userReview != false else { return nil }
+    return MemoryLedgerMetadata.triggerConditionJSON(from: ledgerMetadata)
   }
 }
 
