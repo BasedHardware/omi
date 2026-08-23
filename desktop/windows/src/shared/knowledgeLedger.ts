@@ -12,11 +12,7 @@ export const KNOWLEDGE_LEDGER_SCHEMA_VERSION = 'knowledge_ledger.v1' as const
 export type KnowledgeLedgerKind = 'fact' | 'document' | 'trigger' | 'unknown'
 export type KnowledgeLedgerStatus = 'active' | 'superseded' | 'tombstoned' | 'purged' | 'unknown'
 export type KnowledgeLedgerSubjectScope =
-  | 'primary_user'
-  | 'user_owned_project'
-  | 'user_relationship'
-  | 'third_party'
-  | 'unknown'
+  'primary_user' | 'user_owned_project' | 'user_relationship' | 'third_party' | 'unknown'
 
 export type KnowledgeLedgerEvidence = {
   artifact_ref?: Record<string, unknown>
@@ -103,20 +99,10 @@ export type KnowledgeLedgerMemory = {
 }
 
 export type ChatEvidenceReferenceKind =
-  | 'conversation_summary'
-  | 'conversation_segment'
-  | 'screen'
-  | 'keyframe'
-  | 'request'
-  | 'unknown'
+  'conversation_summary' | 'conversation_segment' | 'screen' | 'keyframe' | 'request' | 'unknown'
 
 export type ChatEvidenceReferenceState =
-  | 'available'
-  | 'loading'
-  | 'offline'
-  | 'pruned'
-  | 'failed'
-  | 'unknown'
+  'available' | 'loading' | 'offline' | 'pruned' | 'failed' | 'unknown'
 
 export type ChatEvidenceReference = {
   id: string
@@ -165,6 +151,17 @@ const LEDGER_SUBJECT_SCOPES: ReadonlySet<KnowledgeLedgerSubjectScope> = new Set(
   'user_owned_project',
   'user_relationship',
   'third_party'
+])
+const LEDGER_SUBJECT_ATTRIBUTIONS = new Set(['user', 'third_party', 'unknown', 'legacy_assumed'])
+const LEDGER_WRITE_REASONS = new Set([
+  'direct_user_statement',
+  'explicit_remember',
+  'agent_reusable_conclusion',
+  'recurring_workflow',
+  'standing_trigger',
+  'onboarding',
+  'daily_reconciliation',
+  'legacy_migration'
 ])
 const EVIDENCE_KINDS: ReadonlySet<ChatEvidenceReferenceKind> = new Set([
   'conversation_summary',
@@ -218,6 +215,11 @@ function asFiniteNumber(value: unknown): number | undefined {
   return value
 }
 
+function asFiniteInteger(value: unknown): number | undefined {
+  const number = asFiniteNumber(value)
+  return number !== undefined && Number.isInteger(number) ? number : undefined
+}
+
 function asBoolean(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined
 }
@@ -228,6 +230,12 @@ function asStringArray(value: unknown): string[] | undefined {
     .map((item) => boundedString(item))
     .filter((item): item is string => item !== undefined)
   return result
+}
+
+function asStrictStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const result = value.map((item) => boundedString(item))
+  return result.every((item): item is string => item !== undefined) ? result : undefined
 }
 
 function boundedMetadataValue(value: unknown, depth: number): unknown {
@@ -311,6 +319,7 @@ export function parseKnowledgeLedgerMemory(value: unknown): KnowledgeLedgerMemor
     : undefined
   const ledgerSchemaVersion = boundedString(raw.ledger_schema_version ?? raw.ledgerSchemaVersion)
   const isLedgerV1 = ledgerSchemaVersion === KNOWLEDGE_LEDGER_SCHEMA_VERSION
+  const ledgerKind = isLedgerV1 ? parseKnowledgeLedgerKind(raw.kind) : undefined
 
   const result: KnowledgeLedgerMemory = {
     id,
@@ -343,70 +352,82 @@ export function parseKnowledgeLedgerMemory(value: unknown): KnowledgeLedgerMemor
     ...(asString(raw.app_id) !== undefined ? { app_id: raw.app_id as string } : {}),
     ...(evidence ? { evidence } : {}),
     ...(ledgerSchemaVersion !== undefined ? { ledger_schema_version: ledgerSchemaVersion } : {}),
-    ...(boundedString(raw.memory_id) !== undefined
+    ...(isLedgerV1 && boundedString(raw.memory_id) !== undefined
       ? { memory_id: boundedString(raw.memory_id) }
       : {}),
-    ...(isLedgerV1 ? { kind: parseKnowledgeLedgerKind(raw.kind) } : {}),
+    ...(isLedgerV1 ? { kind: ledgerKind } : {}),
     ...(isLedgerV1 ? { status: parseKnowledgeLedgerStatus(raw.status) } : {}),
     ...(isLedgerV1
       ? {
           subject_scope: parseKnowledgeLedgerSubjectScope(raw.subject_scope ?? raw.subjectScope)
         }
       : {}),
-    ...(boundedString(raw.subject_entity_id ?? raw.subjectEntityId) !== undefined
+    ...(isLedgerV1 && boundedString(raw.subject_entity_id ?? raw.subjectEntityId) !== undefined
       ? { subject_entity_id: boundedString(raw.subject_entity_id ?? raw.subjectEntityId) }
       : {}),
-    ...(boundedString(raw.subject_attribution ?? raw.subjectAttribution) !== undefined
-      ? { subject_attribution: boundedString(raw.subject_attribution ?? raw.subjectAttribution) }
+    ...(isLedgerV1 &&
+    LEDGER_SUBJECT_ATTRIBUTIONS.has(
+      boundedString(raw.subject_attribution ?? raw.subjectAttribution)?.toLowerCase() ?? ''
+    )
+      ? {
+          subject_attribution: boundedString(
+            raw.subject_attribution ?? raw.subjectAttribution
+          )?.toLowerCase()
+        }
       : {}),
-    ...(boundedString(raw.slot) !== undefined ? { slot: boundedString(raw.slot) } : {}),
-    ...(boundedString(raw.valid_from ?? raw.validFrom) !== undefined
+    ...(isLedgerV1 && ledgerKind === 'fact' && boundedString(raw.slot) !== undefined
+      ? { slot: boundedString(raw.slot) }
+      : {}),
+    ...(isLedgerV1 && boundedString(raw.valid_from ?? raw.validFrom) !== undefined
       ? { valid_from: boundedString(raw.valid_from ?? raw.validFrom) }
       : {}),
-    ...(boundedString(raw.valid_to ?? raw.validTo) !== undefined
+    ...(isLedgerV1 && boundedString(raw.valid_to ?? raw.validTo) !== undefined
       ? { valid_to: boundedString(raw.valid_to ?? raw.validTo) }
       : {}),
-    ...(boundedString(raw.valid_at ?? raw.validAt) !== undefined
+    ...(isLedgerV1 && boundedString(raw.valid_at ?? raw.validAt) !== undefined
       ? { valid_at: boundedString(raw.valid_at ?? raw.validAt) }
       : {}),
-    ...(boundedString(raw.invalid_at ?? raw.invalidAt) !== undefined
+    ...(isLedgerV1 && boundedString(raw.invalid_at ?? raw.invalidAt) !== undefined
       ? { invalid_at: boundedString(raw.invalid_at ?? raw.invalidAt) }
       : {}),
-    ...(boundedString(raw.superseded_by ?? raw.supersededBy) !== undefined
+    ...(isLedgerV1 && boundedString(raw.superseded_by ?? raw.supersededBy) !== undefined
       ? { superseded_by: boundedString(raw.superseded_by ?? raw.supersededBy) }
       : {}),
-    ...(boundedString(raw.canonical_memory_id ?? raw.canonicalMemoryId) !== undefined
+    ...(isLedgerV1 && boundedString(raw.canonical_memory_id ?? raw.canonicalMemoryId) !== undefined
       ? { canonical_memory_id: boundedString(raw.canonical_memory_id ?? raw.canonicalMemoryId) }
       : {}),
-    ...(asFiniteNumber(raw.curation_weight) !== undefined
-      ? { curation_weight: asFiniteNumber(raw.curation_weight) }
+    ...(isLedgerV1 && asFiniteInteger(raw.curation_weight) !== undefined
+      ? { curation_weight: asFiniteInteger(raw.curation_weight) }
       : {}),
-    ...(asBoolean(raw.intent_backed) !== undefined
+    ...(isLedgerV1 && asBoolean(raw.intent_backed) !== undefined
       ? { intent_backed: raw.intent_backed as boolean }
       : {}),
-    ...(asBoolean(raw.user_asserted) !== undefined
+    ...(isLedgerV1 && asBoolean(raw.user_asserted) !== undefined
       ? { user_asserted: raw.user_asserted as boolean }
       : {}),
-    ...(boundedString(raw.write_reason) !== undefined
-      ? { write_reason: boundedString(raw.write_reason) }
+    ...(isLedgerV1 && LEDGER_WRITE_REASONS.has(boundedString(raw.write_reason)?.toLowerCase() ?? '')
+      ? { write_reason: boundedString(raw.write_reason)?.toLowerCase() }
       : {}),
-    ...(boundedString(raw.sensitivity) !== undefined
+    ...(isLedgerV1 && boundedString(raw.sensitivity) !== undefined
       ? { sensitivity: boundedString(raw.sensitivity) }
       : {}),
-    ...(asNumber(raw.account_generation) !== undefined
-      ? { account_generation: asNumber(raw.account_generation) }
+    ...(isLedgerV1 && asFiniteInteger(raw.account_generation) !== undefined
+      ? { account_generation: asFiniteInteger(raw.account_generation) }
       : {}),
-    ...(asNumber(raw.item_revision) !== undefined
-      ? { item_revision: asNumber(raw.item_revision) }
+    ...(isLedgerV1 && asFiniteInteger(raw.item_revision) !== undefined
+      ? { item_revision: asFiniteInteger(raw.item_revision) }
       : {}),
-    ...(boundedString(raw.ledger_commit_id ?? raw.ledgerCommitId) !== undefined
+    ...(isLedgerV1 && boundedString(raw.ledger_commit_id ?? raw.ledgerCommitId) !== undefined
       ? { ledger_commit_id: boundedString(raw.ledger_commit_id ?? raw.ledgerCommitId) }
       : {}),
-    ...(asNumber(raw.ledger_sequence ?? raw.ledgerSequence) !== undefined
-      ? { ledger_sequence: asNumber(raw.ledger_sequence ?? raw.ledgerSequence) }
+    ...(isLedgerV1 && asFiniteInteger(raw.ledger_sequence ?? raw.ledgerSequence) !== undefined
+      ? { ledger_sequence: asFiniteInteger(raw.ledger_sequence ?? raw.ledgerSequence) }
       : {}),
-    ...(isLedgerV1 && asString(raw.body) !== undefined ? { body: raw.body as string } : {}),
+    ...(isLedgerV1 && ledgerKind === 'document' && asString(raw.body) !== undefined
+      ? { body: raw.body as string }
+      : {}),
     ...(isLedgerV1 &&
+    ledgerKind === 'trigger' &&
     boundedRecordCopy(raw.trigger_condition ?? raw.triggerCondition ?? raw.condition)
       ? {
           trigger_condition: boundedRecordCopy(
@@ -414,19 +435,27 @@ export function parseKnowledgeLedgerMemory(value: unknown): KnowledgeLedgerMemor
           )
         }
       : {}),
-    ...(boundedRecordCopy(raw.arguments) ? { arguments: boundedRecordCopy(raw.arguments) } : {}),
-    ...(asString(raw.predicate) !== undefined ? { predicate: raw.predicate as string } : {}),
-    ...(boundedRecordCopy(raw.qualifiers) ? { qualifiers: boundedRecordCopy(raw.qualifiers) } : {}),
-    ...(asStringArray(raw.object_entity_ids)
-      ? { object_entity_ids: asStringArray(raw.object_entity_ids) }
+    ...(isLedgerV1 && boundedRecordCopy(raw.arguments)
+      ? { arguments: boundedRecordCopy(raw.arguments) }
       : {}),
-    ...(asStringArray(raw.uncertainty_reasons)
-      ? { uncertainty_reasons: asStringArray(raw.uncertainty_reasons) }
+    ...(isLedgerV1 && asString(raw.predicate) !== undefined
+      ? { predicate: raw.predicate as string }
       : {}),
-    ...(asFiniteNumber(raw.veracity) !== undefined
+    ...(isLedgerV1 && boundedRecordCopy(raw.qualifiers)
+      ? { qualifiers: boundedRecordCopy(raw.qualifiers) }
+      : {}),
+    ...(isLedgerV1 && asStrictStringArray(raw.object_entity_ids)
+      ? { object_entity_ids: asStrictStringArray(raw.object_entity_ids) }
+      : {}),
+    ...(isLedgerV1 && asStrictStringArray(raw.uncertainty_reasons)
+      ? { uncertainty_reasons: asStrictStringArray(raw.uncertainty_reasons) }
+      : {}),
+    ...(isLedgerV1 && asFiniteNumber(raw.veracity) !== undefined
       ? { veracity: asFiniteNumber(raw.veracity) }
       : {}),
-    ...(asString(raw.durability) !== undefined ? { durability: raw.durability as string } : {}),
+    ...(isLedgerV1 && asString(raw.durability) !== undefined
+      ? { durability: raw.durability as string }
+      : {}),
     ...(asBoolean(raw.edited) !== undefined ? { edited: raw.edited as boolean } : {}),
     ...(asBoolean(raw.reviewed) !== undefined ? { reviewed: raw.reviewed as boolean } : {}),
     ...(asBoolean(raw.user_review) !== undefined
@@ -448,7 +477,12 @@ export function parseKnowledgeLedgerMemory(value: unknown): KnowledgeLedgerMemor
 function parseKnowledgeLedgerEvidence(value: unknown): KnowledgeLedgerEvidence | null {
   const raw = asRecord(value)
   if (!raw) return null
+  const evidenceId = boundedString(raw.evidence_id)
+  const independenceGroup = boundedString(raw.independence_group)
+  if (!evidenceId || !independenceGroup) return null
   const result = boundedRecordCopy(raw) as KnowledgeLedgerEvidence
+  result.evidence_id = evidenceId
+  result.independence_group = independenceGroup
   const artifactRef = boundedRecordCopy(raw.artifact_ref)
   if (artifactRef) result.artifact_ref = artifactRef
   return result
