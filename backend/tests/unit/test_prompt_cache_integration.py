@@ -425,6 +425,8 @@ def _get_agentic_module():
         "fetch_url_tool",
         "traverse_knowledge_graph_tool",
         "get_entity_timeline_tool",
+        "search_knowledge",
+        "read_playbook",
     ]
     for name in tool_names:
         mock_tool = MagicMock()
