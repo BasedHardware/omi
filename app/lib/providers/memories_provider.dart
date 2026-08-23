@@ -19,6 +19,7 @@ import 'package:omi/widgets/extensions/string.dart';
 typedef FetchMemoriesRequest = Future<GetMemoriesResult> Function({int limit, int offset, bool thisDeviceOnly});
 typedef FetchLedgerHistoryRequest = Future<GetLedgerHistoryResult> Function({int limit, int offset});
 typedef ReviewMemoryRequest = Future<bool> Function(String memoryId, bool value);
+typedef EditMemoryRequest = Future<EditMemoryResult> Function(String memoryId, String value);
 
 Future<GetLedgerHistoryResult> _noLedgerHistory({int limit = 500, int offset = 0}) async =>
     const GetLedgerHistoryResult([], supported: false);
@@ -45,17 +46,20 @@ class MemoriesProvider extends ChangeNotifier {
   final FetchLedgerHistoryRequest _fetchLedgerHistoryRequest;
   final Future<bool> Function(String) _deleteMemoryRequest;
   final ReviewMemoryRequest _reviewMemoryRequest;
+  final EditMemoryRequest _editMemoryRequest;
 
   MemoriesProvider({
     FetchMemoriesRequest? fetchMemoriesRequest,
     FetchLedgerHistoryRequest? fetchLedgerHistoryRequest,
     Future<bool> Function(String)? deleteMemoryRequest,
     ReviewMemoryRequest? reviewMemoryRequest,
+    EditMemoryRequest? editMemoryRequest,
   })  : _fetchMemoriesRequest = fetchMemoriesRequest ?? getMemoriesResult,
         _fetchLedgerHistoryRequest =
             fetchLedgerHistoryRequest ?? (fetchMemoriesRequest == null ? getLedgerHistory : _noLedgerHistory),
         _deleteMemoryRequest = deleteMemoryRequest ?? deleteMemoryServer,
-        _reviewMemoryRequest = reviewMemoryRequest ?? reviewMemoryServer;
+        _reviewMemoryRequest = reviewMemoryRequest ?? reviewMemoryServer,
+        _editMemoryRequest = editMemoryRequest ?? editMemoryServer;
 
   List<Memory> get memories => _memories;
   bool get loading => _loading;
@@ -619,24 +623,56 @@ class MemoriesProvider extends ChangeNotifier {
   }
 
   Future<bool> editMemory(Memory memory, String value, [MemoryCategory? category]) async {
-    final success = await editMemoryServer(memory.id, value);
+    if (memory.isKnowledgeLedger &&
+        (memory.deleted ||
+            memory.invalidAt != null ||
+            (memory.supersededBy ?? '').trim().isNotEmpty ||
+            memory.ledgerKind != KnowledgeLedgerKind.fact ||
+            memory.isLocked)) {
+      return false;
+    }
+    final result = await _editMemoryRequest(memory.id, value);
 
-    if (success) {
+    if (result.persisted) {
       final idx = _memories.indexWhere((m) => m.id == memory.id);
       if (idx != -1) {
-        memory.content = value;
-        if (category != null) {
-          memory.category = category;
+        if (memory.isKnowledgeLedger) {
+          final replacement = result.authoritativeMemory;
+          if (replacement == null ||
+              !replacement.isKnowledgeLedger ||
+              replacement.uid != memory.uid ||
+              replacement.id == memory.id ||
+              replacement.content.trim() != value.trim() ||
+              replacement.deleted ||
+              replacement.invalidAt != null ||
+              (replacement.supersededBy ?? '').trim().isNotEmpty ||
+              replacement.ledgerKind != KnowledgeLedgerKind.fact ||
+              !replacement.intentBacked ||
+              replacement.isLocked ||
+              replacement.ledgerSlot != memory.ledgerSlot ||
+              replacement.subjectScope != memory.subjectScope ||
+              replacement.subjectEntityId != memory.subjectEntityId ||
+              replacement.curationWeight != memory.curationWeight ||
+              replacement.visibility != memory.visibility) {
+            return false;
+          }
+          _memories[idx] = replacement;
+        } else {
+          memory.content = value;
+          if (category != null) {
+            memory.category = category;
+          }
+          memory.updatedAt = DateTime.now();
+          memory.edited = true;
+          _memories[idx] = memory;
         }
-        memory.updatedAt = DateTime.now();
-        memory.edited = true;
-        _memories[idx] = memory;
 
         _setCategories();
+        notifyListeners();
       }
     }
 
-    return success;
+    return result.persisted;
   }
 
   Future<void> updateAllMemoriesVisibility(bool makePrivate) async {

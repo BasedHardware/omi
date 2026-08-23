@@ -2,7 +2,7 @@ import 'package:omi/backend/schema/gen/memories_wire.g.dart' as wire;
 
 enum MemoryCategory { system, interesting, manual, workflow }
 
-enum MemoryVisibility { private, public }
+enum MemoryVisibility { private, public, shared }
 
 /// Semantic row kind used by the intent-backed `knowledge_ledger.v1` contract.
 enum KnowledgeLedgerKind {

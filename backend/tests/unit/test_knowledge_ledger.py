@@ -20,7 +20,7 @@ from models.product_memory import (
     MemorySubjectScope,
     ProcessingState,
 )
-from utils.memory import canonical_memory_adapter
+from utils.memory import canonical_memory_adapter, knowledge_ledger
 from utils.memory.canonical_memory_adapter import _canonical_extraction_apply_write
 from utils.memory.knowledge_ledger import (
     LedgerProvenance,
@@ -195,6 +195,39 @@ def test_ledger_amendment_appends_and_supersedes_in_one_commit():
     assert historical.valid_to is not None
     assert historical.valid_to >= replacement.valid_from
     assert {event.payload["action"] for event in result.outbox_events} == {"upsert", "delete"}
+
+
+def test_amend_fact_carries_visibility_into_the_atomic_replacement(monkeypatch):
+    captured = {}
+
+    def write_ledger(uid, payload, *, db_client=None):
+        captured.update({"uid": uid, "payload": payload, "db_client": db_client})
+        return payload["id"]
+
+    monkeypatch.setattr(knowledge_ledger, "write_canonical_knowledge_ledger_memory", write_ledger)
+    provenance = LedgerProvenance(
+        source_id="prior",
+        source_type="explicit_user_correction",
+        source_version="item_revision:4",
+        action_id="correction-1",
+    )
+
+    replacement_id = knowledge_ledger.amend_fact(
+        "u1",
+        "prior",
+        "Lives in Brooklyn",
+        provenance=provenance,
+        write_reason=LedgerWriteReason.direct_user_statement,
+        slot="home_city",
+        visibility="shared",
+        db_client="db",
+    )
+
+    assert replacement_id == captured["payload"]["id"]
+    assert captured["uid"] == "u1"
+    assert captured["db_client"] == "db"
+    assert captured["payload"]["visibility"] == "shared"
+    assert captured["payload"]["supersedes"] == ["prior"]
 
 
 def test_generic_external_writer_cannot_forge_ledger_authority():

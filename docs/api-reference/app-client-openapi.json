@@ -16043,6 +16043,30 @@
         "title": "MemoryDB",
         "type": "object"
       },
+      "MemoryEditResponse": {
+        "description": "Additive authoritative readback for edits that replace a ledger row.",
+        "properties": {
+          "memory": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemoryDB"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "MemoryEditResponse",
+        "type": "object"
+      },
       "MemoryKind": {
         "description": "Semantic kind for the intent-backed knowledge ledger.\n\n``tier`` remains a storage-compatibility projection during the client\nmigration. It is not the lifecycle authority for ledger rows.",
         "enum": [
@@ -62300,7 +62324,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MemoryMutationResponse"
+                  "$ref": "#/components/schemas/MemoryEditResponse"
                 }
               }
             },

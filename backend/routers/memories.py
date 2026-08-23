@@ -49,6 +49,12 @@ class MemoryMutationResponse(BaseModel):
     status: str
 
 
+class MemoryEditResponse(MemoryMutationResponse):
+    """Additive authoritative readback for edits that replace a ledger row."""
+
+    memory: Optional[MemoryDB] = None
+
+
 class MemoryValueRequest(BaseModel):
     """Canonical body for single-value memory mutations."""
 
@@ -846,7 +852,12 @@ def review_memory(
     return {'status': 'ok'}
 
 
-@router.patch('/v3/memories/{memory_id}', tags=['memories'], response_model=MemoryMutationResponse)
+@router.patch(
+    '/v3/memories/{memory_id}',
+    tags=['memories'],
+    response_model=MemoryEditResponse,
+    response_model_exclude_none=True,
+)
 def edit_memory(
     memory_id: str,
     request: Optional[MemoryValueRequest] = Body(default=None),
@@ -864,11 +875,14 @@ def edit_memory(
         raise HTTPException(status_code=422, detail="Missing memory mutation value")
 
     db_client = getattr(db_client_module, 'db', None)
-    _validate_mutable_memory(uid, memory_id, db_client=db_client)
     try:
-        MemoryService(db_client=db_client).update_content(uid, memory_id, mutation_value)
+        updated = MemoryService(db_client=db_client).update_content(uid, memory_id, mutation_value)
+    except HTTPException:
+        raise
     except ValueError:
         raise HTTPException(status_code=404, detail='Memory not found')
+    if updated.ledger_schema_version == 'knowledge_ledger.v1':
+        return {'status': 'ok', 'memory': updated}
     return {'status': 'ok'}
 
 

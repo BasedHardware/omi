@@ -48,9 +48,7 @@ class MemoryItem extends StatelessWidget {
     );
     final provenanceLabel = _resolveProvenanceLabel(context, provenanceType);
     final Widget memoryWidget = GestureDetector(
-      onTap: () {
-        onTap(context, memory, provider);
-      },
+      onTap: _canEditMemory(memory) ? () => onTap(context, memory, provider) : null,
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.fromLTRB(18, 18, 16, 18),
@@ -219,6 +217,15 @@ class MemoryItem extends StatelessWidget {
         !memory.isLocked &&
         memory.invalidAt == null &&
         (memory.supersededBy == null || memory.supersededBy!.trim().isEmpty);
+  }
+
+  static bool _canEditMemory(Memory memory) {
+    if (!memory.isKnowledgeLedger) return true;
+    return !memory.deleted &&
+        memory.invalidAt == null &&
+        (memory.supersededBy ?? '').trim().isEmpty &&
+        memory.ledgerKind == KnowledgeLedgerKind.fact &&
+        !memory.isLocked;
   }
 
   Widget _buildReviewButton(BuildContext context, {required bool accepted}) {

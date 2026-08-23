@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -87,6 +87,7 @@ class LedgerWrite(BaseModel):
     curation_weight: int = 0
     valid_from: Optional[datetime] = None
     user_asserted: bool = False
+    visibility: Literal["private", "public", "shared"] = "private"
     supersedes: List[str] = Field(default_factory=list)
 
     @field_validator("content")
@@ -182,6 +183,7 @@ def save_ledger_write(uid: str, write: LedgerWrite, *, db_client: Any = None) ->
             "write_reason": write.write_reason.value,
             "manually_added": write.user_asserted,
             "user_asserted": write.user_asserted,
+            "visibility": write.visibility,
             "supersedes": sorted(set(write.supersedes)),
             "extractor_id": "knowledge_ledger",
             "evidence": [
@@ -238,6 +240,7 @@ def amend_fact(
     subject_scope: MemorySubjectScope = MemorySubjectScope.primary_user,
     subject_entity_id: Optional[str] = None,
     curation_weight: int = 0,
+    visibility: Literal["private", "public", "shared"] = "private",
     db_client: Any = None,
 ) -> str:
     """Append a replacement and close the prior row in one canonical commit."""
@@ -252,6 +255,7 @@ def amend_fact(
             subject_scope=subject_scope,
             subject_entity_id=subject_entity_id,
             curation_weight=curation_weight,
+            visibility=visibility,
             supersedes=[prior_memory_id],
         ),
         db_client=db_client,
