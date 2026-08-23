@@ -2,6 +2,56 @@ import XCTest
 
 @testable import Omi_Computer
 
+private final class CloudOAuthDisconnectURLProtocol: URLProtocol, @unchecked Sendable {
+  private static let lock = NSLock()
+  private nonisolated(unsafe) static var requests: [(method: String, path: String)] = []
+
+  static func reset() {
+    lock.lock()
+    requests.removeAll()
+    lock.unlock()
+  }
+
+  static var capturedRequests: [(method: String, path: String)] {
+    lock.lock()
+    defer { lock.unlock() }
+    return requests
+  }
+
+  override class func canInit(with request: URLRequest) -> Bool { true }
+
+  override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+  override func startLoading() {
+    let method = request.httpMethod ?? "GET"
+    let path = request.url?.path ?? ""
+    Self.lock.lock()
+    Self.requests.append((method: method, path: path))
+    Self.lock.unlock()
+
+    let body =
+      method == "GET"
+      ? Data("{\"grants\":[{\"id\":\"grant-123\",\"client_id\":\"omi-chatgpt-prod\",\"status\":\"active\"}]}".utf8)
+      : Data()
+    let statusCode = method == "DELETE" ? 204 : 200
+    let response = HTTPURLResponse(
+      url: request.url!, statusCode: statusCode, httpVersion: nil, headerFields: nil)!
+    client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+    if !body.isEmpty {
+      client?.urlProtocol(self, didLoad: body)
+    }
+    client?.urlProtocolDidFinishLoading(self)
+  }
+
+  override func stopLoading() {}
+}
+
+extension APIClient {
+  fileprivate func setTestAuthHeaderForMemoryExportTests(_ value: String) {
+    testAuthHeader = value
+  }
+}
+
 final class MemoryExportStatusTests: XCTestCase {
   private var tempHome: URL!
 
@@ -87,6 +137,31 @@ final class MemoryExportStatusTests: XCTestCase {
     XCTAssertFalse(status.isConfigured)
     XCTAssertFalse(status.hasConnection)
     XCTAssertEqual(presentation.primaryActionTitle, "Add Omi to ChatGPT")
+  }
+
+  func testDisconnectCloudAuthorizationRevokesGrantAndClearsProjection() async throws {
+    CloudOAuthDisconnectURLProtocol.reset()
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [CloudOAuthDisconnectURLProtocol.self]
+    let apiClient = APIClient(session: URLSession(configuration: configuration))
+    await apiClient.setTestAuthHeaderForMemoryExportTests("Bearer test-token")
+    let service = MemoryExportService(apiClient: apiClient)
+
+    UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "memoryExportConnectedAt.chatgpt")
+    UserDefaults.standard.set("Authorized through ChatGPT (cloud)", forKey: "memoryExportDetail.chatgpt")
+
+    let status = try await service.disconnectCloudOAuthConnection(for: .chatgpt)
+
+    XCTAssertFalse(status.hasConnection)
+    XCTAssertFalse(status.isConfigured)
+    XCTAssertNil(UserDefaults.standard.object(forKey: "memoryExportConnectedAt.chatgpt"))
+    XCTAssertNil(UserDefaults.standard.object(forKey: "memoryExportDetail.chatgpt"))
+    let requests = CloudOAuthDisconnectURLProtocol.capturedRequests
+    XCTAssertEqual(requests.count, 2)
+    XCTAssertEqual(requests[0].method, "GET")
+    XCTAssertEqual(requests[0].path, "/v1/mcp/oauth/grants")
+    XCTAssertEqual(requests[1].method, "DELETE")
+    XCTAssertEqual(requests[1].path, "/v1/mcp/oauth/grants/grant-123")
   }
 
   func testCachedCloudGrantStatusReadSignalsInferredConnectorAuthority() async {
