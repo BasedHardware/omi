@@ -115,14 +115,24 @@ struct KnowledgeLedgerTriggerMetadata: Equatable, Sendable {
   let wakeupBudgetPerDay: Int?
 }
 
-struct KnowledgeLedgerTriggerCalendarEvent: Codable, Equatable, Sendable {
+struct KnowledgeLedgerTriggerCalendarEvent: Codable, Equatable, Hashable, Sendable {
   let title: String
   let eventType: String
 }
 
 struct KnowledgeLedgerTriggerObservation: Codable, Equatable, Sendable {
+  static let maxEventIDCharacters = 128
   static let maxTextCharacters = 8_000
+  static let maxEntityLabels = 64
+  static let maxEntityLabelCandidates = 256
+  static let maxEntityLabelCharacters = 120
+  static let maxSelectorCharacters = 120
   static let maxCalendarEvents = 32
+  static let maxCalendarEventCandidates = 128
+  static let maxCalendarFieldCharacters = 160
+  static let maxEmbeddingScores = 32
+  static let maxEmbeddingScoreCandidates = 128
+  static let maxEmbeddingKeyCharacters = 80
 
   let eventID: String?
   let text: String
@@ -132,6 +142,17 @@ struct KnowledgeLedgerTriggerObservation: Codable, Equatable, Sendable {
   let occurredAt: Date?
   let calendarEvents: [KnowledgeLedgerTriggerCalendarEvent]
   let embeddingScores: [String: Double]
+
+  private enum CodingKeys: String, CodingKey {
+    case eventID
+    case text
+    case entityLabels
+    case appName
+    case windowTitle
+    case occurredAt
+    case calendarEvents
+    case embeddingScores
+  }
 
   init(
     eventID: String? = nil,
@@ -143,23 +164,67 @@ struct KnowledgeLedgerTriggerObservation: Codable, Equatable, Sendable {
     calendarEvents: [KnowledgeLedgerTriggerCalendarEvent] = [],
     embeddingScores: [String: Double] = [:]
   ) {
-    self.eventID = eventID
+    self.eventID = eventID.flatMap { Self.boundedIdentifier($0, limit: Self.maxEventIDCharacters) }
     self.text = String(text.prefix(Self.maxTextCharacters))
-    self.entityLabels = entityLabels.map(Self.normalize).filter { !$0.isEmpty }.sorted()
-    self.appName = appName.map(Self.normalize).flatMap { $0.isEmpty ? nil : $0 }
-    self.windowTitle = windowTitle.map(Self.normalize).flatMap { $0.isEmpty ? nil : $0 }
+    let entityLabelCandidates =
+      entityLabels.count <= Self.maxEntityLabelCandidates ? entityLabels : []
+    self.entityLabels = Array(
+      Set(entityLabelCandidates.compactMap { Self.boundedNormalized($0, limit: Self.maxEntityLabelCharacters) })
+        .sorted()
+        .prefix(Self.maxEntityLabels)
+    )
+    self.appName = appName.flatMap { Self.boundedNormalized($0, limit: Self.maxSelectorCharacters) }
+    self.windowTitle = windowTitle.flatMap { Self.boundedNormalized($0, limit: Self.maxSelectorCharacters) }
     self.occurredAt = occurredAt
-    self.calendarEvents = Array(calendarEvents.prefix(Self.maxCalendarEvents))
-    self.embeddingScores =
-      embeddingScores
-      .filter {
-        !$0.key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-          && $0.value.isFinite
-          && (0...1).contains($0.value)
+    let calendarEventCandidates =
+      calendarEvents.count <= Self.maxCalendarEventCandidates ? calendarEvents : []
+    self.calendarEvents = Array(
+      Set(
+        calendarEventCandidates.compactMap { event -> KnowledgeLedgerTriggerCalendarEvent? in
+          let title = Self.boundedNormalized(event.title, limit: Self.maxCalendarFieldCharacters) ?? ""
+          let eventType = Self.boundedNormalized(event.eventType, limit: Self.maxCalendarFieldCharacters) ?? ""
+          guard !title.isEmpty || !eventType.isEmpty else { return nil }
+          return KnowledgeLedgerTriggerCalendarEvent(title: title, eventType: eventType)
+        }
+      )
+      .sorted {
+        if $0.title != $1.title { return $0.title < $1.title }
+        return $0.eventType < $1.eventType
       }
-      .reduce(into: [String: Double]()) { result, pair in
-        result[pair.key.trimmingCharacters(in: .whitespacesAndNewlines)] = pair.value
-      }
+      .prefix(Self.maxCalendarEvents)
+    )
+    var normalizedScores: [String: Double] = [:]
+    let embeddingScoreCandidates =
+      embeddingScores.count <= Self.maxEmbeddingScoreCandidates ? embeddingScores : [:]
+    for pair in embeddingScoreCandidates.sorted(by: { $0.key < $1.key }) {
+      guard let key = Self.boundedIdentifier(pair.key, limit: Self.maxEmbeddingKeyCharacters), pair.value.isFinite,
+        (0...1).contains(pair.value)
+      else { continue }
+      // Whitespace-normalized duplicate keys are ambiguous. Keeping the lower
+      // score is deterministic and fail-closed: normalization can never turn a
+      // non-match into a match.
+      normalizedScores[key] = min(normalizedScores[key] ?? pair.value, pair.value)
+    }
+    var boundedScores: [String: Double] = [:]
+    for pair in normalizedScores.sorted(by: { $0.key < $1.key }).prefix(Self.maxEmbeddingScores) {
+      boundedScores[pair.key] = pair.value
+    }
+    self.embeddingScores = boundedScores
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    self.init(
+      eventID: try container.decodeIfPresent(String.self, forKey: .eventID),
+      text: try container.decodeIfPresent(String.self, forKey: .text) ?? "",
+      entityLabels: try container.decodeIfPresent([String].self, forKey: .entityLabels) ?? [],
+      appName: try container.decodeIfPresent(String.self, forKey: .appName),
+      windowTitle: try container.decodeIfPresent(String.self, forKey: .windowTitle),
+      occurredAt: try container.decodeIfPresent(Date.self, forKey: .occurredAt),
+      calendarEvents: try container.decodeIfPresent([KnowledgeLedgerTriggerCalendarEvent].self, forKey: .calendarEvents)
+        ?? [],
+      embeddingScores: try container.decodeIfPresent([String: Double].self, forKey: .embeddingScores) ?? [:]
+    )
   }
 
   var fingerprint: String {
@@ -170,8 +235,21 @@ struct KnowledgeLedgerTriggerObservation: Codable, Equatable, Sendable {
     return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
   }
 
-  private static func normalize(_ value: String) -> String {
-    value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+  private static func boundedIdentifier(_ value: String, limit: Int) -> String? {
+    let candidate = value.prefix(limit + 1)
+    guard candidate.count <= limit else { return nil }
+    let normalized = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !normalized.isEmpty else { return nil }
+    return normalized
+  }
+
+  private static func boundedNormalized(_ value: String, limit: Int) -> String? {
+    // Four raw characters per retained character leaves room for ordinary
+    // whitespace normalization without traversing attacker-sized strings.
+    let candidate = value.prefix(limit * 4)
+    let normalized = candidate.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ").lowercased()
+    guard !normalized.isEmpty else { return nil }
+    return String(normalized.prefix(limit))
   }
 }
 
@@ -439,6 +517,7 @@ enum KnowledgeLedgerTriggerCompiler {
     guard !id.isEmpty, id.count <= 128 else { return .failure(.malformed("trigger id is invalid")) }
     guard let metadata = metadata(for: row) else { return .failure(.malformed("trigger metadata is invalid")) }
     do {
+      try StrictJSONKeyValidator.validate(row.triggerConditionJSON)
       let payload = try JSONDecoder().decode(ConditionPayload.self, from: row.triggerConditionJSON)
       let compiled = try compile(payload: payload, rowID: id, metadata: metadata)
       return .success(compiled)
@@ -568,6 +647,130 @@ enum KnowledgeLedgerTriggerCompiler {
     pattern.range(of: #"\\[1-9]|\(\?(?:[=!<]|P=)"#, options: .regularExpression) != nil
       || pattern.range(of: #"\([^)]*(?:\*|\+|\{\d+(?:,\d*)?\})[^)]*\)(?:\*|\+|\{)"#, options: .regularExpression) != nil
   }
+}
+
+/// JSONDecoder exposes a set of keyed fields, so duplicate object keys have
+/// already disappeared by the time a Decodable initializer runs. Trigger
+/// conditions are an authority boundary: reject duplicates in every nested
+/// object before decoding instead of accepting an implementation-defined
+/// first/last value.
+private struct StrictJSONKeyValidator {
+  private enum ValidationError: Error {
+    case malformed
+    case duplicateKey
+  }
+
+  private let bytes: [UInt8]
+  private var index = 0
+
+  static func validate(_ data: Data) throws {
+    var parser = StrictJSONKeyValidator(bytes: Array(data))
+    try parser.parseValue()
+    parser.skipWhitespace()
+    guard parser.index == parser.bytes.count else { throw ValidationError.malformed }
+  }
+
+  private mutating func parseValue() throws {
+    skipWhitespace()
+    guard let byte = current else { throw ValidationError.malformed }
+    switch byte {
+    case UInt8(ascii: "{"):
+      try parseObject()
+    case UInt8(ascii: "["):
+      try parseArray()
+    case UInt8(ascii: "\""):
+      _ = try parseString()
+    default:
+      try parsePrimitive()
+    }
+  }
+
+  private mutating func parseObject() throws {
+    try consume(UInt8(ascii: "{"))
+    skipWhitespace()
+    if consumeIfPresent(UInt8(ascii: "}")) { return }
+    var keys = Set<String>()
+    while true {
+      skipWhitespace()
+      guard current == UInt8(ascii: "\"") else { throw ValidationError.malformed }
+      let key = try parseString()
+      guard keys.insert(key).inserted else { throw ValidationError.duplicateKey }
+      skipWhitespace()
+      try consume(UInt8(ascii: ":"))
+      try parseValue()
+      skipWhitespace()
+      if consumeIfPresent(UInt8(ascii: "}")) { return }
+      try consume(UInt8(ascii: ","))
+    }
+  }
+
+  private mutating func parseArray() throws {
+    try consume(UInt8(ascii: "["))
+    skipWhitespace()
+    if consumeIfPresent(UInt8(ascii: "]")) { return }
+    while true {
+      try parseValue()
+      skipWhitespace()
+      if consumeIfPresent(UInt8(ascii: "]")) { return }
+      try consume(UInt8(ascii: ","))
+    }
+  }
+
+  private mutating func parseString() throws -> String {
+    let start = index
+    try consume(UInt8(ascii: "\""))
+    var escaped = false
+    while let byte = current {
+      index += 1
+      if escaped {
+        escaped = false
+      } else if byte == UInt8(ascii: "\\") {
+        escaped = true
+      } else if byte == UInt8(ascii: "\"") {
+        let token = Data(bytes[start..<index])
+        guard let value = try? JSONDecoder().decode(String.self, from: token) else {
+          throw ValidationError.malformed
+        }
+        return value
+      } else if byte < 0x20 {
+        throw ValidationError.malformed
+      }
+    }
+    throw ValidationError.malformed
+  }
+
+  private mutating func parsePrimitive() throws {
+    let start = index
+    while let byte = current,
+      !Self.whitespace.contains(byte),
+      byte != UInt8(ascii: ","),
+      byte != UInt8(ascii: "]"),
+      byte != UInt8(ascii: "}")
+    {
+      index += 1
+    }
+    guard index > start else { throw ValidationError.malformed }
+  }
+
+  private mutating func skipWhitespace() {
+    while let byte = current, Self.whitespace.contains(byte) { index += 1 }
+  }
+
+  private mutating func consume(_ expected: UInt8) throws {
+    guard consumeIfPresent(expected) else { throw ValidationError.malformed }
+  }
+
+  private mutating func consumeIfPresent(_ expected: UInt8) -> Bool {
+    guard current == expected else { return false }
+    index += 1
+    return true
+  }
+
+  private var current: UInt8? {
+    index < bytes.count ? bytes[index] : nil
+  }
+
+  private static let whitespace: Set<UInt8> = [0x20, 0x09, 0x0A, 0x0D]
 }
 
 private struct ConditionPayload: Decodable {

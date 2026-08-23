@@ -73,6 +73,153 @@ final class KnowledgeLedgerTriggerWatchlistTests: XCTestCase {
     XCTAssertThrowsError(try requireFailure(thirdParty))
   }
 
+  func testDuplicateObjectKeysFailClosedBeforeDecoding() {
+    let payloads = [
+      #"{"keywords":["release"],"keywords":[]}"#,
+      #"{"time":{"start":"09:00","start":"10:00","end":"11:00"}}"#,
+      #"{"calendar":{"event_keywords":["planning"],"event_keywords":[]}}"#,
+      #"{"embedding":{"prototype_id":"first","prototype_id":"second"}}"#,
+      #"{"keywords":["release"],"\u006beywords":[]}"#,
+    ]
+
+    for (index, payload) in payloads.enumerated() {
+      let row = KnowledgeLedgerTriggerRow(
+        id: "duplicate-\(index)",
+        triggerConditionJSON: Data(payload.utf8)
+      )
+      guard case .failure(.malformed(_)) = KnowledgeLedgerTriggerCompiler.compile(row) else {
+        return XCTFail("duplicate object keys must be quarantined: \(payload)")
+      }
+    }
+  }
+
+  func testObservationBoundsAreDeterministicAndFingerprintIgnoresInputOrdering() {
+    let longLabel = String(repeating: "L", count: KnowledgeLedgerTriggerObservation.maxEntityLabelCharacters + 40)
+    let longSelector = String(repeating: "S", count: KnowledgeLedgerTriggerObservation.maxSelectorCharacters + 40)
+    let longCalendar = String(repeating: "C", count: KnowledgeLedgerTriggerObservation.maxCalendarFieldCharacters + 40)
+    let labels =
+      (0..<(KnowledgeLedgerTriggerObservation.maxEntityLabels + 20)).map { "entity-\($0)" }
+      + [longLabel, "  ENTITY-1  "]
+    let calendarEvents =
+      (0..<(KnowledgeLedgerTriggerObservation.maxCalendarEvents + 10)).map {
+        KnowledgeLedgerTriggerCalendarEvent(title: "Event \($0)", eventType: "Meeting")
+      } + [KnowledgeLedgerTriggerCalendarEvent(title: longCalendar, eventType: longCalendar)]
+    var scores = [String: Double]()
+    for index in 0..<(KnowledgeLedgerTriggerObservation.maxEmbeddingScores + 10) {
+      scores[String(format: "prototype-%02d", index)] = 0.5
+    }
+    scores[" duplicate"] = 0.9
+    scores["duplicate "] = 0.7
+    scores["not-finite"] = .infinity
+    scores[String(repeating: "k", count: KnowledgeLedgerTriggerObservation.maxEmbeddingKeyCharacters + 1)] = 0.9
+
+    let first = KnowledgeLedgerTriggerObservation(
+      eventID: "  \(String(repeating: "e", count: KnowledgeLedgerTriggerObservation.maxEventIDCharacters + 40))  ",
+      text: "release",
+      entityLabels: labels,
+      appName: "  \(longSelector)  ",
+      windowTitle: "  \(longSelector)  ",
+      calendarEvents: calendarEvents,
+      embeddingScores: scores
+    )
+    let second = KnowledgeLedgerTriggerObservation(
+      eventID: first.eventID,
+      text: "release",
+      entityLabels: Array(labels.reversed()),
+      appName: longSelector.lowercased(),
+      windowTitle: longSelector.lowercased(),
+      calendarEvents: Array(calendarEvents.reversed()),
+      embeddingScores: scores
+    )
+
+    XCTAssertNil(first.eventID)
+    XCTAssertEqual(first.entityLabels.count, KnowledgeLedgerTriggerObservation.maxEntityLabels)
+    XCTAssertTrue(
+      first.entityLabels.allSatisfy { $0.count <= KnowledgeLedgerTriggerObservation.maxEntityLabelCharacters })
+    XCTAssertEqual(first.appName?.count, KnowledgeLedgerTriggerObservation.maxSelectorCharacters)
+    XCTAssertEqual(first.windowTitle?.count, KnowledgeLedgerTriggerObservation.maxSelectorCharacters)
+    XCTAssertEqual(first.calendarEvents.count, KnowledgeLedgerTriggerObservation.maxCalendarEvents)
+    XCTAssertTrue(
+      first.calendarEvents.allSatisfy {
+        $0.title.count <= KnowledgeLedgerTriggerObservation.maxCalendarFieldCharacters
+          && $0.eventType.count <= KnowledgeLedgerTriggerObservation.maxCalendarFieldCharacters
+      })
+    XCTAssertEqual(first.embeddingScores.count, KnowledgeLedgerTriggerObservation.maxEmbeddingScores)
+    XCTAssertTrue(
+      first.embeddingScores.keys.allSatisfy { $0.count <= KnowledgeLedgerTriggerObservation.maxEmbeddingKeyCharacters })
+    XCTAssertNil(first.embeddingScores["not-finite"])
+    XCTAssertNil(
+      first.embeddingScores[
+        String(repeating: "k", count: KnowledgeLedgerTriggerObservation.maxEmbeddingKeyCharacters + 1)])
+    XCTAssertEqual(first.embeddingScores["duplicate"], 0.7)
+    XCTAssertEqual(first, second)
+    XCTAssertEqual(first.fingerprint, second.fingerprint)
+  }
+
+  func testDecodedObservationUsesBoundsAndIsStableAcrossReorderedJSON() throws {
+    let labels = (0..<(KnowledgeLedgerTriggerObservation.maxEntityLabels + 20)).map { "Entity \($0)" }
+    let events = (0..<(KnowledgeLedgerTriggerObservation.maxCalendarEvents + 10)).map {
+      ["title": "Event \($0)", "eventType": "Meeting"]
+    }
+    var scores: [String: Double] = [:]
+    for index in 0..<(KnowledgeLedgerTriggerObservation.maxEmbeddingScores + 10) {
+      scores["prototype-\(index)"] = 0.5
+    }
+    let longSelector = String(repeating: "S", count: KnowledgeLedgerTriggerObservation.maxSelectorCharacters + 40)
+
+    func decode(labels: [String], events: [[String: String]]) throws -> KnowledgeLedgerTriggerObservation {
+      let payload: [String: Any] = [
+        "eventID": String(repeating: "e", count: KnowledgeLedgerTriggerObservation.maxEventIDCharacters + 1),
+        "text": String(repeating: "t", count: KnowledgeLedgerTriggerObservation.maxTextCharacters + 200),
+        "entityLabels": labels,
+        "appName": longSelector,
+        "windowTitle": longSelector,
+        "calendarEvents": events,
+        "embeddingScores": scores,
+      ]
+      return try JSONDecoder().decode(
+        KnowledgeLedgerTriggerObservation.self,
+        from: JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+      )
+    }
+
+    let first = try decode(labels: labels, events: events)
+    let second = try decode(labels: Array(labels.reversed()), events: Array(events.reversed()))
+
+    XCTAssertNil(first.eventID)
+    XCTAssertEqual(first.text.count, KnowledgeLedgerTriggerObservation.maxTextCharacters)
+    XCTAssertEqual(first.entityLabels.count, KnowledgeLedgerTriggerObservation.maxEntityLabels)
+    XCTAssertEqual(first.appName?.count, KnowledgeLedgerTriggerObservation.maxSelectorCharacters)
+    XCTAssertEqual(first.windowTitle?.count, KnowledgeLedgerTriggerObservation.maxSelectorCharacters)
+    XCTAssertEqual(first.calendarEvents.count, KnowledgeLedgerTriggerObservation.maxCalendarEvents)
+    XCTAssertEqual(first.embeddingScores.count, KnowledgeLedgerTriggerObservation.maxEmbeddingScores)
+    XCTAssertEqual(first, second)
+    XCTAssertEqual(first.fingerprint, second.fingerprint)
+  }
+
+  func testPathologicalDecodedCandidateCollectionsFailClosedBeforeNormalization() throws {
+    var scores: [String: Double] = [:]
+    for index in 0...KnowledgeLedgerTriggerObservation.maxEmbeddingScoreCandidates {
+      scores["prototype-\(index)"] = 0.5
+    }
+    let payload: [String: Any] = [
+      "entityLabels": (0...KnowledgeLedgerTriggerObservation.maxEntityLabelCandidates).map { "entity-\($0)" },
+      "calendarEvents": (0...KnowledgeLedgerTriggerObservation.maxCalendarEventCandidates).map {
+        ["title": "event-\($0)", "eventType": "meeting"]
+      },
+      "embeddingScores": scores,
+    ]
+
+    let observation = try JSONDecoder().decode(
+      KnowledgeLedgerTriggerObservation.self,
+      from: JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+    )
+
+    XCTAssertTrue(observation.entityLabels.isEmpty)
+    XCTAssertTrue(observation.calendarEvents.isEmpty)
+    XCTAssertTrue(observation.embeddingScores.isEmpty)
+  }
+
   func testAmbiguousAndMissingContextNeverBecomeMatch() throws {
     let row = try KnowledgeLedgerTriggerRow(
       id: "ambiguous",

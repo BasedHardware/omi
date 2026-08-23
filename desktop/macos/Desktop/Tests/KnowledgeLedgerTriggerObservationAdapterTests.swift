@@ -82,6 +82,22 @@ final class KnowledgeLedgerTriggerObservationAdapterTests: XCTestCase {
     XCTAssertEqual(observation.windowTitle?.count, KnowledgeLedgerTriggerObservationAdapter.maxSelectorCharacters)
   }
 
+  func testAdapterAndDirectObservationShareTheSameSelectorBoundary() {
+    let selector = "  " + String(repeating: "A", count: KnowledgeLedgerTriggerObservation.maxSelectorCharacters + 40)
+    let screenshot = Screenshot(id: 9, appName: selector, windowTitle: selector)
+
+    let adapted = KnowledgeLedgerTriggerObservationAdapter.fromRewindScreenshot(screenshot)
+    let direct = KnowledgeLedgerTriggerObservation(
+      eventID: "9",
+      appName: selector,
+      windowTitle: selector,
+      occurredAt: screenshot.timestamp
+    )
+
+    XCTAssertEqual(adapted, direct)
+    XCTAssertEqual(adapted.fingerprint, direct.fingerprint)
+  }
+
   func testEmptyOCRDoesNotCreateAKeywordMatch() throws {
     let row = try KnowledgeLedgerTriggerRow(
       id: "rewind-empty",
