@@ -8717,6 +8717,16 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v3/memories/ledger-history": {
+    get: {
+      operationId: "get_ledger_history_v3_memories_ledger_history_get";
+      responses: {
+        "200": Array<MemoryDB>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v3/memories/review-queue": {
     get: {
       operationId: "list_memory_review_queue_v3_memories_review_queue_get";
@@ -16590,6 +16600,28 @@ export async function delete_memories_batch_v3_memories_batch_delete(header: { a
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_ledger_history_v3_memories_ledger_history_get(query: { limit?: number, offset?: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<MemoryDB>> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v3/memories/ledger-history`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function list_memory_review_queue_v3_memories_review_queue_get(query: { status?: string, limit?: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<Record<string, unknown>>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v3/memories/review-queue`;
@@ -16904,4 +16936,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 406 client methods generated.
+// Total: 407 client methods generated.
