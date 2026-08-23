@@ -1,3 +1,4 @@
+import GRDB
 import XCTest
 
 @testable import Omi_Computer
@@ -63,5 +64,59 @@ final class RewindSearchQueryExpansionTests: XCTestCase {
   func testUsableWordsSurviveAlongsideDroppedSingleCharacters() {
     let expanded = db.expandSearchQuery("a Telegram 1")
     XCTAssertEqual(expanded, "Telegram*")
+  }
+
+  /// The sibling of the `()` defect above, and the reason every test here now runs its own
+  /// output through FTS5 instead of only inspecting its shape.
+  ///
+  /// FTS5 accepts implicit AND between bare terms — `a* b*` is fine — but not once a word
+  /// expands into a parenthesised group: `a* (b* OR c*)` is `fts5: syntax error near "("`.
+  /// Expansion joined with a space, so any multi-word title where one word split on camelCase
+  /// or a number boundary failed the entire search rather than matching less. Observed 45
+  /// times across 13 sessions, silently emptying both screen-history grounding and the Rewind
+  /// search UI.
+  func testGroupsAreJoinedWithAnExplicitAnd() throws {
+    let expanded = db.expandSearchQuery("ActivityPerformance QuarterlyReport")
+    XCTAssertTrue(
+      expanded.contains(") AND ("),
+      "space-joined groups are invalid FTS5, got \"\(expanded)\"")
+    try assertValidFTS5(expanded)
+  }
+
+  func testBareTermJoinedToAGroupIsValid() throws {
+    try assertValidFTS5(db.expandSearchQuery("Telegram ActivityPerformance"))
+  }
+
+  /// Real window titles, each run through a real FTS5 matcher. Shape assertions did not catch
+  /// this class; executing the query does.
+  func testRealWindowTitlesProduceExecutableQueries() throws {
+    for title in [
+      "ActivityPerformance QuarterlyReport",
+      "Telegram ActivityPerformance",
+      "Cursor 2.1.220 SuggestionModels swift",
+      "GitHub PullRequest 11864 BasedHardware omi",
+      "2 1 220",
+      "a Telegram 1",
+      "Telegram",
+    ] {
+      try assertValidFTS5(db.expandSearchQuery(title), title: title)
+    }
+  }
+
+  /// Runs the expansion against a real FTS5 table. An empty expansion is legitimate — `search`
+  /// guards on it — so only a non-empty one has to parse.
+  private func assertValidFTS5(_ expanded: String, title: String? = nil) throws {
+    guard !expanded.isEmpty else { return }
+    let queue = try DatabaseQueue()
+    try queue.write { db in
+      try db.execute(sql: "CREATE VIRTUAL TABLE t USING fts5(body)")
+      try db.execute(sql: "INSERT INTO t VALUES ('activity performance quarterly report')")
+    }
+    let label = title.map { " (from \"\($0)\")" } ?? ""
+    XCTAssertNoThrow(
+      try queue.read { db in
+        try Row.fetchAll(db, sql: "SELECT * FROM t WHERE t MATCH ?", arguments: [expanded])
+      },
+      "expansion \"\(expanded)\"\(label) is not a valid FTS5 query")
   }
 }

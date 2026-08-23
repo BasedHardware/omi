@@ -605,6 +605,18 @@ struct ConversationDetailView: View {
       overviewSection
     }
 
+    // The backend's headed summary blocks. `overview` is only a compatibility paragraph now, so
+    // without these the pane shows a fraction of what was actually written.
+    //
+    // Shown only when Omi's own summary is the one on screen. `sections` belongs to the first-party
+    // structured summary, and a promoted app result already *replaces* that summary — rendering
+    // both stacks a second, unattributed Omi summary under the app's, which is also the one thing
+    // the Flutter client deliberately does not do.
+    if selection.appId == nil {
+      ConversationSummarySections(sections: displayConversation.structured.sections)
+        .padding(.horizontal, OmiSpacing.lg)
+    }
+
     // Action items sit directly under the summary: they are the part of a
     // meeting a reader acts on. Nothing here is a task until the reader says
     // so (I1) — each row carries its own "Add to Tasks".

@@ -159,13 +159,48 @@ def test_v2_messages_fails_closed_when_quota_accounting_write_fails():
 def test_v2_messages_records_success_when_the_terminal_sse_frame_is_yielded():
     client, module, saved = _make_chat_client()
     try:
-        response = client.post('/v2/messages', json={'text': 'hello', 'file_ids': []})
+        response = client.post(
+            '/v2/messages',
+            json={'text': 'hello', 'file_ids': []},
+            headers={'X-App-Platform': 'ios'},
+        )
 
         assert response.status_code == 200
         assert 'done: ' in response.text
         assert len(module.JourneyAttempt.instances) == 1
         assert module.JourneyAttempt.instances[0].journey == 'chat_response'
         assert module.JourneyAttempt.instances[0].outcomes == ['success']
+        assert len(module.ClientJourneyAttempt.instances) == 1
+        attempt = module.ClientJourneyAttempt.instances[0]
+        assert (attempt.journey, attempt.client_kind, attempt.outcome) == ('mobile_chat', 'mobile_ios', 'success')
+        assert attempt.issue_class is None
+    finally:
+        _cleanup(saved)
+
+
+def test_v2_messages_records_post_2xx_error_frame_as_mobile_chat_failure():
+    client, module, saved = _make_chat_client()
+    try:
+
+        async def in_band_failure(*_args, **kwargs):
+            kwargs['callback_data']['error'] = 'upstream_failure'
+            kwargs['callback_data']['answer'] = 'Unable to complete the response. Please try again.'
+            yield 'error: Unable to complete the response. Please try again.'
+            yield None
+
+        module.execute_chat_stream = in_band_failure
+        response = client.post(
+            '/v2/messages',
+            json={'text': 'hello', 'file_ids': []},
+            headers={'X-App-Platform': 'android'},
+        )
+
+        assert response.status_code == 200
+        assert 'error: Unable to complete the response.' in response.text
+        assert 'done: ' in response.text
+        attempt = module.ClientJourneyAttempt.instances[0]
+        assert (attempt.journey, attempt.client_kind, attempt.outcome) == ('mobile_chat', 'mobile_android', 'failure')
+        assert attempt.issue_class == 'provider_error'
     finally:
         _cleanup(saved)
 

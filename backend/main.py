@@ -94,6 +94,7 @@ from utils.other.timeout import TimeoutMiddleware
 from utils.observability import log_langsmith_status
 from utils.subscription import validate_stripe_price_ids
 from utils.http_client import close_all_clients
+from utils.metrics import start_metrics_sidecar_server, stop_metrics_sidecar_server
 from utils.executors import (
     drain_background_tasks,
     log_executor_health,
@@ -259,6 +260,7 @@ app.add_middleware(BYOKMiddleware)
 
 @app.on_event("startup")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def startup_event():
+    start_metrics_sidecar_server()
     validate_account_deletion_dispatch_configuration()
     asyncio.create_task(log_executor_health())
     # Drain account-deletion wipes orphaned by a previous deploy/restart. Offloaded
@@ -380,6 +382,7 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int | None =
 async def shutdown_event():
     await drain_background_tasks(timeout=10.0)
     await close_all_clients()
+    stop_metrics_sidecar_server()
 
 
 paths = ['_temp', '_samples', '_segments', '_speech_profiles']

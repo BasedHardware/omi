@@ -48,10 +48,13 @@ final class SearchBarWindow {
 
     /// Opens the bar, or brings it forward and re-focuses the field if it is already up.
     ///
+    /// - Parameter via: the route that asked for it. Required rather than defaulted, because a
+    ///   default is exactly how a new call site ends up filed under whichever route was most
+    ///   convenient to leave in place — and the route *is* the question this event exists to answer.
     /// - Parameter prefill: a question to start from. This is the seam the timeline's "Search All"
     ///   pill plugs into — `RewindWindow.present(onSearch:)` hands its query straight through, so the
     ///   two surfaces share one bar rather than each growing their own.
-    static func present(prefill: String = "") {
+    static func present(via: AnalyticsEvent.OpenSource, prefill: String = "") {
         if let window = current {
             window.alphaValue = 1
             window.makeKeyAndOrderFront(nil)
@@ -67,6 +70,13 @@ final class SearchBarWindow {
             // Announced on this branch too. "The panel is up" is the fact observers care about, and a
             // second press of the pill on an already-open bar leaves them holding it either way.
             SearchPanelWatch.report(.opened)
+            // **Reported on this branch too, which it was not.** A press that brings an app already
+            // running to the front is the ordinary shape of using this product all day — the Dock
+            // icon, a second chord, the menu row while the panel sits behind Xcode — and an emit
+            // that only fired when a window had to be built counted first opens and called them
+            // opens. `via` is what tells the two apart afterwards, so nothing is lost by counting
+            // both here rather than by splitting the series.
+            ContextAnalytics.record(.surfaceOpened(.activity, via: via))
             return
         }
 
@@ -186,16 +196,20 @@ final class SearchBarWindow {
         // search beat — is being told a fact about the display, so it is announced after the display
         // has it and not before.
         SearchPanelWatch.report(.opened)
-        // **This branch and not the one above**, which is the difference between "the surface was
-        // opened" and "a key was pressed at a surface that was already up". Here rather than at the
-        // callers because there are five of them — the gesture, the bound shortcut, the menu bar,
-        // the timeline's "Search All" pill and the tutorial's own button — and a per-caller emit
-        // would have measured whichever ones somebody remembered.
+        // Here rather than at the callers because there are seven of them — launch, the Dock icon,
+        // the gesture, a bound shortcut, the menu bar's row, the timeline's "Search All" pill and
+        // the tutorial's own button — and a per-caller emit would have measured whichever ones
+        // somebody remembered. The route arrives as `via`, so one seam still answers "which of
+        // them".
         //
         // Not implied by `cfc_gesture_fired`: that counts the gesture, which also *closes* an open
-        // panel and fires from a Mac where the panel never appeared at all. This is the app's
-        // primary surface, and it was the only one in `Surface` with no emitter.
-        ContextAnalytics.record(.surfaceOpened(.search))
+        // panel and fires from a Mac where the panel never appeared at all.
+        //
+        // **`.activity` and not `.search`.** This window *is* the Activity panel — it opens on the
+        // spine, before anything has been typed — and reporting the surface a query produces would
+        // have made the two indistinguishable. `.search` is emitted where a query is actually
+        // committed; see `SearchResultsModel.searchEvents`.
+        ContextAnalytics.record(.surfaceOpened(.activity, via: via))
     }
 
     /// **Activating a result: open the timeline there, then get out of the way.**
@@ -237,11 +251,12 @@ final class SearchBarWindow {
         RewindWindow.present(
             store: store,
             at: instant,
+            via: .resultActivation,
             // The same two handlers the menu bar and the global shortcut hand it, because the window
             // this opens is the same window: one that could not reach Settings, or whose "Search All"
             // pill did nothing, would be a second-class timeline reachable only from here.
-            onOpenSettings: { SettingsWindow.present() },
-            onSearch: { query in SearchBarWindow.present(prefill: query) })
+            onOpenSettings: { SettingsWindow.present(via: .inAppPill) },
+            onSearch: { query in SearchBarWindow.present(via: .inAppPill, prefill: query) })
         // Announced before the panel goes, so an observer sees "a result was activated" followed by
         // "the panel closed" rather than the other way round — the close is a *consequence* of the
         // activation here, and an observer that saw it first would read the beat as abandoned.
@@ -261,8 +276,13 @@ final class SearchBarWindow {
     /// It dismisses for the same reason activating a result does: this panel floats, and a Spotlight
     /// that stays on top of the window it just opened is covering the thing it was asked for.
     private static func openTheTimeline() {
-        ContextAnalytics.record(.surfaceOpened(.activity))
-        ContextAppDelegate.openTimeline()
+        // The press, and only the press. **The surface this opens reports itself** — it used to be
+        // reported from here, as `.activity`, which is the wrong window under the wrong name: this
+        // opens `RewindWindow`, and the series named for the app's primary window was counting the
+        // demoted one through one of its four routes. The open is now `RewindWindow.present`'s to
+        // report, from the one seam every route goes through.
+        ContextAnalytics.record(.controlUsed(.timelinePill))
+        ContextAppDelegate.openTimeline(via: .inAppPill)
         dismiss()
     }
 
@@ -279,8 +299,11 @@ final class SearchBarWindow {
     /// too and closing on those would break both. So the routes that really mean "leave" have to say
     /// so explicitly, here, rather than being inferred from focus moving.
     private static func openSettings() {
-        ContextAnalytics.record(.surfaceOpened(.settings))
-        SettingsWindow.present()
+        // The gear was pressed; the window it opens says so itself, from `SettingsWindow.present`,
+        // because the menu bar's row and ⌘, open exactly the same window and an emit here could
+        // only ever have covered this one route.
+        ContextAnalytics.record(.controlUsed(.settingsGear))
+        SettingsWindow.present(via: .inAppPill)
         dismiss()
     }
 
@@ -422,12 +445,15 @@ final class SearchBarWindow {
     ///   `LiveShortcutBindings.init` resolves its registry inside). A caller overrides it only to assert
     ///   the three transitions, none of which a headless process can produce — a test cannot make a
     ///   window key.
+    /// - Parameter via: the route the press came in on. `.gesture` for the ⌘ + ⌘ default and
+    ///   `.shortcut` for a key the user recorded, decided by the caller that can read the binding.
     static func hotkeyToggle(
+        via: AnalyticsEvent.OpenSource = .gesture,
         presence: (() -> HotkeyToggle.Presence)? = nil
     ) -> HotkeyToggle {
         HotkeyToggle(
             presence: presence ?? { Self.presence },
-            show: { present() },
+            show: { present(via: via) },
             dismiss: { dismiss() })
     }
 

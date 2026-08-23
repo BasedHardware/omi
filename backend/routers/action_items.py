@@ -5,7 +5,7 @@ import uuid
 
 from utils.executors import postprocess_executor, submit_with_context
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from typing import Optional, List
 from datetime import datetime, timezone
 
@@ -23,6 +23,11 @@ from database.vector_db import (
 from utils.users import get_user_display_name
 from utils.share_links import build_share_url
 from utils.other import endpoints as auth
+from utils.other.list_budget import (
+    OMI_LIST_TRUNCATED_HEADER,
+    OMI_LIST_TRUNCATED_VALUE,
+    list_read_budget_for_request,
+)
 from utils.notifications import (
     send_notification,
     send_action_item_data_message,
@@ -344,6 +349,8 @@ def _ensure_aware(value: datetime) -> datetime:
 
 @router.get("/v1/action-items", response_model=ActionItemsResponse, tags=['action-items'])
 def get_action_items(
+    request: Request = None,  # type: ignore[assignment]
+    response: Response = None,  # type: ignore[assignment]
     limit: int = Query(50, ge=1, le=500, description="Maximum number of action items to return"),
     offset: int = Query(0, ge=0, description="Number of action items to skip"),
     completed: Optional[bool] = Query(None, description="Filter by completion status"),
@@ -352,9 +359,15 @@ def get_action_items(
     end_date: Optional[datetime] = Query(None, description="Filter by creation end date (inclusive)"),
     due_start_date: Optional[datetime] = Query(None, description="Filter by due start date (inclusive)"),
     due_end_date: Optional[datetime] = Query(None, description="Filter by due end date (inclusive)"),
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "action_items:list")),
 ):
-    """Get action items for the current user."""
+    """Get action items for the current user.
+
+    Large accounts can outrun the request budget; such reads return the honest
+    partial page with ``truncated=true``, ``has_more=true``, and the
+    ``X-Omi-List-Truncated: true`` header instead of a bare middleware 504
+    (#11831).
+    """
     if start_date is not None and end_date is not None and _ensure_aware(start_date) > _ensure_aware(end_date):
         raise HTTPException(status_code=400, detail="start_date must be earlier than or equal to end_date")
     if (
@@ -364,6 +377,7 @@ def get_action_items(
     ):
         raise HTTPException(status_code=400, detail="due_start_date must be earlier than or equal to due_end_date")
 
+    budget = list_read_budget_for_request(request, route='action-items')
     action_items = action_items_db.get_action_items(
         uid=uid,
         conversation_id=conversation_id,
@@ -374,9 +388,13 @@ def get_action_items(
         due_end_date=due_end_date,
         limit=limit + 1,
         offset=offset,
+        budget=budget,
     )
 
-    has_more = len(action_items) > limit
+    truncated = budget.truncated
+    # A lookahead-derived has_more cannot report complete when the budget ended
+    # the aggregate scan before the lookahead resolved.
+    has_more = truncated or len(action_items) > limit
     action_items = action_items[:limit]
 
     for item in action_items:
@@ -385,8 +403,11 @@ def get_action_items(
             item['description'] = (description[:70] + '...') if len(description) > 70 else description
 
     response_items = _safe_action_item_responses(action_items, uid=uid)
+    if truncated and response is not None:
+        response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
+    budget.observe('truncated' if truncated else 'complete')
 
-    return {"action_items": response_items, "has_more": has_more}
+    return {"action_items": response_items, "has_more": has_more, "truncated": truncated}
 
 
 @router.get("/v1/action-items/search", response_model=ActionItemsSearchResponse, tags=['action-items'])

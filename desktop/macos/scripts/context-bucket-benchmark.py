@@ -32,6 +32,9 @@ DIRECTOR_CASES = {
     "worthy-revisit-unresolved-task",
     "worthy-new-actionable-fact",
     "silence-ambient-narrative",
+    "silence-user-own-completed-work",
+    "silence-continue-current-investigation",
+    "silence-record-correction-no-next-step",
     "silence-low-confidence-fact",
     "identity-same-numbered-context",
     "identity-similar-title-isolated",
@@ -50,6 +53,7 @@ DIRECTOR_CASES = {
     "referent-file-build-failure",
     "referent-visible-on-screen",
     "referent-no-identifier",
+    "answer-question-from-retrieval",
 }
 
 # Cases whose point is that a spoken message must name the thing it is about.
@@ -115,7 +119,28 @@ def map_case(case: dict) -> dict[str, str]:
         "window": frame["windowTitle"],
         "captured_at": frame["capturedAt"],
         "notify_worthiness": str(bucket.get("notifyWorthiness", 0)),
-    }
+    } | (
+        # A case with retrieved items replays the visit's second director call:
+        # the probe quotes them in a RETRIEVED CONTEXT section and switches to
+        # the lookup-enabled prompt and schema.
+        {
+            "retrieved": json.dumps(
+                [
+                    {
+                        "ref": item["ref"],
+                        "title": item.get("title", ""),
+                        "preview": item["preview"],
+                        "created_at": item.get("createdAt"),
+                    }
+                    for item in synthetic["retrieved"]
+                ],
+                separators=(",", ":"),
+            ),
+            "lookup_query": synthetic.get("lookupQuery", ""),
+        }
+        if synthetic.get("retrieved")
+        else {}
+    )
 
 
 def validate(deck: dict) -> tuple[int, int]:
@@ -162,6 +187,10 @@ def validate(deck: dict) -> tuple[int, int]:
                 "bucket_id", "version", "header", "frozen", "tail", "validated_facts",
                 "tasks", "app", "window", "captured_at", "notify_worthiness",
             }
+            # A retrieval case replays the visit's second director call, so its
+            # mapping carries exactly the two extra hop parameters.
+            if case["synthetic"].get("retrieved"):
+                required = required | {"retrieved", "lookup_query"}
             if set(params) != required:
                 raise ValueError(f"{case['id']}: probe ABI mapping drift")
     return len(cases), len(DIRECTOR_CASES)
@@ -192,11 +221,18 @@ def invoke_case(case: dict, port: int, include_text: bool = False) -> dict:
     except error.HTTPError as exc:
         stable_error = None
         try:
+            # Best-effort enrichment only: the HTTP status below is the real
+            # failure, so nothing raised while reading or parsing the error body
+            # may replace it. The ways that body can be unreadable are not
+            # enumerable — an HTTPError carrying no body raises AttributeError on
+            # some Python versions and KeyError('file') from tempfile's
+            # __getattr__ on others (3.9, including macOS /usr/bin/python3) — and
+            # an enumerated tuple already let one of them mask the HTTP error.
             error_envelope = json.loads(exc.read(4096))
             match = STABLE_PROACTIVE_ERROR.search(str(error_envelope.get("error", "")))
             stable_error = match.group(0) if match else None
-        except (AttributeError, json.JSONDecodeError, UnicodeDecodeError):
-            pass
+        except Exception:  # pylint: disable=broad-except
+            stable_error = None
         suffix = f" ({stable_error})" if stable_error else ""
         raise RuntimeError(f"{case['id']}: probe returned HTTP {exc.code}{suffix}") from exc
     if envelope.get("ok") is not True:

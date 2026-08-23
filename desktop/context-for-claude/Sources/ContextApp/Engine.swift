@@ -1520,6 +1520,8 @@ private final class EngineStore: @unchecked Sendable {
             {
                 if let previous = openSessionId {
                     try store.closeSession(previous, at: lastSegmentEndedAt ?? line.startedAt)
+                    // After the write and inside the `do`, so a close that threw is not counted.
+                    UsageClock.shared.noteConversation()
                     // A closed session is a finished conversation; the uploader turns it into a
                     // real one in the user's Omi account. Enqueued, not sent — it survives being
                     // signed out, offline, or rate limited.
@@ -1648,7 +1650,9 @@ private final class EngineStore: @unchecked Sendable {
     func closeOpenSession() {
         queue.sync {
             guard let store = self.store, let id = self.openSessionId else { return }
-            try? store.closeSession(id, at: self.lastSegmentEndedAt ?? ContextTime.now)
+            if (try? store.closeSession(id, at: self.lastSegmentEndedAt ?? ContextTime.now)) != nil {
+                UsageClock.shared.noteConversation()
+            }
             self.openSessionId = nil
             Task { @MainActor in ConversationUploader.shared.enqueue(sessionId: id) }
         }
@@ -1667,7 +1671,9 @@ private final class EngineStore: @unchecked Sendable {
             // in the query that produced the row, and to `startedAt` when it holds no lines at all,
             // which is the same fallback this loop used to spell out.
             let lastLineAt = session.startedAt + session.durationSeconds
-            try? store.closeSession(session.id, at: lastLineAt)
+            if (try? store.closeSession(session.id, at: lastLineAt)) != nil {
+                UsageClock.shared.noteConversation()
+            }
             // Sessions orphaned by a crash still belong in the account.
             let orphan = session.id
             Task { @MainActor in ConversationUploader.shared.enqueue(sessionId: orphan) }

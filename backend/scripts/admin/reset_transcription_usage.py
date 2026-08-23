@@ -306,7 +306,10 @@ def resolve_plan_and_limit(uid: str) -> tuple[str, Optional[int]]:
     plan = subscription.plan
     limits = get_plan_limits(plan)
     limit_seconds = limits.transcription_seconds
-    return get_plan_display_name(plan), (limit_seconds or None)
+    # `limit_seconds` is None for unlimited plans (typed catalog representation) and a
+    # positive int otherwise. `or None` would also fold a genuine finite 0 into "unlimited",
+    # which is the exact ambiguity the catalog retired — so branch on None explicitly.
+    return get_plan_display_name(plan), (None if limit_seconds is None else limit_seconds)
 
 
 def apply_reset(client: Any, uid: str, plan: ResetPlan) -> None:

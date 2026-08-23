@@ -86,14 +86,18 @@ def _access_secret(project: str) -> str:
     return value
 
 
+def _validated_service_account(account: str, stage: str) -> str:
+    if '\n' in account or '@' not in account or not account.endswith('.gserviceaccount.com') or len(account) > 320:
+        raise ProbeTokenError(stage)
+    return account
+
+
 def _active_service_account() -> str:
     account = _run_gcloud(
         ['gcloud', 'auth', 'list', '--filter=status:ACTIVE', '--format=value(account)'],
         stage='service_account',
     )
-    if '\n' in account or '@' not in account or not account.endswith('.gserviceaccount.com') or len(account) > 320:
-        raise ProbeTokenError('service_account')
-    return account
+    return _validated_service_account(account, 'service_account')
 
 
 def _access_token() -> str:
@@ -345,6 +349,7 @@ def mint_probe_token(
     firebase_project: str,
     *,
     signer_credentials_file: Path | None = None,
+    signer_service_account: str | None = None,
 ) -> str:
     firebase_api_key = ''
     service_account = ''
@@ -354,7 +359,19 @@ def mint_probe_token(
     try:
         firebase_api_key = _access_secret(secret_project)
         if signer_credentials_file is None:
-            service_account = _active_service_account()
+            # Identity Toolkit only accepts a custom token whose signer is
+            # authorized for the Firebase project. The development backend
+            # authenticates against production Firebase, so a development
+            # deploy identity cannot sign for it -- that is why the manual
+            # development lane failed at custom_token_signing. Naming the
+            # Firebase project's own signer and impersonating it (requires
+            # roles/iam.serviceAccountTokenCreator on that account) resolves
+            # the mismatch without moving the runtime off production auth.
+            service_account = (
+                _validated_service_account(signer_service_account, 'signer_service_account')
+                if signer_service_account
+                else _active_service_account()
+            )
             access_token = _access_token()
             custom_token = _signed_custom_token(service_account, access_token)
         else:
@@ -400,6 +417,13 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument('--secret-project', required=True)
     parser.add_argument('--firebase-project', required=True)
     parser.add_argument('--signer-credentials-file', type=Path)
+    parser.add_argument(
+        '--signer-service-account',
+        help=(
+            'Service account to sign the custom token as, via IAM signJwt. '
+            'Use when the Firebase auth project differs from the deploy identity project.'
+        ),
+    )
     parser.add_argument('--token-output', required=True, type=Path)
     return parser.parse_args(argv)
 
@@ -410,10 +434,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if not FIREBASE_PROJECT_ID_PATTERN.fullmatch(args.firebase_project):
             raise ProbeTokenError('firebase_project')
+        if args.signer_credentials_file is not None and args.signer_service_account:
+            raise ProbeTokenError('signer_service_account')
         token = mint_probe_token(
             args.secret_project,
             args.firebase_project,
             signer_credentials_file=args.signer_credentials_file,
+            signer_service_account=args.signer_service_account,
         )
         write_token(args.token_output, token)
     except ProbeTokenError as error:

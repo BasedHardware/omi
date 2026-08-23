@@ -1,0 +1,24 @@
+fullnameOverride: "dev-omi-cloud-run-metrics-exporter"
+
+stackdriver:
+  projectIds:
+    - "based-hardware-dev"
+  metrics:
+    prefixes:
+      - 'prometheus.googleapis.com/omi_'
+    filters:
+      - 'prometheus.googleapis.com/omi_:resource.labels.cluster="__run__" AND (resource.labels.namespace="backend" OR resource.labels.namespace="desktop-backend")'
+    interval: '2m'
+    offset: '1m'
+
+serviceAccount:
+  create: false
+  name: "dev-omi-prometheus-stackdriver-exporter"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi

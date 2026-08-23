@@ -12,6 +12,16 @@ import type {
   CustomerPortalSessionResponse
 } from './omiApi.generated'
 import type { CheckoutOutcome } from '../../../shared/types'
+import {
+  UNKNOWN_PLAN_SUBTITLE,
+  canonicalPlanId,
+  isPaidPlanValue,
+  parsePlanResponse,
+  planDisplayName
+} from './billingPlans'
+
+/** Generated DTOs describe a closed union; runtime billing values do not. */
+export type BillingSubscription = Omit<Subscription, 'plan'> & { plan?: unknown }
 
 // Billing model + logic for the Plan & Usage tab. Ported from the macOS app
 // (SettingsContentView+AccountBilling.swift / +BillingHelpers.swift) — same
@@ -25,7 +35,7 @@ import type { CheckoutOutcome } from '../../../shared/types'
 
 export function fetchSubscription(): Promise<UserSubscriptionResponse> {
   return omiApi.get('/v1/users/me/subscription').then((r) => {
-    const data = r.data as UserSubscriptionResponse
+    const data = parsePlanResponse(r.data as UserSubscriptionResponse)
     reportLegacyCatalog(data.available_plans)
     return data
   })
@@ -138,9 +148,10 @@ function captureLegacyCatalog(reasons: string[], plans: SubscriptionPlan[] | und
  * "Operator". (BillingHelpers.isCurrentSubscriptionOperator.)
  */
 export function isCurrentSubscriptionOperator(
-  sub: Pick<Subscription, 'plan' | 'current_price_id'>,
+  sub: Pick<BillingSubscription, 'plan' | 'current_price_id'>,
   availablePlans: SubscriptionPlan[] | undefined
 ): boolean {
+  if (!canonicalPlanId(sub.plan)) return false
   const priceId = sub.current_price_id
   if (!priceId) return false
   return (availablePlans ?? [])
@@ -158,37 +169,28 @@ export function isCurrentSubscriptionOperator(
  * when there's no catalog match (empty catalog / legacy price id).
  */
 export function resolvePlanTitle(
-  sub: Pick<Subscription, 'plan' | 'current_price_id' | 'features'>,
+  sub: Pick<BillingSubscription, 'plan' | 'current_price_id' | 'features'>,
   availablePlans: SubscriptionPlan[] | undefined
 ): string {
+  const planId = canonicalPlanId(sub.plan)
+  if (!planId) return planDisplayName(sub.plan)
   if ((sub.features ?? []).includes('byok')) return 'Free (BYOK)'
   const owning = owningCatalogPlan(sub, availablePlans)
   if (owning) return owning.title
-  switch (sub.plan) {
-    case 'basic':
-      return 'Free'
-    case 'unlimited':
-      return 'Neo'
-    case 'architect':
-      return 'Architect'
-    case 'operator':
-      return 'Operator'
-    default:
-      return 'Free'
-  }
+  return planDisplayName(planId)
 }
 
 /** BillingHelpers.hasPaidSubscription — BYOK is never "paid". */
 export function hasPaidSubscription(
-  sub: Pick<Subscription, 'plan' | 'status' | 'features'>
+  sub: Pick<BillingSubscription, 'plan' | 'status' | 'features'>
 ): boolean {
   if ((sub.features ?? []).includes('byok')) return false
-  return sub.plan !== 'basic' && sub.status === 'active'
+  return isPaidPlanValue(sub.plan) && sub.status === 'active'
 }
 
 /** The catalog plan that owns the current price (for the billing-detail subtitle). */
 function owningCatalogPlan(
-  sub: Pick<Subscription, 'current_price_id'>,
+  sub: Pick<BillingSubscription, 'current_price_id'>,
   availablePlans: SubscriptionPlan[] | undefined
 ): SubscriptionPlan | undefined {
   const priceId = sub.current_price_id
@@ -202,9 +204,10 @@ function owningCatalogPlan(
  * paid/free line.
  */
 export function currentPlanSubtitle(
-  sub: Subscription,
+  sub: BillingSubscription,
   availablePlans: SubscriptionPlan[] | undefined
 ): string {
+  if (!canonicalPlanId(sub.plan)) return UNKNOWN_PLAN_SUBTITLE
   const paid = hasPaidSubscription(sub)
   if (paid && sub.current_price_id) {
     const plan = owningCatalogPlan(sub, availablePlans)
@@ -218,7 +221,7 @@ export function currentPlanSubtitle(
  * "Renews on <date>" / "Access ends on <date>" for paid plans with a period end
  * (BillingHelpers.currentPlanPeriodText). Medium date style, no time.
  */
-export function currentPlanPeriodText(sub: Subscription): string {
+export function currentPlanPeriodText(sub: BillingSubscription): string {
   if (!hasPaidSubscription(sub) || !sub.current_period_end) return ''
   const prefix = sub.cancel_at_period_end ? 'Access ends' : 'Renews'
   return `${prefix} on ${formatMediumDate(sub.current_period_end)}`
@@ -306,27 +309,37 @@ export function quotaResetText(resetAtSeconds: number | null, now: Date = new Da
 // ── Plan catalog (AccountBilling plan grid) ─────────────────────────────────
 
 // Mac ordering: Neo(unlimited) → Operator → Architect. Unknown ids sort last.
-const PLAN_ORDER: Record<string, number> = { unlimited: 0, operator: 1, architect: 2 }
+// Plus/Unlimited-v2 are included for lossless catalog fixtures even though
+// Windows' current storefront normally serves the desktop plans only.
+const PLAN_ORDER: Record<string, number> = {
+  unlimited: 0,
+  operator: 1,
+  architect: 2,
+  plus: 3,
+  unlimited_v2: 4
+}
 
 /** True if this catalog plan is the one the user is currently on (operator↔
  *  unlimited aliasing + current-price ownership). */
 export function isCurrentCatalogPlan(
   plan: SubscriptionPlan,
-  sub: Pick<Subscription, 'plan' | 'current_price_id'>,
+  sub: Pick<BillingSubscription, 'plan' | 'current_price_id'>,
   availablePlans: SubscriptionPlan[] | undefined
 ): boolean {
+  if (!canonicalPlanId(sub.plan)) return false
   if (sub.current_price_id && (plan.prices ?? []).some((p) => p.id === sub.current_price_id)) {
     return true
   }
   const operator = isCurrentSubscriptionOperator(sub, availablePlans)
-  const effectivePlanId = sub.plan === 'unlimited' && operator ? 'operator' : sub.plan
+  const planId = canonicalPlanId(sub.plan)
+  const effectivePlanId = planId === 'unlimited' && operator ? 'operator' : planId
   return plan.id === effectivePlanId
 }
 
 /** Order the catalog (Neo→Operator→Architect, unknown last, stable) and drop the
  *  plan the user is already on. */
 export function orderedCatalog(
-  sub: Pick<Subscription, 'plan' | 'current_price_id'>,
+  sub: Pick<BillingSubscription, 'plan' | 'current_price_id'>,
   availablePlans: SubscriptionPlan[] | undefined
 ): SubscriptionPlan[] {
   return (availablePlans ?? [])
@@ -414,8 +427,13 @@ export function planStartingPrice(plan: SubscriptionPlan): string {
  * Whether the user may purchase this plan. Mac blocks an Architect/Operator user
  * from "downgrading" to unlimited (Neo) via the grid (canPurchase=false).
  */
-export function canPurchasePlan(plan: SubscriptionPlan, sub: Pick<Subscription, 'plan'>): boolean {
-  if (plan.id === 'unlimited' && (sub.plan === 'architect' || sub.plan === 'operator')) return false
+export function canPurchasePlan(
+  plan: SubscriptionPlan,
+  sub: Pick<BillingSubscription, 'plan'>
+): boolean {
+  const currentPlanId = canonicalPlanId(sub.plan)
+  if (plan.id === 'unlimited' && (currentPlanId === 'architect' || currentPlanId === 'operator'))
+    return false
   return true
 }
 
@@ -495,7 +513,7 @@ const POLL_INTERVAL_MS = 1000
  *    'refresh_lagging' so the caller can show the "catching up" message.
  */
 export async function startCheckout(
-  args: { priceId: string; promotionCode?: string; currentSubscription: Subscription },
+  args: { priceId: string; promotionCode?: string; currentSubscription: BillingSubscription },
   deps: CheckoutDeps
 ): Promise<StartCheckoutResult> {
   const { priceId, promotionCode, currentSubscription: sub } = args
@@ -517,7 +535,7 @@ export async function startCheckout(
     const fresh = await deps.fetchSubscription()
     const s = fresh.subscription
     const matched = s.current_price_id === priceId
-    const paidActive = s.plan !== 'basic' && s.status === 'active'
+    const paidActive = hasPaidSubscription(s)
     if (matched && paidActive) return { kind: 'completed' }
     if (attempt < POLL_ATTEMPTS - 1) await deps.wait(POLL_INTERVAL_MS)
   }
@@ -547,7 +565,7 @@ export function upgradeSubscription(
       price_id: priceId,
       ...(promotionCode ? { promotion_code: promotionCode } : {})
     })
-    .then((r) => r.data as PaymentUpgradeSubscriptionResponse)
+    .then((r) => parsePlanResponse(r.data as PaymentUpgradeSubscriptionResponse))
 }
 
 /** Open the Stripe customer portal in the system browser (Mac parity). */

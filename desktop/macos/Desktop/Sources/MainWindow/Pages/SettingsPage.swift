@@ -226,6 +226,9 @@ struct SettingsContentView: View {
   @State var insightNotificationsEnabled: Bool
   @State var insightExcludedApps: Set<String>
 
+  // Meeting summary share notification
+  @State var meetingSummaryNotificationsEnabled: Bool
+
   // Memory Assistant states
   @State var memoryEnabled: Bool
   @State var memoryExtractionInterval: Double
@@ -359,6 +362,7 @@ struct SettingsContentView: View {
   @AppStorage("multiChatEnabled") var multiChatEnabled = false
   @AppStorage("conversationsCompactView") var conversationsCompactView = true
   @AppStorage("useLegacyHomeDesign") var useLegacyHomeDesign = false
+  @AppStorage("useOldestHomeDesign") var useOldestHomeDesign = false
   @AppStorage("speakNotificationsAloud") var speakNotificationsAloud = false
   @AppStorage(DefaultsKey.integrationNudgesEnabled.rawValue) var integrationNudgesEnabled = true
 
@@ -591,6 +595,8 @@ struct SettingsContentView: View {
     _memoryMinConfidence = State(initialValue: MemoryAssistantSettings.shared.minConfidence)
     _memoryNotificationsEnabled = State(
       initialValue: MemoryAssistantSettings.shared.notificationsEnabled)
+    _meetingSummaryNotificationsEnabled = State(
+      initialValue: MeetingSummaryNotificationSettings.isEnabled)
     _memoryExcludedApps = State(initialValue: MemoryAssistantSettings.shared.excludedApps)
     _vadGateEnabled = State(initialValue: settings.vadGateEnabled)
     _transcriptionLanguage = State(initialValue: settings.transcriptionLanguage)

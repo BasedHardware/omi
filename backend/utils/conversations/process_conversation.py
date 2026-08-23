@@ -5,7 +5,7 @@ import uuid
 import logging
 import asyncio
 from datetime import timezone, timedelta, datetime
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union, cast
 
@@ -19,6 +19,7 @@ from utils.conversations.transcript_for_llm import (
     conversation_transcript_for_llm,
     conversation_transcripts_for_llm,
 )
+from utils.conversations.wake_word import has_structural_wake_word_marker
 import database.conversations as conversations_db
 import database.notifications as notification_db
 import database.users as users_db
@@ -379,6 +380,7 @@ def _get_structured(
 
         main_conv = cast(Union[Conversation, CreateConversation], conversation)
         transcript_text, action_items_transcript = conversation_transcripts_for_llm(uid, main_conv, people)
+        has_wake_word_marker = has_structural_wake_word_marker(action_items_transcript)
 
         # For re-processing, we don't discard, just re-structure.
         if force_process:
@@ -402,6 +404,7 @@ def _get_structured(
                         tz=tz_str,
                         task_intelligence_capture=task_intelligence_capture,
                         existing_action_items=_fetch_dedup_candidates_for_query(uid, transcript_text, conversation),
+                        trusted_wake_word_markers=has_wake_word_marker,
                     )
                 return structured, False
             # reprocess endpoint
@@ -424,6 +427,7 @@ def _get_structured(
                     existing_action_items=_fetch_dedup_candidates(uid, structured, conversation),
                     output_language_code=user_language,
                     task_intelligence_capture=task_intelligence_capture,
+                    trusted_wake_word_markers=has_wake_word_marker,
                 )
             return structured, False
 
@@ -433,8 +437,14 @@ def _get_structured(
             duration_seconds = max(0, (main_conv.finished_at - main_conv.started_at).total_seconds())
 
         # Determine whether to discard the conversation based on its content (transcript and/or photos).
+        discard_transcript = action_items_transcript if has_wake_word_marker else transcript_text
         with track_usage(uid, Features.CONVERSATION_DISCARD):
-            discarded = should_discard_conversation(transcript_text, main_conv.photos, duration_seconds)
+            discarded = should_discard_conversation(
+                discard_transcript,
+                main_conv.photos,
+                duration_seconds,
+                trusted_wake_word_markers=has_wake_word_marker,
+            )
         if discarded:
             return Structured(emoji=random.choice(['🧠', '🎉'])), True
 
@@ -459,6 +469,7 @@ def _get_structured(
                     tz=tz_str,
                     task_intelligence_capture=task_intelligence_capture,
                     existing_action_items=_fetch_dedup_candidates_for_query(uid, transcript_text, conversation),
+                    trusted_wake_word_markers=has_wake_word_marker,
                 )
             return structured, False
         with track_usage(uid, Features.CONVERSATION_STRUCTURE):
@@ -483,6 +494,7 @@ def _get_structured(
                 calendar_meeting_context=calendar_context,
                 output_language_code=user_language,
                 task_intelligence_capture=task_intelligence_capture,
+                trusted_wake_word_markers=has_wake_word_marker,
             )
         return structured, False
     except Exception as e:
@@ -1457,7 +1469,7 @@ def send_new_memories_notification(user_id: str, memories: List[MemoryDB]) -> No
     send_notification(user_id, "omi" + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
 
 
-def _save_action_items(uid: str, conversation: Conversation):
+def _save_action_items(uid: str, conversation: Conversation, people: Sequence[Person] = ()):
     """Propose a conversation's extracted action items as Candidates.
 
     INVARIANT I1: nothing here writes an ``action_item``. Extraction produces
@@ -1465,10 +1477,39 @@ def _save_action_items(uid: str, conversation: Conversation):
     on ``conversation.structured``, which is what the summary view renders and
     what its "Add to Tasks" button acts on.
     """
-    if not conversation.structured or not conversation.structured.action_items:
+    if not conversation.structured:
         return
 
-    conversation_capture.process_conversation_before_legacy(uid, conversation)
+    try:
+        wake_word_gate = conversation_capture.prepare_wake_word_capture_gate(uid, conversation, people)
+    except Exception:
+        logger.exception(f"wake-word capture gate failed for conversation {conversation.id}")
+        record_fallback(
+            component='other',
+            from_mode='wake_word_gate',
+            to_mode='ungated_capture',
+            reason='other',
+            outcome='degraded',
+        )
+        wake_word_gate = None
+    if not conversation.structured.action_items:
+        return
+
+    try:
+        conversation_capture.process_conversation_before_legacy(uid, conversation, wake_word_gate)
+    except Exception:
+        # INV-TASK-2: a capture failure must not fall through to a writer. Defer
+        # and retry; silence is the correct failure. #12014's evidence clamp
+        # already stops the ValidationError that used to abort this path.
+        logger.exception(f"canonical task capture failed for conversation {conversation.id}")
+        record_fallback(
+            component='other',
+            from_mode='canonical_task_capture',
+            to_mode='defer_retry',
+            reason='other',
+            outcome='degraded',
+        )
+        return
     emit_product_event(
         uid=uid,
         event='Task Extracted',
@@ -2011,7 +2052,7 @@ def process_conversation(
                 # fail-closed. Do not hide a retryable apply/store failure in an
                 # unobserved future while reporting finalization as successful.
                 _extract_memories(uid, conversation)
-            submit_with_context(postprocess_executor, _save_action_items, uid, conversation)
+            submit_with_context(postprocess_executor, _save_action_items, uid, conversation, people)
             submit_with_context(postprocess_executor, _update_goal_progress, uid, conversation)
 
         # Create audio files from chunks if private cloud sync was enabled

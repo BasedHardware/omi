@@ -207,7 +207,8 @@ def test_mixed_read_does_not_hydrate_canonical_identity_from_historical_stub(ser
     )
     service.history.read = MagicMock(return_value=[colliding_stub, legacy_stub])
 
-    def hydrate_page_stubs(_uid, records):
+    def hydrate_page_stubs(_uid, records, *, budget=None):
+        del budget
         assert [record.memory.id for record in records] == ["legacy"]
         return [_historical(service_mod, "legacy", content="legacy-full")]
 
@@ -416,6 +417,7 @@ def test_offset_merge_fetches_a_complete_bounded_prefix(service_mod):
         "offset": 0,
         "device_scope_request": None,
         "hydrate": False,
+        "budget": None,
     }
 
 

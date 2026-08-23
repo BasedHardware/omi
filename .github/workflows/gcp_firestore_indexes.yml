@@ -146,6 +146,68 @@ jobs:
             --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
             --check-only
 
+  reconcile_development_composite_indexes:
+    # Development had no automatic migration path at all. An automatic run
+    # resolves its environment to prod (see the job above), and the manual
+    # dispatch is the only thing that ever targeted development -- so a merged
+    # manifest addition reached prod's review queue while development silently
+    # kept a schema that no longer matched main. Every development backend
+    # deploy then failed its Firestore readiness gate until somebody noticed
+    # and dispatched the reconcile by hand, which is exactly what happened to
+    # the `hourly_usage` (year, month) index added by PR #11979.
+    #
+    # Composite reconciliation is create-only -- an index only moves
+    # MISSING -> CREATING -> READY -- and development carries no required
+    # reviewer, so it can simply converge on the same merge that queues the
+    # production migration. Production's approval gate is untouched: this job
+    # never runs against it.
+    if: >-
+      github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: development
+    # The workflow-level group keys automatic runs to prod. Serialize
+    # development against its own manual dispatches instead of against them.
+    concurrency:
+      group: firestore-schema-development
+      cancel-in-progress: false
+    permissions:
+      contents: 'read'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout merged Firestore control plane
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Verify merged Firestore control plane
+        run: |
+          checked_sha="$(git rev-parse HEAD)"
+          if [[ "$checked_sha" != "$GITHUB_SHA" ]]; then
+            echo "Expected merged commit $GITHUB_SHA, checked out $checked_sha."
+            exit 1
+          fi
+          echo "Reconciling development Firestore indexes from merged commit $checked_sha."
+
+      - name: Google Auth for development Firestore schema migration
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Show create-only development Firestore schema plan
+        run: |
+          python3 backend/scripts/reconcile_firestore_indexes.py \
+            --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
+            --dry-run
+
+      - name: Apply create-only development Firestore schema plan
+        run: |
+          python3 backend/scripts/reconcile_firestore_indexes.py \
+            --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
+            --provision-missing \
+            --timeout-seconds 3600
+
   reject_nonprod_field_exemptions:
     if: >-
       github.ref == 'refs/heads/main' &&

@@ -414,12 +414,36 @@ struct SearchBarView: View {
     /// `claude` command, or a clipboard fallback that needs the user to paste. Dismissing on those
     /// would be the silent failure this whole path is supposed to be incapable of.
     private func askClaude(_ question: String) {
-        switch ClaudeRouter.handOff(question, to: SettingsStore.shared.claudeTarget) {
+        let target = SettingsStore.shared.claudeTarget
+        // Two events, deliberately, because they answer two questions: the control says a person
+        // pressed Return meaning "ask Claude", and the handoff says whether it got there. A single
+        // event could not separate "nobody uses this" from "it fails for everybody".
+        //
+        // **The question itself goes nowhere near either of them.** It is the one string in reach at
+        // this call site and the schema has nowhere to put it, which is the point of the schema.
+        ContextAnalytics.record(.controlUsed(.askClaude))
+        switch ClaudeRouter.handOff(question, to: target) {
         case .arrived:
+            ContextAnalytics.record(
+                .claudeHandoff(target: Self.analyticsTarget(target), delivered: true))
             handoffNote = nil
             onDismiss()
         case .note(let sentence):
+            // Not delivered, including the clipboard branch — that one reached Claude and filled
+            // nothing in, so the user still has to paste, which is not the question arriving.
+            ContextAnalytics.record(
+                .claudeHandoff(target: Self.analyticsTarget(target), delivered: false))
             handoffNote = sentence
+        }
+    }
+
+    /// The preference, in the analytics vocabulary. An exhaustive switch rather than a raw-value
+    /// bridge, so a third target added to `ClaudeRouter.Target` is a compile error here rather than
+    /// a silent absence from the series.
+    private static func analyticsTarget(_ target: ClaudeRouter.Target) -> AnalyticsEvent.ClaudeTarget {
+        switch target {
+        case .claudeApp: return .claudeApp
+        case .terminal: return .terminal
         }
     }
 

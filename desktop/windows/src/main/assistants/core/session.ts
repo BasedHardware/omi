@@ -152,14 +152,21 @@ function tokenUid(token: string): string | null {
   return typeof uid === 'string' && uid.length > 0 ? uid : null
 }
 
+/** True when `token`'s JWT `exp` is within the skew window of (or past) now. An
+ *  undecodable `exp` returns false: we can't prove staleness, so callers defer to
+ *  the 401 path rather than pulling on every request. */
+export function tokenLooksExpired(token: string, now: number = Date.now()): boolean {
+  const exp = tokenExpMs(token)
+  if (exp === null) return false
+  return exp - now <= TOKEN_EXP_SKEW_MS
+}
+
 /** True when the cached token is within the skew window of (or past) its `exp`. An
  *  undecodable `exp` returns false: we can't prove staleness, so we defer to the
  *  401 path rather than pulling on every request. */
 export function isSessionExpired(now: number = Date.now()): boolean {
   if (!cached) return false
-  const exp = tokenExpMs(cached.token)
-  if (exp === null) return false
-  return exp - now <= TOKEN_EXP_SKEW_MS
+  return tokenLooksExpired(cached.token, now)
 }
 
 /** Apply a pulled session. A null pull is ignored (see TokenRefresher). A pull for
@@ -181,23 +188,31 @@ function applyPulledSession(pulled: BackendSession | null): void {
   else setBackendSession(pulled)
 }
 
-/** Pull a fresh token from the renderer, COALESCING concurrent callers onto one
- *  in-flight round-trip (no hot loop of parallel pulls). A failed/absent pull
- *  leaves the cached session untouched. */
-export async function pullFreshSession(): Promise<void> {
+/** Pull a fresh session from the renderer, COALESCING concurrent callers onto one
+ *  in-flight round-trip. Returns the pulled session, or null when no refresher is
+ *  wired / the renderer timed out. Does NOT apply it to the shared cache — callers
+ *  that own a private session (pi-mono, Rewind) apply it themselves; REST callers
+ *  go through `pullFreshSession`. */
+export async function requestFreshSession(): Promise<BackendSession | null> {
   const refresher = tokenRefresher
-  if (!refresher) return
+  if (!refresher) return null
   if (!pullInFlight) {
     pullInFlight = refresher().finally(() => {
       pullInFlight = null
     })
   }
   try {
-    applyPulledSession(await pullInFlight)
+    return await pullInFlight
   } catch {
-    // Renderer unreachable / timed out: keep the stale session — the caller's
-    // request will 401 and fail as before. Never logs the token.
+    // Renderer unreachable / timed out. Never logs the token.
+    return null
   }
+}
+
+/** Pull a fresh token from the renderer and apply it to the shared cache. A
+ *  failed/absent pull leaves the cached session untouched. */
+export async function pullFreshSession(): Promise<void> {
+  applyPulledSession(await requestFreshSession())
 }
 
 /** Issue a backend request with pull-based token freshness. `doFetch` receives the

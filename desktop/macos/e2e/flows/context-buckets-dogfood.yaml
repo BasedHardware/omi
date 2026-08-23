@@ -10,6 +10,8 @@ description: >
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Insight/InsightAssistant.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextDwellRefreshPolicy.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/AsyncFirstResolved.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/ScreenCandidateAdapter.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskDeduplicationService.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskPrioritizationService.swift
