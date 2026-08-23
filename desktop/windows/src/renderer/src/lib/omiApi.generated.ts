@@ -232,6 +232,8 @@ export interface App {
   created_at?: string | null;
   description: string;
   disabled?: boolean | null;
+  disabled_at?: string | null;
+  disabled_error?: string | null;
   disabled_reason?: string | null;
   email?: string | null;
   enabled?: boolean;
@@ -289,6 +291,8 @@ export interface AppBaseModel {
   created_at?: string | null;
   description: string;
   disabled?: boolean | null;
+  disabled_at?: string | null;
+  disabled_error?: string | null;
   disabled_reason?: string | null;
   enabled?: boolean;
   external_integration?: ExternalIntegration | null;

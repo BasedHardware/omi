@@ -18,6 +18,7 @@ if str(BACKEND_DIR) not in sys.path:
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
 
 from routers import desktop_proxy
+from utils.observability import journeys
 
 
 def make_request(
@@ -25,6 +26,7 @@ def make_request(
     *,
     query_string: bytes = b"",
     workload: str | None = None,
+    platform: str | None = None,
 ) -> Request:
     sent = False
     pending = asyncio.Event()
@@ -39,6 +41,8 @@ def make_request(
     headers = [(b"x-omi-request-id", b"request-12345678")]
     if workload is not None:
         headers.append((b"x-omi-workload", workload.encode()))
+    if platform is not None:
+        headers.append((b"x-app-platform", platform.encode()))
     return Request(
         {
             "type": "http",
@@ -1710,3 +1714,79 @@ def test_byok_pro_is_still_honoured_because_the_user_pays_for_it(monkeypatch):
     model: a BYOK user asking for Pro gets Pro on their own key."""
     monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: "user-key")
     assert _retarget("models/gemini-2.5-pro:generateContent") == ("models/gemini-2.5-pro:generateContent")
+
+
+def _capture_proxy_journeys(monkeypatch):
+    terminal = []
+    monkeypatch.setattr(journeys, 'record_client_journey_accepted', lambda *_: None)
+    monkeypatch.setattr(
+        journeys,
+        'record_client_journey_terminal',
+        lambda journey, client_kind, outcome, _elapsed, *, issue_class=None: terminal.append(
+            (journey, client_kind, outcome, issue_class)
+        ),
+    )
+    return terminal
+
+
+@pytest.mark.asyncio
+async def test_desktop_proxy_proactivity_journey_requires_content_and_terminal_marker(monkeypatch):
+    terminal = _capture_proxy_journeys(monkeypatch)
+
+    async def source():
+        yield b'data: {"candidates":[{"content":{"parts":[{"text":"suggestion"}]}}]}\n\n'
+        yield b'data: {"candidates":[{"content":{"parts":[{"text":""}]},"finishReason":"STOP"}]}\n\n'
+
+    async def unobserved(*_args, **_kwargs):
+        return desktop_proxy.StreamingResponse(source(), media_type='text/event-stream')
+
+    monkeypatch.setattr(desktop_proxy, '_proxy_unobserved', unobserved)
+    response = await desktop_proxy._proxy(
+        make_request(workload='maintenance', platform='macos'),
+        'models/gemini-2.5-flash-lite:streamGenerateContent',
+        True,
+        'user-1',
+    )
+    assert [chunk async for chunk in response.body_iterator]
+    assert terminal == [('desktop_proactivity', 'desktop_macos', 'success', None)]
+
+
+@pytest.mark.asyncio
+async def test_desktop_proxy_proactivity_journey_catches_post_200_error_event(monkeypatch):
+    terminal = _capture_proxy_journeys(monkeypatch)
+
+    async def source():
+        yield b'data: {"error":"provider_timeout","phase":"body"}\n\n'
+
+    async def unobserved(*_args, **_kwargs):
+        return desktop_proxy.StreamingResponse(source(), media_type='text/event-stream')
+
+    monkeypatch.setattr(desktop_proxy, '_proxy_unobserved', unobserved)
+    response = await desktop_proxy._proxy(
+        make_request(workload='maintenance', platform='windows'),
+        'models/gemini-2.5-flash-lite:streamGenerateContent',
+        True,
+        'user-1',
+    )
+    assert [chunk async for chunk in response.body_iterator]
+    assert terminal == [('desktop_proactivity', 'desktop_windows', 'failure', 'provider_error')]
+
+
+@pytest.mark.asyncio
+async def test_desktop_proxy_proactivity_journey_marks_redis_cap_degraded(monkeypatch):
+    terminal = _capture_proxy_journeys(monkeypatch)
+
+    async def capped(*_args, **_kwargs):
+        raise desktop_proxy._GeminiRateLimitExceeded('daily cap', retryable=False, retry_after=60)
+
+    monkeypatch.setattr(desktop_proxy, '_proxy_unobserved', capped)
+    with pytest.raises(desktop_proxy.HTTPException) as error:
+        await desktop_proxy._proxy(
+            make_request(workload='maintenance', platform='linux'),
+            'models/gemini-2.5-flash-lite:generateContent',
+            False,
+            'user-1',
+        )
+
+    assert error.value.status_code == 429
+    assert terminal == [('desktop_proactivity', 'desktop_linux', 'degraded', 'quota_capped')]

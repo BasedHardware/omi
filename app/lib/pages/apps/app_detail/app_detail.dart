@@ -56,6 +56,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
   bool appLoading = false;
   bool isLoading = false;
   bool chatButtonLoading = false;
+  bool _reEnabling = false;
   Map<String, dynamic>? _subscriptionData;
   bool _isCancelingSubscription = false;
   Timer? _paymentCheckTimer;
@@ -111,7 +112,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
     setState(() => appLoading = true);
     var prefs = SharedPreferencesUtil();
-    var enabled = await enableAppServer(app.id);
+    var (enabled, _) = await enableAppServer(app.id);
 
     if (!mounted) return;
 
@@ -303,7 +304,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
       var details = await getAppDetailsServer(appId);
       if (details != null && details['is_user_paid']) {
-        var enabled = await enableAppServer(appId);
+        var (enabled, _) = await enableAppServer(appId);
         if (enabled) {
           PlatformManager.instance.analytics.appPurchaseCompleted(appId);
           prefs.enableApp(appId);
@@ -1047,6 +1048,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           ],
                         )
                       : const SizedBox.shrink(),
+                  app.isDisabled() ? _buildDisabledNotice() : const SizedBox.shrink(),
                   const SizedBox(height: 24),
                   ...(hasAuthSteps
                       ? app.externalIntegration!.authSteps.mapIndexed<Widget>((i, step) {
@@ -1436,6 +1438,97 @@ class _AppDetailPageState extends State<AppDetailPage> {
     );
   }
 
+  /// Shown when the backend has latched `disabled` on the app.
+  ///
+  /// Nothing surfaced this state before, so a disabled app read as healthy here
+  /// while every install failed, and the owner had no control that could clear it.
+  Widget _buildDisabledNotice() {
+    final isOwner = app.isOwner(SharedPreferencesUtil().uid);
+    final reason = app.disabledReason == 'webhook_failures'
+        ? context.l10n.appDisabledWebhookFailures
+        : context.l10n.appDisabledGeneric;
+    final when = app.disabledAt != null && app.disabledAt!.length >= 10
+        ? ' ${context.l10n.appDisabledOn(app.disabledAt!.substring(0, 10))}'
+        : '';
+    final lastError = app.disabledError != null && app.disabledError!.isNotEmpty
+        ? ' ${context.l10n.appDisabledLastError(app.disabledError!)}'
+        : '';
+
+    return Column(
+      children: [
+        const SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const FaIcon(FontAwesomeIcons.triangleExclamation, color: Colors.grey, size: 18),
+            const SizedBox(width: 10),
+            SizedBox(
+              width: MediaQuery.of(context).size.width * 0.78,
+              child: Text(
+                '${context.l10n.appDisabledTitle} $reason$when$lastError',
+                style: const TextStyle(color: Colors.grey),
+              ),
+            ),
+          ],
+        ),
+        if (isOwner) ...[
+          const SizedBox(height: 12),
+          SizedBox(
+            width: MediaQuery.of(context).size.width * 0.78,
+            child: Text(
+              context.l10n.appDisabledOwnerHint,
+              style: const TextStyle(color: Colors.grey, fontSize: 13),
+            ),
+          ),
+          const SizedBox(height: 10),
+          TextButton(
+            onPressed: _reEnabling ? null : _reEnableApp,
+            style: TextButton.styleFrom(
+              backgroundColor: Colors.grey.shade900,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: _reEnabling
+                ? const SizedBox(
+                    width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : Text(context.l10n.appReEnable, style: const TextStyle(color: Colors.white)),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _reEnableApp() async {
+    setState(() => _reEnabling = true);
+    final (ok, detail) = await reEnableAppServer(app.id);
+    if (!mounted) return;
+    setState(() => _reEnabling = false);
+
+    if (ok) {
+      setState(() {
+        app.disabled = false;
+        app.disabledReason = null;
+        app.disabledAt = null;
+        app.disabledError = null;
+      });
+      context.read<AppProvider>().getApps();
+      return;
+    }
+
+    // The rejection names the URL to fix, so it is shown verbatim rather than
+    // replaced with a generic retry prompt.
+    showDialog(
+      context: context,
+      builder: (c) => getDialog(
+        context,
+        () => Navigator.pop(context),
+        () => Navigator.pop(context),
+        context.l10n.appReEnableFailedTitle,
+        detail.isNotEmpty ? detail : context.l10n.appReEnableFailedBody,
+        singleButton: true,
+      ),
+    );
+  }
+
   Future<void> _navigateToSetup() async {
     bool isIntegration = app.worksExternally();
     bool hasSetupInstructions = isIntegration && app.externalIntegration?.setupInstructionsFilePath?.isNotEmpty == true;
@@ -1508,12 +1601,15 @@ class _AppDetailPageState extends State<AppDetailPage> {
     setState(() => appLoading = true);
 
     if (isEnabled) {
-      var enabled = await enableAppServer(appId);
+      var (enabled, detail) = await enableAppServer(appId);
 
       if (!mounted) return;
 
       if (!enabled) {
-        if (app.worksExternally()) {
+        // Setup is only the right guess when the backend gave no reason. A
+        // disabled app used to land here and get sent to setup instructions,
+        // so the developer re-ran a setup that was never the problem.
+        if (app.worksExternally() && detail.isEmpty) {
           setState(() => appLoading = false);
           await _navigateToSetup();
           return;
@@ -1524,8 +1620,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
               context,
               () => Navigator.pop(context),
               () => Navigator.pop(context),
-              'Error activating the app',
-              'There was an issue activating this app. Please try again.',
+              context.l10n.errorActivatingApp,
+              detail.isNotEmpty ? detail : context.l10n.issueActivatingApp,
               singleButton: true,
             ),
           );

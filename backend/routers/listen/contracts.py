@@ -56,6 +56,7 @@ class ListenSessionState:
     speaker_map_dirty: bool = False
     first_audio_byte_timestamp: Optional[float] = None
     live_transcription_attempt: Any = None
+    client_live_transcription_attempt: Any = None
     live_transcription_failed: bool = False
     last_usage_record_timestamp: Optional[float] = None
     words_transcribed_since_last_record: int = 0

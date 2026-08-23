@@ -257,6 +257,24 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "completed",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "action_items",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "conversation_id",
           "order": "ASCENDING"
         },

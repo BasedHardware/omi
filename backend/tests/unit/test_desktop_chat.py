@@ -6,6 +6,7 @@ import httpx
 import pytest
 
 from routers import desktop_chat
+from utils.observability import journeys
 
 
 def _authorized_request(body, *, web_search_allowed: bool = True):
@@ -2273,3 +2274,182 @@ def test_gateway_body_drops_client_params_the_gateway_would_reject():
     assert result['stream'] is True
     assert result['model'] == desktop_chat.CHAT_AGENT_AUTO_LANE_ID
     assert result['messages'][0]['role'] == 'user'
+
+
+def _capture_client_journeys(monkeypatch):
+    accepted = []
+    terminal = []
+    monkeypatch.setattr(
+        journeys,
+        'record_client_journey_accepted',
+        lambda journey, client_kind: accepted.append((journey, client_kind)),
+    )
+    monkeypatch.setattr(
+        journeys,
+        'record_client_journey_terminal',
+        lambda journey, client_kind, outcome, _elapsed, *, issue_class=None: terminal.append(
+            (journey, client_kind, outcome, issue_class)
+        ),
+    )
+    return accepted, terminal
+
+
+@pytest.mark.asyncio
+async def test_desktop_chat_journey_requires_content_and_done_for_stream_success(monkeypatch):
+    accepted, terminal = _capture_client_journeys(monkeypatch)
+    quota_calls = []
+    _wire_direct_lane(monkeypatch, quota_calls)
+
+    class Stream:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+        async def get_final_message(self):
+            return SimpleNamespace(
+                content=[SimpleNamespace(type='text', text='hi')], stop_reason='end_turn', usage=None
+            )
+
+        def __aiter__(self):
+            async def events():
+                yield SimpleNamespace(type='content_block_delta', delta=SimpleNamespace(type='text_delta', text='hi'))
+
+            return events()
+
+    monkeypatch.setattr(
+        desktop_chat,
+        'get_direct_anthropic_client',
+        lambda **_: SimpleNamespace(messages=SimpleNamespace(stream=lambda **_kwargs: Stream())),
+    )
+
+    response = await desktop_chat.chat_completions(
+        {'model': 'omi-sonnet', 'stream': True, 'messages': [{'role': 'user', 'content': 'hello'}]},
+        uid='user-1',
+        x_app_platform='windows',
+        x_omi_chat_contract_version=None,
+        x_omi_request_id='request-1',
+    )
+    assert 'hi' in await _drain(response)
+    assert accepted == [('desktop_chat', 'desktop_windows')]
+    assert terminal == [('desktop_chat', 'desktop_windows', 'success', None)]
+
+
+@pytest.mark.asyncio
+async def test_desktop_chat_journey_catches_in_band_502_before_later_done(monkeypatch):
+    _accepted, terminal = _capture_client_journeys(monkeypatch)
+    quota_calls = []
+    _wire_direct_lane(monkeypatch, quota_calls)
+
+    class Stream:
+        async def __aenter__(self):
+            raise RuntimeError('upstream rejected the request')
+
+        async def __aexit__(self, *_):
+            return None
+
+    monkeypatch.setattr(
+        desktop_chat,
+        'get_direct_anthropic_client',
+        lambda **_: SimpleNamespace(messages=SimpleNamespace(stream=lambda **_kwargs: Stream())),
+    )
+
+    response = await desktop_chat.chat_completions(
+        {'model': 'omi-sonnet', 'stream': True, 'messages': [{'role': 'user', 'content': 'hello'}]},
+        uid='user-1',
+        x_app_platform='macos',
+        x_omi_chat_contract_version=None,
+        x_omi_request_id='request-1',
+    )
+    body = await _drain(response)
+    assert 'Upstream provider error' in body
+    assert 'data: [DONE]' in body
+    assert terminal == [('desktop_chat', 'desktop_macos', 'failure', 'provider_error')]
+
+
+@pytest.mark.asyncio
+async def test_desktop_chat_journey_records_direct_anthropic_json_success_and_failure(monkeypatch):
+    _accepted, terminal = _capture_client_journeys(monkeypatch)
+    quota_calls = []
+    _wire_direct_lane(monkeypatch, quota_calls)
+    monkeypatch.setattr(desktop_chat, 'get_direct_anthropic_client', lambda **_: object())
+
+    async def answer(*_args, **_kwargs):
+        message = SimpleNamespace(
+            id='message-1',
+            content=[SimpleNamespace(type='text', text='answer')],
+            stop_reason='end_turn',
+            usage=None,
+        )
+        return message, None, None
+
+    monkeypatch.setattr(desktop_chat, '_create_with_pause_turn_continuations', answer)
+    response = await desktop_chat.chat_completions(
+        {'model': 'omi-sonnet', 'messages': [{'role': 'user', 'content': 'hello'}]},
+        uid='user-1',
+        x_app_platform='linux',
+        x_omi_chat_contract_version=None,
+        x_omi_request_id='request-2',
+    )
+    assert response.status_code == 200
+    assert terminal[-1] == ('desktop_chat', 'desktop_linux', 'success', None)
+
+    async def fail(*_args, **_kwargs):
+        raise RuntimeError('provider failed')
+
+    monkeypatch.setattr(desktop_chat, '_create_with_pause_turn_continuations', fail)
+    with pytest.raises(desktop_chat.HTTPException):
+        await desktop_chat.chat_completions(
+            {'model': 'omi-sonnet', 'messages': [{'role': 'user', 'content': 'hello'}]},
+            uid='user-1',
+            x_app_platform='linux',
+            x_omi_chat_contract_version=None,
+            x_omi_request_id='request-3',
+        )
+    assert terminal[-1] == ('desktop_chat', 'desktop_linux', 'failure', 'provider_error')
+
+
+@pytest.mark.asyncio
+async def test_desktop_chat_metric_failure_does_not_break_stream(monkeypatch):
+    quota_calls = []
+    _wire_direct_lane(monkeypatch, quota_calls)
+    monkeypatch.setattr(
+        journeys.OMI_CLIENT_JOURNEY_TERMINAL_TOTAL,
+        'labels',
+        lambda **_: (_ for _ in ()).throw(RuntimeError('metrics unavailable')),
+    )
+
+    class Stream:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+        async def get_final_message(self):
+            return SimpleNamespace(
+                content=[SimpleNamespace(type='text', text='still delivered')], stop_reason='end_turn', usage=None
+            )
+
+        def __aiter__(self):
+            async def events():
+                yield SimpleNamespace(
+                    type='content_block_delta', delta=SimpleNamespace(type='text_delta', text='still delivered')
+                )
+
+            return events()
+
+    monkeypatch.setattr(
+        desktop_chat,
+        'get_direct_anthropic_client',
+        lambda **_: SimpleNamespace(messages=SimpleNamespace(stream=lambda **_kwargs: Stream())),
+    )
+    response = await desktop_chat.chat_completions(
+        {'model': 'omi-sonnet', 'stream': True, 'messages': [{'role': 'user', 'content': 'hello'}]},
+        uid='user-1',
+        x_app_platform='windows',
+        x_omi_chat_contract_version=None,
+        x_omi_request_id='request-4',
+    )
+    assert 'still delivered' in await _drain(response)

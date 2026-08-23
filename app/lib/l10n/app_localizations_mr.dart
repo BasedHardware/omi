@@ -9862,4 +9862,36 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get diagnosticsShareFailed => 'डायग्नोस्टिक्स शेअर करता आले नाही. कृपया पुन्हा प्रयत्न करा.';
+
+  @override
+  String get appDisabledTitle => 'हे अ‍ॅप अक्षम आहे आणि ते स्थापित करता येणार नाही.';
+
+  @override
+  String get appDisabledWebhookFailures => 'त्याचा एंडपॉइंट सलग ७२ तास अयशस्वी झाला, त्यामुळे वितरण थांबवण्यात आले.';
+
+  @override
+  String get appDisabledGeneric => 'ते Omi ने अक्षम केले होते.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'आधी एंडपॉइंट दुरुस्त करा — पुन्हा सक्षम करताना प्रत्येक कॉन्फिगर केलेला URL पुन्हा तपासला जातो.';
+
+  @override
+  String get appReEnable => 'पुन्हा सक्षम करा';
+
+  @override
+  String get appReEnableFailedTitle => 'पुन्हा सक्षम करता आले नाही';
+
+  @override
+  String get appReEnableFailedBody => 'हे अ‍ॅप पुन्हा सक्षम करता आले नाही. कृपया पुन्हा प्रयत्न करा.';
+
+  @override
+  String appDisabledOn(String date) {
+    return '$date रोजी अक्षम केले.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'शेवटची त्रुटी: $error';
+  }
 }

@@ -3314,5 +3314,14 @@
     "sendRawAudioToOmi": "Nyers hang küldése az Ominak",
     "sendRawAudioToOmiDescription": "Kapcsold ki, hogy a nyers hang ne kerüljön az Omihoz. Az átiratok és a felhőfunkciókhoz szükséges adatok továbbra is elküldhetők az Ominak.",
     "findDevice": "Keresés",
-    "diagnosticsShareFailed": "A diagnosztika megosztása nem sikerült. Próbáld újra."
+    "diagnosticsShareFailed": "A diagnosztika megosztása nem sikerült. Próbáld újra.",
+    "appDisabledTitle": "Ez az alkalmazás le van tiltva, és nem telepíthető.",
+    "appDisabledWebhookFailures": "A végpontja 72 órán át folyamatosan hibázott, ezért a kézbesítések leálltak.",
+    "appDisabledGeneric": "Az Omi tiltotta le.",
+    "appDisabledOwnerHint": "Először javítsd ki a végpontot — az újraengedélyezés minden beállított URL-t újra ellenőriz.",
+    "appReEnable": "Újraengedélyezés",
+    "appReEnableFailedTitle": "Az újraengedélyezés nem sikerült",
+    "appReEnableFailedBody": "Ezt az alkalmazást nem sikerült újraengedélyezni. Próbáld újra.",
+    "appDisabledOn": "Letiltva ekkor: {date}.",
+    "appDisabledLastError": "Utolsó hiba: {error}."
 }

@@ -69,6 +69,13 @@ scrape_jobs:
     coverage_alert: null
     coverage_status: declared
 
+  - name: cloud-run-application-metrics
+    mechanism: additionalScrapeConfigs
+    source: prometheus.googleapis.com/omi_
+    auth: null
+    coverage_alert: null
+    coverage_status: declared
+
   - name: gpu-metrics
     mechanism: additionalScrapeConfigs
     auth: null

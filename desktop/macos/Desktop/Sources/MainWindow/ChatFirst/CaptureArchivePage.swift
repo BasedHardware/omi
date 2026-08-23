@@ -156,7 +156,8 @@ struct CaptureArchivePage: View {
   @ViewBuilder
   private func summarySection(_ capture: ServerConversation) -> some View {
     let primary = ConversationSummarySelection.primarySummary(for: capture)
-    let sections = capture.structured.sections
+    // Same provenance rule as the full editor: an app summary replaces Omi's own, sections included.
+    let sections = primary.appId == nil ? capture.structured.sections : []
     if !primary.content.isEmpty || !sections.isEmpty {
       detailSection("Summary") {
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {

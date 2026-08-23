@@ -175,6 +175,13 @@ sys.modules["database.webhook_health"].disable_app_in_firestore = MagicMock()
 sys.modules["database.webhook_health"].record_dev_webhook_failure = MagicMock(return_value=False)
 sys.modules["database.webhook_health"].record_dev_webhook_success = MagicMock()
 sys.modules["database.webhook_health"]._DEV_FAILURE_THRESHOLD = 100
+# Graduated-response action codes; mirror database.webhook_health. utils.app_integrations
+# imports these by name, so the stub has to carry them or the module fails to import.
+sys.modules["database.webhook_health"].ACTION_NONE = 0
+sys.modules["database.webhook_health"].ACTION_WARN_DAY1 = 1
+sys.modules["database.webhook_health"].ACTION_WARN_DAY2 = 2
+sys.modules["database.webhook_health"].ACTION_DISABLE = 3
+sys.modules["database.webhook_health"].ACTION_REDIRECT_NOT_FOLLOWED = 4
 
 _utils_pkg = sys.modules.get("utils")
 if _utils_pkg is None:
