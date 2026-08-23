@@ -452,21 +452,41 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     log("NotificationService: proactive notification snooze cleared")
   }
 
+  /// The two ways other people being around changes what a proactive nudge costs.
+  struct PresenceSignals: Equatable {
+    /// The user's screen is being broadcast, so anything Omi draws is seen by everyone.
+    let screenShared: Bool
+    /// The user is in a call. Others can hear the room, but they cannot see the screen.
+    let onCall: Bool
+  }
+
   /// Whether a delivery must be withheld because other people are present.
   ///
-  /// Two distinct harms, one rule. Sharing a screen makes a private nudge **visible** to
-  /// everyone on the call; being in a call at all makes it **interrupt a conversation**.
-  /// Scoping this to sharing alone was tested against a live Google Meet call and let
-  /// "Meet is fine — but you said you'd submit the SBI Hackathon prototype" through while
-  /// the user was mid-meeting, which is the disruption the guard exists to prevent.
+  /// Only sharing withholds. Sharing makes a private nudge **visible to everyone**, which
+  /// is unrecoverable — the wrong audience has already read it. A call, on its own, only
+  /// makes the nudge *arrive at a busy moment*, and that is frequently the moment it is
+  /// worth most: mid-call with someone is exactly when "you owe them a task" is useful.
+  ///
+  /// This originally suppressed on either signal. That treated the interruption as the
+  /// harm; it is not, it is the product working. What must not happen during a call is
+  /// the nudge being *spoken* — see `shouldWithholdSpeechForPresence`.
   ///
   /// Pure so the policy is testable without a real call; the detection it is fed is
-  /// impure and lives in `currentPresenceDetected()`.
+  /// impure and lives in `currentPresence()`.
   nonisolated static func shouldSuppressForPresence(
     respectFrequency: Bool,
-    presenceDetected: Bool
+    presence: PresenceSignals
   ) -> Bool {
-    respectFrequency && presenceDetected
+    respectFrequency && presence.screenShared
+  }
+
+  /// Whether a delivered notification must stay silent even though it is shown.
+  ///
+  /// Speech has no private surface. A banner during a call is seen by the user alone; the
+  /// same text read aloud is heard by everyone in the room and everyone on the call, with
+  /// no screen share needed. So the visual delivery goes through and the voice does not.
+  nonisolated static func shouldWithholdSpeechForPresence(presence: PresenceSignals) -> Bool {
+    presence.onCall || presence.screenShared
   }
 
   /// Live presence detection, kept out of the policy so the policy stays testable.
@@ -477,14 +497,22 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   /// which is the documented fallback for a *muted* browser call where mic input has
   /// dropped. Omi's own ambient capture cannot trip the mic signal: it matches only
   /// native call apps and browsers by bundle id.
-  nonisolated static func currentPresenceDetected() -> Bool {
-    if ConferencingApps.activeScreenSharePresent() { return true }
+  nonisolated static func currentPresence() -> PresenceSignals {
+    let shared = ConferencingApps.activeScreenSharePresent()
     // The audio-process API this reads is macOS 14.4+. On 14.0–14.3 the browser
     // window-title fallback below still catches browser calls; a native-app call on those
     // versions goes undetected, which fails open — a missed suppression, never a missed
     // notification.
-    if #available(macOS 14.4, *), ConferencingApps.callAppIsUsingMicrophone() { return true }
-    return ConferencingApps.browserCallWindowPresent()
+    var onCall = false
+    if #available(macOS 14.4, *), ConferencingApps.callAppIsUsingMicrophone() { onCall = true }
+    if !onCall { onCall = ConferencingApps.browserCallWindowPresent() }
+    // Reported only when something is detected, so ordinary use stays quiet. Without this
+    // a delivered nudge cannot be told apart from a detector that saw nothing — which is
+    // the difference between "the call rule worked" and "the call rule never ran".
+    if shared || onCall {
+      log("NotificationService: presence — screenShared=\(shared) onCall=\(onCall)")
+    }
+    return PresenceSignals(screenShared: shared, onCall: onCall)
   }
 
   func sendNotification(
@@ -634,11 +662,9 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       return
     }
 
-    if Self.shouldSuppressForPresence(
-      respectFrequency: respectFrequency,
-      presenceDetected: Self.currentPresenceDetected())
-    {
-      log("NotificationService: suppressing \(assistantId) notification while other people are present")
+    let presence = Self.currentPresence()
+    if Self.shouldSuppressForPresence(respectFrequency: respectFrequency, presence: presence) {
+      log("NotificationService: suppressing \(assistantId) notification while the screen is shared")
       recordInsightDeliveryOutcome(
         insightDeliveryID,
         outcome: .suppressed,
@@ -660,7 +686,10 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     // `respectFrequency` is the existing proactive/functional split: assistants leave it
     // true; functional notices (onboarding test, screen-repair prompts) pass false and
     // must never be spoken.
-    let speech = NotificationSpeechOnDelivery(message: message, isProactive: respectFrequency)
+    let speech = NotificationSpeechOnDelivery(
+      message: message,
+      isProactive: respectFrequency,
+      othersCanHear: Self.shouldWithholdSpeechForPresence(presence: presence))
     let recordPresentation = { [weak self] in
       speech.notificationWasPresented()
       if respectFrequency {
@@ -895,11 +924,9 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       return .suppressed
     }
 
-    if Self.shouldSuppressForPresence(
-      respectFrequency: true,
-      presenceDetected: Self.currentPresenceDetected())
-    {
-      log("NotificationService: withholding context director card — other people are present")
+    let presence = Self.currentPresence()
+    if Self.shouldSuppressForPresence(respectFrequency: true, presence: presence) {
+      log("NotificationService: withholding context director card — the screen is shared")
       onDropped?()
       return .suppressed
     }
@@ -912,7 +939,10 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     let deliverSystemBanner = FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBanner(
       previewsEnabled: previewsEnabled, floatingBarEnabled: floatingBarEnabled, deliverSystemBanner: false)
 
-    let speech = NotificationSpeechOnDelivery(message: message, isProactive: true)
+    let speech = NotificationSpeechOnDelivery(
+      message: message,
+      isProactive: true,
+      othersCanHear: Self.shouldWithholdSpeechForPresence(presence: presence))
     let recordPresented = { [weak self] in
       speech.notificationWasPresented()
       self?.recordProactiveNotificationPresented(
@@ -1031,9 +1061,9 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
 
     if Self.shouldSuppressForPresence(
       respectFrequency: true,
-      presenceDetected: Self.currentPresenceDetected())
+      presence: Self.currentPresence())
     {
-      log("NotificationService: withholding \(assistantId) card — other people are present")
+      log("NotificationService: withholding \(assistantId) card — the screen is shared")
       onDropped?()
       return .suppressed
     }

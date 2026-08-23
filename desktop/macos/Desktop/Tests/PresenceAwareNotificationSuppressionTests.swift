@@ -2,20 +2,44 @@ import XCTest
 
 @testable import Omi_Computer
 
-/// A proactive notification is addressed to one person. While the user presents, every
-/// surface Omi draws on is broadcast to the call, so a private nudge reaches an audience it
-/// was never written for.
+/// A proactive notification is addressed to one person. Sharing a screen broadcasts every
+/// surface Omi draws to the whole call, so a private nudge reaches an audience it was never
+/// written for — and once seen, that cannot be taken back.
+///
+/// Being on a call is a different matter. Nobody can see the screen, and the moment is often
+/// exactly when the nudge is worth most: mid-call with someone is when "you owe them a task"
+/// is useful. This originally suppressed on either signal, treating the interruption as the
+/// harm. It is not. What must not happen on a call is the nudge being *spoken*.
 final class PresenceAwareNotificationSuppressionTests: XCTestCase {
-  func testProactiveNotificationIsSuppressedWhilePresenting() {
-    XCTAssertTrue(
-      NotificationService.shouldSuppressForPresence(
-        respectFrequency: true, presenceDetected: true))
+  private func presence(shared: Bool, onCall: Bool) -> NotificationService.PresenceSignals {
+    NotificationService.PresenceSignals(screenShared: shared, onCall: onCall)
   }
 
-  func testProactiveNotificationIsDeliveredWhenNotPresenting() {
+  func testProactiveNotificationIsSuppressedWhileSharing() {
+    XCTAssertTrue(
+      NotificationService.shouldSuppressForPresence(
+        respectFrequency: true, presence: presence(shared: true, onCall: false)))
+  }
+
+  /// The case this change exists for: on a call, not sharing, the nudge goes through.
+  func testProactiveNotificationIsDeliveredOnACallWithoutSharing() {
     XCTAssertFalse(
       NotificationService.shouldSuppressForPresence(
-        respectFrequency: true, presenceDetected: false))
+        respectFrequency: true, presence: presence(shared: false, onCall: true)))
+  }
+
+  func testProactiveNotificationIsDeliveredWhenAlone() {
+    XCTAssertFalse(
+      NotificationService.shouldSuppressForPresence(
+        respectFrequency: true, presence: presence(shared: false, onCall: false)))
+  }
+
+  /// Sharing during a call still suppresses — the visibility harm does not care why the
+  /// screen is up.
+  func testSharingDuringACallStillSuppresses() {
+    XCTAssertTrue(
+      NotificationService.shouldSuppressForPresence(
+        respectFrequency: true, presence: presence(shared: true, onCall: true)))
   }
 
   /// `respectFrequency: false` is the existing proactive/functional split. Functional
@@ -23,16 +47,63 @@ final class PresenceAwareNotificationSuppressionTests: XCTestCase {
   /// test — must still reach the user mid-share. Suppressing the capture-repair prompt
   /// during a share is precisely how a broken capture would stay broken, since that prompt
   /// is what tells the user to fix it.
-  func testFunctionalNotificationIsNotSuppressedWhilePresenting() {
+  func testFunctionalNotificationIsNotSuppressedWhileSharing() {
     XCTAssertFalse(
       NotificationService.shouldSuppressForPresence(
-        respectFrequency: false, presenceDetected: true))
+        respectFrequency: false, presence: presence(shared: true, onCall: false)))
   }
 
-  func testFunctionalNotificationIsNotSuppressedWhenNotPresenting() {
+  func testFunctionalNotificationIsNotSuppressedWhenAlone() {
     XCTAssertFalse(
       NotificationService.shouldSuppressForPresence(
-        respectFrequency: false, presenceDetected: false))
+        respectFrequency: false, presence: presence(shared: false, onCall: false)))
+  }
+
+  // MARK: - Speech has no private surface
+
+  /// A banner on a call is seen by the user alone; the same text read aloud is heard by
+  /// everyone in the room and everyone on the call, with no screen share needed.
+  func testDeliveredNotificationStaysSilentOnACall() {
+    XCTAssertTrue(
+      NotificationService.shouldWithholdSpeechForPresence(
+        presence: presence(shared: false, onCall: true)))
+  }
+
+  func testDeliveredNotificationStaysSilentWhileSharing() {
+    XCTAssertTrue(
+      NotificationService.shouldWithholdSpeechForPresence(
+        presence: presence(shared: true, onCall: false)))
+  }
+
+  func testDeliveredNotificationSpeaksWhenAlone() {
+    XCTAssertFalse(
+      NotificationService.shouldWithholdSpeechForPresence(
+        presence: presence(shared: false, onCall: false)))
+  }
+
+  /// The visual delivery and the voice are decided separately: on a call the nudge is shown
+  /// and not spoken, which is the whole shape of this change.
+  func testOnACallTheNudgeIsShownButNotSpoken() {
+    let onCall = presence(shared: false, onCall: true)
+    XCTAssertFalse(
+      NotificationService.shouldSuppressForPresence(respectFrequency: true, presence: onCall))
+    XCTAssertNil(
+      NotificationSpeech.utterance(
+        message: "You said you'd send Maya the spec.",
+        isEnabled: true,
+        isProactive: true,
+        othersCanHear: NotificationService.shouldWithholdSpeechForPresence(presence: onCall)))
+  }
+
+  func testAloneTheSameNudgeIsSpoken() {
+    let alone = presence(shared: false, onCall: false)
+    XCTAssertEqual(
+      NotificationSpeech.utterance(
+        message: "You said you'd send Maya the spec.",
+        isEnabled: true,
+        isProactive: true,
+        othersCanHear: NotificationService.shouldWithholdSpeechForPresence(presence: alone)),
+      "You said you'd send Maya the spec.")
   }
 
   /// The suppression must be attributable in delivery telemetry rather than looking like a

@@ -1,3 +1,3 @@
 {
-  "change": "Omi now stays quiet while you are in a call or sharing your screen, and delivers the suggestion afterwards instead of losing it"
+  "change": "Omi now stays quiet while you are sharing your screen, and delivers the suggestion afterwards instead of losing it. On a call without sharing, suggestions still reach you — they just are not read aloud"
 }

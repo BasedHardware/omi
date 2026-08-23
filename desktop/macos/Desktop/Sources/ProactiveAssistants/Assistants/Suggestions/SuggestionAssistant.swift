@@ -594,10 +594,10 @@ actor SuggestionAssistant: ProactiveAssistant {
 
     if NotificationService.shouldSuppressForPresence(
       respectFrequency: true,
-      presenceDetected: NotificationService.currentPresenceDetected())
+      presence: NotificationService.currentPresence())
     {
       log(
-        "Suggestion: withheld while others are present [\(suggestion.category.rawValue)] — "
+        "Suggestion: withheld while the screen is shared [\(suggestion.category.rawValue)] — "
           + "\"\(suggestion.suggestion)\""
       )
       await emitDeliveryOutcome(.suppressedPresenting, identity: telemetryIdentity)

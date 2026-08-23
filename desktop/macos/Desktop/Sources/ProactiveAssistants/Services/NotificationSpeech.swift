@@ -23,8 +23,18 @@ enum NotificationSpeech {
   ///
   /// Only the message is spoken: the title is banner chrome ("Suggestion", "Insight")
   /// that would read as a spoken label prefix, not something a person would say.
-  static func utterance(message: String, isEnabled: Bool, isProactive: Bool) -> String? {
-    guard isEnabled, isProactive else { return nil }
+  ///
+  /// `othersCanHear` silences it outright. Speech has no private surface: a banner during
+  /// a call is seen by the user alone, the same text read aloud is heard by everyone in
+  /// the room and on the call. The visual delivery still goes through — see
+  /// `NotificationService.shouldWithholdSpeechForPresence`.
+  static func utterance(
+    message: String,
+    isEnabled: Bool,
+    isProactive: Bool,
+    othersCanHear: Bool = false
+  ) -> String? {
+    guard isEnabled, isProactive, !othersCanHear else { return nil }
     let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return nil }
     return trimmed
@@ -54,10 +64,13 @@ final class NotificationSpeechOnDelivery {
     self.speak = speak
   }
 
-  convenience init(message: String, isProactive: Bool) {
+  convenience init(message: String, isProactive: Bool, othersCanHear: Bool = false) {
     self.init(
       text: NotificationSpeech.utterance(
-        message: message, isEnabled: NotificationSpeech.isEnabled(), isProactive: isProactive))
+        message: message,
+        isEnabled: NotificationSpeech.isEnabled(),
+        isProactive: isProactive,
+        othersCanHear: othersCanHear))
   }
 
   func notificationWasPresented() {
