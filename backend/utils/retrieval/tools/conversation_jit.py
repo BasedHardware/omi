@@ -328,31 +328,38 @@ def format_jit_results(
 ) -> str:
     """Render only whole records whose text and reference can be admitted together."""
     bounded_conversations = list(conversations_data)[:MAX_JIT_CONVERSATIONS]
-    candidates: List[Tuple[Dict[str, Any], Dict[str, Any]]] = []
+    candidates: List[Tuple[Dict[str, Any], Dict[str, Any], Optional[int]]] = []
     seen_conversation_ids: set[str] = set()
-    collected_conversation_ids = {
-        item.get("id") for item in conversations_collected or [] if isinstance(item.get("id"), str)
+    collected_conversation_indexes = {
+        item.get("id"): index
+        for index, item in enumerate(conversations_collected or [], start=1)
+        if isinstance(item.get("id"), str)
     }
     rejected_or_duplicate = False
     for data in bounded_conversations:
         card = _summary_card_from_data(data)
-        if (
-            card is None
-            or card["conversation_id"] in seen_conversation_ids
-            or card["conversation_id"] in collected_conversation_ids
-        ):
+        if card is None or card["conversation_id"] in seen_conversation_ids:
             rejected_or_duplicate = True
             continue
-        seen_conversation_ids.add(card["conversation_id"])
-        candidates.append((data, card))
+        conversation_id = card["conversation_id"]
+        seen_conversation_ids.add(conversation_id)
+        existing_card_index = collected_conversation_indexes.get(conversation_id)
+        if existing_card_index is not None and not hydrate_transcript_windows:
+            rejected_or_duplicate = True
+            continue
+        candidates.append((data, card, existing_card_index))
     if not candidates:
         return JIT_TRUNCATION_MARKER if bounded_conversations else ""
     blocks: List[str] = []
     admitted: List[Tuple[Dict[str, Any], Dict[str, Any]]] = []
     first_card_index = len(conversations_collected) + 1 if conversations_collected is not None else 1
+    new_card_count = 0
     truncated = rejected_or_duplicate or len(conversations_data) > len(bounded_conversations)
-    for data, card in candidates:
-        block = _format_summary_card(card, first_card_index + len(admitted))
+    for data, card, existing_card_index in candidates:
+        if existing_card_index is not None:
+            admitted.append((data, card))
+            continue
+        block = _format_summary_card(card, first_card_index + new_card_count)
         if not _can_admit(blocks, block):
             truncated = True
             break
@@ -362,6 +369,7 @@ def format_jit_results(
         blocks.append(block)
         admitted.append((data, card))
         _append_collected_conversation(conversations_collected, card)
+        new_card_count += 1
 
     if hydrate_transcript_windows:
         for data, card in admitted:
