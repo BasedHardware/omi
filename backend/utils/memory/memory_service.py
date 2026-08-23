@@ -2437,6 +2437,8 @@ class MemoryService:
             return False
         if set(item.sensitivity_labels).intersection(RESTRICTED_SENSITIVITY_LABELS):
             return False
+        if row.is_locked:
+            return False
         # Admit only states the public MemoryDB wire shape can represent. A
         # status-only superseded row would otherwise serialize as current.
         return row.user_review is False or row.invalid_at is not None or row.superseded_by is not None

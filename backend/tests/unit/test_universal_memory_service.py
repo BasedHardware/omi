@@ -320,6 +320,22 @@ def test_ledger_history_page_reports_partial_provider_window_and_filters_privacy
     assert complete.truncated is False
 
 
+def test_ledger_history_excludes_locked_rows(service_mod, monkeypatch):
+    now = datetime(2026, 8, 23, tzinfo=timezone.utc)
+    locked = _ledger_item(service_mod, "locked", updated_at=now, user_review=False)
+    locked = locked.model_copy(update={"promotion": {"is_locked": True, "user_review": False}})
+    monkeypatch.setattr(
+        service_mod,
+        "iter_authoritative_product_memory_items_newest_first",
+        lambda *args, **kwargs: iter([locked]),
+    )
+
+    page = service_mod.MemoryService(db_client=_Db()).read_ledger_history_page("uid-test", limit=10)
+
+    assert page.memories == ()
+    assert page.truncated is False
+
+
 def test_historical_ledger_search_is_deterministic_and_does_not_fallback_to_legacy(service_mod, monkeypatch):
     now = datetime(2026, 8, 23, tzinfo=timezone.utc)
     older = _ledger_item(service_mod, "older", updated_at=now - timedelta(minutes=1), user_review=False)

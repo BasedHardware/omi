@@ -65,6 +65,7 @@ from .entity_timeline_tools import (
 from .knowledge_ledger_tools import (
     read_playbook,
     search_knowledge,
+    search_historical_facts,
 )
 
 __all__ = [
@@ -97,4 +98,5 @@ __all__ = [
     'get_entity_timeline_tool',
     'search_knowledge',
     'read_playbook',
+    'search_historical_facts',
 ]

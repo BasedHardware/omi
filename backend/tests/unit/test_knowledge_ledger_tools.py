@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 from models.memories import MemoryDB
 from models.memory_evidence import SourceState
@@ -165,6 +166,113 @@ def test_tools_are_owner_scoped_bounded_and_fail_closed(monkeypatch):
         tools.read_playbook.invoke({"memory_id": "mem_missing"}, config={"configurable": {"user_id": "u1"}})
         == "Playbook unavailable."
     )
+
+
+def test_search_historical_facts_is_fact_only_owner_scoped_and_partial(monkeypatch):
+    import database._client as database_client
+
+    fact = _memory(
+        "historical-fact",
+        kind=MemoryKind.fact,
+        content="Previously lived in Boston",
+        valid_at=NOW,
+        invalid_at=NOW,
+    )
+    document = _memory(
+        "historical-playbook",
+        kind=MemoryKind.document,
+        content="Release workflow",
+        body="private workflow body",
+        invalid_at=NOW,
+    )
+    trigger = _memory(
+        "historical-trigger",
+        kind=MemoryKind.trigger,
+        content="Watch release windows",
+        invalid_at=NOW,
+        trigger_condition={"keywords": ["release"]},
+    )
+    locked = _memory(
+        "historical-locked",
+        kind=MemoryKind.fact,
+        content="Private locked fact",
+        invalid_at=NOW,
+        is_locked=True,
+    )
+
+    class FakeService:
+        def __init__(self, *, db_client):
+            assert db_client == "db"
+
+        def search_ledger_history_page(self, uid, query, *, limit):
+            assert (uid, query, limit) == ("u1", "Boston", 8)
+            return SimpleNamespace(
+                matches=[
+                    SimpleNamespace(memory=fact),
+                    SimpleNamespace(memory=document),
+                    SimpleNamespace(memory=trigger),
+                    SimpleNamespace(memory=locked),
+                ],
+                truncated=True,
+                scanned_count=501,
+            )
+
+    monkeypatch.setattr(database_client, "get_firestore_client", lambda: "db")
+    monkeypatch.setattr(tools, "MemoryService", FakeService)
+
+    result = tools.search_historical_facts.invoke(
+        {"query": "Boston", "limit": 8},
+        config={"configurable": {"user_id": "u1"}},
+    )
+
+    assert "historical-fact" in result
+    assert "Previously lived in Boston" in result
+    assert "historical-playbook" not in result
+    assert "private workflow body" not in result
+    assert "historical-trigger" not in result
+    assert "historical-locked" not in result
+    assert "valid_at=2026-08-23T12:00:00+00:00" in result
+    assert "invalid_at=2026-08-23T12:00:00+00:00" in result
+    assert "Partial historical search" in result
+    assert "not exhaustive" in result
+
+
+def test_historical_fact_renderer_hard_cap_preserves_both_disclosures():
+    rows = [
+        _memory(
+            f"oversized-{index}",
+            kind=MemoryKind.fact,
+            content="x" * 100_000,
+            valid_at=NOW,
+            invalid_at=NOW,
+        )
+        for index in range(30)
+    ]
+
+    result = tools._format_historical_fact_results(rows, query="Boston", truncated=True)
+
+    assert len(result) <= tools.MAX_KNOWLEDGE_RESULT_CHARACTERS
+    assert tools.HISTORICAL_OUTPUT_TRUNCATION_NOTICE in result
+    assert tools.HISTORICAL_PROVIDER_PARTIAL_NOTICE in result
+
+
+def test_search_historical_facts_rejects_unsearchable_and_oversized_requests(monkeypatch):
+    import database._client as database_client
+
+    monkeypatch.setattr(database_client, "get_firestore_client", lambda: "db")
+    service = SimpleNamespace(search_ledger_history_page=MagicMock())
+    service.search_ledger_history_page.side_effect = ValueError("historical ledger query must contain a token")
+    monkeypatch.setattr(tools, "MemoryService", lambda *, db_client: service)
+    config = {"configurable": {"user_id": "u1"}}
+
+    assert tools.search_historical_facts.invoke({"query": "!"}, config=config).startswith("Error:")
+    service.search_ledger_history_page.assert_called_once_with("u1", "!", limit=8)
+    service.search_ledger_history_page.reset_mock()
+    assert tools.search_historical_facts.invoke({"query": "Boston", "limit": 0}, config=config).startswith("Error:")
+    assert tools.search_historical_facts.invoke(
+        {"query": "Boston", "limit": tools.MAX_KNOWLEDGE_SEARCH_LIMIT + 1}, config=config
+    ).startswith("Error:")
+    service.search_ledger_history_page.assert_not_called()
 
 
 def test_tool_errors_do_not_echo_storage_details(monkeypatch):

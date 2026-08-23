@@ -1,9 +1,10 @@
 """Progressive-disclosure tools for the intent-backed knowledge ledger.
 
 These tools expose only current, default-visible canonical ledger rows to the
-authenticated Omi chat principal.  Search returns compact handles; playbook
-bodies are fetched only by an explicit second tool call.  Historical rows and
-trigger payloads stay out until their separate policy contracts are ratified.
+authenticated Omi chat principal. Search returns compact handles; playbook
+bodies are fetched only by an explicit second tool call. Historical fact
+search is a separate bounded, canonical-only seam; playbook history and trigger
+payloads stay out until their separate policy contracts are ratified.
 """
 
 from __future__ import annotations
@@ -34,6 +35,11 @@ logger = logging.getLogger(__name__)
 MAX_KNOWLEDGE_QUERY_CHARACTERS = 500
 MAX_KNOWLEDGE_SEARCH_LIMIT = 20
 MAX_KNOWLEDGE_RESULT_CHARACTERS = 12_000
+MAX_HISTORICAL_FACT_CONTENT_CHARACTERS = 600
+HISTORICAL_OUTPUT_TRUNCATION_NOTICE = "[Historical output is bounded; use a narrower exact-token query.]"
+HISTORICAL_PROVIDER_PARTIAL_NOTICE = (
+    "[Partial historical search: the canonical provider window or read budget ended; this is not exhaustive.]"
+)
 MAX_PLAYBOOK_ID_CHARACTERS = 256
 MAX_PLAYBOOK_DESCRIPTION_CHARACTERS = 600
 _PLAYBOOK_ID_PATTERN = re.compile(r"[A-Za-z0-9._:-]+")
@@ -136,6 +142,93 @@ def search_current_knowledge(
     ][:limit]
 
 
+def _is_historical_fact_memory(memory: MemoryDB, *, uid: str) -> bool:
+    """Keep the agent seam fact-only even if the service grows new history kinds."""
+
+    kind = memory.kind.value if isinstance(memory.kind, MemoryKind) else str(memory.kind or "")
+    return (
+        memory.uid == uid
+        and memory.ledger_schema_version == LEDGER_SCHEMA_VERSION
+        and kind == MemoryKind.fact.value
+        and memory.intent_backed
+        and not memory.is_locked
+        and (memory.user_review is False or memory.invalid_at is not None or memory.superseded_by is not None)
+    )
+
+
+def _format_historical_fact_results(
+    rows: Iterable[MemoryDB],
+    *,
+    query: str,
+    truncated: bool,
+) -> str:
+    """Render bounded historical fact handles without claiming exhaustive retrieval."""
+
+    lines = [f"Canonical historical facts matching {query!r}:"]
+    count = 0
+    output_truncated = False
+    # Reserve both disclosures while admitting rows. The output notice is
+    # reserved even when not ultimately needed so adding it after the first
+    # rejected row cannot push an otherwise fitting result over the hard cap.
+    reserved_footers = [HISTORICAL_OUTPUT_TRUNCATION_NOTICE]
+    if truncated:
+        reserved_footers.append(HISTORICAL_PROVIDER_PARTIAL_NOTICE)
+
+    def fits(candidate: str) -> bool:
+        return len("\n".join(lines + [candidate] + reserved_footers)) <= MAX_KNOWLEDGE_RESULT_CHARACTERS
+
+    for row in rows:
+        if row.user_review is False:
+            state = "rejected"
+        elif row.superseded_by:
+            state = "superseded"
+        elif row.invalid_at is not None:
+            state = "closed"
+        else:
+            state = "historical"
+        # Bound the raw string before normalization; a malformed oversized
+        # document must not make whitespace splitting unbounded.
+        bounded_content = (row.content or "")[: MAX_HISTORICAL_FACT_CONTENT_CHARACTERS * 2]
+        content = " ".join(bounded_content.split())[:MAX_HISTORICAL_FACT_CONTENT_CHARACTERS]
+        suffix = f" slot={row.slot}" if row.slot else ""
+        validity: list[str] = []
+        for label, value in (("valid_at", row.valid_at), ("invalid_at", row.invalid_at)):
+            if isinstance(value, datetime):
+                validity.append(f"{label}={value.isoformat(timespec='seconds')}")
+        validity_suffix = f" ({', '.join(validity)})" if validity else ""
+        candidate = f"- [fact/{state}] {row.id}{suffix}{validity_suffix}: {content}"
+        if not fits(candidate) and validity_suffix:
+            # Keep the compact validity fields opportunistic: if only their
+            # metadata would cross the hard cap, retain the bounded fact line.
+            candidate = f"- [fact/{state}] {row.id}{suffix}: {content}"
+        if not fits(candidate):
+            output_truncated = True
+            break
+        lines.append(candidate)
+        count += 1
+
+    if count == 0:
+        lines.append("No canonical historical facts found in the bounded provider window.")
+    if output_truncated:
+        lines.append(HISTORICAL_OUTPUT_TRUNCATION_NOTICE)
+    if truncated:
+        lines.append(HISTORICAL_PROVIDER_PARTIAL_NOTICE)
+    rendered = "\n".join(lines)
+    if len(rendered) > MAX_KNOWLEDGE_RESULT_CHARACTERS:
+        # The admission check above reserves both notices. Keep a defensive
+        # fail-closed fallback in case future header/footer edits violate that
+        # invariant rather than returning an over-budget tool result.
+        rendered = "\n".join(
+            [
+                lines[0],
+                "Historical result omitted because the bounded output budget was reached.",
+                HISTORICAL_OUTPUT_TRUNCATION_NOTICE,
+                *([HISTORICAL_PROVIDER_PARTIAL_NOTICE] if truncated else []),
+            ]
+        )
+    return rendered
+
+
 def read_current_playbook(uid: str, memory_id: str, *, db_client: Any) -> Optional[MemoryItem]:
     """Read one current chat-visible primary-user playbook, or fail closed."""
 
@@ -208,6 +301,51 @@ def search_knowledge(
 
 
 @tool
+def search_historical_facts(
+    query: str,
+    limit: int = 8,
+    config: RunnableConfig = None,  # type: ignore[reportAssignmentType]
+) -> str:
+    """Search bounded canonical historical facts for the authenticated owner.
+
+    Matching uses the canonical service's exact lexical token semantics over
+    fact content and structured fact fields.  This tool does not expand aliases,
+    search legacy/vector storage, search playbook bodies or trigger conditions,
+    or claim exhaustive retrieval.  Partial provider-window results are marked
+    explicitly for the agent.
+    """
+
+    normalized_query = " ".join((query or "").split())
+    if not normalized_query or len(normalized_query) > MAX_KNOWLEDGE_QUERY_CHARACTERS:
+        return "Error: query must be non-empty and at most 500 characters"
+    if limit < 1 or limit > MAX_KNOWLEDGE_SEARCH_LIMIT:
+        return f"Error: limit must be between 1 and {MAX_KNOWLEDGE_SEARCH_LIMIT}"
+    uid = _resolve_uid(config)
+    if not uid:
+        return "Error: User ID not found in configuration"
+
+    try:
+        from database._client import get_firestore_client
+
+        page = MemoryService(db_client=get_firestore_client()).search_ledger_history_page(
+            uid,
+            normalized_query,
+            limit=limit,
+        )
+        rows = [match.memory for match in page.matches if _is_historical_fact_memory(match.memory, uid=uid)]
+        return _format_historical_fact_results(
+            rows,
+            query=normalized_query,
+            truncated=page.truncated,
+        )
+    except ValueError:
+        return "Error: historical query must contain a searchable exact token"
+    except Exception as exc:
+        logger.error("search_historical_facts failed error_type=%s", type(exc).__name__)
+        return "Error searching historical facts"
+
+
+@tool
 def read_playbook(
     memory_id: str,
     config: RunnableConfig = None,  # type: ignore[reportAssignmentType]
@@ -248,5 +386,6 @@ __all__ = [
     "read_current_playbook",
     "read_playbook",
     "search_current_knowledge",
+    "search_historical_facts",
     "search_knowledge",
 ]
