@@ -712,6 +712,19 @@ CURRENT_CHAT_SESSION_ORDERED_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('plugin_id'), _desc('created_at'), _desc('__name__')),
 )
 
+# get_app_messages and get_messages' app-scoped branch (no chat_session_id) both
+# filter messages by plugin_id and order by created_at descending. Neither built
+# this through the registry, so no composite index was ever declared for it and
+# a self-host without prod's historically hand-created index 400s with
+# FailedPrecondition on GET /v1/messages (chat.py:get_messages).
+MESSAGES_BY_APP_ORDERED_QUERY = FirestoreQuerySpec(
+    identifier='messages_by_app_created_at',
+    collection_group='messages',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('plugin_id', '==', 'app_id'),),
+    index_fields=(_asc('plugin_id'), _desc('created_at'), _desc('__name__')),
+)
+
 MEETING_RECEIPTS_DUE_QUERY = FirestoreQuerySpec(
     identifier='conversation_finalization_jobs_meeting_receipts_due',
     collection_group='conversation_finalization_jobs',
@@ -781,6 +794,7 @@ QUERY_SPECS = (
     CURRENT_CHAT_SESSION_ORDERED_QUERY,
     MEETING_RECEIPTS_DUE_QUERY,
     HOURLY_USAGE_PLAN_ATTRIBUTION_QUERY,
+    MESSAGES_BY_APP_ORDERED_QUERY,
 )
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)
