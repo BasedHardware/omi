@@ -2583,6 +2583,15 @@ actor RewindDatabase {
       try Self.installScreenActivitySyncStateSchema(db)
     }
 
+    // Ledger fields are an additive mirror only. Legacy rows remain intact and
+    // fail closed in the prompt projection until a canonical payload refreshes
+    // their metadata.
+    migrator.registerMigration("addMemoryLedgerMetadata") { db in
+      try db.alter(table: "memories") { t in
+        t.add(column: "ledgerMetadataJson", .text)
+      }
+    }
+
     try migrator.migrate(queue)
     try ContextBucketSchema.removeMigratedLegacyDefaults(
       afterMigrating: queue,

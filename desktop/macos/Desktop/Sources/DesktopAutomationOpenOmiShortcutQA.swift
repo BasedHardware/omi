@@ -20,6 +20,51 @@ extension DesktopAutomationActionRegistry {
       }
 
       register(
+        name: "knowledge_ledger_foundation_contracts",
+        summary: "Exercise the pure knowledge-ledger prompt and trigger projections. DEBUG non-prod only."
+      ) { _ in
+        guard AppBuild.isNonProduction else {
+          return ["error": "knowledge_ledger_foundation_contracts is disabled on production bundles"]
+        }
+        let prompt = KnowledgeLedgerPromptProjection(
+          rows: [
+            .init(
+              id: "mem_profile",
+              content: "Paris",
+              metadata: [
+                "ledger_schema_version": KnowledgeLedgerPromptProjection.schemaVersion,
+                "kind": "fact",
+                "subject_scope": "primary_user",
+                "slot": "home_city",
+                "intent_backed": "true",
+                "status": "active",
+              ]
+            )
+          ]
+        ).render(userName: "Test")
+        let row = try KnowledgeLedgerTriggerRow(
+          id: "trigger_focus",
+          triggerCondition: [
+            "schema_version": "jit_trigger.v1",
+            "keywords": ["focus"],
+          ]
+        )
+        guard case .success(let trigger) = KnowledgeLedgerTriggerCompiler.compile(row) else {
+          return ["error": "knowledge ledger trigger fixture did not compile"]
+        }
+        let decision = KnowledgeLedgerTriggerEvaluator.evaluate(
+          trigger,
+          observation: .init(text: "focus now"),
+          day: "2026-08-23"
+        )
+        return [
+          "prompt_contains_profile_fact": prompt?.contains("home_city: Paris") == true ? "true" : "false",
+          "trigger_status": decision.status.rawValue,
+          "trigger_wakeups_used": "\(decision.wakeupsUsed)",
+        ]
+      }
+
+      register(
         name: "set_open_omi_shortcut",
         summary: "Select an Open Omi shortcut preset through the production settings mutation. DEBUG non-prod only.",
         params: ["preset"]

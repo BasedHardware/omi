@@ -176,6 +176,9 @@ struct ServerMemory: Decodable, Identifiable {
   let captureDeviceIds: [String]
   // Short headline for notification preview (advice/tips only)
   let headline: String?
+  /// Additive canonical-ledger fields. Kept as strings so an older desktop
+  /// can mirror unknown ledger values without making them prompt-eligible.
+  let ledgerMetadata: [String: String]
 
   enum CodingKeys: String, CodingKey {
     case id, content, category, reviewed, visibility, scoring, source, confidence, tags, reasoning,
@@ -198,6 +201,19 @@ struct ServerMemory: Decodable, Identifiable {
     case windowTitle = "window_title"
     case primaryCaptureDevice = "primary_capture_device"
     case captureDeviceIds = "capture_device_ids"
+    case ledgerSchemaVersion = "ledger_schema_version"
+    case ledgerKind = "kind"
+    case ledgerSubjectScope = "subject_scope"
+    case ledgerSubjectEntityId = "subject_entity_id"
+    case ledgerSlot = "slot"
+    case ledgerBody = "body"
+    case ledgerIntentBacked = "intent_backed"
+    case ledgerCurationWeight = "curation_weight"
+    case ledgerStatus = "status"
+    case ledgerInvalidAt = "invalid_at"
+    case ledgerValidTo = "valid_to"
+    case ledgerSupersededBy = "superseded_by"
+    case ledgerValidAt = "valid_at"
   }
 
   init(from decoder: Decoder) throws {
@@ -300,6 +316,31 @@ struct ServerMemory: Decodable, Identifiable {
     primaryCaptureDevice = wire?.primaryCaptureDevice
     captureDeviceIds = wire?.captureDeviceIds ?? []
     headline = wire?.headline
+
+    var metadata: [String: String] = [:]
+    func addString(_ key: CodingKeys) {
+      if let value = try? container.decode(String.self, forKey: key), !value.isEmpty {
+        metadata[key.rawValue] = value
+      }
+    }
+    addString(.ledgerSchemaVersion)
+    addString(.ledgerKind)
+    addString(.ledgerSubjectScope)
+    addString(.ledgerSubjectEntityId)
+    addString(.ledgerSlot)
+    addString(.ledgerBody)
+    addString(.ledgerStatus)
+    addString(.ledgerInvalidAt)
+    addString(.ledgerValidTo)
+    addString(.ledgerSupersededBy)
+    addString(.ledgerValidAt)
+    if let value = try? container.decode(Bool.self, forKey: .ledgerIntentBacked) {
+      metadata[CodingKeys.ledgerIntentBacked.rawValue] = value ? "true" : "false"
+    }
+    if let value = try? container.decode(Int.self, forKey: .ledgerCurationWeight) {
+      metadata[CodingKeys.ledgerCurationWeight.rawValue] = String(value)
+    }
+    ledgerMetadata = metadata
   }
 
   var isPublic: Bool {

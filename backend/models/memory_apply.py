@@ -406,6 +406,17 @@ def _materialize_memory_item(
         subject_entity_id=patch.subject_entity_id,
         predicate=patch.predicate,
         arguments=dict(patch.arguments or {}),
+        ledger_schema_version=patch.ledger_schema_version,
+        kind=patch.kind,
+        subject_scope=patch.subject_scope,
+        slot=patch.slot,
+        body=patch.body,
+        valid_from=patch.valid_from or now,
+        valid_to=patch.valid_to,
+        curation_weight=patch.curation_weight,
+        trigger_condition=dict(patch.trigger_condition or {}),
+        intent_backed=patch.intent_backed,
+        write_reason=patch.write_reason,
     )
 
 
@@ -487,6 +498,21 @@ def _apply_update_memory_item(
         updates["visibility"] = patch.target_visibility
     if patch.target_user_asserted is not None:
         updates["user_asserted"] = patch.target_user_asserted
+    for ledger_key in (
+        "ledger_schema_version",
+        "kind",
+        "subject_scope",
+        "slot",
+        "body",
+        "valid_from",
+        "valid_to",
+        "curation_weight",
+        "trigger_condition",
+        "intent_backed",
+        "write_reason",
+    ):
+        if ledger_key in patch.model_fields_set:
+            updates[ledger_key] = getattr(patch, ledger_key)
     if extra_updates:
         updates.update(extra_updates)
     if patch.clear_graph_assertion:
@@ -608,7 +634,12 @@ def apply_long_term_patch_transaction(
     ):
         if optional_key in raw:
             extra_item_updates[optional_key] = raw.pop(optional_key)
-    for timestamp_key in ("last_corroborated_at", "captured_at", "updated_at", "expires_at"):
+    for timestamp_key in (
+        "last_corroborated_at",
+        "captured_at",
+        "updated_at",
+        "expires_at",
+    ):
         if timestamp_key in extra_item_updates and isinstance(extra_item_updates[timestamp_key], str):
             coerced = _coerce_iso_timestamp(extra_item_updates[timestamp_key], field=timestamp_key)
             if coerced is None:
@@ -648,6 +679,16 @@ def apply_long_term_patch_transaction(
             control_state=control_state,
             operation=operation,
             reason="patch evidence_ids do not match operation evidence_ids",
+        )
+    if (
+        patch.ledger_schema_version == "knowledge_ledger.v1"
+        and operation.operation_type != MemoryOperationType.ledger_mutation
+    ):
+        return ApplyResult(
+            status=ApplyStatus.invalid_patch,
+            control_state=control_state,
+            operation=operation,
+            reason="knowledge ledger writes require ledger_mutation authority",
         )
     if (
         _operation_digest_for_patch(
@@ -989,12 +1030,43 @@ def apply_long_term_patch_transaction(
                     operation=operation,
                     reason=f"superseded target is not active: {superseded_id}",
                 )
+            if patch.ledger_schema_version == "knowledge_ledger.v1":
+                if existing_superseded.ledger_schema_version != "knowledge_ledger.v1":
+                    return ApplyResult(
+                        status=ApplyStatus.invalid_patch,
+                        control_state=control_state,
+                        operation=operation,
+                        reason="knowledge ledger amendment may supersede only ledger rows",
+                    )
+                if (
+                    existing_superseded.kind != patch.kind
+                    or existing_superseded.subject_scope != patch.subject_scope
+                    or existing_superseded.subject_entity_id != patch.subject_entity_id
+                ):
+                    return ApplyResult(
+                        status=ApplyStatus.invalid_patch,
+                        control_state=control_state,
+                        operation=operation,
+                        reason="knowledge ledger amendment must preserve kind and subject identity",
+                    )
+            superseded_at = max(datetime.now(timezone.utc), existing_superseded.updated_at)
+            if patch.ledger_schema_version == "knowledge_ledger.v1":
+                superseded_at = max(
+                    superseded_at,
+                    memory_item.valid_from or memory_item.captured_at,
+                    existing_superseded.valid_from or existing_superseded.captured_at,
+                )
             superseded_item = existing_superseded.model_copy(
                 update={
                     "canonical_memory_id": memory_item.memory_id,
                     "status": MemoryItemStatus.superseded,
                     "superseded_by": memory_item.memory_id,
-                    "updated_at": max(datetime.now(timezone.utc), existing_superseded.updated_at),
+                    "updated_at": superseded_at,
+                    "valid_to": (
+                        superseded_at
+                        if patch.ledger_schema_version == "knowledge_ledger.v1"
+                        else existing_superseded.valid_to
+                    ),
                     "ledger_commit_id": commit_id,
                     "ledger_sequence": next_control.commit_sequence,
                     "version": existing_superseded.version + 1,

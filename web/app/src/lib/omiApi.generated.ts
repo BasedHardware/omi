@@ -948,6 +948,30 @@ export interface ChartDataset {
   label: string;
 }
 
+export interface ChatEvidenceEnvelope {
+  references?: Array<ChatEvidenceReference>;
+  request_id?: string | null;
+  schema_version?: number;
+}
+
+export interface ChatEvidenceReference {
+  captured_at_ms?: number | null;
+  conversation_id?: string | null;
+  end_ms?: number | null;
+  error_code?: string | null;
+  error_message?: string | null;
+  frame_id?: string | null;
+  id: string;
+  kind: string;
+  metadata?: Record<string, unknown>;
+  request_id?: string | null;
+  segment_id?: string | null;
+  start_ms?: number | null;
+  state: string;
+  summary?: string | null;
+  title?: string | null;
+}
+
 export interface ChatFirstSubject {
   id: string;
   kind: "task" | "goal" | "capture" | "cold_start";
@@ -2200,6 +2224,8 @@ export interface KnowledgeGraphResponse {
   truncated?: boolean;
 }
 
+export type LedgerWriteReason = "direct_user_statement" | "explicit_remember" | "agent_reusable_conclusion" | "recurring_workflow" | "standing_trigger" | "onboarding" | "daily_reconciliation" | "legacy_migration";
+
 export interface LegacyMaterializePromptsResponse {
   intents?: Array<LegacyProactiveIntent>;
 }
@@ -2420,25 +2446,30 @@ export type MemoryCategory = "interesting" | "system" | "manual" | "workflow" | 
 export interface MemoryDB {
   app_id?: string | null;
   arguments?: Record<string, unknown>;
+  body?: string | null;
   capture_confidence?: number | null;
   capture_device_ids?: Array<string>;
   category?: MemoryCategory;
   content: string;
   conversation_id?: string | null;
   created_at: string;
+  curation_weight?: number;
   data_protection_level?: string | null;
   durability?: string | null;
   edited?: boolean;
   evidence?: Array<Evidence>;
   headline?: string | null;
   id: string;
+  intent_backed?: boolean;
   invalid_at?: string | null;
   is_baseline?: boolean;
   is_dismissed?: boolean;
   is_locked?: boolean;
   is_read?: boolean;
   kg_extracted?: boolean;
+  kind?: MemoryKind | null;
   layer: string | null;
+  ledger_schema_version?: string | null;
   manually_added?: boolean;
   memory_id?: string | null;
   memory_tier?: MemoryLayer | null;
@@ -2448,10 +2479,13 @@ export interface MemoryDB {
   qualifiers?: Record<string, unknown>;
   reviewed?: boolean;
   scoring?: string | null;
+  slot?: string | null;
   subject_attribution?: SubjectAttribution;
   subject_entity_id?: string | null;
+  subject_scope?: MemorySubjectScope | null;
   superseded_by?: string | null;
   tags?: Array<string>;
+  trigger_condition?: Record<string, unknown>;
   uid: string;
   uncertainty_reasons?: Array<string>;
   updated_at: string;
@@ -2459,7 +2493,10 @@ export interface MemoryDB {
   valid_at?: string | null;
   veracity?: number | null;
   visibility?: string | null;
+  write_reason?: LedgerWriteReason | null;
 }
+
+export type MemoryKind = "fact" | "document" | "trigger";
 
 export type MemoryLayer = "short_term" | "long_term" | "archive";
 
@@ -2483,6 +2520,8 @@ export interface MemoryReviewItemResponse {
   status?: string;
   [key: string]: unknown;
 }
+
+export type MemorySubjectScope = "primary_user" | "user_owned_project" | "user_relationship" | "third_party";
 
 export interface MemorySummaryRatingResponse {
   has_rating: boolean;
@@ -2521,6 +2560,7 @@ export interface Message {
   content_blocks?: Array<Record<string, unknown>>;
   created_at: string;
   data_protection_level?: string | null;
+  evidence?: ChatEvidenceEnvelope | null;
   files?: Array<FileChat>;
   files_id?: Array<string>;
   from_external_integration?: boolean;
@@ -2963,6 +3003,7 @@ export interface ResponseMessage {
   content_blocks?: Array<Record<string, unknown>>;
   created_at: string;
   data_protection_level?: string | null;
+  evidence?: ChatEvidenceEnvelope | null;
   files?: Array<FileChat>;
   files_id?: Array<string>;
   from_external_integration?: boolean;
@@ -4286,6 +4327,8 @@ export interface OmiApiSchemas {
   "ChartData": ChartData;
   "ChartDataPoint": ChartDataPoint;
   "ChartDataset": ChartDataset;
+  "ChatEvidenceEnvelope": ChatEvidenceEnvelope;
+  "ChatEvidenceReference": ChatEvidenceReference;
   "ChatFirstSubject": ChatFirstSubject;
   "ChatMessageCountResponse": ChatMessageCountResponse;
   "ChatQuotaUnit": ChatQuotaUnit;
@@ -4457,6 +4500,7 @@ export interface OmiApiSchemas {
   "InterventionRecord": InterventionRecord;
   "InterventionSurface": InterventionSurface;
   "KnowledgeGraphResponse": KnowledgeGraphResponse;
+  "LedgerWriteReason": LedgerWriteReason;
   "LegacyMaterializePromptsResponse": LegacyMaterializePromptsResponse;
   "LegacyProactiveIntent": LegacyProactiveIntent;
   "LinkCalendarEventRequest": LinkCalendarEventRequest;
@@ -4490,11 +4534,13 @@ export interface OmiApiSchemas {
   "MemoryAssistantSettings": MemoryAssistantSettings;
   "MemoryCategory": MemoryCategory;
   "MemoryDB": MemoryDB;
+  "MemoryKind": MemoryKind;
   "MemoryLayer": MemoryLayer;
   "MemoryLinkSpec": MemoryLinkSpec;
   "MemoryMutationResponse": MemoryMutationResponse;
   "MemoryReadStatusRequest": MemoryReadStatusRequest;
   "MemoryReviewItemResponse": MemoryReviewItemResponse;
+  "MemorySubjectScope": MemorySubjectScope;
   "MemorySummaryRatingResponse": MemorySummaryRatingResponse;
   "MemoryValueRequest": MemoryValueRequest;
   "MentorNotificationSettingsResponse": MentorNotificationSettingsResponse;

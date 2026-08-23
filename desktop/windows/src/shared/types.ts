@@ -1,6 +1,7 @@
 // BYOK provider key types used by the OmiBridgeApi surface below.
 import type { ByokEnrollResult, ByokKeys, ByokProvider } from './byok'
 import type { ChatContentBlock } from './chatContent'
+import type { ChatEvidenceReferenceEnvelope } from './knowledgeLedger'
 import type {
   McpConnectorId,
   McpExportsSnapshot,
@@ -103,6 +104,8 @@ export type ChatMessage = {
   chartData?: unknown
   /** Whether the backend flagged this turn to prompt the user for an NPS rating. */
   askForNps?: boolean
+  /** Optional bounded supporting evidence; message text remains authoritative. */
+  evidence?: ChatEvidenceReferenceEnvelope
 }
 
 /**
@@ -127,7 +130,12 @@ export type ChatMessage = {
  * See lib/sync/outbox.ts for the transition rules and dedupe strategy.
  */
 export type ConversationSyncState =
-  'local_only' | 'pending' | 'posting' | 'done' | 'failed' | 'unconfirmed'
+  | 'local_only'
+  | 'pending'
+  | 'posting'
+  | 'done'
+  | 'failed'
+  | 'unconfirmed'
 
 /** One transcript segment in the `/v1/conversations/from-segments` request shape
  * (snake_case matches the wire verbatim). `start`/`end` are WALL-CLOCK
@@ -427,6 +435,8 @@ export type BarChatMessage = {
    *  structured-clone bridge; declared here so the bar's renderer type-checks and
    *  the projection stays honest. */
   attachments?: ChatAttachment[]
+  /** Optional bounded supporting evidence; unavailable refs are non-actionable. */
+  evidence?: ChatEvidenceReferenceEnvelope
 }
 /** The bar orb's coarse activity, derived in the main window's ChatBridgeHost:
  *  'sending' while a reply streams, 'speaking' while a spoken (TTS) reply plays. */
@@ -1636,7 +1646,13 @@ export type MainChatEvent =
       output: string
     }
   /** The final assistant text (emitted on a successful turn before run_finished). */
-  | { type: 'completed'; requestId: string; runId: string; text: string }
+  | {
+      type: 'completed'
+      requestId: string
+      runId: string
+      text: string
+      evidence?: ChatEvidenceReferenceEnvelope
+    }
   /** Terminal event — the turn is done. The renderer stops the spinner here. */
   | {
       type: 'run_finished'
@@ -1651,6 +1667,8 @@ export type MainChatResult = {
   requestId: string
   ok: boolean
   text: string
+  /** Optional additive evidence; answer text remains authoritative. */
+  evidence?: ChatEvidenceReferenceEnvelope
   terminalStatus: 'succeeded' | 'failed' | 'cancelled'
   costUsd?: number
   error?: string
@@ -1709,7 +1727,13 @@ export type MemoryExportResult = {
 }
 
 export type IndexedFileType =
-  'document' | 'code' | 'image' | 'media' | 'archive' | 'application' | 'other'
+  | 'document'
+  | 'code'
+  | 'image'
+  | 'media'
+  | 'archive'
+  | 'application'
+  | 'other'
 
 export type IndexedFileRecord = {
   path: string
@@ -1803,7 +1827,14 @@ export type RebuildResult = {
 // the macOS-parity local graph synthesized from indexed_files + memories and
 // consumed by the chat pre-step. Never conflate the two mechanisms.
 export type LocalKGNodeType =
-  'project' | 'app' | 'technology' | 'person' | 'org' | 'interest' | 'file_group' | 'card' // background-synthesized natural-language overview served to the chat floor
+  | 'project'
+  | 'app'
+  | 'technology'
+  | 'person'
+  | 'org'
+  | 'interest'
+  | 'file_group'
+  | 'card' // background-synthesized natural-language overview served to the chat floor
 
 export type LocalKGNode = {
   id: string // `${slug(label)}:${nodeType}` — stable across re-synthesis

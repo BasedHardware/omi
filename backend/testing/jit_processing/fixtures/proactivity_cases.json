@@ -1,0 +1,302 @@
+{
+  "schema_version": "jit_proactivity_eval.v1",
+  "candidate_config": {
+    "ratified": false,
+    "wakeup_on": "match_only",
+    "triage_action": "defer_without_wakeup",
+    "ratified_thresholds": null
+  },
+  "exposure": {
+    "source": "synthetic_fixture",
+    "active_hours": 8.0,
+    "active_days": 2.0,
+    "full_agent_wakeups": 2,
+    "cost": {
+      "currency": "USD",
+      "local_evaluation_count": 16,
+      "full_agent_wakeup_count": 2,
+      "local_evaluation_unit_cost_usd": 0.0,
+      "full_agent_wakeup_unit_cost_usd": 0.12,
+      "total_cost_usd": 0.24
+    }
+  },
+  "cases": [
+    {
+      "case_id": "entity-exact-match",
+      "category": "entity",
+      "condition": {
+        "entity_aliases": {"release_owner": ["David", "Dave"]}
+      },
+      "observation": {
+        "event_id": "synthetic-entity-001",
+        "text": "David reviewed the release.",
+        "entity_labels": ["David"]
+      },
+      "expected": {
+        "status": "match",
+        "reason": "all_conditions_satisfied",
+        "matched_conditions": ["entity:release_owner"],
+        "missing_conditions": [],
+        "matched_fraction": 1.0
+      }
+    },
+    {
+      "case_id": "entity-ambiguous-alias",
+      "category": "entity",
+      "condition": {
+        "entity_aliases": {"alice": ["Alex"], "alex": ["Alex"]}
+      },
+      "observation": {
+        "event_id": "synthetic-entity-002",
+        "text": "Alex discussed the release.",
+        "entity_labels": ["Alex"]
+      },
+      "expected": {
+        "status": "triage",
+        "reason": "insufficient_or_ambiguous_context",
+        "matched_conditions": [],
+        "missing_conditions": ["entity:alex", "entity:alice"],
+        "matched_fraction": 0.0
+      }
+    },
+    {
+      "case_id": "keyword-exact-match",
+      "category": "keyword",
+      "condition": {"keywords": ["budget"]},
+      "observation": {
+        "event_id": "synthetic-keyword-001",
+        "text": "The budget review starts now."
+      },
+      "expected": {
+        "status": "match",
+        "reason": "all_conditions_satisfied",
+        "matched_conditions": ["keywords"],
+        "missing_conditions": [],
+        "matched_fraction": 1.0
+      }
+    },
+    {
+      "case_id": "keyword-boundary-negative",
+      "category": "keyword",
+      "condition": {"keywords": ["budget"]},
+      "observation": {
+        "event_id": "synthetic-keyword-002",
+        "text": "This is a budgetary note only."
+      },
+      "expected": {
+        "status": "no_match",
+        "reason": "condition_not_satisfied",
+        "matched_conditions": [],
+        "missing_conditions": [],
+        "matched_fraction": 0.0
+      }
+    },
+    {
+      "case_id": "app-window-match",
+      "category": "app_window",
+      "condition": {"apps": ["Slack"], "windows": ["#release"]},
+      "observation": {
+        "event_id": "synthetic-app-001",
+        "app_name": "Slack",
+        "window_title": "#release — Omi"
+      },
+      "expected": {
+        "status": "match",
+        "reason": "all_conditions_satisfied",
+        "matched_conditions": ["app", "window"],
+        "missing_conditions": [],
+        "matched_fraction": 1.0
+      }
+    },
+    {
+      "case_id": "app-window-unavailable-device",
+      "category": "unavailable_device",
+      "condition": {"apps": ["Slack"], "windows": ["#release"]},
+      "observation": {
+        "event_id": "synthetic-device-001",
+        "text": "The local device did not provide app or window context."
+      },
+      "expected": {
+        "status": "no_match",
+        "reason": "condition_not_satisfied",
+        "matched_conditions": [],
+        "missing_conditions": [],
+        "matched_fraction": 0.0
+      }
+    },
+    {
+      "case_id": "time-calendar-match",
+      "category": "time_calendar",
+      "condition": {
+        "time": {"weekdays": [6], "start": "09:00", "end": "17:00", "timezone": "UTC"},
+        "calendar": {"event_keywords": ["release review"]}
+      },
+      "observation": {
+        "event_id": "synthetic-calendar-001",
+        "occurred_at": "2026-08-23T14:30:00+00:00",
+        "calendar_events": [{"title": "Release review", "event_type": "meeting"}]
+      },
+      "expected": {
+        "status": "match",
+        "reason": "all_conditions_satisfied",
+        "matched_conditions": ["calendar", "time"],
+        "missing_conditions": [],
+        "matched_fraction": 1.0
+      }
+    },
+    {
+      "case_id": "time-window-negative",
+      "category": "time_calendar",
+      "condition": {
+        "time": {"weekdays": [6], "start": "09:00", "end": "17:00", "timezone": "UTC"}
+      },
+      "observation": {
+        "event_id": "synthetic-time-001",
+        "occurred_at": "2026-08-23T18:00:00+00:00"
+      },
+      "expected": {
+        "status": "no_match",
+        "reason": "condition_not_satisfied",
+        "matched_conditions": [],
+        "missing_conditions": [],
+        "matched_fraction": 0.0
+      }
+    },
+    {
+      "case_id": "calendar-unavailable-device",
+      "category": "unavailable_device",
+      "condition": {"calendar": {"event_types": ["meeting"]}},
+      "observation": {
+        "event_id": "synthetic-device-002",
+        "text": "Calendar access is unavailable."
+      },
+      "expected": {
+        "status": "triage",
+        "reason": "insufficient_or_ambiguous_context",
+        "matched_conditions": [],
+        "missing_conditions": ["calendar"],
+        "matched_fraction": 0.0
+      }
+    },
+    {
+      "case_id": "embedding-clear-match",
+      "category": "embedding",
+      "condition": {"embedding": {"prototype_id": "release-review", "min_similarity": 0.8}},
+      "observation": {
+        "event_id": "synthetic-embedding-001",
+        "text": "The semantic context is close to release review.",
+        "embedding_scores": {"release-review": 0.91}
+      },
+      "expected": {
+        "status": "match",
+        "reason": "all_conditions_satisfied",
+        "matched_conditions": ["embedding:release-review"],
+        "missing_conditions": [],
+        "matched_fraction": 1.0
+      }
+    },
+    {
+      "case_id": "embedding-ambiguous-boundary",
+      "category": "embedding_ambiguous_hit",
+      "condition": {"embedding": {"prototype_id": "release-review", "min_similarity": 0.8}},
+      "observation": {
+        "event_id": "synthetic-embedding-002",
+        "text": "The score is exactly on the candidate boundary.",
+        "embedding_scores": {"release-review": 0.8}
+      },
+      "expected": {
+        "status": "match",
+        "reason": "all_conditions_satisfied",
+        "matched_conditions": ["embedding:release-review"],
+        "missing_conditions": [],
+        "matched_fraction": 1.0
+      },
+      "limitation": "The current pure contract accepts a single prototype score at min_similarity; it has no multi-hit ambiguity state."
+    },
+    {
+      "case_id": "embedding-negative",
+      "category": "embedding",
+      "condition": {"embedding": {"prototype_id": "release-review", "min_similarity": 0.8}},
+      "observation": {
+        "event_id": "synthetic-embedding-003",
+        "text": "The semantic context is unrelated.",
+        "embedding_scores": {"release-review": 0.79}
+      },
+      "expected": {
+        "status": "no_match",
+        "reason": "condition_not_satisfied",
+        "matched_conditions": [],
+        "missing_conditions": [],
+        "matched_fraction": 0.0
+      }
+    },
+    {
+      "case_id": "embedding-unavailable-device",
+      "category": "unavailable_device",
+      "condition": {"embedding": {"prototype_id": "release-review", "min_similarity": 0.8}},
+      "observation": {
+        "event_id": "synthetic-device-003",
+        "text": "Embedding capture is unavailable."
+      },
+      "expected": {
+        "status": "triage",
+        "reason": "insufficient_or_ambiguous_context",
+        "matched_conditions": [],
+        "missing_conditions": ["embedding:release-review"],
+        "matched_fraction": 0.0
+      }
+    },
+    {
+      "case_id": "multi-context-unavailable-device",
+      "category": "unavailable_device",
+      "condition": {
+        "time": {"weekdays": [6], "start": "09:00", "end": "17:00", "timezone": "UTC"},
+        "calendar": {"event_types": ["meeting"]},
+        "embedding": {"prototype_id": "release-review", "min_similarity": 0.8}
+      },
+      "observation": {
+        "event_id": "synthetic-device-004",
+        "text": "No local time, calendar, or embedding evidence was supplied."
+      },
+      "expected": {
+        "status": "triage",
+        "reason": "insufficient_or_ambiguous_context",
+        "matched_conditions": [],
+        "missing_conditions": ["calendar", "embedding:release-review", "time"],
+        "matched_fraction": 0.0
+      }
+    },
+    {
+      "case_id": "any-mode-app-match",
+      "category": "app_window",
+      "condition": {"match_mode": "any", "keywords": ["budget"], "apps": ["Slack"]},
+      "observation": {
+        "event_id": "synthetic-any-001",
+        "app_name": "Slack"
+      },
+      "expected": {
+        "status": "match",
+        "reason": "one_condition_satisfied",
+        "matched_conditions": ["app"],
+        "missing_conditions": [],
+        "matched_fraction": 0.5
+      }
+    },
+    {
+      "case_id": "any-mode-no-signal",
+      "category": "negative",
+      "condition": {"match_mode": "any", "keywords": ["budget"], "apps": ["Slack"]},
+      "observation": {
+        "event_id": "synthetic-any-002",
+        "text": "No matching local signal."
+      },
+      "expected": {
+        "status": "no_match",
+        "reason": "no_condition_satisfied",
+        "matched_conditions": [],
+        "missing_conditions": [],
+        "matched_fraction": 0.0
+      }
+    }
+  ]
+}

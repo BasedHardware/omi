@@ -69,25 +69,30 @@ class GeneratedEvidence {
 class GeneratedMemoryDB {
   final String? appId;
   final Map<String, dynamic>? arguments;
+  final String? body;
   final double? captureConfidence;
   final List<String>? captureDeviceIds;
   final String category;
   final String content;
   final String? conversationId;
   final DateTime createdAt;
+  final int curationWeight;
   final String? dataProtectionLevel;
   final String? durability;
   final bool edited;
   final List<GeneratedEvidence>? evidence;
   final String? headline;
   final String id;
+  final bool intentBacked;
   final DateTime? invalidAt;
   final bool isBaseline;
   final bool isDismissed;
   final bool isLocked;
   final bool isRead;
   final bool kgExtracted;
+  final String? kind;
   final String? layer;
+  final String? ledgerSchemaVersion;
   final bool manuallyAdded;
   final String? memoryId;
   final String? memoryTier;
@@ -97,10 +102,13 @@ class GeneratedMemoryDB {
   final Map<String, dynamic>? qualifiers;
   final bool reviewed;
   final String? scoring;
+  final String? slot;
   final String subjectAttribution;
   final String? subjectEntityId;
+  final String? subjectScope;
   final String? supersededBy;
   final List<String>? tags;
+  final Map<String, dynamic>? triggerCondition;
   final String uid;
   final List<String>? uncertaintyReasons;
   final DateTime updatedAt;
@@ -108,29 +116,35 @@ class GeneratedMemoryDB {
   final DateTime? validAt;
   final double? veracity;
   final String? visibility;
+  final String? writeReason;
 
   const GeneratedMemoryDB({
     this.appId,
     this.arguments,
+    this.body,
     this.captureConfidence,
     this.captureDeviceIds,
     this.category = "interesting",
     required this.content,
     this.conversationId,
     required this.createdAt,
+    this.curationWeight = 0,
     this.dataProtectionLevel,
     this.durability,
     this.edited = false,
     this.evidence,
     this.headline,
     required this.id,
+    this.intentBacked = false,
     this.invalidAt,
     this.isBaseline = false,
     this.isDismissed = false,
     this.isLocked = false,
     this.isRead = false,
     this.kgExtracted = false,
+    this.kind,
     required this.layer,
+    this.ledgerSchemaVersion,
     this.manuallyAdded = false,
     this.memoryId,
     this.memoryTier,
@@ -140,10 +154,13 @@ class GeneratedMemoryDB {
     this.qualifiers,
     this.reviewed = false,
     this.scoring,
+    this.slot,
     this.subjectAttribution = "unknown",
     this.subjectEntityId,
+    this.subjectScope,
     this.supersededBy,
     this.tags,
+    this.triggerCondition,
     required this.uid,
     this.uncertaintyReasons,
     required this.updatedAt,
@@ -151,31 +168,37 @@ class GeneratedMemoryDB {
     this.validAt,
     this.veracity,
     this.visibility = "public",
+    this.writeReason,
   });
 
   factory GeneratedMemoryDB.fromJson(Map<String, dynamic> json) {
     return GeneratedMemoryDB(
       appId: _readFieldValue<String>(_readField(json, const ["app_id"]), "app_id", _readString, requiredField: false, nullable: true),
       arguments: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["arguments"]), "arguments", _readMap, requiredField: false, nullable: true),
+      body: _readFieldValue<String>(_readField(json, const ["body"]), "body", _readString, requiredField: false, nullable: true),
       captureConfidence: _readFieldValue<double>(_readField(json, const ["capture_confidence"]), "capture_confidence", _readDouble, requiredField: false, nullable: true),
       captureDeviceIds: _readFieldValue<List<String>>(_readField(json, const ["capture_device_ids"]), "capture_device_ids", _readStringList, requiredField: false, nullable: true),
       category: _required(_readFieldValue<String>(_readField(json, const ["category"]), "category", _readString, requiredField: false, nullable: false, defaultValue: "interesting"), "category"),
       content: _required(_readFieldValue<String>(_readField(json, const ["content"]), "content", _readString, requiredField: true, nullable: false), "content"),
       conversationId: _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: false, nullable: true),
       createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
+      curationWeight: _required(_readFieldValue<int>(_readField(json, const ["curation_weight"]), "curation_weight", _readInt, requiredField: false, nullable: false, defaultValue: 0), "curation_weight"),
       dataProtectionLevel: _readFieldValue<String>(_readField(json, const ["data_protection_level"]), "data_protection_level", _readString, requiredField: false, nullable: true),
       durability: _readFieldValue<String>(_readField(json, const ["durability"]), "durability", _readString, requiredField: false, nullable: true),
       edited: _required(_readFieldValue<bool>(_readField(json, const ["edited"]), "edited", _readBool, requiredField: false, nullable: false, defaultValue: false), "edited"),
       evidence: _readFieldValue<List<GeneratedEvidence>>(_readField(json, const ["evidence"]), "evidence", (value) => _readObjectList(value, GeneratedEvidence.fromJson), requiredField: false, nullable: true),
       headline: _readFieldValue<String>(_readField(json, const ["headline"]), "headline", _readString, requiredField: false, nullable: true),
       id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      intentBacked: _required(_readFieldValue<bool>(_readField(json, const ["intent_backed"]), "intent_backed", _readBool, requiredField: false, nullable: false, defaultValue: false), "intent_backed"),
       invalidAt: _readFieldValue<DateTime>(_readField(json, const ["invalid_at"]), "invalid_at", _readDateTime, requiredField: false, nullable: true),
       isBaseline: _required(_readFieldValue<bool>(_readField(json, const ["is_baseline"]), "is_baseline", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_baseline"),
       isDismissed: _required(_readFieldValue<bool>(_readField(json, const ["is_dismissed"]), "is_dismissed", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_dismissed"),
       isLocked: _required(_readFieldValue<bool>(_readField(json, const ["is_locked"]), "is_locked", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_locked"),
       isRead: _required(_readFieldValue<bool>(_readField(json, const ["is_read"]), "is_read", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_read"),
       kgExtracted: _required(_readFieldValue<bool>(_readField(json, const ["kg_extracted"]), "kg_extracted", _readBool, requiredField: false, nullable: false, defaultValue: false), "kg_extracted"),
+      kind: _readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: false, nullable: true),
       layer: _readFieldValue<String>(_readField(json, const ["layer"]), "layer", _readString, requiredField: true, nullable: true),
+      ledgerSchemaVersion: _readFieldValue<String>(_readField(json, const ["ledger_schema_version"]), "ledger_schema_version", _readString, requiredField: false, nullable: true),
       manuallyAdded: _required(_readFieldValue<bool>(_readField(json, const ["manually_added"]), "manually_added", _readBool, requiredField: false, nullable: false, defaultValue: false), "manually_added"),
       memoryId: _readFieldValue<String>(_readField(json, const ["memory_id"]), "memory_id", _readString, requiredField: false, nullable: true),
       memoryTier: _readFieldValue<String>(_readField(json, const ["memory_tier"]), "memory_tier", _readString, requiredField: false, nullable: true),
@@ -185,10 +208,13 @@ class GeneratedMemoryDB {
       qualifiers: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["qualifiers"]), "qualifiers", _readMap, requiredField: false, nullable: true),
       reviewed: _required(_readFieldValue<bool>(_readField(json, const ["reviewed"]), "reviewed", _readBool, requiredField: false, nullable: false, defaultValue: false), "reviewed"),
       scoring: _readFieldValue<String>(_readField(json, const ["scoring"]), "scoring", _readString, requiredField: false, nullable: true),
+      slot: _readFieldValue<String>(_readField(json, const ["slot"]), "slot", _readString, requiredField: false, nullable: true),
       subjectAttribution: _required(_readFieldValue<String>(_readField(json, const ["subject_attribution"]), "subject_attribution", _readString, requiredField: false, nullable: false, defaultValue: "unknown"), "subject_attribution"),
       subjectEntityId: _readFieldValue<String>(_readField(json, const ["subject_entity_id"]), "subject_entity_id", _readString, requiredField: false, nullable: true),
+      subjectScope: _readFieldValue<String>(_readField(json, const ["subject_scope"]), "subject_scope", _readString, requiredField: false, nullable: true),
       supersededBy: _readFieldValue<String>(_readField(json, const ["superseded_by"]), "superseded_by", _readString, requiredField: false, nullable: true),
       tags: _readFieldValue<List<String>>(_readField(json, const ["tags"]), "tags", _readStringList, requiredField: false, nullable: true),
+      triggerCondition: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["trigger_condition"]), "trigger_condition", _readMap, requiredField: false, nullable: true),
       uid: _required(_readFieldValue<String>(_readField(json, const ["uid"]), "uid", _readString, requiredField: true, nullable: false), "uid"),
       uncertaintyReasons: _readFieldValue<List<String>>(_readField(json, const ["uncertainty_reasons"]), "uncertainty_reasons", _readStringList, requiredField: false, nullable: true),
       updatedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["updated_at"]), "updated_at", _readDateTime, requiredField: true, nullable: false), "updated_at"),
@@ -196,6 +222,7 @@ class GeneratedMemoryDB {
       validAt: _readFieldValue<DateTime>(_readField(json, const ["valid_at"]), "valid_at", _readDateTime, requiredField: false, nullable: true),
       veracity: _readFieldValue<double>(_readField(json, const ["veracity"]), "veracity", _readDouble, requiredField: false, nullable: true),
       visibility: _readFieldValue<String>(_readField(json, const ["visibility"]), "visibility", _readString, requiredField: false, nullable: true, defaultValue: "public"),
+      writeReason: _readFieldValue<String>(_readField(json, const ["write_reason"]), "write_reason", _readString, requiredField: false, nullable: true),
     );
   }
 
@@ -203,25 +230,30 @@ class GeneratedMemoryDB {
     return {
       'app_id': appId,
       'arguments': arguments,
+      'body': body,
       'capture_confidence': captureConfidence,
       'capture_device_ids': captureDeviceIds,
       'category': category,
       'content': content,
       'conversation_id': conversationId,
       'created_at': createdAt.toUtc().toIso8601String(),
+      'curation_weight': curationWeight,
       'data_protection_level': dataProtectionLevel,
       'durability': durability,
       'edited': edited,
       'evidence': evidence?.map((value) => value.toJson()).toList(),
       'headline': headline,
       'id': id,
+      'intent_backed': intentBacked,
       'invalid_at': invalidAt?.toUtc().toIso8601String(),
       'is_baseline': isBaseline,
       'is_dismissed': isDismissed,
       'is_locked': isLocked,
       'is_read': isRead,
       'kg_extracted': kgExtracted,
+      'kind': kind,
       'layer': layer,
+      'ledger_schema_version': ledgerSchemaVersion,
       'manually_added': manuallyAdded,
       'memory_id': memoryId,
       'memory_tier': memoryTier,
@@ -231,10 +263,13 @@ class GeneratedMemoryDB {
       'qualifiers': qualifiers,
       'reviewed': reviewed,
       'scoring': scoring,
+      'slot': slot,
       'subject_attribution': subjectAttribution,
       'subject_entity_id': subjectEntityId,
+      'subject_scope': subjectScope,
       'superseded_by': supersededBy,
       'tags': tags,
+      'trigger_condition': triggerCondition,
       'uid': uid,
       'uncertainty_reasons': uncertaintyReasons,
       'updated_at': updatedAt.toUtc().toIso8601String(),
@@ -242,6 +277,7 @@ class GeneratedMemoryDB {
       'valid_at': validAt?.toUtc().toIso8601String(),
       'veracity': veracity,
       'visibility': visibility,
+      'write_reason': writeReason,
     };
   }
 }

@@ -41,6 +41,10 @@ import {
 import { trackEvent } from '../lib/analytics'
 import { mergeAgentCards } from '../lib/chat/agentThreadCards'
 import type { ChatContentBlock } from '../../../shared/chatContent'
+import {
+  parseChatEvidenceFromRecord,
+  type ChatEvidenceReferenceEnvelope
+} from '../../../shared/knowledgeLedger'
 
 export type ChatMsg = {
   id?: string
@@ -56,6 +60,8 @@ export type ChatMsg = {
   chartData?: unknown
   /** Whether the backend flagged this turn for an NPS prompt. */
   askForNps?: boolean
+  /** Optional bounded supporting evidence; text remains authoritative. */
+  evidence?: ChatEvidenceReferenceEnvelope
   /** Files attached to this (user) message — rendered as chips in the thread and
    *  round-tripped through the persisted messages JSON. */
   attachments?: ChatAttachment[]
@@ -329,12 +335,16 @@ export function useChat(): UseChat {
         if (cancelled || sendingRef.current || genRef.current !== myGen || !c?.messages) return
         startedAtRef.current = c.startedAt || Date.now()
         setHistory(
-          c.messages.map((m) => ({
-            id: m.id ?? crypto.randomUUID(),
-            role: m.role,
-            content: m.content,
-            ...(m.attachments?.length ? { attachments: m.attachments } : {})
-          }))
+          c.messages.map((m) => {
+            const evidence = parseChatEvidenceFromRecord(m)
+            return {
+              id: m.id ?? crypto.randomUUID(),
+              role: m.role,
+              content: m.content,
+              ...(m.attachments?.length ? { attachments: m.attachments } : {}),
+              ...(evidence ? { evidence } : {})
+            }
+          })
         )
       })
       .catch(() => {
@@ -664,6 +674,7 @@ export function useChat(): UseChat {
 
     const assistantId = crypto.randomUUID()
     let assistantText = ''
+    let assistantEvidence: ChatEvidenceReferenceEnvelope | undefined
     // The latest running tool surfaces as a transient italic line in the bubble,
     // mirroring the coding-agent door (:457-468 `_${name}…_`) so main + bar read the
     // same. DISPLAY-ONLY: it is composed into the live bubble but never folded into
@@ -699,12 +710,19 @@ export function useChat(): UseChat {
       ...(sessionIdRef.current ? { sessionId: sessionIdRef.current } : {})
     })
 
-    const writeAssistant = (content: string): void => {
+    const writeAssistant = (content: string, evidence?: ChatEvidenceReferenceEnvelope): void => {
       if (!isCurrent()) return
       setHistory((h) => {
         const next = [...h]
         const idx = next.findIndex((m) => m.id === assistantId)
-        if (idx >= 0) next[idx] = { id: assistantId, role: 'assistant', content }
+        if (idx >= 0) {
+          next[idx] = {
+            id: assistantId,
+            role: 'assistant',
+            content,
+            ...(evidence ? { evidence } : {})
+          }
+        }
         return next
       })
     }
@@ -727,6 +745,7 @@ export function useChat(): UseChat {
     const attempt = async (reqId: string, textToSend: string): Promise<MainChatResult> => {
       let attemptRunId: string | null = null
       assistantText = ''
+      assistantEvidence = undefined
       toolActivity = null
       const unsubscribe = window.omi.onMainChatEvent((event: MainChatEvent) => {
         if (event.requestId !== reqId) return
@@ -749,8 +768,12 @@ export function useChat(): UseChat {
           // during a long tool run so it no longer reads as dead air.
           toolActivity = event.status === 'started' ? event.name : null
           writeAssistant(composeLive())
+        } else if (event.type === 'completed') {
+          // The terminal result remains authoritative for text. Evidence is
+          // additive and may arrive on this event when the adapter exposes it.
+          assistantEvidence = event.evidence
         }
-        // status / thinking_delta / tool_result_display / completed / run_finished are
+        // status / thinking_delta / tool_result_display / run_finished are
         // covered by the authoritative awaited mainChatSend result below (terminal +
         // final text), exactly as tryAgentTask relies on codingAgentRun's return.
         if (Date.now() - lastPersist > 1500) {
@@ -905,6 +928,7 @@ export function useChat(): UseChat {
 
       if (result.ok) {
         if (result.text) assistantText = result.text
+        if (result.evidence) assistantEvidence = result.evidence
       } else if (result.error && PI_MONO_NOT_READY_RE.test(result.error)) {
         // Still not ready after the one retry: a friendly line, never a raw `Error:`.
         // hasRealText is false here, so (like any error line) it is neither saved to
@@ -944,15 +968,15 @@ export function useChat(): UseChat {
           : errored
             ? errorLine
             : "Omi didn't send a reply. Try again."
-        writeAssistant(displayContent)
-        void persistChat(
-          [
-            ...baseHistory,
-            userMsg,
-            { id: assistantId, role: 'assistant', content: displayContent }
-          ],
-          isCurrent
-        )
+        const finalEvidence = hasRealText ? assistantEvidence : undefined
+        const assistantMessage: ChatMsg = {
+          id: assistantId,
+          role: 'assistant',
+          content: displayContent,
+          ...(finalEvidence ? { evidence: finalEvidence } : {})
+        }
+        writeAssistant(displayContent, finalEvidence)
+        void persistChat([...baseHistory, userMsg, assistantMessage], isCurrent)
         // INV-CHAT-1 site 2: persist the assistant turn to the shared thread — the
         // full reply on success, the partial on a bridge error (Mac sites 4 + 5).
         // Skip when there is no real assistant text so an error line never lands in
@@ -963,6 +987,7 @@ export function useChat(): UseChat {
             sender: 'ai',
             clientMessageId: assistantId,
             messageSource: 'desktop_chat',
+            ...(finalEvidence ? { metadata: JSON.stringify({ evidence: finalEvidence }) } : {}),
             ...(selectedAppIdRef.current ? { appId: selectedAppIdRef.current } : {}),
             ...(sessionIdRef.current ? { sessionId: sessionIdRef.current } : {})
           })
@@ -1290,7 +1315,8 @@ export function useChat(): UseChat {
           serverId: donePayload.id,
           citations: donePayload.citations.length ? donePayload.citations : undefined,
           chartData: donePayload.chartData,
-          askForNps: donePayload.askForNps || undefined
+          askForNps: donePayload.askForNps || undefined,
+          ...(donePayload.evidence ? { evidence: donePayload.evidence } : {})
         }
       } else {
         finalMsg = assistantMsg(assistantText)
@@ -1520,12 +1546,16 @@ export function useChat(): UseChat {
         .then((msgs) => {
           if (!isCurrent()) return
           setHistory(
-            msgs.map((m) => ({
-              id: m.id,
-              role: m.sender === 'ai' ? 'assistant' : 'user',
-              content: m.text,
-              ...(m.attachments?.length ? { attachments: m.attachments } : {})
-            }))
+            msgs.map((m) => {
+              const evidence = parseChatEvidenceFromRecord(m)
+              return {
+                id: m.id,
+                role: m.sender === 'ai' ? 'assistant' : 'user',
+                content: m.text,
+                ...(m.attachments?.length ? { attachments: m.attachments } : {}),
+                ...(evidence ? { evidence } : {})
+              }
+            })
           )
           // Project this thread's shared-thread agent cards after the load replaced
           // history, so the load can't clobber them (B4, INV-CHAT-1).
@@ -1541,12 +1571,16 @@ export function useChat(): UseChat {
         .then((msgs) => {
           if (!isCurrent()) return
           setHistory(
-            msgs.map((m) => ({
-              id: m.id,
-              role: m.sender === 'ai' ? 'assistant' : 'user',
-              content: m.text,
-              ...(m.attachments?.length ? { attachments: m.attachments } : {})
-            }))
+            msgs.map((m) => {
+              const evidence = parseChatEvidenceFromRecord(m)
+              return {
+                id: m.id,
+                role: m.sender === 'ai' ? 'assistant' : 'user',
+                content: m.text,
+                ...(m.attachments?.length ? { attachments: m.attachments } : {}),
+                ...(evidence ? { evidence } : {})
+              }
+            })
           )
           // Project this thread's shared-thread agent cards after the load replaced
           // history, so the load can't clobber them (B4, INV-CHAT-1).
@@ -1564,12 +1598,16 @@ export function useChat(): UseChat {
           if (!isCurrent() || !c?.messages) return
           startedAtRef.current = c.startedAt || Date.now()
           setHistory(
-            c.messages.map((m) => ({
-              id: m.id ?? crypto.randomUUID(),
-              role: m.role,
-              content: m.content,
-              ...(m.attachments?.length ? { attachments: m.attachments } : {})
-            }))
+            c.messages.map((m) => {
+              const evidence = parseChatEvidenceFromRecord(m)
+              return {
+                id: m.id ?? crypto.randomUUID(),
+                role: m.role,
+                content: m.content,
+                ...(m.attachments?.length ? { attachments: m.attachments } : {}),
+                ...(evidence ? { evidence } : {})
+              }
+            })
           )
           // Project this thread's shared-thread agent cards after the load replaced
           // history, so the load can't clobber them (B4, INV-CHAT-1).
@@ -1622,12 +1660,16 @@ export function useChat(): UseChat {
         .then((msgs) => {
           if (!isCurrent()) return
           setHistory(
-            msgs.map((m) => ({
-              id: m.id,
-              role: m.sender === 'ai' ? 'assistant' : 'user',
-              content: m.text,
-              ...(m.attachments?.length ? { attachments: m.attachments } : {})
-            }))
+            msgs.map((m) => {
+              const evidence = parseChatEvidenceFromRecord(m)
+              return {
+                id: m.id,
+                role: m.sender === 'ai' ? 'assistant' : 'user',
+                content: m.text,
+                ...(m.attachments?.length ? { attachments: m.attachments } : {}),
+                ...(evidence ? { evidence } : {})
+              }
+            })
           )
           // Project this thread's shared-thread agent cards after the load replaced
           // history, so the load can't clobber them (B4, INV-CHAT-1).
@@ -1645,12 +1687,16 @@ export function useChat(): UseChat {
           if (!isCurrent() || !c?.messages) return
           startedAtRef.current = c.startedAt || Date.now()
           setHistory(
-            c.messages.map((m) => ({
-              id: m.id ?? crypto.randomUUID(),
-              role: m.role,
-              content: m.content,
-              ...(m.attachments?.length ? { attachments: m.attachments } : {})
-            }))
+            c.messages.map((m) => {
+              const evidence = parseChatEvidenceFromRecord(m)
+              return {
+                id: m.id ?? crypto.randomUUID(),
+                role: m.role,
+                content: m.content,
+                ...(m.attachments?.length ? { attachments: m.attachments } : {}),
+                ...(evidence ? { evidence } : {})
+              }
+            })
           )
           // Project this thread's shared-thread agent cards after the load replaced
           // history, so the load can't clobber them (B4, INV-CHAT-1).

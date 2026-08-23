@@ -33,6 +33,7 @@ import database.llm_usage as llm_usage_db
 from database.apps import record_app_usage
 from models.app import App, UsageHistoryType
 from models.chat import (
+    ChatEvidenceEnvelope,
     ChatSession,
     Message,
     SendMessageRequest,
@@ -496,6 +497,19 @@ def send_message(
         prompt_name = callback_data.get('prompt_name')
         prompt_commit = callback_data.get('prompt_commit')
         chart_data = callback_data.get('chart_data')
+        evidence_payload = callback_data.get('evidence')
+        evidence = None
+        if evidence_payload is not None:
+            try:
+                evidence = ChatEvidenceEnvelope.model_validate(evidence_payload)
+            except ValueError as evidence_exc:
+                # Evidence is optional UI chrome. A malformed tool reference must
+                # never prevent persistence or delivery of the answer text.
+                logger.warning(
+                    'dropping invalid chat evidence uid=%s error_type=%s',
+                    uid,
+                    type(evidence_exc).__name__,
+                )
 
         # cited extraction
         cited_conversation_idxs = {int(i) for i in re.findall(r'\[(\d+)\]', response)}
@@ -517,6 +531,7 @@ def send_message(
             langsmith_run_id=langsmith_run_id,  # Store run_id for feedback tracking
             prompt_name=prompt_name,  # LangSmith prompt name for versioning
             prompt_commit=prompt_commit,  # LangSmith prompt commit for traceability
+            evidence=evidence,
         )
         if chat_session:
             ai_message.chat_session_id = chat_session.id

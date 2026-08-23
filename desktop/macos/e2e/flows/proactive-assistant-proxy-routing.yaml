@@ -4,7 +4,9 @@ tier: 1
 description: Proactive model clients resolve through the non-production desktop backend policy.
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/Chat/KnowledgeLedgerPromptProjection.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/GeminiClient.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/KnowledgeLedgerTriggerWatchlist.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ProactiveLaneClient.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/EmbeddingService.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationOpenOmiShortcutQA.swift
@@ -22,6 +24,15 @@ steps:
       result.detail.proactivity_base_url: https://desktop-backend-dt5lrfkkoa-uc.a.run.app/
 
   - id: S2
+    name: Exercise pure knowledge-ledger foundation contracts
+    bridge.action:
+      name: knowledge_ledger_foundation_contracts
+    expect:
+      result.detail.prompt_contains_profile_fact: "true"
+      result.detail.trigger_status: match
+      result.detail.trigger_wakeups_used: "1"
+
+  - id: S3
     name: Logs are clean
     log.expect:
       absent:
