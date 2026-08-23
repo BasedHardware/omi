@@ -11,6 +11,7 @@ from utils.memory.knowledge_ledger_migration import (
     apply_ledger_migration_plan,
     read_ledger_migration_completion,
 )
+from testing.jit_processing.migration_fixture import run_migration_fixture
 
 NOW = datetime(2026, 8, 23, tzinfo=timezone.utc)
 
@@ -207,3 +208,133 @@ def test_apply_plan_routes_only_automatic_long_term_adaptation(monkeypatch):
     blocked = plan_ledger_migration(_item(tier=MemoryLayer.short_term))
     with pytest.raises(ValueError, match="requires adjudication"):
         apply_ledger_migration_plan("u1", blocked, db_client="fixture-db")
+
+
+def test_hermetic_fixture_proves_counts_provenance_profile_and_resume_without_content_report():
+    long_term = _item(memory_id="mem-long", user_asserted=True)
+    already_ledger = _item(
+        memory_id="mem-ledger",
+        user_asserted=True,
+        ledger_schema_version="knowledge_ledger.v1",
+        kind="fact",
+        subject_scope="primary_user",
+        slot="home_city",
+        valid_from=NOW,
+        intent_backed=True,
+        write_reason="direct_user_statement",
+    )
+    inactive = _item(memory_id="mem-inactive", status=MemoryItemStatus.superseded, valid_to=NOW)
+    short_term = _item(memory_id="mem-short", tier=MemoryLayer.short_term)
+    archive = _item(memory_id="mem-archive", tier=MemoryLayer.archive)
+    apply_calls = []
+
+    def apply(uid, plan):
+        apply_calls.append((uid, plan.memory_id, plan.source_revision))
+        source = next(
+            item
+            for item in (long_term, already_ledger, inactive, short_term, archive)
+            if item.memory_id == plan.memory_id
+        )
+        if plan.action == LedgerMigrationAction.no_op:
+            return source
+        return source.model_copy(
+            update={
+                **plan.updates,
+                "item_revision": source.item_revision + 1,
+                "ledger_schema_version": "knowledge_ledger.v1",
+                "kind": "fact",
+                "subject_scope": plan.updates["subject_scope"],
+                "valid_from": plan.updates["valid_from"],
+                "intent_backed": plan.updates["intent_backed"],
+                "write_reason": plan.updates["write_reason"],
+            }
+        )
+
+    first = run_migration_fixture(
+        "u1",
+        [archive, short_term, inactive, already_ledger, long_term],
+        apply_plan=apply,
+    )
+
+    assert first.report.total_rows == 5
+    assert first.report.action_counts == {
+        "no_op": 1,
+        "adapt_long_term_history": 1,
+        "adjudicate_short_term": 1,
+        "ignore_inactive": 2,
+    }
+    assert first.report.applied_count == 1
+    assert first.report.resumed_count == 1
+    assert first.report.blocking_row_count == 2
+    assert first.report.provenance_complete_count == 2
+    assert first.report.profile_slot_count == 2
+    assert first.report.profile_character_count > 0
+    assert len(first.report.profile_sha256) == 64
+    assert first.report.planner_admissible is False
+    serialized = first.report.model_dump_json()
+    assert "Lives in Brooklyn" not in serialized
+    assert "conv-1" not in serialized
+
+    second = run_migration_fixture(
+        "u1",
+        first.items,
+        apply_plan=lambda uid, plan: (_ for _ in ()).throw(AssertionError("resume reapplied a completed row")),
+        completed_markers=first.completed_markers,
+    )
+    assert second.report.resumed_count == 2
+    assert second.report.applied_count == 0
+    assert second.report.profile_sha256 == first.report.profile_sha256
+
+
+def test_hermetic_fixture_marks_stale_revision_and_inconsistent_resume_as_blocking():
+    source = _item(memory_id="mem-stale", user_asserted=True)
+    plan = plan_ledger_migration(source)
+
+    stale = run_migration_fixture(
+        "u1",
+        [source],
+        apply_plan=lambda uid, candidate: (_ for _ in ()).throw(ValueError("stale item revision")),
+    )
+    assert stale.report.failed_count == 1
+    assert stale.report.blocking_row_count == 1
+    assert stale.report.planner_admissible is False
+
+    inconsistent_resume = run_migration_fixture(
+        "u1",
+        [source],
+        apply_plan=lambda uid, candidate: source,
+        completed_markers=[migration_marker(plan)],
+    )
+    assert inconsistent_resume.report.resumed_count == 0
+    assert inconsistent_resume.report.failed_count == 1
+    assert inconsistent_resume.report.blocking_row_count == 1
+
+
+def test_hermetic_fixture_requires_complete_provenance_before_completion():
+    complete = _item(
+        memory_id="mem-complete",
+        ledger_schema_version="knowledge_ledger.v1",
+        kind="fact",
+        subject_scope="primary_user",
+        slot="home_city",
+        valid_from=NOW,
+        intent_backed=True,
+        write_reason="direct_user_statement",
+    )
+    complete_run = run_migration_fixture(
+        "u1",
+        [complete],
+        apply_plan=lambda uid, plan: complete,
+    )
+    assert complete_run.report.planner_admissible is True
+
+    missing_provenance = complete.model_copy(update={"memory_id": "mem-no-evidence", "evidence": []})
+    incomplete_run = run_migration_fixture(
+        "u1",
+        [missing_provenance],
+        apply_plan=lambda uid, plan: missing_provenance,
+    )
+    assert incomplete_run.report.failed_count == 0
+    assert incomplete_run.report.blocking_row_count == 0
+    assert incomplete_run.report.provenance_complete_count == 0
+    assert incomplete_run.report.planner_admissible is False

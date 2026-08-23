@@ -62,6 +62,10 @@ from .graph_tools import (
 from .entity_timeline_tools import (
     get_entity_timeline_tool,
 )
+from .knowledge_ledger_tools import (
+    read_playbook,
+    search_knowledge,
+)
 
 __all__ = [
     'get_conversations_tool',
@@ -91,4 +95,6 @@ __all__ = [
     'fetch_url_tool',
     'traverse_knowledge_graph_tool',
     'get_entity_timeline_tool',
+    'search_knowledge',
+    'read_playbook',
 ]

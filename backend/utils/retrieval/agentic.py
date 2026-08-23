@@ -52,6 +52,8 @@ from utils.retrieval.tools import (
     fetch_url_tool,
     traverse_knowledge_graph_tool,
     get_entity_timeline_tool,
+    read_playbook,
+    search_knowledge,
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
@@ -236,6 +238,8 @@ CORE_TOOLS = [
     fetch_url_tool,
     traverse_knowledge_graph_tool,
     get_entity_timeline_tool,
+    search_knowledge,
+    read_playbook,
 ]
 
 # Standard tool names (used to detect app tools by exclusion)
@@ -266,6 +270,8 @@ def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str
         'search_memories_tool': 'Searching memories',
         'traverse_knowledge_graph_tool': 'Traversing knowledge graph',
         'get_entity_timeline_tool': 'Reviewing entity timeline',
+        'search_knowledge': 'Searching current knowledge',
+        'read_playbook': 'Reading playbook',
         'get_action_items_tool': 'Checking action items',
         'create_action_item_tool': 'Creating action item',
         'update_action_item_tool': 'Updating action item',
