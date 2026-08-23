@@ -1,8 +1,19 @@
 """Focused behavioral checks for the universal MemoryService seam."""
 
 from unittest.mock import MagicMock
+from datetime import datetime, timedelta, timezone
 
 import pytest
+
+from models.memory_evidence import SourceState
+from models.product_memory import (
+    LedgerWriteReason,
+    MemoryItem,
+    MemoryItemStatus,
+    MemoryKind,
+    MemorySubjectScope,
+    ProcessingState,
+)
 
 from tests.unit.test_memory_service_parity import (
     _load_memory_service,
@@ -154,6 +165,200 @@ def test_prompt_cache_invalidation_also_invalidates_owner_rejection_feedback(ser
     service._invalidate_prompt_cache("uid-test")
 
     clear_rejections.assert_called_once_with("uid-test")
+
+
+def _ledger_item(
+    service_mod,
+    memory_id,
+    *,
+    updated_at,
+    status=None,
+    user_review=None,
+    valid_to=None,
+    superseded_by=None,
+    arguments=None,
+):
+    payload = {
+        "memory_id": memory_id,
+        "uid": "uid-test",
+        "version": 1,
+        "tier": service_mod.MemoryTier.long_term,
+        "status": status or MemoryItemStatus.active,
+        "processing_state": ProcessingState.processed,
+        "content": memory_id,
+        "evidence": [],
+        "source_state": SourceState.active,
+        "sensitivity_labels": [],
+        "visibility": "private",
+        "user_asserted": True,
+        "captured_at": updated_at - timedelta(hours=1),
+        "updated_at": updated_at,
+        "ledger_commit_id": "commit-1",
+        "ledger_sequence": 1,
+        "ledger_schema_version": "knowledge_ledger.v1",
+        "kind": MemoryKind.fact,
+        "subject_scope": MemorySubjectScope.primary_user,
+        "slot": "home_city",
+        "intent_backed": True,
+        "write_reason": LedgerWriteReason.onboarding,
+        "valid_from": updated_at - timedelta(days=2),
+        "valid_to": valid_to,
+        "superseded_by": superseded_by,
+        "arguments": arguments or {},
+    }
+    if user_review is not None:
+        payload["promotion"] = {"user_review": user_review}
+    return MemoryItem(**payload)
+
+
+def test_read_ledger_history_is_explicit_bounded_and_preserves_tri_state(service_mod, monkeypatch):
+    now = datetime(2026, 8, 23, tzinfo=timezone.utc)
+    current = _ledger_item(service_mod, "current", updated_at=now)
+    rejected = _ledger_item(service_mod, "rejected", updated_at=now - timedelta(minutes=1), user_review=False)
+    invalidated = _ledger_item(
+        service_mod,
+        "invalidated",
+        updated_at=now - timedelta(minutes=2),
+        valid_to=now - timedelta(days=1),
+        user_review=True,
+    )
+    superseded = _ledger_item(
+        service_mod,
+        "superseded",
+        updated_at=now - timedelta(minutes=3),
+        status=MemoryItemStatus.superseded,
+        valid_to=now - timedelta(hours=1),
+        superseded_by="replacement",
+    )
+    malformed_status_only = _ledger_item(
+        service_mod,
+        "malformed-status-only",
+        updated_at=now - timedelta(minutes=3, seconds=1),
+        status=MemoryItemStatus.superseded,
+    )
+    hidden = _ledger_item(
+        service_mod,
+        "hidden",
+        updated_at=now - timedelta(minutes=4),
+        status=MemoryItemStatus.hidden,
+    )
+    tombstoned = _ledger_item(
+        service_mod,
+        "tombstoned",
+        updated_at=now - timedelta(minutes=5),
+        status=MemoryItemStatus.tombstoned,
+    )
+    monkeypatch.setattr(
+        service_mod,
+        "iter_authoritative_product_memory_items_newest_first",
+        lambda *args, **kwargs: iter(
+            [
+                tombstoned,
+                current,
+                malformed_status_only,
+                superseded,
+                hidden,
+                rejected,
+                invalidated,
+            ]
+        ),
+    )
+
+    service = service_mod.MemoryService(db_client=_Db())
+    rows = service.read_ledger_history("uid-test", limit=10)
+
+    assert [row.id for row in rows] == ["rejected", "invalidated", "superseded"]
+    assert rows[0].user_review is False
+    assert rows[1].user_review is True
+    assert rows[1].invalid_at == invalidated.valid_to
+    assert rows[2].invalid_at == superseded.valid_to
+    assert rows[2].superseded_by == "replacement"
+    assert service.read_ledger_history("uid-test", limit=1, offset=1)[0].id == "invalidated"
+    with pytest.raises(service_mod.HTTPException) as exc_info:
+        service.read_ledger_history("uid-test", limit=500, offset=5000)
+    assert exc_info.value.status_code == 413
+
+
+def test_ledger_history_page_reports_partial_provider_window_and_filters_privacy(service_mod, monkeypatch):
+    now = datetime(2026, 8, 23, tzinfo=timezone.utc)
+    rejected = _ledger_item(service_mod, "rejected", updated_at=now, user_review=False)
+    restricted = _ledger_item(
+        service_mod,
+        "restricted",
+        updated_at=now - timedelta(minutes=1),
+        user_review=False,
+        arguments={"location": "private clinic"},
+    )
+    restricted = restricted.model_copy(update={"sensitivity_labels": ["health"]})
+    future = _ledger_item(service_mod, "future", updated_at=now - timedelta(minutes=2), user_review=False)
+    future = future.model_copy(update={"ledger_schema_version": "knowledge_ledger.v2"})
+    legacy = _ledger_item(service_mod, "legacy", updated_at=now - timedelta(minutes=3), user_review=False)
+    legacy = legacy.model_copy(update={"intent_backed": False})
+
+    provider_call = {}
+
+    def partial_provider(uid, *, limit, **kwargs):
+        provider_call.update(uid=uid, limit=limit)
+        yield rejected
+        raise service_mod.ListReadBudgetExhausted("documents")
+
+    monkeypatch.setattr(service_mod, "iter_authoritative_product_memory_items_newest_first", partial_provider)
+    page = service_mod.MemoryService(db_client=_Db()).read_ledger_history_page("uid-test", limit=10)
+
+    assert [memory.id for memory in page.memories] == ["rejected"]
+    assert page.truncated is True
+    assert page.scanned_count == 1
+    assert provider_call == {"uid": "uid-test", "limit": 501}
+
+    monkeypatch.setattr(
+        service_mod,
+        "iter_authoritative_product_memory_items_newest_first",
+        lambda *args, **kwargs: iter([restricted, future, legacy]),
+    )
+    complete = service_mod.MemoryService(db_client=_Db()).read_ledger_history_page("uid-test", limit=10)
+    assert complete.memories == ()
+    assert complete.truncated is False
+
+
+def test_historical_ledger_search_is_deterministic_and_does_not_fallback_to_legacy(service_mod, monkeypatch):
+    now = datetime(2026, 8, 23, tzinfo=timezone.utc)
+    older = _ledger_item(service_mod, "older", updated_at=now - timedelta(minutes=1), user_review=False)
+    newer = _ledger_item(service_mod, "newer", updated_at=now, user_review=False)
+    monkeypatch.setattr(
+        service_mod,
+        "iter_authoritative_product_memory_items_newest_first",
+        lambda *args, **kwargs: iter([older, newer]),
+    )
+    service = service_mod.MemoryService(db_client=_Db())
+    service.history.search = MagicMock()
+    first = service.search_ledger_history_page("uid-test", "home city", limit=10)
+    second = service.search_ledger_history_page("uid-test", "home city", limit=10)
+
+    assert [match.memory.id for match in first.matches] == ["newer", "older"]
+    assert first.matches == second.matches
+    assert first.truncated is False
+    assert first.scanned_count == 2
+    service.history.search.assert_not_called()
+
+    with pytest.raises(ValueError):
+        service.search_ledger_history_page("uid-test", "")
+    with pytest.raises(ValueError):
+        service.search_ledger_history_page("uid-test", "!")
+
+
+def test_historical_ledger_search_breaks_same_timestamp_ties_by_memory_id(service_mod, monkeypatch):
+    now = datetime(2026, 8, 23, tzinfo=timezone.utc)
+    first = _ledger_item(service_mod, "a-memory", updated_at=now, user_review=False)
+    second = _ledger_item(service_mod, "z-memory", updated_at=now, user_review=False)
+    monkeypatch.setattr(
+        service_mod,
+        "iter_authoritative_product_memory_items_newest_first",
+        lambda *args, **kwargs: iter([second, first]),
+    )
+
+    page = service_mod.MemoryService(db_client=_Db()).search_ledger_history_page("uid-test", "home_city")
+
+    assert [match.memory.id for match in page.matches] == ["a-memory", "z-memory"]
 
 
 def test_historical_adapter_uses_injected_firestore_client(service_mod, monkeypatch):

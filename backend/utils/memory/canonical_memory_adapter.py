@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import json
 import logging
 import time
 from datetime import datetime, timezone
@@ -62,6 +63,7 @@ from models.memory_apply import (
 from models.memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
 from models.memory_operations import MemoryOperation, MemoryOperationType
 from models.product_memory import (
+    MAX_MEMORY_ARGUMENTS_JSON_BYTES,
     MemoryAccessPolicy,
     MemoryItemStatus,
     MemoryLayer,
@@ -152,6 +154,32 @@ class ConversationReplacementConflictError(RuntimeError):
 
 def _payload_or_empty(value: object) -> Payload:
     return cast(Payload, value) if isinstance(value, dict) else {}
+
+
+def _bounded_memory_arguments(value: object) -> Dict[str, Any]:
+    """Project only JSON-safe proposition arguments within the graph bound.
+
+    ``MemoryItem.arguments`` is typed as a JSON-shaped mapping, but the
+    historical model predates a serialized-size validator on that field. Keep
+    the released MemoryDB projection bounded and fail closed for malformed or
+    oversized nested values rather than emitting an unbounded payload.
+    """
+
+    if not isinstance(value, dict):
+        return {}
+    try:
+        encoded = json.dumps(
+            value,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+            allow_nan=False,
+        )
+        if len(encoded.encode("utf-8")) > MAX_MEMORY_ARGUMENTS_JSON_BYTES:
+            return {}
+        return copy.deepcopy(value)
+    except (TypeError, ValueError, OverflowError, RecursionError):
+        return {}
 
 
 def _snapshot_payload(snapshot: Any) -> Payload:
@@ -314,6 +342,10 @@ def memory_item_to_memorydb(item: MemoryItem) -> MemoryDB:
         superseded_by=item.superseded_by,
         curation_weight=item.curation_weight,
         trigger_condition=item.trigger_condition,
+        # MemoryItem validates this as a JSON object; preserve the canonical
+        # proposition arguments for ledger mirrors instead of silently
+        # degrading entity/alias context to content-only text.
+        arguments=_bounded_memory_arguments(item.arguments),
         intent_backed=item.intent_backed,
         write_reason=item.write_reason,
     )
