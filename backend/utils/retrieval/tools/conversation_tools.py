@@ -3,7 +3,7 @@ Tools for accessing user conversations.
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, cast
+from typing import Any, Dict, List, Optional, Set, Tuple, cast
 import contextvars
 
 from langchain_core.runnables import RunnableConfig
@@ -16,7 +16,6 @@ import database.vector_db as vector_db
 from models.other import Person
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.render import conversations_to_string
-from utils.conversations.mcp_transcript_search import build_transcript_match_snippets
 from utils.conversations.search import (
     conversation_matches_date_range,
     keyword_search_conversation_ids,
@@ -24,6 +23,10 @@ from utils.conversations.search import (
     parse_exact_conversation_reference,
 )
 from utils.retrieval.chat_scope import apply_chat_scope_dates, chat_scope_from_config
+from utils.retrieval.tools.conversation_jit import (
+    format_active_jit_conversations,
+    is_jit_conversation_retrieval_enabled,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -83,223 +86,6 @@ def _scoped_conversation_fetch(
 # information to process at once" (#4927). Bound both the count and the raw size of what we return.
 MAX_CONVERSATIONS_FOR_LLM = 100
 MAX_RESULT_CHARS = 60000
-
-# The JIT retrieval path is deliberately a separate, opt-in contract.  The
-# released tools below retain their historical arguments/defaults, while JIT
-# callers ask for compact cards and (only when needed) a small evidence window.
-MAX_JIT_CONVERSATIONS = 20
-MAX_JIT_TRANSCRIPT_WINDOW_SEGMENTS = 24
-MAX_JIT_TRANSCRIPT_SNIPPETS = 3
-MAX_JIT_RESULT_CHARS = 24000
-MAX_CHAT_EVIDENCE_REFERENCES = 24
-
-
-def _stable_conversation_ref(conversation_id: Any) -> str:
-    """Return the stable public reference used by JIT cards and evidence."""
-    return f"conversation:{str(conversation_id).strip()}"
-
-
-def _stable_segment_ref(conversation_id: Any, segment_id: Any, index: int) -> str:
-    """Return a deterministic segment evidence reference, including legacy rows."""
-    identity = str(segment_id).strip() if segment_id else f"index-{index}"
-    return f"{_stable_conversation_ref(conversation_id)}:segment:{identity}"
-
-
-def _summary_card_from_data(conversation_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Project one conversation into bounded, transcript-free JIT card data."""
-    conversation_id = conversation_data.get("id") or conversation_data.get("conversation_id") or "unknown"
-    structured_raw = conversation_data.get("structured") or {}
-    structured = structured_raw if isinstance(structured_raw, dict) else {}
-    return {
-        "conversation_ref": _stable_conversation_ref(conversation_id),
-        "summary_evidence_ref": f"{_stable_conversation_ref(conversation_id)}:summary",
-        "conversation_id": str(conversation_id),
-        "created_at": conversation_data.get("created_at"),
-        "started_at": conversation_data.get("started_at"),
-        "finished_at": conversation_data.get("finished_at"),
-        "title": str(structured.get("title") or "").strip(),
-        "overview": str(structured.get("overview") or "").strip(),
-        "category": str(structured.get("category") or "").strip(),
-        "action_items": [
-            str(item.get("description") or item.get("text") or "").strip()
-            for item in cast(Sequence[Any], structured.get("action_items") or [])
-            if isinstance(item, dict) and str(item.get("description") or item.get("text") or "").strip()
-        ][:10],
-    }
-
-
-def _append_evidence_reference(
-    evidence_references: Optional[List[Dict[str, Any]]],
-    reference: Dict[str, Any],
-) -> None:
-    """Append one bounded, de-duplicated reference to the shared chat envelope."""
-    if evidence_references is None or len(evidence_references) >= MAX_CHAT_EVIDENCE_REFERENCES:
-        return
-    reference_id = reference.get("id")
-    if not isinstance(reference_id, str) or not reference_id.strip():
-        return
-    if any(item.get("id") == reference_id for item in evidence_references):
-        return
-    evidence_references.append(reference)
-
-
-def _summary_card_evidence_reference(card: Dict[str, Any]) -> Dict[str, Any]:
-    return {
-        "id": card["summary_evidence_ref"],
-        "kind": "conversation_summary",
-        "state": "available",
-        "conversation_id": card["conversation_id"],
-        "title": card.get("title") or None,
-        "summary": card.get("overview") or None,
-    }
-
-
-def _format_summary_cards(cards: Sequence[Dict[str, Any]]) -> str:
-    """Format deterministic JIT cards without deserializing transcript payloads."""
-    lines: List[str] = []
-    for index, card in enumerate(cards, start=1):
-        lines.extend(
-            [
-                f"Conversation card #{index}",
-                f"conversation_ref: {card['conversation_ref']}",
-                f"summary_evidence_ref: {card['summary_evidence_ref']}",
-                f"conversation_id: {card['conversation_id']}",
-            ]
-        )
-        for field in ("created_at", "started_at", "finished_at", "category"):
-            value = card.get(field)
-            if value:
-                lines.append(f"{field}: {value}")
-        if card.get("title"):
-            lines.append(f"title: {card['title']}")
-        if card.get("overview"):
-            lines.append(f"overview: {card['overview']}")
-        action_items = card.get("action_items") or []
-        if action_items:
-            lines.append("action_items: " + " | ".join(action_items))
-        lines.append("")
-    return "\n".join(lines).strip()
-
-
-def _bounded_transcript_window(
-    segments: Sequence[Any],
-    *,
-    offset: int,
-    limit: int,
-    conversation_id: Any,
-) -> List[Dict[str, Any]]:
-    """Return a deterministic transcript slice with stable evidence refs."""
-    bounded_offset = max(0, int(offset))
-    bounded_limit = max(1, min(int(limit), MAX_JIT_TRANSCRIPT_WINDOW_SEGMENTS))
-    raw_segments = [segment for segment in segments if isinstance(segment, dict)]
-    selected = raw_segments[bounded_offset : bounded_offset + bounded_limit]
-    return [
-        {
-            "evidence_ref": _stable_segment_ref(conversation_id, segment.get("id"), bounded_offset + index),
-            "segment_id": segment.get("id"),
-            "start": segment.get("start"),
-            "end": segment.get("end"),
-            "text": str(segment.get("text") or "").strip(),
-            "speaker_id": segment.get("speaker_id"),
-        }
-        for index, segment in enumerate(selected)
-        if str(segment.get("text") or "").strip()
-    ]
-
-
-def format_jit_results(
-    conversations_data: Sequence[Dict[str, Any]],
-    *,
-    query: Optional[str] = None,
-    hydrate_transcript_windows: bool = False,
-    transcript_window_segments: int = 12,
-    transcript_window_offset: int = 0,
-    max_transcript_snippets: int = 3,
-    evidence_references: Optional[List[Dict[str, Any]]] = None,
-) -> str:
-    """Render summary cards and optional bounded transcript evidence."""
-    cards = [_summary_card_from_data(item) for item in list(conversations_data)[:MAX_JIT_CONVERSATIONS]]
-    if not cards:
-        return ""
-    for card in cards:
-        _append_evidence_reference(evidence_references, _summary_card_evidence_reference(card))
-    lines = [_format_summary_cards(cards)]
-    if hydrate_transcript_windows:
-        lines.append("\nTranscript evidence (bounded):")
-        for data, card in zip(list(conversations_data)[:MAX_JIT_CONVERSATIONS], cards):
-            conversation_id = card["conversation_id"]
-            if query:
-                snippets = build_transcript_match_snippets(
-                    data.get("transcript_segments") or [],
-                    query,
-                    context_neighbors=1,
-                    max_snippets=max(1, min(int(max_transcript_snippets), MAX_JIT_TRANSCRIPT_SNIPPETS)),
-                )
-                for snippet in snippets:
-                    segment_id = snippet.get("segment_id")
-                    evidence_ref = _stable_segment_ref(conversation_id, segment_id, 0)
-                    _append_evidence_reference(
-                        evidence_references,
-                        {
-                            "id": evidence_ref,
-                            "kind": "conversation_segment",
-                            "state": "available",
-                            "conversation_id": conversation_id,
-                            "segment_id": str(segment_id).strip() if segment_id else "index-0",
-                            "start_ms": snippet.get("start_ms"),
-                            "end_ms": snippet.get("end_ms"),
-                            "summary": str(snippet.get("text") or "").strip()[:600] or None,
-                        },
-                    )
-                    lines.extend(
-                        [
-                            f"{card['conversation_ref']} transcript_match",
-                            f"evidence_ref: {evidence_ref}",
-                            f"start_ms: {snippet.get('start_ms')}",
-                            f"end_ms: {snippet.get('end_ms')}",
-                            f"text: {snippet.get('text') or ''}",
-                            "",
-                        ]
-                    )
-            else:
-                window = _bounded_transcript_window(
-                    data.get("transcript_segments") or [],
-                    offset=transcript_window_offset,
-                    limit=transcript_window_segments,
-                    conversation_id=conversation_id,
-                )
-                for segment in window:
-                    segment_identity = segment.get("segment_id") or segment["evidence_ref"].rsplit(":", 1)[-1]
-                    _append_evidence_reference(
-                        evidence_references,
-                        {
-                            "id": segment["evidence_ref"],
-                            "kind": "conversation_segment",
-                            "state": "available",
-                            "conversation_id": conversation_id,
-                            "segment_id": str(segment_identity),
-                            "summary": segment["text"][:600],
-                        },
-                    )
-                    lines.extend(
-                        [
-                            f"{card['conversation_ref']} transcript_window",
-                            f"evidence_ref: {segment['evidence_ref']}",
-                            f"segment_id: {segment.get('segment_id')}",
-                            f"start: {segment.get('start')}",
-                            f"end: {segment.get('end')}",
-                            f"text: {segment['text']}",
-                            "",
-                        ]
-                    )
-    result = "\n".join(lines).strip()
-    if len(result) > MAX_JIT_RESULT_CHARS:
-        # Keep output deterministic and do not split an evidence record in half.
-        clipped = result[:MAX_JIT_RESULT_CHARS]
-        boundary = clipped.rfind("\n\n")
-        result = clipped[:boundary] if boundary > 0 else clipped
-        result += "\n\n[Bounded JIT result truncated at an evidence boundary.]"
-    return result
 
 
 def _cap_conversations_for_llm(conversations: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], int, bool]:
@@ -509,6 +295,14 @@ def get_conversations_tool(
         msg = f"No conversations found{date_info}. The user may not have recorded any conversations yet, or the date range may be outside their conversation history."
         logger.info(f"⚠️ get_conversations_tool - {msg}")
         return msg
+
+    if is_jit_conversation_retrieval_enabled(cast(Optional[Dict[str, Any]], configurable)):
+        logger.info("🔧 get_conversations_tool - using explicitly enabled JIT retrieval contract")
+        return format_active_jit_conversations(
+            conversations_data,
+            configurable=cast(Dict[str, Any], configurable),
+            max_transcript_segments=max_transcript_segments if include_transcript else 0,
+        )
 
     try:
         # Only load people if transcripts will be included (people are used for speaker names in transcripts)
@@ -797,6 +591,15 @@ def search_conversations_tool(
                 return f"No conversations found matching query: '{query}'"
 
         logger.info(f"🔍 search_conversations_tool - Loaded {len(conversations_data)} full conversations")
+
+        if is_jit_conversation_retrieval_enabled(cast(Optional[Dict[str, Any]], configurable)):
+            logger.info("🔧 search_conversations_tool - using explicitly enabled JIT retrieval contract")
+            return format_active_jit_conversations(
+                conversations_data,
+                configurable=cast(Dict[str, Any], configurable),
+                query=query,
+                max_transcript_segments=max_transcript_segments if include_transcript else 0,
+            )
 
         # Only load people if transcripts will be included
         people: List[Person] = []

@@ -107,6 +107,7 @@ ct = _load(
     "utils.retrieval.tools._conversation_tools_date_range_test",
     "utils/retrieval/tools/conversation_tools.py",
 )
+jit = importlib.import_module("utils.retrieval.tools.conversation_jit")
 
 
 class TestExactConversationReference:
@@ -198,8 +199,8 @@ class TestJITConversationRetrieval:
             },
         }
 
-        card = ct._summary_card_from_data(raw)
-        result = ct.format_jit_results([raw])
+        card = jit._summary_card_from_data(raw)
+        result = jit.format_jit_results([raw])
 
         assert card["conversation_ref"] == "conversation:conv-42"
         assert card["summary_evidence_ref"] == "conversation:conv-42:summary"
@@ -211,14 +212,14 @@ class TestJITConversationRetrieval:
     def test_bounded_window_caps_segments_and_uses_index_fallback_refs(self):
         segments = [{"id": f"s{i}", "start": i, "end": i + 1, "text": f"line {i}"} for i in range(40)]
 
-        window = ct._bounded_transcript_window(
+        window = jit._bounded_transcript_window(
             segments,
             offset=5,
             limit=999,
             conversation_id="conv-42",
         )
 
-        assert len(window) == ct.MAX_JIT_TRANSCRIPT_WINDOW_SEGMENTS
+        assert len(window) == jit.MAX_JIT_TRANSCRIPT_WINDOW_SEGMENTS
         assert window[0]["evidence_ref"] == "conversation:conv-42:segment:s5"
         assert window[-1]["evidence_ref"] == "conversation:conv-42:segment:s28"
 
