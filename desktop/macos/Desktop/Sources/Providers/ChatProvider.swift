@@ -1311,10 +1311,6 @@ class ChatProvider: ObservableObject {
 
   // MARK: - Cached Context for Prompts
   private var cachedMemories: [ServerMemory] = []
-  /// Canonical prompt view for the bounded memory snapshot. During the
-  /// additive migration this is nil/partial for legacy rows, in which case
-  /// the released memory rendering remains the compatibility path below.
-  private var cachedKnowledgeLedgerProjection: KnowledgeLedgerPromptProjection?
   private var memoriesLoaded = false
   private var cachedGoals: [Goal] = []
   private var goalsLoaded = false
@@ -1705,7 +1701,6 @@ class ChatProvider: ObservableObject {
     sessions.removeAll()
     currentSession = nil
     cachedMemories = []
-    cachedKnowledgeLedgerProjection = nil
     memoriesLoaded = false
     cachedGoals = []
     goalsLoaded = false
@@ -2492,9 +2487,7 @@ class ChatProvider: ObservableObject {
   /// Loads user memories from local SQLite for use in prompts (refreshed each turn).
   private func refreshMemoriesForPrompt() async {
     do {
-      let memories = try await MemoryStorage.shared.getLocalMemories(limit: 50)
-      cachedMemories = memories
-      cachedKnowledgeLedgerProjection = KnowledgeLedgerPromptProjection(memories: memories)
+      cachedMemories = try await MemoryStorage.shared.getLocalMemories(limit: 50)
       memoriesLoaded = true
       log("ChatProvider refreshed \(cachedMemories.count) memories from local DB")
     } catch {
@@ -2509,14 +2502,6 @@ class ChatProvider: ObservableObject {
 
     let userName = AuthService.shared.displayName.isEmpty ? "the user" : AuthService.shared.givenName
 
-    if let projection = cachedKnowledgeLedgerProjection,
-      let rendered = projection.render(
-        userName: userName,
-        marker: { citations.marker(kind: .memory, sourceID: $0) })
-    {
-      return rendered
-    }
-
     var lines: [String] = ["<user_facts>", "Facts about \(userName):"]
     for memory in cachedMemories.prefix(30) {  // Limit to 30 most relevant
       let marker = citations.marker(kind: .memory, sourceID: memory.id).map { " \($0)" } ?? ""
@@ -2530,21 +2515,13 @@ class ChatProvider: ObservableObject {
 
   private func makePromptCitationLedger(includesLegacyGoals: Bool) -> ChatPromptCitationLedger {
     let formatter = ISO8601DateFormatter()
-    var sources: [ChatPromptCitationSource]
-    if let projection = cachedKnowledgeLedgerProjection, projection.isCompleteLedgerSnapshot {
-      sources = projection.citationSources
-    } else {
-      // The complete-snapshot check is deliberately all-or-nothing: a newly
-      // written ledger row cannot hide historical rows that still use the
-      // released memory representation.
-      sources = cachedMemories.prefix(30).map {
-        ChatPromptCitationSource(
-          kind: .memory,
-          sourceID: $0.id,
-          title: $0.headline ?? "Memory",
-          preview: $0.content,
-          createdAt: formatter.string(from: $0.createdAt))
-      }
+    var sources = cachedMemories.prefix(30).map {
+      ChatPromptCitationSource(
+        kind: .memory,
+        sourceID: $0.id,
+        title: $0.headline ?? "Memory",
+        preview: $0.content,
+        createdAt: formatter.string(from: $0.createdAt))
     }
     if includesLegacyGoals {
       sources.append(
