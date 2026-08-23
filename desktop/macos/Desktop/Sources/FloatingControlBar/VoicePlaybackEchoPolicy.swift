@@ -82,10 +82,27 @@ enum VoicePlaybackEchoPolicy {
     let end = tokens.count - trailing
     guard end - leading >= minimumWordCount else { return .drop }
 
+    // What survives has to *start* an utterance. Speech-to-text also mangles the tail of a
+    // long answer — live, Omi's own "Based on today's recording active for roughly about
+    // one hour" diverged from what was synthesised and was kept as if the user had said
+    // it. A garbled continuation runs straight on from the matched words; a person
+    // interrupting starts a new sentence, and the recognizer marks that.
+    guard sentenceBreakPrecedes(tokens[leading], in: transcript, after: tokens[leading - 1]) else {
+      return Double(leading) / Double(tokens.count) >= minimumCoverageToDrop ? .drop : .keep
+    }
+
     // Nothing stripped from the far end means the utterance ends where the segment does,
     // so keep its closing punctuation — the wake-word parser reads punctuation.
     let upperBound = trailing == 0 ? transcript.endIndex : tokens[end - 1].end
     return .keepResidue(String(transcript[tokens[leading].start..<upperBound]))
+  }
+
+  private static func sentenceBreakPrecedes(
+    _ token: (word: String, start: String.Index, end: String.Index),
+    in transcript: String,
+    after previous: (word: String, start: String.Index, end: String.Index)
+  ) -> Bool {
+    transcript[previous.end..<token.start].contains { $0 == "." || $0 == "?" || $0 == "!" }
   }
 
   static func words(_ text: String) -> [String] {
@@ -144,18 +161,39 @@ enum VoicePlaybackEchoPolicy {
     matchedPrefixLength(Array(incoming), against: Array(spoken))
   }
 
+  /// Anchors tried before giving up on finding where in the history this utterance begins.
+  /// A walk pinned to index 0 only sees an echo of the *first* thing said in the window.
+  /// Omi keeps talking, and speech-to-text repeats itself — live, Parakeet returned "Your
+  /// current save task appears to be testing the protocol product." twice in one segment,
+  /// and the second copy survived as if the user had said it because the backward walk
+  /// started at the end of the history rather than at the sentence.
+  static let maximumAnchorsTried = 24
+
   private static func matchedPrefixLength(_ incoming: [String], against spoken: [String]) -> Int {
-    var spokenIndex = 0
+    guard let first = incoming.first else { return 0 }
+    var anchors = spoken.indices.filter { spoken[$0] == first }.prefix(maximumAnchorsTried).map { $0 }
+    if anchors.isEmpty { anchors = [0] }
+    return anchors.map { walk(incoming, against: spoken, from: $0) }.max() ?? 0
+  }
+
+  private static func walk(_ incoming: [String], against spoken: [String], from anchor: Int) -> Int {
+    var spokenIndex = anchor
     var mismatches = 0
+    var run = 0
     var lastMatched = 0
     for (offset, word) in incoming.enumerated() {
       let limit = min(spokenIndex + alignmentLookahead, spoken.count)
       if spokenIndex < limit, let hit = (spokenIndex..<limit).first(where: { spoken[$0] == word }) {
         spokenIndex = hit + 1
         mismatches = 0
-        lastMatched = offset + 1
+        run += 1
+        // A single word matching on its own is coincidence, not the echo continuing —
+        // "the" and "and" occur in every answer. Committing on one match let the backward
+        // walk eat "the time" off the end of a user's command. Two in a row is a run.
+        if run >= 2 { lastMatched = offset + 1 }
         continue
       }
+      run = 0
       mismatches += 1
       if mismatches >= mismatchesEndingEcho { break }
     }

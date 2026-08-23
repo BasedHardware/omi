@@ -181,4 +181,55 @@ final class VoicePlaybackEchoPolicyTests: XCTestCase {
         "delivered be should where and order",
         spoken: "and where should it be delivered, what would you like to order"))
   }
+
+  // MARK: - Anchoring and residue plausibility
+
+  /// Captured live: Parakeet returned the same sentence twice in one segment. The second
+  /// copy survived as if the user had said it, because the backward walk started at the end
+  /// of the playback history instead of at the sentence — Omi had kept talking past it.
+  func testRepeatedSentenceInOneSegmentIsEntirelyEcho() {
+    XCTAssertEqual(
+      classify(
+        "Your current save task appears to be testing the protocol product. "
+          + "Your current save task appears to be testing the protocol product.",
+        spoken: "Your current save task appears to be testing the protocol product, "
+          + "including the project."),
+      .drop)
+  }
+
+  /// Captured live: speech-to-text mangled the tail of a long answer, so it no longer
+  /// matched what was synthesised and was kept as the user's words. A garbled continuation
+  /// runs straight on from the matched text; a person interrupting starts a new sentence.
+  func testGarbledTailOfTheAnswerIsNotMistakenForTheUser() {
+    XCTAssertEqual(
+      classify(
+        "I can't reliably tell how long you've been working because screen recording "
+          + "permission isn't enabled. Based on today's recording active for roughly about one hour.",
+        spoken: "I can't reliably tell how long you've been working because screen recording "
+          + "permission isn't enabled. Based on today's recording we've been active for roughly about one hour."),
+      .drop)
+  }
+
+  /// The echo can start partway through the history when Omi has been talking a while.
+  func testEchoOfALaterSentenceInTheHistoryIsStillMatched() {
+    XCTAssertEqual(
+      classify(
+        "Delhi, the national capital known for historic landmarks.",
+        spoken: "1. Mumbai, India's financial capital and home to Bollywood. "
+          + "2. Delhi, the national capital known for historic landmarks. "
+          + "3. Bengaluru, a major technology and startup hub."),
+      .drop)
+  }
+
+  /// A barge-in buried between playback on both sides is still recovered.
+  func testUserSpeechBetweenTwoStretchesOfPlaybackSurvives() {
+    XCTAssertEqual(
+      classify(
+        "1. Mumbai, India's financial capital and home to Bollywood. "
+          + "Omi, stop and tell me the time. "
+          + "3. Bengaluru, a major technology and startup hub.",
+        spoken: "1. Mumbai, India's financial capital and home to Bollywood. "
+          + "2. Delhi, the national capital. 3. Bengaluru, a major technology and startup hub."),
+      .keepResidue("Omi, stop and tell me the time"))
+  }
 }
