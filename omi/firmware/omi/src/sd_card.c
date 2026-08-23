@@ -30,6 +30,7 @@ LOG_MODULE_REGISTER(sd_card, CONFIG_LOG_DEFAULT_LEVEL);
 #define RAW_BATCH_HEADER_BYTES 32U
 #define RAW_PACKETS_PER_BATCH ((RAW_BATCH_BYTES - RAW_BATCH_HEADER_BYTES) / RAW_AUDIO_PACKET_BYTES)
 #define RAW_FLUSH_INTERVAL_MS 1000
+#define RAW_MIN_VALID_UTC_TIME 1700000000U
 
 #define RAW_META_MAGIC 0x4F4D4952U
 #define RAW_BATCH_MAGIC 0x4F4D4942U
@@ -108,6 +109,7 @@ static int wait_for_sd_worker_response(struct k_sem *sem, int timeout_ms, const 
 
 typedef enum {
     REQ_WRITE_DATA,
+    REQ_TIME_SYNCED,
     REQ_GET_RING_INFO,
     REQ_READ_PACKETS,
     REQ_ADVANCE_READ,
@@ -189,6 +191,7 @@ static uint8_t writing_error_counter;
 
 static uint32_t write_drop_packets;
 static uint32_t write_drop_bytes;
+static uint32_t rtc_unsynced_drop_packets;
 static int64_t last_write_blocked_log_ms;
 
 static char compat_current_name[MAX_FILENAME_LEN];
@@ -666,6 +669,17 @@ static int advance_read_seq_internal(uint64_t new_read_seq, bool sync_requested)
     return 0;
 }
 
+static void record_rtc_unsynced_drop(void)
+{
+    if (rtc_unsynced_drop_packets < UINT32_MAX) {
+        rtc_unsynced_drop_packets++;
+    }
+
+    if ((rtc_unsynced_drop_packets & (rtc_unsynced_drop_packets - 1U)) == 0U) {
+        LOG_WRN("offline audio discarded: clock has never been synced (dropped=%u packets)", rtc_unsynced_drop_packets);
+    }
+}
+
 static void process_write_data_req(const sd_req_t *req)
 {
     if (sd_write_blocked || sd_write_paused || !req) {
@@ -678,11 +692,13 @@ static void process_write_data_req(const sd_req_t *req)
     }
 
     if (!rtc_is_valid()) {
+        record_rtc_unsynced_drop();
         return;
     }
 
     uint32_t timestamp = get_utc_time();
-    if (timestamp == 0U || timestamp < 1700000000U) {
+    if (timestamp == 0U || timestamp < RAW_MIN_VALID_UTC_TIME) {
+        record_rtc_unsynced_drop();
         return;
     }
 
@@ -979,6 +995,13 @@ void sd_worker_thread(void)
             }
             break;
 
+        case REQ_TIME_SYNCED:
+            if (rtc_unsynced_drop_packets > 0U) {
+                LOG_WRN("clock synced after %u offline audio packets were discarded", rtc_unsynced_drop_packets);
+                rtc_unsynced_drop_packets = 0U;
+            }
+            break;
+
         case REQ_GET_RING_INFO:
             if (current_batch_dirty) {
                 (void) flush_current_batch(false);
@@ -1197,7 +1220,18 @@ void sd_request_power(bool on)
 
 void sd_notify_time_synced(uint32_t utc_time)
 {
-    ARG_UNUSED(utc_time);
+    sd_req_t req = {0};
+    int ret;
+
+    if (utc_time < RAW_MIN_VALID_UTC_TIME) {
+        return;
+    }
+
+    req.type = REQ_TIME_SYNCED;
+    ret = k_msgq_put(&sd_prio_msgq, &req, K_MSEC(500));
+    if (ret != 0) {
+        LOG_WRN("failed to queue RTC sync drop summary: %d", ret);
+    }
 }
 
 void sd_notify_ble_state(bool connected)
