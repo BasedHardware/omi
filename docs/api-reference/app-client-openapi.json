@@ -61729,6 +61729,108 @@
         ]
       }
     },
+    "/v3/memories/ledger-history": {
+      "get": {
+        "description": "Return explicit owner-scoped rejected and closed ledger rows.\n\n``GET /v3/memories`` remains the current product view and continues to\nfilter these rows.  This history endpoint is intentionally read-only and\ncanonical-only; it returns rows newest-first by ``updated_at`` then\n``memory_id`` (``limit`` is capped at 500 and the compatibility\n``offset + limit`` window at 5000).  The provider window is bounded to 500\nrows plus one sentinel; an incomplete provider/budget window is marked with\n``X-Omi-List-Truncated: true``.  Tombstoned and hidden rows are never\nresurrected for history UI.",
+        "operationId": "get_ledger_history_v3_memories_ledger_history_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MemoryDB"
+                  },
+                  "title": "Response Get Ledger History V3 Memories Ledger History Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Ledger History",
+        "tags": [
+          "memories"
+        ]
+      }
+    },
     "/v3/memories/review-queue": {
       "get": {
         "operationId": "list_memory_review_queue_v3_memories_review_queue_get",
