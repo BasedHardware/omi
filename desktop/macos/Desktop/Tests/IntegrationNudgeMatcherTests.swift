@@ -70,6 +70,76 @@ final class IntegrationNudgeMatcherTests: XCTestCase {
     XCTAssertNil(match(bundle: "com.google.Chrome", title: "ChatGPT vs Claude — a comparison"))
   }
 
+  /// Ending in the site's name is not the same as being the site. Each of these
+  /// is a real title from browser history that the unanchored "ends with" test
+  /// claimed: a tutorial *about* ChatGPT, a product whose name ends in "Claude",
+  /// and a consultancy whose name ends in "gemini". Reading any of them as the
+  /// site interrupts someone over an app they do not have open.
+  func testAPageAboutASiteIsNotThatSite() {
+    for title in [
+      "How to Create Studio Ghibli Style Art With ChatGPT",
+      "Context for Claude",
+      "Breakout — Events, run end to end inside Claude",
+      "World Wealth Report 2024: HNWI Wealth Management | Capgemini",
+      "Website Tweak for Gemini",
+    ] {
+      XCTAssertNil(
+        match(bundle: "com.google.Chrome", title: title),
+        "'\(title)' is a page about a site, not the site"
+      )
+    }
+  }
+
+  /// "X" is one character, so a title that is nothing but "X" says nothing about
+  /// x.com — this exact title belongs to a Stripe checkout page in the corpus.
+  /// The separator is the whole signal, and real x.com titles always have it.
+  func testASingleCharacterNameIsNeverTheWholeTitle() {
+    XCTAssertNil(match(bundle: "com.google.Chrome", title: "X"))
+    XCTAssertEqual(
+      match(bundle: "com.google.Chrome", title: "Home / X")?.entry.route,
+      .importConnector("x")
+    )
+  }
+
+  /// Gmail on a Workspace domain puts the organization's name where "Gmail"
+  /// would be, which is 51% of the Gmail visits in the corpus this was measured
+  /// against — every one of them invisible to a rule that looks for "Gmail".
+  func testWorkspaceMailboxesAreRecognizedAsGmail() {
+    let result = match(
+      bundle: "com.google.Chrome",
+      title: "Inbox (3,012) - me@umn.edu - University of Minnesota Twin Cities Mail"
+    )
+    XCTAssertEqual(result?.entry.route, .importConnector("email"))
+    XCTAssertEqual(result?.trigger.id, "gmail_workspace_web")
+  }
+
+  /// The account address is what makes a mailbox title Gmail's. Without it,
+  /// " Mail" is just as true of every other webmail, and of a page about one.
+  func testOtherWebmailIsNotClaimedAsGmail() {
+    for title in [
+      "Inbox - Proton Mail",
+      "Yahoo Mail",
+      "The best free email in 2026 - Proton Mail",
+      "Inbox (4) - Outlook",
+    ] {
+      XCTAssertNil(match(bundle: "com.google.Chrome", title: title), "'\(title)' is not Gmail")
+    }
+  }
+
+  /// Gemini prefixes its window title with an invisible left-to-right mark, and
+  /// titles itself "Google Gemini" rather than "Gemini". Both facts are load
+  /// bearing: without the first the exact comparison fails on a character
+  /// nobody can see, and without the second the shorter name is what lets
+  /// "Capgemini" through.
+  func testGeminiIsMatchedThroughItsInvisibleLeadingMark() {
+    XCTAssertEqual(
+      match(bundle: "com.google.Chrome", title: "\u{200E}Google Gemini")?.entry.route,
+      .exportDestination("gemini")
+    )
+    XCTAssertEqual(
+      IntegrationNudgeMatcher.normalizedTitle("\u{200E}Google Gemini"), "google gemini")
+  }
+
   /// Browsers append their own product name to the window title; the site name
   /// is still the end of the page's title.
   func testBrowserChromeSuffixIsStripped() {
