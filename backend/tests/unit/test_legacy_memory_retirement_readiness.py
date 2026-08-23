@@ -1,0 +1,187 @@
+import json
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any
+
+import pytest
+from scripts import legacy_memory_retirement_readiness as readiness
+from scripts import validate_memory_maintenance_scheduler as scheduler_validator
+
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+SCRIPT = BACKEND_ROOT / "scripts" / "legacy_memory_retirement_readiness.py"
+FIXTURES = Path(__file__).parent / "fixtures" / "legacy_memory_retirement"
+
+
+def _fixture(name: str) -> dict[str, Any]:
+    value = json.loads((FIXTURES / name).read_text(encoding="utf-8"))
+    assert isinstance(value, dict)
+    return value
+
+
+def test_active_flags_running_execution_and_enabled_scheduler_are_active() -> None:
+    result = readiness.evaluate_snapshot(_fixture("active_running.json"))
+
+    assert result.status == "ACTIVE"
+    assert result.counts["active_maintenance_flags"] == 1
+    assert result.counts["active_executions"] == 1
+    assert result.counts["enabled_schedulers"] == 1
+    assert result.reasons == ("maintenance_runtime_active",)
+
+
+def test_pending_execution_is_live_activity_even_when_other_controls_are_paused() -> None:
+    snapshot = _fixture("paused_no_executions.json")
+    snapshot["inventories"]["executions"]["resources"] = [
+        {
+            "project": "sanitized-project",
+            "region": "us-central1",
+            "job": "memory-maintenance-job",
+            "name": "execution-pending",
+            "state": "PENDING",
+        }
+    ]
+
+    result = readiness.evaluate_snapshot(snapshot)
+
+    assert result.status == "ACTIVE"
+    assert result.counts["active_executions"] == 1
+
+
+def test_paused_scheduler_without_executions_is_not_deleted() -> None:
+    result = readiness.evaluate_snapshot(_fixture("paused_no_executions.json"))
+
+    assert result.status == "NO_LIVE_ACTIVITY"
+    assert result.counts["paused_schedulers"] == 1
+    assert result.reasons == ("maintenance_resources_present_without_live_activity",)
+
+
+def test_complete_empty_inventories_prove_only_the_resources_absent() -> None:
+    result = readiness.evaluate_snapshot(_fixture("proven_absent.json"))
+
+    assert result.status == "DELETED"
+    assert result.reasons == ("maintenance_resources_proven_absent",)
+    assert all(count == 0 for count in result.counts.values())
+
+
+def test_scheduler_target_contract_cannot_drift_from_authoritative_validator() -> None:
+    contract = readiness.Contract(project="sanitized-project", region="us-central1")
+    authoritative = scheduler_validator.SchedulerContract(
+        project=contract.project,
+        region=contract.region,
+        scheduler_job=contract.scheduler_job,
+        cloud_run_job=contract.cloud_run_job,
+    )
+
+    assert contract.scheduler_target_uri == authoritative.target_uri
+
+
+@pytest.mark.parametrize(
+    ("fixture", "reason"),
+    [
+        ("duplicate.json", "duplicate_cloud_run_job"),
+        ("malformed_missing.json", "cloud_run_jobs_inventory_incomplete"),
+        ("malformed_missing.json", "scheduler_jobs_inventory_missing"),
+        ("target_mismatch.json", "scheduler_target_mismatch"),
+        ("identity_mismatch.json", "resource_project_or_region_mismatch"),
+    ],
+)
+def test_ambiguous_or_mismatched_evidence_fails_closed(fixture: str, reason: str) -> None:
+    result = readiness.evaluate_snapshot(_fixture(fixture))
+
+    assert result.status == "UNKNOWN"
+    assert reason in result.reasons
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        "gcloud run jobs describe memory-maintenance-job",
+        ["gcloud", "run", "jobs", "delete", "memory-maintenance-job"],
+        ["gcloud", "scheduler", "jobs", "pause", "memory-maintenance-hourly"],
+        ["gcloud", "run", "jobs", "describe", "memory-maintenance-job", "--quiet=true"],
+        ["gcloud", "run", "jobs", "describe", "memory-maintenance-job;rm"],
+    ],
+)
+def test_gcloud_allowlist_rejects_shell_strings_mutations_and_unapproved_flags(argv: object) -> None:
+    with pytest.raises(ValueError):
+        readiness.validate_read_only_gcloud_argv(argv)
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        [
+            "gcloud",
+            "run",
+            "jobs",
+            "describe",
+            "memory-maintenance-job",
+            "--project=sanitized-project",
+            "--region=us-central1",
+            "--format=json",
+        ],
+        [
+            "gcloud",
+            "run",
+            "jobs",
+            "executions",
+            "list",
+            "--job=memory-maintenance-job",
+            "--project=sanitized-project",
+            "--region=us-central1",
+            "--format=json",
+        ],
+        [
+            "gcloud",
+            "scheduler",
+            "jobs",
+            "describe",
+            "memory-maintenance-hourly",
+            "--project=sanitized-project",
+            "--location=us-central1",
+            "--format=json",
+        ],
+        [
+            "gcloud",
+            "scheduler",
+            "jobs",
+            "list",
+            "--project=sanitized-project",
+            "--location=us-central1",
+            "--format=json",
+        ],
+    ],
+)
+def test_gcloud_allowlist_accepts_only_read_only_inventory_commands(argv: list[str]) -> None:
+    assert readiness.validate_read_only_gcloud_argv(argv) == tuple(argv)
+
+
+def test_cli_output_is_content_free_and_limited_to_status_counts_reasons() -> None:
+    completed = subprocess.run(
+        [sys.executable, str(SCRIPT), "--snapshot", str(FIXTURES / "active_running.json")],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(completed.stdout)
+
+    assert set(payload) == {"status", "counts", "reasons"}
+    assert "sanitized-project" not in completed.stdout
+    assert "MEMORY_CANONICAL" not in completed.stdout
+    assert "target_uri" not in completed.stdout
+
+
+def test_cli_returns_unknown_without_echoing_invalid_snapshot(tmp_path: Path) -> None:
+    snapshot = tmp_path / "snapshot.json"
+    snapshot.write_text('{"private": "do-not-echo"}', encoding="utf-8")
+
+    completed = subprocess.run(
+        [sys.executable, str(SCRIPT), "--snapshot", str(snapshot)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 2
+    assert "do-not-echo" not in completed.stdout
+    assert json.loads(completed.stdout)["status"] == "UNKNOWN"
