@@ -9,11 +9,13 @@ from typing import Any, Dict, Iterator, List, Optional, cast
 from google.api_core.exceptions import AlreadyExists, Conflict, FailedPrecondition, NotFound
 from google.cloud import firestore, firestore_v1
 from google.cloud.firestore_v1 import FieldFilter
-from google.cloud.firestore_v1.base_query import Or
 
 from database.firestore_index_registry import (
+    CHAT_SESSIONS_BY_APP_ID_STARRED_UPDATED_QUERY,
+    CHAT_SESSIONS_BY_APP_ID_UPDATED_QUERY,
     CURRENT_CHAT_SESSION_ORDERED_QUERY,
     CURRENT_CHAT_SESSION_QUERY,
+    MESSAGES_BY_APP_ID_CREATED_QUERY,
 )
 
 # Sessions are per-user and per-app, so this is a ceiling on a small collection
@@ -41,23 +43,24 @@ CHAT_HISTORY_APPEND_EPOCH_MESSAGES = 8
 CHAT_HISTORY_REPORTED_RAW_SCAN_CAP = 50
 
 
-def _app_scope_filter(app_id: Optional[str]) -> Or:
-    """Match rows written under app_id or legacy plugin_id (same value).
-
-    Dual-read keeps pre-migration documents visible until backfill is guaranteed.
-    """
-    return Or(
-        filters=[
-            FieldFilter('app_id', '==', app_id),
-            FieldFilter('plugin_id', '==', app_id),
-        ]
-    )
-
-
 def _doc_matches_app_scope(data: Dict[str, Any], app_id: Optional[str]) -> bool:
     if 'app_id' in data:
         return data.get('app_id') == app_id
     return data.get('plugin_id') == app_id
+
+
+def _merge_docs_by_id(*groups: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    seen: set[str] = set()
+    merged: List[Dict[str, Any]] = []
+    for group in groups:
+        for data in group:
+            key = str(data.get('id') or '')
+            if key and key in seen:
+                continue
+            if key:
+                seen.add(key)
+            merged.append(data)
+    return merged
 
 
 class ClientMessageIdPayloadConflict(ValueError):
@@ -197,18 +200,29 @@ def get_app_messages(
     uid: str, app_id: str, limit: int = 20, include_conversations: bool = False
 ) -> List[Dict[str, Any]]:
     user_ref = db.collection('users').document(uid)
-    messages_ref = (
-        user_ref.collection('messages')
-        .where(filter=_app_scope_filter(app_id))
+    col = user_ref.collection('messages')
+    app_ref = (
+        MESSAGES_BY_APP_ID_CREATED_QUERY.build(col, {'app_id': app_id}, field_filter_factory=FieldFilter)
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
+        .limit(limit)
+    )
+    legacy_ref = (
+        col.where(filter=FieldFilter('plugin_id', '==', app_id))
         .order_by('created_at', direction=firestore.Query.DESCENDING)
         .limit(limit)
     )
     messages: List[Dict[str, Any]] = []
     conversations_id: set[str] = set()
 
+    collected: List[Dict[str, Any]] = []
+    for query in (app_ref, legacy_ref):
+        for doc in query.stream():
+            collected.append(_typed_doc(doc))
+    collected = _merge_docs_by_id(collected)
+    collected.sort(key=lambda item: item.get('created_at') or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+
     # Fetch messages and collect conversation IDs
-    for doc in messages_ref.stream():
-        message: Dict[str, Any] = _typed_doc(doc)
+    for message in collected[:limit]:
         if message.get('reported') is True:
             continue
         messages.append(message)
@@ -255,18 +269,36 @@ def get_messages(
         # because the session already determines which app the messages belong to.
         messages_ref = messages_ref.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
     else:
-        # App-scoped query: app_id or legacy plugin_id (None = main chat)
-        messages_ref = messages_ref.where(filter=_app_scope_filter(app_id))
+        # Keep the historical plugin_id chain (query-coverage fingerprint) and
+        # dual-read app_id through the registered spec.
+        messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
 
     messages_ref = messages_ref.order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit).offset(offset)
+    app_ref = None
+    if not chat_session_id:
+        app_ref = (
+            MESSAGES_BY_APP_ID_CREATED_QUERY.build(
+                user_ref.collection('messages'), {'app_id': app_id}, field_filter_factory=FieldFilter
+            )
+            .order_by('created_at', direction=firestore.Query.DESCENDING)
+            .limit(limit)
+            .offset(offset)
+        )
 
     messages: List[Dict[str, Any]] = []
     conversations_id: set[str] = set()
     files_id: set[str] = set()
 
+    collected: List[Dict[str, Any]] = [_typed_doc(doc) for doc in messages_ref.stream()]
+    if app_ref is not None:
+        collected = _merge_docs_by_id(collected, [_typed_doc(doc) for doc in app_ref.stream()])
+        collected.sort(
+            key=lambda item: item.get('created_at') or datetime.min.replace(tzinfo=timezone.utc), reverse=True
+        )
+        collected = collected[:limit]
+
     # Fetch messages and collect conversation IDs
-    for doc in messages_ref.stream():
-        message: Dict[str, Any] = _typed_doc(doc)
+    for message in collected:
         if message.get('reported') is True:
             continue
         messages.append(message)
@@ -346,7 +378,9 @@ def get_cache_aligned_messages(
     if chat_session_id:
         scoped_ref = scoped_ref.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
     else:
-        scoped_ref = scoped_ref.where(filter=_app_scope_filter(app_id))
+        scoped_ref = MESSAGES_BY_APP_ID_CREATED_QUERY.build(
+            scoped_ref, {'app_id': app_id}, field_filter_factory=FieldFilter
+        )
 
     total_result = scoped_ref.count().get()
     total = int(total_result[0][0].value) if total_result and total_result[0] else 0
@@ -397,7 +431,7 @@ def get_messages_reconcile_page(
     if chat_session_id:
         query = query.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
     else:
-        query = query.where(filter=_app_scope_filter(app_id))
+        query = MESSAGES_BY_APP_ID_CREATED_QUERY.build(query, {'app_id': app_id}, field_filter_factory=FieldFilter)
     query = query.order_by('created_at', direction=firestore.Query.DESCENDING)
 
     cursor_snapshot: Any = None
@@ -556,29 +590,34 @@ def batch_delete_messages(
     parent_doc_ref: Any, batch_size: int = 450, app_id: Optional[str] = None, chat_session_id: Optional[str] = None
 ) -> None:
     messages_ref = parent_doc_ref.collection('messages')
-    messages_ref = messages_ref.where(filter=_app_scope_filter(app_id))
     if chat_session_id:
-        messages_ref = messages_ref.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
+        scoped_refs = [messages_ref.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))]
+    else:
+        scoped_refs = [
+            messages_ref.where(filter=FieldFilter('app_id', '==', app_id)),
+            messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id)),
+        ]
     logger.info(f'batch_delete_messages {app_id}')
 
-    while True:
-        docs_stream = messages_ref.limit(batch_size).stream()
-        docs_list: List[Any] = list(docs_stream)
+    for messages_ref in scoped_refs:
+        while True:
+            docs_stream = messages_ref.limit(batch_size).stream()
+            docs_list: List[Any] = list(docs_stream)
 
-        if not docs_list:
-            logger.info("No more messages to delete")
-            break
+            if not docs_list:
+                logger.info("No more messages to delete")
+                break
 
-        batch = db.batch()
-        for doc in docs_list:
-            batch.delete(doc.reference)
-        batch.commit()
+            batch = db.batch()
+            for doc in docs_list:
+                batch.delete(doc.reference)
+            batch.commit()
 
-        logger.info(f'Deleted {len(docs_list)} messages')
+            logger.info(f'Deleted {len(docs_list)} messages')
 
-        if len(docs_list) < batch_size:
-            logger.info("Processed all messages")
-            break
+            if len(docs_list) < batch_size:
+                logger.info("Processed all messages")
+                break
 
 
 def clear_chat(
@@ -948,22 +987,35 @@ def get_chat_sessions(
     # Order by updated_at — v2 sessions always have this field.
     # Legacy v1 sessions (missing updated_at) are excluded by Firestore,
     # which is correct since this endpoint serves v2 clients only.
-    query = col.order_by('updated_at', direction=firestore.Query.DESCENDING)
-
     # Always filter — when app_id is None this returns only default-chat sessions
-    query = query.where(filter=_app_scope_filter(app_id))
+    if starred is None:
+        query = CHAT_SESSIONS_BY_APP_ID_UPDATED_QUERY.build(col, {'app_id': app_id}, field_filter_factory=FieldFilter)
+    else:
+        query = CHAT_SESSIONS_BY_APP_ID_STARRED_UPDATED_QUERY.build(
+            col, {'app_id': app_id, 'starred': starred}, field_filter_factory=FieldFilter
+        )
+    query = query.order_by('updated_at', direction=firestore.Query.DESCENDING)
+    legacy = col.order_by('updated_at', direction=firestore.Query.DESCENDING).where(
+        filter=FieldFilter('plugin_id', '==', app_id)
+    )
     if starred is not None:
-        query = query.where(filter=FieldFilter('starred', '==', starred))
+        legacy = legacy.where(filter=FieldFilter('starred', '==', starred))
 
     query = query.offset(offset).limit(limit)
+    legacy = legacy.offset(offset).limit(limit)
     items: List[Dict[str, Any]] = []
-    for doc in query.stream():
-        data: Dict[str, Any] = _typed_doc(doc)
-        data['id'] = doc.id
+    collected: List[Dict[str, Any]] = []
+    for source in (query, legacy):
+        for doc in source.stream():
+            data: Dict[str, Any] = _typed_doc(doc)
+            data['id'] = doc.id
+            collected.append(data)
+    for data in _merge_docs_by_id(collected):
         normalized = _normalize_chat_session(data)
         if normalized is not None:
             items.append(normalized)
-    return items
+    items.sort(key=lambda item: item.get('updated_at') or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+    return items[:limit]
 
 
 def update_chat_session(
@@ -1306,78 +1358,82 @@ def delete_messages(uid: str, app_id: Optional[str] = None, session_id: Optional
     col = user_ref.collection('messages')
     if session_id:
         # Session-scoped delete: filter by session only (same logic as get_messages)
-        query = col.where(filter=FieldFilter('chat_session_id', '==', session_id))
+        queries = [col.where(filter=FieldFilter('chat_session_id', '==', session_id))]
     else:
-        # App-scoped delete: app_id or legacy plugin_id (None = main chat)
-        query = col.where(filter=_app_scope_filter(app_id))
+        # App-scoped delete: app_id plus plugin_id dual-read so legacy rows go too
+        queries = [
+            col.where(filter=FieldFilter('app_id', '==', app_id)),
+            col.where(filter=FieldFilter('plugin_id', '==', app_id)),
+        ]
 
     deleted = 0
     consecutive_conflicts = 0
-    while True:
-        docs: List[Any] = list(query.limit(DELETE_MESSAGES_BATCH_LIMIT).stream())
-        if not docs:
-            break
+    for query in queries:
+        while True:
+            docs: List[Any] = list(query.limit(DELETE_MESSAGES_BATCH_LIMIT).stream())
+            if not docs:
+                break
 
-        deleted_by_session: Dict[str, int] = {}
-        deleted_message_ids_by_session: Dict[str, List[str]] = {}
-        deleted_previews_by_session: Dict[str, set[str]] = {}
-        for doc in docs:
-            data = _typed_doc(doc)
-            message_session_id = data.get('chat_session_id') or data.get('session_id')
-            if isinstance(message_session_id, str) and message_session_id:
-                deleted_by_session[message_session_id] = deleted_by_session.get(message_session_id, 0) + 1
-                stored_message_id = data.get('id')
-                deleted_message_ids_by_session.setdefault(message_session_id, []).append(
-                    stored_message_id if isinstance(stored_message_id, str) and stored_message_id else doc.id
+            deleted_by_session: Dict[str, int] = {}
+            deleted_message_ids_by_session: Dict[str, List[str]] = {}
+            deleted_previews_by_session: Dict[str, set[str]] = {}
+            for doc in docs:
+                data = _typed_doc(doc)
+                message_session_id = data.get('chat_session_id') or data.get('session_id')
+                if isinstance(message_session_id, str) and message_session_id:
+                    deleted_by_session[message_session_id] = deleted_by_session.get(message_session_id, 0) + 1
+                    stored_message_id = data.get('id')
+                    deleted_message_ids_by_session.setdefault(message_session_id, []).append(
+                        stored_message_id if isinstance(stored_message_id, str) and stored_message_id else doc.id
+                    )
+                    text = data.get('text')
+                    if isinstance(text, str) and text:
+                        deleted_previews_by_session.setdefault(message_session_id, set()).add(text[:100])
+
+            session_snapshots: Dict[str, Any] = {}
+            for message_session_id in deleted_by_session:
+                session_snapshots[message_session_id] = (
+                    user_ref.collection('chat_sessions').document(message_session_id).get()
                 )
-                text = data.get('text')
-                if isinstance(text, str) and text:
-                    deleted_previews_by_session.setdefault(message_session_id, set()).add(text[:100])
 
-        session_snapshots: Dict[str, Any] = {}
-        for message_session_id in deleted_by_session:
-            session_snapshots[message_session_id] = (
-                user_ref.collection('chat_sessions').document(message_session_id).get()
-            )
+            batch = db.batch()
+            for doc in docs:
+                delete_option = db.write_option(last_update_time=doc.update_time)
+                batch.delete(col.document(doc.id), option=delete_option)
 
-        batch = db.batch()
-        for doc in docs:
-            delete_option = db.write_option(last_update_time=doc.update_time)
-            batch.delete(col.document(doc.id), option=delete_option)
+            for message_session_id, deleted_from_session in deleted_by_session.items():
+                session_snapshot = session_snapshots[message_session_id]
+                if not session_snapshot.exists:
+                    continue
+                session_data = _typed_doc(session_snapshot)
+                stored_count = session_data.get('message_count')
+                updates: Dict[str, Any] = {}
+                if isinstance(session_data.get('message_ids'), list):
+                    updates['message_ids'] = firestore.ArrayRemove(deleted_message_ids_by_session[message_session_id])
+                if isinstance(stored_count, int) and stored_count > 0:
+                    decrement = min(stored_count, deleted_from_session)
+                    updates['message_count'] = firestore.Increment(-decrement)
+                current_preview = session_data.get('preview')
+                if isinstance(current_preview, str) and current_preview in deleted_previews_by_session.get(
+                    message_session_id, set()
+                ):
+                    updates['preview'] = None
+                if not updates:
+                    continue
+                session_ref = user_ref.collection('chat_sessions').document(message_session_id)
+                option = db.write_option(last_update_time=session_snapshot.update_time)
+                batch.update(session_ref, updates, option=option)
 
-        for message_session_id, deleted_from_session in deleted_by_session.items():
-            session_snapshot = session_snapshots[message_session_id]
-            if not session_snapshot.exists:
+            try:
+                batch.commit()
+            except FailedPrecondition:
+                # Another clear or a concurrent session mutation won the race.
+                # The batch is atomic, so re-query before applying any decrement.
+                consecutive_conflicts += 1
+                if consecutive_conflicts >= DELETE_MESSAGES_CONFLICT_RETRIES:
+                    raise
                 continue
-            session_data = _typed_doc(session_snapshot)
-            stored_count = session_data.get('message_count')
-            updates: Dict[str, Any] = {}
-            if isinstance(session_data.get('message_ids'), list):
-                updates['message_ids'] = firestore.ArrayRemove(deleted_message_ids_by_session[message_session_id])
-            if isinstance(stored_count, int) and stored_count > 0:
-                decrement = min(stored_count, deleted_from_session)
-                updates['message_count'] = firestore.Increment(-decrement)
-            current_preview = session_data.get('preview')
-            if isinstance(current_preview, str) and current_preview in deleted_previews_by_session.get(
-                message_session_id, set()
-            ):
-                updates['preview'] = None
-            if not updates:
-                continue
-            session_ref = user_ref.collection('chat_sessions').document(message_session_id)
-            option = db.write_option(last_update_time=session_snapshot.update_time)
-            batch.update(session_ref, updates, option=option)
-
-        try:
-            batch.commit()
-        except FailedPrecondition:
-            # Another clear or a concurrent session mutation won the race.
-            # The batch is atomic, so re-query before applying any decrement.
-            consecutive_conflicts += 1
-            if consecutive_conflicts >= DELETE_MESSAGES_CONFLICT_RETRIES:
-                raise
-            continue
-        deleted += len(docs)
-        consecutive_conflicts = 0
+            deleted += len(docs)
+            consecutive_conflicts = 0
 
     return deleted

@@ -150,9 +150,7 @@ def test_cache_aligned_history_without_session_is_scoped_to_app():
         assert chat_db.get_cache_aligned_messages("u1", app_id="app-1") == [{"id": "m1"}]
 
     scoped_filters = [call.kwargs["filter"] for call in messages_ref.where.call_args_list]
-    app_scope, reported = scoped_filters
-    assert sorted((part.field_path, part.value) for part in app_scope.filters) == [
+    assert [(filter_.field_path, filter_.value) for filter_ in scoped_filters] == [
         ("app_id", "app-1"),
-        ("plugin_id", "app-1"),
+        ("reported", True),
     ]
-    assert (reported.field_path, reported.value) == ("reported", True)

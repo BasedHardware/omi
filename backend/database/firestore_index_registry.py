@@ -252,6 +252,25 @@ INDEX_ONLY_REQUIREMENTS = (
         'COLLECTION',
         (_asc('app_id'), _asc('chat_session_id'), _desc('created_at'), _desc('__name__')),
     ),
+    # Dual-read companions so legacy plugin_id rows stay visible until backfill.
+    FirestoreIndexRequirement(
+        'messages_plugin_id_created_at',
+        'messages',
+        'COLLECTION',
+        (_asc('plugin_id'), _desc('created_at'), _desc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'chat_sessions_plugin_id_updated_at',
+        'chat_sessions',
+        'COLLECTION',
+        (_asc('plugin_id'), _desc('updated_at'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'chat_sessions_plugin_id_starred_updated_at',
+        'chat_sessions',
+        'COLLECTION',
+        (_asc('plugin_id'), _asc('starred'), _desc('updated_at'), _asc('__name__')),
+    ),
 )
 
 
@@ -776,6 +795,33 @@ MESSAGES_BY_APP_ORDERED_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('plugin_id'), _desc('created_at'), _desc('__name__')),
 )
 
+MESSAGES_BY_APP_ID_CREATED_QUERY = FirestoreQuerySpec(
+    identifier='messages_by_app_id_created_at',
+    collection_group='messages',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('app_id', '==', 'app_id'),),
+    index_fields=(_asc('app_id'), _desc('created_at'), _desc('__name__')),
+)
+
+CHAT_SESSIONS_BY_APP_ID_UPDATED_QUERY = FirestoreQuerySpec(
+    identifier='chat_sessions_by_app_id_updated_at',
+    collection_group='chat_sessions',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('app_id', '==', 'app_id'),),
+    index_fields=(_asc('app_id'), _desc('updated_at'), _asc('__name__')),
+)
+
+CHAT_SESSIONS_BY_APP_ID_STARRED_UPDATED_QUERY = FirestoreQuerySpec(
+    identifier='chat_sessions_by_app_id_starred_updated_at',
+    collection_group='chat_sessions',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('app_id', '==', 'app_id'),
+        FirestoreQueryFilter('starred', '==', 'starred'),
+    ),
+    index_fields=(_asc('app_id'), _asc('starred'), _desc('updated_at'), _asc('__name__')),
+)
+
 MEETING_RECEIPTS_DUE_QUERY = FirestoreQuerySpec(
     identifier='conversation_finalization_jobs_meeting_receipts_due',
     collection_group='conversation_finalization_jobs',
@@ -843,6 +889,9 @@ QUERY_SPECS = (
     CHAT_FIRST_DEFERRALS_SUBJECT_QUERY,
     CURRENT_CHAT_SESSION_QUERY,
     CURRENT_CHAT_SESSION_ORDERED_QUERY,
+    MESSAGES_BY_APP_ID_CREATED_QUERY,
+    CHAT_SESSIONS_BY_APP_ID_UPDATED_QUERY,
+    CHAT_SESSIONS_BY_APP_ID_STARRED_UPDATED_QUERY,
     MEETING_RECEIPTS_DUE_QUERY,
     HOURLY_USAGE_PLAN_ATTRIBUTION_QUERY,
     MESSAGES_BY_APP_ORDERED_QUERY,
