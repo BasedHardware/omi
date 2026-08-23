@@ -342,9 +342,10 @@ def format_jit_results(
         return JIT_TRUNCATION_MARKER if bounded_conversations else ""
     blocks: List[str] = []
     admitted: List[Tuple[Dict[str, Any], Dict[str, Any]]] = []
+    first_card_index = len(conversations_collected) + 1 if conversations_collected is not None else 1
     truncated = rejected_or_duplicate or len(conversations_data) > len(bounded_conversations)
     for data, card in candidates:
-        block = _format_summary_card(card, len(admitted) + 1)
+        block = _format_summary_card(card, first_card_index + len(admitted))
         if not _can_admit(blocks, block):
             truncated = True
             break
