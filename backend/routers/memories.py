@@ -515,6 +515,8 @@ async def create_memory_import_batch(
         logger.exception("Memory import ingest failed uid=%s source_type=%s", uid, request.source_type)
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
     parity_capture.observe("inbound", {"type": "memory_import_result", **result.response.model_dump(mode="json")})
+    parity_capture.persist()
+    return result.response
 
 
 @router.get('/v3/memories', tags=['memories'], response_model=List[MemoryDB])

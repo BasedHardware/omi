@@ -171,6 +171,14 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
     XCTAssertFalse(try XCTUnwrap(appState).hasCompletedOnboarding)
   }
 
+  func testReferralRewardCopyStaysPlanAgnostic() {
+    let model = makeModel()
+
+    XCTAssertEqual(
+      model.message(for: .referral),
+      "Want to invite a friend? They'll get one free month.")
+  }
+
   func testSkippedSetupStillProducesAnswerableGuidance() {
     let model = makeModel()
 
