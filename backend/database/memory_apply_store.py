@@ -295,6 +295,7 @@ def apply_long_term_patch_firestore(
     proposed_operation: Optional[MemoryOperation] = None,
     proposed_evidence: Optional[List[MemoryEvidence]] = None,
     review_resolution: Optional[CanonicalReviewResolution] = None,
+    required_source_item: Optional[MemoryItem] = None,
     db_client: Any = db,
 ) -> ApplyResult:
     """Apply a memory Long-term patch through the Firestore transaction boundary.
@@ -314,6 +315,7 @@ def apply_long_term_patch_firestore(
         proposed_operation,
         proposed_evidence,
         review_resolution,
+        required_source_item,
     )
 
 
@@ -1592,6 +1594,7 @@ def _apply_long_term_patch_firestore_transaction(
     proposed_operation: Optional[MemoryOperation],
     proposed_evidence: Optional[List[MemoryEvidence]],
     review_resolution: Optional[CanonicalReviewResolution],
+    required_source_item: Optional[MemoryItem],
 ) -> ApplyResult:
     collections = MemoryCollections(uid=uid)
     review_item = _read_canonical_review_resolution(
@@ -1640,6 +1643,19 @@ def _apply_long_term_patch_firestore_transaction(
         return committed_replay
     if committed_replay.status == ApplyStatus.payload_mismatch:
         return committed_replay
+
+    source_validation = _validate_required_ledger_source(
+        db_client=db_client,
+        transaction=transaction,
+        collections=collections,
+        expected=required_source_item,
+        operation=operation,
+        control_state=control_state,
+    )
+    if source_validation is not None:
+        # The proposed operation carries memory_text. A privacy-invalidated
+        # source must fail without persisting that stale content anywhere.
+        return source_validation
     if committed_replay.status in {ApplyStatus.generation_mismatch, ApplyStatus.retryable_head_mismatch}:
         _write_apply_result(
             transaction=transaction,
@@ -1858,6 +1874,43 @@ def _validate_authoritative_targets(
     return None
 
 
+def _validate_required_ledger_source(
+    *,
+    db_client: Any,
+    transaction: Any,
+    collections: MemoryCollections,
+    expected: Optional[MemoryItem],
+    operation: MemoryOperation,
+    control_state: MemoryControlState,
+) -> Optional[ApplyResult]:
+    """Fence a user-selected ledger source in the same transaction as its append."""
+
+    if expected is None:
+        return None
+    source_ref = db_client.document(f"{collections.memory_items}/{expected.memory_id}")
+    snapshot = source_ref.get(transaction=transaction)
+    if not getattr(snapshot, "exists", False):
+        return _source_not_active(control_state, operation, "required ledger source is missing")
+    source = parse_snapshot_strict(MemoryItem, snapshot, payload_from_snapshot=_typed_doc)
+    restricted = bool(set(source.sensitivity_labels).intersection(RESTRICTED_SENSITIVITY_LABELS))
+    if (
+        source.uid != operation.uid
+        or source.memory_id != expected.memory_id
+        or str(getattr(snapshot, "id", expected.memory_id)) != expected.memory_id
+        or source.account_generation != control_state.account_generation
+        or source.item_revision != expected.item_revision
+        or source.content_hash != expected.content_hash
+        or source.source_state != SourceState.active
+        or source.source_state != expected.source_state
+        or source.status != expected.status
+        or source.sensitivity_labels != expected.sensitivity_labels
+        or restricted
+        or bool((source.promotion or {}).get("is_locked", False))
+    ):
+        return _source_not_active(control_state, operation, "required ledger source changed or is unavailable")
+    return None
+
+
 def _operation_target_ids(operation: MemoryOperation) -> List[str]:
     target_ids: List[str] = []
     if operation.target_memory_id:
@@ -1871,6 +1924,15 @@ def _operation_target_ids(operation: MemoryOperation) -> List[str]:
 def _target_not_active(control_state: MemoryControlState, operation: MemoryOperation, reason: str) -> ApplyResult:
     return ApplyResult(
         status=ApplyStatus.target_not_active,
+        control_state=control_state,
+        operation=operation,
+        reason=reason,
+    )
+
+
+def _source_not_active(control_state: MemoryControlState, operation: MemoryOperation, reason: str) -> ApplyResult:
+    return ApplyResult(
+        status=ApplyStatus.source_not_active,
         control_state=control_state,
         operation=operation,
         reason=reason,

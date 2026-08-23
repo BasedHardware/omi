@@ -1239,6 +1239,7 @@ def write_canonical_extraction_memory(
     db_client: Any = None,
     evidence_items: Optional[List[MemoryEvidence]] = None,
     _ledger_authority: object | None = None,
+    required_source_item: Optional[MemoryItem] = None,
 ) -> str:
     """Persist one memory to memory_items + ledger (extraction or external/manual writes)."""
     if data.get("ledger_schema_version") is not None and _ledger_authority is not _LEDGER_WRITE_AUTHORITY:
@@ -1259,6 +1260,7 @@ def write_canonical_extraction_memory(
             patch_payload=write.patch_payload,
             proposed_operation=write.operation,
             proposed_evidence=write.evidence,
+            required_source_item=required_source_item,
             db_client=client,
         )
         if result.status != ApplyStatus.retryable_head_mismatch:
@@ -1373,7 +1375,13 @@ def write_canonical_external_memory(
     )
 
 
-def write_canonical_knowledge_ledger_memory(uid: str, data: Dict[str, Any], *, db_client: Any = None) -> str:
+def write_canonical_knowledge_ledger_memory(
+    uid: str,
+    data: Dict[str, Any],
+    *,
+    db_client: Any = None,
+    required_source_item: Optional[MemoryItem] = None,
+) -> str:
     """Dedicated canonical boundary for exactly ``knowledge_ledger.v1`` rows."""
     if data.get("ledger_schema_version") != "knowledge_ledger.v1":
         raise ValueError("dedicated ledger writes require knowledge_ledger.v1")
@@ -1383,6 +1391,7 @@ def write_canonical_knowledge_ledger_memory(uid: str, data: Dict[str, Any], *, d
         data,
         db_client=client,
         _ledger_authority=_LEDGER_WRITE_AUTHORITY,
+        required_source_item=required_source_item,
         evidence_items=_reissued_external_evidence(
             uid,
             _evidence_items_from_payload(data),

@@ -204,6 +204,7 @@ def _ledger_item(
         "valid_from": updated_at - timedelta(days=2),
         "valid_to": valid_to,
         "superseded_by": superseded_by,
+        "canonical_memory_id": superseded_by,
         "arguments": arguments or {},
     }
     if user_review is not None:
@@ -1092,6 +1093,7 @@ def test_superseded_ledger_fact_revert_appends_from_current_tail_and_preserves_t
     assert amend.call_args.kwargs["curation_weight"] == 7
     assert amend.call_args.kwargs["visibility"] == "shared"
     assert amend.call_args.kwargs["provenance"] == provenance
+    assert amend.call_args.kwargs["required_source_item"] == selected
     invalidate.assert_called_once_with("uid-test")
 
 
@@ -1149,6 +1151,95 @@ def test_superseded_ledger_fact_revert_retry_returns_its_current_append(service_
     amend.assert_not_called()
 
 
+def test_superseded_ledger_fact_revert_retry_rejects_a_now_locked_append(service_mod, monkeypatch):
+    now = datetime(2026, 8, 23, tzinfo=timezone.utc)
+    operation_id = "ac532c6f-a9e0-47ec-9c4b-d402dc66544a"
+    selected = _ledger_item(
+        service_mod,
+        "selected",
+        updated_at=now,
+        status=MemoryItemStatus.superseded,
+        valid_to=now,
+        superseded_by="tail",
+    ).model_copy(update={"content": "LOCKED_SECRET_CONTENT", "item_revision": 2})
+    tail = _ledger_item(
+        service_mod,
+        "tail",
+        updated_at=now + timedelta(seconds=1),
+        status=MemoryItemStatus.superseded,
+        valid_to=now + timedelta(seconds=2),
+        superseded_by="restored",
+    )
+    provenance = service_mod.LedgerProvenance(
+        source_id="selected",
+        source_type="explicit_user_revert",
+        source_version="item_revision:2",
+        action_id=f"memory_ui_revert:{operation_id}",
+        artifact_ref={
+            "artifact_id": f"memory-history-revert:{operation_id}",
+            "preservation": "preserved",
+        },
+    )
+    evidence = MemoryEvidence(
+        evidence_id=service_mod.evidence_id_for_ledger_provenance("uid-test", provenance),
+        source_type="explicit_user_revert",
+        source_id="selected",
+        source_version="item_revision:2",
+        artifact_preservation=ArtifactPreservationState.preserved,
+    )
+    restored = _ledger_item(service_mod, "restored", updated_at=now + timedelta(seconds=2)).model_copy(
+        update={
+            "content": "LOCKED_SECRET_CONTENT",
+            "write_reason": LedgerWriteReason.direct_user_statement,
+            "evidence": [evidence],
+            "promotion": {"is_locked": True},
+        }
+    )
+    service = service_mod.MemoryService(db_client=_Db())
+    monkeypatch.setattr(service, "_canonical_item_for_lineage", MagicMock(side_effect=[selected, tail, restored]))
+    monkeypatch.setattr(service_mod, "amend_fact", MagicMock())
+    invalidate = MagicMock()
+    monkeypatch.setattr(service, "_invalidate_prompt_cache", invalidate)
+
+    with pytest.raises(service_mod.HTTPException) as exc_info:
+        service.revert_superseded_ledger_fact("uid-test", "selected", operation_id)
+
+    assert exc_info.value.status_code == 402
+    invalidate.assert_not_called()
+
+
+def test_superseded_ledger_fact_revert_rejects_when_terminal_content_already_matches(service_mod, monkeypatch):
+    now = datetime(2026, 8, 23, tzinfo=timezone.utc)
+    selected = _ledger_item(
+        service_mod,
+        "selected",
+        updated_at=now,
+        status=MemoryItemStatus.superseded,
+        valid_to=now,
+        superseded_by="tail",
+    ).model_copy(update={"content": "Lives in Boston"})
+    tail = _ledger_item(service_mod, "tail", updated_at=now + timedelta(seconds=1)).model_copy(
+        update={"content": " Lives in Boston ", "visibility": "shared"}
+    )
+    service = service_mod.MemoryService(db_client=_Db())
+    monkeypatch.setattr(service, "_canonical_item_for_lineage", MagicMock(side_effect=[selected, tail]))
+    amend = MagicMock()
+    monkeypatch.setattr(service_mod, "amend_fact", amend)
+    invalidate = MagicMock()
+    monkeypatch.setattr(service, "_invalidate_prompt_cache", invalidate)
+
+    with pytest.raises(service_mod.HTTPException) as exc_info:
+        service.revert_superseded_ledger_fact(
+            "uid-test",
+            "selected",
+            "5f95a7a1-10c6-4ec3-946d-e76a0a2f7cc5",
+        )
+
+    assert exc_info.value.status_code == 409
+    amend.assert_not_called()
+    invalidate.assert_not_called()
+
+
 @pytest.mark.parametrize(
     "lineage_update",
     [
@@ -1156,6 +1247,7 @@ def test_superseded_ledger_fact_revert_retry_returns_its_current_append(service_
         {"subject_entity_id": "different-person"},
         {"ledger_schema_version": "knowledge_ledger.v2"},
         {"kind": MemoryKind.document, "body": "workflow"},
+        {"canonical_memory_id": "wrong-tail"},
     ],
 )
 def test_superseded_ledger_fact_revert_rejects_malformed_lineage(service_mod, monkeypatch, lineage_update):
@@ -1261,7 +1353,7 @@ def test_ledger_revert_rejects_suppressed_or_restricted_lineage(service_mod, mon
     amend.assert_not_called()
 
 
-@pytest.mark.parametrize("malformation", ["missing", "cycle", "too_long"])
+@pytest.mark.parametrize("malformation", ["missing", "cycle", "missing_canonical", "too_long"])
 def test_ledger_revert_rejects_broken_or_unbounded_lineage(service_mod, monkeypatch, malformation):
     now = datetime(2026, 8, 23, tzinfo=timezone.utc)
     selected = _ledger_item(
@@ -1275,6 +1367,9 @@ def test_ledger_revert_rejects_broken_or_unbounded_lineage(service_mod, monkeypa
     lineage = [selected]
     if malformation == "missing":
         lineage.append(None)
+    elif malformation == "missing_canonical":
+        selected = selected.model_copy(update={"canonical_memory_id": None})
+        lineage = [selected, _ledger_item(service_mod, "tail", updated_at=now + timedelta(seconds=1))]
     elif malformation == "cycle":
         lineage.append(
             _ledger_item(

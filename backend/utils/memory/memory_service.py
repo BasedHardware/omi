@@ -1816,7 +1816,7 @@ class MemoryService:
             if (
                 prior.status != MemoryItemStatus.superseded
                 or prior.valid_to is None
-                or (prior.canonical_memory_id or successor_id).strip() != successor_id
+                or (prior.canonical_memory_id or "").strip() != successor_id
                 or successor_id in seen
             ):
                 raise HTTPException(status_code=409, detail="Knowledge ledger history cannot be restored")
@@ -1829,6 +1829,7 @@ class MemoryService:
                     successor.status == MemoryItemStatus.active
                     and successor.valid_to is None
                     and not (successor.superseded_by or "").strip()
+                    and not (successor.canonical_memory_id or "").strip()
                     and self._is_exact_ledger_fact_revert(
                         selected,
                         prior,
@@ -1836,6 +1837,8 @@ class MemoryService:
                         evidence_id=expected_evidence_id,
                     )
                 ):
+                    if memory_item_to_memorydb(successor).is_locked:
+                        raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
                     self._invalidate_prompt_cache(uid)
                     return memory_item_to_memorydb(successor)
                 raise HTTPException(status_code=409, detail="Memory revert operation is no longer current")
@@ -1845,12 +1848,19 @@ class MemoryService:
             raise HTTPException(status_code=409, detail="Knowledge ledger history chain is too long")
 
         tail = prior
-        if tail.status != MemoryItemStatus.active or tail.valid_to is not None or tail.superseded_by:
+        if (
+            tail.status != MemoryItemStatus.active
+            or tail.valid_to is not None
+            or tail.superseded_by
+            or tail.canonical_memory_id
+        ):
             raise HTTPException(status_code=409, detail="Knowledge ledger history has no current fact")
         if memory_item_to_memorydb(tail).is_locked:
             raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
         if tail.visibility not in {"private", "public", "shared"}:
             raise HTTPException(status_code=503, detail="Canonical memory unavailable")
+        if (tail.content or "").strip() == (selected.content or "").strip():
+            raise HTTPException(status_code=409, detail="Knowledge ledger fact is already current")
 
         try:
             replacement_id = amend_fact(
@@ -1865,6 +1875,7 @@ class MemoryService:
                 curation_weight=selected.curation_weight,
                 visibility=cast(Literal["private", "public", "shared"], tail.visibility),
                 db_client=self.db_client,
+                required_source_item=selected,
             )
         except (RuntimeError, ValueError) as exc:
             raise HTTPException(status_code=409, detail="Knowledge ledger restore conflicted") from exc
