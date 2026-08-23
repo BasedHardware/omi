@@ -275,6 +275,11 @@ def _fetch_dedup_candidates(uid: str, structured: Structured, conversation: Any 
     return _fetch_dedup_candidates_for_query(uid, structured.overview, conversation)
 
 
+def _primary_user_name(uid: str) -> Optional[str]:
+    raw_name = get_user_name(uid, use_default=False)
+    return raw_name.strip() if isinstance(raw_name, str) and raw_name.strip() else None
+
+
 def _get_structured(
     uid: str,
     language_code: str,
@@ -360,6 +365,7 @@ def _get_structured(
                         calendar_meeting_context=calendar_context,
                         output_language_code=user_language,
                         task_intelligence_capture=task_intelligence_capture,
+                        primary_user_name=_primary_user_name(uid),
                     )
                 return structured, False
 
@@ -433,6 +439,7 @@ def _get_structured(
                     output_language_code=user_language,
                     task_intelligence_capture=task_intelligence_capture,
                     trusted_wake_word_markers=has_wake_word_marker,
+                    primary_user_name=_primary_user_name(uid),
                 )
             return structured, False
 
@@ -500,6 +507,7 @@ def _get_structured(
                 output_language_code=user_language,
                 task_intelligence_capture=task_intelligence_capture,
                 trusted_wake_word_markers=has_wake_word_marker,
+                primary_user_name=_primary_user_name(uid),
             )
         return structured, False
     except Exception as e:
