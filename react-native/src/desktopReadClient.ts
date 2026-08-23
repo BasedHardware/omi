@@ -130,6 +130,10 @@ export const desktopBackendConfigurationCopy =
   'Trusted local Omi service configuration is missing. Set OMI_LOCAL_API_CLIENT_ID and OMI_LOCAL_API_TOKEN, then retry.';
 export const desktopBackendServiceCopy =
   'Trusted local Omi service at 127.0.0.1:8787 is unavailable. Start it, then retry.';
+export const desktopProjectionUnavailableCopy =
+  'Saved conversations and memories are not available from this Omi service yet. Retry after its persisted projections are connected.';
+
+class DesktopProjectionUnavailableError extends Error {}
 
 function nativeErrorCode(value: unknown): string | null {
   if (value === null || typeof value !== 'object') {
@@ -242,6 +246,25 @@ async function read(
 ): Promise<unknown> {
   const response = await backend.request({id, method: 'GET', path});
   if (response.status !== 200) {
+    if (response.status === 503 && response.body !== null) {
+      try {
+        const body = object(JSON.parse(response.body), `${id} error`);
+        const error = object(body.error, `${id} error detail`);
+        if (
+          error.code === 'projection_unavailable' &&
+          error.retryable === true &&
+          error.action === 'retry'
+        ) {
+          throw new DesktopProjectionUnavailableError(
+            desktopProjectionUnavailableCopy,
+          );
+        }
+      } catch (error) {
+        if (error instanceof DesktopProjectionUnavailableError) {
+          throw error;
+        }
+      }
+    }
     throw new Error(`${id} failed (${response.status})`);
   }
   return parseJson(response.body, id);
