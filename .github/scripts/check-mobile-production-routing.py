@@ -28,9 +28,16 @@ RETIRED_GKE_DESKTOP_BACKEND_MANIFEST_SUFFIXES = {".tpl", ".yaml", ".yml"}
 RETIRED_GKE_DESKTOP_BACKEND_MARKERS = ("desktop-api.omi.me", "desktop-backend")
 GKE_WORKFLOW_MARKERS = ("gcloud container clusters", "helm ", "kubectl ")
 CLOUD_RUN_OBSERVER_ROOT = Path("backend/charts/monitoring/prometheus-stackdriver-exporter")
+# What makes one of these files an observer of Cloud Run is the monitored
+# resource it selects, not how it spells the namespace set. `__run__` is Cloud
+# Run's reserved pseudo-cluster, so these two markers together are proof; keying
+# the exemption on an exact namespace comparison instead made it collapse the
+# moment that disjunction was rewritten as one_of(...) to satisfy Cloud
+# Monitoring's filter grammar, and flagged a read-only metrics reader as retired
+# GKE ownership.
 CLOUD_RUN_OBSERVER_MARKERS = (
     "prometheus.googleapis.com/",
-    'resource.labels.namespace="desktop-backend"',
+    'resource.labels.cluster="__run__"',
 )
 LEGACY_BETA_ROUTING_PATHS = (
     "codemagic.yaml",
