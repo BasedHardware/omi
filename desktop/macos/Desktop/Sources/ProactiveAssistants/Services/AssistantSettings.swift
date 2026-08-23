@@ -33,6 +33,7 @@ class AssistantSettings {
   private let wakeWordEnabledKey = "wakeWordEnabled"
   private let wakeWordPhraseKey = "wakeWordPhrase"
   private let wakeWordCooldownKey = "wakeWordCooldown"
+  private let wakeWordUsesRealtimeKey = "wakeWordUsesRealtime"
 
   // MARK: - Default Values
 
@@ -68,6 +69,7 @@ class AssistantSettings {
       wakeWordEnabledKey: defaultWakeWordEnabled,
       wakeWordPhraseKey: defaultWakeWordPhrase,
       wakeWordCooldownKey: defaultWakeWordCooldown,
+      wakeWordUsesRealtimeKey: false,
     ])
   }
 
@@ -201,6 +203,20 @@ class AssistantSettings {
     }
     set {
       UserDefaults.standard.set(newValue, forKey: wakeWordCooldownKey)
+      NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
+    }
+  }
+
+  /// Route a fired wake word into the realtime session instead of the text chat path.
+  ///
+  /// Default off. The text path is what has live measurement behind it; this is the
+  /// alternative under evaluation — the model speaks its own answer, barge-in is native
+  /// rather than text-matched, and a follow-up continues in the same session. Detection is
+  /// unchanged either way: both read the same ambient transcript.
+  var wakeWordUsesRealtime: Bool {
+    get { UserDefaults.standard.bool(forKey: wakeWordUsesRealtimeKey) }
+    set {
+      UserDefaults.standard.set(newValue, forKey: wakeWordUsesRealtimeKey)
       NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
     }
   }

@@ -21,7 +21,20 @@ final class WakeWordService {
     // `submitSpokenCommand` is that entry point. It is not the push-to-talk path: that one
     // presents `.voiceOnly` and owns a `VoiceTurnID` for the whole recording lifecycle,
     // while a wake word owns no turn — the words were already transcribed when it fired.
-    FloatingControlBarManager.shared.submitSpokenCommand(command)
+    guard AssistantSettings.shared.wakeWordUsesRealtime else {
+      FloatingControlBarManager.shared.submitSpokenCommand(command)
+      return
+    }
+    // Under evaluation (#11801): hand the exchange to the realtime session instead. The
+    // words are already transcribed, so what moves is the reply — the model speaks its own
+    // answer, barge-in is native rather than text-matched, and a follow-up continues in the
+    // same session. Detection is unchanged; both paths read the same ambient transcript.
+    Task { @MainActor in
+      let handed = await RealtimeHubController.shared.runWakeWordTurn(command)
+      guard !handed else { return }
+      log("WakeWord: realtime session unavailable — falling back to the chat path")
+      FloatingControlBarManager.shared.submitSpokenCommand(command)
+    }
   }
   private(set) var lastTriggeredCommand: String?
 

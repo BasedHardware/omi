@@ -478,6 +478,14 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     await sendTextInput(text, logLabel: "test text input")
   }
 
+  /// A hands-free command whose words are already transcribed. The wake word rides the
+  /// ambient transcript, so by the time it fires the spoken audio has long passed; what it
+  /// needs from the session is the *exchange* — a spoken answer, native barge-in, and
+  /// follow-ups in the same turn — not another pass at recognising the words.
+  func sendSpokenCommand(_ text: String) async -> Bool {
+    await sendTextInput(text, logLabel: "wake word command")
+  }
+
   /// True when the session can accept injected (non-PTT) context *right now*.
   /// Evaluated on `q`. OpenAI accepts on any open socket; Gemini needs an open
   /// speech-activity window (opened per turn by `beginInputTurn`).
