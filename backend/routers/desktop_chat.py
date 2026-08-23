@@ -1815,7 +1815,7 @@ async def _chat_completions_unobserved(
             )
             gateway_mode = False
         if oauth_provider is not None:
-            if direct_web_search_requested:
+            if _web_search_requested(body):
                 record_fallback(
                     component='desktop_chat',
                     from_mode=f'{oauth_provider}_oauth',
