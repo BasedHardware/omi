@@ -8,6 +8,33 @@ import XCTest
 @MainActor
 final class QueryShellTests: XCTestCase {
 
+  func testHomeDesignSwitchReachesAllThreeHomePresentations() {
+    XCTAssertEqual(
+      HomeDesignPresentation.resolve(
+        useLegacyHomeDesign: false,
+        useOldestHomeDesign: false,
+        forceModernPresentation: false),
+      .queryShell)
+    XCTAssertEqual(
+      HomeDesignPresentation.resolve(
+        useLegacyHomeDesign: true,
+        useOldestHomeDesign: false,
+        forceModernPresentation: false),
+      .redesignedHub)
+    XCTAssertEqual(
+      HomeDesignPresentation.resolve(
+        useLegacyHomeDesign: true,
+        useOldestHomeDesign: true,
+        forceModernPresentation: false),
+      .oldestLegacy)
+    XCTAssertEqual(
+      HomeDesignPresentation.resolve(
+        useLegacyHomeDesign: true,
+        useOldestHomeDesign: true,
+        forceModernPresentation: true),
+      .queryShell)
+  }
+
   // MARK: - The one key
 
   /// **`⏎` sends. There is nothing else for it to mean.**
@@ -490,8 +517,8 @@ final class QueryShellTests: XCTestCase {
     for route in QueryShellRoute.allCases {
       guard let hubView = route.memoryDestination else { continue }
       XCTAssertTrue(
-        MemoryHubDestination.switcherOrder.contains(hubView),
-        "\(route) selects a hub view the hub's own switcher does not show")
+        ActivityDestinationChip.reachableHubDestinations.contains(hubView),
+        "\(route) selects a hub view Activity's chip row has no chip for")
     }
   }
 

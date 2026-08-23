@@ -322,7 +322,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get searchApps => 'Ieškoti programų...';
 
   @override
-  String get myApps => 'Mano programėlės';
+  String get myApps => 'Sukurta manęs';
 
   @override
   String get installedApps => 'Įdiegtos programėlės';
@@ -9869,4 +9869,40 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get findDevice => 'Rasti';
+
+  @override
+  String get diagnosticsShareFailed => 'Nepavyko bendrinti diagnostikos. Bandykite dar kartą.';
+
+  @override
+  String get appDisabledTitle => 'Ši programėlė išjungta ir jos įdiegti negalima.';
+
+  @override
+  String get appDisabledWebhookFailures =>
+      'Jos galinis taškas nepavyko 72 valandas iš eilės, todėl pristatymai buvo sustabdyti.';
+
+  @override
+  String get appDisabledGeneric => 'Ją išjungė „Omi“.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Pirmiausia pataisykite galinį tašką — įjungiant iš naujo kiekvienas sukonfigūruotas URL tikrinamas dar kartą.';
+
+  @override
+  String get appReEnable => 'Įjungti iš naujo';
+
+  @override
+  String get appReEnableFailedTitle => 'Nepavyko įjungti iš naujo';
+
+  @override
+  String get appReEnableFailedBody => 'Šios programėlės nepavyko įjungti iš naujo. Bandykite dar kartą.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Išjungta $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Paskutinė klaida: $error.';
+  }
 }

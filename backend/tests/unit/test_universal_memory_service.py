@@ -146,9 +146,18 @@ def test_memory_enabled_off_blocks_intake_like_mode_off(service_mod, monkeypatch
     assert exc_info.value.detail == "Memory writes are globally paused"
 
 
+def test_prompt_cache_invalidation_also_invalidates_owner_rejection_feedback(service_mod, monkeypatch):
+    service = service_mod.MemoryService(db_client=_Db())
+    clear_rejections = MagicMock()
+    monkeypatch.setattr(service_mod, "clear_rejected_memory_feedback_cache", clear_rejections)
+
+    service._invalidate_prompt_cache("uid-test")
+
+    clear_rejections.assert_called_once_with("uid-test")
+
+
 def test_historical_adapter_uses_injected_firestore_client(service_mod, monkeypatch):
     db = _Db()
-    monkeypatch.setattr(service_mod.memories_db, "get_memories", lambda *args, **kwargs: [])
     service = service_mod.MemoryService(db_client=db)
     service._canonical.read = MagicMock(return_value=[])
     service.read("uid-test", limit=3)
@@ -161,7 +170,7 @@ def test_historical_adapter_uses_injected_firestore_client(service_mod, monkeypa
         calls.append((args, kwargs))
         return []
 
-    monkeypatch.setattr(service_mod.memories_db, "get_memories", capture)
+    monkeypatch.setattr(service_mod.memories_db, "list_memory_updated_or_created_index", capture)
     service.read("uid-test", limit=3)
     assert calls[-1][1]["firestore_client"] is db
 
@@ -178,6 +187,37 @@ def test_mixed_read_deduplicates_canonical_public_identity(service_mod, monkeypa
     result = service.read("uid-test", limit=10)
     assert {item.id for item in result} == {"same", "legacy"}
     assert next(item for item in result if item.id == "same").content == "canonical"
+
+
+def test_mixed_read_does_not_hydrate_canonical_identity_from_historical_stub(service_mod, monkeypatch):
+    """Index stubs share migrated ids. Hydrating the suppressed prefix would
+    replace the canonical row with the grandfathered document, or drop it."""
+    service = service_mod.MemoryService(db_client=_Db())
+    canonical = _memory(service_mod, "same", content="canonical")
+    service._canonical.read = MagicMock(return_value=[canonical])
+    colliding_stub = service_mod.HistoricalMemoryRecord(
+        memory=_memory(service_mod, "same", content=""),
+        locator=service_mod.MemoryLocator("uid-test", "legacy", "same"),
+        hydrated=False,
+    )
+    legacy_stub = service_mod.HistoricalMemoryRecord(
+        memory=_memory(service_mod, "legacy", content=""),
+        locator=service_mod.MemoryLocator("uid-test", "legacy", "legacy"),
+        hydrated=False,
+    )
+    service.history.read = MagicMock(return_value=[colliding_stub, legacy_stub])
+
+    def hydrate_page_stubs(_uid, records, *, budget=None):
+        del budget
+        assert [record.memory.id for record in records] == ["legacy"]
+        return [_historical(service_mod, "legacy", content="legacy-full")]
+
+    monkeypatch.setattr(service.history, "hydrate_records", hydrate_page_stubs)
+
+    result = service.read("uid-test", limit=10)
+    assert {item.id for item in result} == {"same", "legacy"}
+    assert next(item for item in result if item.id == "same").content == "canonical"
+    assert next(item for item in result if item.id == "legacy").content == "legacy-full"
 
 
 def test_canonical_read_preserves_lock_and_returns_only_a_preview(service_mod, monkeypatch):
@@ -376,6 +416,8 @@ def test_offset_merge_fetches_a_complete_bounded_prefix(service_mod):
         "limit": 510,
         "offset": 0,
         "device_scope_request": None,
+        "hydrate": False,
+        "budget": None,
     }
 
 
@@ -436,7 +478,7 @@ def test_adaptive_merge_scan_surfaces_visible_rows_behind_suppressed_prefix(serv
     all_historical = suppressed + visible
     read_limits: list[int] = []
 
-    def fake_history_read(_uid, *, limit, offset, device_scope_request=None):
+    def fake_history_read(_uid, *, limit, offset, device_scope_request=None, **_kwargs):
         del _uid, offset, device_scope_request
         read_limits.append(limit)
         return all_historical[:limit]
@@ -492,7 +534,7 @@ def test_adaptive_merge_scan_does_not_double_count_suppression_across_retries(se
     )
     rows = suppressed + [visible]
 
-    def fake_history_read(_uid, *, limit, offset, device_scope_request=None):
+    def fake_history_read(_uid, *, limit, offset, device_scope_request=None, **_kwargs):
         del _uid, offset, device_scope_request
         return rows[:limit]
 
@@ -745,6 +787,26 @@ def test_historical_missing_updated_at_uses_created_at_for_sort_and_validation(s
     assert record.memory.updated_at == expected
 
 
+def test_historical_missing_uid_falls_back_to_the_owning_path(service_mod):
+    raw = _sample_memory_dict("missing-uid")
+    raw.pop("uid")
+
+    record = service_mod.HistoricalMemoryAdapter._adapt("uid-test", raw)
+
+    assert record is not None
+    assert record.memory.uid == "uid-test"
+
+
+def test_historical_stored_uid_wins_over_the_path_fallback(service_mod):
+    raw = _sample_memory_dict("stored-uid")
+    raw["uid"] = "uid-stored"
+
+    record = service_mod.HistoricalMemoryAdapter._adapt("uid-test", raw)
+
+    assert record is not None
+    assert record.memory.uid == "uid-stored"
+
+
 def test_device_scope_keeps_device_neutral_historical_rows(service_mod):
     db = _Db()
     service = service_mod.MemoryService(db_client=db)
@@ -753,6 +815,46 @@ def test_device_scope_keeps_device_neutral_historical_rows(service_mod):
     request = service_mod.DeviceScopeRequest(device_scope="current", client_device_id="macos_abcd1234")
 
     assert [item.id for item in service.read("uid-test", device_scope_request=request)] == ["neutral"]
+
+
+def test_index_stub_respects_visibility_and_capture_device(service_mod):
+    adapter = service_mod.HistoricalMemoryAdapter()
+    created = "2026-01-01T00:00:00+00:00"
+    unknown = adapter._stub_from_index(
+        "uid-test",
+        {"id": "bad-vis", "created_at": created, "visibility": "secret"},
+    )
+    assert unknown is None
+
+    private = adapter._stub_from_index(
+        "uid-test",
+        {"id": "priv", "created_at": created, "visibility": "private"},
+    )
+    assert private is not None
+    assert private.memory.visibility == "private"
+
+    scoped = service_mod.DeviceScopeRequest(device_scope="current", client_device_id="device-a")
+    other_device = adapter._stub_from_index(
+        "uid-test",
+        {
+            "id": "other",
+            "created_at": created,
+            "capture_device_ids": ["device-b"],
+        },
+    )
+    assert other_device is not None
+    assert adapter.matches_device(other_device, scoped) is False
+
+    matching = adapter._stub_from_index(
+        "uid-test",
+        {
+            "id": "mine",
+            "created_at": created,
+            "capture_device_ids": ["device-a"],
+        },
+    )
+    assert matching is not None
+    assert adapter.matches_device(matching, scoped) is True
 
 
 def test_fetch_applies_device_scope_to_canonical_items(service_mod, monkeypatch):

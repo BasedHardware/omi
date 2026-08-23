@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import type { AgentRuntimeKernel } from "./kernel.js";
+import { maybePruneExpiredToolOutputs, TOOL_OUTPUT_DIRECTORY_NAME } from "./artifact-storage.js";
 import { assertToolResultEnvelope, makeToolResultEnvelope, type ToolResultEnvelope } from "./tool-result-envelope.js";
 
 /** One budget applies to every result put back on a model-facing stdio relay. */
@@ -192,10 +193,11 @@ function projectionFailure(
 function persistRelayToolOutput(input: FinalizeRelayToolResultInput, fullResult: string): string | null {
   if (!input.kernel) return null;
   try {
-    const directory = join(input.artifactRoot, "tool-output", input.identity.ownerId, input.identity.sessionId);
+    const directory = join(input.artifactRoot, TOOL_OUTPUT_DIRECTORY_NAME, input.identity.ownerId, input.identity.sessionId);
     mkdirSync(directory, { recursive: true });
     const path = join(directory, `relay-${randomUUID()}.json`);
     writeFileSync(path, `${fullResult}\n`, "utf8");
+    maybePruneExpiredToolOutputs(input.artifactRoot);
     const artifact = input.kernel.persistArtifact({
       sessionId: input.identity.sessionId,
       kind: "tool_output",

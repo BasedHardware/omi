@@ -380,6 +380,18 @@
             "description": "True only when the commitment names a concrete deliverable or outcome",
             "title": "Concrete Deliverable"
           },
+          "context": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "One line explaining why or how the item matters",
+            "title": "Context"
+          },
           "conversation_id": {
             "anyOf": [
               {
@@ -422,6 +434,34 @@
             ],
             "description": "When the action item is due",
             "title": "Due At"
+          },
+          "due_certainty": {
+            "anyOf": [
+              {
+                "enum": [
+                  "confirmed",
+                  "tentative"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Whether the due date was confirmed or only discussed tentatively",
+            "title": "Due Certainty"
+          },
+          "owner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The person's name when the owner is known",
+            "title": "Owner Name"
           },
           "ownership_confidence": {
             "anyOf": [
@@ -1239,6 +1279,7 @@
         "type": "object"
       },
       "ActionItemsResponse": {
+        "description": "List envelope; ``truncated`` is set only when the request's list-read\nbudget ended the aggregate scan early (#11831) — such pages may not be a\ncomplete prefix, so ``has_more`` is forced true as well.",
         "properties": {
           "action_items": {
             "items": {
@@ -1250,6 +1291,11 @@
           "has_more": {
             "default": false,
             "title": "Has More",
+            "type": "boolean"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
             "type": "boolean"
           }
         },
@@ -1651,6 +1697,28 @@
             ],
             "default": false,
             "title": "Disabled"
+          },
+          "disabled_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled At"
+          },
+          "disabled_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled Error"
           },
           "disabled_reason": {
             "anyOf": [
@@ -2146,6 +2214,28 @@
             ],
             "default": false,
             "title": "Disabled"
+          },
+          "disabled_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled At"
+          },
+          "disabled_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled Error"
           },
           "disabled_reason": {
             "anyOf": [
@@ -6844,6 +6934,11 @@
             "title": "Id",
             "type": "string"
           },
+          "imported": {
+            "default": false,
+            "title": "Imported",
+            "type": "boolean"
+          },
           "is_locked": {
             "default": false,
             "title": "Is Locked",
@@ -6859,6 +6954,44 @@
               }
             ],
             "title": "Language"
+          },
+          "meeting_dedup_speech_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Dedup Speech S"
+          },
+          "meeting_duration_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Duration S"
+          },
+          "meeting_treatment_eligible": {
+            "default": false,
+            "title": "Meeting Treatment Eligible",
+            "type": "boolean"
+          },
+          "meeting_treatment_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Treatment Reason"
           },
           "photos": {
             "default": [],
@@ -6984,6 +7117,11 @@
               }
             ],
             "title": "Updated At"
+          },
+          "uses_custom_stt": {
+            "default": false,
+            "title": "Uses Custom Stt",
+            "type": "boolean"
           },
           "visibility": {
             "$ref": "#/components/schemas/ConversationVisibility",
@@ -7284,6 +7422,11 @@
             "title": "Id",
             "type": "string"
           },
+          "meeting_treatment_eligible": {
+            "default": false,
+            "title": "Meeting Treatment Eligible",
+            "type": "boolean"
+          },
           "status": {
             "title": "Status",
             "type": "string"
@@ -7307,6 +7450,11 @@
           "job_id": {
             "title": "Job Id",
             "type": "string"
+          },
+          "meeting_treatment_eligible": {
+            "default": false,
+            "title": "Meeting Treatment Eligible",
+            "type": "boolean"
           },
           "retryable": {
             "title": "Retryable",
@@ -7336,6 +7484,36 @@
         "title": "ConversationFinalizationStatusResponse",
         "type": "object"
       },
+      "ConversationLinkActionItemSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Id"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "title": "ConversationLinkActionItemSpec",
+        "type": "object"
+      },
       "ConversationLinkSpec": {
         "additionalProperties": false,
         "properties": {
@@ -7345,6 +7523,14 @@
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
             "title": "Conversation Id",
             "type": "string"
+          },
+          "recommended_action_items": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationLinkActionItemSpec"
+            },
+            "maxItems": 8,
+            "title": "Recommended Action Items",
+            "type": "array"
           },
           "summary": {
             "maxLength": 200,
@@ -13027,6 +13213,17 @@
             ],
             "title": "Conversations Created"
           },
+          "conversations_skipped": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversations Skipped"
+          },
           "created_at": {
             "anyOf": [
               {
@@ -15294,6 +15491,15 @@
               }
             ],
             "title": "Client Message Id"
+          },
+          "content_blocks": {
+            "description": "Structured chat content blocks. New rows store these directly; legacy rows are projected from metadata.content_blocks.",
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Content Blocks",
+            "type": "array"
           },
           "created_at": {
             "format": "date-time",
@@ -17633,10 +17839,16 @@
             "type": "integer"
           },
           "cost_usd": {
-            "default": 0.0,
-            "minimum": 0.0,
-            "title": "Cost Usd",
-            "type": "number"
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Usd"
           },
           "input_tokens": {
             "default": 0,
@@ -17658,6 +17870,50 @@
           }
         },
         "title": "RecordLlmUsageBucketRequest",
+        "type": "object"
+      },
+      "ReferralClaimRequest": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "ReferralClaimRequest",
+        "type": "object"
+      },
+      "ReferralClaimResponse": {
+        "properties": {
+          "claimed": {
+            "title": "Claimed",
+            "type": "boolean"
+          },
+          "trial_days": {
+            "title": "Trial Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "claimed",
+          "trial_days"
+        ],
+        "title": "ReferralClaimResponse",
+        "type": "object"
+      },
+      "ReferralLinkResponse": {
+        "properties": {
+          "referral_url": {
+            "title": "Referral Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "referral_url"
+        ],
+        "title": "ReferralLinkResponse",
         "type": "object"
       },
       "ReorderFoldersRequest": {
@@ -17758,6 +18014,15 @@
               }
             ],
             "title": "Client Message Id"
+          },
+          "content_blocks": {
+            "description": "Structured chat content blocks. New rows store these directly; legacy rows are projected from metadata.content_blocks.",
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Content Blocks",
+            "type": "array"
           },
           "created_at": {
             "format": "date-time",
@@ -18508,6 +18773,34 @@
         "title": "SearchedMemory",
         "type": "object"
       },
+      "Section": {
+        "properties": {
+          "body_markdown": {
+            "description": "Free-form markdown containing the section details",
+            "title": "Body Markdown",
+            "type": "string"
+          },
+          "heading": {
+            "description": "A descriptive heading chosen for this conversation",
+            "title": "Heading",
+            "type": "string"
+          },
+          "source_segment_ids": {
+            "description": "Transcript segment IDs that directly support this section",
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Segment Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "heading",
+          "body_markdown"
+        ],
+        "title": "Section",
+        "type": "object"
+      },
       "SendMessageRequest": {
         "properties": {
           "context": {
@@ -18544,6 +18837,40 @@
           "text"
         ],
         "title": "SendMessageRequest",
+        "type": "object"
+      },
+      "SendShareEmailRequest": {
+        "properties": {
+          "recipient_emails": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "minItems": 1,
+            "title": "Recipient Emails",
+            "type": "array"
+          }
+        },
+        "required": [
+          "recipient_emails"
+        ],
+        "title": "SendShareEmailRequest",
+        "type": "object"
+      },
+      "SendShareEmailResponse": {
+        "properties": {
+          "sent_to": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Sent To",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sent_to"
+        ],
+        "title": "SendShareEmailResponse",
         "type": "object"
       },
       "SetConversationActionItemsStateRequest": {
@@ -18681,6 +19008,46 @@
           "token"
         ],
         "title": "ShareChatMessagesResponse",
+        "type": "object"
+      },
+      "ShareRecipient": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "ShareRecipient",
+        "type": "object"
+      },
+      "ShareRecipientsResponse": {
+        "properties": {
+          "recipients": {
+            "items": {
+              "$ref": "#/components/schemas/ShareRecipient"
+            },
+            "title": "Recipients",
+            "type": "array"
+          }
+        },
+        "required": [
+          "recipients"
+        ],
+        "title": "ShareRecipientsResponse",
         "type": "object"
       },
       "ShareTasksRequest": {
@@ -19023,6 +19390,11 @@
             "title": "Id",
             "type": "string"
           },
+          "imported": {
+            "default": false,
+            "title": "Imported",
+            "type": "boolean"
+          },
           "is_locked": {
             "default": false,
             "title": "Is Locked",
@@ -19038,6 +19410,44 @@
               }
             ],
             "title": "Language"
+          },
+          "meeting_dedup_speech_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Dedup Speech S"
+          },
+          "meeting_duration_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Duration S"
+          },
+          "meeting_treatment_eligible": {
+            "default": false,
+            "title": "Meeting Treatment Eligible",
+            "type": "boolean"
+          },
+          "meeting_treatment_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Treatment Reason"
           },
           "people": {
             "default": [],
@@ -19171,6 +19581,11 @@
               }
             ],
             "title": "Updated At"
+          },
+          "uses_custom_stt": {
+            "default": false,
+            "title": "Uses Custom Stt",
+            "type": "boolean"
           },
           "visibility": {
             "$ref": "#/components/schemas/ConversationVisibility",
@@ -19898,6 +20313,14 @@
             "description": "A brief overview of the conversation, highlighting the key details from it",
             "title": "Overview",
             "type": "string"
+          },
+          "sections": {
+            "description": "Detailed, free-form note sections in the model-chosen structure",
+            "items": {
+              "$ref": "#/components/schemas/Section"
+            },
+            "title": "Sections",
+            "type": "array"
           },
           "title": {
             "default": "",
@@ -25040,7 +25463,7 @@
     },
     "/v1/action-items": {
       "get": {
-        "description": "Get action items for the current user.",
+        "description": "Get action items for the current user.\n\nLarge accounts can outrun the request budget; such reads return the honest\npartial page with ``truncated=true``, ``has_more=true``, and the\n``X-Omi-List-Truncated: true`` header instead of a bare middleware 504\n(#11831).",
         "operationId": "get_action_items_v1_action_items_get",
         "parameters": [
           {
@@ -25697,7 +26120,7 @@
     },
     "/v1/action-items/ids": {
       "get": {
-        "description": "Return the user's action-item IDs (lightweight reconciliation).\n\nWithout ``completed``: returns every ID with no field reads — the cheapest\nway for a client to know which tasks it has without paging the full list.\n\nWith ``completed``: returns only non-deleted IDs in the requested bucket,\nwhich requires a three-field projection (``completed``, ``status``,\n``deleted``) streamed across the collection.\n\nDeclared before /v1/action-items/{action_item_id} so the static path is not\ncaptured as an action item id.",
+        "description": "Return the user's action-item IDs (lightweight reconciliation).\n\nWithout ``completed``: returns every ID with no field reads — the cheapest\nway for a client to know which tasks it has without paging the full list.\n\nWith ``completed``: returns only non-deleted IDs in the requested bucket. The\n``completed`` bucket is filtered server-side; only documents in that bucket are\nstreamed (a two-field ``completed``, ``deleted`` projection), and the ``deleted``\nexclusion is still applied in Python since Firestore equality filters would drop\nundeleted rows that have no ``deleted`` field.\n\nDeclared before /v1/action-items/{action_item_id} so the static path is not\ncaptured as an action item id.",
         "operationId": "list_action_item_ids_v1_action_items_ids_get",
         "parameters": [
           {
@@ -32917,7 +33340,7 @@
     },
     "/v1/conversations": {
       "get": {
-        "description": "List responses may omit detail-only fields such as transcript_segments. Clients should treat omitted transcript_segments as unknown/not loaded, not as an empty transcript.",
+        "description": "List responses may omit detail-only fields such as transcript_segments. Clients should treat omitted transcript_segments as unknown/not loaded, not as an empty transcript. Large accounts can outrun the request budget; such responses return a partial newest-first array with the X-Omi-List-Truncated: true header instead of a 504 (#11831).",
         "operationId": "get_conversations_v1_conversations_get",
         "parameters": [
           {
@@ -35606,8 +36029,20 @@
             },
             "description": "Successful Response"
           },
+          "400": {
+            "description": "The selected app cannot summarize conversations"
+          },
           "401": {
             "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "description": "The selected app is not available to this user"
+          },
+          "404": {
+            "description": "The conversation or selected app does not exist"
+          },
+          "409": {
+            "description": "The selected app is disabled or not enabled by this user"
           },
           "422": {
             "content": {
@@ -35958,6 +36393,193 @@
           }
         ],
         "summary": "Set Assignee Conversation Segment",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/share-email": {
+      "post": {
+        "description": "Send the meeting summary to the addresses the owner chose.\n\nThe card lets the owner type a recipient, so the address is theirs to pick\nrather than something we detected; detection only prefills the field. What\nkeeps this from being an open relay is unchanged: the sender must own the\nconversation, the mail carries only that conversation's own summary and\nshare link with the owner as reply-to, the request schema caps how many\naddresses one send may carry, and a per-owner daily quota bounds the total.\nSending\nmakes the conversation link-visible first (same contract as copying the\nshare link) so the emailed link resolves.",
+        "operationId": "send_conversation_share_email_v1_conversations__conversation_id__share_email_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendShareEmailRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendShareEmailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Send Conversation Share Email",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/share-recipients": {
+      "get": {
+        "description": "Who the meeting summary could be sent to: calendar-detected participants minus the owner.",
+        "operationId": "get_conversation_share_recipients_v1_conversations__conversation_id__share_recipients_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareRecipientsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Conversation Share Recipients",
         "tags": [
           "conversations"
         ]
@@ -52048,6 +52670,170 @@
         ]
       }
     },
+    "/v1/users/me/referral": {
+      "get": {
+        "operationId": "get_referral_link_v1_users_me_referral_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralLinkResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Referral Link",
+        "tags": [
+          "referrals"
+        ]
+      }
+    },
+    "/v1/users/me/referral/claim": {
+      "post": {
+        "operationId": "claim_referral_v1_users_me_referral_claim_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReferralClaimRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralClaimResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Claim Referral",
+        "tags": [
+          "referrals"
+        ]
+      }
+    },
     "/v1/users/me/subscription": {
       "get": {
         "description": "Gets the user's subscription plan and usage.",
@@ -57233,6 +58019,22 @@
             }
           },
           {
+            "in": "query",
+            "name": "chat_session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Chat Session Id"
+            }
+          },
+          {
             "in": "header",
             "name": "authorization",
             "required": false,
@@ -57337,6 +58139,45 @@
                 }
               ],
               "title": "App Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "chat_session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Chat Session Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
             }
           },
           {
@@ -57448,6 +58289,22 @@
                 }
               ],
               "title": "App Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "chat_session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Chat Session Id"
             }
           },
           {
@@ -58558,6 +59415,7 @@
         ]
       },
       "get": {
+        "description": "List memories, newest first, as a bare JSON array.\n\nLarge accounts can outrun the request budget; such reads return an honest\npartial array with the ``X-Omi-List-Truncated: true`` header and no\n``X-Omi-Memory-Next-Cursor`` instead of a bare middleware 504 (#11831).",
         "operationId": "get_memories_v3_memories_get",
         "parameters": [
           {

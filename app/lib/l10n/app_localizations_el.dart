@@ -325,7 +325,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get searchApps => 'Αναζήτηση εφαρμογών...';
 
   @override
-  String get myApps => 'Οι εφαρμογές μου';
+  String get myApps => 'Δημιουργήθηκε από εμένα';
 
   @override
   String get installedApps => 'Εγκατεστημένες εφαρμογές';
@@ -9919,4 +9919,40 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get findDevice => 'Εύρεση';
+
+  @override
+  String get diagnosticsShareFailed => 'Δεν ήταν δυνατή η κοινοποίηση των διαγνωστικών. Δοκιμάστε ξανά.';
+
+  @override
+  String get appDisabledTitle => 'Αυτή η εφαρμογή είναι απενεργοποιημένη και δεν μπορεί να εγκατασταθεί.';
+
+  @override
+  String get appDisabledWebhookFailures =>
+      'Το endpoint της απέτυχε επί 72 ώρες συνεχώς, οπότε οι αποστολές σταμάτησαν.';
+
+  @override
+  String get appDisabledGeneric => 'Απενεργοποιήθηκε από την Omi.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Διορθώστε πρώτα το endpoint — η επανενεργοποίηση ελέγχει ξανά κάθε ρυθμισμένο URL.';
+
+  @override
+  String get appReEnable => 'Επανενεργοποίηση';
+
+  @override
+  String get appReEnableFailedTitle => 'Η επανενεργοποίηση απέτυχε';
+
+  @override
+  String get appReEnableFailedBody => 'Δεν ήταν δυνατή η επανενεργοποίηση αυτής της εφαρμογής. Δοκιμάστε ξανά.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Απενεργοποιήθηκε στις $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Τελευταίο σφάλμα: $error.';
+  }
 }

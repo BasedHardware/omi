@@ -101,7 +101,7 @@
     "createYourOwnApp": "Luo oma sovellus",
     "buildAndShareApp": "Rakenna ja jaa oma sovelluksesi",
     "searchApps": "Etsi sovelluksia...",
-    "myApps": "Omat sovellukset",
+    "myApps": "Minun luomani",
     "installedApps": "Asennetut sovellukset",
     "unableToFetchApps": "Sovellusten haku epäonnistui :(\n\nTarkista internet-yhteytesi ja yritä uudelleen.",
     "aboutOmi": "Tietoja Omista",
@@ -3217,5 +3217,15 @@
     "accountCutoverOpenStore": "Avaa kauppa",
     "sendRawAudioToOmi": "Lähetä käsittelemätön ääni Omille",
     "sendRawAudioToOmiDescription": "Poista käytöstä, jotta käsittelemätöntä ääntä ei lähetetä Omille. Litterointeja ja pilviominaisuuksien tarvitsemia tietoja voidaan silti lähettää Omille.",
-    "findDevice": "Etsi"
+    "findDevice": "Etsi",
+    "diagnosticsShareFailed": "Diagnostiikan jakaminen epäonnistui. Yritä uudelleen.",
+    "appDisabledTitle": "Tämä sovellus on poistettu käytöstä eikä sitä voi asentaa.",
+    "appDisabledWebhookFailures": "Sen päätepiste epäonnistui 72 tuntia peräkkäin, joten toimitukset pysäytettiin.",
+    "appDisabledGeneric": "Omi poisti sen käytöstä.",
+    "appDisabledOwnerHint": "Korjaa ensin päätepiste — käyttöönotto tarkistaa jokaisen määritetyn URL-osoitteen uudelleen.",
+    "appReEnable": "Ota uudelleen käyttöön",
+    "appReEnableFailedTitle": "Käyttöönotto epäonnistui",
+    "appReEnableFailedBody": "Tätä sovellusta ei voitu ottaa uudelleen käyttöön. Yritä uudelleen.",
+    "appDisabledOn": "Poistettu käytöstä {date}.",
+    "appDisabledLastError": "Viimeisin virhe: {error}."
 }

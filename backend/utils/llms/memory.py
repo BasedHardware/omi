@@ -1,4 +1,7 @@
+import threading
 from typing import Any, Dict, List, Optional, Tuple
+
+from cachetools import TTLCache
 
 from database._client import db as firestore_db
 from database.auth import get_user_name
@@ -10,6 +13,22 @@ logger = logging.getLogger(__name__)
 
 # Prompt context is a bounded default-visible intake — never a full account export.
 PROMPT_MEMORY_LIMIT = 1000
+
+_PROMPT_DATA_CACHE_MAX_SIZE = 1024
+_PROMPT_DATA_CACHE_TTL_SECONDS = 30
+_prompt_data_cache: TTLCache[str, Tuple[Optional[str], List[MemoryDB], List[MemoryDB], List[MemoryDB]]] = TTLCache(
+    maxsize=_PROMPT_DATA_CACHE_MAX_SIZE, ttl=_PROMPT_DATA_CACHE_TTL_SECONDS
+)
+_prompt_data_cache_lock = threading.Lock()
+
+
+def clear_prompt_data_cache(uid: Optional[str] = None) -> None:
+    """Drop cached prompt context for one user (or all users when uid is None)."""
+    with _prompt_data_cache_lock:
+        if uid is None:
+            _prompt_data_cache.clear()
+        else:
+            _prompt_data_cache.pop(uid, None)
 
 
 def get_prompt_memories(uid: str) -> Tuple[Any, str]:
@@ -73,7 +92,12 @@ def _is_prompt_visible(memory: MemoryDB) -> bool:
 def get_prompt_data(
     uid: str,
 ) -> Tuple[Optional[str], List[MemoryDB], List[MemoryDB], List[MemoryDB]]:
-    # TODO: cache this
+    with _prompt_data_cache_lock:
+        cached = _prompt_data_cache.get(uid)
+    if cached is not None:
+        user_name, baseline, user_made, generated = cached
+        return user_name, list(baseline), list(user_made), list(generated)
+
     # Use the default-visible list surface (processed, non-archive) with a hard
     # page cap. Account export is intentionally not used for prompt intake.
     existing_memories = MemoryService(db_client=firestore_db).read(
@@ -101,4 +125,7 @@ def get_prompt_data(
             logger.error(f"Error routing memory into prompt buckets: {e}")
 
     user_name = get_user_name(uid)
-    return user_name, baseline, user_made, generated
+    result = (user_name, baseline, user_made, generated)
+    with _prompt_data_cache_lock:
+        _prompt_data_cache[uid] = result
+    return result

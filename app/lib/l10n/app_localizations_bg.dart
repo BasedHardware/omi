@@ -323,7 +323,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get searchApps => 'Търсене на приложения...';
 
   @override
-  String get myApps => 'Моите приложения';
+  String get myApps => 'Създадени от мен';
 
   @override
   String get installedApps => 'Инсталирани приложения';
@@ -9887,4 +9887,39 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get findDevice => 'Намери';
+
+  @override
+  String get diagnosticsShareFailed => 'Диагностиката не можа да бъде споделена. Опитайте отново.';
+
+  @override
+  String get appDisabledTitle => 'Това приложение е деактивирано и не може да бъде инсталирано.';
+
+  @override
+  String get appDisabledWebhookFailures => 'Крайната му точка се проваля 72 часа поред, затова доставките бяха спрени.';
+
+  @override
+  String get appDisabledGeneric => 'Деактивирано е от Omi.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Първо поправете крайната точка — повторното активиране проверява отново всеки конфигуриран URL.';
+
+  @override
+  String get appReEnable => 'Активирай отново';
+
+  @override
+  String get appReEnableFailedTitle => 'Повторното активиране не бе успешно';
+
+  @override
+  String get appReEnableFailedBody => 'Това приложение не можа да бъде активирано отново. Опитайте пак.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Деактивирано на $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Последна грешка: $error.';
+  }
 }

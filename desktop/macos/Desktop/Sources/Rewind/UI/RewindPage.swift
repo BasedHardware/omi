@@ -224,9 +224,9 @@ struct RewindPage: View {
           let currentId = oldScreenshots[currentIndex].id,
           let newIndex = newScreenshots.firstIndex(where: { $0.id == currentId })
         {
-          // Same screenshot found in new array - adjust index
-          currentIndex = newIndex
-          // No need to reload frame - it's the same screenshot
+          currentIndex = RewindTimelineNavigation.sameFrameIndex(
+            old: oldScreenshots.count, new: newScreenshots.count, current: currentIndex, found: newIndex)
+          if currentIndex != newIndex { scheduleLoadCurrentFrame() }
         } else if !newScreenshots.isEmpty {
           // A viewport query may replace every sampled row. Stay near the same visible moment instead
           // of snapping to the newest capture in all of history.

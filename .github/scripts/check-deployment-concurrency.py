@@ -64,6 +64,9 @@ LOCK_CONTRACTS = {
         "firestore-schema-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'prod' }}"
     ),
     "gcp_backend_auto_dev.yml": LockContract("deploy-backend-stack-development"),
+    "gcp_cloud_run_metrics_egress.yml": LockContract(
+        "deploy-cloud-run-metrics-egress-${{ github.event.inputs.environment || 'development' }}"
+    ),
     "gcp_backend_listen_helm.yml": LockContract(
         "deploy-backend-stack-${{ github.event.inputs.environment || 'development' }}"
     ),
@@ -102,7 +105,8 @@ RUN_SCOPED_EXEMPTIONS = {
 
 READ_ONLY_WORKFLOW_EXEMPTIONS: dict[str, str] = {}
 
-# Firestore index creation is a schema migration, not ordinary deploy work.
+# Firestore index creation and explicitly confirmed field exemption are schema
+# migrations, not ordinary deploy work.
 # Keep a single auditable writer so backend readiness can stay read-only.
 FIRESTORE_SCHEMA_WRITERS = frozenset({"gcp_firestore_indexes.yml"})
 
@@ -624,9 +628,9 @@ def validate_automatic_backend_stack_lifecycle(workflow_text: dict[str, str]) ->
 
 
 def validate_firestore_schema_lock_isolation(groups: dict[str, str]) -> list[str]:
-    """Keep create-only schema repair out of the backend deploy lock domain.
+    """Keep schema repair out of the backend deploy lock domain.
 
-    Reconciliation only ever creates, so an index state moves MISSING ->
+    Automatic composite reconciliation only ever creates, so an index state moves MISSING ->
     CREATING -> READY and never backwards: it cannot invalidate a readiness
     answer a deploy already obtained, and the deploy ordering guarantee is owned
     by the fail-closed firestore_readiness job rather than by a lock. Sharing the
@@ -796,6 +800,16 @@ jobs:
         raise PolicyError("default Firestore reconciliation bypassed persistent-writer detection")
     if not is_persistent_writer(firestore_read_only.replace("--check-only", "--provision-missing")):
         raise PolicyError("explicit Firestore provisioning bypassed persistent-writer detection")
+    field_exemption_read_only = firestore_read_only.replace(
+        "reconcile_firestore_indexes.py",
+        "reconcile_firestore_field_exemptions.py",
+    )
+    if is_persistent_writer(field_exemption_read_only):
+        raise PolicyError("read-only Firestore field-exemption drift check was classified as a persistent writer")
+    if is_persistent_writer(field_exemption_read_only.replace("--check-only", "--dry-run")):
+        raise PolicyError("Firestore field-exemption dry run was classified as a persistent writer")
+    if not is_persistent_writer(field_exemption_read_only.replace("--check-only", "--apply")):
+        raise PolicyError("explicit Firestore field-exemption apply bypassed persistent-writer detection")
     mixed_firestore_step = firestore_read_only.replace(
         "            --check-only\n",
         "            --check-only\n          python3 backend/scripts/reconcile_firestore_indexes.py --project runtime-project\n",
@@ -833,6 +847,7 @@ jobs:
         "npx firebase deploy",
         "npx firebase deploy --project prod --only=firestore:indexes",
         "gcloud --project=prod firestore indexes composite create --collection-group=memories",
+        "gcloud firestore indexes fields update ocrText --collection-group=screen_activity --disable-indexes",
     )
     for command in direct_writer_commands:
         fixture = direct_firebase_writer.replace(

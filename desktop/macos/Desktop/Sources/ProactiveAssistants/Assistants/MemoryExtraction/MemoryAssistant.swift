@@ -287,7 +287,9 @@ actor MemoryAssistant: ProactiveAssistant {
     result: MemoryExtractionResult,
     windowTitle: String?
   ) async {
-    let title = memory.category == .interesting ? "Wisdom Captured" : "Memory Saved"
+    // One category, one name: every memory notification presents as "Memory" — the
+    // "Wisdom Captured" variant read as an unclassifiable notification type.
+    let title = "Memory Saved"
     let message = "New memory: \(memory.content)"
     let context = FloatingBarNotificationContext(
       sourceTitle: title,

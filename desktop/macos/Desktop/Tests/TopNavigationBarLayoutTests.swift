@@ -146,7 +146,7 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     )
   }
 
-  /// The bar carries six flat pills and no menu. The claim worth holding is not the pill count —
+  /// The bar carries five flat destination pills and no destination menu. The claim worth holding is not the pill count —
   /// it is that **nothing was stranded when the menu was deleted** (INV-NAV-1). `reach` names the one
   /// mechanism responsible for each destination, so this fails the moment a pill is removed without
   /// the destination being moved somewhere that exists.
@@ -177,11 +177,33 @@ final class TopNavigationBarLayoutTests: XCTestCase {
       ShellDestination.unreachable(), [],
       "a destination lost the only mechanism that reached it")
 
-    // The retired menu's three plus the Activity spine are the hub's own views, and the hub itself
-    // has a pill.
+    // The hub's other three pages are reached from Activity's chip row, on the page the pill opens.
+    // `Activity` itself is what the pill opens, so the bar is its own door.
     XCTAssertEqual(
-      ShellDestination.allCases.filter { $0.reach == .memoryHubView }.compactMap(\.memoryDestination),
-      [.conversations, .memories, .brainMap, .activity])
+      ShellDestination.allCases.filter { $0.reach == .activityChipRow }
+        .compactMap(\.memoryDestination),
+      [.conversations, .memories, .brainMap])
+    // The claim is checkable because the row and the model read one value. A page dropped from the
+    // chip row is unreachable here rather than silently stranded in the app.
+    for destination in ShellDestination.allCases where destination.reach == .activityChipRow {
+      guard let hubView = destination.memoryDestination else {
+        return XCTFail("\(destination.title) claims the chip row reaches it but names no hub page")
+      }
+      XCTAssertTrue(
+        ActivityDestinationChip.reachableHubDestinations.contains(hubView),
+        "\(destination.title) claims the chip row reaches it, but the row does not offer it")
+    }
+    XCTAssertEqual(ShellDestination.activity.reach, .topBar)
+
+    // The pill names the view it opens. It used to say `Memories` and open whichever hub view was
+    // persisted last, so the word on the bar and the page you got were only sometimes the same.
+    let hubPill = TopNavigationRoutes.primaryItems.first {
+      $0.index == SidebarNavItem.conversations.rawValue
+    }
+    XCTAssertEqual(hubPill?.title, "Brain")
+    XCTAssertNotEqual(
+      hubPill?.icon, "clock.arrow.circlepath",
+      "the hub pill must not wear Rewind's glyph two pills away from Rewind")
     // Chat is a peer pill, not a brand mark: the eight-dot mark belongs to the query bar, where it
     // animates while Omi is answering. The pill wears a chat glyph because the page IS the chat.
     XCTAssertEqual(ShellDestination.home.navItem, .dashboard)
@@ -236,6 +258,56 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     )
   }
 
+  func testReferAFriendSitsImmediatelyAfterAdvancedInSettings() {
+    guard
+      let advanced = SettingsSidebarRoutes.visibleSections.firstIndex(of: .advanced),
+      let referral = SettingsSidebarRoutes.visibleSections.firstIndex(of: .referral)
+    else {
+      return XCTFail("Advanced and Refer a Friend must both be visible Settings rows")
+    }
+
+    XCTAssertEqual(referral, advanced + 1)
+  }
+
+  func testReferControlIsPinnedImmediatelyBeforeTheMicrophoneControl() {
+    let recorder = TopNavigationLayoutRecorder()
+    let host = NSHostingView(
+      rootView: TopNavigationTrailingControlsLayout(
+        updateStatus: {
+          TopNavigationLayoutProbe(recorder: recorder, slot: .updateStatus) {
+            Color.clear.frame(width: 100, height: 32)
+          }
+        },
+        referral: {
+          TopNavigationLayoutProbe(recorder: recorder, slot: .referral) {
+            Color.clear.frame(width: 78, height: 30)
+          }
+        },
+        statusControls: {
+          HStack(spacing: 2) {
+            TopNavigationLayoutProbe(recorder: recorder, slot: .microphone) {
+              Color.clear.frame(width: 32, height: 32)
+            }
+            Color.clear.frame(width: 32, height: 32)
+          }
+        }
+      )
+    )
+    host.frame = NSRect(x: 0, y: 0, width: 280, height: 32)
+    host.layoutSubtreeIfNeeded()
+
+    guard
+      let updateStatus = recorder.frame(of: .updateStatus),
+      let referral = recorder.frame(of: .referral),
+      let microphone = recorder.frame(of: .microphone)
+    else {
+      return XCTFail("expected every trailing control to be laid out")
+    }
+
+    XCTAssertEqual(referral.minX, updateStatus.maxX + OmiSpacing.sm, accuracy: 0.5)
+    XCTAssertEqual(microphone.minX, referral.maxX + OmiSpacing.sm, accuracy: 0.5)
+  }
+
   /// A destination whose `reach` points at a page the bar does not have a pill for is exactly the
   /// stranding INV-NAV-1 forbids, so the checker has to *see* it rather than pass vacuously.
   func testTheReachabilityCheckerCatchesADestinationWhosePillWasRemoved() {
@@ -252,7 +324,7 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     XCTAssertEqual(
       Set(ShellDestination.unreachable(fromBarItems: barWithoutLibrary)),
       [.conversations, .memories, .brainMap, .activity],
-      "without the Memories pill the hub's views have no way in")
+      "without the Activity pill the hub's views have no way in")
   }
 
   /// **The bridge's destination vocabulary, now that a test can reach it.** This mapping was a
@@ -316,19 +388,20 @@ final class TopNavigationBarLayoutTests: XCTestCase {
       "without the gear there is no way into Settings, so the page behind it is stranded")
   }
 
-  func testLibraryPillReadsAsCurrentOnEveryHubView() {
-    for destination in ShellDestination.allCases where destination.reach == .memoryHubView {
+  func testTheActivityPillReadsAsCurrentOnEveryHubPage() {
+    for destination in ShellDestination.allCases
+    where destination.reach == .activityChipRow || destination == .activity {
       XCTAssertTrue(
         ShellDestination.isHubPage(selectedIndex: destination.navItem.rawValue),
-        "\(destination.title) must light the Library pill")
+        "\(destination.title) must light the Brain pill")
     }
     XCTAssertFalse(ShellDestination.isHubPage(selectedIndex: SidebarNavItem.dashboard.rawValue))
     XCTAssertFalse(ShellDestination.isHubPage(selectedIndex: SidebarNavItem.apps.rawValue))
   }
 
-  /// The badge used to be one number on `Library` covering conversations, memories *and* tasks,
-  /// because Tasks lived inside the menu. Tasks has its own pill now, so a task counted on `Library`
-  /// would point at the wrong page.
+  /// The badge used to be one number on the hub's pill — then labelled `Library` — covering
+  /// conversations, memories *and* tasks, because Tasks lived inside the menu. Tasks has its own
+  /// pill now, so a task counted on the hub's pill would point at the wrong page.
   func testNewItemCountsAreCarriedByThePillThatOwnsThem() {
     let badges = TopNavigationDestinationBadges(library: 4, tasks: 7)
     XCTAssertEqual(badges.count(forNavItemIndex: SidebarNavItem.conversations.rawValue), 4)
@@ -366,8 +439,11 @@ final class TopNavigationBarLayoutTests: XCTestCase {
           }
         },
         persistentControls: {
-          Color.clear.frame(
-            width: TopNavigationLayoutMetrics.persistentControlsWidth, height: 32)
+          HStack(spacing: OmiSpacing.sm) {
+            ReferralTopBarButton {}
+            Color.clear.frame(
+              width: TopNavigationLayoutMetrics.persistentControlsWidth, height: 32)
+          }
         },
         settings: {
           Color.clear.frame(width: TopNavigationLayoutMetrics.settingsControlWidth, height: 32)
@@ -410,10 +486,10 @@ final class TopNavigationBarLayoutTests: XCTestCase {
   }
 
   func testNavigationLaneMatchesFullChatWidthAndPageInsets() {
-    // The 900 pt readable cap lives on the window, not inside the lane. The glass fills
-    // the window horizontally — including a hypothetical 1400 pt host that bypassed the max.
+    // The 900 pt readable cap belongs to content inside the lane. The glass fills the window
+    // horizontally — including a hypothetical 1400 pt host.
     XCTAssertEqual(
-      TopNavigationLayoutMetrics.contentLaneWidth(for: DesktopWindowLayoutPolicy.maximumContentWidth),
+      TopNavigationLayoutMetrics.contentLaneWidth(for: ChatComposerLayout.contentLaneMaxWidth),
       ChatComposerLayout.contentLaneMaxWidth)
     XCTAssertEqual(TopNavigationLayoutMetrics.contentLaneWidth(for: 1_400), 1_400)
     XCTAssertEqual(TopNavigationLayoutMetrics.contentLaneWidth(for: 800), 800)
@@ -494,6 +570,9 @@ private enum TopNavigationLayoutSlot: Hashable {
   case compact
   case persistentControls
   case settings
+  case updateStatus
+  case referral
+  case microphone
 }
 
 private final class TopNavigationLayoutRecorder: @unchecked Sendable {

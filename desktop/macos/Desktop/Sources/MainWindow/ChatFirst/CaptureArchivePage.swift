@@ -117,14 +117,7 @@ struct CaptureArchivePage: View {
           detailHeader(capture)
           playbackSection(capture)
 
-          if !capture.overview.isEmpty {
-            detailSection("Summary") {
-              Text(capture.overview)
-                .scaledFont(size: OmiType.body)
-                .foregroundStyle(Ink.secondary)
-                .textSelection(.enabled)
-            }
-          }
+          summarySection(capture)
 
           if !capture.transcriptSegments.isEmpty {
             momentsSection(capture)
@@ -150,6 +143,49 @@ struct CaptureArchivePage: View {
           .frame(maxWidth: 340)
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+  }
+
+  /// The written summary, at the same fidelity the full editor shows it.
+  ///
+  /// This pane used to render `capture.overview` in a plain `Text`. Two things were wrong with
+  /// that: the backend moved the substance of a summary into `structured.sections` and left
+  /// `overview` a short compatibility paragraph, and even that paragraph is markdown — so its
+  /// syntax was being drawn as literal characters. Action items are shown for the same reason the
+  /// editor shows them: they are part of what the capture produced, not a different feature.
+  @ViewBuilder
+  private func summarySection(_ capture: ServerConversation) -> some View {
+    let primary = ConversationSummarySelection.primarySummary(for: capture)
+    // Same provenance rule as the full editor: an app summary replaces Omi's own, sections included.
+    let sections = primary.appId == nil ? capture.structured.sections : []
+    if !primary.content.isEmpty || !sections.isEmpty {
+      detailSection("Summary") {
+        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+          if !primary.content.isEmpty {
+            OmiMarkdown(text: primary.content, style: .assistant)
+          }
+          ConversationSummarySections(sections: sections)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+      }
+    }
+    if !capture.structured.actionItems.isEmpty {
+      detailSection("Action items") {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+          ForEach(capture.structured.actionItems) { item in
+            HStack(alignment: .top, spacing: OmiSpacing.sm) {
+              Image(systemName: item.completed ? "checkmark.circle.fill" : "circle")
+                .scaledFont(size: OmiType.body)
+                .foregroundStyle(Ink.secondary)
+              Text(item.description)
+                .scaledFont(size: OmiType.body)
+                .foregroundStyle(Ink.secondary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+          }
+        }
+      }
     }
   }
 

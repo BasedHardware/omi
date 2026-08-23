@@ -1520,6 +1520,8 @@ private final class EngineStore: @unchecked Sendable {
             {
                 if let previous = openSessionId {
                     try store.closeSession(previous, at: lastSegmentEndedAt ?? line.startedAt)
+                    // After the write and inside the `do`, so a close that threw is not counted.
+                    UsageClock.shared.noteConversation()
                     // A closed session is a finished conversation; the uploader turns it into a
                     // real one in the user's Omi account. Enqueued, not sent — it survives being
                     // signed out, offline, or rate limited.
@@ -1539,10 +1541,15 @@ private final class EngineStore: @unchecked Sendable {
                 personId: line.personId,
                 backendConversationId: line.backendConversationId,
                 backendSegmentId: line.backendSegmentId)
-            if segment.backendConversationId != nil, segment.backendSegmentId != nil {
-                try store.upsertCloudSegment(segment)
-            } else {
-                try store.insertSegment(segment)
+            // Wrapped rather than followed by an emit, so the report cannot outlive a throw. A
+            // cloud segment counts the same as a local one: it is this Mac's audio, transcribed a
+            // hop away. Once per install; every later write reports nothing.
+            try ContextAnalytics.recordFirstArtifact(.conversation) {
+                if segment.backendConversationId != nil, segment.backendSegmentId != nil {
+                    try store.upsertCloudSegment(segment)
+                } else {
+                    try store.insertSegment(segment)
+                }
             }
             // `max`, because a 10 s window from the other transcriber can land out of order and
             // must not drag the session's end backwards.
@@ -1554,7 +1561,7 @@ private final class EngineStore: @unchecked Sendable {
 
     private func insert(_ frame: Frame, into store: ContextStore) {
         do {
-            try store.insertFrame(frame)
+            try ContextAnalytics.recordFirstArtifact(.screen) { try store.insertFrame(frame) }
         } catch {
             ContextLog.error("Dropped a screen frame: \(error.localizedDescription)", "store")
         }
@@ -1643,7 +1650,9 @@ private final class EngineStore: @unchecked Sendable {
     func closeOpenSession() {
         queue.sync {
             guard let store = self.store, let id = self.openSessionId else { return }
-            try? store.closeSession(id, at: self.lastSegmentEndedAt ?? ContextTime.now)
+            if (try? store.closeSession(id, at: self.lastSegmentEndedAt ?? ContextTime.now)) != nil {
+                UsageClock.shared.noteConversation()
+            }
             self.openSessionId = nil
             Task { @MainActor in ConversationUploader.shared.enqueue(sessionId: id) }
         }
@@ -1662,7 +1671,9 @@ private final class EngineStore: @unchecked Sendable {
             // in the query that produced the row, and to `startedAt` when it holds no lines at all,
             // which is the same fallback this loop used to spell out.
             let lastLineAt = session.startedAt + session.durationSeconds
-            try? store.closeSession(session.id, at: lastLineAt)
+            if (try? store.closeSession(session.id, at: lastLineAt)) != nil {
+                UsageClock.shared.noteConversation()
+            }
             // Sessions orphaned by a crash still belong in the account.
             let orphan = session.id
             Task { @MainActor in ConversationUploader.shared.enqueue(sessionId: orphan) }

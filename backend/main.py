@@ -78,6 +78,7 @@ from routers import (
     desktop_proxy,
     desktop_realtime,
     desktop_screen_crisp,
+    referrals,
     desktop_tts_updates,
     scores,
     stt,
@@ -94,6 +95,7 @@ from utils.other.timeout import TimeoutMiddleware
 from utils.observability import log_langsmith_status
 from utils.subscription import validate_stripe_price_ids
 from utils.http_client import close_all_clients
+from utils.metrics import start_metrics_sidecar_server, stop_metrics_sidecar_server
 from utils.executors import (
     drain_background_tasks,
     log_executor_health,
@@ -103,6 +105,7 @@ from utils.executors import (
 from utils.executors import start_background_task
 from utils.cloud_tasks import validate_account_deletion_dispatch_configuration
 from services.conversation_finalization import reconcile_listen_finalization_jobs
+from services.conversation_finalization import reconcile_meeting_receipts
 from services.conversation_finalization import reconcile_stale_processing_conversations
 from services.users.account_deletion import reconcile_pending_deletion_wipes
 
@@ -171,6 +174,7 @@ app.include_router(notifications.router)
 app.include_router(integration.router)
 app.include_router(agents.router)
 app.include_router(users.router)
+app.include_router(referrals.router)
 app.include_router(conversation_finalization.router)
 app.include_router(trends.router)
 
@@ -257,6 +261,7 @@ app.add_middleware(BYOKMiddleware)
 
 @app.on_event("startup")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def startup_event():
+    start_metrics_sidecar_server()
     validate_account_deletion_dispatch_configuration()
     asyncio.create_task(log_executor_health())
     # Drain account-deletion wipes orphaned by a previous deploy/restart. Offloaded
@@ -275,6 +280,10 @@ async def startup_event():
     start_background_task(
         run_blocking(db_executor, _drain_stale_processing_conversations),
         name='startup_stale_processing_reconcile',
+    )
+    start_background_task(
+        run_blocking(db_executor, _drain_meeting_receipts),
+        name='startup_meeting_receipt_reconcile',
     )
     start_background_task(_periodic_listen_finalization_reconcile(), name='periodic_listen_finalization_reconcile')
     start_background_task(
@@ -329,6 +338,16 @@ def _drain_stale_processing_conversations():
         logger.error(f"Startup stale-processing reconciliation failed: {e}")
 
 
+def _drain_meeting_receipts():
+    """Best-effort repair of missing meeting receipt intents and historical receipts."""
+    try:
+        result = reconcile_meeting_receipts()
+        if result.get('repaired') or result.get('backfilled'):
+            logger.info(f"Startup meeting-receipt reconciliation: {result}")
+    except Exception as e:
+        logger.error(f"Startup meeting-receipt reconciliation failed: {e}")
+
+
 def _listen_finalization_reconcile_interval_seconds() -> int:
     """Periodic reconcile cadence; overridable for hermetic behavioral tests."""
     try:
@@ -356,12 +375,19 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int | None =
                 logger.info(f"Periodic stale-processing reconciliation: {stale_result}")
         except Exception as e:
             logger.error(f"Periodic stale-processing reconciliation failed: {e}")
+        try:
+            receipt_result = await run_blocking(db_executor, reconcile_meeting_receipts)
+            if receipt_result.get('repaired') or receipt_result.get('backfilled'):
+                logger.info(f"Periodic meeting-receipt reconciliation: {receipt_result}")
+        except Exception as e:
+            logger.error(f"Periodic meeting-receipt reconciliation failed: {e}")
 
 
 @app.on_event("shutdown")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def shutdown_event():
     await drain_background_tasks(timeout=10.0)
     await close_all_clients()
+    stop_metrics_sidecar_server()
 
 
 paths = ['_temp', '_samples', '_segments', '_speech_profiles']

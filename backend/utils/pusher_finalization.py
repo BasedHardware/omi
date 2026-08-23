@@ -16,7 +16,10 @@ from utils.conversations.finalizer import (
     finalize_persisted_conversation,
 )
 from utils.executors import db_executor, run_blocking
-from utils.observability.journeys import record_capture_finalization_terminal
+from utils.observability.journeys import (
+    record_capture_finalization_terminal,
+    record_conversation_finalization_client_terminal,
+)
 
 logger = logging.getLogger('routers.pusher')
 
@@ -29,6 +32,7 @@ async def process_conversation_task(
     byok_keys: Optional[Dict[str, str]] = None,
     finalization_job_id: Optional[str] = None,
     dispatch_generation: Optional[int] = None,
+    client_kind: str = 'unknown',
 ) -> None:
     """Process a leased conversation job and send a minimal result to listen.
 
@@ -161,6 +165,7 @@ async def process_conversation_task(
             finalization_job_id=job_id,
             dispatch_generation=generation,
             lease_epoch=lease_epoch,
+            final_attempt=attempt_count >= get_listen_finalization_tasks_max_attempts(),
         )
 
         if disposition == ConversationFinalizationDisposition.fenced:
@@ -184,9 +189,11 @@ async def process_conversation_task(
             return
         if disposition == ConversationFinalizationDisposition.fenced:
             record_capture_finalization_terminal('stale', claim.get('created_at'))
+            record_conversation_finalization_client_terminal('cancelled', claim, client_kind=client_kind)
             await send_result({'conversation_id': conversation_id, 'fenced': True})
             return
         record_capture_finalization_terminal('success', claim.get('created_at'))
+        record_conversation_finalization_client_terminal('success', claim, client_kind=client_kind)
         await send_result({'conversation_id': conversation_id, 'success': True})
     except ConversationFinalizationError:
         terminal = await record_failure('processing_failed')

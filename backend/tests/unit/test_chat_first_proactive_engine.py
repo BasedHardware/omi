@@ -1,6 +1,6 @@
 """Failure-isolated, content-free proactive-judgment contracts."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import logging
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 
 import utils.task_intelligence.proactive_engine as engine
+from utils.conversations import meeting_receipt
 from models.chat_first import (
     ChatFirstSubject,
     ConversationLinkSpec,
@@ -15,6 +16,12 @@ from models.chat_first import (
     QuestionOption,
 )
 from utils.task_intelligence.chat_first_eligibility import ChatFirstEligibility
+from utils.conversations.meeting_treatment import (
+    MIN_MEETING_DURATION_SECONDS,
+    MIN_TRANSCRIBED_SPEECH_SECONDS,
+    deduplicated_transcribed_speech_seconds,
+    is_meeting_treatment_eligible,
+)
 
 NOW = datetime(2026, 7, 15, 12, tzinfo=timezone.utc)
 SUBJECT = ChatFirstSubject(kind='goal', id='goal-1')
@@ -201,6 +208,7 @@ def test_desktop_meeting_arrival_persists_exact_conversation_link(monkeypatch):
         'type': 'conversationLink',
         'conversation_id': 'conversation-1',
         'summary': 'Weekly planning',
+        'recommended_action_items': [],
     }
 
     engine.persist_capture_arrival_intent(
@@ -215,14 +223,62 @@ def test_desktop_meeting_arrival_persists_exact_conversation_link(monkeypatch):
     assert created[1]['blocks'][0].summary == 'Your meeting notes are ready.'
 
 
+def test_meeting_recommendations_keep_bounded_open_user_commitments():
+    structured = {
+        'action_items': [
+            {'description': ' Send the deck ', 'capture_owner': 'user', 'target_task_id': 'task-1'},
+            {'description': 'Someone else reviews it', 'capture_owner': 'other'},
+            {'description': 'Already sent', 'capture_owner': 'user', 'completed': True},
+            {'description': 'Book the follow-up', 'capture_owner': 'user'},
+        ]
+    }
+
+    recommendations = engine.recommended_meeting_action_items(structured)
+
+    assert [item.model_dump() for item in recommendations] == [
+        {'description': 'Send the deck', 'task_id': 'task-1'},
+        {'description': 'Book the follow-up', 'task_id': None},
+    ]
+
+
 def test_desktop_meeting_adapter_uses_stored_role_and_skips_non_meeting_or_rotation(monkeypatch):
-    persist = MagicMock()
-    monkeypatch.setattr(engine, 'persist_capture_arrival_intent', persist)
+    recorded = []
+
+    def _record(_uid, _conversation_id, **kwargs):
+        recorded.append(kwargs)
+        return {
+            'status': 'recorded',
+            'job_id': f'job-{len(recorded)}',
+            'meeting_treatment_eligible': kwargs['eligible'],
+        }
+
+    created = []
+    monkeypatch.setattr(meeting_receipt.jobs_db, 'record_meeting_receipt', _record)
+    monkeypatch.setattr(
+        engine.intent_db,
+        'create_intent',
+        lambda *args, **kwargs: created.append(kwargs) or (SimpleNamespace(intent_id='intent-meeting-1'), True),
+    )
+    monkeypatch.setattr(engine, '_meter', lambda *args: None)
+
+    def _persist_capture(*args, **kwargs):
+        return engine.persist_capture_arrival_intent(
+            *args,
+            **kwargs,
+            eligibility_resolver=lambda _uid: ChatFirstEligibility(enabled=True, account_generation=7),
+        )
+
+    monkeypatch.setattr(meeting_receipt, 'persist_capture_arrival_intent', _persist_capture)
+    mark = MagicMock(return_value=True)
+    monkeypatch.setattr(meeting_receipt.jobs_db, 'mark_meeting_receipt_intent_persisted', mark)
     ambient = {
         'id': 'ambient-1',
         'source': 'desktop',
         'status': 'completed',
         'discarded': False,
+        'started_at': NOW,
+        'finished_at': NOW + timedelta(seconds=MIN_MEETING_DURATION_SECONDS),
+        'transcript_segments': [{'text': 'A substantive exchange', 'start': 0, 'end': MIN_TRANSCRIBED_SPEECH_SECONDS}],
         'structured': {'title': 'Ambient capture'},
         'external_data': {'conversation_role': 'ambient'},
     }
@@ -233,15 +289,34 @@ def test_desktop_meeting_adapter_uses_stored_role_and_skips_non_meeting_or_rotat
         'external_data': {'conversation_role': 'meeting'},
     }
 
-    engine.persist_desktop_meeting_arrival('user-1', ambient)
-    persist.assert_not_called()
+    assert meeting_receipt.record_and_persist_finalized_meeting_receipt('user-1', ambient) is None
+    assert recorded == []
 
-    engine.persist_desktop_meeting_arrival('user-1', meeting)
-    persist.assert_called_once_with(
-        'user-1', conversation_id='meeting-1', summary='Design review', is_desktop_meeting=True
-    )
+    receipt = meeting_receipt.record_and_persist_finalized_meeting_receipt('user-1', meeting)
 
-    persist.reset_mock()
+    assert receipt == {'status': 'recorded', 'job_id': 'job-1', 'meeting_treatment_eligible': True}
+    assert recorded == [
+        {
+            'finalization_job_id': None,
+            'eligible': True,
+            'reason': 'eligible',
+            'duration_s': MIN_MEETING_DURATION_SECONDS,
+            'dedup_speech_s': MIN_TRANSCRIBED_SPEECH_SECONDS,
+            'firestore_client': None,
+        }
+    ]
+    assert len(created) == 1
+    assert created[0]['continuity_key'] == 'capture:meeting-1'
+    assert [block.model_dump() for block in created[0]['blocks']] == [
+        {
+            'type': 'conversationLink',
+            'conversation_id': 'meeting-1',
+            'summary': 'Design review',
+            'recommended_action_items': [],
+        }
+    ]
+    mark.assert_called_once_with('job-1', 'intent-meeting-1')
+
     rotation = {
         **meeting,
         'id': 'meeting-rotation',
@@ -250,8 +325,42 @@ def test_desktop_meeting_adapter_uses_stored_role_and_skips_non_meeting_or_rotat
             'conversation_finalization_reason': 'max_duration_rotation',
         },
     }
-    engine.persist_desktop_meeting_arrival('user-1', rotation)
-    persist.assert_not_called()
+    rotation_receipt = meeting_receipt.record_and_persist_finalized_meeting_receipt('user-1', rotation)
+
+    assert rotation_receipt == {'status': 'recorded', 'job_id': 'job-2', 'meeting_treatment_eligible': False}
+    assert recorded[1]['eligible'] is False
+    assert recorded[1]['reason'] == 'rotation'
+    assert len(created) == 1
+    mark.assert_called_once_with('job-1', 'intent-meeting-1')
+
+
+def test_meeting_treatment_requires_five_minutes_and_deduplicated_speech():
+    eligible = {
+        'source': 'desktop',
+        'discarded': False,
+        'started_at': NOW,
+        'finished_at': NOW + timedelta(seconds=MIN_MEETING_DURATION_SECONDS),
+        'external_data': {'conversation_role': 'meeting'},
+        'transcript_segments': [
+            {'text': 'first exchange', 'start': 0, 'end': 35},
+            {'text': 'second exchange', 'start': 35, 'end': MIN_TRANSCRIBED_SPEECH_SECONDS},
+        ],
+    }
+    assert is_meeting_treatment_eligible(eligible) is True
+
+    short_call = {**eligible, 'finished_at': NOW + timedelta(seconds=MIN_MEETING_DURATION_SECONDS - 1)}
+    assert is_meeting_treatment_eligible(short_call) is False
+
+    duplicate_streams = {
+        **eligible,
+        'finished_at': NOW + timedelta(minutes=20),
+        'transcript_segments': [
+            {'text': 'remote stream from mic', 'start': 0, 'end': 45},
+            {'text': 'same remote stream from system audio', 'start': 0, 'end': 45},
+        ],
+    }
+    assert deduplicated_transcribed_speech_seconds(duplicate_streams['transcript_segments']) == 45
+    assert is_meeting_treatment_eligible(duplicate_streams) is False
 
 
 def test_proactive_failure_logs_redact_authenticated_uid(monkeypatch, caplog):

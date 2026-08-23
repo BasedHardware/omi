@@ -17,6 +17,7 @@ os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 
 from routers import action_items as ai_mod  # noqa: E402
 from database import action_items as action_items_db  # noqa: E402
+from database.firestore_read_metrics import FIRESTORE_READ_OPERATIONS  # noqa: E402
 
 
 class _Doc:
@@ -29,16 +30,63 @@ class _Doc:
 
 
 class _Query:
+    """Fake Firestore query that mimics real equality-filter semantics.
+
+    A ``.where(filter=FieldFilter(field, '==', value))`` only matches documents where
+    ``field`` is present AND equal to ``value`` — a missing field never matches, and this
+    fake enforces that so a test can tell server-side filtering apart from the old
+    Python-side filtering it replaces.
+    """
+
     def __init__(self, docs):
         self.docs = docs
         self.projected_fields = None
+        self.applied_filters = []
+        self.page_limit = None
+        self.cursor = None
+        self.page_sizes = []
+        self.start_after_calls = []
 
     def select(self, fields):
         self.projected_fields = fields
         return self
 
+    def where(self, filter):
+        self.applied_filters.append((filter.field_path, filter.op_string, filter.value))
+        return self
+
+    def order_by(self, field):
+        assert field == '__name__'
+        return self
+
+    def limit(self, value):
+        self.page_limit = value
+        return self
+
+    def start_after(self, cursor):
+        self.cursor = cursor
+        self.start_after_calls.append(cursor.id)
+        return self
+
     def stream(self):
-        return self.docs
+        filtered = self.docs
+        for field_path, op_string, value in self.applied_filters:
+            assert op_string == '==', f'fake only supports == filters, got {op_string}'
+            # Real Firestore equality does not conflate int 1/0 with bool True/False, so
+            # match on type as well as value, not just Python's `1 == True`.
+            filtered = [
+                doc
+                for doc in filtered
+                if field_path in doc._data
+                and type(doc._data[field_path]) is type(value)
+                and doc._data[field_path] == value
+            ]
+        if self.cursor is not None:
+            cursor_index = next(index for index, doc in enumerate(filtered) if doc.id == self.cursor.id)
+            filtered = filtered[cursor_index + 1 :]
+        page = filtered[: self.page_limit]
+        self.page_sizes.append(len(page))
+        return page
 
 
 class _CollectionPath:
@@ -113,7 +161,10 @@ def test_visible_action_item_ids_matches_explicit_bucket_and_excludes_deleted():
     ids = action_items_db.get_visible_action_item_ids('user-9', completed=False, firestore_client=client)
 
     assert ids == ['active']
-    assert client.query.projected_fields == ['completed', 'status', 'deleted']
+    # `status` is never read in the function body, so it is dropped from the projection.
+    assert client.query.projected_fields == ['completed', 'deleted']
+    # The completion bucket is filtered server-side, not in Python.
+    assert client.query.applied_filters == [('completed', '==', False)]
 
 
 def test_visible_action_item_ids_excludes_legacy_null_completion_rows():
@@ -127,6 +178,76 @@ def test_visible_action_item_ids_excludes_legacy_null_completion_rows():
     ids = action_items_db.get_visible_action_item_ids('user-9', completed=True, firestore_client=client)
 
     assert ids == []
+
+
+def test_visible_action_item_ids_includes_docs_with_absent_deleted_field():
+    """The common case: most rows never had `deleted` set at all. A server-side
+    `.where('deleted', '==', False)` would silently drop these, since Firestore equality
+    filters never match a missing field. This must stay a Python-side check."""
+    client = _Firestore(
+        [
+            _Doc('never-deleted', {'completed': False}),
+            _Doc('explicitly-not-deleted', {'completed': False, 'deleted': False}),
+            _Doc('soft-deleted', {'completed': False, 'deleted': True}),
+        ]
+    )
+
+    ids = action_items_db.get_visible_action_item_ids('user-9', completed=False, firestore_client=client)
+
+    assert sorted(ids) == ['explicitly-not-deleted', 'never-deleted']
+    # No `deleted` filter was pushed to Firestore.
+    assert client.query.applied_filters == [('completed', '==', False)]
+
+
+def test_visible_action_item_ids_records_firestore_read():
+    client = _Firestore(
+        [
+            _Doc('active-1', {'completed': False}),
+            _Doc('active-2', {'completed': False, 'deleted': True}),
+            _Doc('done', {'completed': True}),  # excluded server-side by the `completed` filter
+        ]
+    )
+
+    before = FIRESTORE_READ_OPERATIONS.labels(family='action_items_visible_ids', mode='bounded')._value.get()
+
+    action_items_db.get_visible_action_item_ids('user-9', completed=False, firestore_client=client)
+
+    after = FIRESTORE_READ_OPERATIONS.labels(family='action_items_visible_ids', mode='bounded')._value.get()
+    assert after == before + 1
+
+
+def test_visible_action_item_ids_uses_bounded_cursor_pages():
+    client = _Firestore([_Doc(f'task-{index:04d}', {'completed': False}) for index in range(501)])
+
+    ids = action_items_db.get_visible_action_item_ids('user-9', completed=False, firestore_client=client)
+
+    assert len(ids) == 501
+    assert client.query.page_sizes == [500, 1]
+    assert client.query.start_after_calls == ['task-0499']
+
+
+def test_all_action_item_ids_uses_bounded_cursor_pages():
+    client = _Firestore([_Doc(f'task-{index:04d}', {}) for index in range(501)])
+
+    ids = action_items_db.get_action_item_ids('user-9', firestore_client=client)
+
+    assert len(ids) == 501
+    assert client.query.projected_fields == []
+    assert client.query.page_sizes == [500, 1]
+    assert client.query.start_after_calls == ['task-0499']
+
+
+def test_active_description_lookup_continues_after_first_bounded_page(monkeypatch):
+    docs = [_Doc(f'task-{index:04d}', {'completed': False, 'description': 'other'}) for index in range(500)]
+    docs.append(_Doc('task-0500', {'completed': False, 'description': 'Target'}))
+    client = _Firestore(docs)
+    monkeypatch.setattr(action_items_db, 'db', client)
+
+    result = action_items_db.get_active_action_item_by_description('user-9', 'target')
+
+    assert result['id'] == 'task-0500'
+    assert client.query.page_sizes == [500, 1]
+    assert client.query.start_after_calls == ['task-0499']
 
 
 def test_batch_delete_rejects_locked_items_before_any_delete(monkeypatch):

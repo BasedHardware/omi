@@ -21,10 +21,12 @@ import Foundation
 ///    case is the one to design for — a machine whose config cannot be parsed may be under
 ///    exclusions we cannot express, and reporting from it would be reporting from a state where we
 ///    cannot honour what the user asked to hide.
-/// 2. **Development builds.** A locally built app reports nothing. This is not tidiness: the Cloud
-///    Run logs for the first three weeks of this app show a `Context for Claude/1` user agent from up
-///    to twenty machines a day — the team's own builds, indistinguishable in aggregate from users.
-///    Analytics that count their own authors answer a different question than the one being asked.
+/// 2. **Anything that is not the shipping app.** A locally built app reports nothing, and neither
+///    does the test runner. This is not tidiness: the Cloud Run logs for the first three weeks of this
+///    app show a `Context for Claude/1` user agent from up to twenty machines a day — the team's own
+///    builds, indistinguishable in aggregate from users. Analytics that count their own authors
+///    answer a different question than the one being asked. See `isEnabled` for the shape of that
+///    question, which is the half this shipped getting wrong.
 /// 3. **Nothing user-authored, ever.** Enforced by construction in `AnalyticsEvent` — there is no
 ///    API here that accepts a string from a call site.
 ///
@@ -43,6 +45,18 @@ enum ContextAnalytics {
     static func record(_ event: AnalyticsEvent) {
         guard isEnabled else { return }
 
+        // **`active_hours` had no production emitter and this is it.** `UsageClock.noteActivity` was
+        // called from nowhere, so the hour set was filled only as a side effect of capture
+        // transitions inside `mark()` — which measures "hours in which capture toggled", not the
+        // "distinct hours in which anything at all happened" the rollup documents. Every recorded
+        // event is something happening, so this is the honest denominator.
+        //
+        // Safe from any thread and safe under the one re-entrancy this function has: `noteActivity`
+        // takes `UsageClock`'s lock, inserts an `Int`, and releases it before returning — it calls
+        // nothing, so the airgap path's `record` → `recordSuppression` → `recordFallback` → `record`
+        // hop cannot arrive back here holding that lock.
+        UsageClock.shared.noteActivity()
+
         // Read live, never cached: the toggle takes effect on the next event, which is what lets
         // Airgap Mode promise "immediately" rather than "after relaunch".
         guard !NetworkEgress.isSuppressed(.analytics) else {
@@ -59,7 +73,16 @@ enum ContextAnalytics {
         Task { await AnalyticsSink.shared.enqueue(payload) }
     }
 
-    /// False on development builds, which report nothing at all. See refusal 2 above.
+    /// True only in the shipping app. See refusal 2 above.
+    ///
+    /// **Asked as "is this the release?", not as "is this not a dev build?", and the difference is
+    /// the whole of a defect this shipped with.** `ContextPaths.isDevelopmentBuild` is derived from
+    /// `ownIdentifier`, which falls back to the shipping identifier for any process that is not one
+    /// of ours — correct for the log subsystem and the Keychain service, and exactly wrong here. The
+    /// process it let through is the test runner: `swift test` runs under `com.apple.dt.xctest.tool`,
+    /// so the suite counted as production and POSTed to PostHog from the real spool. Measured: 92
+    /// events under a single distinct id derived from the xctest defaults domain's install id, every
+    /// `cfc_gesture_fired` in the project and two thirds of `cfc_search_ran`.
     ///
     /// `CONTEXT_ANALYTICS_FORCE=1` overrides it for one purpose: proving end to end, from a local
     /// build, that events actually arrive in PostHog. There is no way to verify this pipeline without
@@ -69,7 +92,7 @@ enum ContextAnalytics {
     /// series: use a throwaway `CONTEXT_ANALYTICS_FORCE` session, not a day of ordinary work.
     static var isEnabled: Bool {
         if ProcessInfo.processInfo.environment["CONTEXT_ANALYTICS_FORCE"] == "1" { return true }
-        return !ContextPaths.isDevelopmentBuild
+        return ContextPaths.isShippingBundle
     }
 
     // MARK: - Lifecycle
@@ -139,21 +162,98 @@ enum ContextAnalytics {
     @MainActor
     static func recordOnboardingStep(index: Int, of total: Int) {
         guard isEnabled else { return }
-        if onboardingStartedAt == nil { onboardingStartedAt = Date() }
+        noteOnboardingStarted()
         record(.onboardingStep(index: index, of: total))
     }
 
-    /// Records that first run ended.
+    /// Records that first run ended, at most once per install.
+    @MainActor
+    static func recordOnboardingFinished() {
+        guard isEnabled, let event = onboardingFinishedEvent() else { return }
+        record(event)
+    }
+
+    /// Stamps when this install's first run began, if nothing has stamped it yet.
+    ///
+    /// **On disk rather than in a static, because onboarding is the one flow a successful step ends
+    /// the process from the middle of.** Screen Recording only applies to a process that already held
+    /// it when it connected to the window server, so the card's own "Restart to finish" — and macOS's
+    /// own "Quit & Reopen" — kill the app between the grant and the finish. The run that actually
+    /// reaches `.done` therefore often had no `go(to:)` of its own, and an in-memory start instant
+    /// left `recordOnboardingFinished` with nothing to measure from and nothing to send. Live
+    /// evidence: four of the five reporting installs have permissions granted and only one of them
+    /// ever sent `cfc_onboarding_finished`. `OnboardingResume` persists the card for exactly the same
+    /// reason; this is the same fact about the same relaunch.
+    static func noteOnboardingStarted(in defaults: UserDefaults = .standard, at now: Date = Date()) {
+        guard defaults.object(forKey: onboardingStartedKey) == nil else { return }
+        defaults.set(now.timeIntervalSince1970, forKey: onboardingStartedKey)
+    }
+
+    /// The completion this install still owes, or nil — and calling it *spends* the record, so a
+    /// second call reports nothing.
     ///
     /// The elapsed time is measured from the first *step transition*, not from app launch: onboarding
     /// opens behind a permission prompt and a sign-in browser hop, and counting the seconds a person
     /// spent in System Settings as time spent in our flow would make every install look slow for a
-    /// reason we did not cause.
-    @MainActor
-    static func recordOnboardingFinished() {
-        guard isEnabled, let started = onboardingStartedAt else { return }
-        onboardingStartedAt = nil
-        record(.onboardingFinished(secondsElapsed: Int(Date().timeIntervalSince(started))))
+    /// reason we did not cause. Across a relaunch it is still that instant, which is the honest
+    /// answer to "how long did setup cost this person" — including the minutes they spent in System
+    /// Settings between the two processes, because those minutes were setup.
+    ///
+    /// **The reported flag is what makes it once per install rather than once per run.** "Run setup
+    /// again" (`OnboardingReset`) deliberately puts a finished install back through the flow, and it
+    /// clears the three records that describe *where the user is*; this is not one of them. A second
+    /// `cfc_onboarding_finished` from the same install would be counted as a second install setting
+    /// itself up, which is the one thing this series is the denominator for.
+    static func onboardingFinishedEvent(
+        in defaults: UserDefaults = .standard, at now: Date = Date()
+    ) -> AnalyticsEvent? {
+        guard !defaults.bool(forKey: onboardingReportedKey),
+            let started = defaults.object(forKey: onboardingStartedKey) as? Double
+        else { return nil }
+        defaults.set(true, forKey: onboardingReportedKey)
+        defaults.removeObject(forKey: onboardingStartedKey)
+        return .onboardingFinished(secondsElapsed: Int(max(0, now.timeIntervalSince1970 - started)))
+    }
+
+    // MARK: - Activation
+
+    /// Performs one durable write and reports this install's first artifact **only if it landed**.
+    ///
+    /// The write is threaded through the report rather than sitting above a call to it, because
+    /// "after the write" is an ordering a call site can get wrong in silence: an emit a line too
+    /// early, or one that drifted into the `catch` a later refactor added, claims an install as
+    /// activated on the strength of an attempt. `EngineStore` catches and logs every failed insert,
+    /// so an install whose writes all fail is exactly the install this must not count — and here
+    /// there is nowhere to put the emit that a throw does not skip.
+    ///
+    /// Both call sites are on `EngineStore`'s serial writer queue, so the check-then-set inside
+    /// `firstArtifactEvent` cannot interleave with itself: a frame and a transcript line landing in
+    /// the same instant are still two turns of one queue. That is the only reason a plain
+    /// `UserDefaults` flag is enough here, where the defaults it sits beside are main-actor writes.
+    @discardableResult
+    static func recordFirstArtifact<Stored>(
+        _ kind: AnalyticsEvent.ArtifactKind,
+        in defaults: UserDefaults = .standard,
+        stored write: () throws -> Stored
+    ) rethrows -> Stored {
+        let stored = try write()
+        if let event = firstArtifactEvent(kind, in: defaults) { record(event) }
+        return stored
+    }
+
+    /// The decision, and it *spends* the flag: the second call answers nil however it arrives, in
+    /// this process or in any later one.
+    ///
+    /// Spent whether or not the event ends up leaving the Mac — `record` applies the three refusals
+    /// after this returns. That ordering is deliberate: it is what lets the rule be proved from a
+    /// suite that is itself refused, and the only cost is that a build which reports nothing burns
+    /// the flag in its own defaults domain, which is a domain no shipping install reads.
+    static func firstArtifactEvent(
+        _ kind: AnalyticsEvent.ArtifactKind, in defaults: UserDefaults = .standard
+    ) -> AnalyticsEvent? {
+        guard !defaults.bool(forKey: firstArtifactKey) else { return nil }
+        defaults.set(true, forKey: firstArtifactKey)
+        return .firstArtifact(kind)
     }
 
     // MARK: - Fallbacks
@@ -173,8 +273,6 @@ enum ContextAnalytics {
     ) {
         record(.fallback(area: area, outcome: outcome, reason: reason))
     }
-
-    @MainActor private static var onboardingStartedAt: Date?
 
     // MARK: - The daily rollup
 
@@ -204,7 +302,8 @@ enum ContextAnalytics {
             screenMinutes: UsageClock.shared.minutes(for: .screen),
             activeHours: UsageClock.shared.activeHourCount,
             signedIn: OmiAuth.shared.isSignedIn,
-            airgapped: NetworkEgress.isAirgapped)
+            airgapped: NetworkEgress.isAirgapped,
+            conversations: UsageClock.shared.conversationCount)
 
         // An install with nothing at all to say on its first partial day is not a data point, it is
         // noise from a launch that happened at 23:58. Everything else reports, idle included — an
@@ -237,12 +336,57 @@ enum ContextAnalytics {
 
     private static let hasLaunchedKey = "context.analytics.hasLaunched"
     private static let lastRollupDayKey = "context.analytics.lastRollupDay"
+    /// When this install's first run reached its first step, as seconds since the epoch. Survives the
+    /// relaunch the Screen Recording grant forces; see `noteOnboardingStarted`.
+    static let onboardingStartedKey = "context.analytics.onboardingStartedAt"
+    /// Whether the completion has already been reported. Once per install, never once per run.
+    static let onboardingReportedKey = "context.analytics.onboardingFinishedReported"
+    /// Whether this install has already reported storing something. Never cleared — an install only
+    /// activates once, and a second `cfc_first_artifact` would be a second install in the numerator.
+    static let firstArtifactKey = "context.analytics.firstArtifact"
 
     @MainActor private static var rollupTimer: Timer?
 }
 
 /// How long capture actually ran today, and how much of the day it was spread across.
 ///
+/// **One visit to a surface, as a state machine** — the thing `cfc_surface_closed` reports.
+///
+/// A window's dwell looks like two lines of arithmetic and is not: it is an optional whose lifetime
+/// has to survive a window that closes by routes the app does not own. The timeline is `.titled` and
+/// `.closable`, so the X and ⌘W call AppKit's `close()` and never reach the app's own `dismiss()` —
+/// and a stash cleared on only one of those paths keeps running while the window is shut, so the
+/// *next* close reports a single bucket spanning every minute in between. A fabricated `hours` is
+/// worse than no measurement, because it is indistinguishable from a real one.
+///
+/// Extracted rather than left inline because that failure is invisible in a window test and obvious
+/// here: `testAVisitAfterACloseMeasuresOnlyTheSecondVisit` is the regression, and it fails against
+/// an implementation that forgets to clear.
+struct DwellClock {
+    private var presentedAt: Date?
+
+    /// Starts a visit, or leaves one already running alone.
+    ///
+    /// Idempotent on purpose: raising a window that is already up is the same visit, not a new one,
+    /// and restarting here would report a long read as a series of short ones.
+    mutating func presented(at now: Date = Date()) {
+        if presentedAt == nil { presentedAt = now }
+    }
+
+    /// Ends the visit and yields its bucket, or nil when there is no visit to end.
+    ///
+    /// Nil is the answer for a close with no matching open — a second close racing the first, or a
+    /// teardown of a window that never appeared — and the caller reports nothing rather than
+    /// inventing a `seconds`.
+    mutating func closed(at now: Date = Date()) -> AnalyticsEvent.DurationBucket? {
+        guard let presentedAt else { return nil }
+        self.presentedAt = nil
+        return AnalyticsEvent.DurationBucket(now.timeIntervalSince(presentedAt))
+    }
+
+    var isRunning: Bool { presentedAt != nil }
+}
+
 /// Wall-clock accumulation rather than a count of start/stop events: "started capture 40 times" and
 /// "captured for 40 minutes" are very different products, and only the second one says whether the
 /// app is doing its job.
@@ -269,6 +413,8 @@ final class UsageClock: @unchecked Sendable {
     /// runs while *any* of its sources is live and stops when the last one does.
     private var live: [Channel: Set<AnalyticsEvent.CaptureSource>] = [:]
     private var activeHours: Set<Int> = []
+    /// Conversations durably closed today. See `noteConversation`.
+    private var conversations = 0
 
     private static func channel(for source: AnalyticsEvent.CaptureSource) -> Channel {
         switch source {
@@ -295,6 +441,26 @@ final class UsageClock: @unchecked Sendable {
             }
         }
         noteHourLocked(now)
+    }
+
+    /// Records that a conversation was durably closed.
+    ///
+    /// **Counted at the close, because that is when a conversation exists.** A session is open while
+    /// somebody is still talking; the row that becomes a conversation in the account is written when
+    /// it closes, and `Engine` has three sites that close one — the rollover inside `append`, the
+    /// explicit close on pause and quit, and the sweep that closes what a crash left open. All three
+    /// count, and an insert that threw does not.
+    ///
+    /// Not the downloaded-memory cache: that is a copy of what the account already holds, and
+    /// counting it would report another device's work as this Mac's.
+    func noteConversation() {
+        lock.lock(); defer { lock.unlock() }
+        conversations += 1
+    }
+
+    var conversationCount: Int {
+        lock.lock(); defer { lock.unlock() }
+        return conversations
     }
 
     /// Records that something happened, for the active-hours spread. Cheap enough to call from any
@@ -328,6 +494,9 @@ final class UsageClock: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         seconds.removeAll()
         activeHours.removeAll()
+        // The same day boundary as the minutes, and it has to be: a count that survived the reset
+        // would report yesterday's conversations again today, and again the day after.
+        conversations = 0
         for channel in startedAt.keys { startedAt[channel] = now }
         noteHourLocked(now)
     }
@@ -341,6 +510,7 @@ final class UsageClock: @unchecked Sendable {
         startedAt.removeAll()
         live.removeAll()
         activeHours.removeAll()
+        conversations = 0
     }
     #endif
 }

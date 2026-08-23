@@ -15,9 +15,33 @@ import SwiftUI
 /// actor and handed to the probe as plain values so the expensive cross-process
 /// AX round trips can run off it.
 struct AccessibilityProbeTargets: Sendable, Equatable {
-  var frontmostProcessID: pid_t?
+  /// Processes worth asking, frontmost first — never this process.
+  ///
+  /// Self is excluded because a process can always read its own accessibility tree without the
+  /// permission. Probing the frontmost app therefore answered "AX works" whenever Omi itself was
+  /// frontmost, which is exactly when someone is looking at the Permissions page.
+  var candidates: [AccessibilityProbeCandidate]
   var frontmostName: String
   var finderProcessID: pid_t?
+}
+
+struct AccessibilityProbeCandidate: Sendable, Equatable {
+  var processID: pid_t
+  var name: String
+}
+
+/// What a real AX call was able to establish.
+///
+/// Tri-state on purpose. The old probe collapsed "this app cannot answer" into "accessibility
+/// works", so `notImplemented`, `attributeUnsupported`, an unknown error, and a missing frontmost
+/// process all read as a healthy permission. A probe that cannot tell must not move the verdict.
+enum AccessibilityAXProbeResult: String, Sendable, Equatable {
+  /// A foreign application's accessibility tree answered. Only this proves the grant.
+  case working
+  /// Accessibility was definitively refused — `apiDisabled`, or Finder failing too.
+  case failing
+  /// Nothing could answer. Says nothing either way.
+  case indeterminate
 }
 
 /// What the accessibility probes observed. Kept separate from the decision so
@@ -26,10 +50,8 @@ struct AccessibilityProbeTargets: Sendable, Equatable {
 struct AccessibilityProbeSignals: Sendable, Equatable {
   /// `AXIsProcessTrusted()` — authoritative when true, stale-able when false.
   var tccTrusted: Bool
-  /// A `CGEvent.tapCreate` succeeded, which reads the live TCC database.
-  var eventTapWorks: Bool
-  /// A real `AXUIElementCopyAttributeValue` succeeded.
-  var axCallsWork: Bool
+  /// What a real `AXUIElementCopyAttributeValue` against another app established.
+  var axProbe: AccessibilityAXProbeResult
 }
 
 enum NotificationPermissionEnableAction: Equatable {
@@ -241,6 +263,15 @@ extension AppState {
   }
 
   /// Open Bluetooth preferences in System Settings
+  /// Open Full Disk Access preferences in System Settings
+  func openFullDiskAccessPreferences() {
+    if let url = URL(
+      string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")
+    {
+      NSWorkspace.shared.open(url)
+    }
+  }
+
   func openBluetoothPreferences() {
     if let url = URL(
       string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Bluetooth")
@@ -497,28 +528,70 @@ extension AppState {
   /// AppKit lookups the probe needs. Cheap, cached by AppKit, and main-actor
   /// bound — so they are read here and handed to the probe as plain values.
   nonisolated static func accessibilityProbeTargets() -> AccessibilityProbeTargets {
+    let ownPID = ProcessInfo.processInfo.processIdentifier
     let frontmost = NSWorkspace.shared.frontmostApplication
     let finder = NSRunningApplication.runningApplications(
       withBundleIdentifier: "com.apple.finder"
     ).first
+
+    // Frontmost first — it is the app most likely to have a focused window to report — then any
+    // other ordinary app, because a single candidate that happens not to implement AX would
+    // otherwise leave the probe unable to answer.
+    var apps: [NSRunningApplication] = []
+    if let frontmost { apps.append(frontmost) }
+    apps.append(
+      contentsOf: NSWorkspace.shared.runningApplications.filter {
+        $0.activationPolicy == .regular && $0.processIdentifier != frontmost?.processIdentifier
+      })
+
+    let candidates =
+      apps
+      .filter { $0.processIdentifier != ownPID }
+      .prefix(accessibilityProbeCandidateLimit)
+      .map {
+        AccessibilityProbeCandidate(
+          processID: $0.processIdentifier, name: $0.localizedName ?? "unknown")
+      }
+
     return AccessibilityProbeTargets(
-      frontmostProcessID: frontmost?.processIdentifier,
+      candidates: Array(candidates),
       frontmostName: frontmost?.localizedName ?? "unknown",
       finderProcessID: finder?.processIdentifier)
   }
 
-  /// The whole accessibility decision as a pure function of what the probes
-  /// observed. `AXIsProcessTrusted()` can be stale after a macOS update or an
-  /// app re-sign, so an event tap that succeeds is treated as authoritative
-  /// evidence of the grant; a real AX call failing on top of either is what
-  /// "broken" means.
+  /// Enough candidates to get past a couple of apps that do not implement AX, few enough that a
+  /// routine permission poll stays a handful of cross-process calls.
+  nonisolated static let accessibilityProbeCandidateLimit = 4
+
+  /// The whole accessibility decision as a pure function of what the probes observed.
+  ///
+  /// Only two things can establish the grant: `AXIsProcessTrusted()`, or a real accessibility
+  /// call succeeding against another application. `AXIsProcessTrusted()` can be stale after a
+  /// macOS update or an app re-sign, which is why the second route exists — a working AX call is
+  /// proof regardless of what TCC reports.
+  ///
+  /// A `CGEvent` tap deliberately does *not* appear here. It used to, as a "live TCC read", but
+  /// a listen-only session tap is satisfied by **Input Monitoring**, a different permission
+  /// entirely. On a machine with Input Monitoring granted and Accessibility switched off, that
+  /// rule reported the permission as granted while the System Settings toggle was visibly off.
+  ///
+  /// "Broken" is the narrow case worth naming: something says the grant exists while real AX
+  /// calls are definitively refused — a stale entry left behind by a re-sign, where the toggle
+  /// reads enabled and nothing works. An *indeterminate* probe is not broken and not granted; it
+  /// leaves the TCC answer standing.
   nonisolated static func accessibilityProjection(
     _ signals: AccessibilityProbeSignals
   ) -> (hasPermission: Bool, isBroken: Bool) {
-    if signals.tccTrusted { return (true, !signals.axCallsWork) }
-    if signals.eventTapWorks { return (true, !signals.axCallsWork) }
-    // Event tap also failed — permission genuinely not granted.
-    return (false, false)
+    switch (signals.tccTrusted, signals.axProbe) {
+    case (true, .failing):
+      return (true, true)
+    case (true, _):
+      return (true, false)
+    case (false, .working):
+      return (true, false)
+    case (false, _):
+      return (false, false)
+    }
   }
 
   /// Gather the accessibility signals. Safe off the main actor: every call here
@@ -526,24 +599,14 @@ extension AppState {
   nonisolated static func probeAccessibilitySignals(
     targets: AccessibilityProbeTargets
   ) -> AccessibilityProbeSignals {
-    let tccTrusted = AXIsProcessTrusted()
-    if tccTrusted {
-      return AccessibilityProbeSignals(
-        tccTrusted: true,
-        eventTapWorks: true,
-        axCallsWork: axCallsWork(targets: targets))
-    }
-    guard probeAccessibilityViaEventTap() else {
-      return AccessibilityProbeSignals(tccTrusted: false, eventTapWorks: false, axCallsWork: false)
-    }
-    return AccessibilityProbeSignals(
-      tccTrusted: false,
-      eventTapWorks: true,
-      axCallsWork: axCallsWork(targets: targets))
+    AccessibilityProbeSignals(
+      tccTrusted: AXIsProcessTrusted(),
+      axProbe: axProbeResult(targets: targets))
   }
 
   private func applyAccessibilitySignals(_ signals: AccessibilityProbeSignals) {
     let previouslyGranted = hasAccessibilityPermission
+    let previouslyBroken = isAccessibilityBroken
     let projection = Self.accessibilityProjection(signals)
 
     if projection.hasPermission, !previouslyGranted {
@@ -568,6 +631,48 @@ extension AppState {
     }
     if isAccessibilityBroken != projection.isBroken {
       isAccessibilityBroken = projection.isBroken
+    }
+
+    // The capture service latches AX off after one `apiDisabled`, to keep a broken call from
+    // running once a second. That latch outlives the breakage, so clear it on the edge into a
+    // working grant — otherwise the user grants the permission, sees the row turn green, and
+    // still gets window titles instead of URLs until the next launch.
+    let nowWorking = projection.hasPermission && !projection.isBroken
+    let wasWorking = previouslyGranted && !previouslyBroken
+    if nowWorking, !wasWorking {
+      ScreenCaptureService.rearmAccessibilityAfterPermissionChange()
+    }
+  }
+
+  /// Probe the permissions the Settings page shows, regardless of `usesLazyDevPermissions`.
+  ///
+  /// `checkAllPermissions()` skips accessibility, automation, and full-disk access on named dev
+  /// bundles, which is the right trade at *startup* — those probes are slow and can prompt. It is
+  /// the wrong trade on the page whose entire job is to report those permissions: the row would
+  /// read "Not Granted" forever on a dev build, including right after the user granted it.
+  func refreshPermissionsForSettingsPage() {
+    checkAllPermissions()
+    guard AppBuild.usesLazyDevPermissions else { return }
+    checkAccessibilityPermission()
+  }
+
+  /// Watch the system's own accessibility-database signal.
+  ///
+  /// macOS posts `com.apple.accessibility.api` when the AX permission set changes. Without it the
+  /// state only refreshes when the app is activated, so a user who grants the permission and stays
+  /// in System Settings sees nothing move.
+  func startAccessibilityChangeObserver() {
+    guard accessibilityChangeObserver == nil else { return }
+    accessibilityChangeObserver = DistributedNotificationCenter.default().addObserver(
+      forName: NSNotification.Name("com.apple.accessibility.api"),
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      Task { @MainActor [weak self] in
+        guard let self else { return }
+        log("ACCESSIBILITY_CHECK: system reported an accessibility-permission change")
+        _ = await self.refreshAccessibilityPermission()
+      }
     }
   }
 
@@ -620,89 +725,70 @@ extension AppState {
 
   /// Test if Accessibility API actually works by attempting a real AX call.
   /// Returns true if AX calls succeed, false if permission is stuck/broken.
-  nonisolated static func axCallsWork(targets: AccessibilityProbeTargets) -> Bool {
-    guard let frontPID = targets.frontmostProcessID else {
-      // No frontmost app to test against — can't determine, assume OK
-      return true
+  /// Ask other applications whether accessibility actually works.
+  ///
+  /// Returns `.working` on the first candidate that answers, `.failing` only on evidence that the
+  /// permission itself is refused, and `.indeterminate` when no candidate could settle it. The
+  /// candidate list never contains this process: a process can read its own accessibility tree
+  /// without the permission, so probing self reports a grant that does not exist.
+  nonisolated static func axProbeResult(targets: AccessibilityProbeTargets) -> AccessibilityAXProbeResult {
+    guard !targets.candidates.isEmpty else { return .indeterminate }
+
+    var sawCannotComplete = false
+    for candidate in targets.candidates {
+      switch focusedWindowError(pid: candidate.processID) {
+      case .success, .noValue:
+        // `noValue` means the app answered and has no focused window — the call itself worked.
+        return .working
+      case .apiDisabled:
+        log(
+          "ACCESSIBILITY_CHECK: AXError.apiDisabled — accessibility refused (tested against \(candidate.name))"
+        )
+        return .failing
+      case .cannotComplete:
+        // Ambiguous: a broken permission, or an app that does not implement AX (Qt, OpenGL,
+        // Electron-in-some-states). Keep looking; Finder settles it below.
+        sawCannotComplete = true
+      default:
+        // `notImplemented`, `attributeUnsupported`, anything else: this app cannot answer the
+        // question. It is not evidence either way, so try the next one.
+        continue
+      }
     }
 
-    let appElement = AXUIElementCreateApplication(frontPID)
-    var focusedWindow: CFTypeRef?
-    let result = AXUIElementCopyAttributeValue(
-      appElement, kAXFocusedWindowAttribute as CFString, &focusedWindow)
-
-    // .success or .noValue (app has no windows) both mean AX is working
-    switch result {
-    case .success, .noValue, .notImplemented, .attributeUnsupported:
-      return true
-    case .apiDisabled:
-      // System-wide AX is disabled — unambiguous, no confirmation needed
-      log(
-        "ACCESSIBILITY_CHECK: AXError.apiDisabled — permission stuck (tested against pid \(frontPID), app: \(targets.frontmostName))"
-      )
-      return false
-    case .cannotComplete:
-      // cannotComplete is ambiguous: it can mean our permission is broken, OR that the
-      // frontmost app doesn't implement AX (e.g. Qt, OpenGL, Python-based apps like PyMOL).
-      // Confirm against Finder before concluding the permission is truly broken.
-      return confirmAccessibilityBrokenViaFinder(targets: targets)
-    default:
-      log(
-        "ACCESSIBILITY_CHECK: AXError code \(result.rawValue) from app \(targets.frontmostName) — not permission-related, treating as OK"
-      )
-      return true
-    }
+    guard sawCannotComplete else { return .indeterminate }
+    return confirmAccessibilityBrokenViaFinder(targets: targets) ? .indeterminate : .failing
   }
 
-  /// Secondary AX check against Finder to disambiguate cannotComplete errors.
-  /// If Finder (a known AX-compliant app) also fails, the permission is truly broken.
-  /// If Finder succeeds, the original failure was app-specific, not a permission issue.
+  nonisolated static func focusedWindowError(pid: pid_t) -> AXError {
+    let appElement = AXUIElementCreateApplication(pid)
+    var focusedWindow: CFTypeRef?
+    return AXUIElementCopyAttributeValue(
+      appElement, kAXFocusedWindowAttribute as CFString, &focusedWindow)
+  }
+
+  /// Secondary AX check against Finder to disambiguate `cannotComplete`.
+  ///
+  /// Finder is a known AX-compliant app, so if it fails too the permission is the problem.
+  /// Returns whether accessibility looks fine.
   nonisolated static func confirmAccessibilityBrokenViaFinder(
     targets: AccessibilityProbeTargets
   ) -> Bool {
-    let suspectApp = targets.frontmostName
-    if let finderPID = targets.finderProcessID {
-      let finderElement = AXUIElementCreateApplication(finderPID)
-      var finderWindow: CFTypeRef?
-      let finderResult = AXUIElementCopyAttributeValue(
-        finderElement, kAXFocusedWindowAttribute as CFString, &finderWindow)
-      if finderResult == .cannotComplete || finderResult == .apiDisabled {
-        log(
-          "ACCESSIBILITY_CHECK: AXError.cannotComplete confirmed by Finder — permission is truly stuck (original app: \(suspectApp))"
-        )
-        return false
-      } else {
-        log(
-          "ACCESSIBILITY_CHECK: AXError.cannotComplete from \(suspectApp) but Finder OK — app-specific AX incompatibility, permission is fine"
-        )
-        return true
-      }
-    } else {
-      // Finder not running — fall back to event tap probe as tie-breaker
-      log(
-        "ACCESSIBILITY_CHECK: AXError.cannotComplete from \(suspectApp), Finder not running — using event tap probe"
-      )
-      return probeAccessibilityViaEventTap()
-    }
-  }
-
-  /// Probe accessibility permission by attempting to create a CGEvent tap.
-  /// Unlike AXIsProcessTrusted(), event tap creation checks the live TCC database,
-  /// bypassing the per-process cache that can go stale on macOS 26 (Tahoe).
-  nonisolated static func probeAccessibilityViaEventTap() -> Bool {
-    let tap = CGEvent.tapCreate(
-      tap: .cgSessionEventTap,
-      place: .tailAppendEventTap,
-      options: .listenOnly,
-      eventsOfInterest: CGEventMask(1 << CGEventType.mouseMoved.rawValue),
-      callback: { _, _, event, _ in Unmanaged.passRetained(event) },
-      userInfo: nil
-    )
-    if let tap = tap {
-      CFMachPortInvalidate(tap)
+    guard let finderPID = targets.finderProcessID else {
+      // Finder not running. The old code fell back to the event tap here, which measures Input
+      // Monitoring rather than accessibility — the same conflation that produced a false grant.
+      // Unknown is the honest answer.
+      log("ACCESSIBILITY_CHECK: AXError.cannotComplete and Finder not running — cannot determine")
       return true
     }
-    return false
+    switch focusedWindowError(pid: finderPID) {
+    case .cannotComplete, .apiDisabled:
+      log("ACCESSIBILITY_CHECK: cannotComplete confirmed by Finder — permission is truly stuck")
+      return false
+    default:
+      log("ACCESSIBILITY_CHECK: cannotComplete but Finder OK — app-specific AX gap, permission is fine")
+      return true
+    }
   }
 
   /// Check if accessibility permission was explicitly denied

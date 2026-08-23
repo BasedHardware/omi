@@ -111,6 +111,29 @@ final class APIClientMemoryMutationRequestTests: XCTestCase {
     return client
   }
 
+  func testReviewMemorySendsVerdictAsQueryParameter() async throws {
+    let client = await makeClient()
+
+    try await client.reviewMemory(id: "memory-1", keep: false)
+
+    let request = try XCTUnwrap(MemoryMutationURLCapture.request)
+    XCTAssertEqual(request.httpMethod, "POST")
+    XCTAssertEqual(request.url?.path, "/v3/memories/memory-1/review")
+    // The route declares `value` as a bare scalar, so FastAPI binds it from the
+    // query string. Sending it in the body would 422.
+    XCTAssertEqual(request.url?.query, "value=false")
+  }
+
+  func testReviewMemoryKeepSendsTrue() async throws {
+    let client = await makeClient()
+
+    try await client.reviewMemory(id: "memory-2", keep: true)
+
+    let request = try XCTUnwrap(MemoryMutationURLCapture.request)
+    XCTAssertEqual(request.url?.path, "/v3/memories/memory-2/review")
+    XCTAssertEqual(request.url?.query, "value=true")
+  }
+
   func testEditMemorySendsValueInJSONBody() async throws {
     let client = await makeClient()
 

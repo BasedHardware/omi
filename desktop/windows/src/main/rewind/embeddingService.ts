@@ -26,6 +26,8 @@ import {
 } from './embedQueue'
 import { embedBatch, embedOne, type EmbedSession } from './embeddingClient'
 import { linkRewindEmbedding, rewindFramesNeedingEmbedding, upsertRewindEmbedding } from '../ipc/db'
+import { requestFreshSession, tokenLooksExpired } from '../assistants/core/session'
+import { recordFallback } from '../observability/fallback'
 
 /** How often the flush timer checks the queue (the 60s deadline lives in the queue). */
 const TICK_MS = 5_000
@@ -40,6 +42,42 @@ const BACKFILL_BATCH_DELAY_MS = 200
 const MAX_PENDING = 500
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
+
+function isProxyAuthExpired(error: unknown): boolean {
+  return error instanceof Error && /\bstatus 401\b/.test(error.message)
+}
+
+/** Pull a force-refreshed Firebase token into the Rewind session, in place.
+ *  Same renderer-pull seam the assistants and pi-mono use. Null pull is a no-op.
+ *
+ *  Identity: `configureRewindEmbedSession` owns sign-out / account switch. A pull
+ *  that started under user A must not resurrect A's token after a sign-out, or
+ *  write A's bearer over B's just-pushed session (which would drain A's queued
+ *  OCR under B's account). Generation + object identity are the seam. */
+async function refreshEmbedSession(): Promise<EmbedSession | null> {
+  const mine = generation
+  const previous = session
+  if (!previous) return null
+  const pulled = await requestFreshSession()
+  if (generation !== mine || session !== previous) return session
+  if (!pulled?.token) return session
+  const pulledUid = tokenUid(pulled.token)
+  if (sessionUid !== null && pulledUid !== null && pulledUid !== sessionUid) {
+    return session
+  }
+  session = {
+    token: pulled.token,
+    desktopApiBase: pulled.desktopApiBase || session.desktopApiBase
+  }
+  if (pulledUid) sessionUid = pulledUid
+  return session
+}
+
+async function liveEmbedSession(): Promise<EmbedSession | null> {
+  if (!session) return null
+  if (tokenLooksExpired(session.token)) return (await refreshEmbedSession()) ?? session
+  return session
+}
 
 const queue = new EmbedQueue()
 const recentHashes = new RecentHashCache()
@@ -236,19 +274,42 @@ async function flushBatch(
  */
 async function drain(current: EmbedSession, force: boolean): Promise<void> {
   const mine = generation
+  let live = current
+  let retriedAuth = false
   while (queue.size > 0) {
-    if (generation !== mine || session !== current) return // signed out / user changed
+    if (generation !== mine || session !== live) return // signed out / user changed
     const batch = queue.take(EMBED_BATCH_SIZE)
     try {
-      await flushBatch(batch, current, mine)
-    } catch (e) {
-      // Degrade quietly: these frames stay unembedded (keyword search still
-      // finds them) and the sweep moves on. There is no Windows recordFallback
-      // emitter to route this through yet (#10240; see the Track 3 TODO in
-      // assistants/aiUserProfile/orchestrate.ts), so a log is the honest option.
+      await flushBatch(batch, live, mine)
+    } catch (caught) {
+      // Degrade quietly for the user: these frames stay unembedded (keyword search
+      // still finds them) and the sweep moves on — but name the degrade for ops
+      // through the shared fallback emitter rather than only a local log.
       if (generation !== mine) return // torn down mid-request; not the new session's failure
+      let error = caught
+      if (!retriedAuth && isProxyAuthExpired(error)) {
+        retriedAuth = true
+        const refreshed = await refreshEmbedSession()
+        if (refreshed && generation === mine && refreshed.token !== live.token) {
+          live = refreshed
+          try {
+            await flushBatch(batch, live, mine)
+            continue
+          } catch (retryErr) {
+            error = retryErr
+          }
+        }
+      }
       for (const item of batch) failedThisLaunch.add(item.frameId)
-      console.warn(`[rewind-embed] batch of ${batch.length} failed: ${(e as Error).message}`)
+      recordFallback({
+        component: 'other',
+        from: 'semantic_search',
+        to: 'keyword_search',
+        reason: 'embed_batch_failed',
+        outcome: 'degraded',
+        batchSize: batch.length,
+        message: (error as Error).message
+      })
       return
     }
     if (!force && !queue.shouldFlush(Date.now())) return
@@ -272,7 +333,7 @@ async function flushDue(force = false): Promise<void> {
   // double-send the same frames), while a forced caller still gets its turn.
   const run = async (): Promise<void> => {
     await flushInFlight?.catch(() => {})
-    const current = session
+    const current = await liveEmbedSession()
     if (!current) return
     await drain(current, force)
   }
@@ -289,13 +350,27 @@ async function flushDue(force = false): Promise<void> {
  * semantic search is unavailable: the caller falls back to keyword-only.
  */
 export async function embedRewindQuery(text: string): Promise<Float32Array | null> {
-  const current = session
-  if (!current || !text.trim()) return null
+  if (!text.trim()) return null
+  const mine = generation
+  const first = await liveEmbedSession()
+  if (!first || generation !== mine) return null
   try {
-    const vec = await embedOne(current, text, 'RETRIEVAL_QUERY')
+    const vec = await embedOne(first, text, 'RETRIEVAL_QUERY')
     return vec.length === EMBED_DIM ? vec : null
-  } catch (e) {
-    console.warn(`[rewind-embed] query embed failed, keyword-only: ${(e as Error).message}`)
+  } catch (caught) {
+    let error = caught
+    if (isProxyAuthExpired(error) && generation === mine) {
+      const refreshed = await refreshEmbedSession()
+      if (refreshed && generation === mine && refreshed.token !== first.token) {
+        try {
+          const vec = await embedOne(refreshed, text, 'RETRIEVAL_QUERY')
+          return vec.length === EMBED_DIM ? vec : null
+        } catch (retryErr) {
+          error = retryErr
+        }
+      }
+    }
+    console.warn(`[rewind-embed] query embed failed, keyword-only: ${(error as Error).message}`)
     return null
   }
 }

@@ -321,7 +321,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get searchApps => 'Etsi sovelluksia...';
 
   @override
-  String get myApps => 'Omat sovellukset';
+  String get myApps => 'Minun luomani';
 
   @override
   String get installedApps => 'Asennetut sovellukset';
@@ -9850,4 +9850,40 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get findDevice => 'Etsi';
+
+  @override
+  String get diagnosticsShareFailed => 'Diagnostiikan jakaminen epäonnistui. Yritä uudelleen.';
+
+  @override
+  String get appDisabledTitle => 'Tämä sovellus on poistettu käytöstä eikä sitä voi asentaa.';
+
+  @override
+  String get appDisabledWebhookFailures =>
+      'Sen päätepiste epäonnistui 72 tuntia peräkkäin, joten toimitukset pysäytettiin.';
+
+  @override
+  String get appDisabledGeneric => 'Omi poisti sen käytöstä.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Korjaa ensin päätepiste — käyttöönotto tarkistaa jokaisen määritetyn URL-osoitteen uudelleen.';
+
+  @override
+  String get appReEnable => 'Ota uudelleen käyttöön';
+
+  @override
+  String get appReEnableFailedTitle => 'Käyttöönotto epäonnistui';
+
+  @override
+  String get appReEnableFailedBody => 'Tätä sovellusta ei voitu ottaa uudelleen käyttöön. Yritä uudelleen.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Poistettu käytöstä $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Viimeisin virhe: $error.';
+  }
 }

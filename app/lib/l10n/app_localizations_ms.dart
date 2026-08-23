@@ -322,7 +322,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get searchApps => 'Cari apl...';
 
   @override
-  String get myApps => 'Aplikasi Saya';
+  String get myApps => 'Dicipta oleh saya';
 
   @override
   String get installedApps => 'Aplikasi Dipasang';
@@ -9875,4 +9875,40 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get findDevice => 'Cari';
+
+  @override
+  String get diagnosticsShareFailed => 'Tidak dapat berkongsi diagnostik. Sila cuba lagi.';
+
+  @override
+  String get appDisabledTitle => 'Apl ini dilumpuhkan dan tidak boleh dipasang.';
+
+  @override
+  String get appDisabledWebhookFailures =>
+      'Endpoint-nya gagal selama 72 jam berturut-turut, jadi penghantaran dihentikan.';
+
+  @override
+  String get appDisabledGeneric => 'Ia dilumpuhkan oleh Omi.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Betulkan endpoint dahulu — pengaktifan semula akan menyemak semula setiap URL yang dikonfigurasikan.';
+
+  @override
+  String get appReEnable => 'Aktifkan semula';
+
+  @override
+  String get appReEnableFailedTitle => 'Gagal mengaktifkan semula';
+
+  @override
+  String get appReEnableFailedBody => 'Apl ini tidak dapat diaktifkan semula. Sila cuba lagi.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Dilumpuhkan pada $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Ralat terakhir: $error.';
+  }
 }

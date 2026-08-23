@@ -251,6 +251,118 @@ def test_sse_tools_list_filters_by_oauth_scopes():
     assert 'get_conversations' not in names
 
 
+def test_oauth_authentication_carries_memory_identity_into_advertised_memory_tools():
+    oauth_token_context = {
+        'uid': UID,
+        'scopes': ['memories.read'],
+        'client_id': 'omi-chatgpt-prod',
+        'resource': sse.MCP_RESOURCE_URL,
+        'grant_id': 'oauth-grant-1',
+    }
+    service = MagicMock()
+    service.read.return_value = []
+    service.search_mcp.return_value = []
+    grant_state = {
+        'grants': {
+            'mcp': {
+                'apps': {
+                    'omi-chatgpt-prod': {
+                        'keys': {
+                            'oauth-grant-1': {
+                                'enabled': True,
+                                'scopes': ['memories.read'],
+                                'default_read': True,
+                                'archive_read': False,
+                                'write': False,
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    snapshot = SimpleNamespace(exists=True, to_dict=lambda: grant_state)
+    fake_db = MagicMock()
+    fake_db.collection.return_value.document.return_value.get.return_value = snapshot
+
+    with (
+        patch.object(sse.mcp_oauth_db, 'validate_access_token', return_value=oauth_token_context),
+        patch.object(sse, 'enforce_account_deletion_http_access'),
+        patch.object(sse, '_enforce_mcp_cutover_access'),
+        patch.object(sse, 'db', fake_db),
+        patch.object(sse, 'MemoryService', return_value=service),
+    ):
+        auth_context = sse.authenticate_mcp_request('Bearer omi_oat_chatgpt')
+        assert auth_context is not None
+        get_response, _ = sse.handle_mcp_message(
+            auth_context,
+            {'id': 1, 'method': 'tools/call', 'params': {'name': 'get_memories', 'arguments': {}}},
+        )
+        search_response, _ = sse.handle_mcp_message(
+            auth_context,
+            {
+                'id': 2,
+                'method': 'tools/call',
+                'params': {'name': 'search_memories', 'arguments': {'query': 'coffee'}},
+            },
+        )
+
+    assert auth_context.memory_context.app_id == 'omi-chatgpt-prod'
+    assert auth_context.memory_context.key_id == 'oauth-grant-1'
+    assert 'error' not in get_response
+    assert 'error' not in search_response
+
+
+def test_oauth_memory_tool_execution_honors_a_disabled_persisted_grant():
+    oauth_token_context = {
+        'uid': UID,
+        'scopes': ['memories.read'],
+        'client_id': 'omi-chatgpt-prod',
+        'resource': sse.MCP_RESOURCE_URL,
+        'grant_id': 'oauth-disabled-grant',
+    }
+    grant_state = {
+        'grants': {
+            'mcp': {
+                'apps': {
+                    'omi-chatgpt-prod': {
+                        'keys': {
+                            'oauth-disabled-grant': {
+                                'enabled': False,
+                                'scopes': ['memories.read'],
+                                'default_read': True,
+                                'archive_read': False,
+                                'write': False,
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    snapshot = SimpleNamespace(exists=True, to_dict=lambda: grant_state)
+    fake_db = MagicMock()
+    fake_db.collection.return_value.document.return_value.get.return_value = snapshot
+    service = MagicMock()
+
+    with (
+        patch.object(sse.mcp_oauth_db, 'validate_access_token', return_value=oauth_token_context),
+        patch.object(sse, 'enforce_account_deletion_http_access'),
+        patch.object(sse, '_enforce_mcp_cutover_access'),
+        patch.object(sse, 'db', fake_db),
+        patch.object(sse, 'MemoryService', return_value=service),
+    ):
+        auth_context = sse.authenticate_mcp_request('Bearer omi_oat_disabled')
+        assert auth_context is not None
+        response, _ = sse.handle_mcp_message(
+            auth_context,
+            {'id': 1, 'method': 'tools/call', 'params': {'name': 'get_memories', 'arguments': {}}},
+        )
+
+    assert response['error']['code'] == -32009
+    service.read.assert_not_called()
+
+
 def test_sse_initialize_teaches_every_agent_to_retrieve_full_omi_context_safely():
     auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
     response, session_id = sse.handle_mcp_message(auth_context, {'id': 1, 'method': 'initialize'})

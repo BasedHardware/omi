@@ -125,6 +125,33 @@ class ForwardableSignalTests(unittest.TestCase):
             signal.signal(signum, previous)
 
 
+class OutputFlushTests(unittest.TestCase):
+    def test_retries_a_temporarily_full_nonblocking_pipe(self) -> None:
+        stream = mock.Mock()
+        stream.flush.side_effect = [
+            BlockingIOError(35, "write could not complete without blocking"),
+            BlockingIOError(35, "write could not complete without blocking"),
+            None,
+        ]
+
+        with mock.patch.object(runner, "wait_for_stream_writable") as wait:
+            runner.flush_output(stream)
+
+        self.assertEqual(stream.flush.call_count, 3)
+        self.assertEqual(wait.call_count, 2)
+        wait.assert_called_with(stream)
+
+    def test_retries_an_interrupted_flush_without_waiting_for_capacity(self) -> None:
+        stream = mock.Mock()
+        stream.flush.side_effect = [InterruptedError(), None]
+
+        with mock.patch.object(runner, "wait_for_stream_writable") as wait:
+            runner.flush_output(stream)
+
+        self.assertEqual(stream.flush.call_count, 2)
+        wait.assert_not_called()
+
+
 class SignalChildTests(unittest.TestCase):
     def test_posix_signals_the_whole_child_process_group(self) -> None:
         child = FakeChild()

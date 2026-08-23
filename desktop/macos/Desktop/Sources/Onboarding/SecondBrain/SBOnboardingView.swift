@@ -293,6 +293,7 @@ struct SBOnboardingView: View {
     case .agents: agentsWidget
     case .context: contextWidget
     case .capture: captureWidget
+    case .referral: referralWidget
     }
   }
 
@@ -926,6 +927,17 @@ struct SBOnboardingView: View {
       .buttonStyle(InkButtonStyle(kind: .secondary))
     }
     .frame(maxWidth: 340, alignment: .leading)
+  }
+
+  private var referralWidget: some View {
+    VStack(alignment: .leading, spacing: 14) {
+      ReferralProgramView(showsIntroduction: false)
+
+      SBInkButton(title: "Take me to Omi", isDefaultAction: true) {
+        model.finishReferral()
+      }
+    }
+    .frame(maxWidth: 380, alignment: .leading)
   }
 }
 

@@ -33,6 +33,8 @@ _CHAT_QUOTE_TEXT = 'User likes safe chat memory reads.'
 def _empty_historical_store(monkeypatch):
     """Canonical chat fixtures declare no historical rows unless a test opts in."""
     monkeypatch.setattr(memories_db, 'get_memories', lambda *args, **kwargs: [])
+    monkeypatch.setattr(memories_db, 'list_memory_updated_or_created_index', lambda *args, **kwargs: [])
+    monkeypatch.setattr(memories_db, 'get_memories_by_ids', lambda *args, **kwargs: [])
 
 
 def _memory_item(memory_id: str, *, tier=MemoryTier.short_term, now=None, captured_at=None, content=None, **overrides):
@@ -92,7 +94,7 @@ def test_chat_memory_control_defaults_missing_state_and_fails_closed_for_malform
     assert no_grant.collection_paths == []
 
 
-def test_chat_default_memory_adapter_uses_product_search_and_excludes_stale_short_term_and_archive():
+def test_chat_default_memory_adapter_keeps_expired_unadjudicated_short_term_and_excludes_archive():
     now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     stale_short_term = _memory_item(
@@ -112,10 +114,10 @@ def test_chat_default_memory_adapter_uses_product_search_and_excludes_stale_shor
     assert db_client.document_get_paths == ['users/u1/memory_control/state']
     assert db_client.collection_paths == ['users/u1/memory_items']
     assert result is not None
-    assert result.startswith("Found 2 memory default memories matching 'coffee':")
+    assert result.startswith("Found 3 memory default memories matching 'coffee':")
     assert 'content_quoted="coffee fresh short term"' in result
     assert 'content_quoted="coffee long term"' in result
-    assert 'coffee stale short term' not in result
+    assert 'content_quoted="coffee stale short term"' in result
     assert 'coffee archive memory' not in result
     assert 'archive_default_visible=False' in result
 
@@ -231,11 +233,12 @@ def test_chat_vector_adapter_uses_hydrated_vector_search_and_preserves_ranking_w
         'users/u1/memory_items/fresh-short-term',
     ]
     assert result is not None
-    assert result.startswith("Found 2 memory vector memories matching 'coffee':")
+    assert result.startswith("Found 3 memory vector memories matching 'coffee':")
+    assert result.index('coffee stale short term') < result.index('coffee long term')
     assert result.index('coffee long term') < result.index('coffee fresh short term')
+    assert 'content_quoted="coffee stale short term" (relevance: 0.99, tier: short_term' in result
     assert 'content_quoted="coffee long term" (relevance: 0.92, tier: long_term' in result
     assert 'content_quoted="coffee fresh short term" (relevance: 0.80, tier: short_term' in result
-    assert 'coffee stale short term' not in result
     assert 'coffee archive memory' not in result
     assert 'archive_default_visible=False' in result
 

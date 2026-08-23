@@ -418,7 +418,7 @@
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
-    "myApps": "Мои апликации",
+    "myApps": "Создадено од мене",
     "@myApps": {
         "description": "Filter button for user's own apps"
     },
@@ -10783,5 +10783,15 @@
     "accountCutoverOpenStore": "Otevřít obchod",
     "sendRawAudioToOmi": "Испраќај необработено аудио до Omi",
     "sendRawAudioToOmiDescription": "Исклучете за да спречите испраќање необработено аудио до Omi. Транскриптите и податоците потребни за облачните функции сè уште може да се испраќаат до Omi.",
-    "findDevice": "Пронајди"
+    "findDevice": "Пронајди",
+    "diagnosticsShareFailed": "Дијагностиката не можеше да се сподели. Обидете се повторно.",
+    "appDisabledTitle": "Оваа апликација е оневозможена и не може да се инсталира.",
+    "appDisabledWebhookFailures": "Нејзината крајна точка не работеше 72 часа по ред, па испораките беа запрени.",
+    "appDisabledGeneric": "Ја оневозможи Omi.",
+    "appDisabledOwnerHint": "Прво поправете ја крајната точка — повторното овозможување повторно ја проверува секоја конфигурирана URL адреса.",
+    "appReEnable": "Овозможи повторно",
+    "appReEnableFailedTitle": "Повторното овозможување не успеа",
+    "appReEnableFailedBody": "Оваа апликација не можеше повторно да се овозможи. Обидете се повторно.",
+    "appDisabledOn": "Оневозможена на {date}.",
+    "appDisabledLastError": "Последна грешка: {error}."
 }

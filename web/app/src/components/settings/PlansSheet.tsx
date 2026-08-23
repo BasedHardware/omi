@@ -18,6 +18,7 @@ import type {
   PricingOption,
   AvailablePlansResponse,
 } from '@/types/user';
+import { decodePlan, planGrantsPaidCapability } from '@/types/user';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 interface PlansSheetProps {
@@ -43,13 +44,27 @@ export function PlansSheet({
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
 
-  const isUnlimited = subscription?.is_unlimited;
+  const planIdentity = subscription
+    ? subscription.plan_identity ?? decodePlan(subscription.plan)
+    : null;
+  const isUnlimited = planIdentity ? planGrantsPaidCapability(planIdentity) : false;
+  const isUnknownPlan = planIdentity?.kind === 'unknown';
   const isCanceling_ = subscription?.cancel_at_period_end;
 
   useEffect(() => {
     let cancelled = false;
 
     if (open) {
+      if (isUnknownPlan) {
+        setPricingOptions([]);
+        setSelectedPriceId(null);
+        setError(null);
+        setIsLoadingPlans(false);
+        return () => {
+          cancelled = true;
+        };
+      }
+
       // Use cached plans if available, otherwise fetch
       if (cachedPlans && cachedPlans.length > 0) {
         if (cancelled) return;
@@ -70,7 +85,7 @@ export function PlansSheet({
     return () => {
       cancelled = true;
     };
-  }, [open, cachedPlans, subscription?.current_price_id]);
+  }, [open, cachedPlans, subscription?.current_price_id, isUnknownPlan]);
 
   const loadPlans = async (cancelled = false) => {
     setIsLoadingPlans(true);
@@ -98,7 +113,7 @@ export function PlansSheet({
   };
 
   const handleSubscribe = async () => {
-    if (!selectedPriceId) return;
+    if (isUnknownPlan || !selectedPriceId) return;
 
     setIsLoading(true);
     setError(null);
@@ -252,12 +267,14 @@ export function PlansSheet({
                     </Dialog.Close>
 
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-purple-primary/10 flex items-center justify-center">
-                        <Crown className="w-5 h-5 text-purple-primary" />
+                      <div className="w-10 h-10 rounded-full bg-white/[0.08] flex items-center justify-center">
+                        <Crown className="w-5 h-5 text-text-primary" />
                       </div>
                       <div>
                         <Dialog.Title className="text-lg font-semibold text-text-primary">
-                          {isUnlimited && !isCanceling_
+                          {isUnknownPlan
+                            ? 'Plan unavailable'
+                            : isUnlimited && !isCanceling_
                             ? 'Manage Your Plan'
                             : 'Choose Your Plan'}
                         </Dialog.Title>
@@ -274,9 +291,17 @@ export function PlansSheet({
 
                   {/* Content */}
                   <div className="p-6 space-y-6">
-                    {isLoadingPlans ? (
+                    {isUnknownPlan ? (
+                      <div className="py-8 text-center">
+                        <p className="text-sm text-text-secondary">
+                          This account uses a plan that this version of Omi does not
+                          recognize yet. Plan options are unavailable until the plan can
+                          be identified.
+                        </p>
+                      </div>
+                    ) : isLoadingPlans ? (
                       <div className="flex items-center justify-center py-12">
-                        <Loader2 className="w-6 h-6 text-purple-primary animate-spin" />
+                        <Loader2 className="w-6 h-6 text-text-primary animate-spin" />
                       </div>
                     ) : (
                       <>
@@ -299,7 +324,7 @@ export function PlansSheet({
                                 className={cn(
                                   'relative p-4 rounded-xl border-2 text-left transition-all',
                                   isSelected
-                                    ? 'border-purple-primary bg-purple-primary/5'
+                                    ? 'border-white/25 bg-white/[0.08]'
                                     : 'border-bg-tertiary hover:border-bg-quaternary bg-bg-tertiary/50',
                                   isCanceling_ &&
                                     !isCurrent &&
@@ -307,7 +332,7 @@ export function PlansSheet({
                                 )}
                               >
                                 {isAnnual && (
-                                  <span className="absolute -top-2 right-2 px-2 py-0.5 bg-purple-primary text-white text-[10px] font-medium rounded-full">
+                                  <span className="absolute -top-2 right-2 px-2 py-0.5 bg-text-primary text-bg-primary text-[10px] font-medium rounded-full">
                                     POPULAR
                                   </span>
                                 )}
@@ -319,7 +344,7 @@ export function PlansSheet({
                                   {option.price_string}
                                 </p>
                                 {option.description && (
-                                  <p className="text-xs text-purple-primary mt-1">
+                                  <p className="text-xs text-text-primary mt-1">
                                     {option.description}
                                   </p>
                                 )}
@@ -350,7 +375,7 @@ export function PlansSheet({
                           <ul className="space-y-2">
                             {defaultFeatures.map((feature, idx) => (
                               <li key={idx} className="flex items-start gap-2">
-                                <Check className="w-4 h-4 text-purple-primary flex-shrink-0 mt-0.5" />
+                                <Check className="w-4 h-4 text-text-primary flex-shrink-0 mt-0.5" />
                                 <span className="text-sm text-text-tertiary">
                                   {feature}
                                 </span>
@@ -377,8 +402,8 @@ export function PlansSheet({
                           }
                           className={cn(
                             'w-full py-3 rounded-xl font-medium transition-colors',
-                            'bg-purple-primary text-white',
-                            'hover:bg-purple-secondary',
+                            'bg-text-primary text-bg-primary',
+                            'hover:bg-text-primary/90',
                             'disabled:opacity-50 disabled:cursor-not-allowed',
                           )}
                         >

@@ -610,6 +610,7 @@ final class APIClientRoutingTests: XCTestCase {
   override func tearDown() {
     unsetenv("OMI_PYTHON_API_URL")
     unsetenv("OMI_DESKTOP_API_URL")
+    unsetenv("OMI_AUTH_API_URL")
     URLCapture.reset()
     super.tearDown()
   }
@@ -810,6 +811,16 @@ final class APIClientRoutingTests: XCTestCase {
       URLCapture.capturedRequests, host: "python-test", port: 9001,
       pathContains: "v1/users/me/subscription", method: "GET",
       label: "getUserSubscription")
+  }
+
+  func testGetReferralLinkRoutesToAuthAuthority() async {
+    setenv("OMI_AUTH_API_URL", "http://auth-test:9003", 1)
+    let client = await makeTestClient()
+    _ = try? await client.getReferralLink() as ReferralLinkResponse
+    assertRoutes(
+      URLCapture.capturedRequests, host: "auth-test", port: 9003,
+      pathContains: "v1/users/me/referral", method: "GET",
+      label: "getReferralLink")
   }
 
   // MARK: - Routing behavior: Rust-routed endpoints (customBaseURL: rustBackendURL)

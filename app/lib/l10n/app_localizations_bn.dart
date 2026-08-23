@@ -321,7 +321,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get searchApps => 'অ্যাপস খুঁজুন...';
 
   @override
-  String get myApps => 'আমার অ্যাপস';
+  String get myApps => 'আমার তৈরি';
 
   @override
   String get installedApps => 'ইনস্টল করা অ্যাপস';
@@ -9855,4 +9855,39 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get findDevice => 'খুঁজুন';
+
+  @override
+  String get diagnosticsShareFailed => 'ডায়াগনস্টিকস শেয়ার করা যায়নি। আবার চেষ্টা করুন।';
+
+  @override
+  String get appDisabledTitle => 'এই অ্যাপটি নিষ্ক্রিয় এবং ইনস্টল করা যাবে না।';
+
+  @override
+  String get appDisabledWebhookFailures => 'এর এন্ডপয়েন্ট টানা ৭২ ঘণ্টা ব্যর্থ হয়েছে, তাই ডেলিভারি বন্ধ করা হয়েছে।';
+
+  @override
+  String get appDisabledGeneric => 'এটি Omi নিষ্ক্রিয় করেছে।';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'প্রথমে এন্ডপয়েন্ট ঠিক করুন — পুনরায় সক্রিয় করলে কনফিগার করা প্রতিটি URL আবার যাচাই করা হয়।';
+
+  @override
+  String get appReEnable => 'পুনরায় সক্রিয় করুন';
+
+  @override
+  String get appReEnableFailedTitle => 'পুনরায় সক্রিয় করা যায়নি';
+
+  @override
+  String get appReEnableFailedBody => 'এই অ্যাপটি পুনরায় সক্রিয় করা যায়নি। আবার চেষ্টা করুন।';
+
+  @override
+  String appDisabledOn(String date) {
+    return '$date তারিখে নিষ্ক্রিয় করা হয়েছে।';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'শেষ ত্রুটি: $error';
+  }
 }

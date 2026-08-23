@@ -20,6 +20,7 @@ from database.firestore_index_registry import (
     EXPIRED_MEMORY_OUTBOX_LEASE_QUERY,
     INDEX_ONLY_REQUIREMENTS,
     POLICY_EXPIRED_SHORT_TERM_QUERY,
+    RECENT_REJECTED_MEMORY_FEEDBACK_QUERY,
     REVIEW_QUEUE_BY_CONFLICT_QUERY,
     REVIEW_QUEUE_BY_FACT_QUERY,
     REVIEW_QUEUE_BY_STATUS_QUERY,
@@ -153,6 +154,21 @@ def test_registered_attention_override_query_builds_the_real_filter_chain():
                 ("status", "==", "active"),
                 ("processing_state", "==", "processed"),
                 ("source_state", "==", "active"),
+            ],
+        ),
+        (
+            RECENT_REJECTED_MEMORY_FEEDBACK_QUERY,
+            {
+                "statuses": ["active", "hidden"],
+                "source_state": "active",
+                "user_review": False,
+                "updated_at": datetime(2026, 8, 1, tzinfo=timezone.utc),
+            },
+            [
+                ("status", "in", ["active", "hidden"]),
+                ("source_state", "==", "active"),
+                ("promotion.user_review", "==", False),
+                ("updated_at", ">=", datetime(2026, 8, 1, tzinfo=timezone.utc)),
             ],
         ),
         (
@@ -501,6 +517,15 @@ class _StreamRecordingQuery:
 
     def order_by(self, field_path, direction):
         return _StreamRecordingQuery(self._recorder, self._filters, (*self._orders, (field_path, direction)))
+
+    def select(self, _fields):
+        return self
+
+    def offset(self, _n):
+        return self
+
+    def limit(self, _n):
+        return self
 
     def stream(self):
         self._recorder.append((self._filters, self._orders))

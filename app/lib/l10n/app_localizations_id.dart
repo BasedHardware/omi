@@ -322,7 +322,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get searchApps => 'Cari aplikasi...';
 
   @override
-  String get myApps => 'Aplikasi Saya';
+  String get myApps => 'Dibuat oleh saya';
 
   @override
   String get installedApps => 'Aplikasi Terinstal';
@@ -9860,4 +9860,40 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get findDevice => 'Temukan';
+
+  @override
+  String get diagnosticsShareFailed => 'Tidak dapat membagikan diagnostik. Silakan coba lagi.';
+
+  @override
+  String get appDisabledTitle => 'Aplikasi ini dinonaktifkan dan tidak dapat dipasang.';
+
+  @override
+  String get appDisabledWebhookFailures =>
+      'Endpoint-nya gagal selama 72 jam berturut-turut, sehingga pengiriman dihentikan.';
+
+  @override
+  String get appDisabledGeneric => 'Aplikasi ini dinonaktifkan oleh Omi.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Perbaiki endpoint terlebih dahulu — mengaktifkan kembali akan memeriksa ulang setiap URL yang dikonfigurasi.';
+
+  @override
+  String get appReEnable => 'Aktifkan kembali';
+
+  @override
+  String get appReEnableFailedTitle => 'Gagal mengaktifkan kembali';
+
+  @override
+  String get appReEnableFailedBody => 'Aplikasi ini tidak dapat diaktifkan kembali. Silakan coba lagi.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Dinonaktifkan pada $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Kesalahan terakhir: $error.';
+  }
 }

@@ -418,7 +418,7 @@
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
-    "myApps": "اپلیکیشن‌های من",
+    "myApps": "ساخته‌شده توسط من",
     "@myApps": {
         "description": "Filter button for user's own apps"
     },
@@ -10783,5 +10783,15 @@
     "accountCutoverOpenStore": "فتح المتجر",
     "sendRawAudioToOmi": "ارسال صدای خام به Omi",
     "sendRawAudioToOmiDescription": "برای جلوگیری از ارسال صدای خام به Omi این گزینه را خاموش کنید. متن پیاده‌شده و داده‌های مورد نیاز قابلیت‌های ابری ممکن است همچنان به Omi ارسال شوند.",
-    "findDevice": "پیدا کردن"
+    "findDevice": "پیدا کردن",
+    "diagnosticsShareFailed": "اشتراک‌گذاری اطلاعات تشخیصی ممکن نشد. لطفاً دوباره تلاش کنید.",
+    "appDisabledTitle": "این برنامه غیرفعال است و نمی‌توان آن را نصب کرد.",
+    "appDisabledWebhookFailures": "نقطه پایانی آن ۷۲ ساعت پیاپی ناموفق بود، بنابراین ارسال‌ها متوقف شد.",
+    "appDisabledGeneric": "توسط Omi غیرفعال شد.",
+    "appDisabledOwnerHint": "ابتدا نقطه پایانی را درست کنید — فعال‌سازی مجدد هر نشانی اینترنتی پیکربندی‌شده را دوباره بررسی می‌کند.",
+    "appReEnable": "فعال‌سازی مجدد",
+    "appReEnableFailedTitle": "فعال‌سازی مجدد ممکن نشد",
+    "appReEnableFailedBody": "این برنامه دوباره فعال نشد. لطفاً دوباره تلاش کنید.",
+    "appDisabledOn": "در {date} غیرفعال شد.",
+    "appDisabledLastError": "آخرین خطا: {error}"
 }

@@ -323,7 +323,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get searchApps => 'Maghanap ng mga app...';
 
   @override
-  String get myApps => 'Aking Mga App';
+  String get myApps => 'Likha ko';
 
   @override
   String get installedApps => 'Naka-install na Mga App';
@@ -9940,4 +9940,40 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get findDevice => 'Hanapin';
+
+  @override
+  String get diagnosticsShareFailed => 'Hindi maibahagi ang diagnostics. Pakisubukan ulit.';
+
+  @override
+  String get appDisabledTitle => 'Naka-disable ang app na ito at hindi ito mai-install.';
+
+  @override
+  String get appDisabledWebhookFailures =>
+      'Nabigo ang endpoint nito nang 72 oras na sunod-sunod, kaya itinigil ang mga paghahatid.';
+
+  @override
+  String get appDisabledGeneric => 'I-nadisable ito ng Omi.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Ayusin muna ang endpoint — sinusuri muli ng pag-enable ang bawat naka-configure na URL.';
+
+  @override
+  String get appReEnable => 'I-enable muli';
+
+  @override
+  String get appReEnableFailedTitle => 'Hindi ma-enable muli';
+
+  @override
+  String get appReEnableFailedBody => 'Hindi ma-enable muli ang app na ito. Pakisubukan ulit.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Na-disable noong $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Huling error: $error.';
+  }
 }

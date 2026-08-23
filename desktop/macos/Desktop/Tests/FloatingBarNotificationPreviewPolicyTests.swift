@@ -157,6 +157,135 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
       "muted in-bar preview must keep a banner surface so director delivery is visible")
   }
 
+  /// Behavioral guard for the category taxonomy: the director's real entry point must
+  /// refuse a delivery whose category toggle is off. A "suggest" decision is a generic
+  /// tip, which the taxonomy files under Insight. Every upstream gate is pinned open
+  /// (owner seeded, master on, frequency Maximum, not paywalled) and the surface is
+  /// pinned to the deterministic banner path (bar enabled, previews muted), so the
+  /// Insight toggle is the only closed gate: removing the category guard from
+  /// `presentContextDirectorNotification` makes this call return `.queued` from the
+  /// banner path instead of `.suppressed`, failing the test.
+  @MainActor
+  func testDirectorDeliveryWithDisabledCategoryToggleIsSuppressedAtTheEntryPoint() throws {
+    let defaults = UserDefaults.standard
+    let pinnedKeys = [
+      DefaultsKey.authUserId.rawValue,
+      DefaultsKey.automationOwnerOverride.rawValue,
+      NotificationService.masterEnabledDefaultsKey,
+      NotificationService.frequencyDefaultsKey,
+      DefaultsKey.desktopIsPaywalled.rawValue,
+      DefaultsKey.askOmiBarEnabled.rawValue,
+    ]
+    let savedValues = pinnedKeys.map { ($0, defaults.object(forKey: $0)) }
+    let savedInsightEnabled = InsightAssistantSettings.shared.notificationsEnabled
+    let savedPreviewsEnabled = ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled
+    defer {
+      for (key, value) in savedValues {
+        if let value {
+          defaults.set(value, forKey: key)
+        } else {
+          defaults.removeObject(forKey: key)
+        }
+      }
+      InsightAssistantSettings.shared.notificationsEnabled = savedInsightEnabled
+      ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled = savedPreviewsEnabled
+    }
+
+    let owner = "owner-category-gate-\(UUID().uuidString)"
+    defaults.set(owner, forKey: DefaultsKey.authUserId.rawValue)
+    defaults.removeObject(forKey: DefaultsKey.automationOwnerOverride.rawValue)
+    defaults.set(true, forKey: NotificationService.masterEnabledDefaultsKey)
+    defaults.set(5, forKey: NotificationService.frequencyDefaultsKey)
+    defaults.set(false, forKey: DefaultsKey.desktopIsPaywalled.rawValue)
+    defaults.set(true, forKey: DefaultsKey.askOmiBarEnabled.rawValue)
+    ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled = false
+    InsightAssistantSettings.shared.notificationsEnabled = false
+    let liveOwner = try XCTUnwrap(RuntimeOwnerIdentity.currentOwnerId())
+    XCTAssertEqual(liveOwner, owner)
+
+    var droppedCount = 0
+    let service = NotificationService(registerWithSystemNotificationCenter: false)
+    let result = service.presentContextDirectorNotification(
+      ownerID: liveOwner,
+      title: "PR #11937 blocked",
+      message: "The merge is waiting on a re-run of the flaky suite.",
+      decisionType: "suggest",
+      context: FloatingBarNotificationContext(
+        sourceTitle: "Context director",
+        assistantId: "context-director"),
+      onDropped: { droppedCount += 1 })
+
+    XCTAssertEqual(result, .suppressed)
+    XCTAssertEqual(droppedCount, 1)
+  }
+
+  /// The category toggles bind every proactive producer at the shared
+  /// `sendNotification` boundary — including the dedicated producers that never
+  /// consulted a toggle before generating: goals (Insight) and meeting action items
+  /// (Task). Same construction as the director test: every upstream gate is pinned
+  /// open and the surface pinned to the banner path, so with the category gate
+  /// removed these calls fall through to a delivery dispatch this bundle-less test
+  /// host cannot perform, failing the test; with the gate present they return
+  /// before any surface and leave the presentation ledger untouched.
+  @MainActor
+  func testGoalAndMeetingProducersHonorTheirCategoryTogglesAtTheSharedBoundary() throws {
+    let defaults = UserDefaults.standard
+    let pinnedKeys = [
+      DefaultsKey.authUserId.rawValue,
+      DefaultsKey.automationOwnerOverride.rawValue,
+      NotificationService.masterEnabledDefaultsKey,
+      NotificationService.frequencyDefaultsKey,
+      DefaultsKey.desktopIsPaywalled.rawValue,
+      DefaultsKey.askOmiBarEnabled.rawValue,
+    ]
+    let savedValues = pinnedKeys.map { ($0, defaults.object(forKey: $0)) }
+    let savedInsightEnabled = InsightAssistantSettings.shared.notificationsEnabled
+    let savedTaskEnabled = TaskAssistantSettings.shared.notificationsEnabled
+    let savedPreviewsEnabled = ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled
+    defer {
+      for (key, value) in savedValues {
+        if let value {
+          defaults.set(value, forKey: key)
+        } else {
+          defaults.removeObject(forKey: key)
+        }
+      }
+      InsightAssistantSettings.shared.notificationsEnabled = savedInsightEnabled
+      TaskAssistantSettings.shared.notificationsEnabled = savedTaskEnabled
+      ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled = savedPreviewsEnabled
+    }
+
+    let owner = "owner-producer-gate-\(UUID().uuidString)"
+    defaults.set(owner, forKey: DefaultsKey.authUserId.rawValue)
+    defaults.removeObject(forKey: DefaultsKey.automationOwnerOverride.rawValue)
+    defaults.set(true, forKey: NotificationService.masterEnabledDefaultsKey)
+    defaults.set(5, forKey: NotificationService.frequencyDefaultsKey)
+    defaults.set(false, forKey: DefaultsKey.desktopIsPaywalled.rawValue)
+    defaults.set(true, forKey: DefaultsKey.askOmiBarEnabled.rawValue)
+    ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled = false
+    InsightAssistantSettings.shared.notificationsEnabled = false
+    TaskAssistantSettings.shared.notificationsEnabled = false
+    let liveOwner = try XCTUnwrap(RuntimeOwnerIdentity.currentOwnerId())
+    XCTAssertEqual(liveOwner, owner)
+
+    let service = NotificationService(registerWithSystemNotificationCenter: false)
+    service.sendNotification(
+      ownerID: liveOwner,
+      title: "New Goal",
+      message: "Ship the four-type notification taxonomy",
+      assistantId: "goals")
+    service.sendNotification(
+      ownerID: liveOwner,
+      title: "Meeting notes ready",
+      message: "2 action items from standup",
+      assistantId: "meeting-notes",
+      deliveryMode: .systemBannerOnly)
+
+    XCTAssertNil(
+      service.lastProactivePresentationAtForCurrentOwner(),
+      "a category-suppressed delivery must never advance the proactive presentation ledger")
+  }
+
   @MainActor
   func testDirectorOwnerRefusalInvokesDroppedCallbackExactlyOnce() {
     var droppedCount = 0
@@ -173,5 +302,73 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
 
     XCTAssertEqual(result, .rejectedOwnerChange)
     XCTAssertEqual(droppedCount, 1)
+  }
+
+  // MARK: - Persistent card queue policy
+
+  /// A persistent card (meeting summary share) has no timeout, so a newcomer
+  /// must displace it — with the persistent card requeued at the front — or a
+  /// single un-acted card would starve every later proactive notification.
+  func testPersistentCardIsDisplacedByNewcomerExceptDuringAIConversation() {
+    XCTAssertTrue(
+      FloatingBarNotificationQueuePolicy.shouldDisplacePersistentCard(
+        currentIsPersistent: true, showingAIConversation: false))
+    XCTAssertFalse(
+      FloatingBarNotificationQueuePolicy.shouldDisplacePersistentCard(
+        currentIsPersistent: true, showingAIConversation: true))
+    XCTAssertFalse(
+      FloatingBarNotificationQueuePolicy.shouldDisplacePersistentCard(
+        currentIsPersistent: false, showingAIConversation: false))
+  }
+
+  @MainActor
+  func testNotificationsAreNotPersistentByDefault() {
+    let plain = FloatingBarNotification(
+      ownerID: "owner", title: "t", message: "m", assistantId: "default")
+    XCTAssertFalse(plain.isPersistent)
+    let share = FloatingBarNotification(
+      ownerID: "owner", title: "t", message: "m",
+      assistantId: MeetingActionItemBannerPolicy.assistantID,
+      action: .meetingSummaryShare(conversationID: "c1", recipients: []),
+      isPersistent: true)
+    XCTAssertTrue(share.isPersistent)
+  }
+
+  @MainActor
+  func testSeeSummaryNavigationDrivesConversationOpenContract() {
+    final class Captured: @unchecked Sendable {
+      var navigatePayload: Int?
+      var openRequested = false
+    }
+    let conversationID = "conv-see-summary-\(UUID().uuidString)"
+    let captured = Captured()
+    let center = NotificationCenter.default
+    let navToken = center.addObserver(
+      forName: .navigateToSidebarItem, object: nil, queue: nil
+    ) { note in
+      captured.navigatePayload = note.userInfo?["rawValue"] as? Int
+    }
+    let openToken = center.addObserver(
+      forName: .desktopAutomationOpenConversationRequested, object: nil, queue: nil
+    ) { _ in captured.openRequested = true }
+    defer {
+      center.removeObserver(navToken)
+      center.removeObserver(openToken)
+    }
+
+    MeetingSummaryShareActions.postOpenSignals(conversationID: conversationID)
+
+    XCTAssertEqual(captured.navigatePayload, SidebarNavItem.conversations.rawValue)
+    XCTAssertTrue(captured.openRequested)
+    let pending = ConversationDetailAutomationState.shared.takePendingOpenRequest()
+    XCTAssertEqual(pending?.conversationId, conversationID)
+    XCTAssertEqual(pending?.showTranscript, false)
+  }
+
+  /// Multiple notifications arriving during displacement present before the
+  /// persistent card returns: it always rejoins at the tail of the queue.
+  func testDisplacedPersistentCardRequeuesBehindEverythingAlreadyQueued() {
+    XCTAssertEqual(FloatingBarNotificationQueuePolicy.requeueIndex(queueCount: 0), 0)
+    XCTAssertEqual(FloatingBarNotificationQueuePolicy.requeueIndex(queueCount: 3), 3)
   }
 }

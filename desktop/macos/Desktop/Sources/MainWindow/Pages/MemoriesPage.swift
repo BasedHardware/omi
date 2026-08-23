@@ -242,6 +242,13 @@ class MemoriesViewModel: ObservableObject {
   private(set) var refreshInvocations: Int = 0
   /// Bumped at the top of `handleConversationDeleted()` for observer wiring tests.
   private(set) var conversationDeleteInvocations: Int = 0
+  /// Owner verdicts recorded this session, keyed by memory id.
+  ///
+  /// `ServerMemory` is immutable and a rejected memory only disappears on the next
+  /// load (the backend drops it from default reads), so the card needs somewhere to
+  /// show the verdict immediately while triaging a screenful.
+  @Published var reviewVerdicts: [String: Bool] = [:]
+
   @Published var showingAddMemory = false
   @Published var newMemoryText = ""
   @Published var editingMemory: ServerMemory? = nil
@@ -711,7 +718,7 @@ class MemoriesViewModel: ObservableObject {
       )
       currentOffset = memories.count
       rawBackendOffset = apiMemories.count
-      hasMoreMemories = ServerPaging.hasMore(received: apiMemories.count)
+      hasMoreMemories = Self.hasMoreAfterPage(page, received: apiMemories.count)
     } catch {
       // Silently ignore errors during auto-refresh
       logError("MemoriesViewModel: Auto-refresh failed", error: error)
@@ -753,6 +760,13 @@ class MemoriesViewModel: ObservableObject {
     Task {
       await loadTagCountsFromDatabase()
     }
+  }
+
+  /// Whether another page is worth asking for. A truncated page is an honest
+  /// partial response with no resumable cursor, so callers must not continue.
+  private static func hasMoreAfterPage(_ page: APIClient.MemoryListPage, received: Int) -> Bool {
+    if page.truncated { return false }
+    return ServerPaging.hasMore(received: received)
   }
 
   /// Resolve specific memories by id for surfaces that cite them — today the
@@ -1133,7 +1147,7 @@ class MemoriesViewModel: ObservableObject {
         // hasMoreMemories from the filtered count would disable scrolling and
         // permanently hide those memories. This matches the error-fallback path
         // below and the loadMore() API path.
-        hasMoreMemories = ServerPaging.hasMore(received: fetchedMemories.count)
+        hasMoreMemories = Self.hasMoreAfterPage(page, received: fetchedMemories.count)
         log(
           "MemoriesViewModel: Showing \(visibleMemories.count) memories from authoritative API page (raw: \(fetchedMemories.count))"
         )
@@ -1148,7 +1162,7 @@ class MemoriesViewModel: ObservableObject {
         )
         currentOffset = memories.count
         rawBackendOffset = fetchedMemories.count
-        hasMoreMemories = ServerPaging.hasMore(received: fetchedMemories.count)
+        hasMoreMemories = Self.hasMoreAfterPage(page, received: fetchedMemories.count)
       }
     } catch {
       // Only show error if we don't have cached data
@@ -1192,12 +1206,18 @@ class MemoriesViewModel: ObservableObject {
     let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
 
     do {
+      var truncated = false
       while true {
         let page = try await APIClient.shared.getMemoriesPage(
           limit: batchSize,
           cursor: cursor,
           authorizationSnapshot: authorizationSnapshot)
         let batch = page.memories
+        if page.truncated {
+          truncated = true
+          log("MemoriesViewModel: Cache reconcile stopped because the server returned a truncated list")
+          break
+        }
         if batch.isEmpty && page.nextCursor == nil { break }
 
         try await MemoryStorage.shared.syncServerMemories(batch)
@@ -1219,6 +1239,11 @@ class MemoriesViewModel: ObservableObject {
       // Fail closed: sync returned default-scope rows, but do not prune orphans until the
       // backend can prove this page set is complete for an explicit scope. This preserves
       // Archive rows when the default endpoint omits them by design.
+      // A truncated pull is incomplete, so do not mark reconcile as done.
+      guard !truncated else {
+        log("MemoriesViewModel: Cache reconcile did not mark completion because the list was truncated")
+        return
+      }
       UserDefaults.standard.set(true, forKey: reconcileKey)
       log("MemoriesViewModel: Cache reconcile skipped orphan pruning because backend completeness is unknown")
 
@@ -1248,12 +1273,18 @@ class MemoriesViewModel: ObservableObject {
     let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
 
     do {
+      var truncated = false
       while true {
         let page = try await APIClient.shared.getMemoriesPage(
           limit: batchSize,
           cursor: cursor,
           authorizationSnapshot: authorizationSnapshot)
         let batch = page.memories
+        if page.truncated {
+          truncated = true
+          log("MemoriesViewModel: Full sync stopped because the server returned a truncated list")
+          break
+        }
         if batch.isEmpty && page.nextCursor == nil { break }
 
         try await MemoryStorage.shared.syncServerMemories(batch)
@@ -1264,6 +1295,12 @@ class MemoriesViewModel: ObservableObject {
         cursor = nextCursor
       }
 
+      // A truncated sync is incomplete; do not mark it completed so the next
+      // launch retries the full default-scope pull.
+      guard !truncated else {
+        log("MemoriesViewModel: Full sync did not mark completion because the list was truncated")
+        return
+      }
       UserDefaults.standard.set(true, forKey: syncKey)
       log("MemoriesViewModel: Default-scope sync completed - \(totalSynced) additional memories synced")
 
@@ -1400,7 +1437,7 @@ class MemoriesViewModel: ObservableObject {
       // Advance the raw backend cursor by the raw page size so the next fetch
       // starts after all items in this page, not just the visible subset.
       rawBackendOffset += newMemories.count
-      hasMoreMemories = ServerPaging.hasMore(received: newMemories.count)
+      hasMoreMemories = Self.hasMoreAfterPage(page, received: newMemories.count)
       log(
         "MemoriesViewModel: Loaded \(visibleNewMemories.count) more visible memories from API (raw: \(newMemories.count), total: \(memories.count))"
       )
@@ -1419,6 +1456,24 @@ class MemoriesViewModel: ObservableObject {
       await loadMemories()
     } catch {
       logError("Failed to create memory", error: error)
+    }
+  }
+
+  /// Records the owner's keep/reject verdict for a memory.
+  ///
+  /// Rejecting hides the memory from default reads server-side and drops it from the
+  /// keyword index and knowledge graph, so the row will be gone after the next load.
+  /// The verdict is kept locally until then rather than removing the row immediately,
+  /// so a review pass stays legible while it is in progress.
+  func reviewMemory(_ memory: ServerMemory, keep: Bool) async {
+    let previous = reviewVerdicts[memory.id]
+    reviewVerdicts[memory.id] = keep
+    do {
+      try await APIClient.shared.reviewMemory(id: memory.id, keep: keep)
+    } catch {
+      reviewVerdicts[memory.id] = previous
+      errorMessage = UserFacingErrorPresentation.message(for: error, while: .memories)
+      logError("MemoriesViewModel: Failed to review memory", error: error)
     }
   }
 
@@ -1695,6 +1750,22 @@ class MemoriesViewModel: ObservableObject {
     guard !didRegisterAutomationActions else { return }
     didRegisterAutomationActions = true
     let registry = DesktopAutomationActionRegistry.shared
+    // The Add Memory sheet's Save button is only reachable by clicking, and cursor
+    // synthesis is barred, so its filled and empty states were unverifiable outside
+    // production. This presents the real sheet with the real draft text.
+    registry.register(
+      name: "memories_open_add_sheet",
+      summary: "Present the Add Memory sheet, optionally pre-filled with draft text",
+      params: ["text"]
+    ) { [weak self] params in
+      guard let self else { return ["error": "memories view model deallocated"] }
+      self.newMemoryText = params["text"] ?? ""
+      self.showingAddMemory = true
+      return [
+        "presented": "true",
+        "draft_is_empty": self.newMemoryText.isEmpty ? "true" : "false",
+      ]
+    }
     registry.register(
       name: "memories_search",
       summary: "Set memories search query and return filtered result count",
@@ -2500,6 +2571,11 @@ struct MemoriesPage: View {
               onTap: {
                 viewModel.selectedMemory = memory
               },
+              verdict: viewModel.reviewVerdicts[memory.id]
+                ?? (memory.reviewed ? memory.userReview : nil),
+              onReview: { keep in
+                Task { await viewModel.reviewMemory(memory, keep: keep) }
+              },
               categoryIcon: categoryIcon,
               categoryColor: categoryColor,
               tagColorFor: tagColorFor,
@@ -2765,6 +2841,10 @@ private typealias MemoryTierBadge = MemoryLayerBadge
 private struct MemoryCardView: View {
   let memory: ServerMemory
   let onTap: () -> Void
+  /// nil = not yet judged. Session verdicts win over the server's, so a card
+  /// reflects the click immediately instead of waiting for the next load.
+  let verdict: Bool?
+  let onReview: (Bool) -> Void
   let categoryIcon: (MemoryCategory) -> String
   let categoryColor: (MemoryCategory) -> Color
   let tagColorFor: (String) -> Color
@@ -2835,6 +2915,12 @@ private struct MemoryCardView: View {
             tagColorFor: tagColorFor
           )
 
+          MemoryReviewControls(
+            verdict: verdict,
+            isRevealed: isHovered || verdict != nil,
+            onReview: onReview
+          )
+
           if isHovered {
             Image(systemName: "arrow.up.right")
               .scaledFont(size: OmiType.micro, weight: .medium)
@@ -2861,6 +2947,58 @@ private struct MemoryCardView: View {
         NSCursor.pop()
       }
     }
+  }
+}
+
+// MARK: - Memory Review Controls
+
+/// Keep / reject verdict for one memory.
+///
+/// This is the owner's only way to tell the backend a memory is wrong: rejecting
+/// hides it from default reads and drops it from the keyword index and knowledge
+/// graph. The controls stay hidden until hover so a long list reads cleanly, but a
+/// judged card keeps showing its verdict — during a review pass you need to see
+/// what you have already done.
+private struct MemoryReviewControls: View {
+  let verdict: Bool?
+  let isRevealed: Bool
+  let onReview: (Bool) -> Void
+
+  var body: some View {
+    HStack(spacing: OmiSpacing.xs) {
+      reviewButton(
+        keep: true,
+        symbol: verdict == true ? "hand.thumbsup.fill" : "hand.thumbsup",
+        tint: verdict == true ? Ink.listeningGreen : Ink.secondary,
+        label: "Keep this memory"
+      )
+      reviewButton(
+        keep: false,
+        symbol: verdict == false ? "hand.thumbsdown.fill" : "hand.thumbsdown",
+        tint: verdict == false ? Ink.errorRed : Ink.secondary,
+        label: "Reject this memory"
+      )
+    }
+    .opacity(isRevealed ? 1 : 0)
+    // Keep the row from reflowing as controls appear and disappear on hover.
+    .allowsHitTesting(isRevealed)
+  }
+
+  private func reviewButton(keep: Bool, symbol: String, tint: Color, label: String)
+    -> some View
+  {
+    Button {
+      onReview(keep)
+    } label: {
+      Image(systemName: symbol)
+        .scaledFont(size: OmiType.micro, weight: .medium)
+        .foregroundColor(tint)
+        .frame(width: 18, height: 18)
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .help(label)
+    .accessibilityLabel(label)
   }
 }
 

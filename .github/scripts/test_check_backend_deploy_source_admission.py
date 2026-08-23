@@ -103,12 +103,14 @@ class ReleaseAdmissionVerifierTests(unittest.TestCase):
 
 
 class AutomaticReleaseAdmissionVerifierTests(unittest.TestCase):
-    def identity(self, **overrides: str):
+    def identity(self, **overrides):
         values = {
             "sha": SHA,
+            "trigger_sha": SHA,
             "main_sha": SHA,
-            "checkout_sha": SHA,
             "run_attempt": "1",
+            "sha_is_ancestor_of_main": True,
+            "trigger_is_ancestor_of_sha": True,
         }
         values.update(overrides)
         return AUTO_VERIFIER.AutomaticReleaseIdentity(**values)
@@ -116,12 +118,20 @@ class AutomaticReleaseAdmissionVerifierTests(unittest.TestCase):
     def test_accepts_first_attempt_for_exact_current_main(self) -> None:
         AUTO_VERIFIER.validate(self.identity())
 
+    def test_accepts_a_merged_sha_that_main_has_moved_past(self) -> None:
+        """Tip-equality rejected merged commits whenever main moved mid-proof."""
+        AUTO_VERIFIER.validate(self.identity(main_sha="b" * 40))
+
     def test_rejects_reruns_or_stale_current_main(self) -> None:
         for name, overrides, expected in (
             ("rerun", {"run_attempt": "2"}, "first run attempt"),
             ("noncanonical attempt", {"run_attempt": "01"}, "first run attempt"),
-            ("main advanced", {"main_sha": "b" * 40}, "still equal current main"),
-            ("guard checkout stale", {"checkout_sha": "b" * 40}, "current-main guard checkout"),
+            ("unmerged release sha", {"sha_is_ancestor_of_main": False}, "merged into current main"),
+            (
+                "target older than its trigger",
+                {"trigger_is_ancestor_of_sha": False},
+                "older than the triggering release SHA",
+            ),
         ):
             with self.subTest(name=name), self.assertRaisesRegex(
                 AUTO_VERIFIER.AutomaticReleaseAdmissionError, expected
@@ -129,7 +139,7 @@ class AutomaticReleaseAdmissionVerifierTests(unittest.TestCase):
                 AUTO_VERIFIER.validate(self.identity(**overrides))
 
     def test_rejects_ambiguous_automatic_release_identity(self) -> None:
-        for field in ("sha", "main_sha", "checkout_sha"):
+        for field in ("sha", "trigger_sha", "main_sha"):
             with self.subTest(field=field), self.assertRaisesRegex(
                 AUTO_VERIFIER.AutomaticReleaseAdmissionError, "full 40-character"
             ):
@@ -270,56 +280,46 @@ class WorkflowContractTests(unittest.TestCase):
                 self.mutate(root, CHECKER.AUTO_WORKFLOW_PATH, old, new)
                 self.assertIn(expected, CHECKER.validate(root))
 
-    def test_auto_workflow_rejects_api_supersession_proof_bypasses(self) -> None:
-        """Static tripwires for the bounded read-only green no-op proof."""
+    def test_auto_workflow_rejects_reintroduced_scope_supersession(self) -> None:
+        """Scope must never strand a behind triggering SHA.
+
+        Deciding supersession here loses backend changes: the behind commit
+        no-ops for being behind, and the newer commit no-ops because its own
+        diff is unrelated, so nothing deploys. Admission resolves the newest
+        proven commit instead, which subsumes supersession without that hole.
+        """
+        anchor = 'git diff --name-only "$parent_sha" "$RELEASE_SHA"'
         cases = (
             (
-                "wrong ref endpoint",
-                '"$api_base/repos/$GITHUB_REPOSITORY/git/ref/heads/main"',
-                '"$api_base/repos/$GITHUB_REPOSITORY/git/ref/heads/release"',
-                "auto backend scope decision must resolve current main through the bounded GitHub ref API",
+                "compare-based supersession",
+                'compare_url="$api_base/repos/$GITHUB_REPOSITORY/compare/$RELEASE_SHA...$main_sha"\n          ' + anchor,
+                "auto backend scope decision must not decide supersession",
             ),
             (
-                "wrong compare endpoint",
-                '"$api_base/repos/$GITHUB_REPOSITORY/compare/$RELEASE_SHA...$main_sha"',
-                '"$api_base/repos/$GITHUB_REPOSITORY/compare/$main_sha...$RELEASE_SHA"',
-                "auto backend scope decision must compare the immutable triggering SHA to the resolved main SHA through GitHub",
+                "behind status no-op",
+                'if [[ "$comparison" == "behind" ]]; then :; fi\n          ' + anchor,
+                "auto backend scope decision must not strand a behind triggering SHA",
             ),
             (
-                "unbound compare identity",
-                '.base_commit.sha == $release_sha and .head_commit.sha == $main_sha',
-                '.base_commit.sha == $main_sha and .head_commit.sha == $release_sha',
-                "auto backend scope decision must bind compare base and head identities",
+                "superseded summary",
+                'echo "Backend development deploy superseded no-op"\n          ' + anchor,
+                "auto backend scope decision must not publish a superseded no-op",
             ),
             (
-                "unconfirmed supersession",
-                'if [[ "$comparison" == "behind" ]]; then',
-                'if [[ "$comparison" == "identical" ]]; then',
-                "auto backend scope decision must only no-op after confirmed supersession",
-            ),
-            (
-                "ambiguous API becomes no-op",
-                "supersession API proof was unavailable or ambiguous; preserving fail-closed source admission",
-                "GitHub compare confirmed triggering SHA $RELEASE_SHA is behind current main $main_sha",
-                "auto backend scope decision must treat API or identity ambiguity as guarded admission",
-            ),
-            (
-                "local merge-base proof",
-                "git diff --name-only \"$parent_sha\" \"$RELEASE_SHA\"",
-                "git merge-base --is-ancestor \"$RELEASE_SHA\" \"$main_sha\"\n          git diff --name-only \"$parent_sha\" \"$RELEASE_SHA\"",
-                "auto backend scope decision must not use local merge-base supersession proof",
+                "local ancestry proof",
+                'git merge-base --is-ancestor "$RELEASE_SHA" "$main_sha"\n          ' + anchor,
+                "auto backend scope decision must not compute local ancestry",
             ),
             (
                 "local main history fetch",
-                "git diff --name-only \"$parent_sha\" \"$RELEASE_SHA\"",
-                "git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main\n          git diff --name-only \"$parent_sha\" \"$RELEASE_SHA\"",
-                "auto backend scope decision must not fetch local main history for supersession",
+                "git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main\n          " + anchor,
+                "auto backend scope decision must not fetch local main history",
             ),
         )
-        for name, old, new, expected in cases:
+        for name, replacement, expected in cases:
             with self.subTest(name=name):
                 root = self.fixture_root()
-                self.mutate(root, CHECKER.AUTO_WORKFLOW_PATH, old, new)
+                self.mutate(root, CHECKER.AUTO_WORKFLOW_PATH, anchor, replacement)
                 self.assertIn(expected, CHECKER.validate(root))
 
     def test_auto_workflow_rejects_stale_or_unverified_source_admission(self) -> None:
@@ -349,10 +349,28 @@ class WorkflowContractTests(unittest.TestCase):
                 "automatic source admission must verify current main",
             ),
             (
-                "stale checkout comparison",
-                "--checkout-sha \"$checkout_sha\"",
-                "--checkout-sha \"$RELEASE_SHA\"",
-                "automatic source admission must verify the current-main guard checkout",
+                "target resolved from an unproven listing",
+                "actions/workflows/release-eligibility.yml/runs?event=push&branch=main&status=success",
+                "actions/workflows/release-eligibility.yml/runs?event=push&branch=main&status=completed",
+                "automatic source admission must resolve the newest successful main Release Eligibility proof",
+            ),
+            (
+                "candidate not required to be merged",
+                'git merge-base --is-ancestor "$candidate_sha" "$main_sha"',
+                'git merge-base --is-ancestor "$candidate_sha" "$candidate_sha"',
+                "automatic source admission must only admit a candidate reachable from current main",
+            ),
+            (
+                "target allowed to be older than its trigger",
+                '--trigger-is-ancestor-of-sha "$trigger_is_ancestor_of_sha"',
+                '--trigger-is-ancestor-of-sha true',
+                "automatic source admission must refuse a target older than its trigger",
+            ),
+            (
+                "unreadable proof listing tolerated",
+                "curl --silent --show-error --fail",
+                "curl --silent --show-error",
+                "automatic source admission must refuse to deploy on an unreadable proof listing",
             ),
             (
                 "guard tolerance",
@@ -406,19 +424,19 @@ class WorkflowContractTests(unittest.TestCase):
             (
                 "read-only credentials",
                 "Require read-only Firestore credentials",
-                "Verify Release Eligibility proof is current main",
+                "Resolve and verify the newest proven main source",
                 "automatic release-proof freshness validation must run before read-only credential use",
             ),
             (
                 "admitted source checkout",
                 "Checkout admitted Firestore source",
-                "Verify Release Eligibility proof is current main",
+                "Resolve and verify the newest proven main source",
                 "automatic release-proof freshness validation must run before admitted-source checkout or execution",
             ),
             (
                 "read-only Firestore auth",
                 "Google Auth for read-only Firestore inventory",
-                "Verify Release Eligibility proof is current main",
+                "Resolve and verify the newest proven main source",
                 "automatic release-proof freshness validation must run before read-only Firestore authentication",
             ),
             (
@@ -451,13 +469,13 @@ class WorkflowContractTests(unittest.TestCase):
             root,
             CHECKER.AUTO_WORKFLOW_PATH,
             "Require read-only Firestore credentials",
-            "Verify Release Eligibility proof is current main",
+            "Resolve and verify the newest proven main source",
         )
         self.mutate(
             root,
             CHECKER.AUTO_WORKFLOW_PATH,
             "  firestore_readiness:\n",
-            "  dummy:\n    runs-on: ubuntu-latest\n    steps:\n      - name: Verify Release Eligibility proof is current main\n        run: true\n\n  firestore_readiness:\n",
+            "  dummy:\n    runs-on: ubuntu-latest\n    steps:\n      - name: Resolve and verify the newest proven main source\n        run: true\n\n  firestore_readiness:\n",
         )
         self.assertIn(
             "automatic release-proof freshness validation must run before read-only credential use",
@@ -468,8 +486,8 @@ class WorkflowContractTests(unittest.TestCase):
         self.mutate(
             root,
             CHECKER.AUTO_WORKFLOW_PATH,
-            "      - name: Verify Release Eligibility proof is current main\n        id: admitted_source\n",
-            "      - name: Verify Release Eligibility proof is current main\n        run: true\n\n      - name: Verify Release Eligibility proof is current main\n        id: admitted_source\n",
+            "      - name: Resolve and verify the newest proven main source\n        id: admitted_source\n",
+            "      - name: Resolve and verify the newest proven main source\n        run: true\n\n      - name: Resolve and verify the newest proven main source\n        id: admitted_source\n",
         )
         self.assertIn(
             "backend source admission must contain exactly one automatic release-proof freshness validation step",

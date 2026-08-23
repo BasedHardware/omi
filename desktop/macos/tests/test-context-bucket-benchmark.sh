@@ -91,6 +91,46 @@ assert detailed["decision_matched"] is True
 assert detailed["forbidden_output_matched"] is False
 assert detailed["forbidden_terms_matched"] == []
 assert detailed["failure_reasons"] == []
+assert detailed["referent_named"] is None
+assert detailed["referent_hits"] == []
+
+# A case that declares referentTokens fails when the user-visible text names none
+# of them, and `reasoning` -- which the user never sees -- cannot rescue it.
+named_case = {**case, "referentTokens": ["Synthetic title"]}
+unnamed_case = {**case, "referentTokens": ["#4821", "nimbus-labs/ingest-suite"]}
+reasoning_only_case = {**case, "referentTokens": ["Synthetic reasoning"]}
+with patch.object(benchmark.request, "urlopen", return_value=Response()):
+    named = benchmark.invoke_case(named_case, 47910)
+    unnamed = benchmark.invoke_case(unnamed_case, 47910)
+    reasoning_only = benchmark.invoke_case(reasoning_only_case, 47910)
+assert named["referent_named"] is True
+assert named["referent_hits"] == ["Synthetic title"]
+assert named["failure_reasons"] == []
+assert named["matched"] is True
+assert unnamed["referent_named"] is False
+assert unnamed["failure_reasons"] == ["unnamed_referent"]
+assert unnamed["matched"] is False
+assert reasoning_only["referent_named"] is False
+assert reasoning_only["failure_reasons"] == ["unnamed_referent"]
+
+# Silence carries no user-visible text, so the criterion does not apply to it.
+envelope["result"]["detail"]["decision"] = "silence"
+silent_case = {**unnamed_case, "expectedAction": "silence", "allowedDecisions": ["silence"]}
+with patch.object(benchmark.request, "urlopen", return_value=Response()):
+    silent = benchmark.invoke_case(silent_case, 47910)
+assert silent["failure_reasons"] == []
+assert silent["matched"] is True
+envelope["result"]["detail"]["decision"] = "suggest"
+
+referent_ids = {c["id"] for c in fixture["cases"] if c["id"].startswith("referent-")}
+assert referent_ids <= benchmark.DIRECTOR_CASES
+assert benchmark.REFERENT_CASES == referent_ids
+for referent_case in (c for c in fixture["cases"] if c["id"] in referent_ids):
+    # The one deliberate exception is the control whose context supplies no handle.
+    if referent_case["id"] == "referent-no-identifier":
+        assert referent_case["referentTokens"] == []
+        continue
+    assert referent_case["referentTokens"], referent_case["id"]
 
 leaking_case = {**case, "forbiddenOutputTerms": ["synthetic MESSAGE"]}
 with patch.object(benchmark.request, "urlopen", return_value=Response()):
@@ -159,6 +199,35 @@ with patch.object(
         assert str(exc) == "synthetic-text-output: probe returned HTTP 400"
     else:
         raise AssertionError("HTTP probe failure must carry the scenario ID")
+
+
+class UnreadableBody:
+    """An error body whose read() raises, like an HTTPError carrying no body.
+
+    On Python 3.9 (macOS /usr/bin/python3) `HTTPError(..., fp=None).read()`
+    raises KeyError('file') out of tempfile's __getattr__; newer versions return
+    b''. Raising here pins the degrade-safely contract on every version instead
+    of only on the interpreters that happen to reproduce it.
+    """
+
+    def read(self, *_args):
+        raise KeyError("file")
+
+    def close(self):
+        """urllib wraps the body in a tempfile closer that closes it on GC."""
+
+
+with patch.object(
+    benchmark.request,
+    "urlopen",
+    side_effect=error.HTTPError("http://127.0.0.1", 400, "Bad Request", None, UnreadableBody()),
+):
+    try:
+        benchmark.invoke_case(case, 47910)
+    except RuntimeError as exc:
+        assert str(exc) == "synthetic-text-output: probe returned HTTP 400"
+    else:
+        raise AssertionError("an unreadable error body must not mask the HTTP failure")
 
 stable_error_body = io.BytesIO(
     b'{"ok":false,"error":"action failed: proactive_http_error status=429"}'

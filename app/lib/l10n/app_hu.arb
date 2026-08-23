@@ -101,7 +101,7 @@
     "createYourOwnApp": "Hozd létre saját alkalmazásod",
     "buildAndShareApp": "Építsd meg és oszd meg egyedi alkalmazásodat",
     "searchApps": "Alkalmazások keresése...",
-    "myApps": "Alkalmazásaim",
+    "myApps": "Általam létrehozva",
     "installedApps": "Telepített alkalmazások",
     "unableToFetchApps": "Nem sikerült betölteni az alkalmazásokat :(\n\nKérlek, ellenőrizd az internetkapcsolatot, és próbáld újra.",
     "aboutOmi": "Az Omi-ról",
@@ -3313,5 +3313,15 @@
     "accountCutoverOpenStore": "Áruház megnyitása",
     "sendRawAudioToOmi": "Nyers hang küldése az Ominak",
     "sendRawAudioToOmiDescription": "Kapcsold ki, hogy a nyers hang ne kerüljön az Omihoz. Az átiratok és a felhőfunkciókhoz szükséges adatok továbbra is elküldhetők az Ominak.",
-    "findDevice": "Keresés"
+    "findDevice": "Keresés",
+    "diagnosticsShareFailed": "A diagnosztika megosztása nem sikerült. Próbáld újra.",
+    "appDisabledTitle": "Ez az alkalmazás le van tiltva, és nem telepíthető.",
+    "appDisabledWebhookFailures": "A végpontja 72 órán át folyamatosan hibázott, ezért a kézbesítések leálltak.",
+    "appDisabledGeneric": "Az Omi tiltotta le.",
+    "appDisabledOwnerHint": "Először javítsd ki a végpontot — az újraengedélyezés minden beállított URL-t újra ellenőriz.",
+    "appReEnable": "Újraengedélyezés",
+    "appReEnableFailedTitle": "Az újraengedélyezés nem sikerült",
+    "appReEnableFailedBody": "Ezt az alkalmazást nem sikerült újraengedélyezni. Próbáld újra.",
+    "appDisabledOn": "Letiltva ekkor: {date}.",
+    "appDisabledLastError": "Utolsó hiba: {error}."
 }

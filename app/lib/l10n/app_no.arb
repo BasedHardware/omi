@@ -101,7 +101,7 @@
     "createYourOwnApp": "Lag din egen app",
     "buildAndShareApp": "Bygg og del din egendefinerte app",
     "searchApps": "Søk apper...",
-    "myApps": "Mine apper",
+    "myApps": "Laget av meg",
     "installedApps": "Installerte apper",
     "unableToFetchApps": "Kan ikke hente apper :(\n\nSjekk internettforbindelsen din og prøv igjen.",
     "aboutOmi": "Om Omi",
@@ -3217,5 +3217,15 @@
     "accountCutoverOpenStore": "Öppna butik",
     "sendRawAudioToOmi": "Send rå lyd til Omi",
     "sendRawAudioToOmiDescription": "Slå av for å hindre at rå lyd sendes til Omi. Transkripsjoner og data som skyfunksjoner trenger, kan fortsatt bli sendt til Omi.",
-    "findDevice": "Finn"
+    "findDevice": "Finn",
+    "diagnosticsShareFailed": "Kunne ikke dele diagnostikken. Prøv igjen.",
+    "appDisabledTitle": "Denne appen er deaktivert og kan ikke installeres.",
+    "appDisabledWebhookFailures": "Endepunktet feilet 72 timer på rad, så leveringene ble stoppet.",
+    "appDisabledGeneric": "Den ble deaktivert av Omi.",
+    "appDisabledOwnerHint": "Fiks endepunktet først — reaktivering sjekker hver konfigurerte URL på nytt.",
+    "appReEnable": "Reaktiver",
+    "appReEnableFailedTitle": "Kunne ikke reaktivere",
+    "appReEnableFailedBody": "Denne appen kunne ikke reaktiveres. Prøv igjen.",
+    "appDisabledOn": "Deaktivert {date}.",
+    "appDisabledLastError": "Siste feil: {error}."
 }

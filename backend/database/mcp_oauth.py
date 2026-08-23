@@ -14,6 +14,12 @@ from google.cloud import firestore
 
 from database._client import db
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
+from database.memory_app_key_grants import (
+    APP_KEY_MEMORY_GRANT_DOC_ID,
+    APP_KEY_MEMORY_GRANTS_COLLECTION,
+    MCP_CONSUMER,
+    build_app_key_scope_grant_contract_state,
+)
 
 PRODUCTION_MCP_RESOURCE_URL = "https://api.omi.me/v1/mcp/sse"
 # Omi Beta intentionally serves MCP data from dev while retaining the production
@@ -442,13 +448,75 @@ def _grant_write(
     return ref, existing, data
 
 
+def _oauth_memory_grant_ref(uid: str) -> Any:
+    return db.collection(f"users/{uid}/{APP_KEY_MEMORY_GRANTS_COLLECTION}").document(APP_KEY_MEMORY_GRANT_DOC_ID)
+
+
+def _oauth_memory_grant_contract(grant: Dict[str, Any]) -> Dict[str, Any]:
+    scopes = [scope for scope in grant.get("scopes") or [] if scope in {"memories.read", "memories.write"}]
+    return build_app_key_scope_grant_contract_state(
+        consumer=MCP_CONSUMER,
+        app_id=cast(str, grant["client_id"]),
+        key_id=cast(str, grant["id"]),
+        scopes=scopes,
+        default_read="memories.read" in scopes,
+        archive_read=False,
+        write="memories.write" in scopes,
+        enabled=True,
+    )
+
+
+def _oauth_memory_grant_entry_is_absent(state: object, grant: Dict[str, Any]) -> bool:
+    current = state
+    for field in (
+        "grants",
+        MCP_CONSUMER,
+        "apps",
+        grant["client_id"],
+        "keys",
+        grant["id"],
+    ):
+        if not isinstance(current, dict):
+            return False
+        if field not in current:
+            return True
+        current = current[field]
+    return False
+
+
+def _create_oauth_memory_grant_if_absent(
+    transaction: Any, grant_ref: Any, snapshot: Any, grant: Dict[str, Any]
+) -> bool:
+    if getattr(snapshot, "exists", False):
+        state: object = snapshot.to_dict()
+        if not _oauth_memory_grant_entry_is_absent(state, grant):
+            return False
+    transaction.set(grant_ref, _oauth_memory_grant_contract(grant), merge=True)
+    return True
+
+
+def _ensure_oauth_memory_grant(grant: Dict[str, Any]) -> bool:
+    """Create a missing OAuth memory grant without changing control-plane state."""
+    grant_ref = _oauth_memory_grant_ref(cast(str, grant["uid"]))
+    transaction = db.transaction()
+
+    @_typed_transactional
+    def _create(transaction: Any) -> bool:
+        snapshot = grant_ref.get(transaction=transaction)
+        return _create_oauth_memory_grant_if_absent(transaction, grant_ref, snapshot, grant)
+
+    return _create(transaction)
+
+
 def create_or_update_grant(uid: str, client_id: str, resource: str, scopes: List[str]) -> Dict[str, Any]:
     deterministic_grant_id = f"{uid}:{client_id}:{hash_secret(resource)[:16]}"
     now = _now()
     ref = db.collection("mcp_oauth_grants").document(deterministic_grant_id)
     ref, existing, data = _grant_write(uid, client_id, resource, scopes, ref=ref, doc=ref.get(), now=now)
     ref.set(data, merge=True)
-    return {**existing, **data}
+    grant = {**existing, **data}
+    _ensure_oauth_memory_grant(grant)
+    return grant
 
 
 def _authorization_code_write(
@@ -526,6 +594,8 @@ def create_grant_and_authorization_code_if_allowed(
         current_grant_ref, existing, grant_data = _grant_write(
             uid, client_id, resource, scopes, ref=grant_ref, doc=grant_doc, now=now
         )
+        memory_grant_ref = _oauth_memory_grant_ref(uid)
+        memory_grant_doc = memory_grant_ref.get(transaction=transaction)
         code_data = _authorization_code_write(
             uid,
             current_grant_ref.id,
@@ -537,6 +607,7 @@ def create_grant_and_authorization_code_if_allowed(
             now=now,
         )
         transaction.set(current_grant_ref, grant_data, merge=True)
+        _create_oauth_memory_grant_if_absent(transaction, memory_grant_ref, memory_grant_doc, grant_data)
         transaction.set(code_ref, code_data)
         return {**existing, **grant_data}, raw_code
 
@@ -709,14 +780,90 @@ def _token_pair_response(access_token: str, refresh_token: str, scopes: List[str
 
 
 def get_active_grant(grant_id: str) -> Optional[Dict[str, Any]]:
+    if not grant_id.strip():
+        return None
     doc = db.collection("mcp_oauth_grants").document(grant_id).get()
     if not doc.exists:
         return None
     data: Dict[str, Any] = _typed_doc(doc)
     if data.get("revoked_at") or data.get("status") == "revoked":
         return None
-    data.setdefault("id", grant_id)
     return data
+
+
+def _valid_oauth_scopes(value: object) -> Optional[List[str]]:
+    if not isinstance(value, list) or not value:
+        return None
+    scopes = cast(List[Any], value)
+    if any(not isinstance(scope, str) or not scope or scope not in SUPPORTED_SCOPES for scope in scopes):
+        return None
+    if len(scopes) != len(set(scopes)):
+        return None
+    return cast(List[str], scopes)
+
+
+def _nonempty_string(data: Dict[str, Any], field: str) -> Optional[str]:
+    value = data.get(field)
+    return value if isinstance(value, str) and value.strip() else None
+
+
+def _is_unexpired(value: object, now: datetime) -> bool:
+    if not isinstance(value, datetime):
+        return False
+    try:
+        return value > now
+    except (TypeError, ValueError):
+        return False
+
+
+def _validated_access_token_identity(
+    data: Dict[str, Any], grant: Dict[str, Any], resource: str, *, now: datetime
+) -> Optional[Dict[str, Any]]:
+    uid = _nonempty_string(data, "uid")
+    client_id = _nonempty_string(data, "client_id")
+    grant_id = _nonempty_string(data, "grant_id")
+    token_resource = _nonempty_string(data, "resource")
+    token_scopes = _valid_oauth_scopes(data.get("scopes"))
+    grant_uid = _nonempty_string(grant, "uid")
+    grant_client_id = _nonempty_string(grant, "client_id")
+    persisted_grant_id = _nonempty_string(grant, "id")
+    grant_resource = _nonempty_string(grant, "resource")
+    grant_scopes = _valid_oauth_scopes(grant.get("scopes"))
+    grant_expires_at = grant.get("expires_at")
+    if (
+        uid is None
+        or client_id is None
+        or grant_id is None
+        or token_resource is None
+        or token_scopes is None
+        or grant_uid is None
+        or grant_client_id is None
+        or persisted_grant_id is None
+        or grant_resource is None
+        or grant_scopes is None
+        or "revoked_at" not in data
+        or data.get("revoked_at") is not None
+        or not _is_unexpired(data.get("expires_at"), now)
+        or grant.get("status") != "active"
+        or "revoked_at" not in grant
+        or grant.get("revoked_at") is not None
+        or (grant_expires_at is not None and not _is_unexpired(grant_expires_at, now))
+        or token_resource != resource
+        or uid != grant_uid
+        or client_id != grant_client_id
+        or grant_id != persisted_grant_id
+        or token_resource != grant_resource
+        or not set(token_scopes).issubset(grant_scopes)
+    ):
+        return None
+    return {
+        "uid": uid,
+        "auth_type": "oauth",
+        "client_id": client_id,
+        "resource": token_resource,
+        "scopes": token_scopes,
+        "grant_id": grant_id,
+    }
 
 
 def validate_access_token(access_token: str, resource: str = MCP_RESOURCE_URL) -> Optional[Dict[str, Any]]:
@@ -724,21 +871,18 @@ def validate_access_token(access_token: str, resource: str = MCP_RESOURCE_URL) -
     if not doc.exists:
         return None
     data: Dict[str, Any] = _typed_doc(doc)
-    expires_at = data.get("expires_at")
-    if data.get("revoked_at") or data.get("resource") != resource or (expires_at and expires_at <= _now()):
+    grant_id = _nonempty_string(data, "grant_id")
+    if grant_id is None:
         return None
-    grant = get_active_grant(cast(str, data.get("grant_id")))
+    grant = get_active_grant(grant_id)
     if not grant:
         return None
-    db.collection("mcp_oauth_grants").document(data["grant_id"]).set({"last_used_at": _now()}, merge=True)
-    return {
-        "uid": data.get("uid"),
-        "auth_type": "oauth",
-        "client_id": data.get("client_id"),
-        "resource": data.get("resource"),
-        "scopes": data.get("scopes") or [],
-        "grant_id": data.get("grant_id"),
-    }
+    identity = _validated_access_token_identity(data, grant, resource, now=_now())
+    if identity is None:
+        return None
+    _ensure_oauth_memory_grant(grant)
+    db.collection("mcp_oauth_grants").document(grant_id).set({"last_used_at": _now()}, merge=True)
+    return identity
 
 
 def rotate_refresh_token(

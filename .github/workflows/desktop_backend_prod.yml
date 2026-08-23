@@ -63,9 +63,11 @@ jobs:
           set -euo pipefail
           controls="$RUNNER_TEMP/desktop-backend-deploy-controls"
           rm -rf "$controls"
-          mkdir -p "$controls/.github/scripts" "$controls/backend/scripts" "$controls/scripts"
+          mkdir -p "$controls/.github/scripts" "$controls/backend/deploy" "$controls/backend/scripts" "$controls/scripts"
           cp .workflow-source/.github/scripts/desktop_backend_candidate_probe.py "$controls/.github/scripts/"
           cp .workflow-source/.github/scripts/verify_desktop_backend_image_lineage.py "$controls/.github/scripts/"
+          cp .workflow-source/backend/deploy/cloud_run_gmp_sidecar.yaml "$controls/backend/deploy/"
+          cp .workflow-source/backend/scripts/attach_cloud_run_gmp_sidecar.py "$controls/backend/scripts/"
           cp .workflow-source/backend/scripts/firebase_release_probe_token.py "$controls/backend/scripts/"
           cp .workflow-source/backend/scripts/resolve_cloud_run_tagged_url.py "$controls/backend/scripts/"
           cp .workflow-source/backend/scripts/wait_cloud_run_candidate_readiness.py "$controls/backend/scripts/"
@@ -219,7 +221,8 @@ jobs:
             DESKTOP_FIREBASE_API_KEY \
             DESKTOP_REDIS_DB_PASSWORD \
             DESKTOP_REDIS_DB_HOST \
-            DESKTOP_REDIS_DB_PORT; do
+            DESKTOP_REDIS_DB_PORT \
+            METRICS_SECRET; do
             gcloud secrets describe "$secret" \
               --project="$PROJECT_ID" \
               --format='none'
@@ -269,6 +272,28 @@ jobs:
             --dockerfile backend/Dockerfile.desktop_backend \
             --image gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.admitted-source.outputs.image_tag }}
 
+      - name: Install Python deps for the gateway serving gate
+        run: python3 -m pip install -q pyyaml
+
+      - name: Get GKE credentials for the gateway serving gate
+        uses: google-github-actions/get-gke-credentials@v3
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: ${{ env.REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      # Fail the deploy, not the request path. gateway_client raises when
+      # FEATURE_MODE=gateway is set without a reachable URL, which would turn
+      # every desktop chat turn into a 503.
+      - name: Verify LLM Gateway serving data plane
+        id: gateway-serving
+        run: |
+          python3 backend/scripts/verify-llm-gateway-serving.py \
+            --environment="${{ vars.ENV }}" \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --region="${{ env.REGION }}" \
+            --github-output "$GITHUB_OUTPUT"
+
       - name: Deploy production candidate at zero traffic
         id: deploy-candidate
         uses: google-github-actions/deploy-cloudrun@v3
@@ -280,10 +305,10 @@ jobs:
           no_traffic: true
           flags: >-
             --allow-unauthenticated
-            --revision-suffix=${{ steps.admitted-source.outputs.revision_suffix }}
+            --revision-suffix=${{ steps.admitted-source.outputs.revision_suffix }}-base
             --tag=${{ env.CANDIDATE_TAG }}
-            --network=default
-            --subnet=default
+            --network=${{ vars.CLOUD_RUN_VPC_NETWORK }}
+            --subnet=${{ vars.CLOUD_RUN_VPC_SUBNET }}
             --vpc-egress=private-ranges-only
             --remove-env-vars=OMI_DESKTOP_RELEASE_TAG,OMI_DESKTOP_RELEASE_SHA,OMI_DESKTOP_RELEASE_CHANNEL,AGENT_VM_TRUSTED_HEALTH_CHANNEL,AGENT_GCS_BUCKET,GCE_SERVICE_ACCOUNT,GCE_RUNTIME_SERVICE_ACCOUNT,GCE_PROJECT_ID,AGENT_VM_BOOT_IMAGE,AGENT_VM_STARTUP_URI,AGENT_VM_RELEASE_ID,AGENT_VM_IMAGE_DIGEST,AGENT_VM_STARTUP_SHA256,AGENT_VM_STOP_AUDIENCE
             --remove-secrets=PINECONE_API_KEY,PINECONE_HOST
@@ -296,6 +321,11 @@ jobs:
             BASE_API_URL=${{ env.PRODUCTION_DESKTOP_BACKEND_URL }}
             OMI_DESKTOP_BACKEND_RELEASE_SHA=${{ steps.admitted-source.outputs.source_sha }}
             OMI_DESKTOP_BACKEND_RELEASE_CHANNEL=production
+            OMI_LLM_GATEWAY_URL=${{ steps.gateway-serving.outputs.gateway_url }}
+            OMI_LLM_GATEWAY_FEATURE_MODE=gateway
+            OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true
+            OMI_LLM_CHAT_AGENT_ROUTE=gateway
+            PROMETHEUS_SIDECAR_PORT=9090
           secrets: |
             /secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest
             GEMINI_API_KEY=DESKTOP_GEMINI_API_KEY:latest
@@ -308,6 +338,21 @@ jobs:
             ANTHROPIC_API_KEY=DESKTOP_ANTHROPIC_API_KEY:latest
             DESKTOP_LEGACY_ANTHROPIC_KEY=DESKTOP_LEGACY_ANTHROPIC_KEY:latest
             GOOGLE_CALENDAR_API_KEY=DESKTOP_GOOGLE_CALENDAR_API_KEY:latest
+            OMI_LLM_GATEWAY_SERVICE_TOKEN=OMI_LLM_GATEWAY_SERVICE_TOKEN:latest
+            METRICS_SECRET=METRICS_SECRET:latest
+
+      - name: Attach Managed Prometheus sidecar to production candidate
+        id: attach-gmp-sidecar
+        run: |
+          python3 "$DESKTOP_BACKEND_CONTROLS/backend/scripts/attach_cloud_run_gmp_sidecar.py" \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --region="$REGION" \
+            --service="$SERVICE" \
+            --base-revision="desktop-backend-${{ steps.admitted-source.outputs.revision_suffix }}-base" \
+            --final-revision="${{ steps.admitted-source.outputs.revision }}" \
+            --ingress-container=desktop-backend-1 \
+            --config="$DESKTOP_BACKEND_CONTROLS/backend/deploy/cloud_run_gmp_sidecar.yaml" \
+            --tag="$CANDIDATE_TAG"
 
       - name: Wait for no-traffic candidate readiness
         env:

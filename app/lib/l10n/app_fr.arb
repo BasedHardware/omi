@@ -101,7 +101,7 @@
     "createYourOwnApp": "Créez votre propre application",
     "buildAndShareApp": "Créez et partagez votre application personnalisée",
     "searchApps": "Rechercher des applications...",
-    "myApps": "Mes applications",
+    "myApps": "Créé par moi",
     "installedApps": "Applications installées",
     "unableToFetchApps": "Impossible de récupérer les applications :(\n\nVeuillez vérifier votre connexion internet et réessayer.",
     "aboutOmi": "À propos d'Omi",
@@ -3252,5 +3252,15 @@
     "accountCutoverOpenStore": "Ouvrir le store",
     "sendRawAudioToOmi": "Envoyer l'audio brut à Omi",
     "sendRawAudioToOmiDescription": "Désactivez cette option pour empêcher l'envoi de l'audio brut à Omi. Les transcriptions et les données nécessaires aux fonctions cloud peuvent toujours être envoyées à Omi.",
-    "findDevice": "Localiser"
+    "findDevice": "Localiser",
+    "diagnosticsShareFailed": "Impossible de partager le diagnostic. Veuillez réessayer.",
+    "appDisabledTitle": "Cette app est désactivée et ne peut pas être installée.",
+    "appDisabledWebhookFailures": "Son endpoint a échoué pendant 72 heures d'affilée, les envois ont donc été arrêtés.",
+    "appDisabledGeneric": "Elle a été désactivée par Omi.",
+    "appDisabledOwnerHint": "Corrigez d'abord l'endpoint : la réactivation revérifie chaque URL configurée.",
+    "appReEnable": "Réactiver",
+    "appReEnableFailedTitle": "Réactivation impossible",
+    "appReEnableFailedBody": "Cette app n'a pas pu être réactivée. Veuillez réessayer.",
+    "appDisabledOn": "Désactivée le {date}.",
+    "appDisabledLastError": "Dernière erreur : {error}."
 }

@@ -26,6 +26,7 @@ from utils.apps import is_audio_bytes_app_enabled
 from utils.async_tasks import WebSocketTaskSupervisor, drain_tasks, wait_for_event
 from utils.byok import extract_byok_from_websocket, get_byok_keys, set_byok_keys
 from utils.client_device import resolve_client_device_from_headers
+from utils.journey_metrics_contract import resolve_client_kind_from_headers
 from utils.executors import db_executor, run_blocking, start_background_task, storage_executor
 from utils.fair_use import (
     FAIR_USE_CHECK_INTERVAL_SECONDS,
@@ -45,8 +46,10 @@ from utils.listen_session_bootstrap import finalize_listen_connect_context, load
 from utils.metrics import BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.onboarding import OnboardingHandler
+from utils.observability.journeys import ClientJourneyAttempt
 from utils.observability.transcription import LiveSTTAttempt
 from utils.pusher import PusherCircuitBreakerOpen
+from utils.product_telemetry import emit_product_event
 from utils.stt.streaming import get_stt_service_for_language
 from utils.subscription import get_remaining_transcription_seconds, is_trial_paywalled
 from utils.transcribe_decisions import (
@@ -112,11 +115,13 @@ class ListenSessionRuntime:
         self.client_device_context = request.client_device_context or resolve_client_device_from_headers(
             request.websocket.headers
         )
+        self.client_kind = resolve_client_kind_from_headers(request.websocket.headers)
         self.use_custom_stt = request.custom_stt_mode.value == 'enabled'
         self.pusher_enabled = PUSHER_ENABLED
         self.is_multi_channel = request.channels >= 2
         self.language = request.language
         self.stt_service: Any = None
+        self.stt_service_selected: Any = None
         self.stt_language = ''
         self.stt_model = ''
         self.vocabulary: List[str] = []
@@ -184,6 +189,18 @@ class ListenSessionRuntime:
             self.spawn(self.asend_event(event), name='message_event')
 
     def emit_speaker_suggestion(self, speaker_id: int, person_id: str, person_name: str, segment_id: str) -> None:
+        emit_product_event(
+            uid=self.request.uid,
+            event='Speaker Identity Proposed',
+            properties={
+                'recording_id': self.recording_session_id,
+                'conversation_id': self.state.current_conversation_id,
+                'speaker_id': speaker_id,
+                'matched_existing_person': bool(person_id),
+                'auto_assign_enabled': self.request.speaker_auto_assign_enabled,
+                'proposal_source': 'live_speaker_identification',
+            },
+        )
         self.send_event(
             SpeakerLabelSuggestionEvent(
                 speaker_id=speaker_id,
@@ -205,6 +222,17 @@ class ListenSessionRuntime:
             self.state.live_transcription_attempt = LiveSTTAttempt(
                 provider=getattr(self.stt_service, 'value', self.stt_service),
                 platform=self.client_device_context.platform,
+                uid=self.request.uid,
+                recording_id=self.recording_session_id,
+                conversation_id=self.state.current_conversation_id,
+                source=self.request.source,
+                model=self.stt_model,
+                language=self.stt_language,
+            )
+        if getattr(self.state, 'client_live_transcription_attempt', None) is None:
+            self.state.client_live_transcription_attempt = ClientJourneyAttempt(
+                'live_transcription',
+                getattr(self, 'client_kind', 'unknown'),
             )
 
     def capture_client_audio(self, audio: bytes) -> None:
@@ -229,6 +257,9 @@ class ListenSessionRuntime:
         """Record the first nonempty transcript successfully delivered to the client."""
         if self.state.live_transcription_attempt is not None:
             self.state.live_transcription_attempt.finish('success', phase='transcript_delivery')
+        client_attempt = getattr(self.state, 'client_live_transcription_attempt', None)
+        if client_attempt is not None:
+            client_attempt.succeed()
 
     def _finish_live_transcription(self) -> None:
         """Terminalize an accepted attempt that never delivered a transcript."""
@@ -241,6 +272,12 @@ class ListenSessionRuntime:
             else 'cancelled'
         )
         attempt.finish(outcome, phase='teardown')
+        client_attempt = getattr(self.state, 'client_live_transcription_attempt', None)
+        if client_attempt is not None and not client_attempt.finished:
+            if outcome == 'failure':
+                client_attempt.fail('provider_error')
+            else:
+                client_attempt.cancel()
 
     async def _admit(self) -> bool:
         if not self.request.uid:
@@ -277,6 +314,10 @@ class ListenSessionRuntime:
             multi_lang_enabled=not single_language_mode,
             preferred_service=request.stt_service,
         )
+        # The provider the serving policy chose, captured before `_create_stt_socket`
+        # can walk the fallback chain. Only the *selected* value is safe to hold onto:
+        # the serving one has to be read at use time (#11306).
+        self.stt_service_selected = self.stt_service
         self.parity_capture = ListenParityCapture.from_environ(
             principal_id=request.uid,
             session_id=getattr(self, 'session_id', ''),
@@ -543,6 +584,7 @@ class ListenSessionRuntime:
                 max_audio_buffer_size=self.limits.max_audio_buffer_size,
                 max_pending_requests=self.limits.max_pending_requests,
                 max_pending_speaker_sample_requests=self.limits.max_pending_speaker_sample_requests,
+                client_kind=self.client_kind,
             ),
             ListenPusherSessionDeps(
                 get_current_conversation_id=lambda: self.state.current_conversation_id,
@@ -575,6 +617,32 @@ class ListenSessionRuntime:
             self.pusher_tasks.append(
                 self.task_supervisor.create_lifetime_task(session.audio_bytes_consume(), name='pusher_audio')
             )
+
+    def _ready_event(self) -> MessageServiceStatusEvent:
+        """Name the provider actually serving this session on the `ready` event (#11306).
+
+        The client clears its terminal-failure state on `ready`, so a bare event leaves a
+        fallback socket that is about to die indistinguishable from a healthy session on
+        the provider the user selected. `_create_stt_socket` can walk the fallback chain
+        (#11695, #11752), so the serving provider is only knowable once the socket exists
+        — resolving it any earlier is the attribution bug #11359 fixed on the
+        terminal-failure path, which is why this reads `_serving_provider()` here rather
+        than reusing a value from bootstrap.
+
+        Both fields are optional and dropped by `exclude_none=True`, so a client that does
+        not read them sees exactly the payload it sees today.
+        """
+        if self.use_custom_stt:
+            # Custom-STT clients produce their own transcripts; no backend provider serves.
+            return MessageServiceStatusEvent(status='ready')
+        serving = self.receiver._serving_provider()
+        selected = getattr(self.stt_service_selected, 'value', self.stt_service_selected)
+        fell_back = bool(serving) and bool(selected) and serving != selected
+        return MessageServiceStatusEvent(
+            status='ready',
+            provider=serving,
+            reason=f'fallback_from_{selected}' if fell_back else None,
+        )
 
     async def run(self) -> None:
         if not await self._admit() or not await self._bootstrap():
@@ -631,7 +699,7 @@ class ListenSessionRuntime:
                         self.task_supervisor.create_finite_task(self.speakers.load_and_run(), name='speaker_id'),
                     ]
                 )
-            self.send_event(MessageServiceStatusEvent(status='ready'))
+            self.send_event(self._ready_event())
             result = await self.task_supervisor.supervise(receive_task=receive_task)
             logger.info('Listen supervisor exited reason=%s', result.reason)
             if result.reason in {'crash', 'lifetime_done'}:

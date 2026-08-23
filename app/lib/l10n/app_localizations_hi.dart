@@ -321,7 +321,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get searchApps => 'ऐप्स खोजें...';
 
   @override
-  String get myApps => 'मेरे ऐप्स';
+  String get myApps => 'मेरे द्वारा बनाया गया';
 
   @override
   String get installedApps => 'इंस्टॉल किए गए ऐप्स';
@@ -9829,4 +9829,39 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get findDevice => 'ढूँढें';
+
+  @override
+  String get diagnosticsShareFailed => 'डायग्नोस्टिक्स साझा नहीं किया जा सका। कृपया पुनः प्रयास करें।';
+
+  @override
+  String get appDisabledTitle => 'यह ऐप अक्षम है और इंस्टॉल नहीं किया जा सकता।';
+
+  @override
+  String get appDisabledWebhookFailures => 'इसका एंडपॉइंट लगातार 72 घंटे तक विफल रहा, इसलिए डिलीवरी रोक दी गई।';
+
+  @override
+  String get appDisabledGeneric => 'इसे Omi ने अक्षम कर दिया था।';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'पहले एंडपॉइंट ठीक करें — फिर से सक्षम करने पर हर कॉन्फ़िगर किया गया URL दोबारा जाँचा जाता है।';
+
+  @override
+  String get appReEnable => 'फिर से सक्षम करें';
+
+  @override
+  String get appReEnableFailedTitle => 'फिर से सक्षम नहीं हो सका';
+
+  @override
+  String get appReEnableFailedBody => 'इस ऐप को फिर से सक्षम नहीं किया जा सका। कृपया पुनः प्रयास करें।';
+
+  @override
+  String appDisabledOn(String date) {
+    return '$date को अक्षम किया गया।';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'अंतिम त्रुटि: $error';
+  }
 }

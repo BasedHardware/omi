@@ -64,6 +64,18 @@ environments:
             config_map:
               name: dev-omi-backend-config
               key: CONVERSATION_SUMMARIZED_APP_IDS
+          CONVERSATION_NOTES_V2_ENABLED:
+            value: 'true'
+            category: rollout
+          MEETING_RECEIPT_RECONCILER_ENABLED:
+            value: 'false'
+            category: rollout
+          CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_OCR_CONTEXT_ENABLED:
+            value: 'true'
+            category: rollout
           HOSTED_PARAKEET_API_URL:
             category: service_discovery
             value: http://parakeet.omiapi.com
@@ -143,6 +155,9 @@ environments:
             config_map:
               name: dev-omi-backend-config
               key: MCP_RESOURCE_URL
+          REFERRAL_PUBLIC_BASE_URL:
+            value: https://api.omiapi.com
+            category: service_discovery
           OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
             value: 'false'
             category: rollout
@@ -342,6 +357,13 @@ environments:
           value: based-hardware-dev
         GCP_LOCATION:
           value: us-central1
+        PROMETHEUS_SIDECAR_PORT:
+          value: '9090'
+          category: telemetry
+      secrets:
+        METRICS_SECRET:
+          secret: METRICS_SECRET
+          version: latest
     cloud_run:
       network:
         flags:
@@ -363,6 +385,9 @@ environments:
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
+            METRICS_SECRET:
+              secret: METRICS_SECRET
+              version: latest
             MEMORY_V3_CURSOR_SECRET:
               secret: MEMORY_V3_CURSOR_SECRET
               version: latest
@@ -373,6 +398,21 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            PROMETHEUS_SIDECAR_PORT:
+              value: '9090'
+              category: telemetry
+            CONVERSATION_NOTES_V2_ENABLED:
+              value: 'true'
+              category: rollout
+            MEETING_RECEIPT_RECONCILER_ENABLED:
+              value: 'false'
+              category: rollout
+            CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
+              value: 'true'
+              category: rollout
+            CONVERSATION_OCR_CONTEXT_ENABLED:
+              value: 'true'
+              category: rollout
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
@@ -1052,6 +1092,18 @@ environments:
             config_map:
               name: prod-omi-backend-config
               key: CONVERSATION_SUMMARIZED_APP_IDS
+          CONVERSATION_NOTES_V2_ENABLED:
+            value: 'false'
+            category: rollout
+          MEETING_RECEIPT_RECONCILER_ENABLED:
+            value: 'false'
+            category: rollout
+          CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
+            value: 'false'
+            category: rollout
+          CONVERSATION_OCR_CONTEXT_ENABLED:
+            value: 'false'
+            category: rollout
           HOSTED_PARAKEET_API_URL:
             category: service_discovery
             value: http://parakeet.omi.me
@@ -1131,6 +1183,9 @@ environments:
             config_map:
               name: prod-omi-backend-config
               key: MCP_RESOURCE_URL
+          REFERRAL_PUBLIC_BASE_URL:
+            value: https://omi.me
+            category: service_discovery
           ACCOUNT_DELETION_DISPATCH_MODE:
             value: cloud_tasks
             category: reliability
@@ -1254,6 +1309,13 @@ environments:
           value: based-hardware
         GCP_LOCATION:
           value: us-central1
+        PROMETHEUS_SIDECAR_PORT:
+          value: '9090'
+          category: telemetry
+      secrets:
+        METRICS_SECRET:
+          secret: METRICS_SECRET
+          version: latest
     cloud_run:
       network:
         flags:
@@ -1277,6 +1339,9 @@ environments:
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
+            METRICS_SECRET:
+              secret: METRICS_SECRET
+              version: latest
             MEMORY_V3_CURSOR_SECRET:
               secret: MEMORY_V3_CURSOR_SECRET
               version: latest
@@ -1290,6 +1355,21 @@ environments:
               secret: MCP_OAUTH_CLIENTS_JSON
               version: latest
           env:
+            PROMETHEUS_SIDECAR_PORT:
+              value: '9090'
+              category: telemetry
+            CONVERSATION_NOTES_V2_ENABLED:
+              value: 'false'
+              category: rollout
+            MEETING_RECEIPT_RECONCILER_ENABLED:
+              value: 'false'
+              category: rollout
+            CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
+              value: 'false'
+              category: rollout
+            CONVERSATION_OCR_CONTEXT_ENABLED:
+              value: 'false'
+              category: rollout
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9

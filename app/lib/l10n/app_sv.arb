@@ -101,7 +101,7 @@
     "createYourOwnApp": "Skapa din egen app",
     "buildAndShareApp": "Bygg och dela din anpassade app",
     "searchApps": "Sök appar...",
-    "myApps": "Mina appar",
+    "myApps": "Skapad av mig",
     "installedApps": "Installerade appar",
     "unableToFetchApps": "Kunde inte hämta appar :(\n\nKontrollera din internetanslutning och försök igen.",
     "aboutOmi": "Om Omi",
@@ -3217,5 +3217,15 @@
     "accountCutoverOpenStore": "Öppna butik",
     "sendRawAudioToOmi": "Skicka rått ljud till Omi",
     "sendRawAudioToOmiDescription": "Stäng av för att förhindra att rått ljud skickas till Omi. Transkriptioner och data som molnfunktioner behöver kan fortfarande skickas till Omi.",
-    "findDevice": "Hitta"
+    "findDevice": "Hitta",
+    "diagnosticsShareFailed": "Diagnostiken kunde inte delas. Försök igen.",
+    "appDisabledTitle": "Den här appen är inaktiverad och kan inte installeras.",
+    "appDisabledWebhookFailures": "Dess endpoint misslyckades 72 timmar i rad, så leveranserna stoppades.",
+    "appDisabledGeneric": "Den inaktiverades av Omi.",
+    "appDisabledOwnerHint": "Åtgärda endpointen först — vid återaktivering kontrolleras varje konfigurerad URL på nytt.",
+    "appReEnable": "Återaktivera",
+    "appReEnableFailedTitle": "Kunde inte återaktivera",
+    "appReEnableFailedBody": "Den här appen kunde inte återaktiveras. Försök igen.",
+    "appDisabledOn": "Inaktiverad den {date}.",
+    "appDisabledLastError": "Senaste fel: {error}."
 }

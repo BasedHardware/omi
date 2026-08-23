@@ -100,6 +100,8 @@ struct DesktopHomeView: View {
     selectedIndex == SidebarNavItem.settings.rawValue
   }
 
+  private var homeOwnsItsPanels: Bool { !useLegacyHomeDesign }
+
   private var shouldShowAuthEntryShell: Bool {
     authState.isRestoringAuth || authState.sessionPhase == .recoveryRequired || !authState.isSignedIn
       || !hasCompletedOnboardingAtAuthorityRead
@@ -379,6 +381,7 @@ struct DesktopHomeView: View {
     .preferredColorScheme(.light)  // Glass is pinned light — see `InkGlass`. Deliberate, not a bug.
     .tint(Ink.accent)
     .onAppear {
+      reconcileOnboardingCompletionOwner()
       log(
         "DesktopHomeView: View appeared - isSignedIn=\(authState.isSignedIn), hasCompletedOnboarding=\(appState.hasCompletedOnboarding)"
       )
@@ -428,6 +431,7 @@ struct DesktopHomeView: View {
       consumePendingMainChatRequestForChatFirstShell()
     }
     .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
+      reconcileOnboardingCompletionOwner()
       chatFirstCapabilitySample.ownerDidChange(to: RuntimeOwnerIdentity.currentOwnerId())
       // The provider's owner-bound gate rejects the previous sample for this
       // owner; no replacement sample is persisted or inferred locally.
@@ -437,7 +441,7 @@ struct DesktopHomeView: View {
       enforceMainWindowMinimumSize()
       reportAutomationState()
       // First-run seed so the counter doesn't count the entire backlog as "new".
-      if topBarNewSinceRaw.isZero { topBarNewSinceRaw = Date().timeIntervalSince1970 }
+      seedTopBarNewSinceIfNeeded()
     }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
       reportAutomationState()
@@ -467,6 +471,18 @@ struct DesktopHomeView: View {
     .onReceive(NotificationCenter.default.publisher(for: .openMainChatRequested)) { _ in
       handleMainChatRequest()
     }
+  }
+
+  private func reconcileOnboardingCompletionOwner() {
+    guard
+      OnboardingFlow.reconcileCompletionOwner(
+        currentOwnerID: RuntimeOwnerIdentity.currentOwnerId()) == .resetForDifferentOwner
+    else { return }
+
+    onboardingStep = 0
+    onboardingFurthestStep = 0
+    onboardingJustCompleted = false
+    appState.hasCompletedOnboarding = false
   }
 
   private func handleMainChatRequest() {
@@ -515,13 +531,10 @@ struct DesktopHomeView: View {
     }
   }
 
-  /// Pins the hugged glass: not smaller than the destinations, not wider than the
-  /// readable lane plus its page margins. Height stays display-limited.
+  /// Pins the shell between the destination minimum and the visible display frame.
   private static func pinShellWindowSizeLimits(_ window: NSWindow, resizeFrame: Bool = true) {
     let minimumContentSize = DesktopWindowLayoutPolicy.minimumContentSize
-    let maximumContentSize = NSSize(
-      width: DesktopWindowLayoutPolicy.maximumContentWidth,
-      height: 10_000)
+    let maximumContentSize = DesktopWindowLayoutPolicy.maximumContentSize(for: window)
     window.contentMinSize = minimumContentSize
     window.minSize = window.frameRect(forContentRect: NSRect(origin: .zero, size: minimumContentSize)).size
     window.contentMaxSize = maximumContentSize
@@ -632,6 +645,12 @@ struct DesktopHomeView: View {
   /// Reference instant for the top bar's "new since you were last here" counts.
   private var topBarSinceDate: Date {
     topBarNewSinceRaw > 0 ? Date(timeIntervalSince1970: topBarNewSinceRaw) : Date()
+  }
+
+  private func seedTopBarNewSinceIfNeeded() {
+    let currentValue = topBarNewSinceRaw
+    guard currentValue == 0 else { return }
+    topBarNewSinceRaw = Date().timeIntervalSince1970
   }
 
   private var currentAppStateLabel: String {
@@ -1365,7 +1384,11 @@ struct DesktopHomeView: View {
 
       // One panel per destination — see `PageGlassLane`. Settings' own section list rides inside it
       // so the page is one object rather than a panel with its nav stranded on the wallpaper.
-      PageGlassLane(selectedIndex: selectedIndex) {
+      PageGlassLane(
+        selectedIndex: selectedIndex,
+        memoryDestinationRawValue: memoryDestinationRawValue,
+        homeOwnsItsPanels: homeOwnsItsPanels
+      ) {
         HStack(spacing: 0) {
           if isInSettings && !showsPrimarySidebar { settingsSidebar }
           PageContentView(

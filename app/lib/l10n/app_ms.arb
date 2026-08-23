@@ -101,7 +101,7 @@
     "createYourOwnApp": "Cipta Aplikasi Anda Sendiri",
     "buildAndShareApp": "Bina dan kongsi aplikasi tersuai anda",
     "searchApps": "Cari apl...",
-    "myApps": "Aplikasi Saya",
+    "myApps": "Dicipta oleh saya",
     "installedApps": "Aplikasi Dipasang",
     "unableToFetchApps": "Tidak dapat mendapatkan aplikasi :(\n\nSila semak sambungan internet anda dan cuba lagi.",
     "aboutOmi": "Tentang Omi",
@@ -3217,5 +3217,15 @@
     "accountCutoverOpenStore": "Buka toko",
     "sendRawAudioToOmi": "Hantar audio mentah ke Omi",
     "sendRawAudioToOmiDescription": "Matikan untuk menghalang audio mentah daripada dihantar ke Omi. Transkrip dan data yang diperlukan oleh ciri awan mungkin masih dihantar ke Omi.",
-    "findDevice": "Cari"
+    "findDevice": "Cari",
+    "diagnosticsShareFailed": "Tidak dapat berkongsi diagnostik. Sila cuba lagi.",
+    "appDisabledTitle": "Apl ini dilumpuhkan dan tidak boleh dipasang.",
+    "appDisabledWebhookFailures": "Endpoint-nya gagal selama 72 jam berturut-turut, jadi penghantaran dihentikan.",
+    "appDisabledGeneric": "Ia dilumpuhkan oleh Omi.",
+    "appDisabledOwnerHint": "Betulkan endpoint dahulu — pengaktifan semula akan menyemak semula setiap URL yang dikonfigurasikan.",
+    "appReEnable": "Aktifkan semula",
+    "appReEnableFailedTitle": "Gagal mengaktifkan semula",
+    "appReEnableFailedBody": "Apl ini tidak dapat diaktifkan semula. Sila cuba lagi.",
+    "appDisabledOn": "Dilumpuhkan pada {date}.",
+    "appDisabledLastError": "Ralat terakhir: {error}."
 }

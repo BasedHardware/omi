@@ -47,8 +47,9 @@ Before getting started, make sure your device is connected and unlocked. If you'
 
    `bash setup.sh ios` is the safe local-development path: it uses the local
    API/emulator harness and the `demo-omi-local` Firebase project. For a real
-   iPhone, set `OMI_DEV_HOST` to the Mac's LAN address when the local harness is
-   reachable from the device.
+   iPhone, set `OMI_DEV_HOST` to the Mac's LAN or Tailscale address before
+   running both `setup.sh ios` and `make dev-up` (export it so both commands
+   see it) — the harness now binds there too, not just the app build.
 
    iOS setup requires macOS/Xcode, so Windows developers should use the Android setup path.
 

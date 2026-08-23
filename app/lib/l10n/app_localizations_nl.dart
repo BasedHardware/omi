@@ -323,7 +323,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get searchApps => 'Apps zoeken...';
 
   @override
-  String get myApps => 'Mijn apps';
+  String get myApps => 'Door mij gemaakt';
 
   @override
   String get installedApps => 'Geïnstalleerde apps';
@@ -9877,4 +9877,39 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get findDevice => 'Zoeken';
+
+  @override
+  String get diagnosticsShareFailed => 'Kon de diagnostiek niet delen. Probeer het opnieuw.';
+
+  @override
+  String get appDisabledTitle => 'Deze app is uitgeschakeld en kan niet worden geïnstalleerd.';
+
+  @override
+  String get appDisabledWebhookFailures => 'Het endpoint faalde 72 uur achter elkaar, daarom is de bezorging gestopt.';
+
+  @override
+  String get appDisabledGeneric => 'De app is door Omi uitgeschakeld.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Repareer eerst het endpoint — bij het opnieuw inschakelen wordt elke ingestelde URL opnieuw gecontroleerd.';
+
+  @override
+  String get appReEnable => 'Opnieuw inschakelen';
+
+  @override
+  String get appReEnableFailedTitle => 'Opnieuw inschakelen mislukt';
+
+  @override
+  String get appReEnableFailedBody => 'Deze app kon niet opnieuw worden ingeschakeld. Probeer het opnieuw.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Uitgeschakeld op $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Laatste fout: $error.';
+  }
 }

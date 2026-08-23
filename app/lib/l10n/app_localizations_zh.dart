@@ -320,7 +320,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get searchApps => '搜索应用...';
 
   @override
-  String get myApps => '我的应用';
+  String get myApps => '我创建的';
 
   @override
   String get installedApps => '已安装应用';
@@ -9665,4 +9665,38 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get findDevice => '查找';
+
+  @override
+  String get diagnosticsShareFailed => '无法分享诊断信息，请重试。';
+
+  @override
+  String get appDisabledTitle => '此应用已被停用，无法安装。';
+
+  @override
+  String get appDisabledWebhookFailures => '其端点连续 72 小时失败，因此已停止推送。';
+
+  @override
+  String get appDisabledGeneric => '它已被 Omi 停用。';
+
+  @override
+  String get appDisabledOwnerHint => '请先修复端点——重新启用时会重新检查每个已配置的 URL。';
+
+  @override
+  String get appReEnable => '重新启用';
+
+  @override
+  String get appReEnableFailedTitle => '无法重新启用';
+
+  @override
+  String get appReEnableFailedBody => '无法重新启用此应用，请重试。';
+
+  @override
+  String appDisabledOn(String date) {
+    return '于 $date 停用。';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return '最后的错误：$error';
+  }
 }

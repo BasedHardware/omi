@@ -60,15 +60,17 @@ prepare_entitlements() {
     "$PREPARE_SCRIPT" "$BASE_ENTITLEMENTS" "$TMP_ROOT/modes/.dev" "$bundle_id" "$mode"
 }
 
-# Run one of run.sh's own function bodies as the production code it is. run.sh
-# runs under bare `set -e`, so adopt exactly those options before calling in:
-# `pipefail`/`nounset` would make these functions behave differently here than
-# they do in the launcher.
+# Run run.sh's own function bodies as the production code they are, in
+# dependency order. run.sh runs under bare `set -e`, so adopt exactly those
+# options before calling in: `pipefail`/`nounset` would make these functions
+# behave differently here than they do in the launcher.
 eval_run_function() {
-    local name="$1"
-    local body
-    body="$(sed -n "/^$name()/,/^}/p" "$RUN_SCRIPT")"
-    [ -n "$body" ] || fail "$name is missing from $RUN_SCRIPT"
+    local name body="" extracted
+    for name in "$@"; do
+        extracted="$(sed -n "/^$name()/,/^}/p" "$RUN_SCRIPT")"
+        [ -n "$extracted" ] || fail "$name is missing from $RUN_SCRIPT"
+        body+="$extracted"$'\n'
+    done
     set +o pipefail +o nounset
     set -o errexit
     eval "$body"
@@ -235,52 +237,157 @@ done
 )
 
 # ── run.sh: identity resolution prefers a stable identity over ad-hoc ──
+#
+# resolve_signing_identity is driven together with the helpers it now
+# delegates to, against faked environment binaries: `security` answers
+# find-identity and the keychain calls; `codesign` answers probes, failing
+# for identities on the refusal list exactly as the keychain refuses to
+# release a key (errSecInternalComponent). Keychain and stamp state is
+# sandboxed under TMP_ROOT via HOME and OMI_LOCAL_SIGN_KEYCHAIN overrides.
 
 FAKE_BIN="$TMP_ROOT/fake-bin"
 mkdir -p "$FAKE_BIN"
-write_fake_security() {
-    cat >"$FAKE_BIN/security" <<EOF
-#!/bin/bash
-cat <<'IDENTITIES'
-$1
-IDENTITIES
-EOF
-    chmod +x "$FAKE_BIN/security"
+REFUSED_IDENTITIES_FILE="$TMP_ROOT/refused-identities"
+FAKE_CREATED_IDENTITY="$LOCAL_DEV_IDENTITY"
+export REFUSED_IDENTITIES_FILE FAKE_CREATED_IDENTITY
+: >"$REFUSED_IDENTITIES_FILE"
+
+refuse_identities() {
+    printf '%s\n' "$@" >>"$REFUSED_IDENTITIES_FILE"
 }
+
+# What `security find-identity -v -p codesigning` reports.
+FAKE_IDENTITY_LISTING='     0 valid identities found'
+set_fake_identity_listing() {
+    FAKE_IDENTITY_LISTING="$1"
+    export FAKE_IDENTITY_LISTING
+}
+
+cat >"$FAKE_BIN/security" <<'EOF'
+#!/bin/bash
+case "$1" in
+    find-identity)
+        printf '%s\n' "$FAKE_IDENTITY_LISTING"
+        ;;
+    import)
+        # Importing the generated self-signed identity is what makes it usable.
+        sed -i '' "/^$FAKE_CREATED_IDENTITY$/d" "$REFUSED_IDENTITIES_FILE" 2>/dev/null
+        ;;
+    create-keychain)
+        for arg in "$@"; do :; done
+        touch "$arg" 2>/dev/null
+        ;;
+esac
+exit 0
+EOF
+chmod +x "$FAKE_BIN/security"
+
+cat >"$FAKE_BIN/codesign" <<'EOF'
+#!/bin/bash
+# Identity probes answer the way the keychain would: a refused identity
+# fails instantly, which is what errSecInternalComponent looks like from
+# codesign. Anything else signs.
+identity=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --sign) identity="$2"; shift 2; continue ;;
+    esac
+    shift
+done
+if [ -n "$identity" ] && grep -Fxq -- "$identity" "$REFUSED_IDENTITIES_FILE" 2>/dev/null; then
+    exit 1
+fi
+exit 0
+EOF
+chmod +x "$FAKE_BIN/codesign"
 
 (
     PATH="$FAKE_BIN:$PATH"
+    HOME="$TMP_ROOT/sandbox-home"
+    mkdir -p "$HOME/Library/Keychains"
+    step() { :; }
     substep() { :; }
     IS_NAMED_BUNDLE=true
     BUNDLE_ID=com.omi.omi-signfix
     OMI_ALLOW_ADHOC_SIGN=1
     OMI_LOCAL_DEV_SIGN_IDENTITY="$LOCAL_DEV_IDENTITY"
-    eval_run_function resolve_signing_identity
+    OMI_LOCAL_SIGN_KEYCHAIN="$HOME/Library/Keychains/omi-local-dev-signing.keychain-db"
+    OMI_LOCAL_SIGN_KEYCHAIN_PASSWORD=test-only
+    eval_run_function \
+        signing_identity_usable \
+        add_keychain_to_search_list \
+        ensure_local_dev_signing_identity \
+        signing_identity_stamp_path \
+        remembered_signing_identity \
+        resolve_signing_identity
+
+    stamp_file="$HOME/Library/Application Support/Omi Dev Bundles/$BUNDLE_ID/.signing-identity"
+    reset_case() {
+        SIGN_IDENTITY=""
+        rm -f "$stamp_file" "$OMI_LOCAL_SIGN_KEYCHAIN"
+        : >"$REFUSED_IDENTITIES_FILE"
+    }
 
     # Only the self-signed identity exists: it must win over ad-hoc, because
     # ad-hoc would drop this bundle's Screen Recording grant.
-    write_fake_security '  1) BB925114BCB64BD0D17B4CA18CC67B8B2A5CE614 "Omi Local Dev Signing"
-     1 valid identities found'
-    SIGN_IDENTITY=""
+    reset_case
+    set_fake_identity_listing "  1) BB925114BCB64BD0D17B4CA18CC67B8B2A5CE614 \"$LOCAL_DEV_IDENTITY\"
+     1 valid identities found"
     resolve_signing_identity
     [ "$SIGN_IDENTITY" = "$LOCAL_DEV_IDENTITY" ] \
         || fail "ad-hoc signing was chosen over the stable local identity (got '$SIGN_IDENTITY')"
 
     # An Apple identity still wins over the self-signed one.
-    write_fake_security "  1) AAAA \"$APPLE_DEVELOPMENT_IDENTITY\"
+    reset_case
+    set_fake_identity_listing "  1) AAAA \"$APPLE_DEVELOPMENT_IDENTITY\"
   2) BBBB \"$LOCAL_DEV_IDENTITY\"
      2 valid identities found"
-    SIGN_IDENTITY=""
     resolve_signing_identity
     [ "$SIGN_IDENTITY" = "$APPLE_DEVELOPMENT_IDENTITY" ] \
         || fail "Apple Development identity was not preferred (got '$SIGN_IDENTITY')"
 
-    # With nothing in the keychain, the opted-in ad-hoc path is still available.
-    write_fake_security '     0 valid identities found'
-    SIGN_IDENTITY=""
+    # A listed identity is not a usable one: presence is not permission. A key
+    # the keychain refuses to release must lose to the stable local identity,
+    # not fail the build after the compile.
+    reset_case
+    set_fake_identity_listing "  1) AAAA \"$APPLE_DEVELOPMENT_IDENTITY\"
+     1 valid identities found"
+    refuse_identities "$APPLE_DEVELOPMENT_IDENTITY"
+    resolve_signing_identity
+    [ "$SIGN_IDENTITY" = "$LOCAL_DEV_IDENTITY" ] \
+        || fail "a refused Apple Development identity was chosen anyway (got '$SIGN_IDENTITY')"
+
+    # An identity this bundle already wears wins over a "better" one, because
+    # switching resets every permission the bundle has been granted.
+    reset_case
+    set_fake_identity_listing "  1) AAAA \"$APPLE_DEVELOPMENT_IDENTITY\"
+     1 valid identities found"
+    mkdir -p "$(dirname "$stamp_file")"
+    printf '%s' "$LOCAL_DEV_IDENTITY" >"$stamp_file"
+    resolve_signing_identity
+    [ "$SIGN_IDENTITY" = "$LOCAL_DEV_IDENTITY" ] \
+        || fail "the bundle's remembered identity was not reused (got '$SIGN_IDENTITY')"
+
+    # With nothing in the keychain the local identity is created on demand —
+    # never ad-hoc, which would silently drop the Screen Recording grant.
+    reset_case
+    set_fake_identity_listing '     0 valid identities found'
+    refuse_identities "$LOCAL_DEV_IDENTITY"   # does not exist yet: unusable until imported
+    resolve_signing_identity
+    [ "$SIGN_IDENTITY" = "$LOCAL_DEV_IDENTITY" ] \
+        || fail "on-demand local identity creation was not used (got '$SIGN_IDENTITY')"
+    [ -f "$OMI_LOCAL_SIGN_KEYCHAIN" ] \
+        || fail "the local identity was reported usable without creating its keychain"
+
+    # Ad-hoc remains reachable, but only by opting out of the local identity.
+    reset_case
+    set_fake_identity_listing '     0 valid identities found'
+    refuse_identities "$LOCAL_DEV_IDENTITY"
+    OMI_SKIP_LOCAL_SIGN_IDENTITY=1
     resolve_signing_identity
     [ "$SIGN_IDENTITY" = "-" ] \
         || fail "opted-in ad-hoc fallback stopped working (got '$SIGN_IDENTITY')"
+    unset OMI_SKIP_LOCAL_SIGN_IDENTITY
 )
 
 # Preparing a named bundle must never mutate the checked-in source plist.

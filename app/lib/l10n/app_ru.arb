@@ -101,7 +101,7 @@
     "createYourOwnApp": "Создайте своё приложение",
     "buildAndShareApp": "Создавайте и делитесь своим пользовательским приложением",
     "searchApps": "Поиск приложений...",
-    "myApps": "Мои приложения",
+    "myApps": "Создано мной",
     "installedApps": "Установленные приложения",
     "unableToFetchApps": "Не удалось загрузить приложения :(\n\nПожалуйста, проверьте подключение к интернету и попробуйте снова.",
     "aboutOmi": "О Omi",
@@ -3252,5 +3252,15 @@
     "accountCutoverOpenStore": "Открыть магазин",
     "sendRawAudioToOmi": "Отправлять необработанный звук в Omi",
     "sendRawAudioToOmiDescription": "Отключите, чтобы необработанный звук не отправлялся в Omi. Расшифровки и данные, необходимые облачным функциям, всё ещё могут отправляться в Omi.",
-    "findDevice": "Найти"
+    "findDevice": "Найти",
+    "diagnosticsShareFailed": "Не удалось поделиться диагностикой. Попробуйте ещё раз.",
+    "appDisabledTitle": "Это приложение отключено, и его нельзя установить.",
+    "appDisabledWebhookFailures": "Его endpoint не отвечал 72 часа подряд, поэтому отправка была остановлена.",
+    "appDisabledGeneric": "Его отключила Omi.",
+    "appDisabledOwnerHint": "Сначала исправьте endpoint — при повторном включении каждый настроенный URL проверяется заново.",
+    "appReEnable": "Включить снова",
+    "appReEnableFailedTitle": "Не удалось включить снова",
+    "appReEnableFailedBody": "Это приложение не удалось включить снова. Попробуйте ещё раз.",
+    "appDisabledOn": "Отключено {date}.",
+    "appDisabledLastError": "Последняя ошибка: {error}."
 }

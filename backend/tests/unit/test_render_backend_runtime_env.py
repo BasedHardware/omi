@@ -17,8 +17,8 @@ def _reuse_parsed_repo_manifest(monkeypatch):
 
 
 def _job_env_block(out: str, job_prefix: str) -> str:
-    start = out.index(f'{job_prefix}_env_vars<<')
-    end = out.index(f'{job_prefix}_secrets<<')
+    start = out.index(f'\n{job_prefix}_env_vars<<') + 1
+    end = out.index(f'\n{job_prefix}_secrets<<', start) + 1
     return out[start:end]
 
 
@@ -383,5 +383,7 @@ def test_desktop_backend_compose_pins_vertex_pt(env, project):
     assert 'USE_VERTEX_AI=true' in rendered, VERTEX_PT_CONTRACT
     assert f'GOOGLE_CLOUD_PROJECT={project}' in rendered, VERTEX_PT_CONTRACT
     assert 'GCP_LOCATION=us-central1' in rendered, VERTEX_PT_CONTRACT
+    assert 'PROMETHEUS_SIDECAR_PORT=9090' in rendered
+    assert _MODULE['_render_secrets'](desktop['secrets']) == 'METRICS_SECRET=METRICS_SECRET:latest'
     docs = Path(__file__).resolve().parents[2] / 'docs' / 'vertex-pt-flash.md'
     assert VERTEX_PT_CONTRACT.split(',')[0] in docs.read_text(encoding='utf-8')

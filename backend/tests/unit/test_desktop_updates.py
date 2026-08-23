@@ -1,7 +1,7 @@
 """Tests for desktop update system (appcast XML, channel filtering, download endpoint)."""
 
 import xml.etree.ElementTree as ET
-from unittest.mock import ANY, AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -1377,7 +1377,10 @@ class TestDesktopUpdateAdminEndpoints:
             "idempotent": False,
         }
         admit.assert_called_once_with(manifest, control_generation=7)
-        invalidate.assert_called_once_with("desktop_update_pointer:macos:beta")
+        assert invalidate.call_args_list == [
+            call("github_releases_desktop"),
+            call("desktop_update_pointer:macos:beta"),
+        ]
 
     @pytest.mark.asyncio
     async def test_signed_beta_candidate_rejection_writes_nothing_and_never_invalidates_stable(self):
@@ -1406,7 +1409,7 @@ class TestDesktopUpdateAdminEndpoints:
         invalidate.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_signed_beta_candidate_idempotent_receipt_repairs_only_the_beta_cache_after_the_transaction(self):
+    async def test_signed_beta_candidate_idempotent_receipt_repairs_release_and_beta_caches_after_transaction(self):
         manifest = {"release_id": "v0.12.93+12093-macos"}
         receipt = {"manifest": manifest, "pointer": {"generation": 7}, "idempotent": True}
         with (
@@ -1424,7 +1427,10 @@ class TestDesktopUpdateAdminEndpoints:
                 )
 
         assert response.status_code == 200
-        invalidate.assert_called_once_with("desktop_update_pointer:macos:beta")
+        assert invalidate.call_args_list == [
+            call("github_releases_desktop"),
+            call("desktop_update_pointer:macos:beta"),
+        ]
 
     @pytest.mark.asyncio
     async def test_registers_immutable_manifest(self):

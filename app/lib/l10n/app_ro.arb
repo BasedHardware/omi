@@ -101,7 +101,7 @@
     "createYourOwnApp": "Creează-ți propria aplicație",
     "buildAndShareApp": "Construiește și partajează aplicația ta personalizată",
     "searchApps": "Căutați aplicații...",
-    "myApps": "Aplicațiile mele",
+    "myApps": "Creat de mine",
     "installedApps": "Aplicații instalate",
     "unableToFetchApps": "Nu s-au putut prelua aplicațiile :(\n\nTe rugăm să verifici conexiunea la internet și să încerci din nou.",
     "aboutOmi": "Despre Omi",
@@ -3217,5 +3217,15 @@
     "accountCutoverOpenStore": "Deschide magazinul",
     "sendRawAudioToOmi": "Trimite sunetul brut către Omi",
     "sendRawAudioToOmiDescription": "Dezactivează pentru a împiedica trimiterea sunetului brut către Omi. Transcrierile și datele necesare funcțiilor cloud pot fi trimise în continuare către Omi.",
-    "findDevice": "Găsește"
+    "findDevice": "Găsește",
+    "diagnosticsShareFailed": "Diagnosticul nu a putut fi partajat. Încearcă din nou.",
+    "appDisabledTitle": "Această aplicație este dezactivată și nu poate fi instalată.",
+    "appDisabledWebhookFailures": "Endpointul ei a eșuat 72 de ore la rând, așa că livrările au fost oprite.",
+    "appDisabledGeneric": "A fost dezactivată de Omi.",
+    "appDisabledOwnerHint": "Repară mai întâi endpointul — reactivarea verifică din nou fiecare URL configurat.",
+    "appReEnable": "Reactivează",
+    "appReEnableFailedTitle": "Reactivarea a eșuat",
+    "appReEnableFailedBody": "Această aplicație nu a putut fi reactivată. Încearcă din nou.",
+    "appDisabledOn": "Dezactivată pe {date}.",
+    "appDisabledLastError": "Ultima eroare: {error}."
 }

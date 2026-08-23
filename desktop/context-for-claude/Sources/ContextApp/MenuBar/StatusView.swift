@@ -42,7 +42,10 @@ struct StatusView: View {
     @ObservedObject private var auth = OmiAuth.shared
     @ObservedObject private var uploads = ConversationUploader.shared
 
-    @State private var claude: (claudeCode: Bool, claudeDesktop: Bool) = (false, false)
+    /// What is registered on disk *and* whether the running Claude Desktop is serving us. The
+    /// default is the honest one for "not probed yet": nothing connected, nothing to restart.
+    @State private var claude = ClaudeConnection(
+        claudeCode: false, claudeDesktop: false, liveness: .unknown)
     @State private var claudeNote: String?
     /// True while the two config files are being rewritten. A second press cannot start a second
     /// write, which is the same rule the account line's round trip follows.
@@ -512,11 +515,7 @@ struct StatusView: View {
     /// The Claude line as a value, for the reason `account` is one: this view keeps no judgement of
     /// its own about a state it cannot be driven through in a test.
     private var connector: ClaudeConnectorLine {
-        ClaudeConnectorLine(
-            claudeCode: claude.claudeCode,
-            claudeDesktop: claude.claudeDesktop,
-            note: claudeNote,
-            isConnecting: isConnecting)
+        ClaudeConnectorLine(connection: claude, note: claudeNote, isConnecting: isConnecting)
     }
 
     /// Same shape as `refresh()`, and for the same reason: `register()` reads, decodes and rewrites
@@ -528,7 +527,16 @@ struct StatusView: View {
         claudeNote = nil
         Task {
             let result = await Task.detached(priority: .userInitiated) { ClaudeRegistrar.register() }.value
-            claude = (result.claudeCode, result.claudeDesktop)
+            // Re-probed rather than built from `result`: registering writes the config, and Claude
+            // Desktop reads it at *its* launch, so the press that "connects" routinely leaves a
+            // Claude that still cannot answer. That is the state the user most needs to be told
+            // about, and it exists from the instant the write lands.
+            claude = await Task.detached(priority: .userInitiated) {
+                ClaudeConnection(
+                    claudeCode: result.claudeCode,
+                    claudeDesktop: result.claudeDesktop,
+                    liveness: ClaudeServerLiveness.state(claudeDesktopPIDs: ClaudeDesktopProcesses.pids))
+            }.value
             claudeNote = result.message
             isConnecting = false
         }
@@ -551,8 +559,14 @@ struct StatusView: View {
             // the engine was never paused. A control that cannot work is worse than no control.
             MenuCommand(title: engine.isPaused ? "Resume" : "Pause") {
                 if engine.isPaused {
+                    // Named for what the press *did*, read off the state before it. Two cases
+                    // rather than one `captureToggled` with a bool, because the question people
+                    // ask of this row is "how many installs pause capture and never come back",
+                    // and that is a comparison of two counts.
+                    ContextAnalytics.record(.controlUsed(.captureResume))
                     engine.resume()
                 } else {
+                    ContextAnalytics.record(.controlUsed(.capturePause))
                     engine.pause()
                 }
             }
@@ -579,7 +593,7 @@ struct StatusView: View {
             // ungranted user can reach the window at all, and a dead chord beside it suggests they
             // never needed the row.
             MenuCommand(title: "Open Activity", shortcut: activityShortcut) {
-                SearchBarWindow.present()
+                SearchBarWindow.present(via: .menuBarRow)
             }
 
             // **No shortcut, because the timeline has none.** ⌘ + ⌘ opens Activity now, and printing
@@ -591,10 +605,12 @@ struct StatusView: View {
             // rebuilt here — store guard, Settings hand-off, search hand-off — and a second
             // reconstruction of three arguments is how one of them quietly stops being passed.
             MenuCommand(title: "Open Timeline") {
-                ContextAppDelegate.openTimeline()
+                ContextAppDelegate.openTimeline(via: .menuBarRow)
             }
 
-            MenuCommand(title: "Settings…", shortcut: "⌘,") { SettingsWindow.present() }
+            MenuCommand(title: "Settings…", shortcut: "⌘,") {
+                SettingsWindow.present(via: .menuBarRow)
+            }
                 .keyboardShortcut(",")
 
             // **The only way back into the walkthrough once it has been left.**
@@ -605,6 +621,7 @@ struct StatusView: View {
             // once per install. Skipping was therefore permanent, and the app's own explanation of
             // itself was unreachable for the rest of its life on that Mac.
             MenuCommand(title: "Show Me Around") {
+                ContextAnalytics.record(.controlUsed(.showMeAround))
                 Tutorial.start(store: Engine.shared.contextStore)
             }
 
@@ -618,6 +635,11 @@ struct StatusView: View {
             // straight back — an app that cannot be quit, which is worse than one that needs
             // reopening.
             MenuCommand(title: "Quit", shortcut: "⌘Q") {
+                // Before `TerminationOrigin`, because the two lines below end this process
+                // synchronously — `NSApp.terminate` runs `applicationWillTerminate` on the way
+                // through — and an emit after them would be an emit by a process that is gone.
+                // The sink is drained on `willTerminate`, so a record made here still leaves.
+                ContextAnalytics.record(.controlUsed(.quit))
                 TerminationOrigin.userAskedToQuit()
                 NSApp.terminate(nil)
             }
@@ -651,7 +673,7 @@ struct StatusView: View {
         readAskLedger()
         claudeNote = nil
         Task {
-            claude = await Task.detached(priority: .userInitiated) { ClaudeRegistrar.status() }.value
+            claude = await Task.detached(priority: .userInitiated) { ClaudeConnection.current() }.value
         }
     }
 }

@@ -418,7 +418,7 @@
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
-    "myApps": "Мае дадатыі",
+    "myApps": "Створана мной",
     "@myApps": {
         "description": "Filter button for user's own apps"
     },
@@ -10783,5 +10783,15 @@
     "accountCutoverOpenStore": "Открыть магазин",
     "sendRawAudioToOmi": "Адпраўляць неапрацаванае аўдыя ў Omi",
     "sendRawAudioToOmiDescription": "Выключыце, каб не адпраўляць у Omi неапрацаванае аўдыя. Расшыфроўкі і даныя, патрэбныя воблачным функцыям, усё яшчэ могуць адпраўляцца ў Omi.",
-    "findDevice": "Знайсці"
+    "findDevice": "Знайсці",
+    "diagnosticsShareFailed": "Не ўдалося падзяліцца дыягностыкай. Паспрабуйце яшчэ раз.",
+    "appDisabledTitle": "Гэта праграма адключана, і яе нельга ўсталяваць.",
+    "appDisabledWebhookFailures": "Яе endpoint не працаваў 72 гадзіны запар, таму дастаўка спынена.",
+    "appDisabledGeneric": "Яе адключыла Omi.",
+    "appDisabledOwnerHint": "Спачатку выправіце endpoint — паўторнае ўключэнне зноў правярае кожны наладжаны URL.",
+    "appReEnable": "Уключыць зноў",
+    "appReEnableFailedTitle": "Не ўдалося ўключыць зноў",
+    "appReEnableFailedBody": "Не ўдалося паўторна ўключыць гэту праграму. Паспрабуйце яшчэ раз.",
+    "appDisabledOn": "Адключана {date}.",
+    "appDisabledLastError": "Апошняя памылка: {error}."
 }

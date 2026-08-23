@@ -460,7 +460,7 @@ def test_firestore_readiness_fails_before_admitted_source_checkout_when_read_onl
             'Google Auth for read-only Firestore inventory'
         )
         if workflow.name == 'gcp_backend_auto_dev.yml':
-            assert readiness.index('Verify Release Eligibility proof is current main') < readiness.index(
+            assert readiness.index('Resolve and verify the newest proven main source') < readiness.index(
                 'Require read-only Firestore credentials'
             )
 
@@ -490,7 +490,7 @@ def test_static_firestore_index_migration_is_approved_and_main_scoped() -> None:
     assert 'APPLY_FIRESTORE_INDEXES' in text
     assert 'if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then' in text
     assert 'elif [[ "$EVENT_NAME" != "push" ]]; then' in text
-    assert "if: github.ref == 'refs/heads/main'" in text
+    assert "github.ref == 'refs/heads/main'" in text
     assert "  push:\n    branches: [ \"main\" ]\n    paths:\n      - 'firestore.indexes.json'\n" in text
     # An empty environment binds no GitHub Environment and bypasses the prod
     # approval; an unresolved group serializes nothing.
@@ -502,17 +502,38 @@ def test_static_firestore_index_migration_is_approved_and_main_scoped() -> None:
     assert 'git rev-parse HEAD' in text
     assert 'if [[ "$checked_sha" != "$GITHUB_SHA" ]]; then' in text
     assert 'credentials_json: ${{ secrets.GCP_CREDENTIALS }}' in text
-    assert text.count('--provision-missing') == 1
+    composite = text.split('\n  reconcile_composite_indexes:', 1)[1].split(
+        '\n  reconcile_development_composite_indexes:', 1
+    )[0]
+    # Development converges its own schema on the same merge. It is a separate
+    # job precisely so the reviewed production migration above keeps its gate;
+    # assert the two lanes stay one-apply-each rather than counting globally.
+    development = text.split('\n  reconcile_development_composite_indexes:', 1)[1].split(
+        '\n  reject_nonprod_field_exemptions:', 1
+    )[0]
+    field_exemptions = text.split('\n  apply_field_exemptions:', 1)[1]
+
+    assert composite.count('--provision-missing') == 1
+    assert development.count('--provision-missing') == 1
     assert '--provision-missing \\\n            --dry-run' not in text
-    assert text.count('--dry-run') == 1
-    assert '--check-only' not in text
+    assert composite.count('--dry-run') == 1
+    assert development.count('--dry-run') == 1
     assert 'vars.RUNTIME_GCP_PROJECT_ID' in text
+
+    # The development lane must never bind production, and must not be able to
+    # run from a manual dispatch that selected prod.
+    assert 'environment: development' in development
+    assert 'group: firestore-schema-development' in development
+    assert "github.event_name == 'push'" in development
+    assert 'environment: prod' not in development
+    assert 'github.event.inputs.environment' not in development
+    assert 'reconcile_firestore_field_exemptions.py' not in development
 
     plan_step = '- name: Show create-only Firestore schema plan'
     apply_step = '- name: Apply approved Firestore schema plan and wait for readiness'
     verification_step = '- name: Verify dispatched Firestore control plane'
-    plan = text.split(plan_step, 1)[1].split(apply_step, 1)[0]
-    apply = text.split(apply_step, 1)[1]
+    plan = composite.split(plan_step, 1)[1].split(apply_step, 1)[0]
+    apply = composite.split(apply_step, 1)[1]
     assert text.index(verification_step) < text.index(plan_step)
     assert text.index(plan_step) < text.index(apply_step)
     assert '--provision-missing' not in plan
@@ -520,6 +541,19 @@ def test_static_firestore_index_migration_is_approved_and_main_scoped() -> None:
     assert '--dry-run' in plan
     assert '--dry-run' not in apply
     assert '--timeout-seconds 3600' in apply
+
+    # Firestore documents `gcloud firestore indexes fields update --disable-indexes`
+    # as an explicit field override that does not affect composites. Keep that
+    # destructive operation manual/prod-only and distinct from the monotone lane.
+    assert "github.event.inputs.operation == 'field-exemptions'" in field_exemptions
+    assert "github.event.inputs.environment == 'prod'" in field_exemptions
+    assert 'environment: prod' in field_exemptions
+    assert 'APPLY_FIRESTORE_FIELD_EXEMPTIONS' in field_exemptions
+    assert field_exemptions.count('--dry-run') == 1
+    assert field_exemptions.count('--apply') == 1
+    assert '--confirmation APPLY_FIRESTORE_FIELD_EXEMPTIONS' in field_exemptions
+    assert 'reconcile_firestore_field_exemptions.py' in composite
+    assert '--check-only' in composite
 
 
 def test_static_manual_deploy_requires_an_admitted_main_source() -> None:

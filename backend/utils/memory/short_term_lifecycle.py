@@ -64,6 +64,8 @@ def _audit_metadata(
         'policy_version': SHORT_TERM_LIFECYCLE_POLICY_VERSION,
         'memory_id': item.memory_id,
         'uid': item.uid,
+        'item_revision': item.item_revision,
+        'content_hash': item.content_hash,
         'tier': item.tier.value,
         'status': item.status.value,
         'processing_state': item.processing_state.value,

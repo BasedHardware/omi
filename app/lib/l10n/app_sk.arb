@@ -101,7 +101,7 @@
     "createYourOwnApp": "Vytvorte si vlastnú aplikáciu",
     "buildAndShareApp": "Vytvorte a zdieľajte vlastnú aplikáciu",
     "searchApps": "Hľadať aplikácie...",
-    "myApps": "Moje aplikácie",
+    "myApps": "Vytvorené mnou",
     "installedApps": "Nainštalované aplikácie",
     "unableToFetchApps": "Nepodarilo sa načítať aplikácie :(\n\nSkontrolujte prosím svoje internetové pripojenie a skúste to znova.",
     "aboutOmi": "O Omi",
@@ -3222,5 +3222,15 @@
     "accountCutoverOpenStore": "Otevřít obchod",
     "sendRawAudioToOmi": "Odosielať nespracovaný zvuk do Omi",
     "sendRawAudioToOmiDescription": "Vypnutím zabránite odosielaniu nespracovaného zvuku do Omi. Prepisy a údaje potrebné pre cloudové funkcie sa môžu naďalej odosielať do Omi.",
-    "findDevice": "Nájsť"
+    "findDevice": "Nájsť",
+    "diagnosticsShareFailed": "Diagnostiku sa nepodarilo zdieľať. Skús to znova.",
+    "appDisabledTitle": "Táto aplikácia je vypnutá a nedá sa nainštalovať.",
+    "appDisabledWebhookFailures": "Jej endpoint zlyhával 72 hodín v kuse, preto bolo doručovanie zastavené.",
+    "appDisabledGeneric": "Vypla ju Omi.",
+    "appDisabledOwnerHint": "Najskôr oprav endpoint — pri opätovnom zapnutí sa znovu overí každá nastavená URL.",
+    "appReEnable": "Znovu zapnúť",
+    "appReEnableFailedTitle": "Nepodarilo sa znovu zapnúť",
+    "appReEnableFailedBody": "Túto aplikáciu sa nepodarilo znovu zapnúť. Skús to znova.",
+    "appDisabledOn": "Vypnuté {date}.",
+    "appDisabledLastError": "Posledná chyba: {error}."
 }

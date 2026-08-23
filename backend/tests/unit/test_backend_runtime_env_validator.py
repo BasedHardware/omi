@@ -76,6 +76,38 @@ def with_backend_pusher_env(payload: str) -> str:
     )
 
 
+def with_conversation_notes_v2_env(payload: str) -> str:
+    """The summary rollout flags are declared on the Cloud Run `backend` service too.
+
+    Only that service is asserted: `process_conversation` runs inline there for reprocess,
+    so a deploy that carries the flags on backend-listen alone is the drift this catches.
+    """
+    return re.sub(
+        r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        r'\1\n        {"name": "CONVERSATION_NOTES_V2_ENABLED", "value": "true"},'
+        r'\n        {"name": "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED", "value": "true"},'
+        r'\n        {"name": "CONVERSATION_OCR_CONTEXT_ENABLED", "value": "true"},',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+
+def with_meeting_receipt_reconciler_env(payload: str) -> str:
+    """The meeting-receipt reconciler flag is declared on the Cloud Run `backend` service too.
+
+    Only that service is asserted: `process_conversation` runs inline there for reprocess,
+    so a deploy that carries the flag on backend-listen alone is the drift this catches.
+    """
+    return re.sub(
+        r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        r'\1\n        {"name": "MEETING_RECEIPT_RECONCILER_ENABLED", "value": "false"},',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+
 def with_backend_public_shared_chat_auth_env(payload: str) -> str:
     return re.sub(
         r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
@@ -137,10 +169,14 @@ GOOGLE_OAUTH_SECRETS = '''\
 
 def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_backend_public_shared_chat_auth_env(
-        with_backend_pusher_env(
-            with_parity_pack_env(
-                with_listen_finalization_orphan_env(
-                    with_memory_env(with_sync_ledger_fence_mode(with_account_cutover_enforcement(payload)))
+        with_meeting_receipt_reconciler_env(
+            with_conversation_notes_v2_env(
+                with_backend_pusher_env(
+                    with_parity_pack_env(
+                        with_listen_finalization_orphan_env(
+                            with_memory_env(with_sync_ledger_fence_mode(with_account_cutover_enforcement(payload)))
+                        )
+                    )
                 )
             )
         )
@@ -1138,13 +1174,15 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
       "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
+        {"name": "PROMETHEUS_SIDECAR_PORT", "value": "9090"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
         {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
         {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET"}}},
-        {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN"}}}
+        {"name": "METRICS_SECRET", "valueFrom": {"secretKeyRef": {"name": "METRICS_SECRET"}}},
+        {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN"}}},
       ]
     },
     "backend-sync": {
@@ -1374,9 +1412,11 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
                                     'HOSTED_PARAKEET_API_URL': {'value': 'http://parakeet.omiapi.com'},
                                     'STT_PRERECORDED_MODEL': {'value': 'parakeet,modulate-velma-2'},
                                     'CUSTOM_MANIFEST_ONLY_MARKER': {'value': 'present'},
+                                    'PROMETHEUS_SIDECAR_PORT': {'value': '9090'},
                                 },
                                 'secrets': {
                                     **STANDARD_CLOUD_RUN_SECRETS,
+                                    'METRICS_SECRET': {'secret': 'METRICS_SECRET', 'version': 'latest'},
                                 },
                             }
                         },
@@ -1404,6 +1444,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
       "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
+        {"name": "PROMETHEUS_SIDECAR_PORT", "value": "9090"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
@@ -1411,7 +1452,8 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
         {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
         {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET"}}},
-        {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN"}}}
+        {"name": "METRICS_SECRET", "valueFrom": {"secretKeyRef": {"name": "METRICS_SECRET"}}},
+        {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN"}}},
       ]
     },
     "backend-sync": {
@@ -1466,6 +1508,7 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
       "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
+        {"name": "PROMETHEUS_SIDECAR_PORT", "value": "9090"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
@@ -1473,7 +1516,8 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
         {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
         {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON", "key": "1"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET", "key": "latest"}}},
-        {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "key": "latest"}}}
+        {"name": "METRICS_SECRET", "valueFrom": {"secretKeyRef": {"name": "METRICS_SECRET"}}},
+        {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "key": "latest"}}},
       ]
     },
     "backend-sync": {
@@ -1803,6 +1847,12 @@ def test_desktop_backend_compose_requires_vertex_pt_env(env):
     assert desktop_env['USE_VERTEX_AI']['value'] == 'true'
     assert desktop_env['GOOGLE_CLOUD_PROJECT']['value'] == expected_project
     assert desktop_env['GCP_LOCATION']['value'] == 'us-central1'
+    assert desktop_env['PROMETHEUS_SIDECAR_PORT']['value'] == '9090'
+    desktop_secrets = manifest['environments'][env]['desktop_backend']['secrets']
+    assert desktop_secrets['METRICS_SECRET'] == {'secret': 'METRICS_SECRET', 'version': 'latest'}
+    backend = manifest['environments'][env]['cloud_run']['services']['backend']
+    assert backend['env']['PROMETHEUS_SIDECAR_PORT']['value'] == '9090'
+    assert backend['secrets']['METRICS_SECRET'] == {'secret': 'METRICS_SECRET', 'version': 'latest'}
 
 
 def test_desktop_backend_vertex_pt_omission_fails_loud(tmp_path):
