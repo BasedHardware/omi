@@ -100,6 +100,7 @@ class MemoriesProvider extends ChangeNotifier {
         !memory.deleted &&
         !memory.isLocked &&
         memory.userReview != false &&
+        memory.invalidAt != null &&
         (memory.supersededBy ?? '').trim().isNotEmpty;
   }
 
@@ -518,16 +519,68 @@ class MemoriesProvider extends ChangeNotifier {
       }
 
       final existingReplacementIndex = _memories.indexWhere((candidate) => candidate.id == replacement.id);
-      if (existingReplacementIndex == -1) {
-        _memories.add(replacement);
-      } else if (!_sameAuthoritativeReplacement(_memories[existingReplacementIndex], replacement)) {
+      if (existingReplacementIndex != -1 &&
+          !_sameAuthoritativeReplacement(_memories[existingReplacementIndex], replacement)) {
         return false;
       }
+
+      // The backend atomically closes the current tail when it appends the
+      // restored row. Remove that known-stale current projection before
+      // exposing the replacement; do not forge lifecycle fields locally.
+      if (currentTail != null) {
+        _memories.removeWhere((candidate) => candidate.id == currentTail.id);
+      }
+      if (existingReplacementIndex == -1) {
+        _memories.add(replacement);
+      }
       _setCategories();
+      await _refreshLedgerHistoryAfterRevert(
+        generation,
+        closedTailId: currentTail?.id,
+        replacementId: replacement.id,
+      );
       return true;
     } finally {
       final removed = _revertingMemoryIds.remove(memory.id);
       if (removed && generation == _sessionGeneration) notifyListeners();
+    }
+  }
+
+  Future<void> _refreshLedgerHistoryAfterRevert(
+    int generation, {
+    required String? closedTailId,
+    required String replacementId,
+  }) async {
+    if (_filterThisDeviceOnly || closedTailId == null || generation != _sessionGeneration) return;
+
+    try {
+      const historyPageSize = 500;
+      const maxHistoryPages = 10;
+      var historyOffset = 0;
+      final refreshedHistory = <String, Memory>{};
+      for (var page = 0; page < maxHistoryPages; page++) {
+        final result = await _fetchLedgerHistoryRequest(limit: historyPageSize, offset: historyOffset);
+        if (generation != _sessionGeneration || !result.supported) return;
+        for (final row in result.memories) {
+          if (row.id != replacementId && row.isHistoricalKnowledgeLedgerRow) {
+            refreshedHistory[row.id] = row;
+          }
+        }
+        if (result.truncated || result.memories.length < historyPageSize) break;
+        historyOffset += result.memories.length;
+      }
+      if (generation != _sessionGeneration) return;
+      for (final row in refreshedHistory.values) {
+        final index = _memories.indexWhere((candidate) => candidate.id == row.id);
+        if (index == -1) {
+          _memories.add(row);
+        } else {
+          _memories[index] = row;
+        }
+      }
+      _setCategories();
+    } catch (error) {
+      Logger.warning('MemoriesProvider: ledger history refresh failed after fact revert: $error');
     }
   }
 
@@ -559,19 +612,10 @@ class MemoriesProvider extends ChangeNotifier {
       successorId = (successor.supersededBy ?? '').trim();
     }
 
-    // A bounded history page may omit an intermediate link. Fall back only to
-    // one unambiguous current row with the selected fact's canonical identity.
-    final candidates = _memories
-        .where(
-          (candidate) =>
-              candidate.isCurrentKnowledgeLedgerRow &&
-              candidate.ledgerKind == KnowledgeLedgerKind.fact &&
-              candidate.ledgerSlot == source.ledgerSlot &&
-              candidate.subjectScope == source.subjectScope &&
-              candidate.subjectEntityId == source.subjectEntityId,
-        )
-        .toList(growable: false);
-    return candidates.length == 1 ? candidates.single : null;
+    // A bounded history page may omit an intermediate link. Never guess the
+    // tail from slot/subject identity: active-row uniqueness is not a client
+    // invariant, and removing a guessed row could hide unrelated knowledge.
+    return null;
   }
 
   static bool _isAuthoritativeRevertReplacement(
