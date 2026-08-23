@@ -55,40 +55,78 @@ final class ProactiveListenEventTests: XCTestCase {
     XCTAssertNil(event.raw["conversation_id"] as? String)
   }
 
-  // MARK: - handleListenEvent gate: empty message body is dropped
+  // MARK: - admission: show vs suppress
 
-  func testHandlerDropsEmptyMessage() {
-    let state = AppState()
+  /// The previous versions of these two tests called `handleListenEvent` with no
+  /// runtime owner and asserted only that it did not crash, which covered
+  /// neither delivery nor suppression. `ProactiveListenAdmission` is the pure
+  /// decision the handler now takes, so each branch can be asserted directly.
 
-    // An empty message body should be silently dropped (no crash, no
-    // notification). Without a logged-in runtime owner there's no
-    // FloatingControlBarManager delivery to observe, but the guard on empty
-    // message precedes the owner check, so we verify it doesn't crash.
-    state.handleListenEvent(
-      TranscriptionService.ListenEvent(
-        type: "proactive_message",
-        raw: [
-          "app_id": "mentor",
-          "title": "Omi",
-          "message": "",
-        ]
-      )
-    )
-    // If we get here without a crash or assertion failure, the empty-body
-    // guard works. No state mutation to verify — the event is dropped.
+  func testProactiveMessageIsDeliveredWhenOwnedAndNonEmpty() {
+    XCTAssertEqual(
+      ProactiveListenAdmission.decide(
+        appID: "mentor", title: "Omi", message: "You said you'd call the bank.",
+        hasRuntimeOwner: true),
+      .deliver(title: "Omi", message: "You said you'd call the bank.", assistantId: "mentor"))
   }
 
-  func testHandlerDropsMissingMessage() {
-    let state = AppState()
+  func testEmptyMessageIsSuppressed() {
+    XCTAssertEqual(
+      ProactiveListenAdmission.decide(
+        appID: "mentor", title: "Omi", message: "", hasRuntimeOwner: true),
+      .skip(.emptyMessage))
+  }
 
-    // Missing "message" key entirely — the handler defaults to "" and drops.
+  /// A listen socket can outlive a sign-out; delivering then would hand one
+  /// user's mentor prompt to whoever is signed in now.
+  func testMessageIsSuppressedWithoutARuntimeOwner() {
+    XCTAssertEqual(
+      ProactiveListenAdmission.decide(
+        appID: "mentor", title: "Omi", message: "You said you'd call the bank.",
+        hasRuntimeOwner: false),
+      .skip(.noRuntimeOwner))
+  }
+
+  /// Emptiness is checked before ownership so the cheaper guard runs first, and
+  /// so an empty body reports as empty rather than as an ownership problem.
+  func testEmptyMessageWithoutOwnerReportsEmptinessNotOwnership() {
+    XCTAssertEqual(
+      ProactiveListenAdmission.decide(
+        appID: "", title: "Omi", message: "", hasRuntimeOwner: false),
+      .skip(.emptyMessage))
+  }
+
+  func testBlankAppIdFallsBackToTheProactiveListenAssistant() {
+    guard
+      case .deliver(_, _, let assistantId) = ProactiveListenAdmission.decide(
+        appID: "", title: "Omi", message: "Reminder body", hasRuntimeOwner: true)
+    else { return XCTFail("expected delivery") }
+    XCTAssertEqual(assistantId, ProactiveListenAdmission.fallbackAssistantID)
+  }
+
+  /// The suppression that matters most to a user — notifications switched off —
+  /// is deliberately *not* re-decided here. Admission routes to
+  /// `NotificationService`, which owns that gate, so this pins that the master
+  /// toggle is a real read rather than something this path could drift from.
+  func testMasterNotificationToggleIsHonouredByTheServiceThisPathRoutesTo() throws {
+    let suiteName = "omi.tests.proactiveListen"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    let key = NotificationService.masterEnabledDefaultsKey
+    defaults.set(false, forKey: key)
+    XCTAssertFalse(NotificationService.areNotificationsEnabled(defaults: defaults))
+
+    defaults.set(true, forKey: key)
+    XCTAssertTrue(NotificationService.areNotificationsEnabled(defaults: defaults))
+  }
+
+  func testHandlerDropsEmptyMessageWithoutCrashing() {
+    let state = AppState()
     state.handleListenEvent(
       TranscriptionService.ListenEvent(
         type: "proactive_message",
-        raw: [
-          "app_id": "mentor",
-          "title": "Omi",
-        ]
+        raw: ["app_id": "mentor", "title": "Omi", "message": ""]
       )
     )
   }
