@@ -329,6 +329,18 @@ OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL = Counter(
     ['provider', 'stage'],
 )
 
+OMI_VAD_GATE_AUDIO_SECONDS_TOTAL = Counter(
+    'omi_vad_gate_audio_seconds_total',
+    'Live VAD gate audio seconds by gate outcome and mode',
+    ['outcome', 'mode'],
+)
+
+OMI_VAD_GATE_SESSIONS_TOTAL = Counter(
+    'omi_vad_gate_sessions_total',
+    'Live VAD gate sessions by mode',
+    ['mode'],
+)
+
 OMI_LIVE_STT_TERMINAL_TOTAL = Counter(
     'omi_live_stt_terminal_total',
     'Terminal live-STT outcomes for accepted attempts by bounded labels',
