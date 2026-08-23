@@ -209,6 +209,35 @@ void main() {
     expect(message.toJson()['evidence'], isA<Map<String, dynamic>>());
   });
 
+  test(
+    'keeps text readable for loading and offline frame requests',
+    () {
+      for (final state in ['loading', 'offline']) {
+        final json = messageJson(text: 'The answer remains available.');
+        json['evidence'] = {
+          'schema_version': 1,
+          'request_id': 'request-$state',
+          'references': [
+            {
+              'id': 'request-$state',
+              'kind': 'request',
+              'state': state,
+              'request_id': 'request-$state',
+            },
+          ],
+        };
+
+        expect(() => ServerMessage.fromJson(json), returnsNormally);
+        final message = ServerMessage.fromJson(json);
+
+        expect(message.text, 'The answer remains available.');
+        expect(message.evidenceEnvelope?.references.single.kind.wireValue, 'request');
+        expect(message.evidenceEnvelope?.references.single.state.wireValue, state);
+        expect(message.evidenceEnvelope?.references.single.canOpen, isFalse);
+      }
+    },
+  );
+
   test('ignores malformed or future evidence while preserving legacy text', () {
     final malformed = messageJson(text: 'Legacy answer');
     malformed['evidence'] = {'schema_version': 1, 'references': 'not-a-list'};

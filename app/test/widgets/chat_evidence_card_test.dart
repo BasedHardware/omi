@@ -81,6 +81,45 @@ void main() {
     },
   );
 
+  testWidgets(
+    'keeps the answer visible for loading and offline frame requests without actions',
+    (tester) async {
+      for (final state in [
+        ChatEvidenceReferenceState.loading,
+        ChatEvidenceReferenceState.offline,
+      ]) {
+        final reference = ChatEvidenceReference(
+          id: 'request-${state.wireValue}',
+          kind: ChatEvidenceReferenceKind.request,
+          state: state,
+          requestId: 'request-${state.wireValue}',
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Column(
+                children: [
+                  const Text('The answer remains available.'),
+                  ChatEvidenceReferenceCard(reference: reference),
+                ],
+              ),
+            ),
+          ),
+        );
+
+        expect(find.text('The answer remains available.'), findsOneWidget);
+        expect(find.text(reference.statusLabel), findsOneWidget);
+        expect(reference.canOpen, isFalse);
+        expect(find.byType(InkWell), findsNothing);
+        final semantics = tester.getSemantics(
+          find.byKey(ValueKey('chat-evidence-${reference.id}')),
+        );
+        expect(semantics.label, contains(reference.accessibilityLabel));
+      }
+    },
+  );
+
   testWidgets('empty envelopes render no supplemental chrome', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
