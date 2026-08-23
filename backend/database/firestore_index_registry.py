@@ -233,16 +233,24 @@ INDEX_ONLY_REQUIREMENTS = (
         (_asc('app_id'), _asc('chat_session_id'), _asc('__name__')),
     ),
     FirestoreIndexRequirement(
-        'chat_sessions_updated_at_app_id',
+        'chat_sessions_app_id_updated_at',
         'chat_sessions',
         'COLLECTION',
-        (_desc('updated_at'), _asc('app_id'), _asc('__name__')),
+        (_asc('app_id'), _desc('updated_at'), _asc('__name__')),
     ),
     FirestoreIndexRequirement(
-        'chat_sessions_updated_at_app_id_starred',
+        'chat_sessions_app_id_starred_updated_at',
         'chat_sessions',
         'COLLECTION',
-        (_desc('updated_at'), _asc('app_id'), _asc('starred'), _asc('__name__')),
+        (_asc('app_id'), _asc('starred'), _desc('updated_at'), _asc('__name__')),
+    ),
+    # Messages composite index for agent-proxy history queries:
+    # app_id + chat_session_id equality, then created_at DESC for newest-first.
+    FirestoreIndexRequirement(
+        'messages_app_id_chat_session_id_created_at',
+        'messages',
+        'COLLECTION',
+        (_asc('app_id'), _asc('chat_session_id'), _desc('created_at'), _desc('__name__')),
     ),
 )
 
@@ -739,20 +747,20 @@ CURRENT_CHAT_SESSION_QUERY = FirestoreQuerySpec(
     identifier='chat_sessions_current_by_app',
     collection_group='chat_sessions',
     query_scope='COLLECTION',
-    filters=(FirestoreQueryFilter('plugin_id', '==', 'app_id'),),
+    filters=(FirestoreQueryFilter('app_id', '==', 'app_id'),),
     # No `created_at` ordering: Firestore omits documents that lack the ordered
     # field, and a chat session with no timestamp is representable, so ordering
     # in the query would hide a user's existing sessions. The caller reads this
     # filter and picks the newest itself.
-    index_fields=(_asc('plugin_id'), _asc('__name__')),
+    index_fields=(_asc('app_id'), _asc('__name__')),
 )
 
 CURRENT_CHAT_SESSION_ORDERED_QUERY = FirestoreQuerySpec(
     identifier='chat_sessions_current_by_app_created_at',
     collection_group='chat_sessions',
     query_scope='COLLECTION',
-    filters=(FirestoreQueryFilter('plugin_id', '==', 'app_id'),),
-    index_fields=(_asc('plugin_id'), _desc('created_at'), _desc('__name__')),
+    filters=(FirestoreQueryFilter('app_id', '==', 'app_id'),),
+    index_fields=(_asc('app_id'), _desc('created_at'), _desc('__name__')),
 )
 
 # get_app_messages and get_messages' app-scoped branch (no chat_session_id) both

@@ -369,12 +369,12 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "updated_at",
-          "order": "DESCENDING"
-        },
-        {
           "fieldPath": "app_id",
           "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updated_at",
+          "order": "DESCENDING"
         },
         {
           "fieldPath": "__name__",
@@ -387,10 +387,6 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "updated_at",
-          "order": "DESCENDING"
-        },
-        {
           "fieldPath": "app_id",
           "order": "ASCENDING"
         },
@@ -399,8 +395,34 @@
           "order": "ASCENDING"
         },
         {
+          "fieldPath": "updated_at",
+          "order": "DESCENDING"
+        },
+        {
           "fieldPath": "__name__",
           "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "messages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "app_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "chat_session_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created_at",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
         }
       ]
     },
