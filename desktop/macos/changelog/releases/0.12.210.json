@@ -1,0 +1,7 @@
+{
+  "version": "0.12.210",
+  "date": "2026-08-23",
+  "changes": [
+    "Integration suggestions now recognize Gmail on a work or school Google account, and no longer appear when you are reading an article that merely mentions ChatGPT, Claude, or Gemini"
+  ]
+}
