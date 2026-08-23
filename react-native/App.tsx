@@ -1419,7 +1419,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const {width} = useWindowDimensions();
   const macDesktop = Platform.OS === 'macos';
   const compact = width < 1024;
-  const desktopWorkspace = macDesktop || width >= 1024;
+  const desktopWorkspace = macDesktop;
   const floatingPane = width >= 640;
   const composerMaxWidth = width >= 1280 ? 820 : width >= 768 ? 720 : 640;
   const stageOpacity = useRef(new Animated.Value(0)).current;

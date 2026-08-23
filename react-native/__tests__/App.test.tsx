@@ -497,11 +497,12 @@ test('opens host-selected Chat without changing the default route', async () => 
 
   const homeRenderer = await renderApp();
   const homeOutput = JSON.stringify(homeRenderer.toJSON());
-  expect(homeOutput).toContain('Filter saved…');
+  expect(homeOutput).toContain('Search Omi');
   expect(homeOutput).not.toContain('I’m ready.');
 });
 
-test('renders the collapsed reference rail and search-first desktop Home', async () => {
+test('keeps wide browser-like surfaces separate from the native macOS workspace', async () => {
+  mockPlatformOS = 'web';
   const renderer = await renderApp();
   const output = JSON.stringify(renderer.toJSON());
   const tabs = renderer.root.findAll(
@@ -510,13 +511,13 @@ test('renders the collapsed reference rail and search-first desktop Home', async
       node.props.accessibilityRole === 'tab',
   );
 
-  expect(output).toContain('Filter saved…');
-  expect(output).toContain('What matters now');
+  expect(output).toContain('Search Omi');
+  expect(output).toContain('Your Omi, at a glance');
   expect(output).toContain(
-    'Search the conversations and memories saved for you.',
+    'Device status and the conversations and memories saved for you.',
   );
   expect(output).not.toContain('Search what you’ve seen and heard');
-  expect(output).toContain('QA bridge check');
+  expect(output).not.toContain('QA bridge check');
   expect(output).toContain('Open Chat');
   expect(output).not.toContain('I’m ready.');
   expect(output).not.toContain('Ask anything...');
@@ -1517,22 +1518,17 @@ test('presents a full, truthful wide Home unavailable state without leaking endp
   });
 
   const output = JSON.stringify(renderer.toJSON());
-  expect(output).toContain('What matters now');
-  expect(output).toContain('Saved data unavailable');
+  expect(output).toContain('Your Omi, at a glance');
+  expect(output).toContain('Saved data is unavailable.');
   expect(output).toContain(
     'Saved conversations and memories are not available from this Omi service yet. Retry after its persisted projections are connected.',
   );
   expect(output).not.toContain('desktop-conversations-read failed (503)');
   expect(
-    renderer.root.find(
+    renderer.root.findAll(
       node => node.props.accessibilityLabel === 'Home desktop query surface',
-    ).props.style,
-  ).toEqual(expect.objectContaining({flex: 1, backgroundColor: '#171918'}));
-  expect(
-    renderer.root.find(
-      node => node.props.accessibilityLabel === 'Home results panel',
-    ).props.style,
-  ).toEqual(expect.arrayContaining([expect.objectContaining({flex: 1})]));
+    ),
+  ).toHaveLength(0);
 });
 
 test('shows actionable service-unavailable copy when the local backend transport fails', async () => {
