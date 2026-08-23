@@ -12,6 +12,7 @@ from models.product_memory import (
     MemorySubjectScope,
     ProcessingState,
 )
+from utils.memory.product_memory_read_service import iter_authoritative_product_memory_items_newest_first
 from utils.retrieval.tools import entity_timeline_tools as timeline_tools
 
 NOW = datetime(2026, 8, 23, 14, 30, tzinfo=timezone.utc)
@@ -68,6 +69,154 @@ def _item(
     }
     data.update(updates)
     return MemoryItem(**data)
+
+
+class _TimelineSnapshot:
+    def __init__(self, document_id: str, payload: dict):
+        self.id = document_id
+        self._payload = payload
+
+    def to_dict(self):
+        return dict(self._payload)
+
+
+class _OrderedTimelineQuery:
+    def __init__(self, db_client, *, orderings=(), limit_value=None):
+        self._db_client = db_client
+        self._orderings = orderings
+        self._limit_value = limit_value
+
+    def order_by(self, field_path, direction=None):
+        return _OrderedTimelineQuery(
+            self._db_client,
+            orderings=(*self._orderings, (field_path, direction)),
+            limit_value=self._limit_value,
+        )
+
+    def limit(self, value):
+        self._db_client.limits.append(value)
+        return _OrderedTimelineQuery(self._db_client, orderings=self._orderings, limit_value=value)
+
+    def stream(self):
+        self._db_client.orderings.append(self._orderings)
+        rows = list(self._db_client.rows)
+        for field_path, direction in reversed(self._orderings):
+            reverse = direction == "DESCENDING"
+            if field_path == "__name__":
+                key = lambda snapshot: snapshot.id
+            else:
+                key = lambda snapshot, field_path=field_path: snapshot.to_dict()[field_path]
+            rows.sort(key=key, reverse=reverse)
+        return rows[: self._limit_value]
+
+
+class _OrderedTimelineFirestore:
+    def __init__(self, rows):
+        self.rows = rows
+        self.orderings = []
+        self.limits = []
+
+    def collection(self, path):
+        assert path == "users/u1/memory_items"
+        return _OrderedTimelineQuery(self)
+
+
+def _ordered_rows(items):
+    return [_TimelineSnapshot(item.memory_id, item.model_dump(mode="python")) for item in items]
+
+
+def test_ordered_authoritative_iterator_uses_newest_first_updated_at_and_id_tiebreaker():
+    tie_later_id = _item("memory-z", occurred_at=NOW - timedelta(minutes=1), updated_at=NOW)
+    tie_earlier_id = _item("memory-a", occurred_at=NOW - timedelta(minutes=1), updated_at=NOW)
+    older = _item(
+        "memory-older",
+        occurred_at=NOW - timedelta(minutes=2),
+        updated_at=NOW - timedelta(minutes=1),
+    )
+    db_client = _OrderedTimelineFirestore(_ordered_rows([older, tie_later_id, tie_earlier_id]))
+
+    result = list(
+        iter_authoritative_product_memory_items_newest_first(
+            "u1",
+            db_client=db_client,
+            limit=3,
+        )
+    )
+
+    assert [item.memory_id for item in result] == ["memory-a", "memory-z", "memory-older"]
+    assert db_client.orderings == [(('updated_at', "DESCENDING"), ("__name__", None))]
+    assert db_client.limits == [3]
+
+
+def test_ordered_authoritative_iterator_has_deterministic_membership_at_500_row_cap():
+    items = [
+        _item(
+            f"memory-{index:03d}",
+            occurred_at=NOW - timedelta(minutes=index // 2 + 1),
+            updated_at=NOW - timedelta(minutes=index // 2),
+        )
+        for index in range(505)
+    ]
+    expected = sorted(items, key=lambda item: (-item.updated_at.timestamp(), item.memory_id))[:500]
+
+    first_store = _OrderedTimelineFirestore(_ordered_rows(items))
+    second_store = _OrderedTimelineFirestore(_ordered_rows(list(reversed(items))))
+    first_result = list(
+        iter_authoritative_product_memory_items_newest_first(
+            "u1",
+            db_client=first_store,
+            limit=500,
+        )
+    )
+    second_result = list(
+        iter_authoritative_product_memory_items_newest_first(
+            "u1",
+            db_client=second_store,
+            limit=500,
+        )
+    )
+
+    expected_ids = [item.memory_id for item in expected]
+    assert len(first_result) == len(second_result) == 500
+    assert [item.memory_id for item in first_result] == expected_ids
+    assert [item.memory_id for item in second_result] == expected_ids
+    assert first_store.limits == second_store.limits == [500]
+
+
+def test_ordered_authoritative_iterator_is_explicitly_non_exhaustive_at_scan_boundary():
+    items = [
+        _item(
+            f"memory-{index:03d}",
+            occurred_at=NOW - timedelta(minutes=index + 1),
+            updated_at=NOW - timedelta(minutes=index),
+        )
+        for index in range(501)
+    ]
+    db_client = _OrderedTimelineFirestore(_ordered_rows(items))
+
+    bounded_page = list(
+        iter_authoritative_product_memory_items_newest_first(
+            "u1",
+            db_client=db_client,
+            limit=timeline_tools.MAX_TIMELINE_SCAN,
+        )
+    )
+
+    assert len(bounded_page) == timeline_tools.MAX_TIMELINE_SCAN
+    assert bounded_page[0].memory_id == "memory-000"
+    assert bounded_page[-1].memory_id == "memory-499"
+    assert "memory-500" not in {item.memory_id for item in bounded_page}
+    # The iterator returns only the requested prefix; callers must mark the
+    # result non-exhaustive when they probe one extra row.
+    probe = list(
+        iter_authoritative_product_memory_items_newest_first(
+            "u1",
+            db_client=db_client,
+            limit=timeline_tools.MAX_TIMELINE_SCAN + 1,
+        )
+    )
+    assert len(probe) == timeline_tools.MAX_TIMELINE_SCAN + 1
+    assert probe[-1].memory_id == "memory-500"
 
 
 def test_entity_reference_is_canonical_and_unsupported_names_fail_closed():
@@ -140,8 +289,8 @@ def test_tool_is_read_only_bounded_and_double_run_stable(monkeypatch):
     firestore_client = object()
     monkeypatch.setattr(database_client, "get_firestore_client", lambda: firestore_client)
 
-    def reader(uid: str, *, db_client):
-        seen.append((uid, db_client))
+    def reader(uid: str, *, db_client, limit: int):
+        seen.append((uid, db_client, limit))
         yield from items
 
     monkeypatch.setattr(timeline_tools, "_iter_authoritative_items", reader)
@@ -156,8 +305,8 @@ def test_tool_is_read_only_bounded_and_double_run_stable(monkeypatch):
 
     assert first == second
     assert "Entity timeline: person:alice" in first
-    assert [uid for uid, _ in seen] == ["u1", "u1"]
-    assert [client for _, client in seen] == [firestore_client, firestore_client]
+    assert [(uid, limit) for uid, _, limit in seen] == [("u1", timeline_tools.MAX_TIMELINE_SCAN + 1)] * 2
+    assert [client for _, client, _ in seen] == [firestore_client, firestore_client]
     assert "body" not in first
     assert "arguments" not in first
 
@@ -182,7 +331,7 @@ def test_tool_applies_chat_visibility_before_projecting_timeline(monkeypatch):
     monkeypatch.setattr(
         timeline_tools,
         "_iter_authoritative_items",
-        lambda uid, *, db_client: iter([allowed, restricted, blocked, locked, rejected, archived, superseded]),
+        lambda uid, *, db_client, limit: iter([allowed, restricted, blocked, locked, rejected, archived, superseded]),
     )
     result = timeline_tools.get_entity_timeline_tool.invoke(
         {"entity": "person:alice", "limit": 20},
@@ -235,8 +384,10 @@ def test_tool_scan_is_hard_bounded(monkeypatch):
     monkeypatch.setattr(database_client, "get_firestore_client", lambda: object())
     consumed = []
 
-    def reader(uid: str, *, db_client):
-        for index in range(timeline_tools.MAX_TIMELINE_SCAN + 50):
+    def reader(uid: str, *, db_client, limit: int):
+        # Deliberately violate the reader's limit contract: the tool itself
+        # must still stop after the 500-row scan plus one truncation sentinel.
+        for index in range(limit + 50):
             consumed.append(index)
             yield _item(f"mem-{index:03d}")
 

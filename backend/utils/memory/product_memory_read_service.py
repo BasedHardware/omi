@@ -8,12 +8,14 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, Iterable, Iterator, List, Optional, cast
 
+from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from database.firestore_index_registry import (
     CONVERSATION_SOURCE_MEMORY_QUERY,
     SUPERSEDED_MEMORY_BY_CANONICAL_TARGET_QUERY,
     SUPERSEDED_MEMORY_BY_LEGACY_TARGET_QUERY,
+    UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
 )
 from database.memory_collections import MemoryCollections
 from models.product_memory import MemoryAccessPolicy, MemoryItem, MemoryItemStatus
@@ -24,6 +26,7 @@ DEFAULT_PRODUCT_MEMORY_READ_LIMIT = 100
 MAX_PRODUCT_MEMORY_READ_LIMIT = 500
 SOURCE_REPLACEMENT_QUERY_PAGE_LIMIT = 100
 FIRESTORE_IN_QUERY_MAX_VALUES = 30
+MAX_ORDERED_PRODUCT_MEMORY_SCAN_LIMIT = MAX_PRODUCT_MEMORY_READ_LIMIT + 1
 
 
 def fetch_default_product_memory_search(
@@ -123,6 +126,56 @@ def iter_authoritative_product_memory_items(
         item = MemoryItem.model_validate(payload)
         if item.uid != uid:
             raise ValueError(f"memory item uid mismatch: expected {uid}, got {item.uid}")
+        yield item
+
+
+def iter_authoritative_product_memory_items_newest_first(
+    uid: str,
+    *,
+    db_client: Any,
+    limit: int,
+    budget: Optional["ListReadBudget"] = None,
+) -> Iterator[MemoryItem]:
+    """Read a bounded authoritative page in stable newest-first order.
+
+    The explicit ``updated_at DESC, __name__ ASC`` keyset order matches the
+    registered universal canonical-list index.  This seam is for consumers
+    that must choose a deterministic bounded cohort; it deliberately does not
+    imply that the returned page is exhaustive.
+    """
+
+    if limit < 1 or limit > MAX_ORDERED_PRODUCT_MEMORY_SCAN_LIMIT:
+        raise ValueError(f'limit must be between 1 and {MAX_ORDERED_PRODUCT_MEMORY_SCAN_LIMIT}')
+
+    collection_path = MemoryCollections(uid=uid).memory_items
+    collection = db_client.collection(collection_path)
+    query = UNIVERSAL_CANONICAL_LIST_SCAN_QUERY.build(
+        collection,
+        {},
+        field_filter_factory=FieldFilter,
+    )
+    query = query.order_by('updated_at', direction=firestore.Query.DESCENDING).order_by('__name__').limit(limit)
+    if budget is None:
+        snapshots: Iterator[Any] = query.stream()
+    else:
+        timeout = budget.rpc_timeout()
+        try:
+            snapshots = query.stream(timeout=timeout)
+        except TypeError:
+            # Test fakes predating the budget seam.
+            snapshots = query.stream()
+
+    for snapshot in snapshots:
+        if budget is not None:
+            budget.charge(1)
+        raw_payload: object = snapshot.to_dict()
+        payload = cast(Dict[str, Any], raw_payload) if isinstance(raw_payload, dict) else {}
+        item = MemoryItem.model_validate(payload)
+        if item.uid != uid:
+            raise ValueError(f'memory item uid mismatch: expected {uid}, got {item.uid}')
+        document_id = getattr(snapshot, 'id', None)
+        if isinstance(document_id, str) and document_id.strip() and item.memory_id != document_id:
+            raise ValueError(f'memory item id mismatch: expected {document_id}, got {item.memory_id}')
         yield item
 
 
