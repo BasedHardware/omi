@@ -6,7 +6,7 @@ import Foundation
 /// not inspect image/video storage and has no scheduling, persistence, network, or activation
 /// responsibility; a future caller may decide when (or whether) to evaluate the observation.
 enum KnowledgeLedgerTriggerObservationAdapter {
-  static let maxSelectorCharacters = 120
+  static let maxSelectorCharacters = KnowledgeLedgerTriggerObservation.maxSelectorCharacters
 
   static func fromRewindScreenshot(_ screenshot: Screenshot) -> KnowledgeLedgerTriggerObservation {
     KnowledgeLedgerTriggerObservation(
