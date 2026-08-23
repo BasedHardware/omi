@@ -92,7 +92,10 @@ class MemoriesProvider extends ChangeNotifier {
     if (weight != 0) return weight;
     final slot = (a.ledgerSlot ?? '').compareTo(b.ledgerSlot ?? '');
     if (slot != 0) return slot;
-    final validAt = (b.validAt ?? b.updatedAt).compareTo(a.validAt ?? a.updatedAt);
+    // Match the canonical backend/macOS renderer exactly. Recency authority
+    // between concurrently open same-slot rows remains a ratification gate;
+    // clients must not silently invent a different winner meanwhile.
+    final validAt = (a.validAt ?? a.updatedAt).compareTo(b.validAt ?? b.updatedAt);
     if (validAt != 0) return validAt;
     return a.id.compareTo(b.id);
   }

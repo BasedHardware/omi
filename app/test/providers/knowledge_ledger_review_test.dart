@@ -12,6 +12,8 @@ Memory _ledgerMemory({
   int weight = 0,
   bool? review,
   DateTime? invalidAt,
+  DateTime? validAt,
+  String? slot,
 }) {
   return Memory(
     id: id,
@@ -24,8 +26,9 @@ Memory _ledgerMemory({
     userReview: review,
     ledgerSchemaVersion: 'knowledge_ledger.v1',
     ledgerKind: kind,
-    ledgerSlot: kind == KnowledgeLedgerKind.fact ? id : null,
+    ledgerSlot: kind == KnowledgeLedgerKind.fact ? (slot ?? id) : null,
     invalidAt: invalidAt,
+    validAt: validAt,
     intentBacked: true,
     curationWeight: weight,
   );
@@ -65,6 +68,32 @@ void main() {
     expect(provider.currentLedgerPlaybooks.map((row) => row.id), ['playbook']);
     expect(provider.currentLedgerTriggers.map((row) => row.id), ['trigger']);
     expect(provider.historicalLedgerRows.map((row) => row.id), ['closed']);
+  });
+
+  test('current fact ordering matches canonical validity tie breaker', () async {
+    final newer = _ledgerMemory(
+      id: 'newer',
+      kind: KnowledgeLedgerKind.fact,
+      slot: 'home_city',
+      validAt: DateTime.utc(2026, 8, 23),
+    );
+    final older = _ledgerMemory(
+      id: 'older',
+      kind: KnowledgeLedgerKind.fact,
+      slot: 'home_city',
+      validAt: DateTime.utc(2026, 8, 22),
+    );
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+          GetMemoriesResult([newer, older], true),
+      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+          const GetLedgerHistoryResult([], supported: true),
+    );
+    addTearDown(provider.dispose);
+
+    await provider.loadMemories();
+
+    expect(provider.currentLedgerFacts.map((row) => row.id), ['older', 'newer']);
   });
 
   test('review is optimistic but rolls back when canonical persistence fails', () async {
