@@ -1312,15 +1312,29 @@ def write_canonical_external_memory(
     if data.get("ledger_schema_version") is not None:
         raise ValueError("knowledge ledger writes require the dedicated ledger authority")
     client = db_client if db_client is not None else default_db_client
+    original_evidence = _evidence_items_from_payload(data)
+    reissued_evidence = _reissued_external_evidence(uid, original_evidence, db_client=client)
+    payload = dict(data)
+    if [item.evidence_id for item in reissued_evidence] != [item.evidence_id for item in original_evidence]:
+        # A manually re-added fact is a new source artifact. Give the new row a
+        # fresh deterministic identity derived from its newly minted evidence;
+        # the deleted row and evidence remain immutable history.
+        payload["id"] = (
+            "mem_"
+            + deterministic_contract_id(
+                "canonical-external-memory-reissue",
+                {
+                    "uid": uid,
+                    "original_memory_id": data.get("id"),
+                    "evidence_ids": [item.evidence_id for item in reissued_evidence],
+                },
+            )[:32]
+        )
     return write_canonical_extraction_memory(
         uid,
-        data,
+        payload,
         db_client=client,
-        evidence_items=_reissued_external_evidence(
-            uid,
-            _evidence_items_from_payload(data),
-            db_client=client,
-        ),
+        evidence_items=reissued_evidence,
     )
 
 
