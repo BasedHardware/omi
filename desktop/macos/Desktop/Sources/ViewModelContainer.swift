@@ -41,7 +41,6 @@ class ViewModelContainer: ObservableObject {
     chatProvider = provider
     taskChatCoordinator = TaskChatCoordinator(chatProvider: provider)
     ChatProvider.mainInstance = provider
-    RecurringTaskScheduler.shared.configure(taskChatCoordinator: taskChatCoordinator)
 
     // Bind the headless task automation actions (create/toggle/delete/reorder/dump)
     // to this canonical, long-lived TasksViewModel so omi-ctl can drive TASK-01/02/03

@@ -335,11 +335,6 @@ extension SettingsContentView {
           }  // end if taskEnabled
         }
       }
-
-      // Task Agent Settings (merged into Task Assistant subsection)
-      settingsCard(settingId: "advanced.taskassistant.agent") {
-        TaskAgentSettingsView()
-      }
     }
   }
 
