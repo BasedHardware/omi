@@ -79,7 +79,7 @@ class MemoryItem extends StatelessWidget {
                                 size: 15,
                                 color: memory.isHistoricalKnowledgeLedgerRow
                                     ? AppStyles.textTertiary
-                                    : Colors.deepPurpleAccent,
+                                    : AppStyles.textPrimary,
                               ),
                             ),
                           ],
@@ -241,7 +241,7 @@ class MemoryItem extends StatelessWidget {
       icon: Icon(
         accepted ? Icons.thumb_up_outlined : Icons.thumb_down_outlined,
         size: 17,
-        color: selected ? Colors.deepPurpleAccent : AppStyles.textTertiary,
+        color: selected ? AppStyles.textPrimary : AppStyles.textTertiary,
       ),
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
