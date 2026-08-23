@@ -54,7 +54,8 @@ void main() {
     final provider = MemoriesProvider(
       fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
           GetMemoriesResult(rows, true),
-      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async => const [],
+      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+          const GetLedgerHistoryResult([], supported: true),
     );
     addTearDown(provider.dispose);
 
@@ -72,7 +73,8 @@ void main() {
     final provider = MemoriesProvider(
       fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
           GetMemoriesResult([row], true),
-      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async => const [],
+      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+          const GetLedgerHistoryResult([], supported: true),
       reviewMemoryRequest: (id, value) async {
         requested.add(value);
         return false;
@@ -92,7 +94,8 @@ void main() {
     final provider = MemoriesProvider(
       fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
           GetMemoriesResult([row], true),
-      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async => const [],
+      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+          const GetLedgerHistoryResult([], supported: true),
       reviewMemoryRequest: (id, value) async => true,
     );
     addTearDown(provider.dispose);
@@ -108,7 +111,8 @@ void main() {
     final provider = MemoriesProvider(
       fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
           GetMemoriesResult([row], true),
-      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async => const [],
+      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+          const GetLedgerHistoryResult([], supported: true),
       reviewMemoryRequest: (id, value) async => throw StateError('offline'),
     );
     addTearDown(provider.dispose);
@@ -125,7 +129,8 @@ void main() {
     final provider = MemoriesProvider(
       fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
           GetMemoriesResult([current], true),
-      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async => [current, rejected],
+      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+          GetLedgerHistoryResult([current, rejected], supported: true),
     );
     addTearDown(provider.dispose);
 
@@ -134,5 +139,24 @@ void main() {
     expect(provider.memories.map((row) => row.id), ['current', 'rejected']);
     expect(provider.currentLedgerFacts.map((row) => row.id), ['current']);
     expect(provider.historicalLedgerRows.map((row) => row.id), ['rejected']);
+    expect(provider.ledgerHistorySupported, isTrue);
+    expect(provider.ledgerHistoryTruncated, isFalse);
+  });
+
+  test('truncated history remains visible and is labeled partial', () async {
+    final rejected = _ledgerMemory(id: 'rejected', kind: KnowledgeLedgerKind.fact, review: false);
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+          const GetMemoriesResult([], true),
+      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+          GetLedgerHistoryResult([rejected], supported: true, truncated: true),
+    );
+    addTearDown(provider.dispose);
+
+    await provider.loadMemories();
+
+    expect(provider.historicalLedgerRows.map((row) => row.id), ['rejected']);
+    expect(provider.ledgerHistorySupported, isTrue);
+    expect(provider.ledgerHistoryTruncated, isTrue);
   });
 }
