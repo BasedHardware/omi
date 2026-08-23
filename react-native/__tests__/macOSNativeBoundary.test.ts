@@ -32,6 +32,8 @@ test('uses standard visible macOS traffic lights with native window dragging', (
     '[window standardWindowButton:NSWindowZoomButton].hidden = NO;',
   );
   expect(source).toContain('window.movableByWindowBackground = YES;');
+  expect(source).toContain('window.toolbarStyle = NSWindowToolbarStyleUnified;');
+  expect(source).toContain('window.title = @"";');
   expect(source).not.toContain('accessibilityLabel="Window drag handle"');
 });
 
