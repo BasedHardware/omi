@@ -42,6 +42,32 @@ def _check(result: subprocess.CompletedProcess[str], *, action: str) -> str:
     return result.stdout or ''
 
 
+def _project_number(project: str) -> str:
+    """Resolve a project to its number for the run.googleapis.com/secrets annotation.
+
+    gcloud parses that annotation with `^projects/[0-9]{1,19}/secrets/...`, so a
+    project ID in the path makes every later `gcloud run deploy` on the service
+    crash with "Invalid secret path". Cloud Run itself accepts either form, so
+    the breakage only surfaces on the next deploy, not on the attach.
+    """
+    if project.isdigit():
+        return project
+    result = _run(
+        [
+            'gcloud',
+            'projects',
+            'describe',
+            project,
+            '--format=value(projectNumber)',
+        ],
+        capture_output=True,
+    )
+    number = _check(result, action=f'resolving the {project} project number').strip()
+    if not number.isdigit():
+        raise RuntimeError(f'project number for {project} was not numeric')
+    return number
+
+
 def _latest_secret_version(*, project: str, secret: str) -> str:
     result = _run(
         [
@@ -144,14 +170,14 @@ def _normalize_string_mapping(raw: object) -> None:
         raw[key] = _cloud_run_string(value)
 
 
-def _merge_secret_annotation(existing: object, *, project: str, secret: str) -> str:
+def _merge_secret_annotation(existing: object, *, project_number: str, secret: str) -> str:
     entries: dict[str, str] = {}
     if isinstance(existing, str):
         for raw_entry in existing.split(','):
             name, separator, resource = raw_entry.strip().partition(':')
             if name and separator and resource:
                 entries[name] = resource
-    entries[secret] = f'projects/{project}/secrets/{secret}'
+    entries[secret] = f'projects/{project_number}/secrets/{secret}'
     return ','.join(f'{name}:{resource}' for name, resource in sorted(entries.items()))
 
 
@@ -175,7 +201,7 @@ def _merge_container_dependencies(existing: object, *, ingress_container_name: s
 def patch_service(
     service: Mapping[str, Any],
     *,
-    project: str,
+    project_number: str,
     base_revision: str,
     latest_created_revision: str,
     final_revision: str,
@@ -214,7 +240,7 @@ def patch_service(
     )
     template_annotations['run.googleapis.com/secrets'] = _merge_secret_annotation(
         template_annotations.get('run.googleapis.com/secrets'),
-        project=project,
+        project_number=project_number,
         secret=config_secret,
     )
 
@@ -308,7 +334,7 @@ def attach_sidecar(args: argparse.Namespace) -> None:
     ).strip()
     patched = patch_service(
         service,
-        project=args.project,
+        project_number=_project_number(args.project),
         base_revision=args.base_revision,
         latest_created_revision=latest_created_revision,
         final_revision=args.final_revision,

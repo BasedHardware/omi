@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -85,7 +87,7 @@ def test_patch_service_adds_pinned_sidecar_without_losing_ingress_contract():
 
     patched = module.patch_service(
         source,
-        project='example-project',
+        project_number='1031333818730',
         base_revision='desktop-backend-base',
         latest_created_revision='desktop-backend-base',
         final_revision='desktop-backend-final',
@@ -122,6 +124,73 @@ def test_patch_service_adds_pinned_sidecar_without_losing_ingress_contract():
     assert 'name' not in source['spec']['template']['metadata']
 
 
+def test_secret_annotation_uses_a_project_number_gcloud_can_parse():
+    """gcloud rejects a project ID in the run.googleapis.com/secrets annotation.
+
+    Its parser is `^projects/[0-9]{1,19}/secrets/<name>(:v|/versions/v)?$`, so an
+    ID there makes every later `gcloud run deploy` on the service crash with
+    "Invalid secret path". Cloud Run accepts the attach either way, so the break
+    only appears on the next deploy -- long after the change that caused it.
+    """
+    module = _load_module()
+
+    patched = module.patch_service(
+        _service(),
+        project_number='1031333818730',
+        base_revision='desktop-backend-base',
+        latest_created_revision='desktop-backend-base',
+        final_revision='desktop-backend-final',
+        ingress_container_name='desktop-backend-1',
+        config_secret='cloud-run-gmp-config',
+        config_secret_version='7',
+    )
+
+    annotation = patched['spec']['template']['metadata']['annotations']['run.googleapis.com/secrets']
+    assert annotation == 'cloud-run-gmp-config:projects/1031333818730/secrets/cloud-run-gmp-config'
+
+    # verbatim from googlecloudsdk/command_lib/run/secrets_mapping.py
+    gcloud_remote_secret_path = re.compile(
+        r'^projects/(?P<project>[0-9]{1,19})'
+        r'/secrets/(?P<secret>[a-zA-Z0-9-_]{1,255})'
+        r'(?::(?P<version_short>.+)|/versions/(?P<version_long>.+))?$'
+    )
+    for entry in annotation.split(','):
+        _alias, _sep, remote_path = entry.partition(':')
+        assert gcloud_remote_secret_path.search(remote_path), remote_path
+
+
+def test_project_number_passes_through_a_number_without_calling_gcloud(monkeypatch):
+    module = _load_module()
+
+    def fail(*_args, **_kwargs):
+        raise AssertionError('a numeric project must not be resolved through gcloud')
+
+    monkeypatch.setattr(module, '_run', fail)
+
+    assert module._project_number('1031333818730') == '1031333818730'
+
+
+def test_project_number_resolves_an_id_and_rejects_a_non_numeric_answer(monkeypatch):
+    module = _load_module()
+    calls: list[list[str]] = []
+
+    def fake_run(args, *, capture_output=False):
+        calls.append(args)
+        return SimpleNamespace(returncode=0, stdout='1031333818730\n', stderr='')
+
+    monkeypatch.setattr(module, '_run', fake_run)
+    assert module._project_number('based-hardware-dev') == '1031333818730'
+    assert calls == [['gcloud', 'projects', 'describe', 'based-hardware-dev', '--format=value(projectNumber)']]
+
+    monkeypatch.setattr(
+        module,
+        '_run',
+        lambda args, *, capture_output=False: SimpleNamespace(returncode=0, stdout='not-a-number\n', stderr=''),
+    )
+    with pytest.raises(RuntimeError, match='project number'):
+        module._project_number('based-hardware-dev')
+
+
 def test_patch_service_names_an_initial_unnamed_singleton_ingress():
     module = _load_module()
     source = _service()
@@ -132,7 +201,7 @@ def test_patch_service_names_an_initial_unnamed_singleton_ingress():
 
     patched = module.patch_service(
         source,
-        project='example-project',
+        project_number='1031333818730',
         base_revision='desktop-backend-base',
         latest_created_revision='desktop-backend-base',
         final_revision='desktop-backend-final',
@@ -150,7 +219,7 @@ def test_patch_service_refuses_latest_revision_traffic():
     with pytest.raises(ValueError, match='traffic follows latestRevision'):
         module.patch_service(
             _service(latest_traffic=True),
-            project='example-project',
+            project_number='1031333818730',
             base_revision='desktop-backend-base',
             latest_created_revision='desktop-backend-base',
             final_revision='desktop-backend-final',
@@ -166,7 +235,7 @@ def test_patch_service_refuses_a_different_latest_created_revision():
     with pytest.raises(ValueError, match="expected base revision 'desktop-backend-base', found 'another-revision'"):
         module.patch_service(
             _service(),
-            project='example-project',
+            project_number='1031333818730',
             base_revision='desktop-backend-base',
             latest_created_revision='another-revision',
             final_revision='desktop-backend-final',
