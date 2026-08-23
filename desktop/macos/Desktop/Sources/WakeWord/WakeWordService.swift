@@ -16,13 +16,12 @@ final class WakeWordService {
   var now: @MainActor () -> Date = { Date() }
   var onTrigger: @MainActor (String) -> Void = { command in
     log("WakeWord: submitting '\(command)' to the assistant")
-    // `fromVoice: true` is reserved for callers that own a voice-turn lifecycle:
-    // `openAIInputWithQuery` guards it behind `voiceTurnID` +
-    // `VoiceTurnCoordinator.requireCurrentOwner` and returns silently when either is
-    // missing, so passing it without a turn drops the query with no diagnostic.
-    // Push-to-talk owns a turn and passes both; the wake word, like the automation
-    // bridge, submits an already-transcribed command and owns no turn.
-    FloatingControlBarManager.shared.openAIInputWithQuery(command, fromVoice: false)
+    // Hands-free means the answer has to come back the same way the command went out, and
+    // that a second command continues the conversation rather than starting over.
+    // `submitSpokenCommand` is that entry point. It is not the push-to-talk path: that one
+    // presents `.voiceOnly` and owns a `VoiceTurnID` for the whole recording lifecycle,
+    // while a wake word owns no turn — the words were already transcribed when it fired.
+    FloatingControlBarManager.shared.submitSpokenCommand(command)
   }
   private(set) var lastTriggeredCommand: String?
 
@@ -30,7 +29,8 @@ final class WakeWordService {
 
   func observe(
     _ segment: SpeakerSegment,
-    isConversationActive: Bool = WakeWordService.defaultIsConversationActive()
+    isConversationActive: Bool = WakeWordService.defaultIsConversationActive(),
+    isSpeakingAnswer: Bool = WakeWordService.defaultIsSpeakingAnswer()
   ) {
     let parsed = WakeWordSegmentParser.command(
       after: segment.text,
@@ -45,6 +45,15 @@ final class WakeWordService {
 
     guard AssistantSettings.shared.wakeWordEnabled else { return ignore("disabled in settings") }
     guard !isConversationActive else { return ignore("assistant already busy") }
+    // Now that the answer is spoken aloud, the microphone hears it and it lands in the
+    // transcript as the user's own speech — observed live: `Transcript [ADD] Speaker 0:
+    // It's 8 57 p.m. on Sunday...` was Omi, not a person. An answer containing the wake
+    // phrase would command the assistant with its own words, indefinitely.
+    //
+    // This is not a wall in front of the user: `VoiceBargeInPolicy` halts playback the
+    // moment the user actually speaks, so `isSpeaking` is already false by the time their
+    // transcript arrives. Only Omi's own voice is caught here.
+    guard !isSpeakingAnswer else { return ignore("assistant is speaking its answer") }
     // Diarization only sets `isUser` once a speech profile is enrolled, so requiring
     // it alone makes the wake word silently dead for every user who has not enrolled
     // one. Speaker 0 is the primary user everywhere else in this feature set —
@@ -97,6 +106,10 @@ final class WakeWordService {
 
   static func wordCount(_ text: String) -> Int {
     text.split(whereSeparator: \.isWhitespace).count
+  }
+
+  static func defaultIsSpeakingAnswer() -> Bool {
+    FloatingBarVoicePlaybackService.shared.isSpeaking
   }
 
   static func defaultIsConversationActive() -> Bool {

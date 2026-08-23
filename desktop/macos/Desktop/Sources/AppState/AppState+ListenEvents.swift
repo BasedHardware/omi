@@ -14,13 +14,18 @@ extension AppState {
       // Extract speaker_id from backend (e.g. "SPEAKER_00" → 0)
       let speakerId = segment.speaker_id ?? 0
 
+      // Read once, before barge-in can clear it. Barge-in halts playback, so anything
+      // downstream that asks "was Omi speaking?" would be told no by the very segment
+      // that stopped it — including Omi's own voice arriving back through the microphone.
+      let wasSpeakingAnswer = FloatingBarVoicePlaybackService.shared.isSpeaking
+
       // Barge-in interruption: if the user speaks while voice playback is active,
       // halt playback immediately so Omi never talks over the user.
       if VoiceBargeInPolicy.shouldInterrupt(
         isUser: segment.is_user,
         speaker: speakerId,
         text: segment.text,
-        isSpeaking: FloatingBarVoicePlaybackService.shared.isSpeaking
+        isSpeaking: wasSpeakingAnswer
       ) {
         log("Transcription [BARGE-IN]: User spoke mid-playback; interrupting voice output")
         FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
@@ -41,7 +46,7 @@ extension AppState {
         translations: translations
       )
 
-      WakeWordService.shared.observe(newSeg)
+      WakeWordService.shared.observe(newSeg, isSpeakingAnswer: wasSpeakingAnswer)
 
       // Upsert: if we already have a segment with this ID, update it; otherwise append
       if let segId = segment.id,

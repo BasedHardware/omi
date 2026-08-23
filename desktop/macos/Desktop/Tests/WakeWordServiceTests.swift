@@ -92,6 +92,30 @@ final class WakeWordServiceTests: XCTestCase {
     XCTAssertTrue(triggered.isEmpty)
   }
 
+  /// Regression: the answer is spoken aloud, the microphone hears it, and it arrives as
+  /// the user's own speech — live, `Transcript [ADD] Speaker 0: It's 8 57 p.m. on
+  /// Sunday...` was Omi. An answer carrying the wake phrase would command the assistant
+  /// with its own words, indefinitely.
+  func testAssistantsOwnSpokenAnswerCannotRetrigger() {
+    configureService()
+    service.observe(
+      userSegment("Omi, I can help you order food", id: "a"),
+      isConversationActive: false,
+      isSpeakingAnswer: true)
+    XCTAssertTrue(triggered.isEmpty)
+  }
+
+  /// The playback guard is not a wall in front of the user: `VoiceBargeInPolicy` halts
+  /// playback the moment they speak, so their transcript arrives with it already clear.
+  func testUserCommandFiresOncePlaybackHasBeenInterrupted() {
+    configureService()
+    service.observe(
+      userSegment("Omi, let's order food", id: "a"),
+      isConversationActive: false,
+      isSpeakingAnswer: false)
+    XCTAssertEqual(triggered, ["let's order food"])
+  }
+
   func testDeduplicatesBySegmentID() {
     configureService()
     service.observe(userSegment("Omi, let's order food", id: "a"), isConversationActive: false)

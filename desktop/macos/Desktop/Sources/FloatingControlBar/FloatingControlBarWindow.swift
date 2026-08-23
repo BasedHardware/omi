@@ -3688,7 +3688,7 @@ class FloatingControlBarManager {
     window.orderFrontRegardless()
   }
 
-  /// Open AI input with a pre-filled query and auto-send (used by PTT).
+  /// Open AI input with a pre-filled query and auto-send (used by PTT and the wake word).
   func openAIInputWithQuery(
     _ query: String,
     fromVoice: Bool = false,
@@ -3697,9 +3697,14 @@ class FloatingControlBarManager {
     guard let window = window else { return }
     guard let provider = activeFloatingProvider() else { return }
 
-    if fromVoice {
-      guard let voiceTurnID,
-        VoiceTurnCoordinator.shared.requireCurrentOwner(for: voiceTurnID) != nil
+    // The `.voiceOnly` surface belongs to callers that own a turn: it renders nothing, and
+    // every step below re-checks ownership, so entering it without a turn drops the query
+    // with no diagnostic. Selecting it on `voiceTurnID` rather than `fromVoice` says that
+    // directly. Push-to-talk owns a turn and is unchanged. A wake word arrives already
+    // transcribed and owns none, so it falls through to the visible path — where
+    // `fromVoice` still marks it a voice query, which is what makes the answer spoken.
+    if let voiceTurnID {
+      guard VoiceTurnCoordinator.shared.requireCurrentOwner(for: voiceTurnID) != nil
       else { return }
       chatCancellable?.cancel()
       chatCancellable = nil
@@ -4021,16 +4026,27 @@ class FloatingControlBarManager {
   }
 
   /// Send a follow-up query in the existing AI conversation (used by PTT follow-up).
+  /// Submit a hands-free spoken command: the answer is rendered in the bar *and* spoken,
+  /// and a second command continues the same conversation instead of opening a new one.
+  ///
+  /// Separate from push-to-talk, which presents `.voiceOnly` and owns a `VoiceTurnID` for
+  /// the whole recording lifecycle. A wake word owns no turn — the words were already
+  /// transcribed by the time it fires — so it uses the visible surface.
+  func submitSpokenCommand(_ command: String) {
+    sendFollowUpQuery(command, fromVoice: true)
+  }
+
   func sendFollowUpQuery(
     _ query: String,
     fromVoice: Bool = false,
     voiceTurnID: VoiceTurnID? = nil
   ) {
-    if fromVoice {
-      guard let voiceTurnID,
-        VoiceTurnCoordinator.shared.requireCurrentOwner(for: voiceTurnID) != nil
-      else { return }
-    }
+    // A turn that is supplied must be current; no turn is nothing to validate. Same rule
+    // `routeQuery` and `dispatchChatQuery` already apply. Requiring one whenever
+    // `fromVoice` was set is what made a wake word's spoken query vanish silently.
+    guard
+      voiceTurnID.map({ VoiceTurnCoordinator.shared.requireCurrentOwner(for: $0) != nil }) ?? true
+    else { return }
     guard let window = window, window.state.showingAIResponse else {
       // No active conversation — fall back to new conversation
       openAIInputWithQuery(query, fromVoice: fromVoice, voiceTurnID: voiceTurnID)
