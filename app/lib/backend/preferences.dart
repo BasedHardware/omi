@@ -335,7 +335,7 @@ class SharedPreferencesUtil {
   //---------------------- Developer Settings ---------------------------------//
 
   // DEPRECATED: webhook configs should be server-side, not in SharedPreferences.
-  // TODO(SSOT): Move webhook configuration to Firestore/server-managed settings.
+  // TODO(SSOT, #11456): Move webhook configuration to Firestore/server-managed settings.
   String get webhookOnConversationCreated => getString('webhookOnConversationCreated');
 
   set webhookOnConversationCreated(String value) => saveString('webhookOnConversationCreated', value);
@@ -509,7 +509,7 @@ class SharedPreferencesUtil {
 
   // DEPRECATED: GPT completion cache in SharedPreferences has no TTL and duplicates
   // server-side caching. Marked for removal in SSOT migration.
-  // TODO(SSOT): Remove local GPT completion cache; rely on API-level caching with TTL.
+  // TODO(SSOT, #11456): Remove local GPT completion cache; rely on API-level caching with TTL.
   String gptCompletionCache(String key) => getString('gptCompletionCache:$key');
 
   setGptCompletionCache(String key, String value) => saveString('gptCompletionCache:$key', value);
@@ -664,7 +664,7 @@ class SharedPreferencesUtil {
   set preferredSummarizationAppId(String value) => saveString('preferredSummarizationAppId', value);
 
   // DEPRECATED: use API fetch; local cache will be removed.
-  // TODO(SSOT): Remove cachedConversations from SharedPreferences.
+  // TODO(SSOT, #11456): Remove cachedConversations from SharedPreferences.
   List<ServerConversation> get cachedConversations {
     if (getBool('migratedMemories')) {
       final cachedMemories = getStringList('cachedMemories');
@@ -695,7 +695,7 @@ class SharedPreferencesUtil {
 
   // Pending memories - memories created offline that need to be synced
   // DEPRECATED: use API fetch; local cache will be removed.
-  // TODO(SSOT): Remove pendingMemories from SharedPreferences.
+  // TODO(SSOT, #11456): Remove pendingMemories from SharedPreferences.
   List<Memory> get pendingMemories {
     final ownerUid = uid;
     if (ownerUid.isEmpty) return [];
@@ -736,7 +736,7 @@ class SharedPreferencesUtil {
   }
 
   // DEPRECATED: use API fetch; local cache will be removed.
-  // TODO(SSOT): Remove cachedPeople from SharedPreferences.
+  // TODO(SSOT, #11456): Remove cachedPeople from SharedPreferences.
   List<Person> get cachedPeople {
     final people = getStringList('cachedPeople');
     return people.map((e) => Person.fromJson(jsonDecode(e))).toList();
