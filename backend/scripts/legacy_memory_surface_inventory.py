@@ -26,6 +26,8 @@ from typing import Iterable, Mapping, Sequence
 ROOT = Path(__file__).resolve().parents[2]
 BASELINE_PATH = ROOT / "backend" / "scripts" / "legacy_memory_surface_baseline.json"
 BASELINE_REPOSITORY_PATH = "backend/scripts/legacy_memory_surface_baseline.json"
+POTENTIAL_SURFACE_ROLES = frozenset(("reader", "writer", "job"))
+EVIDENCE_SCOPE = "checked_in_source_and_resources"
 
 
 @dataclass(frozen=True)
@@ -42,6 +44,10 @@ class InventoryRule:
     paths: tuple[str, ...]
     pattern: str
     symbol: str
+    # A marker family may span more than one source role.  These are potential
+    # roles for the family, not an exact role for every matched line; they do
+    # not assert that a path is deployed or exercised.
+    potential_roles: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -50,12 +56,14 @@ class Finding:
     symbol: str
     path: str
     line: int
+    potential_roles: tuple[str, ...] = ()
 
     def as_dict(self) -> dict[str, object]:
         return {
             "classification": self.classification,
             "line": self.line,
             "path": self.path,
+            "potential_roles": list(self.potential_roles),
             "symbol": self.symbol,
         }
 
@@ -76,6 +84,7 @@ RULES: tuple[InventoryRule, ...] = (
         ),
         r"_extract_memories|extract_memories_from_text|defer_memory_extraction",
         "eager_extraction_symbol",
+        ("writer",),
     ),
     InventoryRule(
         "short_term_lifecycle",
@@ -88,6 +97,7 @@ RULES: tuple[InventoryRule, ...] = (
         ),
         r"short_term_lifecycle|MemoryTier\.short_term|MemoryLayer\.short_term",
         "short_term_symbol",
+        ("reader", "writer", "job"),
     ),
     InventoryRule(
         "consolidation_promotion",
@@ -98,6 +108,7 @@ RULES: tuple[InventoryRule, ...] = (
         ),
         r"canonical_consolidation|short_term_promotion|consolidat(?:e|ion|ed|ing)|promotion",
         "consolidation_symbol",
+        ("reader", "writer", "job"),
     ),
     InventoryRule(
         "profile_synthesis",
@@ -119,6 +130,7 @@ RULES: tuple[InventoryRule, ...] = (
         ),
         r"ai_user_profile|AIUserProfile|synthesize_ai_user_profile|formatAIProfileSection",
         "profile_symbol",
+        ("reader", "writer"),
     ),
     InventoryRule(
         "old_proactive_assistants",
@@ -129,6 +141,7 @@ RULES: tuple[InventoryRule, ...] = (
         ),
         r"MemoryAssistant|InsightAssistant|SuggestionAssistant|register(?:Memory|Insight|Suggestion)Assistant|GeminiClient|runAdviceExtraction|saveInsightToSQLite|createMemory\(",
         "proactive_assistant_symbol",
+        ("reader", "writer"),
     ),
     InventoryRule(
         "maintenance_resources",
@@ -140,6 +153,7 @@ RULES: tuple[InventoryRule, ...] = (
         ),
         r"memory-maintenance-job|memory-maintenance-hourly|MEMORY_CANONICAL_(?:MAINTENANCE|CONSOLIDATION)|short_term_lifecycle",
         "maintenance_resource_symbol",
+        ("job",),
     ),
 )
 
@@ -177,6 +191,7 @@ def scan(root: Path = ROOT, rules: Sequence[InventoryRule] = RULES) -> list[Find
                             symbol=rule.symbol,
                             path=relative,
                             line=line_number,
+                            potential_roles=rule.potential_roles,
                         )
                     )
     return sorted(findings, key=lambda item: (item.classification, item.path, item.line, item.symbol))
@@ -194,6 +209,30 @@ def counts(findings: Iterable[Finding]) -> dict[str, int]:
     for finding in findings:
         key = f"{finding.classification}|{finding.symbol}|{finding.path}"
         result[key] = result.get(key, 0) + 1
+    return dict(sorted(result.items()))
+
+
+def potential_role_counts(findings: Iterable[Finding]) -> dict[str, int]:
+    """Count source markers by their potential reader/writer/job roles.
+
+    Role counters are intentionally separate from ``counts``.  The latter is
+    the established Gate F baseline contract, while this additional view
+    makes marker-family coverage visible without introducing baseline debt
+    merely by adding metadata.  A finding may have several *potential* roles
+    when its bounded marker family spans lifecycle reads, writes, and
+    orchestration code; this is not an exact per-line producer/consumer/job
+    classification.
+    """
+
+    result: dict[str, int] = {}
+    for finding in findings:
+        unknown_roles = set(finding.potential_roles) - POTENTIAL_SURFACE_ROLES
+        if not finding.potential_roles or unknown_roles:
+            roles = ", ".join(sorted(unknown_roles)) or "none"
+            raise RuntimeError(f"invalid legacy-memory potential roles for {finding.classification}: {roles}")
+        for role in finding.potential_roles:
+            key = f"{role}|{finding.classification}|{finding.symbol}|{finding.path}"
+            result[key] = result.get(key, 0) + 1
     return dict(sorted(result.items()))
 
 
@@ -301,6 +340,7 @@ def report(
 ) -> dict[str, object]:
     findings = scan(root)
     current = counts(findings)
+    potential_roles = potential_role_counts(findings)
     baseline = load_baseline(baseline_path)
     base_baseline = load_baseline_from_ref(base_ref, root=root) if base_ref else None
     growth, shrinkage = evaluate_ratchet(current, baseline, base_baseline=base_baseline)
@@ -309,8 +349,12 @@ def report(
         "base_ref": base_ref,
         "base_ref_has_baseline": base_baseline is not None,
         "counts": current,
+        "evidence_scope": EVIDENCE_SCOPE,
         "findings": [finding.as_dict() for finding in findings],
         "growth": growth,
+        "runtime_proof": False,
+        "potential_role_counts": potential_roles,
+        "potential_role_scope": "marker_family_not_per_line",
         "shrinkage": shrinkage,
         "status": "fail" if growth else "pass",
         "version": 1,
