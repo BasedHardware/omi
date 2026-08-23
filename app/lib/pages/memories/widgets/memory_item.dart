@@ -128,6 +128,10 @@ class MemoryItem extends StatelessWidget {
                       _buildReviewButton(context, accepted: false),
                       const SizedBox(width: AppStyles.spacingS),
                     ],
+                    if (provider.canRevertSupersededFact(memory)) ...[
+                      _buildRevertButton(context),
+                      const SizedBox(width: AppStyles.spacingS),
+                    ],
                     // _buildVisibilityButton(context),
                   ],
                 ),
@@ -252,6 +256,43 @@ class MemoryItem extends StatelessWidget {
       ),
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+    );
+  }
+
+  Widget _buildRevertButton(BuildContext context) {
+    return ListenableBuilder(
+      listenable: provider,
+      builder: (context, _) {
+        final inFlight = provider.isRevertingMemory(memory.id);
+        return Semantics(
+          container: true,
+          label: context.l10n.undo,
+          button: true,
+          enabled: !inFlight,
+          child: IconButton(
+            key: Key('memory_revert_superseded_fact_${memory.id}'),
+            onPressed: inFlight
+                ? null
+                : () async {
+                    final persisted = await provider.revertSupersededFact(memory);
+                    if (!persisted && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(context.l10n.somethingWentWrong)),
+                      );
+                    }
+                  },
+            tooltip: context.l10n.undo,
+            icon: inFlight
+                ? const SizedBox.square(
+                    dimension: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.restore, size: 18),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+        );
+      },
     );
   }
 

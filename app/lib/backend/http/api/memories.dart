@@ -146,6 +146,46 @@ class EditMemoryResult {
   const EditMemoryResult({required this.persisted, this.authoritativeMemory});
 }
 
+class RevertMemoryResult {
+  final bool persisted;
+  final Memory? authoritativeMemory;
+
+  const RevertMemoryResult({required this.persisted, this.authoritativeMemory});
+}
+
+/// Re-open one superseded canonical fact through backend ledger authority.
+///
+/// [operationId] is minted once by the provider for the user tap and remains
+/// stable for this request. The response must carry the appended authoritative
+/// replacement; callers must not infer success from the status code alone.
+Future<RevertMemoryResult> revertMemoryServer(String memoryId, String operationId) async {
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v3/memories/$memoryId/revert',
+    headers: {},
+    method: 'POST',
+    body: json.encode({'operation_id': operationId}),
+  );
+  if (response == null || response.statusCode != 200) {
+    return const RevertMemoryResult(persisted: false);
+  }
+  try {
+    final payload = json.decode(response.body) as Map<String, dynamic>;
+    if (payload['status'] != 'ok') {
+      return const RevertMemoryResult(persisted: false);
+    }
+    final rawMemory = payload['memory'];
+    final authoritativeMemory =
+        rawMemory is Map ? Memory.fromGeneratedWireJson(Map<String, dynamic>.from(rawMemory)) : null;
+    return RevertMemoryResult(
+      persisted: authoritativeMemory != null,
+      authoritativeMemory: authoritativeMemory,
+    );
+  } catch (error) {
+    Logger.warning('revertMemory response decode failed: $error');
+    return const RevertMemoryResult(persisted: false);
+  }
+}
+
 Future<EditMemoryResult> editMemoryServer(String memoryId, String value) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v3/memories/$memoryId',

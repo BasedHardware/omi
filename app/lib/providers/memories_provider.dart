@@ -20,6 +20,7 @@ typedef FetchMemoriesRequest = Future<GetMemoriesResult> Function({int limit, in
 typedef FetchLedgerHistoryRequest = Future<GetLedgerHistoryResult> Function({int limit, int offset});
 typedef ReviewMemoryRequest = Future<bool> Function(String memoryId, bool value);
 typedef EditMemoryRequest = Future<EditMemoryResult> Function(String memoryId, String value);
+typedef RevertMemoryRequest = Future<RevertMemoryResult> Function(String memoryId, String operationId);
 
 Future<GetLedgerHistoryResult> _noLedgerHistory({int limit = 500, int offset = 0}) async =>
     const GetLedgerHistoryResult([], supported: false);
@@ -47,6 +48,8 @@ class MemoriesProvider extends ChangeNotifier {
   final Future<bool> Function(String) _deleteMemoryRequest;
   final ReviewMemoryRequest _reviewMemoryRequest;
   final EditMemoryRequest _editMemoryRequest;
+  final RevertMemoryRequest _revertMemoryRequest;
+  final Set<String> _revertingMemoryIds = {};
 
   MemoriesProvider({
     FetchMemoriesRequest? fetchMemoriesRequest,
@@ -54,12 +57,14 @@ class MemoriesProvider extends ChangeNotifier {
     Future<bool> Function(String)? deleteMemoryRequest,
     ReviewMemoryRequest? reviewMemoryRequest,
     EditMemoryRequest? editMemoryRequest,
+    RevertMemoryRequest? revertMemoryRequest,
   })  : _fetchMemoriesRequest = fetchMemoriesRequest ?? getMemoriesResult,
         _fetchLedgerHistoryRequest =
             fetchLedgerHistoryRequest ?? (fetchMemoriesRequest == null ? getLedgerHistory : _noLedgerHistory),
         _deleteMemoryRequest = deleteMemoryRequest ?? deleteMemoryServer,
         _reviewMemoryRequest = reviewMemoryRequest ?? reviewMemoryServer,
-        _editMemoryRequest = editMemoryRequest ?? editMemoryServer;
+        _editMemoryRequest = editMemoryRequest ?? editMemoryServer,
+        _revertMemoryRequest = revertMemoryRequest ?? revertMemoryServer;
 
   List<Memory> get memories => _memories;
   bool get loading => _loading;
@@ -71,6 +76,32 @@ class MemoriesProvider extends ChangeNotifier {
   int get pendingMemoriesCount => SharedPreferencesUtil().pendingMemories.length;
   bool get ledgerHistorySupported => _ledgerHistorySupported;
   bool get ledgerHistoryTruncated => _ledgerHistoryTruncated;
+
+  bool isRevertingMemory(String memoryId) => _revertingMemoryIds.contains(memoryId);
+
+  bool canRevertSupersededFact(Memory memory) {
+    if (!_isEligibleSupersededFact(memory)) return false;
+    return !_memories.any(
+      (candidate) =>
+          candidate.id != memory.id &&
+          candidate.isCurrentKnowledgeLedgerRow &&
+          candidate.ledgerKind == KnowledgeLedgerKind.fact &&
+          candidate.content.trim() == memory.content.trim() &&
+          candidate.ledgerSlot == memory.ledgerSlot &&
+          candidate.subjectScope == memory.subjectScope &&
+          candidate.subjectEntityId == memory.subjectEntityId,
+    );
+  }
+
+  static bool _isEligibleSupersededFact(Memory memory) {
+    return memory.ledgerSchemaVersion == 'knowledge_ledger.v1' &&
+        memory.ledgerKind == KnowledgeLedgerKind.fact &&
+        memory.intentBacked &&
+        !memory.deleted &&
+        !memory.isLocked &&
+        memory.userReview != false &&
+        (memory.supersededBy ?? '').trim().isNotEmpty;
+  }
 
   List<Memory> get currentLedgerFacts => _memories
       .where(
@@ -204,6 +235,7 @@ class MemoriesProvider extends ChangeNotifier {
     selectedCategory = null;
     _loading = false;
     _isSyncing = false;
+    _revertingMemoryIds.clear();
     _cancelDeletionTimer();
     _lastDeletedMemory = null;
     _pendingDeletionId = null;
@@ -441,6 +473,153 @@ class MemoriesProvider extends ChangeNotifier {
       return false;
     }
     return true;
+  }
+
+  /// Append an authoritative current replacement for one superseded v1 fact.
+  ///
+  /// This is deliberately non-optimistic: the historical row remains
+  /// untouched and no replacement becomes visible until the backend returns a
+  /// fully validated canonical row. A session change discards the late result.
+  Future<bool> revertSupersededFact(Memory memory) async {
+    final sourceIndex = _memories.indexWhere((candidate) => candidate.id == memory.id);
+    if (sourceIndex == -1 || !canRevertSupersededFact(memory) || isRevertingMemory(memory.id)) return false;
+
+    final generation = _sessionGeneration;
+    final operationId = const Uuid().v4();
+    if (!_revertingMemoryIds.add(memory.id)) return false;
+    notifyListeners();
+
+    try {
+      RevertMemoryResult result;
+      try {
+        result = await _revertMemoryRequest(memory.id, operationId);
+      } catch (error) {
+        Logger.warning('MemoriesProvider: fact revert failed for ${memory.id}: $error');
+        return false;
+      }
+      if (generation != _sessionGeneration || !result.persisted) return false;
+
+      final currentSourceIndex = _memories.indexWhere((candidate) => candidate.id == memory.id);
+      if (currentSourceIndex == -1 ||
+          !_isEligibleSupersededFact(_memories[currentSourceIndex]) ||
+          !_sameRevertSource(memory, _memories[currentSourceIndex])) {
+        return false;
+      }
+      final currentSource = _memories[currentSourceIndex];
+      final replacement = result.authoritativeMemory;
+      final currentTail = _matchingCurrentTail(currentSource);
+      if (replacement == null ||
+          !_isAuthoritativeRevertReplacement(
+            currentSource,
+            replacement,
+            expectedVisibility: currentTail?.visibility,
+          )) {
+        return false;
+      }
+
+      final existingReplacementIndex = _memories.indexWhere((candidate) => candidate.id == replacement.id);
+      if (existingReplacementIndex == -1) {
+        _memories.add(replacement);
+      } else if (!_sameAuthoritativeReplacement(_memories[existingReplacementIndex], replacement)) {
+        return false;
+      }
+      _setCategories();
+      return true;
+    } finally {
+      final removed = _revertingMemoryIds.remove(memory.id);
+      if (removed && generation == _sessionGeneration) notifyListeners();
+    }
+  }
+
+  static bool _sameRevertSource(Memory requested, Memory current) {
+    return requested.id == current.id &&
+        requested.uid == current.uid &&
+        requested.content == current.content &&
+        requested.ledgerSchemaVersion == current.ledgerSchemaVersion &&
+        requested.ledgerKind == current.ledgerKind &&
+        requested.ledgerSlot == current.ledgerSlot &&
+        requested.subjectScope == current.subjectScope &&
+        requested.subjectEntityId == current.subjectEntityId &&
+        requested.supersededBy == current.supersededBy &&
+        requested.invalidAt == current.invalidAt &&
+        requested.curationWeight == current.curationWeight &&
+        requested.userReview == current.userReview;
+  }
+
+  Memory? _matchingCurrentTail(Memory source) {
+    final seen = <String>{source.id};
+    var successorId = (source.supersededBy ?? '').trim();
+    while (successorId.isNotEmpty && seen.add(successorId)) {
+      final matches = _memories.where((candidate) => candidate.id == successorId).toList(growable: false);
+      if (matches.length != 1) break;
+      final successor = matches.single;
+      if (successor.isCurrentKnowledgeLedgerRow && successor.ledgerKind == KnowledgeLedgerKind.fact) {
+        return successor;
+      }
+      successorId = (successor.supersededBy ?? '').trim();
+    }
+
+    // A bounded history page may omit an intermediate link. Fall back only to
+    // one unambiguous current row with the selected fact's canonical identity.
+    final candidates = _memories
+        .where(
+          (candidate) =>
+              candidate.isCurrentKnowledgeLedgerRow &&
+              candidate.ledgerKind == KnowledgeLedgerKind.fact &&
+              candidate.ledgerSlot == source.ledgerSlot &&
+              candidate.subjectScope == source.subjectScope &&
+              candidate.subjectEntityId == source.subjectEntityId,
+        )
+        .toList(growable: false);
+    return candidates.length == 1 ? candidates.single : null;
+  }
+
+  static bool _isAuthoritativeRevertReplacement(
+    Memory source,
+    Memory replacement, {
+    MemoryVisibility? expectedVisibility,
+  }) {
+    return replacement.id.trim().isNotEmpty &&
+        replacement.id != source.id &&
+        replacement.uid == source.uid &&
+        replacement.ledgerSchemaVersion == 'knowledge_ledger.v1' &&
+        replacement.ledgerKind == KnowledgeLedgerKind.fact &&
+        replacement.intentBacked &&
+        replacement.writeReason == 'direct_user_statement' &&
+        !replacement.deleted &&
+        !replacement.isLocked &&
+        replacement.userReview != false &&
+        replacement.validAt != null &&
+        replacement.invalidAt == null &&
+        (replacement.supersededBy ?? '').trim().isEmpty &&
+        replacement.content.trim() == source.content.trim() &&
+        replacement.ledgerSlot == source.ledgerSlot &&
+        replacement.subjectScope == source.subjectScope &&
+        replacement.subjectEntityId == source.subjectEntityId &&
+        replacement.curationWeight == source.curationWeight &&
+        replacement.evidence.any(
+          (evidence) => evidence['source_type'] == 'explicit_user_revert' && evidence['source_id'] == source.id,
+        ) &&
+        (expectedVisibility == null || replacement.visibility == expectedVisibility);
+  }
+
+  static bool _sameAuthoritativeReplacement(Memory current, Memory returned) {
+    return current.id == returned.id &&
+        current.uid == returned.uid &&
+        current.content == returned.content &&
+        current.ledgerSchemaVersion == returned.ledgerSchemaVersion &&
+        current.ledgerKind == returned.ledgerKind &&
+        current.ledgerSlot == returned.ledgerSlot &&
+        current.subjectScope == returned.subjectScope &&
+        current.subjectEntityId == returned.subjectEntityId &&
+        current.curationWeight == returned.curationWeight &&
+        current.visibility == returned.visibility &&
+        current.validAt == returned.validAt &&
+        current.supersededBy == returned.supersededBy &&
+        current.invalidAt == returned.invalidAt &&
+        current.intentBacked == returned.intentBacked &&
+        current.writeReason == returned.writeReason &&
+        current.userReview == returned.userReview;
   }
 
   Memory? _lastDeletedMemory;
