@@ -8,7 +8,7 @@ plugin_id=<app_id>), so they would be invisible to the app_id-based queries
 until this backfill copies plugin_id -> app_id.
 
 Iterates all users' messages and chat_sessions subcollections and patches
-documents that have plugin_id set but no app_id. Idempotent; safe to re-run.
+documents that have plugin_id set but no app_id field. Idempotent; safe to re-run.
 
 Usage:
     python 008_backfill_chat_app_id.py [--dry-run] [--uid USER_ID] [--batch-size 100]
@@ -23,12 +23,10 @@ import sys
 import os
 import argparse
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# Load backend/.env before importing modules that read env at import time.
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 import logging
@@ -38,43 +36,62 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 
 def _firestore_client():
-    """Return a Firestore client, initializing Firebase Admin on first use.
-
-    Deferred so this migration module keeps import-time purity (the production
-    import-purity gate scans backend/migrations too).
-    """
-    try:
-        if not firebase_admin._apps:
-            firebase_admin.initialize_app(credentials.ApplicationDefault())
-    except Exception as e:
-        logger.error("Error initializing Firebase Admin SDK. Make sure GOOGLE_APPLICATION_CREDENTIALS is set.")
-        logger.error(e)
-        sys.exit(1)
+    """Return a Firestore client, lazy-init."""
+    if not firebase_admin._apps:
+        firebase_admin.initialize_app(credentials.ApplicationDefault())
     return firestore.client()
 
 
-def _backfill_collection(client, collection_name: str, dry_run: bool, batch_size: int) -> int:
+def _backfill_collection(client, collection_name: str, dry_run: bool, batch_size: int, uid: str | None) -> int:
+    """
+    Scan documents missing app_id but having plugin_id; copy plugin_id → app_id.
+
+    Uses a cursor-based query that advances on each page so dry-run never loops
+    forever on the same batch. Honors --uid to restrict scope.
+    """
     patched = 0
-    for user_snapshot in client.collection('users').stream():
-        uid = user_snapshot.id
-        col = client.collection('users').document(uid).collection(collection_name)
-        # plugin_id-only legacy docs: field set, app_id absent.
-        query = col.where('plugin_id', '!=', None).where('app_id', '==', None).limit(500)
-        docs = list(query.stream())
-        while docs:
+    if uid:
+        doc_ref = client.collection('users').document(uid)
+        user_snapshots = [doc_ref.get()] if doc_ref.get().exists else []
+    else:
+        user_snapshots = client.collection('users').stream()
+
+    for user_snapshot in user_snapshots:
+        uid_val = user_snapshot.id
+        col = client.collection('users').document(uid_val).collection(collection_name)
+
+        # cursor-based page: scan for docs where app_id is absent (missing field)
+        # and plugin_id is set. Use start_after to advance.
+        cursor = None
+        while True:
+            query = col.where('plugin_id', '!=', None).limit(batch_size)
+            if cursor is not None:
+                query = query.start_after(cursor)
+
+            docs = list(query.stream())
+            if not docs:
+                break
+
             batch = client.batch()
+            page_patched = 0
             for doc in docs:
                 data = doc.to_dict() or {}
-                plugin_id = data.get('plugin_id')
-                if not plugin_id:
-                    continue
-                logger.info('%s %s/%s plugin_id=%s -> app_id', collection_name, uid, doc.id, plugin_id)
-                batch.update(doc.reference, {'app_id': plugin_id})
-                patched += 1
-            if not dry_run:
+                # Only patch if app_id is MISSING (absent field), not just None.
+                # Firestore null equality does not match missing fields.
+                if 'app_id' not in data or data.get('app_id') is None:
+                    plugin_id_val = data.get('plugin_id')
+                    if plugin_id_val:
+                        logger.info('%s %s/%s plugin_id=%s -> app_id', collection_name, uid_val, doc.id, plugin_id_val)
+                        batch.update(doc.reference, {'app_id': plugin_id_val})
+                        page_patched += 1
+
+            patched += page_patched
+            if not dry_run and page_patched:
                 batch.commit()
-            time.sleep(0.05)
-            docs = list(query.stream())
+                time.sleep(0.05)
+
+            cursor = docs[-1]
+
     return patched
 
 
@@ -82,15 +99,14 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--dry-run', action='store_true', help='only log; do not write')
     parser.add_argument('--uid', help='restrict to one user (subcollection scoped by users/{uid})')
-    parser.add_argument('--batch-size', type=int, default=100)
+    parser.add_argument('--batch-size', type=int, default=100, help='batch size (Firestore max 500)')
     args = parser.parse_args()
 
-    if args.uid:
-        logger.info("Skipping --uid: this backfill reads a user's subcollections via the users stream.")
+    batch_size = min(args.batch_size, 500)
     client = _firestore_client()
     for collection_name in ('messages', 'chat_sessions'):
         start = time.time()
-        patched = _backfill_collection(client, collection_name, args.dry_run, args.batch_size)
+        patched = _backfill_collection(client, collection_name, args.dry_run, batch_size, args.uid)
         logger.info('%s: %d documents patched in %.1fs', collection_name, patched, time.time() - start)
     return 0
 
