@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import yaml
 
 SCRIPT = Path(__file__).resolve().parents[2] / 'scripts' / 'attach_cloud_run_gmp_sidecar.py'
 
@@ -243,3 +244,62 @@ def test_patch_service_refuses_a_different_latest_created_revision():
             config_secret='cloud-run-gmp-config',
             config_secret_version='7',
         )
+
+
+def test_gcloud_export_loader_preserves_on_off_env_values_as_strings() -> None:
+    """gcloud writes `value: on` unquoted; YAML 1.1 would make that a boolean.
+
+    These bytes are copied from a real `gcloud run services describe
+    --format=export` of the production backend service. Under yaml.safe_load
+    the three flags come back as booleans and the dump back through
+    `services replace` rewrites them to 'true'/'false', which is what broke
+    development deploys at the post-deploy runtime-env validator.
+    """
+    module = _load_module()
+    export = """\
+spec:
+  template:
+    spec:
+      containerConcurrency: 80
+      containers:
+      - name: backend-1
+        env:
+        - name: MEMORY_ENABLED
+          value: on
+        - name: ACCOUNT_CUTOVER_ENFORCEMENT
+          value: off
+        - name: PUBLIC_SHARED_CONVERSATION_CHAT_MODE
+          value: off
+        - name: MEMORY_V3_CURSOR_SECRET_VERSION
+          value: prod-v1
+        - name: REDIS_DB_PORT
+          value: '13151'
+        ports:
+        - containerPort: 8080
+        readinessProbe:
+          periodSeconds: 240
+"""
+    loaded = yaml.load(export, Loader=module.GcloudExportLoader)
+    container = loaded['spec']['template']['spec']['containers'][0]
+    env = {entry['name']: entry['value'] for entry in container['env']}
+
+    assert env['MEMORY_ENABLED'] == 'on'
+    assert env['ACCOUNT_CUTOVER_ENFORCEMENT'] == 'off'
+    assert env['PUBLIC_SHARED_CONVERSATION_CHAT_MODE'] == 'off'
+    assert all(isinstance(value, str) for value in env.values())
+
+    # structural numbers must still load as numbers, not strings
+    assert container['ports'][0]['containerPort'] == 8080
+    assert container['readinessProbe']['periodSeconds'] == 240
+    assert loaded['spec']['template']['spec']['containerConcurrency'] == 80
+
+    # and the round trip back out must reproduce what gcloud gave us
+    round_tripped = yaml.load(yaml.safe_dump(loaded), Loader=module.GcloudExportLoader)
+    assert round_tripped == loaded
+
+
+def test_gcloud_export_loader_still_reads_real_booleans() -> None:
+    """Only the YAML 1.1 extras are dropped; the 1.2 core set is intact."""
+    module = _load_module()
+    loaded = yaml.load('a: true\nb: false\nc: on\nd: off\ne: yes\nf: no\n', Loader=module.GcloudExportLoader)
+    assert loaded == {'a': True, 'b': False, 'c': 'on', 'd': 'off', 'e': 'yes', 'f': 'no'}

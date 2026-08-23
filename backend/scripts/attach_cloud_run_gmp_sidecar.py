@@ -14,7 +14,39 @@ import subprocess
 import tempfile
 from typing import Any, Mapping, Sequence, cast
 
+import re
 import yaml
+
+
+class GcloudExportLoader(yaml.SafeLoader):
+    """Read gcloud's YAML export under YAML 1.2 core semantics.
+
+    gcloud emits plain `on` / `off` for *string* env values -- production's
+    export literally contains `value: on` for MEMORY_ENABLED. PyYAML implements
+    YAML 1.1, where `on`/`off`/`yes`/`no` are booleans, so `yaml.safe_load`
+    turns those into True/False and dumping back through `services replace`
+    rewrites the live value to 'true'/'false'.
+
+    Nothing fails at attach time: Cloud Run stores the rewritten string happily
+    and every consumer of these three flags accepts the coerced spelling. It
+    surfaces one step later, when the post-deploy runtime-env validator compares
+    the live value against the manifest's 'on' and finds 'true' -- on a service
+    nobody edited. Restricting the bool resolver to the YAML 1.2 core set makes
+    the round trip preserve exactly what gcloud wrote. Genuine unquoted numbers
+    (containerPort, periodSeconds) and real booleans still load as themselves.
+    """
+
+
+GcloudExportLoader.yaml_implicit_resolvers = {
+    key: [(tag, regexp) for tag, regexp in resolvers if tag != 'tag:yaml.org,2002:bool']
+    for key, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
+}
+GcloudExportLoader.add_implicit_resolver(
+    'tag:yaml.org,2002:bool',
+    re.compile(r'^(?:true|True|TRUE|false|False|FALSE)$'),
+    list('tTfF'),
+)
+
 
 SIDECAR_IMAGE = (
     'us-docker.pkg.dev/cloud-ops-agents-artifacts/cloud-run-gmp-sidecar/'
@@ -310,7 +342,7 @@ def attach_sidecar(args: argparse.Namespace) -> None:
         ],
         capture_output=True,
     )
-    service = yaml.safe_load(_check(export, action=f'exporting {args.service}'))
+    service = yaml.load(_check(export, action=f'exporting {args.service}'), Loader=GcloudExportLoader)
     if not isinstance(service, dict):
         raise RuntimeError('Cloud Run service export was not a mapping')
     latest_created = _run(
