@@ -2054,6 +2054,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get memoryDeleted => 'Ang Alaala ay Natanggal.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Undo';
 
   @override

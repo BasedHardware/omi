@@ -2055,6 +2055,9 @@ class AppLocalizationsCa extends AppLocalizations {
   String get memoryDeleted => 'Record eliminat.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Desfer';
 
   @override

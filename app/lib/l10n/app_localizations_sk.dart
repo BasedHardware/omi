@@ -2047,6 +2047,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get memoryDeleted => 'Spomienka bola odstránená.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Vrátiť späť';
 
   @override

@@ -2017,6 +2017,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String get memoryDeleted => 'याद हटा दी गई।';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'पूर्ववत करें';
 
   @override

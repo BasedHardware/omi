@@ -135,6 +135,29 @@ void main() {
     expect(provider.historicalLedgerRows.map((item) => item.id), ['fact']);
   });
 
+  test('accepting a rejected row restores it to the current projection', () async {
+    final row = _ledgerMemory(id: 'rejected', kind: KnowledgeLedgerKind.fact, review: false);
+    final requested = <bool>[];
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+          const GetMemoriesResult([], true),
+      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+          GetLedgerHistoryResult([row], supported: true),
+      reviewMemoryRequest: (id, value) async {
+        requested.add(value);
+        return true;
+      },
+    );
+    addTearDown(provider.dispose);
+    await provider.loadMemories();
+
+    expect(provider.historicalLedgerRows.map((item) => item.id), ['rejected']);
+    expect(await provider.reviewMemory(row, true), isTrue);
+    expect(requested, [true]);
+    expect(provider.currentLedgerFacts.map((item) => item.id), ['rejected']);
+    expect(provider.historicalLedgerRows, isEmpty);
+  });
+
   test('transport exceptions roll back the optimistic review', () async {
     final row = _ledgerMemory(id: 'fact', kind: KnowledgeLedgerKind.fact, review: true);
     final provider = MemoriesProvider(

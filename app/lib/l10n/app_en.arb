@@ -2065,6 +2065,10 @@
     "@memoryDeleted": {
         "description": "Notification when memory deleted"
     },
+    "memoryHistoryPartial": "Some memory history is unavailable. Showing the history received so far.",
+    "@memoryHistoryPartial": {
+        "description": "Notice shown when the memory history response is truncated"
+    },
     "undo": "Undo",
     "@undo": {
         "description": "Undo button text"

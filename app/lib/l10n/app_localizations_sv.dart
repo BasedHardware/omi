@@ -2044,6 +2044,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get memoryDeleted => 'Minne borttaget.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Ångra';
 
   @override

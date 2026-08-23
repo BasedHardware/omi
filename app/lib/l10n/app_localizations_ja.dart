@@ -2004,6 +2004,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get memoryDeleted => '記憶を削除しました';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => '元に戻す';
 
   @override

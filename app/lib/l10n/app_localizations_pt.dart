@@ -2018,6 +2018,9 @@ class AppLocalizationsPt extends AppLocalizations {
   String get memoryDeleted => 'Memória apagada.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Desfazer';
 
   @override

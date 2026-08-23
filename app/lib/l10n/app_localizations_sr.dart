@@ -2041,6 +2041,9 @@ class AppLocalizationsSr extends AppLocalizations {
   String get memoryDeleted => 'Сећање је избрисано.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Врати';
 
   @override
