@@ -101,6 +101,7 @@ class Message(BaseModel):
     message_source: Optional[str] = None
     journal_revision: Optional[int] = None
     chart_data: Optional[Union[ChartData, dict]] = None  # Inline chart visualization data
+
     @model_validator(mode='before')
     @classmethod
     def _sync_app_and_plugin_ids(cls, data: Any) -> Any:
@@ -318,6 +319,15 @@ class ChatSession(BaseModel):
     created_at: datetime
     openai_thread_id: Optional[str] = None
     openai_assistant_id: Optional[str] = None
+
+    @model_validator(mode='before')
+    @classmethod
+    def _sync_app_and_plugin_ids(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            plugin_id_val = data.get('plugin_id')
+            if plugin_id_val is not None and data.get('app_id') is None:
+                data['app_id'] = plugin_id_val
+        return data
 
     def add_file_ids(self, new_file_ids: List[str]):
         if self.file_ids is None:
