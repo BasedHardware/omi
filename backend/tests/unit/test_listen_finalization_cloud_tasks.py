@@ -39,7 +39,7 @@ def _prod_backend_sync_runtime_env(monkeypatch):
     validator = runpy.run_path(
         str(backend_root / 'scripts/validate-backend-runtime-env.py'), run_name='validate_backend_runtime_env_contract'
     )
-    assert validator['validate_runtime_env'](env='prod', check_workflows=True, check_rendered_cloud_run=True) == []
+    assert validator['validate_runtime_env'](env='prod', check_workflows=True) == []
 
     manifest = renderer['_load_yaml'](renderer['DEFAULT_MANIFEST'])
     env_entries = manifest['environments']['prod']['cloud_run']['services']['backend-sync']['env']

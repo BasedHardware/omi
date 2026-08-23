@@ -21,7 +21,6 @@ from scripts.runtime_env_durable_dispatch_contracts import (  # noqa: E402
 from scripts.runtime_env_parakeet_contract import validate_parakeet_admission_contract  # noqa: E402
 from scripts.runtime_env_memory_contract import validate_retired_memory_manifest  # noqa: E402
 from scripts.runtime_env_validation.cloud_run import (  # noqa: E402
-    _build_rendered_cloud_run_state,
     _fetch_live_cloud_run_state,
     _validate_cloud_run,
 )
@@ -79,7 +78,6 @@ __all__ = [
     'validate_runtime_env',
     '_as_config_dict',
     '_as_config_list',
-    '_build_rendered_cloud_run_state',
     '_canonical_memory_surfaces',
     '_config_map_names',
     '_env_entries_by_name',
@@ -147,11 +145,6 @@ def main() -> int:
         help='Immutable source root for workflow YAML and local composite actions; defaults to the runtime root.',
     )
     parser.add_argument(
-        '--check-rendered-cloud-run',
-        action='store_true',
-        help='Validate manifest Cloud Run env/secrets against an offline rendered revision shape.',
-    )
-    parser.add_argument(
         '--strict-provisional',
         action='store_true',
         help='Require provisional manifest values to match exactly. By default they only require presence.',
@@ -163,7 +156,6 @@ def main() -> int:
         manifest_path=args.manifest,
         cloud_run_state_path=args.cloud_run_state,
         check_live_cloud_run=args.check_live_cloud_run,
-        check_rendered_cloud_run=args.check_rendered_cloud_run,
         check_workflows=args.check_workflows,
         workflow_root=args.workflow_root,
         strict_provisional=args.strict_provisional,
