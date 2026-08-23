@@ -191,6 +191,49 @@ def test_retrieval_is_summary_only_until_explicit_evidence_hydration(conversatio
     )
 
 
+def test_jit_cards_project_only_bounded_calendar_backed_participant_names(conversation_tools_module) -> None:
+    conversation = _conversation_fixture()
+    conversation["external_data"] = {
+        "calendar_meeting_context": {
+            "calendar_source": "google_calendar",
+            "participants": [
+                {"name": " Ada   Lovelace ", "email": "ada@example.com"},
+                {"name": "ada lovelace", "email": "duplicate@example.com"},
+                {"name": "email-only@example.com", "email": "email-only@example.com"},
+            ],
+        },
+        "screen_meeting_context": {"participants": [{"name": "Untrusted OCR Name"}]},
+    }
+    conversation["calendar_event"] = {
+        "attendees": ["Grace Hopper", "Ada Lovelace"],
+        "attendee_emails": ["grace@example.com", "ada@example.com"],
+    }
+
+    result = _jit_module().format_jit_results([conversation])
+
+    assert "participants: Ada Lovelace | Grace Hopper" in result
+    assert "example.com" not in result
+    assert "Untrusted OCR Name" not in result
+
+
+def test_jit_cards_reject_unattributed_calendar_context_and_bound_participants(conversation_tools_module) -> None:
+    conversation = _conversation_fixture()
+    conversation["external_data"] = {
+        "calendar_meeting_context": {
+            "participants": [{"name": "Unattributed Name"}],
+        }
+    }
+    conversation["calendar_event"] = {
+        "attendees": [f"Participant {index}" for index in range(20)],
+    }
+
+    result = _jit_module().format_jit_results([conversation])
+
+    assert "Unattributed Name" not in result
+    assert "Participant 11" in result
+    assert "Participant 12" not in result
+
+
 def test_jit_evidence_rejects_unresolvable_conversation_identity(conversation_tools_module) -> None:
     references: list = []
     result = _jit_module().format_jit_results(

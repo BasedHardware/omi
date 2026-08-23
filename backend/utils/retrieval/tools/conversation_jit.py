@@ -22,10 +22,15 @@ MAX_JIT_ACTION_ITEM_CHARS = 240
 MAX_JIT_CATEGORY_CHARS = 80
 MAX_JIT_EMOJI_CHARS = 16
 MAX_JIT_TIMESTAMP_CHARS = 64
+MAX_JIT_PARTICIPANTS = 12
+MAX_JIT_PARTICIPANT_NAME_CHARS = 96
 JIT_TRUNCATION_MARKER = "[Bounded JIT result omitted additional evidence records.]"
 JIT_CONVERSATION_RETRIEVAL_ENV = "JIT_CONVERSATION_RETRIEVAL_ENABLED"
 JIT_CONVERSATION_RETRIEVAL_CONFIG_KEY = "jit_conversation_retrieval_enabled"
 _SAFE_IDENTITY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._~-]*$")
+_CALENDAR_BACKED_SOURCES = frozenset(
+    {"system_calendar", "macos_calendar", "google", "google_calendar", "outlook_calendar"}
+)
 
 
 def _is_enabled_value(value: Any) -> bool:
@@ -94,6 +99,56 @@ def _normalized_timestamp(value: Any) -> Optional[str]:
     return parsed.isoformat()[:MAX_JIT_TIMESTAMP_CHARS]
 
 
+def _bounded_participant_name(value: Any) -> Optional[str]:
+    """Return one display-only participant name without leaking addresses or controls."""
+    if not isinstance(value, str):
+        return None
+    normalized = " ".join(value.split()).strip()
+    if not normalized or "@" in normalized:
+        return None
+    return normalized[:MAX_JIT_PARTICIPANT_NAME_CHARS]
+
+
+def _participant_names_from_data(conversation_data: Dict[str, Any]) -> List[str]:
+    """Project bounded names only from attributable calendar records.
+
+    Screen-derived meeting identity is intentionally excluded: OCR can contain
+    unrelated calendar tiles and is not authoritative participant evidence.
+    """
+    candidates: List[Any] = []
+    external_data = conversation_data.get("external_data")
+    external = external_data if isinstance(external_data, dict) else {}
+    calendar_context_raw = external.get("calendar_meeting_context") or conversation_data.get("calendar_meeting_context")
+    if (
+        isinstance(calendar_context_raw, dict)
+        and calendar_context_raw.get("calendar_source") in _CALENDAR_BACKED_SOURCES
+    ):
+        participants = calendar_context_raw.get("participants")
+        if isinstance(participants, (list, tuple)):
+            candidates.extend(item.get("name") for item in participants if isinstance(item, dict))
+
+    calendar_event = conversation_data.get("calendar_event")
+    if isinstance(calendar_event, dict):
+        attendees = calendar_event.get("attendees")
+        if isinstance(attendees, (list, tuple)):
+            candidates.extend(attendees)
+
+    names: List[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        name = _bounded_participant_name(candidate)
+        if name is None:
+            continue
+        key = name.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        names.append(name)
+        if len(names) >= MAX_JIT_PARTICIPANTS:
+            break
+    return names
+
+
 def _bounded_identity_component(value: Any, *, fallback: str) -> str:
     """Encode a subordinate identity without delimiter/control-character collisions."""
     normalized = str(value).strip() if value is not None else ""
@@ -150,6 +205,7 @@ def _summary_card_from_data(conversation_data: Dict[str, Any]) -> Optional[Dict[
         "overview": str(structured.get("overview") or "").strip()[:600],
         "category": str(structured.get("category") or "").strip()[:MAX_JIT_CATEGORY_CHARS],
         "emoji": str(structured.get("emoji") or "").strip()[:MAX_JIT_EMOJI_CHARS],
+        "participants": _participant_names_from_data(conversation_data),
         "action_items": [
             str(item.get("description") or item.get("text") or "").strip()[:MAX_JIT_ACTION_ITEM_CHARS]
             for item in action_items[:MAX_JIT_ACTION_ITEMS]
@@ -241,6 +297,8 @@ def _format_summary_card(card: Dict[str, Any], index: int) -> str:
         lines.append(f"title: {card['title']}")
     if card.get("overview"):
         lines.append(f"overview: {card['overview']}")
+    if card.get("participants"):
+        lines.append("participants: " + " | ".join(card["participants"]))
     if card.get("action_items"):
         lines.append("action_items: " + " | ".join(card["action_items"]))
     return "\n".join(lines)
