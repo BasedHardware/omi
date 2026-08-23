@@ -330,10 +330,19 @@ def format_jit_results(
     bounded_conversations = list(conversations_data)[:MAX_JIT_CONVERSATIONS]
     candidates: List[Tuple[Dict[str, Any], Dict[str, Any]]] = []
     seen_conversation_ids: set[str] = set()
+    collected_conversation_ids = {
+        item.get("id")
+        for item in conversations_collected or []
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
+    }
     rejected_or_duplicate = False
     for data in bounded_conversations:
         card = _summary_card_from_data(data)
-        if card is None or card["conversation_id"] in seen_conversation_ids:
+        if (
+            card is None
+            or card["conversation_id"] in seen_conversation_ids
+            or card["conversation_id"] in collected_conversation_ids
+        ):
             rejected_or_duplicate = True
             continue
         seen_conversation_ids.add(card["conversation_id"])
