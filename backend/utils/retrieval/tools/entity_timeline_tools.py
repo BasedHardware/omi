@@ -255,10 +255,10 @@ def format_entity_timeline(timeline: EntityTimeline) -> str:
     return "\n".join(lines).strip()
 
 
-def _iter_authoritative_items(uid: str, *, db_client: Any) -> Iterator[MemoryItem]:
-    from utils.memory.product_memory_read_service import iter_authoritative_product_memory_items
+def _iter_authoritative_items(uid: str, *, db_client: Any, limit: int) -> Iterator[MemoryItem]:
+    from utils.memory.product_memory_read_service import iter_authoritative_product_memory_items_newest_first
 
-    return iter_authoritative_product_memory_items(uid, db_client=db_client)
+    return iter_authoritative_product_memory_items_newest_first(uid, db_client=db_client, limit=limit)
 
 
 def _chat_visible_items(items: List[MemoryItem]) -> List[MemoryItem]:
@@ -303,7 +303,9 @@ def get_entity_timeline_tool(
         from database._client import get_firestore_client
 
         firestore_db = get_firestore_client()
-        stream = _iter_authoritative_items(uid, db_client=firestore_db)
+        stream = _iter_authoritative_items(uid, db_client=firestore_db, limit=MAX_TIMELINE_SCAN + 1)
+        # Keep the consumer boundary independently bounded even if a future
+        # reader implementation fails to honor its explicit storage limit.
         scanned_rows = list(islice(stream, MAX_TIMELINE_SCAN + 1))
         scan_truncated = len(scanned_rows) > MAX_TIMELINE_SCAN
         timeline = build_entity_timeline(
