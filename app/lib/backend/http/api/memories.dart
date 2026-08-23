@@ -85,24 +85,38 @@ Future<List<Memory>> getMemories({int limit = 100, int offset = 0, bool thisDevi
   return result.memories;
 }
 
+class GetLedgerHistoryResult {
+  final List<Memory> memories;
+  final bool supported;
+  final bool truncated;
+
+  const GetLedgerHistoryResult(this.memories, {required this.supported, this.truncated = false});
+}
+
 /// Fetch owner-scoped, non-current canonical ledger rows for review/history.
 ///
 /// Older backends do not expose this additive route; any non-200 response is
 /// therefore treated as an unavailable history projection while the current
 /// memories list remains usable.
-Future<List<Memory>> getLedgerHistory({int limit = 500, int offset = 0}) async {
+Future<GetLedgerHistoryResult> getLedgerHistory({int limit = 500, int offset = 0}) async {
   final response = await makeApiCall(
     url: '${Env.apiBaseUrl}v3/memories/ledger-history?limit=$limit&offset=$offset',
     headers: {},
     method: 'GET',
     body: '',
   );
-  if (response == null || response.statusCode != 200) return const [];
+  if (response == null || response.statusCode != 200) {
+    return const GetLedgerHistoryResult([], supported: false);
+  }
   try {
-    return _decodeMemoriesResponse(response.body);
+    return GetLedgerHistoryResult(
+      _decodeMemoriesResponse(response.body),
+      supported: true,
+      truncated: isOmiListTruncated(response),
+    );
   } catch (error) {
     Logger.error('Failed to decode ledger history 200 response: $error');
-    return const [];
+    return const GetLedgerHistoryResult([], supported: false);
   }
 }
 

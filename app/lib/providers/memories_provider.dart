@@ -17,10 +17,11 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
 typedef FetchMemoriesRequest = Future<GetMemoriesResult> Function({int limit, int offset, bool thisDeviceOnly});
-typedef FetchLedgerHistoryRequest = Future<List<Memory>> Function({int limit, int offset});
+typedef FetchLedgerHistoryRequest = Future<GetLedgerHistoryResult> Function({int limit, int offset});
 typedef ReviewMemoryRequest = Future<bool> Function(String memoryId, bool value);
 
-Future<List<Memory>> _noLedgerHistory({int limit = 500, int offset = 0}) async => const [];
+Future<GetLedgerHistoryResult> _noLedgerHistory({int limit = 500, int offset = 0}) async =>
+    const GetLedgerHistoryResult([], supported: false);
 
 class MemoriesProvider extends ChangeNotifier {
   List<Memory> _memories = [];
@@ -30,6 +31,8 @@ class MemoriesProvider extends ChangeNotifier {
   bool _showOnlyManual = false;
   bool _filterThisDeviceOnly = false;
   bool _deviceScopeSupported = true;
+  bool _ledgerHistorySupported = false;
+  bool _ledgerHistoryTruncated = false;
   Future<void>? _clientDeviceInitialization;
   List<Tuple2<MemoryCategory, int>> categories = [];
   MemoryCategory? selectedCategory;
@@ -62,6 +65,8 @@ class MemoriesProvider extends ChangeNotifier {
   bool get filterThisDeviceOnly => _filterThisDeviceOnly;
   bool get hasPendingMemories => SharedPreferencesUtil().pendingMemories.isNotEmpty;
   int get pendingMemoriesCount => SharedPreferencesUtil().pendingMemories.length;
+  bool get ledgerHistorySupported => _ledgerHistorySupported;
+  bool get ledgerHistoryTruncated => _ledgerHistoryTruncated;
 
   List<Memory> get currentLedgerFacts => _memories
       .where(
@@ -186,6 +191,8 @@ class MemoriesProvider extends ChangeNotifier {
     _showOnlyManual = false;
     _searchQuery = '';
     _filterThisDeviceOnly = false;
+    _ledgerHistorySupported = false;
+    _ledgerHistoryTruncated = false;
     categories = [];
     selectedCategory = null;
     _loading = false;
@@ -308,10 +315,33 @@ class MemoriesProvider extends ChangeNotifier {
     // rejected and closed rows. Device-scoped history has no ratified server
     // contract, so the "This device" view remains current-only.
     if (!_filterThisDeviceOnly) {
-      final historical = await _fetchLedgerHistoryRequest(limit: 500, offset: 0);
-      if (generation != _sessionGeneration) return;
       final seen = all.map((memory) => memory.id).toSet();
-      all.addAll(historical.where((memory) => seen.add(memory.id)));
+      const historyPageSize = 500;
+      const maxHistoryPages = 10;
+      var historyOffset = 0;
+      var historyRowsLoaded = 0;
+      _ledgerHistorySupported = false;
+      _ledgerHistoryTruncated = false;
+      for (var page = 0; page < maxHistoryPages; page++) {
+        final result = await _fetchLedgerHistoryRequest(limit: historyPageSize, offset: historyOffset);
+        if (generation != _sessionGeneration) return;
+        _ledgerHistorySupported = result.supported;
+        if (!result.supported) break;
+        all.addAll(result.memories.where((memory) => seen.add(memory.id)));
+        historyRowsLoaded += result.memories.length;
+        if (result.truncated || result.memories.length < historyPageSize) {
+          _ledgerHistoryTruncated = result.truncated;
+          break;
+        }
+        historyOffset += result.memories.length;
+        if (page == maxHistoryPages - 1) _ledgerHistoryTruncated = true;
+      }
+      if (_ledgerHistoryTruncated) {
+        Logger.warning('MemoriesProvider: ledger history is partial; loaded $historyRowsLoaded rows');
+      }
+    } else {
+      _ledgerHistorySupported = false;
+      _ledgerHistoryTruncated = false;
     }
     // Keep an optimistic delete hidden throughout its undo window. Use the
     // snapshot taken before the fetch so a concurrent finalization that
