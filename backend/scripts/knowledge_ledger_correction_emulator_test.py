@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prove explicit ledger correction and retry semantics on Firestore emulator only."""
+"""Prove explicit ledger correction/revert and retry semantics on Firestore emulator only."""
 
 from __future__ import annotations
 
@@ -32,6 +32,7 @@ NOW = datetime(2026, 8, 23, tzinfo=timezone.utc)
 INITIAL_HEAD = "ledger-correction-emulator-head"
 ORIGINAL_CONTENT = "Lives in Boston"
 CORRECTED_CONTENT = "Lives in Brooklyn"
+REVERT_OPERATION_ID = "5f95a7a1-10c6-4ec3-946d-e76a0a2f7cc5"
 
 
 def _assert_emulator_only() -> None:
@@ -240,10 +241,101 @@ def main() -> int:
         if observed_invalidation.call_args_list != [((uid,), {}), ((uid,), {})]:
             raise AssertionError("correction and idempotent retry did not both invalidate prompt caches")
 
+        before_revert = _authority_snapshot(db_client, collections)
+        restored_authoritative = service.revert_superseded_ledger_fact(uid, prior_id, REVERT_OPERATION_ID)
+        after_revert = _authority_snapshot(db_client, collections)
+        restored_id = restored_authoritative.id
+        prior_after_revert = _read_item(db_client, collections, prior_id)
+        corrected_after_revert = _read_item(db_client, collections, replacement_id)
+        restored = _read_item(db_client, collections, restored_id)
+
+        if restored_id in {prior_id, replacement_id} or set(after_revert["items"]) != {
+            prior_id,
+            replacement_id,
+            restored_id,
+        }:
+            raise AssertionError("revert did not append exactly one fresh lineage row")
+        if len(after_revert["operations"]) != len(before_revert["operations"]) + 1:
+            raise AssertionError("revert did not add exactly one canonical operation")
+        if len(after_revert["commits"]) != len(before_revert["commits"]) + 1:
+            raise AssertionError("revert did not add exactly one canonical commit")
+        if after_revert["control"]["commit_sequence"] != before_revert["control"]["commit_sequence"] + 1:
+            raise AssertionError("revert did not advance canonical sequence exactly once")
+        revert_head = after_revert["control"]["head_commit_id"]
+        revert_commit = after_revert["commits"].get(revert_head)
+        if revert_commit is None or set(revert_commit.get("memory_item_ids") or []) != {
+            replacement_id,
+            restored_id,
+        }:
+            raise AssertionError("single revert commit does not contain the prior tail and restored row")
+        new_revert_operation_ids = set(after_revert["operations"]) - set(before_revert["operations"])
+        if len(new_revert_operation_ids) != 1:
+            raise AssertionError("revert did not create exactly one operation receipt")
+        revert_operation_id = next(iter(new_revert_operation_ids))
+        if revert_commit.get("operation_id") != revert_operation_id:
+            raise AssertionError("revert commit is not joined to its one operation")
+        new_revert_outbox_ids = set(after_revert["outbox"]) - set(before_revert["outbox"])
+        if set(revert_commit.get("outbox_event_ids") or []) != new_revert_outbox_ids:
+            raise AssertionError("revert commit does not identify exactly its outbox events")
+        if {
+            after_revert["outbox"][event_id].get("payload", {}).get("action") for event_id in new_revert_outbox_ids
+        } != {
+            "upsert",
+            "delete",
+        }:
+            raise AssertionError("revert outbox is not the exact restored-upsert/prior-tail-delete pair")
+        if prior_after_revert != prior_after:
+            raise AssertionError("revert mutated the selected historical row")
+        if (
+            corrected_after_revert.status != MemoryItemStatus.superseded
+            or corrected_after_revert.superseded_by != restored_id
+            or corrected_after_revert.valid_to is None
+        ):
+            raise AssertionError("revert did not supersede the current tail")
+        if (
+            restored.status != MemoryItemStatus.active
+            or restored.content != ORIGINAL_CONTENT
+            or restored.valid_to is not None
+            or restored.superseded_by
+            or restored.visibility != replacement.visibility
+            or restored.slot != prior_after.slot
+            or restored.subject_scope != prior_after.subject_scope
+            or restored.subject_entity_id != prior_after.subject_entity_id
+            or restored.curation_weight != prior_after.curation_weight
+        ):
+            raise AssertionError("revert did not restore selected authority fields on a fresh current row")
+        revert_evidence = [
+            evidence
+            for evidence in restored.evidence
+            if evidence.source_type == "explicit_user_revert" and evidence.source_id == prior_id
+        ]
+        if len(revert_evidence) != 1:
+            raise AssertionError("restored row lacks exactly one explicit-user revert evidence record")
+        if revert_evidence[0].source_version != f"item_revision:{prior_after.item_revision}":
+            raise AssertionError("revert evidence does not name the selected historical revision")
+        if (
+            not revert_evidence[0].artifact_refs
+            or revert_evidence[0].artifact_refs[0].artifact_id != f"memory-history-revert:{REVERT_OPERATION_ID}"
+        ):
+            raise AssertionError("revert evidence does not preserve the client operation identity")
+
+        before_revert_retry = _authority_snapshot(db_client, collections)
+        restored_retry = service.revert_superseded_ledger_fact(uid, prior_id, REVERT_OPERATION_ID)
+        after_revert_retry = _authority_snapshot(db_client, collections)
+        if restored_retry.id != restored_id:
+            raise AssertionError("revert retry did not return the same current append")
+        if after_revert_retry != before_revert_retry:
+            raise AssertionError(
+                "revert retry changed canonical rows, evidence, operations, commits, outbox, or control"
+            )
+        if observed_invalidation.call_args_list != [((uid,), {}), ((uid,), {}), ((uid,), {}), ((uid,), {})]:
+            raise AssertionError("correction/revert and their retries did not invalidate prompt caches")
+
         print(
-            "PASS: Firestore emulator explicit ledger correction proof "
+            "PASS: Firestore emulator explicit ledger correction and revert proof "
             f"prior={prior_id} replacement={replacement_id} correction_commit={correction_head} "
-            f"preclose_revision={prior_before.item_revision} closed_revision={prior_after.item_revision} retry=no-op"
+            f"restored={restored_id} revert_commit={revert_head} "
+            f"preclose_revision={prior_before.item_revision} closed_revision={prior_after.item_revision} retries=no-op"
         )
         return 0
     finally:

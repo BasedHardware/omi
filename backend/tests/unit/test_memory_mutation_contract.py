@@ -13,6 +13,7 @@ from tests.unit.test_memory_service_parity import _sample_memory_dict
 def client(monkeypatch):
     app = FastAPI()
     app.add_api_route('/v3/memories/{memory_id}', memories.edit_memory, methods=['PATCH'])
+    app.add_api_route('/v3/memories/{memory_id}/revert', memories.revert_memory, methods=['POST'])
     app.add_api_route(
         '/v3/memories/{memory_id}/visibility',
         memories.update_memory_visibility,
@@ -45,6 +46,10 @@ def client(monkeypatch):
 
         def update_visibility(self, uid, memory_id, value):
             calls.append(('visibility', uid, memory_id, value))
+
+        def revert_superseded_ledger_fact(self, uid, memory_id, operation_id):
+            calls.append(('revert', uid, memory_id, operation_id))
+            return state["updated"] or MemoryDB.model_validate(_sample_memory_dict("restored"))
 
     monkeypatch.setattr(memories, 'MemoryService', _UniversalMemoryService)
     with TestClient(app) as test_client:
@@ -130,6 +135,41 @@ def test_ledger_edit_retry_reaches_lineage_aware_service(client, monkeypatch):
         ('content', 'test-user', 'prior', 'Lives in Brooklyn'),
         ('content', 'test-user', 'prior', 'Lives in Brooklyn'),
     ]
+
+
+def test_ledger_revert_requires_operation_id_and_returns_authoritative_no_store_readback(client):
+    operation_id = "5f95a7a1-10c6-4ec3-946d-e76a0a2f7cc5"
+    payload = _sample_memory_dict("restored")
+    payload.update(
+        {
+            "content": "Lives in Boston",
+            "ledger_schema_version": "knowledge_ledger.v1",
+            "kind": "fact",
+            "subject_scope": "primary_user",
+            "slot": "home_city",
+            "intent_backed": True,
+            "write_reason": "direct_user_statement",
+        }
+    )
+    client.memory_state["updated"] = MemoryDB.model_validate(payload)
+
+    response = client.post('/v3/memories/historical/revert', json={"operation_id": operation_id})
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert response.json()["memory"]["id"] == "restored"
+    assert client.memory_calls == [('revert', 'test-user', 'historical', operation_id)]
+
+
+@pytest.mark.parametrize(
+    "json_body",
+    [None, {}, {"operation_id": "not-a-uuid"}, {"operation_id": "5f95a7a1-10c6-4ec3-946d-e76a0a2f7cc5", "extra": True}],
+)
+def test_ledger_revert_rejects_missing_malformed_or_extra_operation_id(client, json_body):
+    response = client.post('/v3/memories/historical/revert', json=json_body)
+
+    assert response.status_code == 422
+    assert client.memory_calls == []
 
 
 @pytest.mark.parametrize('json_body', [None, {}, {'content': 'wrong field'}, {'value': {'nested': 'object'}}])

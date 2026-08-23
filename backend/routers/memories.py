@@ -63,6 +63,14 @@ class MemoryValueRequest(BaseModel):
     value: str
 
 
+class MemoryRevertRequest(BaseModel):
+    """Retry-stable client intent for one append-only history restore."""
+
+    model_config = {"extra": "forbid"}
+
+    operation_id: uuid.UUID
+
+
 class MemoryReadStatusRequest(BaseModel):
     """Durable UI read/dismiss mutation for a single memory."""
 
@@ -850,6 +858,31 @@ def review_memory(
     _validate_mutable_memory(uid, memory_id, db_client=getattr(db_client_module, 'db', None))
     service.review(uid, memory_id, value)
     return {'status': 'ok'}
+
+
+@router.post(
+    '/v3/memories/{memory_id}/revert',
+    tags=['memories'],
+    response_model=MemoryEditResponse,
+)
+def revert_memory(
+    memory_id: str,
+    request: MemoryRevertRequest,
+    response: Response,
+    uid: str = Depends(
+        cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:modify"))
+    ),
+):
+    """Append a fresh current fact from one superseded ledger row."""
+
+    response.headers['Cache-Control'] = 'no-store'
+    db_client = getattr(db_client_module, 'db', None)
+    restored = MemoryService(db_client=db_client).revert_superseded_ledger_fact(
+        uid,
+        memory_id,
+        str(request.operation_id),
+    )
+    return {'status': 'ok', 'memory': restored}
 
 
 @router.patch(
