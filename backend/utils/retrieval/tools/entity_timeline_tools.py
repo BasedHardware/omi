@@ -1,16 +1,17 @@
 """Bounded, read-only entity timeline retrieval over canonical memory items.
 
-The tool consumes canonical ``MemoryItem`` rows and exposes only compact fact
-entries plus stable evidence references.  It never expands transcript bodies,
-playbook bodies, trigger conditions, or arbitrary profile fields.  Entity input
-is intentionally strict: callers must use a canonical ``user``/``person``/
-``project``/``organization``/``place``/``entity`` reference, so an unsupported
-natural-language entity cannot accidentally become a broad profile search.
+The tool consumes canonical, chat-visible ``MemoryItem`` rows and exposes only
+compact fact entries plus stable evidence references.  It never expands
+transcript bodies, playbook bodies, trigger conditions, or arbitrary profile
+fields.  Entity input is intentionally strict: callers must use a canonical
+``user``/``person``/``project``/``organization``/``place``/``entity``
+reference, so an unsupported natural-language entity cannot accidentally
+become a broad profile search.
 """
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from itertools import islice
 import logging
 import re
@@ -20,7 +21,8 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from models.product_memory import MemoryItem, MemoryItemStatus, MemoryKind, MemorySubjectScope
+from models.product_memory import MemoryAccessPolicy, MemoryItem, MemoryItemStatus, MemoryKind, MemorySubjectScope
+from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
 
 logger = logging.getLogger(__name__)
 
@@ -259,6 +261,16 @@ def _iter_authoritative_items(uid: str, *, db_client: Any) -> Iterator[MemoryIte
     return iter_authoritative_product_memory_items(uid, db_client=db_client)
 
 
+def _chat_visible_items(items: List[MemoryItem]) -> List[MemoryItem]:
+    """Apply the shared chat policy and the paid-content lock before projection."""
+    visible = filter_canonical_default_visible_items(
+        items,
+        policy=MemoryAccessPolicy.for_omi_chat(archive_capability=False),
+        now=datetime.now(timezone.utc),
+    )
+    return [item for item in visible if (item.promotion or {}).get("is_locked") is not True]
+
+
 @tool
 def get_entity_timeline_tool(
     entity: str,
@@ -267,7 +279,7 @@ def get_entity_timeline_tool(
     end_date: Optional[str] = None,
     config: RunnableConfig = None,  # type: ignore[reportAssignmentType]
 ) -> str:
-    """Read a bounded timeline for one canonical entity.
+    """Read a bounded, current chat-visible timeline for one canonical entity.
 
     ``entity`` must be ``user``/``me`` or a stable reference such as
     ``person:alice`` or ``project:omi``.  The result contains fact entries and
@@ -288,13 +300,14 @@ def get_entity_timeline_tool(
         return "Error: User ID not found in configuration"
 
     try:
-        from database._client import db as firestore_db
+        from database._client import get_firestore_client
 
+        firestore_db = get_firestore_client()
         stream = _iter_authoritative_items(uid, db_client=firestore_db)
         scanned_rows = list(islice(stream, MAX_TIMELINE_SCAN + 1))
         scan_truncated = len(scanned_rows) > MAX_TIMELINE_SCAN
         timeline = build_entity_timeline(
-            scanned_rows[:MAX_TIMELINE_SCAN],
+            _chat_visible_items(scanned_rows[:MAX_TIMELINE_SCAN]),
             reference,
             limit=bounded_limit,
             start=start,
@@ -305,7 +318,7 @@ def get_entity_timeline_tool(
             timeline = timeline.model_copy(update={"truncated": True})
         return format_entity_timeline(timeline)
     except Exception as exc:
-        logger.exception("get_entity_timeline_tool failed uid=%s entity=%s", uid, reference.key)
+        logger.error("get_entity_timeline_tool failed error_type=%s", type(exc).__name__)
         return f"Error reading entity timeline: {type(exc).__name__}"
 
 

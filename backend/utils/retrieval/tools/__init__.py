@@ -59,6 +59,9 @@ from .web_tools import (
 from .graph_tools import (
     traverse_knowledge_graph_tool,
 )
+from .entity_timeline_tools import (
+    get_entity_timeline_tool,
+)
 
 __all__ = [
     'get_conversations_tool',
@@ -87,4 +90,5 @@ __all__ = [
     'save_user_preference_tool',
     'fetch_url_tool',
     'traverse_knowledge_graph_tool',
+    'get_entity_timeline_tool',
 ]

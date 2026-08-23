@@ -433,6 +433,7 @@ def _get_agentic_module():
         "save_user_preference_tool",
         "fetch_url_tool",
         "traverse_knowledge_graph_tool",
+        "get_entity_timeline_tool",
     ]
     for name in tool_names:
         mock_tool = MagicMock()
@@ -666,10 +667,10 @@ def test_static_prefix_exceeds_minimum_cache_tokens():
 # ---------------------------------------------------------------------------
 
 
-def test_core_tools_has_26_tools():
-    """CORE_TOOLS must contain exactly 26 tools (web search is now a built-in server tool)."""
+def test_core_tools_has_27_tools():
+    """CORE_TOOLS must contain exactly 27 tools (web search is a built-in server tool)."""
     agentic_mod = _get_agentic_module()
-    assert len(agentic_mod.CORE_TOOLS) == 26, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 26"
+    assert len(agentic_mod.CORE_TOOLS) == 27, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 27"
 
 
 def test_core_tools_list_creates_independent_copy():
@@ -692,9 +693,9 @@ def test_core_tools_list_creates_independent_copy():
     mock_app_tool.name = "custom_app_tool"
     tools_a.append(mock_app_tool)
 
-    assert len(tools_a) == 27
-    assert len(tools_b) == 26
-    assert len(agentic_mod.CORE_TOOLS) == 26, "CORE_TOOLS was mutated!"
+    assert len(tools_a) == 28
+    assert len(tools_b) == 27
+    assert len(agentic_mod.CORE_TOOLS) == 27, "CORE_TOOLS was mutated!"
 
 
 def test_core_tools_order_matches_exports():
@@ -731,6 +732,7 @@ def test_core_tools_order_matches_exports():
         "save_user_preference_tool",
         "fetch_url_tool",
         "traverse_knowledge_graph_tool",
+        "get_entity_timeline_tool",
     ]
 
     actual_names = [t.name for t in agentic_mod.CORE_TOOLS]
@@ -776,6 +778,21 @@ def test_convert_tools_produces_valid_anthropic_schemas():
         assert "config" not in props, f"Tool {schema['name']} should not expose 'config' parameter"
         # Core tools should NOT have defer_loading
         assert "defer_loading" not in schema, f"Core tool {schema['name']} should not have defer_loading"
+
+
+def test_entity_timeline_is_registered_with_schema_and_display_status():
+    """The timeline tool is a stable core tool across schema, registry, and UI status."""
+    agentic_mod = _get_agentic_module()
+
+    timeline_tool = next(tool for tool in agentic_mod.CORE_TOOLS if tool.name == "get_entity_timeline_tool")
+    tool_schemas, tool_registry = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS)
+
+    timeline_schema = next(schema for schema in tool_schemas if schema.get("name") == timeline_tool.name)
+    raw_schema = timeline_tool.args_schema.schema()
+    assert timeline_schema["input_schema"]["properties"] == raw_schema["properties"]
+    assert timeline_schema["input_schema"]["required"] == raw_schema["required"]
+    assert tool_registry[timeline_tool.name] is timeline_tool
+    assert agentic_mod.get_tool_display_name(timeline_tool.name) == "Reviewing entity timeline"
 
 
 def test_convert_tools_defers_app_tools():

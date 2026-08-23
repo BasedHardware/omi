@@ -133,8 +133,12 @@ def test_timeline_limit_date_range_and_scan_count_are_explicit():
 
 
 def test_tool_is_read_only_bounded_and_double_run_stable(monkeypatch):
+    import database._client as database_client
+
     items = [_item("mem-1"), _item("mem-2", occurred_at=NOW + timedelta(days=1))]
     seen = []
+    firestore_client = object()
+    monkeypatch.setattr(database_client, "get_firestore_client", lambda: firestore_client)
 
     def reader(uid: str, *, db_client):
         seen.append((uid, db_client))
@@ -153,8 +157,48 @@ def test_tool_is_read_only_bounded_and_double_run_stable(monkeypatch):
     assert first == second
     assert "Entity timeline: person:alice" in first
     assert [uid for uid, _ in seen] == ["u1", "u1"]
+    assert [client for _, client in seen] == [firestore_client, firestore_client]
     assert "body" not in first
     assert "arguments" not in first
+
+
+def test_tool_applies_chat_visibility_before_projecting_timeline(monkeypatch):
+    import database._client as database_client
+
+    monkeypatch.setattr(database_client, "get_firestore_client", lambda: object())
+    allowed = _item("mem-allowed")
+    restricted = _item("mem-restricted", sensitivity_labels=["credential"])
+    blocked = _item(
+        "mem-blocked",
+        tier=MemoryLayer.short_term,
+        processing_state=ProcessingState.blocked,
+        expires_at=NOW + timedelta(days=1),
+    )
+    locked = _item("mem-locked", promotion={"is_locked": True})
+    rejected = _item("mem-rejected", promotion={"user_review": False})
+    archived = _item("mem-archived", tier=MemoryLayer.archive)
+    superseded = _item("mem-superseded", status=MemoryItemStatus.superseded)
+
+    monkeypatch.setattr(
+        timeline_tools,
+        "_iter_authoritative_items",
+        lambda uid, *, db_client: iter([allowed, restricted, blocked, locked, rejected, archived, superseded]),
+    )
+    result = timeline_tools.get_entity_timeline_tool.invoke(
+        {"entity": "person:alice", "limit": 20},
+        config={"configurable": {"user_id": "u1"}},
+    )
+
+    assert "mem-allowed" in result
+    for memory_id in (
+        "mem-restricted",
+        "mem-blocked",
+        "mem-locked",
+        "mem-rejected",
+        "mem-archived",
+        "mem-superseded",
+    ):
+        assert memory_id not in result
 
 
 def test_tool_rejects_unsupported_entity_before_reader(monkeypatch):
@@ -170,7 +214,25 @@ def test_tool_rejects_unsupported_entity_before_reader(monkeypatch):
     assert calls == []
 
 
+def test_tool_fails_closed_when_storage_authority_is_unavailable(monkeypatch):
+    import database._client as database_client
+
+    def unavailable_client():
+        raise RuntimeError("detail")
+
+    monkeypatch.setattr(database_client, "get_firestore_client", unavailable_client)
+    result = timeline_tools.get_entity_timeline_tool.invoke(
+        {"entity": "person:alice", "limit": 20},
+        config={"configurable": {"user_id": "u1"}},
+    )
+
+    assert result == "Error reading entity timeline: RuntimeError"
+
+
 def test_tool_scan_is_hard_bounded(monkeypatch):
+    import database._client as database_client
+
+    monkeypatch.setattr(database_client, "get_firestore_client", lambda: object())
     consumed = []
 
     def reader(uid: str, *, db_client):
