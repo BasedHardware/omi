@@ -268,6 +268,19 @@ def _unmanaged_to_thread_calls(
     return calls
 
 
+def _awaited_call_ids(node: FunctionNode) -> Set[int]:
+    """Identities of the Call nodes that are the direct operand of an `await`.
+
+    Keyed on identity rather than line number: one line can hold both an awaited call and a
+    synchronous one, and only the awaited half is safe.
+    """
+    awaited: Set[int] = set()
+    for child in ast.walk(node):
+        if isinstance(child, ast.Await) and isinstance(child.value, ast.Call):
+            awaited.add(id(child.value))
+    return awaited
+
+
 def _scan_function_body(
     node: FunctionNode,
     db_names: Set[str],
@@ -285,12 +298,19 @@ def _scan_function_body(
 
     offloaded = _get_offloaded_lines(node)
     nested = _collect_nested_func_lines(node)
+    awaited = _awaited_call_ids(node)
 
     for child in _walk_body(node):
         if not isinstance(child, ast.Call):
             continue
         line = child.lineno
         if line in offloaded or line in nested:
+            continue
+        # `await f()` yields to the event loop; it is the correct way to call an async
+        # helper, including the async accessors in `database.*`. Counting it as blocking
+        # made a correct fix unpushable and offered no way to say so — there is no
+        # allowlist or inline waiver in this scanner.
+        if id(child) in awaited:
             continue
         body_call_lines.add(line)
         if isinstance(child.func, ast.Name):
