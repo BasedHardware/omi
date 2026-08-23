@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, cast
 from urllib.parse import urlsplit
@@ -17,6 +18,7 @@ class ConversationSearchUnavailableError(Exception):
 
 
 _EXACT_CONVERSATION_PATH_PREFIX = '/conversations/'
+_OWNER_SCOPED_CONVERSATION_REFERENCE = re.compile(r'conversation:([A-Za-z0-9][A-Za-z0-9_-]{0,127})\Z')
 
 
 def _canonical_conversation_uuid(value: str) -> Optional[str]:
@@ -33,14 +35,21 @@ def _canonical_conversation_uuid(value: str) -> Optional[str]:
 
 
 def parse_exact_conversation_reference(query: str) -> Optional[str]:
-    """Extract a canonical conversation UUID from an ID or Omi share URL.
+    """Extract a conversation ID from an owner-scoped reference, UUID, or Omi share URL.
 
-    Exact references intentionally accept only the two values Omi presents to users: a UUID or an
-    HTTPS URL on the configured share host (default ``h.omi.me``) with the exact
-    ``/conversations/<uuid>`` path. Anything else remains a natural-language query so partial IDs
-    and lookalike URLs cannot turn search into document probing.
+    ``conversation:<id>`` is the machine-readable reference emitted by conversation result cards.
+    Callers hydrate the returned ID beneath the authenticated user's conversation collection, so
+    the reference does not grant cross-owner access. Its restricted ID alphabet keeps evidence refs,
+    paths, and natural-language lookalikes out of the exact-lookup path.
+
+    Bare IDs and share URLs intentionally remain UUID-only for backwards compatibility. Anything
+    else remains a natural-language query so partial IDs and lookalike URLs cannot turn search into
+    document probing.
     """
-    value = query.strip() if query else ''
+    raw_value = query if query else ''
+    if owner_scoped_reference := _OWNER_SCOPED_CONVERSATION_REFERENCE.fullmatch(raw_value):
+        return owner_scoped_reference.group(1)
+    value = raw_value.strip()
     if exact_id := _canonical_conversation_uuid(value):
         return exact_id
 
