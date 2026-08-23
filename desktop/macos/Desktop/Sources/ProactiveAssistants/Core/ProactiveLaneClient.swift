@@ -455,13 +455,37 @@ enum ContextProactivityTelemetry {
     case retrievalHop = "retrieval_hop"
   }
 
-  /// A free-gate rejection at one of the engine's fixed gate sites. Both values
-  /// are bounded enums — no bucket, owner, or content data.
-  static func recordGateRejection(reason: ContextDeliveryGateReason, stage: GateStage) async {
+  /// What started the evaluation that got rejected.
+  ///
+  /// Without this, a rejection from a screen visit and one from a transcript are the same
+  /// row, so "do transcripts crowd out screen nudges?" is unanswerable from the data — the
+  /// question a reviewer asked of the transcript lane and the reason this dimension exists.
+  /// Both lanes draw on one daily allocation, so the split is the whole cost argument.
+  enum GateTrigger: String, Sendable {
+    case screenVisit = "screen_visit"
+    case speech
+
+    /// The speech lane is the only evaluation entry point that carries a transcript section,
+    /// so the argument already distinguishes the lanes. Named rather than inlined so the rule
+    /// has one home and a test, instead of a ternary repeated at each gate site.
+    static func forSpeechSection(_ speechSection: String?) -> GateTrigger {
+      speechSection == nil ? .screenVisit : .speech
+    }
+  }
+
+  /// A free-gate rejection at one of the engine's fixed gate sites. Every value
+  /// is a bounded enum — no bucket, owner, or content data.
+  static func recordGateRejection(
+    reason: ContextDeliveryGateReason,
+    stage: GateStage,
+    trigger: GateTrigger = .screenVisit
+  ) async {
     await MainActor.run {
       PostHogManager.shared.track(
         "context_delivery_gate_rejected",
-        properties: ["reason": reason.rawValue, "stage": stage.rawValue])
+        properties: [
+          "reason": reason.rawValue, "stage": stage.rawValue, "trigger": trigger.rawValue,
+        ])
     }
   }
 

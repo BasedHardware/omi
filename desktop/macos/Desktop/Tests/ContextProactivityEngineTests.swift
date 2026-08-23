@@ -1188,4 +1188,27 @@ final class ContextDepartureEvaluationStoreTests: XCTestCase {
       AssistantCoordinator.shared.isTracking(
         app: "GuardTestApp", windowTitle: "Different Document"))
   }
+
+  /// Both lanes draw on one daily allocation, so a reviewer asked whether transcript triggers
+  /// crowd out screen ones. That was unanswerable: gate rejections recorded a stage but not
+  /// which lane started the evaluation, so a speech rejection and a screen rejection were the
+  /// same row. The speech lane is the only entry point that carries a transcript section, so
+  /// the argument already separates them.
+  func testGateTriggerSeparatesTheSpeechLaneFromTheScreenLane() {
+    XCTAssertEqual(ContextProactivityTelemetry.GateTrigger.forSpeechSection(nil), .screenVisit)
+    XCTAssertEqual(
+      ContextProactivityTelemetry.GateTrigger.forSpeechSection("user said something"), .speech)
+  }
+
+  /// An empty section still came from the speech lane. Treating it as a screen visit would
+  /// silently move rows into the wrong column of the comparison this dimension exists for.
+  func testEmptySpeechSectionIsStillTheSpeechLane() {
+    XCTAssertEqual(ContextProactivityTelemetry.GateTrigger.forSpeechSection(""), .speech)
+  }
+
+  /// The raw values land in the analytics payload; renaming one silently breaks the split.
+  func testGateTriggerRawValuesArePinned() {
+    XCTAssertEqual(ContextProactivityTelemetry.GateTrigger.screenVisit.rawValue, "screen_visit")
+    XCTAssertEqual(ContextProactivityTelemetry.GateTrigger.speech.rawValue, "speech")
+  }
 }
