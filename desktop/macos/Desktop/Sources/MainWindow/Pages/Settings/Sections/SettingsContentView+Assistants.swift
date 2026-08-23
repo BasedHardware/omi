@@ -897,6 +897,33 @@ extension SettingsContentView {
         }
       }
 
+      if useLegacyHomeDesign {
+        settingsCard(settingId: "advanced.preferences.oldesthome") {
+          HStack(spacing: OmiSpacing.lg) {
+            Image(systemName: "rectangle.stack")
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(Ink.secondary)
+              .frame(width: 24, height: 24)
+
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+              Text("Use oldest Home theme")
+                .scaledFont(size: OmiType.subheading, weight: .semibold)
+                .foregroundColor(Ink.primary)
+
+              Text("Show the original widgets-and-chat Home")
+                .scaledFont(size: OmiType.body)
+                .foregroundColor(Ink.secondary)
+            }
+
+            Spacer()
+
+            Toggle("", isOn: $useOldestHomeDesign)
+              .toggleStyle(OmiToggleStyle())
+              .labelsHidden()
+          }
+        }
+      }
+
       settingsCard(settingId: "advanced.preferences.speaknotifications") {
         HStack(spacing: OmiSpacing.lg) {
           Image(systemName: "speaker.wave.2")
