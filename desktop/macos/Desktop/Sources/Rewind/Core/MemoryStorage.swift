@@ -513,9 +513,14 @@ actor MemoryStorage {
         {
           // Skip full merge if local record is newer than incoming API data.
           // This prevents auto-refresh from overwriting recent local edits,
-          // but tier is server-authoritative and must still be reconciled.
+          // but server-authoritative tier and ledger metadata must still be
+          // reconciled without overwriting unrelated local edits.
           if existingRecord.updatedAt > memory.updatedAt {
-            if existingRecord.mergeAuthoritativeTierFrom(memory) {
+            var authoritativeFieldsChanged = existingRecord.mergeAuthoritativeTierFrom(memory)
+            if existingRecord.mergeAuthoritativeLedgerMetadataFrom(memory) {
+              authoritativeFieldsChanged = true
+            }
+            if authoritativeFieldsChanged {
               try existingRecord.update(database)
             }
             skipped += 1

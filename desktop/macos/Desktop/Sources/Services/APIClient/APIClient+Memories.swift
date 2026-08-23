@@ -214,6 +214,11 @@ struct ServerMemory: Decodable, Identifiable {
     case ledgerValidTo = "valid_to"
     case ledgerSupersededBy = "superseded_by"
     case ledgerValidAt = "valid_at"
+    case ledgerObjectEntityIds = "object_entity_ids"
+    case ledgerQualifiers = "qualifiers"
+    case ledgerArguments = "arguments"
+    case ledgerTriggerCondition = "trigger_condition"
+    case ledgerWriteReason = "write_reason"
   }
 
   init(from decoder: Decoder) throws {
@@ -334,12 +339,33 @@ struct ServerMemory: Decodable, Identifiable {
     addString(.ledgerValidTo)
     addString(.ledgerSupersededBy)
     addString(.ledgerValidAt)
+    addString(.ledgerWriteReason)
     if let value = try? container.decode(Bool.self, forKey: .ledgerIntentBacked) {
       metadata[CodingKeys.ledgerIntentBacked.rawValue] = value ? "true" : "false"
     }
     if let value = try? container.decode(Int.self, forKey: .ledgerCurationWeight) {
       metadata[CodingKeys.ledgerCurationWeight.rawValue] = String(value)
     }
+    func addCanonicalJSON(_ key: CodingKeys, maximumCharacters: Int? = nil) {
+      guard let value = try? container.decode([String: OmiAnyCodable].self, forKey: key) else { return }
+      let object = value.mapValues(\.value)
+      guard let json = MemoryLedgerMetadata.canonicalJSONString(object, maximumCharacters: maximumCharacters) else {
+        return
+      }
+      metadata[key.rawValue + "_json"] = json
+    }
+    func addCanonicalJSONArray(_ key: CodingKeys) {
+      guard let value = try? container.decode([String].self, forKey: key),
+        let json = MemoryLedgerMetadata.canonicalJSONString(value)
+      else { return }
+      metadata[key.rawValue + "_json"] = json
+    }
+    addCanonicalJSONArray(.ledgerObjectEntityIds)
+    addCanonicalJSON(.ledgerQualifiers)
+    addCanonicalJSON(.ledgerArguments)
+    addCanonicalJSON(
+      .ledgerTriggerCondition,
+      maximumCharacters: MemoryLedgerMetadata.maxTriggerConditionCharacters)
     ledgerMetadata = metadata
   }
 
