@@ -232,6 +232,8 @@ export interface App {
   created_at?: string | null;
   description: string;
   disabled?: boolean | null;
+  disabled_at?: string | null;
+  disabled_error?: string | null;
   disabled_reason?: string | null;
   email?: string | null;
   enabled?: boolean;
@@ -289,6 +291,8 @@ export interface AppBaseModel {
   created_at?: string | null;
   description: string;
   disabled?: boolean | null;
+  disabled_at?: string | null;
+  disabled_error?: string | null;
   disabled_reason?: string | null;
   enabled?: boolean;
   external_integration?: ExternalIntegration | null;
@@ -2928,6 +2932,15 @@ export interface RecordLlmUsageBucketRequest {
   total_tokens?: number;
 }
 
+export interface ReferralClaimRequest {
+  code: string;
+}
+
+export interface ReferralClaimResponse {
+  claimed: boolean;
+  trial_days: number;
+}
+
 export interface ReferralLinkResponse {
   referral_url: string;
 }
@@ -4549,6 +4562,8 @@ export interface OmiApiSchemas {
   "Recommendation": Recommendation;
   "RecommendationSubjectKind": RecommendationSubjectKind;
   "RecordLlmUsageBucketRequest": RecordLlmUsageBucketRequest;
+  "ReferralClaimRequest": ReferralClaimRequest;
+  "ReferralClaimResponse": ReferralClaimResponse;
   "ReferralLinkResponse": ReferralLinkResponse;
   "ReorderFoldersRequest": ReorderFoldersRequest;
   "ReplyToReviewRequest": ReplyToReviewRequest;
@@ -7921,6 +7936,16 @@ export interface OmiApiPaths {
       operationId: "get_referral_link_v1_users_me_referral_get";
       responses: {
         "200": ReferralLinkResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/me/referral/claim": {
+    post: {
+      operationId: "claim_referral_v1_users_me_referral_claim_post";
+      responses: {
+        "200": ReferralClaimResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -15017,6 +15042,27 @@ export async function get_referral_link_v1_users_me_referral_get(header: { autho
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function claim_referral_v1_users_me_referral_claim_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ReferralClaimRequest, init?: OmiApiClientInit): Promise<ReferralClaimResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/me/referral/claim`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_user_subscription_endpoint_v1_users_me_subscription_get(header: { X_App_Platform?: string, X_App_Version?: string, authorization?: string, X_Device_Id_Hash?: string }, init?: OmiApiClientInit): Promise<UserSubscriptionResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/me/subscription`;
@@ -16812,4 +16858,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 405 client methods generated.
+// Total: 406 client methods generated.

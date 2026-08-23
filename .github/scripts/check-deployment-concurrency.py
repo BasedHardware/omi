@@ -64,6 +64,9 @@ LOCK_CONTRACTS = {
         "firestore-schema-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'prod' }}"
     ),
     "gcp_backend_auto_dev.yml": LockContract("deploy-backend-stack-development"),
+    "gcp_cloud_run_metrics_egress.yml": LockContract(
+        "deploy-cloud-run-metrics-egress-${{ github.event.inputs.environment || 'development' }}"
+    ),
     "gcp_backend_listen_helm.yml": LockContract(
         "deploy-backend-stack-${{ github.event.inputs.environment || 'development' }}"
     ),

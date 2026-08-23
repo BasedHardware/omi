@@ -6,14 +6,15 @@ app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/OmiSupport/DesktopLocalProfile.swift
   - desktop/macos/Desktop/Sources/MainWindow/MemoryHubDestination.swift
-  # The hub page itself: it mounts the switcher S1/S3/S5/S6 press, branches to the three views, and
-  # resolves the Brain Map cohort S5 lands on. Extracted from `DesktopHomeView` — these steps walked
-  # it before it had its own file.
+  # The hub page itself: it branches to the four views S1/S2/S3/S5/S6 walk, carries the "‹ Activity"
+  # control back off three of them, and resolves the Brain Map cohort S5 lands on. Extracted from
+  # `DesktopHomeView` — these steps walked it before it had its own file.
   - desktop/macos/Desktop/Sources/MainWindow/MemoryHubPage.swift
-  # The Activity destination: the chronological spine that was Home's landing surface, first in the
-  # switcher row, with its own search bar and filter chips.
+  # The Activity destination: the chronological spine that was Home's landing surface and the page
+  # the bar's pill opens, with its own search bar and the chip row that reaches the other three.
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/ActivityHubTab.swift
-  - desktop/macos/Desktop/Sources/MainWindow/Components/HubDestinationSwitcher.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/ActivityDestinationChip.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ActivityBackButton.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/OmiSearchField.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
   # The Add/Edit forms, exercised by S2c. `memory-crud` writes straight to the view model, so these
@@ -43,20 +44,22 @@ preconditions:
 
 steps:
   - id: S1
-    name: Open the Memory hub and read its own switcher
-    # There is no `Memory` pill and no hover menu any more. The bar carries one `Library` pill, and
-    # the hub's three views are a switcher on the page itself — see `MemoryHubPage` /
-    # `MemoryHubSwitcher` and the note at the top of `TopNavigationDestinations`.
-    do: "Click the Library pill in the top bar (accessibility identifier top-navigation-1). Verify the hub page opens with its own switcher above the content, reading Conversations, Memories, Brain Map — on the page, not hanging off the bar, and with no hover needed to see them."
+    name: Open Activity and read its chip row
+    # There is no `Memory` pill, no hover menu and no hub switcher any more. The bar carries one
+    # `Activity` pill, and the hub's other three views are chips in Activity's own row — see
+    # `MemoryHubPage` / `ActivityDestinationChip` and the note at the top of
+    # `TopNavigationDestinations`.
+    do: "Click the Activity pill in the top bar (accessibility identifier top-navigation-1). Verify the Activity spine opens with one row of chips above the content, reading Activity, Conversations, Memories, Brain Map — on the page, not hanging off the bar, and with no hover needed to see them. Activity reads as the current chip, and there is no second look-alike chip row beneath it."
     expect:
       text_visible:
+        - Activity
         - Memories
         - Conversations
         - Brain Map
 
   - id: S2
     name: Select and verify Memories
-    do: "Choose Memories in the hub's switcher. Verify the full-width page shows the shared search field ('Search memories'), filter buttons ('This device', 'All'), Add button, and memory rows with timestamps."
+    do: "Choose Memories in Activity's chip row. Verify the full-width page shows the shared search field ('Search memories'), filter buttons ('This device', 'All'), Add button, and memory rows with timestamps."
     expect:
       interactive_count: { min: 4 }
 
@@ -79,7 +82,10 @@ steps:
 
   - id: S3
     name: Select Conversations
-    do: "Choose Conversations in the hub's switcher. Verify the full-width Conversations page loads with the shared search field, filters, and a list grouped by date."
+    # The chip row stayed behind on Activity, so getting from one sibling page to the next goes
+    # through the page's own "‹ Activity" control — that control is the only thing making these
+    # pages navigable from each other, so press it rather than the top-bar pill.
+    do: "Press the ‹ Activity control on the Memories page (accessibility identifier activity-back-button) and verify the spine and its chip row come back. Then choose Conversations in that row. Verify the full-width Conversations page loads with the shared search field, filters, and a list grouped by date."
     expect:
       text_visible:
         - Conversations
@@ -95,14 +101,14 @@ steps:
     # The hub resolves which of the two Brain Map surfaces this account gets, and must mount neither
     # until it knows: a one-frame appearance of the legacy graph latches the shared view model and
     # leaves the atlas permanently blank. Watch for the placeholder, not just the end state.
-    do: "Choose Brain Map in the hub's switcher. Verify that while the cohort is still resolving the page shows only a spinner (accessibility identifier brain_map_resolving_capability), and that exactly one surface then appears: an interactive node graph showing connected entities, or the canonical atlas."
+    do: "Press ‹ Activity on the Conversations page to return to the spine, then choose Brain Map in its chip row. Verify that while the cohort is still resolving the page shows only a spinner (accessibility identifier brain_map_resolving_capability), and that exactly one surface then appears: an interactive node graph showing connected entities, or the canonical atlas."
     expect:
       text_visible:
         - Brain Map
 
   - id: S6
     name: Return to Memories
-    do: "Choose Memories in the hub's switcher. Verify the memory list is visible with the shared search and filter controls."
+    do: "Press ‹ Activity on the Brain Map page to return to the spine, then choose Memories in its chip row. Verify the memory list is visible with the shared search and filter controls."
     expect:
       text_visible:
         - Memories

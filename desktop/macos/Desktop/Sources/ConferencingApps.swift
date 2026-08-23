@@ -174,10 +174,7 @@ enum ConferencingApps {
         browserApps.contains(owner),
         let title = window[kCGWindowName as String] as? String
       else { continue }
-      let lower = title.lowercased()
-      for keyword in browserCallKeywords where lower.contains(keyword.lowercased()) {
-        return true
-      }
+      if isBrowserCallTitle(title) { return true }
     }
     return false
   }

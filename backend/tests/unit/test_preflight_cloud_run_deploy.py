@@ -210,7 +210,7 @@ environments:
         }
     }
 
-    with pytest.raises(ValueError, match='exactly one container'):
+    with pytest.raises(ValueError, match='exactly one application container'):
         preflight.check_runtime_bindings(
             services=('backend',),
             env='dev',
@@ -219,6 +219,115 @@ environments:
             manifest_path=manifest,
             runner=lambda _command, **_kwargs: SimpleNamespace(stdout=json.dumps(document)),
         )
+
+
+def test_runtime_binding_check_ignores_the_attached_gmp_metrics_sidecar(tmp_path: Path) -> None:
+    """A service carrying the observability sidecar is still a single-application service.
+
+    Every deploy after the first sidecar attach describes two containers. The
+    sidecar holds none of the runtime bindings these checks read, so counting it
+    would fail a correctly configured service on its second deploy onward.
+    """
+    preflight = load_preflight()
+    manifest = tmp_path / 'runtime_env.yaml'
+    manifest.write_text(
+        """\
+environments:
+  dev:
+    gcp_project: based-hardware-dev
+    cloud_run:
+      services:
+        backend:
+          env:
+            PUBLIC_SETTING:
+              value: public
+""",
+        encoding='utf-8',
+    )
+    document = {
+        'spec': {
+            'template': {
+                'spec': {
+                    'containers': [
+                        {'name': 'backend-1', 'env': [{'name': 'PUBLIC_SETTING', 'value': 'public'}]},
+                        {'name': 'collector', 'env': []},
+                    ]
+                }
+            }
+        }
+    }
+
+    drift = preflight.check_runtime_bindings(
+        services=('backend',),
+        env='dev',
+        project='based-hardware-dev',
+        region='us-central1',
+        manifest_path=manifest,
+        runner=lambda _command, **_kwargs: SimpleNamespace(stdout=json.dumps(document)),
+    )
+
+    assert drift == []
+
+
+def test_legacy_public_binding_migration_ignores_the_attached_gmp_metrics_sidecar(tmp_path: Path) -> None:
+    """The migration reads the application container's legacy secret bindings.
+
+    This runs on production as well as development, so the sidecar must not
+    turn a production deploy into an argument error.
+    """
+    preflight = load_preflight()
+    manifest = tmp_path / 'runtime_env.yaml'
+    manifest.write_text(
+        """\
+environments:
+  dev:
+    gcp_project: based-hardware-dev
+    cloud_run:
+      services:
+        backend:
+          env:
+            PUBLIC_SETTING:
+              value: public
+""",
+        encoding='utf-8',
+    )
+    document = {
+        'spec': {
+            'template': {
+                'spec': {
+                    'containers': [
+                        {
+                            'name': 'backend-1',
+                            'env': [
+                                {
+                                    'name': 'PUBLIC_SETTING',
+                                    'valueFrom': {'secretKeyRef': {'name': 'PUBLIC_SETTING', 'key': 'latest'}},
+                                }
+                            ],
+                        },
+                        {'name': 'collector', 'env': []},
+                    ]
+                }
+            }
+        }
+    }
+    commands: list[list[str]] = []
+
+    def runner(command: list[str], **_kwargs: object) -> SimpleNamespace:
+        commands.append(command)
+        return SimpleNamespace(stdout=json.dumps(document))
+
+    migrated = preflight.migrate_legacy_public_bindings(
+        services=('backend',),
+        env='dev',
+        project='based-hardware-dev',
+        region='us-central1',
+        manifest_path=manifest,
+        runner=runner,
+    )
+
+    assert migrated == ['backend']
+    assert any('--remove-secrets=PUBLIC_SETTING' in argument for command in commands for argument in command)
 
 
 def test_runtime_binding_check_propagates_gcloud_describe_failure(tmp_path: Path) -> None:

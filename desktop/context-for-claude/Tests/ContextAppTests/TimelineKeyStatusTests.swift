@@ -208,7 +208,7 @@ final class TimelineKeyStatusTests: XCTestCase {
     /// app builds, so nothing here may build one.
     private func presentTheTimeline() throws -> RewindWindowFrame {
         let store = try ContextStore(url: root.appendingPathComponent("context.db"))
-        RewindWindow.present(store: store)
+        RewindWindow.present(store: store, via: .menuBarRow)
         return try XCTUnwrap(
             NSApp.windows.compactMap { $0 as? RewindWindowFrame }.first { $0.isVisible },
             "the timeline never came up, so nothing here is measured")

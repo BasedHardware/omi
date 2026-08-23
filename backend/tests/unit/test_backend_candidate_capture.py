@@ -625,7 +625,7 @@ def test_rejected_policy_uses_no_drop_compatibility_writer_without_candidate(mon
     assert decisions == [('Send budget', 'conversation-1')]
 
 
-def test_read_mode_creates_pending_and_silently_accepts_commitment_without_notifications(monkeypatch):
+def test_conversation_capture_resolves_every_create_without_notifications(monkeypatch):
     _enable_canonical(monkeypatch)
     monkeypatch.setattr(
         conversation_capture.task_control_db,
@@ -678,8 +678,10 @@ def test_read_mode_creates_pending_and_silently_accepts_commitment_without_notif
     )
 
     assert len(records) == 2
-    assert accepted == ['candidate-1']
-    assert records[1].status == 'pending'
+    # Both creates resolve here: the direct_request item is policy-tier
+    # 'pending_candidate', and parking it would hide the task from every client
+    # except macOS.
+    assert accepted == ['candidate-1', 'candidate-2']
     assert emitted == [
         {
             'uid': 'user-1',
@@ -877,6 +879,11 @@ def test_repeated_descriptions_use_semantic_occurrences_without_order_dependent_
         return _record(proposal, len(keys))
 
     monkeypatch.setattr(conversation_capture.candidate_service, 'create_candidate', create)
+    monkeypatch.setattr(
+        conversation_capture.candidate_service,
+        'accept_candidate',
+        lambda uid, candidate_id, **kwargs: None,
+    )
 
     conversation_capture.process_before_legacy('user-1', 'conversation-1', [morning, evening])
     first_keys = list(keys)
@@ -885,3 +892,140 @@ def test_repeated_descriptions_use_semantic_occurrences_without_order_dependent_
 
     assert first_keys[0] != first_keys[1]
     assert keys == [first_keys[1], first_keys[0]]
+
+
+def _segment(segment_id, start, end):
+    return SimpleNamespace(id=segment_id, start=start, end=end)
+
+
+def test_capture_survives_negative_segment_offsets():
+    """Merged sync audio yields segment offsets below zero; evidence clamps to zero.
+
+    Before this, EvidenceRef(ge=0) raised inside the adapter and the raising call
+    sat first in _save_action_items, so the conversation produced no task at all.
+    """
+
+    action = _action(
+        'Comprar o presente da sogra',
+        capture_kind='explicit_command',
+        capture_owner='user',
+        concrete_deliverable=True,
+    )
+    action.source_segment_ids = ['segment-1', 'segment-2']
+    segments = [_segment('segment-1', -17.329691410064697, 5.790308589935304), _segment('segment-2', -1.8e-07, 2.15)]
+
+    decision = conversation_capture._capture_decision(action, 'conversation-1', segments)
+
+    assert decision.candidate is not None
+    evidence = decision.candidate.evidence_refs[0]
+    assert evidence.start_seconds == 0.0
+    assert evidence.end_seconds == 5.790308589935304
+    assert evidence.transcript_segment_ids == ['segment-1', 'segment-2']
+
+
+def test_pending_tier_create_is_accepted_so_the_task_is_visible(monkeypatch):
+    monkeypatch.setattr(
+        conversation_capture.task_control_db,
+        'get_task_workflow_control',
+        lambda uid: TaskWorkflowControl(workflow_mode='read', account_generation=3),
+    )
+    records = []
+    accepted = []
+
+    def create(uid, proposal, **kwargs):
+        record = _record(proposal, len(records) + 1)
+        records.append(record)
+        return record
+
+    monkeypatch.setattr(conversation_capture.candidate_service, 'create_candidate', create)
+    monkeypatch.setattr(
+        conversation_capture.candidate_service,
+        'accept_candidate',
+        lambda uid, candidate_id, **kwargs: accepted.append(candidate_id),
+    )
+    action = _action(
+        'Review the forecast',
+        capture_kind='direct_request',
+        capture_owner='user',
+        concrete_deliverable=True,
+    )
+
+    assert conversation_capture._capture_decision(action, 'conversation-1').policy.outcome == 'pending_candidate'
+    assert conversation_capture.process_before_legacy('user-1', 'conversation-1', [action]) is True
+    assert accepted == ['candidate-1']
+
+
+def test_task_mutation_still_waits_for_review(monkeypatch):
+    """Only creates resolve on capture; editing an existing task keeps its review gate."""
+
+    monkeypatch.setattr(
+        conversation_capture.task_control_db,
+        'get_task_workflow_control',
+        lambda uid: TaskWorkflowControl(workflow_mode='read', account_generation=3),
+    )
+    records = []
+    accepted = []
+    monkeypatch.setattr(
+        conversation_capture.candidate_service,
+        'create_candidate',
+        lambda uid, proposal, **kwargs: records.append(_record(proposal, len(records) + 1)) or records[-1],
+    )
+    monkeypatch.setattr(
+        conversation_capture.candidate_service,
+        'accept_candidate',
+        lambda uid, candidate_id, **kwargs: accepted.append(candidate_id),
+    )
+    action = _action(
+        'Send the revised budget',
+        capture_kind='direct_request',
+        capture_owner='user',
+        concrete_deliverable=True,
+        candidate_action='update',
+        target_task_id='task-budget',
+    )
+
+    assert conversation_capture.process_before_legacy('user-1', 'conversation-1', [action]) is True
+    assert len(records) == 1
+    assert accepted == []
+
+
+def test_capture_exception_falls_back_to_the_compatibility_writer(monkeypatch):
+    """A raising capture adapter must not swallow the conversation's tasks."""
+
+    def boom(uid, conversation):
+        raise ValueError('capture adapter exploded')
+
+    monkeypatch.setattr(process_conversation.conversation_capture, 'process_conversation_before_legacy', boom)
+    monkeypatch.setattr(process_conversation.action_items_db, 'get_action_items_by_conversation', lambda *args: [])
+    monkeypatch.setattr(process_conversation.action_items_db, 'delete_action_items_for_conversation', lambda *args: 0)
+    monkeypatch.setattr(process_conversation, 'upsert_action_item_vectors_batch', lambda *args, **kwargs: None)
+    monkeypatch.setattr(process_conversation, 'delete_action_item_vectors_batch', lambda *args, **kwargs: None)
+    monkeypatch.setattr(process_conversation, 'submit_with_context', lambda *args, **kwargs: None)
+    monkeypatch.setattr(process_conversation, 'emit_product_event', lambda **event: None)
+    fallbacks = []
+    monkeypatch.setattr(process_conversation, 'record_fallback', lambda **event: fallbacks.append(event))
+    writes = []
+
+    def write(uid, rows, **kwargs):
+        writes.append(rows)
+        return [f'task-{index + 1}' for index in range(len(rows))]
+
+    monkeypatch.setattr(process_conversation.action_items_db, 'create_action_items_batch', write)
+
+    conversation = _conversation(
+        _action('Send the budget', capture_kind='explicit_command', capture_owner='user', concrete_deliverable=True)
+    )
+    conversation.transcript_segments = []
+
+    process_conversation._save_action_items('user-1', conversation)
+
+    assert [row['description'] for rows in writes for row in rows] == ['Send the budget']
+    assert fallbacks == [
+        {
+            'component': 'other',
+            'from_mode': 'canonical_task_capture',
+            'to_mode': 'legacy_action_items',
+            'reason': 'other',
+            'outcome': 'degraded',
+        }
+    ]

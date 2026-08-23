@@ -9847,4 +9847,36 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get diagnosticsShareFailed => 'Diagnostikat ei õnnestunud jagada. Proovi uuesti.';
+
+  @override
+  String get appDisabledTitle => 'See rakendus on välja lülitatud ja seda ei saa paigaldada.';
+
+  @override
+  String get appDisabledWebhookFailures => 'Selle lõpp-punkt ebaõnnestus 72 tundi järjest, seega saatmine peatati.';
+
+  @override
+  String get appDisabledGeneric => 'Omi lülitas selle välja.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Paranda kõigepealt lõpp-punkt — uuesti sisselülitamisel kontrollitakse iga seadistatud URL uuesti.';
+
+  @override
+  String get appReEnable => 'Lülita uuesti sisse';
+
+  @override
+  String get appReEnableFailedTitle => 'Uuesti sisselülitamine ebaõnnestus';
+
+  @override
+  String get appReEnableFailedBody => 'Seda rakendust ei õnnestunud uuesti sisse lülitada. Proovi uuesti.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Välja lülitatud $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Viimane viga: $error.';
+  }
 }

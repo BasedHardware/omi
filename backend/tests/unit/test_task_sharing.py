@@ -123,6 +123,12 @@ utils_users_mod.get_user_display_name = MagicMock(return_value="TestUser")
 _stub_module("utils.other")
 _stub_module("utils.other.endpoints")
 sys.modules["utils.other.endpoints"].get_current_user_uid = MagicMock()
+# The action-items router wraps its list auth dependency at module level:
+#   Depends(auth.with_rate_limit(auth.get_current_user_uid, "action_items:list"))
+# so the stub has to expose it or importing the router raises AttributeError
+# during collection. Pass the dependency straight through: these tests assert
+# sharing behavior, and the real wrapper only adds a Redis rate-limit check.
+sys.modules["utils.other.endpoints"].with_rate_limit = lambda auth_dependency, policy_name: auth_dependency
 
 # The action-items router imports the list-read budget seam at module level
 # (#11831). Delegate the stubbed submodule to the real (stdlib-only) module so

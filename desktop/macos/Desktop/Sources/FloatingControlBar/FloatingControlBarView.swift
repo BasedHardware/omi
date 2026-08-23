@@ -2736,11 +2736,17 @@ private struct MeetingSummaryShareCard: View {
   }
 
   @State private var phase: Phase = .idle
+  @State private var isAddressing = false
+  @State private var recipientEmail: String = ""
+  @FocusState private var recipientFieldFocused: Bool
 
-  private var sendLabel: String {
-    guard let first = recipients.first else { return "" }
-    let extra = recipients.count - 1
-    return extra > 0 ? "Send to \(first.shortLabel) +\(extra)" : "Send to \(first.shortLabel)"
+  /// Shape-only: the address is the owner's to choose, so this rejects an
+  /// obvious typo without pretending to know the mailbox exists.
+  private var typedEmailIsSendable: Bool {
+    let value = recipientEmail.trimmingCharacters(in: .whitespaces)
+    guard !value.contains(" "), let at = value.firstIndex(of: "@"), at != value.startIndex else { return false }
+    let domain = value[value.index(after: at)...]
+    return !domain.isEmpty && domain.contains(".") && !domain.hasSuffix(".") && !domain.contains("@")
   }
 
   private var isBusy: Bool { phase == .copying || phase == .sending }
@@ -2824,66 +2830,142 @@ private struct MeetingSummaryShareCard: View {
       .padding(.vertical, OmiSpacing.md)
       .accessibilityLabel("Dismiss meeting summary notification")
     }
+    .onReceive(NotificationCenter.default.publisher(for: .meetingSummaryShareBeginAddressing)) { _ in
+      beginAddressing()
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .meetingSummaryShareSubmit)) { note in
+      if let address = note.object as? String, !address.isEmpty {
+        recipientEmail = address
+      }
+      isAddressing = true
+      sendSummary()
+    }
   }
 
   private var actionRow: some View {
-    HStack(spacing: 9) {
+    Group {
+      if isAddressing {
+        addressRow
+      } else {
+        HStack(spacing: 9) {
+          Button {
+            beginAddressing()
+          } label: {
+            HStack(spacing: 4) {
+              Image(systemName: "lock.fill")
+                .font(.system(size: 9, weight: .semibold))
+              Text("Share")
+            }
+            .scaledFont(size: 12, weight: .semibold)
+            .foregroundColor(.black)
+            .padding(.horizontal, 11).padding(.vertical, 4)
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+          }
+          .buttonStyle(.plain)
+          .disabled(isBusy)
+          .help("Email these notes to someone")
+          .accessibilityIdentifier("meeting-summary-share-send")
+
+          Button {
+            copyLink()
+          } label: {
+            Group {
+              if phase == .copying {
+                ProgressView().controlSize(.mini)
+              } else {
+                Image(systemName: "link")
+                  .font(.system(size: 11, weight: .semibold))
+              }
+            }
+            .foregroundColor(.white)
+            .frame(width: 26, height: 21)
+            .background(Color.white.opacity(0.18))
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+          }
+          .buttonStyle(.plain)
+          .disabled(isBusy)
+          .help("Copy the share link")
+          .accessibilityIdentifier("meeting-summary-share-copy")
+
+          // Text-style link, deliberately chrome-free beside the two controls.
+          Button {
+            FloatingControlBarManager.shared.dismissCurrentNotification()
+            MeetingSummaryShareActions.openSummary(conversationID: conversationID)
+          } label: {
+            Text("See summary")
+              .scaledFont(size: 12, weight: .medium)
+              .foregroundColor(.white.opacity(0.55))
+              .underline()
+          }
+          .buttonStyle(.plain)
+          .disabled(isBusy)
+          .accessibilityIdentifier("meeting-summary-share-open")
+        }
+      }
+    }
+    .padding(.top, 6)
+  }
+
+  /// The Share affordance in its open state: one address field and one send.
+  private var addressRow: some View {
+    HStack(spacing: 7) {
+      TextField("name@company.com", text: $recipientEmail)
+        .textFieldStyle(.plain)
+        .scaledFont(size: 12, weight: .medium)
+        .foregroundColor(.white)
+        .focused($recipientFieldFocused)
+        .onSubmit { sendSummary() }
+        .padding(.horizontal, 9).padding(.vertical, 4)
+        .background(Color.white.opacity(0.12))
+        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .frame(maxWidth: 210)
+        .accessibilityIdentifier("meeting-summary-share-email-field")
+
       Button {
-        copyLink()
+        sendSummary()
       } label: {
         HStack(spacing: 4) {
-          if phase == .copying {
+          if phase == .sending {
             ProgressView().controlSize(.mini)
           }
-          Text("Copy link")
+          Text("Send")
         }
         .scaledFont(size: 12, weight: .semibold)
         .foregroundColor(.black)
         .padding(.horizontal, 11).padding(.vertical, 4)
-        .background(Color.white)
+        .background(Color.white.opacity(typedEmailIsSendable ? 1 : 0.35))
         .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
       }
       .buttonStyle(.plain)
-      .disabled(isBusy)
-      .accessibilityIdentifier("meeting-summary-share-copy")
+      .disabled(isBusy || !typedEmailIsSendable)
+      .accessibilityIdentifier("meeting-summary-share-email-send")
 
-      if let firstRecipient = recipients.first {
-        Button {
-          sendSummary()
-        } label: {
-          HStack(spacing: 4) {
-            if phase == .sending {
-              ProgressView().controlSize(.mini)
-            }
-            Text(sendLabel)
-          }
-          .scaledFont(size: 12, weight: .semibold)
-          .foregroundColor(.white)
-          .padding(.horizontal, 11).padding(.vertical, 4)
-          .background(Color.white.opacity(0.18))
-          .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .disabled(isBusy)
-        .help("Email the summary to \(firstRecipient.email)")
-        .accessibilityIdentifier("meeting-summary-share-send")
-      }
-
-      // Text-style link, deliberately chrome-free beside the two pills.
       Button {
-        FloatingControlBarManager.shared.dismissCurrentNotification()
-        MeetingSummaryShareActions.openSummary(conversationID: conversationID)
+        isAddressing = false
+        recipientFieldFocused = false
       } label: {
-        Text("See summary")
+        Text("Cancel")
           .scaledFont(size: 12, weight: .medium)
           .foregroundColor(.white.opacity(0.55))
-          .underline()
       }
       .buttonStyle(.plain)
       .disabled(isBusy)
-      .accessibilityIdentifier("meeting-summary-share-open")
+      .accessibilityIdentifier("meeting-summary-share-email-cancel")
     }
-    .padding(.top, 6)
+  }
+
+  /// Detection now only prefills the field: the owner still confirms or
+  /// replaces the address before anything is sent, which is what keeps a
+  /// mis-identified participant from being emailed by one click.
+  func beginAddressing() {
+    guard !isBusy else { return }
+    if recipientEmail.isEmpty, let suggested = recipients.first?.email {
+      recipientEmail = suggested
+    }
+    isAddressing = true
+    FloatingControlBarManager.shared.focusBarWindowForTextEntry()
+    recipientFieldFocused = true
   }
 
   private func copyLink() {
@@ -2900,15 +2982,18 @@ private struct MeetingSummaryShareCard: View {
   }
 
   private func sendSummary() {
-    guard !isBusy, !recipients.isEmpty else { return }
+    let address = recipientEmail.trimmingCharacters(in: .whitespaces)
+    guard !isBusy, typedEmailIsSendable else { return }
     phase = .sending
+    recipientFieldFocused = false
     Task { @MainActor in
       do {
         let sent = try await MeetingSummaryShareActions.sendSummary(
-          conversationID: conversationID, recipients: recipients)
-        let label = recipients.first?.shortLabel ?? "them"
+          conversationID: conversationID, recipientEmails: [address])
+        let label = ConversationShareRecipient(name: nil, email: address).shortLabel
         finish(confirmation: sent.count > 1 ? "Sent to \(label) +\(sent.count - 1)" : "Sent to \(label)")
       } catch {
+        isAddressing = true
         phase = .failed("Couldn't send — try again")
       }
     }

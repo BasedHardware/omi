@@ -26,6 +26,10 @@ from database import redis_db
 from database.apps import get_app_by_id_db, record_app_usage
 from database.redis_db import delete_app_cache_by_id
 from database.webhook_health import (
+    ACTION_DISABLE,
+    ACTION_REDIRECT_NOT_FOLLOWED,
+    ACTION_WARN_DAY1,
+    ACTION_WARN_DAY2,
     record_app_webhook_failure,
     record_app_webhook_success,
     is_app_webhook_disabled,
@@ -66,7 +70,9 @@ import database.conversations as conversations_db
 from utils.conversations.render import conversation_to_dict, serialize_datetimes
 from utils.log_sanitizer import sanitize
 from utils.mentor_notifications import process_mentor_notification
+from utils.journey_metrics_contract import ClientKind, bounded_client_kind, resolve_client_kind
 from utils.observability.fallback import record_fallback
+from utils.observability.journeys import ClientJourneyAttempt
 import logging
 
 logger = logging.getLogger(__name__)
@@ -119,9 +125,19 @@ def _notify_app_owner(app_id: str, title: str, body: str):
 
 def _handle_webhook_health_action(app_id: str, action: int, error: str):
     """Handle graduated response from webhook health tracking.
-    action: 0=nothing, 1=day1 warn, 2=day2 warn, 3=auto-disable
+    action: 0=nothing, 1=day1 warn, 2=day2 warn, 3=auto-disable,
+    4=redirect not followed (notify only)
     """
-    if action == 1:
+    if action == ACTION_REDIRECT_NOT_FOLLOWED:
+        logger.warning(f'Webhook health: app {app_id} endpoint redirects and was not delivered. {error}')
+        _notify_app_owner(
+            app_id,
+            'Webhook Endpoint Redirects',
+            f'Your app webhook returned a redirect ({error[:40]}), so the payload was not delivered. '
+            'For security we do not follow redirects. Update the webhook URL to the final destination '
+            '(check for a missing/extra trailing slash or an http:// to https:// upgrade).',
+        )
+    elif action == ACTION_WARN_DAY1:
         logger.warning(f'Webhook health: app {app_id} failing for 24h+ (day 1 warning). Last error: {error}')
         _notify_app_owner(
             app_id,
@@ -129,7 +145,7 @@ def _handle_webhook_health_action(app_id: str, action: int, error: str):
             f'Your app webhook has been failing for 24+ hours. Error: {error[:100]}. '
             'Please check your endpoint. It will be auto-disabled in 48 hours if failures continue.',
         )
-    elif action == 2:
+    elif action == ACTION_WARN_DAY2:
         logger.warning(f'Webhook health: app {app_id} failing for 48h+ (day 2 final warning). Last error: {error}')
         _notify_app_owner(
             app_id,
@@ -137,7 +153,7 @@ def _handle_webhook_health_action(app_id: str, action: int, error: str):
             f'Your app webhook has been failing for 48+ hours. Error: {error[:100]}. '
             'It will be auto-disabled in 24 hours if failures continue.',
         )
-    elif action == 3:
+    elif action == ACTION_DISABLE:
         logger.error(f'Webhook health: auto-disabling app {app_id} after 72h+ of failures. Last error: {error}')
         disable_app_in_firestore(app_id, error, 72)
         delete_app_cache_by_id(app_id)
@@ -145,7 +161,7 @@ def _handle_webhook_health_action(app_id: str, action: int, error: str):
             app_id,
             'Webhook Auto-Disabled',
             f'Your app has been auto-disabled after 72+ hours of webhook failures. Error: {error[:100]}. '
-            'Please fix your endpoint and re-enable the app from your developer dashboard.',
+            'Fix your endpoint, then open the app in your developer dashboard and press Re-enable.',
         )
 
 
@@ -223,6 +239,10 @@ async def trigger_external_integrations(
     if conversation.is_locked:
         return []
 
+    client_kind = resolve_client_kind(
+        x_app_platform=getattr(conversation, 'client_platform', None),
+        user_agent=None,
+    )
     apps: List[App] = await run_blocking(db_executor, get_available_apps, uid)
     filtered_apps = [app for app in apps if app.triggers_on_conversation_creation() and app.enabled]
     if not filtered_apps:
@@ -245,6 +265,7 @@ async def trigger_external_integrations(
             conversation_dict['external_data'] = None
 
         url = app.external_integration.webhook_url
+        journey_attempt = ClientJourneyAttempt('app_webhook_delivery', client_kind)
         if '?' in url:
             url += '&uid=' + uid
         else:
@@ -259,11 +280,13 @@ async def trigger_external_integrations(
         try:
             pinned_url, pin_kwargs = await run_blocking(db_executor, safe_request_target, url)
         except UnsafeWebhookURLError as e:
+            journey_attempt.fail('invalid_response')
             logger.warning('Rejected non-public webhook URL for app %s: %s', app.id, e)
             return
 
         cb = get_webhook_circuit_breaker(url)
         if not cb.allow_request():
+            journey_attempt.fail('dependency_unavailable')
             logger.info(f'trigger_external_integrations: circuit breaker open for {app.id}')
             if require_delivery:
                 if last_delivery_attempt:
@@ -287,6 +310,7 @@ async def trigger_external_integrations(
                     follow_redirects=False,
                 )
             if response.status_code < 200 or response.status_code >= 300:
+                journey_attempt.fail('upstream_rejected')
                 cb.record_failure()
                 error_str = f'HTTP {response.status_code}'
                 action = await run_blocking(
@@ -320,6 +344,7 @@ async def trigger_external_integrations(
                         )
                 return
 
+            journey_attempt.succeed()
             cb.record_success()
             await run_blocking(db_executor, record_app_webhook_success, app.id)
 
@@ -349,6 +374,7 @@ async def trigger_external_integrations(
             except Exception:
                 pass
         except Exception as e:
+            journey_attempt.fail('upstream_timeout' if isinstance(e, TimeoutError) else 'provider_error')
             cb.record_failure()
             error_str = type(e).__name__
             action = await run_blocking(db_executor, record_app_webhook_failure, app.id, 0, error_str)
@@ -379,10 +405,18 @@ async def trigger_realtime_integrations(
     segments: list[dict],
     conversation_id: str | None,
     source: str | None = None,
+    *,
+    client_kind: ClientKind = 'unknown',
 ):
     logger.info(f"trigger_realtime_integrations {uid}")
     """REALTIME STREAMING"""
-    return await _async_trigger_realtime_integrations(uid, segments, conversation_id, source=source)
+    return await _async_trigger_realtime_integrations(
+        uid,
+        segments,
+        conversation_id,
+        source=source,
+        client_kind=bounded_client_kind(client_kind),
+    )
 
 
 async def trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
@@ -816,6 +850,8 @@ async def _async_trigger_realtime_integrations(
     segments: List[dict],
     conversation_id: str | None,
     source: str | None = None,
+    *,
+    client_kind: ClientKind = 'unknown',
 ) -> dict:
     # Paywall: skip mentor + third-party proactive notifications when this
     # transcription session belongs to a paywalled desktop user.
@@ -859,6 +895,7 @@ async def _async_trigger_realtime_integrations(
             return
 
         url = app.external_integration.webhook_url
+        journey_attempt = ClientJourneyAttempt('app_webhook_delivery', bounded_client_kind(client_kind))
         if '?' in url:
             url += '&uid=' + uid
         else:
@@ -870,11 +907,13 @@ async def _async_trigger_realtime_integrations(
         try:
             pinned_url, pin_kwargs = await run_blocking(db_executor, safe_request_target, url)
         except UnsafeWebhookURLError as e:
+            journey_attempt.fail('invalid_response')
             logger.warning('Rejected non-public webhook URL for app %s: %s', app.id, e)
             return
 
         cb = get_webhook_circuit_breaker(url)
         if not cb.allow_request():
+            journey_attempt.fail('dependency_unavailable')
             logger.info(f'trigger_realtime_integrations: circuit breaker open for {app.id}')
             return
 
@@ -889,6 +928,7 @@ async def _async_trigger_realtime_integrations(
                     follow_redirects=False,
                 )
             if response.status_code < 200 or response.status_code >= 300:
+                journey_attempt.fail('upstream_rejected')
                 cb.record_failure()
                 error_str = f'HTTP {response.status_code}'
                 action = await run_blocking(
@@ -900,6 +940,7 @@ async def _async_trigger_realtime_integrations(
                 )
                 return
 
+            journey_attempt.succeed()
             cb.record_success()
             await run_blocking(db_executor, record_app_webhook_success, app.id)
 
@@ -941,6 +982,7 @@ async def _async_trigger_realtime_integrations(
                 pass
 
         except Exception as e:
+            journey_attempt.fail('upstream_timeout' if isinstance(e, TimeoutError) else 'provider_error')
             cb.record_failure()
             error_str = type(e).__name__
             action = await run_blocking(db_executor, record_app_webhook_failure, app.id, 0, error_str)

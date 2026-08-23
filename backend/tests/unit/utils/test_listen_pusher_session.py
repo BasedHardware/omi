@@ -84,6 +84,7 @@ def make_session(
     config_overrides=None,
     deps_overrides=None,
     connect_calls=None,
+    client_kind_calls=None,
 ):
     active_ref = active_ref if active_ref is not None else {"active": True}
     config_values = {
@@ -101,9 +102,11 @@ def make_session(
     if config_overrides:
         config_values.update(config_overrides)
 
-    async def connect_to_pusher(uid, sample_rate, retries=5, is_active=None):
+    async def connect_to_pusher(uid, sample_rate, retries=5, is_active=None, client_kind='unknown'):
         if connect_calls is not None:
             connect_calls.append((uid, sample_rate, retries, is_active))
+        if client_kind_calls is not None:
+            client_kind_calls.append(client_kind)
         return ws or FakePusherWebSocket()
 
     async def wait_for_event(event, timeout):
@@ -471,3 +474,32 @@ async def test_close_cancels_reconnect_flushes_buffers_and_closes_socket():
     assert session.reconnect_task is None
     assert [frame_type(frame) for frame in ws.sent] == [103, 101, 102]
     assert ws.closed_codes == [1001]
+
+
+@pytest.mark.anyio
+async def test_pusher_connection_carries_the_bounded_client_kind():
+    """The pusher session is the only place that knows which client opened it.
+
+    Without this the pusher-side journey counters cannot tell an iOS outage from
+    a healthy Android population, which is the aggregation that let a 19-hour
+    desktop chat outage hide behind a larger healthy client.
+    """
+    client_kind_calls = []
+    session = make_session(
+        config_overrides={"client_kind": "mobile_ios"},
+        client_kind_calls=client_kind_calls,
+    )
+
+    await session.connect()
+
+    assert client_kind_calls == ["mobile_ios"]
+
+
+@pytest.mark.anyio
+async def test_pusher_connection_defaults_to_unknown_rather_than_guessing():
+    client_kind_calls = []
+    session = make_session(client_kind_calls=client_kind_calls)
+
+    await session.connect()
+
+    assert client_kind_calls == ["unknown"]
