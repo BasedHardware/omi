@@ -96,6 +96,15 @@ class ExpiryOrderedMaintenanceInventory:
     expired_active_item_count: int = 0
 
 
+@dataclass(frozen=True)
+class DailySweepUIDInventoryPage:
+    """Bounded daily-sweep page with independent fair-cursor channels."""
+
+    uids: tuple[str, ...]
+    canonical_uids: tuple[str, ...] = ()
+    onboarding_uids: tuple[str, ...] = ()
+
+
 def expiry_ordered_maintenance_uid_inventory(
     db_client: Any,
     *,
@@ -412,7 +421,8 @@ def bounded_daily_memory_sweep_uid_inventory(
     *,
     limit: int = MAX_MAINTENANCE_UIDS_PER_RUN,
     persist_cursor: bool = True,
-) -> tuple[str, ...]:
+    return_page: bool = False,
+) -> tuple[str, ...] | DailySweepUIDInventoryPage:
     """Union canonical users with bounded onboarding cold-start users.
 
     Canonical maintenance's neutral registry intentionally contains only users
@@ -501,7 +511,54 @@ def bounded_daily_memory_sweep_uid_inventory(
             },
             merge=True,
         )
-    return tuple(discovered[:bounded_limit])
+    page = DailySweepUIDInventoryPage(
+        uids=tuple(discovered[:bounded_limit]),
+        canonical_uids=tuple(canonical),
+        onboarding_uids=tuple(onboarding_uids),
+    )
+    return page if return_page else page.uids
+
+
+def commit_daily_memory_sweep_uid_inventory(
+    db_client: Any,
+    page: DailySweepUIDInventoryPage,
+    *,
+    completed_uids: Iterable[str],
+) -> None:
+    """Advance each daily inventory cursor through completed prefixes only.
+
+    The page is read with ``persist_cursor=False`` before the daily sweep. A
+    failed account therefore remains at or before the cursor and is retried;
+    successful accounts before it can still make progress on the next run.
+    """
+
+    completed = {uid.strip() for uid in completed_uids if uid.strip()}
+
+    canonical_prefix = []
+    for uid in page.canonical_uids:
+        if uid not in completed:
+            break
+        canonical_prefix.append(uid)
+    if canonical_prefix:
+        _persist_registry_cursor(db_client, canonical_prefix[-1])
+
+    onboarding_prefix = []
+    for uid in page.onboarding_uids:
+        if uid not in completed:
+            break
+        onboarding_prefix.append(uid)
+    if onboarding_prefix:
+        onboarding_cursor_ref = db_client.document(DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_CURSOR_PATH)
+        try:
+            onboarding_cursor_ref.set(
+                {
+                    "schema_version": DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_SCHEMA_VERSION,
+                    "last_uid": onboarding_prefix[-1],
+                },
+                merge=True,
+            )
+        except Exception as exc:
+            raise CanonicalMaintenanceInventoryUnavailable("onboarding inventory cursor unavailable") from exc
 
 
 def _resolve_maintenance_uids(

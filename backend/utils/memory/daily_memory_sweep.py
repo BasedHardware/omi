@@ -238,11 +238,10 @@ def daily_memory_sweep_cohort_authority_from_environment() -> DailySweepCohortAu
     truthy = {"1", "true", "yes", "on"}
     return DailySweepCohortAuthority(
         enabled=os.getenv(DAILY_MEMORY_SWEEP_COHORT_ENABLED_ENV, "false").casefold() in truthy,
-        # The old cohort name binding remains a compatibility alias.  New
-        # deployments should name the PostHog feature flag explicitly.
-        cohort_name=(
-            os.getenv(DAILY_MEMORY_SWEEP_COHORT_FLAG_ENV) or os.getenv(DAILY_MEMORY_SWEEP_COHORT_NAME_ENV, "")
-        ).strip(),
+        # The feature-flag binding is intentionally the only deployment input;
+        # a legacy free-form cohort-name alias could reopen an unrestricted
+        # rollout under a different name.
+        cohort_name=os.getenv(DAILY_MEMORY_SWEEP_COHORT_FLAG_ENV, "").strip(),
     )
 
 
@@ -1938,10 +1937,6 @@ def _find_active_slot_or_subject(
         raw = snapshot.to_dict()
         if not isinstance(raw, dict):
             raise SweepAuthoritativeQueryUnavailable("canonical occupant row is malformed")
-        # ``MemoryItem`` derives the normalized key for legacy payloads during
-        # validation, so retain the raw-field absence before constructing it;
-        # otherwise the bounded read-repair below can never fire.
-        legacy_missing_normalized_key = not raw.get("normalized_content_key")
         item = MemoryItem.model_validate(raw)
         if (
             item.uid != uid
@@ -1957,17 +1952,6 @@ def _find_active_slot_or_subject(
             )
         ):
             continue
-        if not candidate.slot and legacy_missing_normalized_key:
-            # Best-effort read repair is bounded by the compatibility proof
-            # page and merges only the derived identity field. The decision is
-            # already safe if this transport does not expose a writable
-            # reference (as in hermetic fakes).
-            reference = getattr(snapshot, "reference", None)
-            try:
-                if reference is not None and callable(getattr(reference, "set", None)):
-                    reference.set({"normalized_content_key": normalized_memory_content_key(item.content)}, merge=True)
-            except Exception:
-                pass
         items.append(item)
     return sorted(items, key=lambda item: item.memory_id)[0] if items else None
 
@@ -3447,6 +3431,11 @@ class DailySweepSchedulerSummary:
     idempotent_candidates: int = 0
     skipped_candidates: int = 0
     errors: Tuple[str, ...] = ()
+    # Accounts in this tuple reached a terminal bounded decision for this
+    # inventory page.  The maintenance adaptor uses it to advance only the
+    # contiguous successful prefix of each fair cursor; failed accounts stay
+    # eligible on the next invocation.
+    completed_uids: Tuple[str, ...] = ()
 
 
 def _pending_completed_dates(
@@ -3500,7 +3489,13 @@ def run_daily_memory_sweep_scheduler(
     if not resolved_authority.may_write:
         return DailySweepSchedulerSummary()
     resolved_cohort = cohort_authority or daily_memory_sweep_cohort_authority_from_environment()
-    if resolved_cohort.enabled and not resolved_cohort.cohort_name:
+    # A write-enabled scheduler must always have an explicit backend cohort
+    # gate.  A disabled/missing cohort is not an unrestricted all-user mode;
+    # it is a closed rollout.  The flag name is deployment-fixed and supplied
+    # only by the server-owned authority seam.
+    if not resolved_cohort.enabled:
+        return DailySweepSchedulerSummary(errors=("cohort_disabled",))
+    if not resolved_cohort.cohort_name:
         return DailySweepSchedulerSummary(errors=("cohort_name_missing",))
     if now.tzinfo is None or now.utcoffset() is None:
         raise ValueError("now must be timezone-aware")
@@ -3508,23 +3503,27 @@ def run_daily_memory_sweep_scheduler(
     attempted = committed_users = blocked_users = 0
     committed = idempotent = skipped = 0
     errors: List[str] = []
+    completed_uids: List[str] = []
     for uid in bounded_uids:
         attempted += 1
         try:
-            if resolved_cohort.enabled:
-                # This callback is intentionally read-only.  A PostHog client
-                # can be supplied by the maintenance deployment, but no
-                # identify/flag mutation is performed by this scheduler.
-                if not callable(cohort_authorizer):
-                    blocked_users += 1
-                    continue
-                try:
-                    enrolled = cohort_authorizer(uid, resolved_cohort.cohort_name)
-                except TypeError:
-                    enrolled = cohort_authorizer(uid)
-                if not bool(enrolled):
-                    blocked_users += 1
-                    continue
+            # This callback is intentionally read-only.  A PostHog client can
+            # be supplied by the maintenance deployment, but no
+            # identify/flag mutation is performed by this scheduler.
+            if not callable(cohort_authorizer):
+                blocked_users += 1
+                continue
+            try:
+                enrolled = cohort_authorizer(uid, resolved_cohort.cohort_name)
+            except TypeError:
+                enrolled = cohort_authorizer(uid)
+            if enrolled is not True:
+                # Non-enrollment is a successful bounded decision (and is safe
+                # to advance the inventory cursor); resolver exceptions remain
+                # on the retry path via the outer handler.
+                blocked_users += 1
+                completed_uids.append(uid)
+                continue
             control = ensure_canonical_apply_control_state(uid, db_client=db_client)
             timezone_name = str(timezone_resolver(uid) or "UTC")
             cursor = _read_cursor(db_client, uid, control)
@@ -3532,6 +3531,7 @@ def run_daily_memory_sweep_scheduler(
                 raise ValueError("timezone_changed_requires_reconciliation")
             pending_dates = _pending_completed_dates(cursor, timezone_name=timezone_name, now=now)
             if not pending_dates:
+                completed_uids.append(uid)
                 continue
             packets: Dict[date, DailySweepInput] = {}
             for local_date in pending_dates:
@@ -3582,6 +3582,7 @@ def run_daily_memory_sweep_scheduler(
             skipped += output.skipped_count
             if output.status == "committed":
                 committed_users += 1
+                completed_uids.append(uid)
             else:
                 blocked_users += 1
                 errors.append(f"uid={uid}:{output.blocked_reason or output.status}")
@@ -3596,6 +3597,7 @@ def run_daily_memory_sweep_scheduler(
         idempotent_candidates=idempotent,
         skipped_candidates=skipped,
         errors=tuple(errors[:16]),
+        completed_uids=tuple(completed_uids),
     )
 
 

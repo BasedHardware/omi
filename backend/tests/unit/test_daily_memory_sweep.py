@@ -8,6 +8,7 @@ import pytest
 from models.memory_apply import MemoryControlState
 from utils.memory.daily_memory_sweep import (
     DailySweepCandidate,
+    DailySweepCohortAuthority,
     DailySweepCursor,
     DailySweepInput,
     MAX_CATCH_UP_DAYS,
@@ -30,8 +31,10 @@ from utils.memory.daily_memory_sweep import (
     _onboarding_transcript_eligibility,
     _pending_completed_dates,
     close_daily_memory_sweep_cohort_clients,
+    daily_memory_sweep_cohort_authority_from_environment,
     _POSTHOG_CLIENTS,
     read_daily_memory_sweep_cohort_assignment,
+    run_daily_memory_sweep_scheduler,
 )
 from models.product_memory import normalized_memory_content_key
 
@@ -462,6 +465,30 @@ def test_cohort_reader_is_backend_read_only_and_injectable(monkeypatch):
     assert not read_daily_memory_sweep_cohort_assignment("user-1", "memory-sweep")
 
 
+def test_scheduler_never_treats_disabled_cohort_as_unrestricted(monkeypatch):
+    summary = run_daily_memory_sweep_scheduler(
+        db_client=object(),
+        now=datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
+        uid_inventory=("user-1",),
+        source_provider=lambda *_args, **_kwargs: None,
+        timezone_resolver=lambda _uid: "UTC",
+        authority=SweepAuthorityState(enabled=True),
+        cohort_authority=DailySweepCohortAuthority(enabled=False, cohort_name=""),
+        cohort_authorizer=lambda *_args: True,
+    )
+    assert summary.attempted_users == 0
+    assert summary.errors == ("cohort_disabled",)
+
+
+def test_cohort_environment_requires_the_fixed_flag_binding(monkeypatch):
+    monkeypatch.setenv("MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED", "true")
+    monkeypatch.setenv("MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME", "legacy-alias")
+    monkeypatch.delenv("MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG", raising=False)
+    authority = daily_memory_sweep_cohort_authority_from_environment()
+    assert authority.enabled is True
+    assert authority.cohort_name == ""
+
+
 def test_cached_summary_requires_exact_completed_day_eligibility_attestation():
     window = completed_local_day_window(date(2026, 8, 23), "UTC")
     payload = {
@@ -724,4 +751,7 @@ def test_legacy_compatibility_proof_allows_more_than_two_unslotted_facts():
     db = SimpleNamespace(collection=lambda _path: Collection())
     occupant = _find_active_slot_or_subject("user-1", _candidate(slot=None), db_client=db)
     assert occupant is not None and occupant.memory_id == "memory-1"
-    assert writes == [("memory-1", {"normalized_content_key": normalized_memory_content_key(occupant.content)}, True)]
+    # Compatibility reads must not lazily write a child row: an unfenced
+    # backfill can recreate data after account deletion. Identity is derived
+    # in memory for this bounded proof instead.
+    assert writes == []
