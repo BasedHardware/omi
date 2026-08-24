@@ -190,9 +190,17 @@ def test_referral_claim_marks_an_existing_authenticated_account_ineligible(monke
     ]
 
 
-def test_referral_claim_emits_self_refer_reason(monkeypatch):
+@pytest.mark.parametrize(
+    ('uid', 'referrer_uid', 'reason'),
+    [
+        ('same-user', 'same-user', 'self_refer'),
+        ('paid-user', 'referrer-123', 'paid'),
+        ('claimed-user', 'referrer-123', 'already_claimed'),
+    ],
+)
+def test_referral_claim_emits_ineligible_reason(monkeypatch, uid, referrer_uid, reason):
     monkeypatch.setenv('ENCRYPTION_SECRET', TEST_SECRET.decode())
-    code = create_referral_code('same-user')
+    code = create_referral_code(referrer_uid)
     now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
 
     with _loaded_referrals_router() as referrals:
@@ -202,16 +210,16 @@ def test_referral_claim_emits_self_refer_reason(monkeypatch):
             'get_user',
             lambda _uid: SimpleNamespace(user_metadata=SimpleNamespace(creation_timestamp=now_ms)),
         )
-        monkeypatch.setattr(referrals, 'claim_referral_trial', lambda *_args, **_kwargs: (False, 'self_refer'))
+        monkeypatch.setattr(referrals, 'claim_referral_trial', lambda *_args, **_kwargs: (False, reason))
         monkeypatch.setattr(referrals, 'emit_posthog_event', lambda *event: events.append(event))
-        response = referrals.claim_referral(referrals.ReferralClaimRequest(code=code), 'same-user')
+        response = referrals.claim_referral(referrals.ReferralClaimRequest(code=code), uid)
 
     assert response.claimed is False
     assert events == [
         (
-            'same-user',
+            uid,
             'Referral Claimed',
-            {'program': 'desktop_operator_month_v1', 'claimed': False, 'reason': 'self_refer'},
+            {'program': 'desktop_operator_month_v1', 'claimed': False, 'reason': reason},
         )
     ]
 
