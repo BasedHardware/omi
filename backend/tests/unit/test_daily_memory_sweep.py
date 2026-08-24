@@ -9,6 +9,7 @@ from models.memory_apply import MemoryControlState
 from utils.memory.daily_memory_sweep import (
     DailySweepCandidate,
     DailySweepCohortAuthority,
+    DailySweepCohortDecision,
     DailySweepCursor,
     DailySweepInput,
     MAX_CATCH_UP_DAYS,
@@ -28,6 +29,7 @@ from utils.memory.daily_memory_sweep import (
     _cached_summary_eligibility_attested,
     _find_active_slot_or_subject,
     _load_or_stage_onboarding_candidates,
+    _onboarding_staged_candidates_ref,
     _onboarding_transcript_eligibility,
     _pending_completed_dates,
     close_daily_memory_sweep_cohort_clients,
@@ -465,6 +467,36 @@ def test_cohort_reader_is_backend_read_only_and_injectable(monkeypatch):
     assert not read_daily_memory_sweep_cohort_assignment("user-1", "memory-sweep")
 
 
+def test_cohort_reader_distinguishes_false_from_posthog_outage(monkeypatch):
+    assert (
+        read_daily_memory_sweep_cohort_assignment("user-1", "memory-sweep", resolver=lambda *_: False)
+        is DailySweepCohortDecision.disabled
+    )
+    assert (
+        read_daily_memory_sweep_cohort_assignment(
+            "user-1", "memory-sweep", resolver=lambda *_: (_ for _ in ()).throw(RuntimeError("posthog down"))
+        )
+        is DailySweepCohortDecision.unavailable
+    )
+
+
+def test_scheduler_requeues_posthog_outage_without_calling_source_provider():
+    source_calls = []
+    summary = run_daily_memory_sweep_scheduler(
+        db_client=object(),
+        now=datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
+        uid_inventory=("user-1",),
+        source_provider=lambda *_args, **_kwargs: source_calls.append(True),
+        timezone_resolver=lambda _uid: "UTC",
+        authority=SweepAuthorityState(enabled=True),
+        cohort_authority=DailySweepCohortAuthority(enabled=True, cohort_name="memory-sweep"),
+        cohort_authorizer=lambda *_args: DailySweepCohortDecision.unavailable,
+    )
+    assert summary.failed_uids == ("user-1",)
+    assert summary.completed_uids == ()
+    assert source_calls == []
+
+
 def test_scheduler_never_treats_disabled_cohort_as_unrestricted(monkeypatch):
     summary = run_daily_memory_sweep_scheduler(
         db_client=object(),
@@ -688,6 +720,35 @@ def test_onboarding_continuation_reuses_durable_candidate_page(monkeypatch):
     assert second == first
     assert len(second[8:]) == 12
     assert len(calls) == 1
+
+
+def test_onboarding_malformed_stage_fails_closed_without_reextracting(monkeypatch):
+    db = _Db()
+    _onboarding_staged_candidates_ref(db, "user-1", "onboarding:conversation-1").set(
+        {
+            "schema_version": "daily_memory_sweep_onboarding_stage.v1",
+            "uid": "user-1",
+            "source_key": "onboarding:conversation-1",
+            "transcript_digest": "tampered",
+            "candidate_digest": "tampered",
+            "candidate_page": [],
+        }
+    )
+
+    def should_not_extract(_uid, _text):
+        raise AssertionError("malformed durable stage must not rerun extraction")
+
+    assert (
+        _load_or_stage_onboarding_candidates(
+            "user-1",
+            "onboarding:conversation-1",
+            "conversation-1",
+            "stable transcript",
+            db_client=db,
+            extractor=should_not_extract,
+        )
+        is None
+    )
 
 
 def test_legacy_compatibility_proof_allows_more_than_two_unslotted_facts():

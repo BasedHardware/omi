@@ -234,6 +234,19 @@ class DailySweepCohortAuthority(BaseModel):
     cohort_name: str = ""
 
 
+class DailySweepCohortDecision(str, Enum):
+    """Tri-state result for the read-only cohort control-plane lookup."""
+
+    enabled = "enabled"
+    disabled = "disabled"
+    unavailable = "unavailable"
+
+    def __bool__(self) -> bool:
+        # Preserve the old truthiness seam for small adapters while keeping
+        # outage distinct from a definite false assignment.
+        return self is DailySweepCohortDecision.enabled
+
+
 def daily_memory_sweep_cohort_authority_from_environment() -> DailySweepCohortAuthority:
     truthy = {"1", "true", "yes", "on"}
     return DailySweepCohortAuthority(
@@ -250,7 +263,7 @@ def read_daily_memory_sweep_cohort_assignment(
     cohort_name: str,
     *,
     resolver: Optional[Any] = None,
-) -> bool:
+) -> DailySweepCohortDecision:
     """Read-only per-user cohort seam used by the maintenance entrypoint.
 
     The default is deliberately fail-closed.  A deployment may inject a
@@ -261,7 +274,7 @@ def read_daily_memory_sweep_cohort_assignment(
     normalized_uid = (uid or "").strip()
     normalized_flag = (cohort_name or "").strip()
     if not normalized_uid or not normalized_flag:
-        return False
+        return DailySweepCohortDecision.unavailable
     # Tests and the maintenance adaptor inject a read-only resolver.  The
     # production fallback is lazy so importing this module never constructs a
     # client or performs network I/O.  No identify/capture call is made and
@@ -271,13 +284,13 @@ def read_daily_memory_sweep_cohort_assignment(
         api_key = (os.getenv("POSTHOG_PROJECT_API_KEY") or os.getenv("POSTHOG_API_KEY") or "").strip()
         host = (os.getenv("POSTHOG_HOST") or "https://app.posthog.com").strip()
         if not api_key or not host:
-            return False
+            return DailySweepCohortDecision.unavailable
         try:
             posthog_module = importlib.import_module("posthog")
             client_type = getattr(posthog_module, "Posthog")
             timeout = float(os.getenv(DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_ENV, "3"))
             if timeout <= 0 or timeout > 10:
-                return False
+                return DailySweepCohortDecision.unavailable
             client_key = (api_key, host, timeout)
             with _POSTHOG_CLIENTS_LOCK:
                 reader = _POSTHOG_CLIENTS.get(client_key)
@@ -289,7 +302,7 @@ def read_daily_memory_sweep_cohort_assignment(
                     )
                     _POSTHOG_CLIENTS[client_key] = reader
         except Exception:
-            return False
+            return DailySweepCohortDecision.unavailable
     try:
         get_flag = getattr(reader, "get_feature_flag", None)
         if callable(get_flag):
@@ -302,13 +315,17 @@ def read_daily_memory_sweep_cohort_assignment(
         elif callable(reader):
             result = reader(normalized_uid, normalized_flag)
         else:
-            return False
+            return DailySweepCohortDecision.unavailable
     except Exception:
-        return False
+        return DailySweepCohortDecision.unavailable
     # A boolean true is the only accepted assignment.  String variants are
     # deliberately not treated as enrollment: a flag configured with a named
     # variant must use a server-side boolean rollout or stay closed.
-    return result is True
+    if result is True:
+        return DailySweepCohortDecision.enabled
+    if result is False:
+        return DailySweepCohortDecision.disabled
+    return DailySweepCohortDecision.unavailable
 
 
 def close_daily_memory_sweep_cohort_clients() -> None:
@@ -2737,11 +2754,17 @@ def _load_or_stage_onboarding_candidates(
         return staged
 
     try:
-        staged = read_staged(stage_ref.get())
+        staged_snapshot = stage_ref.get()
     except Exception:
         return None
-    if staged is not None:
-        return staged
+    if getattr(staged_snapshot, "exists", False):
+        # An existing but malformed stage is a durable integrity failure, not
+        # a cache miss. Never rerun nondeterministic extraction against the
+        # same source and then slice a different candidate page.
+        try:
+            return read_staged(staged_snapshot)
+        except Exception:
+            return None
 
     try:
         extracted = tuple(extractor(uid, text) or ())
@@ -3432,10 +3455,11 @@ class DailySweepSchedulerSummary:
     skipped_candidates: int = 0
     errors: Tuple[str, ...] = ()
     # Accounts in this tuple reached a terminal bounded decision for this
-    # inventory page.  The maintenance adaptor uses it to advance only the
-    # contiguous successful prefix of each fair cursor; failed accounts stay
-    # eligible on the next invocation.
+    # inventory page. The maintenance adaptor records failures in independent
+    # per-UID retry documents before advancing fair source cursors; a failed
+    # account therefore stays eligible without imposing head-of-line blocking.
     completed_uids: Tuple[str, ...] = ()
+    failed_uids: Tuple[str, ...] = ()
 
 
 def _pending_completed_dates(
@@ -3504,6 +3528,7 @@ def run_daily_memory_sweep_scheduler(
     committed = idempotent = skipped = 0
     errors: List[str] = []
     completed_uids: List[str] = []
+    failed_uids: List[str] = []
     for uid in bounded_uids:
         attempted += 1
         try:
@@ -3512,17 +3537,31 @@ def run_daily_memory_sweep_scheduler(
             # identify/flag mutation is performed by this scheduler.
             if not callable(cohort_authorizer):
                 blocked_users += 1
+                failed_uids.append(uid)
+                errors.append(f"uid={uid}:cohort_unavailable")
                 continue
             try:
                 enrolled = cohort_authorizer(uid, resolved_cohort.cohort_name)
             except TypeError:
                 enrolled = cohort_authorizer(uid)
-            if enrolled is not True:
-                # Non-enrollment is a successful bounded decision (and is safe
-                # to advance the inventory cursor); resolver exceptions remain
-                # on the retry path via the outer handler.
+            if isinstance(enrolled, DailySweepCohortDecision):
+                cohort_decision = enrolled
+            elif enrolled is True:
+                cohort_decision = DailySweepCohortDecision.enabled
+            elif enrolled is False:
+                cohort_decision = DailySweepCohortDecision.disabled
+            else:
+                cohort_decision = DailySweepCohortDecision.unavailable
+            if cohort_decision is DailySweepCohortDecision.disabled:
+                # A definite false assignment is a successful bounded
+                # decision and may advance the fair page cursor.
                 blocked_users += 1
                 completed_uids.append(uid)
+                continue
+            if cohort_decision is not DailySweepCohortDecision.enabled:
+                blocked_users += 1
+                failed_uids.append(uid)
+                errors.append(f"uid={uid}:cohort_unavailable")
                 continue
             control = ensure_canonical_apply_control_state(uid, db_client=db_client)
             timezone_name = str(timezone_resolver(uid) or "UTC")
@@ -3585,9 +3624,11 @@ def run_daily_memory_sweep_scheduler(
                 completed_uids.append(uid)
             else:
                 blocked_users += 1
+                failed_uids.append(uid)
                 errors.append(f"uid={uid}:{output.blocked_reason or output.status}")
         except Exception as exc:
             blocked_users += 1
+            failed_uids.append(uid)
             errors.append(f"uid={uid}:{type(exc).__name__}")
     return DailySweepSchedulerSummary(
         attempted_users=attempted,
@@ -3598,6 +3639,7 @@ def run_daily_memory_sweep_scheduler(
         skipped_candidates=skipped,
         errors=tuple(errors[:16]),
         completed_uids=tuple(completed_uids),
+        failed_uids=tuple(failed_uids),
     )
 
 
@@ -3609,6 +3651,7 @@ __all__ = [
     "DailySweepPlan",
     "DailySweepRuntimeSources",
     "DailySweepSchedulerSummary",
+    "DailySweepCohortDecision",
     "CompletedLocalDayWindow",
     "DailySweepSkip",
     "MAX_CANDIDATES_PER_DAY",

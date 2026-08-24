@@ -74,6 +74,9 @@ CANONICAL_MEMORY_MAINTENANCE_SEED_CURSOR_PATH = "canonical_memory_maintenance_co
 CANONICAL_MEMORY_MAINTENANCE_SEED_SCHEMA_VERSION = 1
 DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_CURSOR_PATH = "daily_memory_sweep_control/onboarding_inventory_cursor"
 DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_SCHEMA_VERSION = 1
+DAILY_MEMORY_SWEEP_RETRY_COLLECTION = "daily_memory_sweep_control_retries"
+DAILY_MEMORY_SWEEP_RETRY_STATE_SCHEMA_VERSION = 1
+MAX_DAILY_MEMORY_SWEEP_RETRY_UIDS_PER_PAGE = 32
 CANONICAL_MEMORY_DREAMING_STATE_COLLECTION = "canonical_memory_dreaming_state"
 DREAMING_MIN_INTERVAL = timedelta(hours=20)
 OVERFLOW_SHORT_TERM_THRESHOLD = 10
@@ -103,6 +106,7 @@ class DailySweepUIDInventoryPage:
     uids: tuple[str, ...]
     canonical_uids: tuple[str, ...] = ()
     onboarding_uids: tuple[str, ...] = ()
+    retry_uids: tuple[str, ...] = ()
 
 
 def expiry_ordered_maintenance_uid_inventory(
@@ -433,11 +437,39 @@ def bounded_daily_memory_sweep_uid_inventory(
     """
 
     bounded_limit = max(1, min(MAX_MAINTENANCE_UIDS_PER_RUN, int(limit)))
-    # Reserve half the bounded page for the cold-start channel.  A canonical
+    try:
+        retry_limit = max(1, min(MAX_DAILY_MEMORY_SWEEP_RETRY_UIDS_PER_PAGE, bounded_limit // 4))
+        retry_snapshots = (
+            db_client.collection(DAILY_MEMORY_SWEEP_RETRY_COLLECTION).order_by("uid").limit(retry_limit).stream()
+        )
+        retry_values: list[str] = []
+        for snapshot in retry_snapshots:
+            payload = snapshot.to_dict() if hasattr(snapshot, "to_dict") else None
+            if (
+                not isinstance(payload, dict)
+                or payload.get("schema_version") != DAILY_MEMORY_SWEEP_RETRY_STATE_SCHEMA_VERSION
+            ):
+                raise CanonicalMaintenanceInventoryUnavailable("daily sweep retry state malformed")
+            uid = payload.get("uid")
+            if not isinstance(uid, str) or not uid.strip() or "/" in uid:
+                raise CanonicalMaintenanceInventoryUnavailable("daily sweep retry state malformed")
+            if uid.strip() not in retry_values:
+                retry_values.append(uid.strip())
+        retry_uids = tuple(retry_values)
+    except CanonicalMaintenanceInventoryUnavailable:
+        raise
+    except Exception as exc:
+        raise CanonicalMaintenanceInventoryUnavailable("daily sweep retry state unavailable") from exc
+    remaining_limit = bounded_limit - len(retry_uids)
+    if not remaining_limit:
+        page = DailySweepUIDInventoryPage(uids=retry_uids, retry_uids=retry_uids)
+        return page if return_page else page.uids
+
+    # Reserve half the remaining bounded page for the cold-start channel. A canonical
     # registry page can contain hundreds of existing users; without a reserve
     # a newly onboarded account would never reach the sweep.
-    onboarding_limit = max(1, bounded_limit // 2) if bounded_limit > 1 else 1
-    canonical_limit = max(0, bounded_limit - onboarding_limit)
+    onboarding_limit = max(1, remaining_limit // 2) if remaining_limit > 1 else 1
+    canonical_limit = max(0, remaining_limit - onboarding_limit)
     canonical = (
         bounded_canonical_memory_uid_inventory(
             db_client,
@@ -451,7 +483,7 @@ def bounded_daily_memory_sweep_uid_inventory(
     where = getattr(users, "where", None)
     if not callable(where):
         raise CanonicalMaintenanceInventoryUnavailable("onboarding cold-start inventory is unavailable")
-    discovered: list[str] = []
+    discovered: list[str] = list(retry_uids)
     for uid in canonical:
         if uid not in discovered:
             discovered.append(uid)
@@ -513,8 +545,9 @@ def bounded_daily_memory_sweep_uid_inventory(
         )
     page = DailySweepUIDInventoryPage(
         uids=tuple(discovered[:bounded_limit]),
-        canonical_uids=tuple(canonical),
-        onboarding_uids=tuple(onboarding_uids),
+        canonical_uids=tuple(uid for uid in canonical if uid in discovered[:bounded_limit]),
+        onboarding_uids=tuple(uid for uid in onboarding_uids if uid in discovered[:bounded_limit]),
+        retry_uids=retry_uids,
     )
     return page if return_page else page.uids
 
@@ -524,36 +557,47 @@ def commit_daily_memory_sweep_uid_inventory(
     page: DailySweepUIDInventoryPage,
     *,
     completed_uids: Iterable[str],
+    failed_uids: Iterable[str] = (),
+    advance_page: bool = True,
 ) -> None:
-    """Advance each daily inventory cursor through completed prefixes only.
+    """Advance fair cursors independently and durably requeue failures.
 
     The page is read with ``persist_cursor=False`` before the daily sweep. A
-    failed account therefore remains at or before the cursor and is retried;
-    successful accounts before it can still make progress on the next run.
+    failed account is placed in a bounded retry queue, while the independent
+    page cursor continues so one outage cannot starve later accounts.
     """
 
     completed = {uid.strip() for uid in completed_uids if uid.strip()}
+    failed = {uid.strip() for uid in failed_uids if uid.strip()}
+    completed.difference_update(failed)
 
-    canonical_prefix = []
-    for uid in page.canonical_uids:
-        if uid not in completed:
-            break
-        canonical_prefix.append(uid)
-    if canonical_prefix:
-        _persist_registry_cursor(db_client, canonical_prefix[-1])
+    if not advance_page and not completed and not failed:
+        return
+    # Persist retry state before advancing either source cursor. Each UID has
+    # an independent durable document, so outages cannot overflow one array or
+    # lose concurrent read/modify/write updates.
+    try:
+        for uid in sorted(failed):
+            db_client.document(f"{DAILY_MEMORY_SWEEP_RETRY_COLLECTION}/{uid}").set(
+                {"schema_version": DAILY_MEMORY_SWEEP_RETRY_STATE_SCHEMA_VERSION, "uid": uid},
+                merge=True,
+            )
+        for uid in sorted(completed):
+            db_client.document(f"{DAILY_MEMORY_SWEEP_RETRY_COLLECTION}/{uid}").delete()
+    except Exception as exc:
+        raise CanonicalMaintenanceInventoryUnavailable("daily sweep retry state unavailable") from exc
 
-    onboarding_prefix = []
-    for uid in page.onboarding_uids:
-        if uid not in completed:
-            break
-        onboarding_prefix.append(uid)
-    if onboarding_prefix:
+    # A cursor write may fail and cause a duplicate page, but it must never
+    # happen before the retry state above is durable.
+    if advance_page and page.canonical_uids:
+        _persist_registry_cursor(db_client, page.canonical_uids[-1])
+    if advance_page and page.onboarding_uids:
         onboarding_cursor_ref = db_client.document(DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_CURSOR_PATH)
         try:
             onboarding_cursor_ref.set(
                 {
                     "schema_version": DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_SCHEMA_VERSION,
-                    "last_uid": onboarding_prefix[-1],
+                    "last_uid": page.onboarding_uids[-1],
                 },
                 merge=True,
             )

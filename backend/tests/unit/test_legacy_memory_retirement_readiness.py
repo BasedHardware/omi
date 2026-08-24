@@ -75,6 +75,41 @@ def test_scheduler_target_contract_cannot_drift_from_authoritative_validator() -
     assert contract.scheduler_target_uri == authoritative.target_uri
 
 
+def test_daily_replacement_has_a_distinct_retained_resource_contract() -> None:
+    workflow = BACKEND_ROOT.parent / ".github" / "workflows" / "gcp_daily_memory_sweep_job.yml"
+    dockerfile = BACKEND_ROOT / "modal" / "Dockerfile.daily_memory_sweep_job"
+    docs = BACKEND_ROOT / "docs" / "doc" / "developer" / "daily-memory-sweep-job.md"
+    assert workflow.is_file()
+    assert dockerfile.is_file()
+    assert docs.is_file()
+    text = workflow.read_text(encoding="utf-8")
+    assert "daily-memory-sweep-job" in text
+    assert "daily-memory-sweep-hourly" in text
+    assert readiness.EXPECTED_CLOUD_RUN_JOB == "memory-maintenance-job"
+    assert readiness.EXPECTED_SCHEDULER_JOB == "memory-maintenance-hourly"
+    runtime_images = json.loads((BACKEND_ROOT.parent / "backend" / "runtime_images.json").read_text(encoding="utf-8"))
+    daily_images = [image for image in runtime_images["images"] if image["name"] == "daily-memory-sweep-job"]
+    assert len(daily_images) == 1
+    assert daily_images[0]["dockerfile"] == "backend/modal/Dockerfile.daily_memory_sweep_job"
+    assert daily_images[0]["entrypoints"] == ["daily_memory_sweep_job"]
+    assert all("gcp_daily_memory_sweep_job" in workflow for workflow in daily_images[0]["deployment_workflows"])
+
+
+def test_legacy_entrypoint_cannot_reset_or_delete_daily_inventory_controls() -> None:
+    legacy_entrypoint = BACKEND_ROOT / "modal" / "memory_maintenance_job.py"
+    daily_entrypoint = BACKEND_ROOT / "modal" / "daily_memory_sweep_job.py"
+    daily_inventory = BACKEND_ROOT / "utils" / "memory" / "daily_memory_sweep_inventory.py"
+    legacy_source = legacy_entrypoint.read_text(encoding="utf-8")
+    daily_source = daily_entrypoint.read_text(encoding="utf-8")
+    inventory_source = daily_inventory.read_text(encoding="utf-8")
+
+    assert "daily_memory" not in legacy_source
+    assert "canonical_short_term_maintenance_cron" not in daily_source
+    assert "memory_maintenance_job" not in daily_source
+    assert "CANONICAL_MEMORY_MAINTENANCE_CURSOR_PATH" not in inventory_source
+    assert "CANONICAL_MEMORY_MAINTENANCE_REGISTRY_COLLECTION" not in inventory_source
+
+
 @pytest.mark.parametrize(
     ("fixture", "reason"),
     [
