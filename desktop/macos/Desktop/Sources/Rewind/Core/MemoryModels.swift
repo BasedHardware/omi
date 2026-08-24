@@ -383,10 +383,15 @@ extension MemoryRecord {
       guard let revision = ledgerEvidenceRevision, memory.updatedAt >= revision else { return false }
     }
     let current = MemoryLedgerEvidence.decode(ledgerEvidenceJson)
-    guard ledgerEvidenceJson == nil || current != memory.evidence else {
+    let payloadChanged = ledgerEvidenceJson == nil || current != memory.evidence
+    let revisionChanged = ledgerEvidenceRevision != memory.updatedAt
+    guard payloadChanged || revisionChanged else {
       return false
     }
-    ledgerEvidenceJson = Self.encodeLedgerEvidence(memory.evidence, preserveEmpty: true)
+    if payloadChanged {
+      guard let encoded = Self.encodeLedgerEvidence(memory.evidence, preserveEmpty: true) else { return false }
+      ledgerEvidenceJson = encoded
+    }
     ledgerEvidenceRevision = memory.updatedAt
     return true
   }

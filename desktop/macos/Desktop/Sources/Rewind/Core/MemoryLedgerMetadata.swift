@@ -80,16 +80,17 @@ enum MemoryLedgerEvidence {
 
   static func normalize(_ wire: [OmiAPI.Evidence]) -> [ServerMemoryEvidence]? {
     guard wire.count <= maxEvidenceEntries else { return nil }
-    let values = wire.map(ServerMemoryEvidence.init)
+    let values = wire.map(ServerMemoryEvidence.init).map(sanitize)
     guard values.allSatisfy(isValid), canonicalJSONString(values) != nil else { return nil }
     return values
   }
 
   static func canonicalJSONString(_ values: [ServerMemoryEvidence]) -> String? {
     guard values.count <= maxEvidenceEntries else { return nil }
+    let sanitizedValues = values.map(sanitize)
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
-    guard let data = try? encoder.encode(values), data.count <= maxEvidenceJSONBytes else { return nil }
+    guard let data = try? encoder.encode(sanitizedValues), data.count <= maxEvidenceJSONBytes else { return nil }
     return String(data: data, encoding: .utf8)
   }
 
@@ -100,7 +101,34 @@ enum MemoryLedgerEvidence {
       values.allSatisfy(isValid),
       canonicalJSONString(values) != nil
     else { return [] }
-    return values
+    return values.map(sanitize)
+  }
+
+  /// Legacy server rows can retain artifact/device pointers after a privacy
+  /// redaction. Keep only non-content identity/lineage fields for any status
+  /// other than active, including unknown future redaction states.
+  private static func sanitize(_ value: ServerMemoryEvidence) -> ServerMemoryEvidence {
+    guard isRedacted(value.redactionStatus) else { return value }
+    return ServerMemoryEvidence(
+      artifactRef: nil,
+      captureConfidence: value.captureConfidence,
+      clientDeviceId: nil,
+      createdAt: value.createdAt,
+      evidenceId: value.evidenceId,
+      extractorId: value.extractorId,
+      extractorVersion: value.extractorVersion,
+      independenceGroup: value.independenceGroup,
+      redactionStatus: value.redactionStatus,
+      sourceId: value.sourceId,
+      sourceSignal: value.sourceSignal,
+      sourceType: value.sourceType
+    )
+  }
+
+  private static func isRedacted(_ status: String?) -> Bool {
+    guard let status else { return false }
+    let normalized = status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    return !normalized.isEmpty && normalized != "active"
   }
 
   private static func isValid(_ value: ServerMemoryEvidence) -> Bool {

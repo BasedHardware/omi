@@ -154,6 +154,34 @@ struct ServerMemoryEvidence: Codable, Equatable {
   let sourceSignal: String?
   let sourceType: String?
 
+  init(
+    artifactRef: [String: OmiAnyCodable]?,
+    captureConfidence: Double?,
+    clientDeviceId: String?,
+    createdAt: String?,
+    evidenceId: String,
+    extractorId: String?,
+    extractorVersion: String?,
+    independenceGroup: String,
+    redactionStatus: String?,
+    sourceId: String?,
+    sourceSignal: String?,
+    sourceType: String?
+  ) {
+    self.artifactRef = artifactRef
+    self.captureConfidence = captureConfidence
+    self.clientDeviceId = clientDeviceId
+    self.createdAt = createdAt
+    self.evidenceId = evidenceId
+    self.extractorId = extractorId
+    self.extractorVersion = extractorVersion
+    self.independenceGroup = independenceGroup
+    self.redactionStatus = redactionStatus
+    self.sourceId = sourceId
+    self.sourceSignal = sourceSignal
+    self.sourceType = sourceType
+  }
+
   init(_ wire: OmiAPI.Evidence) {
     artifactRef = wire.artifactRef
     captureConfidence = wire.captureConfidence
