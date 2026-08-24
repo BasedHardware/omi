@@ -471,11 +471,38 @@ DAILY_SWEEP_ACTIVE_FACT_ENTITY_CONTENT_QUERY = FirestoreQuerySpec(
     index_fields=DAILY_SWEEP_ACTIVE_FACT_ENTITY_QUERY.index_fields + (_asc('normalized_content_key'),),
 )
 
-# Onboarding conversations are ordered by the same field used by the only
-# range predicate.  The old adapter added a second document-id inequality and
-# order, which requires an undeclared composite index and is rejected by some
-# Firestore deployments.  Pagination uses a document snapshot cursor instead;
-# the serving query itself remains a single, deployable range query.
+# Onboarding cold-start discovery is a bounded, cursor-relative query over the
+# users collection.  Keep the two historical completion markers as separate
+# serving queries: a disjunction over both nested fields is not portable across
+# Firestore emulator/server versions.  The document-id range is explicit so the
+# query has a deterministic page boundary; the exact equality+document-id
+# composites are generated into firestore.indexes.json.
+DAILY_SWEEP_ONBOARDING_COMPLETED_USERS_QUERY = FirestoreQuerySpec(
+    identifier='daily_sweep_onboarding_completed_users',
+    collection_group='users',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('onboarding.completed', '==', 'completed'),
+        FirestoreQueryFilter('__name__', '>', 'after_uid'),
+    ),
+    index_fields=(_asc('onboarding.completed'), _asc('__name__')),
+)
+
+DAILY_SWEEP_ONBOARDING_DEVICE_COMPLETED_USERS_QUERY = FirestoreQuerySpec(
+    identifier='daily_sweep_onboarding_device_completed_users',
+    collection_group='users',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('onboarding.device_onboarding_completed', '==', 'completed'),
+        FirestoreQueryFilter('__name__', '>', 'after_uid'),
+    ),
+    index_fields=(_asc('onboarding.device_onboarding_completed'), _asc('__name__')),
+)
+
+# Onboarding transcript extraction has a separate, single-range query over
+# conversation metadata. Keep this contract for the source producer; account
+# discovery above is intentionally the users collection and must not reuse this
+# source query as its fair inventory.
 DAILY_SWEEP_ONBOARDING_CONVERSATIONS_QUERY = FirestoreQuerySpec(
     identifier='daily_sweep_onboarding_conversations',
     collection_group='conversations',
@@ -861,6 +888,8 @@ QUERY_SPECS = (
     DAILY_SWEEP_ACTIVE_FACT_ENTITY_SLOT_QUERY,
     DAILY_SWEEP_ACTIVE_FACT_SUBJECT_CONTENT_QUERY,
     DAILY_SWEEP_ACTIVE_FACT_ENTITY_CONTENT_QUERY,
+    DAILY_SWEEP_ONBOARDING_COMPLETED_USERS_QUERY,
+    DAILY_SWEEP_ONBOARDING_DEVICE_COMPLETED_USERS_QUERY,
     DAILY_SWEEP_ONBOARDING_CONVERSATIONS_QUERY,
     UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY,
     UNIVERSAL_HISTORICAL_CREATED_LIST_SCAN_QUERY,
@@ -913,7 +942,15 @@ def _query_spec_index_requirements() -> tuple[FirestoreIndexRequirement, ...]:
     seen = set(_INDEX_ONLY_REQUIREMENT_SIGNATURES)
     requirements: list[FirestoreIndexRequirement] = []
     for spec in QUERY_SPECS:
-        if not _index_fields_need_composite_manifest(spec.index_fields):
+        # A document-id range paired with a field equality is a compound
+        # serving query even when both index fields have the same direction;
+        # automatic single-field indexes do not provide this cursor contract
+        # consistently across Firestore emulator/server versions.
+        document_id_range = any(
+            query_filter.field_path == '__name__' and query_filter.operator not in ('==', 'in')
+            for query_filter in spec.filters
+        )
+        if not _index_fields_need_composite_manifest(spec.index_fields) and not document_id_range:
             continue
         signature = spec.index_requirement.signature
         if signature in seen:
