@@ -29,7 +29,7 @@ def test_iter_user_data_export_streams_all_top_level_sections(monkeypatch):
     monkeypatch.setattr(data_export, "get_user_profile", MagicMock(return_value={"created_at": now}))
     memory_service = MagicMock()
     memory_service.export_memories.return_value = [MagicMock(model_dump=MagicMock(return_value={"id": "mem1"}))]
-    memory_service.iter_export_memories.return_value = iter(
+    memory_service.iter_portability_export_memories.return_value = iter(
         [MagicMock(model_dump=MagicMock(return_value={"id": "mem1"}))]
     )
     monkeypatch.setattr(data_export, "MemoryService", MagicMock(return_value=memory_service))
@@ -83,7 +83,7 @@ def test_iter_user_data_export_streams_all_top_level_sections(monkeypatch):
         },
         "chat_messages": [{"id": "msg1", "created_at": "2026-01-02T03:04:05+00:00"}],
     }
-    memory_service.iter_export_memories.assert_called_once_with("uid1", include_archive=True)
+    memory_service.iter_portability_export_memories.assert_called_once_with("uid1", include_archive=True)
     data_export.get_standalone_action_items.assert_called_once_with("uid1", limit=1000, offset=0)
     data_export.conversations_db.iter_all_conversations.assert_called_once_with("uid1", include_discarded=True)
     data_export.chat_db.iter_all_messages.assert_called_once_with("uid1")
@@ -94,7 +94,7 @@ def test_iter_user_data_export_uses_empty_profile_object(monkeypatch):
     monkeypatch.setattr(
         data_export,
         "MemoryService",
-        MagicMock(return_value=MagicMock(iter_export_memories=MagicMock(return_value=iter([])))),
+        MagicMock(return_value=MagicMock(iter_portability_export_memories=MagicMock(return_value=iter([])))),
     )
     monkeypatch.setattr(data_export, "get_people", MagicMock(return_value=[]))
     monkeypatch.setattr(data_export, "get_standalone_action_items", MagicMock(return_value=[]))
@@ -188,7 +188,7 @@ def test_iter_user_data_export_yields_before_heavy_reads(monkeypatch):
     monkeypatch.setattr(
         data_export,
         "MemoryService",
-        MagicMock(return_value=MagicMock(iter_export_memories=MagicMock(return_value=iter([])))),
+        MagicMock(return_value=MagicMock(iter_portability_export_memories=MagicMock(return_value=iter([])))),
     )
     monkeypatch.setattr(data_export, "get_people", MagicMock(return_value=[]))
     monkeypatch.setattr(data_export, "get_standalone_action_items", MagicMock(return_value=[]))
@@ -211,7 +211,7 @@ def test_json_default_raises_type_error_for_unsupported_types():
 
 
 def test_iter_user_data_export_does_not_call_list_export(monkeypatch):
-    """Large-account export must stream via iter_export_memories, not list materialization."""
+    """Large-account export must use the portability stream, not list materialization."""
     monkeypatch.setattr(data_export, "get_user_profile", MagicMock(return_value={}))
     monkeypatch.setattr(data_export, "get_people", MagicMock(return_value=[]))
     monkeypatch.setattr(data_export, "get_standalone_action_items", MagicMock(return_value=[]))
@@ -224,7 +224,7 @@ def test_iter_user_data_export_does_not_call_list_export(monkeypatch):
 
     memory = MagicMock(model_dump=MagicMock(return_value={"id": "mem-stream"}))
     memory_service = MagicMock()
-    memory_service.iter_export_memories.return_value = iter([memory])
+    memory_service.iter_portability_export_memories.return_value = iter([memory])
 
     def _boom(*_args, **_kwargs):
         raise AssertionError("export_memories list path must not be used by data export")
@@ -235,7 +235,7 @@ def test_iter_user_data_export_does_not_call_list_export(monkeypatch):
     payload = json.loads("".join(data_export.iter_user_data_export("uid1")))
 
     assert payload["memories"] == [{"id": "mem-stream"}]
-    memory_service.iter_export_memories.assert_called_once_with("uid1", include_archive=True)
+    memory_service.iter_portability_export_memories.assert_called_once_with("uid1", include_archive=True)
     memory_service.export_memories.assert_not_called()
 
 
@@ -268,7 +268,7 @@ def test_iter_user_data_export_skips_none_conversations_and_formats_arrays(monke
     monkeypatch.setattr(
         data_export,
         "MemoryService",
-        MagicMock(return_value=MagicMock(iter_export_memories=MagicMock(return_value=iter([])))),
+        MagicMock(return_value=MagicMock(iter_portability_export_memories=MagicMock(return_value=iter([])))),
     )
     monkeypatch.setattr(data_export, "get_people", MagicMock(return_value=[]))
     monkeypatch.setattr(data_export, "get_standalone_action_items", MagicMock(return_value=[]))
@@ -307,7 +307,7 @@ def test_iter_user_data_export_does_not_emit_partial_memories_on_iteration_failu
         yield good
         raise RuntimeError("memory page unavailable")
 
-    memory_service = MagicMock(iter_export_memories=_failing_iter)
+    memory_service = MagicMock(iter_portability_export_memories=_failing_iter)
     monkeypatch.setattr(data_export, "MemoryService", MagicMock(return_value=memory_service))
 
     with pytest.raises(RuntimeError, match="memory page unavailable"):
@@ -338,7 +338,7 @@ def test_memory_spool_is_streamed_in_bounded_chunks(monkeypatch):
     monkeypatch.setattr(
         data_export,
         "MemoryService",
-        MagicMock(return_value=MagicMock(iter_export_memories=MagicMock(return_value=iter([memory])))),
+        MagicMock(return_value=MagicMock(iter_portability_export_memories=MagicMock(return_value=iter([memory])))),
     )
 
     spool = data_export._spool_export_memories_json("uid1")
@@ -430,7 +430,7 @@ def test_iter_user_data_export_paginates_complete_collections(monkeypatch):
         [{"id": f"task-{i}"} for i in range(1000)],
         [{"id": "task-1000"}],
     ]
-    memory_service = MagicMock(iter_export_memories=MagicMock(return_value=iter(exported_memories)))
+    memory_service = MagicMock(iter_portability_export_memories=MagicMock(return_value=iter(exported_memories)))
     get_action_items = MagicMock(side_effect=action_item_pages)
     monkeypatch.setattr(data_export, "MemoryService", MagicMock(return_value=memory_service))
     monkeypatch.setattr(data_export, "get_standalone_action_items", get_action_items)
@@ -441,7 +441,7 @@ def test_iter_user_data_export_paginates_complete_collections(monkeypatch):
     assert payload["memories"][-1] == {"id": "mem-1000"}
     assert len(payload["action_items"]) == 1001
     assert payload["action_items"][-1] == {"id": "task-1000"}
-    memory_service.iter_export_memories.assert_called_once_with("uid1", include_archive=True)
+    memory_service.iter_portability_export_memories.assert_called_once_with("uid1", include_archive=True)
     assert get_action_items.call_args_list == [
         call("uid1", limit=1000, offset=0),
         call("uid1", limit=1000, offset=1000),

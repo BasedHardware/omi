@@ -418,7 +418,7 @@ def test_export_all_user_data_returns_500_before_streaming_headers_when_memory_p
     monkeypatch.setattr(
         data_export,
         'MemoryService',
-        MagicMock(return_value=MagicMock(iter_export_memories=_failing_iter)),
+        MagicMock(return_value=MagicMock(iter_portability_export_memories=_failing_iter)),
     )
     app = FastAPI()
     app.include_router(users_router.router)
