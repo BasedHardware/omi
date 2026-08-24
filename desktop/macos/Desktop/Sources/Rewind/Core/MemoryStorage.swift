@@ -661,6 +661,55 @@ actor MemoryStorage {
     )
   }
 
+  /// Reconcile an exhaustively fetched current canonical-ledger snapshot.
+  /// Only open v1 rows participate in absence deletion: closed/rejected rows
+  /// are supplied by the separate history contract and must remain available
+  /// for audit/revert when the current-list endpoint omits them.
+  @discardableResult
+  func syncAuthoritativeKnowledgeLedgerSnapshot(_ memories: [ServerMemory]) async throws -> Int {
+    try await syncServerMemories(memories)
+    let keep = Set(
+      memories.lazy
+        .filter { MemoryLedgerMetadata.isSupportedVersion($0.ledgerMetadata) }
+        .map(\.id))
+    let db = try await ensureInitialized()
+    let removed = try await db.write { database -> Int in
+      let candidates =
+        try MemoryRecord
+        .filter(Column("backendId") != nil)
+        .filter(Column("deleted") == false)
+        .filter(Column("ledgerMetadataJson") != nil)
+        .fetchAll(database)
+      var removed = 0
+      for var record in candidates {
+        guard let backendID = record.backendId,
+          let memory = record.toServerMemory(),
+          MemoryLedgerMetadata.isSupportedVersion(memory.ledgerMetadata),
+          memory.userReview != false,
+          Self.isOpenLedgerRow(memory.ledgerMetadata),
+          !keep.contains(backendID)
+        else { continue }
+        record.deleted = true
+        try record.update(database)
+        removed += 1
+      }
+      return removed
+    }
+    if removed > 0 { HomeKnowledgeCountInvalidation.post() }
+    return removed
+  }
+
+  private static func isOpenLedgerRow(_ metadata: [String: String]) -> Bool {
+    let status = metadata["status"]?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard status == nil || status == "active" else { return false }
+    for key in ["invalid_at", "valid_to", "superseded_by"] {
+      guard let value = metadata[key] else { continue }
+      let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+      if !normalized.isEmpty && normalized != "null" { return false }
+    }
+    return true
+  }
+
   // MARK: - Local Extraction Operations
 
   /// Insert a locally extracted memory (before backend sync)
