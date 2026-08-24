@@ -11,10 +11,9 @@ on:
         options:
           - development
           - prod
-      branch:
-        description: 'Branch to deploy from'
+      release_sha:
+        description: 'Exact merged-main SHA with a successful Release Eligibility proof'
         required: true
-        default: 'main'
         type: string
       release_version:
         description: 'Release version (optional)'
@@ -24,6 +23,7 @@ on:
 env:
   SERVICE: daily-memory-sweep-job
   SCHEDULER_JOB: daily-memory-sweep-hourly
+  SCHEDULER_SERVICE_ACCOUNT: memory-maintenance-scheduler@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com
   REGION: us-central1
 
 # Share the development lock with the auto-deploy workflow that writes this Cloud Run job.
@@ -35,10 +35,21 @@ jobs:
   deploy:
     environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
     permissions:
+      actions: 'read'
       contents: 'read'
 
     runs-on: ubuntu-latest
     steps:
+      - name: Require exact main dispatch ref
+        env:
+          DISPATCH_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [[ "$DISPATCH_REF" != "refs/heads/main" ]]; then
+            echo "::error title=Main-only deployment::Daily memory sweep deployment must be dispatched from main." >&2
+            exit 1
+          fi
+
       - name: Validate Environment Input
         env:
           INPUT_ENV: ${{ github.event.inputs.environment }}
@@ -61,10 +72,46 @@ jobs:
             echo "- Free space: ${free_before} → ${free_after}"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Checkout
+      - name: Checkout current main for source admission
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.inputs.branch }}
+          ref: main
+          fetch-depth: 0
+
+      - name: Verify exact admitted main source
+        id: admitted_source
+        env:
+          DEPLOY_SHA: ${{ github.event.inputs.release_sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ || "$DEPLOY_SHA" == "0000000000000000000000000000000000000000" ]]; then
+            echo "ERROR: release_sha must be one non-zero, lowercase, full commit SHA." >&2
+            exit 1
+          fi
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          main_sha="$(git rev-parse --verify 'origin/main^{commit}')"
+          git cat-file -e "${DEPLOY_SHA}^{commit}"
+          if [[ "$DEPLOY_SHA" != "$main_sha" ]]; then
+            echo "ERROR: release_sha must equal the current origin/main SHA; stale or future code may not deploy." >&2
+            exit 1
+          fi
+          proof_path="${RUNNER_TEMP}/release-eligibility-${DEPLOY_SHA}.json"
+          gh api -H "Accept: application/vnd.github+json" \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/release-eligibility.yml/runs?event=push&branch=main&status=completed&head_sha=${DEPLOY_SHA}&per_page=100" \
+            > "$proof_path"
+          python3 .github/scripts/verify_backend_release_admission.py \
+            --sha "$DEPLOY_SHA" \
+            --repository "$GITHUB_REPOSITORY" \
+            --workflow-runs "$proof_path" \
+            --require-first-attempt
+          printf 'admitted_sha=%s\n' "$DEPLOY_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout admitted source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.admitted_source.outputs.admitted_sha }}
+          fetch-depth: 0
 
       - name: Google Auth
         id: auth
@@ -81,8 +128,8 @@ jobs:
       - name: Compute short SHA
         id: image-tag
         run: |
-          # Use checked-out HEAD so the image tag matches the branch input, not
-          # the workflow-file ref (GITHUB_SHA), when they diverge.
+          # Use checked-out HEAD so the image tag matches the admitted source,
+          # not the workflow-dispatch ref (GITHUB_SHA).
           echo "short_sha=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Install Python deps for deploy scripts
@@ -124,6 +171,18 @@ jobs:
             --dockerfile backend/modal/Dockerfile.daily_memory_sweep_job \
             --image "$image"
 
+      - name: Recheck admitted main before image publication
+        env:
+          ADMITTED_SHA: ${{ steps.admitted_source.outputs.admitted_sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          current_main_sha="$(git rev-parse --verify 'origin/main^{commit}')"
+          [[ "$current_main_sha" == "$ADMITTED_SHA" ]] || {
+            echo "ERROR: main advanced after source admission; refusing stale image publication." >&2
+            exit 1
+          }
+
       - name: Push verified runtime image
         run: |
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
@@ -141,6 +200,18 @@ jobs:
             --vpc-egress private-ranges-only \
             --lane omi:auto:memory-l2 \
             --name-suffix "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+      - name: Recheck admitted main before Cloud Run deployment
+        env:
+          ADMITTED_SHA: ${{ steps.admitted_source.outputs.admitted_sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          current_main_sha="$(git rev-parse --verify 'origin/main^{commit}')"
+          [[ "$current_main_sha" == "$ADMITTED_SHA" ]] || {
+            echo "ERROR: main advanced after image publication; refusing stale Cloud Run deployment." >&2
+            exit 1
+          }
 
       - name: Render maintenance runtime env from the gated gateway endpoint
         id: runtime-env
@@ -166,6 +237,15 @@ jobs:
           flags: ${{ steps.runtime-env.outputs.cloud_run_flags }} ${{ steps.runtime-env.outputs.daily_memory_sweep_job_flags }}
           env_vars: ${{ steps.runtime-env.outputs.daily_memory_sweep_job_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.daily_memory_sweep_job_secrets }}
+
+      - name: Provision hourly Scheduler trigger from admitted source
+        run: |
+          python3 backend/scripts/provision_daily_memory_sweep_scheduler.py \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "$REGION" \
+            --scheduler-job "$SCHEDULER_JOB" \
+            --cloud-run-job "$SERVICE" \
+            --service-account "$SCHEDULER_SERVICE_ACCOUNT"
 
       - name: Validate hourly Scheduler trigger
         run: |

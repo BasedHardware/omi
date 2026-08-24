@@ -90,7 +90,7 @@ def _read_retry_uids(db_client: Any, *, limit: int) -> tuple[str, ...]:
 
     try:
         cursor = _read_cursor(db_client, DAILY_SWEEP_RETRY_CURSOR_PATH, DAILY_SWEEP_RETRY_CURSOR_SCHEMA_VERSION)
-        collection = cast(Any, db_client.collection(DAILY_SWEEP_RETRY_COLLECTION))
+        collection = db_client.collection(DAILY_SWEEP_RETRY_COLLECTION)
         query = collection.where("uid", ">", cursor) if cursor else collection
         snapshots = query.order_by("uid").limit(limit).stream()
         page = list(snapshots)

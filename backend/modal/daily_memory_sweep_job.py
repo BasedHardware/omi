@@ -20,7 +20,7 @@ from utils.memory.daily_memory_sweep import (
     daily_memory_sweep_authority_from_environment,
     firestore_daily_sweep_source_provider,
     read_daily_memory_sweep_cohort_assignment,
-    reconcile_daily_memory_sweep_timezones_for_maintenance,
+    reconcile_daily_memory_sweep_timezone,
     run_daily_memory_sweep_scheduler,
 )
 from utils.memory.daily_memory_sweep_inventory import (
@@ -57,13 +57,13 @@ def run_daily_memory_sweep_job() -> None:
     inventory = page.uids
     now = datetime.now(timezone.utc)
     truthy = {"1", "true", "yes", "on"}
+    timezone_reconciler = None
     if os.getenv("MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED", "false").casefold() in truthy:
-        reconcile_daily_memory_sweep_timezones_for_maintenance(
-            inventory,
-            timezone_resolver=lambda uid: get_user_time_zone(uid) or "UTC",
+        timezone_reconciler = lambda uid, timezone_name: reconcile_daily_memory_sweep_timezone(
+            uid,
+            timezone_name,
             db_client=default_db_client,
-            authorized=True,
-            max_users=400,
+            reconciliation_authorized=True,
         )
     summary = run_daily_memory_sweep_scheduler(
         db_client=default_db_client,
@@ -74,6 +74,7 @@ def run_daily_memory_sweep_job() -> None:
         ),
         timezone_resolver=lambda uid: get_user_time_zone(uid) or "UTC",
         cohort_authorizer=read_daily_memory_sweep_cohort_assignment,
+        timezone_reconciler=timezone_reconciler,
         authority=authority,
         max_users=400,
     )

@@ -34,7 +34,7 @@ import importlib
 import os
 import re
 import threading
-from typing import Any, Dict, Iterable, List, Literal, Mapping, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Literal, Mapping, Optional, Sequence, Tuple
 from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -91,6 +91,8 @@ ONBOARDING_CONSUMED_STATE_PATH = "memory_control/daily_memory_sweep_onboarding"
 ONBOARDING_PERMANENT_RECEIPT_PREFIX = "onboarding_source_"
 ONBOARDING_SOURCE_RECEIPT_PATH = "memory_control/daily_memory_sweep_onboarding_sources"
 ONBOARDING_STAGED_CANDIDATE_PATH = "memory_control/daily_memory_sweep_onboarding_staged"
+DAILY_SUMMARY_STAGED_CANDIDATE_PATH = "memory_control/daily_memory_sweep_daily_summary_staged"
+DAILY_SUMMARY_STAGE_SCHEMA_VERSION = "daily_memory_sweep_daily_summary_stage.v1"
 
 SCHEMA_VERSION = "daily_memory_sweep.v1"
 CURSOR_SCHEMA_VERSION = "daily_memory_sweep_cursor.v1"
@@ -989,6 +991,28 @@ def _onboarding_staged_candidates_ref(db_client: Any, uid: str, source_key: str)
         )[:48]
     )
     return db_client.document(f"users/{uid}/{ONBOARDING_STAGED_CANDIDATE_PATH}/{stage_id}")
+
+
+def _daily_summary_staged_candidates_ref(
+    db_client: Any,
+    uid: str,
+    local_date: date,
+    *,
+    account_generation: int,
+    source_generation: int,
+    window_id: str,
+) -> Any:
+    stage_id = deterministic_contract_id(
+        "daily-memory-sweep-daily-summary-staged-candidates",
+        {
+            "uid": uid,
+            "local_date": local_date.isoformat(),
+            "account_generation": account_generation,
+            "source_generation": source_generation,
+            "window_id": window_id,
+        },
+    )[:96]
+    return db_client.document(f"users/{uid}/{DAILY_SUMMARY_STAGED_CANDIDATE_PATH}/{stage_id}")
 
 
 def _receipt_id(
@@ -3014,6 +3038,148 @@ def _produce_onboarding_sources(
     )
 
 
+def _load_or_stage_daily_summary_candidates(
+    uid: str,
+    local_date: date,
+    timezone_name: str,
+    control: MemoryControlState,
+    window: CompletedLocalDayWindow,
+    conversation_rows: Sequence[Tuple[str, str]],
+    *,
+    db_client: Any,
+    extractor: Any,
+    max_candidates: int,
+) -> Optional[Tuple[DailySweepCandidate, ...]]:
+    """Stage the complete bounded daily-summary candidate page before apply."""
+
+    stage_ref = _daily_summary_staged_candidates_ref(
+        db_client,
+        uid,
+        local_date,
+        account_generation=control.account_generation,
+        source_generation=control.source_generation,
+        window_id=window.window_id,
+    )
+    transcript_digest = deterministic_contract_id(
+        "daily-sweep-daily-summary-transcript",
+        {
+            "uid": uid,
+            "local_date": local_date.isoformat(),
+            "rows": [{"source": source_id, "text": text} for source_id, text in conversation_rows],
+        },
+    )
+
+    def read_staged(snapshot: Any) -> Optional[Tuple[DailySweepCandidate, ...]]:
+        if not getattr(snapshot, "exists", False):
+            return None
+        payload = snapshot.to_dict() or {}
+        if (
+            not isinstance(payload, dict)
+            or payload.get("schema_version") != DAILY_SUMMARY_STAGE_SCHEMA_VERSION
+            or payload.get("uid") != uid
+            or payload.get("local_date") != local_date.isoformat()
+            or payload.get("timezone_name") != timezone_name
+            or payload.get("account_generation") != control.account_generation
+            or payload.get("source_generation") != control.source_generation
+            or payload.get("window_id") != window.window_id
+            or payload.get("window_start_utc") != window.start_utc
+            or payload.get("window_end_utc") != window.end_utc
+            or payload.get("transcript_digest") != transcript_digest
+            or not isinstance(payload.get("candidate_page"), list)
+            or len(payload["candidate_page"]) > MAX_CANDIDATES_PER_DAY
+            or payload.get("candidate_count") != len(payload["candidate_page"])
+        ):
+            return None
+        try:
+            staged = tuple(DailySweepCandidate.model_validate(item) for item in payload["candidate_page"])
+        except Exception:
+            return None
+        expected_digest = deterministic_contract_id(
+            "daily-sweep-daily-summary-candidate-page", {"digests": [item.digest() for item in staged]}
+        )
+        if payload.get("candidate_digest") != expected_digest:
+            return None
+        return staged
+
+    try:
+        staged_snapshot = stage_ref.get()
+    except Exception:
+        return None
+    if getattr(staged_snapshot, "exists", False):
+        # An existing malformed stage is an integrity failure. Re-extracting
+        # would let a nondeterministic model response conflict with receipts
+        # created by the first attempt.
+        return read_staged(staged_snapshot)
+
+    try:
+        candidates: List[DailySweepCandidate] = []
+        for conversation_id, text in conversation_rows:
+            extracted = extractor(uid, text)
+            for index, memory in enumerate(extracted or ()):
+                content = str(getattr(memory, "content", "") or "").strip()
+                if not content:
+                    continue
+                candidates.append(
+                    DailySweepCandidate(
+                        candidate_id=deterministic_contract_id(
+                            "daily-sweep-model-candidate",
+                            {
+                                "uid": uid,
+                                "date": local_date.isoformat(),
+                                "source": f"conversation:{conversation_id}",
+                                "index": index,
+                            },
+                        )[:128],
+                        kind="fact",
+                        operation="add",
+                        content=content,
+                        source_id=f"conversation:{conversation_id}",
+                        source_type="daily_summary",
+                        source_version="daily-memory-model.v1",
+                        source_refs=(f"conversation:{conversation_id}",),
+                        authority=SweepAuthority.sweep_inference,
+                        subject_scope=MemorySubjectScope.primary_user,
+                        subject_entity_id=getattr(memory, "subject_entity_id", None),
+                    )
+                )
+                if len(candidates) >= max_candidates:
+                    break
+            if len(candidates) >= max_candidates:
+                break
+        if len(candidates) > MAX_CANDIDATES_PER_DAY:
+            return None
+        candidate_page = tuple(candidates)
+        stage_payload = {
+            "schema_version": DAILY_SUMMARY_STAGE_SCHEMA_VERSION,
+            "uid": uid,
+            "local_date": local_date.isoformat(),
+            "timezone_name": timezone_name,
+            "account_generation": control.account_generation,
+            "source_generation": control.source_generation,
+            "window_id": window.window_id,
+            "window_start_utc": window.start_utc,
+            "window_end_utc": window.end_utc,
+            "transcript_digest": transcript_digest,
+            "candidate_digest": deterministic_contract_id(
+                "daily-sweep-daily-summary-candidate-page", {"digests": [item.digest() for item in candidate_page]}
+            ),
+            "candidate_page": [item.model_dump(mode="json") for item in candidate_page],
+            "candidate_count": len(candidate_page),
+            "staged_at": datetime.now(timezone.utc),
+        }
+        create = getattr(stage_ref, "create", None)
+        if callable(create):
+            try:
+                create(stage_payload)
+            except Exception:
+                return read_staged(stage_ref.get())
+        else:
+            stage_ref.set(stage_payload)
+        return candidate_page
+    except Exception:
+        return None
+
+
 def produce_completed_day_daily_summary_sources(
     uid: str,
     local_date: date,
@@ -3131,39 +3297,20 @@ def produce_completed_day_daily_summary_sources(
     estimated_cost = (total_characters / 1000.0) * MODEL_COST_PER_1K_INPUT_CHARACTERS_USD
     if estimated_cost > model.max_cost_usd:
         return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
-    candidates: List[DailySweepCandidate] = []
-    try:
-        for conversation_id, text in conversation_rows:
-            extracted = extractor(uid, text)
-            for index, memory in enumerate(extracted or ()):
-                content = str(getattr(memory, "content", "") or "").strip()
-                if not content:
-                    continue
-                source_id = f"conversation:{conversation_id}"
-                candidates.append(
-                    DailySweepCandidate(
-                        candidate_id=deterministic_contract_id(
-                            "daily-sweep-model-candidate",
-                            {"uid": uid, "date": local_date.isoformat(), "source": source_id, "index": index},
-                        )[:128],
-                        kind="fact",
-                        operation="add",
-                        content=content,
-                        source_id=source_id,
-                        source_type="daily_summary",
-                        source_version="daily-memory-model.v1",
-                        source_refs=(f"conversation:{conversation_id}",),
-                        authority=SweepAuthority.sweep_inference,
-                        subject_scope=MemorySubjectScope.primary_user,
-                        subject_entity_id=getattr(memory, "subject_entity_id", None),
-                    )
-                )
-                if len(candidates) >= model.max_candidates:
-                    break
-            if len(candidates) >= model.max_candidates:
-                break
-    except Exception:
-        # Model/provider failures are source incompleteness, not complete-zero.
+    candidates = _load_or_stage_daily_summary_candidates(
+        uid,
+        local_date,
+        timezone_name,
+        control,
+        window,
+        conversation_rows,
+        db_client=db_client,
+        extractor=extractor,
+        max_candidates=model.max_candidates,
+    )
+    if candidates is None:
+        # Model/provider failures and malformed existing stages are source
+        # incompleteness, never permission to re-extract or advance.
         return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
     return DailySweepRuntimeSources.from_iterables(
         daily_summary=candidates,
@@ -3497,6 +3644,7 @@ def run_daily_memory_sweep_scheduler(
     authority: Optional[SweepAuthorityState] = None,
     cohort_authority: Optional[DailySweepCohortAuthority] = None,
     cohort_authorizer: Optional[Any] = None,
+    timezone_reconciler: Optional[Any] = None,
     max_users: int = 400,
 ) -> DailySweepSchedulerSummary:
     """Runtime producer/scheduler/adaptor behind the closed backend authority.
@@ -3567,7 +3715,14 @@ def run_daily_memory_sweep_scheduler(
             timezone_name = str(timezone_resolver(uid) or "UTC")
             cursor = _read_cursor(db_client, uid, control)
             if cursor.last_completed_local_date is not None and cursor.timezone_name != timezone_name:
-                raise ValueError("timezone_changed_requires_reconciliation")
+                # Reconciliation is itself a cursor/control write. It must be
+                # reached only after the per-UID backend cohort decision above;
+                # the old inventory-wide pre-pass wrote disabled and unknown
+                # users before this gate. A failed/absent reconciler remains a
+                # retryable account failure and cannot advance the page.
+                if not callable(timezone_reconciler) or not timezone_reconciler(uid, timezone_name):
+                    raise ValueError("timezone_changed_requires_reconciliation")
+                cursor = _read_cursor(db_client, uid, control)
             pending_dates = _pending_completed_dates(cursor, timezone_name=timezone_name, now=now)
             if not pending_dates:
                 completed_uids.append(uid)

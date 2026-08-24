@@ -20,3 +20,9 @@ document, so outage volume is not silently truncated by one bounded array.
 The legacy `memory-maintenance-job` and `memory-maintenance-hourly` resources
 remain covered by `legacy_memory_retirement_readiness.py`; that readiness check
 must not be used as evidence that the daily replacement is retired or absent.
+Manual deployment is main-only and requires an exact merged-main SHA with a
+successful same-repository Release Eligibility run. The admitted checkout
+builds the image and runs `provision_daily_memory_sweep_scheduler.py`, which
+creates or updates (and enables) the hourly trigger before the read-only
+contract validation. The trigger uses the retained scheduler service identity
+and the v2 Cloud Run Jobs execution URI.
