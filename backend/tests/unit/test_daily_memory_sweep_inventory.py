@@ -91,3 +91,20 @@ def test_daily_sweep_inventory_reserves_onboarding_and_advances_separate_cursor(
     assert first == ("canonical-a", "canonical-b", "a", "b")
     assert second == ("canonical-a", "canonical-b", "c", "d")
     assert db.store[cron.DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_CURSOR_PATH]["last_uid"] == "d"
+
+
+def test_daily_sweep_inventory_commits_only_completed_prefixes(monkeypatch):
+    db = _Db()
+    monkeypatch.setattr(
+        cron,
+        "bounded_canonical_memory_uid_inventory",
+        lambda *_args, **_kwargs: ("canonical-a", "canonical-b"),
+    )
+    page = cron.bounded_daily_memory_sweep_uid_inventory(db, limit=4, persist_cursor=False, return_page=True)
+
+    assert isinstance(page, cron.DailySweepUIDInventoryPage)
+    assert db.store == {}
+    cron.commit_daily_memory_sweep_uid_inventory(db, page, completed_uids=("canonical-a", "a"))
+
+    assert db.store[cron.CANONICAL_MEMORY_MAINTENANCE_CURSOR_PATH]["last_uid"] == "canonical-a"
+    assert db.store[cron.DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_CURSOR_PATH]["last_uid"] == "a"

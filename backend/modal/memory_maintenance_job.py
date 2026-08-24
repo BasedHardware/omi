@@ -22,7 +22,9 @@ from database._client import db as default_db_client
 from database.notifications import get_user_time_zone
 
 from utils.memory.canonical_short_term_maintenance_cron import (
+    DailySweepUIDInventoryPage,
     bounded_daily_memory_sweep_uid_inventory,
+    commit_daily_memory_sweep_uid_inventory,
     run_canonical_short_term_maintenance_cron,
 )
 from utils.memory.daily_memory_sweep import (
@@ -63,7 +65,15 @@ def _run_daily_memory_sweep_if_authorized() -> None:
     # The inventory cursor is the fairness boundary.  A stateless page would
     # repeatedly sweep the first canonical users and starve onboarding/cold
     # starts despite the bounded union inventory.
-    inventory = bounded_daily_memory_sweep_uid_inventory(default_db_client, limit=400, persist_cursor=True)
+    inventory_page = bounded_daily_memory_sweep_uid_inventory(
+        default_db_client,
+        limit=400,
+        persist_cursor=False,
+        return_page=True,
+    )
+    if not isinstance(inventory_page, DailySweepUIDInventoryPage):
+        raise RuntimeError("daily-memory-sweep inventory page is malformed")
+    inventory = inventory_page.uids
     truthy = {"1", "true", "yes", "on"}
     if os.getenv("MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED", "false").casefold() in truthy:
         reconcile_daily_memory_sweep_timezones_for_maintenance(
@@ -87,6 +97,11 @@ def _run_daily_memory_sweep_if_authorized() -> None:
         authority=authority,
         max_users=400,
     )
+    commit_daily_memory_sweep_uid_inventory(
+        default_db_client,
+        inventory_page,
+        completed_uids=summary.completed_uids,
+    )
     if summary.errors:
         raise RuntimeError(f"daily-memory-sweep completed with {len(summary.errors)} error(s)")
 
@@ -94,15 +109,31 @@ def _run_daily_memory_sweep_if_authorized() -> None:
 def main() -> None:
     _init_firebase()
     logger.info("Starting memory-maintenance-job...")
-    summary = asyncio.run(
-        run_canonical_short_term_maintenance_cron(
-            recurrence_signal_persister=persist_recurrence_signals_for_maintenance,
-            recurrence_signal_consumer=drain_recurrence_inbox_for_maintenance,
+    errors: list[str] = []
+    try:
+        summary = asyncio.run(
+            run_canonical_short_term_maintenance_cron(
+                recurrence_signal_persister=persist_recurrence_signals_for_maintenance,
+                recurrence_signal_consumer=drain_recurrence_inbox_for_maintenance,
+            )
         )
-    )
-    if summary.errors:
-        raise RuntimeError(f"memory-maintenance-job completed with {len(summary.errors)} error(s)")
-    _run_daily_memory_sweep_if_authorized()
+        if summary.errors:
+            errors.append(f"canonical={len(summary.errors)}")
+            logger.error("canonical short-term maintenance reported %d error(s)", len(summary.errors))
+    except Exception as exc:
+        errors.append(f"canonical={type(exc).__name__}")
+        logger.exception("canonical short-term maintenance failed; continuing daily sweep")
+
+    # Daily replacement is an independent backend-authoritative lane. Legacy
+    # canonical maintenance may be retired, disabled, or unhealthy without
+    # suppressing this scheduler's bounded retry/cursor work.
+    try:
+        _run_daily_memory_sweep_if_authorized()
+    except Exception as exc:
+        errors.append(f"daily={type(exc).__name__}")
+        logger.exception("daily-memory-sweep failed")
+    if errors:
+        raise RuntimeError(f"memory-maintenance-job completed with {len(errors)} error(s)")
 
 
 if __name__ == "__main__":

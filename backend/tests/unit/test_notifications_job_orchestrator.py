@@ -88,6 +88,27 @@ def test_memory_maintenance_job_exits_with_failure_when_cron_reports_outbox_erro
 
     monkeypatch.setattr(memory_maintenance_job, "_init_firebase", lambda: None)
     monkeypatch.setattr(memory_maintenance_job, "run_canonical_short_term_maintenance_cron", failed_cron)
+    daily_calls = []
+    monkeypatch.setattr(
+        memory_maintenance_job, "_run_daily_memory_sweep_if_authorized", lambda: daily_calls.append(True)
+    )
 
     with pytest.raises(RuntimeError, match=r"completed with 1 error\(s\)"):
         memory_maintenance_job.main()
+    assert daily_calls == [True]
+
+
+def test_memory_maintenance_job_runs_daily_lane_when_legacy_cron_raises(monkeypatch, memory_maintenance_job):
+    async def failed_cron(**_kwargs):
+        raise RuntimeError("legacy retired")
+
+    monkeypatch.setattr(memory_maintenance_job, "_init_firebase", lambda: None)
+    monkeypatch.setattr(memory_maintenance_job, "run_canonical_short_term_maintenance_cron", failed_cron)
+    daily_calls = []
+    monkeypatch.setattr(
+        memory_maintenance_job, "_run_daily_memory_sweep_if_authorized", lambda: daily_calls.append(True)
+    )
+
+    with pytest.raises(RuntimeError, match=r"completed with 1 error\(s\)"):
+        memory_maintenance_job.main()
+    assert daily_calls == [True]
