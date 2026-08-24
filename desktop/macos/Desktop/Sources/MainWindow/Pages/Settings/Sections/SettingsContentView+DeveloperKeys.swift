@@ -210,6 +210,7 @@ extension SettingsContentView {
     // paths only ever deactivate, so the duplicate call is harmless.
     Task {
       try? await APIClient.shared.deactivateBYOK()
+      APIKeyService.persistEnrolledFingerprints([:])
       await FloatingBarUsageLimiter.shared.fetchPlan()
     }
   }
@@ -225,6 +226,7 @@ extension SettingsContentView {
       byokActivationError = nil
       if hasAnyBYOKKey {
         try? await APIClient.shared.deactivateBYOK()
+        APIKeyService.persistEnrolledFingerprints([:])
         await FloatingBarUsageLimiter.shared.fetchPlan()
       }
       return
@@ -272,6 +274,7 @@ extension SettingsContentView {
           }
         }
         try? await APIClient.shared.activateBYOK(fingerprints: fingerprints)
+        APIKeyService.persistEnrolledFingerprints(fingerprints)
         await FloatingBarUsageLimiter.shared.fetchPlan()
         await MainActor.run {
           // Clear any sticky paywall flag from a prior `freemium_threshold_reached`
@@ -288,6 +291,7 @@ extension SettingsContentView {
         }
         let names = failed.keys.map(\.displayName).sorted().joined(separator: ", ")
         try? await APIClient.shared.deactivateBYOK()
+        APIKeyService.persistEnrolledFingerprints([:])
         await FloatingBarUsageLimiter.shared.fetchPlan()
         await MainActor.run {
           byokKeyStatuses = results
@@ -298,6 +302,7 @@ extension SettingsContentView {
 
     case .deactivate:
       try? await APIClient.shared.deactivateBYOK()
+      APIKeyService.persistEnrolledFingerprints([:])
       await FloatingBarUsageLimiter.shared.fetchPlan()
       await MainActor.run {
         byokKeyStatuses = [:]

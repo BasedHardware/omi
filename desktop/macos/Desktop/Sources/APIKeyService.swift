@@ -245,7 +245,28 @@ final class APIKeyService: ObservableObject {
   }
 
   nonisolated static var hasTranscriptionBYOK: Bool {
-    selectedBYOKLLMProvider != nil && byokKey(.deepgram) != nil
+    guard selectedBYOKLLMProvider != nil, let key = byokKey(.deepgram) else { return false }
+    return enrolledFingerprints()["deepgram"] == byokFingerprint(key)
+  }
+
+  /// Persist fingerprints that passed BYOKValidator and were sent to activateBYOK.
+  nonisolated static func persistEnrolledFingerprints(_ fingerprints: [String: String]) {
+    if fingerprints.isEmpty {
+      UserDefaults.standard.removeObject(forKey: DefaultsKey.byokEnrolledFingerprints.rawValue)
+    } else {
+      UserDefaults.standard.set(fingerprints, forKey: DefaultsKey.byokEnrolledFingerprints.rawValue)
+    }
+  }
+
+  nonisolated static func enrolledFingerprints() -> [String: String] {
+    UserDefaults.standard.dictionary(forKey: DefaultsKey.byokEnrolledFingerprints.rawValue) as? [String: String]
+      ?? [:]
+  }
+
+  /// Voice/realtime may use a leftover OpenAI/Gemini key only when that provider is selected.
+  nonisolated static func selectedRealtimeBYOKKey(for provider: BYOKProvider) -> String? {
+    guard selectedBYOKLLMProvider == provider else { return nil }
+    return byokKey(provider)
   }
 
   nonisolated static var selectedBYOKLLMProvider: BYOKProvider? {
@@ -300,6 +321,7 @@ final class APIKeyService: ObservableObject {
     let statuses = await BYOKValidator.validateAll(snapshot)
     guard statuses[selectedProvider] == .ok else {
       try? await APIClient.shared.deactivateBYOK()
+      persistEnrolledFingerprints([:])
       return
     }
 
@@ -309,5 +331,6 @@ final class APIKeyService: ObservableObject {
       }
     }
     try? await APIClient.shared.activateBYOK(fingerprints: fingerprints)
+    persistEnrolledFingerprints(fingerprints)
   }
 }
