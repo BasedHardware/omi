@@ -226,32 +226,45 @@ def test_search_historical_facts_is_fact_only_owner_scoped_and_partial(monkeypat
         invalid_at=NOW,
         is_locked=True,
     )
-    legacy_generated = _memory(
-        "legacy-generated",
+    rejected = _memory(
+        "historical-rejected",
         kind=MemoryKind.fact,
-        content="Generated old preference",
-        invalid_at=NOW,
+        content="Rejected Boston claim",
+        user_review=False,
+    )
+    migrated_legacy = _memory(
+        "historical-legacy",
+        kind=MemoryKind.fact,
+        content="Generated Boston history",
         intent_backed=False,
         write_reason=LedgerWriteReason.legacy_migration,
-        arguments={"history_class": "legacy_generated"},
+    )
+    passive = _memory(
+        "historical-passive",
+        kind=MemoryKind.fact,
+        content="Unratified passive Boston extraction",
+        intent_backed=False,
     )
 
     class FakeService:
         def __init__(self, *, db_client):
             assert db_client == "db"
 
-        def search_ledger_history_page(self, uid, query, *, limit):
-            assert (uid, query, limit) == ("u1", "Boston", 8)
+        def search_ledger_history_page(self, uid, query, *, limit, offset, include_rejected):
+            assert (uid, query, limit, offset, include_rejected) == ("u1", "Boston", 8, 0, False)
             return SimpleNamespace(
                 matches=[
                     SimpleNamespace(memory=fact),
                     SimpleNamespace(memory=document),
                     SimpleNamespace(memory=trigger),
                     SimpleNamespace(memory=locked),
-                    SimpleNamespace(memory=legacy_generated),
+                    SimpleNamespace(memory=rejected),
+                    SimpleNamespace(memory=migrated_legacy),
+                    SimpleNamespace(memory=passive),
                 ],
                 truncated=True,
                 scanned_count=501,
+                next_offset=8,
             )
 
     monkeypatch.setattr(database_client, "get_firestore_client", lambda: "db")
@@ -268,12 +281,16 @@ def test_search_historical_facts_is_fact_only_owner_scoped_and_partial(monkeypat
     assert "private workflow body" not in result
     assert "historical-trigger" not in result
     assert "historical-locked" not in result
-    assert "legacy-generated" in result
-    assert "Generated old preference" in result
+    assert "historical-rejected" not in result
+    assert "historical-legacy" in result
+    assert "fact/legacy-migrated" in result
+    assert "historical-passive" not in result
     assert "valid_at=2026-08-23T12:00:00+00:00" in result
     assert "invalid_at=2026-08-23T12:00:00+00:00" in result
     assert "Partial historical search" in result
     assert "not exhaustive" in result
+    assert "offset=8" in result
+    assert tools.HISTORICAL_LIVE_WINDOW_NOTICE in result
 
 
 def test_historical_fact_renderer_hard_cap_preserves_both_disclosures():
@@ -288,11 +305,20 @@ def test_historical_fact_renderer_hard_cap_preserves_both_disclosures():
         for index in range(30)
     ]
 
-    result = tools._format_historical_fact_results(rows, query="Boston", truncated=True)
+    result = tools._format_historical_fact_results(
+        rows,
+        query="Boston",
+        truncated=True,
+        next_offset=20,
+        include_rejected=True,
+    )
 
     assert len(result) <= tools.MAX_KNOWLEDGE_RESULT_CHARACTERS
     assert tools.HISTORICAL_OUTPUT_TRUNCATION_NOTICE in result
     assert tools.HISTORICAL_PROVIDER_PARTIAL_NOTICE in result
+    assert "offset=20" in result
+    assert tools.HISTORICAL_LIVE_WINDOW_NOTICE in result
+    assert tools.HISTORICAL_REJECTED_AUDIT_NOTICE in result
 
 
 def test_search_historical_facts_rejects_unsearchable_and_oversized_requests(monkeypatch):
@@ -305,13 +331,58 @@ def test_search_historical_facts_rejects_unsearchable_and_oversized_requests(mon
     config = {"configurable": {"user_id": "u1"}}
 
     assert tools.search_historical_facts.invoke({"query": "!"}, config=config).startswith("Error:")
-    service.search_ledger_history_page.assert_called_once_with("u1", "!", limit=8)
+    service.search_ledger_history_page.assert_called_once_with(
+        "u1",
+        "!",
+        limit=8,
+        offset=0,
+        include_rejected=False,
+    )
     service.search_ledger_history_page.reset_mock()
     assert tools.search_historical_facts.invoke({"query": "Boston", "limit": 0}, config=config).startswith("Error:")
     assert tools.search_historical_facts.invoke(
         {"query": "Boston", "limit": tools.MAX_KNOWLEDGE_SEARCH_LIMIT + 1}, config=config
     ).startswith("Error:")
+    assert tools.search_historical_facts.invoke(
+        {"query": "Boston", "limit": 8, "offset": 495}, config=config
+    ).startswith("Error:")
     service.search_ledger_history_page.assert_not_called()
+
+
+def test_search_historical_facts_requires_explicit_rejected_audit(monkeypatch):
+    import database._client as database_client
+
+    rejected = _memory(
+        "historical-rejected",
+        kind=MemoryKind.fact,
+        content="Rejected Boston claim",
+        user_review=False,
+    )
+
+    class FakeService:
+        def __init__(self, *, db_client):
+            assert db_client == "db"
+
+        def search_ledger_history_page(self, uid, query, *, limit, offset, include_rejected):
+            assert (uid, query, limit, offset, include_rejected) == ("u1", "Boston", 8, 16, True)
+            return SimpleNamespace(
+                matches=[SimpleNamespace(memory=rejected)],
+                truncated=False,
+                scanned_count=1,
+                next_offset=None,
+            )
+
+    monkeypatch.setattr(database_client, "get_firestore_client", lambda: "db")
+    monkeypatch.setattr(tools, "MemoryService", FakeService)
+
+    result = tools.search_historical_facts.invoke(
+        {"query": "Boston", "limit": 8, "offset": 16, "include_rejected": True},
+        config={"configurable": {"user_id": "u1"}},
+    )
+
+    assert "historical-rejected" in result
+    assert "fact/rejected" in result
+    assert tools.HISTORICAL_REJECTED_AUDIT_NOTICE in result
 
 
 def test_tool_errors_do_not_echo_storage_details(monkeypatch):

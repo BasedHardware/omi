@@ -53,6 +53,7 @@ from utils.retrieval.tools import (
     traverse_knowledge_graph_tool,
     get_entity_timeline_tool,
     read_playbook,
+    search_historical_facts,
     search_knowledge,
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
@@ -244,6 +245,7 @@ CORE_TOOLS = [
     get_entity_timeline_tool,
     search_knowledge,
     read_playbook,
+    search_historical_facts,
 ]
 
 # Standard tool names (used to detect app tools by exclusion)
