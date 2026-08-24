@@ -16,7 +16,7 @@ picks up the pinned version from `.nvmrc` automatically.
 ```bash
 # 1. Install dependencies
 nvm use   # or: nvm install (first time)
-pnpm install
+pnpm install --frozen-lockfile
 
 # 2. Create your local env file (required — the app won't start without it)
 cp .env.example .env
