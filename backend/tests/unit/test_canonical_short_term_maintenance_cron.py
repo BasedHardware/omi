@@ -635,6 +635,7 @@ def test_async_entrypoint_runs_shared_rollout_gated_ledger_sweep_for_completed_u
     assert [call[0][0] for call in sweep_calls] == ["uid-enabled"]
     assert [call[0][0] for call in publication_calls] == ["uid-enabled"]
     assert sweep_calls[0][1]["publish"] is False
+    assert callable(sweep_calls[0][1]["mutation_authorizer"])
     assert result.ledger_migration_users == 1
     assert result.ledger_migration_rows == 3
 
@@ -691,3 +692,43 @@ def test_kill_flip_between_users_reauthorizes_before_second_user_mutation(monkey
 
     assert sweep_uids == ["uid-before-flip"]
     assert result.ledger_migration_rows == 1
+
+
+def test_production_row_authorizer_force_refreshes_and_revokes_mid_batch(monkeypatch):
+    summary = cron.CanonicalShortTermMaintenanceCronSummary(run_id="cron", user_count=1, completed_uids=("uid-a",))
+    decisions = iter([True, True, False])
+    row_authorizations = []
+    publications = []
+
+    async def resolve(_uid, *, stage, force_refresh):
+        assert stage == cron.JITDecisionStage.INGRESS and force_refresh is True
+        return SimpleNamespace(permits_work=next(decisions))
+
+    async def run_blocking(_executor, function, *args, **kwargs):
+        if function is cron.run_universal_short_term_maintenance:
+            return summary
+        if function is cron.run_ledger_migration_sweep:
+            authorize = kwargs["mutation_authorizer"]
+
+            def sample_row_boundary():
+                row_authorizations.extend([authorize("mem-1"), authorize("mem-2")])
+
+            await asyncio.to_thread(sample_row_boundary)
+            return SimpleNamespace(
+                migrated_long_term_count=1,
+                adjudicated_short_term_count=0,
+                remaining_live_legacy_count=1,
+                authorization_revoked=True,
+            )
+        publications.append(function)
+        raise AssertionError("revoked migration authority must prevent publication")
+
+    monkeypatch.setattr(cron, "run_blocking", run_blocking)
+    monkeypatch.setattr(cron, "resolve_jit_rollout", resolve)
+
+    result = asyncio.run(cron.run_canonical_short_term_maintenance_cron(db_client=object(), now=NOW))
+
+    assert row_authorizations == [True, False]
+    assert publications == []
+    assert result.ledger_migration_rows == 1
+    assert result.ledger_migration_users == 0
