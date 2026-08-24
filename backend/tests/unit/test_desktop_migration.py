@@ -786,7 +786,7 @@ class TestGetChatSessionsQuery:
 
         fields = [call.args[0] for call in field_filter_stub.FieldFilter.call_args_list if call.args]
         assert 'plugin_id' in fields, f"Expected plugin_id filter, got: {fields}"
-        assert 'app_id' not in fields, f"Should use plugin_id, not app_id as filter field: {fields}"
+        assert 'app_id' in fields, f"Expected dual-read app_id filter, got: {fields}"
 
 
 class TestCreateChatSession:
@@ -1371,7 +1371,7 @@ class TestDeleteMessagesCount:
         doc2.id = 'msg-2'
         doc3 = MagicMock()
         doc3.id = 'msg-3'
-        mock_query.stream.side_effect = [[doc1, doc2, doc3], []]
+        mock_query.stream.side_effect = [[doc1, doc2, doc3], [], []]
 
         mock_batch = MagicMock()
         with patch.object(chat_db, 'db') as patched_db:
@@ -1397,7 +1397,7 @@ class TestDeleteMessagesCount:
         doc2.id = 'msg-2'
         doc2.update_time = object()
         doc2.to_dict.return_value = {'id': 'logical-2', 'chat_session_id': 'sess-1', 'text': 'latest'}
-        mock_delete_query.stream.side_effect = [[doc1, doc2], []]
+        mock_delete_query.stream.side_effect = [[doc1, doc2], [], []]
 
         mock_session_snapshot = MagicMock()
         mock_session_snapshot.exists = True
@@ -1449,7 +1449,7 @@ class TestDeleteMessagesCount:
         message.id = 'msg-1'
         message.update_time = object()
         message.to_dict.return_value = {'id': 'logical-1', 'chat_session_id': 'sess-1'}
-        mock_delete_query.stream.side_effect = [[message], []]
+        mock_delete_query.stream.side_effect = [[message], [], []]
 
         mock_session_snapshot = MagicMock()
         mock_session_snapshot.exists = True

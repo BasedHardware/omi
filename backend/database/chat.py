@@ -273,16 +273,22 @@ def get_messages(
         # dual-read app_id through the registered spec.
         messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
 
-    messages_ref = messages_ref.order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit).offset(offset)
     app_ref = None
-    if not chat_session_id:
+    if chat_session_id:
+        messages_ref = (
+            messages_ref.order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit).offset(offset)
+        )
+    else:
+        # Fetch the combined window from each chain, then offset after merge so
+        # mixed app_id-only and plugin_id-only rows paginate as one stream.
+        window = offset + limit
+        messages_ref = messages_ref.order_by('created_at', direction=firestore.Query.DESCENDING).limit(window)
         app_ref = (
             MESSAGES_BY_APP_ID_CREATED_QUERY.build(
                 user_ref.collection('messages'), {'app_id': app_id}, field_filter_factory=FieldFilter
             )
             .order_by('created_at', direction=firestore.Query.DESCENDING)
-            .limit(limit)
-            .offset(offset)
+            .limit(window)
         )
 
     messages: List[Dict[str, Any]] = []
@@ -295,7 +301,7 @@ def get_messages(
         collected.sort(
             key=lambda item: item.get('created_at') or datetime.min.replace(tzinfo=timezone.utc), reverse=True
         )
-        collected = collected[:limit]
+        collected = collected[offset : offset + limit]
 
     # Fetch messages and collect conversation IDs
     for message in collected:
@@ -1001,8 +1007,9 @@ def get_chat_sessions(
     if starred is not None:
         legacy = legacy.where(filter=FieldFilter('starred', '==', starred))
 
-    query = query.offset(offset).limit(limit)
-    legacy = legacy.offset(offset).limit(limit)
+    window = offset + limit
+    query = query.limit(window)
+    legacy = legacy.limit(window)
     items: List[Dict[str, Any]] = []
     collected: List[Dict[str, Any]] = []
     for source in (query, legacy):
@@ -1015,7 +1022,7 @@ def get_chat_sessions(
         if normalized is not None:
             items.append(normalized)
     items.sort(key=lambda item: item.get('updated_at') or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
-    return items[:limit]
+    return items[offset : offset + limit]
 
 
 def update_chat_session(
@@ -1435,5 +1442,7 @@ def delete_messages(uid: str, app_id: Optional[str] = None, session_id: Optional
                 continue
             deleted += len(docs)
             consecutive_conflicts = 0
+            if len(docs) < DELETE_MESSAGES_BATCH_LIMIT:
+                break
 
     return deleted
