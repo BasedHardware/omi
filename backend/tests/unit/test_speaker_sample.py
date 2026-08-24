@@ -372,3 +372,84 @@ def test_verify_and_transcribe_sample_empty_transcript(monkeypatch):
     assert transcript is None
     assert is_valid is False
     assert reason == "insufficient_words: 0/5"
+
+
+# --- provider granularity: the counts are over words, not over list entries ------------------------
+#
+# A transcriber may return either granularity, and both are legitimate. Deepgram emits one entry per
+# word, so counting entries and counting words are the same number there. Parakeet emits one entry per
+# SEGMENT with the whole utterance inside — measured against a live parakeet on a 24.9s sample, its
+# /v2/transcribe response carries `segments: 1` and no `words` field at all. Counting entries therefore
+# read 1, and every parakeet-backed sample was rejected as `insufficient_words` whatever it contained;
+# the same miscount made the multi-speaker ratio 1.0 on a single entry, so that guard stopped rejecting
+# instead of stopping bad samples.
+
+
+def _make_segments(texts, speakers=None):
+    """One entry per segment, each carrying several words — what parakeet returns."""
+    segments = []
+    for index, text in enumerate(texts):
+        segment = {"text": text}
+        if speakers is not None:
+            segment["speaker"] = speakers[index]
+        segments.append(segment)
+    return segments
+
+
+def test_a_single_segment_is_counted_by_its_words_not_as_one_entry(monkeypatch):
+    segments = _make_segments(["hester prynne went one day to the mansion"], speakers=["SPEAKER_00"])
+
+    monkeypatch.setattr(speaker_sample, "deepgram_prerecorded_from_bytes", lambda *_a, **_k: segments)
+
+    transcript, is_valid, reason = asyncio.run(speaker_sample.verify_and_transcribe_sample(b"audio", 16000))
+
+    assert (is_valid, reason) == (True, "ok")
+    assert transcript == "hester prynne went one day to the mansion"
+
+
+def test_word_granular_and_segment_granular_agree_on_the_same_utterance(monkeypatch):
+    """The same eight words, split two ways, must produce the same verdict."""
+    words = " one two three four five six seven eight".split()
+
+    monkeypatch.setattr(speaker_sample, "deepgram_prerecorded_from_bytes", lambda *_a, **_k: _make_words(words))
+    per_word = asyncio.run(speaker_sample.verify_and_transcribe_sample(b"audio", 16000))
+
+    monkeypatch.setattr(
+        speaker_sample, "deepgram_prerecorded_from_bytes", lambda *_a, **_k: _make_segments([" ".join(words)])
+    )
+    per_segment = asyncio.run(speaker_sample.verify_and_transcribe_sample(b"audio", 16000))
+
+    assert per_word[1:] == per_segment[1:] == (True, "ok")
+
+
+def test_a_segment_short_of_the_floor_is_still_refused(monkeypatch):
+    """The fix must not turn the word floor off: four words in one entry still fail."""
+    monkeypatch.setattr(
+        speaker_sample,
+        "deepgram_prerecorded_from_bytes",
+        lambda *_a, **_k: _make_segments(["thanks for joining today"]),
+    )
+
+    transcript, is_valid, reason = asyncio.run(speaker_sample.verify_and_transcribe_sample(b"audio", 16000))
+
+    assert (transcript, is_valid) == (None, False)
+    assert reason == f"insufficient_words: 4/{speaker_sample.MIN_WORDS}"
+
+
+def test_the_dominant_ratio_weighs_segments_by_their_words(monkeypatch):
+    """Two segments, one long and one short: counting entries would call it a 50/50 split.
+
+    Entry counting gives ratio 0.50 and rejects a sample that is 90% one speaker; word counting
+    gives 0.90 and accepts it. The inverse case — one entry per speaker with equal weight — is what
+    used to let a genuinely mixed sample through on a single-segment provider.
+    """
+    segments = _make_segments(
+        ["one two three four five six seven eight nine", "interrupting"],
+        speakers=["SPEAKER_00", "SPEAKER_01"],
+    )
+
+    monkeypatch.setattr(speaker_sample, "deepgram_prerecorded_from_bytes", lambda *_a, **_k: segments)
+
+    _transcript, is_valid, reason = asyncio.run(speaker_sample.verify_and_transcribe_sample(b"audio", 16000))
+
+    assert (is_valid, reason) == (True, "ok")

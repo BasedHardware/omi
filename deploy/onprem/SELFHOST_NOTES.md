@@ -1231,6 +1231,45 @@ docker run --rm --network host -v $(git rev-parse --show-toplevel)/backend:/app 
 docker rm -f kc-contract    # cleanup
 ```
 
+### Live reproduction: speaker identification across two conversations
+
+`backend/testing/e2e/test_zz_spike_4455.py` is a **reproduction, not a gate**. It skips without the
+corpus and a reachable parakeet, so it contributes **no coverage** — do not count it as such (see the
+collection-error rule below). Its value is that the whole chain can be re-measured in minutes:
+extraction → sample stored → `speech_samples_version` 3 → the next session loads the person → a
+segment of the same voice matches.
+
+Two environment traps, both of which cost hours the first time:
+
+  - The e2e conftest replaces `socket.connect`/`getaddrinfo` and allows **only** `127.0.0.1`, `::1`,
+    `localhost`, `0.0.0.0`. A service on the compose network is refused before the connection is
+    attempted. So the test container must **share the netns** of the service, not join its network.
+  - parakeet and the diarizer both listen on **:8080**, so they cannot share one netns. Reach the
+    second through a TCP forward started inside the test container — a separate process, so pytest's
+    socket monkeypatch does not apply to it.
+
+```bash
+cd deploy/onprem && docker compose -f compose.prod.yaml --profile inference up -d parakeet diarizer
+DIARIZER=$(docker inspect omi-oss-diarizer-1 --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
+docker run --rm --network container:omi-oss-parakeet-1 \
+  -v $(git rev-parse --show-toplevel):/repo -v ~/.cache/omi-oss/librispeech:/corpus:ro \
+  -v /path/to/forward.py:/fw/forward.py:ro -w /repo/backend \
+  -e ENCRYPTION_SECRET="$(openssl rand -hex 32)" -e OPENAI_API_KEY=test -e LOCAL_DEVELOPMENT=true \
+  -e STT_PRERECORDED_MODEL=parakeet -e HOSTED_PARAKEET_API_URL=http://127.0.0.1:8080 \
+  -e HOSTED_SPEAKER_EMBEDDING_API_URL=http://127.0.0.1:8081 \
+  omi-oss-backend-test bash -c "
+    /opt/venv/bin/python /fw/forward.py 8081 $DIARIZER 8080 & sleep 2
+    /opt/venv/bin/python -m pytest -o addopts='' -s testing/e2e/test_zz_spike_4455.py"
+```
+
+The corpus is LibriSpeech test-clean under `~/.cache/omi-oss/librispeech` (10 speakers, 16 kHz mono
+PCM16, with `.trans.txt` ground truth so the containment gate is measured on a fair comparison). It
+holds **one utterance per speaker**, so the two-conversation case splits one 24.9s reading in half:
+same voice, different words, both above the 8s floor the extraction requires.
+
+Both inference images rebuild from warm cache in well under a minute; the `nvcr.io/nvidia/nemo` base
+layers are already in the builder cache.
+
 ### Known residual failures — and why the list is not the gate
 
 **Do not gate a change on this list. Gate it on a diff against a baseline worktree** at the commit you
