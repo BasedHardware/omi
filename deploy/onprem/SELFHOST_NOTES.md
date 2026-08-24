@@ -1253,6 +1253,33 @@ worse than no list, because "the FAIL set equals the known residuals" then reads
 baseline diff cannot drift, and it is what caught a regression this list would have absorbed
 (`test_city_prompt_context.py`, ours, fixed in `1a8a6edb01`).
 
+**Re-measured 2026-08-24: 1021 files swept, five failed** — the four e2e files below plus
+`test_sys_modules_hermeticity`. The three "ours" in the table are fixed and gone.
+
+**And a hole in the method, found the hard way.** Between those two measurements the whole e2e tier
+was DARK: our own `validate_configuration_values` refused the declared-empty `ADMIN_KEY` that
+upstream's hermetic conftest sets on purpose, and since the validator runs at import of `main.py`,
+20 files died at COLLECTION — zero tests executed, for weeks. The baseline diff never saw it,
+because *a diff against the commit you started from cannot see what was already broken there*: every
+later baseline inherited the darkness and came out clean. Two rules follow.
+
+  - **A collection error is not a test failure.** "Failed" means executed and wrong; "error at
+    collection" means never executed at all. The sweep prints both as FAIL and they land in the same
+    residual list. Read the distinction before trusting any FAIL set — a file that never ran is not
+    a known residual, it is missing coverage.
+  - **Re-derive a residual, do not inherit it.** The entry that hid this said "the tier that needs
+    live services". It does not need them; the harness fakes its boundaries. The explanation was
+    written once and repeated for weeks, including into a merge commit as verification evidence.
+
+**The four e2e residuals are now settled, with the cause.** Run on a pristine `upstream/main`
+worktree on 2026-08-24 the tier gives **106 passed / 10 failed with the identical failing files**, so
+they are upstream's. The cause is upstream's own memory kill switch: `MEMORY_ENABLED` unset means
+rollout mode `off`, `off` raises `Memory writes are globally paused`
+(`utils/memory/memory_service.py`), and `routers/memories.py` reports it as a bare
+`503 Service temporarily unavailable` through an `except Exception` — which is why it took a probe
+that replaced `logger.exception` with `traceback.print_exc()` to see it at all. The contract lane
+passes `MEMORY_ENABLED=on`, which is why the same code is green there.
+
 **Measured 2026-08-21, all eight diagnosed.** 960 files swept; the eight that failed at `e88aeb2d90`
 also failed at `bb14216e52`, which proved only that they were *older* — not that they were upstream's.
 Three of them were ours. The test that settles it is cheap and worth repeating for any new entry:
