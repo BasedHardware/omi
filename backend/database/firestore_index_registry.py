@@ -824,6 +824,30 @@ HOURLY_USAGE_PLAN_ATTRIBUTION_QUERY = FirestoreQuerySpec(
     ),
 )
 
+CONVERSATION_KEYFRAME_JOBS_DEVICE_STATE_QUERY = FirestoreQuerySpec(
+    identifier='conversation_keyframe_jobs_device_state',
+    collection_group='conversation_keyframe_jobs',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('device_id', '==', 'device_id'),
+        FirestoreQueryFilter('state', '==', 'state'),
+    ),
+    index_fields=(_asc('device_id'), _asc('state'), _asc('__name__')),
+)
+
+SCREEN_ACTIVITY_KEYFRAME_QUERY = FirestoreQuerySpec(
+    identifier='screen_activity_keyframe_device_generation_timestamp',
+    collection_group='screen_activity',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('clientDeviceId', '==', 'device_id'),
+        FirestoreQueryFilter('accountGeneration', '==', 'account_generation'),
+        FirestoreQueryFilter('timestamp', '>=', 'started_at'),
+        FirestoreQueryFilter('timestamp', '<=', 'finished_at'),
+    ),
+    index_fields=(_asc('clientDeviceId'), _asc('accountGeneration'), _desc('timestamp'), _desc('__name__')),
+)
+
 QUERY_SPECS = (
     ACTION_ITEMS_COMPLETION_ID_SCAN_QUERY,
     ACTION_ITEMS_COMPLETED_DUE_RANGE_QUERY,
@@ -862,6 +886,8 @@ QUERY_SPECS = (
     MEETING_RECEIPTS_DUE_QUERY,
     HOURLY_USAGE_PLAN_ATTRIBUTION_QUERY,
     MESSAGES_BY_APP_ORDERED_QUERY,
+    CONVERSATION_KEYFRAME_JOBS_DEVICE_STATE_QUERY,
+    SCREEN_ACTIVITY_KEYFRAME_QUERY,
 )
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)
