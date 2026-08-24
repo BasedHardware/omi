@@ -1890,6 +1890,10 @@ def test_desktop_backend_compose_requires_vertex_pt_env(env):
     assert desktop_env['PROMETHEUS_SIDECAR_PORT']['value'] == '9090'
     desktop_secrets = manifest['environments'][env]['desktop_backend']['secrets']
     assert desktop_secrets['METRICS_SECRET'] == {'secret': 'METRICS_SECRET', 'version': 'latest'}
+    assert desktop_secrets['POSTHOG_PROJECT_API_KEY'] == {
+        'secret': 'POSTHOG_PROJECT_API_KEY',
+        'version': 'latest',
+    }
     backend = manifest['environments'][env]['cloud_run']['services']['backend']
     assert backend['env']['PROMETHEUS_SIDECAR_PORT']['value'] == '9090'
     assert backend['secrets']['METRICS_SECRET'] == {'secret': 'METRICS_SECRET', 'version': 'latest'}

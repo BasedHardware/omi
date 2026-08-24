@@ -627,27 +627,30 @@ async def _post_provider_completion(
     max_completion_tokens: int | None = None,
     record_direct_fallback: bool = False,
 ) -> Any:
-    await _renew_quota(uid, operation, reservation_token)
-    paid_boundary_decision = await resolve_jit_rollout(
-        uid,
-        stage=JITDecisionStage.PAID_BOUNDARY,
-        force_refresh=True,
-    )
-    _require_jit_rollout(paid_boundary_decision)
-    if record_direct_fallback and provider_request.fallback_class == "dev_direct_openai":
-        record_fallback(
-            component="llm_gateway",
-            from_mode="gateway",
-            to_mode="direct_openai",
-            reason="config_incomplete",
-            outcome="recovered",
-            log=logger,
-        )
-        record_direct_exception_surface(surface="desktop_context_proactivity.dev_direct_openai")
-    payload = provider_request.payload
-    if max_completion_tokens is not None:
-        payload = {**payload, "max_completion_tokens": max_completion_tokens}
     async with get_llm_gateway_semaphore():
+        # Queue before the gateway slot is not paid provider work.  Do not let
+        # an unbounded wait consume lease time or make a stale kill-switch
+        # snapshot authorize the eventual request.
+        await _renew_quota(uid, operation, reservation_token)
+        paid_boundary_decision = await resolve_jit_rollout(
+            uid,
+            stage=JITDecisionStage.PAID_BOUNDARY,
+            force_refresh=True,
+        )
+        _require_jit_rollout(paid_boundary_decision)
+        if record_direct_fallback and provider_request.fallback_class == "dev_direct_openai":
+            record_fallback(
+                component="llm_gateway",
+                from_mode="gateway",
+                to_mode="direct_openai",
+                reason="config_incomplete",
+                outcome="recovered",
+                log=logger,
+            )
+            record_direct_exception_surface(surface="desktop_context_proactivity.dev_direct_openai")
+        payload = provider_request.payload
+        if max_completion_tokens is not None:
+            payload = {**payload, "max_completion_tokens": max_completion_tokens}
         response = await get_llm_gateway_client().post(
             provider_request.url,
             headers=provider_request.headers,

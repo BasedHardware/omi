@@ -689,6 +689,138 @@ async def test_expired_lease_fails_closed_before_provider_and_releases_once(monk
 
 
 @pytest.mark.asyncio
+async def test_gateway_queue_wait_does_not_renew_expiring_lease_until_slot(monkeypatch):
+    entered = asyncio.Event()
+    release_slot = asyncio.Event()
+    renew_calls = []
+    provider_calls = []
+    released = []
+
+    class QueuedSemaphore:
+        async def __aenter__(self):
+            entered.set()
+            await release_slot.wait()
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+    class GatewayClient:
+        async def post(self, *_args, **_kwargs):
+            provider_calls.append(True)
+            raise AssertionError("provider must not run after lease expiry")
+
+    async def consume(*_args):
+        return _test_quota_state()
+
+    async def renew(*_args):
+        renew_calls.append(True)
+        raise desktop_proactivity.HTTPException(status_code=503, detail="Proactive metering lease expired")
+
+    async def release(uid, operation, token):
+        released.append((uid, operation, token))
+
+    monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
+    monkeypatch.setenv("OMI_LLM_GATEWAY_URL", "http://gateway")
+    monkeypatch.setattr(desktop_proactivity, "_consume_quota", consume)
+    monkeypatch.setattr(desktop_proactivity, "_renew_quota", renew)
+    monkeypatch.setattr(desktop_proactivity, "_release_quota", release)
+    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", lambda: GatewayClient())
+    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_semaphore", lambda: QueuedSemaphore())
+    monkeypatch.setattr(desktop_proactivity, "llm_gateway_headers", lambda **_: {})
+
+    task = asyncio.create_task(desktop_proactivity.proactive_completion(request(), Response(), uid="user-1"))
+    await asyncio.wait_for(entered.wait(), timeout=1)
+    await asyncio.sleep(0)
+    assert renew_calls == []
+    assert provider_calls == []
+
+    release_slot.set()
+    with pytest.raises(desktop_proactivity.HTTPException) as expired:
+        await task
+
+    assert expired.value.status_code == 503
+    assert renew_calls == [True]
+    assert provider_calls == []
+    assert released == [("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION, "test-reservation-token")]
+
+
+@pytest.mark.asyncio
+async def test_gateway_queue_wait_refreshes_kill_switch_before_direct_provider(monkeypatch):
+    entered = asyncio.Event()
+    release_slot = asyncio.Event()
+    kill_switch = False
+    resolutions = []
+    provider_calls = []
+    released = []
+    fallbacks = []
+    enabled = _rollout_decision(
+        rollout=TriState.ENABLED,
+        kill_switch=TriState.DISABLED,
+        effective=TriState.ENABLED,
+        reason=JITDecisionReason.ROLLOUT_ENABLED,
+    )
+    killed = _rollout_decision(
+        rollout=TriState.ENABLED,
+        kill_switch=TriState.ENABLED,
+        effective=TriState.DISABLED,
+        reason=JITDecisionReason.KILL_SWITCH_ENABLED,
+    )
+
+    class QueuedSemaphore:
+        async def __aenter__(self):
+            entered.set()
+            await release_slot.wait()
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+    class DirectClient:
+        async def post(self, *_args, **_kwargs):
+            provider_calls.append(True)
+            raise AssertionError("provider must not run after the kill switch changes")
+
+    async def resolve(_uid, *, stage, force_refresh=False):
+        resolutions.append((stage, force_refresh, kill_switch))
+        return killed if kill_switch else enabled
+
+    async def consume(*_args):
+        return _test_quota_state()
+
+    async def release(uid, operation, token):
+        released.append((uid, operation, token))
+
+    monkeypatch.setattr(desktop_proactivity, "resolve_jit_rollout", resolve)
+    monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
+    monkeypatch.delenv("OMI_LLM_GATEWAY_URL", raising=False)
+    monkeypatch.setenv("OMI_ENV_STAGE", "dev")
+    monkeypatch.setattr(desktop_proactivity, "get_openai_api_key", lambda: "dev-provider-key")
+    monkeypatch.setattr(desktop_proactivity, "record_fallback", lambda **values: fallbacks.append(values))
+    monkeypatch.setattr(desktop_proactivity, "_consume_quota", consume)
+    monkeypatch.setattr(desktop_proactivity, "_release_quota", release)
+    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", lambda: DirectClient())
+    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_semaphore", lambda: QueuedSemaphore())
+
+    task = asyncio.create_task(desktop_proactivity.proactive_completion(request(), Response(), uid="user-1"))
+    await asyncio.wait_for(entered.wait(), timeout=1)
+    kill_switch = True
+    release_slot.set()
+    with pytest.raises(desktop_proactivity.HTTPException) as blocked:
+        await task
+
+    assert blocked.value.status_code == 403
+    assert provider_calls == []
+    assert fallbacks == []
+    assert released == [("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION, "test-reservation-token")]
+    assert resolutions == [
+        (desktop_proactivity.JITDecisionStage.INGRESS, False, False),
+        (desktop_proactivity.JITDecisionStage.PAID_BOUNDARY, True, False),
+        (desktop_proactivity.JITDecisionStage.PAID_BOUNDARY, True, True),
+    ]
+
+
+@pytest.mark.asyncio
 async def test_missing_finalize_fails_closed_without_rolling_back_successful_provider_work(monkeypatch):
     released = []
 

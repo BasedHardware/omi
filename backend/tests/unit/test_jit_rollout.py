@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 
 import pytest
 from fastapi import FastAPI
@@ -18,6 +19,7 @@ from utils.jit_rollout import (
     PostHogJITFlagProvider,
     TriState,
 )
+from utils.executors import run_blocking, sync_executor
 from utils.other.endpoints import get_current_user_uid
 
 
@@ -221,6 +223,76 @@ async def test_posthog_provider_errors_and_timeouts_are_unknown(monkeypatch):
         JITDecisionReason.PROVIDER_TIMEOUT,
         JITErrorClass.TIMEOUT,
     )
+
+
+@pytest.mark.asyncio
+async def test_posthog_decide_coalesces_same_uid_calls():
+    started = threading.Event()
+    release = threading.Event()
+
+    class SlowPostHog:
+        def __init__(self):
+            self.calls = 0
+
+        def get_feature_variants(self, _uid: str):
+            self.calls += 1
+            started.set()
+            release.wait(1)
+            return {'jit-processing-v1': True, 'jit-processing-kill-switch-v1': False}
+
+    client = SlowPostHog()
+    provider = PostHogJITFlagProvider(timeout_seconds=1, client_factory=lambda: client)
+    tasks = [asyncio.create_task(provider('same-user')) for _ in range(32)]
+    for _ in range(100):
+        if started.is_set():
+            break
+        await asyncio.sleep(0.001)
+    assert started.is_set()
+    release.set()
+
+    results = await asyncio.gather(*tasks)
+    assert client.calls == 1
+    assert all(result.rollout == TriState.ENABLED for result in results)
+
+
+@pytest.mark.asyncio
+async def test_posthog_bulkhead_bounds_fanout_without_starving_sync_executor():
+    started = threading.Event()
+    release = threading.Event()
+    lock = threading.Lock()
+
+    class SaturatedPostHog:
+        def __init__(self):
+            self.calls = 0
+
+        def get_feature_variants(self, _uid: str):
+            with lock:
+                self.calls += 1
+            started.set()
+            release.wait(1)
+            return {'jit-processing-v1': True, 'jit-processing-kill-switch-v1': False}
+
+    client = SaturatedPostHog()
+    provider = PostHogJITFlagProvider(timeout_seconds=0.05, client_factory=lambda: client)
+    tasks = [asyncio.create_task(provider(f'user-{index}')) for index in range(24)]
+    for _ in range(100):
+        if client.calls >= 4:
+            break
+        await asyncio.sleep(0.001)
+    assert started.is_set()
+
+    # The PostHog control plane has its own four-worker bulkhead.  A saturated
+    # decide fanout must leave the shared sync pipeline executor usable.
+    assert await asyncio.wait_for(run_blocking(sync_executor, lambda: 'sync-ready'), timeout=0.5) == 'sync-ready'
+    results = await asyncio.gather(*tasks)
+    assert all(result.error_class == JITErrorClass.TIMEOUT for result in results)
+
+    release.set()
+    for _ in range(100):
+        if client.calls >= 20:
+            break
+        await asyncio.sleep(0.01)
+    assert client.calls == 20  # four workers plus sixteen queued submissions
 
 
 def test_read_only_route_uses_authenticated_uid_and_ignores_self_enrolment(monkeypatch):
