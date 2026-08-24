@@ -1,0 +1,7 @@
+{
+  "bucket_env_var": "BUCKET_FRAME_REQUESTS",
+  "conversation_attachment_policy": "conversation_lifetime",
+  "lifecycle": {
+    "expires_objects": false
+  }
+}

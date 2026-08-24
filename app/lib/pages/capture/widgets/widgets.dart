@@ -103,7 +103,8 @@ class UpdateFirmwareCardWidget extends StatelessWidget {
       builder: (context, provider, child) {
         if (!provider.havingNewFirmware) return const SizedBox();
 
-        final isOmiGlass = provider.pairedDevice?.type == DeviceType.openglass ||
+        final isOmiGlass =
+            provider.pairedDevice?.type == DeviceType.openglass ||
             (provider.pairedDevice?.name.toLowerCase().contains('glass') ?? false);
 
         return Stack(
@@ -213,6 +214,7 @@ getTranscriptWidget(
   Function(int)? onEditSegmentText,
   Key? transcriptKey,
   bool followLatest = false,
+  String? conversationId,
   TranscriptScrollState? scrollState,
   double jumpToLatestButtonBottom = 16,
   int contentVersion = 0,
@@ -232,7 +234,7 @@ getTranscriptWidget(
   final bool showTranscript = segments.isNotEmpty;
 
   Widget buildPhotos() {
-    return PhotosGridComponent(photos: photos);
+    return PhotosGridComponent(photos: photos, conversationId: conversationId);
   }
 
   Widget buildTranscriptSegments() {

@@ -925,7 +925,10 @@ def patch_conversation_segment_text(
 @router.get(
     "/v1/conversations/{conversation_id}/photos", response_model=List[ConversationPhoto], tags=['conversations']
 )
-def get_conversation_photos(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def get_conversation_photos(
+    conversation_id: str,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "frame_requests:read")),
+):
     _get_valid_conversation_by_id(uid, conversation_id)
     return conversations_db.get_conversation_photos(uid, conversation_id)
 
@@ -934,12 +937,20 @@ def get_conversation_photos(conversation_id: str, uid: str = Depends(auth.get_cu
     "/v1/conversations/{conversation_id}/photos/{photo_id}/image",
     tags=['conversations'],
     response_class=Response,
-    responses={200: {"content": {"image/jpeg": {}, "image/png": {}, "image/webp": {}}}},
+    responses={
+        200: {
+            "content": {
+                "image/jpeg": {"schema": {"type": "string", "format": "binary"}},
+                "image/png": {"schema": {"type": "string", "format": "binary"}},
+                "image/webp": {"schema": {"type": "string", "format": "binary"}},
+            }
+        }
+    },
 )
 def get_conversation_photo_image(
     conversation_id: str,
     photo_id: str,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "frame_requests:read")),
 ):
     """Serve owner-authorized frame evidence from conversation-lifetime storage."""
 
@@ -1018,8 +1029,17 @@ def delete_conversation(
     # still-live conversation evidence must remain available for a retry. The
     # queue metadata/object cleanup is exhaustive and follows only after the
     # conversation deletion has returned successfully.
+    # Snapshot both current photo metadata and queue metadata before deleting
+    # the conversation. If the owner-authorized conversation delete fails, no
+    # pixel is removed and the still-live evidence remains retryable.
+    photo_storage_ids = [
+        str(photo.get("storage_id"))
+        for photo in (conversations_db.get_conversation_photos(uid, conversation_id) or [])
+        if isinstance(photo, dict) and isinstance(photo.get("storage_id"), str) and photo.get("storage_id")
+    ]
+    frame_storage_ids = frame_requests_db.list_all_frame_request_storage_ids(uid, conversation_id=conversation_id)
+    storage_ids = list(dict.fromkeys(photo_storage_ids + frame_storage_ids))
     conversations_db.delete_conversation(uid, conversation_id)
-    storage_ids = frame_requests_db.list_all_frame_request_storage_ids(uid, conversation_id=conversation_id)
     delete_frame_request_pixels_for_user(uid, storage_ids)
     frame_requests_db.delete_frame_requests_for_conversation(uid, conversation_id)
 

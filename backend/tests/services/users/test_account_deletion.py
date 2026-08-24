@@ -1322,7 +1322,7 @@ def test_background_wipe_fails_closed_when_running_marker_persist_fails(monkeypa
 
 def test_purge_derived_user_data_isolates_backends_and_reloads_conversation_ids(monkeypatch):
     calls = []
-    conversation_calls = iter([['c1'], ['c2']])
+    conversation_calls = iter([['c1'], ['c2'], ['c3']])
     monkeypatch.setattr(
         account_deletion,
         'get_conversation_ids',
@@ -1370,6 +1370,7 @@ def test_purge_derived_user_data_isolates_backends_and_reloads_conversation_ids(
         'purge_canonical_derived_user_data',
         MagicMock(return_value={'vector_ids': ['canonical-1', 'canonical-2']}),
     )
+    monkeypatch.setattr(account_deletion, 'get_conversation_photos', lambda uid, conversation_id: [])
 
     result = account_deletion.purge_derived_user_data('uid1')
 
@@ -1385,6 +1386,7 @@ def test_purge_derived_user_data_isolates_backends_and_reloads_conversation_ids(
         ('get_screen', 'uid1'),
         ('delete_screen_vectors', 'uid1', ['s1']),
         ('recordings', 'uid1'),
+        ('get_conversations', 'uid1'),
     ]
     assert result == {
         'required_failures': [],
@@ -1415,7 +1417,7 @@ def test_purge_derived_user_data_continues_after_each_failure(monkeypatch):
 
     result = account_deletion.purge_derived_user_data('uid1')
 
-    assert account_deletion.get_conversation_ids.call_count == 2
+    assert account_deletion.get_conversation_ids.call_count == 3
     account_deletion.delete_conversation_vectors_batch.assert_not_called()
     account_deletion.delete_transcript_chunk_vectors_batch.assert_not_called()
     account_deletion.delete_memory_vectors_batch.assert_called_once_with('uid1', ['m1'])
@@ -1428,6 +1430,7 @@ def test_purge_derived_user_data_continues_after_each_failure(monkeypatch):
         'transcript_chunk_vectors',
         'memory_vectors',
         'conversation_recordings',
+        'frame_request_pixels',
         'canonical_derived_data',
     ]
     assert result['best_effort_failures'] == []

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -28,12 +29,18 @@ class MediaViewerItem {
   /// rather than an `ImageProvider`: building the provider eagerly means base64-decoding every
   /// photo in the gallery and holding all of them before the first frame renders, which the
   /// widget this replaced never did — `PhotoViewGallery.builder` only decoded pages it built.
-  /// Exactly one of [base64] / [imageUrl] must be set.
+  /// Exactly one of [base64] / [imageUrl] / [bytesLoader] must be set.
   final String? base64;
 
   /// Network image URL, for app-store thumbnails. Exactly one of [base64] / [imageUrl] must be
   /// set.
   final String? imageUrl;
+
+  /// Lazily loads authenticated image bytes, for storage-backed conversation photos.
+  final Future<Uint8List?> Function()? bytesLoader;
+
+  /// MIME type used when bytes loaded through [bytesLoader] are shared.
+  final String? mimeType;
 
   /// Hero tag for cross-page transitions. Null disables the Hero wrapper for this page, matching
   /// the single-image call sites, which never had one.
@@ -48,12 +55,14 @@ class MediaViewerItem {
   const MediaViewerItem({
     this.base64,
     this.imageUrl,
+    this.bytesLoader,
+    this.mimeType,
     this.heroTag,
     this.showCaptionStrip = false,
     this.caption,
     this.discarded = false,
   }) : assert(
-          (base64 == null) != (imageUrl == null),
+          (base64 != null ? 1 : 0) + (imageUrl != null ? 1 : 0) + (bytesLoader != null ? 1 : 0) == 1,
           'MediaViewerItem needs exactly one image source',
         );
 }
@@ -102,6 +111,7 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
   /// back and forth does not decode the same photo again while opening the route still decodes
   /// nothing.
   final Map<int, ImageProvider> _providers = {};
+  final Map<int, Future<Uint8List?>> _byteLoads = {};
 
   ImageProvider _providerFor(int index) {
     return _providers.putIfAbsent(index, () {
@@ -110,6 +120,10 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
       if (encoded != null) return MemoryImage(base64Decode(encoded));
       return CachedNetworkImageProvider(item.imageUrl!);
     });
+  }
+
+  Future<Uint8List?> _bytesFor(int index) {
+    return _byteLoads.putIfAbsent(index, () => widget.items[index].bytesLoader!());
   }
 
   @override
@@ -152,6 +166,17 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
         scratch = File('${dir.path}/omi_photo_$stamp.jpg');
         await scratch.writeAsBytes(base64Decode(encoded));
         file = XFile(scratch.path, mimeType: 'image/jpeg');
+      } else if (item.bytesLoader != null) {
+        final bytes = await item.bytesLoader!();
+        if (bytes == null || bytes.isEmpty) throw Exception('Failed to load image bytes');
+        if (bytes.length > _maxDownloadBytes) {
+          throw Exception('Image too large to share: ${bytes.length} bytes');
+        }
+        final mime = _imageMimeType(item.mimeType) ?? 'image/jpeg';
+        final ext = mime.split('/').last;
+        scratch = File('${dir.path}/omi_photo_$stamp.$ext');
+        await scratch.writeAsBytes(bytes);
+        file = XFile(scratch.path, mimeType: mime);
       } else {
         final url = item.imageUrl!;
         final response = await http.get(Uri.parse(url)).timeout(_downloadTimeout);
@@ -266,6 +291,28 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
       backgroundDecoration: const BoxDecoration(color: Colors.black),
       builder: (context, index) {
         final item = widget.items[index];
+        if (item.bytesLoader != null) {
+          return PhotoViewGalleryPageOptions.customChild(
+            child: FutureBuilder<Uint8List?>(
+              future: _bytesFor(index),
+              builder: (context, snapshot) {
+                final bytes = snapshot.data;
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (bytes == null || bytes.isEmpty) {
+                  return const Center(child: Icon(Icons.broken_image_outlined, color: Colors.white70));
+                }
+                return PhotoView(
+                  imageProvider: MemoryImage(bytes),
+                  minScale: PhotoViewComputedScale.contained,
+                  maxScale: PhotoViewComputedScale.covered * widget.maxScaleMultiplier,
+                  heroAttributes: item.heroTag != null ? PhotoViewHeroAttributes(tag: item.heroTag!) : null,
+                );
+              },
+            ),
+          );
+        }
         return PhotoViewGalleryPageOptions(
           imageProvider: _providerFor(index),
           minScale: PhotoViewComputedScale.contained,

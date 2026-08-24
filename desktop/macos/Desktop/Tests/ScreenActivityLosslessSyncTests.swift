@@ -4,6 +4,14 @@ import XCTest
 @testable import Omi_Computer
 
 final class ScreenActivityLosslessSyncTests: XCTestCase {
+  func testFrameRequestRecoveryRetriesClaimedUploadsButNotUploadedPixels() {
+    XCTAssertTrue(ScreenActivitySyncService.shouldClaimFrameRequest(state: "requested"))
+    XCTAssertFalse(ScreenActivitySyncService.shouldClaimFrameRequest(state: "claimed"))
+    XCTAssertTrue(ScreenActivitySyncService.shouldUploadFrameRequest(state: "requested"))
+    XCTAssertTrue(ScreenActivitySyncService.shouldUploadFrameRequest(state: "claimed"))
+    XCTAssertFalse(ScreenActivitySyncService.shouldUploadFrameRequest(state: "uploaded"))
+  }
+
   func testMigrationPreservesPopulatedLegacyRowsAndStartsThemPending() throws {
     let queue = try makeLegacyQueue()
     try queue.write { db in

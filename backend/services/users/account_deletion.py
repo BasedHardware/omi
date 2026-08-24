@@ -11,7 +11,7 @@ from database.mcp_api_key import delete_mcp_key, get_mcp_keys_for_user
 from database.mcp_oauth import delete_user_oauth_credentials
 from database import users as users_db
 from database.action_items import get_action_item_ids
-from database.conversations import get_conversation_ids
+from database.conversations import get_conversation_ids, get_conversation_photos
 from database.screen_activity import get_screen_activity_ids
 from database import frame_requests as frame_requests_db
 from database.vector_db import (
@@ -167,8 +167,13 @@ def purge_derived_user_data(uid: str) -> PurgeResult:
     try:
         # Firestore metadata is removed by the recursive user wipe below, but
         # referenced pixels live in GCS and would otherwise become orphaned.
+        photo_storage_ids = []
+        for conversation_id in get_conversation_ids(uid):
+            for photo in get_conversation_photos(uid, conversation_id) or []:
+                if isinstance(photo, dict) and isinstance(photo.get('storage_id'), str) and photo.get('storage_id'):
+                    photo_storage_ids.append(str(photo['storage_id']))
         frame_storage_ids = frame_requests_db.list_all_frame_request_storage_ids(uid)
-        delete_frame_request_pixels_for_user(uid, frame_storage_ids)
+        delete_frame_request_pixels_for_user(uid, list(dict.fromkeys(photo_storage_ids + frame_storage_ids)))
     except Exception as e:
         record_failure('required_failures', 'frame_request_pixels', e)
         logger.error(f'delete_account purge frame request pixels failed for {uid}: {sanitize(str(e))}')

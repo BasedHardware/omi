@@ -47,7 +47,13 @@ def main() -> None:
     # Temporary frame pixels have an independent retention loop.  It is not
     # gated by frame-request delivery or the product rollout, so a disabled
     # cohort cannot strand previously uploaded ephemeral objects.
-    run_frame_request_retention_maintenance()
+    try:
+        # Frame pixels are an independent bounded convergence concern. A
+        # Firestore/GCS outage must not prevent canonical memory maintenance
+        # from running for the account population.
+        run_frame_request_retention_maintenance()
+    except Exception:
+        logger.exception("frame retention maintenance failed; canonical maintenance continues")
     summary = asyncio.run(
         run_canonical_short_term_maintenance_cron(
             recurrence_signal_persister=persist_recurrence_signals_for_maintenance,

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
@@ -257,6 +258,20 @@ Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String c
 
 Future<ServerConversation?> getConversationById(String conversationId) async {
   return (await getConversationByIdResult(conversationId)).item;
+}
+
+/// Fetches conversation-lifetime photo bytes for storage-backed photos. Legacy
+/// inline base64 photos continue to render without a network round trip.
+Future<Uint8List?> getConversationPhotoImage(String conversationId, String photoId) async {
+  final response = await makeApiCall(
+    url:
+        '${Env.apiBaseUrl}v1/conversations/${Uri.encodeComponent(conversationId)}/photos/${Uri.encodeComponent(photoId)}/image',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response?.statusCode != 200) return null;
+  return response!.bodyBytes;
 }
 
 Future<bool> updateConversationTitle(String conversationId, String title) async {
@@ -564,8 +579,8 @@ int? _parseRetryAfterSeconds(http.Response response) {
 /// Everything else remains a generic backend-capacity limit.
 SyncRateLimitKind syncRateLimitKindForResponse(http.Response response) =>
     response.headers['x-omi-rate-limit-reason']?.trim().toLowerCase() == 'fair_use'
-        ? SyncRateLimitKind.fairUse
-        : SyncRateLimitKind.backendCapacity;
+    ? SyncRateLimitKind.fairUse
+    : SyncRateLimitKind.backendCapacity;
 
 /// Upload-only: POST files and return as soon as the server acknowledges
 /// (HTTP 202 with a job_id, or the 200 fast-path with a finished result).
