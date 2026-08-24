@@ -28,6 +28,10 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextDetection.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextDirectorRetrieval.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextFactWritePolicy.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/JITProactivityCoordinator.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/JITProactivityDelivery.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/JITProactivityRuntime.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/JITTriggerMirror.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextProactivityEngine.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/EnvironmentalSpeakerContext.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextSubjectBindingService.swift
@@ -45,6 +49,7 @@ covers:
 preconditions:
   - signed_in_dogfood_account
   - context_buckets_feature_enabled
+  - jit_proactivity_rollout_enabled
   - screen_recording_enabled
   - notifications_enabled
 
@@ -98,6 +103,24 @@ steps:
       is. Confirm get_work_context returns a visit or workstream brief whose handle is the
       document URL or file path, not only a Rewind screenshot. Switching browsers on the
       same URL must stay one workstream.
+
+  - id: S7
+    name: Verify planned trigger wins over ambient proactivity
+    do: >
+      Create a standing trigger with a narrow condition and agent prompt through the supported
+      memory path, then enter a context that satisfies it and also contains a novel actionable
+      fact. Confirm exactly one proactive result is presented, it follows the planned prompt,
+      and no ambient result appears for the same context version. Revisit without changing the
+      context and confirm neither lane delivers again.
+
+  - id: S8
+    name: Verify bounded ambient fallback for an unplanned change
+    do: >
+      Enter a materially changed, locally novel context that matches no standing trigger and
+      contains one clear next-action opportunity. Confirm at most one ambient result is presented;
+      a task result must enter Suggested through the candidate sink. Repeat with only the words
+      remember, history, before, or previously added and confirm those words alone do not change
+      admission. Silence is valid when bounded triage rejects the candidate.
 
   - id: S7
     name: Logs are clean

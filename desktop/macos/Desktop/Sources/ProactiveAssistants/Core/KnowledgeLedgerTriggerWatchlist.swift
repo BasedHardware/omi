@@ -115,6 +115,19 @@ struct KnowledgeLedgerTriggerMetadata: Equatable, Sendable {
   let wakeupBudgetPerDay: Int?
 }
 
+struct KnowledgeLedgerTriggerAction: Codable, Equatable, Sendable {
+  static let maximumPromptCharacters = 2_000
+
+  let type: String
+  let prompt: String
+
+  var isValid: Bool {
+    type == "agent_prompt"
+      && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      && prompt.count <= Self.maximumPromptCharacters
+  }
+}
+
 struct KnowledgeLedgerTriggerCalendarEvent: Codable, Equatable, Hashable, Sendable {
   let title: String
   let eventType: String
@@ -290,6 +303,7 @@ struct KnowledgeLedgerCompiledTrigger: Equatable, Sendable {
   let time: TimeCondition?
   let calendar: CalendarCondition?
   let embedding: EmbeddingCondition?
+  let action: KnowledgeLedgerTriggerAction?
 
   enum MatchMode: String, Equatable, Sendable {
     case all
@@ -326,6 +340,7 @@ struct KnowledgeLedgerCompiledTrigger: Equatable, Sendable {
       && lhs.time == rhs.time
       && lhs.calendar == rhs.calendar
       && lhs.embedding == rhs.embedding
+      && lhs.action == rhs.action
   }
 }
 
@@ -605,7 +620,8 @@ enum KnowledgeLedgerTriggerCompiler {
       windows: windows,
       time: time,
       calendar: calendar,
-      embedding: embedding
+      embedding: embedding,
+      action: payload.action
     )
   }
 
@@ -784,6 +800,7 @@ private struct ConditionPayload: Decodable {
   let time: TimePayload?
   let calendar: CalendarPayload?
   let embedding: EmbeddingPayload?
+  let action: KnowledgeLedgerTriggerAction?
 
   enum CodingKeys: String, CodingKey, CaseIterable {
     case schemaVersion = "schema_version"
@@ -796,6 +813,7 @@ private struct ConditionPayload: Decodable {
     case time
     case calendar
     case embedding
+    case action
   }
 
   init(from decoder: Decoder) throws {
@@ -818,6 +836,10 @@ private struct ConditionPayload: Decodable {
     time = try container.decodeIfPresent(TimePayload.self, forKey: .time)
     calendar = try container.decodeIfPresent(CalendarPayload.self, forKey: .calendar)
     embedding = try container.decodeIfPresent(EmbeddingPayload.self, forKey: .embedding)
+    action = try container.decodeIfPresent(KnowledgeLedgerTriggerAction.self, forKey: .action)
+    if let action, !action.isValid {
+      throw KnowledgeLedgerTriggerCompileFailure.malformed("trigger action is invalid")
+    }
   }
 }
 

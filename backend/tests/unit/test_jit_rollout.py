@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+from datetime import datetime, timezone
 
 import pytest
 from fastapi import FastAPI
@@ -10,6 +11,8 @@ from fastapi.testclient import TestClient
 import desktop_backend
 import main
 from routers import jit_rollout
+from utils.memory.jit_trigger_contract import TriggerAction
+from utils.memory.jit_trigger_snapshot import AuthoritativeTriggerRow, AuthoritativeTriggerSnapshot
 from utils import jit_rollout as authority_module
 from utils.jit_rollout import (
     JITDecisionReason,
@@ -372,3 +375,86 @@ def test_main_and_desktop_apps_mount_one_read_only_decision_contract():
         jit_rollout.validate_jit_rollout_contract(app)
         route = next(route for route in app.routes if getattr(route, 'path', None) == '/v1/jit/rollout-decision')
         assert route.methods == {'GET'}
+
+
+def test_trigger_snapshot_is_owner_authenticated_default_off_and_never_reads_memory(monkeypatch):
+    async def resolve(uid: str, *, stage: JITDecisionStage, force_refresh: bool = False):
+        assert uid == 'owner'
+        evaluation = JITFlagEvaluation(TriState.DISABLED, TriState.DISABLED, JITDecisionReason.EVALUATED)
+        return authority_module._effective_decision(evaluation, cache_hit=False, cache_ttl_seconds=20)
+
+    monkeypatch.setattr(jit_rollout, 'resolve_jit_rollout', resolve)
+    monkeypatch.setattr(
+        jit_rollout,
+        'read_authoritative_trigger_snapshot',
+        lambda *_args, **_kwargs: pytest.fail('flag-off request must not read the memory ledger'),
+    )
+    app = FastAPI()
+    app.include_router(jit_rollout.router)
+    app.dependency_overrides[get_current_user_uid] = lambda: 'owner'
+
+    response = TestClient(app).get('/v1/jit/trigger-snapshot?uid=attacker')
+
+    assert response.status_code == 200
+    assert response.headers['cache-control'] == 'no-store'
+    assert response.json() == {
+        'owner_id': 'owner',
+        'account_generation': 0,
+        'head_commit_id': '',
+        'commit_sequence': 0,
+        'snapshot_revision': '',
+        'complete': False,
+        'rows': [],
+        'failure_reason': 'rollout_not_enabled',
+    }
+
+
+def test_trigger_snapshot_serializes_exhaustive_action_receipt(monkeypatch):
+    async def resolve(uid: str, *, stage: JITDecisionStage, force_refresh: bool = False):
+        evaluation = JITFlagEvaluation(TriState.ENABLED, TriState.DISABLED, JITDecisionReason.EVALUATED)
+        return authority_module._effective_decision(evaluation, cache_hit=False, cache_ttl_seconds=20)
+
+    snapshot = AuthoritativeTriggerSnapshot(
+        owner_id='owner',
+        account_generation=7,
+        head_commit_id='head',
+        commit_sequence=11,
+        snapshot_revision='revision',
+        complete=True,
+        rows=(
+            AuthoritativeTriggerRow(
+                memory_id='trigger-1',
+                item_revision=3,
+                updated_at=datetime(2026, 8, 24, tzinfo=timezone.utc),
+                trigger_condition={
+                    'schema_version': 'jit_trigger.v1',
+                    'match_mode': 'all',
+                    'keywords': ['release'],
+                    'action': {'type': 'agent_prompt', 'prompt': 'Give the next release step.'},
+                },
+                action=TriggerAction(type='agent_prompt', prompt='Give the next release step.'),
+                wakeup_budget_per_day=2,
+            ),
+        ),
+    )
+
+    async def immediate(_executor, function, uid):
+        assert uid == 'owner'
+        assert function is jit_rollout.read_authoritative_trigger_snapshot
+        return snapshot
+
+    monkeypatch.setattr(jit_rollout, 'resolve_jit_rollout', resolve)
+    monkeypatch.setattr(jit_rollout, 'run_blocking', immediate)
+    app = FastAPI()
+    app.include_router(jit_rollout.router)
+    app.dependency_overrides[get_current_user_uid] = lambda: 'owner'
+
+    payload = TestClient(app).get('/v1/jit/trigger-snapshot').json()
+
+    assert payload['owner_id'] == 'owner'
+    assert payload['snapshot_revision'] == 'revision'
+    assert payload['rows'][0]['action'] == {
+        'type': 'agent_prompt',
+        'prompt': 'Give the next release step.',
+    }
+    assert '"action"' in payload['rows'][0]['trigger_condition_json']

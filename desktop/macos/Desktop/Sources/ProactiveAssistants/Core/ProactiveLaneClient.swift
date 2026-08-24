@@ -136,6 +136,40 @@ actor ProactiveLaneClient {
   private var cooldownOwner: String?
   private var jitFlagsCache: (ownerID: String, flags: JITProactivityFlags, expiresAt: Date)?
 
+  func fetchJITTriggerSnapshot(
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> JITTriggerSnapshot {
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+      throw ProactiveLaneClientError.ownerChanged
+    }
+    let root = baseURL().hasSuffix("/") ? baseURL() : baseURL() + "/"
+    guard let url = URL(string: root + "v1/jit/trigger-snapshot") else {
+      throw ProactiveLaneClientError.invalidResponse
+    }
+    let authService = await MainActor.run { AuthService.shared }
+    let header = try await authService.getAuthHeader(expectedUserId: authorizationSnapshot.ownerID)
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+      throw ProactiveLaneClientError.ownerChanged
+    }
+    var request = URLRequest(url: url)
+    request.httpMethod = "GET"
+    request.setValue(header, forHTTPHeaderField: "Authorization")
+    request.timeoutInterval = 15
+    let (data, response) = try await session.data(for: request)
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+      throw ProactiveLaneClientError.ownerChanged
+    }
+    guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+      throw ProactiveLaneClientError.invalidResponse
+    }
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    guard let snapshot = try? decoder.decode(JITTriggerSnapshot.self, from: data),
+      snapshot.ownerID == authorizationSnapshot.ownerID
+    else { throw ProactiveLaneClientError.invalidResponse }
+    return snapshot
+  }
+
   init(
     session: URLSession = .shared,
     baseURL: @escaping () -> String = { ProactiveLaneClient.backendBaseURL },

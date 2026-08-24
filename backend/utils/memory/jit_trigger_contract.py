@@ -38,6 +38,7 @@ MAX_CONTEXT_TEXT_CHARS = 8_000
 MAX_CALENDAR_EVENTS = 32
 MAX_FEEDBACK_IDS = 32
 MAX_FEEDBACK_NOTE_CHARS = 240
+MAX_TRIGGER_ACTION_PROMPT_CHARS = 2_000
 
 
 class TriggerDecisionStatus(str, Enum):
@@ -127,6 +128,35 @@ class TriggerEmbeddingCondition(BaseModel):
         return float(value)
 
 
+class TriggerAction(BaseModel):
+    """Server-authored work purchased after a deterministic local match.
+
+    The action deliberately carries no provider/model choice and no client
+    enrollment bit.  It is an opaque instruction for one bounded agent turn;
+    the backend rollout authority remains the only admission authority.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: str = "agent_prompt"
+    prompt: str
+
+    @field_validator("type")
+    @classmethod
+    def validate_type(cls, value: str) -> str:
+        if value != "agent_prompt":
+            raise ValueError("trigger action type must be agent_prompt")
+        return value
+
+    @field_validator("prompt")
+    @classmethod
+    def validate_prompt(cls, value: str) -> str:
+        normalized = " ".join((value or "").split())
+        if not normalized or len(normalized) > MAX_TRIGGER_ACTION_PROMPT_CHARS:
+            raise ValueError("trigger action prompt is blank or oversized")
+        return normalized
+
+
 class TriggerCondition(BaseModel):
     """Serializable condition payload stored in ``MemoryItem.trigger_condition``."""
 
@@ -142,6 +172,7 @@ class TriggerCondition(BaseModel):
     time: Optional[TriggerTimeCondition] = None
     calendar: Optional[TriggerCalendarCondition] = None
     embedding: Optional[TriggerEmbeddingCondition] = None
+    action: Optional[TriggerAction] = None
 
     @field_validator("schema_version")
     @classmethod
@@ -395,7 +426,7 @@ def compile_trigger_condition(condition: Mapping[str, Any] | TriggerCondition) -
     if isinstance(condition, TriggerCondition):
         parsed = condition
     else:
-        if len(condition) > MAX_CONDITION_KEYS:
+        if len(condition) > MAX_CONDITION_KEYS + (1 if "action" in condition else 0):
             raise ValueError("trigger condition exceeds the key limit")
         parsed = TriggerCondition.model_validate(dict(condition))
 
@@ -630,6 +661,7 @@ __all__ = [
     "CompiledTrigger",
     "FeedbackUpdate",
     "TriggerCalendarCondition",
+    "TriggerAction",
     "TriggerCondition",
     "TriggerDecision",
     "TriggerDecisionStatus",
@@ -644,5 +676,6 @@ __all__ = [
     "evaluate_memory_item_trigger",
     "evaluate_trigger",
     "MAX_CONDITION_KEYS",
+    "MAX_TRIGGER_ACTION_PROMPT_CHARS",
     "TRIGGER_SCHEMA_VERSION",
 ]
