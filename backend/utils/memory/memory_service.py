@@ -202,6 +202,7 @@ class LedgerHistorySearchPage:
     matches: Tuple[MemorySearchMatch, ...]
     truncated: bool
     scanned_count: int
+    next_offset: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -2638,7 +2639,8 @@ class MemoryService:
 
         if item.ledger_schema_version != LEDGER_SCHEMA_VERSION:
             return False
-        if not item.intent_backed:
+        is_preserved_legacy_history = not item.intent_backed and item.write_reason == LedgerWriteReason.legacy_migration
+        if not item.intent_backed and not is_preserved_legacy_history:
             return False
         if item.status in {MemoryItemStatus.hidden, MemoryItemStatus.tombstoned}:
             return False
@@ -2652,7 +2654,12 @@ class MemoryService:
             return False
         # Admit only states the public MemoryDB wire shape can represent. A
         # status-only superseded row would otherwise serialize as current.
-        return row.user_review is False or row.invalid_at is not None or row.superseded_by is not None
+        return (
+            is_preserved_legacy_history
+            or row.user_review is False
+            or row.invalid_at is not None
+            or row.superseded_by is not None
+        )
 
     def read_ledger_history_page(
         self,
@@ -2667,8 +2674,9 @@ class MemoryService:
         This is deliberately separate from ``read``: default product reads
         must continue to hide rejected and closed facts.  The history seam is
         for a user's review/history surfaces and admits only canonical ledger
-        rows that are either explicitly rejected or no longer current.  It
-        never exposes tombstoned/hidden rows and never consults the legacy
+        rows that are explicitly rejected, no longer current, or preserved
+        with ``legacy_migration`` provenance. It never exposes arbitrary
+        passive rows, tombstoned/hidden rows, or the legacy
         ``users/{uid}/memories`` collection.
         """
 
@@ -2725,6 +2733,8 @@ class MemoryService:
         query: str,
         *,
         limit: int = 20,
+        offset: int = 0,
+        include_rejected: bool = False,
         budget: Optional[ListReadBudget] = None,
     ) -> LedgerHistorySearchPage:
         """Search one bounded canonical history provider window.
@@ -2733,6 +2743,9 @@ class MemoryService:
         authoritative canonical window. It does not consult legacy vectors or
         claim exhaustive historical retrieval; callers must surface
         ``truncated`` when the provider window or request budget is incomplete.
+        Offset pagination is deterministic for one live provider snapshot, but
+        concurrent history changes may shift later offsets and must be disclosed
+        by interactive callers.
         """
 
         normalized_query = " ".join((query or "").split()).casefold()
@@ -2740,6 +2753,9 @@ class MemoryService:
         if not terms:
             raise ValueError("historical ledger query must contain a searchable token")
         bounded_limit = max(1, min(int(limit or 20), 20))
+        bounded_offset = max(0, int(offset or 0))
+        if bounded_offset + bounded_limit > MAX_LEDGER_HISTORY_PROVIDER_WINDOW:
+            raise HTTPException(status_code=413, detail="Ledger history search pagination window exceeded")
         page = self.read_ledger_history_page(
             uid,
             limit=MAX_LEDGER_HISTORY_PROVIDER_WINDOW,
@@ -2749,6 +2765,8 @@ class MemoryService:
         matches: List[MemorySearchMatch] = []
         for memory in page.memories:
             if memory.kind != MemoryKind.fact:
+                continue
+            if memory.user_review is False and not include_rejected:
                 continue
             try:
                 arguments_text = json.dumps(memory.arguments, sort_keys=True, default=str)[:4000]
@@ -2772,10 +2790,14 @@ class MemoryService:
             return (-match.score, -value.timestamp(), match.memory.id)
 
         matches.sort(key=sort_key)
+        page_end = bounded_offset + bounded_limit
+        selected = matches[bounded_offset:page_end]
+        next_offset = page_end if page_end < len(matches) else None
         return LedgerHistorySearchPage(
-            matches=tuple(matches[:bounded_limit]),
-            truncated=page.truncated or len(matches) > bounded_limit,
+            matches=tuple(selected),
+            truncated=page.truncated or next_offset is not None,
             scanned_count=page.scanned_count,
+            next_offset=next_offset,
         )
 
     def search_mcp(self, uid: str, query: str, *, limit: int = 5) -> List[McpSearchPayload]:
