@@ -42,6 +42,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.account_deletion_projection_fence import read_account_deletion_projection_fence
 from database.firestore_index_registry import (
+    DAILY_SWEEP_ACTIVE_FACT_ENTITY_QUERY,
+    DAILY_SWEEP_ACTIVE_FACT_ENTITY_SLOT_QUERY,
     DAILY_SWEEP_ACTIVE_FACT_SLOT_QUERY,
     DAILY_SWEEP_ACTIVE_FACT_SUBJECT_QUERY,
 )
@@ -66,6 +68,17 @@ from utils.memory.memory_system import ensure_canonical_apply_control_state
 from utils.memory.memory_authority import validate_uid_for_memory_path
 from utils.memory.jit_trigger_contract import compile_trigger_condition
 
+# These budgets are deliberately separate from the canonical write budget.  A
+# completed-day producer must prove that it read the whole bounded source
+# window before the cursor can advance; it may never turn an unavailable read
+# into an empty day.
+MAX_COMPLETED_DAY_CONVERSATIONS = 32
+MAX_COMPLETED_DAY_INPUT_CHARACTERS = 48_000
+MAX_ONBOARDING_CONVERSATIONS = 8
+MAX_ONBOARDING_INPUT_CHARACTERS = 24_000
+MODEL_COST_PER_1K_INPUT_CHARACTERS_USD = 0.002
+ONBOARDING_CONSUMED_STATE_PATH = "memory_control/daily_memory_sweep_onboarding"
+
 SCHEMA_VERSION = "daily_memory_sweep.v1"
 CURSOR_SCHEMA_VERSION = "daily_memory_sweep_cursor.v1"
 RECEIPT_SCHEMA_VERSION = "daily_memory_sweep_receipt.v1"
@@ -84,6 +97,8 @@ DAILY_MEMORY_SWEEP_MODEL_ENABLED_ENV = "MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED"
 DAILY_MEMORY_SWEEP_MODEL_NAME_ENV = "MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME"
 DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES_ENV = "MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES"
 DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD_ENV = "MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD"
+DAILY_MEMORY_SWEEP_COHORT_ENABLED_ENV = "MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED"
+DAILY_MEMORY_SWEEP_COHORT_NAME_ENV = "MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME"
 
 RECEIPT_LEASE = timedelta(minutes=10)
 MAX_AUTHORITATIVE_OCCUPANTS = 2
@@ -180,12 +195,35 @@ class SweepAuthorityState(BaseModel):
         return self.enabled and not self.kill_switch_active
 
 
-class DailySweepModelAuthority(BaseModel):
-    """Explicit budget/model seam for a future summary candidate extractor.
+class DailySweepCohortAuthority(BaseModel):
+    """Read-only per-user rollout seam (for example a PostHog flag read).
 
-    The current adapter consumes only persisted, completed-day summary output;
-    it never invokes a model implicitly. A deployment must open this separate
-    authority before allowing a model-backed producer to add candidates.
+    The sweep never writes PostHog.  A deployment may inject a resolver that
+    reads the cohort assignment; when the seam is enabled without a resolver,
+    the scheduler fails closed for every user.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    enabled: bool = False
+    cohort_name: str = ""
+
+
+def daily_memory_sweep_cohort_authority_from_environment() -> DailySweepCohortAuthority:
+    truthy = {"1", "true", "yes", "on"}
+    return DailySweepCohortAuthority(
+        enabled=os.getenv(DAILY_MEMORY_SWEEP_COHORT_ENABLED_ENV, "false").casefold() in truthy,
+        cohort_name=os.getenv(DAILY_MEMORY_SWEEP_COHORT_NAME_ENV, "").strip(),
+    )
+
+
+class DailySweepModelAuthority(BaseModel):
+    """Explicit authority for the bounded completed-day candidate producer.
+
+    ``model_name`` is checked against the configured ``memories`` route before
+    the built-in extractor is called.  The optional extractor injection is for
+    deterministic emulator/unit tests; production uses the same existing
+    memory model route and never accepts a client-selected model.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -194,6 +232,10 @@ class DailySweepModelAuthority(BaseModel):
     model_name: str = "disabled"
     max_candidates: int = Field(default=8, ge=0, le=MAX_CANDIDATES_PER_DAY)
     max_cost_usd: float = Field(default=0.0, ge=0.0, le=10.0)
+
+    @property
+    def route_is_budgeted(self) -> bool:
+        return self.enabled and self.model_name not in {"", "disabled"} and self.max_cost_usd > 0
 
 
 def daily_memory_sweep_model_authority_from_environment() -> DailySweepModelAuthority:
@@ -740,6 +782,87 @@ def _rollover_cursor_source_generation(
     return bool(firestore.transactional(rollover)(transaction))
 
 
+def reconcile_daily_memory_sweep_timezone(
+    uid: str,
+    timezone_name: str,
+    *,
+    db_client: Any,
+    reconciliation_authorized: bool = False,
+) -> bool:
+    """Explicitly re-anchor a cursor after a user timezone change.
+
+    A timezone change can create a 23/25-hour overlap or gap.  The scheduler
+    therefore blocks automatically; this separate server-only operation clears
+    the completed-day anchor and lets the bounded source producer replay from
+    the new zone.  It is transactional with deletion and generation fences and
+    never infers permission from the user's profile write.
+    """
+
+    if not reconciliation_authorized:
+        return False
+    try:
+        ZoneInfo(timezone_name)
+    except (ZoneInfoNotFoundError, ValueError) as exc:
+        raise ValueError("timezone_name must be a valid IANA timezone") from exc
+    control = ensure_canonical_apply_control_state(uid, db_client=db_client)
+    ref = _cursor_ref(db_client, uid)
+
+    def reconcile(transaction: Any) -> bool:
+        deletion_ref, control_ref = _live_fence_refs(db_client, uid)
+        if not _transaction_fence_open(
+            transaction,
+            deletion_ref,
+            control_ref,
+            uid=uid,
+            account_generation=control.account_generation,
+            source_generation=control.source_generation,
+        ):
+            return False
+        snapshot = ref.get(transaction=transaction)
+        if not getattr(snapshot, "exists", False):
+            transaction.set(
+                ref,
+                DailySweepCursor(
+                    uid=uid,
+                    account_generation=control.account_generation,
+                    source_generation=control.source_generation,
+                    timezone_name=timezone_name,
+                ).model_dump(mode="json"),
+            )
+            return True
+        try:
+            cursor = DailySweepCursor.model_validate(snapshot.to_dict() or {})
+        except Exception:
+            return False
+        if (
+            cursor.uid != uid
+            or cursor.account_generation != control.account_generation
+            or cursor.source_generation != control.source_generation
+        ):
+            return False
+        if cursor.timezone_name == timezone_name:
+            return True
+        transaction.set(
+            ref,
+            {
+                "schema_version": CURSOR_SCHEMA_VERSION,
+                "uid": uid,
+                "account_generation": control.account_generation,
+                "source_generation": control.source_generation,
+                "generation": cursor.generation + 1,
+                "timezone_name": timezone_name,
+                "last_completed_local_date": None,
+                "last_completed_window_id": None,
+                "last_completed_window_start_utc": None,
+                "last_completed_window_end_utc": None,
+                "updated_at": datetime.now(timezone.utc),
+            },
+        )
+        return True
+
+    return bool(firestore.transactional(reconcile)(db_client.transaction()))
+
+
 def _pending_receipt_dates(
     db_client: Any,
     uid: str,
@@ -1078,6 +1201,17 @@ def _finish_receipt(
             or existing.get("window_end_utc") != window.end_utc
         ):
             raise RuntimeError("daily sweep receipt changed while completing")
+        consumed_ref = None
+        consumed_values: List[str] = []
+        if candidate.source_type == "onboarding" and callable(getattr(transaction, "get", None)):
+            # Firestore transactions require all reads before the first write.
+            consumed_ref = db_client.document(f"users/{uid}/{ONBOARDING_CONSUMED_STATE_PATH}")
+            consumed_snapshot = transaction.get(consumed_ref)
+            consumed_payload = consumed_snapshot.to_dict() if getattr(consumed_snapshot, "exists", False) else {}
+            raw_consumed_values = (
+                consumed_payload.get("consumed_source_keys", []) if isinstance(consumed_payload, dict) else []
+            )
+            consumed_values = list(raw_consumed_values) if isinstance(raw_consumed_values, list) else []
         payload: Dict[str, Any] = {
             "schema_version": RECEIPT_SCHEMA_VERSION,
             "receipt_state": "committed",
@@ -1094,6 +1228,27 @@ def _finish_receipt(
         if skip_reason:
             payload["skip_reason"] = skip_reason
         transaction.set(receipt_ref, payload, merge=True)
+        if consumed_ref is not None:
+            # The one-time onboarding marker shares the receipt transaction.
+            # A crash before receipt completion therefore leaves the source
+            # retryable, while a completed receipt cannot cause daily repeats.
+            # Consume the onboarding conversation source, not one particular
+            # candidate, so a multi-fact answer is not re-emitted when its
+            # first candidate happened to finish before a crash.
+            consumption_key = candidate.source_id
+            if consumption_key not in consumed_values:
+                consumed_values = (consumed_values + [consumption_key])[-MAX_CANDIDATES_PER_DAY:]
+            transaction.set(
+                consumed_ref,
+                {
+                    "schema_version": "daily_memory_sweep_onboarding.v1",
+                    "consumed_source_keys": consumed_values,
+                    "account_generation": account_generation,
+                    "source_generation": source_generation,
+                    "updated_at": datetime.now(timezone.utc),
+                },
+                merge=True,
+            )
 
     transaction = db_client.transaction()
     firestore.transactional(finish)(transaction)
@@ -1145,17 +1300,29 @@ def _find_active_slot_or_subject(
     }
     try:
         query = (
-            DAILY_SWEEP_ACTIVE_FACT_SLOT_QUERY.build(
-                collection,
-                {**values, "slot": candidate.slot},
-                field_filter_factory=FieldFilter,
+            DAILY_SWEEP_ACTIVE_FACT_ENTITY_SLOT_QUERY
+            if candidate.subject_entity_id is not None and candidate.slot
+            else (
+                DAILY_SWEEP_ACTIVE_FACT_SLOT_QUERY
+                if candidate.slot
+                else (
+                    DAILY_SWEEP_ACTIVE_FACT_ENTITY_QUERY
+                    if candidate.subject_entity_id is not None
+                    else DAILY_SWEEP_ACTIVE_FACT_SUBJECT_QUERY
+                )
             )
-            if candidate.slot
-            else DAILY_SWEEP_ACTIVE_FACT_SUBJECT_QUERY.build(
-                collection,
-                values,
-                field_filter_factory=FieldFilter,
-            )
+        ).build(
+            collection,
+            {
+                **values,
+                **({"slot": candidate.slot} if candidate.slot else {}),
+                **(
+                    {"subject_entity_id": candidate.subject_entity_id}
+                    if candidate.subject_entity_id is not None
+                    else {}
+                ),
+            },
+            field_filter_factory=FieldFilter,
         )
         snapshots = list(query.limit(MAX_AUTHORITATIVE_OCCUPANTS + 1).stream())
     except Exception as exc:
@@ -1519,6 +1686,10 @@ class DailySweepRuntimeSources:
     # source is absent/partial and the cursor must not advance, even when the
     # candidate list is empty (the explicit complete-zero case is True).
     complete: bool = False
+    source_status: Literal["complete", "complete_zero", "incomplete", "absent"] = "incomplete"
+    # Content-free accounting used to enforce the model budget.  It is never
+    # emitted as a user-facing telemetry payload.
+    model_cost_usd: float = 0.0
 
     @classmethod
     def from_iterables(
@@ -1528,12 +1699,16 @@ class DailySweepRuntimeSources:
         onboarding_cold_start: Iterable[DailySweepCandidate] = (),
         existing_trigger_reconciliation: Iterable[DailySweepCandidate] = (),
         complete: bool = False,
+        source_status: Literal["complete", "complete_zero", "incomplete", "absent"] = "incomplete",
+        model_cost_usd: float = 0.0,
     ) -> "DailySweepRuntimeSources":
         return cls(
             daily_summary=tuple(daily_summary),
             onboarding_cold_start=tuple(onboarding_cold_start),
             existing_trigger_reconciliation=tuple(existing_trigger_reconciliation),
             complete=complete,
+            source_status=source_status,
+            model_cost_usd=model_cost_usd,
         )
 
     def candidates(self) -> Tuple[DailySweepCandidate, ...]:
@@ -1571,6 +1746,7 @@ def _bounded_candidate_channel(
     *,
     source_type: Optional[str] = None,
     authority: Optional[SweepAuthority] = None,
+    trusted_direct: bool = False,
     max_candidates: int = MAX_CANDIDATES_PER_DAY,
 ) -> Tuple[DailySweepCandidate, ...]:
     if raw is None:
@@ -1580,18 +1756,232 @@ def _bounded_candidate_channel(
     parsed: List[DailySweepCandidate] = []
     for item in raw:
         if isinstance(item, DailySweepCandidate):
-            candidate = item
+            payload = item.model_dump(mode="python")
         elif isinstance(item, dict):
             payload = dict(item)
-            if source_type is not None:
-                payload.setdefault("source_type", source_type)
-            if authority is not None:
-                payload.setdefault("authority", authority)
-            candidate = DailySweepCandidate.model_validate(payload)
         else:
             raise ValueError("daily sweep source candidate must be an object")
+        # Source producers are not authorities.  Never let a producer payload
+        # smuggle in direct-user authority (or a different source type).  The
+        # only exception is the trusted canonical onboarding channel, whose
+        # adapter has already authenticated that the evidence came from an
+        # onboarding conversation.
+        if source_type is not None:
+            supplied_source_type = payload.get("source_type")
+            if supplied_source_type is not None and supplied_source_type != source_type:
+                if not (trusted_direct and supplied_source_type == "explicit_user_statement"):
+                    raise ValueError("daily sweep candidate source type is not trusted")
+            payload["source_type"] = source_type
+        if authority is not None:
+            supplied_authority = payload.get("authority")
+            if supplied_authority is not None:
+                try:
+                    supplied_authority = SweepAuthority(supplied_authority)
+                except ValueError as exc:
+                    raise ValueError("daily sweep candidate authority is invalid") from exc
+                if supplied_authority != authority and not (
+                    trusted_direct and supplied_authority == SweepAuthority.direct_user_statement
+                ):
+                    raise ValueError("daily sweep candidate authority is not trusted")
+            payload["authority"] = authority
+        candidate = DailySweepCandidate.model_validate(payload)
         parsed.append(candidate)
     return tuple(parsed)
+
+
+def _read_completed_day_conversation_texts(
+    uid: str,
+    window: CompletedLocalDayWindow,
+    *,
+    db_client: Any,
+    max_conversations: int,
+    max_characters: int,
+) -> Tuple[Tuple[Tuple[str, str], ...], Literal["complete", "incomplete"]]:
+    """Read only bounded textual conversations in one exact UTC window.
+
+    This adapter deliberately strips photos and other media.  A query failure,
+    an over-budget page, or an undecodable conversation is incomplete rather
+    than an empty source, so callers cannot move the cursor past unprocessed
+    data.
+    """
+
+    collection = db_client.collection(f"users/{uid}/conversations")
+    where = getattr(collection, "where", None)
+    if not callable(where):
+        return (), "incomplete"
+    try:
+        try:
+            query: Any = where(filter=FieldFilter("started_at", ">=", window.start_utc))
+            query = query.where(filter=FieldFilter("started_at", "<", window.end_utc))
+        except TypeError:
+            query = where("started_at", ">=", window.start_utc)
+            query = query.where("started_at", "<", window.end_utc)
+        try:
+            query = query.order_by("started_at")
+        except (AttributeError, TypeError):
+            # A small injected emulator fake may not implement ordering; the
+            # identity and bounded page still hold, and model output is sorted
+            # below by the stable document id.
+            pass
+        snapshots = list(query.limit(max_conversations + 1).stream())
+    except Exception:
+        return (), "incomplete"
+    if len(snapshots) > max_conversations:
+        return (), "incomplete"
+
+    from database.conversations import (  # pyright: ignore[reportPrivateUsage]
+        _prepare_conversation_for_read as prepare_conversation_for_read,  # pyright: ignore[reportPrivateUsage]
+    )
+    from models.conversation import Conversation
+
+    rows: List[Tuple[str, str]] = []
+    total_characters = 0
+    for snapshot in snapshots:
+        conversation_id = str(getattr(snapshot, "id", "") or "")
+        raw = snapshot.to_dict() or {}
+        if not conversation_id or not isinstance(raw, dict):
+            return (), "incomplete"
+        try:
+            prepared = prepare_conversation_for_read(raw, uid)  # pyright: ignore[reportPrivateUsage]
+            conversation = Conversation(**(prepared or {}))
+            # TranscriptSegment.segments_as_string is the canonical textual
+            # rendering.  It ignores photos by construction.
+            text = conversation.get_transcript(include_timestamps=False) or ""
+        except Exception:
+            return (), "incomplete"
+        text = text.strip()
+        if not text:
+            continue
+        total_characters += len(text)
+        if total_characters > max_characters:
+            return (), "incomplete"
+        rows.append((conversation_id, text))
+    rows.sort(key=lambda row: row[0])
+    return tuple(rows), "complete"
+
+
+def _extract_daily_memory_candidates(uid: str, text: str) -> Tuple[Any, ...]:
+    """Invoke Omi's existing bounded memory extractor for sweep input."""
+
+    from utils.llm.memories import extract_memories_from_text
+
+    # The model receives transcript text only.  ``strict`` makes provider or
+    # parser failure visible to the producer rather than silently attesting an
+    # empty day.
+    return tuple(extract_memories_from_text(uid, text, "daily_summary", strict=True))
+
+
+def _onboarding_consumed_keys(db_client: Any, uid: str) -> frozenset[str]:
+    snapshot = db_client.document(f"users/{uid}/{ONBOARDING_CONSUMED_STATE_PATH}").get()
+    if not getattr(snapshot, "exists", False):
+        return frozenset()
+    payload = snapshot.to_dict() or {}
+    values = payload.get("consumed_source_keys") if isinstance(payload, dict) else None
+    if not isinstance(values, list):
+        return frozenset()
+    return frozenset(str(value) for value in values if isinstance(value, str))
+
+
+def _produce_onboarding_sources(
+    uid: str,
+    *,
+    db_client: Any,
+    max_candidates: int,
+    model_authority: DailySweepModelAuthority,
+    model_extractor: Optional[Any] = None,
+) -> Tuple[Tuple[DailySweepCandidate, ...], bool]:
+    """Produce once-only onboarding facts from trusted onboarding conversations."""
+
+    collection = db_client.collection(f"users/{uid}/conversations")
+    where = getattr(collection, "where", None)
+    if not callable(where):
+        return (), False
+    try:
+        try:
+            query: Any = where(filter=FieldFilter("source", "==", "onboarding"))
+        except TypeError:
+            query = where("source", "==", "onboarding")
+        snapshots = list(query.limit(MAX_ONBOARDING_CONVERSATIONS + 1).stream())
+    except Exception:
+        return (), False
+    if len(snapshots) > MAX_ONBOARDING_CONVERSATIONS:
+        return (), False
+
+    consumed = _onboarding_consumed_keys(db_client, uid)
+    from database.conversations import (  # pyright: ignore[reportPrivateUsage]
+        _prepare_conversation_for_read as prepare_conversation_for_read,  # pyright: ignore[reportPrivateUsage]
+    )
+    from models.conversation import Conversation
+
+    rows: List[Tuple[str, str]] = []
+    total_characters = 0
+    for snapshot in snapshots:
+        conversation_id = str(getattr(snapshot, "id", "") or "")
+        raw = snapshot.to_dict() or {}
+        if not conversation_id or not isinstance(raw, dict):
+            return (), False
+        source_key = f"onboarding:{conversation_id}"
+        if source_key in consumed:
+            continue
+        try:
+            prepared = prepare_conversation_for_read(raw, uid)  # pyright: ignore[reportPrivateUsage]
+            conversation = Conversation(**(prepared or {}))
+            text = (conversation.get_transcript(include_timestamps=False) or "").strip()
+        except Exception:
+            return (), False
+        if not text:
+            # An empty onboarding recording is a complete, consumed source; it
+            # cannot become a direct memory later.
+            continue
+        total_characters += len(text)
+        if total_characters > MAX_ONBOARDING_INPUT_CHARACTERS:
+            return (), False
+        rows.append((conversation_id, text))
+    if not rows:
+        return (), True
+    if not model_authority.route_is_budgeted:
+        return (), False
+    extractor = model_extractor or _extract_daily_memory_candidates
+    if model_extractor is None:
+        from utils.llm.model_config import get_model
+
+        if model_authority.model_name != get_model("memories"):
+            return (), False
+    estimated_cost = (total_characters / 1000.0) * MODEL_COST_PER_1K_INPUT_CHARACTERS_USD
+    if estimated_cost > model_authority.max_cost_usd:
+        return (), False
+    candidates: List[DailySweepCandidate] = []
+    try:
+        for conversation_id, text in rows:
+            for index, memory in enumerate(extractor(uid, text) or ()):
+                content = str(getattr(memory, "content", "") or "").strip()
+                if not content:
+                    continue
+                candidates.append(
+                    DailySweepCandidate(
+                        candidate_id=deterministic_contract_id(
+                            "daily-sweep-onboarding-candidate",
+                            {"uid": uid, "source": conversation_id, "index": index},
+                        )[:128],
+                        kind="fact",
+                        operation="add",
+                        content=content,
+                        source_id=f"onboarding:{conversation_id}",
+                        source_type="onboarding",
+                        source_version="onboarding-memory-model.v1",
+                        source_refs=(f"conversation:{conversation_id}",),
+                        authority=SweepAuthority.direct_user_statement,
+                        subject_scope=MemorySubjectScope.primary_user,
+                        subject_entity_id=getattr(memory, "subject_entity_id", None),
+                    )
+                )
+                if len(candidates) >= max_candidates:
+                    break
+            if len(candidates) >= max_candidates:
+                break
+    except Exception:
+        return (), False
+    return tuple(candidates), True
 
 
 def produce_completed_day_daily_summary_sources(
@@ -1602,15 +1992,16 @@ def produce_completed_day_daily_summary_sources(
     *,
     db_client: Any,
     model_authority: Optional[DailySweepModelAuthority] = None,
+    model_extractor: Optional[Any] = None,
 ) -> DailySweepRuntimeSources:
-    """Adapt one persisted completed-day summary into a bounded source bundle.
+    """Produce the exact completed-day source, including its bounded model call.
 
-    This deliberately reads the already-materialized daily summary for the
-    exact local-day window. It never queries today's conversations or invokes a
-    partial-day summarizer. A missing summary is *incomplete*, not complete-zero;
-    only a summary document whose candidate channel is explicitly empty proves
-    complete-zero. Optional model-produced candidates must be persisted by the
-    summary producer and are budgeted by the separate model authority.
+    A summary document is a cache, not a producer authority.  When its
+    candidate channel is absent, this function reads the completed day's
+    conversation transcripts and invokes the existing memory extractor behind
+    the explicit model/cost seam.  The cursor advances for an empty day only
+    after a bounded source query proves that the day contained no textual
+    conversations (or a summary explicitly attests zero conversations).
     """
 
     window = completed_local_day_window(local_date, timezone_name)
@@ -1626,35 +2017,115 @@ def produce_completed_day_daily_summary_sources(
         snapshots = list(query.limit(1).stream())
     except Exception as exc:
         raise ValueError("daily summary completed-day query failed") from exc
-    if not snapshots:
-        return DailySweepRuntimeSources(complete=False)
-    payload = snapshots[0].to_dict() or {}
-    if not isinstance(payload, dict):
-        raise ValueError("daily summary payload is malformed")
-    if payload.get("date") != local_date.isoformat():
-        raise ValueError("daily summary date identity mismatch")
-    if any(key in payload for key in ("window_id", "window_start_utc", "window_end_utc")) and (
-        payload.get("window_id") != window.window_id
-        or payload.get("window_start_utc") != window.start_utc
-        or payload.get("window_end_utc") != window.end_utc
-    ):
-        raise ValueError("daily summary window identity mismatch")
-    # Candidate extraction is intentionally a persisted producer contract. A
-    # deployment can attach a bounded `memory_candidates` list to the summary;
-    # arbitrary summary text is never promoted implicitly.
+    payload: Dict[str, Any] = {}
+    if snapshots:
+        payload_value = snapshots[0].to_dict() or {}
+        if not isinstance(payload_value, dict):
+            raise ValueError("daily summary payload is malformed")
+        payload = payload_value
+        if payload.get("date") != local_date.isoformat():
+            raise ValueError("daily summary date identity mismatch")
+        if any(key in payload for key in ("window_id", "window_start_utc", "window_end_utc")) and (
+            payload.get("window_id") != window.window_id
+            or payload.get("window_start_utc") != window.start_utc
+            or payload.get("window_end_utc") != window.end_utc
+        ):
+            raise ValueError("daily summary window identity mismatch")
+
     model = model_authority or daily_memory_sweep_model_authority_from_environment()
-    raw_candidates = payload.get("memory_candidates", ())
-    if raw_candidates and not model.enabled:
-        raise ValueError("summary model candidates require the model authority seam")
-    candidates = _bounded_candidate_channel(
-        raw_candidates,
-        source_type="daily_summary",
-        authority=SweepAuthority.sweep_inference,
-        max_candidates=model.max_candidates if model.enabled else MAX_CANDIDATES_PER_DAY,
+
+    # A persisted candidate list is accepted only when the model authority is
+    # open.  In particular, a missing key is not interpreted as []: older
+    # summary writers did not produce this field and must not advance the new
+    # cursor without a producer proof.
+    if "memory_candidates" in payload:
+        raw_candidates = payload.get("memory_candidates")
+        if raw_candidates is None:
+            return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
+        if not model.route_is_budgeted:
+            return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
+        persisted_candidates = _bounded_candidate_channel(
+            raw_candidates,
+            source_type="daily_summary",
+            authority=SweepAuthority.sweep_inference,
+            max_candidates=model.max_candidates,
+        )
+        return DailySweepRuntimeSources.from_iterables(
+            daily_summary=persisted_candidates,
+            complete=True,
+            source_status="complete" if persisted_candidates else "complete_zero",
+            model_cost_usd=0.0,
+        )
+
+    conversation_rows, conversation_status = _read_completed_day_conversation_texts(
+        uid,
+        window,
+        db_client=db_client,
+        max_conversations=MAX_COMPLETED_DAY_CONVERSATIONS,
+        max_characters=MAX_COMPLETED_DAY_INPUT_CHARACTERS,
     )
+    if conversation_status == "incomplete":
+        return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
+    if not conversation_rows:
+        # The query itself is the producer's complete-zero attestation.  A
+        # missing summary is therefore safe only after this proof, never from
+        # a missing Firestore document alone.
+        return DailySweepRuntimeSources.from_iterables(complete=True, source_status="complete_zero")
+    if not model.route_is_budgeted:
+        return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
+
+    extractor = model_extractor or _extract_daily_memory_candidates
+    if model_extractor is None:
+        # The deployment may only name the model configured for the existing
+        # memory route.  It cannot select an arbitrary model through a source
+        # packet or staging document.
+        from utils.llm.model_config import get_model
+
+        if model.model_name != get_model("memories"):
+            return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
+    total_characters = sum(len(text) for _, text in conversation_rows)
+    estimated_cost = (total_characters / 1000.0) * MODEL_COST_PER_1K_INPUT_CHARACTERS_USD
+    if estimated_cost > model.max_cost_usd:
+        return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
+    candidates: List[DailySweepCandidate] = []
+    try:
+        for conversation_id, text in conversation_rows:
+            extracted = extractor(uid, text)
+            for index, memory in enumerate(extracted or ()):
+                content = str(getattr(memory, "content", "") or "").strip()
+                if not content:
+                    continue
+                source_id = f"conversation:{conversation_id}"
+                candidates.append(
+                    DailySweepCandidate(
+                        candidate_id=deterministic_contract_id(
+                            "daily-sweep-model-candidate",
+                            {"uid": uid, "date": local_date.isoformat(), "source": source_id, "index": index},
+                        )[:128],
+                        kind="fact",
+                        operation="add",
+                        content=content,
+                        source_id=source_id,
+                        source_type="daily_summary",
+                        source_version="daily-memory-model.v1",
+                        source_refs=(f"conversation:{conversation_id}",),
+                        authority=SweepAuthority.sweep_inference,
+                        subject_scope=MemorySubjectScope.primary_user,
+                        subject_entity_id=getattr(memory, "subject_entity_id", None),
+                    )
+                )
+                if len(candidates) >= model.max_candidates:
+                    break
+            if len(candidates) >= model.max_candidates:
+                break
+    except Exception:
+        # Model/provider failures are source incompleteness, not complete-zero.
+        return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
     return DailySweepRuntimeSources.from_iterables(
         daily_summary=candidates,
         complete=True,
+        source_status="complete" if candidates else "complete_zero",
+        model_cost_usd=estimated_cost,
     )
 
 
@@ -1664,21 +2135,22 @@ def produce_onboarding_seed_sources(
     db_client: Any,
     max_candidates: int = 8,
 ) -> Tuple[DailySweepCandidate, ...]:
-    """Adapt explicit onboarding seed facts; passive observations are ignored."""
+    """Return candidates from the real onboarding conversation source.
 
-    snapshot = db_client.document(f"users/{uid}").get()
-    if not getattr(snapshot, "exists", False):
-        return ()
-    payload = snapshot.to_dict() or {}
-    onboarding = payload.get("onboarding") if isinstance(payload, dict) else None
-    if not isinstance(onboarding, dict):
-        return ()
-    return _bounded_candidate_channel(
-        onboarding.get("memory_candidates", onboarding.get("memory_seeds", ())),
-        source_type="onboarding",
-        authority=SweepAuthority.direct_user_statement,
+    The old adapter read ``users.onboarding.memory_candidates`` even though no
+    writer ever persisted that field.  Onboarding is actually represented by
+    conversations whose trusted ``source`` is ``onboarding``.  Consumption is
+    marked transactionally with the receipt completion, so retries are safe and
+    a daily run does not repeatedly emit the same seed.
+    """
+
+    candidates, _complete = _produce_onboarding_sources(
+        uid,
+        db_client=db_client,
         max_candidates=max_candidates,
+        model_authority=daily_memory_sweep_model_authority_from_environment(),
     )
+    return candidates
 
 
 def _iter_active_standing_triggers(uid: str, *, db_client: Any) -> Tuple[MemoryItem, ...]:
@@ -1749,24 +2221,42 @@ def firestore_daily_sweep_source_provider(
             control,
             db_client=db_client,
         )
-        onboarding = produce_onboarding_seed_sources(uid, db_client=db_client)
+        model_authority = daily_memory_sweep_model_authority_from_environment()
+        onboarding, onboarding_complete = _produce_onboarding_sources(
+            uid,
+            db_client=db_client,
+            max_candidates=model_authority.max_candidates,
+            model_authority=model_authority,
+        )
         return DailySweepRuntimeSources.from_iterables(
             daily_summary=summary_sources.daily_summary,
             onboarding_cold_start=onboarding,
-            complete=summary_sources.complete,
+            complete=summary_sources.complete and onboarding_complete,
+            source_status=(
+                "incomplete"
+                if not (summary_sources.complete and onboarding_complete)
+                else ("complete" if summary_sources.candidates() else "complete_zero")
+            ),
+            model_cost_usd=summary_sources.model_cost_usd,
         )
     raw_payload = snapshot.to_dict() or {}
     payload: Dict[str, Any] = raw_payload if isinstance(raw_payload, dict) else {}
-    if not payload or payload.get("uid") not in {None, uid}:
+    # A staged packet is an immutable producer artifact.  Missing identity is
+    # not repaired from scheduler state: accepting it would let a stale packet
+    # be restamped into a new account/source generation or timezone window.
+    if not payload or payload.get("schema_version") != SCHEMA_VERSION or payload.get("uid") != uid:
         raise ValueError("daily sweep source packet owner mismatch")
-    if payload.get("account_generation", control.account_generation) != control.account_generation:
+    if payload.get("local_date") != local_date.isoformat():
+        raise ValueError("daily sweep source packet local date mismatch")
+    if payload.get("account_generation") != control.account_generation:
         raise ValueError("daily sweep source packet account generation mismatch")
-    if payload.get("source_generation", control.source_generation) != control.source_generation:
+    if payload.get("source_generation") != control.source_generation:
         raise ValueError("daily sweep source packet source generation mismatch")
     raw_timezone_name = payload.get("timezone_name")
     if not isinstance(raw_timezone_name, str) or not raw_timezone_name.strip():
         raise ValueError("daily sweep source packet timezone is required")
-    timezone_name = raw_timezone_name
+    if raw_timezone_name != timezone_name:
+        raise ValueError("daily sweep source packet timezone mismatch")
     expected_window = completed_local_day_window(local_date, timezone_name)
     if (
         payload.get("complete") is not True
@@ -1776,17 +2266,33 @@ def firestore_daily_sweep_source_provider(
     ):
         raise ValueError("daily sweep source packet is not an exact complete window")
 
-    def parse(name: str) -> Tuple[DailySweepCandidate, ...]:
+    def parse(
+        name: str,
+        *,
+        source_type: str,
+        authority: SweepAuthority,
+        trusted_direct: bool = False,
+    ) -> Tuple[DailySweepCandidate, ...]:
         raw = payload.get(name, ())
         if not isinstance(raw, (list, tuple)):
             raise ValueError("daily sweep source channel must be a list")
         if len(raw) > MAX_CANDIDATES_PER_DAY:
             raise ValueError("daily sweep source packet exceeds candidate budget")
-        return tuple(
-            item if isinstance(item, DailySweepCandidate) else DailySweepCandidate.model_validate(item) for item in raw
+        return _bounded_candidate_channel(
+            raw,
+            source_type=source_type,
+            authority=authority,
+            trusted_direct=trusted_direct,
+            max_candidates=MAX_CANDIDATES_PER_DAY,
         )
 
-    trigger_repairs = list(parse("existing_trigger_reconciliation"))
+    trigger_repairs = list(
+        parse(
+            "existing_trigger_reconciliation",
+            source_type="agent_conclusion",
+            authority=SweepAuthority.agent_reusable_conclusion,
+        )
+    )
     # Reconcile only active, already-standing triggers whose strict compiled
     # representation differs from the stored payload. This is repeatable and
     # cannot invent a trigger from passive behavior.
@@ -1831,10 +2337,16 @@ def firestore_daily_sweep_source_provider(
         # the scheduler must not advance its cursor.
         raise
     return DailySweepRuntimeSources(
-        daily_summary=parse("daily_summary"),
-        onboarding_cold_start=parse("onboarding_cold_start"),
+        daily_summary=parse("daily_summary", source_type="daily_summary", authority=SweepAuthority.sweep_inference),
+        onboarding_cold_start=parse(
+            "onboarding_cold_start",
+            source_type="onboarding",
+            authority=SweepAuthority.direct_user_statement,
+            trusted_direct=True,
+        ),
         existing_trigger_reconciliation=tuple(trigger_repairs),
         complete=True,
+        source_status="complete" if trigger_repairs else "complete_zero",
     )
 
 
@@ -1890,6 +2402,8 @@ def run_daily_memory_sweep_scheduler(
     source_provider: Any,
     timezone_resolver: Any,
     authority: Optional[SweepAuthorityState] = None,
+    cohort_authority: Optional[DailySweepCohortAuthority] = None,
+    cohort_authorizer: Optional[Any] = None,
     max_users: int = 400,
 ) -> DailySweepSchedulerSummary:
     """Runtime producer/scheduler/adaptor behind the closed backend authority.
@@ -1905,6 +2419,9 @@ def run_daily_memory_sweep_scheduler(
     resolved_authority = authority or daily_memory_sweep_authority_from_environment()
     if not resolved_authority.may_write:
         return DailySweepSchedulerSummary()
+    resolved_cohort = cohort_authority or daily_memory_sweep_cohort_authority_from_environment()
+    if resolved_cohort.enabled and not resolved_cohort.cohort_name:
+        return DailySweepSchedulerSummary(errors=("cohort_name_missing",))
     if now.tzinfo is None or now.utcoffset() is None:
         raise ValueError("now must be timezone-aware")
     bounded_uids = tuple(sorted({uid.strip() for uid in uid_inventory if uid.strip()}))[: max(1, min(400, max_users))]
@@ -1914,6 +2431,20 @@ def run_daily_memory_sweep_scheduler(
     for uid in bounded_uids:
         attempted += 1
         try:
+            if resolved_cohort.enabled:
+                # This callback is intentionally read-only.  A PostHog client
+                # can be supplied by the maintenance deployment, but no
+                # identify/flag mutation is performed by this scheduler.
+                if not callable(cohort_authorizer):
+                    blocked_users += 1
+                    continue
+                try:
+                    enrolled = cohort_authorizer(uid, resolved_cohort.cohort_name)
+                except TypeError:
+                    enrolled = cohort_authorizer(uid)
+                if not bool(enrolled):
+                    blocked_users += 1
+                    continue
             control = ensure_canonical_apply_control_state(uid, db_client=db_client)
             timezone_name = str(timezone_resolver(uid) or "UTC")
             cursor = _read_cursor(db_client, uid, control)
@@ -1984,22 +2515,30 @@ __all__ = [
     "MAX_CANDIDATES_PER_DAY",
     "MAX_CATCH_UP_DAYS",
     "MAX_WRITES_PER_DAY",
+    "MAX_COMPLETED_DAY_CONVERSATIONS",
+    "MAX_COMPLETED_DAY_INPUT_CHARACTERS",
+    "MAX_ONBOARDING_CONVERSATIONS",
     "DAILY_MEMORY_SWEEP_ENABLED_ENV",
     "DAILY_MEMORY_SWEEP_KILL_SWITCH_ENV",
     "DAILY_MEMORY_SWEEP_MODEL_ENABLED_ENV",
     "DAILY_MEMORY_SWEEP_MODEL_NAME_ENV",
     "DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES_ENV",
     "DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD_ENV",
+    "DAILY_MEMORY_SWEEP_COHORT_ENABLED_ENV",
+    "DAILY_MEMORY_SWEEP_COHORT_NAME_ENV",
     "SCHEMA_VERSION",
     "SweepAuthority",
     "SweepAuthorityState",
     "DailySweepModelAuthority",
+    "DailySweepCohortAuthority",
     "daily_memory_sweep_model_authority_from_environment",
+    "daily_memory_sweep_cohort_authority_from_environment",
     "plan_daily_memory_sweep",
     "build_daily_sweep_input",
     "produce_completed_day_daily_summary_sources",
     "produce_onboarding_seed_sources",
     "completed_local_day_window",
+    "reconcile_daily_memory_sweep_timezone",
     "daily_memory_sweep_authority_from_environment",
     "firestore_daily_sweep_source_provider",
     "run_daily_memory_sweep_scheduler",

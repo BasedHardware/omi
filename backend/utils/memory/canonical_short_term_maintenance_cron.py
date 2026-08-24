@@ -16,6 +16,7 @@ from collections.abc import Callable
 from typing import Any, Iterable, Optional, Protocol, cast
 
 from pydantic import ValidationError
+from google.cloud.firestore_v1 import FieldFilter
 
 from database._client import db as default_db_client
 from database.memory_collections import MemoryCollections
@@ -393,6 +394,53 @@ def bounded_canonical_memory_uid_inventory(
         raise
     except Exception as exc:
         raise CanonicalMaintenanceInventoryUnavailable("bounded canonical UID registry query failed") from exc
+
+
+def bounded_daily_memory_sweep_uid_inventory(
+    db_client: Any,
+    *,
+    limit: int = MAX_MAINTENANCE_UIDS_PER_RUN,
+    persist_cursor: bool = False,
+) -> tuple[str, ...]:
+    """Union canonical users with bounded onboarding cold-start users.
+
+    Canonical maintenance's neutral registry intentionally contains only users
+    who already have canonical state.  The daily sweep must also discover a
+    newly onboarded user before that state exists.  This read-only inventory
+    queries the trusted onboarding completion markers and never writes a
+    registry row or mutates a PostHog cohort.
+    """
+
+    bounded_limit = max(1, min(MAX_MAINTENANCE_UIDS_PER_RUN, int(limit)))
+    canonical = bounded_canonical_memory_uid_inventory(
+        db_client,
+        limit=bounded_limit,
+        persist_cursor=persist_cursor,
+    )
+    users = getattr(db_client, "collection", lambda _name: None)("users")
+    where = getattr(users, "where", None)
+    if not callable(where):
+        raise CanonicalMaintenanceInventoryUnavailable("onboarding cold-start inventory is unavailable")
+    discovered: set[str] = set(canonical)
+    remaining = bounded_limit
+    try:
+        for field_name in ("onboarding.completed", "onboarding.device_onboarding_completed"):
+            if len(discovered) >= bounded_limit:
+                break
+            try:
+                query = where(filter=FieldFilter(field_name, "==", True))
+            except TypeError:
+                query = where(field_name, "==", True)
+            for snapshot in cast(Any, query).limit(remaining).stream():
+                uid = str(getattr(snapshot, "id", "") or "").strip()
+                if uid and "/" not in uid:
+                    discovered.add(uid)
+                    if len(discovered) >= bounded_limit:
+                        break
+            remaining = max(0, bounded_limit - len(discovered))
+    except Exception as exc:
+        raise CanonicalMaintenanceInventoryUnavailable("onboarding cold-start inventory query failed") from exc
+    return tuple(sorted(discovered))[:bounded_limit]
 
 
 def _resolve_maintenance_uids(

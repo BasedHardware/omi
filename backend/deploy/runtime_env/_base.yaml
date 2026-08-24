@@ -636,6 +636,12 @@ environment_shared:
           MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD:
             category: memory_rollout
             value: '0'
+          MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED:
+            category: memory_rollout
+            value: 'false'
+          MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME:
+            category: memory_rollout
+            value: ''
           OMI_ENV_STAGE:
             value: '{env}'
             category: runtime_identity
