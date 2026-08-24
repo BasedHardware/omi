@@ -452,6 +452,10 @@ esac
             captured = capture.read_text(encoding="utf-8")
             self.assertIn("uv run --no-project", captured)
             self.assertIn("--cleanup-path", captured)
+            self.assertIn(
+                "\n".join(["--package", "firebase-tools@15.22.0", "firebase", "emulators:exec"]),
+                captured,
+            )
 
     def test_trigger_matching_selects_only_relevant_checks(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)

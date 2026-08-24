@@ -63,7 +63,7 @@ printf -v quoted_python_command ' %q' "${python_command[@]}"
 printf -v quoted_test_path '%q' "$repo_root/backend/testing/desktop_beta_admission/firestore_contention_test.py"
 printf -v quoted_python_path '%q' "$repo_root/backend"
 runner_command="FIRESTORE_EMULATOR_HOST=127.0.0.1:${emulator_port} GOOGLE_CLOUD_PROJECT=demo-desktop-beta GCLOUD_PROJECT=demo-desktop-beta PYTHONPATH=${quoted_python_path}${quoted_python_command} ${quoted_test_path}"
-firebase_command=(npx --prefix "$repo_root" --yes "firebase-tools@${firebase_tools_version}" emulators:exec --only firestore --project demo-desktop-beta --config "$emulator_config" "$runner_command")
+firebase_command=(npx --yes --package "firebase-tools@${firebase_tools_version}" firebase emulators:exec --only firestore --project demo-desktop-beta --config "$emulator_config" "$runner_command")
 
 # Firebase writes its debug logs to the current directory, so never launch it
 # from the checkout. The supervisor owns and drains the Firebase process group,
