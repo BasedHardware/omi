@@ -52,6 +52,7 @@ from utils.conversations.subjects import infer_subject_from_segments
 from utils.memory.memory_service import MemoryService
 from utils.memory.decision_path_telemetry import (
     classify_model_about,
+    count_speaker_ids,
     emit_memory_capture_decision,
     model_about_disagrees_with_attribution,
 )
@@ -1366,9 +1367,7 @@ def _extract_memories_canonical(
         replacement_payloads,
     )
     capture_regime = getattr(conversation.source, "value", conversation.source) or ConversationSource.unknown.value
-    distinct_speaker_ids = len(
-        {segment.speaker_id for segment in conversation.transcript_segments if segment.speaker_id is not None}
-    )
+    distinct_speaker_ids, owner_speaker_ids = count_speaker_ids(conversation.transcript_segments)
     for memory_db_obj, _, _, _ in parsed_memories:
         if not memory_db_obj.id:
             continue
@@ -1386,6 +1385,7 @@ def _extract_memories_canonical(
             model_about=model_about,
             attribution_disagreed=attribution_disagreed,
             distinct_speaker_ids=distinct_speaker_ids,
+            owner_speaker_ids=owner_speaker_ids,
         )
     if len(parsed_memories) == 0:
         logger.info(f"No canonical memories extracted for conversation {conversation.id}")
