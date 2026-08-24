@@ -49,7 +49,9 @@ def _revision(
     head_commit_id: str,
     commit_sequence: int,
     items: list[MemoryItem],
+    rows: list[AuthoritativeTriggerRow],
 ) -> str:
+    ordered_rows = sorted(rows, key=lambda candidate: candidate.memory_id)
     payload = {
         'uid': uid,
         'account_generation': account_generation,
@@ -65,6 +67,18 @@ def _revision(
                 'valid_to': item.valid_to.isoformat() if item.valid_to else None,
             }
             for item in sorted(items, key=lambda candidate: candidate.memory_id)
+        ],
+        'active_rows': [
+            {
+                'ordinal': ordinal,
+                'memory_id': row.memory_id,
+                'item_revision': row.item_revision,
+                'updated_at': row.updated_at.isoformat(),
+                'trigger_condition': row.trigger_condition,
+                'action': {'type': row.action.type, 'prompt': row.action.prompt},
+                'wakeup_budget_per_day': row.wakeup_budget_per_day,
+            }
+            for ordinal, row in enumerate(ordered_rows)
         ],
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(',', ':')).encode('utf-8')
@@ -148,7 +162,25 @@ def read_authoritative_trigger_snapshot(
             uid, account_generation, head_commit_id, commit_sequence, '', False, (), 'row_invalid'
         )
 
-    revision = _revision(uid, account_generation, head_commit_id, commit_sequence, items)
+    # Firestore has no transaction spanning this compound query and the
+    # separately stored ledger head. Re-read the trusted head after exhausting
+    # and validating every row; any mutation during the read makes the receipt
+    # explicitly incomplete instead of certifying a torn projection.
+    trailing_head = read_memory_v3_trusted_account_generation(uid=uid, db_client=client)
+    try:
+        trailing_identity = (
+            trailing_head.require_account_generation(),
+            trailing_head.head_commit_id or '',
+            trailing_head.commit_sequence if trailing_head.commit_sequence is not None else 0,
+        )
+    except Exception:
+        trailing_identity = None
+    if trailing_identity != (account_generation, head_commit_id, commit_sequence):
+        return AuthoritativeTriggerSnapshot(
+            uid, account_generation, head_commit_id, commit_sequence, '', False, (), 'authority_changed'
+        )
+
+    revision = _revision(uid, account_generation, head_commit_id, commit_sequence, items, rows)
     rows.sort(key=lambda row: row.memory_id)
     return AuthoritativeTriggerSnapshot(
         owner_id=uid,

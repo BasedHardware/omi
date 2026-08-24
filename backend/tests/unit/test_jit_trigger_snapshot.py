@@ -51,11 +51,17 @@ class _Query:
 
 
 class _Client:
-    def __init__(self, rows, generation=3):
+    def __init__(self, rows, generation=3, trailing_head=None):
         self.rows = rows
         self.generation = generation
+        self.trailing_head = trailing_head
+        self.head_reads = 0
 
     def document(self, _path):
+        self.head_reads += 1
+        generation, head_commit_id, commit_sequence = (
+            self.trailing_head if self.head_reads > 1 and self.trailing_head else (self.generation, 'head-7', 7)
+        )
         return _Document(
             _Snapshot(
                 'head',
@@ -63,9 +69,9 @@ class _Client:
                     'schema_version': MEMORY_STATE_HEAD_SCHEMA_VERSION,
                     'source': MEMORY_STATE_HEAD_SOURCE,
                     'uid': 'owner',
-                    'account_generation': self.generation,
-                    'head_commit_id': 'head-7',
-                    'commit_sequence': 7,
+                    'account_generation': generation,
+                    'head_commit_id': head_commit_id,
+                    'commit_sequence': commit_sequence,
                 },
             )
         )
@@ -147,3 +153,58 @@ def test_mixed_generation_or_actionless_active_row_invalidates_whole_snapshot():
 
     assert mixed.complete is False and mixed.failure_reason == 'row_invalid'
     assert actionless.complete is False and actionless.failure_reason == 'row_invalid'
+
+
+def test_torn_head_read_never_certifies_complete_snapshot():
+    result = read_authoritative_trigger_snapshot(
+        'owner', firestore_client=_Client([_row(_trigger())], trailing_head=(3, 'head-8', 8))
+    )
+
+    assert result.complete is False
+    assert result.failure_reason == 'authority_changed'
+    assert result.snapshot_revision == ''
+    assert result.rows == ()
+
+
+def test_revision_binds_condition_action_budget_and_canonical_order():
+    first = _trigger('a')
+    second = _trigger('b')
+    baseline = read_authoritative_trigger_snapshot('owner', firestore_client=_Client([_row(second), _row(first)]))
+    reordered = read_authoritative_trigger_snapshot('owner', firestore_client=_Client([_row(first), _row(second)]))
+    changed_action = first.model_copy(
+        update={
+            'trigger_condition': {
+                'keywords': ['release'],
+                'action': {'type': 'agent_prompt', 'prompt': 'A different safe prompt.'},
+            }
+        }
+    )
+    changed_condition = first.model_copy(
+        update={
+            'trigger_condition': {
+                'keywords': ['different condition'],
+                'action': {'type': 'agent_prompt', 'prompt': 'Find the next release step.'},
+            }
+        }
+    )
+    changed_budget = first.model_copy(update={'arguments': {'wakeup_budget_per_day': 3}})
+
+    assert baseline.snapshot_revision == reordered.snapshot_revision
+    assert (
+        baseline.snapshot_revision
+        != read_authoritative_trigger_snapshot(
+            'owner', firestore_client=_Client([_row(changed_action), _row(second)])
+        ).snapshot_revision
+    )
+    assert (
+        baseline.snapshot_revision
+        != read_authoritative_trigger_snapshot(
+            'owner', firestore_client=_Client([_row(changed_condition), _row(second)])
+        ).snapshot_revision
+    )
+    assert (
+        baseline.snapshot_revision
+        != read_authoritative_trigger_snapshot(
+            'owner', firestore_client=_Client([_row(changed_budget), _row(second)])
+        ).snapshot_revision
+    )

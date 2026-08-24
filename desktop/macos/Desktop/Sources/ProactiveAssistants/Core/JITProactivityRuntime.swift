@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 struct JITPlannedExecution: Equatable, Sendable {
@@ -10,13 +11,20 @@ struct JITPlannedExecution: Equatable, Sendable {
 
 struct JITAmbientRuntimeContext: Equatable, Sendable {
   let id: String
-  let materialChange: Bool
-  let locallyNovel: Bool
+  let semanticFingerprint: String
   let locallyRelevant: Bool
   let boundedEvidence: String
 
   var permitsNanoTriage: Bool {
-    !id.isEmpty && materialChange && locallyNovel && locallyRelevant && !boundedEvidence.isEmpty
+    !id.isEmpty && semanticFingerprint.count == 64 && locallyRelevant && !boundedEvidence.isEmpty
+  }
+
+  static func semanticFingerprint(contextID: String, validatedFacts: [String]) -> String {
+    let facts = validatedFacts.map {
+      $0.split(whereSeparator: \.isWhitespace).joined(separator: " ").lowercased()
+    }.filter { !$0.isEmpty }.sorted().prefix(20)
+    let payload = ([contextID.lowercased()] + facts).joined(separator: "\u{1f}")
+    return SHA256.hash(data: Data(payload.utf8)).map { String(format: "%02x", $0) }.joined()
   }
 }
 
@@ -120,7 +128,11 @@ actor JITProactivityRuntime {
       guard let action = winner.0.action, action.isValid else {
         return .suppressed(reason: "planned_action_invalid")
       }
-      let continuityKey = "jit-context:\(winner.1.observationFingerprint)"
+      let stableAmbientFingerprint = ambient.flatMap {
+        $0.semanticFingerprint.count == 64 ? $0.semanticFingerprint : nil
+      }
+      let continuityFingerprint = stableAmbientFingerprint ?? winner.1.observationFingerprint
+      let continuityKey = "jit-context:\(continuityFingerprint)"
       guard
         let claim = try await mirror.claimWakeup(
           continuityKey: continuityKey,
@@ -128,7 +140,7 @@ actor JITProactivityRuntime {
           lane: .planned,
           budgetDay: day,
           snapshotRevision: receipt.snapshotRevision,
-          observationFingerprint: winner.1.observationFingerprint,
+          observationFingerprint: continuityFingerprint,
           budget: winner.0.metadata.wakeupBudgetPerDay,
           now: observation.occurredAt ?? Date())
       else { return .suppressed(reason: "planned_duplicate_or_budget") }
@@ -156,13 +168,11 @@ actor JITProactivityRuntime {
     let day = Self.day(for: observation.occurredAt ?? Date())
     let nanoClaim: JITTriggerWakeupClaim?
     do {
-      nanoClaim = try await mirror.claimWakeup(
-        continuityKey: "jit-nano:\(observation.fingerprint)",
-        triggerID: "ambient-nano",
-        lane: .ambient,
+      nanoClaim = try await mirror.claimAmbientNanoChange(
+        contextID: context.id,
+        semanticFingerprint: context.semanticFingerprint,
         budgetDay: day,
         snapshotRevision: receipt.snapshotRevision,
-        observationFingerprint: observation.fingerprint,
         budget: 8,
         now: observation.occurredAt ?? Date())
     } catch {
@@ -176,7 +186,7 @@ actor JITProactivityRuntime {
     guard triage == .approved else {
       return .suppressed(reason: "ambient_nano_rejected")
     }
-    let continuityKey = "jit-context:\(observation.fingerprint)"
+    let continuityKey = "jit-context:\(context.semanticFingerprint)"
     let claimed: JITTriggerWakeupClaim?
     do {
       claimed = try await mirror.claimWakeup(
@@ -185,8 +195,8 @@ actor JITProactivityRuntime {
         lane: .ambient,
         budgetDay: day,
         snapshotRevision: receipt.snapshotRevision,
-        observationFingerprint: observation.fingerprint,
-        // One ambient full turn per material context version/day. Planned
+        observationFingerprint: context.semanticFingerprint,
+        // One ambient full turn per stable semantic context/day. Planned
         // triggers retain their explicit ledger budget and always arbitrate first.
         budget: 1,
         now: observation.occurredAt ?? Date())
