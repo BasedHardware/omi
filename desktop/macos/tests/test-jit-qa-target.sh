@@ -33,6 +33,7 @@ expect_launcher_failure_before_stop() {
 
 clear_target_env() {
     unset OMI_JIT_QA_TARGET OMI_PYTHON_API_URL OMI_DESKTOP_API_URL OMI_AUTH_API_URL OMI_ENV_STAGE
+    unset FIREBASE_API_KEY
     unset OMI_SKIP_BACKEND OMI_SKIP_TUNNEL
     unset OMI_SKIP_REWIND_SEED OMI_FORCE_REWIND_SEED
 }
@@ -45,6 +46,7 @@ test "$OMI_PYTHON_API_URL" = "http://127.0.0.1:18080"
 test "$OMI_DESKTOP_API_URL" = "http://127.0.0.1:18081"
 test "$OMI_AUTH_API_URL" = "http://127.0.0.1:18080"
 test "$OMI_ENV_STAGE" = dev
+test "$FIREBASE_API_KEY" = "$OMI_JIT_QA_FIREBASE_API_KEY"
 test "$OMI_SKIP_BACKEND" = 1
 test "$OMI_SKIP_TUNNEL" = 1
 test "$OMI_SKIP_REWIND_SEED" = 1
@@ -74,6 +76,8 @@ omi_preflight_jit_qa_config_file "$exact_config"
 bad_env="$(mktemp)"
 printf '%s\n' 'OMI_PYTHON_API_URL=https://api.omi.me' > "$bad_env"
 expect_failure omi_preflight_jit_qa_config_file "$bad_env"
+printf '%s\n' 'FIREBASE_API_KEY=wrong-client-key' > "$bad_env"
+expect_failure omi_preflight_jit_qa_config_file "$bad_env"
 
 duplicate_config="$(mktemp)"
 printf '%s\n' \
@@ -87,6 +91,7 @@ grep -Fqx 'OMI_PYTHON_API_URL=http://127.0.0.1:18080' "$local_env"
 grep -Fqx 'OMI_DESKTOP_API_URL=http://127.0.0.1:18081' "$local_env"
 grep -Fqx 'OMI_AUTH_API_URL=http://127.0.0.1:18080' "$local_env"
 grep -Fqx 'OMI_ENV_STAGE=dev' "$local_env"
+grep -Fqx "FIREBASE_API_KEY=$OMI_JIT_QA_FIREBASE_API_KEY" "$local_env"
 if grep -q 'api\.omi\.me' "$local_env"; then
     echo "FAIL: local tuple retained the production API host" >&2
     exit 1
@@ -105,6 +110,7 @@ omi_write_jit_qa_bundle_env "$dev_env"
 grep -Fqx 'OMI_PYTHON_API_URL=https://api.omiapi.com' "$dev_env"
 grep -Fqx 'OMI_DESKTOP_API_URL=https://desktop-backend-dt5lrfkkoa-uc.a.run.app' "$dev_env"
 grep -Fqx 'OMI_AUTH_API_URL=https://api.omiapi.com' "$dev_env"
+grep -Fqx "FIREBASE_API_KEY=$OMI_JIT_QA_FIREBASE_API_KEY" "$dev_env"
 if grep -q 'api\.omi\.me' "$dev_env"; then
     echo "FAIL: deployed-dev tuple retained the production API host" >&2
     exit 1
@@ -126,6 +132,10 @@ export OMI_JIT_QA_TARGET=local-dev-gcp OMI_FORCE_REWIND_SEED=1
 expect_failure omi_preflight_jit_qa_launch_request omi-jit-qa "" 0 false
 clear_target_env
 export OMI_JIT_QA_TARGET=deployed-dev OMI_PYTHON_API_URL=https://api.omi.me
+expect_failure omi_preflight_jit_qa_launch_request omi-jit-qa "" 0 false
+expect_failure omi_prepare_jit_qa_target omi-jit-qa com.omi.omi-jit-qa 0 initial
+clear_target_env
+export OMI_JIT_QA_TARGET=deployed-dev FIREBASE_API_KEY=wrong-client-key
 expect_failure omi_preflight_jit_qa_launch_request omi-jit-qa "" 0 false
 expect_failure omi_prepare_jit_qa_target omi-jit-qa com.omi.omi-jit-qa 0 initial
 clear_target_env

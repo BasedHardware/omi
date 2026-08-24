@@ -10,6 +10,11 @@ OMI_JIT_QA_LOCAL_PYTHON_URL="http://127.0.0.1:18080"
 OMI_JIT_QA_LOCAL_DESKTOP_URL="http://127.0.0.1:18081"
 OMI_JIT_QA_DEV_PYTHON_URL="https://api.omiapi.com"
 OMI_JIT_QA_DEV_DESKTOP_URL="https://desktop-backend-dt5lrfkkoa-uc.a.run.app"
+# Firebase web API keys identify a client/project; they are not credentials.
+# The dev services intentionally validate the same production Firebase identity
+# described by run.sh's --yolo contract, so the reserved QA tuple must carry the
+# matching public client key on both deployed-dev and local-dev-gcp launches.
+OMI_JIT_QA_FIREBASE_API_KEY="AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8"
 
 omi_jit_qa_fail() {
     printf 'ERROR: JIT QA target: %s\n' "$1" >&2
@@ -34,6 +39,7 @@ omi_jit_qa_set_exact_tuple() {
             ;;
     esac
     export OMI_ENV_STAGE="dev"
+    export FIREBASE_API_KEY="$OMI_JIT_QA_FIREBASE_API_KEY"
     export OMI_SKIP_BACKEND=1
     export OMI_SKIP_TUNNEL=1
     # The reserved bundle is dev-routed. Its exact tuple therefore includes
@@ -95,7 +101,7 @@ omi_preflight_jit_qa_launch_request() {
             return $?
             ;;
     esac
-    for variable_name in OMI_PYTHON_API_URL OMI_DESKTOP_API_URL OMI_AUTH_API_URL OMI_ENV_STAGE; do
+    for variable_name in OMI_PYTHON_API_URL OMI_DESKTOP_API_URL OMI_AUTH_API_URL OMI_ENV_STAGE FIREBASE_API_KEY; do
         if [ -n "${!variable_name+x}" ]; then
             omi_jit_qa_fail "$variable_name cannot override the selected atomic tuple"
             return $?
@@ -151,7 +157,7 @@ omi_prepare_jit_qa_target() {
 
     if [ "$phase" = "initial" ]; then
         local variable_name
-        for variable_name in OMI_PYTHON_API_URL OMI_DESKTOP_API_URL OMI_AUTH_API_URL OMI_ENV_STAGE; do
+        for variable_name in OMI_PYTHON_API_URL OMI_DESKTOP_API_URL OMI_AUTH_API_URL OMI_ENV_STAGE FIREBASE_API_KEY; do
             if [ -n "${!variable_name+x}" ]; then
                 omi_jit_qa_fail "$variable_name cannot override the selected atomic tuple"
                 return $?
@@ -168,6 +174,7 @@ omi_jit_qa_expected_value() {
         OMI_DESKTOP_API_URL) printf '%s\n' "$OMI_DESKTOP_API_URL" ;;
         OMI_AUTH_API_URL) printf '%s\n' "$OMI_AUTH_API_URL" ;;
         OMI_ENV_STAGE) printf '%s\n' "$OMI_ENV_STAGE" ;;
+        FIREBASE_API_KEY) printf '%s\n' "$FIREBASE_API_KEY" ;;
         *) return 1 ;;
     esac
 }
@@ -193,7 +200,7 @@ omi_preflight_jit_qa_config_file() {
         case "$line" in
             ""|\#*) continue ;;
         esac
-        if [[ ! "$line" =~ ^(export[[:space:]]+)?(OMI_PYTHON_API_URL|OMI_DESKTOP_API_URL|OMI_AUTH_API_URL|OMI_ENV_STAGE)[[:space:]]*=(.*)$ ]]; then
+        if [[ ! "$line" =~ ^(export[[:space:]]+)?(OMI_PYTHON_API_URL|OMI_DESKTOP_API_URL|OMI_AUTH_API_URL|OMI_ENV_STAGE|FIREBASE_API_KEY)[[:space:]]*=(.*)$ ]]; then
             continue
         fi
 
@@ -259,11 +266,13 @@ omi_write_jit_qa_bundle_env() {
     omi_jit_qa_write_env_value "$env_file" OMI_DESKTOP_API_URL "$OMI_DESKTOP_API_URL"
     omi_jit_qa_write_env_value "$env_file" OMI_AUTH_API_URL "$OMI_AUTH_API_URL"
     omi_jit_qa_write_env_value "$env_file" OMI_ENV_STAGE "$OMI_ENV_STAGE"
+    omi_jit_qa_write_env_value "$env_file" FIREBASE_API_KEY "$FIREBASE_API_KEY"
 
     omi_jit_qa_assert_env_value "$env_file" OMI_PYTHON_API_URL "$OMI_PYTHON_API_URL"
     omi_jit_qa_assert_env_value "$env_file" OMI_DESKTOP_API_URL "$OMI_DESKTOP_API_URL"
     omi_jit_qa_assert_env_value "$env_file" OMI_AUTH_API_URL "$OMI_AUTH_API_URL"
     omi_jit_qa_assert_env_value "$env_file" OMI_ENV_STAGE "$OMI_ENV_STAGE"
+    omi_jit_qa_assert_env_value "$env_file" FIREBASE_API_KEY "$FIREBASE_API_KEY"
 
     if grep -Eq '(^|[=/])api\.omi\.me([/:]|$)' "$env_file"; then
         omi_jit_qa_fail "$env_file contains the prohibited production API host"
