@@ -16,7 +16,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Literal
+from typing import Any, Callable, Coroutine, Literal
+import asyncio
+import importlib
 
 
 class FirstOpenClientTier(str, Enum):
@@ -83,6 +85,51 @@ class FirstOpenStateTransition:
 
 
 SUPPORTED_SOURCES = frozenset({"desktop", "mobile", "phone", "omi", "web", "windows"})
+
+
+def resolve_authorized_first_open_plan(
+    *,
+    uid: str,
+    source: str | None,
+    authority: Callable[[str], Coroutine[Any, Any, Any]] | None = None,
+) -> FirstOpenPlan:
+    """Resolve from the backend rollout authority; any unavailable state is off.
+
+    The caller supplies only the authenticated uid and persisted source.  No
+    request/client cohort value participates in enrollment.  ``authority`` is
+    injectable for tests; production loads the shared JIT rollout resolver
+    added by the rollout-foundation stack.
+    """
+
+    normalized_source = (source or "").strip().lower()
+    tier = (
+        FirstOpenClientTier.DESKTOP
+        if normalized_source in {"desktop", "windows", "web"}
+        else FirstOpenClientTier.MOBILE
+    )
+    try:
+        authority_resolver = authority
+        if authority_resolver is None:
+            rollout_module = importlib.import_module("utils.jit_rollout")
+            decision_stage = rollout_module.JITDecisionStage
+            resolve_rollout = rollout_module.resolve_jit_rollout
+
+            async def _backend_authority(user_id: str) -> Any:
+                return await resolve_rollout(user_id, stage=decision_stage.INGRESS)
+
+            authority_resolver = _backend_authority
+
+        decision = asyncio.run(authority_resolver(uid))
+        permitted = bool(getattr(decision, "permits_work", False))
+        kill_switch = str(getattr(decision, "kill_switch", "")).casefold().endswith("on")
+        return resolve_first_open_plan(
+            feature_enabled=permitted,
+            client_tier=tier,
+            source=normalized_source,
+            kill_switch=kill_switch,
+        )
+    except Exception:
+        return resolve_first_open_plan(feature_enabled=False, client_tier=tier, source=normalized_source)
 
 
 def resolve_first_open_plan(
@@ -201,5 +248,6 @@ __all__ = [
     "FirstOpenStateTransition",
     "SUPPORTED_SOURCES",
     "resolve_first_open_plan",
+    "resolve_authorized_first_open_plan",
     "transition_first_open",
 ]

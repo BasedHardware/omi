@@ -791,6 +791,110 @@ def update_conversation(uid: str, conversation_id: str, update_data: dict) -> bo
     return True
 
 
+def initialize_first_open_work(uid: str, conversation_id: str, *, firestore_client: Any = None) -> bool:
+    """Create the durable JIT obligation before capture skips any fan-out."""
+    client = firestore_client or get_firestore_client()
+    ref = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+
+    @firestore.transactional
+    def _initialize(transaction):
+        snapshot = ref.get(transaction=transaction)
+        if not snapshot.exists:
+            return False
+        existing = (snapshot.to_dict() or {}).get('jit_first_open')
+        if existing is not None:
+            return True
+        transaction.update(
+            ref,
+            {
+                'jit_first_open': {
+                    'version': 1,
+                    'state': 'pending',
+                    'attempt': 0,
+                    'effects': ['folder_assignment', 'goal_progress', 'app_fanout'],
+                    'updated_at': firestore.SERVER_TIMESTAMP,
+                }
+            },
+        )
+        return True
+
+    return bool(run_transactional(client, _initialize))
+
+
+def claim_first_open_work(
+    uid: str,
+    conversation_id: str,
+    *,
+    lease_seconds: int = 300,
+    now: Optional[datetime] = None,
+    firestore_client: Any = None,
+) -> Optional[str]:
+    """Claim pending/stale work; repeated opens during a live lease are no-ops."""
+    client = firestore_client or get_firestore_client()
+    ref = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    current_time = now or datetime.now(timezone.utc)
+    token = str(uuid.uuid4())
+
+    @firestore.transactional
+    def _claim(transaction):
+        snapshot = ref.get(transaction=transaction)
+        if not snapshot.exists:
+            return None
+        state = (snapshot.to_dict() or {}).get('jit_first_open') or {}
+        if state.get('state') == 'complete':
+            return None
+        lease_expires = state.get('lease_expires_at')
+        if state.get('state') == 'in_flight' and isinstance(lease_expires, datetime) and lease_expires > current_time:
+            return None
+        attempt = state.get('attempt', 0)
+        attempt = attempt if type(attempt) is int and attempt >= 0 else 0
+        transaction.update(
+            ref,
+            {
+                'jit_first_open': {
+                    **state,
+                    'version': 1,
+                    'state': 'in_flight',
+                    'attempt': attempt + 1,
+                    'lease_token': token,
+                    'lease_expires_at': current_time + timedelta(seconds=max(30, lease_seconds)),
+                    'updated_at': firestore.SERVER_TIMESTAMP,
+                }
+            },
+        )
+        return token
+
+    return run_transactional(client, _claim)
+
+
+def finish_first_open_work(
+    uid: str, conversation_id: str, token: str, *, succeeded: bool, firestore_client: Any = None
+) -> bool:
+    """Fence completion/failure by lease token; failures become retryable."""
+    client = firestore_client or get_firestore_client()
+    ref = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+
+    @firestore.transactional
+    def _finish(transaction):
+        snapshot = ref.get(transaction=transaction)
+        if not snapshot.exists:
+            return False
+        state = (snapshot.to_dict() or {}).get('jit_first_open') or {}
+        if state.get('state') != 'in_flight' or state.get('lease_token') != token:
+            return False
+        next_state = {
+            **state,
+            'state': 'complete' if succeeded else 'pending',
+            'updated_at': firestore.SERVER_TIMESTAMP,
+        }
+        next_state.pop('lease_token', None)
+        next_state.pop('lease_expires_at', None)
+        transaction.update(ref, {'jit_first_open': next_state})
+        return True
+
+    return bool(run_transactional(client, _finish))
+
+
 def try_claim_conversation_memory_analytics(uid: str, conversation_id: str, firestore_client: Any = None) -> bool:
     """Atomically claim the one analytics success slot for a conversation.
 
