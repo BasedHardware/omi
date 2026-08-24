@@ -645,6 +645,24 @@ environment_shared:
             category: memory_rollout
           MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
             category: memory_rollout
+          MEMORY_DAILY_MEMORY_SWEEP_ENABLED:
+            category: memory_rollout
+            value: 'false'
+          MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH:
+            category: memory_rollout
+            value: 'false'
+          MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED:
+            category: memory_rollout
+            value: 'false'
+          MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME:
+            category: memory_rollout
+            value: disabled
+          MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES:
+            category: memory_rollout
+            value: '8'
+          MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD:
+            category: memory_rollout
+            value: '0'
           OMI_ENV_STAGE:
             value: '{env}'
             category: runtime_identity

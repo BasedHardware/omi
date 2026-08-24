@@ -467,6 +467,18 @@ overlay:
             value: 'true'
           MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
             value: 'false'
+          MEMORY_DAILY_MEMORY_SWEEP_ENABLED:
+            value: 'false'
+          MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH:
+            value: 'false'
+          MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED:
+            value: 'false'
+          MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME:
+            value: disabled
+          MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES:
+            value: '8'
+          MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD:
+            value: '0'
           OMI_BACKGROUND_FLEX_CAPABLE:
             value: 'true'
           MEMORY_CANONICAL_GRAPH_BACKFILL_PAGE_SIZE:

@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import date, datetime, timezone
+import threading
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -31,9 +32,11 @@ from utils.memory.daily_memory_sweep import (  # noqa: E402
     DailySweepCandidate,
     DailySweepInput,
     SweepAuthorityState,
+    completed_local_day_window,
     run_daily_memory_sweep,
 )
 import utils.memory.daily_memory_sweep as daily_sweep  # noqa: E402
+import utils.memory.canonical_memory_adapter as canonical_adapter  # noqa: E402
 
 
 def _assert_emulator_only() -> None:
@@ -52,12 +55,18 @@ def _collection_ids(db_client: Any, path: str) -> set[str]:
 
 
 def _packet(uid: str, control: MemoryControlState) -> DailySweepInput:
+    local_date = date(2026, 8, 23)
+    window = completed_local_day_window(local_date, "America/New_York")
     return DailySweepInput(
         uid=uid,
-        local_date=date(2026, 8, 23),
+        local_date=local_date,
         account_generation=control.account_generation,
         source_generation=control.source_generation,
         timezone_name="America/New_York",
+        window_id=window.window_id,
+        window_start_utc=window.start_utc,
+        window_end_utc=window.end_utc,
+        complete=True,
         candidates=(
             DailySweepCandidate(
                 candidate_id="fact-release-role",
@@ -152,12 +161,68 @@ def main() -> int:
         if concurrent.blocked_reason != "source_idempotency_conflict":
             raise AssertionError(f"concurrent receipt claimant was not fenced: {concurrent}")
         replay = run_daily_memory_sweep(
-            uid, "America/New_York", now, {packet.local_date: packet}, db_client=db_client, authority=authority
+            uid,
+            "America/New_York",
+            now + timedelta(days=1),
+            {packet.local_date: packet},
+            db_client=db_client,
+            authority=authority,
         )
         if replay.status != "committed" or replay.committed_count != 0 or replay.skipped_count != 1:
             raise AssertionError(f"crash replay did not complete pending receipt: {replay}")
         if _canonical_counts(db_client, collections) != before:
             raise AssertionError("crash replay added canonical records")
+
+        # Canonical deletion race: pause after the canonical preflight has
+        # returned, publish the deletion marker, then let the real apply path
+        # proceed. The shared Firestore apply transaction must read that marker
+        # and refuse the write; a preflight-only fence would recreate memory.
+        uid = f"daily-memory-sweep-canonical-race-{uuid4().hex}"
+        uids.append(uid)
+        collections = MemoryCollections(uid=uid)
+        control, packet = _seed(db_client, uid, now)
+        entered = threading.Event()
+        release = threading.Event()
+        original_ensure = getattr(canonical_adapter, "_ensure_control_state")
+
+        def gated_ensure(*args: Any, **kwargs: Any) -> Any:
+            result = original_ensure(*args, **kwargs)
+            entered.set()
+            if not release.wait(timeout=10):
+                raise RuntimeError("canonical race test gate timed out")
+            return result
+
+        setattr(canonical_adapter, "_ensure_control_state", gated_ensure)
+        result_holder: list[Any] = []
+
+        def run_race() -> None:
+            try:
+                result_holder.append(
+                    run_daily_memory_sweep(
+                        uid,
+                        "America/New_York",
+                        now,
+                        {packet.local_date: packet},
+                        db_client=db_client,
+                        authority=authority,
+                        claimant="canonical-race-runner",
+                    )
+                )
+            except Exception as exc:  # expected canonical deletion fence
+                result_holder.append(exc)
+
+        race_thread = threading.Thread(target=run_race)
+        race_thread.start()
+        if not entered.wait(timeout=10):
+            raise AssertionError("canonical apply race did not reach preflight gate")
+        db_client.document(f"account_deletions/{uid}").set({"wipe_status": "running"})
+        release.set()
+        race_thread.join(timeout=10)
+        setattr(canonical_adapter, "_ensure_control_state", original_ensure)
+        if race_thread.is_alive() or not result_holder:
+            raise AssertionError("canonical apply race did not finish")
+        if _collection_ids(db_client, collections.memory_items):
+            raise AssertionError("canonical apply recreated an item after deletion marker")
 
         # Deletion contention closes receipt completion after canonical apply;
         # wipe then proves no cursor/receipt auxiliary document is recreated.
@@ -216,6 +281,90 @@ def main() -> int:
         )
         if first.blocked_reason != "input_generation_mismatch":
             raise AssertionError(f"generation mismatch retry unexpectedly wrote: {first}")
+
+        # Source-generation rollover preserves the completed-day identity and
+        # accepts only a packet stamped with the new live generation.
+        uid = f"daily-memory-sweep-rollover-{uuid4().hex}"
+        uids.append(uid)
+        collections = MemoryCollections(uid=uid)
+        control, packet = _seed(db_client, uid, now, source_generation=7)
+        prior_day = date(2026, 8, 22)
+        prior_window = daily_sweep.completed_local_day_window(prior_day, "America/New_York")
+        db_client.document(f"{collections.user_root}/memory_control/daily_memory_sweep").set(
+            {
+                "schema_version": "daily_memory_sweep_cursor.v1",
+                "uid": uid,
+                "account_generation": control.account_generation,
+                "source_generation": control.source_generation,
+                "generation": 3,
+                "timezone_name": "America/New_York",
+                "last_completed_local_date": prior_day.isoformat(),
+                "last_completed_window_id": prior_window.window_id,
+                "last_completed_window_start_utc": prior_window.start_utc,
+                "last_completed_window_end_utc": prior_window.end_utc,
+                "updated_at": now,
+            }
+        )
+        bumped = control.model_copy(update={"source_generation": control.source_generation + 1})
+        db_client.document(collections.memory_apply_control_state).set(bumped.model_dump(mode="json"))
+        new_window = daily_sweep.completed_local_day_window(packet.local_date, "America/New_York")
+        fresh_packet = packet.model_copy(
+            update={
+                "source_generation": bumped.source_generation,
+                "window_id": new_window.window_id,
+                "window_start_utc": new_window.start_utc,
+                "window_end_utc": new_window.end_utc,
+            }
+        )
+        rollover = run_daily_memory_sweep(
+            uid,
+            "America/New_York",
+            now,
+            {fresh_packet.local_date: fresh_packet},
+            db_client=db_client,
+            authority=authority,
+        )
+        if rollover.status != "committed":
+            raise AssertionError(f"source-generation rollover did not recover: {rollover}")
+        rolled_cursor = db_client.document(f"{collections.user_root}/memory_control/daily_memory_sweep").get().to_dict()
+        if (
+            rolled_cursor.get("source_generation") != bumped.source_generation
+            or rolled_cursor.get("last_completed_local_date") != packet.local_date.isoformat()
+        ):
+            raise AssertionError("source-generation rollover lost completed-day identity")
+
+        # Two real runners share one source packet; unique leases allow only
+        # one canonical result and never duplicate the memory row.
+        uid = f"daily-memory-sweep-overlap-{uuid4().hex}"
+        uids.append(uid)
+        collections = MemoryCollections(uid=uid)
+        control, packet = _seed(db_client, uid, now)
+        overlap_results: list[Any] = []
+
+        def run_overlap() -> None:
+            try:
+                overlap_results.append(
+                    run_daily_memory_sweep(
+                        uid,
+                        "America/New_York",
+                        now,
+                        {packet.local_date: packet},
+                        db_client=db_client,
+                        authority=authority,
+                    )
+                )
+            except Exception as exc:
+                overlap_results.append(exc)
+
+        workers = [threading.Thread(target=run_overlap) for _ in range(2)]
+        for worker in workers:
+            worker.start()
+        for worker in workers:
+            worker.join(timeout=15)
+        if any(worker.is_alive() for worker in workers) or len(overlap_results) != 2:
+            raise AssertionError("overlapping runners did not finish")
+        if len(_collection_ids(db_client, collections.memory_items)) > 1:
+            raise AssertionError("overlapping runners duplicated canonical memory")
         print("PASS: daily memory sweep Firestore emulator retry/interruption proof (crash/deletion/generation)")
         return 0
     finally:
