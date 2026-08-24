@@ -68,6 +68,8 @@ jobs:
           cp .workflow-source/.github/scripts/verify_desktop_backend_image_lineage.py "$controls/.github/scripts/"
           cp .workflow-source/backend/deploy/cloud_run_gmp_sidecar.yaml "$controls/backend/deploy/"
           cp .workflow-source/backend/scripts/attach_cloud_run_gmp_sidecar.py "$controls/backend/scripts/"
+          cp .workflow-source/backend/scripts/render_backend_runtime_env.py "$controls/backend/scripts/"
+          cp .workflow-source/backend/deploy/runtime_env.yaml "$controls/backend/deploy/"
           cp .workflow-source/backend/scripts/firebase_release_probe_token.py "$controls/backend/scripts/"
           cp .workflow-source/backend/scripts/resolve_cloud_run_tagged_url.py "$controls/backend/scripts/"
           cp .workflow-source/backend/scripts/wait_cloud_run_candidate_readiness.py "$controls/backend/scripts/"
@@ -341,6 +343,19 @@ jobs:
             OMI_LLM_GATEWAY_SERVICE_TOKEN=OMI_LLM_GATEWAY_SERVICE_TOKEN:latest
             METRICS_SECRET=METRICS_SECRET:latest
 
+      # The sidecar attach re-serialises the live Cloud Run export, so it verifies
+      # the ingress env it is about to rewrite against what the manifest says it
+      # should be. Render that expectation from the manifest rather than
+      # restating it here, so the guard cannot drift from its source.
+      - name: Render desktop backend expected env state
+        id: desktop-expected-env
+        run: |
+          set -euo pipefail
+          python3 "$DESKTOP_BACKEND_CONTROLS/backend/scripts/render_backend_runtime_env.py" \
+            --env prod \
+            --manifest "$DESKTOP_BACKEND_CONTROLS/backend/deploy/runtime_env.yaml" \
+            --desktop-state-output "$RUNNER_TEMP/desktop-backend-runtime-env-state.json"
+
       - name: Attach Managed Prometheus sidecar to production candidate
         id: attach-gmp-sidecar
         run: |
@@ -352,6 +367,7 @@ jobs:
             --final-revision="${{ steps.admitted-source.outputs.revision }}" \
             --ingress-container=desktop-backend-1 \
             --config="$DESKTOP_BACKEND_CONTROLS/backend/deploy/cloud_run_gmp_sidecar.yaml" \
+            --expected-env-state="$RUNNER_TEMP/desktop-backend-runtime-env-state.json" \
             --tag="$CANDIDATE_TAG"
 
       - name: Wait for no-traffic candidate readiness

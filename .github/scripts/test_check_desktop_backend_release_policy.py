@@ -103,6 +103,35 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
 
 
 
+    def test_rejects_sidecar_attach_without_rendered_expected_env_state(self) -> None:
+        """#12098 made --expected-env-state required and updated only the backend caller.
+
+        Every other fragment this policy required was still present, so both
+        desktop deploy paths passed the check and then died at the attach step
+        with an argparse usage error. Bind the requirement to the step.
+        """
+        for workflow, production in ((self.dev, False), (self.prod, True)):
+            with self.subTest(production=production, mutation="drop --expected-env-state"):
+                errors = POLICY.validate_deploy_workflow(
+                    workflow.replace('            --expected-env-state=', '            --unused-arg=', 1),
+                    production=production,
+                )
+                self.assertTrue(any("--expected-env-state" in error for error in errors), errors)
+
+            with self.subTest(production=production, mutation="drop the render step"):
+                errors = POLICY.validate_deploy_workflow(
+                    workflow.replace("Render desktop backend expected env state", "Render something else"),
+                    production=production,
+                )
+                self.assertTrue(any("Render desktop backend expected env state" in e for e in errors), errors)
+
+            with self.subTest(production=production, mutation="render without --desktop-state-output"):
+                errors = POLICY.validate_deploy_workflow(
+                    workflow.replace('--desktop-state-output', '--state-output', 1),
+                    production=production,
+                )
+                self.assertTrue(any("--desktop-state-output" in error for error in errors), errors)
+
     def test_rejects_traffic_before_candidate_proof(self) -> None:
         mutated = self.dev.replace(
             "      - name: Prove candidate chat compatibility",

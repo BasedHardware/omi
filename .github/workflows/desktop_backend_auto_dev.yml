@@ -257,6 +257,17 @@ jobs:
             OMI_LLM_GATEWAY_SERVICE_TOKEN=OMI_LLM_GATEWAY_SERVICE_TOKEN:latest
             METRICS_SECRET=METRICS_SECRET:latest
 
+      # See desktop_backend_prod.yml: the expectation is rendered from the
+      # manifest so it cannot drift from the values actually deployed.
+      - name: Render desktop backend expected env state
+        id: desktop-expected-env
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/render_backend_runtime_env.py \
+            --env dev \
+            --manifest backend/deploy/runtime_env.yaml \
+            --desktop-state-output "$RUNNER_TEMP/desktop-backend-runtime-env-state.json"
+
       - name: Attach Managed Prometheus sidecar to development candidate
         id: attach-gmp-sidecar
         run: |
@@ -268,6 +279,7 @@ jobs:
             --final-revision="${{ steps.candidate-identity.outputs.revision }}" \
             --ingress-container=desktop-backend-1 \
             --config=backend/deploy/cloud_run_gmp_sidecar.yaml \
+            --expected-env-state="$RUNNER_TEMP/desktop-backend-runtime-env-state.json" \
             --tag="$CANDIDATE_TAG"
 
       - name: Wait for no-traffic candidate readiness
