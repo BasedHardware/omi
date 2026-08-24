@@ -1,10 +1,7 @@
-import 'dart:convert';
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 
-import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/widgets/conversation_photo_image.dart';
 import 'package:omi/widgets/media_viewer_page.dart';
 
 class PhotosGridComponent extends StatelessWidget {
@@ -38,7 +35,7 @@ class PhotosGridComponent extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  _ConversationPhotoImage(
+                  ConversationPhotoImage(
                     photo: photo,
                     conversationId: conversationId,
                     fit: BoxFit.cover,
@@ -85,7 +82,7 @@ List<MediaViewerItem> _mediaItemsFor(List<ConversationPhoto> photos, String? con
     final hasInlineBytes = photo.base64.isNotEmpty;
     return MediaViewerItem(
       base64: hasInlineBytes ? photo.base64 : null,
-      bytesLoader: hasInlineBytes ? null : () => _loadConversationPhotoBytes(photo, conversationId),
+      bytesLoader: hasInlineBytes ? null : () => loadConversationPhotoBytes(photo, conversationId),
       mimeType: photo.contentType,
       heroTag: photo.id,
       showCaptionStrip: true,
@@ -93,51 +90,4 @@ List<MediaViewerItem> _mediaItemsFor(List<ConversationPhoto> photos, String? con
       discarded: photo.discarded,
     );
   }).toList();
-}
-
-Future<Uint8List?> _loadConversationPhotoBytes(ConversationPhoto photo, String? conversationId) async {
-  if (photo.base64.isNotEmpty) {
-    try {
-      return base64Decode(photo.base64);
-    } on FormatException {
-      return null;
-    }
-  }
-  if (conversationId == null || conversationId.isEmpty || photo.storageId == null || photo.storageId!.isEmpty) {
-    return null;
-  }
-  return getConversationPhotoImage(conversationId, photo.id);
-}
-
-class _ConversationPhotoImage extends StatelessWidget {
-  final ConversationPhoto photo;
-  final String? conversationId;
-  final BoxFit fit;
-  final Color? color;
-  final BlendMode? colorBlendMode;
-
-  const _ConversationPhotoImage({
-    required this.photo,
-    this.conversationId,
-    this.fit = BoxFit.cover,
-    this.color,
-    this.colorBlendMode,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<Uint8List?>(
-      future: _loadConversationPhotoBytes(photo, conversationId),
-      builder: (context, snapshot) {
-        final bytes = snapshot.data;
-        if (bytes == null || bytes.isEmpty) {
-          return const ColoredBox(
-            color: Colors.black12,
-            child: Center(child: Icon(Icons.image_outlined)),
-          );
-        }
-        return Image.memory(bytes, fit: fit, gaplessPlayback: true, color: color, colorBlendMode: colorBlendMode);
-      },
-    );
-  }
 }
