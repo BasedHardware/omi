@@ -46,9 +46,10 @@ class TranscriptSegment(BaseModel):
     translations: Optional[List[Translation]] = Field(default_factory=list)
     speech_profile_processed: bool = True
     stt_provider: Optional[str] = None
-    # These fields are persisted for backend identity consumers, but are not part
-    # of the first-party app wire contract. SkipJsonSchema leaves validation and
-    # model_dump intact while avoiding generated-client fan-out for internal state.
+    # Persisted for backend identity consumers. SkipJsonSchema keeps these out of
+    # the generated OpenAPI/Dart/Swift client schema while validation and
+    # model_dump (Firestore persistence, and the pusher transcript frames that
+    # document them) stay intact.
     speaker_id_scope: SkipJsonSchema[Optional[str]] = None
     speaker_identity_status: SkipJsonSchema[str] = SpeakerIdentityStatus.unknown
 
