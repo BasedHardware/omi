@@ -9,6 +9,7 @@ from google.cloud.firestore_v1 import FieldFilter
 
 import database.action_items as action_items_db
 import database.chat as chat_db
+import database.conversations as conversations_db
 import database.task_recommendations as task_recommendations_db
 import routers.task_recommendations as task_recommendations_router
 from database.firestore_index_registry import (
@@ -16,6 +17,7 @@ from database.firestore_index_registry import (
     CANONICAL_CONSOLIDATION_QUERY,
     CANONICAL_MEMORY_ATLAS_READ_QUERY,
     CONVERSATION_SOURCE_MEMORY_QUERY,
+    CONVERSATIONS_ACTIVE_ORDERED_QUERY,
     DUE_MEMORY_OUTBOX_QUERY,
     EXPIRED_SHORT_TERM_LIFECYCLE_QUERY,
     EXPIRED_MEMORY_OUTBOX_LEASE_QUERY,
@@ -622,6 +624,41 @@ def test_app_scoped_message_reads_have_a_declared_composite_index(monkeypatch, s
 def test_messages_by_app_ordered_query_is_registered_for_the_messages_collection():
     assert MESSAGES_BY_APP_ORDERED_QUERY.collection_group == 'messages'
     assert MESSAGES_BY_APP_ORDERED_QUERY.index_requirement.to_manifest() in firebase_index_manifest()['indexes']
+
+
+@pytest.mark.parametrize(
+    ('symbol', 'call'),
+    [
+        ('get_conversations', lambda: conversations_db.get_conversations('index-contract-user', limit=20)),
+        (
+            'get_conversations_without_photos',
+            lambda: conversations_db.get_conversations_without_photos('index-contract-user', limit=20),
+        ),
+    ],
+)
+def test_default_conversation_list_reads_have_a_declared_composite_index(monkeypatch, symbol, call):
+    """The bare `discarded == False` + `created_at` descending list read needs a declared composite.
+
+    Regression for a self-host FailedPrecondition 400 on GET /v1/conversations: this is the
+    app's default conversation list call (no status/category/folder/starred filter), prod has
+    the index only because it was created by hand at some point, but firestore_index_registry.py
+    never declared it, so a fresh self-host deploy 400s the first time anyone loads their list.
+    """
+    recorder = []
+    monkeypatch.setattr(conversations_db, 'db', _StreamRecordingFirestore(recorder, collection_name='conversations'))
+
+    call()
+
+    compound = [(filters, orders) for filters, orders in recorder if orders and any(op == '==' for _, op in filters)]
+    assert compound, f'{symbol} no longer builds a discarded equality + created_at ordering chain'
+    declared = _declared_index_signatures()
+    for filters, orders in compound:
+        assert _equality_plus_order_signature('conversations', filters, orders) in declared
+
+
+def test_conversations_active_ordered_query_is_registered_for_the_conversations_collection():
+    assert CONVERSATIONS_ACTIVE_ORDERED_QUERY.collection_group == 'conversations'
+    assert CONVERSATIONS_ACTIVE_ORDERED_QUERY.index_requirement.to_manifest() in firebase_index_manifest()['indexes']
 
 
 def test_query_source_paths_are_posix_canonical_on_every_host_platform():
