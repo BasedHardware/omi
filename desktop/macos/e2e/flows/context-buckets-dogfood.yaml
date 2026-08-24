@@ -122,7 +122,7 @@ steps:
       remember, history, before, or previously added and confirm those words alone do not change
       admission. Silence is valid when bounded triage rejects the candidate.
 
-  - id: S7
+  - id: S9
     name: Logs are clean
     log.expect:
       absent:

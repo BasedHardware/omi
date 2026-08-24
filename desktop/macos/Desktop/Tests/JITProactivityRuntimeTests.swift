@@ -42,29 +42,38 @@ final class JITProactivityRuntimeTests: XCTestCase {
 
   func testAmbientLocalGateDoesNotUseHistoricalIntentWords() {
     let historicalWords = JITAmbientRuntimeContext(
-      id: "bucket:1", materialChange: true, locallyNovel: true, locallyRelevant: true,
+      id: "bucket:1", semanticFingerprint: String(repeating: "a", count: 64), locallyRelevant: true,
       boundedEvidence: "remember what happened before in history")
     let ordinaryWords = JITAmbientRuntimeContext(
-      id: "bucket:1", materialChange: true, locallyNovel: true, locallyRelevant: true,
+      id: "bucket:1", semanticFingerprint: String(repeating: "b", count: 64), locallyRelevant: true,
       boundedEvidence: "the release owner changed")
 
     XCTAssertTrue(historicalWords.permitsNanoTriage)
     XCTAssertEqual(historicalWords.permitsNanoTriage, ordinaryWords.permitsNanoTriage)
   }
 
-  func testAmbientCheapGateRejectsBeforeAnyModelWhenMaterialNoveltyOrRelevanceIsMissing() {
+  func testAmbientCheapGateRejectsBeforeAnyModelWhenSemanticIdentityOrRelevanceIsMissing() {
     for context in [
       JITAmbientRuntimeContext(
-        id: "bucket", materialChange: false, locallyNovel: true, locallyRelevant: true,
+        id: "bucket", semanticFingerprint: "", locallyRelevant: true,
         boundedEvidence: "fact"),
       JITAmbientRuntimeContext(
-        id: "bucket", materialChange: true, locallyNovel: false, locallyRelevant: true,
-        boundedEvidence: "fact"),
-      JITAmbientRuntimeContext(
-        id: "bucket", materialChange: true, locallyNovel: true, locallyRelevant: false,
+        id: "bucket", semanticFingerprint: String(repeating: "a", count: 64), locallyRelevant: false,
         boundedEvidence: "fact"),
     ] {
       XCTAssertFalse(context.permitsNanoTriage)
     }
+  }
+
+  func testAmbientSemanticFingerprintIgnoresFactOrderWhitespaceAndCaptureVolatility() {
+    let first = JITAmbientRuntimeContext.semanticFingerprint(
+      contextID: "bucket-1", validatedFacts: ["Release   OWNER changed", "Build is green"])
+    let revisit = JITAmbientRuntimeContext.semanticFingerprint(
+      contextID: "bucket-1", validatedFacts: ["build is green", "Release OWNER changed"])
+    let changed = JITAmbientRuntimeContext.semanticFingerprint(
+      contextID: "bucket-1", validatedFacts: ["build is red", "Release OWNER changed"])
+
+    XCTAssertEqual(first, revisit)
+    XCTAssertNotEqual(first, changed)
   }
 }

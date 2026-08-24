@@ -89,6 +89,9 @@ final class JITTriggerMirrorTests: XCTestCase {
         continuityKey: "prior", triggerID: "trigger", lane: .planned,
         budgetDay: "2026-08-24", snapshotRevision: "old", observationFingerprint: "f",
         budget: 1, now: Date(), in: db)
+      _ = try JITTriggerMirror.claimAmbientNanoChange(
+        contextID: "prior-bucket", semanticFingerprint: "prior-semantic",
+        budgetDay: "2026-08-24", snapshotRevision: "old", budget: 8, now: Date(), in: db)
       _ = try JITTriggerMirror.reconcile(
         snapshot(generation: 4, sequence: 0, revision: "reset", rows: []),
         in: db, now: Date())
@@ -96,7 +99,11 @@ final class JITTriggerMirrorTests: XCTestCase {
     let receiptCount = try queue.read { db in
       try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM jit_trigger_wakeup_receipts") ?? -1
     }
+    let ambientCount = try queue.read { db in
+      try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM jit_ambient_context_state") ?? -1
+    }
     XCTAssertEqual(receiptCount, 0)
+    XCTAssertEqual(ambientCount, 0)
   }
 
   func testAmbientNanoBudgetCountsDistinctAttemptsAndStopsBeforeAnotherProviderCall() throws {
@@ -117,6 +124,25 @@ final class JITTriggerMirrorTests: XCTestCase {
         budgetDay: "2026-08-24", snapshotRevision: "r", observationFingerprint: "f2",
         budget: 2, now: Date(), in: db)
       XCTAssertNil(exhausted)
+    }
+  }
+
+  func testAmbientSemanticRevisitDoesNotSpendNanoBudgetUntilContentChanges() throws {
+    let queue = try migratedQueue()
+    try queue.write { db in
+      let first = try JITTriggerMirror.claimAmbientNanoChange(
+        contextID: "bucket", semanticFingerprint: "stable", budgetDay: "2026-08-24",
+        snapshotRevision: "r", budget: 8, now: Date(), in: db)
+      let unchanged = try JITTriggerMirror.claimAmbientNanoChange(
+        contextID: "bucket", semanticFingerprint: "stable", budgetDay: "2026-08-24",
+        snapshotRevision: "r", budget: 8, now: Date().addingTimeInterval(1), in: db)
+      let changed = try JITTriggerMirror.claimAmbientNanoChange(
+        contextID: "bucket", semanticFingerprint: "changed", budgetDay: "2026-08-24",
+        snapshotRevision: "r", budget: 8, now: Date().addingTimeInterval(2), in: db)
+
+      XCTAssertNotNil(first)
+      XCTAssertNil(unchanged)
+      XCTAssertNotNil(changed)
     }
   }
 

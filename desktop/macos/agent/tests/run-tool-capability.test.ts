@@ -20,7 +20,7 @@ afterEach(() => {
   while (roots.length) rmSync(roots.pop()!, { recursive: true, force: true });
 });
 
-function fixture(role: "coordinator" | "leaf" = "coordinator") {
+function fixture(role: "coordinator" | "leaf" = "coordinator", mode: "ask" | "act" = "act") {
   const root = mkdtempSync(join(tmpdir(), "omi-capability-"));
   roots.push(root);
   const databasePath = join(root, "agent.sqlite");
@@ -36,7 +36,7 @@ function fixture(role: "coordinator" | "leaf" = "coordinator") {
     clientId: "trace-client",
     requestId: "trace-request",
     status: "running",
-    mode: "act",
+    mode,
   });
   const attempt = store.insertAttempt({
     runId: run.runId,
@@ -86,6 +86,37 @@ function invocationIdentity(invocation: AuthorizedRunToolInvocation) {
 }
 
 describe("RunToolCapabilityBroker", () => {
+  it("hard-denies JIT ask-mode writes while preserving historical reads", () => {
+    const { store, session, run, attempt } = fixture("coordinator", "ask");
+    store.execute(
+      "UPDATE sessions SET surface_kind = 'service', external_ref_kind = 'service', external_ref_id = 'jit-proactivity-test' WHERE session_id = ?",
+      [session.sessionId],
+    );
+    const broker = createBroker(store);
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+    const base = {
+      capabilityRef: capability.capabilityRef,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      activeOwnerId: session.ownerId,
+      toolInput: {},
+    };
+
+    expectCode(
+      () => broker.authorize({ ...base, invocationId: "write", toolName: "create_memory" }),
+      "tool_not_allowed",
+    );
+    expect(
+      broker.authorize({ ...base, invocationId: "read", toolName: "search_memories" }).effectClass,
+    ).toBe("read_only");
+    store.close();
+  });
+
   it("requires the canonical profile reader and rejects unknown canonical adapters", () => {
     const { store } = fixture();
     expect(() => new RunToolCapabilityBroker({ store } as never)).toThrow(

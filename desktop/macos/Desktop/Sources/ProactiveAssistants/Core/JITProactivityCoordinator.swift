@@ -22,9 +22,9 @@ actor JITProactivityCoordinator {
       authorizationSnapshot: authorizationSnapshot,
       observation: observation,
       ambient: JITAmbientRuntimeContext(
-        id: "\(snapshot.bucketID):\(snapshot.versionID)",
-        materialChange: snapshot.version > 0,
-        locallyNovel: snapshot.versionID > 0,
+        id: snapshot.bucketID,
+        semanticFingerprint: JITAmbientRuntimeContext.semanticFingerprint(
+          contextID: snapshot.bucketID, validatedFacts: snapshot.validatedFacts),
         locallyRelevant: snapshot.notifyWorthiness > 0,
         boundedEvidence: snapshot.validatedFacts.prefix(20).map { String($0.prefix(400)) }
           .joined(separator: "\n")))

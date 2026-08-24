@@ -114,6 +114,13 @@ enum JITTriggerMirrorSchema {
         on: "jit_trigger_wakeup_receipts",
         columns: ["triggerID", "budgetDay", "state"])
     }
+    migrator.registerMigration("createJITAmbientContextState") { db in
+      try db.create(table: "jit_ambient_context_state", ifNotExists: true) { table in
+        table.column("contextID", .text).primaryKey()
+        table.column("semanticFingerprint", .text).notNull()
+        table.column("updatedAt", .datetime).notNull()
+      }
+    }
   }
 }
 
@@ -170,6 +177,7 @@ actor JITTriggerMirror {
         // An account reset is a new authority epoch. Old wakeup receipts must
         // neither disclose prior continuity nor consume the new epoch's budget.
         try db.execute(sql: "DELETE FROM jit_trigger_wakeup_receipts")
+        try db.execute(sql: "DELETE FROM jit_ambient_context_state")
       }
     }
 
@@ -294,6 +302,67 @@ actor JITTriggerMirror {
         snapshotRevision: snapshotRevision, observationFingerprint: observationFingerprint,
         budget: budget, now: now, leaseSeconds: leaseSeconds, in: db)
     }
+  }
+
+  func claimAmbientNanoChange(
+    contextID: String,
+    semanticFingerprint: String,
+    budgetDay: String,
+    snapshotRevision: String,
+    budget: Int,
+    now: Date
+  ) async throws -> JITTriggerWakeupClaim? {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { throw JITTriggerMirrorError.databaseUnavailable }
+    return try await pool.write { db in
+      try Self.claimAmbientNanoChange(
+        contextID: contextID,
+        semanticFingerprint: semanticFingerprint,
+        budgetDay: budgetDay,
+        snapshotRevision: snapshotRevision,
+        budget: budget,
+        now: now,
+        in: db)
+    }
+  }
+
+  static func claimAmbientNanoChange(
+    contextID: String,
+    semanticFingerprint: String,
+    budgetDay: String,
+    snapshotRevision: String,
+    budget: Int,
+    now: Date,
+    in db: Database
+  ) throws -> JITTriggerWakeupClaim? {
+    guard !contextID.isEmpty, !semanticFingerprint.isEmpty else { return nil }
+    let prior: String? = try String.fetchOne(
+      db,
+      sql: "SELECT semanticFingerprint FROM jit_ambient_context_state WHERE contextID = ?",
+      arguments: [contextID])
+    guard prior != semanticFingerprint else { return nil }
+    guard
+      let claim = try claimWakeup(
+        continuityKey: "jit-nano:\(contextID):\(semanticFingerprint)",
+        triggerID: "ambient-nano",
+        lane: .ambient,
+        budgetDay: budgetDay,
+        snapshotRevision: snapshotRevision,
+        observationFingerprint: semanticFingerprint,
+        budget: budget,
+        now: now,
+        in: db)
+    else { return nil }
+    try db.execute(
+      sql: """
+        INSERT INTO jit_ambient_context_state (contextID, semanticFingerprint, updatedAt)
+        VALUES (?, ?, ?)
+        ON CONFLICT(contextID) DO UPDATE SET
+          semanticFingerprint = excluded.semanticFingerprint,
+          updatedAt = excluded.updatedAt
+        """,
+      arguments: [contextID, semanticFingerprint, now])
+    return claim
   }
 
   static func claimWakeup(
