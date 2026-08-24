@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-import threading
+from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -18,7 +18,6 @@ from utils.jit_rollout import (
     JITRolloutDecision,
     TriState,
 )
-from utils.executors import drain_critical_compensation_tasks, get_critical_compensation_task_count
 from utils.observability import journeys
 from utils.subscription import (
     DESKTOP_ACCESS_TIER_ARCHITECT,
@@ -47,6 +46,18 @@ def _allow_jit_rollout(monkeypatch):
         )
 
     monkeypatch.setattr(desktop_proactivity, 'resolve_jit_rollout', resolve)
+
+    # Most route tests use an in-memory quota state rather than Redis. Keep
+    # their provider-path assertions focused while dedicated lease tests below
+    # exercise renew/finalize failure semantics explicitly.
+    async def renew(*_args, **_kwargs):
+        return None
+
+    async def finalize(*_args, **_kwargs):
+        return 3600
+
+    monkeypatch.setattr(desktop_proactivity, '_renew_quota', renew)
+    monkeypatch.setattr(desktop_proactivity, '_finalize_quota', finalize)
 
 
 def request(
@@ -96,6 +107,20 @@ def _rollout_decision(
         error_class=error_class,
         cache_hit=False,
         cache_ttl_seconds=0,
+    )
+
+
+def _test_quota_state(
+    *,
+    limit: int = 150,
+    remaining: int = 149,
+    reset_seconds: int = 86400,
+) -> desktop_proactivity.ProactiveQuotaState:
+    return desktop_proactivity.ProactiveQuotaState(
+        limit=limit,
+        remaining=remaining,
+        reset_seconds=reset_seconds,
+        reservation_token="test-reservation-token",
     )
 
 
@@ -245,9 +270,9 @@ async def test_late_paid_boundary_block_does_not_emit_direct_fallback_telemetry(
         return enabled if len(resolutions) <= 2 else late_decision
 
     async def consume(*_args):
-        return desktop_proactivity.ProactiveQuotaState(limit=150, remaining=149, reset_seconds=86400)
+        return _test_quota_state()
 
-    async def release(uid, operation):
+    async def release(uid, operation, *_args):
         released.append((uid, operation))
 
     monkeypatch.setattr(desktop_proactivity, "resolve_jit_rollout", resolve)
@@ -401,7 +426,11 @@ async def test_quota_is_allowed_based_and_fails_closed(monkeypatch):
     monkeypatch.setattr(desktop_proactivity, "run_blocking", run_blocking)
     monkeypatch.setattr(desktop_proactivity, "get_customer_firestore_client", MagicMock())
     monkeypatch.setattr(desktop_proactivity.users_db, "get_user_valid_subscription", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(desktop_proactivity.redis_db, "reserve_rate_limit", lambda *_: (False, 0, 19))
+    monkeypatch.setattr(
+        desktop_proactivity.redis_db,
+        "reserve_proactive_rate_limit",
+        lambda *_args, **_kwargs: (False, 0, 19, None),
+    )
     with pytest.raises(desktop_proactivity.HTTPException) as exhausted:
         await desktop_proactivity._consume_quota("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)
     assert exhausted.value.status_code == 429
@@ -414,8 +443,8 @@ async def test_quota_is_allowed_based_and_fails_closed(monkeypatch):
 
     monkeypatch.setattr(
         desktop_proactivity.redis_db,
-        "reserve_rate_limit",
-        lambda *_: (_ for _ in ()).throw(RuntimeError("redis down")),
+        "reserve_proactive_rate_limit",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("redis down")),
     )
     with pytest.raises(desktop_proactivity.HTTPException) as unavailable:
         await desktop_proactivity._consume_quota("user-1", desktop_proactivity.ProactiveOperation.REASONING)
@@ -436,14 +465,14 @@ async def test_quota_reservation_uses_the_free_row_and_daily_window(monkeypatch,
     async def run_blocking(_, function, *args, **kwargs):
         return function(*args, **kwargs)
 
-    def reserve_rate_limit(uid, key, limit, window_seconds):
-        observed.update(uid=uid, key=key, limit=limit, window_seconds=window_seconds)
-        return True, 1, 0
+    def reserve_rate_limit(uid, key, limit, window_seconds, **kwargs):
+        observed.update(uid=uid, key=key, limit=limit, window_seconds=window_seconds, **kwargs)
+        return True, 1, 0, "reservation-token"
 
     monkeypatch.setattr(desktop_proactivity, "run_blocking", run_blocking)
     monkeypatch.setattr(desktop_proactivity, "get_customer_firestore_client", MagicMock())
     monkeypatch.setattr(desktop_proactivity.users_db, "get_user_valid_subscription", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(desktop_proactivity.redis_db, "reserve_rate_limit", reserve_rate_limit)
+    monkeypatch.setattr(desktop_proactivity.redis_db, "reserve_proactive_rate_limit", reserve_rate_limit)
 
     await desktop_proactivity._consume_quota("user-1", operation)
 
@@ -451,84 +480,7 @@ async def test_quota_reservation_uses_the_free_row_and_daily_window(monkeypatch,
     assert observed["key"] == f"desktop_{operation.value}"
     assert observed["limit"] == expected_limit
     assert observed["window_seconds"] == 24 * 60 * 60
-
-
-@pytest.mark.asyncio
-async def test_quota_reservation_cancellation_releases_late_admission_once(monkeypatch):
-    reservation_started = asyncio.Event()
-    unblock_reservation = asyncio.Event()
-    release_seen = asyncio.Event()
-    released = []
-
-    async def run_blocking(_, function, *args, **kwargs):
-        if function is desktop_proactivity.redis_db.reserve_rate_limit:
-            reservation_started.set()
-            await unblock_reservation.wait()
-            return True, 149, 86400
-        return function(*args, **kwargs)
-
-    async def release(uid, operation):
-        released.append((uid, operation))
-        release_seen.set()
-
-    monkeypatch.setattr(desktop_proactivity, "run_blocking", run_blocking)
-    monkeypatch.setattr(desktop_proactivity, "_customer_subscription", lambda *_: None)
-    monkeypatch.setattr(desktop_proactivity, "_release_quota", release)
-
-    reservation = asyncio.create_task(
-        desktop_proactivity._consume_quota("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)
-    )
-    await asyncio.wait_for(reservation_started.wait(), timeout=1)
-    reservation.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await reservation
-
-    assert released == []
-    unblock_reservation.set()
-    await asyncio.wait_for(release_seen.wait(), timeout=1)
-    await asyncio.sleep(0)
-    assert released == [("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)]
-
-
-@pytest.mark.asyncio
-async def test_shutdown_drain_observes_blocked_quota_reservation_before_release(monkeypatch):
-    reservation_started = threading.Event()
-    unblock_reservation = threading.Event()
-    release_seen = asyncio.Event()
-    released = []
-
-    def blocked_reservation(*_args):
-        reservation_started.set()
-        assert unblock_reservation.wait(timeout=2)
-        return True, 149, 86400
-
-    async def release(uid, operation):
-        released.append((uid, operation))
-        release_seen.set()
-
-    monkeypatch.setattr(desktop_proactivity, "_customer_subscription", lambda *_: None)
-    monkeypatch.setattr(desktop_proactivity.redis_db, "reserve_rate_limit", blocked_reservation)
-    monkeypatch.setattr(desktop_proactivity, "_release_quota", release)
-
-    reservation = asyncio.create_task(
-        desktop_proactivity._consume_quota("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)
-    )
-    await asyncio.wait_for(asyncio.to_thread(reservation_started.wait, 1), timeout=2)
-    reservation.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await reservation
-    assert get_critical_compensation_task_count() == 1
-
-    async def emulate_shutdown_unblock():
-        await asyncio.sleep(0)
-        unblock_reservation.set()
-
-    asyncio.create_task(emulate_shutdown_unblock())
-    drained = await drain_critical_compensation_tasks(timeout=1.0)
-
-    assert drained == 1
-    await asyncio.wait_for(release_seen.wait(), timeout=1)
-    assert released == [("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)]
+    assert observed["lease_seconds"] == desktop_proactivity._QUOTA_LEASE_SECONDS
 
 
 @pytest.mark.asyncio
@@ -541,12 +493,17 @@ async def test_quota_headers_present_on_success(monkeypatch):
     monkeypatch.setattr(desktop_proactivity.users_db, "get_user_valid_subscription", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         desktop_proactivity.redis_db,
-        "reserve_rate_limit",
-        lambda *_: (True, 12, 3600),
+        "reserve_proactive_rate_limit",
+        lambda *_args, **_kwargs: (True, 12, 3600, "reservation-token"),
     )
 
     state = await desktop_proactivity._consume_quota("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)
-    assert state == desktop_proactivity.ProactiveQuotaState(limit=150, remaining=12, reset_seconds=3600)
+    assert state == desktop_proactivity.ProactiveQuotaState(
+        limit=150,
+        remaining=12,
+        reset_seconds=3600,
+        reservation_token="reservation-token",
+    )
 
     response = Response()
     desktop_proactivity._apply_quota_headers(response, state)
@@ -554,6 +511,50 @@ async def test_quota_headers_present_on_success(monkeypatch):
     assert response.headers["X-Proactive-Quota-Remaining"] == "12"
     assert response.headers["X-Proactive-Quota-Reset"] == "3600"
     assert "retry-after" not in {name.lower() for name in response.headers.keys()}
+
+
+@pytest.mark.asyncio
+async def test_cancellation_before_reservation_response_leaves_server_lease_to_expire(monkeypatch):
+    started = asyncio.Event()
+    finish_reservation = asyncio.Event()
+    late_result_task = None
+    release_calls = []
+
+    async def delayed_reservation():
+        started.set()
+        await finish_reservation.wait()
+        return True, 149, 90, "late-reservation-token"
+
+    async def run_blocking(_, function, *args, **kwargs):
+        nonlocal late_result_task
+        if function is desktop_proactivity.redis_db.reserve_proactive_rate_limit:
+            del args, kwargs
+            late_result_task = asyncio.create_task(delayed_reservation())
+            # This mirrors a Redis executor call: cancellation stops observing
+            # the await, but cannot stop the already-running server operation.
+            return await asyncio.shield(late_result_task)
+        return function(*args, **kwargs)
+
+    async def release(*args):
+        release_calls.append(args)
+
+    monkeypatch.setattr(desktop_proactivity, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_proactivity, "_release_quota", release)
+    monkeypatch.setattr(desktop_proactivity, "get_customer_firestore_client", MagicMock())
+    monkeypatch.setattr(desktop_proactivity.users_db, "get_user_valid_subscription", lambda *_args, **_kwargs: None)
+
+    reservation_task = asyncio.create_task(
+        desktop_proactivity._consume_quota("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)
+    )
+    await started.wait()
+    reservation_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await reservation_task
+
+    finish_reservation.set()
+    assert late_result_task is not None
+    assert await late_result_task == (True, 149, 90, "late-reservation-token")
+    assert release_calls == []
 
 
 @pytest.mark.asyncio
@@ -578,7 +579,7 @@ async def test_completion_success_attaches_quota_headers(monkeypatch):
             return None
 
     async def consume(*_):
-        return desktop_proactivity.ProactiveQuotaState(limit=200, remaining=12, reset_seconds=3600)
+        return _test_quota_state(limit=200, remaining=12, reset_seconds=3600)
 
     monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
     monkeypatch.setenv("OMI_LLM_GATEWAY_URL", "http://gateway")
@@ -593,6 +594,144 @@ async def test_completion_success_attaches_quota_headers(monkeypatch):
     assert response.headers["X-Proactive-Quota-Limit"] == "200"
     assert response.headers["X-Proactive-Quota-Remaining"] == "12"
     assert response.headers["X-Proactive-Quota-Reset"] == "3600"
+
+
+@pytest.mark.asyncio
+async def test_provider_boundaries_renew_each_attempt_and_finalize_after_validation(monkeypatch):
+    events = []
+
+    class GatewayClient:
+        def __init__(self):
+            self.calls = 0
+
+        async def post(self, url, *, headers, json):
+            del url, headers, json
+            events.append("provider")
+            self.calls += 1
+            if self.calls == 1:
+                body = {"choices": [{"finish_reason": "length", "message": {"content": ""}}]}
+            else:
+                body = {
+                    "model": "gpt-5-nano",
+                    "choices": [{"finish_reason": "stop", "message": {"content": '{"summary":"ok"}'}}],
+                }
+            return httpx.Response(200, request=httpx.Request("POST", "http://gateway"), json=body)
+
+    async def consume(*_args):
+        return _test_quota_state()
+
+    async def renew(uid, operation, token):
+        events.append("renew")
+        assert uid == "user-1"
+        assert operation == desktop_proactivity.ProactiveOperation.EXTRACTION
+        assert token == "test-reservation-token"
+
+    async def finalize(uid, operation, token):
+        events.append("finalize")
+        assert uid == "user-1"
+        assert operation == desktop_proactivity.ProactiveOperation.EXTRACTION
+        assert token == "test-reservation-token"
+        return 41
+
+    client = GatewayClient()
+    monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
+    monkeypatch.setenv("OMI_LLM_GATEWAY_URL", "http://gateway")
+    monkeypatch.setattr(desktop_proactivity, "_consume_quota", consume)
+    monkeypatch.setattr(desktop_proactivity, "_renew_quota", renew)
+    monkeypatch.setattr(desktop_proactivity, "_finalize_quota", finalize)
+    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", lambda: client)
+    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_semaphore", lambda: _ImmediateSemaphore())
+    monkeypatch.setattr(desktop_proactivity, "llm_gateway_headers", lambda **_: {})
+
+    response = Response()
+    result = await desktop_proactivity.proactive_completion(request(), response, uid="user-1")
+
+    assert result.response["choices"][0]["message"]["content"] == '{"summary":"ok"}'
+    assert events == ["renew", "provider", "renew", "provider", "finalize"]
+    assert response.headers["X-Proactive-Quota-Reset"] == "41"
+
+
+@pytest.mark.asyncio
+async def test_expired_lease_fails_closed_before_provider_and_releases_once(monkeypatch):
+    provider_calls = []
+    released = []
+
+    class GatewayClient:
+        async def post(self, *_args, **_kwargs):
+            provider_calls.append(True)
+            raise AssertionError("provider must not run after lease renewal failure")
+
+    async def consume(*_args):
+        return _test_quota_state()
+
+    async def renew(*_args):
+        raise desktop_proactivity.HTTPException(status_code=503, detail="Proactive metering lease expired")
+
+    async def release(uid, operation, token):
+        released.append((uid, operation, token))
+
+    monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
+    monkeypatch.setenv("OMI_LLM_GATEWAY_URL", "http://gateway")
+    monkeypatch.setattr(desktop_proactivity, "_consume_quota", consume)
+    monkeypatch.setattr(desktop_proactivity, "_renew_quota", renew)
+    monkeypatch.setattr(desktop_proactivity, "_release_quota", release)
+    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", lambda: GatewayClient())
+    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_semaphore", lambda: _ImmediateSemaphore())
+    monkeypatch.setattr(desktop_proactivity, "llm_gateway_headers", lambda **_: {})
+
+    with pytest.raises(desktop_proactivity.HTTPException) as expired:
+        await desktop_proactivity.proactive_completion(request(), Response(), uid="user-1")
+
+    assert expired.value.status_code == 503
+    assert provider_calls == []
+    assert released == [("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION, "test-reservation-token")]
+
+
+@pytest.mark.asyncio
+async def test_missing_finalize_fails_closed_without_rolling_back_successful_provider_work(monkeypatch):
+    released = []
+
+    class GatewayClient:
+        async def post(self, url, *, headers, json):
+            del url, headers, json
+            return httpx.Response(
+                200,
+                request=httpx.Request("POST", "http://gateway"),
+                json={
+                    "model": "gpt-5-nano",
+                    "choices": [{"finish_reason": "stop", "message": {"content": '{"summary":"ok"}'}}],
+                },
+            )
+
+    async def consume(*_args):
+        return _test_quota_state()
+
+    async def renew(*_args):
+        return None
+
+    async def finalize(*_args):
+        raise desktop_proactivity.HTTPException(status_code=503, detail="Proactive metering lease expired")
+
+    async def release(*args):
+        released.append(args)
+
+    monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
+    monkeypatch.setenv("OMI_LLM_GATEWAY_URL", "http://gateway")
+    monkeypatch.setattr(desktop_proactivity, "_consume_quota", consume)
+    monkeypatch.setattr(desktop_proactivity, "_renew_quota", renew)
+    monkeypatch.setattr(desktop_proactivity, "_finalize_quota", finalize)
+    monkeypatch.setattr(desktop_proactivity, "_release_quota", release)
+    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", lambda: GatewayClient())
+    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_semaphore", lambda: _ImmediateSemaphore())
+    monkeypatch.setattr(desktop_proactivity, "llm_gateway_headers", lambda **_: {})
+
+    with pytest.raises(desktop_proactivity.HTTPException) as missing:
+        await desktop_proactivity.proactive_completion(request(), Response(), uid="user-1")
+
+    assert missing.value.status_code == 503
+    # Finalization's Redis result is ambiguous: releasing here could erase a
+    # committed success if the response was lost after Redis finalized it.
+    assert released == []
 
 
 def test_release_after_delete_does_not_go_negative():
@@ -618,6 +757,97 @@ def test_release_after_delete_does_not_go_negative():
     stored = client.get(key)
     if stored is not None:
         assert int(stored) >= 0
+
+
+def _proactive_quota_scripts(client):
+    redis_db = desktop_proactivity.redis_db
+    return {
+        "reserve": client.register_script(redis_db._PROACTIVE_QUOTA_RESERVE_LUA_SOURCE),
+        "renew": client.register_script(redis_db._PROACTIVE_QUOTA_RENEW_LUA_SOURCE),
+        "finalize": client.register_script(redis_db._PROACTIVE_QUOTA_FINALIZE_LUA_SOURCE),
+        "release": client.register_script(redis_db._PROACTIVE_QUOTA_RELEASE_LUA_SOURCE),
+    }
+
+
+def test_proactive_quota_reservations_are_atomic_and_fail_closed_at_limit():
+    import fakeredis
+
+    client = fakeredis.FakeRedis()
+    scripts = _proactive_quota_scripts(client)
+    key = "rl:proactive_lease:desktop_proactive_extraction:user-1"
+    now_ms = 1_000_000
+
+    def reserve(index):
+        return scripts["reserve"](
+            keys=[key],
+            args=[now_ms, 90_000, 86_400, 2, f"token-{index}"],
+        )
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        results = list(executor.map(reserve, range(8)))
+
+    admitted = [result for result in results if int(result[0]) == 1]
+    denied = [result for result in results if int(result[0]) == 0]
+    assert len(admitted) == 2
+    assert len(denied) == 6
+    assert client.zcard(key) == 2
+    assert all(result[3] == b"" for result in denied)
+
+
+def test_proactive_quota_lease_renew_finalize_release_and_process_expiry():
+    import fakeredis
+
+    client = fakeredis.FakeRedis()
+    scripts = _proactive_quota_scripts(client)
+    key = "rl:proactive_lease:desktop_proactive_reasoning:user-1"
+    now_ms = 2_000_000
+    token = "opaque-token"
+    committed = f"committed:{token}"
+
+    admitted = scripts["reserve"](keys=[key], args=[now_ms, 90_000, 86_400, 1, token])
+    assert admitted[:3] == [1, 1, 90]
+    assert admitted[3] == token.encode()
+
+    renewed = scripts["renew"](
+        keys=[key],
+        args=[now_ms + 1_000, 90_000, 86_400, token, "committed:"],
+    )
+    assert renewed == [1, 90]
+    assert client.zscore(key, token) == float(now_ms + 91_000)
+    assert scripts["renew"](keys=[key], args=[now_ms + 1_000, 90_000, 86_400, "missing", "committed:"]) == [0, 0]
+
+    finalized = scripts["finalize"](
+        keys=[key],
+        args=[now_ms + 2_000, 86_400_000, 86_400, token, "committed:"],
+    )
+    assert finalized == [1, 86_400]
+    assert client.zscore(key, token) is None
+    assert client.zscore(key, committed) == float(now_ms + 86_402_000)
+    # A duplicate completion acknowledgement must not create a second slot or
+    # extend the committed window.
+    assert scripts["finalize"](
+        keys=[key],
+        args=[now_ms + 2_000, 86_400_000, 86_400, token, "committed:"],
+    ) == [1, 86_400]
+    # Release only removes a pending token. A late failure cleanup cannot
+    # erase a successful committed result, so both calls are harmless here.
+    assert scripts["release"](keys=[key], args=[token]) == 0
+    assert scripts["release"](keys=[key], args=[token]) == 0
+    assert client.zscore(key, committed) == float(now_ms + 86_402_000)
+
+    # Model cancellation/process death: with no observer, the short lease is
+    # pruned by the next reservation and never becomes a daily commitment.
+    orphan_key = f"{key}:orphan"
+    orphan = "orphan-token"
+    scripts["reserve"](keys=[orphan_key], args=[now_ms, 90_000, 86_400, 1, orphan])
+    after_expiry = scripts["reserve"](keys=[orphan_key], args=[now_ms + 90_001, 90_000, 86_400, 1, "replacement"])
+    assert after_expiry[0:2] == [1, 1]
+    assert client.zscore(orphan_key, orphan) is None
+
+    pending_key = f"{key}:pending"
+    scripts["reserve"](keys=[pending_key], args=[now_ms, 90_000, 86_400, 1, "pending-token"])
+    assert scripts["release"](keys=[pending_key], args=["pending-token"]) == 1
+    assert scripts["release"](keys=[pending_key], args=["pending-token"]) == 0
 
 
 @pytest.mark.parametrize(
@@ -740,9 +970,9 @@ async def test_gateway_failure_releases_reserved_quota(monkeypatch):
             return None
 
     async def allow(*_):
-        return None
+        return _test_quota_state()
 
-    async def release(uid, operation):
+    async def release(uid, operation, *_args):
         released.append((uid, operation))
 
     monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
@@ -778,9 +1008,9 @@ async def test_cancellation_during_provider_paid_boundary_refresh_releases_quota
         return enabled
 
     async def consume(*_args):
-        return desktop_proactivity.ProactiveQuotaState(limit=150, remaining=149, reset_seconds=86400)
+        return _test_quota_state()
 
-    async def release(uid, operation):
+    async def release(uid, operation, *_args):
         released.append((uid, operation))
 
     monkeypatch.setattr(desktop_proactivity, "resolve_jit_rollout", resolve)
@@ -834,9 +1064,9 @@ async def test_cancellation_during_provider_retry_releases_quota_once_without_re
             return None
 
     async def consume(*_args):
-        return desktop_proactivity.ProactiveQuotaState(limit=150, remaining=149, reset_seconds=86400)
+        return _test_quota_state()
 
-    async def release(uid, operation):
+    async def release(uid, operation, *_args):
         released.append((uid, operation))
 
     monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
@@ -1038,6 +1268,7 @@ async def test_direct_extraction_retries_length_once_without_extra_quota_reserva
 
     async def consume(uid, operation):
         consumed.append((uid, operation))
+        return _test_quota_state()
 
     monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
     monkeypatch.delenv("OMI_LLM_GATEWAY_URL", raising=False)
@@ -1119,8 +1350,9 @@ async def test_kill_toggle_after_first_provider_call_denies_length_retry(monkeyp
 
     async def consume(uid, operation):
         consumed.append((uid, operation))
+        return _test_quota_state()
 
-    async def release(uid, operation):
+    async def release(uid, operation, *_args):
         released.append((uid, operation))
 
     monkeypatch.setattr(desktop_proactivity, 'resolve_jit_rollout', resolve)
@@ -1187,9 +1419,9 @@ async def test_direct_extraction_length_retry_releases_quota_once_after_final_fa
             return None
 
     async def allow(*_):
-        return None
+        return _test_quota_state()
 
-    async def release(uid, operation):
+    async def release(uid, operation, *_args):
         released.append((uid, operation))
 
     monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
@@ -1226,9 +1458,9 @@ async def test_provider_configuration_failure_releases_reserved_quota(monkeypatc
     released = []
 
     async def allow(*_):
-        return None
+        return _test_quota_state()
 
-    async def release(uid, operation):
+    async def release(uid, operation, *_args):
         released.append((uid, operation))
 
     monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
@@ -1275,7 +1507,7 @@ async def test_facade_adds_provenance_and_cache_envelope(monkeypatch):
             return None
 
     async def allow(*_):
-        return None
+        return _test_quota_state()
 
     monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
     monkeypatch.setenv("OMI_LLM_GATEWAY_URL", "http://gateway")
@@ -1358,6 +1590,7 @@ async def test_truncated_reasoning_retries_once_without_extra_quota(monkeypatch)
 
     async def consume(uid, operation):
         consumed.append((uid, operation))
+        return _test_quota_state()
 
     monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
     monkeypatch.delenv("OMI_LLM_GATEWAY_URL", raising=False)
@@ -1403,9 +1636,9 @@ async def test_upstream_http_error_is_not_retried_and_stays_502(monkeypatch):
             )
 
     async def allow(*_):
-        return None
+        return _test_quota_state()
 
-    async def release(uid, operation):
+    async def release(uid, operation, *_args):
         released.append((uid, operation))
 
     monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
@@ -1447,9 +1680,9 @@ async def test_complete_invalid_json_returns_422_without_retry(monkeypatch):
             )
 
     async def allow(*_):
-        return None
+        return _test_quota_state()
 
-    async def release(uid, operation):
+    async def release(uid, operation, *_args):
         released.append((uid, operation))
 
     monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
@@ -1562,7 +1795,7 @@ async def test_desktop_proactivity_journey_rejects_post_200_invalid_structured_o
             )
 
     async def allow(*_):
-        return None
+        return _test_quota_state()
 
     async def release(*_):
         return None

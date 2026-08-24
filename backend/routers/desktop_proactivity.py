@@ -20,7 +20,7 @@ from database import redis_db, users as users_db
 from config.plan_catalog import DESKTOP_PROFILE_DEFAULTS
 from models.users import PlanType, Subscription
 from utils.env_loader import EnvStage, resolve_stage_from_env
-from utils.executors import critical_executor, db_executor, run_blocking, start_critical_compensation_task
+from utils.executors import critical_executor, db_executor, run_blocking
 from utils.http_client import get_llm_gateway_client, get_llm_gateway_semaphore
 from utils.llm.desktop_llm_stub import llm_stub_enabled
 from utils.llm.gateway_client import llm_gateway_headers
@@ -42,7 +42,12 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 _MAX_REQUEST_BYTES = 5 * 1024 * 1024
-_QUOTA_WINDOW_SECONDS = 24 * 60 * 60
+_QUOTA_WINDOW_SECONDS = redis_db.PROACTIVE_QUOTA_COMMITTED_WINDOW_SECONDS
+# The gateway client bounds each provider attempt at 20 seconds and the
+# structured-output recovery path allows one retry. A 90-second Redis lease
+# leaves headroom for rollout refreshes and executor scheduling while still
+# expiring quickly after cancellation or process death.
+_QUOTA_LEASE_SECONDS = redis_db.PROACTIVE_QUOTA_LEASE_SECONDS
 # The catalog owns these profile allocations. They are deliberately not a
 # constant multiple of a shared base row: measured desktop dogfooding runs
 # ~37 extraction calls per hour of active use, so the architect extraction
@@ -90,6 +95,7 @@ class ProactiveQuotaState:
     limit: int
     remaining: int
     reset_seconds: int
+    reservation_token: str
 
 
 _QUOTA_LIMIT_HEADER = "X-Proactive-Quota-Limit"
@@ -260,55 +266,82 @@ async def _consume_quota(uid: str, operation: ProactiveOperation) -> ProactiveQu
             uid,
         )
         limit = _quota_limit_for_subscription(operation, subscription)
-        reservation_task = asyncio.create_task(
-            run_blocking(
-                critical_executor,
-                redis_db.reserve_rate_limit,
-                uid,
-                f"desktop_{operation_value}",
-                limit,
-                _QUOTA_WINDOW_SECONDS,
-            ),
-            name=f"proactive-quota-reservation:{operation_value}",
+        allowed, remaining, reset_seconds, reservation_token = await run_blocking(
+            critical_executor,
+            redis_db.reserve_proactive_rate_limit,
+            uid,
+            f"desktop_{operation_value}",
+            limit,
+            _QUOTA_WINDOW_SECONDS,
+            lease_seconds=_QUOTA_LEASE_SECONDS,
         )
-        try:
-            allowed, remaining, reset_seconds = await asyncio.shield(reservation_task)
-        except asyncio.CancelledError:
-            # run_in_executor cannot stop a Redis call already executing in a
-            # worker. Keep the reservation task alive and release its slot if
-            # it eventually admits; do not block request cancellation on Redis.
-            async def release_late_reservation() -> None:
-                try:
-                    reservation_allowed, _, _ = await reservation_task
-                except BaseException:
-                    return
-                if reservation_allowed:
-                    await _release_quota(uid, operation)
-
-            start_critical_compensation_task(
-                release_late_reservation(),
-                name=f"proactive-quota-release-after-cancel:{operation_value}",
-            )
-            raise
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Proactive metering is temporarily unavailable") from exc
-    state = ProactiveQuotaState(limit=limit, remaining=remaining, reset_seconds=reset_seconds)
+    state = ProactiveQuotaState(
+        limit=limit,
+        remaining=remaining,
+        reset_seconds=reset_seconds,
+        reservation_token=reservation_token or "",
+    )
     if not allowed:
         raise HTTPException(
             status_code=429,
             detail="Proactive request limit exceeded",
             headers=_quota_headers(state, include_retry_after=True),
         )
+    if not state.reservation_token:
+        raise HTTPException(status_code=503, detail="Proactive metering lease is unavailable")
     return state
 
 
-async def _release_quota(uid: str, operation: ProactiveOperation) -> None:
+async def _renew_quota(uid: str, operation: ProactiveOperation, reservation_token: str) -> None:
+    if not reservation_token:
+        raise HTTPException(status_code=503, detail="Proactive metering lease is unavailable")
+    try:
+        renewed, _ = await run_blocking(
+            critical_executor,
+            redis_db.renew_proactive_rate_limit,
+            uid,
+            f"desktop_{operation.value}",
+            reservation_token,
+            window=_QUOTA_WINDOW_SECONDS,
+            lease_seconds=_QUOTA_LEASE_SECONDS,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Proactive metering is temporarily unavailable") from exc
+    if not renewed:
+        raise HTTPException(status_code=503, detail="Proactive metering lease expired")
+
+
+async def _finalize_quota(uid: str, operation: ProactiveOperation, reservation_token: str) -> int:
+    if not reservation_token:
+        raise HTTPException(status_code=503, detail="Proactive metering lease is unavailable")
+    try:
+        finalized, reset_seconds = await run_blocking(
+            critical_executor,
+            redis_db.finalize_proactive_rate_limit,
+            uid,
+            f"desktop_{operation.value}",
+            reservation_token,
+            window=_QUOTA_WINDOW_SECONDS,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Proactive metering is temporarily unavailable") from exc
+    if not finalized:
+        raise HTTPException(status_code=503, detail="Proactive metering lease expired")
+    return reset_seconds
+
+
+async def _release_quota(uid: str, operation: ProactiveOperation, reservation_token: str) -> None:
+    if not reservation_token:
+        return
     try:
         await run_blocking(
             critical_executor,
-            redis_db.release_rate_limit,
+            redis_db.release_proactive_rate_limit,
             uid,
             f"desktop_{operation.value}",
+            reservation_token,
         )
     except Exception:
         logger.exception("Failed to release proactive quota reservation uid=%s operation=%s", uid, operation.value)
@@ -554,9 +587,12 @@ async def _post_provider_completion(
     provider_request: _ProviderRequest,
     *,
     uid: str,
+    operation: ProactiveOperation,
+    reservation_token: str,
     max_completion_tokens: int | None = None,
     record_direct_fallback: bool = False,
 ) -> Any:
+    await _renew_quota(uid, operation, reservation_token)
     paid_boundary_decision = await resolve_jit_rollout(
         uid,
         stage=JITDecisionStage.PAID_BOUNDARY,
@@ -651,7 +687,8 @@ async def _proactive_completion_unobserved(
         if not quota_reserved or quota_released:
             return
         quota_released = True
-        await _release_quota(uid, request.operation)
+        assert quota is not None
+        await _release_quota(uid, request.operation, quota.reservation_token)
 
     request_id = str(uuid4())
     provider_request: _ProviderRequest | None = None
@@ -662,7 +699,13 @@ async def _proactive_completion_unobserved(
         _apply_quota_headers(response, quota)
         provider_request = _proactive_provider_request(request, uid, request_id)
         attempted_max_completion_tokens = provider_request.payload["max_completion_tokens"]
-        response_body = await _post_provider_completion(provider_request, uid=uid, record_direct_fallback=True)
+        response_body = await _post_provider_completion(
+            provider_request,
+            uid=uid,
+            operation=request.operation,
+            reservation_token=quota.reservation_token,
+            record_direct_fallback=True,
+        )
         if _should_retry_truncated_structured_output(
             response_body,
             request,
@@ -688,6 +731,8 @@ async def _proactive_completion_unobserved(
             response_body = await _post_provider_completion(
                 provider_request,
                 uid=uid,
+                operation=request.operation,
+                reservation_token=quota.reservation_token,
                 max_completion_tokens=retry_max,
             )
     except asyncio.CancelledError:
@@ -745,6 +790,17 @@ async def _proactive_completion_unobserved(
     usage = _usage_envelope(response_body)
     provider_model = response_body.get("model")
     assert provider_request is not None
+    assert quota is not None
+    finalized_reset_seconds = await _finalize_quota(uid, request.operation, quota.reservation_token)
+    _apply_quota_headers(
+        response,
+        ProactiveQuotaState(
+            limit=quota.limit,
+            remaining=quota.remaining,
+            reset_seconds=finalized_reset_seconds,
+            reservation_token=quota.reservation_token,
+        ),
+    )
     return ProactiveCompletionEnvelope(
         operation=request.operation,
         lane=lane,
