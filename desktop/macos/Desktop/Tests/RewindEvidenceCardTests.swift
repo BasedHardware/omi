@@ -90,12 +90,21 @@ final class RewindEvidenceCardTests: XCTestCase {
       return XCTFail("owner snapshot should be available for this local resolution test")
     }
     RewindCaptureOwnerGeneration.beginTransition()
-    defer { RewindCaptureOwnerGeneration.endTransition() }
     XCTAssertFalse(owner.isCurrent())
+    let oldLease = RewindEvidenceCardLease(screenshotID: 42, owner: owner)
+    RewindCaptureOwnerGeneration.endTransition()
+    let nextOwner = RewindCaptureOwnerSnapshot.capture()
+    XCTAssertFalse(
+      RewindEvidenceCardResolutionPolicy.leaseIsCurrent(
+        oldLease,
+        screenshotID: 42,
+        currentOwner: nextOwner
+      )
+    )
     XCTAssertEqual(
       RewindEvidenceCardResolutionPolicy.availability(
         localRowExists: true,
-        ownerStillCurrent: owner.isCurrent()
+        ownerStillCurrent: false
       ),
       .unavailable
     )
@@ -111,6 +120,27 @@ final class RewindEvidenceCardTests: XCTestCase {
         ownerStillCurrent: true
       ),
       .unavailable
+    )
+  }
+
+  func testUnavailablePresentationIsDisabledAndAccessible() {
+    let card = RewindEvidenceCardModel(screenshotID: 42)
+
+    XCTAssertFalse(
+      RewindEvidenceCardPresentationPolicy.isOpenable(
+        availability: .unavailable,
+        hasOpenHandler: true
+      )
+    )
+    XCTAssertEqual(
+      RewindEvidenceCardPresentationPolicy.subtitle(for: card, availability: .unavailable),
+      "Unavailable locally · frame 42"
+    )
+    XCTAssertTrue(
+      RewindEvidenceCardPresentationPolicy.accessibilityHint(
+        availability: .unavailable,
+        hasOpenHandler: true
+      ).contains("unavailable locally")
     )
   }
 
@@ -141,7 +171,7 @@ final class RewindEvidenceCardTests: XCTestCase {
     }
   }
 
-  func testTaskDetailLocalEvidenceKeepsAnInertRouteWhenItCannotBeValidated() {
+  func testTaskDetailLocalEvidenceIsOmittedWhenItCannotBeValidated() {
     let task = TaskActionItem(
       id: "task-1",
       description: "Review context",
@@ -160,7 +190,7 @@ final class RewindEvidenceCardTests: XCTestCase {
 
     let links = TaskDetailSourceLinkPolicy.links(for: task)
 
-    XCTAssertEqual(links.first?.route, .rewind)
+    XCTAssertTrue(links.isEmpty)
   }
 
   func testTaskDetailCurrentDeviceEvidenceCarriesTheExactFrameIntoRewind() throws {

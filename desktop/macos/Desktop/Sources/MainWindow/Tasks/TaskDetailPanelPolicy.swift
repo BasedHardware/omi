@@ -156,20 +156,15 @@ enum TaskDetailSourceLinkPolicy {
         subtitle = evidenceID
         systemImage = "brain.head.profile"
       case .local_screen:
-        if let screenshotID = RewindEvidenceCardPolicy.card(
-          for: evidence,
-          currentDeviceID: ClientDeviceService.shared.clientDeviceId
-        )?.screenshotID {
-          route = .rewindFrame(id: screenshotID)
-          title = "Screen evidence"
-          subtitle = "Open Rewind · frame \(screenshotID)"
-        } else {
-          // Keep old/malformed/foreign/future refs as an inert Rewind route rather than treating an
-          // opaque id as a local row. This preserves legacy navigation without crossing owners.
-          route = .rewind
-          title = "Screen context"
-          subtitle = "Open Rewind"
-        }
+        guard
+          let screenshotID = RewindEvidenceCardPolicy.card(
+            for: evidence,
+            currentDeviceID: ClientDeviceService.shared.clientDeviceId
+          )?.screenshotID
+        else { continue }
+        route = .rewindFrame(id: screenshotID)
+        title = "Screen evidence"
+        subtitle = "Open Rewind · frame \(screenshotID)"
         systemImage = "rectangle.dashed.and.paperclip"
       case .external:
         guard let url = URL(string: evidenceID), url.scheme != nil else { continue }
