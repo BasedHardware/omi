@@ -180,7 +180,7 @@ final class MemoryLedgerMirrorTests: XCTestCase {
     XCTAssertEqual(persisted.ledgerEvidence.map(\.evidenceId), ["ev-preserved-through-invalid"])
   }
 
-  func testNewerRedactedEvidenceCannotBeResurrectedByOlderActiveResponse() async throws {
+  func testLocalEditCannotAllowOlderActiveEvidenceAfterIdenticalNewerRedaction() async throws {
     let id = "ledger-evidence-redaction-fence-\(UUID().uuidString)"
     let initial = makeMemory(
       id: id,
@@ -193,26 +193,93 @@ final class MemoryLedgerMirrorTests: XCTestCase {
 
     let newerRedacted = makeMemory(
       id: id,
-      updatedAt: Date(timeIntervalSince1970: 3_000),
+      updatedAt: Date(timeIntervalSince1970: 2_000),
       metadata: [:],
       evidence: [makeEvidence("ev-redaction", redactionStatus: "tombstoned")],
       evidenceIsExplicit: true
     )
     try await MemoryStorage.shared.syncServerMemory(newerRedacted)
 
+    guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else {
+      XCTFail("Database queue unavailable")
+      return
+    }
+    try await dbQueue.write { database in
+      guard var record = try MemoryRecord.filter(Column("backendId") == id).fetchOne(database) else {
+        XCTFail("Expected local ledger row")
+        return
+      }
+      record.content = "Unrelated local edit after redaction"
+      record.updatedAt = Date(timeIntervalSince1970: 4_000)
+      try record.update(database)
+    }
+
+    // This response has the same tombstone payload but a newer server
+    // revision. It must advance the evidence fence even though the local
+    // content edit makes the row newer than the response.
+    let identicalNewerRedacted = makeMemory(
+      id: id,
+      updatedAt: Date(timeIntervalSince1970: 3_000),
+      metadata: [:],
+      evidence: [makeEvidence("ev-redaction", redactionStatus: "tombstoned")],
+      evidenceIsExplicit: true
+    )
+    try await MemoryStorage.shared.syncServerMemories([identicalNewerRedacted])
+
     let olderActive = makeMemory(
       id: id,
-      updatedAt: Date(timeIntervalSince1970: 2_000),
+      updatedAt: Date(timeIntervalSince1970: 2_500),
       metadata: [:],
       evidence: [makeEvidence("ev-redaction", redactionStatus: "active")],
       evidenceIsExplicit: true
     )
-    try await MemoryStorage.shared.syncServerMemory(olderActive)
+    try await MemoryStorage.shared.syncServerMemories([olderActive])
 
     let persistedRecord = try await MemoryStorage.shared.getMemoryByBackendId(id)
     let persisted = try XCTUnwrap(persistedRecord)
+    XCTAssertEqual(persisted.content, "Unrelated local edit after redaction")
     XCTAssertEqual(persisted.ledgerEvidence.first?.redactionStatus, "tombstoned")
     XCTAssertEqual(persisted.ledgerEvidenceRevision, Date(timeIntervalSince1970: 3_000))
+  }
+
+  func testRedactedEvidencePersistenceScrubsArtifactAndDevicePointers() async throws {
+    let id = "ledger-evidence-redaction-sanitize-\(UUID().uuidString)"
+    let memory = makeMemory(
+      id: id,
+      metadata: [:],
+      evidence: [
+        makeEvidence(
+          "ev-private",
+          group: "lineage-1",
+          redactionStatus: "tombstoned",
+          artifactRef: [
+            "uri": OmiAnyCodable("gs://private-artifact"),
+            "quote_ref": OmiAnyCodable("private-quote"),
+          ],
+          clientDeviceId: "device-private",
+          sourceId: "source-1"
+        )
+      ],
+      evidenceIsExplicit: true
+    )
+
+    try await MemoryStorage.shared.syncServerMemory(memory)
+
+    let optionalRecord = try await MemoryStorage.shared.getMemoryByBackendId(id)
+    let persistedRecord = try XCTUnwrap(optionalRecord)
+    let json = try XCTUnwrap(persistedRecord.ledgerEvidenceJson)
+    XCTAssertFalse(json.contains("gs://private-artifact"))
+    XCTAssertFalse(json.contains("private-quote"))
+    XCTAssertFalse(json.contains("device-private"))
+
+    let persisted = try XCTUnwrap(persistedRecord.ledgerEvidence.first)
+    XCTAssertEqual(persisted.evidenceId, "ev-private")
+    XCTAssertEqual(persisted.independenceGroup, "lineage-1")
+    XCTAssertEqual(persisted.sourceId, "source-1")
+    XCTAssertEqual(persisted.sourceType, "conversation")
+    XCTAssertEqual(persisted.redactionStatus, "tombstoned")
+    XCTAssertNil(persisted.artifactRef)
+    XCTAssertNil(persisted.clientDeviceId)
   }
 
   func testEvidenceMigrationPreservesPopulatedPreColumnMemories() throws {
@@ -441,13 +508,19 @@ final class MemoryLedgerMirrorTests: XCTestCase {
   private func makeEvidence(
     _ id: String,
     group: String = "conversation-group",
-    redactionStatus: String? = nil
+    redactionStatus: String? = nil,
+    artifactRef: [String: OmiAnyCodable]? = nil,
+    clientDeviceId: String? = nil,
+    sourceId: String? = nil
   ) -> ServerMemoryEvidence {
     ServerMemoryEvidence(
       OmiAPI.Evidence(
+        artifactRef: artifactRef,
+        clientDeviceId: clientDeviceId,
         evidenceId: id,
         independenceGroup: group,
         redactionStatus: redactionStatus,
+        sourceId: sourceId,
         sourceSignal: "transcript",
         sourceType: "conversation"
       )
