@@ -154,7 +154,7 @@ async def test_off_unknown_and_killed_decisions_do_no_quota_or_provider_work(mon
 
 
 @pytest.mark.asyncio
-async def test_kill_switch_is_refreshed_at_paid_boundary_before_provider(monkeypatch):
+async def test_stale_ingress_allow_then_kill_does_no_quota_or_provider_work(monkeypatch):
     enabled = _rollout_decision(
         rollout=TriState.ENABLED,
         kill_switch=TriState.DISABLED,
@@ -169,7 +169,6 @@ async def test_kill_switch_is_refreshed_at_paid_boundary_before_provider(monkeyp
     )
     resolutions = []
     quota_calls = []
-    releases = []
     provider_calls = []
     provider_selections = []
 
@@ -179,10 +178,7 @@ async def test_kill_switch_is_refreshed_at_paid_boundary_before_provider(monkeyp
 
     async def quota(uid, operation):
         quota_calls.append((uid, operation))
-        return desktop_proactivity.ProactiveQuotaState(limit=10, remaining=9, reset_seconds=60)
-
-    async def release(uid, operation):
-        releases.append((uid, operation))
+        raise AssertionError('quota must not be reserved after the paid-boundary kill refresh')
 
     async def provider(*_args, **_kwargs):
         provider_calls.append(True)
@@ -194,7 +190,6 @@ async def test_kill_switch_is_refreshed_at_paid_boundary_before_provider(monkeyp
 
     monkeypatch.setattr(desktop_proactivity, 'resolve_jit_rollout', resolve)
     monkeypatch.setattr(desktop_proactivity, '_consume_quota', quota)
-    monkeypatch.setattr(desktop_proactivity, '_release_quota', release)
     monkeypatch.setattr(desktop_proactivity, '_proactive_provider_request', provider_selection)
     monkeypatch.setattr(desktop_proactivity, '_post_provider_completion', provider)
     monkeypatch.setattr(desktop_proactivity, 'llm_stub_enabled', lambda: False)
@@ -207,8 +202,7 @@ async def test_kill_switch_is_refreshed_at_paid_boundary_before_provider(monkeyp
         (desktop_proactivity.JITDecisionStage.INGRESS, False),
         (desktop_proactivity.JITDecisionStage.PAID_BOUNDARY, True),
     ]
-    assert quota_calls == [('user-1', desktop_proactivity.ProactiveOperation.EXTRACTION)]
-    assert releases == [('user-1', desktop_proactivity.ProactiveOperation.EXTRACTION)]
+    assert quota_calls == []
     assert provider_selections == []
     assert provider_calls == []
 
@@ -826,6 +820,93 @@ async def test_direct_extraction_retries_length_once_without_extra_quota_reserva
         "outcome": "recovered",
         "log": None,
     }
+
+
+@pytest.mark.asyncio
+async def test_kill_toggle_after_first_provider_call_denies_length_retry(monkeypatch):
+    terminal = _capture_proactivity_journeys(monkeypatch)
+    calls = []
+    resolutions = []
+    consumed = []
+    released = []
+    fallbacks = []
+    kill_state = {'enabled': False}
+    enabled = _rollout_decision(
+        rollout=TriState.ENABLED,
+        kill_switch=TriState.DISABLED,
+        effective=TriState.ENABLED,
+        reason=JITDecisionReason.ROLLOUT_ENABLED,
+    )
+    killed = _rollout_decision(
+        rollout=TriState.ENABLED,
+        kill_switch=TriState.ENABLED,
+        effective=TriState.DISABLED,
+        reason=JITDecisionReason.KILL_SWITCH_ENABLED,
+    )
+
+    class DirectClient:
+        async def post(self, url, *, headers, json):
+            calls.append((url, headers, json))
+            kill_state['enabled'] = True
+            return httpx.Response(
+                200,
+                request=httpx.Request('POST', url),
+                json={'choices': [{'finish_reason': 'length', 'message': {'content': ''}}]},
+            )
+
+    class Semaphore:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+    async def resolve(_uid, *, stage, force_refresh=False):
+        resolutions.append((stage, force_refresh))
+        return killed if kill_state['enabled'] else enabled
+
+    async def consume(uid, operation):
+        consumed.append((uid, operation))
+
+    async def release(uid, operation):
+        released.append((uid, operation))
+
+    monkeypatch.setattr(desktop_proactivity, 'resolve_jit_rollout', resolve)
+    monkeypatch.setattr(desktop_proactivity, 'llm_stub_enabled', lambda: False)
+    monkeypatch.delenv('OMI_LLM_GATEWAY_URL', raising=False)
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setattr(desktop_proactivity, 'get_openai_api_key', lambda: 'dev-provider-key')
+    monkeypatch.setattr(desktop_proactivity, 'record_fallback', lambda **values: fallbacks.append(values))
+    monkeypatch.setattr(desktop_proactivity, '_consume_quota', consume)
+    monkeypatch.setattr(desktop_proactivity, '_release_quota', release)
+    monkeypatch.setattr(desktop_proactivity, 'get_llm_gateway_client', lambda: DirectClient())
+    monkeypatch.setattr(desktop_proactivity, 'get_llm_gateway_semaphore', lambda: Semaphore())
+
+    with pytest.raises(desktop_proactivity.HTTPException) as blocked:
+        await desktop_proactivity.proactive_completion(
+            request(),
+            Response(),
+            uid='user-1',
+            x_app_platform='macos',
+        )
+
+    assert blocked.value.status_code == 403
+    assert blocked.value.detail == {
+        'code': 'jit_rollout_not_enabled',
+        'decision': 'disabled',
+        'reason': 'kill_switch_enabled',
+    }
+    assert resolutions == [
+        (desktop_proactivity.JITDecisionStage.INGRESS, False),
+        (desktop_proactivity.JITDecisionStage.PAID_BOUNDARY, True),
+        (desktop_proactivity.JITDecisionStage.PAID_BOUNDARY, True),
+        (desktop_proactivity.JITDecisionStage.PAID_BOUNDARY, True),
+    ]
+    assert len(calls) == 1
+    assert consumed == [('user-1', desktop_proactivity.ProactiveOperation.EXTRACTION)]
+    assert released == [('user-1', desktop_proactivity.ProactiveOperation.EXTRACTION)]
+    assert len(fallbacks) == 1
+    assert terminal == [('desktop_proactivity', 'desktop_macos', 'degraded', 'rollout_disabled')]
 
 
 @pytest.mark.asyncio

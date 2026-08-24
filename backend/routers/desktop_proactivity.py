@@ -541,8 +541,15 @@ def _record_length_retry_outcome(provider_request: _ProviderRequest, outcome: st
 async def _post_provider_completion(
     provider_request: _ProviderRequest,
     *,
+    uid: str,
     max_completion_tokens: int | None = None,
 ) -> Any:
+    paid_boundary_decision = await resolve_jit_rollout(
+        uid,
+        stage=JITDecisionStage.PAID_BOUNDARY,
+        force_refresh=True,
+    )
+    _require_jit_rollout(paid_boundary_decision)
     payload = provider_request.payload
     if max_completion_tokens is not None:
         payload = {**payload, "max_completion_tokens": max_completion_tokens}
@@ -604,21 +611,23 @@ async def _proactive_completion_unobserved(
             response=response_body,
         )
 
+    # A cached ingress allow is not admission to mutate quota. Refresh first so
+    # a newly-enabled kill switch or provider uncertainty performs no quota work.
+    paid_admission = await resolve_jit_rollout(
+        uid,
+        stage=JITDecisionStage.PAID_BOUNDARY,
+        force_refresh=True,
+    )
+    _require_jit_rollout(paid_admission)
     quota = await _consume_quota(uid, request.operation)
     _apply_quota_headers(response, quota)
     request_id = str(uuid4())
     provider_request: _ProviderRequest | None = None
     length_retry_attempted = False
     try:
-        paid_boundary_decision = await resolve_jit_rollout(
-            uid,
-            stage=JITDecisionStage.PAID_BOUNDARY,
-            force_refresh=True,
-        )
-        _require_jit_rollout(paid_boundary_decision)
         provider_request = _proactive_provider_request(request, uid, request_id)
         attempted_max_completion_tokens = provider_request.payload["max_completion_tokens"]
-        response_body = await _post_provider_completion(provider_request)
+        response_body = await _post_provider_completion(provider_request, uid=uid)
         if _should_retry_truncated_structured_output(
             response_body,
             request,
@@ -643,10 +652,11 @@ async def _proactive_completion_unobserved(
             )
             response_body = await _post_provider_completion(
                 provider_request,
+                uid=uid,
                 max_completion_tokens=retry_max,
             )
-    except HTTPException:
-        if length_retry_attempted and provider_request is not None:
+    except HTTPException as exc:
+        if length_retry_attempted and provider_request is not None and not _is_jit_rollout_block(exc):
             _record_length_retry_outcome(provider_request, "exhausted")
         await _release_quota(uid, request.operation)
         raise
@@ -719,6 +729,14 @@ def _require_jit_rollout(decision: JITRolloutDecision) -> None:
     )
 
 
+def _is_jit_rollout_block(exc: HTTPException) -> bool:
+    return bool(
+        exc.status_code == 403
+        and isinstance(exc.detail, Mapping)
+        and exc.detail.get('code') == 'jit_rollout_not_enabled'
+    )
+
+
 def _invalid_structured_output() -> HTTPException:
     return HTTPException(status_code=_INVALID_STRUCTURED_OUTPUT_STATUS, detail=_INVALID_STRUCTURED_OUTPUT_DETAIL)
 
@@ -765,12 +783,7 @@ async def proactive_completion(
     except Exception as exc:
         if isinstance(exc, HTTPException) and exc.status_code == 429:
             attempt.degrade('quota_capped')
-        elif (
-            isinstance(exc, HTTPException)
-            and exc.status_code == 403
-            and isinstance(exc.detail, Mapping)
-            and exc.detail.get('code') == 'jit_rollout_not_enabled'
-        ):
+        elif isinstance(exc, HTTPException) and _is_jit_rollout_block(exc):
             attempt.degrade('rollout_disabled')
         else:
             attempt.fail(_proactivity_issue_class(exc))
