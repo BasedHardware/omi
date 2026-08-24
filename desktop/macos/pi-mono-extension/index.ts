@@ -73,6 +73,19 @@ export function omiReasoningEffortFromRelayContext(raw: string): string | undefi
   }
 }
 
+export type OmiBuiltInToolPolicy = "default" | "read_only";
+
+/** Kernel-minted adapter-native authority. Unknown or malformed context fails
+ * closed; only an explicit kernel-written default token enables mutation. */
+export function omiBuiltInToolPolicyFromRelayContext(raw: string): OmiBuiltInToolPolicy {
+  try {
+    const parsed = JSON.parse(raw) as { builtInToolPolicy?: unknown };
+    return parsed.builtInToolPolicy === "default" ? "default" : "read_only";
+  } catch {
+    return "read_only";
+  }
+}
+
 async function omiRelayContextRaw(): Promise<string | undefined> {
   const contextFile = process.env.OMI_CONTEXT_FILE;
   if (!contextFile) return undefined;
@@ -348,9 +361,18 @@ export function classifyFileWrite(filePath: string): DenyDecision | null {
 }
 
 /** Classify a whole tool_call event by dispatching on toolName.
- *  When OMI_YOLO_MODE=1, all tool calls are allowed (no denylist).
- *  Yolo mode is gated by the adapter — only forwarded from dev builds. */
-export function inspectToolCall(event: ToolCallEvent): DenyDecision | null {
+ *  When OMI_YOLO_MODE=1, the ordinary interactive denylist is bypassed.
+ *  Kernel read-only authority remains mandatory in every build. */
+export function inspectToolCall(
+  event: ToolCallEvent,
+  builtInToolPolicy: OmiBuiltInToolPolicy = "default",
+): DenyDecision | null {
+  if (
+    builtInToolPolicy === "read_only"
+    && ["bash", "write", "edit", "edit-diff"].includes(event.toolName)
+  ) {
+    return { blocked: true, reason: "Ask-mode service runs have read-only adapter authority" };
+  }
   if (process.env.OMI_YOLO_MODE === "1") {
     process.stderr.write(`[omi-provider] YOLO bypass: ${event.toolName}\n`);
     return null;
@@ -866,11 +888,14 @@ export default function omiProvider(pi: ExtensionAPI): void {
 
   pi.on("tool_call", async (event): Promise<ToolCallEventResult | void> => {
     let decision: DenyDecision | null = null;
+    let builtInToolPolicy: OmiBuiltInToolPolicy = "read_only";
     try {
-      decision = inspectToolCall(event);
+      const relayContext = await omiRelayContextRaw();
+      builtInToolPolicy = relayContext === undefined
+        ? "read_only"
+        : omiBuiltInToolPolicyFromRelayContext(relayContext);
     } catch (err) {
-      // Never let classifier bugs block execution. Fail-open for the
-      // denylist and log the error through the audit channel.
+      // Authority transport failures fail closed for adapter mutations.
       const msg = err instanceof Error ? err.message : String(err);
       void appendAudit({
         ts: new Date().toISOString(),
@@ -880,8 +905,8 @@ export default function omiProvider(pi: ExtensionAPI): void {
         reason: `classifier threw: ${msg}`,
         summary: summarizeInput(event),
       });
-      return undefined;
     }
+    decision = inspectToolCall(event, builtInToolPolicy);
 
     void appendAudit({
       ts: new Date().toISOString(),

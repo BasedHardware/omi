@@ -128,11 +128,16 @@ actor JITProactivityRuntime {
       guard let action = winner.0.action, action.isValid else {
         return .suppressed(reason: "planned_action_invalid")
       }
-      let stableAmbientFingerprint = ambient.flatMap {
-        $0.semanticFingerprint.count == 64 ? $0.semanticFingerprint : nil
-      }
-      let continuityFingerprint = stableAmbientFingerprint ?? winner.1.observationFingerprint
-      let continuityKey = "jit-context:\(continuityFingerprint)"
+      let continuityFingerprint = winner.1.observationFingerprint
+      // One receipt identifies one planned occurrence, not a context forever.
+      // Day permits a recurring standing trigger to run again; trigger and
+      // authoritative snapshot revision admit changed actions; the normalized
+      // observation fingerprint suppresses duplicates within that occurrence.
+      let continuityKey = Self.plannedContinuityKey(
+        triggerID: winner.0.id,
+        snapshotRevision: receipt.snapshotRevision,
+        budgetDay: day,
+        observationFingerprint: continuityFingerprint)
       guard
         let claim = try await mirror.claimWakeup(
           continuityKey: continuityKey,
@@ -182,7 +187,12 @@ actor JITProactivityRuntime {
     let triage = await nanoTriage(context, authorizationSnapshot)
     // Every provider attempt, including unknown/malformed, spends the bounded
     // nano budget so a flaky response cannot create an unbounded retry loop.
-    await mirror.finishWakeup(nanoClaim, delivered: true)
+    guard
+      await mirror.completeAmbientNanoAttempt(
+        nanoClaim,
+        contextID: context.id,
+        semanticFingerprint: context.semanticFingerprint)
+    else { return .suppressed(reason: "ambient_nano_receipt_unavailable") }
     guard triage == .approved else {
       return .suppressed(reason: "ambient_nano_rejected")
     }
@@ -223,6 +233,16 @@ actor JITProactivityRuntime {
 
   func finish(_ execution: JITPlannedExecution, delivered: Bool) async {
     await mirror.finishWakeup(execution.claim, delivered: delivered)
+  }
+
+  static func plannedContinuityKey(
+    triggerID: String,
+    snapshotRevision: String,
+    budgetDay: String,
+    observationFingerprint: String
+  ) -> String {
+    ["jit-planned", triggerID, snapshotRevision, budgetDay, observationFingerprint]
+      .joined(separator: ":")
   }
 
   private static func day(for date: Date) -> String {

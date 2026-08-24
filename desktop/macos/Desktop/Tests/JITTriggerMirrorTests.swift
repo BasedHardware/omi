@@ -127,23 +127,63 @@ final class JITTriggerMirrorTests: XCTestCase {
     }
   }
 
-  func testAmbientSemanticRevisitDoesNotSpendNanoBudgetUntilContentChanges() throws {
+  func testAmbientSemanticStateAdvancesOnlyAfterProviderAttemptAndCrashCanRecover() throws {
     let queue = try migratedQueue()
+    let now = Date(timeIntervalSince1970: 100)
     try queue.write { db in
       let first = try JITTriggerMirror.claimAmbientNanoChange(
         contextID: "bucket", semanticFingerprint: "stable", budgetDay: "2026-08-24",
-        snapshotRevision: "r", budget: 8, now: Date(), in: db)
-      let unchanged = try JITTriggerMirror.claimAmbientNanoChange(
-        contextID: "bucket", semanticFingerprint: "stable", budgetDay: "2026-08-24",
-        snapshotRevision: "r", budget: 8, now: Date().addingTimeInterval(1), in: db)
-      let changed = try JITTriggerMirror.claimAmbientNanoChange(
-        contextID: "bucket", semanticFingerprint: "changed", budgetDay: "2026-08-24",
-        snapshotRevision: "r", budget: 8, now: Date().addingTimeInterval(2), in: db)
-
+        snapshotRevision: "r", budget: 8, now: now, in: db)
       XCTAssertNotNil(first)
-      XCTAssertNil(unchanged)
-      XCTAssertNotNil(changed)
+      XCTAssertEqual(
+        try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM jit_ambient_context_state"), 0)
+
+      let beforeLeaseExpiry = try JITTriggerMirror.claimAmbientNanoChange(
+        contextID: "bucket", semanticFingerprint: "stable", budgetDay: "2026-08-24",
+        snapshotRevision: "r", budget: 8, now: now.addingTimeInterval(1), in: db)
+      XCTAssertNil(beforeLeaseExpiry)
+
+      let recovered = try JITTriggerMirror.claimAmbientNanoChange(
+        contextID: "bucket", semanticFingerprint: "stable", budgetDay: "2026-08-24",
+        snapshotRevision: "r", budget: 8, now: now.addingTimeInterval(181), in: db)
+      XCTAssertNotNil(recovered)
+      XCTAssertNotEqual(first?.leaseToken, recovered?.leaseToken)
+      XCTAssertTrue(
+        try JITTriggerMirror.completeAmbientNanoAttempt(
+          recovered!, contextID: "bucket", semanticFingerprint: "stable",
+          now: now.addingTimeInterval(182), in: db))
+
+      let unchangedAfterCompletion = try JITTriggerMirror.claimAmbientNanoChange(
+        contextID: "bucket", semanticFingerprint: "stable", budgetDay: "2026-08-24",
+        snapshotRevision: "r", budget: 8, now: now.addingTimeInterval(183), in: db)
+      let changedAfterCompletion = try JITTriggerMirror.claimAmbientNanoChange(
+        contextID: "bucket", semanticFingerprint: "changed", budgetDay: "2026-08-24",
+        snapshotRevision: "r", budget: 8, now: now.addingTimeInterval(184), in: db)
+
+      XCTAssertNil(unchangedAfterCompletion)
+      XCTAssertNotNil(changedAfterCompletion)
     }
+  }
+
+  func testPlannedContinuityRecursAcrossDaysAndSnapshotRevisions() {
+    let first = JITProactivityRuntime.plannedContinuityKey(
+      triggerID: "standing", snapshotRevision: "r1", budgetDay: "2026-08-24",
+      observationFingerprint: "same")
+    XCTAssertEqual(
+      first,
+      JITProactivityRuntime.plannedContinuityKey(
+        triggerID: "standing", snapshotRevision: "r1", budgetDay: "2026-08-24",
+        observationFingerprint: "same"))
+    XCTAssertNotEqual(
+      first,
+      JITProactivityRuntime.plannedContinuityKey(
+        triggerID: "standing", snapshotRevision: "r1", budgetDay: "2026-08-25",
+        observationFingerprint: "same"))
+    XCTAssertNotEqual(
+      first,
+      JITProactivityRuntime.plannedContinuityKey(
+        triggerID: "standing", snapshotRevision: "r2", budgetDay: "2026-08-24",
+        observationFingerprint: "same"))
   }
 
   private func migratedQueue() throws -> DatabaseQueue {
