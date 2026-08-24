@@ -7,6 +7,14 @@ struct JITPlannedExecution: Equatable, Sendable {
   let continuityKey: String
   let prompt: String
   let claim: JITTriggerWakeupClaim
+  /// Planned turns retain the exact authority that purchased their claim so the delivery path can
+  /// revalidate it immediately before starting model work. Ambient turns have no ledger trigger.
+  let plannedAuthority: JITPlannedExecutionAuthority?
+}
+
+struct JITPlannedExecutionAuthority: Equatable, Sendable {
+  let receipt: JITTriggerMirrorReceipt
+  let triggerRow: JITTriggerSnapshotRow
 }
 
 struct JITAmbientRuntimeContext: Equatable, Sendable {
@@ -48,6 +56,8 @@ actor JITProactivityRuntime {
   typealias ReadWakeupCounts = @Sendable ([String], String, Date) async throws -> [String: Int]
   typealias ClaimWakeup =
     @Sendable (JITPlannedWakeupRequest) async throws -> JITTriggerWakeupClaim?
+  typealias BeginPlannedExecution =
+    @Sendable (JITPlannedExecutionAuthority, JITTriggerWakeupClaim) async throws -> Bool
   typealias AuthorizationCurrent = @Sendable (RuntimeOwnerAuthorizationSnapshot) -> Bool
   private let flags: FlagResolver
   private let snapshots: SnapshotResolver
@@ -57,6 +67,7 @@ actor JITProactivityRuntime {
   private let compileSnapshot: CompileSnapshot?
   private let readWakeupCounts: ReadWakeupCounts?
   private let claimPlannedWakeup: ClaimWakeup?
+  private let beginPlannedExecution: BeginPlannedExecution?
   private let authorizationCurrent: AuthorizationCurrent
   private var pending: [String: JITPlannedExecution] = [:]
 
@@ -103,6 +114,7 @@ actor JITProactivityRuntime {
     compileSnapshot: CompileSnapshot? = nil,
     readWakeupCounts: ReadWakeupCounts? = nil,
     claimPlannedWakeup: ClaimWakeup? = nil,
+    beginPlannedExecution: BeginPlannedExecution? = nil,
     authorizationCurrent: @escaping AuthorizationCurrent = { snapshot in
       RuntimeOwnerIdentity.isAuthorizationCurrent(snapshot)
     }
@@ -115,6 +127,7 @@ actor JITProactivityRuntime {
     self.compileSnapshot = compileSnapshot
     self.readWakeupCounts = readWakeupCounts
     self.claimPlannedWakeup = claimPlannedWakeup
+    self.beginPlannedExecution = beginPlannedExecution
     self.authorizationCurrent = authorizationCurrent
   }
 
@@ -213,7 +226,8 @@ actor JITProactivityRuntime {
         triggerID: trigger.id,
         continuityKey: continuityKey,
         prompt: action.prompt,
-        claim: claim)
+        claim: claim,
+        plannedAuthority: JITPlannedExecutionAuthority(receipt: receipt, triggerRow: triggerRow))
       return .deliver(lane: .planned, id: trigger.id, continuityKey: continuityKey)
     } catch {
       return .suppressed(reason: "authoritative_snapshot_unavailable")
@@ -335,12 +349,30 @@ actor JITProactivityRuntime {
         context. It must change the user's next action. Do not merely recap, praise, or create a
         permanent trigger. Use task_candidate only when a concrete actionable task is supported.
         """,
-      claim: claim)
+      claim: claim,
+      plannedAuthority: nil)
     return .deliver(lane: .ambient, id: context.id, continuityKey: continuityKey)
   }
 
   func takeExecution(continuityKey: String) -> JITPlannedExecution? {
     pending.removeValue(forKey: continuityKey)
+  }
+
+  /// This is the final planned-trigger authority fence and must run immediately before the agent
+  /// turn starts. A newer reconciliation may have deleted or changed a trigger after admission
+  /// returned a delivery decision but before the coordinator completed its other local gates.
+  func beginExecution(_ execution: JITPlannedExecution) async -> Bool {
+    guard execution.lane == .planned else { return true }
+    guard let authority = execution.plannedAuthority else { return false }
+    do {
+      if let beginPlannedExecution {
+        return try await beginPlannedExecution(authority, execution.claim)
+      }
+      return try await mirror.beginPlannedExecution(
+        authority, claim: execution.claim)
+    } catch {
+      return false
+    }
   }
 
   func finish(_ execution: JITPlannedExecution, delivered: Bool) async {

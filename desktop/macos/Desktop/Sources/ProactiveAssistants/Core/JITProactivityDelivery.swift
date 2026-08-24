@@ -152,6 +152,10 @@ actor JITProactivityDelivery {
       JSON object with decision, title, message, reasoning, bucket_entry_refs, and fact_ids.
       Cite at least one exact fact:<id> handle from current validated context for non-silence.
       """
+    guard await JITProactivityRuntime.shared.beginExecution(execution) else {
+      await terminalize(deliveryID, failure: "jit_trigger_authority_changed", state: "suppressed")
+      return await finish(execution, delivered: false)
+    }
     do {
       let result = try await JITProactivityAgentAuthority.run(
         JITProactivityAgentRequest(

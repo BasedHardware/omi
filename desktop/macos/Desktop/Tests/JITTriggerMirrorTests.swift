@@ -166,6 +166,41 @@ final class JITTriggerMirrorTests: XCTestCase {
     XCTAssertNotNil(claim)
   }
 
+  func testExecutionStartAtomicallyConsumesOneCurrentPlannedClaim() throws {
+    let queue = try migratedQueue()
+    let now = Date(timeIntervalSince1970: 100)
+    let currentRow = row(id: "trigger")
+    let receipt = try queue.write { db in
+      try JITTriggerMirror.reconcile(
+        snapshot(sequence: 4, revision: "revision-4", rows: [currentRow]),
+        in: db, now: now)
+    }
+    let claim = try XCTUnwrap(
+      queue.write { db in
+        try JITTriggerMirror.claimPlannedWakeup(
+          plannedRequest(receipt: receipt, triggerRow: currentRow), in: db)
+      })
+    let authority = JITPlannedExecutionAuthority(receipt: receipt, triggerRow: currentRow)
+
+    let began = try queue.write { db in
+      try JITTriggerMirror.beginPlannedExecution(
+        authority, claim: claim, now: now.addingTimeInterval(1), in: db)
+    }
+    let replay = try queue.write { db in
+      try JITTriggerMirror.beginPlannedExecution(
+        authority, claim: claim, now: now.addingTimeInterval(2), in: db)
+    }
+    let state = try queue.read { db in
+      try String.fetchOne(
+        db, sql: "SELECT state FROM jit_trigger_wakeup_receipts WHERE continuityKey = ?",
+        arguments: [claim.continuityKey])
+    }
+
+    XCTAssertTrue(began)
+    XCTAssertFalse(replay)
+    XCTAssertEqual(state, "executing")
+  }
+
   func testOwnerTransitionCannotReuseOldReceiptAgainstIdenticalMirrorRow() throws {
     let queue = try migratedQueue()
     let currentRow = row(id: "trigger")
@@ -238,13 +273,14 @@ final class JITTriggerMirrorTests: XCTestCase {
     }
   }
 
-  func testWakeupCountsIncludeDeliveredAndLiveClaimsButExcludeExpiredAndFailed() throws {
+  func testWakeupCountsIncludeDeliveredLiveClaimsAndExecutingButExcludeExpiredAndFailed() throws {
     let queue = try migratedQueue()
     let now = Date(timeIntervalSince1970: 1_000)
     try queue.write { db in
       for (key, triggerID, state, expiry) in [
         ("delivered", "a", "delivered", now.addingTimeInterval(-10)),
         ("live", "a", "claimed", now.addingTimeInterval(10)),
+        ("executing", "a", "executing", now.addingTimeInterval(10)),
         ("expired", "a", "claimed", now.addingTimeInterval(-1)),
         ("failed", "a", "failed", now.addingTimeInterval(10)),
         ("other", "b", "delivered", now.addingTimeInterval(10)),
@@ -265,7 +301,7 @@ final class JITTriggerMirrorTests: XCTestCase {
         triggerIDs: ["b", "a", "a"], budgetDay: "2026-08-24", now: now, in: db)
     }
 
-    XCTAssertEqual(counts, ["a": 2, "b": 1])
+    XCTAssertEqual(counts, ["a": 3, "b": 1])
   }
 
   func testWakeupCountsRejectMoreThanSnapshotBound() throws {

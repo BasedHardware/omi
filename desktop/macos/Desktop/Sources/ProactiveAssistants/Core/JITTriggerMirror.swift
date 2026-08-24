@@ -333,6 +333,19 @@ actor JITTriggerMirror {
     }
   }
 
+  func beginPlannedExecution(
+    _ authority: JITPlannedExecutionAuthority,
+    claim: JITTriggerWakeupClaim,
+    now: Date = Date()
+  ) async throws -> Bool {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { throw JITTriggerMirrorError.databaseUnavailable }
+    return try await pool.write { db in
+      try Self.beginPlannedExecution(
+        authority, claim: claim, now: now, in: db)
+    }
+  }
+
   func wakeupCounts(
     triggerIDs: [String],
     budgetDay: String,
@@ -366,7 +379,7 @@ actor JITTriggerMirror {
         SELECT triggerID, COUNT(*) AS used
         FROM jit_trigger_wakeup_receipts
         WHERE triggerID IN (\(placeholders)) AND budgetDay = ?
-          AND (state = 'delivered' OR (state = 'claimed' AND leaseExpiresAt > ?))
+          AND (state = 'delivered' OR (state IN ('claimed', 'executing') AND leaseExpiresAt > ?))
         GROUP BY triggerID
         """,
       arguments: StatementArguments(arguments)
@@ -505,7 +518,9 @@ actor JITTriggerMirror {
     {
       let state: String = existing["state"]
       let leaseExpiresAt: Date? = existing["leaseExpiresAt"]
-      if state == "delivered" || (state == "claimed" && (leaseExpiresAt ?? .distantPast) > now) {
+      if state == "delivered"
+        || (["claimed", "executing"].contains(state) && (leaseExpiresAt ?? .distantPast) > now)
+      {
         return nil
       }
     }
@@ -515,7 +530,7 @@ actor JITTriggerMirror {
         sql: """
           SELECT COUNT(*) FROM jit_trigger_wakeup_receipts
           WHERE triggerID = ? AND budgetDay = ?
-            AND (state = 'delivered' OR (state = 'claimed' AND leaseExpiresAt > ?))
+            AND (state = 'delivered' OR (state IN ('claimed', 'executing') AND leaseExpiresAt > ?))
           """,
         arguments: [triggerID, budgetDay, now]) ?? 0
     if let budget, used >= budget { return nil }
@@ -588,6 +603,67 @@ actor JITTriggerMirror {
       in: db)
   }
 
+  static func beginPlannedExecution(
+    _ authority: JITPlannedExecutionAuthority,
+    claim: JITTriggerWakeupClaim,
+    now: Date,
+    in db: Database
+  ) throws -> Bool {
+    let receipt = authority.receipt
+    let triggerRow = authority.triggerRow
+    guard claim.triggerID == triggerRow.memoryID,
+      let currentReceipt = try Row.fetchOne(
+        db,
+        sql: """
+          SELECT accountGeneration, commitSequence, snapshotRevision, rowCount
+          FROM jit_trigger_snapshot_receipts WHERE ownerID = ?
+          """,
+        arguments: [receipt.ownerID]),
+      (currentReceipt["accountGeneration"] as Int) == receipt.accountGeneration,
+      (currentReceipt["commitSequence"] as Int) == receipt.commitSequence,
+      (currentReceipt["snapshotRevision"] as String) == receipt.snapshotRevision,
+      (currentReceipt["rowCount"] as Int) == receipt.rowCount,
+      let currentTrigger = try Row.fetchOne(
+        db,
+        sql: """
+          SELECT accountGeneration, itemRevision, updatedAt, conditionJSON,
+                 actionType, actionPrompt, wakeupBudgetPerDay
+          FROM jit_trigger_mirror WHERE memoryID = ?
+          """,
+        arguments: [claim.triggerID]),
+      (currentTrigger["accountGeneration"] as Int) == receipt.accountGeneration,
+      (currentTrigger["itemRevision"] as Int) == triggerRow.itemRevision,
+      (currentTrigger["updatedAt"] as Date) == triggerRow.updatedAt,
+      (currentTrigger["conditionJSON"] as String) == triggerRow.triggerConditionJSON,
+      (currentTrigger["actionType"] as String) == triggerRow.action.type,
+      (currentTrigger["actionPrompt"] as String) == triggerRow.action.prompt,
+      (currentTrigger["wakeupBudgetPerDay"] as Int?) == triggerRow.wakeupBudgetPerDay,
+      let wakeup = try Row.fetchOne(
+        db,
+        sql: """
+          SELECT lane, snapshotRevision, state, leaseToken, leaseExpiresAt
+          FROM jit_trigger_wakeup_receipts WHERE continuityKey = ? AND triggerID = ?
+          """,
+        arguments: [claim.continuityKey, claim.triggerID]),
+      (wakeup["lane"] as String) == JITProactivityLane.planned.rawValue,
+      (wakeup["snapshotRevision"] as String) == receipt.snapshotRevision,
+      (wakeup["state"] as String) == "claimed",
+      (wakeup["leaseToken"] as String?) == claim.leaseToken,
+      ((wakeup["leaseExpiresAt"] as Date?) ?? .distantPast) > now
+    else { return false }
+    // This state transition is the durable execution-start boundary. A reconciliation that commits
+    // before it makes the transaction fail closed; one that commits afterward cannot retroactively
+    // revoke a turn whose model-work lease has already started.
+    try db.execute(
+      sql: """
+        UPDATE jit_trigger_wakeup_receipts
+        SET state = 'executing', updatedAt = ?
+        WHERE continuityKey = ? AND triggerID = ? AND leaseToken = ? AND state = 'claimed'
+        """,
+      arguments: [now, claim.continuityKey, claim.triggerID, claim.leaseToken])
+    return db.changesCount == 1
+  }
+
   func finishWakeup(_ claim: JITTriggerWakeupClaim, delivered: Bool, now: Date = Date()) async {
     let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
     guard let pool else { return }
@@ -596,7 +672,7 @@ actor JITTriggerMirror {
         sql: """
           UPDATE jit_trigger_wakeup_receipts
           SET state = ?, leaseToken = NULL, leaseExpiresAt = NULL, updatedAt = ?
-          WHERE continuityKey = ? AND leaseToken = ? AND state = 'claimed'
+          WHERE continuityKey = ? AND leaseToken = ? AND state IN ('claimed', 'executing')
           """,
         arguments: [delivered ? "delivered" : "failed", now, claim.continuityKey, claim.leaseToken])
     }

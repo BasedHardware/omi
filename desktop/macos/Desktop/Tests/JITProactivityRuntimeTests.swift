@@ -212,6 +212,47 @@ final class JITProactivityRuntimeTests: XCTestCase {
     XCTAssertNil(pending)
   }
 
+  func testReconciliationAfterClaimRejectsExecutionBeforeAgentTurnStarts() async throws {
+    let queue = try migratedQueue()
+    let trigger = try compiledTrigger(id: "planned", condition: ["keywords": ["release"]])
+    let row = try snapshotRow(for: trigger)
+    let admittedSnapshot = serverSnapshot(sequence: 4, revision: "revision-4", rows: [row])
+    let deletedSnapshot = serverSnapshot(sequence: 5, revision: "revision-5", rows: [])
+    let now = Date()
+    let runtime = JITProactivityRuntime(
+      flags: { _ in JITProactivityFlags(rollout: .enabled, killSwitch: .disabled) },
+      snapshots: { _ in admittedSnapshot },
+      reconcileSnapshot: { snapshot, _ in
+        try queue.write { db in try JITTriggerMirror.reconcile(snapshot, in: db, now: now) }
+      },
+      compileSnapshot: { _, _ in [trigger] },
+      readWakeupCounts: { _, _, _ in [:] },
+      claimPlannedWakeup: { request in
+        try queue.write { db in try JITTriggerMirror.claimPlannedWakeup(request, in: db) }
+      },
+      beginPlannedExecution: { authority, claim in
+        try queue.write { db in
+          try JITTriggerMirror.beginPlannedExecution(
+            authority, claim: claim, now: now.addingTimeInterval(1), in: db)
+        }
+      },
+      authorizationCurrent: { _ in true })
+
+    let decision = await runtime.admission(
+      authorizationSnapshot: try snapshot(),
+      observation: .init(text: "release", occurredAt: now))
+    guard case .deliver(.planned, "planned", let continuityKey) = decision,
+      let execution = await runtime.takeExecution(continuityKey: continuityKey)
+    else { return XCTFail("expected a claimed planned execution: \(decision)") }
+
+    try await queue.write { db in
+      _ = try JITTriggerMirror.reconcile(deletedSnapshot, in: db, now: now.addingTimeInterval(1))
+    }
+
+    let mayBegin = await runtime.beginExecution(execution)
+    XCTAssertFalse(mayBegin)
+  }
+
   func testAmbientLocalGateDoesNotUseHistoricalIntentWords() {
     let historicalWords = JITAmbientRuntimeContext(
       id: "bucket:1", semanticFingerprint: String(repeating: "a", count: 64), locallyRelevant: true,
