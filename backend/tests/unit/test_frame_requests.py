@@ -2,10 +2,31 @@ from datetime import datetime, timezone
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+import pytest
 
 from models.frame_request import FrameRequest, FrameRequestState
 from routers import frame_requests
 from utils.other.endpoints import get_current_user_uid
+from utils.retrieval.frame_request_authority import (
+    DisabledFrameRequestAuthority,
+    FrameRequestAuthorityDecision,
+    set_frame_request_authority_for_tests,
+)
+
+
+class _EnabledAuthority:
+    def __init__(self, generation: int):
+        self.generation = generation
+
+    def decide(self, uid: str) -> FrameRequestAuthorityDecision:
+        return FrameRequestAuthorityDecision(enabled=True, account_generation=self.generation)
+
+
+@pytest.fixture(autouse=True)
+def _reset_authority():
+    set_frame_request_authority_for_tests(DisabledFrameRequestAuthority())
+    yield
+    set_frame_request_authority_for_tests(DisabledFrameRequestAuthority())
 
 
 def _client() -> TestClient:
@@ -27,8 +48,7 @@ def _request() -> FrameRequest:
     )
 
 
-def test_frame_request_routes_are_inert_without_explicit_local_gate(monkeypatch):
-    monkeypatch.delenv("JIT_FRAME_REQUESTS_ENABLED", raising=False)
+def test_frame_request_routes_are_inert_without_rollout_authority():
     response = _client().post(
         "/v1/frame-requests",
         json={"device_id": "mac-1", "dedupe_key": "dedupe-1", "screenshot_id": "42"},
@@ -38,7 +58,7 @@ def test_frame_request_routes_are_inert_without_explicit_local_gate(monkeypatch)
 
 
 def test_create_route_is_idempotent_and_returns_metadata_only(monkeypatch):
-    monkeypatch.setenv("JIT_FRAME_REQUESTS_ENABLED", "true")
+    set_frame_request_authority_for_tests(_EnabledAuthority(7))
     calls = {}
 
     def enqueue(*args, **kwargs):
@@ -64,7 +84,7 @@ def test_create_route_is_idempotent_and_returns_metadata_only(monkeypatch):
 
 
 def test_pending_route_is_owner_device_scoped(monkeypatch):
-    monkeypatch.setenv("JIT_FRAME_REQUESTS_ENABLED", "true")
+    set_frame_request_authority_for_tests(_EnabledAuthority(0))
     monkeypatch.setattr(
         frame_requests,
         "list_pending_frame_requests",
@@ -76,7 +96,7 @@ def test_pending_route_is_owner_device_scoped(monkeypatch):
 
 
 def test_state_route_maps_owner_mismatch_to_forbidden(monkeypatch):
-    monkeypatch.setenv("JIT_FRAME_REQUESTS_ENABLED", "true")
+    set_frame_request_authority_for_tests(_EnabledAuthority(0))
 
     def reject(*args, **kwargs):
         raise PermissionError("frame request owner or account generation mismatch")

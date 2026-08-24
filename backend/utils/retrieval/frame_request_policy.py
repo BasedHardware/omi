@@ -9,7 +9,6 @@ the distinction between temporary requested frames and conversation evidence.
 from __future__ import annotations
 
 import hashlib
-import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -21,15 +20,12 @@ from models.frame_request import (
     FrameRequestState,
 )
 
-FRAME_REQUESTS_ENABLED_ENV = "JIT_FRAME_REQUESTS_ENABLED"
 FRAME_REQUEST_MAX_TTL_SECONDS = 7 * 24 * 60 * 60
 FRAME_REQUEST_MAX_BYTES = 10 * 1024 * 1024
 FRAME_REQUEST_MAX_BATCH = 32
 FRAME_REQUEST_MAX_PENDING_PER_DEVICE = 8
 FRAME_REQUEST_MAX_BYTES_PER_DEVICE = 50 * 1024 * 1024
 FRAME_REQUEST_DEDUPE_WINDOW_SECONDS = 60
-
-_TRUE = frozenset({"1", "true", "yes", "on"})
 
 
 def explicit_frame_requests_enabled(configurable: Mapping[str, Any] | None = None) -> bool:
@@ -49,21 +45,29 @@ def explicit_frame_requests_enabled(configurable: Mapping[str, Any] | None = Non
     return decision
 
 
-def local_frame_requests_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """Read the explicit local-only gate; missing/malformed values are off."""
-
-    source = env if env is not None else os.environ
-    return str(source.get(FRAME_REQUESTS_ENABLED_ENV, "")).strip().lower() in _TRUE
-
-
 def canonical_dedupe_key(
-    *, uid: str, device_id: str, screenshot_id: str | None, conversation_id: str | None, intent_key: str
+    *,
+    uid: str,
+    device_id: str,
+    screenshot_id: str | None,
+    conversation_id: str | None,
+    intent_key: str,
+    account_generation: int = 0,
 ) -> str:
     """Return a non-reversible request identity without logging user content."""
 
-    values = [uid.strip(), device_id.strip(), screenshot_id or "", conversation_id or "", intent_key.strip()]
+    values = [
+        uid.strip(),
+        device_id.strip(),
+        str(account_generation),
+        screenshot_id or "",
+        conversation_id or "",
+        intent_key.strip(),
+    ]
     if not uid.strip() or not device_id.strip() or not intent_key.strip() or not (screenshot_id or conversation_id):
         raise ValueError("frame request dedupe components must not be blank")
+    if account_generation < 0:
+        raise ValueError("account_generation must be nonnegative")
     material = "\x00".join(values).encode("utf-8")
     return hashlib.sha256(material).hexdigest()
 

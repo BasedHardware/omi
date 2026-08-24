@@ -1069,6 +1069,20 @@ def delete_conversation_photos(uid: str, conversation_id: str) -> int:
     return deleted_count
 
 
+def delete_conversation_photo(uid: str, conversation_id: str, photo_id: str) -> None:
+    """Idempotently remove one photo metadata row during a failed promotion."""
+
+    ref = (
+        db.collection('users')
+        .document(uid)
+        .collection(conversations_collection)
+        .document(conversation_id)
+        .collection('photos')
+        .document(photo_id)
+    )
+    ref.delete()
+
+
 def delete_conversation(uid, conversation_id):
     """Delete a conversation and every subcollection underneath it.
 

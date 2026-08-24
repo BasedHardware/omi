@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 import database.conversations as conversations_db
 import database.frame_requests as frame_requests_db
-from utils.retrieval.frame_request_policy import local_frame_requests_enabled
+from utils.retrieval.frame_request_storage import delete_frame_request_pixels_for_user, download_frame_request_pixels
 import database._client as db_client_module
 import database.action_items as action_items_db
 import database.redis_db as redis_db
@@ -930,6 +930,27 @@ def get_conversation_photos(conversation_id: str, uid: str = Depends(auth.get_cu
     return conversations_db.get_conversation_photos(uid, conversation_id)
 
 
+@router.get("/v1/conversations/{conversation_id}/photos/{photo_id}/image", tags=['conversations'])
+def get_conversation_photo_image(
+    conversation_id: str,
+    photo_id: str,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Serve owner-authorized frame evidence from conversation-lifetime storage."""
+
+    _get_valid_conversation_by_id(uid, conversation_id)
+    photos = conversations_db.get_conversation_photos(uid, conversation_id) or []
+    photo = next((item for item in photos if item.get('id') == photo_id and item.get('storage_id')), None)
+    if not photo:
+        raise HTTPException(status_code=404, detail="Photo not found")
+    try:
+        payload = download_frame_request_pixels(uid, str(photo['storage_id']))
+    except Exception as exc:
+        logger.exception("Conversation frame evidence read failed for uid=%s", uid)
+        raise HTTPException(status_code=404, detail="Photo not found") from exc
+    return Response(content=payload, media_type=photo.get('content_type') or "image/jpeg")
+
+
 @router.get(
     "/v1/conversations/{conversation_id}/transcripts",
     response_model=dict[str, List[TranscriptSegment]],
@@ -991,8 +1012,11 @@ def delete_conversation(
     # Requested-frame metadata and conversation-attached keyframe references
     # share the conversation's owner-authorized deletion boundary. Temporary
     # requested frames are otherwise pruned by their bounded retention worker.
-    if local_frame_requests_enabled():
-        frame_requests_db.delete_frame_requests_for_conversation(uid, conversation_id)
+    # Cleanup is unconditional: retention/rollout controls whether new queue
+    # work is admitted, never whether an owner can delete existing evidence.
+    storage_ids = frame_requests_db.list_frame_request_storage_ids(uid, conversation_id=conversation_id)
+    delete_frame_request_pixels_for_user(uid, storage_ids)
+    frame_requests_db.delete_frame_requests_for_conversation(uid, conversation_id)
 
     conversations_db.delete_conversation(uid, conversation_id)
     delete_vector(uid, conversation_id)

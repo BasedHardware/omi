@@ -55,6 +55,10 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "stt:transcribe": (60, 3600),
     # Agent/MCP — bursty tool calls
     "agent:execute_tool": (120, 3600),
+    # JIT frame metadata is cheap, but uploads carry bounded pixel bytes.
+    "frame_requests:read": (120, 3600),
+    "frame_requests:write": (120, 3600),
+    "frame_requests:upload": (30, 3600),
     # Platform tools — backend RAG endpoints
     "tools:search": (60, 3600),
     "tools:mutate": (60, 3600),

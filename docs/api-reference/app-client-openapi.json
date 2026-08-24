@@ -7790,6 +7790,17 @@
             "title": "Base64",
             "type": "string"
           },
+          "content_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -7832,6 +7843,17 @@
               }
             ],
             "title": "Id"
+          },
+          "storage_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Id"
           }
         },
         "required": [
@@ -14369,6 +14391,130 @@
         "title": "JITRolloutDecisionEnvelope",
         "type": "object"
       },
+      "JITTriggerActionEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "prompt"
+        ],
+        "title": "JITTriggerActionEnvelope",
+        "type": "object"
+      },
+      "JITTriggerSnapshotEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "account_generation": {
+            "minimum": 0.0,
+            "title": "Account Generation",
+            "type": "integer"
+          },
+          "commit_sequence": {
+            "minimum": 0.0,
+            "title": "Commit Sequence",
+            "type": "integer"
+          },
+          "complete": {
+            "title": "Complete",
+            "type": "boolean"
+          },
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reason"
+          },
+          "head_commit_id": {
+            "title": "Head Commit Id",
+            "type": "string"
+          },
+          "owner_id": {
+            "title": "Owner Id",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/JITTriggerSnapshotRowEnvelope"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "snapshot_revision": {
+            "title": "Snapshot Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "owner_id",
+          "account_generation",
+          "head_commit_id",
+          "commit_sequence",
+          "snapshot_revision",
+          "complete",
+          "rows"
+        ],
+        "title": "JITTriggerSnapshotEnvelope",
+        "type": "object"
+      },
+      "JITTriggerSnapshotRowEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/JITTriggerActionEnvelope"
+          },
+          "item_revision": {
+            "title": "Item Revision",
+            "type": "integer"
+          },
+          "memory_id": {
+            "title": "Memory Id",
+            "type": "string"
+          },
+          "trigger_condition_json": {
+            "title": "Trigger Condition Json",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "wakeup_budget_per_day": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wakeup Budget Per Day"
+          }
+        },
+        "required": [
+          "memory_id",
+          "item_revision",
+          "updated_at",
+          "trigger_condition_json",
+          "action"
+        ],
+        "title": "JITTriggerSnapshotRowEnvelope",
+        "type": "object"
+      },
       "KnowledgeGraphResponse": {
         "properties": {
           "edge_count": {
@@ -19942,6 +20088,8 @@
           "id"
         ],
         "title": "ScreenFrameSubjectIn",
+        "type": "object"
+      },
       "SearchConversationsResponse": {
         "properties": {
           "current_page": {
@@ -37336,6 +37484,103 @@
         ]
       }
     },
+    "/v1/conversations/{conversation_id}/photos/{photo_id}/image": {
+      "get": {
+        "description": "Serve owner-authorized frame evidence from conversation-lifetime storage.",
+        "operationId": "get_conversation_photo_image_v1_conversations__conversation_id__photos__photo_id__image_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "photo_id",
+            "required": true,
+            "schema": {
+              "title": "Photo Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Conversation Photo Image",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
     "/v1/conversations/{conversation_id}/recording": {
       "get": {
         "operationId": "conversation_has_audio_recording_v1_conversations__conversation_id__recording_get",
@@ -44961,6 +45206,81 @@
           }
         ],
         "summary": "Get Jit Rollout Decision"
+      }
+    },
+    "/v1/jit/trigger-snapshot": {
+      "get": {
+        "description": "Return an exhaustive action-bearing watchlist only for admitted owners.",
+        "operationId": "get_jit_trigger_snapshot_v1_jit_trigger_snapshot_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JITTriggerSnapshotEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Jit Trigger Snapshot"
       }
     },
     "/v1/knowledge-graph": {

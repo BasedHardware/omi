@@ -263,6 +263,37 @@ INDEX_ONLY_REQUIREMENTS = (
         'COLLECTION',
         (_asc('device_id'), _asc('state'), _asc('created_at'), _asc('__name__')),
     ),
+    FirestoreIndexRequirement(
+        'frame_requests_device_generation_state_created',
+        'frame_requests',
+        'COLLECTION',
+        (_asc('device_id'), _asc('account_generation'), _asc('state'), _asc('created_at'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'frame_requests_generation_expiry',
+        'frame_requests',
+        'COLLECTION',
+        (_asc('account_generation'), _asc('state'), _asc('expires_at'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'frame_requests_state_expiry',
+        'frame_requests',
+        'COLLECTION',
+        (_asc('state'), _asc('expires_at'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'frame_requests_dedupe_attempt',
+        'frame_requests',
+        'COLLECTION',
+        (
+            _asc('device_id'),
+            _asc('account_generation'),
+            _asc('dedupe_key'),
+            _asc('dedupe_window'),
+            _desc('attempt_number'),
+            _asc('__name__'),
+        ),
+    ),
 )
 
 

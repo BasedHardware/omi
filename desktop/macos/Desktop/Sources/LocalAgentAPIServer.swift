@@ -433,7 +433,7 @@ final class LocalAgentAPIServer: @unchecked Sendable {
     } catch {
       logError("LocalAgentAPIServer: get_screenshot lookup failed", error: error)
       ScreenContextToolTelemetry.trackToolResult(
-        toolName: "get_screenshot",
+        toolName: toolName,
         context: ScreenContextTelemetryContext(surface: "local_api"),
         ok: false,
         failureCode: .databaseUnavailable,
@@ -443,7 +443,7 @@ final class LocalAgentAPIServer: @unchecked Sendable {
     }
     guard let screenshot else {
       ScreenContextToolTelemetry.trackToolResult(
-        toolName: "get_screenshot",
+        toolName: toolName,
         context: ScreenContextTelemetryContext(surface: "local_api"),
         ok: false,
         failureCode: .imageUnavailable,
@@ -456,7 +456,7 @@ final class LocalAgentAPIServer: @unchecked Sendable {
       let imageData = try await loadScreenshotDataEnsuringStorage(for: screenshot)
       let metadata = screenshotMetadata(screenshot, imageByteCount: imageData.count)
       ScreenContextToolTelemetry.trackToolResult(
-        toolName: "get_screenshot",
+        toolName: toolName,
         context: ScreenContextTelemetryContext(surface: "local_api"),
         ok: true,
         imageBytes: imageData.count,
@@ -472,7 +472,8 @@ final class LocalAgentAPIServer: @unchecked Sendable {
     } catch {
       // The image row exists but its pixels could not be loaded. Rather than a
       // generic 500, classify why so agents get an actionable reason + hint.
-      return await screenshotUnavailableResponse(screenshot, screenshotID: screenshotID, error: error)
+      return await screenshotUnavailableResponse(
+        screenshot, screenshotID: screenshotID, error: error, toolName: toolName)
     }
   }
 
@@ -484,7 +485,8 @@ final class LocalAgentAPIServer: @unchecked Sendable {
   private func screenshotUnavailableResponse(
     _ screenshot: Screenshot,
     screenshotID: Int64,
-    error: Error
+    error: Error,
+    toolName: String
   ) async -> LocalHTTPResponse {
     let activeChunk = await VideoChunkEncoder.shared.currentChunkPath
 
@@ -503,7 +505,7 @@ final class LocalAgentAPIServer: @unchecked Sendable {
     } else {
       logError("LocalAgentAPIServer: get_screenshot failed", error: error)
       ScreenContextToolTelemetry.trackToolResult(
-        toolName: "get_screenshot",
+        toolName: toolName,
         context: ScreenContextTelemetryContext(surface: "local_api"),
         ok: false,
         failureCode: .unknown,
@@ -513,7 +515,7 @@ final class LocalAgentAPIServer: @unchecked Sendable {
     }
 
     ScreenContextToolTelemetry.trackToolResult(
-      toolName: "get_screenshot",
+      toolName: toolName,
       context: ScreenContextTelemetryContext(surface: "local_api"),
       ok: false,
       failureCode: ScreenContextFailureCode(rawValue: code) ?? .unknown,

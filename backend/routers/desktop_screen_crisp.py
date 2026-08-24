@@ -12,8 +12,10 @@ from database.screen_activity import (
 from database.vector_db import upsert_screen_activity_vectors
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.executors import db_executor, run_blocking
-from utils.other.endpoints import get_current_user_uid
-from utils.retrieval.frame_request_policy import local_frame_requests_enabled
+from utils.other.endpoints import get_current_user_uid, with_rate_limit
+from utils.observability.fallback import record_fallback
+from utils.retrieval.frame_request_authority import decision_for
+from utils.retrieval.frame_request_storage import delete_frame_request_pixels
 from utils.subscription import grants_cloud_screen_vectors, is_desktop_trial_paywalled
 
 logger = logging.getLogger(__name__)
@@ -70,7 +72,9 @@ class ScreenActivitySyncResponse(BaseModel):
     frame_requests: list[FrameRequestDelivery] | None = None
 
 
-async def _authorized_desktop_user(uid: str = Depends(get_current_user_uid)) -> str:
+async def _authorized_desktop_user(
+    uid: str = Depends(with_rate_limit(get_current_user_uid, "frame_requests:read")),
+) -> str:
     if await run_blocking(db_executor, is_desktop_trial_paywalled, uid, "desktop"):
         raise HTTPException(status_code=402, detail="trial_expired")
     return uid
@@ -133,7 +137,9 @@ async def sync_screen_activity(
         # them only to the exact device that supplied this sync batch and keep
         # the payload metadata-only: no image bytes, URLs, or OCR are returned.
         device_id = request.rows[0].client_device_id
-        if local_frame_requests_enabled() and device_id:
+        same_device_batch = bool(device_id) and all(row.client_device_id == device_id for row in request.rows)
+        decision = decision_for(uid)
+        if decision.enabled and decision.account_generation == request.account_generation and same_device_batch:
             try:
                 pending = await run_blocking(
                     db_executor,
@@ -141,6 +147,7 @@ async def sync_screen_activity(
                     uid,
                     device_id=device_id,
                     account_generation=request.account_generation,
+                    cleanup_storage=lambda storage_id: delete_frame_request_pixels(uid, storage_id),
                 )
                 response_payload["frame_requests"] = [
                     FrameRequestDelivery(
@@ -159,6 +166,23 @@ async def sync_screen_activity(
                 # a 500.  The device will retry on its next sync; details stay
                 # in the private log rather than telemetry.
                 logger.exception("Frame-request delivery failed for uid=%s", uid)
+                record_fallback(
+                    component="other",
+                    from_mode="frame-request-queue",
+                    to_mode="screen-sync-retry",
+                    reason="enqueue_failed",
+                    outcome="degraded",
+                    log=logger,
+                )
+        elif decision.enabled and not same_device_batch:
+            record_fallback(
+                component="other",
+                from_mode="frame-request-queue",
+                to_mode="screen-sync-retry",
+                reason="policy",
+                outcome="degraded",
+                log=logger,
+            )
         response = ScreenActivitySyncResponse.model_validate(response_payload)
         parity_capture.observe(
             "inbound",

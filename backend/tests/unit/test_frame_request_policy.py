@@ -181,6 +181,26 @@ def test_dedupe_key_is_stable_and_does_not_expose_input():
     assert "look-at-frame" not in first
 
 
+def test_dedupe_key_changes_at_account_generation_boundary():
+    first = canonical_dedupe_key(
+        uid="uid-1",
+        device_id="mac-1",
+        screenshot_id="42",
+        conversation_id=None,
+        intent_key="look-at-frame",
+        account_generation=3,
+    )
+    second = canonical_dedupe_key(
+        uid="uid-1",
+        device_id="mac-1",
+        screenshot_id="42",
+        conversation_id=None,
+        intent_key="look-at-frame",
+        account_generation=4,
+    )
+    assert first != second
+
+
 @pytest.mark.parametrize(
     "payload",
     [
