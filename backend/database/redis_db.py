@@ -2,6 +2,7 @@ import ast
 import base64
 import json
 import os
+import secrets
 from typing import Any, Callable, Dict, List, Optional, TypeVar, Union, cast
 from datetime import datetime, timedelta, timezone
 
@@ -899,6 +900,197 @@ end
 return remaining
 """
 _RATE_LIMIT_RELEASE_LUA = r.register_script(_RATE_LIMIT_RELEASE_LUA_SOURCE)
+
+# Proactive quota leases are separate from the legacy integer limiter above.
+# A pending provider call occupies a short-lived ZSET member; only a validated
+# success is finalized into the full daily window. If the process dies or a
+# request is cancelled before that point, the member expires without consuming
+# a full quota slot and is pruned atomically by the next reservation.
+PROACTIVE_QUOTA_LEASE_SECONDS = 90
+PROACTIVE_QUOTA_COMMITTED_WINDOW_SECONDS = 24 * 60 * 60
+_PROACTIVE_QUOTA_COMMITTED_PREFIX = 'committed:'
+
+_PROACTIVE_QUOTA_RESERVE_LUA_SOURCE = """
+local key = KEYS[1]
+local server_time = redis.call('TIME')
+local now_ms = tonumber(server_time[1]) * 1000 + math.floor(tonumber(server_time[2]) / 1000)
+local lease_ms = tonumber(ARGV[1])
+local window_seconds = tonumber(ARGV[2])
+local limit = tonumber(ARGV[3])
+local token = ARGV[4]
+
+redis.call('ZREMRANGEBYSCORE', key, '-inf', now_ms)
+local current = redis.call('ZCARD', key)
+local function reset_seconds()
+    local first = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
+    if #first < 2 then
+        return 0
+    end
+    return math.max(0, math.ceil((tonumber(first[2]) - now_ms) / 1000))
+end
+
+if current >= limit then
+    return {0, current, reset_seconds(), ''}
+end
+
+redis.call('ZADD', key, now_ms + lease_ms, token)
+redis.call('EXPIRE', key, window_seconds)
+return {1, current + 1, reset_seconds(), token}
+"""
+_PROACTIVE_QUOTA_RESERVE_LUA = r.register_script(_PROACTIVE_QUOTA_RESERVE_LUA_SOURCE)
+
+_PROACTIVE_QUOTA_RENEW_LUA_SOURCE = """
+local key = KEYS[1]
+local server_time = redis.call('TIME')
+local now_ms = tonumber(server_time[1]) * 1000 + math.floor(tonumber(server_time[2]) / 1000)
+local lease_ms = tonumber(ARGV[1])
+local window_seconds = tonumber(ARGV[2])
+local token = ARGV[3]
+local committed_member = ARGV[4] .. token
+
+redis.call('ZREMRANGEBYSCORE', key, '-inf', now_ms)
+if redis.call('ZSCORE', key, committed_member) then
+    return {0, 0}
+end
+local score = redis.call('ZSCORE', key, token)
+if not score then
+    return {0, 0}
+end
+
+redis.call('ZADD', key, now_ms + lease_ms, token)
+redis.call('EXPIRE', key, window_seconds)
+local first = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
+if #first < 2 then
+    return {1, 0}
+end
+return {1, math.max(0, math.ceil((tonumber(first[2]) - now_ms) / 1000))}
+"""
+_PROACTIVE_QUOTA_RENEW_LUA = r.register_script(_PROACTIVE_QUOTA_RENEW_LUA_SOURCE)
+
+_PROACTIVE_QUOTA_FINALIZE_LUA_SOURCE = """
+local key = KEYS[1]
+local server_time = redis.call('TIME')
+local now_ms = tonumber(server_time[1]) * 1000 + math.floor(tonumber(server_time[2]) / 1000)
+local window_ms = tonumber(ARGV[1])
+local window_seconds = tonumber(ARGV[2])
+local token = ARGV[3]
+local committed_member = ARGV[4] .. token
+
+redis.call('ZREMRANGEBYSCORE', key, '-inf', now_ms)
+local function reset_seconds()
+    local first = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
+    if #first < 2 then
+        return 0
+    end
+    return math.max(0, math.ceil((tonumber(first[2]) - now_ms) / 1000))
+end
+
+local committed_score = redis.call('ZSCORE', key, committed_member)
+if committed_score then
+    return {1, reset_seconds()}
+end
+if not redis.call('ZSCORE', key, token) then
+    return {0, 0}
+end
+
+redis.call('ZREM', key, token)
+redis.call('ZADD', key, now_ms + window_ms, committed_member)
+redis.call('EXPIRE', key, window_seconds)
+return {1, reset_seconds()}
+"""
+_PROACTIVE_QUOTA_FINALIZE_LUA = r.register_script(_PROACTIVE_QUOTA_FINALIZE_LUA_SOURCE)
+
+_PROACTIVE_QUOTA_RELEASE_LUA_SOURCE = """
+local key = KEYS[1]
+local token = ARGV[1]
+return redis.call('ZREM', key, token)
+"""
+_PROACTIVE_QUOTA_RELEASE_LUA = r.register_script(_PROACTIVE_QUOTA_RELEASE_LUA_SOURCE)
+
+
+def _proactive_quota_key(key: str, policy: str) -> str:
+    return f'rl:proactive_lease:{policy}:{key}'
+
+
+def reserve_proactive_rate_limit(
+    key: str,
+    policy: str,
+    max_requests: int,
+    window: int,
+    *,
+    lease_seconds: int = PROACTIVE_QUOTA_LEASE_SECONDS,
+) -> tuple[bool, int, int, str | None]:
+    """Reserve a tokenized short lease for a proactive provider attempt.
+
+    The ZSET score is the member expiry in epoch milliseconds. The script
+    prunes expired pending/committed members and admits only when the active
+    plus committed count is below ``max_requests``. ``remaining`` and
+    ``reset_seconds`` are derived from that same atomic snapshot; reset is the
+    first member's expiry, so a caller can advertise when the next slot may
+    become available.
+    """
+    if max_requests <= 0 or window <= 0 or lease_seconds <= 0 or lease_seconds >= window:
+        raise ValueError('proactive quota limits and lease must be positive; lease must be below window')
+    token = secrets.token_urlsafe(24)
+    result = _PROACTIVE_QUOTA_RESERVE_LUA(
+        keys=[_proactive_quota_key(key, policy)],
+        args=[lease_seconds * 1000, window, max_requests, token],
+    )
+    allowed, current, reset_seconds, returned_token = result
+    admitted = bool(allowed)
+    token_value = _decode_redis_value(returned_token) if returned_token else None
+    return admitted, max(0, max_requests - int(current)), max(0, int(reset_seconds)), token_value
+
+
+def renew_proactive_rate_limit(
+    key: str,
+    policy: str,
+    token: str,
+    *,
+    window: int,
+    lease_seconds: int = PROACTIVE_QUOTA_LEASE_SECONDS,
+) -> tuple[bool, int]:
+    """Renew an active token lease; missing/committed tokens fail closed."""
+    if not token or window <= 0 or lease_seconds <= 0 or lease_seconds >= window:
+        return False, 0
+    result = _PROACTIVE_QUOTA_RENEW_LUA(
+        keys=[_proactive_quota_key(key, policy)],
+        args=[lease_seconds * 1000, window, token, _PROACTIVE_QUOTA_COMMITTED_PREFIX],
+    )
+    return bool(result[0]), max(0, int(result[1]))
+
+
+def finalize_proactive_rate_limit(
+    key: str,
+    policy: str,
+    token: str,
+    *,
+    window: int = PROACTIVE_QUOTA_COMMITTED_WINDOW_SECONDS,
+) -> tuple[bool, int]:
+    """Commit a successful token into the full daily window exactly once."""
+    if not token or window <= 0:
+        return False, 0
+    result = _PROACTIVE_QUOTA_FINALIZE_LUA(
+        keys=[_proactive_quota_key(key, policy)],
+        args=[
+            window * 1000,
+            window,
+            token,
+            _PROACTIVE_QUOTA_COMMITTED_PREFIX,
+        ],
+    )
+    return bool(result[0]), max(0, int(result[1]))
+
+
+def release_proactive_rate_limit(key: str, policy: str, token: str) -> bool:
+    """Release a pending token idempotently without undoing a committed success."""
+    if not token:
+        return False
+    removed = _PROACTIVE_QUOTA_RELEASE_LUA(
+        keys=[_proactive_quota_key(key, policy)],
+        args=[token],
+    )
+    return bool(removed)
 
 
 def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> tuple[bool, int, int]:

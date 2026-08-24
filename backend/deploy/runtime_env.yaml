@@ -364,6 +364,9 @@ environments:
         METRICS_SECRET:
           secret: METRICS_SECRET
           version: latest
+        POSTHOG_PROJECT_API_KEY:
+          secret: POSTHOG_PROJECT_API_KEY
+          version: latest
     cloud_run:
       network:
         flags:
@@ -1372,6 +1375,9 @@ environments:
       secrets:
         METRICS_SECRET:
           secret: METRICS_SECRET
+          version: latest
+        POSTHOG_PROJECT_API_KEY:
+          secret: POSTHOG_PROJECT_API_KEY
           version: latest
     cloud_run:
       network:

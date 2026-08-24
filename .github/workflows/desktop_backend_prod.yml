@@ -222,7 +222,8 @@ jobs:
             DESKTOP_REDIS_DB_PASSWORD \
             DESKTOP_REDIS_DB_HOST \
             DESKTOP_REDIS_DB_PORT \
-            METRICS_SECRET; do
+            METRICS_SECRET \
+            POSTHOG_PROJECT_API_KEY; do
             gcloud secrets describe "$secret" \
               --project="$PROJECT_ID" \
               --format='none'
@@ -340,6 +341,7 @@ jobs:
             GOOGLE_CALENDAR_API_KEY=DESKTOP_GOOGLE_CALENDAR_API_KEY:latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN=OMI_LLM_GATEWAY_SERVICE_TOKEN:latest
             METRICS_SECRET=METRICS_SECRET:latest
+            POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest
 
       - name: Attach Managed Prometheus sidecar to production candidate
         id: attach-gmp-sidecar
