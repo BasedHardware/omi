@@ -12,6 +12,7 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from database._client import get_firestore_client, run_transactional
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
+from database.firestore_index_registry import FIRST_OPEN_FOLDER_CONVERSATION_COUNT_QUERY
 from database.read_boundary import parse_snapshot_strict
 from models.memory_apply import MemoryControlState
 
@@ -252,10 +253,10 @@ def commit_first_open_folder_count(
 ) -> bool:
     client = firestore_client or get_firestore_client()
     user = client.collection('users').document(uid)
-    query = (
-        user.collection(CONVERSATIONS_COLLECTION)
-        .where(filter=FieldFilter('folder_id', '==', folder_id))
-        .where(filter=FieldFilter('discarded', '==', False))
+    query = FIRST_OPEN_FOLDER_CONVERSATION_COUNT_QUERY.build(
+        user.collection(CONVERSATIONS_COLLECTION),
+        {'folder_id': folder_id, 'discarded': False},
+        field_filter_factory=FieldFilter,
     )
     count = int(query.count().get()[0][0].value or 0)
     conversation_ref = _conversation_ref(client, uid, conversation_id)
