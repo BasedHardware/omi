@@ -409,6 +409,12 @@ overlay:
             value: 'false'
           MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME:
             value: ''
+          MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG:
+            value: ''
+          MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS:
+            value: '3'
+          MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED:
+            value: 'false'
           OMI_BACKGROUND_FLEX_CAPABLE:
             value: 'true'
           PINECONE_INDEX_NAME:

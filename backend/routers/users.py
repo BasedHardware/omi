@@ -567,6 +567,10 @@ def delete_permission_and_recordings(uid: str = Depends(auth.get_current_user_ui
 def get_onboarding_state(uid: str = Depends(auth.get_current_user_uid)):
     """Get the user's onboarding state (completed status, acquisition source, etc.)."""
     state = get_user_onboarding_state(uid)
+    # The client-visible state remains backward compatible, while the backend
+    # issues a separate short-lived admission consumed by the listen runtime.
+    # A client cannot create this marker by setting the websocket flag.
+    ensure_backend_onboarding_admission(uid)
     return {
         'completed': state.get('completed', False),
         'acquisition_source': state.get('acquisition_source', ''),

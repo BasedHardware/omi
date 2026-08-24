@@ -29,6 +29,7 @@ from utils.memory.daily_memory_sweep import (
     daily_memory_sweep_authority_from_environment,
     firestore_daily_sweep_source_provider,
     read_daily_memory_sweep_cohort_assignment,
+    reconcile_daily_memory_sweep_timezones_for_maintenance,
     run_daily_memory_sweep_scheduler,
 )
 from utils.task_intelligence.workstream_association import (
@@ -59,7 +60,19 @@ def _run_daily_memory_sweep_if_authorized() -> None:
         logger.info("daily-memory-sweep disabled by backend authority")
         return
     now = datetime.now(timezone.utc)
-    inventory = bounded_daily_memory_sweep_uid_inventory(default_db_client, limit=400, persist_cursor=False)
+    # The inventory cursor is the fairness boundary.  A stateless page would
+    # repeatedly sweep the first canonical users and starve onboarding/cold
+    # starts despite the bounded union inventory.
+    inventory = bounded_daily_memory_sweep_uid_inventory(default_db_client, limit=400, persist_cursor=True)
+    truthy = {"1", "true", "yes", "on"}
+    if os.getenv("MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED", "false").casefold() in truthy:
+        reconcile_daily_memory_sweep_timezones_for_maintenance(
+            inventory,
+            timezone_resolver=lambda uid: get_user_time_zone(uid) or "UTC",
+            db_client=default_db_client,
+            authorized=True,
+            max_users=400,
+        )
     summary = run_daily_memory_sweep_scheduler(
         db_client=default_db_client,
         now=now,

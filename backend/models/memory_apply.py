@@ -35,6 +35,7 @@ from models.product_memory import (
     MemoryItemStatus,
     MemoryTier,
     ProcessingState,
+    normalized_memory_content_key,
 )
 from utils.memory.short_term_lifecycle import default_short_term_expiry
 
@@ -387,6 +388,7 @@ def _materialize_memory_item(
         status=status,
         processing_state=processing_state,
         content=patch.memory_text,
+        normalized_content_key=normalized_memory_content_key(patch.memory_text),
         evidence=evidence,
         source_state=SourceState.active,
         sensitivity_labels=[],
@@ -473,6 +475,7 @@ def _apply_update_memory_item(
         "status": status,
         "processing_state": processing_state,
         "content": content,
+        "normalized_content_key": normalized_memory_content_key(content),
         "evidence": evidence or existing.evidence,
         "updated_at": now,
         "expires_at": expires_at,

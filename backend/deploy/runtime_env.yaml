@@ -983,6 +983,9 @@ environments:
             TYPESENSE_HOST:
               secret: TYPESENSE_HOST
               version: latest
+            POSTHOG_PROJECT_API_KEY:
+              secret: POSTHOG_PROJECT_API_KEY
+              version: latest
           flags:
             --remove-env-vars: MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
             --task-timeout: 3600s
@@ -1046,6 +1049,15 @@ environments:
             MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME:
               category: memory_rollout
               value: ''
+            MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG:
+              category: memory_rollout
+              value: ''
+            MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS:
+              category: memory_rollout
+              value: '3'
+            MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED:
+              category: memory_rollout
+              value: 'false'
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
@@ -2023,6 +2035,9 @@ environments:
             TYPESENSE_HOST:
               secret: TYPESENSE_HOST
               version: latest
+            POSTHOG_PROJECT_API_KEY:
+              secret: POSTHOG_PROJECT_API_KEY
+              version: latest
           flags:
             --remove-env-vars: MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
             --task-timeout: 3600s
@@ -2084,6 +2099,15 @@ environments:
             MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME:
               category: memory_rollout
               value: ''
+            MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG:
+              category: memory_rollout
+              value: ''
+            MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS:
+              category: memory_rollout
+              value: '3'
+            MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED:
+              category: memory_rollout
+              value: 'false'
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
