@@ -192,6 +192,7 @@ def router():
         "utils.retrieval.tools": _pkg("utils.retrieval.tools"),
         "utils.retrieval.tools.calendar_tools": _pkg("utils.retrieval.tools.calendar_tools"),
         "utils.retrieval.tools.google_utils": _pkg("utils.retrieval.tools.google_utils"),
+        "services.conversation_frame_evidence": _pkg("services.conversation_frame_evidence"),
         "utils.request_validation": request_validation,
     }
 

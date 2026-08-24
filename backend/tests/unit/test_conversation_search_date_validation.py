@@ -74,6 +74,7 @@ _stubs = [
     'utils.app_integrations',
     'utils.retrieval.tools.calendar_tools',
     'utils.retrieval.tools.google_utils',
+    'services.conversation_frame_evidence',
 ]
 
 _MISSING = object()

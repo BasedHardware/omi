@@ -422,6 +422,7 @@ def _get_agentic_module():
         "create_chart_tool",
         "get_screen_activity_tool",
         "search_screen_activity_tool",
+        "look_at_frame_tool",
         "save_user_preference_tool",
         "fetch_url_tool",
         "traverse_knowledge_graph_tool",
@@ -438,6 +439,10 @@ def _get_agentic_module():
         mock_tool.args_schema = mock_schema
         mock_tool.description = f"Mock tool: {name}"
         setattr(tools_pkg, name, mock_tool)
+
+    # Runtime-only request context is imported beside the tool exports, but is
+    # not itself a LangChain tool or part of the cached CORE_TOOLS prefix.
+    tools_pkg.frame_request_runtime_config = MagicMock(return_value={})
 
     # Stub sub-modules
     _stub_module("utils.retrieval.tools.preference_tools")
@@ -661,10 +666,10 @@ def test_static_prefix_exceeds_minimum_cache_tokens():
 # ---------------------------------------------------------------------------
 
 
-def test_core_tools_has_29_tools():
-    """CORE_TOOLS must contain exactly 29 tools (web search is a built-in server tool)."""
+def test_core_tools_has_30_tools():
+    """CORE_TOOLS must contain exactly 30 tools (web search is a built-in server tool)."""
     agentic_mod = _get_agentic_module()
-    assert len(agentic_mod.CORE_TOOLS) == 29, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 29"
+    assert len(agentic_mod.CORE_TOOLS) == 30, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 30"
 
 
 def test_core_tools_list_creates_independent_copy():
@@ -687,9 +692,9 @@ def test_core_tools_list_creates_independent_copy():
     mock_app_tool.name = "custom_app_tool"
     tools_a.append(mock_app_tool)
 
-    assert len(tools_a) == 30
-    assert len(tools_b) == 29
-    assert len(agentic_mod.CORE_TOOLS) == 29, "CORE_TOOLS was mutated!"
+    assert len(tools_a) == 31
+    assert len(tools_b) == 30
+    assert len(agentic_mod.CORE_TOOLS) == 30, "CORE_TOOLS was mutated!"
 
 
 def test_core_tools_order_matches_exports():
@@ -723,6 +728,7 @@ def test_core_tools_order_matches_exports():
         "create_chart_tool",
         "get_screen_activity_tool",
         "search_screen_activity_tool",
+        "look_at_frame_tool",
         "save_user_preference_tool",
         "fetch_url_tool",
         "traverse_knowledge_graph_tool",
