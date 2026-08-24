@@ -6,12 +6,14 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from models.memory_apply import MemoryControlState
+from models.memory_contracts import deterministic_contract_id
 from utils.memory.daily_memory_sweep import (
     DailySweepCandidate,
     DailySweepCohortAuthority,
     DailySweepCohortDecision,
     DailySweepCursor,
     DailySweepInput,
+    DailySweepModelAuthority,
     MAX_CATCH_UP_DAYS,
     SweepAuthority,
     SweepAuthorityState,
@@ -30,13 +32,16 @@ from utils.memory.daily_memory_sweep import (
     _find_active_slot_or_subject,
     _load_or_stage_onboarding_candidates,
     _onboarding_staged_candidates_ref,
+    _daily_summary_staged_candidates_ref,
     _onboarding_transcript_eligibility,
     _pending_completed_dates,
+    _advance_cursor,
     close_daily_memory_sweep_cohort_clients,
     daily_memory_sweep_cohort_authority_from_environment,
     _POSTHOG_CLIENTS,
     read_daily_memory_sweep_cohort_assignment,
     run_daily_memory_sweep_scheduler,
+    produce_completed_day_daily_summary_sources,
 )
 from models.product_memory import normalized_memory_content_key
 
@@ -259,6 +264,22 @@ class _Ref:
         else:
             self.store[self.path] = dict(value)
 
+    def create(self, value):
+        if self.path in self.store:
+            raise RuntimeError("already exists")
+        self.store[self.path] = dict(value)
+
+
+class _EmptyCollection:
+    def where(self, *args, **kwargs):
+        return self
+
+    def limit(self, _count):
+        return self
+
+    def stream(self):
+        return []
+
 
 class _Transaction:
     def get(self, ref):
@@ -274,6 +295,9 @@ class _Db:
 
     def document(self, path):
         return _Ref(self.store, path)
+
+    def collection(self, _path):
+        return _EmptyCollection()
 
     def transaction(self):
         return _Transaction()
@@ -510,6 +534,73 @@ def test_scheduler_never_treats_disabled_cohort_as_unrestricted(monkeypatch):
     )
     assert summary.attempted_users == 0
     assert summary.errors == ("cohort_disabled",)
+
+
+@pytest.mark.parametrize("decision", [DailySweepCohortDecision.disabled, DailySweepCohortDecision.unavailable])
+def test_scheduler_cohort_gate_precedes_timezone_reconciliation_and_all_sweep_writes(decision):
+    db = _Db()
+    source_calls = []
+    reconciliation_calls = []
+    summary = run_daily_memory_sweep_scheduler(
+        db_client=db,
+        now=datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
+        uid_inventory=("user-1",),
+        source_provider=lambda *_args, **_kwargs: source_calls.append(True),
+        timezone_resolver=lambda _uid: "America/Los_Angeles",
+        timezone_reconciler=lambda *_args: reconciliation_calls.append(True),
+        authority=SweepAuthorityState(enabled=True),
+        cohort_authority=DailySweepCohortAuthority(enabled=True, cohort_name="memory-sweep"),
+        cohort_authorizer=lambda *_args: decision,
+    )
+    assert source_calls == []
+    assert reconciliation_calls == []
+    assert db.store == {}
+    if decision is DailySweepCohortDecision.disabled:
+        assert summary.completed_uids == ("user-1",)
+    else:
+        assert summary.failed_uids == ("user-1",)
+
+
+def test_stale_overlapping_cursor_writer_cannot_move_cursor_backward(monkeypatch):
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    current_window = completed_local_day_window(date(2026, 8, 24), "UTC")
+    current = DailySweepCursor(
+        uid="user-1",
+        account_generation=control.account_generation,
+        source_generation=control.source_generation,
+        timezone_name="UTC",
+        generation=2,
+        last_completed_local_date=date(2026, 8, 24),
+        last_completed_window_id=current_window.window_id,
+        last_completed_window_start_utc=current_window.start_utc,
+        last_completed_window_end_utc=current_window.end_utc,
+    )
+    cursor_ref = db.document("users/user-1/memory_control/daily_memory_sweep")
+    cursor_ref.set(current.model_dump(mode="json"))
+    stale_window = completed_local_day_window(date(2026, 8, 23), "UTC")
+    stale = current.model_copy(
+        update={
+            "generation": 1,
+            "last_completed_local_date": date(2026, 8, 23),
+            "last_completed_window_id": stale_window.window_id,
+            "last_completed_window_start_utc": stale_window.start_utc,
+            "last_completed_window_end_utc": stale_window.end_utc,
+        }
+    )
+    assert not _advance_cursor(
+        db,
+        "user-1",
+        control,
+        stale,
+        date(2026, 8, 23),
+        "UTC",
+        stale_window.start_utc,
+        stale_window.end_utc,
+        stale_window.window_id,
+    )
+    assert cursor_ref.get().to_dict() == current.model_dump(mode="json")
 
 
 def test_cohort_environment_requires_the_fixed_flag_binding(monkeypatch):
@@ -749,6 +840,112 @@ def test_onboarding_malformed_stage_fails_closed_without_reextracting(monkeypatc
         )
         is None
     )
+
+
+def test_completed_day_model_candidates_are_staged_before_apply_and_reused(monkeypatch):
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    local_date = date(2026, 8, 23)
+    window = completed_local_day_window(local_date, "UTC")
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep._read_completed_day_conversation_texts",
+        lambda *_args, **_kwargs: ((("conversation-1", "stable transcript"),), "complete"),
+    )
+    model = DailySweepModelAuthority(enabled=True, model_name="test", max_candidates=8, max_cost_usd=1.0)
+    calls = []
+
+    def extractor(_uid, _text):
+        calls.append(True)
+        return (SimpleNamespace(content="fact from first extraction"),)
+
+    first = produce_completed_day_daily_summary_sources(
+        "user-1",
+        local_date,
+        "UTC",
+        control,
+        db_client=db,
+        model_authority=model,
+        model_extractor=extractor,
+        window_override=window,
+    )
+    assert first.source_status == "complete"
+    assert len(first.daily_summary) == 1
+    assert len(calls) == 1
+    staged = next(payload for path, payload in db.store.items() if "daily_summary_staged" in path)
+    assert staged["candidate_count"] == 1
+    assert staged["candidate_digest"] == deterministic_contract_id(
+        "daily-sweep-daily-summary-candidate-page", {"digests": [first.daily_summary[0].digest()]}
+    )
+
+    def should_not_extract(_uid, _text):
+        raise AssertionError("completed-day continuation reran nondeterministic extraction")
+
+    second = produce_completed_day_daily_summary_sources(
+        "user-1",
+        local_date,
+        "UTC",
+        control,
+        db_client=db,
+        model_authority=model,
+        model_extractor=should_not_extract,
+        window_override=window,
+    )
+    assert second.daily_summary == first.daily_summary
+    assert len(calls) == 1
+
+
+def test_completed_day_malformed_stage_fails_closed_without_reextracting(monkeypatch):
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    local_date = date(2026, 8, 23)
+    window = completed_local_day_window(local_date, "UTC")
+    ref = _daily_summary_staged_candidates_ref(
+        db,
+        "user-1",
+        local_date,
+        account_generation=control.account_generation,
+        source_generation=control.source_generation,
+        window_id=window.window_id,
+    )
+    ref.set(
+        {
+            "schema_version": "daily_memory_sweep_daily_summary_stage.v1",
+            "uid": "user-1",
+            "local_date": local_date.isoformat(),
+            "timezone_name": "UTC",
+            "account_generation": control.account_generation,
+            "source_generation": control.source_generation,
+            "window_id": window.window_id,
+            "window_start_utc": window.start_utc,
+            "window_end_utc": window.end_utc,
+            "transcript_digest": "tampered",
+            "candidate_digest": "tampered",
+            "candidate_page": [],
+            "candidate_count": 0,
+        }
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep._read_completed_day_conversation_texts",
+        lambda *_args, **_kwargs: ((("conversation-1", "stable transcript"),), "complete"),
+    )
+    model = DailySweepModelAuthority(enabled=True, model_name="test", max_candidates=8, max_cost_usd=1.0)
+
+    def should_not_extract(_uid, _text):
+        raise AssertionError("malformed completed-day stage must not rerun extraction")
+
+    result = produce_completed_day_daily_summary_sources(
+        "user-1",
+        local_date,
+        "UTC",
+        control,
+        db_client=db,
+        model_authority=model,
+        model_extractor=should_not_extract,
+        window_override=window,
+    )
+    assert result.source_status == "incomplete"
 
 
 def test_legacy_compatibility_proof_allows_more_than_two_unslotted_facts():

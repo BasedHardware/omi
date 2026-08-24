@@ -36,6 +36,12 @@ incomplete and cannot advance the cursor. Model-produced candidates require
 the separate model/cost authority and bounded deployment flags
 `MEMORY_DAILY_MEMORY_SWEEP_MODEL_*`.
 
+When the completed-day transcript path invokes the model, the full bounded
+candidate page and its digest are staged under the sweep-owned control path
+before any candidate can be applied. A later retry reads that exact stage; a
+missing or malformed stage is incomplete and never triggers a second,
+nondeterministic extraction.
+
 Onboarding provenance is a server-generated session marker written by the
 listen runtime; client `source` and onboarding flags are not trusted. The
 producer returns source identities separately from candidates, so a source
@@ -62,7 +68,9 @@ reconcile rather than silently replaying an overlap or skipping a gap.
 Reconciliation transactionally increments the sweep-owned receipt namespace
 while preserving the completed-day anchor and leaves canonical
 `source_generation` unchanged, so the next bounded catch-up uses the new
-timezone without colliding with the old receipt set.
+timezone without colliding with the old receipt set. The scheduler reaches
+this write only after a definite per-user enabled cohort decision; disabled or
+unavailable users produce no sweep control or cursor writes.
 
 ## Authority and safety
 
