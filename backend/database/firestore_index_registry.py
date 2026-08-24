@@ -253,6 +253,24 @@ INDEX_ONLY_REQUIREMENTS = (
             _asc('__name__'),
         ),
     ),
+    FirestoreIndexRequirement(
+        'frame_requests_dedupe_active_attempt',
+        'frame_requests',
+        'COLLECTION',
+        (_asc('device_id'), _asc('account_generation'), _asc('dedupe_key'), _desc('attempt_number'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'frame_requests_conversation_state',
+        'frame_requests',
+        'COLLECTION',
+        (_asc('conversation_id'), _asc('state'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'frame_requests_cleanup_retry',
+        'frame_requests',
+        'COLLECTION',
+        (_asc('state'), _asc('cleanup_state'), _asc('cleanup_next_attempt_at'), _asc('__name__')),
+    ),
 )
 
 

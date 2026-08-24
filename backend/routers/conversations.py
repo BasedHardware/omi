@@ -878,7 +878,12 @@ def get_conversation_photos(conversation_id: str, uid: str = Depends(auth.get_cu
     return conversations_db.get_conversation_photos(uid, conversation_id)
 
 
-@router.get("/v1/conversations/{conversation_id}/photos/{photo_id}/image", tags=['conversations'])
+@router.get(
+    "/v1/conversations/{conversation_id}/photos/{photo_id}/image",
+    tags=['conversations'],
+    response_class=Response,
+    responses={200: {"content": {"image/jpeg": {}, "image/png": {}, "image/webp": {}}}},
+)
 def get_conversation_photo_image(
     conversation_id: str,
     photo_id: str,
@@ -947,15 +952,14 @@ def delete_conversation(
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)
         background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
 
-    # Requested-frame metadata and conversation-attached keyframe references
-    # share the conversation's owner-authorized deletion boundary. Temporary
-    # requested frames are otherwise pruned by their bounded retention worker.
-    # Cleanup is unconditional: retention/rollout controls whether new queue
-    # work is admitted, never whether an owner can delete existing evidence.
-    storage_ids = frame_requests_db.list_frame_request_storage_ids(uid, conversation_id=conversation_id)
+    # Delete the conversation first. If that owner-authorized operation fails,
+    # still-live conversation evidence must remain available for a retry. The
+    # queue metadata/object cleanup is exhaustive and follows only after the
+    # conversation deletion has returned successfully.
+    conversations_db.delete_conversation(uid, conversation_id)
+    storage_ids = frame_requests_db.list_all_frame_request_storage_ids(uid, conversation_id=conversation_id)
     delete_frame_request_pixels_for_user(uid, storage_ids)
     frame_requests_db.delete_frame_requests_for_conversation(uid, conversation_id)
-    conversations_db.delete_conversation(uid, conversation_id)
     delete_vector(uid, conversation_id)
     delete_transcript_chunk_vectors(uid, conversation_id)
 

@@ -24,6 +24,7 @@ from utils.task_intelligence.workstream_association import (
     drain_recurrence_inbox_for_maintenance,
     persist_recurrence_signals_for_maintenance,
 )
+from services.frame_request_retention import run_frame_request_retention_maintenance
 
 logging.basicConfig(level=logging.INFO)
 
@@ -43,6 +44,10 @@ def _init_firebase() -> None:
 def main() -> None:
     _init_firebase()
     logger.info("Starting memory-maintenance-job...")
+    # Temporary frame pixels have an independent retention loop.  It is not
+    # gated by frame-request delivery or the product rollout, so a disabled
+    # cohort cannot strand previously uploaded ephemeral objects.
+    run_frame_request_retention_maintenance()
     summary = asyncio.run(
         run_canonical_short_term_maintenance_cron(
             recurrence_signal_persister=persist_recurrence_signals_for_maintenance,

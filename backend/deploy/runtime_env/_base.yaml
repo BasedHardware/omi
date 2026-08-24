@@ -246,6 +246,19 @@ environment_shared:
           POSTHOG_HOST:
             value: https://app.posthog.com
             category: telemetry
+          BUCKET_FRAME_REQUESTS:
+            env_var: BUCKET_FRAME_REQUESTS
+            default: '{env}-omi-frame-requests'
+            provisional: true
+            category: storage_retention
+          FRAME_REQUEST_POSTHOG_COHORT_FLAG:
+            value: jit-frame-requests-cohort
+            provisional: true
+            category: rollout
+          FRAME_REQUEST_POSTHOG_KILL_SWITCH:
+            value: jit-frame-requests-kill-switch
+            provisional: true
+            category: rollout
           GCP_LOCATION:
             value: us-central1
       backend:

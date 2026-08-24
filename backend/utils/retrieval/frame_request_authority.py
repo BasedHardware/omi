@@ -9,7 +9,11 @@ can never enrol itself by sending a header or setting a process variable.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 from typing import Protocol
+
+from database.account_cutover import get_account_cutover_record
+from utils.integration_telemetry import get_posthog_client_for_decisions
 
 
 @dataclass(frozen=True)
@@ -23,13 +27,47 @@ class FrameRequestAuthority(Protocol):
     def decide(self, uid: str) -> FrameRequestAuthorityDecision:
         """Return the server-owned decision for one authenticated account."""
 
+        ...
+
 
 class DisabledFrameRequestAuthority:
     def decide(self, uid: str) -> FrameRequestAuthorityDecision:
         return FrameRequestAuthorityDecision(enabled=False)
 
 
-_authority: FrameRequestAuthority = DisabledFrameRequestAuthority()
+class PostHogFrameRequestAuthority:
+    """Resolve cohort and kill-switch flags from the server-side PostHog client."""
+
+    def __init__(self, *, cohort_flag: str | None = None, kill_switch_flag: str | None = None) -> None:
+        self.cohort_flag = cohort_flag or os.getenv("FRAME_REQUEST_POSTHOG_COHORT_FLAG", "jit-frame-requests-cohort")
+        self.kill_switch_flag = kill_switch_flag or os.getenv(
+            "FRAME_REQUEST_POSTHOG_KILL_SWITCH", "jit-frame-requests-kill-switch"
+        )
+
+    @staticmethod
+    def _enabled(value: object) -> bool:
+        return value is True or (isinstance(value, str) and value.strip().lower() in {"true", "on", "enabled"})
+
+    def decide(self, uid: str) -> FrameRequestAuthorityDecision:
+        try:
+            client = get_posthog_client_for_decisions()
+            if client is None:
+                return FrameRequestAuthorityDecision(enabled=False)
+            kill_switch = self._enabled(client.get_feature_flag(self.kill_switch_flag, uid))
+            cohort = self._enabled(client.get_feature_flag(self.cohort_flag, uid))
+            generation = get_account_cutover_record(uid).account_generation
+            return FrameRequestAuthorityDecision(
+                enabled=cohort and not kill_switch,
+                account_generation=generation,
+                kill_switch=kill_switch,
+            )
+        except Exception:
+            # A rollout read failure must not accidentally open a new pixel
+            # path. Do not log or emit user/content identifiers here.
+            return FrameRequestAuthorityDecision(enabled=False, kill_switch=True)
+
+
+_authority: FrameRequestAuthority = PostHogFrameRequestAuthority()
 
 
 def get_frame_request_authority() -> FrameRequestAuthority:
@@ -49,7 +87,7 @@ def decision_for(uid: str) -> FrameRequestAuthorityDecision:
     decision = get_frame_request_authority().decide(uid.strip())
     if decision.kill_switch or not decision.enabled or decision.account_generation is None:
         return FrameRequestAuthorityDecision(
-            enabled=False, account_generation=decision.account_generation, kill_switch=True
+            enabled=False, account_generation=decision.account_generation, kill_switch=decision.kill_switch
         )
     return decision
 
@@ -63,6 +101,7 @@ def authorize(uid: str, account_generation: int) -> FrameRequestAuthorityDecisio
 
 __all__ = [
     "DisabledFrameRequestAuthority",
+    "PostHogFrameRequestAuthority",
     "FrameRequestAuthority",
     "FrameRequestAuthorityDecision",
     "authorize",

@@ -422,7 +422,8 @@ actor ScreenActivitySyncService {
         // mixed-generation response must never partially move the queue.
         guard delivered.count <= 32,
           delivered.allSatisfy({
-            $0.deviceId == deviceID && $0.accountGeneration == accountGeneration && $0.state == "requested"
+            $0.deviceId == deviceID && $0.accountGeneration == accountGeneration
+              && ["requested", "claimed", "uploaded"].contains($0.state)
           }),
           Set(delivered.map(\.requestId)).count == delivered.count
         else {
@@ -466,6 +467,7 @@ actor ScreenActivitySyncService {
     baseURL: String
   ) async -> Bool {
     for item in requests {
+      if item.state != "requested" { continue }
       guard let url = URL(string: baseURL + "v1/frame-requests/\(item.requestId)/state") else { return false }
       let body: [String: Any] = [
         "state": "claimed",
@@ -498,55 +500,46 @@ actor ScreenActivitySyncService {
     baseURL: String
   ) async -> Bool {
     for item in requests {
-      guard let screenshotID = item.screenshotId.flatMap(Int64.init),
-        let screenshot = try? await RewindDatabase.shared.getScreenshot(id: screenshotID)
-      else {
-        // A request may target an already-pruned local capture. The queue
-        // receives an auditable terminal reason; no raw pixels or OCR are
-        // emitted here.
-        _ = await failFrameRequest(
-          item,
-          deviceID: deviceID,
-          accountGeneration: accountGeneration,
-          reason: "screenshot_unavailable",
-          headers: headers,
-          baseURL: baseURL
-        )
-        continue
+      // Requested/claimed are recoverable uploads. Uploaded rows are
+      // recoverable promotions and must not upload a second pixel object.
+      if item.state != "uploaded" {
+        guard let screenshotID = item.screenshotId.flatMap(Int64.init),
+          let screenshot = try? await RewindDatabase.shared.getScreenshot(id: screenshotID),
+          let data = try? await RewindStorage.shared.loadScreenshotData(for: screenshot),
+          data.count <= 10 * 1024 * 1024,
+          let uploadURL = URL(
+            string: baseURL
+              + "v1/frame-requests/\(item.requestId)/upload?device_id=\(deviceID.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? deviceID)&account_generation=\(accountGeneration)"
+          )
+        else {
+          // A request may target an already-pruned local capture. Never hide
+          // a terminal-update failure; leaving it claimed lets the next sync
+          // retry or the retention worker reap it safely.
+          guard
+            await failFrameRequest(
+              item, deviceID: deviceID, accountGeneration: accountGeneration,
+              reason: "screenshot_unavailable", headers: headers, baseURL: baseURL
+            )
+          else { return false }
+          continue
+        }
+        let boundary = "omi-frame-\(UUID().uuidString)"
+        var body = Data()
+        body.append(Data("--\(boundary)\r\n".utf8))
+        body.append(Data("Content-Disposition: form-data; name=\"file\"; filename=\"frame.jpg\"\r\n".utf8))
+        body.append(Data("Content-Type: image/jpeg\r\n\r\n".utf8))
+        body.append(data)
+        body.append(Data("\r\n--\(boundary)--\r\n".utf8))
+        var upload = URLRequest(url: uploadURL)
+        upload.httpMethod = "POST"
+        upload.httpBody = body
+        upload.timeoutInterval = 60
+        upload.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        for (key, value) in headers { upload.setValue(value, forHTTPHeaderField: key) }
+        guard let uploadResult = try? await URLSession.shared.data(for: upload),
+          (uploadResult.1 as? HTTPURLResponse)?.statusCode == 200
+        else { return false }
       }
-      guard let data = try? await RewindStorage.shared.loadScreenshotData(for: screenshot),
-        data.count <= 10 * 1024 * 1024,
-        let uploadURL = URL(
-          string: baseURL
-            + "v1/frame-requests/\(item.requestId)/upload?device_id=\(deviceID.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? deviceID)&account_generation=\(accountGeneration)"
-        )
-      else {
-        _ = await failFrameRequest(
-          item,
-          deviceID: deviceID,
-          accountGeneration: accountGeneration,
-          reason: "screenshot_unavailable",
-          headers: headers,
-          baseURL: baseURL
-        )
-        continue
-      }
-      let boundary = "omi-frame-\(UUID().uuidString)"
-      var body = Data()
-      body.append(Data("--\(boundary)\r\n".utf8))
-      body.append(Data("Content-Disposition: form-data; name=\"file\"; filename=\"frame.jpg\"\r\n".utf8))
-      body.append(Data("Content-Type: image/jpeg\r\n\r\n".utf8))
-      body.append(data)
-      body.append(Data("\r\n--\(boundary)--\r\n".utf8))
-      var upload = URLRequest(url: uploadURL)
-      upload.httpMethod = "POST"
-      upload.httpBody = body
-      upload.timeoutInterval = 60
-      upload.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-      for (key, value) in headers { upload.setValue(value, forHTTPHeaderField: key) }
-      guard let uploadResult = try? await URLSession.shared.data(for: upload),
-        (uploadResult.1 as? HTTPURLResponse)?.statusCode == 200
-      else { return false }
 
       if let conversationID = item.conversationId,
         let promoteURL = URL(string: baseURL + "v1/frame-requests/\(item.requestId)/promote")

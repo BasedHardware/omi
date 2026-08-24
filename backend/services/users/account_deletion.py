@@ -167,7 +167,7 @@ def purge_derived_user_data(uid: str) -> PurgeResult:
     try:
         # Firestore metadata is removed by the recursive user wipe below, but
         # referenced pixels live in GCS and would otherwise become orphaned.
-        frame_storage_ids = frame_requests_db.list_frame_request_storage_ids(uid)
+        frame_storage_ids = frame_requests_db.list_all_frame_request_storage_ids(uid)
         delete_frame_request_pixels_for_user(uid, frame_storage_ids)
     except Exception as e:
         record_failure('required_failures', 'frame_request_pixels', e)

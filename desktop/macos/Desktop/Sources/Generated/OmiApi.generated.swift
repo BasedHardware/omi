@@ -1709,6 +1709,44 @@ public enum OmiAPI {
   }
 
 
+  public struct CreateFrameRequest: Codable {
+    public let accountGeneration: Int?
+    public let conversationId: String?
+    public let dedupeKey: String
+    public let deviceId: String
+    public let requestedTtlSeconds: Int?
+    public let screenshotId: String?
+
+    private enum CodingKeys: String, CodingKey {
+      case accountGeneration = "account_generation"
+      case conversationId = "conversation_id"
+      case dedupeKey = "dedupe_key"
+      case deviceId = "device_id"
+      case requestedTtlSeconds = "requested_ttl_seconds"
+      case screenshotId = "screenshot_id"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      accountGeneration = try c.decodeIfPresent(Int.self, forKey: .accountGeneration)
+      conversationId = try c.decodeIfPresent(String.self, forKey: .conversationId)
+      dedupeKey = try c.decode(String.self, forKey: .dedupeKey)
+      deviceId = try c.decode(String.self, forKey: .deviceId)
+      requestedTtlSeconds = try c.decodeIfPresent(Int.self, forKey: .requestedTtlSeconds)
+      screenshotId = try c.decodeIfPresent(String.self, forKey: .screenshotId)
+    }
+
+    public init(accountGeneration: Int? = nil, conversationId: String? = nil, dedupeKey: String, deviceId: String, requestedTtlSeconds: Int? = nil, screenshotId: String? = nil) {
+      self.accountGeneration = accountGeneration
+      self.conversationId = conversationId
+      self.dedupeKey = dedupeKey
+      self.deviceId = deviceId
+      self.requestedTtlSeconds = requestedTtlSeconds
+      self.screenshotId = screenshotId
+    }
+  }
+
+
   public struct DecisionDebugProjection: Codable {
     public let decisions: [DecisionRecord]
     public let projection: WhatMattersNowProjection
@@ -2162,6 +2200,137 @@ public enum OmiAPI {
   }
 
 
+  public struct FrameRequest: Codable {
+    public let accountGeneration: Int?
+    public let attachedAt: String?
+    public let attemptNumber: Int?
+    public let byteCount: Int?
+    public let claimedAt: String?
+    public let cleanupAttempts: Int?
+    public let cleanupNextAttemptAt: String?
+    public let cleanupState: FrameRequestCleanupState?
+    public let contentType: String?
+    public let conversationId: String?
+    public let createdAt: String
+    public let dedupeKey: String
+    public let dedupeWindow: Int?
+    public let deviceId: String
+    public let expiresAt: String
+    public let requestId: String
+    public let screenshotId: String?
+    public let state: FrameRequestState?
+    public let storageId: String?
+    public let terminalReason: String?
+    public let uid: String
+    public let uploadedAt: String?
+
+    private enum CodingKeys: String, CodingKey {
+      case accountGeneration = "account_generation"
+      case attachedAt = "attached_at"
+      case attemptNumber = "attempt_number"
+      case byteCount = "byte_count"
+      case claimedAt = "claimed_at"
+      case cleanupAttempts = "cleanup_attempts"
+      case cleanupNextAttemptAt = "cleanup_next_attempt_at"
+      case cleanupState = "cleanup_state"
+      case contentType = "content_type"
+      case conversationId = "conversation_id"
+      case createdAt = "created_at"
+      case dedupeKey = "dedupe_key"
+      case dedupeWindow = "dedupe_window"
+      case deviceId = "device_id"
+      case expiresAt = "expires_at"
+      case requestId = "request_id"
+      case screenshotId = "screenshot_id"
+      case state
+      case storageId = "storage_id"
+      case terminalReason = "terminal_reason"
+      case uid
+      case uploadedAt = "uploaded_at"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      accountGeneration = try c.decodeIfPresent(Int.self, forKey: .accountGeneration)
+      attachedAt = try c.decodeIfPresent(String.self, forKey: .attachedAt)
+      attemptNumber = try c.decodeIfPresent(Int.self, forKey: .attemptNumber)
+      byteCount = try c.decodeIfPresent(Int.self, forKey: .byteCount)
+      claimedAt = try c.decodeIfPresent(String.self, forKey: .claimedAt)
+      cleanupAttempts = try c.decodeIfPresent(Int.self, forKey: .cleanupAttempts)
+      cleanupNextAttemptAt = try c.decodeIfPresent(String.self, forKey: .cleanupNextAttemptAt)
+      cleanupState = try c.decodeIfPresent(FrameRequestCleanupState.self, forKey: .cleanupState)
+      contentType = try c.decodeIfPresent(String.self, forKey: .contentType)
+      conversationId = try c.decodeIfPresent(String.self, forKey: .conversationId)
+      createdAt = try c.decode(String.self, forKey: .createdAt)
+      dedupeKey = try c.decode(String.self, forKey: .dedupeKey)
+      dedupeWindow = try c.decodeIfPresent(Int.self, forKey: .dedupeWindow)
+      deviceId = try c.decode(String.self, forKey: .deviceId)
+      expiresAt = try c.decode(String.self, forKey: .expiresAt)
+      requestId = try c.decode(String.self, forKey: .requestId)
+      screenshotId = try c.decodeIfPresent(String.self, forKey: .screenshotId)
+      state = try c.decodeIfPresent(FrameRequestState.self, forKey: .state)
+      storageId = try c.decodeIfPresent(String.self, forKey: .storageId)
+      terminalReason = try c.decodeIfPresent(String.self, forKey: .terminalReason)
+      uid = try c.decode(String.self, forKey: .uid)
+      uploadedAt = try c.decodeIfPresent(String.self, forKey: .uploadedAt)
+    }
+
+    public init(accountGeneration: Int? = nil, attachedAt: String? = nil, attemptNumber: Int? = nil, byteCount: Int? = nil, claimedAt: String? = nil, cleanupAttempts: Int? = nil, cleanupNextAttemptAt: String? = nil, cleanupState: FrameRequestCleanupState? = nil, contentType: String? = nil, conversationId: String? = nil, createdAt: String, dedupeKey: String, dedupeWindow: Int? = nil, deviceId: String, expiresAt: String, requestId: String, screenshotId: String? = nil, state: FrameRequestState? = nil, storageId: String? = nil, terminalReason: String? = nil, uid: String, uploadedAt: String? = nil) {
+      self.accountGeneration = accountGeneration
+      self.attachedAt = attachedAt
+      self.attemptNumber = attemptNumber
+      self.byteCount = byteCount
+      self.claimedAt = claimedAt
+      self.cleanupAttempts = cleanupAttempts
+      self.cleanupNextAttemptAt = cleanupNextAttemptAt
+      self.cleanupState = cleanupState
+      self.contentType = contentType
+      self.conversationId = conversationId
+      self.createdAt = createdAt
+      self.dedupeKey = dedupeKey
+      self.dedupeWindow = dedupeWindow
+      self.deviceId = deviceId
+      self.expiresAt = expiresAt
+      self.requestId = requestId
+      self.screenshotId = screenshotId
+      self.state = state
+      self.storageId = storageId
+      self.terminalReason = terminalReason
+      self.uid = uid
+      self.uploadedAt = uploadedAt
+    }
+  }
+
+
+  public struct FrameRequestBatch: Codable {
+    public let requests: [FrameRequest]?
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      requests = try c.decodeIfPresent([FrameRequest].self, forKey: .requests)
+    }
+
+    public init(requests: [FrameRequest]? = nil) {
+      self.requests = requests
+    }
+  }
+
+
+  public enum FrameRequestCleanupState: String, Codable, CaseIterable {
+    case not_required
+    case pending
+    case failed
+    case deleted
+    case permanent
+    case _unknown = "__unknown__"
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.singleValueContainer()
+      let raw = try c.decode(String.self)
+      self = FrameRequestCleanupState(rawValue: raw) ?? ._unknown
+    }
+  }
+
+
   public struct FrameRequestDelivery: Codable {
     public let accountGeneration: Int
     public let conversationId: String?
@@ -2200,6 +2369,110 @@ public enum OmiAPI {
       self.requestId = requestId
       self.screenshotId = screenshotId
       self.state = state
+    }
+  }
+
+
+  public struct FrameRequestEnvelope: Codable {
+    public let deduplicated: Bool?
+    public let request: FrameRequest
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      deduplicated = try c.decodeIfPresent(Bool.self, forKey: .deduplicated)
+      request = try c.decode(FrameRequest.self, forKey: .request)
+    }
+
+    public init(deduplicated: Bool? = nil, request: FrameRequest) {
+      self.deduplicated = deduplicated
+      self.request = request
+    }
+  }
+
+
+  public struct FrameRequestPromotion: Codable {
+    public let accountGeneration: Int?
+    public let conversationId: String
+    public let deviceId: String
+
+    private enum CodingKeys: String, CodingKey {
+      case accountGeneration = "account_generation"
+      case conversationId = "conversation_id"
+      case deviceId = "device_id"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      accountGeneration = try c.decodeIfPresent(Int.self, forKey: .accountGeneration)
+      conversationId = try c.decode(String.self, forKey: .conversationId)
+      deviceId = try c.decode(String.self, forKey: .deviceId)
+    }
+
+    public init(accountGeneration: Int? = nil, conversationId: String, deviceId: String) {
+      self.accountGeneration = accountGeneration
+      self.conversationId = conversationId
+      self.deviceId = deviceId
+    }
+  }
+
+
+  public enum FrameRequestState: String, Codable, CaseIterable {
+    case requested
+    case claimed
+    case uploaded
+    case attached
+    case offline
+    case pruned
+    case failed
+    case expired
+    case cancelled
+    case _unknown = "__unknown__"
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.singleValueContainer()
+      let raw = try c.decode(String.self)
+      self = FrameRequestState(rawValue: raw) ?? ._unknown
+    }
+  }
+
+
+  public struct FrameRequestStateUpdate: Codable {
+    public let accountGeneration: Int?
+    public let byteCount: Int?
+    public let contentType: String?
+    public let deviceId: String
+    public let state: FrameRequestState
+    public let storageId: String?
+    public let terminalReason: String?
+
+    private enum CodingKeys: String, CodingKey {
+      case accountGeneration = "account_generation"
+      case byteCount = "byte_count"
+      case contentType = "content_type"
+      case deviceId = "device_id"
+      case state
+      case storageId = "storage_id"
+      case terminalReason = "terminal_reason"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      accountGeneration = try c.decodeIfPresent(Int.self, forKey: .accountGeneration)
+      byteCount = try c.decodeIfPresent(Int.self, forKey: .byteCount)
+      contentType = try c.decodeIfPresent(String.self, forKey: .contentType)
+      deviceId = try c.decode(String.self, forKey: .deviceId)
+      state = try c.decode(FrameRequestState.self, forKey: .state)
+      storageId = try c.decodeIfPresent(String.self, forKey: .storageId)
+      terminalReason = try c.decodeIfPresent(String.self, forKey: .terminalReason)
+    }
+
+    public init(accountGeneration: Int? = nil, byteCount: Int? = nil, contentType: String? = nil, deviceId: String, state: FrameRequestState, storageId: String? = nil, terminalReason: String? = nil) {
+      self.accountGeneration = accountGeneration
+      self.byteCount = byteCount
+      self.contentType = contentType
+      self.deviceId = deviceId
+      self.state = state
+      self.storageId = storageId
+      self.terminalReason = terminalReason
     }
   }
 
@@ -7860,7 +8133,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode([ConversationPhoto].self, from: data)
   }
 
-  public static func getConversationPhotoImageV1ConversationsConversationIdPhotosPhotoIdImageGet(client: OmiApiClient, conversationId: String, photoId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+  public static func getConversationPhotoImageV1ConversationsConversationIdPhotosPhotoIdImageGet(client: OmiApiClient, conversationId: String, photoId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> Data {
     let _path = "/v1/conversations/\(conversationId)/photos/\(photoId)/image"
     guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -7881,7 +8154,7 @@ public enum OmiAPI {
     guard (200..<300).contains(http.statusCode) else {
       throw OmiApiError.httpError(status: http.statusCode, data: data)
     }
-    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+    return data
   }
 
   public static func conversationHasAudioRecordingV1ConversationsConversationIdRecordingGet(client: OmiApiClient, conversationId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
@@ -9202,6 +9475,145 @@ public enum OmiAPI {
       throw OmiApiError.httpError(status: http.statusCode, data: data)
     }
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func createFrameRequestV1FrameRequestsPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: CreateFrameRequest) async throws -> FrameRequestEnvelope {
+    let _path = "/v1/frame-requests"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(FrameRequestEnvelope.self, from: data)
+  }
+
+  public static func getPendingFrameRequestsV1FrameRequestsPendingGet(client: OmiApiClient, deviceId: String, accountGeneration: Int? = nil, limit: Int? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> FrameRequestBatch {
+    let _path = "/v1/frame-requests/pending"
+    guard var components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    var queryItems: [URLQueryItem] = []
+    queryItems.append(URLQueryItem(name: "device_id", value: String(deviceId)))
+    if let accountGeneration {
+      queryItems.append(URLQueryItem(name: "account_generation", value: String(accountGeneration)))
+    }
+    if let limit {
+      queryItems.append(URLQueryItem(name: "limit", value: String(limit)))
+    }
+    if !queryItems.isEmpty { components.queryItems = queryItems }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(FrameRequestBatch.self, from: data)
+  }
+
+  public static func promoteFrameRequestV1FrameRequestsRequestIdPromotePost(client: OmiApiClient, requestId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: FrameRequestPromotion) async throws -> FrameRequestEnvelope {
+    let _path = "/v1/frame-requests/\(requestId)/promote"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(FrameRequestEnvelope.self, from: data)
+  }
+
+  public static func updateFrameRequestStateV1FrameRequestsRequestIdStatePost(client: OmiApiClient, requestId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: FrameRequestStateUpdate) async throws -> FrameRequestEnvelope {
+    let _path = "/v1/frame-requests/\(requestId)/state"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(FrameRequestEnvelope.self, from: data)
+  }
+
+  public static func uploadFrameRequestV1FrameRequestsRequestIdUploadPost(client: OmiApiClient, requestId: String, deviceId: String, accountGeneration: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> FrameRequestEnvelope {
+    let _path = "/v1/frame-requests/\(requestId)/upload"
+    guard var components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    var queryItems: [URLQueryItem] = []
+    queryItems.append(URLQueryItem(name: "device_id", value: String(deviceId)))
+    queryItems.append(URLQueryItem(name: "account_generation", value: String(accountGeneration)))
+    if !queryItems.isEmpty { components.queryItems = queryItems }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(FrameRequestEnvelope.self, from: data)
   }
 
   public static func getCurrentGoalV1GoalsGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> GoalResponse {
@@ -15484,5 +15896,5 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  // Total: 409 Swift client methods generated.
+  // Total: 414 Swift client methods generated.
 }

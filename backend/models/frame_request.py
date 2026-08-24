@@ -26,6 +26,16 @@ class FrameRequestState(str, Enum):
     cancelled = "cancelled"
 
 
+class FrameRequestCleanupState(str, Enum):
+    """External-pixel deletion state, independent of lifecycle terminality."""
+
+    not_required = "not_required"
+    pending = "pending"
+    failed = "failed"
+    deleted = "deleted"
+    permanent = "permanent"
+
+
 TERMINAL_FRAME_REQUEST_STATES = frozenset(
     {
         FrameRequestState.attached,
@@ -65,6 +75,9 @@ class FrameRequest(BaseModel):
     byte_count: int = Field(default=0, ge=0, le=10 * 1024 * 1024)
     content_type: str | None = Field(default=None, max_length=100)
     storage_id: str | None = Field(default=None, max_length=256)
+    cleanup_state: FrameRequestCleanupState = FrameRequestCleanupState.not_required
+    cleanup_attempts: int = Field(default=0, ge=0, le=1000)
+    cleanup_next_attempt_at: datetime | None = None
 
     @field_validator("uid", "device_id", "request_id", "dedupe_key", mode="before")
     @classmethod
@@ -102,7 +115,7 @@ class FrameRequest(BaseModel):
             raise ValueError("storage_id must be an opaque owner-scoped identifier")
         return value
 
-    @field_validator("created_at", "expires_at", "claimed_at", "uploaded_at", "attached_at")
+    @field_validator("created_at", "expires_at", "claimed_at", "uploaded_at", "attached_at", "cleanup_next_attempt_at")
     @classmethod
     def _normalize_datetime(cls, value: datetime | None) -> datetime | None:
         if value is None:

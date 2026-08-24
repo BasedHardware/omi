@@ -8,18 +8,23 @@ pixel bytes.  The pure policy module owns lifecycle and quota rules.
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 from google.cloud import firestore
 
 from database._client import get_firestore_client
-from models.frame_request import TERMINAL_FRAME_REQUEST_STATES, FrameRequest, FrameRequestState
+from models.frame_request import (
+    TERMINAL_FRAME_REQUEST_STATES,
+    FrameRequest,
+    FrameRequestCleanupState,
+    FrameRequestState,
+)
 from utils.retrieval.frame_request_policy import (
     FRAME_REQUEST_MAX_BATCH,
-    FRAME_REQUEST_MAX_PENDING_PER_DEVICE,
     FRAME_REQUEST_MAX_BYTES_PER_DEVICE,
     FRAME_REQUEST_DEDUPE_WINDOW_SECONDS,
+    FRAME_REQUEST_MAX_ATTACHED_PER_CONVERSATION,
     check_device_quota,
     is_expired,
     request_expiry,
@@ -68,6 +73,26 @@ def get_frame_request(uid: str, request_id: str, *, firestore_client: Any | None
     return _request_from_snapshot(snapshot)
 
 
+def list_attached_frame_requests(
+    uid: str,
+    conversation_id: str,
+    *,
+    firestore_client: Any | None = None,
+    limit: int = 2,
+) -> list[FrameRequest]:
+    """Return the bounded set used to enforce one permanent keyframe."""
+
+    if not conversation_id.strip() or not 1 <= limit <= 2:
+        raise ValueError("invalid conversation frame-request lookup")
+    query = (
+        _collection(uid, firestore_client=firestore_client)
+        .where(filter=firestore.FieldFilter("conversation_id", "==", conversation_id))
+        .where(filter=firestore.FieldFilter("state", "==", FrameRequestState.attached.value))
+        .limit(limit)
+    )
+    return [_request_from_snapshot(snapshot) for snapshot in query.stream()]
+
+
 def enqueue_frame_request(
     uid: str,
     *,
@@ -113,15 +138,14 @@ def enqueue_frame_request(
 
     @firestore.transactional
     def _create(transaction: Any) -> tuple[dict[str, Any], bool]:
-        # Dedupe is scoped to the account generation and a short request
-        # window. Terminal/expired attempts are intentionally ignored so a
-        # stale row cannot starve a later trigger.
+        # Dedupe is scoped to the account generation and the full active
+        # logical-request lifetime. ``dedupe_window`` remains an observability
+        # bucket/index hint, never an expiry boundary for active work.
         attempts = [
             _request_from_snapshot(item)
             for item in collection.where(filter=firestore.FieldFilter("device_id", "==", owner_device))
             .where(filter=firestore.FieldFilter("account_generation", "==", account_generation))
             .where(filter=firestore.FieldFilter("dedupe_key", "==", dedupe_identity))
-            .where(filter=firestore.FieldFilter("dedupe_window", "==", dedupe_window))
             .order_by("attempt_number", direction=firestore.Query.DESCENDING)
             .limit(FRAME_REQUEST_MAX_BATCH)
             .stream(transaction=transaction)
@@ -135,6 +159,27 @@ def enqueue_frame_request(
                 continue
             if not is_expired(existing, now=created):
                 return _request_data(existing), True
+        if conversation_id:
+            conversation_rows = [
+                _request_from_snapshot(item)
+                for item in collection.where(filter=firestore.FieldFilter("conversation_id", "==", conversation_id))
+                .where(
+                    filter=firestore.FieldFilter(
+                        "state",
+                        "in",
+                        [
+                            FrameRequestState.requested.value,
+                            FrameRequestState.claimed.value,
+                            FrameRequestState.uploaded.value,
+                            FrameRequestState.attached.value,
+                        ],
+                    )
+                )
+                .limit(FRAME_REQUEST_MAX_ATTACHED_PER_CONVERSATION + 1)
+                .stream(transaction=transaction)
+            ]
+            if conversation_rows:
+                raise ValueError("conversation already has an active frame request")
         attempt_number = max((item.attempt_number for item in attempts), default=-1) + 1
         dedupe_digest = hashlib.sha256(
             f"{dedupe_identity}:{account_generation}:{dedupe_window}:{attempt_number}".encode("utf-8")
@@ -205,7 +250,9 @@ def list_pending_frame_requests(
         now=current,
         limit=FRAME_REQUEST_MAX_BATCH,
         firestore_client=firestore_client,
-        cleanup_storage=cleanup_storage,
+        # External deletion belongs to the scheduled retention worker.  A
+        # device polling endpoint must not be the only janitor.
+        cleanup_storage=None,
     )
     rows: list[FrameRequest] = []
     query = (
@@ -222,6 +269,45 @@ def list_pending_frame_requests(
             continue
         rows.append(request)
     return rows
+
+
+def list_recoverable_frame_requests(
+    uid: str,
+    *,
+    device_id: str,
+    account_generation: int,
+    now: datetime | None = None,
+    limit: int = FRAME_REQUEST_MAX_BATCH,
+    firestore_client: Any | None = None,
+) -> list[FrameRequest]:
+    """Return requested/claimed/uploaded rows for in-flight device recovery."""
+
+    if not 1 <= limit <= FRAME_REQUEST_MAX_BATCH:
+        raise ValueError("limit is outside the bounded frame-request window")
+    current = _utc(now or datetime.now(timezone.utc))
+    query = (
+        _collection(uid, firestore_client=firestore_client)
+        .where(filter=firestore.FieldFilter("device_id", "==", device_id))
+        .where(filter=firestore.FieldFilter("account_generation", "==", account_generation))
+        .where(
+            filter=firestore.FieldFilter(
+                "state",
+                "in",
+                [
+                    FrameRequestState.requested.value,
+                    FrameRequestState.claimed.value,
+                    FrameRequestState.uploaded.value,
+                ],
+            )
+        )
+        .order_by("created_at", direction=firestore.Query.ASCENDING)
+        .limit(limit)
+    )
+    return [
+        request
+        for snapshot in query.stream()
+        if not is_expired(request := _request_from_snapshot(snapshot), now=current)
+    ]
 
 
 def transition_frame_request(
@@ -276,15 +362,6 @@ def transition_frame_request(
             raise ValueError("only conversation-bound requests may be attached")
         if next_state == FrameRequestState.attached and (storage_id or byte_count or content_type):
             raise ValueError("attached transition cannot replace upload metadata")
-        if (
-            next_state in TERMINAL_FRAME_REQUEST_STATES - {FrameRequestState.attached}
-            and cleanup_storage
-            and request.storage_id
-        ):
-            # Pixels are temporary until the attached transition. Delete them
-            # before recording a terminal outcome; a storage failure leaves the
-            # row retryable rather than orphaning data.
-            cleanup_storage(request.storage_id)
         if next_state == FrameRequestState.uploaded:
             # Byte quota is enforced at the upload transition, after the
             # object has been authenticated and before metadata is committed.
@@ -304,8 +381,9 @@ def transition_frame_request(
                         ],
                     )
                 )
-                .limit(FRAME_REQUEST_MAX_PENDING_PER_DEVICE + 1)
-                .stream(transaction=transaction)
+                # Sum the full bounded active set; using only the pending-count
+                # cap would let old uploaded rows evade the byte quota.
+                .limit(FRAME_REQUEST_MAX_BATCH).stream(transaction=transaction)
             ]
             quota = check_device_quota(
                 active_rows,
@@ -336,6 +414,15 @@ def transition_frame_request(
             # Attached conversation evidence follows conversation lifetime; do
             # not leave a temporary TTL for a cleanup worker to delete.
             update["expires_at"] = request.created_at
+            update["cleanup_state"] = FrameRequestCleanupState.permanent.value
+        elif request.storage_id and next_state in TERMINAL_FRAME_REQUEST_STATES:
+            # Terminal metadata must not imply that the external object was
+            # deleted. A scheduled worker retries this independently.
+            update["cleanup_state"] = FrameRequestCleanupState.pending.value
+            update["cleanup_next_attempt_at"] = current_time
+        elif next_state == FrameRequestState.uploaded:
+            update["cleanup_state"] = FrameRequestCleanupState.pending.value
+            update["cleanup_next_attempt_at"] = current_time
         candidate = FrameRequest.model_validate({**_request_data(request), **update})
         transaction.update(ref, _request_data(candidate))
         return _request_data(candidate)
@@ -370,34 +457,100 @@ def prune_expired_frame_requests(
         row_transaction = client.transaction()
 
         @firestore.transactional
-        def _prune_one(transaction: Any) -> tuple[bool, str | None]:
+        def _prune_one(transaction: Any) -> bool:
             fresh = snapshot.reference.get(transaction=transaction)
             if not fresh.exists:
-                return False, None
+                return False
             request = _request_from_snapshot(fresh)
             # Re-read inside a transaction so a concurrent upload/promotion
             # cannot be overwritten by this expiry worker.
             if request.state == FrameRequestState.attached or not is_expired(request, now=current):
-                return False, None
+                return False
             candidate = FrameRequest.model_validate(
                 {
                     **_request_data(request),
                     "state": FrameRequestState.pruned.value,
                     "terminal_reason": "retention_expired",
+                    "cleanup_state": (
+                        FrameRequestCleanupState.pending.value
+                        if request.storage_id
+                        else FrameRequestCleanupState.not_required.value
+                    ),
+                    "cleanup_next_attempt_at": current,
                 }
             )
             transaction.update(snapshot.reference, _request_data(candidate))
-            return True, request.storage_id
+            return True
 
-        pruned, storage_id = _prune_one(row_transaction)
-        if storage_id and cleanup_storage:
-            # Metadata is terminal before the external object delete. Cleanup
-            # is idempotent and a retrying worker can remove a transiently
-            # unavailable object without reopening the lifecycle row.
-            cleanup_storage(storage_id)
+        pruned = _prune_one(row_transaction)
         if pruned:
             changed += 1
     return changed
+
+
+def cleanup_frame_request_pixels(
+    uid: str,
+    *,
+    delete_storage: Callable[[str], None],
+    now: datetime | None = None,
+    limit: int = FRAME_REQUEST_MAX_BATCH,
+    firestore_client: Any | None = None,
+) -> int:
+    """Retry external deletion independently of queue delivery or lifecycle state.
+
+    A failed GCS delete never reopens or hides the terminal Firestore row. The
+    retry state is deliberately content-free and bounded, so a scheduled job
+    can converge even when no device calls the pending endpoint.
+    """
+
+    if not 1 <= limit <= FRAME_REQUEST_MAX_BATCH:
+        raise ValueError("limit is outside the bounded frame-request window")
+    current = _utc(now or datetime.now(timezone.utc))
+    client = _get_client(firestore_client)
+    query = (
+        _collection(uid, firestore_client=client)
+        .where(
+            filter=firestore.FieldFilter(
+                "state",
+                "in",
+                [state.value for state in TERMINAL_FRAME_REQUEST_STATES if state != FrameRequestState.attached],
+            )
+        )
+        .where(filter=firestore.FieldFilter("cleanup_state", "in", ["pending", "failed"]))
+        .order_by("cleanup_next_attempt_at", direction=firestore.Query.ASCENDING)
+        .limit(limit)
+    )
+    cleaned = 0
+    for snapshot in query.stream():
+        request = _request_from_snapshot(snapshot)
+        if not request.storage_id or request.cleanup_state not in {
+            FrameRequestCleanupState.pending,
+            FrameRequestCleanupState.failed,
+        }:
+            continue
+        try:
+            delete_storage(request.storage_id)
+        except Exception:
+            # Do not persist exception text or pixels in telemetry/metadata.
+            retry_at = current + timedelta(seconds=min(24 * 60 * 60, 2 ** min(request.cleanup_attempts, 16)))
+            ref = snapshot.reference
+            ref.update(
+                {
+                    "cleanup_state": FrameRequestCleanupState.failed.value,
+                    "cleanup_attempts": request.cleanup_attempts + 1,
+                    "cleanup_next_attempt_at": retry_at,
+                }
+            )
+            continue
+        snapshot.reference.update(
+            {
+                "cleanup_state": FrameRequestCleanupState.deleted.value,
+                "cleanup_attempts": request.cleanup_attempts + 1,
+                "cleanup_next_attempt_at": None,
+            }
+        )
+        cleaned += 1
+    return cleaned
 
 
 def delete_frame_requests_for_conversation(
@@ -417,19 +570,25 @@ def delete_frame_requests_for_conversation(
     if not conversation_id.strip():
         raise ValueError("conversation_id is required")
     client = _get_client(firestore_client)
-    rows = list(
-        _collection(uid, firestore_client=client)
-        .where(filter=firestore.FieldFilter("conversation_id", "==", conversation_id))
-        .stream()
-    )
     deleted = 0
-    for start in range(0, len(rows), batch_size):
+    # Page by repeatedly reading a bounded batch and deleting only that page.
+    # A hard page fence turns a silent truncation into an error instead of a
+    # privacy claim that was only partially fulfilled.
+    for _page in range(1000):
+        rows = list(
+            _collection(uid, firestore_client=client)
+            .where(filter=firestore.FieldFilter("conversation_id", "==", conversation_id))
+            .limit(batch_size)
+            .stream()
+        )
+        if not rows:
+            return deleted
         batch = client.batch()
-        for snapshot in rows[start : start + batch_size]:
+        for snapshot in rows:
             batch.delete(snapshot.reference)
             deleted += 1
         batch.commit()
-    return deleted
+    raise RuntimeError("frame request conversation cleanup exceeded page bound")
 
 
 def list_frame_request_storage_ids(
@@ -449,11 +608,49 @@ def list_frame_request_storage_ids(
             raise ValueError("conversation_id is required")
         query = query.where(filter=firestore.FieldFilter("conversation_id", "==", conversation_id))
     result: list[str] = []
-    for snapshot in query.limit(limit).stream():
+    seen = 0
+    for snapshot in query.limit(limit + 1).stream():
+        seen += 1
+        if seen > limit:
+            raise RuntimeError("frame request storage cleanup was truncated")
         value = (snapshot.to_dict() or {}).get("storage_id")
         if isinstance(value, str) and value.strip() and "/" not in value and "\\" not in value:
             result.append(value.strip())
     return result
+
+
+def list_all_frame_request_storage_ids(
+    uid: str,
+    *,
+    conversation_id: str | None = None,
+    firestore_client: Any | None = None,
+    page_size: int = 500,
+    max_pages: int = 1000,
+) -> list[str]:
+    """Exhaustively enumerate opaque storage IDs with a truncation fence."""
+
+    if not 1 <= page_size <= 10000 or not 1 <= max_pages <= 10000:
+        raise ValueError("invalid frame-request storage page bounds")
+    query_base = _collection(uid, firestore_client=firestore_client)
+    if conversation_id is not None:
+        if not conversation_id.strip():
+            raise ValueError("conversation_id is required")
+        query_base = query_base.where(filter=firestore.FieldFilter("conversation_id", "==", conversation_id))
+    result: list[str] = []
+    last_snapshot: Any | None = None
+    for _page in range(max_pages):
+        query = query_base.order_by("__name__", direction=firestore.Query.ASCENDING).limit(page_size)
+        if last_snapshot is not None:
+            query = query.start_after(last_snapshot)
+        rows = list(query.stream())
+        for snapshot in rows:
+            value = (snapshot.to_dict() or {}).get("storage_id")
+            if isinstance(value, str) and value.strip() and "/" not in value and "\\" not in value:
+                result.append(value.strip())
+        if len(rows) < page_size:
+            return result
+        last_snapshot = rows[-1]
+    raise RuntimeError("frame request storage enumeration exceeded page bound")
 
 
 def _utc(value: datetime) -> datetime:
