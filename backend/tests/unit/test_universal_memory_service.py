@@ -1338,7 +1338,7 @@ def test_superseded_ledger_fact_revert_rejects_malformed_lineage(service_mod, mo
     amend.assert_not_called()
 
 
-def test_ledger_revert_rejects_standalone_closed_row_and_invalid_operation_id(service_mod, monkeypatch):
+def test_ledger_revert_reopens_standalone_closed_row_and_rejects_invalid_operation_id(service_mod, monkeypatch):
     now = datetime(2026, 8, 23, tzinfo=timezone.utc)
     selected = _ledger_item(
         service_mod,
@@ -1347,23 +1347,81 @@ def test_ledger_revert_rejects_standalone_closed_row_and_invalid_operation_id(se
         status=MemoryItemStatus.superseded,
         valid_to=now,
     )
+    operation_id = "5f95a7a1-10c6-4ec3-946d-e76a0a2f7cc5"
+    provenance = service_mod.LedgerProvenance(
+        source_id="selected",
+        source_type="explicit_user_reopen",
+        source_version="item_revision:1",
+        action_id=f"memory_ui_reopen:{operation_id}",
+    )
+    evidence = MemoryEvidence(
+        evidence_id=service_mod.evidence_id_for_ledger_provenance("uid-test", provenance),
+        source_type="explicit_user_reopen",
+        source_id="selected",
+        source_version="item_revision:1",
+        artifact_preservation=ArtifactPreservationState.preserved,
+    )
+    replacement = selected.model_copy(
+        update={
+            "memory_id": "replacement",
+            "status": MemoryItemStatus.active,
+            "valid_to": None,
+            "write_reason": LedgerWriteReason.direct_user_statement,
+            "evidence": [evidence],
+        }
+    )
     service = service_mod.MemoryService(db_client=_Db())
-    monkeypatch.setattr(service, "_canonical_item_for_lineage", MagicMock(return_value=selected))
-    amend = MagicMock()
-    monkeypatch.setattr(service_mod, "amend_fact", amend)
+    monkeypatch.setattr(
+        service, "_canonical_item_for_lineage", MagicMock(side_effect=[selected, selected, replacement])
+    )
+    reopen = MagicMock(return_value="replacement")
+    monkeypatch.setattr(service_mod, "reopen_standalone_fact", reopen)
 
     with pytest.raises(service_mod.HTTPException) as invalid_operation:
         service.revert_superseded_ledger_fact("uid-test", "selected", "not-a-uuid")
     assert invalid_operation.value.status_code == 422
 
-    with pytest.raises(service_mod.HTTPException) as standalone:
-        service.revert_superseded_ledger_fact(
+    restored = service.revert_superseded_ledger_fact("uid-test", "selected", operation_id)
+    assert restored.id == "replacement"
+    assert restored.content == selected.content
+    reopen.assert_called_once()
+    assert reopen.call_args.args[:2] == ("uid-test", selected)
+
+
+@pytest.mark.parametrize(
+    "source_update",
+    [
+        {"user_review": False},
+        {"sensitivity_labels": ["health"]},
+        {"source_state": SourceState.tombstoned},
+    ],
+)
+def test_standalone_ledger_reopen_rejects_rejected_or_unavailable_source(service_mod, monkeypatch, source_update):
+    now = datetime(2026, 8, 23, tzinfo=timezone.utc)
+    selected = _ledger_item(
+        service_mod,
+        "selected",
+        updated_at=now,
+        status=MemoryItemStatus.superseded,
+        valid_to=now,
+    )
+    if "user_review" in source_update:
+        selected = selected.model_copy(update={"promotion": {"user_review": False}})
+    else:
+        selected = selected.model_copy(update=source_update)
+    service = service_mod.MemoryService(db_client=_Db())
+    monkeypatch.setattr(service, "_canonical_item_for_lineage", MagicMock(return_value=selected))
+    reopen = MagicMock()
+    monkeypatch.setattr(service_mod, "reopen_standalone_fact", reopen)
+
+    with pytest.raises(service_mod.HTTPException) as exc_info:
+        service.reopen_standalone_closed_ledger_fact(
             "uid-test",
             "selected",
             "5f95a7a1-10c6-4ec3-946d-e76a0a2f7cc5",
         )
-    assert standalone.value.status_code == 409
-    amend.assert_not_called()
+    assert exc_info.value.status_code == 409
+    reopen.assert_not_called()
 
 
 @pytest.mark.parametrize(

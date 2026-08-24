@@ -41,6 +41,9 @@ _ALLOWED_MEMORY_COLLECTIONS_PROPERTIES = frozenset(
         # Immutable source-replacement receipts are journal metadata, not a
         # second product-memory collection or product tier.
         "memory_source_replacements",
+        # Standalone ledger reopen receipts are journal metadata, not a
+        # second product-memory collection or product tier.
+        "memory_ledger_reopens",
         "memory_outbox",
         "memory_control_state",
         # Migration checkpoint under memory_control (not a product-memory tier store).

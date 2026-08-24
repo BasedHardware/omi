@@ -873,7 +873,7 @@ def revert_memory(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:modify"))
     ),
 ):
-    """Append a fresh current fact from one superseded ledger row."""
+    """Append a fresh current fact from one closed ledger history row."""
 
     response.headers['Cache-Control'] = 'no-store'
     db_client = getattr(db_client_module, 'db', None)

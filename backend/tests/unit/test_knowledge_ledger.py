@@ -28,6 +28,7 @@ from utils.memory.knowledge_ledger import (
     close_fact,
     render_playbook_index,
     render_profile,
+    reopen_standalone_fact,
 )
 
 NOW = datetime(2026, 8, 23, 12, 0, tzinfo=timezone.utc)
@@ -195,6 +196,77 @@ def test_ledger_amendment_appends_and_supersedes_in_one_commit():
     assert historical.valid_to is not None
     assert historical.valid_to >= replacement.valid_from
     assert {event.payload["action"] for event in result.outbox_events} == {"upsert", "delete"}
+
+
+def test_standalone_reopen_builds_preserving_append_and_stable_receipt(monkeypatch):
+    source = _item(
+        "closed",
+        content="Lives in Brooklyn",
+        status=MemoryItemStatus.superseded,
+        valid_to=NOW + timedelta(hours=1),
+        canonical_memory_id=None,
+        superseded_by=None,
+        predicate="lives_in",
+        arguments={"city": "Brooklyn"},
+        sensitivity_labels=["location"],
+    )
+    captured = {}
+
+    def write_ledger(
+        uid,
+        payload,
+        *,
+        db_client=None,
+        required_source_item=None,
+        ledger_reopen_receipt=None,
+    ):
+        captured.update(
+            {
+                "uid": uid,
+                "payload": payload,
+                "db_client": db_client,
+                "required_source_item": required_source_item,
+                "ledger_reopen_receipt": ledger_reopen_receipt,
+            }
+        )
+        return payload["id"]
+
+    monkeypatch.setattr(
+        knowledge_ledger,
+        "ensure_canonical_apply_control_state",
+        lambda *args, **kwargs: MemoryControlState(
+            uid="u1", head_commit_id="head0", account_generation=7, source_generation=8
+        ),
+    )
+    monkeypatch.setattr(knowledge_ledger, "read_canonical_memory_item", lambda *args, **kwargs: None)
+    monkeypatch.setattr(knowledge_ledger, "write_canonical_knowledge_ledger_memory", write_ledger)
+    provenance = LedgerProvenance(
+        source_id="closed",
+        source_type="explicit_user_reopen",
+        source_version="item_revision:1",
+        action_id="memory_ui_reopen:client-op",
+    )
+
+    replacement_id = reopen_standalone_fact(
+        "u1",
+        source,
+        operation_id="client-op",
+        provenance=provenance,
+        db_client="db",
+    )
+
+    assert replacement_id == captured["payload"]["id"]
+    assert captured["required_source_item"] == source
+    assert captured["payload"]["visibility"] == source.visibility
+    assert captured["payload"]["predicate"] == source.predicate
+    assert captured["payload"]["arguments"] == source.arguments
+    assert captured["payload"]["sensitivity_labels"] == source.sensitivity_labels
+    assert {item["evidence_id"] for item in captured["payload"]["evidence"]} == {
+        "ev-ledger-1",
+        knowledge_ledger.evidence_id_for_ledger_provenance("u1", provenance),
+    }
+    assert captured["ledger_reopen_receipt"].source_memory_id == source.memory_id
+    assert captured["ledger_reopen_receipt"].account_generation == 7
 
 
 def test_amend_fact_carries_visibility_into_the_atomic_replacement(monkeypatch):

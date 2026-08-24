@@ -27,7 +27,12 @@ from models.memory_apply import (
     memory_content_hash,
 )
 from models.memory_contracts import DurablePatchDecision, LifecycleState
-from models.memory_operations import MemoryOperation, MemoryOperationStatus, MemoryOperationType
+from models.memory_operations import (
+    MemoryLedgerReopenReceipt,
+    MemoryOperation,
+    MemoryOperationStatus,
+    MemoryOperationType,
+)
 from models.memory_promotion import PromotionGraphPlan, build_promotion_admission_receipt
 from models.product_memory import (
     LedgerWriteReason,
@@ -1494,6 +1499,134 @@ def test_firestore_apply_creates_operation_inside_transaction_and_never_overwrit
     assert replay.status == ApplyStatus.idempotent_skip
     assert replay.control_state.commit_sequence == first_sequence
     assert db.docs[operation_path]["status"] == MemoryOperationStatus.committed.value
+
+
+def test_firestore_standalone_reopen_receipt_blocks_duplicate_current_tail(store):
+    now = datetime.now(timezone.utc)
+    source_evidence = _evidence(evidence_id="ev-closed-source", source_id="source", source_version="v1")
+    reopen_evidence = _evidence(
+        evidence_id="ev-reopen",
+        source_id="source",
+        source_type="explicit_user_reopen",
+        source_version="item_revision:1",
+    )
+    source = _target_item(
+        memory_id="source",
+        content="User lives in Boston.",
+        evidence=[source_evidence],
+        content_hash="source-content-hash",
+        status=MemoryItemStatus.superseded,
+        valid_from=now - timedelta(days=1),
+        valid_to=now,
+        canonical_memory_id=None,
+        superseded_by=None,
+        ledger_schema_version="knowledge_ledger.v1",
+        kind=MemoryKind.fact,
+        subject_scope=MemorySubjectScope.primary_user,
+        slot="home_city",
+        intent_backed=True,
+        write_reason=LedgerWriteReason.daily_reconciliation,
+        user_asserted=True,
+    )
+    control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
+    patch = _patch(
+        patch_id="patch-reopen",
+        packet_id="source",
+        run_id="reopen-source",
+        idempotency_key="reopen-source",
+        evidence_ids=[source_evidence.evidence_id, reopen_evidence.evidence_id],
+        new_memory_id="replacement",
+        memory_text=source.content,
+        initial_tier=MemoryTier.long_term,
+        ledger_schema_version="knowledge_ledger.v1",
+        kind=MemoryKind.fact,
+        subject_scope=MemorySubjectScope.primary_user,
+        slot="home_city",
+        intent_backed=True,
+        write_reason=LedgerWriteReason.direct_user_statement,
+        user_asserted=True,
+        visibility="private",
+    )
+    mutation_identity = build_patch_mutation_identity(patch)
+    patch["mutation_metadata"] = mutation_identity
+    operation = _operation(
+        operation_type=MemoryOperationType.ledger_mutation,
+        source_packet_id="source",
+        evidence_ids=patch["evidence_ids"],
+        logical_payload={
+            "decision": DurablePatchDecision.add.value,
+            "memory_text": source.content,
+            "supersedes": [],
+            "result_status": LifecycleState.active.value,
+            "mutation_metadata": mutation_identity,
+        },
+    )
+    db = _db_with(control=control, operation=operation, evidence=source_evidence, target_items=[source])
+    db.docs.pop("users/u1/memory_evidence/ev1", None)
+    db.docs[f"users/u1/memory_evidence/{source_evidence.evidence_id}"] = _stored_model(source_evidence)
+    db.docs[f"users/u1/memory_evidence/{reopen_evidence.evidence_id}"] = _stored_model(reopen_evidence)
+    receipt = MemoryLedgerReopenReceipt(
+        uid="u1",
+        source_memory_id="source",
+        replacement_memory_id="replacement",
+        operation_id="client-op-1",
+        account_generation=1,
+        source_generation=2,
+        source_item_revision=source.item_revision,
+        source_content_hash=source.content_hash or "",
+    )
+
+    first = store.apply_long_term_patch_firestore(
+        uid="u1",
+        operation_id=operation.operation_id,
+        patch_payload=patch,
+        proposed_operation=operation,
+        proposed_evidence=[source_evidence, reopen_evidence],
+        required_source_item=source,
+        ledger_reopen_receipt=receipt,
+        db_client=db,
+    )
+    assert first.status == ApplyStatus.committed, first.reason
+    assert db.docs["users/u1/memory_ledger_reopens/source"]["replacement_memory_id"] == "replacement"
+
+    replay = store.apply_long_term_patch_firestore(
+        uid="u1",
+        operation_id=operation.operation_id,
+        patch_payload=patch,
+        proposed_operation=operation,
+        proposed_evidence=[source_evidence, reopen_evidence],
+        required_source_item=source,
+        ledger_reopen_receipt=receipt,
+        db_client=db,
+    )
+    assert replay.status == ApplyStatus.idempotent_skip
+    assert len([path for path in db.docs if path.startswith("users/u1/memory_items/")]) == 2
+
+    competing = _operation(
+        operation_type=MemoryOperationType.ledger_mutation,
+        source_packet_id="source:competing",
+        evidence_ids=patch["evidence_ids"],
+        observed_head_commit_id=first.control_state.head_commit_id,
+        logical_payload={
+            "decision": DurablePatchDecision.add.value,
+            "memory_text": source.content,
+            "supersedes": [],
+            "result_status": LifecycleState.active.value,
+            "mutation_metadata": mutation_identity,
+        },
+    )
+    competing_result = store.apply_long_term_patch_firestore(
+        uid="u1",
+        operation_id=competing.operation_id,
+        patch_payload=patch,
+        proposed_operation=competing,
+        proposed_evidence=[source_evidence, reopen_evidence],
+        required_source_item=source,
+        ledger_reopen_receipt=receipt.model_copy(update={"operation_id": "client-op-2"}),
+        db_client=db,
+    )
+    assert competing_result.status == ApplyStatus.source_not_active
+    assert len([path for path in db.docs if path.startswith("users/u1/memory_items/")]) == 2
 
 
 def test_firestore_apply_stages_new_evidence_in_the_same_commit(store):

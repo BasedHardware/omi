@@ -62575,7 +62575,7 @@
     },
     "/v3/memories/{memory_id}/revert": {
       "post": {
-        "description": "Append a fresh current fact from one superseded ledger row.",
+        "description": "Append a fresh current fact from one closed ledger history row.",
         "operationId": "revert_memory_v3_memories__memory_id__revert_post",
         "parameters": [
           {

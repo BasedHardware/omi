@@ -9,11 +9,13 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
-from typing import Any, Dict, Iterable, List, Literal, Optional
+from typing import Any, Dict, Iterable, List, Literal, Optional, cast
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from models.memory_evidence import MemoryEvidence
 from models.memory_contracts import deterministic_contract_id
+from models.memory_operations import MemoryLedgerReopenReceipt
 from models.product_memory import (
     MAX_LEDGER_PLAYBOOK_BODY_CHARACTERS,
     MAX_LEDGER_TRIGGER_CONDITION_CHARACTERS,
@@ -31,6 +33,7 @@ from utils.memory.canonical_memory_adapter import (
     read_canonical_memory_item,
     write_canonical_knowledge_ledger_memory,
 )
+from utils.memory.memory_system import ensure_canonical_apply_control_state
 
 LEDGER_SCHEMA_VERSION = "knowledge_ledger.v1"
 DEFAULT_PROFILE_CHARACTER_BUDGET = 2_400
@@ -85,10 +88,14 @@ class LedgerWrite(BaseModel):
     body: Optional[str] = None
     trigger_condition: Dict[str, Any] = Field(default_factory=dict)
     curation_weight: int = 0
+    predicate: Optional[str] = None
+    arguments: Dict[str, Any] = Field(default_factory=dict)
+    sensitivity_labels: List[str] = Field(default_factory=list)
     valid_from: Optional[datetime] = None
     user_asserted: bool = False
     visibility: Literal["private", "public", "shared"] = "private"
     supersedes: List[str] = Field(default_factory=list)
+    preserved_evidence: List[MemoryEvidence] = Field(default_factory=list, exclude=True)
 
     @field_validator("content")
     @classmethod
@@ -177,10 +184,28 @@ def save_ledger_write(
     *,
     db_client: Any = None,
     required_source_item: Optional[MemoryItem] = None,
+    ledger_reopen_receipt: Optional[MemoryLedgerReopenReceipt] = None,
 ) -> str:
     """Commit one idempotent semantic row through canonical apply."""
     memory_id = _row_id(uid, write)
     evidence_id = _evidence_id(uid, write.provenance)
+    evidence = [
+        {
+            "evidence_id": evidence_id,
+            "source_id": write.provenance.source_id,
+            "source_type": write.provenance.source_type,
+            "source_version": write.provenance.source_version,
+            "artifact_ref": write.provenance.artifact_ref,
+            "quote_refs": write.provenance.quote_refs,
+        },
+        *[item.model_dump(mode="python") for item in write.preserved_evidence if item.evidence_id != evidence_id],
+    ]
+    write_kwargs: Dict[str, Any] = {
+        "db_client": db_client,
+        "required_source_item": required_source_item,
+    }
+    if ledger_reopen_receipt is not None:
+        write_kwargs["ledger_reopen_receipt"] = ledger_reopen_receipt
     return write_canonical_knowledge_ledger_memory(
         uid,
         {
@@ -195,6 +220,9 @@ def save_ledger_write(
             "body": write.body,
             "valid_from": write.valid_from or datetime.now(timezone.utc),
             "curation_weight": write.curation_weight,
+            "predicate": write.predicate,
+            "arguments": write.arguments,
+            "sensitivity_labels": write.sensitivity_labels,
             "trigger_condition": write.trigger_condition,
             "intent_backed": True,
             "write_reason": write.write_reason.value,
@@ -203,19 +231,9 @@ def save_ledger_write(
             "visibility": write.visibility,
             "supersedes": sorted(set(write.supersedes)),
             "extractor_id": "knowledge_ledger",
-            "evidence": [
-                {
-                    "evidence_id": evidence_id,
-                    "source_id": write.provenance.source_id,
-                    "source_type": write.provenance.source_type,
-                    "source_version": write.provenance.source_version,
-                    "artifact_ref": write.provenance.artifact_ref,
-                    "quote_refs": write.provenance.quote_refs,
-                }
-            ],
+            "evidence": evidence,
         },
-        db_client=db_client,
-        required_source_item=required_source_item,
+        **write_kwargs,
     )
 
 
@@ -279,6 +297,80 @@ def amend_fact(
         ),
         db_client=db_client,
         required_source_item=required_source_item,
+    )
+
+
+def reopen_standalone_fact(
+    uid: str,
+    source: MemoryItem,
+    *,
+    operation_id: str,
+    provenance: LedgerProvenance,
+    db_client: Any = None,
+) -> str:
+    """Append one current tail from a standalone closed fact.
+
+    The source is fenced by the canonical Firestore apply transaction.  A
+    source-keyed receipt makes a second client operation fail closed even when
+    it races the first append; the operation journal makes the same request
+    UUID an exact retry no-op.
+    """
+
+    if (
+        source.ledger_schema_version != LEDGER_SCHEMA_VERSION
+        or source.kind != MemoryKind.fact
+        or not source.intent_backed
+        or source.status != MemoryItemStatus.superseded
+        or source.valid_to is None
+        or source.superseded_by
+        or source.canonical_memory_id
+        or source.source_state.value != "active"
+        or source.processing_state.value != "processed"
+    ):
+        raise ValueError("only standalone closed knowledge ledger facts may be reopened")
+    write = LedgerWrite(
+        kind=MemoryKind.fact,
+        content=(source.content or "").strip(),
+        provenance=provenance,
+        write_reason=LedgerWriteReason.direct_user_statement,
+        subject_scope=source.subject_scope,
+        subject_entity_id=source.subject_entity_id,
+        slot=source.slot,
+        curation_weight=source.curation_weight,
+        predicate=source.predicate,
+        arguments=dict(source.arguments or {}),
+        sensitivity_labels=list(source.sensitivity_labels),
+        user_asserted=True,
+        visibility=cast(Literal["private", "public", "shared"], source.visibility),
+        preserved_evidence=list(source.evidence),
+    )
+    replacement_id = _row_id(uid, write)
+    control = ensure_canonical_apply_control_state(
+        uid,
+        db_client=db_client,
+    )
+    receipt = MemoryLedgerReopenReceipt(
+        uid=uid,
+        source_memory_id=source.memory_id,
+        replacement_memory_id=replacement_id,
+        operation_id=operation_id,
+        account_generation=control.account_generation,
+        source_generation=control.source_generation,
+        source_item_revision=source.item_revision,
+        source_content_hash=source.content_hash or "",
+    )
+    # The row id is deterministic from the source and request action.  A
+    # response lost after the transaction commits can therefore read back the
+    # exact append before attempting another write.
+    existing = read_canonical_memory_item(uid, replacement_id, db_client=db_client)
+    if existing is not None:
+        return replacement_id
+    return save_ledger_write(
+        uid,
+        write,
+        db_client=db_client,
+        required_source_item=source,
+        ledger_reopen_receipt=receipt,
     )
 
 
@@ -426,6 +518,7 @@ __all__ = [
     "read_playbook",
     "render_playbook_index",
     "render_profile",
+    "reopen_standalone_fact",
     "save_fact",
     "save_ledger_write",
     "write_playbook",

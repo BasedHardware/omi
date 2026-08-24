@@ -38,7 +38,7 @@ from models.memory_apply import (
     apply_long_term_patch_transaction,
     memory_content_hash,
 )
-from models.memory_operations import MemoryOperation, MemoryOperationType
+from models.memory_operations import MemoryLedgerReopenReceipt, MemoryOperation, MemoryOperationType
 from models.memory_promotion import MemoryGraphAssertion, PromotionGraphPlan, build_memory_graph_assertion
 from models.memory_review import build_memory_review_conflict
 from models.memory_source_replacement import ConversationSourceReplacementReceipt
@@ -296,6 +296,7 @@ def apply_long_term_patch_firestore(
     proposed_evidence: Optional[List[MemoryEvidence]] = None,
     review_resolution: Optional[CanonicalReviewResolution] = None,
     required_source_item: Optional[MemoryItem] = None,
+    ledger_reopen_receipt: Optional[MemoryLedgerReopenReceipt] = None,
     db_client: Any = db,
 ) -> ApplyResult:
     """Apply a memory Long-term patch through the Firestore transaction boundary.
@@ -316,6 +317,7 @@ def apply_long_term_patch_firestore(
         proposed_evidence,
         review_resolution,
         required_source_item,
+        ledger_reopen_receipt,
     )
 
 
@@ -1595,6 +1597,7 @@ def _apply_long_term_patch_firestore_transaction(
     proposed_evidence: Optional[List[MemoryEvidence]],
     review_resolution: Optional[CanonicalReviewResolution],
     required_source_item: Optional[MemoryItem],
+    ledger_reopen_receipt: Optional[MemoryLedgerReopenReceipt],
 ) -> ApplyResult:
     collections = MemoryCollections(uid=uid)
     review_item = _read_canonical_review_resolution(
@@ -1644,6 +1647,43 @@ def _apply_long_term_patch_firestore_transaction(
     if committed_replay.status == ApplyStatus.payload_mismatch:
         return committed_replay
 
+    reopen_receipt_ref = None
+    if ledger_reopen_receipt is not None:
+        if ledger_reopen_receipt.uid != uid:
+            raise MemoryFirestoreApplyError("ledger reopen receipt uid does not match requested uid")
+        if required_source_item is None or ledger_reopen_receipt.source_memory_id != required_source_item.memory_id:
+            raise MemoryFirestoreApplyError("ledger reopen receipt source does not match the fenced source")
+        if (
+            ledger_reopen_receipt.account_generation != control_state.account_generation
+            or ledger_reopen_receipt.source_generation != control_state.source_generation
+            or ledger_reopen_receipt.source_item_revision != required_source_item.item_revision
+            or ledger_reopen_receipt.source_content_hash != (required_source_item.content_hash or "")
+        ):
+            return _source_not_active(control_state, operation, "standalone ledger reopen receipt fence is stale")
+        reopen_receipt_ref = db_client.document(
+            f"{collections.memory_ledger_reopens}/{ledger_reopen_receipt.source_memory_id}"
+        )
+        existing_receipt_snapshot = reopen_receipt_ref.get(transaction=transaction)
+        if getattr(existing_receipt_snapshot, "exists", False):
+            existing_receipt = parse_snapshot_strict(
+                MemoryLedgerReopenReceipt,
+                existing_receipt_snapshot,
+                payload_from_snapshot=_typed_doc,
+            )
+            if (
+                existing_receipt.uid != uid
+                or existing_receipt.source_memory_id != ledger_reopen_receipt.source_memory_id
+                or existing_receipt.account_generation != control_state.account_generation
+                or existing_receipt.source_generation != control_state.source_generation
+            ):
+                return _source_not_active(
+                    control_state, operation, "standalone ledger source reopen receipt is invalid"
+                )
+            # A committed operation should have been handled by the idempotent
+            # replay above. Any other operation is a duplicate current-tail
+            # attempt and must not mutate the ledger or operation journal.
+            return _source_not_active(control_state, operation, "standalone ledger source is already reopened")
+
     source_validation = _validate_required_ledger_source(
         db_client=db_client,
         transaction=transaction,
@@ -1651,6 +1691,7 @@ def _apply_long_term_patch_firestore_transaction(
         expected=required_source_item,
         operation=operation,
         control_state=control_state,
+        ledger_reopen_receipt=ledger_reopen_receipt,
     )
     if source_validation is not None:
         # The proposed operation carries memory_text. A privacy-invalidated
@@ -1761,6 +1802,13 @@ def _apply_long_term_patch_firestore_transaction(
             commit_id=result.control_state.head_commit_id,
             now=result.control_state.updated_at,
         )
+        if ledger_reopen_receipt is not None:
+            if reopen_receipt_ref is None or len(result.memory_items) != 1:
+                raise MemoryFirestoreApplyError("standalone ledger reopen did not produce exactly one replacement")
+            replacement = result.memory_items[0]
+            if replacement.memory_id != ledger_reopen_receipt.replacement_memory_id:
+                raise MemoryFirestoreApplyError("standalone ledger reopen replacement identity mismatch")
+            transaction.set(reopen_receipt_ref, _firestore_data(ledger_reopen_receipt))
     return result
 
 
@@ -1882,6 +1930,7 @@ def _validate_required_ledger_source(
     expected: Optional[MemoryItem],
     operation: MemoryOperation,
     control_state: MemoryControlState,
+    ledger_reopen_receipt: Optional[MemoryLedgerReopenReceipt] = None,
 ) -> Optional[ApplyResult]:
     """Fence a user-selected ledger source in the same transaction as its append."""
 
@@ -1908,6 +1957,40 @@ def _validate_required_ledger_source(
         or bool((source.promotion or {}).get("is_locked", False))
     ):
         return _source_not_active(control_state, operation, "required ledger source changed or is unavailable")
+    if ledger_reopen_receipt is None:
+        return None
+    if (
+        source.valid_to != expected.valid_to
+        or source.superseded_by != expected.superseded_by
+        or source.canonical_memory_id != expected.canonical_memory_id
+        or source.ledger_schema_version != expected.ledger_schema_version
+        or source.kind != expected.kind
+        or source.intent_backed != expected.intent_backed
+        or source.processing_state != expected.processing_state
+        or source.visibility != expected.visibility
+        or source.slot != expected.slot
+        or source.subject_scope != expected.subject_scope
+        or source.subject_entity_id != expected.subject_entity_id
+        or source.promotion != expected.promotion
+    ):
+        return _source_not_active(control_state, operation, "standalone ledger source changed or is unavailable")
+    # Reopening is allowed to preserve the source evidence only while every
+    # referenced evidence record is still active.  Do not permit the external
+    # evidence-reissue path to turn a privacy tombstone into a fresh source.
+    for expected_evidence in expected.evidence:
+        evidence_ref = db_client.document(f"{collections.memory_evidence}/{expected_evidence.evidence_id}")
+        evidence_snapshot = evidence_ref.get(transaction=transaction)
+        if not getattr(evidence_snapshot, "exists", False):
+            return _source_not_active(control_state, operation, "required ledger source evidence is missing")
+        evidence = parse_snapshot_strict(MemoryEvidence, evidence_snapshot, payload_from_snapshot=_typed_doc)
+        if (
+            evidence.evidence_id != expected_evidence.evidence_id
+            or evidence.source_state != SourceState.active
+            or evidence.redaction_status == RedactionStatus.tombstoned
+            or evidence.redaction_status == RedactionStatus.redacted
+            or evidence.encryption_or_redaction_status != RedactionStatus.active
+        ):
+            return _source_not_active(control_state, operation, "required ledger source evidence is unavailable")
     return None
 
 
