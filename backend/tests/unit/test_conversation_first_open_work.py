@@ -146,6 +146,38 @@ def test_app_usage_attribution_is_idempotent_and_deletion_fenced() -> None:
     assert ("plugins", "other-app", "usage_history", "conversation") not in store.rows
 
 
+def test_plugin_deletion_after_usage_does_not_block_no_write_completion_retry() -> None:
+    store, _path = _store()
+    plugin_path = ("plugins_data", "app")
+    store.rows[plugin_path] = {"id": "app"}
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    assert conversations_db.initialize_first_open_work("owner", "conversation", firestore_client=store)
+    token = conversations_db.claim_first_open_work("owner", "conversation", now=now, firestore_client=store)
+    assert token is not None
+    assert conversations_db.commit_first_open_app_result(
+        "owner",
+        "conversation",
+        token,
+        "app",
+        {"apps_results": [{"app_id": "app", "content": "paid result"}]},
+        firestore_client=store,
+    )
+    assert conversations_db.commit_first_open_app_usage(
+        "owner", "conversation", token, "app", "memory_created_prompt", firestore_client=store
+    )
+
+    del store.rows[plugin_path]
+    writes_before_retry = sum(len(transaction.sets) + len(transaction.updates) for transaction in store.transactions)
+    assert conversations_db.commit_first_open_app_usage(
+        "owner", "conversation", token, "app", "memory_created_prompt", firestore_client=store
+    )
+    writes_after_retry = sum(len(transaction.sets) + len(transaction.updates) for transaction in store.transactions)
+    assert writes_after_retry == writes_before_retry
+    assert conversations_db.complete_first_open_effect(
+        "owner", "conversation", token, "app_fanout", firestore_client=store
+    )
+
+
 def test_app_result_cannot_complete_until_usage_receipt_is_durable() -> None:
     store, path = _store()
     store.rows[("plugins_data", "app")] = {"id": "app"}
