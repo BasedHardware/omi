@@ -1,0 +1,3 @@
+{
+  "change": "Fixed the app hanging indefinitely on \"Preparing your data...\" during startup"
+}
