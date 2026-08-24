@@ -239,7 +239,7 @@ def test_standalone_reopen_builds_preserving_append_and_stable_receipt(monkeypat
         ),
     )
     monkeypatch.setattr(knowledge_ledger, "read_canonical_memory_item", lambda *args, **kwargs: None)
-    monkeypatch.setattr(knowledge_ledger, "write_canonical_knowledge_ledger_memory", write_ledger)
+    monkeypatch.setattr(knowledge_ledger, "write_canonical_direct_user_knowledge_ledger_memory", write_ledger)
     provenance = LedgerProvenance(
         source_id="closed",
         source_type="explicit_user_reopen",

@@ -83,7 +83,11 @@ class MissingMemoryDocument(MemoryFirestoreApplyError):
     pass
 
 
-_DIRECT_USER_LEDGER_EVIDENCE_TYPES = {"explicit_user_correction", "explicit_user_revert"}
+_DIRECT_USER_LEDGER_EVIDENCE_TYPES = {
+    "explicit_user_correction",
+    "explicit_user_reopen",
+    "explicit_user_revert",
+}
 _DIRECT_USER_WRITE_AUTHORITY = object()
 _DIRECT_USER_MUTATION_PATCH_FIELDS = frozenset(
     {
@@ -1926,7 +1930,7 @@ def _apply_long_term_patch_firestore_transaction(
             and patch_payload.get("ledger_schema_version") == "knowledge_ledger.v1"
             and patch_payload.get("write_reason") == LedgerWriteReason.direct_user_statement.value
             and patch_payload.get("user_asserted") is True
-            and bool(operation.logical_payload.supersedes)
+            and (bool(operation.logical_payload.supersedes) or ledger_reopen_receipt is not None)
             and any(evidence.source_type in _DIRECT_USER_LEDGER_EVIDENCE_TYPES for evidence in evidence_items)
         )
         if direct_user_update or direct_user_append:

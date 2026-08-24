@@ -1608,7 +1608,7 @@ def test_firestore_standalone_reopen_receipt_blocks_duplicate_current_tail(store
         source_content_hash=source.content_hash or "",
     )
 
-    first = store.apply_long_term_patch_firestore(
+    first = store.apply_direct_user_long_term_patch_firestore(
         uid="u1",
         operation_id=operation.operation_id,
         patch_payload=patch,
@@ -1621,7 +1621,7 @@ def test_firestore_standalone_reopen_receipt_blocks_duplicate_current_tail(store
     assert first.status == ApplyStatus.committed, first.reason
     assert db.docs["users/u1/memory_ledger_reopens/source"]["replacement_memory_id"] == "replacement"
 
-    replay = store.apply_long_term_patch_firestore(
+    replay = store.apply_direct_user_long_term_patch_firestore(
         uid="u1",
         operation_id=operation.operation_id,
         patch_payload=patch,
@@ -1647,7 +1647,7 @@ def test_firestore_standalone_reopen_receipt_blocks_duplicate_current_tail(store
             "mutation_metadata": mutation_identity,
         },
     )
-    competing_result = store.apply_long_term_patch_firestore(
+    competing_result = store.apply_direct_user_long_term_patch_firestore(
         uid="u1",
         operation_id=competing.operation_id,
         patch_payload=patch,

@@ -7,7 +7,7 @@ import re
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Iterator, List, Literal, NoReturn, Optional, Set, Tuple, cast
+from typing import Any, Callable, Collection, Dict, Iterator, List, Literal, NoReturn, Optional, Set, Tuple, cast
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -32,6 +32,7 @@ from models.product_memory import (
     RESTRICTED_SENSITIVITY_LABELS,
     SourceState,
 )
+from models.knowledge_ledger_search import LedgerSearchSurface, is_ledger_row_admissible
 from utils.log_sanitizer import sanitize_validation_error
 from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_get_all
 from utils.memory.canonical_memory_adapter import (
@@ -401,14 +402,20 @@ class CanonicalMemoryBackend:
         limit: int = 5,
         device_scope_request: Optional[DeviceScopeRequest] = None,
         item_filter: Optional[Callable[[MemoryItem], bool]] = None,
+        ledger_kinds: Optional[Collection[str]] = None,
     ) -> List[MemorySearchMatch]:
+        search_kwargs: Dict[str, Any] = {
+            "limit": limit,
+            "db_client": self._db_client,
+            "device_scope_request": device_scope_request,
+            "item_filter": item_filter,
+        }
+        if ledger_kinds is not None:
+            search_kwargs["ledger_kinds"] = ledger_kinds
         items = search_canonical_memories(
             uid,
             query,
-            limit=limit,
-            db_client=self._db_client,
-            device_scope_request=device_scope_request,
-            item_filter=item_filter,
+            **search_kwargs,
         )
         results: List[MemorySearchMatch] = []
         for rank, item in enumerate(items):
@@ -2706,6 +2713,7 @@ class MemoryService:
         device_scope_request: Optional[DeviceScopeRequest] = None,
         canonical_item_filter: Optional[Callable[[MemoryItem], bool]] = None,
         result_filter: Optional[Callable[[MemoryDB], bool]] = None,
+        ledger_kinds: Optional[Collection[str]] = None,
     ) -> List[MemorySearchMatch]:
         capped = max(1, min(int(limit or 5), 20))
         # Default 3× oversample so dedup/canonical suppression still yields `limit` hits.
@@ -2715,23 +2723,35 @@ class MemoryService:
             min(int(candidate_limit if candidate_limit is not None else capped * 3), 60),
         )
         try:
+            canonical_kwargs: Dict[str, Any] = {
+                "limit": candidate_cap,
+                "device_scope_request": device_scope_request,
+                "item_filter": canonical_item_filter,
+            }
+            if ledger_kinds is not None:
+                canonical_kwargs["ledger_kinds"] = ledger_kinds
             canonical = self._canonical.search(
                 uid,
                 query,
-                limit=candidate_cap,
-                device_scope_request=device_scope_request,
-                item_filter=canonical_item_filter,
+                **canonical_kwargs,
             )
         except HTTPException:
             raise
         except Exception as exc:
             raise HTTPException(status_code=503, detail="Canonical memory search unavailable") from exc
-        historical = self.history.search(
-            uid,
-            query,
-            limit=candidate_cap,
-            device_scope_request=device_scope_request,
-        )
+        if ledger_kinds is not None:
+            # The ledger agent surface is explicitly canonical-only. Legacy
+            # vector/storage search is a separate historical tool and must not
+            # be merged here: aside from leaking stamped compatibility rows,
+            # its provider outage would make current ledger search unavailable.
+            historical: List[MemorySearchMatch] = []
+        else:
+            historical = self.history.search(
+                uid,
+                query,
+                limit=candidate_cap,
+                device_scope_request=device_scope_request,
+            )
         by_id: Dict[str, MemorySearchMatch] = {}
         for match in canonical:
             by_id[match.memory.id] = match
