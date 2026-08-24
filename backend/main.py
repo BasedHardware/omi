@@ -97,6 +97,7 @@ from routers import (
     conversation_finalization,
     public_shared_conversation_chat,
     screen_frames,
+    jit_rollout,
 )
 from routers.listen.registry import proactive_message_dispatcher
 
@@ -240,6 +241,7 @@ app.include_router(tts.router)
 app.include_router(memory_admin.router)
 app.include_router(memory_product.router)
 app.include_router(task_recommendations.router)
+app.include_router(jit_rollout.router)
 app.include_router(desktop_core.router)
 app.include_router(desktop_agent_vm.router)
 app.include_router(desktop_chat.router)
@@ -248,6 +250,7 @@ app.include_router(desktop_realtime.router)
 app.include_router(desktop_screen_crisp.router)
 app.include_router(desktop_tts_updates.router)
 app.include_router(screen_frames.router)
+jit_rollout.validate_jit_rollout_contract(app)
 
 
 methods_timeout = {

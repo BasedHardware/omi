@@ -28,6 +28,7 @@ from utils.llm.gateway_observability import record_direct_exception_surface
 from utils.llm.prompt_cache import EXPLICIT_CACHE_OPTIONS, has_cacheable_prefix
 from utils.llm.providers import get_openai_api_key
 from utils.journey_metrics_contract import ClientKind, resolve_client_kind_from_headers
+from utils.jit_rollout import JITDecisionStage, JITRolloutDecision, resolve_jit_rollout
 from utils.observability.fallback import record_fallback
 from utils.observability.journeys import ClientJourneyAttempt
 from utils.other.endpoints import get_current_user_uid
@@ -589,6 +590,8 @@ async def _proactive_completion_unobserved(
 ) -> ProactiveCompletionEnvelope:
     operation = request.operation.value
     lane = _OPERATION_LANES[operation]
+    ingress_decision = await resolve_jit_rollout(uid, stage=JITDecisionStage.INGRESS)
+    _require_jit_rollout(ingress_decision)
     if llm_stub_enabled():
         response_body = _offline_stub_response(request)
         return ProactiveCompletionEnvelope(
@@ -607,6 +610,12 @@ async def _proactive_completion_unobserved(
     provider_request: _ProviderRequest | None = None
     length_retry_attempted = False
     try:
+        paid_boundary_decision = await resolve_jit_rollout(
+            uid,
+            stage=JITDecisionStage.PAID_BOUNDARY,
+            force_refresh=True,
+        )
+        _require_jit_rollout(paid_boundary_decision)
         provider_request = _proactive_provider_request(request, uid, request_id)
         attempted_max_completion_tokens = provider_request.payload["max_completion_tokens"]
         response_body = await _post_provider_completion(provider_request)
@@ -697,6 +706,19 @@ async def _proactive_completion_unobserved(
     )
 
 
+def _require_jit_rollout(decision: JITRolloutDecision) -> None:
+    if decision.permits_work:
+        return
+    raise HTTPException(
+        status_code=403,
+        detail={
+            'code': 'jit_rollout_not_enabled',
+            'decision': decision.effective.value,
+            'reason': decision.reason.value,
+        },
+    )
+
+
 def _invalid_structured_output() -> HTTPException:
     return HTTPException(status_code=_INVALID_STRUCTURED_OUTPUT_STATUS, detail=_INVALID_STRUCTURED_OUTPUT_DETAIL)
 
@@ -743,6 +765,13 @@ async def proactive_completion(
     except Exception as exc:
         if isinstance(exc, HTTPException) and exc.status_code == 429:
             attempt.degrade('quota_capped')
+        elif (
+            isinstance(exc, HTTPException)
+            and exc.status_code == 403
+            and isinstance(exc.detail, Mapping)
+            and exc.detail.get('code') == 'jit_rollout_not_enabled'
+        ):
+            attempt.degrade('rollout_disabled')
         else:
             attempt.fail(_proactivity_issue_class(exc))
         raise
