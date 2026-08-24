@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -14,7 +14,9 @@ from database._client import get_firestore_client, run_transactional
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.firestore_index_registry import FIRST_OPEN_FOLDER_CONVERSATION_COUNT_QUERY
 from database.read_boundary import parse_snapshot_strict
-from models.memory_apply import MemoryControlState
+
+if TYPE_CHECKING:
+    from models.memory_apply import MemoryControlState
 
 CONVERSATIONS_COLLECTION = 'conversations'
 FIRST_OPEN_EFFECTS = ('folder_assignment', 'goal_progress', 'app_fanout')
@@ -27,6 +29,20 @@ def _refs(client: Any, uid: str) -> tuple[Any, Any, Any]:
         client.collection('account_deletions').document(uid),
         user.collection('memory_state').document('apply_control'),
     )
+
+
+def _memory_control_state_model() -> type[Any]:
+    """Load the JIT control model only at the first-open execution boundary.
+
+    ``database.conversations`` is also imported by narrow legacy query seams
+    which intentionally stub the rest of the backend model graph. Importing
+    the control model while that module is merely loaded couples those reads
+    to JIT execution dependencies they never exercise.
+    """
+
+    from models.memory_apply import MemoryControlState
+
+    return MemoryControlState
 
 
 def _authority(transaction: Any, client: Any, uid: str) -> Optional[MemoryControlState]:
@@ -42,7 +58,7 @@ def _authority(transaction: Any, client: Any, uid: str) -> Optional[MemoryContro
     if not user.exists or account_deletion_blocks_access(status) or not control_snapshot.exists:
         return None
     try:
-        control = parse_snapshot_strict(MemoryControlState, control_snapshot)
+        control = parse_snapshot_strict(_memory_control_state_model(), control_snapshot)
     except Exception:
         return None
     return control if control.uid == uid else None
