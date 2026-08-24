@@ -21,7 +21,7 @@ extract rather than excuse.
 
 import copy
 from datetime import datetime, timezone
-from typing import List, Optional, Dict, Any
+from typing import List, Dict, Any
 
 from google.cloud import firestore
 
@@ -41,9 +41,14 @@ def _prepare_screen_frame_for_write(data: Dict[str, Any], uid: str, level: str) 
     return data
 
 
-def _prepare_screen_frame_for_read(frame_data: Optional[Dict[str, Any]], uid: str) -> Optional[Dict[str, Any]]:
+def _prepare_screen_frame_for_read(frame_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
+    # Typed to `prepare_for_read`'s actual contract — it maps over documents that already exist,
+    # so it never hands this None. `_prepare_photo_for_read` declares Optional on both sides and
+    # is not flagged only because the typecheck runs over changed files; copying that here would
+    # be copying a latent mismatch. The falsy guard stays for an empty document, but it returns
+    # the same shape it was given rather than None, which is what the caller is annotated for.
     if not frame_data:
-        return None
+        return frame_data
     data = copy.deepcopy(frame_data)
     level = data.get('data_protection_level')
     if level == 'enhanced' and 'caption' in data and isinstance(data['caption'], str):
