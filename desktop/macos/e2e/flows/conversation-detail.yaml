@@ -1,7 +1,7 @@
 version: 2
 name: conversation-detail
 tier: 2
-description: Hermetic conversation detail open + full-width transcript pane via capture seam
+description: Hermetic conversation detail open, dark screenshot prototype, and full-width transcript pane
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift
@@ -14,6 +14,12 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Components/LiveTranscriptView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/TranscriptDetailView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/CitationCardView.swift
+  - desktop/macos/Desktop/Sources/MeetingScreenshots/MeetingFrameJudge.swift
+  - desktop/macos/Desktop/Sources/MeetingScreenshots/MeetingFrameSelector.swift
+  - desktop/macos/Desktop/Sources/MeetingScreenshots/MeetingFrameSimilarity.swift
+  - desktop/macos/Desktop/Sources/MeetingScreenshots/MeetingNoteScreenshotViews.swift
+  - desktop/macos/Desktop/Sources/MeetingScreenshots/MeetingScreenshotsStore.swift
+  - desktop/macos/Desktop/Sources/Rewind/UI/ScreenFrameLightbox.swift
 preconditions:
   - automation_bridge_ready
 
@@ -61,3 +67,4 @@ steps:
     log.expect:
       absent:
         - "DesktopAutomationBridge: failed"
+        - "MeetingScreenshots:"
