@@ -32,9 +32,14 @@ reservation or provider selection. It then bypasses the cache and refreshes the
 kill switch immediately before constructing or calling the model provider. A
 late kill releases the quota reservation and makes no model call.
 
-The implementation is dark by default. It does not create PostHog flags or
-cohorts, bind a new secret to a runtime, deploy a service, or enroll a user.
-Those are separate operator actions.
+The implementation is dark by default. It does not create or enable PostHog
+flags or cohorts, deploy a service, or enroll a user. The desktop backend's
+development and production deploy contracts bind
+`POSTHOG_PROJECT_API_KEY` from Secret Manager so the authority can query
+server-owned flags when operators enable the rollout; the binding itself does
+not enroll users or turn the feature on. PostHog decide calls use an isolated,
+bounded control-plane bulkhead and same-UID coalescing so flag fanout cannot
+starve the shared sync executor.
 
 ## Telemetry boundary
 

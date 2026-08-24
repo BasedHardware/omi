@@ -256,6 +256,40 @@ async def test_posthog_decide_coalesces_same_uid_calls():
 
 
 @pytest.mark.asyncio
+async def test_posthog_coalescing_survives_caller_timeout_while_sdk_call_is_blocked():
+    started = threading.Event()
+    release = threading.Event()
+
+    class BlockedPostHog:
+        def __init__(self):
+            self.calls = 0
+
+        def get_feature_variants(self, _uid: str):
+            self.calls += 1
+            started.set()
+            release.wait(1)
+            return {'jit-processing-v1': True, 'jit-processing-kill-switch-v1': False}
+
+    client = BlockedPostHog()
+    provider = PostHogJITFlagProvider(timeout_seconds=0.02, client_factory=lambda: client)
+
+    first = await provider('same-user')
+    assert first.error_class == JITErrorClass.TIMEOUT
+    assert started.is_set()
+
+    second = await provider('same-user')
+    assert second == first
+    assert client.calls == 1
+
+    release.set()
+    for _ in range(100):
+        if not provider._inflight:
+            break
+        await asyncio.sleep(0.01)
+    assert not provider._inflight
+
+
+@pytest.mark.asyncio
 async def test_posthog_bulkhead_bounds_fanout_without_starving_sync_executor():
     started = threading.Event()
     release = threading.Event()
@@ -293,6 +327,20 @@ async def test_posthog_bulkhead_bounds_fanout_without_starving_sync_executor():
             break
         await asyncio.sleep(0.01)
     assert client.calls == 20  # four workers plus sixteen queued submissions
+
+
+def test_posthog_control_plane_shutdown_is_nonblocking(monkeypatch):
+    calls = []
+
+    class Executor:
+        def shutdown(self, *, wait, cancel_futures):
+            calls.append((wait, cancel_futures))
+
+    monkeypatch.setattr(authority_module, '_posthog_control_executor', Executor())
+    authority_module.close_posthog_control_plane()
+
+    assert calls == [(False, True)]
+    assert authority_module._posthog_control_executor is None
 
 
 def test_read_only_route_uses_authenticated_uid_and_ignores_self_enrolment(monkeypatch):

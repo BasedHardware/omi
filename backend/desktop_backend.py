@@ -24,6 +24,7 @@ from routers import (
 )
 from utils.env_loader import firebase_admin_options, load_backend_env
 from utils.http_client import close_all_clients
+from utils.jit_rollout import close_posthog_control_plane
 from utils.metrics import start_metrics_sidecar_server, stop_metrics_sidecar_server
 
 
@@ -65,6 +66,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         await close_all_clients()
+        close_posthog_control_plane()
         stop_metrics_sidecar_server()
 
 
