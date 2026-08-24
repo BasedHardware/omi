@@ -16,6 +16,7 @@ def _conversation(*, folder_id: str | None = None):
         language="en",
         apps_results=[],
         suggested_summarization_apps=[],
+        source="desktop",
         get_person_ids=lambda: [],
     )
 
@@ -25,7 +26,15 @@ def _install_common(monkeypatch, conversation, completed: list[str]) -> None:
     monkeypatch.setattr(
         processing.conversations_db,
         "complete_first_open_effect",
-        lambda _uid, _cid, _token, effect: completed.append(effect) or True,
+        lambda _uid, _cid, _token, effect, **_kwargs: completed.append(effect) or True,
+    )
+    monkeypatch.setattr(processing.conversations_db, "first_open_effect_is_authorized", lambda *_args: True)
+    monkeypatch.setattr(processing.conversations_db, "commit_first_open_folder_count", lambda *_args: True)
+    monkeypatch.setattr(processing.conversations_db, "commit_first_open_app_usage", lambda *_args: True)
+    monkeypatch.setattr(
+        processing,
+        "resolve_authorized_first_open_plan",
+        lambda **_kwargs: SimpleNamespace(defer_derived_work=True),
     )
     monkeypatch.setattr(processing, "_update_goal_progress", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(processing, "_trigger_apps", lambda *_args, **_kwargs: True)
@@ -66,9 +75,9 @@ def test_retry_repairs_folder_count_after_folder_id_persisted(monkeypatch) -> No
     counts: list[str] = []
     _install_common(monkeypatch, conversation, completed)
     monkeypatch.setattr(
-        processing.folders_db,
-        "update_folder_conversation_count",
-        lambda _uid, folder_id: counts.append(folder_id),
+        processing.conversations_db,
+        "commit_first_open_folder_count",
+        lambda _uid, _cid, _token, folder_id: counts.append(folder_id) or True,
     )
 
     processing.run_first_open_derived_work(
@@ -79,6 +88,121 @@ def test_retry_repairs_folder_count_after_folder_id_persisted(monkeypatch) -> No
 
     assert counts == ["folder"]
     assert completed == ["folder_assignment", "goal_progress", "app_fanout"]
+
+
+def test_kill_flip_during_folder_effect_blocks_commit_and_suffix(monkeypatch) -> None:
+    conversation = _conversation(folder_id="folder")
+    completed: list[str] = []
+    _install_common(monkeypatch, conversation, completed)
+    decisions = iter([True, False])
+    monkeypatch.setattr(
+        processing,
+        "resolve_authorized_first_open_plan",
+        lambda **_kwargs: SimpleNamespace(defer_derived_work=next(decisions)),
+    )
+    monkeypatch.setattr(
+        processing,
+        "_update_goal_progress",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("goal work must remain suspended")),
+    )
+    monkeypatch.setattr(
+        processing,
+        "_trigger_apps",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("app work must remain suspended")),
+    )
+
+    try:
+        processing.run_first_open_derived_work(
+            "owner", {"id": "conversation", "jit_first_open": {"effects": {}}}, "lease"
+        )
+    except RuntimeError as error:
+        assert "authority suspended before folder_assignment" in str(error)
+    else:
+        raise AssertionError("kill must suspend the outstanding suffix")
+
+    assert completed == []
+
+
+def test_first_open_never_initializes_folder_documents(monkeypatch) -> None:
+    conversation = _conversation()
+    completed: list[str] = []
+    _install_common(monkeypatch, conversation, completed)
+    monkeypatch.setattr(processing.folders_db, "get_folders", lambda _uid: [])
+    monkeypatch.setattr(
+        processing.folders_db,
+        "initialize_system_folders",
+        lambda _uid: (_ for _ in ()).throw(AssertionError("first-open must not create folder documents")),
+    )
+
+    processing.run_first_open_derived_work("owner", {"id": "conversation", "jit_first_open": {"effects": {}}}, "lease")
+
+    assert completed == ["folder_assignment", "goal_progress", "app_fanout"]
+
+
+def test_kill_flip_after_goal_llm_blocks_goal_commit(monkeypatch) -> None:
+    conversation = _conversation()
+    completed: list[str] = []
+    _install_common(monkeypatch, conversation, completed)
+    decisions = iter([True, False])
+    monkeypatch.setattr(
+        processing,
+        "resolve_authorized_first_open_plan",
+        lambda **_kwargs: SimpleNamespace(defer_derived_work=next(decisions)),
+    )
+
+    def goal_work(*_args, **kwargs):
+        kwargs["effect_authorizer"]()
+        raise AssertionError("fresh kill authority must interrupt before the goal write")
+
+    monkeypatch.setattr(processing, "_update_goal_progress", goal_work)
+    state = {
+        "effects": {
+            "folder_assignment": {"state": "complete"},
+            "goal_progress": {"state": "pending"},
+            "app_fanout": {"state": "pending"},
+        }
+    }
+    try:
+        processing.run_first_open_derived_work("owner", {"id": "conversation", "jit_first_open": state}, "lease")
+    except RuntimeError as error:
+        assert "authority suspended before goal_progress" in str(error)
+    else:
+        raise AssertionError("kill must block the goal mutation")
+
+    assert completed == []
+
+
+def test_kill_flip_after_app_llm_blocks_result_and_usage_commits(monkeypatch) -> None:
+    conversation = _conversation()
+    completed: list[str] = []
+    _install_common(monkeypatch, conversation, completed)
+    decisions = iter([True, False])
+    monkeypatch.setattr(
+        processing,
+        "resolve_authorized_first_open_plan",
+        lambda **_kwargs: SimpleNamespace(defer_derived_work=next(decisions)),
+    )
+
+    def app_work(*_args, **kwargs):
+        kwargs["resumable_result_commit"]({"apps_results": []})
+        raise AssertionError("fresh kill authority must interrupt before app output commit")
+
+    monkeypatch.setattr(processing, "_trigger_apps", app_work)
+    state = {
+        "effects": {
+            "folder_assignment": {"state": "complete"},
+            "goal_progress": {"state": "complete"},
+            "app_fanout": {"state": "pending"},
+        }
+    }
+    try:
+        processing.run_first_open_derived_work("owner", {"id": "conversation", "jit_first_open": state}, "lease")
+    except RuntimeError as error:
+        assert "authority suspended before app_fanout" in str(error)
+    else:
+        raise AssertionError("kill must block app result and usage mutation")
+
+    assert completed == []
 
 
 def test_first_open_app_retry_preserves_already_persisted_result(monkeypatch) -> None:
@@ -97,6 +221,7 @@ def test_first_open_app_retry_preserves_already_persisted_result(monkeypatch) ->
         photos=[],
         apps_results=[AppResult(app_id="app-1", content="durable result")],
         suggested_summarization_apps=["app-1"],
+        source="desktop",
     )
     monkeypatch.setattr(processing, "_conversation_apps_opt_in_only", lambda: False)
     monkeypatch.setattr(processing, "get_default_conversation_summarized_apps", lambda: [app])
@@ -140,6 +265,7 @@ def test_first_open_app_result_is_persisted_before_usage(monkeypatch) -> None:
         photos=[],
         apps_results=[],
         suggested_summarization_apps=["app-1"],
+        source="desktop",
     )
     calls: list[str] = []
     monkeypatch.setattr(processing, "_conversation_apps_opt_in_only", lambda: False)
@@ -158,6 +284,9 @@ def test_first_open_app_result_is_persisted_before_usage(monkeypatch) -> None:
     monkeypatch.setattr(processing, "record_app_usage", lambda *_args, **_kwargs: calls.append("usage"))
 
     assert processing._trigger_apps(  # pyright: ignore[reportPrivateUsage]
-        "owner", conversation, preserve_existing_results=True
+        "owner",
+        conversation,
+        preserve_existing_results=True,
+        resumable_effect_authorizer=lambda: calls.append("authorize"),
     )
-    assert calls == ["persist", "usage"]
+    assert calls == ["authorize", "persist", "usage"]

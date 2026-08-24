@@ -91,6 +91,7 @@ def resolve_authorized_first_open_plan(
     *,
     uid: str,
     source: str | None,
+    force_refresh: bool = False,
     authority: Callable[[str], Coroutine[Any, Any, Any]] | None = None,
 ) -> FirstOpenPlan:
     """Resolve from the backend rollout authority; any unavailable state is off.
@@ -115,7 +116,11 @@ def resolve_authorized_first_open_plan(
             resolve_rollout = rollout_module.resolve_jit_rollout
 
             async def _backend_authority(user_id: str) -> Any:
-                return await resolve_rollout(user_id, stage=decision_stage.INGRESS)
+                return await resolve_rollout(
+                    user_id,
+                    stage=decision_stage.PAID_BOUNDARY if force_refresh else decision_stage.INGRESS,
+                    force_refresh=force_refresh,
+                )
 
             authority_resolver = _backend_authority
 
@@ -179,6 +184,11 @@ def resolve_first_open_plan(
         app_fanout_on_first_open=True,
         reason="enabled",
     )
+
+
+def outstanding_first_open_work_permitted(*, uid: str, source: str | None) -> bool:
+    """Fresh paid-boundary authority for a previously persisted obligation."""
+    return resolve_authorized_first_open_plan(uid=uid, source=source, force_refresh=True).defer_derived_work
 
 
 def _disabled_plan(

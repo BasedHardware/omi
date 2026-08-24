@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+import utils.jit_first_open_policy as policy
 
 from utils.jit_first_open_policy import (
     FirstOpenClientTier,
@@ -37,6 +38,19 @@ def test_authority_error_fails_closed_to_legacy_eager_processing() -> None:
 
     assert plan.enabled is False
     assert plan.defer_derived_work is False
+
+
+def test_outstanding_obligation_forces_fresh_paid_boundary_authority(monkeypatch) -> None:
+    observed: list[dict[str, object]] = []
+
+    def resolve(**kwargs):
+        observed.append(kwargs)
+        return type("Plan", (), {"defer_derived_work": False})()
+
+    monkeypatch.setattr(policy, "resolve_authorized_first_open_plan", resolve)
+
+    assert policy.outstanding_first_open_work_permitted(uid="owner", source="desktop") is False
+    assert observed == [{"uid": "owner", "source": "desktop", "force_refresh": True}]
 
 
 @pytest.mark.parametrize("tier", list(FirstOpenClientTier))
