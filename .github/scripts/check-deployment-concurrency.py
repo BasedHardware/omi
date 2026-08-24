@@ -78,6 +78,9 @@ LOCK_CONTRACTS = {
     "gcp_frontend.yml": LockContract(
         "deploy-cloud-run-frontend-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}"
     ),
+    "gcp_frame_request_retention_job.yml": LockContract(
+        "deploy-frame-request-retention-${{ github.event.inputs.environment }}"
+    ),
     "gcp_llm_gateway.yml": LockContract("deploy-backend-stack-${{ github.event.inputs.environment }}"),
     "gcp_memory_maintenance_job.yml": LockContract(
         "deploy-cloud-run-memory-maintenance-job-${{ github.event.inputs.environment }}"
@@ -681,6 +684,7 @@ def validate_shared_families(groups: dict[str, str]) -> list[str]:
         "gcp_firestore_indexes.yml",
         "gcp_backend_listen_helm.yml",
         "gcp_diarizer.yml",
+        "gcp_frame_request_retention_job.yml",
         "gcp_llm_gateway.yml",
         "gcp_memory_maintenance_job.yml",
         "gcp_models.yml",
