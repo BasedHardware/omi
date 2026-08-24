@@ -157,6 +157,27 @@ final class JITProactivityRuntimeTests: XCTestCase {
     XCTAssertEqual(decision, .suppressed(reason: "planned_duplicate_or_budget"))
   }
 
+  func testRunningExecutionSuppressesSameProcessReclaimBeyondDatabaseLease() async throws {
+    let runtime = try wiredRuntime(
+      triggers: [try compiledTrigger(id: "planned", condition: ["keywords": ["release"]])],
+      begin: { _, _ in true })
+    let observation = KnowledgeLedgerTriggerObservation(text: "release", occurredAt: Date())
+    let authorization = try snapshot()
+    let first = await runtime.admission(
+      authorizationSnapshot: authorization, observation: observation)
+    guard case .deliver(.planned, "planned", let continuityKey) = first,
+      let execution = await runtime.takeExecution(continuityKey: continuityKey)
+    else { return XCTFail("expected a planned execution: \(first)") }
+    let began = await runtime.beginExecution(execution)
+    XCTAssertTrue(began)
+
+    let duplicate = await runtime.admission(
+      authorizationSnapshot: authorization, observation: observation)
+
+    XCTAssertEqual(duplicate, .suppressed(reason: "planned_duplicate_or_budget"))
+    await runtime.finish(execution, delivered: false)
+  }
+
   func testNewerAdmissionDeletingTriggerRejectsStaleClaimAfterActorReentrancy() async throws {
     let queue = try migratedQueue()
     let gate = AdmissionRaceGate()
@@ -295,7 +316,8 @@ final class JITProactivityRuntimeTests: XCTestCase {
     receiptOwner: String = "owner",
     receiptRevision: String = "revision",
     authorizationCurrent: Bool = true,
-    claim: JITProactivityRuntime.ClaimWakeup? = nil
+    claim: JITProactivityRuntime.ClaimWakeup? = nil,
+    begin: JITProactivityRuntime.BeginPlannedExecution? = nil
   ) throws -> JITProactivityRuntime {
     let rows = try triggers.map { try snapshotRow(for: $0) }
     let serverSnapshot = serverSnapshot(sequence: 4, revision: "revision", rows: rows)
@@ -315,6 +337,7 @@ final class JITProactivityRuntimeTests: XCTestCase {
         JITTriggerWakeupClaim(
           continuityKey: request.continuityKey, triggerID: request.triggerID, leaseToken: "lease")
       },
+      beginPlannedExecution: begin,
       authorizationCurrent: { _ in authorizationCurrent })
   }
 
