@@ -247,13 +247,11 @@ final class MeetingScreenshotsStore: ObservableObject {
   }
 
   private func run(start: Date, end: Date) async {
-    // `GET` is the source of truth for what this conversation currently shows (contract §1).
+    // Ask the server what it already knows before offering it anything. `GET` is the source of
+    // truth for what this conversation currently shows (contract §1).
     //
-    // `revision` (`ConversationScreenFrameSet.revision`) is NOT an "already adjudicated" flag —
-    // it is a monotonic mutation counter over this conversation's persisted frame set, starting
-    // Ask the server what it already knows before offering it anything.
-    //
-    // The test is `adjudicatedAt`, deliberately not `revision`. `revision` only moves when a
+    // The test is `adjudicatedAt`, deliberately not `revision`. `revision` is a monotonic
+    // mutation counter over this conversation's persisted frame set, and it only moves when a
     // frame was actually approved and persisted, so a pass that judged every candidate and
     // rejected all of them leaves it at 0 — identical to a conversation nobody has ever tried.
     // Keying off it would mean re-selecting and re-uploading on every reopen, and the frames

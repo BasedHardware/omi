@@ -254,6 +254,12 @@ def adjudicate_screen_frames(
 )
 def get_conversation_screenshots(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     _get_owned_conversation(uid, conversation_id)
+    # Contract §9: the account setting off means existing frames stay hidden. Enforced here
+    # rather than in each client so every surface hides them the way the macOS gate already
+    # does locally — without this, turning the setting off on desktop leaves the web banner
+    # rendering the persisted set.
+    if not users_db.get_meeting_note_screenshots_enabled(uid):
+        return EMPTY_FRAME_SET
     return enforcement.build_frame_set_response(uid, conversation_id)
 
 
@@ -322,6 +328,11 @@ def get_shared_conversation_screenshots(conversation_id: str):
         return EMPTY_FRAME_SET
 
     if not screen_frames_db.get_conversation_screenshot_sharing_enabled(conversation):
+        return EMPTY_FRAME_SET
+
+    # The owner's account-level gate (contract §9): off hides existing frames here
+    # too, not just on the owner's own devices. Still an empty set, never a 404.
+    if not users_db.get_meeting_note_screenshots_enabled(uid):
         return EMPTY_FRAME_SET
 
     return enforcement.build_frame_set_response(uid, conversation_id)

@@ -192,8 +192,8 @@ class Conversation(BaseModel):
     # product: it tells every client — iOS, Android, web — that a conversation carries its
     # screenshots inline, when the only way to get them is
     # GET /v1/conversations/{id}/screenshots. It also pulled ConversationScreenFrameSet into the
-    # mobile Dart schema group, where the generator could not resolve it.
-    # Callers that want the set inline: utils.screen_frames.enforcement.build_frame_set_response.
+    # mobile Dart schema group, where the generator could not resolve it. Callers that want the
+    # set inline: utils.screen_frames.enforcement.build_frame_set_response.
     # Per-conversation opt-out of including screenshots in the public shared
     # note. Default true (David's ruling 2026-08-20) — shared notes include
     # screenshots unless the owner explicitly turns this off.

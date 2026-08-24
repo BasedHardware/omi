@@ -155,6 +155,32 @@ class TestSettingsRoutes:
         assert result.meeting_note_screenshots_enabled is False
 
 
+class TestAuthenticatedScreenshotsRoute:
+    def test_empty_set_when_account_setting_off(self, _stub_admission_dependencies, monkeypatch):
+        """Contract §9: the account gate hides existing frames on every surface, not just
+        the ones that remember to check it client-side — the web GET goes through this
+        route and has no local gate."""
+        _fake_conversations_db, fake_users_db, _fake_redis_db = _stub_admission_dependencies
+        fake_users_db.get_meeting_note_screenshots_enabled.return_value = False
+
+        fake_enforcement = MagicMock()
+        monkeypatch.setattr(screen_frames_mod, "enforcement", fake_enforcement)
+
+        result = screen_frames_mod.get_conversation_screenshots(CONVERSATION_ID, uid=UID)
+        assert result == screen_frames_mod.EMPTY_FRAME_SET
+        fake_enforcement.build_frame_set_response.assert_not_called()
+
+    def test_builds_frame_set_when_account_setting_on(self, _stub_admission_dependencies, monkeypatch):
+        fake_enforcement = MagicMock()
+        sentinel = object()
+        fake_enforcement.build_frame_set_response.return_value = sentinel
+        monkeypatch.setattr(screen_frames_mod, "enforcement", fake_enforcement)
+
+        result = screen_frames_mod.get_conversation_screenshots(CONVERSATION_ID, uid=UID)
+        assert result is sentinel
+        fake_enforcement.build_frame_set_response.assert_called_once_with(UID, CONVERSATION_ID)
+
+
 class TestSharedScreenshotsRoute:
     def test_empty_when_conversation_id_unknown(self, monkeypatch):
         fake_redis_db = MagicMock()
@@ -211,6 +237,10 @@ class TestSharedScreenshotsRoute:
         monkeypatch.setattr(screen_frames_mod, "conversations_db", fake_conversations_db)
         monkeypatch.setattr(screen_frames_mod, "screen_frames_db", fake_conversations_db)
 
+        fake_users_db = MagicMock()
+        fake_users_db.get_meeting_note_screenshots_enabled.return_value = True
+        monkeypatch.setattr(screen_frames_mod, "users_db", fake_users_db)
+
         fake_enforcement = MagicMock()
         sentinel = object()
         fake_enforcement.build_frame_set_response.return_value = sentinel
@@ -218,4 +248,30 @@ class TestSharedScreenshotsRoute:
 
         result = screen_frames_mod.get_shared_conversation_screenshots(CONVERSATION_ID)
         assert result is sentinel
+        # Pinned deliberately: this public route resolves the OWNER's uid from the share index,
+        # and serving any other uid's frames from an unauthenticated endpoint is the worst thing
+        # it could do. Asserting the return value alone would not catch that.
         fake_enforcement.build_frame_set_response.assert_called_once_with(UID, CONVERSATION_ID)
+
+    def test_empty_when_account_setting_off_even_if_publicly_shared(self, monkeypatch):
+        """Contract §9 on the public route too: the owner turning the account gate off
+        must hide the shared note's screenshots, not just the owner's own clients."""
+        fake_redis_db = MagicMock()
+        fake_redis_db.get_conversation_uid.return_value = UID
+        monkeypatch.setattr(screen_frames_mod, "redis_db", fake_redis_db)
+
+        fake_conversations_db = MagicMock()
+        fake_conversations_db.get_conversation.return_value = _conversation(
+            visibility=ConversationVisibility.public.value, screenshot_sharing_enabled=True
+        )
+        fake_conversations_db.is_soft_deleted.return_value = False
+        fake_conversations_db.get_conversation_screenshot_sharing_enabled.return_value = True
+        monkeypatch.setattr(screen_frames_mod, "conversations_db", fake_conversations_db)
+        monkeypatch.setattr(screen_frames_mod, "screen_frames_db", fake_conversations_db)
+
+        fake_users_db = MagicMock()
+        fake_users_db.get_meeting_note_screenshots_enabled.return_value = False
+        monkeypatch.setattr(screen_frames_mod, "users_db", fake_users_db)
+
+        result = screen_frames_mod.get_shared_conversation_screenshots(CONVERSATION_ID)
+        assert result == screen_frames_mod.EMPTY_FRAME_SET

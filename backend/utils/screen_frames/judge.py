@@ -75,11 +75,11 @@ For every frame, regardless of outcome, also produce:
 - caption: a short (<=160 char) neutral description of what the frame shows
 - labels: up to 8 short topical labels
 - source_badge: one of "code", "browser", "document", "slides", "product", or null if none fit
-- banner_suitability: 0..1, how well this specific frame would work as a note's hero banner.
-  The banner exists to remind someone later what the meeting was and who it was with, so
-  score for recall, not decoration. A frame showing the people in the meeting usually
-  carries more of that than a wall of code or text.
-  image (favor a single clear focal subject, readable at a glance, not dense text-only content)
+- banner_suitability: 0..1, how well this specific frame would work as a note's hero banner
+  image. The banner exists to remind someone later what the meeting was and who it was with,
+  so score for recall, not decoration. A frame showing the people in the meeting usually
+  carries more of that than a wall of code or text; otherwise favor a single clear focal
+  subject, readable at a glance, over dense text-only content.
 
 If you reject the frame, still fill in reject_reason with the single best-matching reason
 above, and still fill in caption/labels/source_badge/banner_suitability as best you can from
