@@ -14,6 +14,7 @@ from typing import Any, Callable
 from google.cloud import firestore
 
 from database._client import get_firestore_client
+from database.conversations import conversations_collection, _prepare_photo_for_write
 from models.frame_request import (
     TERMINAL_FRAME_REQUEST_STATES,
     FrameRequest,
@@ -23,6 +24,7 @@ from models.frame_request import (
 from utils.retrieval.frame_request_policy import (
     FRAME_REQUEST_MAX_BATCH,
     FRAME_REQUEST_MAX_BYTES_PER_DEVICE,
+    FRAME_REQUEST_MAX_BYTES_PER_CONVERSATION,
     FRAME_REQUEST_DEDUPE_WINDOW_SECONDS,
     FRAME_REQUEST_MAX_ATTACHED_PER_CONVERSATION,
     check_device_quota,
@@ -91,6 +93,115 @@ def list_attached_frame_requests(
         .limit(limit)
     )
     return [_request_from_snapshot(snapshot) for snapshot in query.stream()]
+
+
+def attach_frame_request_to_conversation(
+    uid: str,
+    request_id: str,
+    *,
+    device_id: str,
+    account_generation: int,
+    conversation_id: str,
+    now: datetime | None = None,
+    firestore_client: Any | None = None,
+) -> FrameRequest:
+    """Atomically attach one uploaded frame and its permanent photo metadata.
+
+    The row, photo subcollection document, conversation marker, and one-photo
+    invariant are committed in a single transaction. A retry after a committed
+    response/transport ambiguity returns the already-attached row without
+    touching the permanent object.
+    """
+
+    if not conversation_id.strip():
+        raise ValueError("conversation_id is required")
+    current_time = _utc(now or datetime.now(timezone.utc))
+    client = _get_client(firestore_client)
+    ref = _collection(uid, firestore_client=client).document(request_id)
+    conversation_ref = (
+        client.collection(USERS_COLLECTION)
+        .document(uid.strip())
+        .collection(conversations_collection)
+        .document(conversation_id)
+    )
+    photos_ref = conversation_ref.collection("photos")
+    photo_ref = photos_ref.document(request_id)
+    transaction = client.transaction()
+
+    @firestore.transactional
+    def _attach(transaction: Any) -> dict[str, Any]:
+        snapshot = ref.get(transaction=transaction)
+        if not snapshot.exists:
+            raise KeyError("frame request not found")
+        request = _request_from_snapshot(snapshot)
+        if request.uid != uid or request.device_id != device_id or request.account_generation != account_generation:
+            raise PermissionError("frame request owner or account generation mismatch")
+        if request.conversation_id != conversation_id:
+            raise PermissionError("conversation ownership mismatch")
+        if request.state == FrameRequestState.attached:
+            return _request_data(request)
+        if request.state != FrameRequestState.uploaded or not request.storage_id:
+            raise ValueError("only uploaded frame requests may be promoted")
+
+        conversation_snapshot = conversation_ref.get(transaction=transaction)
+        if not conversation_snapshot.exists:
+            raise KeyError("conversation not found")
+
+        # Firestore reads in this transaction establish a contention fence for
+        # all attached rows in the conversation; a concurrent winner retries
+        # this transaction and is then observed as the existing row above.
+        attached_rows = [
+            _request_from_snapshot(item)
+            for item in _collection(uid, firestore_client=client)
+            .where(filter=firestore.FieldFilter("conversation_id", "==", conversation_id))
+            .where(filter=firestore.FieldFilter("state", "==", FrameRequestState.attached.value))
+            .limit(FRAME_REQUEST_MAX_ATTACHED_PER_CONVERSATION + 1)
+            .stream(transaction=transaction)
+        ]
+        if any(item.request_id != request_id for item in attached_rows):
+            raise ValueError("conversation already has permanent frame evidence")
+        if (
+            sum(item.byte_count for item in attached_rows) + request.byte_count
+            > FRAME_REQUEST_MAX_BYTES_PER_CONVERSATION
+        ):
+            raise ValueError("conversation frame evidence byte budget exceeded")
+
+        existing_photo = photo_ref.get(transaction=transaction)
+        if existing_photo.exists:
+            existing_storage_id = (existing_photo.to_dict() or {}).get("storage_id")
+            if existing_storage_id != request.storage_id:
+                raise ValueError("conversation photo id is already used")
+        else:
+            level = (conversation_snapshot.to_dict() or {}).get("data_protection_level", "standard")
+            photo_data = _prepare_photo_for_write(
+                {
+                    "id": request.request_id,
+                    "base64": "",
+                    "storage_id": request.storage_id,
+                    "content_type": request.content_type,
+                    "description": "Just-in-time frame evidence",
+                    "discarded": False,
+                    "created_at": request.created_at,
+                },
+                uid,
+                level,
+            )
+            transaction.set(photo_ref, photo_data)
+        transaction.update(conversation_ref, {"has_content": True, "has_photos": True})
+        candidate = FrameRequest.model_validate(
+            {
+                **_request_data(request),
+                "state": FrameRequestState.attached.value,
+                "attached_at": current_time,
+                "expires_at": request.created_at,
+                "cleanup_state": FrameRequestCleanupState.permanent.value,
+                "cleanup_next_attempt_at": None,
+            }
+        )
+        transaction.update(ref, _request_data(candidate))
+        return _request_data(candidate)
+
+    return FrameRequest.model_validate(_attach(transaction))
 
 
 def enqueue_frame_request(
@@ -430,6 +541,65 @@ def transition_frame_request(
     return FrameRequest.model_validate(_transition(transaction))
 
 
+def reconcile_ambiguous_frame_upload(
+    uid: str,
+    request_id: str,
+    *,
+    device_id: str,
+    account_generation: int,
+    storage_id: str,
+    byte_count: int,
+    content_type: str | None,
+    now: datetime | None = None,
+    firestore_client: Any | None = None,
+) -> FrameRequest | None:
+    """Resolve an uncertain upload commit without deleting its object.
+
+    If the upload transition committed, return the uploaded/attached row. If a
+    strongly consistent read proves the row is still active, persist a terminal
+    failed row that references the object so the normal external-cleanup worker
+    can reap it. The object is never deleted in this ambiguity path.
+    """
+
+    current_time = _utc(now or datetime.now(timezone.utc))
+    client = _get_client(firestore_client)
+    ref = _collection(uid, firestore_client=client).document(request_id)
+    transaction = client.transaction()
+
+    @firestore.transactional
+    def _reconcile(transaction: Any) -> dict[str, Any] | None:
+        snapshot = ref.get(transaction=transaction)
+        if not snapshot.exists:
+            return None
+        request = _request_from_snapshot(snapshot)
+        if request.uid != uid or request.device_id != device_id or request.account_generation != account_generation:
+            raise PermissionError("frame request owner or account generation mismatch")
+        if request.storage_id == storage_id and request.state in {
+            FrameRequestState.uploaded,
+            FrameRequestState.attached,
+        }:
+            return _request_data(request)
+        if request.state in TERMINAL_FRAME_REQUEST_STATES:
+            return _request_data(request)
+        candidate = FrameRequest.model_validate(
+            {
+                **_request_data(request),
+                "state": FrameRequestState.failed.value,
+                "terminal_reason": "upload_commit_ambiguous",
+                "storage_id": storage_id,
+                "byte_count": byte_count,
+                "content_type": content_type,
+                "cleanup_state": FrameRequestCleanupState.pending.value,
+                "cleanup_next_attempt_at": current_time,
+            }
+        )
+        transaction.update(ref, _request_data(candidate))
+        return _request_data(candidate)
+
+    result = _reconcile(transaction)
+    return FrameRequest.model_validate(result) if result else None
+
+
 def prune_expired_frame_requests(
     uid: str,
     *,
@@ -517,6 +687,7 @@ def cleanup_frame_request_pixels(
             )
         )
         .where(filter=firestore.FieldFilter("cleanup_state", "in", ["pending", "failed"]))
+        .where(filter=firestore.FieldFilter("cleanup_next_attempt_at", "<=", current))
         .order_by("cleanup_next_attempt_at", direction=firestore.Query.ASCENDING)
         .limit(limit)
     )

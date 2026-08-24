@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
+from io import BytesIO
 
 import pytest
+from fastapi import UploadFile
 
 from models.frame_request import FrameRequest, FrameRequestCleanupState, FrameRequestPromotion, FrameRequestState
 from routers import frame_requests
@@ -61,11 +63,9 @@ async def test_ambiguous_state_commit_leaves_object_retryable(monkeypatch):
     request = _request(FrameRequestState.uploaded)
     monkeypatch.setattr(frame_requests, "_authorize", lambda uid, generation: None)
     monkeypatch.setattr(frame_requests, "get_frame_request", lambda uid, request_id: request)
-    monkeypatch.setattr(frame_requests, "list_attached_frame_requests", lambda *args: [])
-    monkeypatch.setattr(frame_requests.conversations_db, "store_conversation_photos", lambda *args: True)
     monkeypatch.setattr(
         frame_requests,
-        "transition_frame_request",
+        "attach_frame_request_to_conversation",
         lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("commit outcome unknown")),
     )
     monkeypatch.setattr(
@@ -80,6 +80,41 @@ async def test_ambiguous_state_commit_leaves_object_retryable(monkeypatch):
             FrameRequestPromotion(device_id="desktop-1", account_generation=3, conversation_id="conversation-1"),
             uid="user-1",
         )
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_upload_commit_reconciles_without_deleting_object(monkeypatch):
+    request = _request(FrameRequestState.uploaded)
+    uploaded_storage_id = ""
+    monkeypatch.setattr(frame_requests, "_authorize", lambda uid, generation: None)
+    monkeypatch.setattr(frame_requests, "upload_frame_request_pixels", lambda *args: None)
+
+    async def run_blocking(_executor, function, *args, **kwargs):
+        if function is frame_requests.upload_frame_request_pixels:
+            nonlocal uploaded_storage_id
+            uploaded_storage_id = args[1]
+            return None
+        if function is frame_requests.transition_frame_request:
+            raise RuntimeError("commit outcome unknown")
+        if function is frame_requests.reconcile_ambiguous_frame_upload:
+            return request.model_copy(update={"storage_id": uploaded_storage_id})
+        raise AssertionError(function)
+
+    monkeypatch.setattr(frame_requests, "run_blocking", run_blocking)
+    monkeypatch.setattr(
+        frame_requests,
+        "delete_frame_request_pixels",
+        lambda *args: pytest.fail("ambiguous upload must not delete an object"),
+    )
+
+    result = await frame_requests.upload_frame_request(
+        "frame-1",
+        device_id="desktop-1",
+        account_generation=3,
+        file=UploadFile(filename="frame.jpg", file=BytesIO(b"pixels"), headers={"content-type": "image/jpeg"}),
+        uid="user-1",
+    )
+    assert result.request.state == FrameRequestState.uploaded
 
 
 def test_posthog_authority_requires_cohort_and_independent_kill_switch(monkeypatch):

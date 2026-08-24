@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
@@ -7,7 +5,8 @@ import 'package:omi/widgets/photo_viewer_page.dart';
 
 class PhotosGridComponent extends StatelessWidget {
   final List<ConversationPhoto> photos;
-  const PhotosGridComponent({super.key, required this.photos});
+  final String? conversationId;
+  const PhotosGridComponent({super.key, required this.photos, this.conversationId});
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +23,8 @@ class PhotosGridComponent extends StatelessWidget {
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (context) => PhotoViewerPage(photos: photos, initialIndex: idx),
+                builder: (context) =>
+                    PhotoViewerPage(photos: photos, initialIndex: idx, conversationId: conversationId),
               ),
             );
           },
@@ -35,10 +35,10 @@ class PhotosGridComponent extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  Image.memory(
-                    base64Decode(photo.base64),
+                  ConversationPhotoImage(
+                    photo: photo,
+                    conversationId: conversationId,
                     fit: BoxFit.cover,
-                    gaplessPlayback: true,
                     color: photo.discarded ? const Color(0xFF35343B) : null,
                     colorBlendMode: photo.discarded ? BlendMode.saturation : null,
                   ),

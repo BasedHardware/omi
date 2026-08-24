@@ -36845,9 +36845,24 @@
         "responses": {
           "200": {
             "content": {
-              "image/jpeg": {},
-              "image/png": {},
-              "image/webp": {}
+              "image/jpeg": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "image/webp": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
             },
             "description": "Successful Response"
           },

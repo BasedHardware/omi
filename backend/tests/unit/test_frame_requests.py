@@ -83,6 +83,19 @@ def test_create_route_is_idempotent_and_returns_metadata_only(monkeypatch):
     assert "image_base64" not in response.text
 
 
+def test_create_route_rejects_non_conversation_requests_before_enqueue(monkeypatch):
+    set_frame_request_authority_for_tests(_EnabledAuthority(0))
+    monkeypatch.setattr(
+        frame_requests, "enqueue_frame_request", lambda *args, **kwargs: pytest.fail("must reject early")
+    )
+    response = _client().post(
+        "/v1/frame-requests",
+        json={"device_id": "mac-1", "dedupe_key": "dedupe-1", "account_generation": 0},
+    )
+    assert response.status_code == 400
+    assert response.json() == {"detail": "conversation_id_required"}
+
+
 def test_pending_route_is_owner_device_scoped(monkeypatch):
     set_frame_request_authority_for_tests(_EnabledAuthority(0))
     monkeypatch.setattr(

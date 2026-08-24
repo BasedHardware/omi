@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import base64
 import tempfile
 from datetime import datetime
 from typing import IO, Any, Callable, Iterable, Iterator, Mapping, Sequence, cast
@@ -9,6 +10,7 @@ from database import chat as chat_db
 from database import conversations as conversations_db
 from database import _client as database_client
 from database.action_items import get_action_items as get_standalone_action_items
+from utils.retrieval.frame_request_storage import download_frame_request_pixels
 from database.users import get_people, get_user_profile
 from utils.memory.memory_service import MemoryService
 
@@ -133,6 +135,35 @@ def _iter_user_nested_subcollection(
             yield row
 
 
+def _export_photo_manifest(uid: str, conversation_id: str, photo: Mapping[str, Any]) -> JsonRecord:
+    """Return a portable photo manifest, including durable bytes when present."""
+
+    result: JsonRecord = {
+        "conversation_id": conversation_id,
+        "photo_id": photo.get("id"),
+        "content_type": photo.get("content_type"),
+        "created_at": photo.get("created_at"),
+        "storage_id": photo.get("storage_id"),
+        "bytes_available": False,
+    }
+    inline = photo.get("base64")
+    if isinstance(inline, str) and inline:
+        result["bytes_base64"] = inline
+        result["bytes_available"] = True
+        return result
+    storage_id = photo.get("storage_id")
+    if isinstance(storage_id, str) and storage_id:
+        try:
+            payload = download_frame_request_pixels(uid, storage_id)
+        except Exception:
+            # The manifest remains explicit when an external object cannot be
+            # read; never silently claim that export contains image bytes.
+            return result
+        result["bytes_base64"] = base64.b64encode(payload).decode("ascii")
+        result["bytes_available"] = True
+    return result
+
+
 def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str]) -> Iterator[str]:
     yield "{\n"
 
@@ -141,6 +172,7 @@ def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str]) -> Iter
 
     yield '  "conversations": [\n'
     first = True
+    photo_manifests: list[JsonRecord] = []
     for conv in conversations_db.iter_all_conversations(uid, include_discarded=True):
         if conv is None:
             continue
@@ -148,7 +180,46 @@ def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str]) -> Iter
             yield ",\n"
         first = False
         yield "    " + json.dumps(conv, default=_json_default, indent=4)
+        # Do not trust the marker alone: legacy conversations may have a photo
+        # subcollection without ``has_photos``. Export every owner-authorized
+        # photo subcollection so the export is exhaustive across generations.
+        conversation_id = str(conv.get("id") or "")
+        if conversation_id:
+            for photo in conversations_db.get_conversation_photos(uid, conversation_id) or []:
+                if isinstance(photo, Mapping):
+                    photo_manifests.append(_export_photo_manifest(uid, conversation_id, photo))
     yield "\n  ],\n"
+
+    # Frame-request metadata is user-owned audit history. Keep it separate from
+    # conversation JSON and include a byte manifest for each referenced object.
+    frame_request_rows = [
+        row
+        for row in _iter_user_subcollection(uid, "frame_requests")
+        if isinstance(row, Mapping) and isinstance(row.get("state"), str)
+    ]
+    if photo_manifests:
+        yield '  "conversation_photo_manifest": '
+        yield from _yield_json_array(photo_manifests)
+        yield ",\n"
+    if frame_request_rows:
+        yield '  "frame_requests": [\n'
+        for index, row in enumerate(frame_request_rows):
+            request = dict(row)
+            storage_id = request.get("storage_id")
+            if isinstance(storage_id, str) and storage_id:
+                request["image_manifest"] = _export_photo_manifest(
+                    uid,
+                    str(request.get("conversation_id") or ""),
+                    {
+                        "id": request.get("request_id") or request.get("id"),
+                        "storage_id": storage_id,
+                        "content_type": request.get("content_type"),
+                        "created_at": request.get("created_at"),
+                    },
+                )
+            yield "    " + json.dumps(request, default=_json_default, indent=4)
+            yield ",\n" if index < len(frame_request_rows) - 1 else "\n"
+        yield "  ],\n"
 
     yield '  "memories": '
     while chunk := memories_spool.read(64 * 1024):

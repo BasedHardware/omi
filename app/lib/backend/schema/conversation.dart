@@ -96,9 +96,11 @@ class ConversationPostProcessing {
 
   factory ConversationPostProcessing.fromJson(Map<String, dynamic> json) {
     return ConversationPostProcessing(
-      status: ConversationPostProcessingStatus.values.asNameMap()[json['status']] ??
+      status:
+          ConversationPostProcessingStatus.values.asNameMap()[json['status']] ??
           ConversationPostProcessingStatus.in_progress,
-      model: ConversationPostProcessingModel.values.asNameMap()[json['model']] ??
+      model:
+          ConversationPostProcessingModel.values.asNameMap()[json['model']] ??
           ConversationPostProcessingModel.fal_whisperx,
       failReason: json['fail_reason'],
     );
@@ -127,6 +129,8 @@ class ConversationPhoto {
   String id;
   final String base64;
   String? description;
+  final String? contentType;
+  final String? storageId;
   final DateTime createdAt;
   bool discarded;
 
@@ -134,6 +138,8 @@ class ConversationPhoto {
     required this.id,
     required this.base64,
     this.description,
+    this.contentType,
+    this.storageId,
     required this.createdAt,
     this.discarded = false,
   });
@@ -148,6 +154,8 @@ class ConversationPhoto {
       id: generated.id ?? '',
       base64: generated.base64,
       description: generated.description,
+      contentType: generated.contentType,
+      storageId: generated.storageId,
       createdAt: generated.createdAt ?? DateTime.now(),
       discarded: generated.discarded,
     );
@@ -158,8 +166,10 @@ class ConversationPhoto {
       id: id,
       base64: base64,
       description: description,
+      contentType: contentType,
       createdAt: createdAt,
       discarded: discarded,
+      storageId: storageId,
     );
   }
 
@@ -411,12 +421,14 @@ class ServerConversation {
           ? null
           : ConversationAudioInfo.fromGenerated(generated.conversationAudio!),
       discarded: generated.discarded,
-      source:
-          generated.source != null ? ConversationSource.values.asNameMap()[generated.source] : ConversationSource.omi,
+      source: generated.source != null
+          ? ConversationSource.values.asNameMap()[generated.source]
+          : ConversationSource.omi,
       language: generated.language,
       deleted: deleted,
-      externalIntegration:
-          generated.externalData != null ? ConversationExternalData.fromJson(generated.externalData!) : null,
+      externalIntegration: generated.externalData != null
+          ? ConversationExternalData.fromJson(generated.externalData!)
+          : null,
       calendarEvent: generated.calendarEvent == null ? null : CalendarEventLink.fromGenerated(generated.calendarEvent!),
       status: generated.status != null
           ? ConversationStatus.values.asNameMap()[generated.status] ?? ConversationStatus.completed

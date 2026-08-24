@@ -21,6 +21,7 @@ def _isolate_firestore_collection_iterators(monkeypatch):
     """
     monkeypatch.setattr(data_export, "_iter_user_subcollection", MagicMock(return_value=iter([])))
     monkeypatch.setattr(data_export, "_iter_user_nested_subcollection", MagicMock(return_value=iter([])))
+    monkeypatch.setattr(data_export.conversations_db, "get_conversation_photos", MagicMock(return_value=[]))
 
 
 def test_iter_user_data_export_streams_all_top_level_sections(monkeypatch):
@@ -105,6 +106,77 @@ def test_iter_user_data_export_uses_empty_profile_object(monkeypatch):
     payload = json.loads("".join(data_export.iter_user_data_export("uid1")))
 
     assert payload["profile"] == {}
+
+
+def test_iter_user_data_export_includes_frame_metadata_and_photo_bytes(monkeypatch):
+    monkeypatch.setattr(data_export, "get_user_profile", MagicMock(return_value={}))
+    monkeypatch.setattr(
+        data_export,
+        "MemoryService",
+        MagicMock(return_value=MagicMock(iter_export_memories=MagicMock(return_value=iter([])))),
+    )
+    monkeypatch.setattr(data_export, "get_people", MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export, "get_standalone_action_items", MagicMock(return_value=[]))
+    monkeypatch.setattr(
+        data_export,
+        "_iter_user_subcollection",
+        lambda _uid, name: iter(
+            [
+                {
+                    "request_id": "frame-1",
+                    "state": "attached",
+                    "conversation_id": "conv-1",
+                    "storage_id": "storage-1",
+                    "content_type": "image/jpeg",
+                }
+            ]
+            if name == "frame_requests"
+            else []
+        ),
+    )
+    monkeypatch.setattr(data_export, "download_frame_request_pixels", lambda *_args: b"image-bytes")
+    monkeypatch.setattr(data_export.conversations_db, "iter_all_conversations", MagicMock(return_value=iter([])))
+    monkeypatch.setattr(data_export.chat_db, "iter_all_messages", MagicMock(return_value=iter([])))
+
+    payload = json.loads("".join(data_export.iter_user_data_export("uid1")))
+
+    assert payload["frame_requests"][0]["request_id"] == "frame-1"
+    assert payload["frame_requests"][0]["image_manifest"] == {
+        "conversation_id": "conv-1",
+        "photo_id": "frame-1",
+        "content_type": "image/jpeg",
+        "created_at": None,
+        "storage_id": "storage-1",
+        "bytes_available": True,
+        "bytes_base64": "aW1hZ2UtYnl0ZXM=",
+    }
+
+
+def test_iter_user_data_export_includes_legacy_photo_subcollection_without_marker(monkeypatch):
+    monkeypatch.setattr(data_export, "get_user_profile", MagicMock(return_value={}))
+    monkeypatch.setattr(
+        data_export,
+        "MemoryService",
+        MagicMock(return_value=MagicMock(iter_export_memories=MagicMock(return_value=iter([])))),
+    )
+    monkeypatch.setattr(data_export, "get_people", MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export, "get_standalone_action_items", MagicMock(return_value=[]))
+    monkeypatch.setattr(
+        data_export.conversations_db,
+        "iter_all_conversations",
+        MagicMock(return_value=iter([{"id": "conv-legacy"}])),
+    )
+    monkeypatch.setattr(
+        data_export.conversations_db,
+        "get_conversation_photos",
+        MagicMock(return_value=[{"id": "photo-1", "base64": "aW1hZ2U=", "content_type": "image/jpeg"}]),
+    )
+    monkeypatch.setattr(data_export.chat_db, "iter_all_messages", MagicMock(return_value=iter([])))
+
+    payload = json.loads("".join(data_export.iter_user_data_export("uid1")))
+
+    assert payload["conversation_photo_manifest"][0]["photo_id"] == "photo-1"
+    assert payload["conversation_photo_manifest"][0]["bytes_available"] is True
 
 
 def test_iter_user_data_export_yields_before_heavy_reads(monkeypatch):

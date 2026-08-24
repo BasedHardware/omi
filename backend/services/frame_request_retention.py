@@ -32,9 +32,11 @@ def run_frame_request_retention_maintenance(
         raise ValueError("maintenance limits must be positive")
     started = time.monotonic()
     client = firestore_client or get_firestore_client()
-    users = list(client.collection("users").limit(user_limit + 1).stream())
-    if len(users) > user_limit:
-        raise RuntimeError("frame retention user scan exceeded its safety bound")
+    # A scheduled invocation is one bounded page. Never fail the whole job
+    # merely because the account population is larger than this pass; the
+    # next invocation repeats the independent per-account convergence work.
+    users = list(client.collection("users").limit(user_limit).stream())
+    users_truncated = len(users) == user_limit
     attempted = cleaned = pruned = failures = 0
     for user in users:
         uid = str(getattr(user, "id", "")).strip()
@@ -55,7 +57,12 @@ def run_frame_request_retention_maintenance(
             # unexpected query failures are retried by the next run.
             logger.exception("frame retention maintenance failed for one account")
             failures += 1
-    result = {"users_scanned": attempted, "rows_pruned": pruned, "pixels_cleaned": cleaned}
+    result = {
+        "users_scanned": attempted,
+        "rows_pruned": pruned,
+        "pixels_cleaned": cleaned,
+        "users_page_full": int(users_truncated),
+    }
     elapsed_ms = max(0, int((time.monotonic() - started) * 1000))
     emit_posthog_event(
         "frame-retention-worker",
@@ -65,6 +72,7 @@ def run_frame_request_retention_maintenance(
             "rows_pruned": min(pruned, user_limit * rows_per_user),
             "pixels_cleaned": min(cleaned, user_limit * rows_per_user),
             "accounts_with_errors": min(failures, user_limit),
+            "users_page_full": int(users_truncated),
             "latency_bucket": "0_1s" if elapsed_ms <= 1000 else "1s_plus",
             "outcome": "degraded" if failures else "completed",
         },

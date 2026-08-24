@@ -14,10 +14,12 @@ import time
 import database.conversations as conversations_db
 
 from database.frame_requests import (
+    attach_frame_request_to_conversation,
     enqueue_frame_request,
     get_frame_request,
     list_attached_frame_requests,
     list_pending_frame_requests,
+    reconcile_ambiguous_frame_upload,
     transition_frame_request,
 )
 from models.frame_request import (
@@ -33,7 +35,6 @@ from utils.other.endpoints import get_current_user_uid, with_rate_limit
 from utils.executors import db_executor, run_blocking, storage_executor
 from utils.retrieval.frame_request_authority import authorize
 from utils.retrieval.frame_request_storage import delete_frame_request_pixels, upload_frame_request_pixels
-from utils.retrieval.frame_request_policy import FRAME_REQUEST_MAX_BYTES_PER_CONVERSATION
 from utils.integration_telemetry import emit_posthog_event
 
 router = APIRouter()
@@ -61,6 +62,34 @@ def _authorize(uid: str, account_generation: int) -> None:
         raise HTTPException(status_code=404, detail="frame_requests_unavailable") from exc
 
 
+async def _reconcile_uploaded_object(
+    uid: str,
+    request_id: str,
+    *,
+    device_id: str,
+    account_generation: int,
+    storage_id: str,
+    byte_count: int,
+    content_type: str | None,
+) -> FrameRequest | None:
+    try:
+        return await run_blocking(
+            db_executor,
+            reconcile_ambiguous_frame_upload,
+            uid,
+            request_id,
+            device_id=device_id,
+            account_generation=account_generation,
+            storage_id=storage_id,
+            byte_count=byte_count,
+            content_type=content_type,
+        )
+    except Exception:
+        # A failed read/reconcile cannot prove ownership or terminality. Keep
+        # the object for the independent retry worker rather than deleting it.
+        return None
+
+
 @router.post("/v1/frame-requests", response_model=FrameRequestEnvelope)
 async def create_frame_request(
     request: CreateFrameRequest,
@@ -68,6 +97,10 @@ async def create_frame_request(
 ) -> FrameRequestEnvelope:
     started = time.monotonic()
     _authorize(uid, request.account_generation)
+    if not request.conversation_id:
+        # A request without a conversation has no supported permanent evidence
+        # read path. Reject it before it can strand pixels in an owner bucket.
+        raise HTTPException(status_code=400, detail="conversation_id_required")
     try:
         frame_request, deduplicated = enqueue_frame_request(
             uid,
@@ -116,6 +149,7 @@ async def update_frame_request_state(
     update: FrameRequestStateUpdate,
     uid: str = Depends(with_rate_limit(get_current_user_uid, "frame_requests:write")),
 ) -> FrameRequestEnvelope:
+    started = time.monotonic()
     _authorize(uid, update.account_generation)
     try:
         frame_request = transition_frame_request(
@@ -136,6 +170,13 @@ async def update_frame_request_state(
         raise HTTPException(status_code=403, detail="frame_request_owner_mismatch") from exc
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    _record_frame_lifecycle(
+        uid,
+        "frame_request_state_transition",
+        state=frame_request.state,
+        started=started,
+        byte_count=frame_request.byte_count,
+    )
     return FrameRequestEnvelope(request=frame_request)
 
 
@@ -160,6 +201,13 @@ async def upload_frame_request(
     storage_id = f"frame-{uuid4().hex}"
     try:
         await run_blocking(storage_executor, upload_frame_request_pixels, uid, storage_id, payload, content_type)
+    except Exception:
+        # The object was not handed to Firestore yet, so a failed storage write
+        # is safe to clean up.
+        await run_blocking(storage_executor, delete_frame_request_pixels, uid, storage_id)
+        raise
+
+    try:
         frame_request = await run_blocking(
             db_executor,
             transition_frame_request,
@@ -173,18 +221,101 @@ async def upload_frame_request(
             content_type=content_type,
         )
     except KeyError as exc:
-        await run_blocking(storage_executor, delete_frame_request_pixels, uid, storage_id)
+        # Transition failures are commit-ambiguous, even for typed validation
+        # errors. Keep the object and let reconciliation/retention converge.
+        reconciled = await _reconcile_uploaded_object(
+            uid,
+            request_id,
+            device_id=device_id,
+            account_generation=account_generation,
+            storage_id=storage_id,
+            byte_count=len(payload),
+            content_type=content_type,
+        )
+        if (
+            reconciled
+            and reconciled.storage_id == storage_id
+            and reconciled.state
+            in {
+                FrameRequestState.uploaded,
+                FrameRequestState.attached,
+            }
+        ):
+            return FrameRequestEnvelope(request=reconciled)
         raise HTTPException(status_code=404, detail="frame_request_not_found") from exc
     except PermissionError as exc:
-        await run_blocking(storage_executor, delete_frame_request_pixels, uid, storage_id)
+        reconciled = await _reconcile_uploaded_object(
+            uid,
+            request_id,
+            device_id=device_id,
+            account_generation=account_generation,
+            storage_id=storage_id,
+            byte_count=len(payload),
+            content_type=content_type,
+        )
+        if (
+            reconciled
+            and reconciled.storage_id == storage_id
+            and reconciled.state
+            in {
+                FrameRequestState.uploaded,
+                FrameRequestState.attached,
+            }
+        ):
+            return FrameRequestEnvelope(request=reconciled)
         raise HTTPException(status_code=403, detail="frame_request_owner_mismatch") from exc
     except ValueError as exc:
-        await run_blocking(storage_executor, delete_frame_request_pixels, uid, storage_id)
+        reconciled = await _reconcile_uploaded_object(
+            uid,
+            request_id,
+            device_id=device_id,
+            account_generation=account_generation,
+            storage_id=storage_id,
+            byte_count=len(payload),
+            content_type=content_type,
+        )
+        if (
+            reconciled
+            and reconciled.storage_id == storage_id
+            and reconciled.state
+            in {
+                FrameRequestState.uploaded,
+                FrameRequestState.attached,
+            }
+        ):
+            return FrameRequestEnvelope(request=reconciled)
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception:
-        # Known pre-commit upload failures can remove their temporary object;
-        # promotion intentionally uses a different no-cleanup ambiguity rule.
-        await run_blocking(storage_executor, delete_frame_request_pixels, uid, storage_id)
+        # A Firestore transaction can have committed while the client observed
+        # a transport error. Never delete an object on an ambiguous commit: a
+        # scheduled owner-scoped cleanup/reconciliation pass may remove an
+        # object only after proving that metadata does not reference it.
+        reconciled = await _reconcile_uploaded_object(
+            uid,
+            request_id,
+            device_id=device_id,
+            account_generation=account_generation,
+            storage_id=storage_id,
+            byte_count=len(payload),
+            content_type=content_type,
+        )
+        if (
+            reconciled
+            and reconciled.storage_id == storage_id
+            and reconciled.state
+            in {
+                FrameRequestState.uploaded,
+                FrameRequestState.attached,
+            }
+        ):
+            _record_frame_lifecycle(
+                uid,
+                "frame_request_uploaded",
+                state=reconciled.state,
+                started=started,
+                byte_count=reconciled.byte_count,
+            )
+            return FrameRequestEnvelope(request=reconciled)
         raise
     _record_frame_lifecycle(
         uid, "frame_request_uploaded", state=frame_request.state, started=started, byte_count=frame_request.byte_count
@@ -202,56 +333,28 @@ async def promote_frame_request(
 
     started = time.monotonic()
     _authorize(uid, promotion.account_generation)
-    request: FrameRequest | None = None
     try:
-        # Read before writing so a completed request is a true idempotent
-        # retry.  In particular, never run cleanup after observing ``attached``:
-        # the metadata and object are now conversation-lifetime evidence.
-        request = get_frame_request(uid, request_id)
-        if request.account_generation != promotion.account_generation or request.device_id != promotion.device_id:
+        # Fast idempotent read path avoids even starting a transaction for a
+        # row already known to be permanent. The transaction below remains the
+        # authority for the uploaded -> attached race.
+        existing = get_frame_request(uid, request_id)
+        if existing.account_generation != promotion.account_generation or existing.device_id != promotion.device_id:
             raise PermissionError("frame request owner or account generation mismatch")
-        if request.conversation_id != promotion.conversation_id:
+        if existing.conversation_id != promotion.conversation_id:
             raise PermissionError("conversation ownership mismatch")
-        if request.state == FrameRequestState.attached:
-            _record_frame_lifecycle(uid, "frame_request_attached", state=request.state, started=started)
-            return FrameRequestEnvelope(request=request)
-        if request.state != FrameRequestState.uploaded:
-            raise ValueError("only uploaded frame requests may be promoted")
-        if not request.storage_id:
-            raise ValueError("only uploaded frame requests may be promoted")
-        attached = list_attached_frame_requests(uid, promotion.conversation_id)
-        if any(item.request_id != request_id for item in attached):
-            raise ValueError("conversation already has permanent frame evidence")
-        if sum(item.byte_count for item in attached) + request.byte_count > FRAME_REQUEST_MAX_BYTES_PER_CONVERSATION:
-            raise ValueError("conversation frame evidence byte budget exceeded")
-        photo = conversations_db.ConversationPhoto(
-            id=request_id,
-            base64="",
-            storage_id=request.storage_id,
-            content_type=request.content_type,
-            description="Just-in-time frame evidence",
+        if existing.state == FrameRequestState.attached:
+            _record_frame_lifecycle(uid, "frame_request_attached", state=existing.state, started=started)
+            return FrameRequestEnvelope(request=existing)
+        # The frame row, photo metadata, and one-keyframe invariant are one
+        # Firestore transaction. This makes concurrent promotion idempotent:
+        # one caller wins and the retry observes the committed attached row.
+        frame_request = attach_frame_request_to_conversation(
+            uid,
+            request_id,
+            device_id=promotion.device_id,
+            account_generation=promotion.account_generation,
+            conversation_id=promotion.conversation_id,
         )
-        if not conversations_db.store_conversation_photos(uid, promotion.conversation_id, [photo]):
-            raise KeyError("conversation not found")
-        try:
-            frame_request = transition_frame_request(
-                uid,
-                request_id,
-                next_state=FrameRequestState.attached,
-                device_id=promotion.device_id,
-                account_generation=promotion.account_generation,
-            )
-        except ValueError:
-            # Another promotion may have won the state race after this request
-            # wrote the stable photo id.  Re-read and accept only the exact
-            # attached outcome; all other failures remain retryable.  The
-            # exception could be raised after Firestore committed, so cleanup
-            # here would risk deleting permanent evidence.
-            current = get_frame_request(uid, request_id)
-            if current.state == FrameRequestState.attached and current.conversation_id == promotion.conversation_id:
-                _record_frame_lifecycle(uid, "frame_request_attached", state=current.state, started=started)
-                return FrameRequestEnvelope(request=current)
-            raise
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="frame_request_not_found") from exc
     except PermissionError as exc:

@@ -50,6 +50,18 @@ enum ScreenActivityLosslessSyncFeature {
 actor ScreenActivitySyncService {
   static let shared = ScreenActivitySyncService()
 
+  /// Pure lifecycle decisions keep the recovery contract testable without
+  /// invoking Firestore/GCS or a network session. Claimed rows may have lost a
+  /// response after a prior claim and therefore remain uploadable; uploaded
+  /// rows skip pixel upload and only retry promotion.
+  static func shouldClaimFrameRequest(state: String) -> Bool {
+    state == "requested"
+  }
+
+  static func shouldUploadFrameRequest(state: String) -> Bool {
+    state != "uploaded"
+  }
+
   // MARK: - State
 
   private var lastSyncedId: Int64 = 0
@@ -467,7 +479,7 @@ actor ScreenActivitySyncService {
     baseURL: String
   ) async -> Bool {
     for item in requests {
-      if item.state != "requested" { continue }
+      if !Self.shouldClaimFrameRequest(state: item.state) { continue }
       guard let url = URL(string: baseURL + "v1/frame-requests/\(item.requestId)/state") else { return false }
       let body: [String: Any] = [
         "state": "claimed",
@@ -502,7 +514,7 @@ actor ScreenActivitySyncService {
     for item in requests {
       // Requested/claimed are recoverable uploads. Uploaded rows are
       // recoverable promotions and must not upload a second pixel object.
-      if item.state != "uploaded" {
+      if Self.shouldUploadFrameRequest(state: item.state) {
         guard let screenshotID = item.screenshotId.flatMap(Int64.init),
           let screenshot = try? await RewindDatabase.shared.getScreenshot(id: screenshotID),
           let data = try? await RewindStorage.shared.loadScreenshotData(for: screenshot),

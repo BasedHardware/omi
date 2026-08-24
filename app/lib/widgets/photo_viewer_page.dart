@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
@@ -6,13 +7,15 @@ import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class PhotoViewerPage extends StatefulWidget {
   final List<ConversationPhoto> photos;
   final int initialIndex;
+  final String? conversationId;
 
-  const PhotoViewerPage({super.key, required this.photos, required this.initialIndex});
+  const PhotoViewerPage({super.key, required this.photos, required this.initialIndex, this.conversationId});
 
   @override
   State<PhotoViewerPage> createState() => _PhotoViewerPageState();
@@ -58,12 +61,22 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
                 onPageChanged: onPageChanged,
                 builder: (context, index) {
                   final photo = widget.photos[index];
-                  final imageBytes = base64Decode(photo.base64);
-                  return PhotoViewGalleryPageOptions(
-                    imageProvider: MemoryImage(imageBytes),
-                    minScale: PhotoViewComputedScale.contained,
-                    maxScale: PhotoViewComputedScale.covered * 4,
-                    heroAttributes: PhotoViewHeroAttributes(tag: photo.id),
+                  return FutureBuilder<Uint8List?>(
+                    future: loadConversationPhotoBytes(photo, widget.conversationId),
+                    builder: (context, snapshot) {
+                      final bytes = snapshot.data;
+                      if (bytes == null || bytes.isEmpty) {
+                        return const PhotoViewGalleryPageOptions.customChild(
+                          child: Center(child: CircularProgressIndicator()),
+                        );
+                      }
+                      return PhotoViewGalleryPageOptions(
+                        imageProvider: MemoryImage(bytes),
+                        minScale: PhotoViewComputedScale.contained,
+                        maxScale: PhotoViewComputedScale.covered * 4,
+                        heroAttributes: PhotoViewHeroAttributes(tag: photo.id),
+                      );
+                    },
                   );
                 },
                 scrollPhysics: const BouncingScrollPhysics(),
@@ -111,6 +124,54 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
           ],
         ),
       ),
+    );
+  }
+}
+
+Future<Uint8List?> loadConversationPhotoBytes(ConversationPhoto photo, String? conversationId) async {
+  if (photo.base64.isNotEmpty) {
+    try {
+      return base64Decode(photo.base64);
+    } on FormatException {
+      return null;
+    }
+  }
+  if (conversationId == null || conversationId.isEmpty || photo.storageId == null || photo.storageId!.isEmpty) {
+    return null;
+  }
+  return getConversationPhotoImage(conversationId, photo.id);
+}
+
+class ConversationPhotoImage extends StatelessWidget {
+  final ConversationPhoto photo;
+  final String? conversationId;
+  final BoxFit fit;
+  final Color? color;
+  final BlendMode? colorBlendMode;
+
+  const ConversationPhotoImage({
+    super.key,
+    required this.photo,
+    this.conversationId,
+    this.fit = BoxFit.cover,
+    this.color,
+    this.colorBlendMode,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Uint8List?>(
+      future: loadConversationPhotoBytes(photo, conversationId),
+      builder: (context, snapshot) {
+        final bytes = snapshot.data;
+        if (bytes == null || bytes.isEmpty) {
+          return const ColoredBox(
+            color: Colors.black12,
+            child: Center(child: Icon(Icons.image_outlined)),
+          );
+        }
+        return Image.memory(bytes, fit: fit, gaplessPlayback: true, color: color, colorBlendMode: colorBlendMode);
+      },
     );
   }
 }
