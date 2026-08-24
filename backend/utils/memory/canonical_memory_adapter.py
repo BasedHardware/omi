@@ -1467,6 +1467,7 @@ def close_canonical_legacy_generated_history(
     memory_id: str,
     *,
     expected_item_revision: int,
+    expected_tier: MemoryLayer,
     valid_to: Optional[datetime] = None,
     db_client: Any = None,
 ) -> MemoryItem:
@@ -1491,7 +1492,7 @@ def close_canonical_legacy_generated_history(
         if item.item_revision != expected_item_revision:
             raise ValueError("legacy Short-term adjudication source revision changed")
         if (
-            item.tier != MemoryLayer.short_term
+            item.tier != expected_tier
             or item.status != MemoryItemStatus.active
             or item.ledger_schema_version is not None
         ):

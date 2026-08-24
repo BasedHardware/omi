@@ -939,6 +939,7 @@ def test_short_term_adjudication_uses_canonical_close_and_marks_retained_history
         "u1",
         item.memory_id,
         expected_item_revision=item.item_revision,
+        expected_tier=item.tier,
         valid_to=NOW,
         db_client=object(),
     )
