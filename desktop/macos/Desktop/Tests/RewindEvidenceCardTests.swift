@@ -27,6 +27,32 @@ final class RewindEvidenceCardTests: XCTestCase {
     )
   }
 
+  func testProducerEvidenceReachesAvailableOnlyAfterLocalRowResolution() throws {
+    let decision = ScreenCandidateAdapter.adapt(
+      task: makeExtractedTask(),
+      dueAt: nil,
+      localEvidenceID: "screen-42",
+      deviceID: deviceID,
+      evidenceVersion: ScreenCandidateAdapter.evidenceVersion(for: 42)
+    )
+    let evidence = try XCTUnwrap(decision.candidateEvidenceRefs.first)
+    XCTAssertNotNil(RewindEvidenceCardPolicy.card(for: evidence, currentDeviceID: deviceID))
+    XCTAssertEqual(
+      RewindEvidenceCardResolutionPolicy.availability(
+        localRowExists: true,
+        ownerStillCurrent: true
+      ),
+      .available
+    )
+    XCTAssertEqual(
+      RewindEvidenceCardResolutionPolicy.availability(
+        localRowExists: false,
+        ownerStillCurrent: true
+      ),
+      .unavailable
+    )
+  }
+
   func testNilScreenshotFallbackCannotCollideIntoARewindFrame() throws {
     XCTAssertEqual(
       ScreenCandidateAdapter.evidenceVersion(for: nil),
@@ -57,6 +83,39 @@ final class RewindEvidenceCardTests: XCTestCase {
 
     XCTAssertNil(RewindEvidenceCardPolicy.card(for: oldCapture, currentDeviceID: deviceID))
     XCTAssertNil(RewindEvidenceCardPolicy.card(for: legacy, currentDeviceID: deviceID))
+  }
+
+  func testOwnerTransitionMakesAnExistingLocalRowUnavailable() {
+    guard let owner = RewindCaptureOwnerSnapshot.capture() else {
+      return XCTFail("owner snapshot should be available for this local resolution test")
+    }
+    RewindCaptureOwnerGeneration.beginTransition()
+    defer { RewindCaptureOwnerGeneration.endTransition() }
+    XCTAssertFalse(owner.isCurrent())
+    XCTAssertEqual(
+      RewindEvidenceCardResolutionPolicy.availability(
+        localRowExists: true,
+        ownerStillCurrent: owner.isCurrent()
+      ),
+      .unavailable
+    )
+  }
+
+  func testMissingLocalRowResolvesUnavailable() async {
+    let localRowExists = (try? await RewindDatabase.shared.getScreenshot(id: Int64.max)) != nil
+
+    XCTAssertFalse(localRowExists)
+    XCTAssertEqual(
+      RewindEvidenceCardResolutionPolicy.availability(
+        localRowExists: localRowExists,
+        ownerStillCurrent: true
+      ),
+      .unavailable
+    )
+  }
+
+  func testNilHostCallbackRemainsNonActionable() {
+    XCTAssertNil(RewindEvidenceCardPolicy.openHandler(for: 42, onOpen: nil))
   }
 
   func testMalformedForeignAndFutureEvidenceRemainTextOnly() {

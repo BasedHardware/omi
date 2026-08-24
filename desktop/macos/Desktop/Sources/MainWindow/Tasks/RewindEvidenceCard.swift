@@ -13,6 +13,22 @@ struct RewindEvidenceCardModel: Equatable, Identifiable, Sendable {
   var subtitle: String { "Open Rewind · frame \(screenshotID)" }
 }
 
+enum RewindEvidenceCardAvailability: Equatable, Sendable {
+  case checking
+  case available
+  case unavailable
+}
+
+enum RewindEvidenceCardResolutionPolicy {
+  static func availability(
+    localRowExists: Bool,
+    ownerStillCurrent: Bool
+  ) -> RewindEvidenceCardAvailability {
+    guard localRowExists, ownerStillCurrent else { return .unavailable }
+    return .available
+  }
+}
+
 enum RewindEvidenceCardPolicy {
   /// Only this explicit version identifies an exact local Rewind frame. The older `capture.v2`
   /// contract may carry a staged-task id when no screenshot row exists, so it must stay text-only.
@@ -50,6 +66,14 @@ enum RewindEvidenceCardPolicy {
     return id
   }
 
+  static func openHandler(
+    for screenshotID: Int64,
+    onOpen: ((Int64) -> Void)?
+  ) -> (() -> Void)? {
+    guard let onOpen else { return nil }
+    return { onOpen(screenshotID) }
+  }
+
   private static func normalized(_ value: String?) -> String? {
     guard let value else { return nil }
     let result = value.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -62,12 +86,26 @@ enum RewindEvidenceCardPolicy {
 struct RewindEvidenceCardView: View {
   let card: RewindEvidenceCardModel
   let onOpen: (() -> Void)?
+  let localScreenshotExists: @Sendable (Int64) async -> Bool
 
   @State private var isHovering = false
+  @State private var availability: RewindEvidenceCardAvailability = .checking
+
+  init(
+    card: RewindEvidenceCardModel,
+    onOpen: (() -> Void)?,
+    localScreenshotExists: @escaping @Sendable (Int64) async -> Bool = { screenshotID in
+      (try? RewindDatabase.shared.getScreenshot(id: screenshotID)) != nil
+    }
+  ) {
+    self.card = card
+    self.onOpen = onOpen
+    self.localScreenshotExists = localScreenshotExists
+  }
 
   var body: some View {
     Button {
-      onOpen?()
+      validateAndOpen()
     } label: {
       HStack(spacing: OmiSpacing.sm) {
         Image(systemName: "clock.arrow.circlepath")
@@ -80,7 +118,7 @@ struct RewindEvidenceCardView: View {
             .scaledFont(size: OmiType.caption, weight: .medium)
             .foregroundColor(Ink.primary)
             .lineLimit(1)
-          Text(card.subtitle)
+          Text(subtitle)
             .scaledFont(size: OmiType.micro)
             .foregroundColor(Ink.secondary)
             .lineLimit(1)
@@ -88,7 +126,7 @@ struct RewindEvidenceCardView: View {
 
         Spacer(minLength: OmiSpacing.xs)
 
-        Image(systemName: onOpen == nil ? "lock" : "chevron.right")
+        Image(systemName: trailingIcon)
           .scaledFont(size: OmiType.micro, weight: .medium)
           .foregroundColor(Ink.secondary)
       }
@@ -97,11 +135,80 @@ struct RewindEvidenceCardView: View {
       .glassCard(cornerRadius: PageGlass.chipRadius, emphasized: isHovering && onOpen != nil)
     }
     .buttonStyle(.plain)
-    .disabled(onOpen == nil)
+    .disabled(!isOpenable)
     .onHover { isHovering = $0 }
     .accessibilityIdentifier("rewind-evidence-card-\(card.screenshotID)")
     .accessibilityLabel(card.title)
-    .accessibilityHint(
-      onOpen == nil ? "This evidence is not available to open here" : "Opens the matching frame in Rewind")
+    .accessibilityValue(subtitle)
+    .accessibilityHint(accessibilityHint)
+    .task(id: card.screenshotID) {
+      await refreshAvailability()
+    }
+  }
+
+  private var isOpenable: Bool {
+    availability == .available && onOpen != nil
+  }
+
+  private var subtitle: String {
+    switch availability {
+    case .checking: return "Checking local Rewind · frame \(card.screenshotID)"
+    case .available: return card.subtitle
+    case .unavailable: return "Unavailable locally · frame \(card.screenshotID)"
+    }
+  }
+
+  private var trailingIcon: String {
+    guard onOpen != nil else { return "lock" }
+    switch availability {
+    case .checking: return "hourglass"
+    case .available: return "chevron.right"
+    case .unavailable: return "exclamationmark.triangle"
+    }
+  }
+
+  private var accessibilityHint: String {
+    guard onOpen != nil else { return "This evidence is not available to open here" }
+    switch availability {
+    case .checking: return "Checking whether this frame is still available locally"
+    case .available: return "Opens the matching frame in Rewind"
+    case .unavailable: return "This frame is unavailable locally, possibly because it was pruned"
+    }
+  }
+
+  @MainActor
+  private func refreshAvailability() async {
+    guard let ownerAtStart = RewindCaptureOwnerSnapshot.capture() else {
+      availability = .unavailable
+      return
+    }
+    let localRowExists = await localScreenshotExists(card.screenshotID)
+    guard !Task.isCancelled else { return }
+    availability = RewindEvidenceCardResolutionPolicy.availability(
+      localRowExists: localRowExists,
+      ownerStillCurrent: ownerAtStart.isCurrent()
+    )
+  }
+
+  @MainActor
+  private func validateAndOpen() {
+    guard isOpenable, let onOpen else { return }
+    Task { @MainActor in
+      guard let ownerAtStart = RewindCaptureOwnerSnapshot.capture() else {
+        availability = .unavailable
+        return
+      }
+      let localRowExists = await localScreenshotExists(card.screenshotID)
+      guard !Task.isCancelled else { return }
+      let resolvedAvailability = RewindEvidenceCardResolutionPolicy.availability(
+        localRowExists: localRowExists,
+        ownerStillCurrent: ownerAtStart.isCurrent()
+      )
+      guard resolvedAvailability == .available else {
+        availability = .unavailable
+        return
+      }
+      onOpen()
+    }
   }
 }
