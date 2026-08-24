@@ -200,13 +200,29 @@ def _render_cloud_run_state(env_config: ConfigDict) -> ConfigDict:
         service_config = _as_config_dict(raw_service_config)
         if service_config is None:
             raise ValueError(f'Cloud Run service {service_name} must be a mapping')
-        env_entries = _render_env_entries(_as_config_dict(service_config.get('env')) or {})
-        secret_entries = _render_secret_entries(_as_config_dict(service_config.get('secrets')) or {})
         services[str(service_name)] = {
-            'env': [*env_entries, *secret_entries],
+            'env': _render_state_env(service_config),
             'flags': dict(network_flags),
         }
-    return {'services': services}
+    # Jobs ship from their own workflows, but their env, secret and forbidden_env contract is
+    # declared in this manifest and validated against this state; omitting them retires that check.
+    jobs: ConfigDict = {}
+    for job_name, raw_job_config in (_as_config_dict(cloud_run.get('jobs')) or {}).items():
+        job_config = _as_config_dict(raw_job_config)
+        if job_config is None:
+            raise ValueError(f'Cloud Run job {job_name} must be a mapping')
+        jobs[str(job_name)] = {
+            'env': _render_state_env(job_config),
+            'flags': _render_flag_values(_as_config_dict(job_config.get('flags')) or {}),
+        }
+    return {'services': services, 'jobs': jobs}
+
+
+def _render_state_env(config: ConfigDict) -> list[ConfigDict]:
+    return [
+        *_render_env_entries(_as_config_dict(config.get('env')) or {}),
+        *_render_secret_entries(_as_config_dict(config.get('secrets')) or {}),
+    ]
 
 
 def _runtime_value(name: str, entry: ConfigDict, *, allow_missing: bool = False) -> str | None:
