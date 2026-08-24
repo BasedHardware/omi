@@ -18,6 +18,7 @@ except ImportError:  # pragma: no cover - local unit tests mock Firestore.
     _firestore_transactional = None
 
 from database._client import db
+from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.memory_collections import MemoryCollections
 from database.read_boundary import parse_snapshot_strict
 from models.memory_evidence import (
@@ -1597,6 +1598,20 @@ def _apply_long_term_patch_firestore_transaction(
     required_source_item: Optional[MemoryItem],
 ) -> ApplyResult:
     collections = MemoryCollections(uid=uid)
+    # The deletion authority must be part of this very transaction, not only a
+    # best-effort preflight.  Otherwise a wipe can race a canonical apply and
+    # the apply can recreate an item after the wipe's inventory was read.
+    # Reading the marker here makes Firestore retry the transaction when the
+    # deletion lifecycle changes, and a non-restoring marker fails closed.
+    deletion_ref = db_client.document(f"account_deletions/{uid}")
+    deletion_snapshot = deletion_ref.get(transaction=transaction)
+    deletion_payload = deletion_snapshot.to_dict() if getattr(deletion_snapshot, "exists", False) else {}
+    deletion_status = normalize_account_deletion_status(
+        marker_exists=bool(getattr(deletion_snapshot, "exists", False)),
+        raw_status=deletion_payload.get("wipe_status") if isinstance(deletion_payload, dict) else None,
+    )
+    if account_deletion_blocks_access(deletion_status):
+        raise MemoryFirestoreApplyError("canonical apply blocked by account deletion fence")
     review_item = _read_canonical_review_resolution(
         transaction=transaction,
         db_client=db_client,

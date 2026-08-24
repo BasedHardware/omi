@@ -407,6 +407,28 @@ UNIVERSAL_CANONICAL_LIST_SCAN_QUERY = FirestoreQuerySpec(
     index_fields=(_desc('updated_at'), _asc('__name__')),
 )
 
+# Bounded daily-sweep occupant lookups. The sweep must prove the active
+# subject/slot cohort without scanning an arbitrary memory collection page.
+DAILY_SWEEP_ACTIVE_FACT_SUBJECT_QUERY = FirestoreQuerySpec(
+    identifier='daily_sweep_active_fact_subject',
+    collection_group='memory_items',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('kind', '==', 'kind'),
+        FirestoreQueryFilter('subject_scope', '==', 'subject_scope'),
+    ),
+    index_fields=(_asc('status'), _asc('kind'), _asc('subject_scope')),
+)
+
+DAILY_SWEEP_ACTIVE_FACT_SLOT_QUERY = FirestoreQuerySpec(
+    identifier='daily_sweep_active_fact_slot',
+    collection_group='memory_items',
+    query_scope='COLLECTION',
+    filters=DAILY_SWEEP_ACTIVE_FACT_SUBJECT_QUERY.filters + (FirestoreQueryFilter('slot', '==', 'slot'),),
+    index_fields=DAILY_SWEEP_ACTIVE_FACT_SUBJECT_QUERY.index_fields + (_asc('slot'),),
+)
+
 # Historical dual-stream keysets for effective updated_at-or-created_at order.
 # Docs with updated_at ride the updated stream; created stream skips those
 # duplicates in Python so each document is emitted once. Opposite-direction
@@ -778,6 +800,8 @@ QUERY_SPECS = (
     CANONICAL_GRAPH_READ_QUERY,
     CANONICAL_MEMORY_ATLAS_READ_QUERY,
     UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
+    DAILY_SWEEP_ACTIVE_FACT_SUBJECT_QUERY,
+    DAILY_SWEEP_ACTIVE_FACT_SLOT_QUERY,
     UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY,
     UNIVERSAL_HISTORICAL_CREATED_LIST_SCAN_QUERY,
     CONVERSATION_SOURCE_MEMORY_QUERY,

@@ -32,13 +32,19 @@ from dataclasses import dataclass
 import os
 import re
 from typing import Any, Dict, Iterable, List, Literal, Mapping, Optional, Tuple
+from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from google.cloud.firestore_v1 import FieldFilter
 from google.cloud import firestore
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.account_deletion_projection_fence import read_account_deletion_projection_fence
+from database.firestore_index_registry import (
+    DAILY_SWEEP_ACTIVE_FACT_SLOT_QUERY,
+    DAILY_SWEEP_ACTIVE_FACT_SUBJECT_QUERY,
+)
 from database.memory_collections import MemoryCollections
 from models.memory_apply import MemoryControlState
 from models.memory_contracts import deterministic_contract_id
@@ -59,7 +65,6 @@ from utils.memory.knowledge_ledger import (
 from utils.memory.memory_system import ensure_canonical_apply_control_state
 from utils.memory.memory_authority import validate_uid_for_memory_path
 from utils.memory.jit_trigger_contract import compile_trigger_condition
-from utils.memory.product_memory_read_service import iter_authoritative_product_memory_items
 
 SCHEMA_VERSION = "daily_memory_sweep.v1"
 CURSOR_SCHEMA_VERSION = "daily_memory_sweep_cursor.v1"
@@ -75,6 +80,13 @@ MAX_SOURCE_REF_CHARACTERS = 256
 MAX_TRIGGER_CONDITION_KEYS = 12
 DAILY_MEMORY_SWEEP_ENABLED_ENV = "MEMORY_DAILY_MEMORY_SWEEP_ENABLED"
 DAILY_MEMORY_SWEEP_KILL_SWITCH_ENV = "MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH"
+DAILY_MEMORY_SWEEP_MODEL_ENABLED_ENV = "MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED"
+DAILY_MEMORY_SWEEP_MODEL_NAME_ENV = "MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME"
+DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES_ENV = "MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES"
+DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD_ENV = "MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD"
+
+RECEIPT_LEASE = timedelta(minutes=10)
+MAX_AUTHORITATIVE_OCCUPANTS = 2
 
 _ID_RE = re.compile(r"[a-z0-9][a-z0-9._:-]{0,127}")
 _FORBIDDEN_SOURCE_MARKERS = (
@@ -103,6 +115,7 @@ _ALLOWED_SOURCE_TYPES = frozenset(
         "conversation",
         "daily_summary",
         "explicit_user_statement",
+        "onboarding",
         "agent_conclusion",
         "screen_metadata",
     }
@@ -167,8 +180,45 @@ class SweepAuthorityState(BaseModel):
         return self.enabled and not self.kill_switch_active
 
 
+class DailySweepModelAuthority(BaseModel):
+    """Explicit budget/model seam for a future summary candidate extractor.
+
+    The current adapter consumes only persisted, completed-day summary output;
+    it never invokes a model implicitly. A deployment must open this separate
+    authority before allowing a model-backed producer to add candidates.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    enabled: bool = False
+    model_name: str = "disabled"
+    max_candidates: int = Field(default=8, ge=0, le=MAX_CANDIDATES_PER_DAY)
+    max_cost_usd: float = Field(default=0.0, ge=0.0, le=10.0)
+
+
+def daily_memory_sweep_model_authority_from_environment() -> DailySweepModelAuthority:
+    truthy = {"1", "true", "yes", "on"}
+    raw_candidates = os.getenv(DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES_ENV, "8")
+    raw_cost = os.getenv(DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD_ENV, "0")
+    try:
+        max_candidates = int(raw_candidates)
+        max_cost = float(raw_cost)
+    except ValueError as exc:
+        raise ValueError("daily sweep model budget environment is malformed") from exc
+    return DailySweepModelAuthority(
+        enabled=os.getenv(DAILY_MEMORY_SWEEP_MODEL_ENABLED_ENV, "false").casefold() in truthy,
+        model_name=os.getenv(DAILY_MEMORY_SWEEP_MODEL_NAME_ENV, "disabled").strip() or "disabled",
+        max_candidates=max_candidates,
+        max_cost_usd=max_cost,
+    )
+
+
 class SweepFenceBlocked(RuntimeError):
     """A durable deletion or generation fence closed during a transaction."""
+
+
+class SweepAuthoritativeQueryUnavailable(RuntimeError):
+    """A bounded canonical query could not prove the occupant set."""
 
 
 class SweepAuthority(str, Enum):
@@ -289,8 +339,11 @@ class DailySweepCandidate(BaseModel):
             raise ValueError("the daily sweep may repair existing triggers but never invent them")
         if self.operation in {"amend", "repair"} and not self.target_memory_id:
             raise ValueError("amend/repair candidates require target_memory_id")
-        if self.authority == SweepAuthority.direct_user_statement and self.source_type != "explicit_user_statement":
-            raise ValueError("direct authority requires an explicit-user-statement source")
+        if self.authority == SweepAuthority.direct_user_statement and self.source_type not in {
+            "explicit_user_statement",
+            "onboarding",
+        }:
+            raise ValueError("direct authority requires an explicit-user-statement or onboarding source")
         if self.kind == "trigger":
             # Compile at the boundary, then persist the normalized strict schema
             # so a future evaluator never receives an unvalidated ad-hoc map.
@@ -317,7 +370,11 @@ class DailySweepInput(BaseModel):
     local_date: date
     account_generation: int
     source_generation: int
-    timezone_name: Optional[str] = None
+    timezone_name: str
+    window_id: str
+    window_start_utc: datetime
+    window_end_utc: datetime
+    complete: bool
     candidates: Tuple[DailySweepCandidate, ...] = ()
 
     @field_validator("uid")
@@ -335,6 +392,13 @@ class DailySweepInput(BaseModel):
             raise ValueError("generation must be nonnegative")
         return value
 
+    @field_validator("window_start_utc", "window_end_utc")
+    @classmethod
+    def validate_window_timestamp(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("input window timestamps must be timezone-aware")
+        return value.astimezone(timezone.utc)
+
     @field_validator("candidates")
     @classmethod
     def validate_candidate_count(cls, value: Tuple[DailySweepCandidate, ...]) -> Tuple[DailySweepCandidate, ...]:
@@ -346,11 +410,18 @@ class DailySweepInput(BaseModel):
     def validate_schema(self) -> "DailySweepInput":
         if self.schema_version != SCHEMA_VERSION:
             raise ValueError("unsupported daily sweep input schema")
-        if self.timezone_name is not None:
-            try:
-                ZoneInfo(self.timezone_name)
-            except ZoneInfoNotFoundError as exc:
-                raise ValueError("input timezone must be an installed IANA timezone") from exc
+        try:
+            ZoneInfo(self.timezone_name)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ValueError("input timezone must be an installed IANA timezone") from exc
+        expected = completed_local_day_window(self.local_date, self.timezone_name)
+        if (
+            not self.complete
+            or self.window_id != expected.window_id
+            or self.window_start_utc != expected.start_utc
+            or self.window_end_utc != expected.end_utc
+        ):
+            raise ValueError("input must be an immutable complete exact local-day packet")
         return self
 
 
@@ -560,12 +631,25 @@ def _receipt_ref(db_client: Any, uid: str, receipt_id: str) -> Any:
     return db_client.document(f"{MemoryCollections(uid=uid).daily_memory_sweep_receipts}/{receipt_id}")
 
 
-def _receipt_id(uid: str, local_date: date, candidate: DailySweepCandidate) -> str:
+def _receipt_id(
+    uid: str,
+    local_date: date,
+    candidate: DailySweepCandidate,
+    *,
+    account_generation: int,
+    source_generation: int,
+) -> str:
     return (
         "receipt_"
         + deterministic_contract_id(
             "daily-memory-sweep-receipt",
-            {"uid": uid, "local_date": local_date.isoformat(), "source_key": candidate.source_key},
+            {
+                "uid": uid,
+                "local_date": local_date.isoformat(),
+                "source_key": candidate.source_key,
+                "account_generation": account_generation,
+                "source_generation": source_generation,
+            },
         )[:40]
     )
 
@@ -582,13 +666,119 @@ def _read_cursor(db_client: Any, uid: str, control: MemoryControlState) -> Daily
         cursor = DailySweepCursor.model_validate(snapshot.to_dict() or {})
     except Exception as exc:
         raise RuntimeError("daily sweep cursor is malformed") from exc
-    if (
-        cursor.uid != uid
-        or cursor.account_generation != control.account_generation
-        or cursor.source_generation != control.source_generation
-    ):
+    if cursor.uid != uid or cursor.account_generation != control.account_generation:
         raise RuntimeError("daily sweep cursor owner or generation mismatch")
+    if cursor.source_generation != control.source_generation:
+        if cursor.source_generation > control.source_generation:
+            raise RuntimeError("daily sweep cursor source generation is ahead of canonical control")
+        if not _rollover_cursor_source_generation(
+            db_client,
+            uid,
+            cursor,
+            control,
+        ):
+            raise RuntimeError("daily sweep cursor source-generation rollover conflict")
+        snapshot = _cursor_ref(db_client, uid).get()
+        try:
+            cursor = DailySweepCursor.model_validate(snapshot.to_dict() or {})
+        except Exception as exc:
+            raise RuntimeError("daily sweep cursor is malformed after source-generation rollover") from exc
+        if cursor.source_generation != control.source_generation:
+            raise RuntimeError("daily sweep cursor source-generation rollover did not commit")
     return cursor
+
+
+def _rollover_cursor_source_generation(
+    db_client: Any,
+    uid: str,
+    prior: DailySweepCursor,
+    control: MemoryControlState,
+) -> bool:
+    """CAS source generation while preserving the exact completed-day identity.
+
+    A source refresh must not replay a completed local day or silently skip a
+    pending one. Receipts are generation-namespaced, so stale packets/receipts
+    cannot be reused after this transaction.
+    """
+
+    ref = _cursor_ref(db_client, uid)
+
+    def rollover(transaction: Any) -> bool:
+        deletion_ref, control_ref = _live_fence_refs(db_client, uid)
+        if not _transaction_fence_open(
+            transaction,
+            deletion_ref,
+            control_ref,
+            uid=uid,
+            account_generation=control.account_generation,
+            source_generation=control.source_generation,
+        ):
+            return False
+        snapshot = ref.get(transaction=transaction)
+        if not getattr(snapshot, "exists", False):
+            return prior.source_generation == control.source_generation
+        payload = snapshot.to_dict() or {}
+        if (
+            payload.get("uid") != uid
+            or int(payload.get("account_generation", -1)) != control.account_generation
+            or int(payload.get("source_generation", -1)) != prior.source_generation
+            or int(payload.get("generation", -1)) != prior.generation
+        ):
+            return False
+        transaction.set(
+            ref,
+            {
+                **payload,
+                "source_generation": control.source_generation,
+                "generation": prior.generation + 1,
+                "updated_at": datetime.now(timezone.utc),
+            },
+        )
+        return True
+
+    transaction = db_client.transaction()
+    return bool(firestore.transactional(rollover)(transaction))
+
+
+def _pending_receipt_dates(
+    db_client: Any,
+    uid: str,
+    *,
+    through: date,
+    account_generation: int,
+    source_generation: int,
+) -> Tuple[date, ...]:
+    """Recover bounded incomplete dates when a crash occurred before cursor CAS."""
+
+    try:
+        snapshots = list(
+            db_client.collection(MemoryCollections(uid=uid).daily_memory_sweep_receipts)
+            .where(filter=FieldFilter("receipt_state", "==", "pending"))
+            .limit(MAX_CANDIDATES_PER_DAY * MAX_CATCH_UP_DAYS)
+            .stream()
+        )
+    except Exception:
+        # A missing index/query support is not evidence that there are no
+        # pending dates. The regular cursor path remains safe and the caller
+        # will block on missing input rather than advance.
+        return ()
+    dates: set[date] = set()
+    for snapshot in snapshots:
+        payload = snapshot.to_dict() or {}
+        if (
+            not isinstance(payload, dict)
+            or int(payload.get("account_generation", -1)) != account_generation
+            or int(payload.get("source_generation", -1)) != source_generation
+        ):
+            continue
+        raw = payload.get("local_date")
+        try:
+            local_date = date.fromisoformat(str(raw))
+        except (TypeError, ValueError):
+            continue
+        if local_date <= through:
+            dates.add(local_date)
+    return tuple(sorted(dates))
 
 
 def _live_fence_refs(db_client: Any, uid: str) -> Tuple[Any, Any]:
@@ -736,9 +926,22 @@ def _claim_receipt(
     account_generation: int,
     source_generation: int,
     claimant: str,
+    claim_now: datetime,
+    window: CompletedLocalDayWindow,
 ) -> Literal["claimed", "idempotent", "conflict"]:
-    receipt_ref = _receipt_ref(db_client, uid, _receipt_id(uid, local_date, candidate))
+    receipt_ref = _receipt_ref(
+        db_client,
+        uid,
+        _receipt_id(
+            uid,
+            local_date,
+            candidate,
+            account_generation=account_generation,
+            source_generation=source_generation,
+        ),
+    )
     digest = candidate.digest()
+    normalized_now = claim_now.astimezone(timezone.utc)
 
     def claim(transaction: Any) -> Literal["claimed", "idempotent", "conflict"]:
         deletion_ref, control_ref = _live_fence_refs(db_client, uid)
@@ -760,13 +963,41 @@ def _claim_receipt(
                 or existing.get("candidate_digest") != digest
                 or int(existing.get("account_generation", -1)) != account_generation
                 or int(existing.get("source_generation", -1)) != source_generation
+                or existing.get("local_timezone_window_id") != window.window_id
+                or existing.get("window_start_utc") != window.start_utc
+                or existing.get("window_end_utc") != window.end_utc
             ):
                 return "conflict"
             if existing.get("receipt_state") == "committed":
                 return "idempotent"
             prior_claimant = existing.get("claimant")
             if prior_claimant and prior_claimant != claimant:
-                return "conflict"
+                expires_raw = existing.get("claim_expires_at")
+                try:
+                    expires = (
+                        expires_raw
+                        if isinstance(expires_raw, datetime)
+                        else datetime.fromisoformat(str(expires_raw).replace("Z", "+00:00"))
+                    )
+                    if (
+                        expires.tzinfo is None
+                        or expires.utcoffset() is None
+                        or expires.astimezone(timezone.utc) > normalized_now
+                    ):
+                        return "conflict"
+                except (TypeError, ValueError):
+                    # An old or malformed pending claim is never guessed at or
+                    # overwritten. The next retry must use an explicit repair.
+                    return "conflict"
+            transaction.set(
+                receipt_ref,
+                {
+                    "claimant": claimant,
+                    "claimed_at": normalized_now,
+                    "claim_expires_at": normalized_now + RECEIPT_LEASE,
+                },
+                merge=True,
+            )
             return "claimed"
         transaction.set(
             receipt_ref,
@@ -780,6 +1011,11 @@ def _claim_receipt(
                 "source_generation": source_generation,
                 "claimant": claimant,
                 "receipt_state": "pending",
+                "local_timezone_window_id": window.window_id,
+                "window_start_utc": window.start_utc,
+                "window_end_utc": window.end_utc,
+                "claimed_at": normalized_now,
+                "claim_expires_at": normalized_now + RECEIPT_LEASE,
             },
         )
         return "claimed"
@@ -801,8 +1037,19 @@ def _finish_receipt(
     account_generation: int,
     source_generation: int,
     claimant: str,
+    window: CompletedLocalDayWindow,
 ) -> None:
-    receipt_ref = _receipt_ref(db_client, uid, _receipt_id(uid, local_date, candidate))
+    receipt_ref = _receipt_ref(
+        db_client,
+        uid,
+        _receipt_id(
+            uid,
+            local_date,
+            candidate,
+            account_generation=account_generation,
+            source_generation=source_generation,
+        ),
+    )
 
     def finish(transaction: Any) -> None:
         deletion_ref, control_ref = _live_fence_refs(db_client, uid)
@@ -825,7 +1072,10 @@ def _finish_receipt(
             or existing.get("candidate_digest") != candidate.digest()
             or int(existing.get("account_generation", -1)) != account_generation
             or int(existing.get("source_generation", -1)) != source_generation
-            or existing.get("claimant") not in {None, claimant}
+            or existing.get("claimant") != claimant
+            or existing.get("local_timezone_window_id") != window.window_id
+            or existing.get("window_start_utc") != window.start_utc
+            or existing.get("window_end_utc") != window.end_utc
         ):
             raise RuntimeError("daily sweep receipt changed while completing")
         payload: Dict[str, Any] = {
@@ -834,6 +1084,9 @@ def _finish_receipt(
             "source_generation": source_generation,
             "claimant": claimant,
             "outcome": outcome,
+            "local_timezone_window_id": window.window_id,
+            "window_start_utc": window.start_utc,
+            "window_end_utc": window.end_utc,
             "completed_at": datetime.now(timezone.utc),
         }
         if memory_id:
@@ -854,7 +1107,11 @@ def _target_for_candidate(uid: str, candidate: DailySweepCandidate, *, db_client
 
 def _target_authority(item: MemoryItem) -> int:
     reason = item.write_reason
-    if reason == LedgerWriteReason.direct_user_statement:
+    if reason in {
+        LedgerWriteReason.direct_user_statement,
+        LedgerWriteReason.explicit_remember,
+        LedgerWriteReason.onboarding,
+    }:
         return SweepAuthority.direct_user_statement.rank
     if reason == LedgerWriteReason.agent_reusable_conclusion:
         return SweepAuthority.agent_reusable_conclusion.rank
@@ -867,32 +1124,62 @@ def _find_active_slot_or_subject(
     *,
     db_client: Any,
 ) -> Optional[MemoryItem]:
-    """Find one deterministic active canonical occupant for add candidates.
+    """Find one deterministic active canonical occupant using a targeted query.
 
-    The read is bounded and only used to prevent cross-day duplicate profile
-    slots.  A minimal fake without a collection stream is treated as an empty
-    store for backwards-compatible unit seams; production canonical reads are
-    authoritative and validated by ``MemoryItem``.
+    A broad collection scan is unsafe here: truncation could be mistaken for
+    an empty slot and create a duplicate. The production query is narrowed by
+    active fact + subject identity (+ slot when present), and a result page
+    larger than the bounded proof fails closed.
     """
 
     if candidate.kind != "fact":
         return None
+    collection = db_client.collection(MemoryCollections(uid=uid).memory_items)
+    where = getattr(collection, "where", None)
+    if not callable(where):
+        raise SweepAuthoritativeQueryUnavailable("canonical occupant query is unavailable")
+    values = {
+        "status": MemoryItemStatus.active.value,
+        "kind": MemoryKind.fact.value,
+        "subject_scope": candidate.subject_scope.value,
+    }
     try:
-        items: List[MemoryItem] = []
-        for index, item in enumerate(iter_authoritative_product_memory_items(uid, db_client=db_client)):
-            if index >= 128:
-                break
-            if item.status != MemoryItemStatus.active or item.kind != MemoryKind.fact:
-                continue
-            if item.subject_scope != candidate.subject_scope or item.subject_entity_id != candidate.subject_entity_id:
-                continue
-            if candidate.slot and item.slot == candidate.slot:
-                items.append(item)
-            elif not candidate.slot and (item.content or "").casefold() == candidate.content.casefold():
-                items.append(item)
-        return sorted(items, key=lambda item: item.memory_id)[0] if items else None
-    except (AttributeError, TypeError):
-        return None
+        query = (
+            DAILY_SWEEP_ACTIVE_FACT_SLOT_QUERY.build(
+                collection,
+                {**values, "slot": candidate.slot},
+                field_filter_factory=FieldFilter,
+            )
+            if candidate.slot
+            else DAILY_SWEEP_ACTIVE_FACT_SUBJECT_QUERY.build(
+                collection,
+                values,
+                field_filter_factory=FieldFilter,
+            )
+        )
+        snapshots = list(query.limit(MAX_AUTHORITATIVE_OCCUPANTS + 1).stream())
+    except Exception as exc:
+        raise SweepAuthoritativeQueryUnavailable("canonical occupant query failed") from exc
+    if len(snapshots) > MAX_AUTHORITATIVE_OCCUPANTS:
+        raise SweepAuthoritativeQueryUnavailable("canonical occupant query exceeded proof budget")
+    items: List[MemoryItem] = []
+    for snapshot in snapshots:
+        raw = snapshot.to_dict()
+        if not isinstance(raw, dict):
+            raise SweepAuthoritativeQueryUnavailable("canonical occupant row is malformed")
+        item = MemoryItem.model_validate(raw)
+        if (
+            item.uid != uid
+            or item.status != MemoryItemStatus.active
+            or item.kind != MemoryKind.fact
+            or item.subject_scope != candidate.subject_scope
+            or item.subject_entity_id != candidate.subject_entity_id
+            or (candidate.slot and item.slot != candidate.slot)
+            or (not candidate.slot and (item.content or "").casefold() != candidate.content.casefold())
+        ):
+            continue
+        items.append(item)
+    return sorted(items, key=lambda item: item.memory_id)[0] if items else None
 
 
 def _apply_candidate(
@@ -949,7 +1236,12 @@ def _apply_candidate(
         },
         quote_refs=[{"source_ref": ref} for ref in candidate.source_refs],
     )
-    reason = LedgerWriteReason.standing_trigger if candidate.kind == "trigger" else candidate.authority.ledger_reason
+    if candidate.kind == "trigger":
+        reason = LedgerWriteReason.standing_trigger
+    elif candidate.source_type == "onboarding":
+        reason = LedgerWriteReason.onboarding
+    else:
+        reason = candidate.authority.ledger_reason
     if effective_operation == "amend":
         assert target is not None
         memory_id = amend_fact(
@@ -1047,17 +1339,34 @@ def run_daily_memory_sweep(
         if cursor.last_completed_local_date is not None
         else eligible_through
     )
+    pending_receipt_dates = _pending_receipt_dates(
+        db_client,
+        normalized_uid,
+        through=eligible_through,
+        account_generation=control.account_generation,
+        source_generation=control.source_generation,
+    )
     if first_pending > eligible_through:
         return _blocked_output(normalized_uid, "no_completed_local_day", status="not_due")
-    dates = [first_pending + timedelta(days=index) for index in range(max_catch_up_days)]
-    dates = [item for item in dates if item <= eligible_through]
+    if pending_receipt_dates:
+        # A crash can leave a receipt for an older day while the wall clock
+        # moves on. Recover that exact day first; do not demand a newer day's
+        # source packet and accidentally turn a recoverable replay into a
+        # cursor-advancing gap.
+        dates = list(pending_receipt_dates[:max_catch_up_days])
+    else:
+        dates = [first_pending + timedelta(days=index) for index in range(max_catch_up_days)]
+        dates = [item for item in dates if item <= eligible_through]
 
     completed: List[date] = []
     committed_count = 0
     idempotent_count = 0
     skipped_count = 0
     current_cursor = cursor
-    receipt_claimant = claimant or _plan_id(normalized_uid, eligible_through)
+    # A production invocation owns a unique lease. Date-derived claimants made
+    # two independent runners look like one worker and could strand pending
+    # work across the next day.
+    receipt_claimant = claimant or f"run:{uuid4().hex}"
     for local_date in dates:
         packet = inputs_by_date.get(local_date)
         if packet is None:
@@ -1069,8 +1378,16 @@ def run_daily_memory_sweep(
             or packet.source_generation != control.source_generation
         ):
             return _blocked_output(normalized_uid, "input_generation_mismatch")
-        if packet.timezone_name is not None and packet.timezone_name != timezone_name:
+        if packet.timezone_name != timezone_name:
             return _blocked_output(normalized_uid, "input_timezone_mismatch")
+        expected_window = completed_local_day_window(local_date, timezone_name)
+        if (
+            not packet.complete
+            or packet.window_id != expected_window.window_id
+            or packet.window_start_utc != expected_window.start_utc
+            or packet.window_end_utc != expected_window.end_utc
+        ):
+            return _blocked_output(normalized_uid, "incomplete_or_wrong_window")
         try:
             plan = plan_daily_memory_sweep(packet)
         except Exception:
@@ -1087,18 +1404,23 @@ def run_daily_memory_sweep(
                 account_generation=control.account_generation,
                 source_generation=control.source_generation,
                 claimant=receipt_claimant,
+                claim_now=now,
+                window=expected_window,
             )
             if claim == "conflict":
                 return _blocked_output(normalized_uid, "source_idempotency_conflict")
             if claim == "idempotent":
                 idempotent_count += 1
                 continue
-            memory_id, skip_reason = _apply_candidate(
-                normalized_uid,
-                local_date,
-                candidate,
-                db_client=db_client,
-            )
+            try:
+                memory_id, skip_reason = _apply_candidate(
+                    normalized_uid,
+                    local_date,
+                    candidate,
+                    db_client=db_client,
+                )
+            except SweepAuthoritativeQueryUnavailable:
+                return _blocked_output(normalized_uid, "canonical_occupant_query_unavailable")
             if skip_reason:
                 skipped_count += 1
                 try:
@@ -1113,6 +1435,7 @@ def run_daily_memory_sweep(
                         account_generation=control.account_generation,
                         source_generation=control.source_generation,
                         claimant=receipt_claimant,
+                        window=expected_window,
                     )
                 except SweepFenceBlocked:
                     return _blocked_output(normalized_uid, "receipt_completion_fence_closed")
@@ -1129,6 +1452,7 @@ def run_daily_memory_sweep(
                     account_generation=control.account_generation,
                     source_generation=control.source_generation,
                     claimant=receipt_claimant,
+                    window=expected_window,
                 )
             except SweepFenceBlocked:
                 return _blocked_output(normalized_uid, "receipt_completion_fence_closed")
@@ -1191,6 +1515,10 @@ class DailySweepRuntimeSources:
     daily_summary: Tuple[DailySweepCandidate, ...] = ()
     onboarding_cold_start: Tuple[DailySweepCandidate, ...] = ()
     existing_trigger_reconciliation: Tuple[DailySweepCandidate, ...] = ()
+    # ``complete`` is an immutable producer attestation. False means the
+    # source is absent/partial and the cursor must not advance, even when the
+    # candidate list is empty (the explicit complete-zero case is True).
+    complete: bool = False
 
     @classmethod
     def from_iterables(
@@ -1199,11 +1527,13 @@ class DailySweepRuntimeSources:
         daily_summary: Iterable[DailySweepCandidate] = (),
         onboarding_cold_start: Iterable[DailySweepCandidate] = (),
         existing_trigger_reconciliation: Iterable[DailySweepCandidate] = (),
+        complete: bool = False,
     ) -> "DailySweepRuntimeSources":
         return cls(
             daily_summary=tuple(daily_summary),
             onboarding_cold_start=tuple(onboarding_cold_start),
             existing_trigger_reconciliation=tuple(existing_trigger_reconciliation),
+            complete=complete,
         )
 
     def candidates(self) -> Tuple[DailySweepCandidate, ...]:
@@ -1221,18 +1551,182 @@ def build_daily_sweep_input(
 ) -> DailySweepInput:
     """Adapt typed daily-summary/onboarding/trigger sources into one packet."""
 
+    window = completed_local_day_window(local_date, timezone_name)
     return DailySweepInput(
         uid=uid,
         local_date=local_date,
         account_generation=account_generation,
         source_generation=source_generation,
         timezone_name=timezone_name,
+        window_id=window.window_id,
+        window_start_utc=window.start_utc,
+        window_end_utc=window.end_utc,
+        complete=sources.complete,
         candidates=sources.candidates(),
     )
 
 
+def _bounded_candidate_channel(
+    raw: Any,
+    *,
+    source_type: Optional[str] = None,
+    authority: Optional[SweepAuthority] = None,
+    max_candidates: int = MAX_CANDIDATES_PER_DAY,
+) -> Tuple[DailySweepCandidate, ...]:
+    if raw is None:
+        return ()
+    if not isinstance(raw, (list, tuple)) or len(raw) > max_candidates:
+        raise ValueError("daily sweep source channel exceeds its bounded candidate budget")
+    parsed: List[DailySweepCandidate] = []
+    for item in raw:
+        if isinstance(item, DailySweepCandidate):
+            candidate = item
+        elif isinstance(item, dict):
+            payload = dict(item)
+            if source_type is not None:
+                payload.setdefault("source_type", source_type)
+            if authority is not None:
+                payload.setdefault("authority", authority)
+            candidate = DailySweepCandidate.model_validate(payload)
+        else:
+            raise ValueError("daily sweep source candidate must be an object")
+        parsed.append(candidate)
+    return tuple(parsed)
+
+
+def produce_completed_day_daily_summary_sources(
+    uid: str,
+    local_date: date,
+    timezone_name: str,
+    control: MemoryControlState,
+    *,
+    db_client: Any,
+    model_authority: Optional[DailySweepModelAuthority] = None,
+) -> DailySweepRuntimeSources:
+    """Adapt one persisted completed-day summary into a bounded source bundle.
+
+    This deliberately reads the already-materialized daily summary for the
+    exact local-day window. It never queries today's conversations or invokes a
+    partial-day summarizer. A missing summary is *incomplete*, not complete-zero;
+    only a summary document whose candidate channel is explicitly empty proves
+    complete-zero. Optional model-produced candidates must be persisted by the
+    summary producer and are budgeted by the separate model authority.
+    """
+
+    window = completed_local_day_window(local_date, timezone_name)
+    collection = db_client.collection(f"users/{uid}/daily_summaries")
+    where = getattr(collection, "where", None)
+    if not callable(where):
+        raise ValueError("daily summary completed-day query is unavailable")
+    try:
+        try:
+            query: Any = where(filter=FieldFilter("date", "==", local_date.isoformat()))
+        except TypeError:
+            query = where("date", "==", local_date.isoformat())
+        snapshots = list(query.limit(1).stream())
+    except Exception as exc:
+        raise ValueError("daily summary completed-day query failed") from exc
+    if not snapshots:
+        return DailySweepRuntimeSources(complete=False)
+    payload = snapshots[0].to_dict() or {}
+    if not isinstance(payload, dict):
+        raise ValueError("daily summary payload is malformed")
+    if payload.get("date") != local_date.isoformat():
+        raise ValueError("daily summary date identity mismatch")
+    if any(key in payload for key in ("window_id", "window_start_utc", "window_end_utc")) and (
+        payload.get("window_id") != window.window_id
+        or payload.get("window_start_utc") != window.start_utc
+        or payload.get("window_end_utc") != window.end_utc
+    ):
+        raise ValueError("daily summary window identity mismatch")
+    # Candidate extraction is intentionally a persisted producer contract. A
+    # deployment can attach a bounded `memory_candidates` list to the summary;
+    # arbitrary summary text is never promoted implicitly.
+    model = model_authority or daily_memory_sweep_model_authority_from_environment()
+    raw_candidates = payload.get("memory_candidates", ())
+    if raw_candidates and not model.enabled:
+        raise ValueError("summary model candidates require the model authority seam")
+    candidates = _bounded_candidate_channel(
+        raw_candidates,
+        source_type="daily_summary",
+        authority=SweepAuthority.sweep_inference,
+        max_candidates=model.max_candidates if model.enabled else MAX_CANDIDATES_PER_DAY,
+    )
+    return DailySweepRuntimeSources.from_iterables(
+        daily_summary=candidates,
+        complete=True,
+    )
+
+
+def produce_onboarding_seed_sources(
+    uid: str,
+    *,
+    db_client: Any,
+    max_candidates: int = 8,
+) -> Tuple[DailySweepCandidate, ...]:
+    """Adapt explicit onboarding seed facts; passive observations are ignored."""
+
+    snapshot = db_client.document(f"users/{uid}").get()
+    if not getattr(snapshot, "exists", False):
+        return ()
+    payload = snapshot.to_dict() or {}
+    onboarding = payload.get("onboarding") if isinstance(payload, dict) else None
+    if not isinstance(onboarding, dict):
+        return ()
+    return _bounded_candidate_channel(
+        onboarding.get("memory_candidates", onboarding.get("memory_seeds", ())),
+        source_type="onboarding",
+        authority=SweepAuthority.direct_user_statement,
+        max_candidates=max_candidates,
+    )
+
+
+def _iter_active_standing_triggers(uid: str, *, db_client: Any) -> Tuple[MemoryItem, ...]:
+    """Read the bounded trigger-repair cohort through an authoritative query."""
+
+    collection = db_client.collection(MemoryCollections(uid=uid).memory_items)
+    where = getattr(collection, "where", None)
+    if not callable(where):
+        raise ValueError("standing-trigger reconciliation query is unavailable")
+    query = collection
+    for field_name, value in (
+        ("status", MemoryItemStatus.active.value),
+        ("kind", MemoryKind.trigger.value),
+        ("write_reason", LedgerWriteReason.standing_trigger.value),
+    ):
+        try:
+            query = query.where(filter=FieldFilter(field_name, "==", value))
+        except TypeError:
+            query = query.where(field_name, "==", value)
+    try:
+        snapshots = list(query.limit(MAX_WRITES_PER_DAY + 1).stream())
+    except Exception as exc:
+        raise ValueError("standing-trigger reconciliation query failed") from exc
+    if len(snapshots) > MAX_WRITES_PER_DAY:
+        raise ValueError("standing-trigger reconciliation exceeded proof budget")
+    items: List[MemoryItem] = []
+    for snapshot in snapshots:
+        payload = snapshot.to_dict() or {}
+        if not isinstance(payload, dict):
+            raise ValueError("standing-trigger row is malformed")
+        item = MemoryItem.model_validate(payload)
+        if (
+            item.uid == uid
+            and item.status == MemoryItemStatus.active
+            and item.kind == MemoryKind.trigger
+            and item.write_reason == LedgerWriteReason.standing_trigger
+        ):
+            items.append(item)
+    return tuple(sorted(items, key=lambda item: item.memory_id))
+
+
 def firestore_daily_sweep_source_provider(
-    uid: str, local_date: date, control: MemoryControlState, *, db_client: Any
+    uid: str,
+    local_date: date,
+    control: MemoryControlState,
+    *,
+    db_client: Any,
+    timezone_name: str = "UTC",
 ) -> DailySweepRuntimeSources:
     """Read one bounded backend-produced source packet for the scheduler.
 
@@ -1245,14 +1739,42 @@ def firestore_daily_sweep_source_provider(
     ref = db_client.document(f"{MemoryCollections(uid=uid).daily_memory_sweep_sources}/{local_date.isoformat()}")
     snapshot = ref.get()
     if not getattr(snapshot, "exists", False):
-        return DailySweepRuntimeSources()
-    payload = snapshot.to_dict() or {}
-    if not isinstance(payload, dict) or payload.get("uid") not in {None, uid}:
+        # The source is not allowed to advance the cursor merely because the
+        # staging document is absent. Fall back only to the durable completed-
+        # day summary producer; its missing-summary result remains incomplete.
+        summary_sources = produce_completed_day_daily_summary_sources(
+            uid,
+            local_date,
+            timezone_name,
+            control,
+            db_client=db_client,
+        )
+        onboarding = produce_onboarding_seed_sources(uid, db_client=db_client)
+        return DailySweepRuntimeSources.from_iterables(
+            daily_summary=summary_sources.daily_summary,
+            onboarding_cold_start=onboarding,
+            complete=summary_sources.complete,
+        )
+    raw_payload = snapshot.to_dict() or {}
+    payload: Dict[str, Any] = raw_payload if isinstance(raw_payload, dict) else {}
+    if not payload or payload.get("uid") not in {None, uid}:
         raise ValueError("daily sweep source packet owner mismatch")
     if payload.get("account_generation", control.account_generation) != control.account_generation:
         raise ValueError("daily sweep source packet account generation mismatch")
     if payload.get("source_generation", control.source_generation) != control.source_generation:
         raise ValueError("daily sweep source packet source generation mismatch")
+    raw_timezone_name = payload.get("timezone_name")
+    if not isinstance(raw_timezone_name, str) or not raw_timezone_name.strip():
+        raise ValueError("daily sweep source packet timezone is required")
+    timezone_name = raw_timezone_name
+    expected_window = completed_local_day_window(local_date, timezone_name)
+    if (
+        payload.get("complete") is not True
+        or payload.get("window_id") != expected_window.window_id
+        or payload.get("window_start_utc") != expected_window.start_utc
+        or payload.get("window_end_utc") != expected_window.end_utc
+    ):
+        raise ValueError("daily sweep source packet is not an exact complete window")
 
     def parse(name: str) -> Tuple[DailySweepCandidate, ...]:
         raw = payload.get(name, ())
@@ -1269,9 +1791,7 @@ def firestore_daily_sweep_source_provider(
     # representation differs from the stored payload. This is repeatable and
     # cannot invent a trigger from passive behavior.
     try:
-        for index, item in enumerate(iter_authoritative_product_memory_items(uid, db_client=db_client)):
-            if index >= 128:
-                break
+        for item in _iter_active_standing_triggers(uid, db_client=db_client):
             if (
                 item.status != MemoryItemStatus.active
                 or item.kind != MemoryKind.trigger
@@ -1305,14 +1825,16 @@ def firestore_daily_sweep_source_provider(
             )
             if len(trigger_repairs) >= MAX_WRITES_PER_DAY:
                 break
-    except (AttributeError, TypeError, ValueError):
-        # A missing collection seam is equivalent to no reconciliation input;
-        # malformed canonical rows are handled by the canonical read boundary.
-        pass
+    except ValueError:
+        # Reconciliation is auxiliary, but a truncated authoritative query is
+        # not equivalent to an empty set. The source remains unavailable and
+        # the scheduler must not advance its cursor.
+        raise
     return DailySweepRuntimeSources(
         daily_summary=parse("daily_summary"),
         onboarding_cold_start=parse("onboarding_cold_start"),
         existing_trigger_reconciliation=tuple(trigger_repairs),
+        complete=True,
     )
 
 
@@ -1337,6 +1859,27 @@ class DailySweepSchedulerSummary:
     idempotent_candidates: int = 0
     skipped_candidates: int = 0
     errors: Tuple[str, ...] = ()
+
+
+def _pending_completed_dates(
+    cursor: DailySweepCursor,
+    *,
+    timezone_name: str,
+    now: datetime,
+    max_days: int = MAX_CATCH_UP_DAYS,
+) -> Tuple[date, ...]:
+    local_today = now.astimezone(ZoneInfo(timezone_name)).date()
+    eligible_through = local_today - timedelta(days=1)
+    first_pending = (
+        cursor.last_completed_local_date + timedelta(days=1)
+        if cursor.last_completed_local_date is not None
+        else eligible_through
+    )
+    if first_pending > eligible_through:
+        return ()
+    return tuple(
+        day for day in (first_pending + timedelta(days=index) for index in range(max_days)) if day <= eligible_through
+    )
 
 
 def run_daily_memory_sweep_scheduler(
@@ -1373,25 +1916,38 @@ def run_daily_memory_sweep_scheduler(
         try:
             control = ensure_canonical_apply_control_state(uid, db_client=db_client)
             timezone_name = str(timezone_resolver(uid) or "UTC")
-            local_date = now.astimezone(ZoneInfo(timezone_name)).date() - timedelta(days=1)
-            sources = source_provider(uid, local_date, control)
-            if not isinstance(sources, DailySweepRuntimeSources):
-                raise ValueError("daily sweep source provider returned an invalid source bundle")
-            packet = build_daily_sweep_input(
-                uid,
-                local_date,
-                account_generation=control.account_generation,
-                source_generation=control.source_generation,
-                timezone_name=timezone_name,
-                sources=sources,
-            )
+            cursor = _read_cursor(db_client, uid, control)
+            if cursor.last_completed_local_date is not None and cursor.timezone_name != timezone_name:
+                raise ValueError("timezone_changed_requires_reconciliation")
+            pending_dates = _pending_completed_dates(cursor, timezone_name=timezone_name, now=now)
+            if not pending_dates:
+                continue
+            packets: Dict[date, DailySweepInput] = {}
+            for local_date in pending_dates:
+                try:
+                    sources = source_provider(uid, local_date, control, timezone_name=timezone_name)
+                except TypeError:
+                    # Preserve the narrow three-argument provider contract for
+                    # existing test/deployment adapters.
+                    sources = source_provider(uid, local_date, control)
+                if not isinstance(sources, DailySweepRuntimeSources):
+                    raise ValueError("daily sweep source provider returned an invalid source bundle")
+                packets[local_date] = build_daily_sweep_input(
+                    uid,
+                    local_date,
+                    account_generation=control.account_generation,
+                    source_generation=control.source_generation,
+                    timezone_name=timezone_name,
+                    sources=sources,
+                )
             output = run_daily_memory_sweep(
                 uid,
                 timezone_name,
                 now,
-                {local_date: packet},
+                packets,
                 db_client=db_client,
                 authority=resolved_authority,
+                claimant=f"scheduler:{uuid4().hex}",
             )
             committed += output.committed_count
             idempotent += output.idempotent_count
@@ -1430,11 +1986,19 @@ __all__ = [
     "MAX_WRITES_PER_DAY",
     "DAILY_MEMORY_SWEEP_ENABLED_ENV",
     "DAILY_MEMORY_SWEEP_KILL_SWITCH_ENV",
+    "DAILY_MEMORY_SWEEP_MODEL_ENABLED_ENV",
+    "DAILY_MEMORY_SWEEP_MODEL_NAME_ENV",
+    "DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES_ENV",
+    "DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD_ENV",
     "SCHEMA_VERSION",
     "SweepAuthority",
     "SweepAuthorityState",
+    "DailySweepModelAuthority",
+    "daily_memory_sweep_model_authority_from_environment",
     "plan_daily_memory_sweep",
     "build_daily_sweep_input",
+    "produce_completed_day_daily_summary_sources",
+    "produce_onboarding_seed_sources",
     "completed_local_day_window",
     "daily_memory_sweep_authority_from_environment",
     "firestore_daily_sweep_source_provider",

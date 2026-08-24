@@ -63,8 +63,8 @@ def _run_daily_memory_sweep_if_authorized() -> None:
         db_client=default_db_client,
         now=now,
         uid_inventory=inventory,
-        source_provider=lambda uid, local_date, control: firestore_daily_sweep_source_provider(
-            uid, local_date, control, db_client=default_db_client
+        source_provider=lambda uid, local_date, control, **kwargs: firestore_daily_sweep_source_provider(
+            uid, local_date, control, db_client=default_db_client, timezone_name=kwargs.get("timezone_name", "UTC")
         ),
         timezone_resolver=lambda uid: get_user_time_zone(uid) or "UTC",
         authority=authority,

@@ -12,6 +12,10 @@ The server constructs one immutable `DailySweepInput` per completed local day:
 
 - `uid`, `local_date`, and the canonical `account_generation` and
   `source_generation` observed while producing the packet;
+- the producer's IANA `timezone_name`, exact DST-aware `window_id`,
+  `window_start_utc`, and `window_end_utc`, plus `complete=true`; an empty
+  candidate list is valid only when this explicit complete-zero packet is
+  durable;
 - at most 32 `DailySweepCandidate` values and 16 canonical writes per day;
 - bounded content, source identity, metadata-only source references (at most 8,
   matching `LedgerProvenance.quote_refs`), and an
@@ -22,7 +26,13 @@ The runtime adapter reads a bounded backend-produced packet at
 `users/{uid}/daily_memory_sweep_sources/{local_date}`. Its three typed channels
 are `daily_summary`, `onboarding_cold_start`, and
 `existing_trigger_reconciliation`; this staging packet is not a memory
-authority and is inert while the backend switch is closed.
+authority and is inert while the backend switch is closed. When staging is
+absent, the adapter consults only the persisted completed-day daily summary
+for the exact window (never today's partial conversations) and an explicit
+onboarding seed channel. Missing summary/source evidence remains incomplete
+and cannot advance the cursor. Model-produced summary candidates require the
+separate model/cost authority and bounded deployment flags
+`MEMORY_DAILY_MEMORY_SWEEP_MODEL_*`.
 
 The runner accepts a mapping of completed local dates, derives the user's
 local day through `zoneinfo`, and never consumes today's partial window. It
@@ -61,17 +71,18 @@ separately in ledger evidence so later explicit repairs remain possible.
 Account-deletion, owner, generation, and durable cursor CAS checks fail closed.
 Receipt claim, receipt completion, and cursor advancement each transactionally
 re-read the durable deletion marker and live account/source generations.
-Receipt claims carry a claimant identity, so a different concurrent runner
-cannot steal a pending claim. If a process dies after canonical apply but
-before receipt completion, the same deterministic claimant retries the pending
-receipt; canonical apply idempotency prevents a second memory/operation/
-commit/outbox record.
+Receipt claims carry a unique per-invocation claimant and a short lease, so a
+different concurrent runner cannot steal live work but a next-day retry can
+take over an expired exact-digest claim. Receipt IDs include the source
+generation; a transactional source-generation rollover preserves the exact
+completed-day window identity and rejects stale packets.
 The per-user cursor lives under `memory_control/daily_memory_sweep`. Each
-candidate additionally gets a content-free receipt keyed by local date and
-source key under `daily_memory_sweep_receipts`. A receipt is claimed before
-the canonical write and marked committed after it. If a process dies between
-those steps, the same deterministic canonical operation is retried and the
-receipt completes without a second memory/operation/commit/outbox record.
+candidate additionally gets a content-free receipt keyed by local date, source
+key, and generations under `daily_memory_sweep_receipts`. A receipt is claimed
+before the canonical write and marked committed after it. If a process dies
+between those steps, the pending exact-digest date is recovered even after the
+wall clock advances; canonical apply idempotency prevents a second
+memory/operation/commit/outbox record.
 
 ## Verification
 
@@ -88,9 +99,10 @@ loopback-only:
 npm run test:memory-daily-sweep:emulator
 ```
 
-It uses a demo project and exercises three isolated synthetic users: a true
-crash after canonical apply but before receipt completion, deletion-marker
-contention during receipt completion followed by a wipe/retry, and source
-generation contention. It verifies no post-wipe cursor/receipt recreation and
-no duplicate canonical records. It never targets a real project and does not
-activate the production sweep.
+It uses a demo project and exercises isolated synthetic users: a true crash
+after canonical apply but before receipt completion plus next-day lease
+takeover, a canonical-apply/deletion race, deletion-marker contention during
+receipt completion followed by a wipe/retry, source-generation contention and
+transactional rollover, and overlapping runners. It verifies no post-wipe
+cursor/receipt recreation and no duplicate canonical records. It never targets
+a real project and does not activate the production sweep.

@@ -30,6 +30,17 @@ def _candidate(**updates):
     return DailySweepCandidate.model_validate(value)
 
 
+def _packet_kwargs(local_date, timezone_name="America/New_York"):
+    window = completed_local_day_window(local_date, timezone_name)
+    return {
+        "timezone_name": timezone_name,
+        "window_id": window.window_id,
+        "window_start_utc": window.start_utc,
+        "window_end_utc": window.end_utc,
+        "complete": True,
+    }
+
+
 def test_plan_is_deterministic_and_direct_statement_wins_over_inference():
     inferred = _candidate(candidate_id="infer", source_id="summary-1")
     direct = _candidate(
@@ -45,6 +56,7 @@ def test_plan_is_deterministic_and_direct_statement_wins_over_inference():
             local_date=date(2026, 8, 23),
             account_generation=4,
             source_generation=7,
+            **_packet_kwargs(date(2026, 8, 23)),
             candidates=(inferred, direct),
         )
     )
@@ -54,6 +66,7 @@ def test_plan_is_deterministic_and_direct_statement_wins_over_inference():
             local_date=date(2026, 8, 23),
             account_generation=4,
             source_generation=7,
+            **_packet_kwargs(date(2026, 8, 23)),
             candidates=(direct, inferred),
         )
     )
@@ -90,6 +103,7 @@ def test_equal_authority_winner_is_order_independent_and_subject_scoped():
             local_date=date(2026, 8, 23),
             account_generation=1,
             source_generation=1,
+            **_packet_kwargs(date(2026, 8, 23)),
             candidates=(left, right),
         )
     )
@@ -99,6 +113,7 @@ def test_equal_authority_winner_is_order_independent_and_subject_scoped():
             local_date=date(2026, 8, 23),
             account_generation=1,
             source_generation=1,
+            **_packet_kwargs(date(2026, 8, 23)),
             candidates=(right, left),
         )
     )
@@ -117,6 +132,7 @@ def test_equal_authority_winner_is_order_independent_and_subject_scoped():
             local_date=date(2026, 8, 23),
             account_generation=1,
             source_generation=1,
+            **_packet_kwargs(date(2026, 8, 23)),
             candidates=(left, third_party),
         )
     )
@@ -129,6 +145,27 @@ def test_completed_windows_preserve_dst_23_and_25_hour_days():
     assert (spring.end_utc - spring.start_utc).total_seconds() == 23 * 3600
     assert (fall.end_utc - fall.start_utc).total_seconds() == 25 * 3600
     assert spring.window_id != fall.window_id
+
+
+def test_packet_requires_explicit_complete_exact_window_and_onboarding_is_direct():
+    incomplete = _packet_kwargs(date(2026, 8, 23), timezone_name="UTC")
+    incomplete["complete"] = False
+    with pytest.raises(ValueError, match="complete exact local-day"):
+        DailySweepInput(
+            uid="user-1",
+            local_date=date(2026, 8, 23),
+            account_generation=1,
+            source_generation=1,
+            **incomplete,
+            candidates=(),
+        )
+    onboarding = _candidate(
+        candidate_id="seed",
+        source_id="seed-1",
+        source_type="onboarding",
+        authority=SweepAuthority.direct_user_statement,
+    )
+    assert onboarding.authority.rank == SweepAuthority.direct_user_statement.rank
 
 
 def test_authority_is_closed_by_default():
@@ -223,6 +260,7 @@ def test_runner_uses_local_completed_days_and_cursor(monkeypatch):
         local_date=date(2026, 8, 23),
         account_generation=control.account_generation,
         source_generation=control.source_generation,
+        **_packet_kwargs(date(2026, 8, 23)),
         candidates=(_candidate(),),
     )
     first = run_daily_memory_sweep(
@@ -278,6 +316,7 @@ def test_runner_limits_missed_day_catch_up(monkeypatch):
             local_date=day,
             account_generation=control.account_generation,
             source_generation=control.source_generation,
+            **_packet_kwargs(day),
             candidates=(),
         )
         for day in (date(2026, 8, 20), date(2026, 8, 21), date(2026, 8, 22), date(2026, 8, 23))
@@ -305,6 +344,7 @@ def test_runner_blocks_generation_mismatch_before_writes(monkeypatch):
         local_date=date(2026, 8, 23),
         account_generation=control.account_generation,
         source_generation=control.source_generation + 1,
+        **_packet_kwargs(date(2026, 8, 23)),
         candidates=(_candidate(),),
     )
     output = run_daily_memory_sweep(
