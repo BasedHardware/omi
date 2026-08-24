@@ -296,6 +296,17 @@ async def test_bootstrap_sends_first_onboarding_question_before_any_audio(monkey
     assert enqueued_segments and enqueued_segments[0]['speaker_id'] == OnboardingHandler.OMI_SPEAKER_ID
 
 
+def test_allocator_sentinel_matches_the_onboarding_handler_reservation():
+    # The allocator reserves OMI_SPEAKER_ID_SENTINEL so a long session with
+    # many provider transitions can never allocate 99 to a real speaker. That
+    # reservation is only meaningful while it equals the value onboarding
+    # actually stamps its question segments with, so pin the two together.
+    # (This file already owns the heavy utils.onboarding import chain.)
+    from utils.stt.speaker_identity import OMI_SPEAKER_ID_SENTINEL
+
+    assert OMI_SPEAKER_ID_SENTINEL == OnboardingHandler.OMI_SPEAKER_ID
+
+
 @pytest.mark.anyio
 async def test_bootstrap_passes_explicit_parakeet_through_capability_aware_selection(monkeypatch):
     import routers.listen.runtime as runtime_module
