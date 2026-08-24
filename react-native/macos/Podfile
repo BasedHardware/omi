@@ -32,7 +32,7 @@ target 'RnRuntime-macOS' do
         configuration.build_settings['MACOSX_DEPLOYMENT_TARGET'] = '14.0'
         # The generated CocoaPods project otherwise points at the iOS package.
         # macOS codegen script phases must inspect the macOS React Native tree.
-        configuration.build_settings['REACT_NATIVE_PATH'] = '${PODS_ROOT}/../../../node_modules/react-native-macos'
+        configuration.build_settings['REACT_NATIVE_PATH'] = '${PODS_ROOT}/../../node_modules/react-native-macos'
       end
 
       if target.name == 'fmt'
