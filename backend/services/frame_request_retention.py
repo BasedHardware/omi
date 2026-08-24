@@ -21,7 +21,9 @@ from database.frame_requests import (
     FrameCleanupPage,
     cleanup_ambiguous_frame_upload_pixels,
     cleanup_conversation_frame_deletion_outbox,
+    cleanup_expired_frame_vision_outputs,
     cleanup_frame_request_pixels,
+    delete_expired_frame_request_metadata,
     prune_expired_frame_requests,
 )
 from utils.integration_telemetry import emit_posthog_event
@@ -207,13 +209,15 @@ def run_frame_request_retention_maintenance(
             "users_scanned": 0,
             "rows_pruned": 0,
             "pixels_cleaned": 0,
+            "metadata_deleted": 0,
+            "vision_outputs_stripped": 0,
             "users_page_full": 0,
             "accounts_with_errors": 0,
             "lease_skipped": 1,
         }
     users, next_cursor, retry_uids = _load_user_page(client, user_limit=user_limit)
     users_truncated = next_cursor is not None
-    attempted = cleaned = pruned = failures = 0
+    attempted = cleaned = pruned = metadata_deleted = outputs_stripped = failures = 0
     retry_set = set(retry_uids)
     retry_collection = _retry_collection(client)
     for user in users:
@@ -243,6 +247,26 @@ def run_frame_request_retention_maintenance(
                 page_size=rows_per_user,
             )
             cleaned += changed
+            changed, more_metadata = _drain_due_pages(
+                lambda: delete_expired_frame_request_metadata(
+                    uid,
+                    limit=rows_per_user,
+                    firestore_client=client,
+                    report_page=True,
+                ),
+                page_size=rows_per_user,
+            )
+            metadata_deleted += changed
+            changed, more_outputs = _drain_due_pages(
+                lambda: cleanup_expired_frame_vision_outputs(
+                    uid,
+                    limit=rows_per_user,
+                    firestore_client=client,
+                    report_page=True,
+                ),
+                page_size=rows_per_user,
+            )
+            outputs_stripped += changed
             changed, more_orphans = _drain_due_pages(
                 lambda: cleanup_ambiguous_frame_upload_pixels(
                     uid,
@@ -265,7 +289,7 @@ def run_frame_request_retention_maintenance(
                 page_size=rows_per_user,
             )
             cleaned += changed
-            if more_due or more_cleanup or more_orphans or more_deletions:
+            if more_due or more_cleanup or more_metadata or more_outputs or more_orphans or more_deletions:
                 retry_collection.document(uid).set({"uid": uid, "updated_at": datetime.now(timezone.utc)}, merge=True)
             elif uid in retry_set:
                 retry_collection.document(uid).delete()
@@ -288,6 +312,8 @@ def run_frame_request_retention_maintenance(
         "users_scanned": attempted,
         "rows_pruned": pruned,
         "pixels_cleaned": cleaned,
+        "metadata_deleted": metadata_deleted,
+        "vision_outputs_stripped": outputs_stripped,
         "users_page_full": int(users_truncated),
         "accounts_with_errors": failures,
         "lease_skipped": 0,
@@ -301,6 +327,8 @@ def run_frame_request_retention_maintenance(
             "users_scanned": min(attempted, user_limit),
             "rows_pruned": min(pruned, user_limit * rows_per_user),
             "pixels_cleaned": min(cleaned, user_limit * rows_per_user),
+            "metadata_deleted": min(metadata_deleted, user_limit * rows_per_user),
+            "vision_outputs_stripped": min(outputs_stripped, user_limit * rows_per_user),
             "accounts_with_errors": min(failures, user_limit),
             "users_page_full": int(users_truncated),
             "latency_bucket": "0_1s" if elapsed_ms <= 1000 else "1s_plus",

@@ -16,6 +16,10 @@ from google.cloud import firestore
 
 from database._client import get_firestore_client
 from database.conversations import conversations_collection, prepare_photo_for_write
+from database.firestore_index_registry import (
+    FRAME_REQUEST_METADATA_EXPIRY_QUERY,
+    FRAME_VISION_OUTPUT_EXPIRY_QUERY,
+)
 from database.read_boundary import parse_payload_strict, parse_snapshot_strict
 from models.frame_request import (
     TERMINAL_FRAME_REQUEST_STATES,
@@ -27,6 +31,7 @@ from utils.retrieval.frame_request_policy import (
     FRAME_REQUEST_MAX_BATCH,
     FRAME_REQUEST_MAX_BYTES_PER_DEVICE,
     FRAME_REQUEST_MAX_BYTES_PER_CONVERSATION,
+    FRAME_REQUEST_MAX_TTL_SECONDS,
     FRAME_REQUEST_DEDUPE_WINDOW_SECONDS,
     FRAME_REQUEST_MAX_ATTACHED_PER_CONVERSATION,
     check_device_quota,
@@ -142,6 +147,7 @@ def complete_frame_vision_invocation(
     request_id: str,
     account_generation: int,
     description: str,
+    now: datetime | None = None,
     firestore_client: Any | None = None,
 ) -> None:
     """Store only the bounded derived result; never pixels or prompt content."""
@@ -157,7 +163,15 @@ def complete_frame_vision_invocation(
     row = snapshot.to_dict() if snapshot.exists else {}
     if row.get("request_id") != request_id or row.get("account_generation") != account_generation:
         raise PermissionError("vision receipt authority mismatch")
-    ref.update({"state": "completed", "description": bounded, "completed_at": datetime.now(timezone.utc)})
+    completed_at = _utc(now or datetime.now(timezone.utc))
+    ref.update(
+        {
+            "state": "completed",
+            "description": bounded,
+            "completed_at": completed_at,
+            "output_expires_at": completed_at + timedelta(seconds=FRAME_REQUEST_MAX_TTL_SECONDS),
+        }
+    )
 
 
 def persist_conversation_frame_deletion_outbox(
@@ -1095,6 +1109,118 @@ def cleanup_frame_request_pixels(
         )
         cleaned += 1
     page = FrameCleanupPage(processed=processed, cleaned=cleaned)
+    return page if report_page else page.cleaned
+
+
+def cleanup_expired_frame_vision_outputs(
+    uid: str,
+    *,
+    now: datetime | None = None,
+    limit: int = FRAME_REQUEST_MAX_BATCH,
+    firestore_client: Any | None = None,
+    report_page: bool = False,
+) -> int | FrameCleanupPage:
+    """Strip expired derived descriptions while preserving at-most-once authority.
+
+    The surviving receipt is deliberately content-free and non-expiring. A
+    crash after provider egress must never turn retention cleanup into
+    permission to invoke the provider again.
+    """
+
+    if not 1 <= limit <= FRAME_REQUEST_MAX_BATCH:
+        raise ValueError("limit is outside the bounded frame-request window")
+    current = _utc(now or datetime.now(timezone.utc))
+    client = _get_client(firestore_client)
+    query = FRAME_VISION_OUTPUT_EXPIRY_QUERY.build(
+        client.collection(USERS_COLLECTION).document(uid).collection(FRAME_VISION_RECEIPTS_COLLECTION),
+        {"now": current},
+        field_filter_factory=firestore.FieldFilter,
+    ).order_by("output_expires_at", direction=firestore.Query.ASCENDING)
+    processed = stripped = 0
+    for snapshot in query.limit(limit).stream():
+        processed += 1
+        transaction = client.transaction()
+
+        @firestore.transactional
+        def _strip_one(transaction: Any) -> bool:
+            fresh = snapshot.reference.get(transaction=transaction)
+            if not fresh.exists:
+                return False
+            row = fresh.to_dict() or {}
+            expires_at = row.get("output_expires_at")
+            if not isinstance(expires_at, datetime) or _utc(expires_at) > current:
+                return False
+            transaction.update(
+                snapshot.reference,
+                {
+                    "state": "payload_expired",
+                    "description": firestore.DELETE_FIELD,
+                    "completed_at": firestore.DELETE_FIELD,
+                    "output_expires_at": firestore.DELETE_FIELD,
+                },
+            )
+            return True
+
+        if _strip_one(transaction):
+            stripped += 1
+    page = FrameCleanupPage(processed=processed, cleaned=stripped)
+    return page if report_page else page.cleaned
+
+
+def delete_expired_frame_request_metadata(
+    uid: str,
+    *,
+    now: datetime | None = None,
+    limit: int = FRAME_REQUEST_MAX_BATCH,
+    firestore_client: Any | None = None,
+    report_page: bool = False,
+) -> int | FrameCleanupPage:
+    """Delete expired unattached metadata only after pixel cleanup converges."""
+
+    if not 1 <= limit <= FRAME_REQUEST_MAX_BATCH:
+        raise ValueError("limit is outside the bounded frame-request window")
+    current = _utc(now or datetime.now(timezone.utc))
+    client = _get_client(firestore_client)
+    terminal_states = [state.value for state in TERMINAL_FRAME_REQUEST_STATES if state != FrameRequestState.attached]
+    safe_cleanup_states = [
+        FrameRequestCleanupState.not_required.value,
+        FrameRequestCleanupState.deleted.value,
+    ]
+    query = FRAME_REQUEST_METADATA_EXPIRY_QUERY.build(
+        _collection(uid, firestore_client=client),
+        {
+            "terminal_states": terminal_states,
+            "cleanup_states": safe_cleanup_states,
+            "now": current,
+        },
+        field_filter_factory=firestore.FieldFilter,
+    ).order_by("expires_at", direction=firestore.Query.ASCENDING)
+    processed = deleted = 0
+    for snapshot in query.limit(limit).stream():
+        processed += 1
+        transaction = client.transaction()
+
+        @firestore.transactional
+        def _delete_one(transaction: Any) -> bool:
+            fresh = snapshot.reference.get(transaction=transaction)
+            if not fresh.exists:
+                return False
+            row = fresh.to_dict() or {}
+            expires_at = row.get("expires_at")
+            if (
+                row.get("state") not in terminal_states
+                or row.get("cleanup_state") not in safe_cleanup_states
+                or not isinstance(expires_at, datetime)
+                or _utc(expires_at) > current
+                or row.get("conversation_id")
+            ):
+                return False
+            transaction.delete(snapshot.reference)
+            return True
+
+        if _delete_one(transaction):
+            deleted += 1
+    page = FrameCleanupPage(processed=processed, cleaned=deleted)
     return page if report_page else page.cleaned
 
 

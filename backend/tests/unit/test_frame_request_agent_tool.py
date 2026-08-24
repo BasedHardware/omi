@@ -305,6 +305,157 @@ async def test_concurrent_fresh_configs_reserve_one_paid_invocation(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_distinct_frames_in_one_human_turn_share_one_durable_paid_authority(monkeypatch):
+    requests = {
+        "42": _request(FrameRequestState.uploaded),
+        "43": _request(FrameRequestState.uploaded).model_copy(
+            update={"request_id": "frame-2", "screenshot_id": "43", "storage_id": "temporary-object-2"}
+        ),
+    }
+    receipt = {}
+    authority_keys = []
+    dedupe_keys = []
+    calls = []
+    telemetry = []
+    _allow_authority(monkeypatch)
+    monkeypatch.setattr(
+        frame_request_tools,
+        "_screen_delivery_route",
+        lambda _uid, screen_id: ("mac-1", screen_id.rsplit("-", 1)[-1], None),
+    )
+
+    def enqueue(*_args, dedupe_key, screenshot_id, **_kwargs):
+        dedupe_keys.append(dedupe_key)
+        return requests[screenshot_id], True
+
+    monkeypatch.setattr(frame_request_tools, "enqueue_frame_request", enqueue)
+    monkeypatch.setattr(
+        frame_request_tools,
+        "get_frame_request",
+        lambda _uid, request_id: next(row for row in requests.values() if row.request_id == request_id),
+    )
+    monkeypatch.setattr(frame_request_tools, "download_frame_request_pixels", lambda *_args: b"pixels")
+
+    def reserve(_uid, authority_key, *, request_id, account_generation):
+        authority_keys.append(authority_key)
+        if receipt:
+            if receipt["request_id"] != request_id:
+                raise PermissionError("vision receipt authority mismatch")
+            return dict(receipt)
+        receipt.update(
+            {
+                "request_id": request_id,
+                "account_generation": account_generation,
+                "state": "invoked",
+            }
+        )
+        return {**receipt, "reserved": True}
+
+    def complete(*_args, description, **_kwargs):
+        receipt.update({"state": "completed", "description": description})
+
+    async def describe(*_args):
+        calls.append(1)
+        return "winner"
+
+    monkeypatch.setattr(frame_request_tools, "reserve_frame_vision_invocation", reserve)
+    monkeypatch.setattr(frame_request_tools, "complete_frame_vision_invocation", complete)
+    monkeypatch.setattr(frame_request_tools, "describe_image", describe)
+    monkeypatch.setattr(frame_request_tools, "emit_product_event", lambda **kwargs: telemetry.append(kwargs))
+
+    def config(screen_id):
+        value = _config()
+        value["configurable"]["evidence_references"] = [
+            {"id": f"screen:{screen_id}", "kind": "screen", "frame_id": screen_id, "state": "available"}
+        ]
+        return value
+
+    winner = await frame_request_tools.look_at_frame_tool.ainvoke(
+        {"screenshot_id": "mac-1-42"}, config=config("mac-1-42")
+    )
+    loser = await frame_request_tools.look_at_frame_tool.ainvoke(
+        {"screenshot_id": "mac-1-43"}, config=config("mac-1-43")
+    )
+
+    assert json.loads(winner)["state"] == "available"
+    assert json.loads(loser) == {"state": "unavailable", "reason": "vision_authority_mismatch"}
+    assert len(set(authority_keys)) == 1
+    assert len(set(dedupe_keys)) == 2
+    assert calls == [1]
+    assert [event["properties"]["vision_invoked"] for event in telemetry] == [True, False]
+
+
+@pytest.mark.asyncio
+async def test_concurrent_distinct_frames_in_one_human_turn_invoke_vision_once(monkeypatch):
+    rows = {
+        "42": _request(FrameRequestState.uploaded),
+        "43": _request(FrameRequestState.uploaded).model_copy(
+            update={"request_id": "frame-2", "screenshot_id": "43", "storage_id": "temporary-object-2"}
+        ),
+    }
+    receipt = {}
+    calls = []
+    telemetry = []
+    gate = asyncio.Event()
+    _allow_authority(monkeypatch)
+    monkeypatch.setattr(
+        frame_request_tools,
+        "_screen_delivery_route",
+        lambda _uid, screen_id: ("mac-1", screen_id.rsplit("-", 1)[-1], None),
+    )
+    monkeypatch.setattr(
+        frame_request_tools,
+        "enqueue_frame_request",
+        lambda *_args, screenshot_id, **_kwargs: (rows[screenshot_id], True),
+    )
+    monkeypatch.setattr(
+        frame_request_tools,
+        "get_frame_request",
+        lambda _uid, request_id: next(row for row in rows.values() if row.request_id == request_id),
+    )
+    monkeypatch.setattr(frame_request_tools, "download_frame_request_pixels", lambda *_args: b"pixels")
+
+    def reserve(_uid, _authority_key, *, request_id, account_generation):
+        if receipt:
+            if receipt["request_id"] != request_id:
+                raise PermissionError("vision receipt authority mismatch")
+            return dict(receipt)
+        receipt.update({"request_id": request_id, "account_generation": account_generation, "state": "invoked"})
+        return {**receipt, "reserved": True}
+
+    async def describe(*_args):
+        calls.append(1)
+        await gate.wait()
+        return "winner"
+
+    monkeypatch.setattr(frame_request_tools, "reserve_frame_vision_invocation", reserve)
+    monkeypatch.setattr(frame_request_tools, "complete_frame_vision_invocation", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(frame_request_tools, "describe_image", describe)
+    monkeypatch.setattr(frame_request_tools, "emit_product_event", lambda **kwargs: telemetry.append(kwargs))
+
+    def config(screen_id):
+        value = _config()
+        value["configurable"]["evidence_references"] = [
+            {"id": f"screen:{screen_id}", "kind": "screen", "frame_id": screen_id, "state": "available"}
+        ]
+        return value
+
+    first = asyncio.create_task(
+        frame_request_tools.look_at_frame_tool.ainvoke({"screenshot_id": "mac-1-42"}, config=config("mac-1-42"))
+    )
+    second = asyncio.create_task(
+        frame_request_tools.look_at_frame_tool.ainvoke({"screenshot_id": "mac-1-43"}, config=config("mac-1-43"))
+    )
+    await asyncio.sleep(0.05)
+    gate.set()
+    results = [json.loads(result) for result in await asyncio.gather(first, second)]
+
+    assert calls == [1]
+    assert sorted(result["state"] for result in results) == ["available", "unavailable"]
+    assert sorted(event["properties"]["vision_invoked"] for event in telemetry) == [False, True]
+
+
+@pytest.mark.asyncio
 async def test_crash_after_durable_reservation_never_reinvokes_paid_vision(monkeypatch):
     request = _request(FrameRequestState.uploaded)
     reserved = False

@@ -4,6 +4,7 @@ import json
 import base64
 import tempfile
 from datetime import datetime
+from itertools import chain
 from typing import IO, Any, Callable, Iterable, Iterator, Mapping, Sequence, cast
 
 from database import chat as chat_db
@@ -170,38 +171,55 @@ def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str]) -> Iter
     profile = cast(JsonRecord | None, get_user_profile(uid))
     yield ('  "profile": ' + json.dumps(profile if profile else {}, default=_json_default, indent=2) + ",\n")
 
-    yield '  "conversations": [\n'
-    first = True
-    photo_manifests: list[JsonRecord] = []
-    for conv in conversations_db.iter_all_conversations(uid, include_discarded=True):
-        if conv is None:
-            continue
-        if not first:
-            yield ",\n"
-        first = False
-        yield "    " + json.dumps(conv, default=_json_default, indent=4)
-        # Do not trust the marker alone: legacy conversations may have a photo
-        # subcollection without ``has_photos``. Export every owner-authorized
-        # photo subcollection so the export is exhaustive across generations.
-        conversation_id = str(conv.get("id") or "")
-        if conversation_id:
-            for photo in conversations_db.get_conversation_photos(uid, conversation_id) or []:
-                if isinstance(photo, Mapping):
-                    photo_manifests.append(_export_photo_manifest(uid, conversation_id, photo))
-    yield "\n  ],\n"
+    # Photo manifests can contain base64 image bytes. Spool them independently
+    # while conversations stream so account size cannot turn export into an
+    # unbounded resident list.
+    photo_spool = tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024, mode="w+", encoding="utf-8")
+    photo_count = 0
+    try:
+        yield '  "conversations": [\n'
+        first = True
+        for conv in conversations_db.iter_all_conversations(uid, include_discarded=True):
+            if conv is None:
+                continue
+            if not first:
+                yield ",\n"
+            first = False
+            yield "    " + json.dumps(conv, default=_json_default, indent=4)
+            # Do not trust the marker alone: legacy conversations may have a
+            # photo subcollection without ``has_photos``.
+            conversation_id = str(conv.get("id") or "")
+            if conversation_id:
+                for photo in conversations_db.get_conversation_photos(uid, conversation_id) or []:
+                    if not isinstance(photo, Mapping):
+                        continue
+                    if photo_count:
+                        photo_spool.write(",\n")
+                    photo_spool.write("    ")
+                    json.dump(
+                        _export_photo_manifest(uid, conversation_id, photo),
+                        photo_spool,
+                        default=_json_default,
+                        indent=4,
+                    )
+                    photo_count += 1
+        yield "\n  ],\n"
+
+        if photo_count:
+            yield '  "conversation_photo_manifest": [\n'
+            photo_spool.seek(0)
+            while chunk := photo_spool.read(64 * 1024):
+                yield chunk
+            yield "\n  ],\n"
+    finally:
+        photo_spool.close()
 
     # Frame-request metadata is user-owned audit history. Keep it separate from
     # conversation JSON and include a byte manifest for each referenced object.
-    frame_request_rows = [
-        row for row in _iter_user_subcollection(uid, "frame_requests") if isinstance(row.get("state"), str)
-    ]
-    if photo_manifests:
-        yield '  "conversation_photo_manifest": '
-        yield from _yield_json_array(photo_manifests)
-        yield ",\n"
-    if frame_request_rows:
-        yield '  "frame_requests": [\n'
-        for index, row in enumerate(frame_request_rows):
+    def frame_request_rows() -> Iterator[Mapping[str, Any]]:
+        for row in _iter_user_subcollection(uid, "frame_requests"):
+            if not isinstance(row.get("state"), str):
+                continue
             request = dict(row)
             storage_id = request.get("storage_id")
             if isinstance(storage_id, str) and storage_id:
@@ -215,9 +233,14 @@ def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str]) -> Iter
                         "created_at": request.get("created_at"),
                     },
                 )
-            yield "    " + json.dumps(request, default=_json_default, indent=4)
-            yield ",\n" if index < len(frame_request_rows) - 1 else "\n"
-        yield "  ],\n"
+            yield request
+
+    frame_rows = frame_request_rows()
+    first_frame = next(frame_rows, None)
+    if first_frame is not None:
+        yield '  "frame_requests": '
+        yield from _yield_json_array(chain((first_frame,), frame_rows))
+        yield ",\n"
 
     # Durable JIT receipts are user data too. They contain no pixels, but the
     # bounded derived vision description and lifecycle metadata remain part of
@@ -226,10 +249,11 @@ def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str]) -> Iter
         ("frame_vision_receipts", "frame_vision_receipts"),
         ("conversation_keyframe_jobs", "conversation_keyframe_jobs"),
     ):
-        rows = list(_iter_user_subcollection(uid, collection_name))
-        if rows:
+        rows = _iter_user_subcollection(uid, collection_name)
+        first_row = next(rows, None)
+        if first_row is not None:
             yield f'  "{export_name}": '
-            yield from _yield_json_array(rows)
+            yield from _yield_json_array(chain((first_row,), rows))
             yield ",\n"
 
     yield '  "memories": '

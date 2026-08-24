@@ -161,6 +161,48 @@ async def test_ambiguous_upload_commit_reconciles_without_deleting_object(monkey
 
 
 @pytest.mark.asyncio
+async def test_upload_rechecks_authority_after_canonicalization_before_gcs(monkeypatch):
+    authority_checks = []
+    canonicalized = False
+
+    async def authorize(_uid, _generation, **kwargs):
+        authority_checks.append((canonicalized, kwargs))
+        if canonicalized:
+            raise HTTPException(status_code=503, detail="frame_requests_unavailable")
+
+    def canonicalize(payload):
+        nonlocal canonicalized
+        canonicalized = True
+        return payload
+
+    monkeypatch.setattr(frame_requests, "_authorize", authorize)
+    monkeypatch.setattr(frame_requests, "_canonicalize_frame_image", canonicalize)
+    monkeypatch.setattr(
+        frame_requests,
+        "upload_frame_request_pixels",
+        lambda *_args, **_kwargs: pytest.fail("revoked upload must not reach GCS"),
+    )
+
+    image = BytesIO()
+    Image.new("RGB", (2, 2), color="white").save(image, format="JPEG")
+    image.seek(0)
+    with pytest.raises(HTTPException) as error:
+        await frame_requests.upload_frame_request(
+            "frame-1",
+            device_id="desktop-1",
+            account_generation=3,
+            file=UploadFile(filename="frame.jpg", file=image, headers={"content-type": "image/jpeg"}),
+            uid="user-1",
+        )
+
+    assert error.value.status_code == 503
+    assert authority_checks == [
+        (False, {"mutation": True}),
+        (True, {"mutation": True}),
+    ]
+
+
+@pytest.mark.asyncio
 async def test_frame_authority_reuses_shared_rollout_and_generation_fence(monkeypatch):
     calls = []
 
