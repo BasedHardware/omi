@@ -146,6 +146,59 @@ final class MemoryLedgerMirrorTests: XCTestCase {
     XCTAssertNil(persistedFuture.ledgerTriggerConditionJSON)
   }
 
+  func testAuthoritativeCurrentSnapshotPrunesOnlyAbsentOpenAcceptedV1Rows() async throws {
+    let kept = makeMemory(id: "ledger-kept", metadata: canonicalMetadata())
+    let removed = makeMemory(id: "ledger-removed", metadata: canonicalMetadata())
+    let closed = makeMemory(
+      id: "ledger-closed-preserved", metadata: canonicalMetadata(), status: "superseded")
+    var rejected = makeMemory(id: "ledger-rejected-preserved", metadata: canonicalMetadata())
+    rejected = ServerMemory(
+      id: rejected.id,
+      content: rejected.content,
+      category: rejected.category,
+      tier: rejected.tier,
+      tierIsExplicit: rejected.tierIsExplicit,
+      createdAt: rejected.createdAt,
+      updatedAt: rejected.updatedAt,
+      conversationId: rejected.conversationId,
+      reviewed: rejected.reviewed,
+      userReview: false,
+      visibility: rejected.visibility,
+      manuallyAdded: rejected.manuallyAdded,
+      scoring: rejected.scoring,
+      source: rejected.source,
+      confidence: rejected.confidence,
+      sourceApp: rejected.sourceApp,
+      contextSummary: rejected.contextSummary,
+      isRead: rejected.isRead,
+      isDismissed: rejected.isDismissed,
+      tags: rejected.tags,
+      reasoning: rejected.reasoning,
+      currentActivity: rejected.currentActivity,
+      inputDeviceName: rejected.inputDeviceName,
+      windowTitle: rejected.windowTitle,
+      headline: rejected.headline,
+      ledgerMetadata: rejected.ledgerMetadata)
+    var futureMetadata = canonicalMetadata()
+    futureMetadata[MemoryLedgerMetadata.schemaVersionKey] = "knowledge_ledger.v2"
+    let future = makeMemory(id: "ledger-future-preserved", metadata: futureMetadata)
+    try await MemoryStorage.shared.syncServerMemories([kept, removed, closed, rejected, future])
+
+    let count = try await MemoryStorage.shared.syncAuthoritativeKnowledgeLedgerSnapshot([kept])
+
+    XCTAssertEqual(count, 1)
+    let keptRecord = try await MemoryStorage.shared.getMemoryByBackendId(kept.id)
+    let removedRecord = try await MemoryStorage.shared.getMemoryByBackendId(removed.id)
+    let closedRecord = try await MemoryStorage.shared.getMemoryByBackendId(closed.id)
+    let rejectedRecord = try await MemoryStorage.shared.getMemoryByBackendId(rejected.id)
+    let futureRecord = try await MemoryStorage.shared.getMemoryByBackendId(future.id)
+    XCTAssertFalse(try XCTUnwrap(keptRecord).deleted)
+    XCTAssertTrue(try XCTUnwrap(removedRecord).deleted)
+    XCTAssertFalse(try XCTUnwrap(closedRecord).deleted)
+    XCTAssertFalse(try XCTUnwrap(rejectedRecord).deleted)
+    XCTAssertFalse(try XCTUnwrap(futureRecord).deleted)
+  }
+
   private func canonicalMetadata(city: String = "Brooklyn") -> [String: String] {
     [
       "ledger_schema_version": "knowledge_ledger.v1",
