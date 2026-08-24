@@ -20,7 +20,9 @@ from models.frame_request import (
     FrameRequestState,
 )
 
-FRAME_REQUEST_MAX_TTL_SECONDS = 7 * 24 * 60 * 60
+# Metadata must become terminal before the temporary bucket's day-6 lifecycle
+# can remove pixels; this avoids a live row pointing at a lifecycle-pruned blob.
+FRAME_REQUEST_MAX_TTL_SECONDS = 6 * 24 * 60 * 60
 FRAME_REQUEST_MAX_BYTES = 10 * 1024 * 1024
 FRAME_REQUEST_MAX_BATCH = 32
 FRAME_REQUEST_MAX_PENDING_PER_DEVICE = 8

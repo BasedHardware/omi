@@ -15,14 +15,27 @@ An uploaded request without a conversation remains temporary and is available
 to authenticated JIT vision through its owner- and generation-fenced temporary
 image endpoint; reading it never promotes it or extends its expiry. The backend
 agent's `look_at_frame` consumer accepts only a screen evidence reference
-admitted in that request and reserves a request-scoped one-frame budget before
-queueing or invoking vision. Its telemetry contains only closed outcome and
-vision-invoked fields, never frame IDs, OCR, pixels, or descriptions.
+admitted in that request and reserves both a request-scoped one-frame budget
+and a durable stable-turn invocation receipt before paid vision. A crash after
+reservation returns an honest indeterminate result and cannot pay twice.
+Its telemetry contains only closed outcome and vision-invoked fields, never
+frame IDs, OCR, pixels, or descriptions.
+
+Completed desktop conversations persist a metadata-only keyframe outbox intent
+independently of rollout availability. Finalization, later screen sync, and the
+hourly recovery worker can reconcile it. Selection queries the exact device,
+account generation, and conversation time window newest-first, requires the
+Mac's fail-closed Rewind-exclusion attestation, and uses the authoritative local
+screenshot ID. Upload decoding strips metadata and canonicalizes JPEG/PNG/WebP
+to a bounded JPEG before storage or vision. The existing desktop recovery loop
+uploads and promotes the winner; missing/aged local captures terminalize as
+pruned without blocking the text conversation.
 
 The worker retries external deletion independently of queue delivery and the
 rollout kill switch. Per-account retries and population scans have independent
 cursors and finite page budgets, so a poison account cannot pin the population
-scan. Cleanup operations are idempotent under overlapping executions. Account
+scan. A durable generation-fenced lease prevents overlapping workers from
+regressing either cursor; lease expiry recovers a crashed worker. Account
 deletion enumerates all queue pages, deletion outbox entries, and photo
 subcollections before deleting opaque objects. Conversation deletion persists
 an object-deletion outbox before deleting conversation metadata, so an external
@@ -52,7 +65,7 @@ device matching remain authoritative. The current product does not claim
 cryptographic device authentication; strengthening that boundary is a separate
 security decision.
 
-User exports include frame-request metadata and explicit conversation-photo
-manifests. When the dedicated object is readable, the manifest carries
+User exports include frame-request metadata, durable vision/keyframe receipts,
+and explicit conversation-photo manifests. When the dedicated object is readable, the manifest carries
 `bytes_base64`; if it is unavailable, `bytes_available: false` makes that
 limitation explicit rather than silently omitting the image.

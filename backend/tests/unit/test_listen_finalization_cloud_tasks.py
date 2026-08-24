@@ -64,6 +64,12 @@ def prod_backend_sync_runtime_env(monkeypatch):
     return _prod_backend_sync_runtime_env(monkeypatch)
 
 
+@pytest.fixture(autouse=True)
+def _isolate_keyframe_outbox(monkeypatch):
+    """Keyframe lifecycle behavior is covered by its focused service tests."""
+    monkeypatch.setattr(persisted_finalizer, "ensure_conversation_keyframe_job", lambda *_args, **_kwargs: False)
+
+
 def _finalization_task_client():
     app = FastAPI()
     app.include_router(finalization_router.router)

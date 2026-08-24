@@ -181,6 +181,18 @@ INDEX_ONLY_REQUIREMENTS = (
         (_asc('appName'), _asc('timestamp'), _asc('__name__')),
     ),
     FirestoreIndexRequirement(
+        'screen_activity_keyframe_device_generation_timestamp',
+        'screen_activity',
+        'COLLECTION',
+        (_asc('clientDeviceId'), _asc('accountGeneration'), _desc('timestamp'), _desc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'conversation_keyframe_jobs_device_state',
+        'conversation_keyframe_jobs',
+        'COLLECTION',
+        (_asc('device_id'), _asc('state'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
         'candidates_status_generation_created',
         'candidates',
         'COLLECTION',

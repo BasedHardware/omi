@@ -22,6 +22,8 @@ from utils.conversations import lifecycle as lifecycle_service
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.log_sanitizer import sanitize_pii
 from utils.task_intelligence.proactive_engine import persist_capture_arrival_intent
+from services.conversation_keyframes import ensure_conversation_keyframe_job, reconcile_conversation_keyframe_jobs
+from utils.retrieval.frame_request_authority import decision_for as frame_request_decision_for
 
 logger = logging.getLogger(__name__)
 
@@ -181,6 +183,21 @@ async def finalize_persisted_conversation(
             conversation,
             finalization_job_id=finalization_job_id,
         )
+        # This is a metadata-only durable outbox write. Pixels remain local and
+        # an offline desktop can satisfy it on a later screen-sync recovery.
+        if not getattr(conversation, 'discarded', False):
+            keyframe_eligible = await run_blocking(db_executor, ensure_conversation_keyframe_job, uid, conversation)
+            if keyframe_eligible:
+                decision = await run_blocking(db_executor, frame_request_decision_for, uid)
+                device_id = str(getattr(conversation, 'client_device_id', None) or '').strip()
+                if decision.enabled and decision.account_generation is not None and device_id:
+                    await run_blocking(
+                        db_executor,
+                        reconcile_conversation_keyframe_jobs,
+                        uid,
+                        device_id=device_id,
+                        account_generation=decision.account_generation,
+                    )
         source = getattr(conversation, 'source', None)
         source_value = getattr(source, 'value', source)
         if source_value == 'omi' and not getattr(conversation, 'discarded', False):

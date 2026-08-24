@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 from database.frame_requests import (
     acknowledge_frame_storage_cleanup,
@@ -51,6 +51,8 @@ from utils.retrieval.frame_request_storage import (
 router = APIRouter()
 _ALLOWED_IMAGE_FORMATS = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}
 _MAX_IMAGE_PIXELS = 25_000_000
+_MAX_EGRESS_DIMENSION = 1920
+_MAX_EGRESS_PIXELS = 2_500_000
 
 
 def _validated_image_content_type(payload: bytes) -> str:
@@ -68,6 +70,36 @@ def _validated_image_content_type(payload: bytes) -> str:
     if width < 1 or height < 1 or width * height > _MAX_IMAGE_PIXELS:
         raise HTTPException(status_code=413, detail="frame_upload_dimensions_too_large")
     return _ALLOWED_IMAGE_FORMATS[image_format]
+
+
+def _canonicalize_frame_image(payload: bytes) -> bytes:
+    """Strip metadata and bound the exact bytes persisted and sent to vision."""
+    try:
+        with Image.open(BytesIO(payload)) as source:
+            source.load()
+            image = ImageOps.exif_transpose(source)
+            width, height = image.size
+            scale = min(
+                1.0,
+                _MAX_EGRESS_DIMENSION / max(width, height),
+                (_MAX_EGRESS_PIXELS / (width * height)) ** 0.5,
+            )
+            if scale < 1.0:
+                image = image.resize(
+                    (max(1, int(width * scale)), max(1, int(height * scale))), Image.Resampling.LANCZOS
+                )
+            if image.mode not in {"RGB", "L"}:
+                if "A" in image.getbands():
+                    background = Image.new("RGB", image.size, "white")
+                    background.paste(image, mask=image.getchannel("A"))
+                    image = background
+                else:
+                    image = image.convert("RGB")
+            output = BytesIO()
+            image.save(output, format="JPEG", quality=85, optimize=True)
+            return output.getvalue()
+    except (Image.DecompressionBombError, UnidentifiedImageError, OSError, ValueError) as exc:
+        raise HTTPException(status_code=415, detail="frame_upload_invalid_image") from exc
 
 
 def _record_frame_lifecycle(
@@ -314,7 +346,9 @@ async def upload_frame_request(
     payload = await file.read(10 * 1024 * 1024 + 1)
     if len(payload) > 10 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="frame_upload_too_large")
-    content_type = _validated_image_content_type(payload)
+    _validated_image_content_type(payload)
+    payload = _canonicalize_frame_image(payload)
+    content_type = "image/jpeg"
     storage_id = f"{TEMPORARY_STORAGE_PREFIX}{uuid4().hex}"
     try:
         await run_blocking(

@@ -221,6 +221,19 @@ def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str]) -> Iter
             yield ",\n" if index < len(frame_request_rows) - 1 else "\n"
         yield "  ],\n"
 
+    # Durable JIT receipts are user data too. They contain no pixels, but the
+    # bounded derived vision description and lifecycle metadata remain part of
+    # an exhaustive portability export.
+    for collection_name, export_name in (
+        ("frame_vision_receipts", "frame_vision_receipts"),
+        ("conversation_keyframe_jobs", "conversation_keyframe_jobs"),
+    ):
+        rows = [row for row in _iter_user_subcollection(uid, collection_name) if isinstance(row, Mapping)]
+        if rows:
+            yield f'  "{export_name}": '
+            yield from _yield_json_array(rows)
+            yield ",\n"
+
     yield '  "memories": '
     while chunk := memories_spool.read(64 * 1024):
         yield chunk

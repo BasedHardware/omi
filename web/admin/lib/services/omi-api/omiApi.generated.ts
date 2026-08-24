@@ -3160,6 +3160,7 @@ export interface ScreenActivityAppSummary {
 
 export interface ScreenActivityRow {
   appName?: string;
+  captureEligible?: boolean;
   clientDeviceId?: string | null;
   deviceName?: string | null;
   embedding?: Array<number> | null;
@@ -3176,6 +3177,7 @@ export interface ScreenActivitySummaryResponse {
 
 export interface ScreenActivitySyncRequest {
   account_generation?: number;
+  deviceRetentionSeconds?: number | null;
   rows: Array<ScreenActivityRow>;
 }
 

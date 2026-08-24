@@ -3775,6 +3775,7 @@ public enum OmiAPI {
 
   public struct ScreenActivityRow: Codable {
     public let appName: String?
+    public let captureEligible: Bool?
     public let clientDeviceId: String?
     public let deviceName: String?
     public let embedding: [Double]?
@@ -3786,6 +3787,7 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       appName = try c.decodeIfPresent(String.self, forKey: .appName)
+      captureEligible = try c.decodeIfPresent(Bool.self, forKey: .captureEligible)
       clientDeviceId = try c.decodeIfPresent(String.self, forKey: .clientDeviceId)
       deviceName = try c.decodeIfPresent(String.self, forKey: .deviceName)
       embedding = try c.decodeIfPresent([Double].self, forKey: .embedding)
@@ -3795,8 +3797,9 @@ public enum OmiAPI {
       windowTitle = try c.decodeIfPresent(String.self, forKey: .windowTitle)
     }
 
-    public init(appName: String? = nil, clientDeviceId: String? = nil, deviceName: String? = nil, embedding: [Double]? = nil, id: Int, ocrText: String? = nil, timestamp: String, windowTitle: String? = nil) {
+    public init(appName: String? = nil, captureEligible: Bool? = nil, clientDeviceId: String? = nil, deviceName: String? = nil, embedding: [Double]? = nil, id: Int, ocrText: String? = nil, timestamp: String, windowTitle: String? = nil) {
       self.appName = appName
+      self.captureEligible = captureEligible
       self.clientDeviceId = clientDeviceId
       self.deviceName = deviceName
       self.embedding = embedding
@@ -3810,21 +3813,25 @@ public enum OmiAPI {
 
   public struct ScreenActivitySyncRequest: Codable {
     public let accountGeneration: Int?
+    public let deviceRetentionSeconds: Int?
     public let rows: [ScreenActivityRow]
 
     private enum CodingKeys: String, CodingKey {
       case accountGeneration = "account_generation"
+      case deviceRetentionSeconds
       case rows
     }
 
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       accountGeneration = try c.decodeIfPresent(Int.self, forKey: .accountGeneration)
+      deviceRetentionSeconds = try c.decodeIfPresent(Int.self, forKey: .deviceRetentionSeconds)
       rows = try c.decode([ScreenActivityRow].self, forKey: .rows)
     }
 
-    public init(accountGeneration: Int? = nil, rows: [ScreenActivityRow]) {
+    public init(accountGeneration: Int? = nil, deviceRetentionSeconds: Int? = nil, rows: [ScreenActivityRow]) {
       self.accountGeneration = accountGeneration
+      self.deviceRetentionSeconds = deviceRetentionSeconds
       self.rows = rows
     }
   }

@@ -92,15 +92,13 @@ jobs:
             --contract backend/deploy/frame-request-bucket-contract.json \
             --bucket "$permanent_bucket" --lifecycle-json "$permanent_state" \
             --temporary-bucket "$temporary_bucket" --temporary-lifecycle-json "$temporary_state"
-      - name: Require independent hourly Scheduler target before publication
+      - name: Recheck main immediately before publication
+        env:
+          DEPLOY_SHA: ${{ github.event.inputs.release_sha }}
         run: |
-          state_file=$(mktemp)
-          trap 'rm -f "$state_file"' EXIT
-          gcloud scheduler jobs describe "$SCHEDULER_JOB" --location="$REGION" \
-            --project="${{ vars.GCP_PROJECT_ID }}" --format=json > "$state_file"
-          python3 backend/scripts/validate_memory_maintenance_scheduler.py \
-            --state-file "$state_file" --project "${{ vars.GCP_PROJECT_ID }}" \
-            --region "$REGION" --scheduler-job "$SCHEDULER_JOB" --cloud-run-job "$SERVICE"
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          test "$DEPLOY_SHA" = "$(git rev-parse 'origin/main^{commit}')"
+          test "$DEPLOY_SHA" = "$(git rev-parse HEAD)"
       - name: Publish retention image after live storage admission
         run: |
           image=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
@@ -110,6 +108,13 @@ jobs:
         run: python3 backend/scripts/render_backend_runtime_env.py --env ${{ vars.ENV }} --job frame-request-retention-job >> "$GITHUB_OUTPUT"
       - name: Validate runtime contracts
         run: python3 backend/scripts/validate-backend-runtime-env.py --env "${{ vars.ENV }}" --check-workflows
+      - name: Recheck main immediately before Cloud Run deployment
+        env:
+          DEPLOY_SHA: ${{ github.event.inputs.release_sha }}
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          test "$DEPLOY_SHA" = "$(git rev-parse 'origin/main^{commit}')"
+          test "$DEPLOY_SHA" = "$(git rev-parse HEAD)"
       - name: Deploy retention job
         uses: google-github-actions/deploy-cloudrun@v3
         with:
@@ -120,3 +125,36 @@ jobs:
           flags: ${{ steps.runtime-env.outputs.cloud_run_flags }} ${{ steps.runtime-env.outputs.frame_request_retention_job_flags }}
           env_vars: ${{ steps.runtime-env.outputs.frame_request_retention_job_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.frame_request_retention_job_secrets }}
+      - name: Verify exact admitted job image and recheck main
+        env:
+          DEPLOY_SHA: ${{ github.event.inputs.release_sha }}
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          test "$DEPLOY_SHA" = "$(git rev-parse 'origin/main^{commit}')"
+          expected="gcr.io/${{ vars.GCP_PROJECT_ID }}/${SERVICE}:${{ steps.image-tag.outputs.short_sha }}"
+          actual=$(gcloud run jobs describe "$SERVICE" --region="$REGION" \
+            --project="${{ vars.GCP_PROJECT_ID }}" --format='value(template.template.containers[0].image)')
+          test "$actual" = "$expected"
+      - name: Provision or update dedicated hourly Scheduler and validate
+        env:
+          SCHEDULER_SERVICE_ACCOUNT: ${{ vars.FRAME_REQUEST_RETENTION_SCHEDULER_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          test -n "$SCHEDULER_SERVICE_ACCOUNT"
+          target="https://run.googleapis.com/v2/projects/${{ vars.GCP_PROJECT_ID }}/locations/${REGION}/jobs/${SERVICE}:run"
+          common=(--location="$REGION" --project="${{ vars.GCP_PROJECT_ID }}" --schedule='0 * * * *' \
+            --time-zone='Etc/UTC' --uri="$target" --http-method=POST \
+            --oauth-service-account-email="$SCHEDULER_SERVICE_ACCOUNT")
+          if gcloud scheduler jobs describe "$SCHEDULER_JOB" --location="$REGION" \
+            --project="${{ vars.GCP_PROJECT_ID }}" >/dev/null 2>&1; then
+            gcloud scheduler jobs update http "$SCHEDULER_JOB" "${common[@]}"
+          else
+            gcloud scheduler jobs create http "$SCHEDULER_JOB" "${common[@]}"
+          fi
+          state_file=$(mktemp)
+          trap 'rm -f "$state_file"' EXIT
+          gcloud scheduler jobs describe "$SCHEDULER_JOB" --location="$REGION" \
+            --project="${{ vars.GCP_PROJECT_ID }}" --format=json > "$state_file"
+          python3 backend/scripts/validate_memory_maintenance_scheduler.py \
+            --state-file "$state_file" --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "$REGION" --scheduler-job "$SCHEDULER_JOB" --cloud-run-job "$SERVICE"

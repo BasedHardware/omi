@@ -4,6 +4,7 @@
 
 class GeneratedScreenActivityRow {
   final String appName;
+  final bool captureEligible;
   final String? clientDeviceId;
   final String? deviceName;
   final List<double>? embedding;
@@ -14,6 +15,7 @@ class GeneratedScreenActivityRow {
 
   const GeneratedScreenActivityRow({
     this.appName = "",
+    this.captureEligible = false,
     this.clientDeviceId,
     this.deviceName,
     this.embedding,
@@ -26,6 +28,7 @@ class GeneratedScreenActivityRow {
   factory GeneratedScreenActivityRow.fromJson(Map<String, dynamic> json) {
     return GeneratedScreenActivityRow(
       appName: _required(_readFieldValue<String>(_readField(json, const ["appName"]), "appName", _readString, requiredField: false, nullable: false, defaultValue: ""), "appName"),
+      captureEligible: _required(_readFieldValue<bool>(_readField(json, const ["captureEligible"]), "captureEligible", _readBool, requiredField: false, nullable: false, defaultValue: false), "captureEligible"),
       clientDeviceId: _readFieldValue<String>(_readField(json, const ["clientDeviceId"]), "clientDeviceId", _readString, requiredField: false, nullable: true),
       deviceName: _readFieldValue<String>(_readField(json, const ["deviceName"]), "deviceName", _readString, requiredField: false, nullable: true),
       embedding: _readFieldValue<List<double>>(_readField(json, const ["embedding"]), "embedding", _readDoubleList, requiredField: false, nullable: true),
@@ -39,6 +42,7 @@ class GeneratedScreenActivityRow {
   Map<String, dynamic> toJson() {
     return {
       'appName': appName,
+      'captureEligible': captureEligible,
       'clientDeviceId': clientDeviceId,
       'deviceName': deviceName,
       'embedding': embedding,
@@ -96,16 +100,19 @@ class GeneratedFrameRequestDelivery {
 
 class GeneratedScreenActivitySyncRequest {
   final int accountGeneration;
+  final int? deviceRetentionSeconds;
   final List<GeneratedScreenActivityRow> rows;
 
   const GeneratedScreenActivitySyncRequest({
     this.accountGeneration = 0,
+    this.deviceRetentionSeconds,
     required this.rows,
   });
 
   factory GeneratedScreenActivitySyncRequest.fromJson(Map<String, dynamic> json) {
     return GeneratedScreenActivitySyncRequest(
       accountGeneration: _required(_readFieldValue<int>(_readField(json, const ["account_generation"]), "account_generation", _readInt, requiredField: false, nullable: false, defaultValue: 0), "account_generation"),
+      deviceRetentionSeconds: _readFieldValue<int>(_readField(json, const ["deviceRetentionSeconds"]), "deviceRetentionSeconds", _readInt, requiredField: false, nullable: true),
       rows: _required(_readFieldValue<List<GeneratedScreenActivityRow>>(_readField(json, const ["rows"]), "rows", (value) => _readObjectList(value, GeneratedScreenActivityRow.fromJson), requiredField: true, nullable: false), "rows"),
     );
   }
@@ -113,6 +120,7 @@ class GeneratedScreenActivitySyncRequest {
   Map<String, dynamic> toJson() {
     return {
       'account_generation': accountGeneration,
+      'deviceRetentionSeconds': deviceRetentionSeconds,
       'rows': rows.map((value) => value.toJson()).toList(),
     };
   }

@@ -62,6 +62,28 @@ actor ScreenActivitySyncService {
     state != "uploaded"
   }
 
+  static func boundedDeviceRetentionSeconds(retentionDays: Int) -> Int? {
+    RewindSettings.isUnlimited(retentionDays: retentionDays)
+      ? nil : min(6, max(1, retentionDays)) * 24 * 60 * 60
+  }
+
+  static func frameRequestSyncPayload(
+    rows: [[String: Any]], accountGeneration: Int, retentionDays: Int
+  ) -> [String: Any] {
+    let eligibleRows = rows.map { row in
+      var admitted = row
+      // A sync row exists only after Rewind's exclusion policy admitted and
+      // persisted the capture. Never synthesize this for an arbitrary image.
+      admitted["captureEligible"] = true
+      return admitted
+    }
+    var payload: [String: Any] = ["rows": eligibleRows, "account_generation": accountGeneration]
+    if let seconds = boundedDeviceRetentionSeconds(retentionDays: retentionDays) {
+      payload["deviceRetentionSeconds"] = seconds
+    }
+    return payload
+  }
+
   // MARK: - State
 
   private var lastSyncedId: Int64 = 0
@@ -396,9 +418,11 @@ actor ScreenActivitySyncService {
     let accountGeneration = await MainActor.run {
       AccountCutoverControlManager.shared.control.accountGeneration
     }
+    let retentionDays = RewindSettings.shared.retentionDays
     // This generation is read from the server-authoritative cutover
     // projection, never inferred from local queue state.
-    let payload: [String: Any] = ["rows": rows, "account_generation": accountGeneration]
+    let payload = Self.frameRequestSyncPayload(
+      rows: rows, accountGeneration: accountGeneration, retentionDays: retentionDays)
 
     guard let jsonData = try? JSONSerialization.data(withJSONObject: payload) else {
       log("ScreenActivitySync: JSON serialization error")
@@ -586,7 +610,7 @@ actor ScreenActivitySyncService {
   ) async -> Bool {
     guard let url = URL(string: baseURL + "v1/frame-requests/\(item.requestId)/state"),
       let data = try? JSONSerialization.data(withJSONObject: [
-        "state": "failed",
+        "state": reason == "screenshot_unavailable" ? "pruned" : "failed",
         "device_id": deviceID,
         "account_generation": accountGeneration,
         "terminal_reason": reason,
