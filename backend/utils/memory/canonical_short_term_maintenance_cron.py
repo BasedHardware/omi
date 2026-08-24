@@ -892,8 +892,8 @@ async def run_canonical_short_term_maintenance_cron(
 
     authority_loop = asyncio.get_running_loop()
 
-    def row_mutation_authorizer(uid: str) -> Callable[[str], bool]:
-        def authorize(_memory_id: str) -> bool:
+    def fresh_rollout_authorizer(uid: str) -> Callable[..., bool]:
+        def authorize(*_context: str) -> bool:
             future = asyncio.run_coroutine_threadsafe(
                 resolve_jit_rollout(
                     uid,
@@ -907,7 +907,7 @@ async def run_canonical_short_term_maintenance_cron(
             except Exception as exc:
                 future.cancel()
                 logger.warning(
-                    "canonical_short_term_maintenance_cron: uid=%s ledger_row_authorization_failed=%s",
+                    "canonical_short_term_maintenance_cron: uid=%s ledger_authorization_failed=%s",
                     uid,
                     type(exc).__name__,
                 )
@@ -926,6 +926,7 @@ async def run_canonical_short_term_maintenance_cron(
         )
         if not decision.permits_work:
             continue
+        authorizer = fresh_rollout_authorizer(uid)
         try:
             result = await run_blocking(
                 db_executor,
@@ -934,7 +935,8 @@ async def run_canonical_short_term_maintenance_cron(
                 db_client=client,
                 completed_at=now,
                 publish=False,
-                mutation_authorizer=row_mutation_authorizer(uid),
+                mutation_authorizer=authorizer,
+                publication_authorizer=authorizer,
             )
         except Exception as exc:
             summary.errors.append(f"uid={uid}: ledger_migration:{type(exc).__name__}")
@@ -949,19 +951,13 @@ async def run_canonical_short_term_maintenance_cron(
             continue
         if result.remaining_live_legacy_count:
             continue
-        final_decision = await resolve_jit_rollout(
-            uid,
-            stage=JITDecisionStage.INGRESS,
-            force_refresh=True,
-        )
-        if not final_decision.permits_work:
-            continue
         try:
             await run_blocking(
                 db_executor,
                 publish_ledger_migration_cutover,
                 uid,
                 db_client=client,
+                publication_authorizer=authorizer,
                 migrated_long_term_count=result.migrated_long_term_count,
                 adjudicated_short_term_count=result.adjudicated_short_term_count,
                 completed_at=now,
