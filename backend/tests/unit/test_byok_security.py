@@ -667,7 +667,7 @@ class TestBYOKSubscriptionEntitlements:
 
         subscription = Subscription(plan=PlanType.basic)
         monkeypatch.setattr(users.users_db, 'is_byok_active', lambda _uid: True)
-        monkeypatch.setattr(users, '_request_has_llm_byok_key', lambda: False)
+        monkeypatch.setattr(users, 'request_has_llm_byok_key', lambda: False)
         monkeypatch.setattr(users, 'get_user_subscription', lambda _uid: subscription, raising=False)
         monkeypatch.setattr(users, 'reconcile_basic_plan_with_stripe', lambda _uid, _subscription: None)
         monkeypatch.setattr(users, 'get_user_valid_subscription', lambda _uid: subscription, raising=False)
@@ -706,7 +706,7 @@ class TestBYOKSubscriptionEntitlements:
         from routers import users
 
         monkeypatch.setattr(users.users_db, 'is_byok_active', lambda _uid: True)
-        monkeypatch.setattr(users, '_request_has_llm_byok_key', lambda: True)
+        monkeypatch.setattr(users, 'request_has_llm_byok_key', lambda: True)
 
         response = users.get_user_subscription_endpoint(uid='validated-byok-user')
 
@@ -719,7 +719,7 @@ class TestBYOKSubscriptionEntitlements:
 
         subscription = Subscription(plan=PlanType.basic)
         monkeypatch.setattr(users.users_db, 'is_byok_active', lambda _uid: True)
-        monkeypatch.setattr(users, '_request_has_llm_byok_key', lambda: False)
+        monkeypatch.setattr(users, 'request_has_llm_byok_key', lambda: False)
         monkeypatch.setattr(users, 'get_user_subscription', lambda _uid: subscription, raising=False)
         monkeypatch.setattr(users, 'reconcile_basic_plan_with_stripe', lambda _uid, _subscription: None)
         monkeypatch.setattr(users, 'get_user_valid_subscription', lambda _uid: subscription, raising=False)
@@ -758,7 +758,7 @@ class TestBYOKSubscriptionEntitlements:
         from routers import users
 
         monkeypatch.setattr(users.users_db, 'is_byok_active', lambda _uid: True)
-        monkeypatch.setattr(users, '_request_has_llm_byok_key', lambda: False)
+        monkeypatch.setattr(users, 'request_has_llm_byok_key', lambda: False)
         monkeypatch.setattr(
             users,
             'get_chat_quota_snapshot',
@@ -776,7 +776,7 @@ class TestBYOKSubscriptionEntitlements:
         assert response.plan_type == PlanType.basic.value
         assert response.limit == 30
 
-        monkeypatch.setattr(users, '_request_has_llm_byok_key', lambda: True)
+        monkeypatch.setattr(users, 'request_has_llm_byok_key', lambda: True)
         response = users.get_user_chat_usage_quota(uid='llm-byok-user')
         assert response.plan_type == PlanType.unlimited.value
         assert response.limit is None
@@ -789,18 +789,18 @@ class TestRequestHasLLMByokKey:
 
         monkeypatch.setattr(subscription, 'has_validated_byok_keys', lambda: True)
         monkeypatch.setattr(subscription, 'get_byok_keys', lambda: {'openrouter': 'or-key'})
-        assert subscription._request_has_llm_byok_key() is True
+        assert subscription.request_has_llm_byok_key() is True
         monkeypatch.setattr(subscription, 'get_byok_keys', lambda: {'gemini': 'gm-key'})
-        assert subscription._request_has_llm_byok_key() is True
+        assert subscription.request_has_llm_byok_key() is True
         monkeypatch.setattr(subscription, 'get_byok_keys', lambda: {'deepgram': 'dg-key'})
-        assert subscription._request_has_llm_byok_key() is False
+        assert subscription.request_has_llm_byok_key() is False
 
     def test_requires_validated_context(self, monkeypatch):
         from utils import subscription
 
         monkeypatch.setattr(subscription, 'has_validated_byok_keys', lambda: False)
         monkeypatch.setattr(subscription, 'get_byok_keys', lambda: {'openai': 'sk'})
-        assert subscription._request_has_llm_byok_key() is False
+        assert subscription.request_has_llm_byok_key() is False
 
 
 class TestBYOKMiddlewareValidation:

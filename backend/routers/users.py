@@ -86,7 +86,7 @@ from models.users import (
 from utils.phone_calls import get_quota_snapshot as get_phone_call_quota_snapshot
 from utils.apps import get_available_app_by_id
 from utils.subscription import (
-    _request_has_llm_byok_key,
+    request_has_llm_byok_key,
     enforce_chat_quota,
     get_chat_quota_snapshot,
     get_default_basic_subscription,
@@ -1177,7 +1177,7 @@ def get_user_subscription_endpoint(
     # these users aren't surprised by a disabled phone-call feature.
     unlimited_phone_quota = PhoneCallQuota(has_access=True, is_paid=True)
 
-    if users_db.is_byok_active(uid) and _request_has_llm_byok_key():
+    if users_db.is_byok_active(uid) and request_has_llm_byok_key():
         return UserSubscriptionResponse(
             subscription=_byok_unlimited_subscription(),
             transcription_seconds_used=0,
@@ -1399,7 +1399,7 @@ def get_user_chat_usage_quota(
     # BYOK free plan: user brings their own keys, so there's no Omi-side cost
     # to meter. Only return unlimited when BYOK headers are on the request (desktop).
     # Mobile (no headers) should see real quota.
-    if users_db.is_byok_active(uid) and _request_has_llm_byok_key():
+    if users_db.is_byok_active(uid) and request_has_llm_byok_key():
         return ChatUsageQuota(
             plan='Free (BYOK)',
             plan_type=PlanType.unlimited.value,

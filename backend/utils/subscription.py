@@ -213,10 +213,14 @@ _TRIAL_PAYWALL_DESKTOP_TOKENS = DESKTOP_PLATFORMS | {"desktop"}
 _TRIAL_PAYWALL_CACHE_TTL_SECONDS = 300
 
 
-def _request_has_llm_byok_key() -> bool:
+def request_has_llm_byok_key() -> bool:
+    """Validated request has an enrolled LLM BYOK key (not Deepgram-only)."""
     return has_validated_byok_keys() and any(
         get_byok_keys().get(provider) for provider in ('openrouter', 'openai', 'anthropic', 'gemini')
     )
+
+
+_request_has_llm_byok_key = request_has_llm_byok_key
 
 
 def _request_has_byok_provider(provider: str) -> bool:

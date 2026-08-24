@@ -474,7 +474,7 @@ def test_byok_subscription_endpoint_returns_unlimited_plan():
     # `PlanLimits` was used in this module without being imported, so every BYOK
     # user's GET /v1/users/me/subscription raised NameError -> 500 in prod.
     with patch.object(users_router.users_db, 'is_byok_active', MagicMock(return_value=True)), patch.object(
-        users_router, '_request_has_llm_byok_key', MagicMock(return_value=True)
+        users_router, 'request_has_llm_byok_key', MagicMock(return_value=True)
     ):
         response = users_router.get_user_subscription_endpoint(uid='uid1')
 
