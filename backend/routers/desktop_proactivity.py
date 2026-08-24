@@ -332,6 +332,40 @@ async def _finalize_quota(uid: str, operation: ProactiveOperation, reservation_t
     return reset_seconds
 
 
+_pending_proactive_finalizations: set[asyncio.Task[int]] = set()
+
+
+async def _finalize_quota_after_success(
+    uid: str,
+    operation: ProactiveOperation,
+    reservation_token: str,
+) -> int:
+    """Submit successful-work finalization even if response delivery is cancelled.
+
+    The task is strongly retained only until its Redis call settles. It is not
+    part of the ordinary background-task registry and is never cancellation- or
+    shutdown-drained: process death intentionally leaves the pending lease to
+    expire, while request cancellation after validation cannot prevent a
+    submitted finalization from counting successful provider work.
+    """
+    finalization_task = asyncio.create_task(
+        _finalize_quota(uid, operation, reservation_token),
+        name="proactive-quota-finalize",
+    )
+    _pending_proactive_finalizations.add(finalization_task)
+
+    def observe_finalization(completed: asyncio.Task[int]) -> None:
+        _pending_proactive_finalizations.discard(completed)
+        if completed.cancelled():
+            return
+        error = completed.exception()
+        if error is not None:
+            logger.error("Proactive quota finalization failed: %s", type(error).__name__)
+
+    finalization_task.add_done_callback(observe_finalization)
+    return await asyncio.shield(finalization_task)
+
+
 async def _release_quota(uid: str, operation: ProactiveOperation, reservation_token: str) -> None:
     if not reservation_token:
         return
@@ -791,7 +825,7 @@ async def _proactive_completion_unobserved(
     provider_model = response_body.get("model")
     assert provider_request is not None
     assert quota is not None
-    finalized_reset_seconds = await _finalize_quota(uid, request.operation, quota.reservation_token)
+    finalized_reset_seconds = await _finalize_quota_after_success(uid, request.operation, quota.reservation_token)
     _apply_quota_headers(
         response,
         ProactiveQuotaState(

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -734,6 +735,82 @@ async def test_missing_finalize_fails_closed_without_rolling_back_successful_pro
     assert released == []
 
 
+@pytest.mark.asyncio
+async def test_cancellation_after_validation_retains_finalize_behind_saturated_executor(monkeypatch):
+    from utils.executors import critical_executor
+
+    executor_gate = threading.Event()
+    blockers = [critical_executor.submit(executor_gate.wait, 5) for _ in range(critical_executor._max_workers)]
+    for _ in range(100):
+        if critical_executor.active_count >= critical_executor._max_workers:
+            break
+        await asyncio.sleep(0.001)
+    assert critical_executor.active_count == critical_executor._max_workers
+    finalize_started = asyncio.Event()
+    finalized = []
+
+    async def consume(*_args):
+        return _test_quota_state()
+
+    async def renew(*_args):
+        return None
+
+    def finalize_in_executor():
+        finalized.append(True)
+        return True, 37
+
+    async def finalize(*_args):
+        finalize_started.set()
+        admitted, reset_seconds = await desktop_proactivity.run_blocking(critical_executor, finalize_in_executor)
+        assert admitted
+        return reset_seconds
+
+    class GatewayClient:
+        async def post(self, url, *, headers, json):
+            del url, headers, json
+            return httpx.Response(
+                200,
+                request=httpx.Request("POST", "http://gateway"),
+                json={
+                    "model": "gpt-5-nano",
+                    "choices": [{"finish_reason": "stop", "message": {"content": '{"summary":"ok"}'}}],
+                },
+            )
+
+    monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
+    monkeypatch.setenv("OMI_LLM_GATEWAY_URL", "http://gateway")
+    monkeypatch.setattr(desktop_proactivity, "_consume_quota", consume)
+    monkeypatch.setattr(desktop_proactivity, "_renew_quota", renew)
+    monkeypatch.setattr(desktop_proactivity, "_finalize_quota", finalize)
+    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", lambda: GatewayClient())
+    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_semaphore", lambda: _ImmediateSemaphore())
+    monkeypatch.setattr(desktop_proactivity, "llm_gateway_headers", lambda **_: {})
+
+    try:
+        request_task = asyncio.create_task(
+            desktop_proactivity.proactive_completion(request(), Response(), uid="user-1")
+        )
+        await asyncio.wait_for(finalize_started.wait(), timeout=1)
+        request_task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await request_task
+
+        executor_gate.set()
+        for blocker in blockers:
+            await asyncio.to_thread(blocker.result)
+        for _ in range(100):
+            if not desktop_proactivity._pending_proactive_finalizations:
+                break
+            await asyncio.sleep(0.001)
+        assert finalized == [True]
+        assert not desktop_proactivity._pending_proactive_finalizations
+    finally:
+        executor_gate.set()
+        for blocker in blockers:
+            if not blocker.done():
+                await asyncio.to_thread(blocker.result)
+
+
 def test_release_after_delete_does_not_go_negative():
     import fakeredis
 
@@ -769,18 +846,46 @@ def _proactive_quota_scripts(client):
     }
 
 
+def test_proactive_quota_uses_redis_clock_when_host_clock_is_skewed(monkeypatch):
+    from database import redis_db
+
+    observed = {}
+
+    class RedisClockScript:
+        def __call__(self, *, keys, args):
+            observed.update(keys=keys, args=args)
+            # This fixed value stands in for the authoritative Redis TIME
+            # result; the host clock is intentionally not consulted.
+            return [1, 1, 90, b"skew-safe-token"]
+
+    monkeypatch.setattr(redis_db, "_PROACTIVE_QUOTA_RESERVE_LUA", RedisClockScript())
+    monkeypatch.setattr(redis_db.secrets, "token_urlsafe", lambda _bytes: "skew-safe-token")
+    import time as host_time
+
+    monkeypatch.setattr(host_time, "time", lambda: -(10**12))
+    result = redis_db.reserve_proactive_rate_limit("user-1", "desktop_test", 2, 86_400)
+
+    assert result == (True, 1, 90, "skew-safe-token")
+    assert observed["args"] == [90_000, 86_400, 2, "skew-safe-token"]
+    for source in (
+        redis_db._PROACTIVE_QUOTA_RESERVE_LUA_SOURCE,
+        redis_db._PROACTIVE_QUOTA_RENEW_LUA_SOURCE,
+        redis_db._PROACTIVE_QUOTA_FINALIZE_LUA_SOURCE,
+    ):
+        assert "redis.call('TIME')" in source
+
+
 def test_proactive_quota_reservations_are_atomic_and_fail_closed_at_limit():
     import fakeredis
 
     client = fakeredis.FakeRedis()
     scripts = _proactive_quota_scripts(client)
     key = "rl:proactive_lease:desktop_proactive_extraction:user-1"
-    now_ms = 1_000_000
 
     def reserve(index):
         return scripts["reserve"](
             keys=[key],
-            args=[now_ms, 90_000, 86_400, 2, f"token-{index}"],
+            args=[90_000, 86_400, 2, f"token-{index}"],
         )
 
     with ThreadPoolExecutor(max_workers=8) as executor:
@@ -800,52 +905,63 @@ def test_proactive_quota_lease_renew_finalize_release_and_process_expiry():
     client = fakeredis.FakeRedis()
     scripts = _proactive_quota_scripts(client)
     key = "rl:proactive_lease:desktop_proactive_reasoning:user-1"
-    now_ms = 2_000_000
     token = "opaque-token"
     committed = f"committed:{token}"
 
-    admitted = scripts["reserve"](keys=[key], args=[now_ms, 90_000, 86_400, 1, token])
-    assert admitted[:3] == [1, 1, 90]
+    server_seconds, server_micros = client.time()
+    server_now_ms = int(server_seconds) * 1000 + int(server_micros) // 1000
+    client.zadd(key, {"older-active": server_now_ms + 30_000})
+
+    admitted = scripts["reserve"](keys=[key], args=[90_000, 86_400, 2, token])
+    assert admitted[0:2] == [1, 2]
+    assert 28 <= admitted[2] <= 31
     assert admitted[3] == token.encode()
 
     renewed = scripts["renew"](
         keys=[key],
-        args=[now_ms + 1_000, 90_000, 86_400, token, "committed:"],
+        args=[90_000, 86_400, token, "committed:"],
     )
-    assert renewed == [1, 90]
-    assert client.zscore(key, token) == float(now_ms + 91_000)
-    assert scripts["renew"](keys=[key], args=[now_ms + 1_000, 90_000, 86_400, "missing", "committed:"]) == [0, 0]
+    assert renewed[0] == 1
+    assert 28 <= renewed[1] <= 31
+    assert scripts["renew"](keys=[key], args=[90_000, 86_400, "missing", "committed:"]) == [0, 0]
 
     finalized = scripts["finalize"](
         keys=[key],
-        args=[now_ms + 2_000, 86_400_000, 86_400, token, "committed:"],
+        args=[86_400_000, 86_400, token, "committed:"],
     )
-    assert finalized == [1, 86_400]
+    assert finalized[0] == 1
+    assert 28 <= finalized[1] <= 31
     assert client.zscore(key, token) is None
-    assert client.zscore(key, committed) == float(now_ms + 86_402_000)
+    assert client.zscore(key, committed) is not None
     # A duplicate completion acknowledgement must not create a second slot or
     # extend the committed window.
-    assert scripts["finalize"](
-        keys=[key],
-        args=[now_ms + 2_000, 86_400_000, 86_400, token, "committed:"],
-    ) == [1, 86_400]
+    assert (
+        scripts["finalize"](
+            keys=[key],
+            args=[86_400_000, 86_400, token, "committed:"],
+        )
+        == finalized
+    )
     # Release only removes a pending token. A late failure cleanup cannot
     # erase a successful committed result, so both calls are harmless here.
     assert scripts["release"](keys=[key], args=[token]) == 0
     assert scripts["release"](keys=[key], args=[token]) == 0
-    assert client.zscore(key, committed) == float(now_ms + 86_402_000)
+    assert client.zscore(key, committed) is not None
 
-    # Model cancellation/process death: with no observer, the short lease is
+    # Model cancellation/process death: with no observer, the expired member is
     # pruned by the next reservation and never becomes a daily commitment.
     orphan_key = f"{key}:orphan"
     orphan = "orphan-token"
-    scripts["reserve"](keys=[orphan_key], args=[now_ms, 90_000, 86_400, 1, orphan])
-    after_expiry = scripts["reserve"](keys=[orphan_key], args=[now_ms + 90_001, 90_000, 86_400, 1, "replacement"])
+    assert scripts["reserve"](keys=[orphan_key], args=[90_000, 86_400, 1, orphan])[0:2] == [1, 1]
+    # Inject passage of time on the Redis member itself; the script's TIME is
+    # still the sole clock used to decide whether this lease is expired.
+    client.zadd(orphan_key, {orphan: 1})
+    after_expiry = scripts["reserve"](keys=[orphan_key], args=[90_000, 86_400, 1, "replacement"])
     assert after_expiry[0:2] == [1, 1]
     assert client.zscore(orphan_key, orphan) is None
 
     pending_key = f"{key}:pending"
-    scripts["reserve"](keys=[pending_key], args=[now_ms, 90_000, 86_400, 1, "pending-token"])
+    scripts["reserve"](keys=[pending_key], args=[90_000, 86_400, 1, "pending-token"])
     assert scripts["release"](keys=[pending_key], args=["pending-token"]) == 1
     assert scripts["release"](keys=[pending_key], args=["pending-token"]) == 0
 
