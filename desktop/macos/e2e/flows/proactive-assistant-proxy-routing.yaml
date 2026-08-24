@@ -4,6 +4,7 @@ tier: 1
 description: Proactive model clients resolve through the non-production desktop backend policy.
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/JITProactivityPolicy.swift
   - desktop/macos/Desktop/Sources/Chat/KnowledgeLedgerPromptProjection.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/GeminiClient.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/KnowledgeLedgerTriggerObservationAdapters.swift
