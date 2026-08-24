@@ -13,10 +13,47 @@ struct RewindEvidenceCardModel: Equatable, Identifiable, Sendable {
   var subtitle: String { "Open Rewind · frame \(screenshotID)" }
 }
 
+struct RewindEvidenceCardLease: Equatable, Sendable {
+  let screenshotID: Int64
+  let owner: RewindCaptureOwnerSnapshot
+}
+
 enum RewindEvidenceCardAvailability: Equatable, Sendable {
   case checking
   case available
   case unavailable
+}
+
+enum RewindEvidenceCardPresentationPolicy {
+  static func isOpenable(
+    availability: RewindEvidenceCardAvailability,
+    hasOpenHandler: Bool
+  ) -> Bool {
+    availability == .available && hasOpenHandler
+  }
+
+  static func subtitle(
+    for card: RewindEvidenceCardModel,
+    availability: RewindEvidenceCardAvailability
+  ) -> String {
+    switch availability {
+    case .checking: return "Checking local Rewind · frame \(card.screenshotID)"
+    case .available: return card.subtitle
+    case .unavailable: return "Unavailable locally · frame \(card.screenshotID)"
+    }
+  }
+
+  static func accessibilityHint(
+    availability: RewindEvidenceCardAvailability,
+    hasOpenHandler: Bool
+  ) -> String {
+    guard hasOpenHandler else { return "This evidence is not available to open here" }
+    switch availability {
+    case .checking: return "Checking whether this frame is still available locally"
+    case .available: return "Opens the matching frame in Rewind"
+    case .unavailable: return "This frame is unavailable locally, possibly because it was pruned"
+    }
+  }
 }
 
 enum RewindEvidenceCardResolutionPolicy {
@@ -26,6 +63,16 @@ enum RewindEvidenceCardResolutionPolicy {
   ) -> RewindEvidenceCardAvailability {
     guard localRowExists, ownerStillCurrent else { return .unavailable }
     return .available
+  }
+
+  static func leaseIsCurrent(
+    _ lease: RewindEvidenceCardLease,
+    screenshotID: Int64,
+    currentOwner: RewindCaptureOwnerSnapshot?
+  ) -> Bool {
+    lease.screenshotID == screenshotID
+      && currentOwner == lease.owner
+      && lease.owner.isCurrent()
   }
 }
 
@@ -69,9 +116,12 @@ enum RewindEvidenceCardPolicy {
   static func openHandler(
     for screenshotID: Int64,
     onOpen: ((Int64) -> Void)?
-  ) -> (() -> Void)? {
+  ) -> ((RewindEvidenceCardLease) -> Void)? {
     guard let onOpen else { return nil }
-    return { onOpen(screenshotID) }
+    return { lease in
+      guard lease.screenshotID == screenshotID else { return }
+      onOpen(screenshotID)
+    }
   }
 
   private static func normalized(_ value: String?) -> String? {
@@ -85,15 +135,17 @@ enum RewindEvidenceCardPolicy {
 /// Rewind after the navigation handoff; task/thread rendering never fetches or embeds an image.
 struct RewindEvidenceCardView: View {
   let card: RewindEvidenceCardModel
-  let onOpen: (() -> Void)?
+  let onOpen: ((RewindEvidenceCardLease) -> Void)?
   let localScreenshotExists: @Sendable (Int64) async -> Bool
 
   @State private var isHovering = false
   @State private var availability: RewindEvidenceCardAvailability = .checking
+  @State private var presentationLease: RewindEvidenceCardLease?
+  @State private var availabilityEpoch = 0
 
   init(
     card: RewindEvidenceCardModel,
-    onOpen: (() -> Void)?,
+    onOpen: ((RewindEvidenceCardLease) -> Void)?,
     localScreenshotExists: @escaping @Sendable (Int64) async -> Bool = { screenshotID in
       (try? RewindDatabase.shared.getScreenshot(id: screenshotID)) != nil
     }
@@ -141,21 +193,25 @@ struct RewindEvidenceCardView: View {
     .accessibilityLabel(card.title)
     .accessibilityValue(subtitle)
     .accessibilityHint(accessibilityHint)
-    .task(id: card.screenshotID) {
+    .task(id: "\(card.screenshotID)-\(availabilityEpoch)") {
       await refreshAvailability()
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
+      presentationLease = nil
+      availability = .checking
+      availabilityEpoch &+= 1
     }
   }
 
   private var isOpenable: Bool {
-    availability == .available && onOpen != nil
+    RewindEvidenceCardPresentationPolicy.isOpenable(
+      availability: availability,
+      hasOpenHandler: onOpen != nil
+    )
   }
 
   private var subtitle: String {
-    switch availability {
-    case .checking: return "Checking local Rewind · frame \(card.screenshotID)"
-    case .available: return card.subtitle
-    case .unavailable: return "Unavailable locally · frame \(card.screenshotID)"
-    }
+    RewindEvidenceCardPresentationPolicy.subtitle(for: card, availability: availability)
   }
 
   private var trailingIcon: String {
@@ -168,47 +224,96 @@ struct RewindEvidenceCardView: View {
   }
 
   private var accessibilityHint: String {
-    guard onOpen != nil else { return "This evidence is not available to open here" }
-    switch availability {
-    case .checking: return "Checking whether this frame is still available locally"
-    case .available: return "Opens the matching frame in Rewind"
-    case .unavailable: return "This frame is unavailable locally, possibly because it was pruned"
-    }
-  }
-
-  @MainActor
-  private func refreshAvailability() async {
-    guard let ownerAtStart = RewindCaptureOwnerSnapshot.capture() else {
-      availability = .unavailable
-      return
-    }
-    let localRowExists = await localScreenshotExists(card.screenshotID)
-    guard !Task.isCancelled else { return }
-    availability = RewindEvidenceCardResolutionPolicy.availability(
-      localRowExists: localRowExists,
-      ownerStillCurrent: ownerAtStart.isCurrent()
+    RewindEvidenceCardPresentationPolicy.accessibilityHint(
+      availability: availability,
+      hasOpenHandler: onOpen != nil
     )
   }
 
   @MainActor
-  private func validateAndOpen() {
-    guard isOpenable, let onOpen else { return }
-    Task { @MainActor in
+  private func refreshAvailability() async {
+    let attempts = 8
+    for attempt in 0..<attempts {
+      guard !Task.isCancelled else { return }
       guard let ownerAtStart = RewindCaptureOwnerSnapshot.capture() else {
+        if await retryOwnerResolution(after: attempt, attempts: attempts) { continue }
+        presentationLease = nil
         availability = .unavailable
         return
       }
+
       let localRowExists = await localScreenshotExists(card.screenshotID)
       guard !Task.isCancelled else { return }
-      let resolvedAvailability = RewindEvidenceCardResolutionPolicy.availability(
-        localRowExists: localRowExists,
-        ownerStillCurrent: ownerAtStart.isCurrent()
+      let ownerIsStable = RewindEvidenceCardResolutionPolicy.leaseIsCurrent(
+        RewindEvidenceCardLease(screenshotID: card.screenshotID, owner: ownerAtStart),
+        screenshotID: card.screenshotID,
+        currentOwner: RewindCaptureOwnerSnapshot.capture()
       )
-      guard resolvedAvailability == .available else {
+      guard ownerIsStable else {
+        if await retryOwnerResolution(after: attempt, attempts: attempts) { continue }
+        presentationLease = nil
         availability = .unavailable
         return
       }
-      onOpen()
+
+      presentationLease = RewindEvidenceCardLease(
+        screenshotID: card.screenshotID,
+        owner: ownerAtStart
+      )
+      availability = RewindEvidenceCardResolutionPolicy.availability(
+        localRowExists: localRowExists,
+        ownerStillCurrent: true
+      )
+      if availability != .available { presentationLease = nil }
+      return
     }
+  }
+
+  @MainActor
+  private func validateAndOpen() {
+    guard isOpenable, let onOpen, let lease = presentationLease else { return }
+    guard
+      RewindEvidenceCardResolutionPolicy.leaseIsCurrent(
+        lease,
+        screenshotID: card.screenshotID,
+        currentOwner: RewindCaptureOwnerSnapshot.capture()
+      )
+    else {
+      presentationLease = nil
+      availability = .unavailable
+      return
+    }
+    Task { @MainActor in
+      let localRowExists = await localScreenshotExists(card.screenshotID)
+      guard !Task.isCancelled else { return }
+      guard
+        RewindEvidenceCardResolutionPolicy.leaseIsCurrent(
+          lease,
+          screenshotID: card.screenshotID,
+          currentOwner: RewindCaptureOwnerSnapshot.capture()
+        )
+      else {
+        presentationLease = nil
+        availability = .unavailable
+        return
+      }
+      let resolvedAvailability = RewindEvidenceCardResolutionPolicy.availability(
+        localRowExists: localRowExists,
+        ownerStillCurrent: true
+      )
+      guard resolvedAvailability == .available else {
+        presentationLease = nil
+        availability = .unavailable
+        return
+      }
+      onOpen(lease)
+    }
+  }
+
+  @MainActor
+  private func retryOwnerResolution(after attempt: Int, attempts: Int) async -> Bool {
+    guard attempt + 1 < attempts else { return false }
+    try? await Task.sleep(for: .milliseconds(25))
+    return !Task.isCancelled
   }
 }
