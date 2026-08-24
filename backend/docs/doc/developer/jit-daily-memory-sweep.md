@@ -58,10 +58,11 @@ window identity (`start_utc`, `end_utc`, and `window_id`). Spring-forward days
 measure 23 hours and fall-back days 25 hours. A timezone change with an
 existing completed cursor fails closed with
 `timezone_changed_requires_reconciliation`; an operator must explicitly
-reconcile/reset the cursor rather than silently replaying an overlap or
-skipping a gap. Reconciliation transactionally rolls the source generation
-and resets the local-date anchor, so overlapping dates cannot collide with
-old receipts.
+reconcile rather than silently replaying an overlap or skipping a gap.
+Reconciliation transactionally increments the sweep-owned receipt namespace
+while preserving the completed-day anchor and leaves canonical
+`source_generation` unchanged, so the next bounded catch-up uses the new
+timezone without colliding with the old receipt set.
 
 ## Authority and safety
 

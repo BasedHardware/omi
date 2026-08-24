@@ -1,4 +1,6 @@
 import json
+import hashlib
+import unicodedata
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -72,6 +74,17 @@ MAX_LEDGER_SLOT_CHARACTERS = 64
 MAX_LEDGER_TRIGGER_CONDITION_KEYS = 12
 MAX_LEDGER_TRIGGER_CONDITION_CHARACTERS = 8_000
 MAX_MEMORY_ARGUMENTS_JSON_BYTES = 8 * 1024
+
+
+def normalized_memory_content_key(content: Optional[str]) -> Optional[str]:
+    """Stable casefolded content identity used by authority-safe dedupe."""
+
+    if content is None:
+        return None
+    normalized = " ".join(unicodedata.normalize("NFKC", content).casefold().split())
+    if not normalized:
+        return None
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
 class MemoryItemStatus(str, Enum):
@@ -156,6 +169,7 @@ class MemoryItem(BaseModel):
     status: MemoryItemStatus
     processing_state: ProcessingState
     content: Optional[str]
+    normalized_content_key: Optional[str] = None
     evidence: List[MemoryEvidence] = Field(default_factory=list)
     source_state: SourceState
     sensitivity_labels: List[str]
@@ -264,6 +278,9 @@ class MemoryItem(BaseModel):
 
     @model_validator(mode="after")
     def validate_tier_invariants(self):
+        expected_content_key = normalized_memory_content_key(self.content)
+        if self.normalized_content_key != expected_content_key:
+            object.__setattr__(self, "normalized_content_key", expected_content_key)
         if self.updated_at < self.captured_at:
             raise ValueError("updated_at must be >= captured_at")
         if self.status == MemoryItemStatus.active and not (self.content or "").strip():

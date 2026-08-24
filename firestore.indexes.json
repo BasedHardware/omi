@@ -751,7 +751,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "content",
+          "fieldPath": "normalized_content_key",
           "order": "ASCENDING"
         }
       ]
@@ -777,7 +777,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "content",
+          "fieldPath": "normalized_content_key",
           "order": "ASCENDING"
         }
       ]

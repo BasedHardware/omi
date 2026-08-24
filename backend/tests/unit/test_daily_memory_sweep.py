@@ -19,7 +19,10 @@ from utils.memory.daily_memory_sweep import (
     reconcile_daily_memory_sweep_timezone,
     _finish_onboarding_sources,
     _receipt_id,
+    _cached_summary_eligibility_attested,
+    read_daily_memory_sweep_cohort_assignment,
 )
+from models.product_memory import normalized_memory_content_key
 
 
 def _candidate(**updates):
@@ -398,7 +401,7 @@ def test_runner_blocks_generation_mismatch_before_writes(monkeypatch):
     assert not db.store
 
 
-def test_timezone_reconcile_rolls_source_generation_with_cursor_namespace(monkeypatch):
+def test_timezone_reconcile_rolls_sweep_namespace_without_global_generation_or_anchor_reset(monkeypatch):
     db = _Db()
     control = _open_control(monkeypatch)
     db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
@@ -426,10 +429,56 @@ def test_timezone_reconcile_rolls_source_generation_with_cursor_namespace(monkey
     )
     updated_control = db.document("users/user-1/memory_state/apply_control").get().to_dict()
     updated_cursor = db.document("users/user-1/memory_control/daily_memory_sweep").get().to_dict()
-    assert updated_control["source_generation"] == control.source_generation + 1
-    assert updated_cursor["source_generation"] == control.source_generation + 1
+    assert updated_control["source_generation"] == control.source_generation
+    assert updated_cursor["source_generation"] == control.source_generation
+    assert updated_cursor["sweep_generation"] == 2
     assert updated_cursor["timezone_name"] == "UTC"
-    assert updated_cursor["last_completed_local_date"] is None
+    assert updated_cursor["last_completed_local_date"] == date(2026, 8, 23)
+
+
+def test_cohort_reader_is_backend_read_only_and_injectable(monkeypatch):
+    calls = []
+
+    class Reader:
+        def get_feature_flag(self, flag, uid, **kwargs):
+            calls.append((flag, uid, kwargs))
+            return True
+
+    assert read_daily_memory_sweep_cohort_assignment("user-1", "memory-sweep", resolver=Reader())
+    assert calls == [("memory-sweep", "user-1", {"only_evaluate_locally": False, "send_feature_flag_events": False})]
+    assert not read_daily_memory_sweep_cohort_assignment("user-1", "memory-sweep", resolver=lambda *_: "true")
+    monkeypatch.delenv("POSTHOG_PROJECT_API_KEY", raising=False)
+    assert not read_daily_memory_sweep_cohort_assignment("user-1", "memory-sweep")
+
+
+def test_cached_summary_requires_exact_completed_day_eligibility_attestation():
+    window = completed_local_day_window(date(2026, 8, 23), "UTC")
+    payload = {
+        "complete": True,
+        "source_status": "complete",
+        "eligibility_proof": "completed_transcript_v1",
+        "eligibility_attestation": {
+            "schema_version": "completed_day_eligibility.v1",
+            "local_date": "2026-08-23",
+            "timezone_name": "UTC",
+            "window_id": window.window_id,
+            "window_start_utc": window.start_utc,
+            "window_end_utc": window.end_utc,
+            "eligible_count": 1,
+            "discarded_count": 0,
+            "processing_count": 0,
+            "unfinished_count": 0,
+        },
+    }
+    assert _cached_summary_eligibility_attested(payload, local_date=date(2026, 8, 23), window=window)
+    payload["eligibility_attestation"]["processing_count"] = 1
+    assert not _cached_summary_eligibility_attested(payload, local_date=date(2026, 8, 23), window=window)
+
+
+def test_normalized_content_identity_is_casefolded_and_whitespace_stable():
+    assert normalized_memory_content_key(" Alice   Owns Release Review ") == normalized_memory_content_key(
+        "alice owns release review"
+    )
 
 
 def test_onboarding_source_receipt_consumes_multi_candidate_and_zero_sources(monkeypatch):

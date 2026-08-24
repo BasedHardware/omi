@@ -36,6 +36,8 @@ DELETION_WIPE_RUNNING_STALE_AFTER = timedelta(hours=6)
 _DELETION_WIPE_TERMINAL_STATUSES = frozenset({'completed', 'cancelled'})
 _DELETION_WIPE_LEGACY_ACTIONABLE_STATUSES = frozenset({'pending', 'retrying', 'running', 'failed'})
 LOCATION_CONTEXT_CONSENT_TTL = timedelta(days=30)
+ONBOARDING_ADMISSION_PATH = "onboarding_admission/current"
+ONBOARDING_ADMISSION_TTL = timedelta(minutes=20)
 
 
 class DeletionWipeTaskResolution(TypedDict):
@@ -1512,6 +1514,96 @@ def get_user_onboarding_state(uid: str) -> dict:
         user_data = user_doc.to_dict()
         return user_data.get('onboarding', {})
     return {}
+
+
+def ensure_backend_onboarding_admission(uid: str, *, firestore_client: Any = None) -> bool:
+    """Issue a short-lived server-owned admission for pending onboarding.
+
+    The listen query flag is not an authority.  This marker is written only by
+    authenticated backend code after reading the durable account state and is
+    the provenance gate used by the transcript writer.
+    """
+
+    client = firestore_client or db
+    user_ref = client.collection("users").document(uid)
+    admission_ref = client.document(f"users/{uid}/{ONBOARDING_ADMISSION_PATH}")
+    now = datetime.now(timezone.utc)
+
+    @transactional
+    def admit(transaction: Any) -> bool:
+        user_snapshot = transaction.get(user_ref)
+        user_payload = user_snapshot.to_dict() if getattr(user_snapshot, "exists", False) else {}
+        onboarding = user_payload.get("onboarding", {}) if isinstance(user_payload, dict) else {}
+        if not isinstance(onboarding, dict):
+            onboarding = {}
+        if onboarding.get("completed") is True or onboarding.get("device_onboarding_completed") is True:
+            return False
+        admission_snapshot = transaction.get(admission_ref)
+        existing = admission_snapshot.to_dict() if getattr(admission_snapshot, "exists", False) else {}
+        expires_at = existing.get("expires_at") if isinstance(existing, dict) else None
+        if (
+            isinstance(existing, dict)
+            and existing.get("status") == "active"
+            and isinstance(expires_at, datetime)
+            and expires_at > now
+            and isinstance(existing.get("session_id"), str)
+            and len(existing["session_id"]) >= 16
+        ):
+            return True
+        transaction.set(
+            admission_ref,
+            {
+                "schema_version": "onboarding_admission.v1",
+                "uid": uid,
+                "session_id": uuid.uuid4().hex,
+                "status": "active",
+                "issued_at": now,
+                "expires_at": now + ONBOARDING_ADMISSION_TTL,
+            },
+        )
+        return True
+
+    return bool(admit(client.transaction()))
+
+
+def get_backend_onboarding_admission(uid: str, *, firestore_client: Any = None) -> Optional[str]:
+    """Return the active server-owned onboarding session, if one exists."""
+
+    client = firestore_client or db
+    try:
+        user_snapshot = client.collection("users").document(uid).get()
+        user_payload = user_snapshot.to_dict() if getattr(user_snapshot, "exists", False) else {}
+        onboarding = user_payload.get("onboarding", {}) if isinstance(user_payload, dict) else {}
+        if (
+            not getattr(user_snapshot, "exists", False)
+            or not isinstance(onboarding, dict)
+            or onboarding.get("completed") is True
+            or onboarding.get("device_onboarding_completed") is True
+        ):
+            return False
+        admission_snapshot = client.document(f"users/{uid}/{ONBOARDING_ADMISSION_PATH}").get()
+        payload = admission_snapshot.to_dict() if getattr(admission_snapshot, "exists", False) else {}
+        expires_at = payload.get("expires_at") if isinstance(payload, dict) else None
+        if (
+            isinstance(payload, dict)
+            and payload.get("schema_version") == "onboarding_admission.v1"
+            and payload.get("uid") == uid
+            and payload.get("status") == "active"
+            and isinstance(payload.get("session_id"), str)
+            and len(payload["session_id"]) >= 16
+            and isinstance(expires_at, datetime)
+            and expires_at > datetime.now(timezone.utc)
+        ):
+            return payload["session_id"]
+        return None
+    except Exception:
+        return None
+
+
+def is_backend_onboarding_admitted(uid: str, *, firestore_client: Any = None) -> bool:
+    """Read the server-owned admission without trusting any listen query flag."""
+
+    return get_backend_onboarding_admission(uid, firestore_client=firestore_client) is not None
 
 
 def set_user_onboarding_state(uid: str, onboarding_data: dict) -> None:

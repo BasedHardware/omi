@@ -304,7 +304,7 @@ class TranscriptProcessor:
                     raw['end'] += offset
                     segment = TranscriptSegment(**raw, speech_profile_processed=True)
                     if (
-                        self.host.request.onboarding_mode
+                        self.host.onboarding_handler is not None
                         and raw.get('speaker_id') != self.host.onboarding_omi_speaker_id
                     ):
                         segment.is_user = True
