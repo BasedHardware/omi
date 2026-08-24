@@ -156,6 +156,7 @@ async def log_executor_health(
 
 
 _background_tasks: set[asyncio.Task[Any]] = set()
+_critical_compensation_tasks: set[asyncio.Task[Any]] = set()
 
 
 def start_background_task(coro: Coroutine[Any, Any, Any], *, name: str) -> asyncio.Task[Any]:
@@ -181,9 +182,62 @@ def start_background_task(coro: Coroutine[Any, Any, Any], *, name: str) -> async
     return task
 
 
+def start_critical_compensation_task(coro: Coroutine[Any, Any, Any], *, name: str) -> asyncio.Task[Any]:
+    """Track a side-effect compensator that shutdown must observe, not cancel.
+
+    This registry is deliberately separate from ordinary background work:
+    ``drain_background_tasks`` cancels its members, while compensation tasks
+    must remain alive until an in-flight operation settles and its reversible
+    side effect is undone.
+    """
+    task = asyncio.create_task(coro, name=name)
+    _critical_compensation_tasks.add(task)
+
+    def _done(t: asyncio.Task[Any]) -> None:
+        _critical_compensation_tasks.discard(t)
+        if t.cancelled():
+            logger.warning('critical_compensation_task cancelled: %s', t.get_name())
+            return
+        exc = t.exception()
+        if exc:
+            logger.error(
+                'critical_compensation_task failed: %s — %s: %s',
+                t.get_name(),
+                type(exc).__name__,
+                exc,
+            )
+
+    task.add_done_callback(_done)
+    return task
+
+
 def get_background_task_count() -> int:
     """Return the number of currently tracked background tasks."""
     return len(_background_tasks)
+
+
+def get_critical_compensation_task_count() -> int:
+    """Return the number of unsettled side-effect compensators."""
+    return len(_critical_compensation_tasks)
+
+
+async def drain_critical_compensation_tasks(timeout: float = 10.0) -> int:
+    """Wait for compensators without cancelling them on shutdown.
+
+    ``asyncio.shield`` keeps a shutdown cancellation from propagating into the
+    compensator or the reservation task it observes. A timeout leaves pending
+    tasks registered and alive; the executor thread can still settle and the
+    compensator remains the owner responsible for releasing an admission.
+    """
+    tasks = list(_critical_compensation_tasks)
+    if not tasks:
+        return 0
+    shielded_tasks = [asyncio.shield(task) for task in tasks]
+    done, _ = await asyncio.wait(shielded_tasks, timeout=timeout)
+    for task in done:
+        if not task.cancelled():
+            task.exception()
+    return len(done)
 
 
 async def drain_background_tasks(timeout: float = 10.0) -> int:

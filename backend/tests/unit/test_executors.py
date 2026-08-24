@@ -13,12 +13,16 @@ import pytest
 from utils.executors import (
     MonitoredThreadPoolExecutor,
     _background_tasks,
+    _critical_compensation_tasks,
     drain_background_tasks,
+    drain_critical_compensation_tasks,
     get_background_task_count,
+    get_critical_compensation_task_count,
     get_executor_metrics,
     log_executor_health,
     run_blocking,
     start_background_task,
+    start_critical_compensation_task,
     submit_with_context,
     _ALL_EXECUTORS,
 )
@@ -248,6 +252,30 @@ async def test_start_background_task_tracks_and_removes():
     await task
     await asyncio.sleep(0)  # let done callback fire
     assert task not in _background_tasks
+
+
+@pytest.mark.asyncio
+async def test_critical_compensation_drain_waits_without_cancelling():
+    """Shutdown must let a reversible side-effect compensator settle."""
+    settled = asyncio.Event()
+
+    async def compensate():
+        await settled.wait()
+
+    task = start_critical_compensation_task(compensate(), name='test-critical-compensation')
+    assert task in _critical_compensation_tasks
+    assert get_critical_compensation_task_count() >= 1
+
+    async def settle_next_tick():
+        await asyncio.sleep(0)
+        settled.set()
+
+    asyncio.create_task(settle_next_tick())
+    drained = await drain_critical_compensation_tasks(timeout=1.0)
+
+    assert drained == 1
+    assert task.done()
+    assert task not in _critical_compensation_tasks
 
 
 @pytest.mark.asyncio

@@ -98,6 +98,7 @@ from utils.http_client import close_all_clients
 from utils.metrics import start_metrics_sidecar_server, stop_metrics_sidecar_server
 from utils.executors import (
     drain_background_tasks,
+    drain_critical_compensation_tasks,
     log_executor_health,
     run_blocking,
     db_executor,
@@ -383,6 +384,7 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int | None =
 
 @app.on_event("shutdown")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def shutdown_event():
+    await drain_critical_compensation_tasks(timeout=10.0)
     await drain_background_tasks(timeout=10.0)
     await close_all_clients()
     stop_metrics_sidecar_server()
