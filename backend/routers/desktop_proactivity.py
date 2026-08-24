@@ -625,7 +625,6 @@ async def _post_provider_completion(
     operation: ProactiveOperation,
     reservation_token: str,
     max_completion_tokens: int | None = None,
-    record_direct_fallback: bool = False,
 ) -> Any:
     async with get_llm_gateway_semaphore():
         # Queue before the gateway slot is not paid provider work.  Do not let
@@ -638,16 +637,6 @@ async def _post_provider_completion(
             force_refresh=True,
         )
         _require_jit_rollout(paid_boundary_decision)
-        if record_direct_fallback and provider_request.fallback_class == "dev_direct_openai":
-            record_fallback(
-                component="llm_gateway",
-                from_mode="gateway",
-                to_mode="direct_openai",
-                reason="config_incomplete",
-                outcome="recovered",
-                log=logger,
-            )
-            record_direct_exception_surface(surface="desktop_context_proactivity.dev_direct_openai")
         payload = provider_request.payload
         if max_completion_tokens is not None:
             payload = {**payload, "max_completion_tokens": max_completion_tokens}
@@ -742,7 +731,6 @@ async def _proactive_completion_unobserved(
             uid=uid,
             operation=request.operation,
             reservation_token=quota.reservation_token,
-            record_direct_fallback=True,
         )
         if _should_retry_truncated_structured_output(
             response_body,
@@ -839,6 +827,19 @@ async def _proactive_completion_unobserved(
             reservation_token=quota.reservation_token,
         ),
     )
+    if provider_request.fallback_class == "dev_direct_openai":
+        # A direct provider is only a recovered fallback once the response has
+        # passed schema validation and the reservation has been committed. Do
+        # not emit recovery telemetry for provider or output-validation errors.
+        record_fallback(
+            component="llm_gateway",
+            from_mode="gateway",
+            to_mode="direct_openai",
+            reason="config_incomplete",
+            outcome="recovered",
+            log=logger,
+        )
+        record_direct_exception_surface(surface="desktop_context_proactivity.dev_direct_openai")
     return ProactiveCompletionEnvelope(
         operation=request.operation,
         lane=lane,

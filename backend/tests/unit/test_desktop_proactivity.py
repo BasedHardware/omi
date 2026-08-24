@@ -1537,17 +1537,17 @@ async def test_direct_extraction_retries_length_once_without_extra_quota_reserva
     assert len(fallbacks) == 2
     assert fallbacks[0] | {"log": None} == {
         "component": "llm_gateway",
-        "from_mode": "gateway",
-        "to_mode": "direct_openai",
-        "reason": "config_incomplete",
+        "from_mode": "direct_openai",
+        "to_mode": "direct_openai_retry",
+        "reason": "capability_mismatch",
         "outcome": "recovered",
         "log": None,
     }
     assert fallbacks[1] | {"log": None} == {
         "component": "llm_gateway",
-        "from_mode": "direct_openai",
-        "to_mode": "direct_openai_retry",
-        "reason": "capability_mismatch",
+        "from_mode": "gateway",
+        "to_mode": "direct_openai",
+        "reason": "config_incomplete",
         "outcome": "recovered",
         "log": None,
     }
@@ -1637,7 +1637,7 @@ async def test_kill_toggle_after_first_provider_call_denies_length_retry(monkeyp
     assert len(calls) == 1
     assert consumed == [('user-1', desktop_proactivity.ProactiveOperation.EXTRACTION)]
     assert released == [('user-1', desktop_proactivity.ProactiveOperation.EXTRACTION)]
-    assert len(fallbacks) == 1
+    assert fallbacks == []
     assert terminal == [('desktop_proactivity', 'desktop_macos', 'degraded', 'rollout_disabled')]
 
 
@@ -1690,15 +1690,59 @@ async def test_direct_extraction_length_retry_releases_quota_once_after_final_fa
     )
     assert [payload["max_completion_tokens"] for payload in calls] == [1024, 2400]
     assert released == [("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)]
-    assert len(fallbacks) == 2
-    assert fallbacks[0]["from_mode"] == "gateway"
-    assert fallbacks[0]["to_mode"] == "direct_openai"
-    assert fallbacks[0]["outcome"] == "recovered"
-    assert fallbacks[1]["component"] == "llm_gateway"
-    assert fallbacks[1]["from_mode"] == "direct_openai"
-    assert fallbacks[1]["to_mode"] == "direct_openai_retry"
-    assert fallbacks[1]["reason"] == "capability_mismatch"
-    assert fallbacks[1]["outcome"] == "exhausted"
+    assert len(fallbacks) == 1
+    assert fallbacks[0]["component"] == "llm_gateway"
+    assert fallbacks[0]["from_mode"] == "direct_openai"
+    assert fallbacks[0]["to_mode"] == "direct_openai_retry"
+    assert fallbacks[0]["reason"] == "capability_mismatch"
+    assert fallbacks[0]["outcome"] == "exhausted"
+
+
+@pytest.mark.asyncio
+async def test_direct_provider_invalid_output_does_not_emit_recovered_fallback(monkeypatch):
+    fallbacks = []
+    direct_surfaces = []
+    released = []
+
+    class DirectClient:
+        async def post(self, url, *, headers, json):
+            del headers, json
+            return httpx.Response(
+                200,
+                request=httpx.Request("POST", url),
+                json={
+                    "choices": [{"finish_reason": "stop", "message": {"content": '{"summary": 7}'}}],
+                },
+            )
+
+    async def allow(*_):
+        return _test_quota_state()
+
+    async def release(uid, operation, *_args):
+        released.append((uid, operation))
+
+    monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
+    monkeypatch.delenv("OMI_LLM_GATEWAY_URL", raising=False)
+    monkeypatch.setenv("OMI_ENV_STAGE", "dev")
+    monkeypatch.setattr(desktop_proactivity, "get_openai_api_key", lambda: "dev-provider-key")
+    monkeypatch.setattr(desktop_proactivity, "record_fallback", lambda **values: fallbacks.append(values))
+    monkeypatch.setattr(
+        desktop_proactivity,
+        "record_direct_exception_surface",
+        lambda **values: direct_surfaces.append(values),
+    )
+    monkeypatch.setattr(desktop_proactivity, "_consume_quota", allow)
+    monkeypatch.setattr(desktop_proactivity, "_release_quota", release)
+    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", lambda: DirectClient())
+    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_semaphore", lambda: _ImmediateSemaphore())
+
+    with pytest.raises(desktop_proactivity.HTTPException) as invalid:
+        await desktop_proactivity.proactive_completion(request(), Response(), uid="user-1")
+
+    assert invalid.value.status_code == desktop_proactivity._INVALID_STRUCTURED_OUTPUT_STATUS
+    assert released == [("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)]
+    assert fallbacks == []
+    assert direct_surfaces == []
 
 
 @pytest.mark.asyncio
@@ -1859,11 +1903,19 @@ async def test_truncated_reasoning_retries_once_without_extra_quota(monkeypatch)
     assert calls[0][2]["reasoning_effort"] == "low"
     assert consumed == [("user-1", desktop_proactivity.ProactiveOperation.REASONING)]
     assert result.response["choices"][0]["message"]["content"] == '{"summary":"ok"}'
-    assert fallbacks[-1] | {"log": None} == {
+    assert fallbacks[0] | {"log": None} == {
         "component": "llm_gateway",
         "from_mode": "direct_openai",
         "to_mode": "direct_openai_retry",
         "reason": "capability_mismatch",
+        "outcome": "recovered",
+        "log": None,
+    }
+    assert fallbacks[1] | {"log": None} == {
+        "component": "llm_gateway",
+        "from_mode": "gateway",
+        "to_mode": "direct_openai",
+        "reason": "config_incomplete",
         "outcome": "recovered",
         "log": None,
     }

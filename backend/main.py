@@ -105,6 +105,7 @@ from utils.other.timeout import TimeoutMiddleware
 from utils.observability import log_langsmith_status
 from utils.subscription import validate_stripe_price_ids
 from utils.http_client import close_all_clients
+from utils.jit_rollout import close_posthog_control_plane
 from utils.metrics import start_metrics_sidecar_server, stop_metrics_sidecar_server
 from utils.executors import (
     drain_background_tasks,
@@ -430,6 +431,7 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int | None =
 async def shutdown_event():
     await drain_background_tasks(timeout=10.0)
     await close_all_clients()
+    close_posthog_control_plane()
     stop_metrics_sidecar_server()
 
 

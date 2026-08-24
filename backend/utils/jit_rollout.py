@@ -41,10 +41,34 @@ POSTHOG_CONTROL_QUEUE_WAIT_SECONDS = 0.25
 # sync pipeline pool.  The semaphore bounds both active calls and submitted
 # work; a slot is held until the underlying thread actually finishes, even if
 # the async caller has already received a timeout/fail-off result.
-_posthog_control_executor = ThreadPoolExecutor(
-    max_workers=POSTHOG_CONTROL_MAX_WORKERS,
-    thread_name_prefix='posthog-control',
-)
+_posthog_control_executor: ThreadPoolExecutor | None = None
+_posthog_control_executor_lock = threading.Lock()
+
+
+def _get_posthog_control_executor() -> ThreadPoolExecutor:
+    global _posthog_control_executor
+    with _posthog_control_executor_lock:
+        if _posthog_control_executor is None:
+            _posthog_control_executor = ThreadPoolExecutor(
+                max_workers=POSTHOG_CONTROL_MAX_WORKERS,
+                thread_name_prefix='posthog-control',
+            )
+        return _posthog_control_executor
+
+
+def close_posthog_control_plane() -> None:
+    """Stop accepting control-plane work without blocking application shutdown.
+
+    Queued calls are cancelled; already-running SDK calls retain their own
+    bounded timeout and are not waited on here. A later in-process app startup
+    lazily creates a fresh isolated executor.
+    """
+    global _posthog_control_executor
+    with _posthog_control_executor_lock:
+        executor = _posthog_control_executor
+        _posthog_control_executor = None
+    if executor is not None:
+        executor.shutdown(wait=False, cancel_futures=True)
 
 
 class TriState(str, Enum):
@@ -236,7 +260,7 @@ class PostHogJITFlagProvider:
         self._client: Any | None = None
         self._client_lock = threading.Lock()
         self._control_slots = asyncio.BoundedSemaphore(POSTHOG_CONTROL_MAX_WORKERS + POSTHOG_CONTROL_MAX_QUEUE)
-        self._inflight: dict[str, asyncio.Task[JITFlagEvaluation]] = {}
+        self._inflight: dict[str, tuple[asyncio.Task[JITFlagEvaluation], asyncio.Event]] = {}
 
     def _build_client(self) -> Any | None:
         api_key = (os.getenv('POSTHOG_PROJECT_API_KEY') or os.getenv('POSTHOG_API_KEY') or '').strip()
@@ -267,45 +291,72 @@ class PostHogJITFlagProvider:
     async def __call__(self, uid: str) -> JITFlagEvaluation:
         # Requests for the same owner share one in-flight decision, preventing
         # a cold-cache fanout from multiplying identical PostHog calls.
-        in_flight = self._inflight.get(uid)
-        if in_flight is None:
-            in_flight = asyncio.create_task(self._resolve_uncached(uid), name='posthog-jit-decide')
-            self._inflight[uid] = in_flight
+        entry = self._inflight.get(uid)
+        if entry is None:
+            control_done = asyncio.Event()
+            in_flight = asyncio.create_task(
+                self._resolve_uncached(uid, control_done),
+                name='posthog-jit-decide',
+            )
+            entry = (in_flight, control_done)
+            self._inflight[uid] = entry
 
             def forget(completed: asyncio.Task[JITFlagEvaluation]) -> None:
-                if self._inflight.get(uid) is completed:
-                    self._inflight.pop(uid, None)
                 if not completed.cancelled():
                     completed.exception()
 
-            in_flight.add_done_callback(forget)
-        return await asyncio.shield(in_flight)
+                async def remove_after_control_finishes() -> None:
+                    await control_done.wait()
+                    if self._inflight.get(uid) == entry:
+                        self._inflight.pop(uid, None)
 
-    async def _resolve_uncached(self, uid: str) -> JITFlagEvaluation:
+                if control_done.is_set():
+                    if self._inflight.get(uid) == entry:
+                        self._inflight.pop(uid, None)
+                else:
+                    try:
+                        loop = asyncio.get_running_loop()
+                    except RuntimeError:
+                        # The event loop is already closing; process shutdown
+                        # will discard this in-memory coalescing state.
+                        self._inflight.pop(uid, None)
+                    else:
+                        loop.create_task(remove_after_control_finishes(), name='posthog-jit-coalesce-cleanup')
+
+            in_flight.add_done_callback(forget)
+        return await asyncio.shield(entry[0])
+
+    async def _resolve_uncached(self, uid: str, control_done: asyncio.Event) -> JITFlagEvaluation:
         try:
             await asyncio.wait_for(
                 self._control_slots.acquire(),
                 timeout=POSTHOG_CONTROL_QUEUE_WAIT_SECONDS,
             )
         except asyncio.TimeoutError:
+            control_done.set()
             return JITFlagEvaluation(
                 TriState.UNKNOWN,
                 TriState.UNKNOWN,
                 JITDecisionReason.PROVIDER_TIMEOUT,
                 JITErrorClass.TIMEOUT,
             )
+        except asyncio.CancelledError:
+            control_done.set()
+            raise
 
         try:
             call = asyncio.create_task(
-                run_blocking(_posthog_control_executor, self._fetch, uid),
+                run_blocking(_get_posthog_control_executor(), self._fetch, uid),
                 name='posthog-jit-fetch',
             )
         except BaseException:
             self._control_slots.release()
+            control_done.set()
             raise
 
         def release_slot(completed: asyncio.Task[Any]) -> None:
             self._control_slots.release()
+            control_done.set()
             if not completed.cancelled():
                 completed.exception()
 
@@ -390,5 +441,6 @@ __all__ = [
     'JITRolloutDecision',
     'PostHogJITFlagProvider',
     'TriState',
+    'close_posthog_control_plane',
     'resolve_jit_rollout',
 ]
