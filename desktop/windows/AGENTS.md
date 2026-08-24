@@ -51,18 +51,22 @@ for this alone.
 
 ### Linux dev environment (niri / Wayland compositors)
 
-On native Wayland compositors with limited XWayland support (e.g. niri), the
-default XWayland path (`ozone-platform=x11`, chosen deliberately for global
-shortcuts + active-window support — see `src/main/index.ts`) can fail to map
-the main window at all (tray icon appears, window never does). Set
-`OMI_OZONE=wayland` to run under native Wayland instead, at the cost of global
-shortcuts (push-to-talk / overlay summon) and active-window detection not
-working. See `docs/multi-worktree-dev.md`'s environment-overrides table for
-this and other dev-only env vars (`OMI_DEV_HW_GPU`, etc.).
+XWayland (`ozone-platform=x11`) is the default on Linux — chosen deliberately
+for global shortcuts + active-window support — but on compositors with
+limited XWayland support (niri, Sway, Hyprland; detected via each one's own
+session marker env var in `src/main/linuxCompositor.ts`) it can fail to map
+the main window at all (tray icon appears, window never does), so those
+default to native Wayland automatically instead. Set `OMI_OZONE=x11` or
+`OMI_OZONE=wayland` to override the auto-detected choice either way; running
+native Wayland costs global shortcuts (push-to-talk / overlay summon) and
+active-window detection. See `docs/multi-worktree-dev.md`'s
+environment-overrides table for this and other dev-only env vars
+(`OMI_DEV_HW_GPU`, etc.).
 
-`OMI_OZONE=wayland` alone can still leave the main window mapped but blank
-(tray works fine) — `pnpm dev`'s software-render default has known
-presentation bugs on native Wayland; add `OMI_DEV_HW_GPU=1` alongside it. See
+Native Wayland alone (auto-selected on niri, or forced via `OMI_OZONE=wayland`)
+can still leave the main window mapped but blank (tray works fine) —
+`pnpm dev`'s software-render default has known presentation bugs on native
+Wayland; add `OMI_DEV_HW_GPU=1` alongside it. See
 `docs/multi-worktree-dev.md`'s
 troubleshooting section for the confirmed repro (Asahi Fedora + niri) and a
 second known limitation: the bar and the focus-halo glow window both
