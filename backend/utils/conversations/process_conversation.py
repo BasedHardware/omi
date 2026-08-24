@@ -24,6 +24,7 @@ import database.conversations as conversations_db
 import database.notifications as notification_db
 import database.users as users_db
 import database.tasks as tasks_db
+import database.goals as goals_db
 import database.action_items as action_items_db
 import database.folders as folders_db
 import database.calendar_meetings as calendar_db
@@ -603,6 +604,7 @@ def _trigger_apps(
     usage_attribution: Optional[AppUsageAttribution] = None,
     language_code: str = 'en',
     people: Optional[List[Person]] = None,
+    preserve_existing_results: bool = False,
 ) -> bool:
     if usage_attribution is None:
         usage_attribution = (
@@ -674,13 +676,14 @@ def _trigger_apps(
         elif app_to_run is None:
             logger.info('Summarization apps are opt-in only; skipping automatic app selection')
 
-    filtered_apps: List[App] = [app_to_run] if app_to_run else []
+    completed_app_ids = {result.app_id for result in conversation.apps_results} if preserve_existing_results else set()
+    filtered_apps: List[App] = [app_to_run] if app_to_run and app_to_run.id not in completed_app_ids else []
 
     if not filtered_apps:
         logger.info(f"No summarization app selected for conversation {conversation.id} {uid}")
 
-    # Clear existing app results
-    conversation.apps_results = []
+    if not preserve_existing_results:
+        conversation.apps_results = []
 
     def execute_app(app: App) -> None:
         with track_usage(uid, Features.CONVERSATION_APPS):
@@ -704,6 +707,20 @@ def _trigger_apps(
                 prompt_prefix=prompt_prefix,
             ).strip()
         conversation.apps_results.append(AppResult(app_id=app.id, content=result))
+        if preserve_existing_results:
+            # Persist the generated app result before any later telemetry or
+            # aggregate effect receipt. A process crash can then resume from
+            # this durable per-app output instead of paying for the same LLM
+            # mutation again.
+            if not conversations_db.update_conversation(
+                uid,
+                conversation.id,
+                {
+                    'apps_results': [item.dict() for item in conversation.apps_results],
+                    'suggested_summarization_apps': conversation.suggested_summarization_apps,
+                },
+            ):
+                raise RuntimeError('conversation disappeared while persisting app result')
         if usage_attribution in {
             AppUsageAttribution.AUTOMATIC_PROCESSING,
             AppUsageAttribution.EXPLICIT_SELECTION,
@@ -721,11 +738,15 @@ def _trigger_apps(
     return succeeded
 
 
-def _update_goal_progress(uid: str, conversation: Conversation) -> bool:
+def _update_goal_progress(
+    uid: str, conversation: Conversation, *, idempotency_key_prefix: Optional[str] = None
+) -> bool:
     """Extract and update goal progress from conversation text."""
     try:
-        # Idempotency: skip if this conversation was already processed for goals
-        if not redis_db.try_acquire_conversation_goal_lock(uid, conversation.id):
+        # Legacy eager processing uses the bounded Redis lock. First-open work
+        # instead uses durable per-goal events below, so TTL expiry cannot
+        # duplicate a committed goal mutation.
+        if idempotency_key_prefix is None and not redis_db.try_acquire_conversation_goal_lock(uid, conversation.id):
             logger.info(f"[GOAL] Skipping already-processed conversation {conversation.id}")
             return True
 
@@ -741,11 +762,20 @@ def _update_goal_progress(uid: str, conversation: Conversation) -> bool:
 
         # Use utility function to extract and update goal progress
         with track_usage(uid, Features.GOALS):
-            extract_and_update_goal_progress(uid, text)
+            account_generation = (
+                goals_db.get_task_workflow_account_generation(uid) if idempotency_key_prefix is not None else None
+            )
+            extract_and_update_goal_progress(
+                uid,
+                text,
+                idempotency_key_prefix=idempotency_key_prefix,
+                account_generation=account_generation,
+            )
         return True
     except Exception as e:
         logger.error(f"[GOAL] Error updating progress: {e}")
-        redis_db.release_conversation_goal_lock(uid, conversation.id)
+        if idempotency_key_prefix is None:
+            redis_db.release_conversation_goal_lock(uid, conversation.id)
         return False
 
 
@@ -2132,62 +2162,92 @@ def process_conversation(
     return conversation
 
 
-def run_first_open_derived_work(uid: str, conversation_data: dict[str, Any]) -> None:
+def run_first_open_derived_work(uid: str, conversation_data: dict[str, Any], token: str) -> None:
     """Produce the three deferred effects from an authoritative persisted row.
 
-    The durable lease in ``database.conversations`` owns retries.  This worker
-    deliberately raises on a failed write so the route can re-arm the
-    obligation instead of silently marking partial work complete.
+    The durable lease in ``database.conversations`` owns retries, while each
+    effect has its own durable completion receipt. A crash resumes only the
+    unfinished suffix instead of replaying earlier mutations.
     """
     conversation = deserialize_conversation(conversation_data)
+    raw_effects = (conversation_data.get('jit_first_open') or {}).get('effects')
+    effect_states = dict(raw_effects) if isinstance(raw_effects, Mapping) else {}
+
+    def is_complete(effect: str) -> bool:
+        state = effect_states.get(effect)
+        return isinstance(state, Mapping) and state.get('state') == 'complete'
+
+    def complete(effect: str) -> None:
+        if not conversations_db.complete_first_open_effect(uid, conversation.id, token, effect):
+            raise RuntimeError(f'first-open lease lost while completing {effect}')
+        effect_states[effect] = {'state': 'complete'}
+
     if conversation.discarded:
+        for effect in conversations_db.FIRST_OPEN_EFFECTS:
+            if not is_complete(effect):
+                complete(effect)
         return
     people: List[Person] = []
     person_ids = conversation.get_person_ids()
     if person_ids:
         people = [Person(**item) for item in users_db.get_people_by_ids(uid, list(set(person_ids)))]
 
-    if not conversation.folder_id:
-        user_folders = folders_db.get_folders(uid) or folders_db.initialize_system_folders(uid)
-        if user_folders and conversation.structured:
-            category = conversation.structured.category.value if conversation.structured.category else 'other'
-            with track_usage(uid, Features.CONVERSATION_FOLDER):
-                folder_id, _confidence, _reasoning = assign_conversation_to_folder(
-                    title=conversation.structured.title or '',
-                    overview=conversation.structured.overview or '',
-                    category=category,
-                    user_folders=user_folders,
-                    category_folder_id=folders_db.resolve_category_folder_id(category, user_folders),
-                )
-            if folder_id:
-                conversation.folder_id = folder_id
-                if not conversations_db.update_conversation(uid, conversation.id, {'folder_id': folder_id}):
-                    raise RuntimeError('conversation disappeared during folder assignment')
-                folders_db.update_folder_conversation_count(uid, folder_id)
+    if not is_complete('folder_assignment'):
+        if not conversation.folder_id:
+            user_folders = folders_db.get_folders(uid) or folders_db.initialize_system_folders(uid)
+            if user_folders and conversation.structured:
+                category = conversation.structured.category.value if conversation.structured.category else 'other'
+                with track_usage(uid, Features.CONVERSATION_FOLDER):
+                    folder_id, _confidence, _reasoning = assign_conversation_to_folder(
+                        title=conversation.structured.title or '',
+                        overview=conversation.structured.overview or '',
+                        category=category,
+                        user_folders=user_folders,
+                        category_folder_id=folders_db.resolve_category_folder_id(category, user_folders),
+                    )
+                if folder_id:
+                    conversation.folder_id = folder_id
+                    if not conversations_db.update_conversation(uid, conversation.id, {'folder_id': folder_id}):
+                        raise RuntimeError('conversation disappeared during folder assignment')
+        # The count refresh is a convergent recount, not an increment. If a
+        # crash happened after folder_id persisted, retry repairs the count.
+        if conversation.folder_id:
+            folders_db.update_folder_conversation_count(uid, conversation.folder_id)
+        complete('folder_assignment')
 
-    goals_succeeded = _update_goal_progress(uid, conversation)
-    if not goals_succeeded:
-        raise RuntimeError('goal progress first-open effect failed')
-    apps_succeeded = _trigger_apps(
-        uid,
-        conversation,
-        is_reprocess=False,
-        usage_attribution=AppUsageAttribution.AUTOMATIC_PROCESSING,
-        language_code=conversation.language or 'en',
-        people=people,
-    )
-    if _conversation_apps_opt_in_only() or conversation.apps_results or conversation.suggested_summarization_apps:
-        if not conversations_db.update_conversation(
+    if not is_complete('goal_progress'):
+        goals_succeeded = _update_goal_progress(
             uid,
-            conversation.id,
-            {
-                'apps_results': [result.dict() for result in conversation.apps_results],
-                'suggested_summarization_apps': conversation.suggested_summarization_apps,
-            },
-        ):
-            raise RuntimeError('conversation disappeared during app fanout')
-    if not apps_succeeded:
-        raise RuntimeError('app fanout first-open effect failed')
+            conversation,
+            idempotency_key_prefix=f'jit-first-open:{conversation.id}',
+        )
+        if not goals_succeeded:
+            raise RuntimeError('goal progress first-open effect failed')
+        complete('goal_progress')
+
+    if not is_complete('app_fanout'):
+        apps_succeeded = _trigger_apps(
+            uid,
+            conversation,
+            is_reprocess=False,
+            usage_attribution=AppUsageAttribution.AUTOMATIC_PROCESSING,
+            language_code=conversation.language or 'en',
+            people=people,
+            preserve_existing_results=True,
+        )
+        if _conversation_apps_opt_in_only() or conversation.apps_results or conversation.suggested_summarization_apps:
+            if not conversations_db.update_conversation(
+                uid,
+                conversation.id,
+                {
+                    'apps_results': [result.dict() for result in conversation.apps_results],
+                    'suggested_summarization_apps': conversation.suggested_summarization_apps,
+                },
+            ):
+                raise RuntimeError('conversation disappeared during app fanout')
+        if not apps_succeeded:
+            raise RuntimeError('app fanout first-open effect failed')
+        complete('app_fanout')
 
 
 def _send_important_conversation_notification_if_needed(uid: str, conversation: Conversation) -> None:  # type: ignore[reportUnusedFunction]  # reserved for re-enablement

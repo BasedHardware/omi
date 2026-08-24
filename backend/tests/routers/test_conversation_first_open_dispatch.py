@@ -4,7 +4,7 @@ from routers import conversations
 
 
 def test_detail_dispatch_runs_claimed_work_and_completes(monkeypatch) -> None:
-    calls: list[tuple[str, object]] = []
+    calls: list[tuple[object, ...]] = []
     monkeypatch.setattr(conversations.conversations_db, "claim_first_open_work", lambda _uid, _cid: "lease")
     monkeypatch.setattr(
         conversations.conversations_db,
@@ -19,7 +19,7 @@ def test_detail_dispatch_runs_claimed_work_and_completes(monkeypatch) -> None:
     monkeypatch.setattr(
         conversations,
         "run_first_open_derived_work",
-        lambda uid, row: calls.append((uid, row["id"])),
+        lambda uid, row, token: calls.append((uid, row["id"], token)),
     )
     monkeypatch.setattr(
         conversations,
@@ -29,7 +29,7 @@ def test_detail_dispatch_runs_claimed_work_and_completes(monkeypatch) -> None:
 
     conversations._dispatch_first_open_work("owner", {"id": "conversation", "jit_first_open": {"state": "pending"}})
 
-    assert calls == [("owner", "conversation"), ("lease", True)]
+    assert calls == [("owner", "conversation", "lease"), ("lease", True)]
 
 
 def test_detail_dispatch_does_not_run_without_claim(monkeypatch) -> None:

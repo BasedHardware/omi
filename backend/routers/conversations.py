@@ -217,7 +217,7 @@ def _dispatch_first_open_work(uid: str, conversation: dict) -> None:
             latest = conversations_db.get_conversation(uid, conversation_id)
             if latest is None:
                 raise RuntimeError('conversation disappeared before first-open work')
-            run_first_open_derived_work(uid, latest)
+            run_first_open_derived_work(uid, latest, token)
             succeeded = True
         except Exception as error:
             logger.exception('JIT first-open worker failed uid=%s conv=%s: %s', uid, conversation_id, error)

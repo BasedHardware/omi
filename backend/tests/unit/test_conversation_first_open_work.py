@@ -25,6 +25,10 @@ def test_first_open_obligation_claim_completion_is_idempotent() -> None:
         )
         is None
     )
+    for effect in conversations_db.FIRST_OPEN_EFFECTS:
+        assert conversations_db.complete_first_open_effect(
+            "owner", "conversation", token, effect, firestore_client=store
+        )
     assert conversations_db.finish_first_open_work(
         "owner", "conversation", token, succeeded=True, firestore_client=store
     )
@@ -61,3 +65,38 @@ def test_failed_and_expired_first_open_claims_are_retryable_and_fenced() -> None
     )
     assert store.rows[path]["jit_first_open"]["state"] == "pending"
     assert store.rows[path]["jit_first_open"]["attempt"] == 2
+
+
+def test_first_open_retry_preserves_completed_effect_receipts() -> None:
+    store, path = _store()
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    conversations_db.initialize_first_open_work("owner", "conversation", firestore_client=store)
+    first = conversations_db.claim_first_open_work("owner", "conversation", now=now, firestore_client=store)
+    assert first is not None
+    assert conversations_db.complete_first_open_effect(
+        "owner", "conversation", first, "folder_assignment", firestore_client=store
+    )
+
+    # Simulate a process crash after the folder side effect and receipt.
+    assert conversations_db.finish_first_open_work(
+        "owner", "conversation", first, succeeded=False, firestore_client=store
+    )
+    state = store.rows[path]["jit_first_open"]
+    assert state["state"] == "pending"
+    assert state["effects"]["folder_assignment"]["state"] == "complete"
+
+    retry = conversations_db.claim_first_open_work(
+        "owner", "conversation", now=now + timedelta(minutes=1), firestore_client=store
+    )
+    assert retry is not None
+    assert not conversations_db.complete_first_open_effect(
+        "owner", "conversation", first, "goal_progress", firestore_client=store
+    )
+    for effect in ("goal_progress", "app_fanout"):
+        assert conversations_db.complete_first_open_effect(
+            "owner", "conversation", retry, effect, firestore_client=store
+        )
+    assert conversations_db.finish_first_open_work(
+        "owner", "conversation", retry, succeeded=True, firestore_client=store
+    )
+    assert store.rows[path]["jit_first_open"]["state"] == "complete"
