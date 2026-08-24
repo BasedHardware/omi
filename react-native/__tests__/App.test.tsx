@@ -246,6 +246,11 @@ jest.mock(
     mockReact.createElement('ChevronLeft', props),
 );
 jest.mock(
+  'lucide-react-native/icons/ellipsis',
+  () => (props: Record<string, unknown>) =>
+    mockReact.createElement('Ellipsis', props),
+);
+jest.mock(
   'lucide-react-native/icons/square-chart-gantt',
   () => (props: Record<string, unknown>) =>
     mockReact.createElement('GanttChartSquare', props),
@@ -740,7 +745,7 @@ test('shows the desktop chronological spine at rest and filters that same loaded
   );
   expect(
     renderer.root.find(
-      node => node.props.accessibilityLabel === 'Home chronological spine',
+      node => node.props.accessibilityLabel === 'Home chronological timeline',
     ),
   ).toBeDefined();
   await ReactTestRenderer.act(async () => {
@@ -1638,150 +1643,57 @@ test('uses a full, navigation-free pane on mobile', async () => {
   ).toBeDefined();
 });
 
-test('uses a full dark macOS Home workspace over the owned window material', async () => {
+test('keeps macOS Home as search chrome followed by compact navigation and timeline', async () => {
   mockPlatformOS = 'macos';
   const renderer = await renderApp();
-  const navigation = renderer.root.find(
-    node => node.props.accessibilityLabel === 'Desktop navigation',
-  );
-  const shell = renderer.root.find(
-    node =>
-      Array.isArray(node.props.style) &&
-      node.props.style.some(
-        (style: {paddingTop?: number}) => style?.paddingTop === 28,
-      ),
-  );
-  const panel = renderer.root.find(
-    node => String(node.type) === 'KeyboardAvoidingView',
-  );
-  const panelInset = renderer.root.find(
-    node =>
-      Array.isArray(node.props.style) &&
-      node.props.style.some(
-        (style: {paddingTop?: number}) => style?.paddingTop === 0,
-      ),
-  );
+  const output = JSON.stringify(renderer.toJSON());
+  const searchIndex = output.indexOf('Home search dock');
+  const homeIndex = output.indexOf('Home navigation');
+  const overflowIndex = output.indexOf('More navigation');
+  const timelineIndex = output.indexOf('Home chronological timeline');
 
-  expect(navigation.props.style).toEqual(
-    expect.objectContaining({
-      backgroundColor: 'transparent',
-      height: 58,
-    }),
-  );
-  expect(
-    renderer.root.findAll(
-      node =>
-        String(node.type) === 'Pressable' &&
-        node.props.accessibilityRole === 'tab',
-    ),
-  ).toHaveLength(6);
-  expect(shell.props.style).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({backgroundColor: 'transparent'}),
-    ]),
-  );
-  expect(panel.props.style).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({
-        backgroundColor: 'transparent',
-        borderColor: 'transparent',
-        borderRadius: 0,
-        borderWidth: 0,
-      }),
-    ]),
-  );
-  expect(panelInset).toBeDefined();
-  expect(
-    renderer.root.findAll(
-      node => node.props.accessibilityLabel === 'Desktop material panel',
-    ),
-  ).toHaveLength(0);
-  const queryLane = renderer.root.find(
-    node => node.props.accessibilityLabel === 'Home query lane',
-  );
-  const queryIsland = renderer.root.find(
-    node => node.props.accessibilityLabel === 'Home query island',
-  );
-  const resultsPanel = renderer.root.find(
-    node => node.props.accessibilityLabel === 'Home results panel',
-  );
-  expect(queryLane.props.style).toEqual(
-    expect.objectContaining({
-      flex: 1,
-      gap: 14,
-      paddingHorizontal: 30,
-      width: '100%',
-    }),
-  );
-  expect(queryIsland.props.style).toEqual(
-    expect.objectContaining({minHeight: 64, backgroundColor: '#222523'}),
-  );
-  expect(resultsPanel.props.style).toEqual(
-    expect.arrayContaining([expect.objectContaining({flex: 1})]),
-  );
-  expect(
-    renderer.root.find(node => node.props.testID === 'home-workspace-material'),
-  ).toBeDefined();
-  expect(
-    renderer.root.find(
-      node => node.props.accessibilityLabel === 'Home chronological spine',
-    ),
-  ).toBeDefined();
+  expect(searchIndex).toBeGreaterThan(-1);
+  expect(homeIndex).toBeGreaterThan(searchIndex);
+  expect(overflowIndex).toBeGreaterThan(homeIndex);
+  expect(timelineIndex).toBeGreaterThan(overflowIndex);
+  expect(output).not.toContain('Home query island');
+  expect(output).not.toContain('Home results panel');
+  expect(output).not.toContain('What matters now');
+  expect(output).not.toContain('home-workspace-material');
   const homeSearch = renderer.root.find(
     node => node.props.accessibilityLabel === 'Search Home',
   );
-  expect(homeSearch.parent?.props.style).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({alignItems: 'center'}),
-      expect.objectContaining({gap: 14, minHeight: 64}),
-    ]),
-  );
-  expect(homeSearch.props.placeholder).toBe('Filter saved…');
-  expect(homeSearch.props.style).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({
-        fontSize: 21,
-        height: 26,
-        minHeight: 0,
-        paddingVertical: 0,
-      }),
-    ]),
-  );
-  await ReactTestRenderer.act(async () => {
-    homeSearch.props.onFocus();
-  });
-  const focusedDock = renderer.root.find(
-    node => node.props.accessibilityLabel === 'Home search dock',
-  );
-  expect(focusedDock.props.style).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({borderColor: '#78bda5', borderWidth: 1}),
-      expect.objectContaining({paddingLeft: 18, paddingRight: 18}),
-    ]),
-  );
-  expect(JSON.stringify(focusedDock.props.style)).not.toContain('shadowColor');
-  const output = JSON.stringify(renderer.toJSON());
-  expect(output.indexOf('Filter saved…')).toBeLessThan(
-    output.indexOf('Home device affordance'),
-  );
-  expect(output).not.toContain('Home pendant');
-  expect(output).not.toContain('Home devices');
+  expect(homeSearch.props.placeholder).toBe('Search Omi');
   expect(
     renderer.root.find(
-      node => node.props.accessibilityLabel === 'Desktop navigation material',
+      node => node.props.accessibilityLabel === 'Home navigation',
     ),
   ).toBeDefined();
   expect(
     renderer.root.findAll(
-      node => node.props.accessibilityLabel === 'Floating pane depth',
+      node => node.props.accessibilityLabel === 'Conversations navigation',
     ),
   ).toHaveLength(0);
   expect(
-    renderer.root.findAll(
-      node => node.props.accessibilityLabel === 'Expand sidebar',
-    ),
-  ).toHaveLength(0);
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'More navigation',
+    ).props.accessibilityState,
+  ).toEqual({expanded: false});
+});
 
+test('opens secondary desktop destinations from the Home-adjacent overflow', async () => {
+  mockPlatformOS = 'macos';
+  const renderer = await renderApp();
+
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'More navigation')
+      .props.onPress();
+  });
+  const menu = renderer.root.find(
+    node => node.props.accessibilityLabel === 'More navigation menu',
+  );
+  expect(menu).toBeDefined();
   await ReactTestRenderer.act(async () => {
     renderer.root
       .find(node => node.props.accessibilityLabel === 'Tasks navigation')
@@ -1809,7 +1721,7 @@ test('keeps desktop hardware secondary while retaining native device actions', a
   });
   const renderer = await renderApp();
   const output = JSON.stringify(renderer.toJSON());
-  expect(output.indexOf('Home results panel')).toBeLessThan(
+  expect(output.indexOf('Home chronological timeline')).toBeLessThan(
     output.indexOf('Home device affordance'),
   );
   const affordance = renderer.root.find(
@@ -1853,6 +1765,11 @@ test.each([800, 960, 1440])(
       ),
     ).toHaveLength(0);
 
+    await ReactTestRenderer.act(async () => {
+      renderer.root
+        .find(node => node.props.accessibilityLabel === 'More navigation')
+        .props.onPress();
+    });
     await ReactTestRenderer.act(async () => {
       renderer.root
         .find(node => node.props.accessibilityLabel === 'Tasks navigation')
