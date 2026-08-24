@@ -70,6 +70,11 @@ actor JITProactivityRuntime {
   private let beginPlannedExecution: BeginPlannedExecution?
   private let authorizationCurrent: AuthorizationCurrent
   private var pending: [String: JITPlannedExecution] = [:]
+  private struct ExecutionHeartbeat {
+    let leaseToken: String
+    let task: Task<Void, Never>
+  }
+  private var executionHeartbeats: [String: ExecutionHeartbeat] = [:]
 
   init(
     flags: @escaping FlagResolver = { snapshot in
@@ -208,6 +213,9 @@ actor JITProactivityRuntime {
         snapshotRevision: receipt.snapshotRevision,
         budgetDay: day,
         observationFingerprint: continuityFingerprint)
+      guard pending[continuityKey] == nil, executionHeartbeats[continuityKey] == nil else {
+        return .suppressed(reason: "planned_duplicate_or_budget")
+      }
       guard
         let claim = try await claimWakeup(
           continuityKey: continuityKey,
@@ -323,6 +331,9 @@ actor JITProactivityRuntime {
       return .suppressed(reason: "ambient_nano_rejected")
     }
     let continuityKey = "jit-context:\(context.semanticFingerprint)"
+    guard pending[continuityKey] == nil, executionHeartbeats[continuityKey] == nil else {
+      return .suppressed(reason: "ambient_duplicate_or_budget")
+    }
     let claimed: JITTriggerWakeupClaim?
     do {
       claimed = try await mirror.claimWakeup(
@@ -362,21 +373,57 @@ actor JITProactivityRuntime {
   /// turn starts. A newer reconciliation may have deleted or changed a trigger after admission
   /// returned a delivery decision but before the coordinator completed its other local gates.
   func beginExecution(_ execution: JITPlannedExecution) async -> Bool {
-    guard execution.lane == .planned else { return true }
-    guard let authority = execution.plannedAuthority else { return false }
+    let began: Bool
     do {
-      if let beginPlannedExecution {
-        return try await beginPlannedExecution(authority, execution.claim)
+      if execution.lane == .planned {
+        guard let authority = execution.plannedAuthority else { return false }
+        if let beginPlannedExecution {
+          began = try await beginPlannedExecution(authority, execution.claim)
+        } else {
+          began = try await mirror.beginPlannedExecution(
+            authority, claim: execution.claim)
+        }
+      } else {
+        began = try await mirror.beginAmbientExecution(claim: execution.claim)
       }
-      return try await mirror.beginPlannedExecution(
-        authority, claim: execution.claim)
     } catch {
       return false
     }
+    guard began else { return false }
+    startExecutionHeartbeat(for: execution.claim)
+    return true
   }
 
   func finish(_ execution: JITPlannedExecution, delivered: Bool) async {
+    if executionHeartbeats[execution.claim.continuityKey]?.leaseToken == execution.claim.leaseToken {
+      executionHeartbeats.removeValue(forKey: execution.claim.continuityKey)?.task.cancel()
+    }
     await mirror.finishWakeup(execution.claim, delivered: delivered)
+  }
+
+  private func startExecutionHeartbeat(for claim: JITTriggerWakeupClaim) {
+    executionHeartbeats.removeValue(forKey: claim.continuityKey)?.task.cancel()
+    let mirror = mirror
+    let task = Task {
+      let clock = ContinuousClock()
+      while !Task.isCancelled {
+        do {
+          try await clock.sleep(for: .seconds(JITTriggerMirror.executionHeartbeatSeconds))
+        } catch {
+          return
+        }
+        guard !Task.isCancelled else { return }
+        do {
+          guard try await mirror.renewExecutionLease(claim: claim) else { return }
+        } catch {
+          // The local database may be briefly unavailable during owner-bound reinitialization.
+          // Keep retrying inside the existing lease window; finish or owner teardown cancels us.
+          continue
+        }
+      }
+    }
+    executionHeartbeats[claim.continuityKey] = ExecutionHeartbeat(
+      leaseToken: claim.leaseToken, task: task)
   }
 
   static func plannedContinuityKey(

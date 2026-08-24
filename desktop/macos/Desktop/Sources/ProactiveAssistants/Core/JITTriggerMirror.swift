@@ -139,6 +139,8 @@ enum JITTriggerMirrorSchema {
 
 actor JITTriggerMirror {
   static let shared = JITTriggerMirror()
+  static let executionLeaseSeconds: TimeInterval = 300
+  static let executionHeartbeatSeconds: TimeInterval = 60
 
   func reconcile(
     _ snapshot: JITTriggerSnapshot,
@@ -343,6 +345,28 @@ actor JITTriggerMirror {
     return try await pool.write { db in
       try Self.beginPlannedExecution(
         authority, claim: claim, now: now, in: db)
+    }
+  }
+
+  func beginAmbientExecution(
+    claim: JITTriggerWakeupClaim,
+    now: Date = Date()
+  ) async throws -> Bool {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { throw JITTriggerMirrorError.databaseUnavailable }
+    return try await pool.write { db in
+      try Self.beginAmbientExecution(claim: claim, now: now, in: db)
+    }
+  }
+
+  func renewExecutionLease(
+    claim: JITTriggerWakeupClaim,
+    now: Date = Date()
+  ) async throws -> Bool {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { throw JITTriggerMirrorError.databaseUnavailable }
+    return try await pool.write { db in
+      try Self.renewExecutionLease(claim: claim, now: now, in: db)
     }
   }
 
@@ -657,10 +681,62 @@ actor JITTriggerMirror {
     try db.execute(
       sql: """
         UPDATE jit_trigger_wakeup_receipts
-        SET state = 'executing', updatedAt = ?
+        SET state = 'executing', leaseExpiresAt = ?, updatedAt = ?
         WHERE continuityKey = ? AND triggerID = ? AND leaseToken = ? AND state = 'claimed'
         """,
-      arguments: [now, claim.continuityKey, claim.triggerID, claim.leaseToken])
+      arguments: [
+        now.addingTimeInterval(executionLeaseSeconds), now,
+        claim.continuityKey, claim.triggerID, claim.leaseToken,
+      ])
+    return db.changesCount == 1
+  }
+
+  static func beginAmbientExecution(
+    claim: JITTriggerWakeupClaim,
+    now: Date,
+    in db: Database
+  ) throws -> Bool {
+    guard
+      let wakeup = try Row.fetchOne(
+        db,
+        sql: """
+          SELECT lane, state, leaseToken, leaseExpiresAt
+          FROM jit_trigger_wakeup_receipts WHERE continuityKey = ? AND triggerID = ?
+          """,
+        arguments: [claim.continuityKey, claim.triggerID]),
+      (wakeup["lane"] as String) == JITProactivityLane.ambient.rawValue,
+      (wakeup["state"] as String) == "claimed",
+      (wakeup["leaseToken"] as String?) == claim.leaseToken,
+      ((wakeup["leaseExpiresAt"] as Date?) ?? .distantPast) > now
+    else { return false }
+    try db.execute(
+      sql: """
+        UPDATE jit_trigger_wakeup_receipts
+        SET state = 'executing', leaseExpiresAt = ?, updatedAt = ?
+        WHERE continuityKey = ? AND triggerID = ? AND leaseToken = ? AND state = 'claimed'
+        """,
+      arguments: [
+        now.addingTimeInterval(executionLeaseSeconds), now,
+        claim.continuityKey, claim.triggerID, claim.leaseToken,
+      ])
+    return db.changesCount == 1
+  }
+
+  static func renewExecutionLease(
+    claim: JITTriggerWakeupClaim,
+    now: Date,
+    in db: Database
+  ) throws -> Bool {
+    try db.execute(
+      sql: """
+        UPDATE jit_trigger_wakeup_receipts
+        SET leaseExpiresAt = ?, updatedAt = ?
+        WHERE continuityKey = ? AND triggerID = ? AND leaseToken = ? AND state = 'executing'
+        """,
+      arguments: [
+        now.addingTimeInterval(executionLeaseSeconds), now,
+        claim.continuityKey, claim.triggerID, claim.leaseToken,
+      ])
     return db.changesCount == 1
   }
 

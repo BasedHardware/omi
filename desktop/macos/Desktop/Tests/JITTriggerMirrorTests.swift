@@ -79,6 +79,37 @@ final class JITTriggerMirrorTests: XCTestCase {
     XCTAssertNotEqual(first?.leaseToken, recovered?.leaseToken)
   }
 
+  func testAmbientExecutionUsesTheSameRenewableRunningLease() throws {
+    let queue = try migratedQueue()
+    let now = Date(timeIntervalSince1970: 100)
+    let claim = try XCTUnwrap(
+      queue.write { db in
+        try JITTriggerMirror.claimWakeup(
+          continuityKey: "ambient", triggerID: "ambient:bucket", lane: .ambient,
+          budgetDay: "2026-08-24", snapshotRevision: "r", observationFingerprint: "f",
+          budget: 1, now: now, in: db)
+      })
+
+    let began = try queue.write { db in
+      try JITTriggerMirror.beginAmbientExecution(
+        claim: claim, now: now.addingTimeInterval(1), in: db)
+    }
+    let renewed = try queue.write { db in
+      try JITTriggerMirror.renewExecutionLease(
+        claim: claim, now: now.addingTimeInterval(250), in: db)
+    }
+    let duplicate = try queue.write { db in
+      try JITTriggerMirror.claimWakeup(
+        continuityKey: "ambient", triggerID: "ambient:bucket", lane: .ambient,
+        budgetDay: "2026-08-24", snapshotRevision: "r", observationFingerprint: "f",
+        budget: 1, now: now.addingTimeInterval(500), in: db)
+    }
+
+    XCTAssertTrue(began)
+    XCTAssertTrue(renewed)
+    XCTAssertNil(duplicate)
+  }
+
   func testPlannedClaimAtomicallyRejectsEverySnapshotAuthorityMismatch() throws {
     let queue = try migratedQueue()
     let currentRow = row(id: "trigger")
@@ -190,15 +221,42 @@ final class JITTriggerMirrorTests: XCTestCase {
       try JITTriggerMirror.beginPlannedExecution(
         authority, claim: claim, now: now.addingTimeInterval(2), in: db)
     }
-    let state = try queue.read { db in
-      try String.fetchOne(
-        db, sql: "SELECT state FROM jit_trigger_wakeup_receipts WHERE continuityKey = ?",
+    let renewed = try queue.write { db in
+      try JITTriggerMirror.renewExecutionLease(
+        claim: claim, now: now.addingTimeInterval(250), in: db)
+    }
+    let stateAndExpiry = try queue.read { db -> (String?, Date?) in
+      let row = try Row.fetchOne(
+        db, sql: "SELECT state, leaseExpiresAt FROM jit_trigger_wakeup_receipts WHERE continuityKey = ?",
         arguments: [claim.continuityKey])
+      return (row?["state"], row?["leaseExpiresAt"])
+    }
+    let duplicateWhileRunning = try queue.write { db in
+      try JITTriggerMirror.claimPlannedWakeup(
+        plannedRequest(receipt: receipt, triggerRow: currentRow),
+        in: db)
+    }
+    let recoveredAfterHeartbeatStops = try queue.write { db in
+      let request = plannedRequest(
+        continuityKey: claim.continuityKey, receipt: receipt, triggerRow: currentRow)
+      return try JITTriggerMirror.claimPlannedWakeup(
+        JITPlannedWakeupRequest(
+          continuityKey: request.continuityKey, triggerID: request.triggerID, lane: request.lane,
+          budgetDay: request.budgetDay, snapshotRevision: request.snapshotRevision,
+          observationFingerprint: request.observationFingerprint, budget: request.budget,
+          now: now.addingTimeInterval(551), authority: request.authority,
+          triggerRow: request.triggerRow),
+        in: db)
     }
 
     XCTAssertTrue(began)
     XCTAssertFalse(replay)
-    XCTAssertEqual(state, "executing")
+    XCTAssertTrue(renewed)
+    XCTAssertEqual(stateAndExpiry.0, "executing")
+    XCTAssertEqual(stateAndExpiry.1, now.addingTimeInterval(550))
+    XCTAssertNil(duplicateWhileRunning)
+    XCTAssertNotNil(recoveredAfterHeartbeatStops)
+    XCTAssertNotEqual(recoveredAfterHeartbeatStops?.leaseToken, claim.leaseToken)
   }
 
   func testOwnerTransitionCannotReuseOldReceiptAgainstIdenticalMirrorRow() throws {
