@@ -94,6 +94,13 @@ PYTHONPATH="$REPO_ROOT/scripts/dev-harness" python3 -c \
   'import importlib.util, os, sys; p=sys.argv[1]; s=importlib.util.spec_from_file_location("jit_stack", p); m=importlib.util.module_from_spec(s); s.loader.exec_module(m); assert not m._owned_process_group(os.getpgrp(), "")' \
   "$PY"
 
+# Development ADC refresh is a cloud readiness operation, not a one-second
+# loopback liveness probe. Keep its timeout bounded but independently long
+# enough for a normal token refresh.
+PYTHONPATH="$REPO_ROOT/scripts/dev-harness" python3 -c \
+  'import importlib.util, sys; p=sys.argv[1]; s=importlib.util.spec_from_file_location("jit_stack", p); m=importlib.util.module_from_spec(s); s.loader.exec_module(m); calls=[]; m._http=lambda url, timeout=1.0, **kwargs: calls.append((url, timeout)) or (True, 200); assert m._health("vertex-gateway")[0]; assert calls[0][1] == 1.0; assert calls[1][1] == m.CLOUD_READINESS_TIMEOUT_SECONDS' \
+  "$PY"
+
 grep -Fq '18080' "$PY"
 grep -Fq '18081' "$PY"
 grep -Fq 'FIRESTORE_EMULATOR_HOST' "$PY"
