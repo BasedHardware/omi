@@ -10,6 +10,11 @@ folder assignment, goal progress, and conversation-app fan-out. A detail read
 claims a token-fenced lease and dispatches those effects. Concurrent/repeated
 opens do not duplicate a live claim; failures return to pending and expired
 leases can be reclaimed. Completion is accepted only from the current token.
+Outstanding work re-reads uncached paid-boundary rollout/kill authority before
+each provider call and again before every result, usage, folder, goal, or
+receipt commit. A kill that changes while a provider request is already in
+flight cannot retract that paid request, but its result is suspended and no
+mutation commits. Kill/off/unknown never drain persisted work.
 
 If rollout authority, source classification, or durable initialization is
 unknown or unavailable, capture runs the existing eager pipeline. The legacy
