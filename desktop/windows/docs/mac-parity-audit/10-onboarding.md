@@ -26,7 +26,7 @@ predates the audit):
    add Mac-parity Data Sources step") and is wired into `Onboarding.tsx` at step index 12. It offers
    Calendar (Google Calendar OAuth), Email (Gmail OAuth), a read-only status row for the local file index,
    and ChatGPT/Claude memory-log paste-in — four of the old table's "Absent" rows in one step. It is
-   real but genuinely partial (see detail section below), so this is a status change from **Absent → 
+   real but genuinely partial (see detail section below), so this is a status change from **Absent →
    Partial**, not Absent → Present.
 2. **"Memory-log import: Absent" was also wrong for the same reason.** The ChatGPT/Claude paste-in flow
    living inside `DataSourcesStep.tsx` (`MemoryLogRow`, backed by `lib/pasteImport.ts` +
