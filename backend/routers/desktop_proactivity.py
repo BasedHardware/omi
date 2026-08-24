@@ -20,7 +20,7 @@ from database import redis_db, users as users_db
 from config.plan_catalog import DESKTOP_PROFILE_DEFAULTS
 from models.users import PlanType, Subscription
 from utils.env_loader import EnvStage, resolve_stage_from_env
-from utils.executors import critical_executor, db_executor, run_blocking
+from utils.executors import critical_executor, db_executor, run_blocking, start_background_task
 from utils.http_client import get_llm_gateway_client, get_llm_gateway_semaphore
 from utils.llm.desktop_llm_stub import llm_stub_enabled
 from utils.llm.gateway_client import llm_gateway_headers
@@ -160,15 +160,6 @@ def _proactive_provider_request(request: "ProactiveCompletionRequest", uid: str,
     # fields; prompt_cache_key is a real OpenAI field and is kept.
     payload.pop("prompt_cache_options", None)
     payload.pop("metadata", None)
-    record_fallback(
-        component="llm_gateway",
-        from_mode="gateway",
-        to_mode="direct_openai",
-        reason="config_incomplete",
-        outcome="recovered",
-        log=logger,
-    )
-    record_direct_exception_surface(surface="desktop_context_proactivity.dev_direct_openai")
     return _ProviderRequest(
         url="https://api.openai.com/v1/chat/completions",
         headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
@@ -270,14 +261,36 @@ async def _consume_quota(uid: str, operation: ProactiveOperation) -> ProactiveQu
             uid,
         )
         limit = _quota_limit_for_subscription(operation, subscription)
-        allowed, remaining, reset_seconds = await run_blocking(
-            critical_executor,
-            redis_db.reserve_rate_limit,
-            uid,
-            f"desktop_{operation_value}",
-            limit,
-            _QUOTA_WINDOW_SECONDS,
+        reservation_task = asyncio.create_task(
+            run_blocking(
+                critical_executor,
+                redis_db.reserve_rate_limit,
+                uid,
+                f"desktop_{operation_value}",
+                limit,
+                _QUOTA_WINDOW_SECONDS,
+            ),
+            name=f"proactive-quota-reservation:{operation_value}",
         )
+        try:
+            allowed, remaining, reset_seconds = await asyncio.shield(reservation_task)
+        except asyncio.CancelledError:
+            # run_in_executor cannot stop a Redis call already executing in a
+            # worker. Keep the reservation task alive and release its slot if
+            # it eventually admits; do not block request cancellation on Redis.
+            async def release_late_reservation() -> None:
+                try:
+                    reservation_allowed, _, _ = await reservation_task
+                except BaseException:
+                    return
+                if reservation_allowed:
+                    await _release_quota(uid, operation)
+
+            start_background_task(
+                release_late_reservation(),
+                name=f"proactive-quota-release-after-cancel:{operation_value}",
+            )
+            raise
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Proactive metering is temporarily unavailable") from exc
     state = ProactiveQuotaState(limit=limit, remaining=remaining, reset_seconds=reset_seconds)
@@ -543,6 +556,7 @@ async def _post_provider_completion(
     *,
     uid: str,
     max_completion_tokens: int | None = None,
+    record_direct_fallback: bool = False,
 ) -> Any:
     paid_boundary_decision = await resolve_jit_rollout(
         uid,
@@ -550,6 +564,16 @@ async def _post_provider_completion(
         force_refresh=True,
     )
     _require_jit_rollout(paid_boundary_decision)
+    if record_direct_fallback and provider_request.fallback_class == "dev_direct_openai":
+        record_fallback(
+            component="llm_gateway",
+            from_mode="gateway",
+            to_mode="direct_openai",
+            reason="config_incomplete",
+            outcome="recovered",
+            log=logger,
+        )
+        record_direct_exception_surface(surface="desktop_context_proactivity.dev_direct_openai")
     payload = provider_request.payload
     if max_completion_tokens is not None:
         payload = {**payload, "max_completion_tokens": max_completion_tokens}
@@ -619,13 +643,13 @@ async def _proactive_completion_unobserved(
         force_refresh=True,
     )
     _require_jit_rollout(paid_admission)
-    quota = await _consume_quota(uid, request.operation)
-    _apply_quota_headers(response, quota)
+    quota: ProactiveQuotaState | None = None
+    quota_reserved = False
     quota_released = False
 
     async def release_quota_once() -> None:
         nonlocal quota_released
-        if quota_released:
+        if not quota_reserved or quota_released:
             return
         quota_released = True
         await _release_quota(uid, request.operation)
@@ -634,9 +658,12 @@ async def _proactive_completion_unobserved(
     provider_request: _ProviderRequest | None = None
     length_retry_attempted = False
     try:
+        quota = await _consume_quota(uid, request.operation)
+        quota_reserved = True
+        _apply_quota_headers(response, quota)
         provider_request = _proactive_provider_request(request, uid, request_id)
         attempted_max_completion_tokens = provider_request.payload["max_completion_tokens"]
-        response_body = await _post_provider_completion(provider_request, uid=uid)
+        response_body = await _post_provider_completion(provider_request, uid=uid, record_direct_fallback=True)
         if _should_retry_truncated_structured_output(
             response_body,
             request,

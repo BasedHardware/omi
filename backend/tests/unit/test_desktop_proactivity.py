@@ -208,6 +208,79 @@ async def test_stale_ingress_allow_then_kill_does_no_quota_or_provider_work(monk
     assert provider_calls == []
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("late_mode", ["killed", "unknown"])
+async def test_late_paid_boundary_block_does_not_emit_direct_fallback_telemetry(monkeypatch, late_mode):
+    enabled = _rollout_decision(
+        rollout=TriState.ENABLED,
+        kill_switch=TriState.DISABLED,
+        effective=TriState.ENABLED,
+        reason=JITDecisionReason.ROLLOUT_ENABLED,
+    )
+    late_decision = (
+        _rollout_decision(
+            rollout=TriState.ENABLED,
+            kill_switch=TriState.ENABLED,
+            effective=TriState.DISABLED,
+            reason=JITDecisionReason.KILL_SWITCH_ENABLED,
+        )
+        if late_mode == "killed"
+        else _rollout_decision(
+            rollout=TriState.UNKNOWN,
+            kill_switch=TriState.UNKNOWN,
+            effective=TriState.UNKNOWN,
+            reason=JITDecisionReason.PROVIDER_ERROR,
+            error_class=JITErrorClass.PROVIDER,
+        )
+    )
+    resolutions = []
+    released = []
+    fallbacks = []
+    direct_surfaces = []
+
+    async def resolve(_uid, *, stage, force_refresh=False):
+        resolutions.append((stage, force_refresh))
+        return enabled if len(resolutions) <= 2 else late_decision
+
+    async def consume(*_args):
+        return desktop_proactivity.ProactiveQuotaState(limit=150, remaining=149, reset_seconds=86400)
+
+    async def release(uid, operation):
+        released.append((uid, operation))
+
+    monkeypatch.setattr(desktop_proactivity, "resolve_jit_rollout", resolve)
+    monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
+    monkeypatch.delenv("OMI_LLM_GATEWAY_URL", raising=False)
+    monkeypatch.setenv("OMI_ENV_STAGE", "dev")
+    monkeypatch.setattr(desktop_proactivity, "get_openai_api_key", lambda: "dev-provider-key")
+    monkeypatch.setattr(desktop_proactivity, "record_fallback", lambda **values: fallbacks.append(values))
+    monkeypatch.setattr(
+        desktop_proactivity,
+        "record_direct_exception_surface",
+        lambda **values: direct_surfaces.append(values),
+    )
+    monkeypatch.setattr(desktop_proactivity, "_consume_quota", consume)
+    monkeypatch.setattr(desktop_proactivity, "_release_quota", release)
+    monkeypatch.setattr(
+        desktop_proactivity,
+        "get_llm_gateway_client",
+        lambda: (_ for _ in ()).throw(AssertionError("late rollout block must precede provider I/O")),
+    )
+
+    with pytest.raises(desktop_proactivity.HTTPException) as blocked:
+        await desktop_proactivity.proactive_completion(request(), Response(), uid="user-1")
+
+    assert blocked.value.status_code == 403
+    assert resolutions == [
+        (desktop_proactivity.JITDecisionStage.INGRESS, False),
+        (desktop_proactivity.JITDecisionStage.PAID_BOUNDARY, True),
+        (desktop_proactivity.JITDecisionStage.PAID_BOUNDARY, True),
+    ]
+    assert released == [("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)]
+    assert fallbacks == []
+    assert direct_surfaces == []
+
+
 def test_operation_pins_lane_and_only_reasoning_enables_explicit_cache():
     extraction = desktop_proactivity._gateway_payload(request())
     reasoning = desktop_proactivity._gateway_payload(
@@ -376,6 +449,43 @@ async def test_quota_reservation_uses_the_free_row_and_daily_window(monkeypatch,
     assert observed["key"] == f"desktop_{operation.value}"
     assert observed["limit"] == expected_limit
     assert observed["window_seconds"] == 24 * 60 * 60
+
+
+@pytest.mark.asyncio
+async def test_quota_reservation_cancellation_releases_late_admission_once(monkeypatch):
+    reservation_started = asyncio.Event()
+    unblock_reservation = asyncio.Event()
+    release_seen = asyncio.Event()
+    released = []
+
+    async def run_blocking(_, function, *args, **kwargs):
+        if function is desktop_proactivity.redis_db.reserve_rate_limit:
+            reservation_started.set()
+            await unblock_reservation.wait()
+            return True, 149, 86400
+        return function(*args, **kwargs)
+
+    async def release(uid, operation):
+        released.append((uid, operation))
+        release_seen.set()
+
+    monkeypatch.setattr(desktop_proactivity, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_proactivity, "_customer_subscription", lambda *_: None)
+    monkeypatch.setattr(desktop_proactivity, "_release_quota", release)
+
+    reservation = asyncio.create_task(
+        desktop_proactivity._consume_quota("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)
+    )
+    await asyncio.wait_for(reservation_started.wait(), timeout=1)
+    reservation.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await reservation
+
+    assert released == []
+    unblock_reservation.set()
+    await asyncio.wait_for(release_seen.wait(), timeout=1)
+    await asyncio.sleep(0)
+    assert released == [("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)]
 
 
 @pytest.mark.asyncio
@@ -720,7 +830,9 @@ def test_dev_direct_provider_fallback_is_scoped_to_proactivity(monkeypatch):
     assert "metadata" not in provider.payload
     assert provider.payload["reasoning_effort"] == "minimal"
     assert provider.fallback_class == "dev_direct_openai"
-    assert fallbacks[0]["component"] == "llm_gateway"
+    # Selection is side-effect free. Fallback telemetry is emitted only after
+    # the per-invocation paid-boundary rollout refresh permits the request.
+    assert fallbacks == []
 
     reasoning_provider = desktop_proactivity._proactive_provider_request(
         request("proactive_reasoning"), "user-1", "request-2"
