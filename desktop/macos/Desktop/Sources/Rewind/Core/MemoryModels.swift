@@ -39,6 +39,9 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
   /// Additive canonical-ledger metadata mirrored from the server. Legacy rows
   /// remain decodable with nil metadata and are fail-closed for prompt use.
   var ledgerMetadataJson: String?
+  /// Additive generated-v3 evidence mirror. Evidence is audit metadata only;
+  /// prompt projections must not read this column as authority.
+  var ledgerEvidenceJson: String?
 
   // Capture-device provenance (preserved through SQLite cache round-trip)
   var primaryCaptureDevice: String?
@@ -83,6 +86,7 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
     inputDeviceName: String? = nil,
     headline: String? = nil,
     ledgerMetadataJson: String? = nil,
+    ledgerEvidenceJson: String? = nil,
     primaryCaptureDevice: String? = nil,
     captureDeviceIdsJson: String? = nil,
     isRead: Bool = false,
@@ -116,6 +120,7 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
     self.inputDeviceName = inputDeviceName
     self.headline = headline
     self.ledgerMetadataJson = ledgerMetadataJson
+    self.ledgerEvidenceJson = ledgerEvidenceJson
     self.primaryCaptureDevice = primaryCaptureDevice
     self.captureDeviceIdsJson = captureDeviceIdsJson
     self.isRead = isRead
@@ -240,6 +245,10 @@ extension MemoryRecord {
       inputDeviceName: memory.inputDeviceName,
       headline: memory.headline,
       ledgerMetadataJson: Self.encodeLedgerMetadata(memory.ledgerMetadata),
+      ledgerEvidenceJson: Self.encodeLedgerEvidence(
+        memory.evidence,
+        preserveEmpty: memory.evidenceIsExplicit
+      ),
       primaryCaptureDevice: memory.primaryCaptureDevice,
       captureDeviceIdsJson: encodeCaptureDeviceIds(memory.captureDeviceIds),
       isRead: memory.isRead,
@@ -305,6 +314,9 @@ extension MemoryRecord {
       self.headline = headline
     }
     self.ledgerMetadataJson = Self.encodeLedgerMetadata(memory.ledgerMetadata)
+    if memory.evidenceIsExplicit {
+      self.ledgerEvidenceJson = Self.encodeLedgerEvidence(memory.evidence, preserveEmpty: true)
+    }
 
     // Preserve capture-device provenance through cache sync/reload
     self.primaryCaptureDevice = memory.primaryCaptureDevice
@@ -348,6 +360,20 @@ extension MemoryRecord {
   mutating func mergeAuthoritativeLedgerMetadataFrom(_ memory: ServerMemory) -> Bool {
     guard ledgerMetadata != memory.ledgerMetadata else { return false }
     ledgerMetadataJson = Self.encodeLedgerMetadata(memory.ledgerMetadata)
+    return true
+  }
+
+  /// Evidence is server-authoritative when the optional wire field is
+  /// present. An older response that omits it must not erase a newer local
+  /// mirror during a compatibility conflict.
+  @discardableResult
+  mutating func mergeAuthoritativeLedgerEvidenceFrom(_ memory: ServerMemory) -> Bool {
+    guard memory.evidenceIsExplicit else { return false }
+    let current = MemoryLedgerEvidence.decode(ledgerEvidenceJson)
+    guard ledgerEvidenceJson == nil || current != memory.evidence else {
+      return false
+    }
+    ledgerEvidenceJson = Self.encodeLedgerEvidence(memory.evidence, preserveEmpty: true)
     return true
   }
 
@@ -412,6 +438,8 @@ extension MemoryRecord {
       windowTitle: windowTitle,
       headline: headline,
       ledgerMetadata: ledgerMetadata,
+      evidence: MemoryLedgerEvidence.decode(ledgerEvidenceJson),
+      evidenceIsExplicit: ledgerEvidenceJson != nil,
       primaryCaptureDevice: primaryCaptureDevice,
       captureDeviceIds: captureDeviceIds
     )
@@ -422,12 +450,27 @@ extension MemoryRecord {
     return MemoryLedgerMetadata.canonicalJSONString(metadata)
   }
 
+  private static func encodeLedgerEvidence(
+    _ evidence: [ServerMemoryEvidence], preserveEmpty: Bool = false
+  ) -> String? {
+    if evidence.isEmpty {
+      return preserveEmpty ? "[]" : nil
+    }
+    return MemoryLedgerEvidence.canonicalJSONString(evidence)
+  }
+
   private var ledgerMetadata: [String: String] {
     guard let json = ledgerMetadataJson,
       let data = json.data(using: .utf8),
       let metadata = try? JSONDecoder().decode([String: String].self, from: data)
     else { return [:] }
     return metadata
+  }
+
+  /// Read-only access to the bounded evidence mirror for audit/UI surfaces.
+  /// This never participates in prompt projection or trigger compilation.
+  var ledgerEvidence: [ServerMemoryEvidence] {
+    MemoryLedgerEvidence.decode(ledgerEvidenceJson)
   }
 
   /// Structured trigger data remains inert until a caller explicitly validates
@@ -476,6 +519,8 @@ extension ServerMemory {
       windowTitle: windowTitle,
       headline: headline,
       ledgerMetadata: ledgerMetadata,
+      evidence: evidence,
+      evidenceIsExplicit: evidenceIsExplicit,
       primaryCaptureDevice: primaryCaptureDevice,
       captureDeviceIds: captureDeviceIds
     )
@@ -511,6 +556,8 @@ extension ServerMemory {
     windowTitle: String? = nil,
     headline: String? = nil,
     ledgerMetadata: [String: String] = [:],
+    evidence: [ServerMemoryEvidence] = [],
+    evidenceIsExplicit: Bool = false,
     primaryCaptureDevice: String? = nil,
     captureDeviceIds: [String] = []
   ) {
@@ -542,6 +589,8 @@ extension ServerMemory {
     self.windowTitle = windowTitle
     self.headline = headline
     self.ledgerMetadata = ledgerMetadata
+    self.evidence = evidence
+    self.evidenceIsExplicit = evidenceIsExplicit
     self.primaryCaptureDevice = primaryCaptureDevice
     self.captureDeviceIds = captureDeviceIds
   }

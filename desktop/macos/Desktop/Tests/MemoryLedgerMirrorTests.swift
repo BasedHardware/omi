@@ -30,10 +30,16 @@ final class MemoryLedgerMirrorTests: XCTestCase {
   }
 
   func testCanonicalStructuredMetadataSurvivesServerRecordSQLiteAndReadRoundTrip() async throws {
-    let memory = makeMemory(id: "ledger-roundtrip-\(UUID().uuidString)", metadata: canonicalMetadata())
+    let memory = makeMemory(
+      id: "ledger-roundtrip-\(UUID().uuidString)",
+      metadata: canonicalMetadata(),
+      evidence: [makeEvidence("ev-roundtrip")],
+      evidenceIsExplicit: true
+    )
 
     let record = MemoryRecord.from(memory)
     XCTAssertEqual(record.toServerMemory()?.ledgerMetadata, memory.ledgerMetadata)
+    XCTAssertEqual(record.toServerMemory()?.evidence, memory.evidence)
     XCTAssertEqual(
       record.ledgerTriggerConditionJSON, MemoryLedgerMetadata.triggerConditionJSON(from: memory.ledgerMetadata))
 
@@ -41,6 +47,12 @@ final class MemoryLedgerMirrorTests: XCTestCase {
     let persisted = try await MemoryStorage.shared.getMemoryByBackendId(memory.id)
     let read = try XCTUnwrap(persisted?.toServerMemory())
     XCTAssertEqual(read.ledgerMetadata, memory.ledgerMetadata)
+    XCTAssertEqual(read.evidence, memory.evidence)
+    XCTAssertEqual(read.evidence.first?.evidenceId, "ev-roundtrip")
+    XCTAssertLessThanOrEqual(
+      try XCTUnwrap(persisted?.ledgerEvidenceJson).utf8.count,
+      MemoryLedgerEvidence.maxEvidenceJSONBytes
+    )
     XCTAssertEqual(read.ledgerMetadata["object_entity_ids_json"], "[\"project-release\"]")
     XCTAssertEqual(
       read.ledgerMetadata["trigger_condition_json"],
@@ -53,7 +65,9 @@ final class MemoryLedgerMirrorTests: XCTestCase {
     let initialServer = makeMemory(
       id: id,
       updatedAt: Date(timeIntervalSince1970: 1_000),
-      metadata: canonicalMetadata(city: "Initial city")
+      metadata: canonicalMetadata(city: "Initial city"),
+      evidence: [makeEvidence("ev-initial")],
+      evidenceIsExplicit: true
     )
     try await MemoryStorage.shared.syncServerMemory(initialServer)
 
@@ -77,7 +91,9 @@ final class MemoryLedgerMirrorTests: XCTestCase {
       id: id,
       updatedAt: Date(timeIntervalSince1970: 1_500),
       metadata: canonicalMetadata(city: "Server closure"),
-      status: "superseded"
+      status: "superseded",
+      evidence: [makeEvidence("ev-closure")],
+      evidenceIsExplicit: true
     )
     try await MemoryStorage.shared.syncServerMemories([staleServer])
     let afterStaleRecord = try await MemoryStorage.shared.getMemoryByBackendId(id)
@@ -85,7 +101,59 @@ final class MemoryLedgerMirrorTests: XCTestCase {
     XCTAssertEqual(afterStale.content, "Unrelated local edit")
     XCTAssertEqual(afterStale.updatedAt, Date(timeIntervalSince1970: 2_000))
     XCTAssertEqual(afterStale.ledgerMetadata, staleServer.ledgerMetadata)
+    XCTAssertEqual(afterStale.evidence.map(\.evidenceId), ["ev-closure"])
     XCTAssertNil(afterStaleRecord?.ledgerTriggerConditionJSON, "A server closure must fail closed locally")
+  }
+
+  func testOmittedEvidenceDoesNotEraseExistingMirror() async throws {
+    let id = "ledger-evidence-omitted-\(UUID().uuidString)"
+    let initial = makeMemory(
+      id: id,
+      updatedAt: Date(timeIntervalSince1970: 1_000),
+      metadata: [:],
+      evidence: [makeEvidence("ev-preserved")],
+      evidenceIsExplicit: true
+    )
+    try await MemoryStorage.shared.syncServerMemory(initial)
+
+    let compatibilityResponse = makeMemory(
+      id: id,
+      updatedAt: Date(timeIntervalSince1970: 2_000),
+      metadata: [:]
+    )
+    try await MemoryStorage.shared.syncServerMemory(compatibilityResponse)
+
+    let persistedRecord = try await MemoryStorage.shared.getMemoryByBackendId(id)
+    let persisted = try XCTUnwrap(persistedRecord)
+    XCTAssertEqual(persisted.ledgerEvidence.map(\.evidenceId), ["ev-preserved"])
+    XCTAssertEqual(persisted.toServerMemory()?.evidence.map(\.evidenceId), ["ev-preserved"])
+  }
+
+  func testExplicitEmptyEvidenceClearsMirrorAndSurvivesRoundTrip() async throws {
+    let id = "ledger-evidence-clear-\(UUID().uuidString)"
+    let initial = makeMemory(
+      id: id,
+      updatedAt: Date(timeIntervalSince1970: 1_000),
+      metadata: [:],
+      evidence: [makeEvidence("ev-to-clear")],
+      evidenceIsExplicit: true
+    )
+    try await MemoryStorage.shared.syncServerMemory(initial)
+
+    let cleared = makeMemory(
+      id: id,
+      updatedAt: Date(timeIntervalSince1970: 2_000),
+      metadata: [:],
+      evidence: [],
+      evidenceIsExplicit: true
+    )
+    try await MemoryStorage.shared.syncServerMemory(cleared)
+
+    let persistedRecord = try await MemoryStorage.shared.getMemoryByBackendId(id)
+    let persisted = try XCTUnwrap(persistedRecord)
+    XCTAssertEqual(persisted.ledgerEvidenceJson, "[]")
+    XCTAssertTrue(persisted.toServerMemory()?.evidence.isEmpty == true)
+    XCTAssertTrue(persisted.toServerMemory()?.evidenceIsExplicit == true)
   }
 
   func testAbsentLedgerRowIsSoftDeletedWithoutErasingMirrorMetadata() async throws {
@@ -236,7 +304,9 @@ final class MemoryLedgerMirrorTests: XCTestCase {
     id: String,
     updatedAt: Date = Date(timeIntervalSince1970: 2),
     metadata: [String: String],
-    status: String? = nil
+    status: String? = nil,
+    evidence: [ServerMemoryEvidence] = [],
+    evidenceIsExplicit: Bool = false
   ) -> ServerMemory {
     var metadata = metadata
     if let status { metadata["status"] = status }
@@ -266,7 +336,20 @@ final class MemoryLedgerMirrorTests: XCTestCase {
       inputDeviceName: nil,
       windowTitle: nil,
       headline: nil,
-      ledgerMetadata: metadata
+      ledgerMetadata: metadata,
+      evidence: evidence,
+      evidenceIsExplicit: evidenceIsExplicit
+    )
+  }
+
+  private func makeEvidence(_ id: String, group: String = "conversation-group") -> ServerMemoryEvidence {
+    ServerMemoryEvidence(
+      OmiAPI.Evidence(
+        evidenceId: id,
+        independenceGroup: group,
+        sourceSignal: "transcript",
+        sourceType: "conversation"
+      )
     )
   }
 }

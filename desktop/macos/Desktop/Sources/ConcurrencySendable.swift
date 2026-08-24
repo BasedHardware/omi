@@ -14,6 +14,7 @@ extension KeyPath: @retroactive @unchecked Sendable {}
 extension TaskActionItem: @unchecked Sendable {}
 extension ToolChatResult: @unchecked Sendable {}
 extension ServerConversation: @unchecked Sendable {}
+extension ServerMemoryEvidence: @unchecked Sendable {}
 
 extension OmiAPI.EvidenceRef: @unchecked Sendable {}
 extension OmiAPI.TaskWorkflowControl: @unchecked Sendable {}

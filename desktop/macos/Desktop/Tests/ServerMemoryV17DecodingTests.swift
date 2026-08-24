@@ -345,4 +345,121 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
     )
   }
 
+  func testDecodesGeneratedV3EvidenceIntoBoundedMirror() throws {
+    let json = Data(
+      """
+      {
+        "id": "mem-evidence",
+        "content": "Evidence remains readable",
+        "category": "workflow",
+        "created_at": "2026-06-21T10:00:00Z",
+        "updated_at": "2026-06-21T10:05:00Z",
+        "evidence": [
+          {
+            "evidence_id": "ev-1",
+            "independence_group": "conversation-1",
+            "source_type": "conversation",
+            "source_signal": "transcript",
+            "client_device_id": "desktop-1",
+            "artifact_ref": {"conversation_id": "conv-1"},
+            "capture_confidence": 0.91
+          }
+        ]
+      }
+      """.utf8)
+
+    let memory = try decoder.decode(ServerMemory.self, from: json)
+
+    XCTAssertEqual(memory.content, "Evidence remains readable")
+    XCTAssertTrue(memory.evidenceIsExplicit)
+    let evidence = try XCTUnwrap(memory.evidence.first)
+    XCTAssertEqual(evidence.evidenceId, "ev-1")
+    XCTAssertEqual(evidence.independenceGroup, "conversation-1")
+    XCTAssertEqual(evidence.sourceType, "conversation")
+    XCTAssertEqual(evidence.captureConfidence, 0.91)
+    XCTAssertLessThanOrEqual(
+      try XCTUnwrap(MemoryLedgerEvidence.canonicalJSONString(memory.evidence)).utf8.count,
+      MemoryLedgerEvidence.maxEvidenceJSONBytes
+    )
+  }
+
+  func testMalformedEvidenceFailsClosedWithoutRejectingMemoryText() throws {
+    let json = Data(
+      """
+      {
+        "id": "mem-malformed-evidence",
+        "content": "Keep this memory text",
+        "category": "workflow",
+        "created_at": "2026-06-21T10:00:00Z",
+        "updated_at": "2026-06-21T10:05:00Z",
+        "evidence": [{"evidence_id": "ev-missing-group"}]
+      }
+      """.utf8)
+
+    let memory = try decoder.decode(ServerMemory.self, from: json)
+
+    XCTAssertEqual(memory.content, "Keep this memory text")
+    XCTAssertTrue(memory.evidenceIsExplicit)
+    XCTAssertTrue(memory.evidence.isEmpty)
+  }
+
+  func testFutureShapedEvidenceFailsClosedWithoutRejectingMemoryText() throws {
+    let json = Data(
+      """
+      {
+        "id": "mem-future-evidence",
+        "content": "Future evidence must not block reads",
+        "category": "workflow",
+        "created_at": "2026-06-21T10:00:00Z",
+        "updated_at": "2026-06-21T10:05:00Z",
+        "evidence": {"schema_version": "evidence.v4"}
+      }
+      """.utf8)
+
+    let memory = try decoder.decode(ServerMemory.self, from: json)
+
+    XCTAssertEqual(memory.content, "Future evidence must not block reads")
+    XCTAssertTrue(memory.evidenceIsExplicit)
+    XCTAssertTrue(memory.evidence.isEmpty)
+  }
+
+  func testOversizedAndTooManyEvidenceEntriesFailClosed() throws {
+    let oversizedArtifact = String(
+      repeating: "x", count: MemoryLedgerEvidence.maxEvidenceJSONBytes)
+    let oversizedObject: [String: Any] = [
+      "id": "mem-oversized-evidence",
+      "content": "Oversized evidence must not block reads",
+      "category": "workflow",
+      "created_at": "2026-06-21T10:00:00Z",
+      "updated_at": "2026-06-21T10:05:00Z",
+      "evidence": [
+        [
+          "evidence_id": "ev-oversized",
+          "independence_group": "group",
+          "artifact_ref": ["payload": oversizedArtifact],
+        ]
+      ],
+    ]
+    let oversizedData = try JSONSerialization.data(withJSONObject: oversizedObject)
+    let oversized = try decoder.decode(ServerMemory.self, from: oversizedData)
+    XCTAssertEqual(oversized.content, "Oversized evidence must not block reads")
+    XCTAssertTrue(oversized.evidence.isEmpty)
+
+    let tooManyEntries = (0...MemoryLedgerEvidence.maxEvidenceEntries).map { index in
+      ["evidence_id": "ev-\(index)", "independence_group": "group"]
+    }
+    let tooManyObject: [String: Any] = [
+      "id": "mem-too-many-evidence",
+      "content": "Too many evidence rows must not block reads",
+      "category": "workflow",
+      "created_at": "2026-06-21T10:00:00Z",
+      "updated_at": "2026-06-21T10:05:00Z",
+      "evidence": tooManyEntries,
+    ]
+    let tooManyData = try JSONSerialization.data(withJSONObject: tooManyObject)
+    let tooMany = try decoder.decode(ServerMemory.self, from: tooManyData)
+    XCTAssertEqual(tooMany.content, "Too many evidence rows must not block reads")
+    XCTAssertTrue(tooMany.evidence.isEmpty)
+  }
+
 }
