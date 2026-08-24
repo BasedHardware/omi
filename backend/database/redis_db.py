@@ -3,7 +3,6 @@ import base64
 import json
 import os
 import secrets
-import time
 from typing import Any, Callable, Dict, List, Optional, TypeVar, Union, cast
 from datetime import datetime, timedelta, timezone
 
@@ -960,11 +959,12 @@ _PROACTIVE_QUOTA_COMMITTED_PREFIX = 'committed:'
 
 _PROACTIVE_QUOTA_RESERVE_LUA_SOURCE = """
 local key = KEYS[1]
-local now_ms = tonumber(ARGV[1])
-local lease_ms = tonumber(ARGV[2])
-local window_seconds = tonumber(ARGV[3])
-local limit = tonumber(ARGV[4])
-local token = ARGV[5]
+local server_time = redis.call('TIME')
+local now_ms = tonumber(server_time[1]) * 1000 + math.floor(tonumber(server_time[2]) / 1000)
+local lease_ms = tonumber(ARGV[1])
+local window_seconds = tonumber(ARGV[2])
+local limit = tonumber(ARGV[3])
+local token = ARGV[4]
 
 redis.call('ZREMRANGEBYSCORE', key, '-inf', now_ms)
 local current = redis.call('ZCARD', key)
@@ -988,11 +988,12 @@ _PROACTIVE_QUOTA_RESERVE_LUA = r.register_script(_PROACTIVE_QUOTA_RESERVE_LUA_SO
 
 _PROACTIVE_QUOTA_RENEW_LUA_SOURCE = """
 local key = KEYS[1]
-local now_ms = tonumber(ARGV[1])
-local lease_ms = tonumber(ARGV[2])
-local window_seconds = tonumber(ARGV[3])
-local token = ARGV[4]
-local committed_member = ARGV[5] .. token
+local server_time = redis.call('TIME')
+local now_ms = tonumber(server_time[1]) * 1000 + math.floor(tonumber(server_time[2]) / 1000)
+local lease_ms = tonumber(ARGV[1])
+local window_seconds = tonumber(ARGV[2])
+local token = ARGV[3]
+local committed_member = ARGV[4] .. token
 
 redis.call('ZREMRANGEBYSCORE', key, '-inf', now_ms)
 if redis.call('ZSCORE', key, committed_member) then
@@ -1015,16 +1016,25 @@ _PROACTIVE_QUOTA_RENEW_LUA = r.register_script(_PROACTIVE_QUOTA_RENEW_LUA_SOURCE
 
 _PROACTIVE_QUOTA_FINALIZE_LUA_SOURCE = """
 local key = KEYS[1]
-local now_ms = tonumber(ARGV[1])
-local window_ms = tonumber(ARGV[2])
-local window_seconds = tonumber(ARGV[3])
-local token = ARGV[4]
-local committed_member = ARGV[5] .. token
+local server_time = redis.call('TIME')
+local now_ms = tonumber(server_time[1]) * 1000 + math.floor(tonumber(server_time[2]) / 1000)
+local window_ms = tonumber(ARGV[1])
+local window_seconds = tonumber(ARGV[2])
+local token = ARGV[3]
+local committed_member = ARGV[4] .. token
 
 redis.call('ZREMRANGEBYSCORE', key, '-inf', now_ms)
+local function reset_seconds()
+    local first = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
+    if #first < 2 then
+        return 0
+    end
+    return math.max(0, math.ceil((tonumber(first[2]) - now_ms) / 1000))
+end
+
 local committed_score = redis.call('ZSCORE', key, committed_member)
 if committed_score then
-    return {1, math.max(0, math.ceil((tonumber(committed_score) - now_ms) / 1000))}
+    return {1, reset_seconds()}
 end
 if not redis.call('ZSCORE', key, token) then
     return {0, 0}
@@ -1033,7 +1043,7 @@ end
 redis.call('ZREM', key, token)
 redis.call('ZADD', key, now_ms + window_ms, committed_member)
 redis.call('EXPIRE', key, window_seconds)
-return {1, window_seconds}
+return {1, reset_seconds()}
 """
 _PROACTIVE_QUOTA_FINALIZE_LUA = r.register_script(_PROACTIVE_QUOTA_FINALIZE_LUA_SOURCE)
 
@@ -1071,7 +1081,7 @@ def reserve_proactive_rate_limit(
     token = secrets.token_urlsafe(24)
     result = _PROACTIVE_QUOTA_RESERVE_LUA(
         keys=[_proactive_quota_key(key, policy)],
-        args=[int(time.time() * 1000), lease_seconds * 1000, window, max_requests, token],
+        args=[lease_seconds * 1000, window, max_requests, token],
     )
     allowed, current, reset_seconds, returned_token = result
     admitted = bool(allowed)
@@ -1092,7 +1102,7 @@ def renew_proactive_rate_limit(
         return False, 0
     result = _PROACTIVE_QUOTA_RENEW_LUA(
         keys=[_proactive_quota_key(key, policy)],
-        args=[int(time.time() * 1000), lease_seconds * 1000, window, token, _PROACTIVE_QUOTA_COMMITTED_PREFIX],
+        args=[lease_seconds * 1000, window, token, _PROACTIVE_QUOTA_COMMITTED_PREFIX],
     )
     return bool(result[0]), max(0, int(result[1]))
 
@@ -1110,7 +1120,6 @@ def finalize_proactive_rate_limit(
     result = _PROACTIVE_QUOTA_FINALIZE_LUA(
         keys=[_proactive_quota_key(key, policy)],
         args=[
-            int(time.time() * 1000),
             window * 1000,
             window,
             token,
