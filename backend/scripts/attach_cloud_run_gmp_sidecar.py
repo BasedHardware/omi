@@ -589,6 +589,23 @@ def attach_sidecar(args: argparse.Namespace) -> None:
     print(f'Attached pinned GMP sidecar to zero-traffic revision {args.final_revision}')
 
 
+def _drop_pinned_revision_name(service: dict[str, Any]) -> str | None:
+    """Remove spec.template.metadata.name, returning what was removed.
+
+    Cloud Run refuses `services replace` when the spec pins a revision name that
+    already exists with different configuration, which is exactly the state a
+    failed deploy leaves behind.
+    """
+    template = service.get('spec', {}).get('template') if isinstance(service.get('spec'), dict) else None
+    if not isinstance(template, dict):
+        return None
+    metadata = template.get('metadata')
+    if not isinstance(metadata, dict):
+        return None
+    name = metadata.pop('name', None)
+    return name if isinstance(name, str) and name else None
+
+
 def repair_secret_annotations(args: argparse.Namespace) -> int:
     """Rewrite project-ID secret paths on a live service into project-number paths.
 
@@ -654,6 +671,18 @@ def repair_secret_annotations(args: argparse.Namespace) -> int:
     if args.dry_run:
         print('--dry-run: no changes applied')
         return 0
+
+    # A failed deploy leaves its pinned revision name in the exported spec.
+    # `services replace` then tries to recreate that exact name with different
+    # config and Cloud Run rejects it:
+    #   ALREADY_EXISTS: Revision named '<name>' with different configuration
+    #   already exists.
+    # Repair is not creating a named release, so drop the pin and let Cloud Run
+    # assign a fresh name. Traffic is unaffected: the traffic block in the export
+    # still pins whatever revision is currently serving.
+    pinned = _drop_pinned_revision_name(service)
+    if pinned:
+        print(f'dropping stale pinned revision name {pinned} so Cloud Run can assign a fresh one')
 
     path: Path | None = None
     try:
