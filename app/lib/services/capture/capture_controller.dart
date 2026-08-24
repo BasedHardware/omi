@@ -1830,6 +1830,12 @@ class CaptureController extends ChangeNotifier
 
   void _startInProgressConversationRefresh() {
     if (!_canRefreshInProgressConversation || segments.isNotEmpty || photos.isNotEmpty) return;
+    // The socket calls this on every connect. If a cycle is already running, leave it
+    // alone: restarting it resets the attempt counter, so a connection that reconnects
+    // more often than the give-up window keeps this polling
+    // GET /v1/conversations?...&statuses=in_progress forever instead of ever
+    // reaching the cap.
+    if (_inProgressConversationRefreshTimer?.isActive ?? false) return;
 
     _stopInProgressConversationRefresh();
     _inProgressConversationRefreshAttempts = 0;
@@ -1837,6 +1843,15 @@ class CaptureController extends ChangeNotifier
       _refreshInProgressConversationTick();
     });
   }
+
+  @visibleForTesting
+  void startInProgressConversationRefreshForTesting() => _startInProgressConversationRefresh();
+
+  @visibleForTesting
+  bool get inProgressConversationRefreshActiveForTesting => _inProgressConversationRefreshTimer?.isActive ?? false;
+
+  @visibleForTesting
+  int get inProgressConversationRefreshAttemptsForTesting => _inProgressConversationRefreshAttempts;
 
   void _stopInProgressConversationRefresh() {
     _inProgressConversationRefreshTimer?.cancel();
