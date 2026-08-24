@@ -378,8 +378,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         final conversation = provider.conversation;
         final summaryContent =
             conversation.appResults.isNotEmpty && conversation.appResults[0].content.trim().isNotEmpty
-            ? conversation.appResults[0].content.trim()
-            : conversation.structured.toString();
+                ? conversation.appResults[0].content.trim()
+                : conversation.structured.toString();
         _copyContent(context, summaryContent);
         break;
       case 'download_audio':
@@ -832,8 +832,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                         provider.conversation.starred = newStarredState;
                                         // Update in conversation provider
                                         context.read<ConversationProvider>().updateConversationInSortedList(
-                                          provider.conversation,
-                                        );
+                                              provider.conversation,
+                                            );
                                         // Track star/unstar action
                                         PlatformManager.instance.analytics.conversationStarToggled(
                                           conversation: provider.conversation,
@@ -1172,15 +1172,13 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                   child: Consumer<ConversationDetailProvider>(
                     builder: (context, provider, child) {
                       final conversation = provider.conversation;
-                      final hasActionItems = conversation.structured.actionItems
-                          .where((item) => !item.deleted)
-                          .isNotEmpty;
+                      final hasActionItems =
+                          conversation.structured.actionItems.where((item) => !item.deleted).isNotEmpty;
                       return ConversationBottomBar(
                         mode: ConversationBottomBarMode.detail,
                         selectedTab: selectedTab,
                         conversation: conversation,
-                        hasSegments:
-                            conversation.transcriptSegments.isNotEmpty ||
+                        hasSegments: conversation.transcriptSegments.isNotEmpty ||
                             conversation.photos.isNotEmpty ||
                             conversation.externalIntegration != null,
                         hasActionItems: hasActionItems,
@@ -1806,29 +1804,29 @@ class _CalendarEventPickerSheetState extends State<CalendarEventPickerSheet> {
             child: _isLoading
                 ? _buildShimmerList()
                 : _events.isEmpty
-                ? const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(40),
-                      child: Text(
-                        'No calendar events found around this time.',
-                        style: TextStyle(color: Colors.grey, fontSize: 15),
-                        textAlign: TextAlign.center,
+                    ? const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(40),
+                          child: Text(
+                            'No calendar events found around this time.',
+                            style: TextStyle(color: Colors.grey, fontSize: 15),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      )
+                    : ListView.separated(
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        itemCount: _events.length,
+                        separatorBuilder: (_, __) =>
+                            const Divider(color: Color(0xFF2A2A2E), height: 1, indent: 16, endIndent: 16),
+                        itemBuilder: (context, index) {
+                          final event = _events[index];
+                          final isLinkingThis = _linkingEventId == event.eventId;
+                          final isSuggested = event.eventId == _suggestedEventId;
+                          return _buildEventTile(event, isSuggested, isLinkingThis);
+                        },
                       ),
-                    ),
-                  )
-                : ListView.separated(
-                    shrinkWrap: true,
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    itemCount: _events.length,
-                    separatorBuilder: (_, __) =>
-                        const Divider(color: Color(0xFF2A2A2E), height: 1, indent: 16, endIndent: 16),
-                    itemBuilder: (context, index) {
-                      final event = _events[index];
-                      final isLinkingThis = _linkingEventId == event.eventId;
-                      final isSuggested = event.eventId == _suggestedEventId;
-                      return _buildEventTile(event, isSuggested, isLinkingThis);
-                    },
-                  ),
           ),
           SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
         ],
@@ -1904,7 +1902,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
               segments,
               photos,
               null,
-              conversationId: widget.conversation.id,
+              conversationId: conversation.id,
               horizontalMargin: false,
               topMargin: false,
               canDisplaySeconds: provider.canDisplaySeconds,
@@ -1922,11 +1920,9 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                 }
                 final segments = provider.conversation.transcriptSegments;
                 final segment = segments[segmentIndex];
-                final person = segment.personId != null
-                    ? SharedPreferencesUtil().getPersonById(segment.personId!)
-                    : null;
-                final speakerName =
-                    person?.name ??
+                final person =
+                    segment.personId != null ? SharedPreferencesUtil().getPersonById(segment.personId!) : null;
+                final speakerName = person?.name ??
                     context.l10n.speakerWithId('${TranscriptSegment.getDisplaySpeakerId(segment.speakerId, segments)}');
                 PlatformManager.instance.analytics.editSegmentTextStarted();
                 bool saved = false;
@@ -1985,9 +1981,8 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                               );
                               if (segmentIndex == -1) continue;
                               provider.conversation.transcriptSegments[segmentIndex].isUser = finalPersonId == 'user';
-                              provider.conversation.transcriptSegments[segmentIndex].personId = finalPersonId == 'user'
-                                  ? null
-                                  : finalPersonId;
+                              provider.conversation.transcriptSegments[segmentIndex].personId =
+                                  finalPersonId == 'user' ? null : finalPersonId;
                             }
                             await assignBulkConversationTranscriptSegments(
                               provider.conversation.id,

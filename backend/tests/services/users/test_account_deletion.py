@@ -1371,6 +1371,16 @@ def test_purge_derived_user_data_isolates_backends_and_reloads_conversation_ids(
         MagicMock(return_value={'vector_ids': ['canonical-1', 'canonical-2']}),
     )
     monkeypatch.setattr(account_deletion, 'get_conversation_photos', lambda uid, conversation_id: [])
+    monkeypatch.setattr(
+        account_deletion.frame_requests_db, 'list_all_frame_request_storage_ids', lambda uid: ['request-object']
+    )
+    monkeypatch.setattr(
+        account_deletion.frame_requests_db,
+        'list_all_frame_upload_orphan_storage_ids',
+        lambda uid: ['orphan-object'],
+    )
+    delete_frame_pixels = MagicMock()
+    monkeypatch.setattr(account_deletion, 'delete_frame_request_pixels_for_user', delete_frame_pixels)
 
     result = account_deletion.purge_derived_user_data('uid1')
 
@@ -1394,6 +1404,7 @@ def test_purge_derived_user_data_isolates_backends_and_reloads_conversation_ids(
         'vectors_deleted': 8,
         'recordings_deleted': 3,
     }
+    delete_frame_pixels.assert_called_once_with('uid1', ['request-object', 'orphan-object'])
 
 
 def test_purge_derived_user_data_continues_after_each_failure(monkeypatch):

@@ -303,14 +303,12 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
                 if (bytes == null || bytes.isEmpty) {
                   return const Center(child: Icon(Icons.broken_image_outlined, color: Colors.white70));
                 }
-                return PhotoView(
-                  imageProvider: MemoryImage(bytes),
-                  minScale: PhotoViewComputedScale.contained,
-                  maxScale: PhotoViewComputedScale.covered * widget.maxScaleMultiplier,
-                  heroAttributes: item.heroTag != null ? PhotoViewHeroAttributes(tag: item.heroTag!) : null,
-                );
+                return Image.memory(bytes, fit: BoxFit.contain, gaplessPlayback: true);
               },
             ),
+            minScale: PhotoViewComputedScale.contained,
+            maxScale: PhotoViewComputedScale.covered * widget.maxScaleMultiplier,
+            heroAttributes: item.heroTag != null ? PhotoViewHeroAttributes(tag: item.heroTag!) : null,
           );
         }
         return PhotoViewGalleryPageOptions(

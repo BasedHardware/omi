@@ -328,7 +328,7 @@ def _document_data_with_revision(document) -> Optional[Dict[str, Any]]:
     return data
 
 
-def _prepare_photo_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[str, Any]:
+def prepare_photo_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[str, Any]:
     data = copy.deepcopy(data)
     data['data_protection_level'] = level
     if level == 'enhanced' and 'base64' in data and isinstance(data['base64'], str):
@@ -1848,7 +1848,7 @@ def store_conversation_photos(
             photo_ref = photos_ref.document(photo_id)
             data = photo.model_dump()
             data['id'] = photo_id
-            transaction.set(photo_ref, _prepare_photo_for_write(data, uid, level))
+            transaction.set(photo_ref, prepare_photo_for_write(data, uid, level))
         transaction.update(conversation_ref, {'has_content': True, 'has_photos': True})
         return True
 
