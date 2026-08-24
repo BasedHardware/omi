@@ -217,19 +217,10 @@ actor ContextProactivityEngine {
         startedAt: fence.startedAt,
         endedAt: frameFreshness.endedAt)
     else { return }
-    let jitAdmission = await JITProactivityRuntime.shared.admission(
+    if await JITProactivityCoordinator.shared.handle(
+      fence: fence, snapshot: snapshot, frame: frameSample.frame,
       authorizationSnapshot: authorizationSnapshot)
-    switch jitAdmission {
-    case .legacyContextBucketFallback(let reason):
-      await ContextProactivityTelemetry.recordJITAdmission(outcome: "legacy_fallback", reason: reason)
-    case .suppressed(let reason):
-      await ContextProactivityTelemetry.recordJITAdmission(outcome: "suppressed", reason: reason)
-      return
-    case .deliver(let lane, _, _):
-      // Production admission cannot reach this until the authoritative action
-      // and durable receipt contract is installed.
-      await ContextProactivityTelemetry.recordJITAdmission(
-        outcome: "contract_missing", reason: lane.rawValue)
+    {
       return
     }
     await evaluateAndDeliver(
@@ -282,6 +273,12 @@ actor ContextProactivityEngine {
       log(
         "DepartureEvalDebug: ineligible snapshot worthiness=\(snapshot.notifyWorthiness) facts=\(snapshot.validatedFacts.count)"
       )
+      return
+    }
+    if await JITProactivityCoordinator.shared.handle(
+      fence: fence, snapshot: snapshot, frame: departingFrame,
+      authorizationSnapshot: authorizationSnapshot)
+    {
       return
     }
     log("DepartureEvalDebug: proceeding to evaluateAndDeliver")

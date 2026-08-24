@@ -2592,7 +2592,7 @@ actor RewindDatabase {
       }
     }
 
-    try migrator.migrate(queue)
+    try JITTriggerMirrorSchema.migrating(migrator, queue: queue)
     try ContextBucketSchema.removeMigratedLegacyDefaults(
       afterMigrating: queue,
       defaults: .standard,

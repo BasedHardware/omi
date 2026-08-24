@@ -96,6 +96,23 @@ def test_compiler_normalizes_all_local_watchlist_selectors_deterministically():
     assert compiled.as_condition() == compile_trigger_condition(compiled.as_condition()).as_condition()
 
 
+def test_trigger_action_is_bounded_typed_and_round_trips_with_selectors():
+    compiled = compile_trigger_condition(
+        {
+            "keywords": ["release"],
+            "action": {"type": "agent_prompt", "prompt": " Summarize the next release step. "},
+        }
+    )
+
+    assert compiled.condition.action is not None
+    assert compiled.condition.action.prompt == "Summarize the next release step."
+    assert compile_trigger_condition(compiled.as_condition()).as_condition() == compiled.as_condition()
+    with pytest.raises(ValueError):
+        compile_trigger_condition({"keywords": ["release"], "action": {"type": "notify", "prompt": "x"}})
+    with pytest.raises(ValueError):
+        compile_trigger_condition({"keywords": ["release"], "action": {"type": "agent_prompt", "prompt": "x" * 2001}})
+
+
 @pytest.mark.parametrize(
     "condition",
     [

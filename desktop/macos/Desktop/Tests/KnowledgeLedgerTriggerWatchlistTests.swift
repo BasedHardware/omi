@@ -15,6 +15,7 @@ final class KnowledgeLedgerTriggerWatchlistTests: XCTestCase {
         "apps": ["Slack"],
         "windows": ["#release"],
         "embedding": ["prototype_id": "release-intent", "min_similarity": 0.8],
+        "action": ["type": "agent_prompt", "prompt": "Give me the next release step."],
       ],
       modelID: "local-trigger-model",
       modelVersion: "2026-08",
@@ -27,6 +28,9 @@ final class KnowledgeLedgerTriggerWatchlistTests: XCTestCase {
     XCTAssertEqual(trigger.metadata.modelVersion, "2026-08")
     XCTAssertEqual(trigger.metadata.threshold, 0.91)
     XCTAssertEqual(trigger.metadata.wakeupBudgetPerDay, 2)
+    XCTAssertEqual(
+      trigger.action,
+      KnowledgeLedgerTriggerAction(type: "agent_prompt", prompt: "Give me the next release step."))
     let observation = KnowledgeLedgerTriggerObservation(
       eventID: "event-1",
       text: "Omi release discussion",
