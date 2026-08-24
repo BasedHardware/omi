@@ -39,7 +39,7 @@ from utils.aac import AACDecoder
 from utils.llm.openglass import describe_image
 from utils.request_validation import ImageChunkEnvelope
 from utils.speaker_assignment import update_speaker_assignment_maps
-from utils.byok import get_byok_key
+from utils.subscription import _request_has_llm_byok_key
 from utils.executors import db_executor, run_blocking
 from utils.transcribe_decisions import should_skip_custom_stt_postprocessing
 from utils.stt.live_failure import (
@@ -486,7 +486,7 @@ class ListenReceiver:
             except Exception as error:
                 logger.warning('Custom-STT photo BYOK enrollment lookup failed type=%s', type(error).__name__)
                 byok_active = False
-            has_llm_byok_key = bool(byok_active and (get_byok_key('openai') or get_byok_key('anthropic')))
+            has_llm_byok_key = bool(byok_active and _request_has_llm_byok_key())
             skip_photo_description = should_skip_custom_stt_postprocessing(
                 uses_custom_stt=True,
                 has_llm_byok_key=has_llm_byok_key,
