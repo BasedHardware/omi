@@ -21,6 +21,7 @@ async def test_start_sends_question_zero_once_after_client_request():
         events.append(event)
 
     handler = OnboardingHandler('user-1', send_message, transcript_batches.append)
+    assert len(handler.session_id) == 32
 
     await handler.start()
     await handler.start()

@@ -18,6 +18,7 @@ from typing import Any, Iterable, Optional, Protocol, cast
 
 from pydantic import ValidationError
 from google.cloud.firestore_v1 import FieldFilter
+from google.cloud.firestore_v1.field_path import FieldPath
 
 from database._client import db as default_db_client
 from database.memory_collections import MemoryCollections
@@ -71,6 +72,8 @@ LEDGER_ROW_AUTHORIZATION_TIMEOUT_SECONDS = 15.0
 EXPIRY_ADJUDICATION_LOOKAHEAD = DEFAULT_SHORT_TERM_TTL / 2
 CANONICAL_MEMORY_MAINTENANCE_SEED_CURSOR_PATH = "canonical_memory_maintenance_control/seed_cursor"
 CANONICAL_MEMORY_MAINTENANCE_SEED_SCHEMA_VERSION = 1
+DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_CURSOR_PATH = "daily_memory_sweep_control/onboarding_inventory_cursor"
+DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_SCHEMA_VERSION = 1
 CANONICAL_MEMORY_DREAMING_STATE_COLLECTION = "canonical_memory_dreaming_state"
 DREAMING_MIN_INTERVAL = timedelta(hours=20)
 OVERFLOW_SHORT_TERM_THRESHOLD = 10
@@ -408,7 +411,7 @@ def bounded_daily_memory_sweep_uid_inventory(
     db_client: Any,
     *,
     limit: int = MAX_MAINTENANCE_UIDS_PER_RUN,
-    persist_cursor: bool = False,
+    persist_cursor: bool = True,
 ) -> tuple[str, ...]:
     """Union canonical users with bounded onboarding cold-start users.
 
@@ -420,35 +423,85 @@ def bounded_daily_memory_sweep_uid_inventory(
     """
 
     bounded_limit = max(1, min(MAX_MAINTENANCE_UIDS_PER_RUN, int(limit)))
-    canonical = bounded_canonical_memory_uid_inventory(
-        db_client,
-        limit=bounded_limit,
-        persist_cursor=persist_cursor,
+    # Reserve half the bounded page for the cold-start channel.  A canonical
+    # registry page can contain hundreds of existing users; without a reserve
+    # a newly onboarded account would never reach the sweep.
+    onboarding_limit = max(1, bounded_limit // 2) if bounded_limit > 1 else 1
+    canonical_limit = max(0, bounded_limit - onboarding_limit)
+    canonical = (
+        bounded_canonical_memory_uid_inventory(
+            db_client,
+            limit=canonical_limit,
+            persist_cursor=persist_cursor,
+        )
+        if canonical_limit
+        else ()
     )
     users = getattr(db_client, "collection", lambda _name: None)("users")
     where = getattr(users, "where", None)
     if not callable(where):
         raise CanonicalMaintenanceInventoryUnavailable("onboarding cold-start inventory is unavailable")
-    discovered: set[str] = set(canonical)
-    remaining = bounded_limit
+    discovered: list[str] = []
+    for uid in canonical:
+        if uid not in discovered:
+            discovered.append(uid)
+    onboarding_cursor_ref = db_client.document(DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_CURSOR_PATH)
     try:
+        cursor_snapshot = onboarding_cursor_ref.get()
+        cursor_payload = cursor_snapshot.to_dict() if getattr(cursor_snapshot, "exists", False) else {}
+    except Exception as exc:
+        raise CanonicalMaintenanceInventoryUnavailable("onboarding inventory cursor unavailable") from exc
+    if cursor_payload and (
+        not isinstance(cursor_payload, dict)
+        or cursor_payload.get("schema_version") != DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_SCHEMA_VERSION
+    ):
+        raise CanonicalMaintenanceInventoryUnavailable("onboarding inventory cursor is malformed")
+    onboarding_cursor = str(cursor_payload.get("last_uid", "")) if isinstance(cursor_payload, dict) else ""
+    onboarding_uids: list[str] = []
+    candidate_rows: list[str] = []
+
+    def read_onboarding_page(*, after_uid: str = "") -> list[str]:
+        rows: list[str] = []
         for field_name in ("onboarding.completed", "onboarding.device_onboarding_completed"):
-            if len(discovered) >= bounded_limit:
-                break
             try:
-                query = where(filter=FieldFilter(field_name, "==", True))
+                query: Any = where(filter=FieldFilter(field_name, "==", True))
             except TypeError:
-                query = where(field_name, "==", True)
-            for snapshot in cast(Any, query).limit(remaining).stream():
+                query = cast(Any, where)(field_name, "==", True)
+            if after_uid:
+                try:
+                    query = query.where(filter=FieldFilter(FieldPath.document_id(), ">", after_uid))
+                except TypeError:
+                    query = query.where(FieldPath.document_id(), ">", after_uid)
+            try:
+                query = query.order_by("__name__")
+            except (AttributeError, TypeError):
+                pass
+            for snapshot in query.limit(onboarding_limit).stream():
                 uid = str(getattr(snapshot, "id", "") or "").strip()
-                if uid and "/" not in uid:
-                    discovered.add(uid)
-                    if len(discovered) >= bounded_limit:
-                        break
-            remaining = max(0, bounded_limit - len(discovered))
+                if uid and "/" not in uid and uid not in rows:
+                    rows.append(uid)
+        return rows
+
+    try:
+        candidate_rows = read_onboarding_page(after_uid=onboarding_cursor)
+        if onboarding_cursor and not candidate_rows:
+            candidate_rows = read_onboarding_page()
     except Exception as exc:
         raise CanonicalMaintenanceInventoryUnavailable("onboarding cold-start inventory query failed") from exc
-    return tuple(sorted(discovered))[:bounded_limit]
+    candidate_rows.sort()
+    onboarding_uids = candidate_rows[:onboarding_limit]
+    for uid in onboarding_uids:
+        if uid not in discovered:
+            discovered.append(uid)
+    if persist_cursor and onboarding_uids:
+        onboarding_cursor_ref.set(
+            {
+                "schema_version": DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_SCHEMA_VERSION,
+                "last_uid": onboarding_uids[-1],
+            },
+            merge=True,
+        )
+    return tuple(discovered[:bounded_limit])
 
 
 def _resolve_maintenance_uids(

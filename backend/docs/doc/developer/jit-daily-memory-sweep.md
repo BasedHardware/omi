@@ -27,12 +27,24 @@ The runtime adapter reads a bounded backend-produced packet at
 are `daily_summary`, `onboarding_cold_start`, and
 `existing_trigger_reconciliation`; this staging packet is not a memory
 authority and is inert while the backend switch is closed. When staging is
-absent, the adapter consults only the persisted completed-day daily summary
-for the exact window (never today's partial conversations) and an explicit
-onboarding seed channel. Missing summary/source evidence remains incomplete
-and cannot advance the cursor. Model-produced summary candidates require the
-separate model/cost authority and bounded deployment flags
+absent, the completed-day producer proves an exact UTC window, excludes
+discarded/processing/unfinished conversations, and sends only transcript text
+(never photos, screen pixels, or today's partial window) through the existing
+bounded memory extractor. An optional typed summary packet is accepted only
+when it explicitly attests completion; a missing or failed source remains
+incomplete and cannot advance the cursor. Model-produced candidates require
+the separate model/cost authority and bounded deployment flags
 `MEMORY_DAILY_MEMORY_SWEEP_MODEL_*`.
+
+Onboarding provenance is a server-generated session marker written by the
+listen runtime; client `source` and onboarding flags are not trusted. The
+producer returns source identities separately from candidates, so a source
+with multiple facts is consumed only after every candidate receipt commits,
+and a zero-candidate source receives an idempotent completion receipt. The
+maintenance inventory reserves a bounded onboarding page and advances its own
+cursor independently of the canonical-user registry, preventing cold-start
+starvation. Cohort rollout uses a read-only per-user resolver seam and fails
+closed by default; it never mutates PostHog.
 
 The runner accepts a mapping of completed local dates, derives the user's
 local day through `zoneinfo`, and never consumes today's partial window. It
@@ -47,7 +59,9 @@ measure 23 hours and fall-back days 25 hours. A timezone change with an
 existing completed cursor fails closed with
 `timezone_changed_requires_reconciliation`; an operator must explicitly
 reconcile/reset the cursor rather than silently replaying an overlap or
-skipping a gap.
+skipping a gap. Reconciliation transactionally rolls the source generation
+and resets the local-date anchor, so overlapping dates cannot collide with
+old receipts.
 
 ## Authority and safety
 
@@ -78,7 +92,9 @@ generation; a transactional source-generation rollover preserves the exact
 completed-day window identity and rejects stale packets.
 The per-user cursor lives under `memory_control/daily_memory_sweep`. Each
 candidate additionally gets a content-free receipt keyed by local date, source
-key, and generations under `daily_memory_sweep_receipts`. A receipt is claimed
+key, and generations under `daily_memory_sweep_receipts`; onboarding sources
+also receive a source-level receipt after all of their candidate receipts.
+A receipt is claimed
 before the canonical write and marked committed after it. If a process dies
 between those steps, the pending exact-digest date is recovered even after the
 wall clock advances; canonical apply idempotency prevents a second

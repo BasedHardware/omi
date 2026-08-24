@@ -13,6 +13,13 @@ from utils.memory.daily_memory_sweep import (
     plan_daily_memory_sweep,
     run_daily_memory_sweep,
 )
+from utils.memory.daily_memory_sweep import (
+    DailySweepRuntimeSources,
+    _completed_day_row_eligibility,
+    reconcile_daily_memory_sweep_timezone,
+    _finish_onboarding_sources,
+    _receipt_id,
+)
 
 
 def _candidate(**updates):
@@ -168,6 +175,34 @@ def test_packet_requires_explicit_complete_exact_window_and_onboarding_is_direct
     assert onboarding.authority.rank == SweepAuthority.direct_user_statement.rank
 
 
+def test_completed_day_eligibility_proof_excludes_discarded_and_unfinished_rows():
+    finished = {"status": "completed", "finished_at": datetime(2026, 8, 23, tzinfo=timezone.utc)}
+    assert _completed_day_row_eligibility(finished) == "eligible"
+    assert _completed_day_row_eligibility({**finished, "discarded": True}) == "discarded"
+    assert (
+        _completed_day_row_eligibility({"status": "processing", "finished_at": finished["finished_at"]}) == "unfinished"
+    )
+    assert _completed_day_row_eligibility({"status": "completed"}) == "unfinished"
+
+
+def test_runtime_source_status_counts_auxiliary_candidates_and_zero_sources():
+    source = DailySweepRuntimeSources.from_iterables(
+        onboarding_cold_start=(_candidate(source_type="onboarding", authority=SweepAuthority.direct_user_statement),),
+        onboarding_source_keys=("onboarding:conversation-1",),
+        complete=True,
+        source_status="complete_zero",
+    )
+    assert source.source_status == "complete"
+    assert source.onboarding_source_keys == ("onboarding:conversation-1",)
+    zero = DailySweepRuntimeSources.from_iterables(
+        onboarding_source_keys=("onboarding:conversation-empty",),
+        complete=True,
+        source_status="complete_zero",
+    )
+    assert zero.candidates() == ()
+    assert zero.onboarding_source_keys
+
+
 def test_authority_is_closed_by_default():
     output = run_daily_memory_sweep(
         "user-1",
@@ -207,8 +242,11 @@ class _Ref:
 
 
 class _Transaction:
-    def set(self, ref, value):
-        ref.set(value)
+    def get(self, ref):
+        return ref.get()
+
+    def set(self, ref, value, merge=False):
+        ref.set(value, merge=merge)
 
 
 class _Db:
@@ -358,3 +396,72 @@ def test_runner_blocks_generation_mismatch_before_writes(monkeypatch):
     assert output.status == "blocked"
     assert output.blocked_reason == "input_generation_mismatch"
     assert not db.store
+
+
+def test_timezone_reconcile_rolls_source_generation_with_cursor_namespace(monkeypatch):
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    old_window = completed_local_day_window(date(2026, 8, 23), "America/New_York")
+    db.document("users/user-1/memory_control/daily_memory_sweep").set(
+        {
+            "schema_version": "daily_memory_sweep_cursor.v1",
+            "uid": "user-1",
+            "account_generation": control.account_generation,
+            "source_generation": control.source_generation,
+            "generation": 1,
+            "timezone_name": "America/New_York",
+            "last_completed_local_date": "2026-08-23",
+            "last_completed_window_id": old_window.window_id,
+            "last_completed_window_start_utc": old_window.start_utc,
+            "last_completed_window_end_utc": old_window.end_utc,
+            "updated_at": datetime(2026, 8, 24, tzinfo=timezone.utc),
+        }
+    )
+    assert reconcile_daily_memory_sweep_timezone(
+        "user-1",
+        "UTC",
+        db_client=db,
+        reconciliation_authorized=True,
+    )
+    updated_control = db.document("users/user-1/memory_state/apply_control").get().to_dict()
+    updated_cursor = db.document("users/user-1/memory_control/daily_memory_sweep").get().to_dict()
+    assert updated_control["source_generation"] == control.source_generation + 1
+    assert updated_cursor["source_generation"] == control.source_generation + 1
+    assert updated_cursor["timezone_name"] == "UTC"
+    assert updated_cursor["last_completed_local_date"] is None
+
+
+def test_onboarding_source_receipt_consumes_multi_candidate_and_zero_sources(monkeypatch):
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    local_date = date(2026, 8, 23)
+    window = completed_local_day_window(local_date, "America/New_York")
+    first = _candidate(
+        candidate_id="onboarding-a",
+        source_id="onboarding:conversation-1",
+        source_type="onboarding",
+        authority=SweepAuthority.direct_user_statement,
+    )
+    second = first.model_copy(update={"candidate_id": "onboarding-b", "content": "Alice lives in NYC"})
+    for candidate in (first, second):
+        db.document(
+            f"users/user-1/daily_memory_sweep_receipts/"
+            f"{_receipt_id('user-1', local_date, candidate, account_generation=4, source_generation=7)}"
+        ).set({"receipt_state": "committed"})
+    assert _finish_onboarding_sources(
+        db,
+        "user-1",
+        local_date,
+        ("onboarding:conversation-1", "onboarding:conversation-empty"),
+        (first, second),
+        account_generation=4,
+        source_generation=7,
+        window=window,
+    )
+    consumed = db.document("users/user-1/memory_control/daily_memory_sweep_onboarding").get().to_dict()
+    assert set(consumed["consumed_source_keys"]) == {
+        "onboarding:conversation-1",
+        "onboarding:conversation-empty",
+    }
