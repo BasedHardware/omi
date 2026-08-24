@@ -56,15 +56,26 @@ async def verify_and_transcribe_sample(
         raw_words = cast(Any, raw_words[0])
     words: List[Dict[str, Any]] = cast(List[Dict[str, Any]], raw_words)
 
-    if len(words) < MIN_WORDS:
-        return None, False, f"insufficient_words: {len(words)}/{MIN_WORDS}"
+    # Count words in the text, not entries in the list. A transcriber is free to return either
+    # granularity: Deepgram emits one entry per word, so the two are the same number there, but
+    # parakeet emits one entry per SEGMENT with the whole utterance inside. Measured on a 24.9s
+    # sample: parakeet returns segments=1 and no word field, so the entry count read 1 and every
+    # sample was rejected as `insufficient_words` no matter what it contained. The same miscount
+    # made the multi-speaker guard inert rather than strict — one entry means ratio 1.0, so a
+    # sample carrying two voices passed. Both are unchanged for a word-granular provider.
+    def _words_in(entry: Dict[str, Any]) -> int:
+        return len((entry.get('text') or '').split())
+
+    total_words = sum(_words_in(word) for word in words)
+
+    if total_words < MIN_WORDS:
+        return None, False, f"insufficient_words: {total_words}/{MIN_WORDS}"
 
     speaker_counts: Dict[str, int] = {}
     for word in words:
         speaker = word.get('speaker', 'SPEAKER_00')
-        speaker_counts[speaker] = speaker_counts.get(speaker, 0) + 1
+        speaker_counts[speaker] = speaker_counts.get(speaker, 0) + _words_in(word)
 
-    total_words = len(words)
     dominant_count = max(speaker_counts.values()) if speaker_counts else 0
     dominant_ratio = dominant_count / total_words if total_words > 0 else 0
 
