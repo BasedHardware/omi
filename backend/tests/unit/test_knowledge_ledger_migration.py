@@ -888,7 +888,9 @@ def test_production_sweep_closes_short_term_as_legacy_generated_history(monkeypa
     monkeypatch.setattr(
         knowledge_ledger_migration,
         "close_canonical_legacy_generated_history",
-        lambda uid, memory_id, **kwargs: closed.append((uid, memory_id, kwargs["expected_item_revision"])),
+        lambda uid, memory_id, **kwargs: closed.append(
+            (uid, memory_id, kwargs["expected_item_revision"], kwargs["expected_tier"])
+        ),
     )
     db = _PublishingDB(_publisher_control())
 
@@ -901,7 +903,7 @@ def test_production_sweep_closes_short_term_as_legacy_generated_history(monkeypa
         completed_at=NOW,
     )
 
-    assert closed == [("u1", "mem-1", short_item.item_revision)]
+    assert closed == [("u1", "mem-1", short_item.item_revision, MemoryLayer.short_term)]
     assert result.adjudicated_short_term_count == 1
     assert result.receipt is not None
 
@@ -958,6 +960,45 @@ def test_short_term_adjudication_uses_canonical_close_and_marks_retained_history
     assert closed.valid_to == NOW
     assert closed.arguments["history_class"] == "legacy_generated"
     assert closed.write_reason == "legacy_migration"
+
+
+@pytest.mark.parametrize(
+    ("transaction_item", "error"),
+    [
+        (_item(tier=MemoryLayer.long_term), "only active pre-ledger Short-term rows"),
+        (_item(tier=MemoryLayer.short_term, item_revision=5), "source revision changed"),
+    ],
+)
+def test_short_term_adjudication_rejects_transaction_visible_tier_or_revision_drift(
+    monkeypatch, transaction_item, error
+):
+    planned_item = _item(tier=MemoryLayer.short_term)
+    committed = []
+
+    monkeypatch.setattr(
+        canonical_memory_adapter,
+        "_read_canonical_memory_item_for_lineage",
+        lambda *_args, **_kwargs: transaction_item,
+    )
+
+    def apply(_uid, _memory_id, *, build_patch, **_kwargs):
+        build_patch(transaction_item, NOW)
+        committed.append(True)
+        return transaction_item, transaction_item
+
+    monkeypatch.setattr(canonical_memory_adapter, "_apply_canonical_user_mutation", apply)
+
+    with pytest.raises(ValueError, match=error):
+        canonical_memory_adapter.close_canonical_legacy_generated_history(
+            "u1",
+            planned_item.memory_id,
+            expected_item_revision=planned_item.item_revision,
+            expected_tier=planned_item.tier,
+            valid_to=NOW,
+            db_client=object(),
+        )
+
+    assert committed == []
 
 
 def test_migration_mutation_budget_bounds_one_authorized_run(monkeypatch):
