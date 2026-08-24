@@ -132,6 +132,13 @@ def test_app_usage_attribution_is_idempotent_and_deletion_fenced() -> None:
     receipt = store.rows[path]["jit_first_open"]["effects"]["app_fanout"]["app_receipts"]["app"]
     assert receipt == {"result_persisted": True, "usage_persisted": True}
 
+    writes_before_retry = sum(len(transaction.sets) + len(transaction.updates) for transaction in store.transactions)
+    assert conversations_db.commit_first_open_app_usage(
+        "owner", "conversation", token, "app", "memory_created_prompt", firestore_client=store
+    )
+    writes_after_retry = sum(len(transaction.sets) + len(transaction.updates) for transaction in store.transactions)
+    assert writes_after_retry == writes_before_retry
+
     store.rows[("account_deletions", "owner")] = {"wipe_status": "running"}
     assert not conversations_db.commit_first_open_app_usage(
         "owner", "conversation", token, "other-app", "memory_created_prompt", firestore_client=store
