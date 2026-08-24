@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -103,6 +104,50 @@ def test_screen_activity_sync_writes_rows_and_embeddings(monkeypatch):
             ],
         ),
     ]
+
+
+def test_enabled_screen_sync_returns_only_device_routed_frame_metadata(monkeypatch):
+    _entitle(monkeypatch)
+    monkeypatch.setenv("JIT_FRAME_REQUESTS_ENABLED", "true")
+    monkeypatch.setattr(desktop_screen_crisp, "upsert_screen_activity", lambda uid, rows: len(rows))
+    monkeypatch.setattr(desktop_screen_crisp, "upsert_screen_activity_vectors", lambda uid, rows: None)
+    monkeypatch.setattr(
+        desktop_screen_crisp,
+        "list_pending_frame_requests",
+        lambda uid, **kwargs: [
+            SimpleNamespace(
+                request_id="frame-1",
+                device_id=kwargs["device_id"],
+                account_generation=kwargs["account_generation"],
+                conversation_id="conversation-1",
+                screenshot_id="42",
+                state=SimpleNamespace(value="requested"),
+                expires_at=datetime(2026, 8, 25, tzinfo=timezone.utc),
+            )
+        ],
+    )
+
+    response = make_client().post(
+        "/v1/screen-activity/sync",
+        json={
+            "account_generation": 7,
+            "rows": [{"id": 1, "timestamp": "2026-07-26T00:00:00Z", "clientDeviceId": "mac-a"}],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["frame_requests"] == [
+        {
+            "request_id": "frame-1",
+            "device_id": "mac-a",
+            "account_generation": 7,
+            "conversation_id": "conversation-1",
+            "screenshot_id": "42",
+            "state": "requested",
+            "expires_at": "2026-08-25T00:00:00+00:00",
+        }
+    ]
+    assert "image_base64" not in response.text
 
 
 def test_screen_activity_sync_rejects_batches_larger_than_rust_contract():

@@ -666,7 +666,7 @@ class ChatToolExecutor {
     toolName: String
   ) -> PhysicalExecutionPrecondition {
     switch toolName {
-    case "capture_screen", "get_screenshot", "show_rewind_evidence":
+    case "capture_screen", "get_screenshot", "look_at_frame", "show_rewind_evidence":
       if isChatScreenshotSharingEnabled {
         return .satisfied
       }

@@ -78,6 +78,7 @@ from routers import (
     desktop_proxy,
     desktop_realtime,
     desktop_screen_crisp,
+    frame_requests,
     referrals,
     desktop_tts_updates,
     scores,
@@ -226,6 +227,7 @@ app.include_router(desktop_chat.router)
 app.include_router(desktop_proxy.router)
 app.include_router(desktop_realtime.router)
 app.include_router(desktop_screen_crisp.router)
+app.include_router(frame_requests.router)
 app.include_router(desktop_tts_updates.router)
 
 
