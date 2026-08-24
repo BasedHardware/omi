@@ -9,6 +9,7 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/GeminiClient.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/KnowledgeLedgerTriggerObservationAdapters.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/KnowledgeLedgerTriggerProjection.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/KnowledgeLedgerTriggerRuntime.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/KnowledgeLedgerTriggerWatchlist.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ProactiveLaneClient.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/EmbeddingService.swift
@@ -36,6 +37,9 @@ steps:
       result.detail.trigger_metadata_roundtrip: "true"
       result.detail.trigger_projection_count: "1"
       result.detail.trigger_projection_quarantine_count: "1"
+      result.detail.trigger_runtime_status: evaluated
+      result.detail.trigger_runtime_next_lane: planned_trigger
+      result.detail.trigger_runtime_match_count: "1"
       result.detail.trigger_status: match
       result.detail.trigger_wakeups_used: "1"
 
