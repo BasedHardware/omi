@@ -14,15 +14,28 @@ from typing import Any
 
 from utils.other.storage import _get_storage_client
 
+TEMPORARY_STORAGE_PREFIX = "temporary-"
+PERMANENT_STORAGE_PREFIX = "permanent-"
 
-def _bucket() -> Any:
-    # A dedicated binding is part of the retention proof. Falling back to the
-    # audio/sync bucket would let an unrelated lifecycle policy delete attached
-    # conversation evidence.
-    bucket_name = (os.getenv("BUCKET_FRAME_REQUESTS") or "").strip()
+
+def _bucket(*, permanent: bool) -> Any:
+    # Temporary and conversation-lifetime objects deliberately use different
+    # buckets. The temporary bucket is lifecycle-backed; the permanent bucket
+    # must have no object-expiration rule.
+    env_name = "BUCKET_FRAME_REQUESTS" if permanent else "BUCKET_FRAME_REQUESTS_TEMPORARY"
+    bucket_name = (os.getenv(env_name) or "").strip()
     if not bucket_name:
-        raise RuntimeError("frame-request storage bucket is not configured")
+        raise RuntimeError(f"{env_name} is not configured")
     return _get_storage_client().bucket(bucket_name)
+
+
+def _is_permanent(storage_id: str) -> bool:
+    if storage_id.startswith(PERMANENT_STORAGE_PREFIX):
+        return True
+    if storage_id.startswith(TEMPORARY_STORAGE_PREFIX):
+        return False
+    # Existing objects created before the split lived in the permanent binding.
+    return True
 
 
 def _object_name(uid: str, storage_id: str) -> str:
@@ -39,13 +52,15 @@ def _object_name(uid: str, storage_id: str) -> str:
 def upload_frame_request_pixels(uid: str, storage_id: str, data: bytes, content_type: str) -> None:
     if not data:
         raise ValueError("frame upload is empty")
-    blob = _bucket().blob(_object_name(uid, storage_id))
+    if not storage_id.startswith(TEMPORARY_STORAGE_PREFIX):
+        raise ValueError("new frame uploads must use temporary storage")
+    blob = _bucket(permanent=False).blob(_object_name(uid, storage_id))
     blob.upload_from_string(data, content_type=content_type)
 
 
 def delete_frame_request_pixels(uid: str, storage_id: str) -> None:
     try:
-        _bucket().blob(_object_name(uid, storage_id)).delete()
+        _bucket(permanent=_is_permanent(storage_id)).blob(_object_name(uid, storage_id)).delete()
     except Exception as exc:
         # GCS NotFound is safe during an idempotent cleanup, while all other
         # errors remain visible to the deletion fence.
@@ -55,9 +70,20 @@ def delete_frame_request_pixels(uid: str, storage_id: str) -> None:
 
 
 def download_frame_request_pixels(uid: str, storage_id: str) -> bytes:
-    """Read conversation-attached pixels only after owner authorization."""
+    """Read owner-authorized pixels from their declared storage tier."""
 
-    return bytes(_bucket().blob(_object_name(uid, storage_id)).download_as_bytes())
+    return bytes(_bucket(permanent=_is_permanent(storage_id)).blob(_object_name(uid, storage_id)).download_as_bytes())
+
+
+def copy_frame_request_pixels_to_permanent(uid: str, temporary_storage_id: str, permanent_storage_id: str) -> None:
+    """Idempotently copy one temporary object into conversation-lifetime storage."""
+
+    if not permanent_storage_id.startswith(PERMANENT_STORAGE_PREFIX):
+        raise ValueError("promotion destination must be permanent")
+    source_bucket = _bucket(permanent=_is_permanent(temporary_storage_id))
+    destination_bucket = _bucket(permanent=True)
+    source = source_bucket.blob(_object_name(uid, temporary_storage_id))
+    source_bucket.copy_blob(source, destination_bucket, new_name=_object_name(uid, permanent_storage_id))
 
 
 def delete_frame_request_pixels_for_user(uid: str, storage_ids: list[str]) -> int:
@@ -72,5 +98,8 @@ __all__ = [
     "delete_frame_request_pixels",
     "delete_frame_request_pixels_for_user",
     "download_frame_request_pixels",
+    "copy_frame_request_pixels_to_permanent",
+    "PERMANENT_STORAGE_PREFIX",
+    "TEMPORARY_STORAGE_PREFIX",
     "upload_frame_request_pixels",
 ]

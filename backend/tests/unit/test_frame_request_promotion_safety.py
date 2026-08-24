@@ -2,7 +2,8 @@ from datetime import datetime, timezone
 from io import BytesIO
 
 import pytest
-from fastapi import UploadFile
+from fastapi import HTTPException, UploadFile
+from PIL import Image
 
 from models.frame_request import FrameRequest, FrameRequestCleanupState, FrameRequestPromotion, FrameRequestState
 from routers import frame_requests
@@ -40,17 +41,18 @@ def _request(state: FrameRequestState) -> FrameRequest:
 @pytest.mark.asyncio
 async def test_attached_retry_is_idempotent_and_never_cleans_permanent_evidence(monkeypatch):
     request = _request(FrameRequestState.attached)
+    acknowledged = []
     monkeypatch.setattr(frame_requests, "_authorize", _allow)
     monkeypatch.setattr(frame_requests, "get_frame_request", lambda uid, request_id: request)
     monkeypatch.setattr(
         frame_requests,
-        "delete_frame_request_pixels",
-        lambda *args: pytest.fail("permanent pixels must not be deleted on retry"),
+        "acknowledge_frame_storage_cleanup",
+        lambda uid, storage_id: acknowledged.append((uid, storage_id)),
     )
     monkeypatch.setattr(
-        frame_requests.conversations_db,
-        "delete_conversation_photo",
-        lambda *args: pytest.fail("permanent metadata must not be deleted on retry"),
+        frame_requests,
+        "delete_frame_request_pixels",
+        lambda *args: pytest.fail("permanent pixels must not be deleted on retry"),
     )
 
     result = await frame_requests.promote_frame_request(
@@ -60,6 +62,36 @@ async def test_attached_retry_is_idempotent_and_never_cleans_permanent_evidence(
     )
 
     assert result.request.state == FrameRequestState.attached
+    assert acknowledged == [("user-1", "storage-1")]
+
+
+def test_image_decoder_accepts_only_bounded_jpeg_png_and_webp(monkeypatch):
+    for image_format, content_type in (("JPEG", "image/jpeg"), ("PNG", "image/png"), ("WEBP", "image/webp")):
+        payload = BytesIO()
+        Image.new("RGB", (2, 2), color="white").save(payload, format=image_format)
+        assert frame_requests._validated_image_content_type(payload.getvalue()) == content_type
+
+    with pytest.raises(HTTPException) as invalid:
+        frame_requests._validated_image_content_type(b"not-an-image")
+    assert invalid.value.status_code == 415
+
+    class OversizedImage:
+        format = "PNG"
+        size = (5001, 5001)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def verify(self):
+            return None
+
+    monkeypatch.setattr(frame_requests.Image, "open", lambda *_args: OversizedImage())
+    with pytest.raises(HTTPException) as oversized:
+        frame_requests._validated_image_content_type(b"header")
+    assert oversized.value.status_code == 413
 
 
 @pytest.mark.asyncio
@@ -72,6 +104,9 @@ async def test_ambiguous_state_commit_leaves_object_retryable(monkeypatch):
         "attach_frame_request_to_conversation",
         lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("commit outcome unknown")),
     )
+    monkeypatch.setattr(frame_requests, "reserve_frame_promotion_copy", lambda *args: None)
+    monkeypatch.setattr(frame_requests, "reserve_frame_storage_cleanup", lambda *args: None)
+    monkeypatch.setattr(frame_requests, "copy_frame_request_pixels_to_permanent", lambda *args: None)
     monkeypatch.setattr(
         frame_requests,
         "delete_frame_request_pixels",
@@ -113,11 +148,14 @@ async def test_ambiguous_upload_commit_reconciles_without_deleting_object(monkey
         lambda *args: pytest.fail("ambiguous upload must not delete an object"),
     )
 
+    image = BytesIO()
+    Image.new("RGB", (2, 2), color="white").save(image, format="JPEG")
+    image.seek(0)
     result = await frame_requests.upload_frame_request(
         "frame-1",
         device_id="desktop-1",
         account_generation=3,
-        file=UploadFile(filename="frame.jpg", file=BytesIO(b"pixels"), headers={"content-type": "image/jpeg"}),
+        file=UploadFile(filename="frame.jpg", file=image, headers={"content-type": "image/jpeg"}),
         uid="user-1",
     )
     assert result.request.state == FrameRequestState.uploaded

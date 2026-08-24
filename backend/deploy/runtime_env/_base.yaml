@@ -251,6 +251,11 @@ environment_shared:
             default: '{env}-omi-frame-requests'
             provisional: true
             category: storage_retention
+          BUCKET_FRAME_REQUESTS_TEMPORARY:
+            env_var: BUCKET_FRAME_REQUESTS_TEMPORARY
+            default: '{env}-omi-frame-requests-temporary'
+            provisional: true
+            category: storage_retention
           FRAME_REQUEST_POSTHOG_COHORT_FLAG:
             value: jit-frame-requests-cohort
             provisional: true
@@ -612,6 +617,17 @@ environment_shared:
         flags:
           --remove-env-vars: MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
         env:
+          BUCKET_FRAME_REQUESTS:
+            env_var: BUCKET_FRAME_REQUESTS
+            default: '{env}-omi-frame-requests'
+            category: storage_retention
+          BUCKET_FRAME_REQUESTS_TEMPORARY:
+            env_var: BUCKET_FRAME_REQUESTS_TEMPORARY
+            default: '{env}-omi-frame-requests-temporary'
+            category: storage_retention
+          FRAME_REQUEST_RETENTION_INDEPENDENT_HEALTHY:
+            value: 'false'
+            category: storage_retention
           OMI_LLM_GATEWAY_URL:
             env_var: OMI_LLM_GATEWAY_URL
             default: http://127.0.0.1:9
@@ -666,5 +682,10 @@ environment_shared:
           BUCKET_FRAME_REQUESTS:
             env_var: BUCKET_FRAME_REQUESTS
             default: '{env}-omi-frame-requests'
+            provisional: false
+            category: storage_retention
+          BUCKET_FRAME_REQUESTS_TEMPORARY:
+            env_var: BUCKET_FRAME_REQUESTS_TEMPORARY
+            default: '{env}-omi-frame-requests-temporary'
             provisional: false
             category: storage_retention

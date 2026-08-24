@@ -6,6 +6,7 @@ from scripts.validate_frame_request_bucket_contract import (
     validate_bucket_contract,
     validate_contract_document,
     validate_runtime_binding,
+    validate_temporary_bucket_contract,
 )
 
 
@@ -69,6 +70,30 @@ def test_runtime_manifest_and_contract_bind_permanent_bucket():
     contract = json.loads((root / "deploy/frame-request-bucket-contract.json").read_text())
     assert validate_runtime_binding(runtime) == []
     assert validate_contract_document(contract) == []
+
+
+def test_temporary_bucket_requires_sub_seven_day_delete_and_no_soft_delete():
+    contract = {
+        "allowed_locations": ["US-CENTRAL1"],
+        "uniform_bucket_level_access": True,
+        "public_access_prevention": "enforced",
+        "temporary_lifecycle": {"delete_age_days": 6},
+    }
+    state = {
+        "name": "omi-frame-requests-temporary",
+        "location": "US-CENTRAL1",
+        "lifecycle": {"rule": [{"action": {"type": "Delete"}, "condition": {"age": 6}}]},
+        "softDeletePolicy": {"retentionDurationSeconds": 0},
+        "iamConfiguration": {
+            "uniformBucketLevelAccess": {"enabled": True},
+            "publicAccessPrevention": "enforced",
+        },
+    }
+    assert validate_temporary_bucket_contract("omi-frame-requests-temporary", state, contract) == []
+    state["softDeletePolicy"] = {"retentionDurationSeconds": 604800}
+    assert "soft delete must be disabled" in " ".join(
+        validate_temporary_bucket_contract("omi-frame-requests-temporary", state, contract)
+    )
 
 
 def test_runtime_manifest_alone_cannot_claim_live_bucket_validation(monkeypatch):

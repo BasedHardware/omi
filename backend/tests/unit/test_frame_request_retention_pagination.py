@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from services import frame_request_retention
+from database.frame_requests import FrameCleanupPage
 from services.frame_request_retention import (
     _drain_due_pages,
     _load_user_page,
@@ -45,15 +46,17 @@ class _UserSnapshot:
 class _StateDocument:
     def __init__(self, cursor_uid: str = ""):
         self.cursor_uid = cursor_uid
+        self.retry_cursor_uid = ""
         self.writes = []
         self.retries = _RetryCollection()
 
     def get(self):
-        return _Snapshot({"cursor_uid": self.cursor_uid})
+        return _Snapshot({"cursor_uid": self.cursor_uid, "retry_cursor_uid": self.retry_cursor_uid})
 
     def set(self, data, merge=False):
         self.writes.append((data, merge))
         self.cursor_uid = data["cursor_uid"]
+        self.retry_cursor_uid = data.get("retry_cursor_uid", "")
 
     def collection(self, name):
         assert name == "retry_accounts"
@@ -82,16 +85,23 @@ class _RetryCollection:
     def __init__(self):
         self.uids = set()
         self._limit = 1000
+        self._after = ""
 
     def order_by(self, *_args, **_kwargs):
+        self._after = ""
         return self
 
     def limit(self, value):
         self._limit = value
         return self
 
+    def start_after(self, cursor):
+        self._after = cursor["__name__"].uid
+        return self
+
     def stream(self):
-        return iter(_RetrySnapshot(uid) for uid in sorted(self.uids)[: self._limit])
+        selected = [uid for uid in sorted(self.uids) if uid > self._after][: self._limit]
+        return iter(_RetrySnapshot(uid) for uid in selected)
 
     def document(self, uid):
         return _RetryDocument(self, uid)
@@ -201,6 +211,20 @@ def test_retry_uids_are_served_without_pinning_population_cursor():
     assert client.state.retries.uids == {"a"}
 
 
+def test_retry_cursor_rotates_fairly_across_poison_accounts():
+    client = _Client(["a", "b", "c", "d"])
+    client.state.retries.uids = {"a", "b", "c", "d"}
+
+    first, cursor, first_retry = _load_user_page(client, user_limit=2)
+    assert first_retry == ["a"]
+    assert [user.id for user in first] == ["a"]
+    _store_user_cursor(client, cursor, first_retry[-1])
+
+    second, _, second_retry = _load_user_page(client, user_limit=2)
+    assert second_retry == ["b"]
+    assert [user.id for user in second] == ["b"]
+
+
 def test_account_failure_advances_population_and_persists_convergent_retry(monkeypatch):
     client = _Client(["a", "b", "c"])
     failing = {"a"}
@@ -219,6 +243,11 @@ def test_account_failure_advances_population_and_persists_convergent_retry(monke
     monkeypatch.setattr(
         frame_request_retention,
         "cleanup_ambiguous_frame_upload_pixels",
+        lambda *_args, **_kwargs: 0,
+    )
+    monkeypatch.setattr(
+        frame_request_retention,
+        "cleanup_conversation_frame_deletion_outbox",
         lambda *_args, **_kwargs: 0,
     )
     monkeypatch.setattr(frame_request_retention, "emit_posthog_event", lambda *_args, **_kwargs: None)
@@ -247,4 +276,14 @@ def test_retry_queue_has_no_fixed_capacity_or_array_overwrite():
 def test_due_backlog_drains_every_full_page_without_increasing_query_limit():
     pages = iter([32, 32, 7])
 
-    assert _drain_due_pages(lambda: next(pages), page_size=32) == 71
+    assert _drain_due_pages(lambda: next(pages), page_size=32) == (71, False)
+
+
+def test_due_backlog_is_bounded_and_reports_more_work():
+    assert _drain_due_pages(lambda: 32, page_size=32, max_pages=3) == (96, True)
+
+
+def test_failed_cleanup_page_does_not_hide_due_backlog_or_overstate_cleaned_count():
+    pages = iter([FrameCleanupPage(processed=32, cleaned=0), FrameCleanupPage(processed=3, cleaned=3)])
+
+    assert _drain_due_pages(lambda: next(pages), page_size=32) == (3, False)

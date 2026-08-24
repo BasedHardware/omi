@@ -48,6 +48,7 @@ from utils.retrieval.tools import (
     create_chart_tool,
     get_screen_activity_tool,
     search_screen_activity_tool,
+    look_at_frame_tool,
     save_user_preference_tool,
     fetch_url_tool,
     traverse_knowledge_graph_tool,
@@ -238,6 +239,7 @@ CORE_TOOLS = [
     create_chart_tool,
     get_screen_activity_tool,
     search_screen_activity_tool,
+    look_at_frame_tool,
     save_user_preference_tool,
     fetch_url_tool,
     traverse_knowledge_graph_tool,
@@ -285,6 +287,7 @@ def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str
         'create_chart_tool': 'Creating chart',
         'get_screen_activity_tool': 'Checking screen activity',
         'search_screen_activity_tool': 'Searching screen activity',
+        'look_at_frame': 'Asking your Mac for a frame',
         'save_user_preference_tool': 'Saving preference',
         'fetch_url_tool': 'Reading page',
     }
@@ -1424,6 +1427,9 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
         "thread_id": str(uuid.uuid4()),
         "conversations_collected": conversations_collected,
         "evidence_references": evidence_references,
+        # Shared mutable object: RunnableConfig copies the outer mapping for
+        # each tool call, while this request budget must survive those copies.
+        "frame_request_budget": {"reserved": False},
         "safety_guard": safety_guard,
         "chat_session_id": chat_session.id if chat_session else None,
         "client_kind": client_kind,
