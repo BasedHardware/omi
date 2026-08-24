@@ -11,6 +11,7 @@ import { uploadChatFiles, getChatApps } from '@/lib/api';
 import type { App } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { MixpanelManager } from '@/lib/analytics/mixpanel';
+import { shouldSubmitComposerKey } from '@/lib/chatComposerKey';
 import { ChatMarkdown } from './ChatMarkdown';
 
 interface FilePreviewItem {
@@ -201,7 +202,7 @@ export function ChatPanel() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (shouldSubmitComposerKey(e)) {
       e.preventDefault();
       handleSend();
     }
