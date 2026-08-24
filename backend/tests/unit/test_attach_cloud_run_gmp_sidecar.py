@@ -389,3 +389,105 @@ spec:
 
     assert not any(args[1:4] == ['run', 'services', 'replace'] for args in calls)
     assert secret_calls == []
+
+
+# A project ID in run.googleapis.com/secrets crashes the NEXT gcloud run deploy.
+# Cloud Run accepts the ID and stores it, so nothing fails at attach time and the
+# breakage lands on whoever deploys next. Production carried
+# `cloud-run-gmp-config:projects/based-hardware/secrets/cloud-run-gmp-config` and
+# every deploy died with "Invalid secret path" until the live service was repaired.
+PROJECT_NUMBER = '208440318997'
+
+
+def test_project_id_path_is_rewritten_to_project_number():
+    module = _load_module()
+    repaired = module._normalize_secret_annotation(
+        'cloud-run-gmp-config:projects/based-hardware/secrets/cloud-run-gmp-config',
+        project_number=PROJECT_NUMBER,
+    )
+    assert repaired == f'cloud-run-gmp-config:projects/{PROJECT_NUMBER}/secrets/cloud-run-gmp-config'
+
+
+def test_already_numeric_path_needs_no_change():
+    module = _load_module()
+    annotation = f'cloud-run-gmp-config:projects/{PROJECT_NUMBER}/secrets/cloud-run-gmp-config'
+    assert module._normalize_secret_annotation(annotation, project_number=PROJECT_NUMBER) is None
+
+
+def test_every_entry_is_repaired_not_just_the_sidecar_secret():
+    module = _load_module()
+    repaired = module._normalize_secret_annotation(
+        'other-secret:projects/based-hardware/secrets/other-secret,'
+        f'cloud-run-gmp-config:projects/{PROJECT_NUMBER}/secrets/cloud-run-gmp-config',
+        project_number=PROJECT_NUMBER,
+    )
+    assert repaired == (
+        f'cloud-run-gmp-config:projects/{PROJECT_NUMBER}/secrets/cloud-run-gmp-config,'
+        f'other-secret:projects/{PROJECT_NUMBER}/secrets/other-secret'
+    )
+
+
+@pytest.mark.parametrize('value', ['not-an-entry', '', None])
+def test_unrecognised_annotation_is_left_alone_rather_than_guessed_at(value):
+    module = _load_module()
+    assert module._normalize_secret_annotation(value, project_number=PROJECT_NUMBER) is None
+
+
+def test_attach_merge_heals_a_stale_entry_for_another_secret():
+    module = _load_module()
+    merged = module._merge_secret_annotation(
+        'other-secret:projects/based-hardware/secrets/other-secret',
+        project_number=PROJECT_NUMBER,
+        secret='cloud-run-gmp-config',
+    )
+    assert 'projects/based-hardware/' not in merged
+    assert f'other-secret:projects/{PROJECT_NUMBER}/secrets/other-secret' in merged
+
+
+def test_repair_is_a_no_op_when_the_annotation_is_already_correct(monkeypatch):
+    """Idempotence: a second repair run must not issue a services replace."""
+    module = _load_module()
+    good = f'cloud-run-gmp-config:projects/{PROJECT_NUMBER}/secrets/cloud-run-gmp-config'
+    service = {
+        'metadata': {'name': 'backend'},
+        'spec': {'template': {'metadata': {'annotations': {module.SECRET_ANNOTATION: good}}}},
+    }
+    calls = []
+
+    def fake_run(argv, **kwargs):
+        calls.append(argv)
+        if 'describe' in argv:
+            return SimpleNamespace(returncode=0, stdout=yaml.safe_dump(service), stderr='')
+        raise AssertionError(f'unexpected gcloud call: {argv}')
+
+    monkeypatch.setattr(module, '_run', fake_run)
+    monkeypatch.setattr(module, '_project_number', lambda project: PROJECT_NUMBER)
+    args = SimpleNamespace(project='based-hardware', region='us-central1', service='backend', dry_run=False)
+    assert module.repair_secret_annotations(args) == 0
+    assert not any('replace' in argv for argv in calls)
+
+
+# gcloud's own validation rule, copied verbatim from googlecloudsdk's secret-path
+# parser so a vendor upgrade that tightens it fails here rather than on the next
+# production deploy. This is the strict consumer that FC-metadata-format-validated-
+# only-on-next-read exists for: Cloud Run's API accepts a project ID here, gcloud
+# does not, and the mismatch surfaces on an unrelated later deploy.
+GCLOUD_SECRET_PATH_RULE = re.compile(r'^projects/[0-9]{1,19}/secrets/[^/:]+$')
+
+
+@pytest.mark.parametrize(
+    'existing',
+    [
+        None,
+        '',
+        'cloud-run-gmp-config:projects/based-hardware/secrets/cloud-run-gmp-config',
+        'other-secret:projects/based-hardware/secrets/other-secret',
+        f'cloud-run-gmp-config:projects/{PROJECT_NUMBER}/secrets/cloud-run-gmp-config',
+    ],
+)
+def test_every_written_entry_satisfies_gclouds_actual_rule(existing):
+    module = _load_module()
+    merged = module._merge_secret_annotation(existing, project_number=PROJECT_NUMBER, secret='cloud-run-gmp-config')
+    for entry in merged.split(','):
+        _, _, resource = entry.partition(':')
+        assert GCLOUD_SECRET_PATH_RULE.match(resource), f'gcloud would reject {resource!r}'

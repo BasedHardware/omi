@@ -268,6 +268,65 @@ def _validate_expected_literal_env(
             )
 
 
+SECRET_ANNOTATION = 'run.googleapis.com/secrets'
+
+_SECRET_RESOURCE_RE = re.compile(r'^projects/(?P<project>[^/]+)/secrets/(?P<secret>.+)$')
+
+
+def _normalize_secret_resource(resource: str, *, project_number: str) -> str:
+    """Rewrite a secret path that names the project by ID into one naming it by number.
+
+    gcloud validates this annotation against ``^projects/[0-9]{1,19}/secrets/...``.
+    Cloud Run itself accepts a project ID, so an ID written here is stored happily
+    and then crashes the *next* ``gcloud run deploy`` with "Invalid secret path".
+    """
+    match = _SECRET_RESOURCE_RE.match(resource)
+    if not match or match.group('project').isdigit():
+        return resource
+    return f"projects/{project_number}/secrets/{match.group('secret')}"
+
+
+def _parse_secret_annotation(existing: object) -> dict[str, str] | None:
+    """Parse the annotation into {name: resource}, or None when it is absent or malformed.
+
+    Returning None for a malformed value is deliberate: a repair pass must refuse to
+    guess at a shape it does not recognise rather than rewrite it into something new.
+    """
+    if not isinstance(existing, str) or not existing.strip():
+        return None
+    entries: dict[str, str] = {}
+    for raw_entry in existing.split(','):
+        candidate = raw_entry.strip()
+        if not candidate:
+            continue
+        name, separator, resource = candidate.partition(':')
+        if not (name and separator and resource):
+            return None
+        entries[name] = resource
+    return entries or None
+
+
+def _render_secret_annotation(entries: Mapping[str, str]) -> str:
+    return ','.join(f'{name}:{resource}' for name, resource in sorted(entries.items()))
+
+
+def _normalize_secret_annotation(existing: object, *, project_number: str) -> str | None:
+    """Return a repaired annotation, or None when nothing needs to change.
+
+    Normalizes *every* entry, not just the sidecar's own: a bad path under any
+    secret name breaks the same deploy.
+    """
+    entries = _parse_secret_annotation(existing)
+    if entries is None:
+        return None
+    repaired = {
+        name: _normalize_secret_resource(resource, project_number=project_number) for name, resource in entries.items()
+    }
+    if repaired == entries:
+        return None
+    return _render_secret_annotation(repaired)
+
+
 def _merge_secret_annotation(existing: object, *, project_number: str, secret: str) -> str:
     entries: dict[str, str] = {}
     if isinstance(existing, str):
@@ -275,8 +334,11 @@ def _merge_secret_annotation(existing: object, *, project_number: str, secret: s
             name, separator, resource = raw_entry.strip().partition(':')
             if name and separator and resource:
                 entries[name] = resource
+    entries = {
+        name: _normalize_secret_resource(resource, project_number=project_number) for name, resource in entries.items()
+    }
     entries[secret] = f'projects/{project_number}/secrets/{secret}'
-    return ','.join(f'{name}:{resource}' for name, resource in sorted(entries.items()))
+    return _render_secret_annotation(entries)
 
 
 def _merge_container_dependencies(existing: object, *, ingress_container_name: str) -> str:
@@ -336,8 +398,8 @@ def patch_service(
         template_annotations.get('run.googleapis.com/container-dependencies'),
         ingress_container_name=ingress_container_name,
     )
-    template_annotations['run.googleapis.com/secrets'] = _merge_secret_annotation(
-        template_annotations.get('run.googleapis.com/secrets'),
+    template_annotations[SECRET_ANNOTATION] = _merge_secret_annotation(
+        template_annotations.get(SECRET_ANNOTATION),
         project_number=project_number,
         secret=config_secret,
     )
@@ -527,23 +589,174 @@ def attach_sidecar(args: argparse.Namespace) -> None:
     print(f'Attached pinned GMP sidecar to zero-traffic revision {args.final_revision}')
 
 
+def repair_secret_annotations(args: argparse.Namespace) -> int:
+    """Rewrite project-ID secret paths on a live service into project-number paths.
+
+    A previous sidecar attach persisted `projects/<id>/secrets/...` into the
+    template annotation. Cloud Run stored it, but every subsequent
+    `gcloud run deploy` on that service crashes with "Invalid secret path", so no
+    code change can unblock a deploy - the damage is in the live service and has
+    to be repaired there.
+
+    Idempotent: when nothing needs repair it reports so and writes nothing.
+    """
+    project_number = _project_number(args.project)
+    export = _run(
+        [
+            'gcloud',
+            'run',
+            'services',
+            'describe',
+            args.service,
+            '--project',
+            args.project,
+            '--region',
+            args.region,
+            '--format=export',
+        ],
+        capture_output=True,
+    )
+    service = yaml.load(_check(export, action=f'exporting {args.service}'), Loader=GcloudExportLoader)
+    if not isinstance(service, dict):
+        raise RuntimeError('Cloud Run service export was not a mapping')
+
+    scopes: list[tuple[str, dict[str, Any]]] = []
+    service_meta = service.get('metadata')
+    if isinstance(service_meta, dict) and isinstance(service_meta.get('annotations'), dict):
+        scopes.append(('service', cast(dict[str, Any], service_meta['annotations'])))
+    template = service.get('spec', {}).get('template') if isinstance(service.get('spec'), dict) else None
+    if isinstance(template, dict):
+        template_meta = template.get('metadata')
+        if isinstance(template_meta, dict) and isinstance(template_meta.get('annotations'), dict):
+            scopes.append(('template', cast(dict[str, Any], template_meta['annotations'])))
+
+    changes: list[str] = []
+    for scope, annotations in scopes:
+        current = annotations.get(SECRET_ANNOTATION)
+        if current is None:
+            continue
+        repaired = _normalize_secret_annotation(current, project_number=project_number)
+        if repaired is None:
+            if _parse_secret_annotation(current) is None:
+                print(f'[{scope}] {SECRET_ANNOTATION} is absent or unrecognised; leaving it untouched')
+            else:
+                print(f'[{scope}] {SECRET_ANNOTATION} already uses project numbers; no change')
+            continue
+        changes.append(f'[{scope}] {current}  ->  {repaired}')
+        annotations[SECRET_ANNOTATION] = repaired
+
+    if not changes:
+        print(f'{args.service} needs no secret-annotation repair')
+        return 0
+
+    for change in changes:
+        print(change)
+    if args.dry_run:
+        print('--dry-run: no changes applied')
+        return 0
+
+    path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile('w', prefix='cloud-run-repair-', suffix='.yaml', delete=False) as handle:
+            path = Path(handle.name)
+            os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+            yaml.safe_dump(service, handle, sort_keys=False)
+        replace = _run(
+            [
+                'gcloud',
+                'run',
+                'services',
+                'replace',
+                str(path),
+                '--project',
+                args.project,
+                '--region',
+                args.region,
+                '--format=json',
+            ],
+            capture_output=True,
+        )
+        _check(replace, action=f'repairing secret annotations on {args.service}')
+    finally:
+        if path is not None:
+            path.unlink(missing_ok=True)
+
+    verify = _run(
+        [
+            'gcloud',
+            'run',
+            'services',
+            'describe',
+            args.service,
+            '--project',
+            args.project,
+            '--region',
+            args.region,
+            '--format=export',
+        ],
+        capture_output=True,
+    )
+    after = yaml.load(_check(verify, action=f're-reading {args.service}'), Loader=GcloudExportLoader)
+    if not isinstance(after, dict):
+        raise RuntimeError('Cloud Run service re-read was not a mapping')
+    for scope, annotations in (
+        ('service', after.get('metadata', {}).get('annotations', {})),
+        ('template', after.get('spec', {}).get('template', {}).get('metadata', {}).get('annotations', {})),
+    ):
+        current = annotations.get(SECRET_ANNOTATION) if isinstance(annotations, dict) else None
+        if current is None:
+            continue
+        if _normalize_secret_annotation(current, project_number=project_number) is not None:
+            raise RuntimeError(f'[{scope}] {SECRET_ANNOTATION} still needs repair after replace: {current}')
+    print(f'Repaired secret annotations on {args.service}')
+    return 0
+
+
+_ATTACH_REQUIRED = (
+    'base_revision',
+    'final_revision',
+    'ingress_container',
+    'config',
+    'expected_env_state',
+)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument('--project', required=True)
     parser.add_argument('--region', default='us-central1')
     parser.add_argument('--service', required=True)
-    parser.add_argument('--base-revision', required=True)
-    parser.add_argument('--final-revision', required=True)
-    parser.add_argument('--ingress-container', required=True)
-    parser.add_argument('--config', type=Path, required=True)
+    # Attach-only. Not argparse-required so --repair-secret-annotations can run
+    # standalone; main() enforces them for the attach path instead.
+    parser.add_argument('--base-revision')
+    parser.add_argument('--final-revision')
+    parser.add_argument('--ingress-container')
+    parser.add_argument('--config', type=Path)
     parser.add_argument('--config-secret', default='cloud-run-gmp-config')
-    parser.add_argument('--expected-env-state', type=Path, required=True)
+    parser.add_argument('--expected-env-state', type=Path)
     parser.add_argument('--tag', default='')
+    parser.add_argument(
+        '--repair-secret-annotations',
+        action='store_true',
+        help='Repair project-ID secret paths on the live service and exit. Does not attach a sidecar.',
+    )
+    parser.add_argument(
+        '--dry-run',
+        action='store_true',
+        help='With --repair-secret-annotations, report the change without applying it.',
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
+    if args.repair_secret_annotations:
+        return repair_secret_annotations(args)
+    if args.dry_run:
+        raise SystemExit('--dry-run is only supported with --repair-secret-annotations')
+    missing = [f"--{name.replace('_', '-')}" for name in _ATTACH_REQUIRED if getattr(args, name) is None]
+    if missing:
+        raise SystemExit(f"attach mode requires: {', '.join(missing)}")
     if not args.config.is_file():
         raise SystemExit(f'RunMonitoring config not found: {args.config}')
     attach_sidecar(args)
