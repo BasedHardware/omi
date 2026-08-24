@@ -2,12 +2,14 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+import database.memory_apply_store as apply_store
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.knowledge_ledger_policy import LEDGER_SLOT_BY_LEGACY_PREDICATE, canonicalize_ledger_slot
 from models.memories import MemoryCategory, MemoryDB
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryLayer, ProcessingState
 from utils.memory import knowledge_ledger_migration
 from utils.memory import canonical_memory_adapter
+import utils.memory.memory_service as memory_service
 from utils.memory.knowledge_ledger_migration import LedgerMigrationAction, migration_marker, plan_ledger_migration
 from utils.memory.knowledge_ledger_migration import (
     LedgerMigrationCompletion,
@@ -427,9 +429,6 @@ class _PublishingDB:
 
 
 def _install_publisher_fakes(monkeypatch, db, rows):
-    import database.memory_apply_store as apply_store
-    import utils.memory.memory_service as memory_service
-
     def transactional(function):
         def wrapper(transaction, *args, **kwargs):
             result = function(transaction, *args, **kwargs)
