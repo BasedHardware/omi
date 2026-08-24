@@ -10,14 +10,61 @@ from __future__ import annotations
 
 import logging
 import time
+from datetime import datetime, timezone
 from typing import Any
 
+from google.cloud import firestore
+
 from database._client import get_firestore_client
-from database.frame_requests import cleanup_frame_request_pixels, prune_expired_frame_requests
+from database.frame_requests import (
+    cleanup_ambiguous_frame_upload_pixels,
+    cleanup_frame_request_pixels,
+    prune_expired_frame_requests,
+)
 from utils.retrieval.frame_request_storage import delete_frame_request_pixels
 from utils.integration_telemetry import emit_posthog_event
 
 logger = logging.getLogger(__name__)
+_STATE_COLLECTION = "maintenance_state"
+_STATE_DOCUMENT = "frame_request_retention"
+
+
+def _load_user_page(client: Any, *, user_limit: int) -> tuple[list[Any], str | None]:
+    """Load one stable user page and return its durable continuation cursor.
+
+    A cursor is cleared at the end of a cycle so the next invocation wraps to
+    the first account. Duplicate work after a crash is safe; advancing only
+    after the page finishes prevents a skipped account.
+    """
+
+    state_ref = client.collection(_STATE_COLLECTION).document(_STATE_DOCUMENT)
+    state_snapshot = state_ref.get()
+    state = state_snapshot.to_dict() if state_snapshot.exists else {}
+    cursor_uid = str((state or {}).get("cursor_uid") or "").strip()
+    users_ref = client.collection("users")
+
+    def query_page(after_uid: str | None) -> list[Any]:
+        query = users_ref.order_by("__name__", direction=firestore.Query.ASCENDING)
+        if after_uid:
+            query = query.start_after({"__name__": users_ref.document(after_uid)})
+        return list(query.limit(user_limit + 1).stream())
+
+    rows = query_page(cursor_uid or None)
+    if not rows and cursor_uid:
+        rows = query_page(None)
+    selected = rows[:user_limit]
+    next_cursor = str(selected[-1].id) if len(rows) > user_limit and selected else None
+    return selected, next_cursor
+
+
+def _store_user_cursor(client: Any, cursor_uid: str | None) -> None:
+    client.collection(_STATE_COLLECTION).document(_STATE_DOCUMENT).set(
+        {
+            "cursor_uid": cursor_uid or "",
+            "updated_at": datetime.now(timezone.utc),
+        },
+        merge=True,
+    )
 
 
 def run_frame_request_retention_maintenance(
@@ -32,11 +79,8 @@ def run_frame_request_retention_maintenance(
         raise ValueError("maintenance limits must be positive")
     started = time.monotonic()
     client = firestore_client or get_firestore_client()
-    # A scheduled invocation is one bounded page. Never fail the whole job
-    # merely because the account population is larger than this pass; the
-    # next invocation repeats the independent per-account convergence work.
-    users = list(client.collection("users").limit(user_limit).stream())
-    users_truncated = len(users) == user_limit
+    users, next_cursor = _load_user_page(client, user_limit=user_limit)
+    users_truncated = next_cursor is not None
     attempted = cleaned = pruned = failures = 0
     for user in users:
         uid = str(getattr(user, "id", "")).strip()
@@ -51,12 +95,19 @@ def run_frame_request_retention_maintenance(
                 limit=rows_per_user,
                 firestore_client=client,
             )
+            cleaned += cleanup_ambiguous_frame_upload_pixels(
+                uid,
+                delete_storage=lambda storage_id, owner=uid: delete_frame_request_pixels(owner, storage_id),
+                limit=rows_per_user,
+                firestore_client=client,
+            )
         except Exception:
             # Keep the scheduler moving across accounts. The row-level retry
             # state is written by the cleanup adapter for external failures;
             # unexpected query failures are retried by the next run.
             logger.exception("frame retention maintenance failed for one account")
             failures += 1
+    _store_user_cursor(client, next_cursor)
     result = {
         "users_scanned": attempted,
         "rows_pruned": pruned,

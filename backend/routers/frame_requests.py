@@ -55,9 +55,9 @@ def _record_frame_lifecycle(
     )
 
 
-def _authorize(uid: str, account_generation: int) -> None:
+async def _authorize(uid: str, account_generation: int) -> None:
     try:
-        authorize(uid, account_generation)
+        await run_blocking(db_executor, authorize, uid, account_generation)
     except PermissionError as exc:
         raise HTTPException(status_code=404, detail="frame_requests_unavailable") from exc
 
@@ -96,13 +96,15 @@ async def create_frame_request(
     uid: str = Depends(with_rate_limit(get_current_user_uid, "frame_requests:write")),
 ) -> FrameRequestEnvelope:
     started = time.monotonic()
-    _authorize(uid, request.account_generation)
+    await _authorize(uid, request.account_generation)
     if not request.conversation_id:
         # A request without a conversation has no supported permanent evidence
         # read path. Reject it before it can strand pixels in an owner bucket.
         raise HTTPException(status_code=400, detail="conversation_id_required")
     try:
-        frame_request, deduplicated = enqueue_frame_request(
+        frame_request, deduplicated = await run_blocking(
+            db_executor,
+            enqueue_frame_request,
             uid,
             device_id=request.device_id,
             account_generation=request.account_generation,
@@ -129,9 +131,11 @@ async def get_pending_frame_requests(
     limit: int = Query(default=32, ge=1, le=32),
     uid: str = Depends(with_rate_limit(get_current_user_uid, "frame_requests:read")),
 ) -> FrameRequestBatch:
-    _authorize(uid, account_generation)
+    await _authorize(uid, account_generation)
     try:
-        rows = list_pending_frame_requests(
+        rows = await run_blocking(
+            db_executor,
+            list_pending_frame_requests,
             uid,
             device_id=device_id,
             account_generation=account_generation,
@@ -150,9 +154,11 @@ async def update_frame_request_state(
     uid: str = Depends(with_rate_limit(get_current_user_uid, "frame_requests:write")),
 ) -> FrameRequestEnvelope:
     started = time.monotonic()
-    _authorize(uid, update.account_generation)
+    await _authorize(uid, update.account_generation)
     try:
-        frame_request = transition_frame_request(
+        frame_request = await run_blocking(
+            db_executor,
+            transition_frame_request,
             uid,
             request_id,
             next_state=update.state,
@@ -191,7 +197,7 @@ async def upload_frame_request(
     """Store an owner-authorized pixel and then commit its bounded metadata."""
 
     started = time.monotonic()
-    _authorize(uid, account_generation)
+    await _authorize(uid, account_generation)
     content_type = file.content_type
     if not content_type or not content_type.lower().startswith("image/"):
         raise HTTPException(status_code=415, detail="frame_upload_requires_image")
@@ -332,12 +338,12 @@ async def promote_frame_request(
     """Promote uploaded pixels into conversation-lifetime photo evidence."""
 
     started = time.monotonic()
-    _authorize(uid, promotion.account_generation)
+    await _authorize(uid, promotion.account_generation)
     try:
         # Fast idempotent read path avoids even starting a transaction for a
         # row already known to be permanent. The transaction below remains the
         # authority for the uploaded -> attached race.
-        existing = get_frame_request(uid, request_id)
+        existing = await run_blocking(db_executor, get_frame_request, uid, request_id)
         if existing.account_generation != promotion.account_generation or existing.device_id != promotion.device_id:
             raise PermissionError("frame request owner or account generation mismatch")
         if existing.conversation_id != promotion.conversation_id:
@@ -348,7 +354,9 @@ async def promote_frame_request(
         # The frame row, photo metadata, and one-keyframe invariant are one
         # Firestore transaction. This makes concurrent promotion idempotent:
         # one caller wins and the retry observes the committed attached row.
-        frame_request = attach_frame_request_to_conversation(
+        frame_request = await run_blocking(
+            db_executor,
+            attach_frame_request_to_conversation,
             uid,
             request_id,
             device_id=promotion.device_id,

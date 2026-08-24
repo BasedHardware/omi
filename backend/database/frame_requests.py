@@ -14,7 +14,8 @@ from typing import Any, Callable
 from google.cloud import firestore
 
 from database._client import get_firestore_client
-from database.conversations import conversations_collection, _prepare_photo_for_write
+from database.conversations import conversations_collection, prepare_photo_for_write
+from database.read_boundary import parse_payload_strict, parse_snapshot_strict
 from models.frame_request import (
     TERMINAL_FRAME_REQUEST_STATES,
     FrameRequest,
@@ -35,6 +36,7 @@ from utils.retrieval.frame_request_policy import (
 
 USERS_COLLECTION = "users"
 FRAME_REQUESTS_COLLECTION = "frame_requests"
+FRAME_UPLOAD_ORPHANS_COLLECTION = "frame_upload_orphans"
 
 
 def _get_client(firestore_client: Any | None) -> Any:
@@ -56,10 +58,24 @@ def _collection(uid: str, *, firestore_client: Any | None = None) -> Any:
     return client.collection(USERS_COLLECTION).document(owner_uid).collection(FRAME_REQUESTS_COLLECTION)
 
 
+def _orphan_collection(uid: str, *, firestore_client: Any | None = None) -> Any:
+    owner_uid = uid.strip()
+    if not owner_uid:
+        raise ValueError("uid is required")
+    client = _get_client(firestore_client)
+    return client.collection(USERS_COLLECTION).document(owner_uid).collection(FRAME_UPLOAD_ORPHANS_COLLECTION)
+
+
 def _request_from_snapshot(snapshot: Any) -> FrameRequest:
-    raw = snapshot.to_dict() or {}
-    raw["request_id"] = str(raw.get("request_id") or snapshot.id)
-    return FrameRequest.model_validate(raw)
+    return parse_snapshot_strict(FrameRequest, snapshot, document_id_field="request_id")
+
+
+def _request_from_payload(payload: dict[str, Any], *, document_path: str) -> FrameRequest:
+    return parse_payload_strict(FrameRequest, payload, document_path=document_path)
+
+
+def _request_path(uid: str, request_id: str) -> str:
+    return f"{USERS_COLLECTION}/{uid}/{FRAME_REQUESTS_COLLECTION}/{request_id}"
 
 
 def _request_data(request: FrameRequest) -> dict[str, Any]:
@@ -173,7 +189,7 @@ def attach_frame_request_to_conversation(
                 raise ValueError("conversation photo id is already used")
         else:
             level = (conversation_snapshot.to_dict() or {}).get("data_protection_level", "standard")
-            photo_data = _prepare_photo_for_write(
+            photo_data = prepare_photo_for_write(
                 {
                     "id": request.request_id,
                     "base64": "",
@@ -188,7 +204,7 @@ def attach_frame_request_to_conversation(
             )
             transaction.set(photo_ref, photo_data)
         transaction.update(conversation_ref, {"has_content": True, "has_photos": True})
-        candidate = FrameRequest.model_validate(
+        candidate = _request_from_payload(
             {
                 **_request_data(request),
                 "state": FrameRequestState.attached.value,
@@ -196,12 +212,13 @@ def attach_frame_request_to_conversation(
                 "expires_at": request.created_at,
                 "cleanup_state": FrameRequestCleanupState.permanent.value,
                 "cleanup_next_attempt_at": None,
-            }
+            },
+            document_path=_request_path(uid, request_id),
         )
         transaction.update(ref, _request_data(candidate))
         return _request_data(candidate)
 
-    return FrameRequest.model_validate(_attach(transaction))
+    return _request_from_payload(_attach(transaction), document_path=_request_path(uid, request_id))
 
 
 def enqueue_frame_request(
@@ -335,7 +352,13 @@ def enqueue_frame_request(
         return _request_data(request), False
 
     data, deduplicated = _create(transaction)
-    return FrameRequest.model_validate(data), deduplicated
+    return (
+        _request_from_payload(
+            data,
+            document_path=_request_path(owner_uid, str(data["request_id"])),
+        ),
+        deduplicated,
+    )
 
 
 def list_pending_frame_requests(
@@ -534,11 +557,14 @@ def transition_frame_request(
         elif next_state == FrameRequestState.uploaded:
             update["cleanup_state"] = FrameRequestCleanupState.pending.value
             update["cleanup_next_attempt_at"] = current_time
-        candidate = FrameRequest.model_validate({**_request_data(request), **update})
+        candidate = _request_from_payload(
+            {**_request_data(request), **update},
+            document_path=_request_path(uid, request_id),
+        )
         transaction.update(ref, _request_data(candidate))
         return _request_data(candidate)
 
-    return FrameRequest.model_validate(_transition(transaction))
+    return _request_from_payload(_transition(transaction), document_path=_request_path(uid, request_id))
 
 
 def reconcile_ambiguous_frame_upload(
@@ -553,51 +579,123 @@ def reconcile_ambiguous_frame_upload(
     now: datetime | None = None,
     firestore_client: Any | None = None,
 ) -> FrameRequest | None:
-    """Resolve an uncertain upload commit without deleting its object.
+    """Resolve an uncertain upload commit without losing an object reference.
 
     If the upload transition committed, return the uploaded/attached row. If a
-    strongly consistent read proves the row is still active, persist a terminal
-    failed row that references the object so the normal external-cleanup worker
-    can reap it. The object is never deleted in this ambiguity path.
+    strongly consistent read does not find that exact reference, persist an
+    independent owner-scoped orphan receipt for the newly uploaded object. The
+    existing request reference is never overwritten, and the object is never
+    deleted in this ambiguity path.
     """
 
     current_time = _utc(now or datetime.now(timezone.utc))
     client = _get_client(firestore_client)
     ref = _collection(uid, firestore_client=client).document(request_id)
+    orphan_ref = _orphan_collection(uid, firestore_client=client).document(
+        hashlib.sha256(storage_id.encode("utf-8")).hexdigest()
+    )
     transaction = client.transaction()
 
     @firestore.transactional
     def _reconcile(transaction: Any) -> dict[str, Any] | None:
         snapshot = ref.get(transaction=transaction)
+        orphan_snapshot = orphan_ref.get(transaction=transaction)
+        orphan_data = {
+            "storage_id": storage_id,
+            "request_id": request_id,
+            "cleanup_state": FrameRequestCleanupState.pending.value,
+            "cleanup_attempts": 0,
+            "cleanup_next_attempt_at": current_time,
+            "created_at": current_time,
+        }
+
+        def ensure_orphan_receipt() -> None:
+            # A repeated ambiguity reconciliation must not reset a receipt
+            # that the cleanup worker already terminalized.
+            if not orphan_snapshot.exists:
+                transaction.set(orphan_ref, orphan_data)
+
         if not snapshot.exists:
+            ensure_orphan_receipt()
             return None
         request = _request_from_snapshot(snapshot)
         if request.uid != uid or request.device_id != device_id or request.account_generation != account_generation:
-            raise PermissionError("frame request owner or account generation mismatch")
-        if request.storage_id == storage_id and request.state in {
-            FrameRequestState.uploaded,
-            FrameRequestState.attached,
-        }:
+            ensure_orphan_receipt()
+            return None
+        if request.storage_id == storage_id:
             return _request_data(request)
-        if request.state in TERMINAL_FRAME_REQUEST_STATES:
+        ensure_orphan_receipt()
+        if request.state in TERMINAL_FRAME_REQUEST_STATES or request.storage_id:
             return _request_data(request)
-        candidate = FrameRequest.model_validate(
+        candidate = _request_from_payload(
             {
                 **_request_data(request),
                 "state": FrameRequestState.failed.value,
                 "terminal_reason": "upload_commit_ambiguous",
-                "storage_id": storage_id,
-                "byte_count": byte_count,
-                "content_type": content_type,
-                "cleanup_state": FrameRequestCleanupState.pending.value,
-                "cleanup_next_attempt_at": current_time,
-            }
+            },
+            document_path=_request_path(uid, request_id),
         )
         transaction.update(ref, _request_data(candidate))
         return _request_data(candidate)
 
     result = _reconcile(transaction)
-    return FrameRequest.model_validate(result) if result else None
+    return _request_from_payload(result, document_path=_request_path(uid, request_id)) if result else None
+
+
+def cleanup_ambiguous_frame_upload_pixels(
+    uid: str,
+    *,
+    delete_storage: Callable[[str], None],
+    now: datetime | None = None,
+    limit: int = FRAME_REQUEST_MAX_BATCH,
+    firestore_client: Any | None = None,
+) -> int:
+    """Converge durable ambiguous-upload receipts independently of request rows."""
+
+    if not 1 <= limit <= FRAME_REQUEST_MAX_BATCH:
+        raise ValueError("limit is outside the bounded frame-request window")
+    current = _utc(now or datetime.now(timezone.utc))
+    query = (
+        _orphan_collection(uid, firestore_client=firestore_client)
+        .where(filter=firestore.FieldFilter("cleanup_next_attempt_at", "<=", current))
+        .order_by("cleanup_next_attempt_at", direction=firestore.Query.ASCENDING)
+        .limit(limit)
+    )
+    cleaned = 0
+    for snapshot in query.stream():
+        row = snapshot.to_dict() or {}
+        storage_id = row.get("storage_id")
+        cleanup_state = row.get("cleanup_state")
+        if (
+            not isinstance(storage_id, str)
+            or not storage_id.strip()
+            or "/" in storage_id
+            or "\\" in storage_id
+            or cleanup_state not in {FrameRequestCleanupState.pending.value, FrameRequestCleanupState.failed.value}
+        ):
+            continue
+        attempts = max(0, int(row.get("cleanup_attempts") or 0))
+        try:
+            delete_storage(storage_id)
+        except Exception:
+            retry_at = current + timedelta(seconds=min(24 * 60 * 60, 2 ** min(attempts, 16)))
+            snapshot.reference.update(
+                {
+                    "cleanup_state": FrameRequestCleanupState.failed.value,
+                    "cleanup_attempts": attempts + 1,
+                    "cleanup_next_attempt_at": retry_at,
+                }
+            )
+            continue
+        snapshot.reference.update(
+            {
+                "cleanup_state": FrameRequestCleanupState.deleted.value,
+                "cleanup_attempts": attempts + 1,
+                "cleanup_next_attempt_at": None,
+            }
+        )
+        cleaned += 1
+    return cleaned
 
 
 def prune_expired_frame_requests(
@@ -636,7 +734,7 @@ def prune_expired_frame_requests(
             # cannot be overwritten by this expiry worker.
             if request.state == FrameRequestState.attached or not is_expired(request, now=current):
                 return False
-            candidate = FrameRequest.model_validate(
+            candidate = _request_from_payload(
                 {
                     **_request_data(request),
                     "state": FrameRequestState.pruned.value,
@@ -647,7 +745,8 @@ def prune_expired_frame_requests(
                         else FrameRequestCleanupState.not_required.value
                     ),
                     "cleanup_next_attempt_at": current,
-                }
+                },
+                document_path=_request_path(uid, snapshot.id),
             )
             transaction.update(snapshot.reference, _request_data(candidate))
             return True
@@ -822,6 +921,35 @@ def list_all_frame_request_storage_ids(
             return result
         last_snapshot = rows[-1]
     raise RuntimeError("frame request storage enumeration exceeded page bound")
+
+
+def list_all_frame_upload_orphan_storage_ids(
+    uid: str,
+    *,
+    firestore_client: Any | None = None,
+    page_size: int = 500,
+    max_pages: int = 1000,
+) -> list[str]:
+    """Exhaustively enumerate ambiguous-upload objects for account deletion."""
+
+    if not 1 <= page_size <= 10000 or not 1 <= max_pages <= 10000:
+        raise ValueError("invalid frame-upload orphan page bounds")
+    collection = _orphan_collection(uid, firestore_client=firestore_client)
+    result: list[str] = []
+    cursor: Any | None = None
+    for _page in range(max_pages):
+        query = collection.order_by("__name__", direction=firestore.Query.ASCENDING).limit(page_size)
+        if cursor is not None:
+            query = query.start_after(cursor)
+        rows = list(query.stream())
+        for snapshot in rows:
+            value = (snapshot.to_dict() or {}).get("storage_id")
+            if isinstance(value, str) and value.strip() and "/" not in value and "\\" not in value:
+                result.append(value.strip())
+        if len(rows) < page_size:
+            return result
+        cursor = rows[-1]
+    raise RuntimeError("frame-upload orphan enumeration exceeded page bound")
 
 
 def _utc(value: datetime) -> datetime:

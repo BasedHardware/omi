@@ -61,22 +61,20 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
                 onPageChanged: onPageChanged,
                 builder: (context, index) {
                   final photo = widget.photos[index];
-                  return FutureBuilder<Uint8List?>(
-                    future: loadConversationPhotoBytes(photo, widget.conversationId),
-                    builder: (context, snapshot) {
-                      final bytes = snapshot.data;
-                      if (bytes == null || bytes.isEmpty) {
-                        return const PhotoViewGalleryPageOptions.customChild(
-                          child: Center(child: CircularProgressIndicator()),
-                        );
-                      }
-                      return PhotoViewGalleryPageOptions(
-                        imageProvider: MemoryImage(bytes),
-                        minScale: PhotoViewComputedScale.contained,
-                        maxScale: PhotoViewComputedScale.covered * 4,
-                        heroAttributes: PhotoViewHeroAttributes(tag: photo.id),
-                      );
-                    },
+                  return PhotoViewGalleryPageOptions.customChild(
+                    child: FutureBuilder<Uint8List?>(
+                      future: loadConversationPhotoBytes(photo, widget.conversationId),
+                      builder: (context, snapshot) {
+                        final bytes = snapshot.data;
+                        if (bytes == null || bytes.isEmpty) {
+                          return const Center(child: CircularProgressIndicator());
+                        }
+                        return Image.memory(bytes, fit: BoxFit.contain, gaplessPlayback: true);
+                      },
+                    ),
+                    minScale: PhotoViewComputedScale.contained,
+                    maxScale: PhotoViewComputedScale.covered * 4,
+                    heroAttributes: PhotoViewHeroAttributes(tag: photo.id),
                   );
                 },
                 scrollPhysics: const BouncingScrollPhysics(),

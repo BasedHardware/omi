@@ -9,6 +9,10 @@ from routers import frame_requests
 from utils.retrieval import frame_request_authority
 
 
+async def _allow(_uid: str, _generation: int) -> None:
+    return None
+
+
 def _request(state: FrameRequestState) -> FrameRequest:
     now = datetime(2026, 8, 24, tzinfo=timezone.utc)
     return FrameRequest(
@@ -36,7 +40,7 @@ def _request(state: FrameRequestState) -> FrameRequest:
 @pytest.mark.asyncio
 async def test_attached_retry_is_idempotent_and_never_cleans_permanent_evidence(monkeypatch):
     request = _request(FrameRequestState.attached)
-    monkeypatch.setattr(frame_requests, "_authorize", lambda uid, generation: None)
+    monkeypatch.setattr(frame_requests, "_authorize", _allow)
     monkeypatch.setattr(frame_requests, "get_frame_request", lambda uid, request_id: request)
     monkeypatch.setattr(
         frame_requests,
@@ -61,7 +65,7 @@ async def test_attached_retry_is_idempotent_and_never_cleans_permanent_evidence(
 @pytest.mark.asyncio
 async def test_ambiguous_state_commit_leaves_object_retryable(monkeypatch):
     request = _request(FrameRequestState.uploaded)
-    monkeypatch.setattr(frame_requests, "_authorize", lambda uid, generation: None)
+    monkeypatch.setattr(frame_requests, "_authorize", _allow)
     monkeypatch.setattr(frame_requests, "get_frame_request", lambda uid, request_id: request)
     monkeypatch.setattr(
         frame_requests,
@@ -86,10 +90,12 @@ async def test_ambiguous_state_commit_leaves_object_retryable(monkeypatch):
 async def test_ambiguous_upload_commit_reconciles_without_deleting_object(monkeypatch):
     request = _request(FrameRequestState.uploaded)
     uploaded_storage_id = ""
-    monkeypatch.setattr(frame_requests, "_authorize", lambda uid, generation: None)
+    monkeypatch.setattr(frame_requests, "_authorize", _allow)
     monkeypatch.setattr(frame_requests, "upload_frame_request_pixels", lambda *args: None)
 
     async def run_blocking(_executor, function, *args, **kwargs):
+        if function is frame_requests.authorize:
+            return None
         if function is frame_requests.upload_frame_request_pixels:
             nonlocal uploaded_storage_id
             uploaded_storage_id = args[1]
