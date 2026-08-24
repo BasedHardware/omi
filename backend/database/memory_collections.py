@@ -105,6 +105,11 @@ class MemoryCollections:
         return f"{self.user_root}/daily_memory_sweep_receipts"
 
     @property
+    def daily_memory_sweep_sources(self) -> str:
+        """Backend-produced, deletion-scoped daily sweep staging packets."""
+        return f"{self.user_root}/daily_memory_sweep_sources"
+
+    @property
     def non_active_memory_routes(self) -> str:
         return f"{self.user_root}/non_active_memory_routes"
 
@@ -145,6 +150,7 @@ class MemoryCollections:
             self.memory_import_artifacts,
             self.memory_import_candidates,
             self.daily_memory_sweep_receipts,
+            self.daily_memory_sweep_sources,
             self.non_active_memory_routes,
             self.short_term_lifecycle_transitions,
             self.legacy_fallback,
