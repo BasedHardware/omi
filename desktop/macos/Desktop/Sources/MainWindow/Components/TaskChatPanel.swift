@@ -359,9 +359,13 @@ private struct TaskThreadOverview: View {
         let currentDeviceID = ClientDeviceService.shared.clientDeviceId
         ForEach(Array(visibleRefs.enumerated()), id: \.offset) { _, ref in
           if let card = RewindEvidenceCardPolicy.card(for: ref, currentDeviceID: currentDeviceID) {
-            RewindEvidenceCardView(card: card) {
-              onOpenRewindEvidence?(card.screenshotID)
-            }
+            RewindEvidenceCardView(
+              card: card,
+              onOpen: RewindEvidenceCardPolicy.openHandler(
+                for: card.screenshotID,
+                onOpen: onOpenRewindEvidence
+              )
+            )
           } else {
             HStack(spacing: OmiSpacing.xxs) {
               Image(systemName: "link")
