@@ -25,6 +25,7 @@ import XCTest
     clearAllBYOKKeys()
     UserDefaults.standard.removeObject(forKey: paywallKey)
     UserDefaults.standard.removeObject(forKey: .byokLLMProvider)
+    APIKeyService.persistEnrolledFingerprints([:])
   }
 
   func testByokActiveRequiresSelectedLLMKey() {
@@ -139,5 +140,39 @@ import XCTest
     // Deepgram is optional when a selected LLM key remains configured.
     UserDefaults.standard.removeObject(forKey: BYOKProvider.deepgram.storageKey)
     XCTAssertFalse(AppState.isPaywalledEffective)
+  }
+
+  func testHasTranscriptionBYOKRequiresEnrolledDeepgramFingerprint() {
+    clearAllBYOKKeys()
+    UserDefaults.standard.set(BYOKLLMProvider.openrouter.rawValue, forKey: .byokLLMProvider)
+    UserDefaults.standard.set("sk-or", forKey: BYOKProvider.openrouter.storageKey)
+    UserDefaults.standard.set("dg-rejected", forKey: BYOKProvider.deepgram.storageKey)
+    APIKeyService.persistEnrolledFingerprints([:])
+
+    XCTAssertFalse(
+      APIKeyService.hasTranscriptionBYOK,
+      "raw Deepgram presence must not suppress transcription exhaustion")
+
+    let fp = APIKeyService.byokFingerprint("dg-rejected")
+    APIKeyService.persistEnrolledFingerprints(["deepgram": fp])
+    XCTAssertTrue(APIKeyService.hasTranscriptionBYOK)
+
+    UserDefaults.standard.set("dg-rotated", forKey: BYOKProvider.deepgram.storageKey)
+    XCTAssertFalse(
+      APIKeyService.hasTranscriptionBYOK,
+      "rotated Deepgram key is not enrolled until validation succeeds")
+  }
+
+  func testSelectedRealtimeBYOKKeyIgnoresUnselectedLeftover() {
+    clearAllBYOKKeys()
+    UserDefaults.standard.set(BYOKLLMProvider.openrouter.rawValue, forKey: .byokLLMProvider)
+    UserDefaults.standard.set("sk-or", forKey: BYOKProvider.openrouter.storageKey)
+    UserDefaults.standard.set("sk-openai-leftover", forKey: BYOKProvider.openai.storageKey)
+    UserDefaults.standard.set("sk-gemini-leftover", forKey: BYOKProvider.gemini.storageKey)
+
+    XCTAssertEqual(APIKeyService.selectedBYOKLLMProvider, .openrouter)
+    XCTAssertNil(APIKeyService.selectedRealtimeBYOKKey(for: .openai))
+    XCTAssertNil(APIKeyService.selectedRealtimeBYOKKey(for: .gemini))
+    XCTAssertEqual(APIKeyService.selectedRealtimeBYOKKey(for: .openrouter), "sk-or")
   }
 }
