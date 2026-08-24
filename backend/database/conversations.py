@@ -25,6 +25,7 @@ from .first_open_obligations import (
     FIRST_OPEN_EFFECTS,
     claim_authorized_first_open_work,
     claim_first_open_work,
+    commit_first_open_app_result,
     commit_first_open_app_usage,
     commit_first_open_conversation_patch,
     commit_first_open_folder_count,
@@ -37,7 +38,6 @@ from .first_open_obligations import (
 logger = logging.getLogger(__name__)
 
 conversations_collection = 'conversations'
-
 
 _LIFECYCLE_FIELDS = frozenset({'status', 'discarded'})
 _PUBLIC_TRANSCRIPT_MAX_STORED_BYTES = 256 * 1024

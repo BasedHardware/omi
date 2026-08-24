@@ -209,7 +209,7 @@ def _conversation_notes_v2_enabled() -> bool:
     return summary_pipeline_mode() is SummaryPipelineMode.NOTES_V2_APPS_OPT_IN
 
 
-def _conversation_apps_opt_in_only() -> bool:
+def conversation_apps_opt_in_only() -> bool:
     # Derived, never independently configured — see SummaryPipelineMode.
     return summary_pipeline_mode() is SummaryPipelineMode.NOTES_V2_APPS_OPT_IN
 
@@ -608,7 +608,7 @@ def get_default_conversation_summarized_apps() -> List[App]:
     return default_apps
 
 
-def _trigger_apps(
+def trigger_conversation_apps(
     uid: str,
     conversation: Conversation,
     is_reprocess: bool = False,
@@ -618,7 +618,7 @@ def _trigger_apps(
     language_code: str = 'en',
     people: Optional[List[Person]] = None,
     preserve_existing_results: bool = False,
-    resumable_result_commit: Optional[Callable[[Mapping[str, Any]], bool]] = None,
+    resumable_result_commit: Optional[Callable[[str, Mapping[str, Any]], bool]] = None,
     resumable_usage_commit: Optional[Callable[[str, UsageHistoryType], bool]] = None,
     resumable_effect_authorizer: Optional[Callable[[], None]] = None,
 ) -> bool:
@@ -628,7 +628,7 @@ def _trigger_apps(
         )
 
     # Get default apps for auto-selection
-    opt_in_only = _conversation_apps_opt_in_only()
+    opt_in_only = conversation_apps_opt_in_only()
     default_apps = [] if opt_in_only else get_default_conversation_summarized_apps()
     default_apps_dict = {app.id: app for app in default_apps}
 
@@ -737,7 +737,7 @@ def _trigger_apps(
                 'suggested_summarization_apps': conversation.suggested_summarization_apps,
             }
             persisted = (
-                resumable_result_commit(result_patch)
+                resumable_result_commit(app.id, result_patch)
                 if resumable_result_commit is not None
                 else conversations_db.update_conversation(uid, conversation.id, result_patch)
             )
@@ -775,7 +775,7 @@ def _trigger_apps(
             raise ExplicitAppSelectionFailedError(f'Selected app {app_id} produced no summary content')
 
 
-def _update_goal_progress(
+def update_goal_progress(
     uid: str,
     conversation: Conversation,
     *,
@@ -2137,7 +2137,7 @@ def process_conversation(
 
             if not jit_defer_expensive:
                 try:
-                    _trigger_apps(
+                    trigger_conversation_apps(
                         uid,
                         conversation,
                         is_reprocess=is_reprocess,
@@ -2159,7 +2159,7 @@ def process_conversation(
             # happened, so persist its output the same way the calendar_event/folder_id/audio_files
             # write-backs do. Otherwise the app summary the LLM just produced is discarded.
             if not jit_defer_expensive and (
-                _conversation_apps_opt_in_only()
+                conversation_apps_opt_in_only()
                 or conversation.apps_results
                 or conversation.suggested_summarization_apps
             ):
@@ -2179,7 +2179,7 @@ def process_conversation(
                 _extract_memories(uid, conversation)
             submit_with_context(postprocess_executor, _save_action_items, uid, conversation, people)
             if not jit_defer_expensive:
-                submit_with_context(postprocess_executor, _update_goal_progress, uid, conversation)
+                submit_with_context(postprocess_executor, update_goal_progress, uid, conversation)
 
         # Create audio files from chunks if private cloud sync was enabled
         if not is_reprocess and conversation.private_cloud_sync_enabled:

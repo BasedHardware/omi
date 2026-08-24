@@ -109,23 +109,87 @@ def test_conversation_effect_output_commits_before_separate_completion_receipt()
 
 
 def test_app_usage_attribution_is_idempotent_and_deletion_fenced() -> None:
-    store, _path = _store()
+    store, path = _store()
+    store.rows[("plugins_data", "app")] = {"id": "app"}
     now = datetime(2026, 1, 1, tzinfo=timezone.utc)
     assert conversations_db.initialize_first_open_work("owner", "conversation", firestore_client=store)
     token = conversations_db.claim_first_open_work("owner", "conversation", now=now, firestore_client=store)
     assert token is not None
 
+    assert conversations_db.commit_first_open_app_result(
+        "owner",
+        "conversation",
+        token,
+        "app",
+        {"apps_results": [{"app_id": "app", "content": "result"}]},
+        firestore_client=store,
+    )
     assert conversations_db.commit_first_open_app_usage(
         "owner", "conversation", token, "app", "memory_created_prompt", firestore_client=store
     )
     usage_path = ("plugins", "app", "usage_history", "conversation")
     assert store.rows[usage_path]["uid"] == "owner"
+    receipt = store.rows[path]["jit_first_open"]["effects"]["app_fanout"]["app_receipts"]["app"]
+    assert receipt == {"result_persisted": True, "usage_persisted": True}
 
     store.rows[("account_deletions", "owner")] = {"wipe_status": "running"}
     assert not conversations_db.commit_first_open_app_usage(
         "owner", "conversation", token, "other-app", "memory_created_prompt", firestore_client=store
     )
     assert ("plugins", "other-app", "usage_history", "conversation") not in store.rows
+
+
+def test_app_result_cannot_complete_until_usage_receipt_is_durable() -> None:
+    store, path = _store()
+    store.rows[("plugins_data", "app")] = {"id": "app"}
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    assert conversations_db.initialize_first_open_work("owner", "conversation", firestore_client=store)
+    token = conversations_db.claim_first_open_work("owner", "conversation", now=now, firestore_client=store)
+    assert token is not None
+
+    assert conversations_db.commit_first_open_app_result(
+        "owner",
+        "conversation",
+        token,
+        "app",
+        {"apps_results": [{"app_id": "app", "content": "paid result"}]},
+        firestore_client=store,
+    )
+    assert not conversations_db.complete_first_open_effect(
+        "owner", "conversation", token, "app_fanout", firestore_client=store
+    )
+    assert store.rows[path]["jit_first_open"]["effects"]["app_fanout"]["state"] == "pending"
+
+    assert conversations_db.commit_first_open_app_usage(
+        "owner", "conversation", token, "app", "memory_created_prompt", firestore_client=store
+    )
+    assert conversations_db.complete_first_open_effect(
+        "owner", "conversation", token, "app_fanout", firestore_client=store
+    )
+
+
+def test_plugin_deletion_after_app_result_cannot_recreate_usage_child() -> None:
+    store, _path = _store()
+    plugin_path = ("plugins_data", "app")
+    store.rows[plugin_path] = {"id": "app"}
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    assert conversations_db.initialize_first_open_work("owner", "conversation", firestore_client=store)
+    token = conversations_db.claim_first_open_work("owner", "conversation", now=now, firestore_client=store)
+    assert token is not None
+    assert conversations_db.commit_first_open_app_result(
+        "owner",
+        "conversation",
+        token,
+        "app",
+        {"apps_results": [{"app_id": "app", "content": "paid result"}]},
+        firestore_client=store,
+    )
+
+    del store.rows[plugin_path]
+    assert not conversations_db.commit_first_open_app_usage(
+        "owner", "conversation", token, "app", "memory_created_prompt", firestore_client=store
+    )
+    assert ("plugins", "app", "usage_history", "conversation") not in store.rows
 
 
 def test_account_recreation_generation_fences_old_in_flight_lease() -> None:
@@ -154,7 +218,7 @@ def test_goal_effect_commit_uses_same_account_deletion_and_generation_fence() ->
 
     @firestore.transactional
     def validate(transaction) -> None:
-        goals_db._validate_first_open_authority(  # pyright: ignore[reportPrivateUsage]
+        goals_db.validate_first_open_authority(
             transaction,
             uid="owner",
             account_generation=3,

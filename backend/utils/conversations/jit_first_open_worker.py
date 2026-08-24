@@ -86,7 +86,7 @@ def run_first_open_derived_work(uid: str, conversation_data: dict[str, Any], tok
 
     if not complete_state('goal_progress'):
         authorize('goal_progress')
-        if not processing._update_goal_progress(
+        if not processing.update_goal_progress(
             uid,
             conversation,
             idempotency_key_prefix=f'jit-first-open:{conversation.id}',
@@ -101,11 +101,9 @@ def run_first_open_derived_work(uid: str, conversation_data: dict[str, Any], tok
         return
     authorize('app_fanout')
 
-    def commit_result(patch: Mapping[str, Any]) -> bool:
+    def commit_result(app_id: str, patch: Mapping[str, Any]) -> bool:
         authorize('app_fanout')
-        return processing.conversations_db.commit_first_open_conversation_patch(
-            uid, conversation.id, token, 'app_fanout', patch
-        )
+        return processing.conversations_db.commit_first_open_app_result(uid, conversation.id, token, app_id, patch)
 
     def commit_usage(app_id: str, usage_type: UsageHistoryType) -> bool:
         authorize('app_fanout')
@@ -113,7 +111,21 @@ def run_first_open_derived_work(uid: str, conversation_data: dict[str, Any], tok
             uid, conversation.id, token, app_id, usage_type.value
         )
 
-    succeeded = processing._trigger_apps(
+    # A crash may leave a durable app result before its usage attribution. Repair
+    # that suffix before selection filters the already-computed app from replay.
+    for result in conversation.apps_results:
+        if not result.app_id:
+            raise RuntimeError('app fanout first-open result is missing an app id')
+        result_patch = {
+            'apps_results': [item.dict() for item in conversation.apps_results],
+            'suggested_summarization_apps': conversation.suggested_summarization_apps,
+        }
+        if not commit_result(result.app_id, result_patch) or not commit_usage(
+            result.app_id, UsageHistoryType.memory_created_prompt
+        ):
+            raise RuntimeError('app fanout first-open receipt repair failed')
+
+    succeeded = processing.trigger_conversation_apps(
         uid,
         conversation,
         is_reprocess=False,
@@ -132,11 +144,15 @@ def run_first_open_derived_work(uid: str, conversation_data: dict[str, Any], tok
             'apps_results': [result.dict() for result in conversation.apps_results],
             'suggested_summarization_apps': conversation.suggested_summarization_apps,
         }
-        if processing._conversation_apps_opt_in_only()
+        if processing.conversation_apps_opt_in_only()
         or conversation.apps_results
         or conversation.suggested_summarization_apps
         else None
     )
-    if patch and not conversation.apps_results and not commit_result(patch):
-        raise RuntimeError('first-open authority lost while persisting app selection')
+    if patch and not conversation.apps_results:
+        authorize('app_fanout')
+        if not processing.conversations_db.commit_first_open_conversation_patch(
+            uid, conversation.id, token, 'app_fanout', patch
+        ):
+            raise RuntimeError('first-open authority lost while persisting app selection')
     complete('app_fanout')

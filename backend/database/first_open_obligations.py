@@ -151,6 +151,49 @@ def commit_first_open_conversation_patch(
     return bool(run_transactional(client, commit))
 
 
+def commit_first_open_app_result(
+    uid: str,
+    conversation_id: str,
+    token: str,
+    app_id: str,
+    patch: Mapping[str, Any],
+    *,
+    firestore_client: Any = None,
+) -> bool:
+    """Persist an app result and its resumable receipt in one transaction."""
+    if not app_id or not patch:
+        return False
+    client = firestore_client or get_firestore_client()
+    ref = _conversation_ref(client, uid, conversation_id)
+
+    @firestore.transactional
+    def commit(transaction):
+        snapshot = ref.get(transaction=transaction)
+        control = _authority(transaction, client, uid)
+        if not _live_effect(snapshot, control, token, 'app_fanout'):
+            return False
+        row = snapshot.to_dict() or {}
+        state = row.get('jit_first_open') or {}
+        effects = _effects(state)
+        app_effect = effects['app_fanout']
+        raw_receipts = app_effect.get('app_receipts')
+        receipts = dict(raw_receipts) if isinstance(raw_receipts, Mapping) else {}
+        prior = receipts.get(app_id)
+        receipt = dict(prior) if isinstance(prior, Mapping) else {}
+        receipts[app_id] = {**receipt, 'result_persisted': True}
+        effects['app_fanout'] = {**app_effect, 'app_receipts': receipts}
+        transaction.update(
+            ref,
+            {
+                **dict(patch),
+                'jit_first_open': {**state, 'effects': effects, 'updated_at': firestore.SERVER_TIMESTAMP},
+            },
+        )
+        return True
+
+    return bool(run_transactional(client, commit))
+
+
 def complete_first_open_effect(
     uid: str,
     conversation_id: str,
@@ -178,6 +221,20 @@ def complete_first_open_effect(
         effects = _effects(state)
         if effects[effect].get('state') == 'complete':
             return True
+        if effect == 'app_fanout':
+            raw_receipts = effects[effect].get('app_receipts')
+            receipts = raw_receipts if isinstance(raw_receipts, Mapping) else {}
+            app_results = row.get('apps_results', [])
+            if not isinstance(app_results, list):
+                return False
+            for result in app_results:
+                if not isinstance(result, Mapping) or not isinstance(result.get('app_id'), str):
+                    return False
+                receipt = receipts.get(result['app_id'])
+                if not isinstance(receipt, Mapping) or not (
+                    receipt.get('result_persisted') is True and receipt.get('usage_persisted') is True
+                ):
+                    return False
         effects[effect] = {**effects[effect], 'state': 'complete', 'completed_at': firestore.SERVER_TIMESTAMP}
         patch: dict[str, Any] = {
             'jit_first_open': {**state, 'effects': effects, 'updated_at': firestore.SERVER_TIMESTAMP}
@@ -228,13 +285,27 @@ def commit_first_open_app_usage(
 ) -> bool:
     client = firestore_client or get_firestore_client()
     conversation_ref = _conversation_ref(client, uid, conversation_id)
+    plugin_ref = client.collection('plugins_data').document(app_id)
     usage_ref = client.collection('plugins').document(app_id).collection('usage_history').document(conversation_id)
 
     @firestore.transactional
     def commit(transaction):
         conversation = conversation_ref.get(transaction=transaction)
+        plugin = plugin_ref.get(transaction=transaction)
         if not _live_effect(conversation, _authority(transaction, client, uid), token, 'app_fanout'):
             return False
+        row = conversation.to_dict() or {}
+        state = row.get('jit_first_open') or {}
+        effects = _effects(state)
+        app_effect = effects['app_fanout']
+        raw_receipts = app_effect.get('app_receipts')
+        receipts = dict(raw_receipts) if isinstance(raw_receipts, Mapping) else {}
+        prior = receipts.get(app_id)
+        receipt = dict(prior) if isinstance(prior, Mapping) else {}
+        if not plugin.exists or receipt.get('result_persisted') is not True:
+            return False
+        receipts[app_id] = {**receipt, 'usage_persisted': True}
+        effects['app_fanout'] = {**app_effect, 'app_receipts': receipts}
         transaction.set(
             usage_ref,
             {
@@ -244,6 +315,10 @@ def commit_first_open_app_usage(
                 'timestamp': firestore.SERVER_TIMESTAMP,
                 'type': usage_type,
             },
+        )
+        transaction.update(
+            conversation_ref,
+            {'jit_first_open': {**state, 'effects': effects, 'updated_at': firestore.SERVER_TIMESTAMP}},
         )
         return True
 

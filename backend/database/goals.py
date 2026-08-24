@@ -97,7 +97,7 @@ def _validate_write_control(snapshot: Any, *, uid: str, account_generation: int)
         raise GoalConflictError('account generation mismatch')
 
 
-def _validate_first_open_authority(
+def validate_first_open_authority(
     write_transaction: Any,
     *,
     uid: str,
@@ -803,7 +803,7 @@ def _append_goal_progress_event(
     @firestore.transactional
     def apply(write_transaction):
         if authority_account_generation is not None and authority_source_generation is not None:
-            _validate_first_open_authority(
+            validate_first_open_authority(
                 write_transaction,
                 uid=uid,
                 account_generation=authority_account_generation,
@@ -846,7 +846,7 @@ def _append_goal_progress_event(
             goal_patch['metric'] = event.metric.model_dump(mode='python')
             goal_patch.update(_metric_aliases(event.metric))
         write_transaction.update(goal_ref, goal_patch)
-        if authority_account_generation is not None:
+        if authority_account_generation is not None and record.metric is not None:
             history_ref = goal_ref.collection(goal_history_collection).document(now.strftime('%Y-%m-%d'))
             write_transaction.set(
                 history_ref,

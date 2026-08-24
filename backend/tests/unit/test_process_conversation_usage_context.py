@@ -427,7 +427,7 @@ def test_fenced_completion_submits_no_derived_work(monkeypatch):
     monkeypatch.setattr(process_conversation, "_get_conversation_obj", lambda *args, **kwargs: completed_conversation)
     monkeypatch.setattr(process_conversation.lifecycle_service, "persist_processed_conversation", persistence)
     monkeypatch.setattr(process_conversation, "submit_with_context", submit)
-    monkeypatch.setattr(process_conversation, "_trigger_apps", trigger_apps)
+    monkeypatch.setattr(process_conversation, "trigger_conversation_apps", trigger_apps)
     monkeypatch.setattr(process_conversation.conversations_db, "create_audio_files_from_chunks", create_audio_files)
     monkeypatch.setattr(process_conversation.conversations_db, "update_conversation", update_conversation)
 
@@ -478,7 +478,7 @@ def test_deferred_derived_effects_emit_nothing_until_runner_invoked(monkeypatch)
     monkeypatch.setattr(process_conversation, "_get_conversation_obj", lambda *args, **kwargs: completed_conversation)
     monkeypatch.setattr(process_conversation.lifecycle_service, "persist_processed_conversation", persistence)
     monkeypatch.setattr(process_conversation, "submit_with_context", submit)
-    monkeypatch.setattr(process_conversation, "_trigger_apps", trigger_apps)
+    monkeypatch.setattr(process_conversation, "trigger_conversation_apps", trigger_apps)
     monkeypatch.setattr(process_conversation.conversations_db, "create_audio_files_from_chunks", create_audio_files)
     monkeypatch.setattr(process_conversation.conversations_db, "update_conversation", update_conversation)
     monkeypatch.setattr(process_conversation, "_extract_memories", extract_memories)
@@ -1385,7 +1385,7 @@ def test_trigger_apps_uses_preferred_app_skips_llm_suggestion():
     p2 = patch.object(process_conversation, "get_available_apps", return_value=[preferred])
 
     with p1, p2, p3, p4, p5, p6:
-        process_conversation._trigger_apps("user-preferred", conv)
+        process_conversation.trigger_conversation_apps("user-preferred", conv)
 
     # The suggestion LLM call must NOT have been invoked
     suggestion_mock.assert_not_called()
@@ -1404,7 +1404,7 @@ def test_trigger_apps_stale_preferred_app_falls_through_to_suggestion():
     suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context(default_apps=[suggestion_app])
 
     with p1, p2, p3, p4, p5, p6:
-        process_conversation._trigger_apps("user-stale", conv)
+        process_conversation.trigger_conversation_apps("user-stale", conv)
 
     # The suggestion LLM call SHOULD have been invoked since preferred app was invalid
     suggestion_mock.assert_called_once()
@@ -1419,7 +1419,7 @@ def test_trigger_apps_no_preferred_app_runs_suggestion():
     suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context(default_apps=[suggestion_app])
 
     with p1, p2, p3, p4, p5, p6:
-        process_conversation._trigger_apps("user-no-pref", conv)
+        process_conversation.trigger_conversation_apps("user-no-pref", conv)
 
     # The suggestion LLM call SHOULD have been invoked
     suggestion_mock.assert_called_once()
@@ -1437,7 +1437,7 @@ def test_trigger_apps_opt_in_only_skips_default_and_suggestion(monkeypatch):
 
     suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context(default_apps=[suggestion_app])
     with p1, p2, p3, p4, p5, p6:
-        process_conversation._trigger_apps('user-opt-in-only', conv)
+        process_conversation.trigger_conversation_apps('user-opt-in-only', conv)
 
     suggestion_mock.assert_not_called()
     app_result_mock.assert_not_called()
@@ -1452,7 +1452,7 @@ def test_trigger_apps_counts_a_successful_explicit_reprocess_selection(monkeypat
 
     suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
     with p1, p2, p3, p4, p5 as record_usage, p6:
-        process_conversation._trigger_apps(
+        process_conversation.trigger_conversation_apps(
             'user-explicit',
             conv,
             is_reprocess=True,
@@ -1480,7 +1480,7 @@ def test_trigger_apps_does_not_count_non_user_reprocessing(is_reprocess):
     suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
     p2 = patch.object(process_conversation, 'get_available_apps', return_value=[preferred])
     with p1, p2, p3, p4, p5 as record_usage, p6:
-        process_conversation._trigger_apps(
+        process_conversation.trigger_conversation_apps(
             'user-non-selection',
             conv,
             is_reprocess=is_reprocess,
@@ -1583,18 +1583,18 @@ def test_summary_pipeline_mode_cannot_reach_the_regressing_combination(monkeypat
     """
     monkeypatch.delenv('CONVERSATION_NOTES_V2_ENABLED', raising=False)
     assert process_conversation.summary_pipeline_mode() is process_conversation.SummaryPipelineMode.LEGACY_APP_PRIMARY
-    assert process_conversation._conversation_apps_opt_in_only() is False
+    assert process_conversation.conversation_apps_opt_in_only() is False
     assert process_conversation._conversation_notes_v2_enabled() is False
 
     monkeypatch.setenv('CONVERSATION_NOTES_V2_ENABLED', 'true')
     assert process_conversation.summary_pipeline_mode() is process_conversation.SummaryPipelineMode.NOTES_V2_APPS_OPT_IN
-    assert process_conversation._conversation_apps_opt_in_only() is True
+    assert process_conversation.conversation_apps_opt_in_only() is True
     assert process_conversation._conversation_notes_v2_enabled() is True
 
     # A stale standalone override must not resurrect the fourth state.
     monkeypatch.delenv('CONVERSATION_NOTES_V2_ENABLED', raising=False)
     monkeypatch.setenv('CONVERSATION_APPS_OPT_IN_ONLY', 'true')
-    assert process_conversation._conversation_apps_opt_in_only() is False
+    assert process_conversation.conversation_apps_opt_in_only() is False
 
 
 def test_trigger_apps_preferred_app_outside_installed_slice_is_still_used():
@@ -1608,7 +1608,7 @@ def test_trigger_apps_preferred_app_outside_installed_slice_is_still_used():
     suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context(availability_app=preferred)
 
     with p1, p2, p3, p4, p5, p6:
-        process_conversation._trigger_apps("user-template", conv)
+        process_conversation.trigger_conversation_apps("user-template", conv)
 
     suggestion_mock.assert_not_called()
     app_result_mock.assert_called_once()
@@ -1629,7 +1629,7 @@ def test_trigger_apps_preferred_app_without_memories_capability_falls_through():
     )
 
     with p1, p2, p3, p4, p5, p6:
-        process_conversation._trigger_apps("user-persona", conv)
+        process_conversation.trigger_conversation_apps("user-persona", conv)
 
     suggestion_mock.assert_called_once()
 
@@ -1688,7 +1688,7 @@ def test_app_summary_results_reach_the_database(monkeypatch):
     monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *a, **k: completed_conversation)
     monkeypatch.setattr(process_conversation.lifecycle_service, 'persist_processed_conversation', persisted)
     monkeypatch.setattr(process_conversation.lifecycle_service, 'create_completed_conversation', persisted)
-    monkeypatch.setattr(process_conversation, '_trigger_apps', fake_trigger_apps)
+    monkeypatch.setattr(process_conversation, 'trigger_conversation_apps', fake_trigger_apps)
     monkeypatch.setattr(process_conversation, 'submit_with_context', MagicMock())
     monkeypatch.setattr(process_conversation.conversations_db, 'update_conversation', update_conversation)
     monkeypatch.setattr(
@@ -1752,7 +1752,7 @@ def test_finalization_survives_an_extraction_run_with_no_grounded_candidates(mon
     monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *a, **k: completed_conversation)
     monkeypatch.setattr(process_conversation.lifecycle_service, 'persist_processed_conversation', lambda *a, **k: True)
     monkeypatch.setattr(process_conversation.lifecycle_service, 'create_completed_conversation', lambda *a, **k: True)
-    monkeypatch.setattr(process_conversation, '_trigger_apps', lambda *a, **k: None)
+    monkeypatch.setattr(process_conversation, 'trigger_conversation_apps', lambda *a, **k: None)
     monkeypatch.setattr(process_conversation, 'submit_with_context', submitted)
     monkeypatch.setattr(process_conversation.conversations_db, 'update_conversation', lambda *a, **k: None)
     monkeypatch.setattr(process_conversation, 'MemoryService', lambda db_client: memory_service)
@@ -1823,7 +1823,7 @@ def test_finalization_survives_an_unavailable_memory_extractor(monkeypatch):
     monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *a, **k: completed_conversation)
     monkeypatch.setattr(process_conversation.lifecycle_service, 'persist_processed_conversation', lambda *a, **k: True)
     monkeypatch.setattr(process_conversation.lifecycle_service, 'create_completed_conversation', lambda *a, **k: True)
-    monkeypatch.setattr(process_conversation, '_trigger_apps', lambda *a, **k: None)
+    monkeypatch.setattr(process_conversation, 'trigger_conversation_apps', lambda *a, **k: None)
     monkeypatch.setattr(process_conversation, 'submit_with_context', submitted)
     monkeypatch.setattr(process_conversation.conversations_db, 'update_conversation', lambda *a, **k: None)
     monkeypatch.setattr(process_conversation, 'MemoryService', lambda db_client: memory_service)
@@ -1863,7 +1863,7 @@ def test_custom_stt_conversation_without_llm_byok_key_skips_llm_work(monkeypatch
         process_conversation, '_get_structured', lambda *a, **k: structured_calls.append(1) or (MagicMock(), False)
     )
     monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *a, **k: completed_conversation)
-    monkeypatch.setattr(process_conversation, '_trigger_apps', lambda *a, **k: None)
+    monkeypatch.setattr(process_conversation, 'trigger_conversation_apps', lambda *a, **k: None)
     # No LLM BYOK key on this request, so Omi would pay — the gate must fire.
     monkeypatch.setattr(process_conversation.users_db, 'is_byok_active', lambda _uid: False)
     monkeypatch.setattr(process_conversation, 'get_byok_key', lambda _provider: None)
@@ -1913,7 +1913,7 @@ def test_custom_stt_conversation_with_llm_byok_key_runs_llm_work(monkeypatch):
         process_conversation, '_get_structured', lambda *a, **k: structured_calls.append(1) or (MagicMock(), False)
     )
     monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *a, **k: completed_conversation)
-    monkeypatch.setattr(process_conversation, '_trigger_apps', lambda *a, **k: None)
+    monkeypatch.setattr(process_conversation, 'trigger_conversation_apps', lambda *a, **k: None)
     monkeypatch.setattr(process_conversation, 'submit_with_context', MagicMock())
     # The user carries an OpenAI key — enrichment runs on their bill.
     monkeypatch.setattr(process_conversation.users_db, 'is_byok_active', lambda _uid: True)
@@ -1949,7 +1949,7 @@ def test_omi_stt_conversation_never_reads_byok_state(monkeypatch):
         process_conversation, '_get_structured', lambda *a, **k: structured_calls.append(1) or (MagicMock(), False)
     )
     monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *a, **k: completed_conversation)
-    monkeypatch.setattr(process_conversation, '_trigger_apps', lambda *a, **k: None)
+    monkeypatch.setattr(process_conversation, 'trigger_conversation_apps', lambda *a, **k: None)
     byok_calls = []
     monkeypatch.setattr(
         process_conversation.users_db,
