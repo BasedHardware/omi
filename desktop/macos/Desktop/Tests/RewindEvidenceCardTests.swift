@@ -5,23 +5,58 @@ import XCTest
 final class RewindEvidenceCardTests: XCTestCase {
   private let deviceID = "macos_test-device"
 
-  func testCurrentDeviceLocalCaptureV2EvidenceBecomesARewindCard() {
-    let evidence = makeEvidence(deviceID: deviceID, id: "screen-42", version: "capture.v2")
+  func testProducerMarksAnActualScreenshotAsAnExactRewindFrame() throws {
+    XCTAssertEqual(
+      ScreenCandidateAdapter.evidenceVersion(for: 42),
+      RewindEvidenceCardPolicy.supportedVersion
+    )
+    let decision = ScreenCandidateAdapter.adapt(
+      task: makeExtractedTask(),
+      dueAt: nil,
+      localEvidenceID: "screen-42",
+      deviceID: deviceID,
+      evidenceVersion: ScreenCandidateAdapter.evidenceVersion(for: 42)
+    )
+    let evidence = try XCTUnwrap(decision.candidateEvidenceRefs.first)
 
-    let card = RewindEvidenceCardPolicy.card(for: evidence, currentDeviceID: deviceID)
-
-    XCTAssertEqual(card?.screenshotID, 42)
-    XCTAssertEqual(card?.subtitle, "Open Rewind · frame 42")
-  }
-
-  func testLegacyVersionWithoutVersionStillNeedsTheLocalIdentityFence() {
-    let evidence = makeEvidence(deviceID: deviceID, id: "screen-7", version: nil)
-
+    XCTAssertEqual(evidence.id, "screen-42")
+    XCTAssertEqual(evidence.version, "rewind_frame.v1")
     XCTAssertEqual(
       RewindEvidenceCardPolicy.card(for: evidence, currentDeviceID: deviceID)?.screenshotID,
-      7
+      42
     )
-    XCTAssertNil(RewindEvidenceCardPolicy.card(for: evidence, currentDeviceID: "macos_other-device"))
+  }
+
+  func testNilScreenshotFallbackCannotCollideIntoARewindFrame() throws {
+    XCTAssertEqual(
+      ScreenCandidateAdapter.evidenceVersion(for: nil),
+      ScreenCandidateAdapter.captureEvidenceVersion
+    )
+    let fallbackDecision = ScreenCandidateAdapter.adapt(
+      task: makeExtractedTask(),
+      dueAt: nil,
+      localEvidenceID: "screen-42",
+      deviceID: deviceID
+    )
+    let fallback = try XCTUnwrap(fallbackDecision.candidateEvidenceRefs.first)
+    let actual = makeEvidence(
+      deviceID: deviceID,
+      id: fallback.id,
+      version: RewindEvidenceCardPolicy.supportedVersion
+    )
+
+    XCTAssertEqual(fallback.version, ScreenCandidateAdapter.captureEvidenceVersion)
+    XCTAssertEqual(fallback.id, actual.id)
+    XCTAssertNil(RewindEvidenceCardPolicy.card(for: fallback, currentDeviceID: deviceID))
+    XCTAssertEqual(RewindEvidenceCardPolicy.card(for: actual, currentDeviceID: deviceID)?.screenshotID, 42)
+  }
+
+  func testOldCaptureVersionAndLegacyNilVersionRemainTextOnly() {
+    let oldCapture = makeEvidence(deviceID: deviceID, id: "screen-7", version: "capture.v2")
+    let legacy = makeEvidence(deviceID: deviceID, id: "screen-8", version: nil)
+
+    XCTAssertNil(RewindEvidenceCardPolicy.card(for: oldCapture, currentDeviceID: deviceID))
+    XCTAssertNil(RewindEvidenceCardPolicy.card(for: legacy, currentDeviceID: deviceID))
   }
 
   func testMalformedForeignAndFutureEvidenceRemainTextOnly() {
@@ -29,8 +64,12 @@ final class RewindEvidenceCardTests: XCTestCase {
       makeEvidence(deviceID: deviceID, id: "42", version: "capture.v2"),
       makeEvidence(deviceID: deviceID, id: "screen-0", version: "capture.v2"),
       makeEvidence(deviceID: deviceID, id: "screen-01", version: "capture.v2"),
-      makeEvidence(deviceID: "macos_other-device", id: "screen-42", version: "capture.v2"),
-      makeEvidence(deviceID: deviceID, id: "screen-42", version: "capture.v3"),
+      makeEvidence(
+        deviceID: "macos_other-device",
+        id: "screen-42",
+        version: RewindEvidenceCardPolicy.supportedVersion
+      ),
+      makeEvidence(deviceID: deviceID, id: "screen-42", version: "rewind_frame.v2"),
       OmiAPI.EvidenceRef(id: "screen-42", kind: .conversation, scope: .canonical, version: "capture.v2"),
       OmiAPI.EvidenceRef(id: "screen-42", kind: .local_screen, scope: .canonical, version: "capture.v2"),
     ]
@@ -76,7 +115,7 @@ final class RewindEvidenceCardTests: XCTestCase {
         makeEvidence(
           deviceID: ClientDeviceService.shared.clientDeviceId,
           id: "screen-42",
-          version: "capture.v2"
+          version: RewindEvidenceCardPolicy.supportedVersion
         )
       ]
     )
@@ -95,5 +134,42 @@ final class RewindEvidenceCardTests: XCTestCase {
       scope: .device_local,
       version: version
     )
+  }
+
+  private func makeExtractedTask() -> ExtractedTask {
+    ExtractedTask(
+      title: "Review the captured screen",
+      description: nil,
+      priority: .medium,
+      sourceApp: "Messages",
+      inferredDeadline: nil,
+      confidence: 0.95,
+      tags: [],
+      sourceCategory: "direct_request",
+      sourceSubcategory: "message",
+      captureKind: "direct_request",
+      owner: "user",
+      concreteDeliverable: true,
+      publicBroadcast: false,
+      directMention: true,
+      alreadyDone: false,
+      duplicateOf: nil,
+      refinesTask: nil,
+      ownershipConfidence: 0.95
+    )
+  }
+}
+
+extension ScreenCandidateDecision {
+  fileprivate var candidateEvidenceRefs: [OmiAPI.EvidenceRef] {
+    guard let candidate else { return [] }
+    switch candidate {
+    case .taskCreate(let candidate): return candidate.evidenceRefs
+    case .taskUpdate(let candidate): return candidate.evidenceRefs
+    case .taskComplete(let candidate): return candidate.evidenceRefs
+    case .taskCancel(let candidate): return candidate.evidenceRefs
+    case .taskSupersede(let candidate): return candidate.evidenceRefs
+    case .workstreamCreate(let candidate): return candidate.evidenceRefs
+    }
   }
 }

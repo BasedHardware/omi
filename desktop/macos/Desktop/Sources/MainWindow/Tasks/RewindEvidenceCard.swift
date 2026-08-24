@@ -14,9 +14,9 @@ struct RewindEvidenceCardModel: Equatable, Identifiable, Sendable {
 }
 
 enum RewindEvidenceCardPolicy {
-  /// The version emitted by the local screen-candidate producer. Nil is accepted for older local
-  /// refs only after the stronger kind/scope/device/id checks below; unknown versions stay inert.
-  static let supportedVersion = "capture.v2"
+  /// Only this explicit version identifies an exact local Rewind frame. The older `capture.v2`
+  /// contract may carry a staged-task id when no screenshot row exists, so it must stay text-only.
+  static let supportedVersion = "rewind_frame.v1"
 
   /// Return a card only when this exact reference identifies a frame owned by this installation.
   /// The caller supplies the device identity so this policy remains deterministic in tests and
@@ -30,7 +30,7 @@ enum RewindEvidenceCardPolicy {
       let expectedDeviceID = normalized(currentDeviceID),
       let evidenceDeviceID = normalized(evidence.deviceId),
       evidenceDeviceID == expectedDeviceID,
-      evidence.version == nil || evidence.version == supportedVersion,
+      evidence.version == supportedVersion,
       let screenshotID = parseScreenshotID(evidence.id)
     else { return nil }
 
