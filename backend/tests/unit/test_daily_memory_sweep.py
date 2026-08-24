@@ -1,5 +1,8 @@
 from datetime import date, datetime, timedelta, timezone
+from io import StringIO
 import sys
+import threading
+import time
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
@@ -39,6 +42,10 @@ from utils.memory.daily_memory_sweep import (
     close_daily_memory_sweep_cohort_clients,
     daily_memory_sweep_cohort_authority_from_environment,
     _POSTHOG_CLIENTS,
+    MODEL_INVOCATION_PATH,
+    MODEL_INVOCATION_SCHEMA_VERSION,
+    _invoke_model_once,
+    cleanup_expired_daily_memory_sweep_stages,
     read_daily_memory_sweep_cohort_assignment,
     run_daily_memory_sweep_scheduler,
     produce_completed_day_daily_summary_sources,
@@ -811,6 +818,157 @@ def test_onboarding_continuation_reuses_durable_candidate_page(monkeypatch):
     assert second == first
     assert len(second[8:]) == 12
     assert len(calls) == 1
+
+
+def test_model_invocation_fence_is_at_most_once_under_overlapping_threads():
+    db = _Db()
+    calls = []
+    results = []
+
+    def builder():
+        calls.append(True)
+        # Give the second worker a chance to contend at the durable boundary.
+        time.sleep(0.01)
+        return ({"candidate_id": "candidate-1"},)
+
+    workers = [
+        threading.Thread(
+            target=lambda: results.append(_invoke_model_once(db, "user-1", "overlap", candidate_builder=builder))
+        )
+        for _ in range(2)
+    ]
+    for worker in workers:
+        worker.start()
+    for worker in workers:
+        worker.join()
+
+    assert len(calls) == 1
+    assert results == [({"candidate_id": "candidate-1"},)] * 2
+    invocation = db.document(f"users/user-1/{MODEL_INVOCATION_PATH}/overlap").get().to_dict()
+    assert invocation["schema_version"] == MODEL_INVOCATION_SCHEMA_VERSION
+    assert invocation["state"] == "returned"
+
+
+def test_model_return_is_reused_after_stage_gap_and_pending_is_fail_closed():
+    db = _Db()
+    calls = []
+
+    def builder():
+        calls.append(True)
+        return ({"candidate_id": "candidate-after-provider-return"},)
+
+    first = _invoke_model_once(db, "user-1", "stage-gap", candidate_builder=builder)
+    # The candidate stage can be absent after a worker crash, but the durable
+    # invocation receipt still makes a retry free and deterministic.
+    second = _invoke_model_once(
+        db,
+        "user-1",
+        "stage-gap",
+        candidate_builder=lambda: (_ for _ in ()).throw(AssertionError("provider charged twice")),
+    )
+    assert first == second
+    assert len(calls) == 1
+
+    pending_ref = db.document(f"users/user-1/{MODEL_INVOCATION_PATH}/pending-crash")
+    pending_ref.set(
+        {
+            "schema_version": MODEL_INVOCATION_SCHEMA_VERSION,
+            "uid": "user-1",
+            "invocation_id": "pending-crash",
+            "state": "pending",
+            "lease_expires_at": datetime.now(timezone.utc) - timedelta(minutes=1),
+        }
+    )
+    assert (
+        _invoke_model_once(
+            db,
+            "user-1",
+            "pending-crash",
+            candidate_builder=lambda: (_ for _ in ()).throw(AssertionError("indeterminate call retried")),
+        )
+        is None
+    )
+
+
+class _CleanupRow:
+    def __init__(self, path, payload, store):
+        self.reference = SimpleNamespace(delete=lambda: store.pop(path, None))
+        self._payload = payload
+
+    def to_dict(self):
+        return self._payload
+
+
+class _CleanupCollection:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def limit(self, _count):
+        return self
+
+    def stream(self):
+        return iter(self.rows)
+
+
+class _CleanupDb(_Db):
+    def collection(self, path):
+        rows = [
+            _CleanupRow(row_path, payload, self.store)
+            for row_path, payload in list(self.store.items())
+            if row_path.startswith(path + "/")
+        ]
+        return _CleanupCollection(rows)
+
+
+def test_expired_candidate_stages_are_bounded_but_indeterminate_claims_remain_closed():
+    db = _CleanupDb()
+    expired = datetime.now(timezone.utc) - timedelta(minutes=1)
+    db.store["users/user-1/daily_memory_sweep_daily_summary_staged/summary"] = {"expires_at": expired}
+    db.store["users/user-1/daily_memory_sweep_onboarding_staged/onboarding"] = {"expires_at": expired}
+    db.store["users/user-1/daily_memory_sweep_model_invocations/returned"] = {
+        "state": "returned",
+        "expires_at": expired,
+    }
+    db.store["users/user-1/daily_memory_sweep_model_invocations/pending"] = {
+        "state": "pending",
+        "lease_expires_at": expired,
+    }
+
+    assert cleanup_expired_daily_memory_sweep_stages("user-1", db_client=db) == 3
+    assert not any("staged" in path for path in db.store)
+    assert "users/user-1/daily_memory_sweep_model_invocations/returned" not in db.store
+    assert "users/user-1/daily_memory_sweep_model_invocations/pending" in db.store
+
+
+def test_user_export_includes_both_candidate_stages_and_model_receipts(monkeypatch):
+    from services.users import data_export
+
+    monkeypatch.setattr(data_export, "get_user_profile", lambda _uid: {})
+    monkeypatch.setattr(data_export.conversations_db, "iter_all_conversations", lambda *_args, **_kwargs: ())
+    monkeypatch.setattr(data_export, "get_people", lambda _uid: ())
+    monkeypatch.setattr(data_export, "get_standalone_action_items", lambda *_args, **_kwargs: ())
+    monkeypatch.setattr(data_export.chat_db, "iter_all_messages", lambda *_args, **_kwargs: ())
+
+    def user_rows(_uid, collection):
+        if collection in {
+            "daily_memory_sweep_daily_summary_staged",
+            "daily_memory_sweep_onboarding_staged",
+            "daily_memory_sweep_model_invocations",
+        }:
+            yield {"id": f"{collection}-row", "candidate_page": [{"content": "private fact"}]}
+
+    monkeypatch.setattr(data_export, "_iter_user_subcollection", user_rows)
+    monkeypatch.setattr(data_export, "_iter_user_nested_subcollection", lambda *_args, **_kwargs: iter(()))
+
+    payload = "".join(data_export._iter_user_data_export_from_spool("user-1", StringIO("[\n]")))
+    export = __import__("json").loads(payload)
+
+    assert {
+        "daily_memory_sweep_daily_summary_staged",
+        "daily_memory_sweep_onboarding_staged",
+        "daily_memory_sweep_model_invocations",
+    } <= set(export["task_data"])
+    assert export["task_data"]["daily_memory_sweep_onboarding_staged"][0]["candidate_page"]
 
 
 def test_onboarding_malformed_stage_fails_closed_without_reextracting(monkeypatch):

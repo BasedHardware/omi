@@ -44,6 +44,15 @@ TASK_NESTED_EXPORT_COLLECTIONS = (
     ('workstream_continuation_checkpoints', 'workstreams', 'continuation_checkpoints'),
 )
 
+# The daily memory sweep persists bounded model output in user-owned
+# subcollections. These rows contain transcript-derived candidates and must
+# be included in export even though they are not product-facing collections.
+MEMORY_SWEEP_EXPORT_COLLECTIONS = (
+    'daily_memory_sweep_daily_summary_staged',
+    'daily_memory_sweep_onboarding_staged',
+    'daily_memory_sweep_model_invocations',
+)
+
 
 def _json_default(obj: object) -> str:
     if isinstance(obj, datetime):
@@ -179,6 +188,10 @@ def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str]) -> Iter
             _iter_user_nested_subcollection(uid, parent_collection_name, child_collection_name),
         )
         for export_name, parent_collection_name, child_collection_name in TASK_NESTED_EXPORT_COLLECTIONS
+    )
+    task_export_sections.extend(
+        (collection_name, _iter_user_subcollection(uid, collection_name))
+        for collection_name in MEMORY_SWEEP_EXPORT_COLLECTIONS
     )
     for index, (collection_name, records) in enumerate(task_export_sections):
         yield f"    {json.dumps(collection_name)}: "

@@ -263,6 +263,31 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
 
     job_env = _as_config_dict(job.get('env')) or {}
     job_secrets = _as_config_dict(job.get('secrets')) or {}
+    daily_sweep_env_names = {
+        'MEMORY_DAILY_MEMORY_SWEEP_ENABLED',
+        'MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH',
+        'MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED',
+        'MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME',
+        'MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES',
+        'MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD',
+        'MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED',
+        'MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME',
+        'MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG',
+        'MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS',
+        'MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED',
+    }
+    for forbidden_name in sorted(daily_sweep_env_names.intersection(job_env)):
+        errors.append(
+            ValidationError(
+                scope,
+                f'env {forbidden_name} belongs only on daily-memory-sweep-job',
+            )
+        )
+    for forbidden_name in ('POSTHOG_HOST',):
+        if forbidden_name in job_env:
+            errors.append(ValidationError(scope, f'env {forbidden_name} belongs only on daily-memory-sweep-job'))
+    if 'POSTHOG_PROJECT_API_KEY' in job_secrets:
+        errors.append(ValidationError(scope, 'secret POSTHOG_PROJECT_API_KEY belongs only on daily-memory-sweep-job'))
     if env == 'dev':
         job_flags = _as_config_dict(job.get('flags')) or {}
         for flag_name, expected_value in _MEMORY_MAINTENANCE_DEV_REQUIRED_FLAGS.items():

@@ -117,7 +117,7 @@ class _Db:
         raise AssertionError(path)
 
 
-def test_onboarding_queries_are_registered_with_exact_generated_indexes():
+def test_onboarding_queries_keep_server_cursor_without_redundant_composites():
     assert DAILY_SWEEP_ONBOARDING_COMPLETED_USERS_QUERY in QUERY_SPECS
     assert DAILY_SWEEP_ONBOARDING_DEVICE_COMPLETED_USERS_QUERY in QUERY_SPECS
     signatures = {
@@ -132,12 +132,16 @@ def test_onboarding_queries_are_registered_with_exact_generated_indexes():
         "users",
         "COLLECTION",
         (("onboarding.completed", "ASCENDING"), ("__name__", "ASCENDING")),
-    ) in signatures
+    ) not in signatures
     assert (
         "users",
         "COLLECTION",
         (("onboarding.device_onboarding_completed", "ASCENDING"), ("__name__", "ASCENDING")),
-    ) in signatures
+    ) not in signatures
+    assert tuple((item.field_path, item.operator) for item in DAILY_SWEEP_ONBOARDING_COMPLETED_USERS_QUERY.filters) == (
+        ("onboarding.completed", "=="),
+        ("__name__", ">"),
+    )
 
 
 def test_independent_inventory_executes_registered_onboarding_cursor_query(monkeypatch):
@@ -150,6 +154,47 @@ def test_independent_inventory_executes_registered_onboarding_cursor_query(monke
     page = independent.bounded_daily_memory_sweep_uid_inventory(db, limit=2, return_page=True)
     assert isinstance(page, independent.DailySweepUIDInventoryPage)
     assert page.onboarding_uids == ("a",)
+
+
+def test_independent_onboarding_cursor_is_server_side_before_page_limit(monkeypatch):
+    db = _Db()
+    # A provider-side limit over pre-cursor rows would starve z-user forever.
+    db.users = _Users(
+        [_Snapshot(f"a-{index:02d}") for index in range(12)]
+        + [_Snapshot("z-user", {"onboarding": {"completed": True}})]
+    )
+    db.document(independent.DAILY_SWEEP_ONBOARDING_CURSOR_PATH).set(
+        {
+            "schema_version": independent.DAILY_SWEEP_ONBOARDING_CURSOR_SCHEMA_VERSION,
+            "last_uid": "m-user",
+            "generation": 0,
+        }
+    )
+    monkeypatch.setattr(independent, "bounded_canonical_daily_sweep_uids", lambda *_args, **_kwargs: ())
+
+    page = independent.bounded_daily_memory_sweep_uid_inventory(db, limit=2, return_page=True)
+
+    assert page.onboarding_uids == ("z-user",)
+
+
+def test_legacy_onboarding_cursor_is_server_side_before_page_limit(monkeypatch):
+    db = _Db()
+    db.users = _Users(
+        [_Snapshot(f"a-{index:02d}") for index in range(12)]
+        + [_Snapshot("z-user", {"onboarding": {"completed": True}})]
+    )
+    db.document(cron.DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_CURSOR_PATH).set(
+        {
+            "schema_version": cron.DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_SCHEMA_VERSION,
+            "last_uid": "m-user",
+            "generation": 0,
+        }
+    )
+    monkeypatch.setattr(cron, "bounded_canonical_memory_uid_inventory", lambda *_args, **_kwargs: ())
+
+    page = cron.bounded_daily_memory_sweep_uid_inventory(db, limit=2, persist_cursor=False, return_page=True)
+
+    assert page.onboarding_uids == ("z-user",)
 
 
 def test_independent_inventory_commits_only_its_own_fair_cursor_namespace():
@@ -212,6 +257,27 @@ def test_independent_retry_cursor_rotates_past_more_than_32_failing_uids(monkeyp
     )
     second = independent.bounded_daily_memory_sweep_uid_inventory(db, limit=400, return_page=True)
     assert second.retry_uids[0] == "retry-32"
+
+
+@pytest.mark.parametrize(
+    ("channel", "path"),
+    [
+        ("retry_uids", independent.DAILY_SWEEP_RETRY_CURSOR_PATH),
+        ("canonical_uids", independent.DAILY_SWEEP_CANONICAL_CURSOR_PATH),
+        ("onboarding_uids", independent.DAILY_SWEEP_ONBOARDING_CURSOR_PATH),
+    ],
+)
+def test_independent_overlapping_page_commits_are_generation_fenced(channel, path):
+    db = _Db()
+    page = independent.DailySweepUIDInventoryPage(uids=("uid-a",), **{channel: ("uid-a",)})
+    stale_page = independent.DailySweepUIDInventoryPage(uids=("uid-a",), **{channel: ("uid-a",)})
+
+    independent.commit_daily_memory_sweep_uid_inventory(db, page, completed_uids=(), failed_uids=())
+    with pytest.raises(independent.DailySweepInventoryUnavailable):
+        independent.commit_daily_memory_sweep_uid_inventory(db, stale_page, completed_uids=(), failed_uids=())
+
+    assert db.store[path]["last_uid"] == "uid-a"
+    assert db.store[path]["generation"] == 1
 
 
 def test_daily_sweep_inventory_reserves_onboarding_and_advances_separate_cursor(monkeypatch):
@@ -298,6 +364,27 @@ def test_retry_page_slice_does_not_starve_sources_when_many_retries_are_failing(
     page = cron.bounded_daily_memory_sweep_uid_inventory(db, limit=4, persist_cursor=False, return_page=True)
     assert page.retry_uids == ("retry-00",)
     assert "canonical-later-a" in page.uids
+
+
+@pytest.mark.parametrize(
+    ("channel", "path"),
+    [
+        ("retry_uids", cron.DAILY_MEMORY_SWEEP_RETRY_CURSOR_PATH),
+        ("canonical_uids", cron.CANONICAL_MEMORY_MAINTENANCE_CURSOR_PATH),
+        ("onboarding_uids", cron.DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_CURSOR_PATH),
+    ],
+)
+def test_legacy_overlapping_page_commits_are_generation_fenced(channel, path):
+    db = _Db()
+    page = cron.DailySweepUIDInventoryPage(uids=("uid-a",), **{channel: ("uid-a",)})
+    stale_page = cron.DailySweepUIDInventoryPage(uids=("uid-a",), **{channel: ("uid-a",)})
+
+    cron.commit_daily_memory_sweep_uid_inventory(db, page, completed_uids=(), failed_uids=())
+    with pytest.raises(cron.CanonicalMaintenanceInventoryUnavailable):
+        cron.commit_daily_memory_sweep_uid_inventory(db, stale_page, completed_uids=(), failed_uids=())
+
+    assert db.store[path]["last_uid"] == "uid-a"
+    assert db.store[path]["generation"] == 1
 
 
 def test_retry_write_failure_precedes_cursor_advance(monkeypatch):

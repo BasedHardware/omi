@@ -16,6 +16,7 @@ from collections.abc import Callable
 from typing import Any, Iterable, Optional, Protocol, cast
 
 from pydantic import ValidationError
+from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 from google.cloud.firestore_v1.field_path import FieldPath
 
@@ -68,6 +69,8 @@ DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_CURSOR_PATH = "daily_memory_sweep_contro
 DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_SCHEMA_VERSION = 1
 DAILY_MEMORY_SWEEP_RETRY_COLLECTION = "daily_memory_sweep_control_retries"
 DAILY_MEMORY_SWEEP_RETRY_STATE_SCHEMA_VERSION = 1
+DAILY_MEMORY_SWEEP_RETRY_CURSOR_PATH = "daily_memory_sweep_control/retry_cursor"
+DAILY_MEMORY_SWEEP_RETRY_CURSOR_SCHEMA_VERSION = 1
 MAX_DAILY_MEMORY_SWEEP_RETRY_UIDS_PER_PAGE = 32
 CANONICAL_MEMORY_DREAMING_STATE_COLLECTION = "canonical_memory_dreaming_state"
 DREAMING_MIN_INTERVAL = timedelta(hours=20)
@@ -99,6 +102,9 @@ class DailySweepUIDInventoryPage:
     canonical_uids: tuple[str, ...] = ()
     onboarding_uids: tuple[str, ...] = ()
     retry_uids: tuple[str, ...] = ()
+    canonical_cursor_generation: int = 0
+    onboarding_cursor_generation: int = 0
+    retry_cursor_generation: int = 0
 
 
 def expiry_ordered_maintenance_uid_inventory(
@@ -149,38 +155,118 @@ def _registry_uid(snapshot: Any) -> Optional[str]:
     return uid.strip()
 
 
-def _read_registry_cursor(db_client: Any) -> str:
+def _read_registry_cursor_state(db_client: Any) -> tuple[str, int]:
     ref = db_client.document(CANONICAL_MEMORY_MAINTENANCE_CURSOR_PATH)
     try:
         snapshot = ref.get()
     except Exception as exc:
         raise CanonicalMaintenanceInventoryUnavailable("canonical maintenance cursor unavailable") from exc
     if not getattr(snapshot, "exists", False):
-        payload = {"schema_version": 1, "last_uid": ""}
-        try:
-            create = getattr(ref, "create", None)
-            if callable(create):
-                create(payload)
-            else:
-                ref.set(payload)
-        except Exception as exc:
-            raise CanonicalMaintenanceInventoryUnavailable("canonical maintenance cursor unavailable") from exc
-        return ""
+        # Reads must stay side-effect free. The first durable cursor write is
+        # performed by the generation-fenced commit below; creating an empty
+        # document here would make ``persist_cursor=False`` mutate state.
+        return "", 0
     payload = snapshot.to_dict()
     if not isinstance(payload, dict) or payload.get("schema_version") != 1:
         raise CanonicalMaintenanceInventoryUnavailable("canonical maintenance cursor is malformed")
     last_uid = payload.get("last_uid", "")
-    if not isinstance(last_uid, str):
+    generation = payload.get("generation", 0)
+    if not isinstance(last_uid, str) or not isinstance(generation, int) or generation < 0:
         raise CanonicalMaintenanceInventoryUnavailable("canonical maintenance cursor is malformed")
-    return last_uid
+    return last_uid, generation
 
 
-def _persist_registry_cursor(db_client: Any, last_uid: str) -> None:
+def _persist_registry_cursor(db_client: Any, last_uid: str, *, expected_generation: int | None = None) -> None:
     payload = {"schema_version": 1, "last_uid": last_uid}
     try:
-        db_client.document(CANONICAL_MEMORY_MAINTENANCE_CURSOR_PATH).set(payload, merge=True)
+        ref = db_client.document(CANONICAL_MEMORY_MAINTENANCE_CURSOR_PATH)
+        current = ref.get()
+        current_payload = current.to_dict() if getattr(current, "exists", False) else {}
+        current_generation = current_payload.get("generation", 0) if isinstance(current_payload, dict) else 0
+        if not isinstance(current_generation, int) or current_generation < 0:
+            raise CanonicalMaintenanceInventoryUnavailable("canonical maintenance cursor is malformed")
+        if expected_generation is not None and current_generation != expected_generation:
+            raise CanonicalMaintenanceInventoryUnavailable("canonical maintenance cursor generation conflict")
+        next_payload = {**payload, "generation": current_generation + 1}
+        transaction_factory = getattr(db_client, "transaction", None)
+        if callable(transaction_factory):
+            try:
+                transaction = transaction_factory()
+
+                def write_transaction(tx: Any) -> None:
+                    live_snapshot = ref.get(transaction=tx)
+                    live_payload = live_snapshot.to_dict() if getattr(live_snapshot, "exists", False) else {}
+                    live_generation = live_payload.get("generation", 0) if isinstance(live_payload, dict) else 0
+                    if expected_generation is not None and live_generation != expected_generation:
+                        raise CanonicalMaintenanceInventoryUnavailable(
+                            "canonical maintenance cursor generation conflict"
+                        )
+                    tx.set(ref, next_payload, merge=True)
+
+                cast(Any, firestore.transactional(write_transaction))(transaction)
+                return
+            except TypeError:
+                pass
+        ref.set(next_payload, merge=True)
     except Exception as exc:
         raise CanonicalMaintenanceInventoryUnavailable("canonical maintenance cursor unavailable") from exc
+
+
+def _read_global_cursor_state(db_client: Any, path: str, schema_version: int) -> tuple[str, int]:
+    try:
+        snapshot = db_client.document(path).get()
+    except Exception as exc:
+        raise CanonicalMaintenanceInventoryUnavailable("daily sweep inventory cursor unavailable") from exc
+    payload = snapshot.to_dict() if getattr(snapshot, "exists", False) else {}
+    if not isinstance(payload, dict) or (payload and payload.get("schema_version") != schema_version):
+        raise CanonicalMaintenanceInventoryUnavailable("daily sweep inventory cursor is malformed")
+    last_uid = payload.get("last_uid", "")
+    generation = payload.get("generation", 0)
+    if not isinstance(last_uid, str) or not isinstance(generation, int) or generation < 0:
+        raise CanonicalMaintenanceInventoryUnavailable("daily sweep inventory cursor is malformed")
+    return last_uid.strip(), generation
+
+
+def _persist_global_cursor(
+    db_client: Any,
+    path: str,
+    schema_version: int,
+    last_uid: str,
+    *,
+    expected_generation: int,
+) -> None:
+    try:
+        ref = db_client.document(path)
+        snapshot = ref.get()
+        payload = snapshot.to_dict() if getattr(snapshot, "exists", False) else {}
+        current_generation = payload.get("generation", 0) if isinstance(payload, dict) else 0
+        if current_generation != expected_generation:
+            raise CanonicalMaintenanceInventoryUnavailable("daily sweep inventory cursor generation conflict")
+        next_payload = {"schema_version": schema_version, "last_uid": last_uid, "generation": current_generation + 1}
+        transaction_factory = getattr(db_client, "transaction", None)
+        if callable(transaction_factory):
+            try:
+                transaction = transaction_factory()
+
+                def write_transaction(tx: Any) -> None:
+                    live_snapshot = ref.get(transaction=tx)
+                    live_payload = live_snapshot.to_dict() if getattr(live_snapshot, "exists", False) else {}
+                    live_generation = live_payload.get("generation", 0) if isinstance(live_payload, dict) else 0
+                    if live_generation != expected_generation:
+                        raise CanonicalMaintenanceInventoryUnavailable(
+                            "daily sweep inventory cursor generation conflict"
+                        )
+                    tx.set(ref, next_payload, merge=True)
+
+                cast(Any, firestore.transactional(write_transaction))(transaction)
+                return
+            except TypeError:
+                pass
+        ref.set(next_payload, merge=True)
+    except CanonicalMaintenanceInventoryUnavailable:
+        raise
+    except Exception as exc:
+        raise CanonicalMaintenanceInventoryUnavailable("daily sweep inventory cursor unavailable") from exc
 
 
 def maintenance_flex_forced() -> bool:
@@ -385,7 +471,7 @@ def bounded_canonical_memory_uid_inventory(
             "bounded canonical UID registry is unavailable; provide a registry/index or injectable inventory"
         )
     _seed_registry_from_existing_memory_states(db_client, limit=bounded_limit)
-    cursor = _read_registry_cursor(db_client)
+    cursor, cursor_generation = _read_registry_cursor_state(db_client)
     try:
         # Firestore's public query objects and the strict test fakes both expose
         # this fluent surface, but the callable narrowing above intentionally
@@ -404,7 +490,7 @@ def bounded_canonical_memory_uid_inventory(
             if uid and uid not in uids:
                 uids.append(uid)
         if persist_cursor and uids:
-            _persist_registry_cursor(db_client, uids[-1])
+            _persist_registry_cursor(db_client, uids[-1], expected_generation=cursor_generation)
         return tuple(uids[:bounded_limit])
     except CanonicalMaintenanceInventoryUnavailable:
         raise
@@ -431,11 +517,17 @@ def bounded_daily_memory_sweep_uid_inventory(
     bounded_limit = max(1, min(MAX_MAINTENANCE_UIDS_PER_RUN, int(limit)))
     try:
         retry_limit = max(1, min(MAX_DAILY_MEMORY_SWEEP_RETRY_UIDS_PER_PAGE, bounded_limit // 4))
-        retry_snapshots = (
-            db_client.collection(DAILY_MEMORY_SWEEP_RETRY_COLLECTION).order_by("uid").limit(retry_limit).stream()
+        retry_cursor, retry_cursor_generation = _read_global_cursor_state(
+            db_client, DAILY_MEMORY_SWEEP_RETRY_CURSOR_PATH, DAILY_MEMORY_SWEEP_RETRY_CURSOR_SCHEMA_VERSION
         )
+        retry_collection = db_client.collection(DAILY_MEMORY_SWEEP_RETRY_COLLECTION)
+        retry_query = retry_collection.where("uid", ">", retry_cursor) if retry_cursor else retry_collection
+        retry_snapshots = retry_query.order_by("uid").limit(retry_limit).stream()
+        retry_page = list(retry_snapshots)
+        if retry_cursor and len(retry_page) < retry_limit:
+            retry_page.extend(retry_collection.order_by("uid").limit(retry_limit - len(retry_page)).stream())
         retry_values: list[str] = []
-        for snapshot in retry_snapshots:
+        for snapshot in retry_page:
             payload = snapshot.to_dict() if hasattr(snapshot, "to_dict") else None
             if (
                 not isinstance(payload, dict)
@@ -454,7 +546,11 @@ def bounded_daily_memory_sweep_uid_inventory(
         raise CanonicalMaintenanceInventoryUnavailable("daily sweep retry state unavailable") from exc
     remaining_limit = bounded_limit - len(retry_uids)
     if not remaining_limit:
-        page = DailySweepUIDInventoryPage(uids=retry_uids, retry_uids=retry_uids)
+        page = DailySweepUIDInventoryPage(
+            uids=retry_uids,
+            retry_uids=retry_uids,
+            retry_cursor_generation=retry_cursor_generation,
+        )
         return page if return_page else page.uids
 
     # Reserve half the remaining bounded page for the cold-start channel. A canonical
@@ -479,18 +575,14 @@ def bounded_daily_memory_sweep_uid_inventory(
     for uid in canonical:
         if uid not in discovered:
             discovered.append(uid)
-    onboarding_cursor_ref = db_client.document(DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_CURSOR_PATH)
     try:
-        cursor_snapshot = onboarding_cursor_ref.get()
-        cursor_payload = cursor_snapshot.to_dict() if getattr(cursor_snapshot, "exists", False) else {}
+        onboarding_cursor, onboarding_cursor_generation = _read_global_cursor_state(
+            db_client,
+            DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_CURSOR_PATH,
+            DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_SCHEMA_VERSION,
+        )
     except Exception as exc:
         raise CanonicalMaintenanceInventoryUnavailable("onboarding inventory cursor unavailable") from exc
-    if cursor_payload and (
-        not isinstance(cursor_payload, dict)
-        or cursor_payload.get("schema_version") != DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_SCHEMA_VERSION
-    ):
-        raise CanonicalMaintenanceInventoryUnavailable("onboarding inventory cursor is malformed")
-    onboarding_cursor = str(cursor_payload.get("last_uid", "")) if isinstance(cursor_payload, dict) else ""
     onboarding_uids: list[str] = []
     candidate_rows: list[str] = []
 
@@ -528,18 +620,26 @@ def bounded_daily_memory_sweep_uid_inventory(
         if uid not in discovered:
             discovered.append(uid)
     if persist_cursor and onboarding_uids:
-        onboarding_cursor_ref.set(
-            {
-                "schema_version": DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_SCHEMA_VERSION,
-                "last_uid": onboarding_uids[-1],
-            },
-            merge=True,
+        _persist_global_cursor(
+            db_client,
+            DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_CURSOR_PATH,
+            DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_SCHEMA_VERSION,
+            onboarding_uids[-1],
+            expected_generation=onboarding_cursor_generation,
         )
+        onboarding_cursor_generation = _read_global_cursor_state(
+            db_client,
+            DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_CURSOR_PATH,
+            DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_SCHEMA_VERSION,
+        )[1]
     page = DailySweepUIDInventoryPage(
         uids=tuple(discovered[:bounded_limit]),
         canonical_uids=tuple(uid for uid in canonical if uid in discovered[:bounded_limit]),
         onboarding_uids=tuple(uid for uid in onboarding_uids if uid in discovered[:bounded_limit]),
         retry_uids=retry_uids,
+        canonical_cursor_generation=_read_registry_cursor_state(db_client)[1],
+        onboarding_cursor_generation=onboarding_cursor_generation,
+        retry_cursor_generation=retry_cursor_generation,
     )
     return page if return_page else page.uids
 
@@ -581,20 +681,28 @@ def commit_daily_memory_sweep_uid_inventory(
 
     # A cursor write may fail and cause a duplicate page, but it must never
     # happen before the retry state above is durable.
+    if advance_page and page.retry_uids:
+        _persist_global_cursor(
+            db_client,
+            DAILY_MEMORY_SWEEP_RETRY_CURSOR_PATH,
+            DAILY_MEMORY_SWEEP_RETRY_CURSOR_SCHEMA_VERSION,
+            page.retry_uids[-1],
+            expected_generation=page.retry_cursor_generation,
+        )
     if advance_page and page.canonical_uids:
-        _persist_registry_cursor(db_client, page.canonical_uids[-1])
+        _persist_registry_cursor(
+            db_client,
+            page.canonical_uids[-1],
+            expected_generation=page.canonical_cursor_generation,
+        )
     if advance_page and page.onboarding_uids:
-        onboarding_cursor_ref = db_client.document(DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_CURSOR_PATH)
-        try:
-            onboarding_cursor_ref.set(
-                {
-                    "schema_version": DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_SCHEMA_VERSION,
-                    "last_uid": page.onboarding_uids[-1],
-                },
-                merge=True,
-            )
-        except Exception as exc:
-            raise CanonicalMaintenanceInventoryUnavailable("onboarding inventory cursor unavailable") from exc
+        _persist_global_cursor(
+            db_client,
+            DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_CURSOR_PATH,
+            DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_SCHEMA_VERSION,
+            page.onboarding_uids[-1],
+            expected_generation=page.onboarding_cursor_generation,
+        )
 
 
 def _resolve_maintenance_uids(
@@ -761,6 +869,7 @@ def run_universal_short_term_maintenance(
     promotion_flex = PromotionFlexRunRouter(db_client=client, force_enabled=maintenance_flex_forced())
     expiry_inventory = ExpiryOrderedMaintenanceInventory(uids=())
     registry_uids: tuple[str, ...] = ()
+    registry_cursor_generation = 0
     inventory_errors: list[str] = []
     if uid_inventory is None:
         try:
@@ -776,6 +885,12 @@ def run_universal_short_term_maintenance(
                 type(exc).__name__,
             )
         try:
+            # Keep compatibility with the injected expiry-only backstop,
+            # which intentionally uses a sentinel client without Firestore.
+            # Real clients expose ``document`` and therefore receive the
+            # generation snapshot used by the final CAS commit.
+            if callable(getattr(client, "document", None)):
+                _registry_cursor, registry_cursor_generation = _read_registry_cursor_state(client)
             registry_uids = bounded_canonical_memory_uid_inventory(
                 client,
                 limit=inventory_limit,
@@ -1015,7 +1130,11 @@ def run_universal_short_term_maintenance(
         last_completed_registry_uid = registry_uid
     if uid_inventory is None and last_completed_registry_uid:
         try:
-            _persist_registry_cursor(client, last_completed_registry_uid)
+            _persist_registry_cursor(
+                client,
+                last_completed_registry_uid,
+                expected_generation=registry_cursor_generation,
+            )
         except CanonicalMaintenanceInventoryUnavailable as exc:
             summary.errors.append(f"cursor_persist:{type(exc).__name__}")
             logger.warning(

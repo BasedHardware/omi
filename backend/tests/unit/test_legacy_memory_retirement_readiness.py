@@ -119,7 +119,11 @@ def test_daily_manual_deploy_is_main_only_admitted_and_provisions_scheduler() ->
         BACKEND_ROOT.parent / ".github" / "workflows" / "gcp_daily_memory_sweep_job_auto_dev.yml"
     ).read_text(encoding="utf-8")
     for admitted_workflow in (auto_workflow,):
-        assert "Require exact main push ref" in admitted_workflow
+        assert "workflow_run:" in admitted_workflow
+        assert 'workflows: ["Release Eligibility"]' in admitted_workflow
+        assert "Require successful first-attempt Release Eligibility push" in admitted_workflow
+        assert "github.event.workflow_run.conclusion == 'success'" in admitted_workflow
+        assert "github.event.workflow_run.run_attempt == 1" in admitted_workflow
         assert "release-eligibility.yml" in admitted_workflow
         assert "--require-first-attempt" in admitted_workflow
         assert '"$DEPLOY_SHA" == "$main_sha"' in admitted_workflow

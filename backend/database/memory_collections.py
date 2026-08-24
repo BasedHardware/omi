@@ -100,6 +100,22 @@ class MemoryCollections:
         return f"{self.user_root}/daily_memory_sweep_sources"
 
     @property
+    def daily_memory_sweep_onboarding_sources(self) -> str:
+        return f"{self.user_root}/daily_memory_sweep_onboarding_sources"
+
+    @property
+    def daily_memory_sweep_daily_summary_staged(self) -> str:
+        return f"{self.user_root}/daily_memory_sweep_daily_summary_staged"
+
+    @property
+    def daily_memory_sweep_onboarding_staged(self) -> str:
+        return f"{self.user_root}/daily_memory_sweep_onboarding_staged"
+
+    @property
+    def daily_memory_sweep_model_invocations(self) -> str:
+        return f"{self.user_root}/daily_memory_sweep_model_invocations"
+
+    @property
     def non_active_memory_routes(self) -> str:
         return f"{self.user_root}/non_active_memory_routes"
 
@@ -140,6 +156,10 @@ class MemoryCollections:
             self.memory_import_candidates,
             self.daily_memory_sweep_receipts,
             self.daily_memory_sweep_sources,
+            self.daily_memory_sweep_onboarding_sources,
+            self.daily_memory_sweep_daily_summary_staged,
+            self.daily_memory_sweep_onboarding_staged,
+            self.daily_memory_sweep_model_invocations,
             self.non_active_memory_routes,
             self.short_term_lifecycle_transitions,
             self.legacy_fallback,

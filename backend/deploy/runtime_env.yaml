@@ -967,9 +967,6 @@ environments:
             TYPESENSE_HOST:
               secret: TYPESENSE_HOST
               version: latest
-            POSTHOG_PROJECT_API_KEY:
-              secret: POSTHOG_PROJECT_API_KEY
-              version: latest
           flags:
             --remove-env-vars: MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
             --task-timeout: 3600s
@@ -996,39 +993,6 @@ environments:
               category: memory_rollout
               value: 'true'
             MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
-              category: memory_rollout
-              value: 'false'
-            MEMORY_DAILY_MEMORY_SWEEP_ENABLED:
-              category: memory_rollout
-              value: 'false'
-            MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH:
-              category: memory_rollout
-              value: 'false'
-            MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED:
-              category: memory_rollout
-              value: 'false'
-            MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME:
-              category: memory_rollout
-              value: disabled
-            MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES:
-              category: memory_rollout
-              value: '8'
-            MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD:
-              category: memory_rollout
-              value: '0'
-            MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED:
-              category: memory_rollout
-              value: 'false'
-            MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME:
-              category: memory_rollout
-              value: ''
-            MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG:
-              category: memory_rollout
-              value: ''
-            MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS:
-              category: memory_rollout
-              value: '3'
-            MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED:
               category: memory_rollout
               value: 'false'
             OMI_ENV_STAGE:
@@ -2024,9 +1988,6 @@ environments:
             TYPESENSE_HOST:
               secret: TYPESENSE_HOST
               version: latest
-            POSTHOG_PROJECT_API_KEY:
-              secret: POSTHOG_PROJECT_API_KEY
-              version: latest
           flags:
             --remove-env-vars: MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
             --task-timeout: 3600s
@@ -2051,39 +2012,6 @@ environments:
               category: memory_rollout
               value: 'true'
             MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
-              category: memory_rollout
-              value: 'false'
-            MEMORY_DAILY_MEMORY_SWEEP_ENABLED:
-              category: memory_rollout
-              value: 'false'
-            MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH:
-              category: memory_rollout
-              value: 'false'
-            MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED:
-              category: memory_rollout
-              value: 'false'
-            MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME:
-              category: memory_rollout
-              value: disabled
-            MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES:
-              category: memory_rollout
-              value: '8'
-            MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD:
-              category: memory_rollout
-              value: '0'
-            MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED:
-              category: memory_rollout
-              value: 'false'
-            MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME:
-              category: memory_rollout
-              value: ''
-            MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG:
-              category: memory_rollout
-              value: ''
-            MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS:
-              category: memory_rollout
-              value: '3'
-            MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED:
               category: memory_rollout
               value: 'false'
             OMI_ENV_STAGE:

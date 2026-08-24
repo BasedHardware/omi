@@ -1,12 +1,10 @@
 name: Auto Deploy Daily Memory Sweep Job to Development
 
 on:
-  push:
-    branches: [ "main" ]
-    paths:
-      - 'backend/**'
-      - '.github/workflows/gcp_daily_memory_sweep_job.yml'
-      - '.github/workflows/gcp_daily_memory_sweep_job_auto_dev.yml'
+  workflow_run:
+    workflows: ["Release Eligibility"]
+    branches: [main]
+    types: [completed]
 
 env:
   SERVICE: daily-memory-sweep-job
@@ -21,6 +19,12 @@ concurrency:
 
 jobs:
   deploy:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.run_attempt == 1 &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
     environment: development
     permissions:
       actions: 'read'
@@ -41,13 +45,21 @@ jobs:
             echo "- Free space: ${free_before} → ${free_after}"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Require exact main push ref
+      - name: Require successful first-attempt Release Eligibility push
         env:
-          PUSH_REF: ${{ github.ref }}
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
-          [[ "$PUSH_REF" == "refs/heads/main" ]] || {
-            echo "ERROR: daily development deployment only admits refs/heads/main." >&2
+          [[ "${{ github.event.workflow_run.conclusion }}" == "success" ]] || {
+            echo "ERROR: Release Eligibility did not succeed." >&2
+            exit 1
+          }
+          [[ "${{ github.event.workflow_run.run_attempt }}" == "1" ]] || {
+            echo "ERROR: only the first Release Eligibility attempt may admit deployment." >&2
+            exit 1
+          }
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "ERROR: Release Eligibility head SHA is not a full commit SHA." >&2
             exit 1
           }
 
@@ -60,7 +72,7 @@ jobs:
       - name: Verify exact admitted main source
         id: admitted_source
         env:
-          DEPLOY_SHA: ${{ github.sha }}
+          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail

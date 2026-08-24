@@ -471,12 +471,10 @@ DAILY_SWEEP_ACTIVE_FACT_ENTITY_CONTENT_QUERY = FirestoreQuerySpec(
     index_fields=DAILY_SWEEP_ACTIVE_FACT_ENTITY_QUERY.index_fields + (_asc('normalized_content_key'),),
 )
 
-# Onboarding cold-start discovery is a bounded, cursor-relative query over the
-# users collection.  Keep the two historical completion markers as separate
-# serving queries: a disjunction over both nested fields is not portable across
-# Firestore emulator/server versions.  The document-id range is explicit so the
-# query has a deterministic page boundary; the exact equality+document-id
-# composites are generated into firestore.indexes.json.
+# Onboarding cold-start discovery is a bounded cursor-relative query over the
+# users collection. Keep the server-side document-ID range/order for a stable
+# page boundary, but do not emit redundant explicit composites: Firestore's
+# automatic marker index serves these equality+document-ID scans.
 DAILY_SWEEP_ONBOARDING_COMPLETED_USERS_QUERY = FirestoreQuerySpec(
     identifier='daily_sweep_onboarding_completed_users',
     collection_group='users',
@@ -940,8 +938,20 @@ def _index_fields_need_composite_manifest(index_fields: tuple[FirestoreIndexFiel
 def _query_spec_index_requirements() -> tuple[FirestoreIndexRequirement, ...]:
     """One composite index per signature, even when two serving queries share it."""
     seen = set(_INDEX_ONLY_REQUIREMENT_SIGNATURES)
+    # Equality plus a document-ID range is served by Firestore's automatic
+    # single-field marker index for these two onboarding scans. Keep the
+    # server-side cursor contract above, but do not provision redundant
+    # collection composites for it.
+    redundant_onboarding_indexes = frozenset(
+        {
+            DAILY_SWEEP_ONBOARDING_COMPLETED_USERS_QUERY.identifier,
+            DAILY_SWEEP_ONBOARDING_DEVICE_COMPLETED_USERS_QUERY.identifier,
+        }
+    )
     requirements: list[FirestoreIndexRequirement] = []
     for spec in QUERY_SPECS:
+        if spec.identifier in redundant_onboarding_indexes:
+            continue
         # A document-id range paired with a field equality is a compound
         # serving query even when both index fields have the same direction;
         # automatic single-field indexes do not provide this cursor contract
