@@ -36,6 +36,10 @@ omi_jit_qa_set_exact_tuple() {
     export OMI_ENV_STAGE="dev"
     export OMI_SKIP_BACKEND=1
     export OMI_SKIP_TUNNEL=1
+    # The reserved bundle is dev-routed. Its exact tuple therefore includes
+    # an empty Rewind profile for every entry point, not only the convenience
+    # wrapper. Never copy production screenshots/history into it.
+    export OMI_SKIP_REWIND_SEED=1
 }
 
 # Validate the raw invocation before dev-instance creates its scratch directory
@@ -74,6 +78,14 @@ omi_preflight_jit_qa_launch_request() {
     fi
     if [ "$local_profile" = true ]; then
         omi_jit_qa_fail "the reserved JIT QA bundle cannot use OMI_DESKTOP_LOCAL_PROFILE=1"
+        return $?
+    fi
+    if [ "${OMI_FORCE_REWIND_SEED:-0}" = "1" ]; then
+        omi_jit_qa_fail "the reserved JIT QA bundle cannot seed Rewind history"
+        return $?
+    fi
+    if [ -n "${OMI_SKIP_REWIND_SEED+x}" ] && [ "$OMI_SKIP_REWIND_SEED" != "1" ]; then
+        omi_jit_qa_fail "OMI_SKIP_REWIND_SEED must be 1 for the reserved JIT QA bundle"
         return $?
     fi
     case "$OMI_JIT_QA_TARGET" in
@@ -124,6 +136,16 @@ omi_prepare_jit_qa_target() {
     fi
     if [ "$local_profile" = true ]; then
         omi_jit_qa_fail "the reserved JIT QA bundle cannot use OMI_DESKTOP_LOCAL_PROFILE=1"
+        return $?
+    fi
+    if [ "${OMI_FORCE_REWIND_SEED:-0}" = "1" ]; then
+        omi_jit_qa_fail "the reserved JIT QA bundle cannot seed Rewind history"
+        return $?
+    fi
+    if [ "$phase" = "initial" ] \
+        && [ -n "${OMI_SKIP_REWIND_SEED+x}" ] \
+        && [ "$OMI_SKIP_REWIND_SEED" != "1" ]; then
+        omi_jit_qa_fail "OMI_SKIP_REWIND_SEED must be 1 for the reserved JIT QA bundle"
         return $?
     fi
 

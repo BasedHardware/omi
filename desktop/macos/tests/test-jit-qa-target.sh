@@ -34,6 +34,7 @@ expect_launcher_failure_before_stop() {
 clear_target_env() {
     unset OMI_JIT_QA_TARGET OMI_PYTHON_API_URL OMI_DESKTOP_API_URL OMI_AUTH_API_URL OMI_ENV_STAGE
     unset OMI_SKIP_BACKEND OMI_SKIP_TUNNEL
+    unset OMI_SKIP_REWIND_SEED OMI_FORCE_REWIND_SEED
 }
 
 clear_target_env
@@ -46,6 +47,7 @@ test "$OMI_AUTH_API_URL" = "http://127.0.0.1:18080"
 test "$OMI_ENV_STAGE" = dev
 test "$OMI_SKIP_BACKEND" = 1
 test "$OMI_SKIP_TUNNEL" = 1
+test "$OMI_SKIP_REWIND_SEED" = 1
 
 local_env="$(mktemp)"
 dev_env=""
@@ -117,6 +119,12 @@ expect_failure omi_preflight_jit_qa_launch_request omi-jit-qa com.example.wrong 
 expect_failure omi_preflight_jit_qa_launch_request omi-jit-qa "" 1 false
 expect_failure omi_preflight_jit_qa_launch_request omi-jit-qa "" 0 true
 clear_target_env
+export OMI_JIT_QA_TARGET=local-dev-gcp OMI_SKIP_REWIND_SEED=0
+expect_failure omi_preflight_jit_qa_launch_request omi-jit-qa "" 0 false
+clear_target_env
+export OMI_JIT_QA_TARGET=local-dev-gcp OMI_FORCE_REWIND_SEED=1
+expect_failure omi_preflight_jit_qa_launch_request omi-jit-qa "" 0 false
+clear_target_env
 export OMI_JIT_QA_TARGET=deployed-dev OMI_PYTHON_API_URL=https://api.omi.me
 expect_failure omi_preflight_jit_qa_launch_request omi-jit-qa "" 0 false
 expect_failure omi_prepare_jit_qa_target omi-jit-qa com.omi.omi-jit-qa 0 initial
@@ -142,6 +150,8 @@ fi
 grep -q 'OMI_JIT_QA_TARGET' "$ROOT/run.sh"
 grep -q 'omi_write_jit_qa_bundle_env' "$ROOT/run.sh"
 grep -q 'OMI_AUTH_API_URL' "$ROOT/run.sh"
+grep -Fq 'cd "$MACOS_ROOT"' "$ROOT/scripts/omi-jit-qa"
+grep -Fq 'export OMI_SKIP_REWIND_SEED=1' "$ROOT/scripts/omi-jit-qa"
 prepare_line="$(grep -n 'omi_prepare_jit_qa_target.*derived' "$ROOT/run.sh" | head -1 | cut -d: -f1)"
 request_preflight_line="$(grep -n '^omi_preflight_jit_qa_launch_request' "$ROOT/run.sh" | head -1 | cut -d: -f1)"
 dev_instance_line="$(grep -n 'source .*scripts/dev-instance.sh' "$ROOT/run.sh" | head -1 | cut -d: -f1)"
@@ -176,5 +186,15 @@ expect_launcher_failure_before_stop \
     OMI_APP_NAME=omi-jit-qa OMI_JIT_QA_TARGET=local-dev-gcp OMI_DESKTOP_LOCAL_PROFILE=1
 expect_launcher_failure_before_stop \
     OMI_APP_NAME=omi-jit-qa OMI_JIT_QA_TARGET=deployed-dev OMI_PYTHON_API_URL=https://api.omi.me
+expect_launcher_failure_before_stop \
+    OMI_APP_NAME=omi-jit-qa OMI_JIT_QA_TARGET=local-dev-gcp OMI_FORCE_REWIND_SEED=1
+
+# Direct run.sh entry (without scripts/omi-jit-qa) must derive the same
+# privacy tuple before any bundle/profile mutation.
+clear_target_env
+export OMI_JIT_QA_TARGET=local-dev-gcp
+omi_preflight_jit_qa_launch_request omi-jit-qa "" 0 false
+omi_jit_qa_set_exact_tuple
+test "$OMI_SKIP_REWIND_SEED" = 1
 
 echo "PASS: JIT QA bundle target selection is atomic and production-host fail-closed"

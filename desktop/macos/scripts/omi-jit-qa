@@ -21,4 +21,8 @@ esac
 
 export OMI_APP_NAME="omi-jit-qa"
 export OMI_JIT_QA_TARGET="$target"
+# The reserved bundle starts with an empty Rewind profile. Copying production
+# screenshots/history into a dev-routed app is never an implicit launch step.
+export OMI_SKIP_REWIND_SEED=1
+cd "$MACOS_ROOT"
 exec "$MACOS_ROOT/run.sh" "$@"
