@@ -347,6 +347,41 @@ def test_prompt_projection_receipt_rejects_playbook_bodies_and_duplicate_rows():
         )
 
 
+@pytest.mark.parametrize(
+    "updates",
+    [
+        {"memory_tier": "archive"},
+        {"is_dismissed": True},
+        {"superseded_by": "replacement"},
+    ],
+)
+def test_prompt_projection_receipt_rejects_every_non_current_lifecycle_shape(updates):
+    completion = LedgerMigrationCompletion(
+        completed_at=NOW,
+        source_head_commit_id="head-7",
+        migrated_long_term_count=0,
+        adjudicated_short_term_count=0,
+    )
+    control = knowledge_ledger_migration.MemoryControlState(
+        uid="u1",
+        head_commit_id="head-7",
+        account_generation=1,
+        source_generation=1,
+    )
+    receipt = LedgerPromptProjectionReceipt(
+        uid="u1",
+        generated_at=NOW,
+        source_head_commit_id="head-7",
+        account_generation=1,
+        source_generation=1,
+        scanned_row_count=1,
+        rows=[_prompt_row(**updates)],
+    )
+
+    with pytest.raises(ValueError, match="non-current"):
+        receipt.validate_authoritative(uid="u1", completion=completion, control=control)
+
+
 class _PublishingSnapshot(_Snapshot):
     pass
 
@@ -437,6 +472,46 @@ def test_cutover_publisher_atomically_publishes_authoritative_empty_snapshot(mon
     assert receipt.scanned_row_count == 0
     assert "users/u1/memory_control/knowledge_ledger_migration" in db.values
     assert "users/u1/memory_control/knowledge_ledger_prompt_projection" in db.values
+
+
+def test_cutover_filters_historical_slot_winner_before_arbitrating_valid_runner_up(monkeypatch):
+    valid = _prompt_row(
+        "valid-runner-up",
+        content="Lives in Brooklyn",
+        created_at=NOW,
+        updated_at=NOW,
+        write_reason="direct_user_statement",
+    )
+    superseded = _prompt_row(
+        "superseded-would-win",
+        content="Lives in Boston",
+        created_at=NOW + timedelta(days=1),
+        updated_at=NOW + timedelta(days=1),
+        write_reason="explicit_remember",
+        superseded_by=valid.id,
+    )
+    archived_handle = _prompt_row(
+        "archived-playbook",
+        kind="document",
+        slot=None,
+        write_reason="recurring_workflow",
+        memory_tier="archive",
+    )
+    dismissed_trigger = _prompt_row(
+        "dismissed-trigger",
+        kind="trigger",
+        slot=None,
+        write_reason="standing_trigger",
+        is_dismissed=True,
+    )
+    db = _PublishingDB(_publisher_control())
+    _install_publisher_fakes(monkeypatch, db, [valid, superseded, archived_handle, dismissed_trigger])
+
+    receipt = publish_ledger_migration_cutover(
+        "u1", db_client=db, migrated_long_term_count=0, adjudicated_short_term_count=0, completed_at=NOW
+    )
+
+    assert [row.id for row in receipt.rows] == ["valid-runner-up"]
 
 
 def test_cutover_preserves_inactive_legacy_history_outside_default_prompt(monkeypatch):

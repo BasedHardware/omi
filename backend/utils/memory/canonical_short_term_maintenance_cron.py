@@ -8,7 +8,6 @@ inventory; this module never scans all users or consults a UID allowlist.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
 from dataclasses import dataclass, field
@@ -889,19 +888,15 @@ async def run_canonical_short_term_maintenance_cron(
     if not candidate_uids:
         return summary
 
-    # The same backend-owned PostHog authority and kill switch used by request
-    # paths selects the bounded maintenance cohort. No job-only rollout seam
-    # can accidentally migrate users outside the enabled cohort.
-    decision_coroutines = [
-        resolve_jit_rollout(
+    # Re-authorize each account immediately before its bounded mutation pass.
+    # Resolving the whole page up front leaves later accounts holding stale
+    # permission while earlier accounts scan and mutate.
+    for uid in candidate_uids:
+        decision = await resolve_jit_rollout(
             uid,
             stage=JITDecisionStage.INGRESS,
             force_refresh=True,
         )
-        for uid in candidate_uids
-    ]
-    decisions = await asyncio.gather(*decision_coroutines)
-    for uid, decision in zip(candidate_uids, decisions):
         if not decision.permits_work:
             continue
         try:

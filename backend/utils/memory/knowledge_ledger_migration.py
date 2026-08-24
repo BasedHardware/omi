@@ -131,6 +131,9 @@ class LedgerPromptProjectionReceipt(BaseModel):
                 row.is_locked
                 or row.user_review is False
                 or row.invalid_at is not None
+                or (row.superseded_by or "").strip()
+                or row.is_dismissed
+                or getattr(row.memory_tier, "value", row.memory_tier) == "archive"
                 or (row.visibility or "").strip().lower() == "hidden"
                 or row.evidence
             ):
@@ -155,6 +158,9 @@ def _prompt_eligible(row: MemoryDB) -> bool:
         or row.is_locked
         or row.user_review is False
         or row.invalid_at is not None
+        or (row.superseded_by or "").strip()
+        or row.is_dismissed
+        or getattr(row.memory_tier, "value", row.memory_tier) == "archive"
         or (row.visibility or "").strip().lower() == "hidden"
     ):
         return False
