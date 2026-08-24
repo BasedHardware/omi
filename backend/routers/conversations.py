@@ -893,7 +893,9 @@ def get_conversation_transcripts_by_models(conversation_id: str, uid: str = Depe
 def delete_conversation(
     conversation_id: str,
     background_tasks: BackgroundTasks,
-    # TODO(Q8-gated): cascade=true needs owner sign-off; see test_ws_j_delete_privacy.py and the delete matrix.
+    # TODO(Q8-gated): ratified default is cascade=true — NOT flipped; needs explicit owner sign-off
+    # before changing production behavior for all users. See test_ws_j_delete_privacy.py +
+    # docs/memory/domain_model.md §Delete/privacy matrix.
     cascade: bool = Query(False),
     uid: str = Depends(auth.get_current_user_uid),
 ):
@@ -903,10 +905,8 @@ def delete_conversation(
         # Delete associated memories and action items first so partial failure cannot orphan derived data.
         db_client = getattr(db_client_module, 'db', None)
         memory_service = MemoryService(db_client=db_client)
-        # Retraction is fenced with canonical intake (MEMORY_MODE). Skipping it
-        # when there is provably nothing to retract keeps delete working while
-        # the fence is closed; anything real still raises rather than orphaning
-        # live memories against a deleted conversation.
+        # Retraction is fenced with canonical intake; skip only when there is provably nothing to retract.
+        # Any real memory still raises instead of being orphaned by conversation deletion.
         if not retraction_can_be_skipped(uid, conversation_id, memory_service=memory_service, db_client=db_client):
             try:
                 memory_service.retract_conversation_memories(uid, conversation_id)
