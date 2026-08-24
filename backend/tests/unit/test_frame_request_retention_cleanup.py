@@ -254,3 +254,57 @@ def test_terminal_metadata_cleanup_pages_without_touching_pending_or_attached(mo
     assert collection.rows["attached"].exists is True
     assert collection.rows["future"].exists is True
     assert all(not collection.rows[f"expired-{index}"].exists for index in range(5))
+
+
+def test_conversation_bound_terminal_metadata_cannot_starve_cleanup_pages(monkeypatch):
+    now = datetime(2026, 8, 24, tzinfo=timezone.utc)
+    client = _Client()
+    collection = _Collection(frame_requests.FRAME_REQUESTS_COLLECTION)
+    client.collections[frame_requests.FRAME_REQUESTS_COLLECTION] = collection
+
+    def add(document_id, *, state="pruned", cleanup_state="not_required", conversation_id=None, offset=0):
+        collection.rows[document_id] = _Reference(
+            document_id,
+            {
+                "state": state,
+                "cleanup_state": cleanup_state,
+                "conversation_id": conversation_id,
+                "expires_at": now - timedelta(days=3 - offset),
+            },
+            path_prefix="users/uid-1/frame_requests",
+        )
+
+    # The two oldest rows are terminal and pixel-clean despite retaining the
+    # conversation identity they were requested for. They must be removed so
+    # the later eligible row can reach the bounded head page.
+    add("conversation-pruned", conversation_id="conversation-1")
+    add("conversation-failed", state="failed", cleanup_state="deleted", conversation_id="conversation-1", offset=1)
+    add("later-unbound", offset=2)
+    add("attached-permanent", state="attached", cleanup_state="permanent", conversation_id="conversation-1")
+
+    terminal = {state.value for state in frame_requests.TERMINAL_FRAME_REQUEST_STATES if state.value != "attached"}
+    safe_cleanup = {"not_required", "deleted"}
+    monkeypatch.setattr(
+        frame_requests,
+        "FRAME_REQUEST_METADATA_EXPIRY_QUERY",
+        _Spec(
+            lambda values: lambda row: row.get("state") in terminal
+            and row.get("cleanup_state") in safe_cleanup
+            and row.get("expires_at") <= values["now"]
+        ),
+    )
+
+    first = frame_requests.delete_expired_frame_request_metadata(
+        "uid-1", now=now, limit=2, firestore_client=client, report_page=True
+    )
+    second = frame_requests.delete_expired_frame_request_metadata(
+        "uid-1", now=now, limit=2, firestore_client=client, report_page=True
+    )
+
+    assert first == frame_requests.FrameCleanupPage(processed=2, cleaned=2)
+    assert second == frame_requests.FrameCleanupPage(processed=1, cleaned=1)
+    assert collection.rows["attached-permanent"].exists is True
+    assert all(
+        not collection.rows[document_id].exists
+        for document_id in ("conversation-pruned", "conversation-failed", "later-unbound")
+    )

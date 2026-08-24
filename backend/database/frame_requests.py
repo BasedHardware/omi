@@ -1212,7 +1212,6 @@ def delete_expired_frame_request_metadata(
                 or row.get("cleanup_state") not in safe_cleanup_states
                 or not isinstance(expires_at, datetime)
                 or _utc(expires_at) > current
-                or row.get("conversation_id")
             ):
                 return False
             transaction.delete(snapshot.reference)
