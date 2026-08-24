@@ -407,7 +407,7 @@ def test_fresh_high_confidence_capture_replaces_stale_low_confidence_pending_cla
         account_generation=3,
         now=captured_at,
     )
-    refreshed_at = captured_at + candidates_db.PENDING_CANDIDATE_REUSE_WINDOW + timedelta(days=1)
+    refreshed_at = captured_at + candidates_db.SUGGESTION_TTL + timedelta(days=1)
     fresh = candidates_db.create_candidate(
         'user-1',
         task_create_proposal(
@@ -436,6 +436,63 @@ def test_fresh_high_confidence_capture_replaces_stale_low_confidence_pending_cla
     assert len(alias_paths(fake_db)) == 2
     claim = fake_db.rows[pending_claim_paths(fake_db)[0]]
     assert claim['candidate_id'] == fresh.candidate_id
+
+
+def test_a_lapsed_pending_claim_is_not_reused_for_a_later_capture(fake_db):
+    """A suggestion the user never saw must not swallow the next one.
+
+    A pending Candidate stops being readable once its two-day window closes, so
+    merging a fresh capture into a lapsed one stores a proposal the Suggested
+    surface will never show — the shape INV-TASK-2 forbids.
+    """
+    captured_at = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    lapsed = candidates_db.create_candidate(
+        'user-1',
+        task_create_proposal(evidence_refs=evidence_refs(0, 1)),
+        idempotency_key='capture:first-mention',
+        account_generation=3,
+        now=captured_at,
+    )
+    heard_again_at = captured_at + candidates_db.SUGGESTION_TTL + timedelta(hours=1)
+    reproposed = candidates_db.create_candidate(
+        'user-1',
+        task_create_proposal(evidence_refs=evidence_refs(1, 2), source_surface='screen'),
+        idempotency_key='capture:second-mention',
+        account_generation=3,
+        now=heard_again_at,
+    )
+
+    assert candidates_db.candidate_has_lapsed(lapsed, now=heard_again_at)
+    assert reproposed.candidate_id != lapsed.candidate_id
+    assert not candidates_db.candidate_has_lapsed(reproposed, now=heard_again_at)
+    assert reproposed.created_at == heard_again_at
+    assert reproposed.expires_at == heard_again_at + candidates_db.SUGGESTION_TTL
+    assert len(candidate_paths(fake_db)) == 2
+    claim = fake_db.rows[pending_claim_paths(fake_db)[0]]
+    assert claim['candidate_id'] == reproposed.candidate_id
+
+
+def test_a_live_pending_claim_is_still_reused_within_its_window(fake_db):
+    captured_at = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    first = candidates_db.create_candidate(
+        'user-1',
+        task_create_proposal(evidence_refs=evidence_refs(0, 1)),
+        idempotency_key='capture:first-mention',
+        account_generation=3,
+        now=captured_at,
+    )
+    heard_again_at = captured_at + candidates_db.SUGGESTION_TTL - timedelta(hours=1)
+    merged = candidates_db.create_candidate(
+        'user-1',
+        task_create_proposal(evidence_refs=evidence_refs(1, 2), source_surface='screen'),
+        idempotency_key='capture:second-mention',
+        account_generation=3,
+        now=heard_again_at,
+    )
+
+    assert merged.candidate_id == first.candidate_id
+    assert [evidence.id for evidence in merged.evidence_refs] == ['conversation-0', 'conversation-1']
+    assert len(candidate_paths(fake_db)) == 1
 
 
 def test_pending_candidate_evidence_union_is_stable_deduplicated_and_capped(fake_db):
