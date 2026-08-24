@@ -3,6 +3,26 @@ import XCTest
 @testable import Omi_Computer
 
 final class KnowledgeLedgerPromptProjectionTests: XCTestCase {
+  func testLegacyAIProfileIsCompatibilityOnlyForEmptyAndNonemptyAuthority() {
+    let authoritativeEmpty = ChatPromptKnowledgeSelection(
+      authoritativeLedger: KnowledgeLedgerPromptProjection(
+        rows: [], hasAuthoritativeSnapshot: true))
+    let authoritativeNonempty = ChatPromptKnowledgeSelection(
+      authoritativeLedger: KnowledgeLedgerPromptProjection(
+        rows: [row(id: "city", content: "Brooklyn", slot: "home_city")],
+        hasAuthoritativeSnapshot: true))
+    let compatibility = ChatPromptKnowledgeSelection(authoritativeLedger: nil)
+
+    for selection in [authoritativeEmpty, authoritativeNonempty] {
+      XCTAssertFalse(selection.shouldLoadLegacyAIProfile)
+      XCTAssertEqual(selection.legacyAIProfileSection(profileText: "Legacy wholesale profile"), "")
+    }
+    XCTAssertTrue(compatibility.shouldLoadLegacyAIProfile)
+    XCTAssertEqual(
+      compatibility.legacyAIProfileSection(profileText: "Legacy wholesale profile"),
+      "\n<ai_user_profile>\nLegacy wholesale profile\n</ai_user_profile>")
+  }
+
   func testCurrentProfileAndPlaybookHandlesAreBoundedAndDeterministic() {
     let projection = KnowledgeLedgerPromptProjection(
       rows: [

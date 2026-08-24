@@ -203,3 +203,19 @@ struct KnowledgeLedgerPromptProjection: Equatable, Sendable {
     return result.joined(separator: "\n")
   }
 }
+
+/// One prompt turn must have exactly one profile authority. The legacy
+/// synthesized profile is compatibility-only and cannot be layered beside an
+/// authoritative ledger, including an authoritative empty ledger.
+struct ChatPromptKnowledgeSelection: Equatable, Sendable {
+  let authoritativeLedger: KnowledgeLedgerPromptProjection?
+
+  var shouldLoadLegacyAIProfile: Bool { authoritativeLedger == nil }
+
+  func legacyAIProfileSection(profileText: String) -> String {
+    guard shouldLoadLegacyAIProfile else { return "" }
+    let trimmed = profileText.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return "" }
+    return "\n<ai_user_profile>\n\(profileText)\n</ai_user_profile>"
+  }
+}

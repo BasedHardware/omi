@@ -2501,16 +2501,23 @@ class ChatProvider: ObservableObject {
       // Continue without memories - non-critical
     }
 
-    guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else { return }
+    guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+      await loadAIProfileIfNeeded()
+      return
+    }
     do {
       let snapshot = try await APIClient.shared.getKnowledgeLedgerPromptSnapshot(
         authorizationSnapshot: authorization)
-      guard snapshot.isAuthoritative else { return }
+      guard snapshot.isAuthoritative else {
+        await loadAIProfileIfNeeded()
+        return
+      }
       let projection = KnowledgeLedgerPromptProjection(
         memories: snapshot.memories,
         hasAuthoritativeSnapshot: true)
       guard projection.isCompleteLedgerSnapshot else {
         log("ChatProvider: canonical ledger prompt snapshot rejected as incomplete or mixed-version")
+        await loadAIProfileIfNeeded()
         return
       }
       try await MemoryStorage.shared.syncAuthoritativeKnowledgeLedgerSnapshot(
@@ -2518,9 +2525,15 @@ class ChatProvider: ObservableObject {
         authorizationSnapshot: authorization)
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
       cachedLedgerPromptProjection = projection
+      // Authoritative empty and non-empty ledgers both replace the independent
+      // synthesized profile. Mark it reloadable so a later flag-off or stale
+      // receipt can intentionally restore compatibility on the next turn.
+      cachedAIProfile = ""
+      aiProfileLoaded = false
       log("ChatProvider: adopted authoritative ledger prompt snapshot (\(snapshot.memories.count) rows)")
     } catch {
       logError("ChatProvider: authoritative ledger prompt refresh failed closed", error: error)
+      await loadAIProfileIfNeeded()
     }
   }
 
@@ -2684,6 +2697,11 @@ class ChatProvider: ObservableObject {
 
   /// Fetches the latest AI-generated user profile from local database
   private func loadAIProfileIfNeeded() async {
+    guard promptKnowledgeSelection.shouldLoadLegacyAIProfile else {
+      cachedAIProfile = ""
+      aiProfileLoaded = false
+      return
+    }
     guard !aiProfileLoaded else { return }
 
     if let profile = await AIUserProfileService.shared.getLatestProfile() {
@@ -2695,8 +2713,11 @@ class ChatProvider: ObservableObject {
 
   /// Formats AI profile into a prompt section
   private func formatAIProfileSection() -> String {
-    guard !cachedAIProfile.isEmpty else { return "" }
-    return "\n<ai_user_profile>\n\(cachedAIProfile)\n</ai_user_profile>"
+    promptKnowledgeSelection.legacyAIProfileSection(profileText: cachedAIProfile)
+  }
+
+  private var promptKnowledgeSelection: ChatPromptKnowledgeSelection {
+    ChatPromptKnowledgeSelection(authoritativeLedger: cachedLedgerPromptProjection)
   }
 
   // MARK: - Load Database Schema
@@ -2944,7 +2965,6 @@ class ChatProvider: ObservableObject {
       await loadGoalsIfNeeded()
     }
     await loadTasksIfNeeded()
-    await loadAIProfileIfNeeded()
     await loadSchemaIfNeeded()
     await discoverClaudeConfig()
 
