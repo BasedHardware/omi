@@ -148,6 +148,25 @@ final class RewindEvidenceCardTests: XCTestCase {
     XCTAssertNil(RewindEvidenceCardPolicy.openHandler(for: 42, onOpen: nil))
   }
 
+  func testNilHostSubtitleMatchesDisabledState() {
+    let card = RewindEvidenceCardModel(screenshotID: 42)
+
+    XCTAssertEqual(
+      RewindEvidenceCardPresentationPolicy.subtitle(
+        for: card,
+        availability: .available,
+        hasOpenHandler: false
+      ),
+      "Unavailable to open here · frame 42"
+    )
+    XCTAssertFalse(
+      RewindEvidenceCardPresentationPolicy.isOpenable(
+        availability: .available,
+        hasOpenHandler: false
+      )
+    )
+  }
+
   func testMalformedForeignAndFutureEvidenceRemainTextOnly() {
     let cases = [
       makeEvidence(deviceID: deviceID, id: "42", version: "capture.v2"),
