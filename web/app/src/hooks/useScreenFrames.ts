@@ -7,7 +7,7 @@ import {
   getConversationScreenFrames,
   patchScreenFrameSharing,
 } from '@/lib/api';
-import type { ConversationScreenFrameSet } from '@/types/screenFrames';
+import type { ConversationScreenFrameSet } from '@/types/conversation';
 
 interface UseScreenFramesOptions {
   enabled?: boolean;

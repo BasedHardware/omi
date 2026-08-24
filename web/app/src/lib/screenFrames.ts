@@ -14,7 +14,7 @@
 import type {
   ConversationScreenFrame,
   ConversationScreenFrameSet,
-} from '@/types/screenFrames';
+} from '@/types/conversation';
 
 /**
  * Steps a lightbox index by one frame, wrapping around both ends of the strip.
@@ -70,7 +70,9 @@ export function buildLightboxFrames(
   set: ConversationScreenFrameSet | null | undefined,
 ): ConversationScreenFrame[] {
   if (!set) return [];
-  return set.banner ? [set.banner, ...set.strip] : set.strip;
+  // `strip` is optional in the generated schema (absent means empty).
+  const strip = set.strip ?? [];
+  return set.banner ? [set.banner, ...strip] : strip;
 }
 
 /**
@@ -93,5 +95,5 @@ export function stripFrameLightboxIndex(
 export function isFrameSetEmpty(
   set: ConversationScreenFrameSet | null | undefined,
 ): boolean {
-  return !set || (!set.banner && set.strip.length === 0);
+  return !set || (!set.banner && (set.strip ?? []).length === 0);
 }

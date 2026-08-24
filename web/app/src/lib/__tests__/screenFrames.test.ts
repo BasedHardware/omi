@@ -11,7 +11,7 @@ import {
 import type {
   ConversationScreenFrame,
   ConversationScreenFrameSet,
-} from '@/types/screenFrames';
+} from '@/types/conversation';
 
 function frame(id: string): ConversationScreenFrame {
   return {
@@ -28,6 +28,7 @@ function frame(id: string): ConversationScreenFrame {
     content_url: `https://example.com/${id}.jpg`,
     thumbnail_url: `https://example.com/${id}_thumb.jpg`,
     url_expires_at: '2026-08-24T11:00:00Z',
+    ground: { stops: ['#101010', '#202020'], is_neutral: false },
   };
 }
 

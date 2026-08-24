@@ -3,10 +3,15 @@
 import Image from '@tschk/moonshine-next/image';
 import { Code2, FileText, Globe, Package, Presentation } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type {
-  ConversationScreenFrame,
-  ScreenFrameSourceBadge,
-} from '@/types/screenFrames';
+import type { ConversationScreenFrame } from '@/types/conversation';
+
+/**
+ * Presentational-only label/icon union for the source badge. There is no
+ * generated equivalent — the OpenAPI schema only types `source_badge` as an
+ * inline string-literal union on `ConversationScreenFrame`, not a standalone
+ * schema — so this is derived from that field rather than hand-duplicated.
+ */
+type ScreenFrameSourceBadge = NonNullable<ConversationScreenFrame['source_badge']>;
 
 interface ConversationScreenFrameBannerProps {
   /** The approved banner frame, or null. Renders nothing when null — see contract §9. */
@@ -21,9 +26,12 @@ interface ConversationScreenFrameBannerProps {
 
 /**
  * The neutral ground `palette.py`'s `_neutral_ground()` produces (hue 0.62,
- * sat/val 0.12/0.40 and 0.16/0.24). Used only when a record predates the
- * `ground` field — kept in sync with the backend by value, not computed,
- * since this is a display fallback, not a re-derivation.
+ * sat/val 0.12/0.40 and 0.16/0.24) — kept in sync with the backend by value,
+ * not computed, since this is a display fallback, not a re-derivation. `ground`
+ * itself is always present on a `ConversationScreenFrame`, but the generated
+ * `ScreenFrameGround.stops` is typed as a general `string[]` (not a fixed
+ * 2-tuple), so each stop is still defaulted independently below in case a
+ * malformed record ever has fewer than 2.
  */
 const NEUTRAL_GROUND_STOPS: [string, string] = ['#5A5D66', '#33363D'];
 
@@ -67,7 +75,8 @@ export function ConversationScreenFrameBanner({
 
   const badge = frame.source_badge ? SOURCE_BADGE_META[frame.source_badge] : null;
   const BadgeIcon = badge?.icon;
-  const [stopA, stopB] = frame.ground?.stops ?? NEUTRAL_GROUND_STOPS;
+  const stopA = frame.ground.stops[0] ?? NEUTRAL_GROUND_STOPS[0];
+  const stopB = frame.ground.stops[1] ?? NEUTRAL_GROUND_STOPS[1];
 
   return (
     <div

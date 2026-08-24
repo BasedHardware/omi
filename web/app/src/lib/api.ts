@@ -11,12 +11,14 @@ import {
 import type {
   Conversation,
   ConversationSearchResponse,
+  ConversationScreenFrameSet,
   ConversationStatus,
   ActionItem,
   Memory,
   MemoryCategory,
   MemoryVisibility,
   KnowledgeGraph,
+  ScreenFrameSharingUpdateRequest,
   ServerMessage,
   MessageChunk,
   MessageChunkType,
@@ -35,10 +37,6 @@ export type {
   CreateConversationResponse,
   ActionItemsResponse,
 };
-import type {
-  ConversationScreenFrameSet,
-  ScreenFrameSharingPatchRequest,
-} from '@/types/screenFrames';
 import type { Goal, GoalHistoryEntry } from '@/types/goals';
 import type { ChatSession } from '@/types/chatSessions';
 import type { Scores } from '@/types/scores';
@@ -237,9 +235,8 @@ export async function deleteConversation(id: string): Promise<void> {
 // =============================================================================
 // Meeting-note screenshots ("screen frames")
 // =============================================================================
-// Types are hand-written in `@/types/screenFrames` until the OpenAPI spec is
-// regenerated to include the screen-frame-egress routes — see the comment at
-// the top of that file. Wire shape and route paths mirror the shared contract
+// Types come from the generated OpenAPI client (`@/types/conversation`
+// re-exports them). Route paths mirror the shared contract
 // (`data/reports/meeting-screenshots/DESIGN-sol.md` §1-2) exactly.
 
 /**
@@ -298,7 +295,7 @@ export async function patchScreenFrameSharing(
   conversationId: string,
   enabled: boolean,
 ): Promise<ConversationScreenFrameSet> {
-  const body: ScreenFrameSharingPatchRequest = { enabled };
+  const body: ScreenFrameSharingUpdateRequest = { enabled };
   const result = await fetchWithAuth<ConversationScreenFrameSet>(
     `/v1/conversations/${conversationId}/screenshot-sharing`,
     { method: 'PATCH', body: JSON.stringify(body) },

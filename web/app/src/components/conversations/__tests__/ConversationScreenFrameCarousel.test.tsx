@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ConversationScreenFrameCarousel } from '@/components/conversations/ConversationScreenFrameCarousel';
-import type { ConversationScreenFrame } from '@/types/screenFrames';
+import type { ConversationScreenFrame } from '@/types/conversation';
 
 vi.mock('@tschk/moonshine-next/image', () => ({
   default: (props: Record<string, unknown>) => {
@@ -26,6 +26,7 @@ function frame(id: string, caption = `caption-${id}`): ConversationScreenFrame {
     content_url: `https://example.com/${id}.jpg`,
     thumbnail_url: `https://example.com/${id}_thumb.jpg`,
     url_expires_at: '2026-08-24T11:00:00Z',
+    ground: { stops: ['#101010', '#202020'], is_neutral: false },
   };
 }
 

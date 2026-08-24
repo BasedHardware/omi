@@ -13,7 +13,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { stepFrameIndex } from '@/lib/screenFrames';
-import type { ConversationScreenFrame } from '@/types/screenFrames';
+import type { ConversationScreenFrame } from '@/types/conversation';
 
 interface ScreenFrameLightboxProps {
   open: boolean;

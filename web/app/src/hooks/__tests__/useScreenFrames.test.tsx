@@ -4,7 +4,7 @@ import { useScreenFrames } from '@/hooks/useScreenFrames';
 import type {
   ConversationScreenFrame,
   ConversationScreenFrameSet,
-} from '@/types/screenFrames';
+} from '@/types/conversation';
 
 vi.mock('@/lib/api', () => ({
   getConversationScreenFrames: vi.fn(),
@@ -30,6 +30,7 @@ function frame(id: string): ConversationScreenFrame {
     content_url: `https://example.com/${id}.jpg`,
     thumbnail_url: `https://example.com/${id}_thumb.jpg`,
     url_expires_at: '2026-08-24T11:00:00Z',
+    ground: { stops: ['#101010', '#202020'], is_neutral: false },
   };
 }
 
@@ -161,6 +162,6 @@ describe('useScreenFrames', () => {
     });
 
     // The stale conv-2 response must not have landed once conv-3 is current.
-    expect(result.current.frameSet?.strip.map((f) => f.id)).not.toEqual(['stale']);
+    expect(result.current.frameSet?.strip?.map((f) => f.id)).not.toEqual(['stale']);
   });
 });

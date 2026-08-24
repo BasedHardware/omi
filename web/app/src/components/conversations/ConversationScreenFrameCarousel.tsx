@@ -3,7 +3,7 @@
 import Image from '@tschk/moonshine-next/image';
 import { Image as ImageIcon, Loader2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { ConversationScreenFrame } from '@/types/screenFrames';
+import type { ConversationScreenFrame } from '@/types/conversation';
 
 interface ConversationScreenFrameCarouselProps {
   frames: ConversationScreenFrame[];

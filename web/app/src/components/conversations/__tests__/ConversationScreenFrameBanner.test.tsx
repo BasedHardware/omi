@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ConversationScreenFrameBanner } from '@/components/conversations/ConversationScreenFrameBanner';
-import type { ConversationScreenFrame } from '@/types/screenFrames';
+import type { ConversationScreenFrame } from '@/types/conversation';
 
 vi.mock('@tschk/moonshine-next/image', () => ({
   default: (props: Record<string, unknown>) => {
@@ -28,6 +28,9 @@ function frame(
     content_url: 'https://example.com/frame-1.jpg',
     thumbnail_url: 'https://example.com/frame-1_thumb.jpg',
     url_expires_at: '2026-08-24T11:00:00Z',
+    // `ground` is required in the generated schema; individual tests override
+    // it to exercise the specific-stops and defensive-fallback paths.
+    ground: { stops: ['#101010', '#202020'], is_neutral: false },
     ...overrides,
   };
 }
@@ -128,9 +131,15 @@ describe('ConversationScreenFrameBanner', () => {
     expect(ground.style.backgroundImage).toContain('68, 85, 102');
   });
 
-  it('falls back to the neutral ground when ground is absent', () => {
+  it('falls back to the neutral ground per-stop when stops are missing', () => {
+    // The generated `ScreenFrameGround.stops` is a general string[], not a
+    // fixed 2-tuple, so a malformed record with too few stops should still
+    // render — defaulting each missing stop to the neutral ground value.
     const { container } = render(
-      <ConversationScreenFrameBanner frame={frame()} title="Weekly Standup" />,
+      <ConversationScreenFrameBanner
+        frame={frame({ ground: { stops: [], is_neutral: true } })}
+        title="Weekly Standup"
+      />,
     );
 
     const ground = container.querySelector('[aria-hidden="true"]') as HTMLElement;
