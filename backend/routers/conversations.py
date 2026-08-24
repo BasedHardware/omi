@@ -1025,13 +1025,10 @@ def delete_conversation(
     # is gone.
     delete_conversation_screen_frames(uid, conversation_id)
 
-    # Delete the conversation first. If that owner-authorized operation fails,
-    # still-live conversation evidence must remain available for a retry. The
-    # queue metadata/object cleanup is exhaustive and follows only after the
-    # conversation deletion has returned successfully.
     # Snapshot both current photo metadata and queue metadata before deleting
-    # the conversation. If the owner-authorized conversation delete fails, no
-    # pixel is removed and the still-live evidence remains retryable.
+    # the conversation, and durably outbox every object before the metadata can
+    # disappear. If the owner-authorized delete fails, no pixel is removed and
+    # the still-live evidence plus idempotent receipts remain retryable.
     photo_storage_ids = [
         str(photo.get("storage_id"))
         for photo in (conversations_db.get_conversation_photos(uid, conversation_id) or [])
@@ -1039,8 +1036,17 @@ def delete_conversation(
     ]
     frame_storage_ids = frame_requests_db.list_all_frame_request_storage_ids(uid, conversation_id=conversation_id)
     storage_ids = list(dict.fromkeys(photo_storage_ids + frame_storage_ids))
+    frame_requests_db.persist_conversation_frame_deletion_outbox(uid, conversation_id, storage_ids)
     conversations_db.delete_conversation(uid, conversation_id)
-    delete_frame_request_pixels_for_user(uid, storage_ids)
+    for storage_id in storage_ids:
+        try:
+            delete_frame_request_pixels_for_user(uid, [storage_id])
+        except Exception:
+            # The durable outbox is now the authority; the independent worker
+            # retries without requiring the deleted conversation to exist.
+            logger.exception("Conversation frame deletion deferred for uid=%s", uid)
+        else:
+            frame_requests_db.acknowledge_conversation_frame_deletion(uid, conversation_id, storage_id)
     frame_requests_db.delete_frame_requests_for_conversation(uid, conversation_id)
 
     delete_vector(uid, conversation_id)

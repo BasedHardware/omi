@@ -8,17 +8,22 @@ multipart route; conversation deletion owns permanent attached evidence.
 from __future__ import annotations
 
 import time
+from io import BytesIO
 from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
+from PIL import Image, UnidentifiedImageError
 
 from database.frame_requests import (
+    acknowledge_frame_storage_cleanup,
     attach_frame_request_to_conversation,
     enqueue_frame_request,
     get_frame_request,
     list_pending_frame_requests,
     reconcile_ambiguous_frame_upload,
+    reserve_frame_promotion_copy,
+    reserve_frame_storage_cleanup,
     transition_frame_request,
 )
 from models.frame_request import (
@@ -35,12 +40,34 @@ from utils.integration_telemetry import emit_posthog_event
 from utils.other.endpoints import get_current_user_uid, with_rate_limit
 from utils.retrieval.frame_request_authority import authorize
 from utils.retrieval.frame_request_storage import (
+    PERMANENT_STORAGE_PREFIX,
+    TEMPORARY_STORAGE_PREFIX,
+    copy_frame_request_pixels_to_permanent,
     delete_frame_request_pixels,
     download_frame_request_pixels,
     upload_frame_request_pixels,
 )
 
 router = APIRouter()
+_ALLOWED_IMAGE_FORMATS = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}
+_MAX_IMAGE_PIXELS = 25_000_000
+
+
+def _validated_image_content_type(payload: bytes) -> str:
+    """Decode enough image structure to reject spoofed or decompression-bomb uploads."""
+
+    try:
+        with Image.open(BytesIO(payload)) as image:
+            image_format = str(image.format or "").upper()
+            width, height = image.size
+            image.verify()
+    except (Image.DecompressionBombError, UnidentifiedImageError, OSError, ValueError) as exc:
+        raise HTTPException(status_code=415, detail="frame_upload_invalid_image") from exc
+    if image_format not in _ALLOWED_IMAGE_FORMATS:
+        raise HTTPException(status_code=415, detail="frame_upload_unsupported_image")
+    if width < 1 or height < 1 or width * height > _MAX_IMAGE_PIXELS:
+        raise HTTPException(status_code=413, detail="frame_upload_dimensions_too_large")
+    return _ALLOWED_IMAGE_FORMATS[image_format]
 
 
 def _record_frame_lifecycle(
@@ -281,13 +308,14 @@ async def upload_frame_request(
 
     started = time.monotonic()
     await _authorize(uid, account_generation)
-    content_type = file.content_type
-    if not content_type or not content_type.lower().startswith("image/"):
+    declared_content_type = file.content_type
+    if not declared_content_type or declared_content_type.lower() not in set(_ALLOWED_IMAGE_FORMATS.values()):
         raise HTTPException(status_code=415, detail="frame_upload_requires_image")
     payload = await file.read(10 * 1024 * 1024 + 1)
     if len(payload) > 10 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="frame_upload_too_large")
-    storage_id = f"frame-{uuid4().hex}"
+    content_type = _validated_image_content_type(payload)
+    storage_id = f"{TEMPORARY_STORAGE_PREFIX}{uuid4().hex}"
     try:
         await run_blocking(
             storage_executor,
@@ -443,8 +471,34 @@ async def promote_frame_request(
         if existing.conversation_id != promotion.conversation_id:
             raise PermissionError("conversation ownership mismatch")
         if existing.state == FrameRequestState.attached:
+            if existing.storage_id:
+                await run_blocking(db_executor, acknowledge_frame_storage_cleanup, uid, existing.storage_id)
             _record_frame_lifecycle(uid, "frame_request_attached", state=existing.state, started=started)
             return FrameRequestEnvelope(request=existing)
+        if existing.state != FrameRequestState.uploaded or not existing.storage_id:
+            raise ValueError("only uploaded frame requests may be promoted")
+        permanent_storage_id = f"{PERMANENT_STORAGE_PREFIX}{request_id.removeprefix('frame-')}"
+        await run_blocking(
+            db_executor,
+            reserve_frame_promotion_copy,
+            uid,
+            request_id,
+            permanent_storage_id,
+        )
+        await run_blocking(
+            storage_executor,
+            copy_frame_request_pixels_to_permanent,
+            uid,
+            existing.storage_id,
+            permanent_storage_id,
+        )
+        await run_blocking(
+            db_executor,
+            reserve_frame_storage_cleanup,
+            uid,
+            request_id,
+            existing.storage_id,
+        )
         # The frame row, photo metadata, and one-keyframe invariant are one
         # Firestore transaction. This makes concurrent promotion idempotent:
         # one caller wins and the retry observes the committed attached row.
@@ -456,7 +510,16 @@ async def promote_frame_request(
             device_id=promotion.device_id,
             account_generation=promotion.account_generation,
             conversation_id=promotion.conversation_id,
+            permanent_storage_id=permanent_storage_id,
         )
+        # The attached row now references the permanent object. Temporary
+        # deletion is idempotent; a failure is retried by its durable receipt.
+        try:
+            await run_blocking(storage_executor, delete_frame_request_pixels, uid, existing.storage_id)
+        except Exception:
+            pass
+        else:
+            await run_blocking(db_executor, acknowledge_frame_storage_cleanup, uid, existing.storage_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="frame_request_not_found") from exc
     except PermissionError as exc:

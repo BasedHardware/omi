@@ -878,6 +878,11 @@ environments:
               default: dev-omi-frame-requests
               provisional: true
               category: storage_retention
+            BUCKET_FRAME_REQUESTS_TEMPORARY:
+              env_var: BUCKET_FRAME_REQUESTS_TEMPORARY
+              default: dev-omi-frame-requests-temporary
+              provisional: true
+              category: storage_retention
             FRAME_REQUEST_POSTHOG_COHORT_FLAG:
               value: jit-frame-requests-cohort
               provisional: true
@@ -992,6 +997,17 @@ environments:
             --cpu: '2'
             --memory: 2Gi
           env:
+            BUCKET_FRAME_REQUESTS:
+              env_var: BUCKET_FRAME_REQUESTS
+              default: dev-omi-frame-requests
+              category: storage_retention
+            BUCKET_FRAME_REQUESTS_TEMPORARY:
+              env_var: BUCKET_FRAME_REQUESTS_TEMPORARY
+              default: dev-omi-frame-requests-temporary
+              category: storage_retention
+            FRAME_REQUEST_RETENTION_INDEPENDENT_HEALTHY:
+              value: 'false'
+              category: storage_retention
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
@@ -1054,6 +1070,11 @@ environments:
             BUCKET_FRAME_REQUESTS:
               env_var: BUCKET_FRAME_REQUESTS
               default: dev-omi-frame-requests
+              provisional: false
+              category: storage_retention
+            BUCKET_FRAME_REQUESTS_TEMPORARY:
+              env_var: BUCKET_FRAME_REQUESTS_TEMPORARY
+              default: dev-omi-frame-requests-temporary
               provisional: false
               category: storage_retention
             GOOGLE_CLOUD_PROJECT:
@@ -1896,6 +1917,11 @@ environments:
               default: prod-omi-frame-requests
               provisional: true
               category: storage_retention
+            BUCKET_FRAME_REQUESTS_TEMPORARY:
+              env_var: BUCKET_FRAME_REQUESTS_TEMPORARY
+              default: prod-omi-frame-requests-temporary
+              provisional: true
+              category: storage_retention
             FRAME_REQUEST_POSTHOG_COHORT_FLAG:
               value: jit-frame-requests-cohort
               provisional: true
@@ -1993,6 +2019,17 @@ environments:
             --remove-env-vars: MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
             --task-timeout: 3600s
           env:
+            BUCKET_FRAME_REQUESTS:
+              env_var: BUCKET_FRAME_REQUESTS
+              default: prod-omi-frame-requests
+              category: storage_retention
+            BUCKET_FRAME_REQUESTS_TEMPORARY:
+              env_var: BUCKET_FRAME_REQUESTS_TEMPORARY
+              default: prod-omi-frame-requests-temporary
+              category: storage_retention
+            FRAME_REQUEST_RETENTION_INDEPENDENT_HEALTHY:
+              value: 'false'
+              category: storage_retention
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
@@ -2054,6 +2091,11 @@ environments:
             BUCKET_FRAME_REQUESTS:
               env_var: BUCKET_FRAME_REQUESTS
               default: prod-omi-frame-requests
+              provisional: false
+              category: storage_retention
+            BUCKET_FRAME_REQUESTS_TEMPORARY:
+              env_var: BUCKET_FRAME_REQUESTS_TEMPORARY
+              default: prod-omi-frame-requests-temporary
               provisional: false
               category: storage_retention
             GOOGLE_CLOUD_PROJECT:

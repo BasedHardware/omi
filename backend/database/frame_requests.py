@@ -8,6 +8,7 @@ pixel bytes.  The pure policy module owns lifecycle and quota rules.
 from __future__ import annotations
 
 import hashlib
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
@@ -37,6 +38,13 @@ from utils.retrieval.frame_request_policy import (
 USERS_COLLECTION = "users"
 FRAME_REQUESTS_COLLECTION = "frame_requests"
 FRAME_UPLOAD_ORPHANS_COLLECTION = "frame_upload_orphans"
+FRAME_DELETION_OUTBOX_COLLECTION = "frame_deletion_outbox"
+
+
+@dataclass(frozen=True)
+class FrameCleanupPage:
+    processed: int
+    cleaned: int
 
 
 def _get_client(firestore_client: Any | None) -> Any:
@@ -64,6 +72,103 @@ def _orphan_collection(uid: str, *, firestore_client: Any | None = None) -> Any:
         raise ValueError("uid is required")
     client = _get_client(firestore_client)
     return client.collection(USERS_COLLECTION).document(owner_uid).collection(FRAME_UPLOAD_ORPHANS_COLLECTION)
+
+
+def _deletion_outbox_collection(uid: str, *, firestore_client: Any | None = None) -> Any:
+    owner_uid = uid.strip()
+    if not owner_uid:
+        raise ValueError("uid is required")
+    client = _get_client(firestore_client)
+    return client.collection(USERS_COLLECTION).document(owner_uid).collection(FRAME_DELETION_OUTBOX_COLLECTION)
+
+
+def _deletion_receipt_id(conversation_id: str, storage_id: str) -> str:
+    return hashlib.sha256(f"{conversation_id}\0{storage_id}".encode("utf-8")).hexdigest()
+
+
+def persist_conversation_frame_deletion_outbox(
+    uid: str,
+    conversation_id: str,
+    storage_ids: list[str],
+    *,
+    now: datetime | None = None,
+    firestore_client: Any | None = None,
+) -> None:
+    """Durably record every object before its owning conversation is removed."""
+
+    if not conversation_id.strip():
+        raise ValueError("conversation_id is required")
+    current = _utc(now or datetime.now(timezone.utc))
+    client = _get_client(firestore_client)
+    collection = _deletion_outbox_collection(uid, firestore_client=client)
+    for storage_id in dict.fromkeys(storage_ids):
+        if not storage_id or "/" in storage_id or "\\" in storage_id:
+            raise ValueError("invalid frame storage id")
+        collection.document(_deletion_receipt_id(conversation_id, storage_id)).set(
+            {
+                "conversation_id": conversation_id,
+                "storage_id": storage_id,
+                "cleanup_next_attempt_at": current,
+                "cleanup_attempts": 0,
+            },
+            merge=True,
+        )
+
+
+def acknowledge_conversation_frame_deletion(
+    uid: str,
+    conversation_id: str,
+    storage_id: str,
+    *,
+    firestore_client: Any | None = None,
+) -> None:
+    _deletion_outbox_collection(uid, firestore_client=firestore_client).document(
+        _deletion_receipt_id(conversation_id, storage_id)
+    ).delete()
+
+
+def cleanup_conversation_frame_deletion_outbox(
+    uid: str,
+    *,
+    delete_storage: Callable[[str], None],
+    now: datetime | None = None,
+    limit: int = FRAME_REQUEST_MAX_BATCH,
+    firestore_client: Any | None = None,
+    report_page: bool = False,
+) -> int | FrameCleanupPage:
+    """Retry conversation-owned object deletion after the conversation is gone."""
+
+    current = _utc(now or datetime.now(timezone.utc))
+    query = (
+        _deletion_outbox_collection(uid, firestore_client=firestore_client)
+        .where(filter=firestore.FieldFilter("cleanup_next_attempt_at", "<=", current))
+        .order_by("cleanup_next_attempt_at", direction=firestore.Query.ASCENDING)
+        .limit(limit)
+    )
+    processed = cleaned = 0
+    for snapshot in query.stream():
+        row = snapshot.to_dict() or {}
+        storage_id = row.get("storage_id")
+        attempts = max(0, int(row.get("cleanup_attempts") or 0))
+        if not isinstance(storage_id, str) or not storage_id or "/" in storage_id or "\\" in storage_id:
+            snapshot.reference.delete()
+            processed += 1
+            continue
+        processed += 1
+        try:
+            delete_storage(storage_id)
+        except Exception:
+            snapshot.reference.update(
+                {
+                    "cleanup_attempts": attempts + 1,
+                    "cleanup_next_attempt_at": current + timedelta(seconds=min(86400, 2 ** min(attempts, 16))),
+                }
+            )
+            continue
+        snapshot.reference.delete()
+        cleaned += 1
+    page = FrameCleanupPage(processed=processed, cleaned=cleaned)
+    return page if report_page else page.cleaned
 
 
 def _request_from_snapshot(snapshot: Any) -> FrameRequest:
@@ -118,6 +223,7 @@ def attach_frame_request_to_conversation(
     device_id: str,
     account_generation: int,
     conversation_id: str,
+    permanent_storage_id: str,
     now: datetime | None = None,
     firestore_client: Any | None = None,
 ) -> FrameRequest:
@@ -129,8 +235,8 @@ def attach_frame_request_to_conversation(
     touching the permanent object.
     """
 
-    if not conversation_id.strip():
-        raise ValueError("conversation_id is required")
+    if not conversation_id.strip() or not permanent_storage_id.strip():
+        raise ValueError("conversation_id and permanent_storage_id are required")
     current_time = _utc(now or datetime.now(timezone.utc))
     client = _get_client(firestore_client)
     ref = _collection(uid, firestore_client=client).document(request_id)
@@ -142,6 +248,9 @@ def attach_frame_request_to_conversation(
     )
     photos_ref = conversation_ref.collection("photos")
     photo_ref = photos_ref.document(request_id)
+    promotion_receipt_ref = _orphan_collection(uid, firestore_client=client).document(
+        hashlib.sha256(permanent_storage_id.encode("utf-8")).hexdigest()
+    )
     transaction = client.transaction()
 
     @firestore.transactional
@@ -155,6 +264,12 @@ def attach_frame_request_to_conversation(
         if request.conversation_id != conversation_id:
             raise PermissionError("conversation ownership mismatch")
         if request.state == FrameRequestState.attached:
+            if request.storage_id != permanent_storage_id:
+                raise ValueError("attached frame uses a different permanent object")
+            # A concurrent caller may have reserved the same deterministic copy
+            # receipt after the winner committed. Clear it transactionally so
+            # cleanup can never delete referenced permanent evidence.
+            transaction.delete(promotion_receipt_ref)
             return _request_data(request)
         if request.state != FrameRequestState.uploaded or not request.storage_id:
             raise ValueError("only uploaded frame requests may be promoted")
@@ -185,7 +300,7 @@ def attach_frame_request_to_conversation(
         existing_photo = photo_ref.get(transaction=transaction)
         if existing_photo.exists:
             existing_storage_id = (existing_photo.to_dict() or {}).get("storage_id")
-            if existing_storage_id != request.storage_id:
+            if existing_storage_id != permanent_storage_id:
                 raise ValueError("conversation photo id is already used")
         else:
             level = (conversation_snapshot.to_dict() or {}).get("data_protection_level", "standard")
@@ -193,7 +308,7 @@ def attach_frame_request_to_conversation(
                 {
                     "id": request.request_id,
                     "base64": "",
-                    "storage_id": request.storage_id,
+                    "storage_id": permanent_storage_id,
                     "content_type": request.content_type,
                     "description": "Just-in-time frame evidence",
                     "discarded": False,
@@ -212,13 +327,91 @@ def attach_frame_request_to_conversation(
                 "expires_at": request.created_at,
                 "cleanup_state": FrameRequestCleanupState.permanent.value,
                 "cleanup_next_attempt_at": None,
+                "storage_id": permanent_storage_id,
             },
             document_path=_request_path(uid, request_id),
         )
         transaction.update(ref, _request_data(candidate))
+        transaction.delete(promotion_receipt_ref)
         return _request_data(candidate)
 
     return _request_from_payload(_attach(transaction), document_path=_request_path(uid, request_id))
+
+
+def reserve_frame_promotion_copy(
+    uid: str,
+    request_id: str,
+    permanent_storage_id: str,
+    *,
+    now: datetime | None = None,
+    firestore_client: Any | None = None,
+) -> None:
+    """Persist a cleanup receipt before copying into the no-expiry bucket.
+
+    Successful attachment deletes the receipt in the same transaction as the
+    permanent reference. A failed/ambiguous promotion therefore leaves either
+    a referenced permanent object or a discoverable object due for cleanup.
+    """
+
+    current = _utc(now or datetime.now(timezone.utc))
+    if not request_id.strip() or not permanent_storage_id.strip():
+        raise ValueError("promotion receipt identities are required")
+    receipt = _orphan_collection(uid, firestore_client=firestore_client).document(
+        hashlib.sha256(permanent_storage_id.encode("utf-8")).hexdigest()
+    )
+    receipt.set(
+        {
+            "storage_id": permanent_storage_id,
+            "request_id": request_id,
+            "cleanup_state": FrameRequestCleanupState.pending.value,
+            "cleanup_attempts": 0,
+            # Leave ample time for copy + Firestore transaction retries while
+            # remaining far inside the temporary retention deadline.
+            "cleanup_next_attempt_at": current + timedelta(hours=1),
+            "created_at": current,
+            "kind": "promotion_copy",
+        },
+        merge=False,
+    )
+
+
+def reserve_frame_storage_cleanup(
+    uid: str,
+    request_id: str,
+    storage_id: str,
+    *,
+    now: datetime | None = None,
+    firestore_client: Any | None = None,
+) -> None:
+    """Persist an independently retryable cleanup receipt for a displaced object."""
+
+    current = _utc(now or datetime.now(timezone.utc))
+    receipt = _orphan_collection(uid, firestore_client=firestore_client).document(
+        hashlib.sha256(storage_id.encode("utf-8")).hexdigest()
+    )
+    receipt.set(
+        {
+            "storage_id": storage_id,
+            "request_id": request_id,
+            "cleanup_state": FrameRequestCleanupState.pending.value,
+            "cleanup_attempts": 0,
+            "cleanup_next_attempt_at": current + timedelta(hours=1),
+            "created_at": current,
+            "kind": "displaced_temporary",
+        },
+        merge=False,
+    )
+
+
+def acknowledge_frame_storage_cleanup(
+    uid: str,
+    storage_id: str,
+    *,
+    firestore_client: Any | None = None,
+) -> None:
+    _orphan_collection(uid, firestore_client=firestore_client).document(
+        hashlib.sha256(storage_id.encode("utf-8")).hexdigest()
+    ).delete()
 
 
 def enqueue_frame_request(
@@ -649,7 +842,8 @@ def cleanup_ambiguous_frame_upload_pixels(
     now: datetime | None = None,
     limit: int = FRAME_REQUEST_MAX_BATCH,
     firestore_client: Any | None = None,
-) -> int:
+    report_page: bool = False,
+) -> int | FrameCleanupPage:
     """Converge durable ambiguous-upload receipts independently of request rows."""
 
     if not 1 <= limit <= FRAME_REQUEST_MAX_BATCH:
@@ -661,7 +855,7 @@ def cleanup_ambiguous_frame_upload_pixels(
         .order_by("cleanup_next_attempt_at", direction=firestore.Query.ASCENDING)
         .limit(limit)
     )
-    cleaned = 0
+    processed = cleaned = 0
     for snapshot in query.stream():
         row = snapshot.to_dict() or {}
         storage_id = row.get("storage_id")
@@ -673,7 +867,10 @@ def cleanup_ambiguous_frame_upload_pixels(
             or "\\" in storage_id
             or cleanup_state not in {FrameRequestCleanupState.pending.value, FrameRequestCleanupState.failed.value}
         ):
+            snapshot.reference.delete()
+            processed += 1
             continue
+        processed += 1
         attempts = max(0, int(row.get("cleanup_attempts") or 0))
         try:
             delete_storage(storage_id)
@@ -695,7 +892,8 @@ def cleanup_ambiguous_frame_upload_pixels(
             }
         )
         cleaned += 1
-    return cleaned
+    page = FrameCleanupPage(processed=processed, cleaned=cleaned)
+    return page if report_page else page.cleaned
 
 
 def prune_expired_frame_requests(
@@ -764,7 +962,8 @@ def cleanup_frame_request_pixels(
     now: datetime | None = None,
     limit: int = FRAME_REQUEST_MAX_BATCH,
     firestore_client: Any | None = None,
-) -> int:
+    report_page: bool = False,
+) -> int | FrameCleanupPage:
     """Retry external deletion independently of queue delivery or lifecycle state.
 
     A failed GCS delete never reopens or hides the terminal Firestore row. The
@@ -790,7 +989,7 @@ def cleanup_frame_request_pixels(
         .order_by("cleanup_next_attempt_at", direction=firestore.Query.ASCENDING)
         .limit(limit)
     )
-    cleaned = 0
+    processed = cleaned = 0
     for snapshot in query.stream():
         request = _request_from_snapshot(snapshot)
         if not request.storage_id or request.cleanup_state not in {
@@ -798,6 +997,7 @@ def cleanup_frame_request_pixels(
             FrameRequestCleanupState.failed,
         }:
             continue
+        processed += 1
         try:
             delete_storage(request.storage_id)
         except Exception:
@@ -820,7 +1020,8 @@ def cleanup_frame_request_pixels(
             }
         )
         cleaned += 1
-    return cleaned
+    page = FrameCleanupPage(processed=processed, cleaned=cleaned)
+    return page if report_page else page.cleaned
 
 
 def delete_frame_requests_for_conversation(
@@ -950,6 +1151,33 @@ def list_all_frame_upload_orphan_storage_ids(
             return result
         cursor = rows[-1]
     raise RuntimeError("frame-upload orphan enumeration exceeded page bound")
+
+
+def list_all_frame_deletion_outbox_storage_ids(
+    uid: str,
+    *,
+    firestore_client: Any | None = None,
+    page_size: int = 500,
+    max_pages: int = 1000,
+) -> list[str]:
+    """Exhaustively enumerate durable conversation-deletion receipts."""
+
+    collection = _deletion_outbox_collection(uid, firestore_client=firestore_client)
+    result: list[str] = []
+    cursor: Any | None = None
+    for _page in range(max_pages):
+        query = collection.order_by("__name__", direction=firestore.Query.ASCENDING).limit(page_size)
+        if cursor is not None:
+            query = query.start_after(cursor)
+        rows = list(query.stream())
+        for snapshot in rows:
+            value = (snapshot.to_dict() or {}).get("storage_id")
+            if isinstance(value, str) and value.strip() and "/" not in value and "\\" not in value:
+                result.append(value.strip())
+        if len(rows) < page_size:
+            return result
+        cursor = rows[-1]
+    raise RuntimeError("frame deletion outbox enumeration exceeded page bound")
 
 
 def _utc(value: datetime) -> datetime:

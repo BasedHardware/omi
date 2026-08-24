@@ -59,6 +59,9 @@ def upsert_screen_activity(uid: str, rows: List[Dict[str, Any]]) -> int:
                 'appName': row.get('appName', ''),
                 'windowTitle': row.get('windowTitle', ''),
                 'ocrText': (row.get('ocrText') or '')[:1000],
+                # The Firestore/vector ID is device-qualified, while the desktop
+                # frame database is addressed by this original numeric ID.
+                'localScreenshotId': str(row['id']),
             }
             if row.get('deviceName'):
                 doc_data['deviceName'] = row['deviceName']

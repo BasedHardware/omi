@@ -17,7 +17,9 @@ from google.cloud import firestore
 
 from database._client import get_firestore_client
 from database.frame_requests import (
+    FrameCleanupPage,
     cleanup_ambiguous_frame_upload_pixels,
+    cleanup_conversation_frame_deletion_outbox,
     cleanup_frame_request_pixels,
     prune_expired_frame_requests,
 )
@@ -45,6 +47,7 @@ def _load_user_page(client: Any, *, user_limit: int) -> tuple[list[Any], str | N
     state_snapshot = state_ref.get()
     state = state_snapshot.to_dict() if state_snapshot.exists else {}
     cursor_uid = str((state or {}).get("cursor_uid") or "").strip()
+    retry_cursor_uid = str((state or {}).get("retry_cursor_uid") or "").strip()
     users_ref = client.collection("users")
 
     # Retry failures independently from the population cursor while reserving
@@ -53,9 +56,17 @@ def _load_user_page(client: Any, *, user_limit: int) -> tuple[list[Any], str | N
     retry_budget = max(1, user_limit // 4)
     if user_limit > 1:
         retry_budget = min(retry_budget, user_limit - 1)
-    retry_snapshots = list(
-        _retry_collection(client).order_by("__name__", direction=firestore.Query.ASCENDING).limit(retry_budget).stream()
-    )
+    retry_query = _retry_collection(client).order_by("__name__", direction=firestore.Query.ASCENDING)
+    if retry_cursor_uid:
+        retry_query = retry_query.start_after({"__name__": _retry_collection(client).document(retry_cursor_uid)})
+    retry_snapshots = list(retry_query.limit(retry_budget).stream())
+    if not retry_snapshots and retry_cursor_uid:
+        retry_snapshots = list(
+            _retry_collection(client)
+            .order_by("__name__", direction=firestore.Query.ASCENDING)
+            .limit(retry_budget)
+            .stream()
+        )
     retry_uids = [str(snapshot.id) for snapshot in retry_snapshots]
     retry_rows: list[Any] = []
     selected_retry_uids: list[str] = []
@@ -64,6 +75,8 @@ def _load_user_page(client: Any, *, user_limit: int) -> tuple[list[Any], str | N
         if getattr(snapshot, "exists", False):
             retry_rows.append(snapshot)
             selected_retry_uids.append(uid)
+        else:
+            _retry_collection(client).document(uid).delete()
     fresh_limit = max(0, user_limit - len(retry_rows))
 
     def query_page(after_uid: str | None) -> list[Any]:
@@ -85,25 +98,29 @@ def _load_user_page(client: Any, *, user_limit: int) -> tuple[list[Any], str | N
     return retry_rows + selected, next_cursor, retry_uids
 
 
-def _store_user_cursor(client: Any, cursor_uid: str | None) -> None:
+def _store_user_cursor(client: Any, cursor_uid: str | None, retry_cursor_uid: str | None = None) -> None:
     client.collection(_STATE_COLLECTION).document(_STATE_DOCUMENT).set(
         {
             "cursor_uid": cursor_uid or "",
+            "retry_cursor_uid": retry_cursor_uid or "",
             "updated_at": datetime.now(timezone.utc),
         },
         merge=True,
     )
 
 
-def _drain_due_pages(operation: Any, *, page_size: int) -> int:
+def _drain_due_pages(operation: Any, *, page_size: int, max_pages: int = 8) -> tuple[int, bool]:
     """Drain a finite due query while preserving its bounded page size."""
 
     total = 0
-    while True:
-        changed = int(operation())
+    for _page in range(max_pages):
+        result = operation()
+        processed = result.processed if isinstance(result, FrameCleanupPage) else int(result)
+        changed = result.cleaned if isinstance(result, FrameCleanupPage) else processed
         total += changed
-        if changed < page_size:
-            return total
+        if processed < page_size:
+            return total, False
+    return total, True
 
 
 def run_frame_request_retention_maintenance(
@@ -129,29 +146,47 @@ def run_frame_request_retention_maintenance(
             continue
         attempted += 1
         try:
-            pruned += _drain_due_pages(
+            changed, more_due = _drain_due_pages(
                 lambda: prune_expired_frame_requests(uid, limit=rows_per_user, firestore_client=client),
                 page_size=rows_per_user,
             )
-            cleaned += _drain_due_pages(
+            pruned += changed
+            changed, more_cleanup = _drain_due_pages(
                 lambda: cleanup_frame_request_pixels(
                     uid,
                     delete_storage=lambda storage_id, owner=uid: (delete_frame_request_pixels(owner, storage_id)),
                     limit=rows_per_user,
                     firestore_client=client,
+                    report_page=True,
                 ),
                 page_size=rows_per_user,
             )
-            cleaned += _drain_due_pages(
+            cleaned += changed
+            changed, more_orphans = _drain_due_pages(
                 lambda: cleanup_ambiguous_frame_upload_pixels(
                     uid,
                     delete_storage=lambda storage_id, owner=uid: (delete_frame_request_pixels(owner, storage_id)),
                     limit=rows_per_user,
                     firestore_client=client,
+                    report_page=True,
                 ),
                 page_size=rows_per_user,
             )
-            if uid in retry_set:
+            cleaned += changed
+            changed, more_deletions = _drain_due_pages(
+                lambda: cleanup_conversation_frame_deletion_outbox(
+                    uid,
+                    delete_storage=lambda storage_id, owner=uid: delete_frame_request_pixels(owner, storage_id),
+                    limit=rows_per_user,
+                    firestore_client=client,
+                    report_page=True,
+                ),
+                page_size=rows_per_user,
+            )
+            cleaned += changed
+            if more_due or more_cleanup or more_orphans or more_deletions:
+                retry_collection.document(uid).set({"uid": uid, "updated_at": datetime.now(timezone.utc)}, merge=True)
+            elif uid in retry_set:
                 retry_collection.document(uid).delete()
         except Exception:
             # Keep the scheduler moving across accounts. The row-level retry
@@ -160,7 +195,7 @@ def run_frame_request_retention_maintenance(
             logger.exception("frame retention maintenance failed for one account")
             failures += 1
             retry_collection.document(uid).set({"uid": uid, "updated_at": datetime.now(timezone.utc)}, merge=True)
-    _store_user_cursor(client, next_cursor)
+    _store_user_cursor(client, next_cursor, retry_uids[-1] if retry_uids else None)
     result = {
         "users_scanned": attempted,
         "rows_pruned": pruned,

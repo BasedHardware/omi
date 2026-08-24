@@ -174,8 +174,12 @@ def purge_derived_user_data(uid: str) -> PurgeResult:
                     photo_storage_ids.append(str(photo['storage_id']))
         frame_storage_ids = frame_requests_db.list_all_frame_request_storage_ids(uid)
         orphan_storage_ids = frame_requests_db.list_all_frame_upload_orphan_storage_ids(uid)
+        deletion_outbox_storage_ids = frame_requests_db.list_all_frame_deletion_outbox_storage_ids(uid)
         delete_frame_request_pixels_for_user(
-            uid, list(dict.fromkeys(photo_storage_ids + frame_storage_ids + orphan_storage_ids))
+            uid,
+            list(
+                dict.fromkeys(photo_storage_ids + frame_storage_ids + orphan_storage_ids + deletion_outbox_storage_ids)
+            ),
         )
     except Exception as e:
         record_failure('required_failures', 'frame_request_pixels', e)

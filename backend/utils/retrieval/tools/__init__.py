@@ -50,6 +50,7 @@ from .screen_activity_tools import (
     get_screen_activity_tool,
     search_screen_activity_tool,
 )
+from .frame_request_tools import look_at_frame_tool
 from .preference_tools import (
     save_user_preference_tool,
 )
@@ -92,6 +93,7 @@ __all__ = [
     'create_chart_tool',
     'get_screen_activity_tool',
     'search_screen_activity_tool',
+    'look_at_frame_tool',
     'save_user_preference_tool',
     'fetch_url_tool',
     'traverse_knowledge_graph_tool',
