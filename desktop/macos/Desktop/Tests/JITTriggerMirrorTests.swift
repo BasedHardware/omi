@@ -127,6 +127,51 @@ final class JITTriggerMirrorTests: XCTestCase {
     }
   }
 
+  func testWakeupCountsIncludeDeliveredAndLiveClaimsButExcludeExpiredAndFailed() throws {
+    let queue = try migratedQueue()
+    let now = Date(timeIntervalSince1970: 1_000)
+    try queue.write { db in
+      for (key, triggerID, state, expiry) in [
+        ("delivered", "a", "delivered", now.addingTimeInterval(-10)),
+        ("live", "a", "claimed", now.addingTimeInterval(10)),
+        ("expired", "a", "claimed", now.addingTimeInterval(-1)),
+        ("failed", "a", "failed", now.addingTimeInterval(10)),
+        ("other", "b", "delivered", now.addingTimeInterval(10)),
+      ] {
+        try db.execute(
+          sql: """
+            INSERT INTO jit_trigger_wakeup_receipts
+              (continuityKey, triggerID, lane, budgetDay, snapshotRevision, observationFingerprint,
+               state, leaseToken, leaseExpiresAt, updatedAt)
+            VALUES (?, ?, 'planned', '2026-08-24', 'r', 'f', ?, 'token', ?, ?)
+            """,
+          arguments: [key, triggerID, state, expiry, now])
+      }
+    }
+
+    let counts = try queue.read { db in
+      try JITTriggerMirror.wakeupCounts(
+        triggerIDs: ["b", "a", "a"], budgetDay: "2026-08-24", now: now, in: db)
+    }
+
+    XCTAssertEqual(counts, ["a": 2, "b": 1])
+  }
+
+  func testWakeupCountsRejectMoreThanSnapshotBound() throws {
+    let queue = try migratedQueue()
+    let triggerIDs = (0...KnowledgeLedgerTriggerWatchlistRuntime.maxWakeupCounterCandidates).map {
+      "trigger-\($0)"
+    }
+    XCTAssertThrowsError(
+      try queue.read { db in
+        try JITTriggerMirror.wakeupCounts(
+          triggerIDs: triggerIDs, budgetDay: "2026-08-24", now: Date(), in: db)
+      }
+    ) { error in
+      XCTAssertEqual(error as? JITTriggerMirrorError, .malformedRow)
+    }
+  }
+
   func testAmbientSemanticStateAdvancesOnlyAfterProviderAttemptAndCrashCanRecover() throws {
     let queue = try migratedQueue()
     let now = Date(timeIntervalSince1970: 100)

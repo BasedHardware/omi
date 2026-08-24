@@ -304,6 +304,50 @@ actor JITTriggerMirror {
     }
   }
 
+  func wakeupCounts(
+    triggerIDs: [String],
+    budgetDay: String,
+    now: Date
+  ) async throws -> [String: Int] {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { throw JITTriggerMirrorError.databaseUnavailable }
+    return try await pool.read { db in
+      try Self.wakeupCounts(triggerIDs: triggerIDs, budgetDay: budgetDay, now: now, in: db)
+    }
+  }
+
+  static func wakeupCounts(
+    triggerIDs: [String],
+    budgetDay: String,
+    now: Date,
+    in db: Database
+  ) throws -> [String: Int] {
+    let boundedIDs = Array(Set(triggerIDs)).sorted()
+    guard boundedIDs.count <= KnowledgeLedgerTriggerWatchlistRuntime.maxWakeupCounterCandidates,
+      boundedIDs.allSatisfy({ !$0.isEmpty })
+    else { throw JITTriggerMirrorError.malformedRow }
+    guard !boundedIDs.isEmpty else { return [:] }
+    let placeholders = boundedIDs.map { _ in "?" }.joined(separator: ",")
+    var arguments: [DatabaseValueConvertible?] = boundedIDs
+    arguments.append(budgetDay)
+    arguments.append(now)
+    return try Row.fetchAll(
+      db,
+      sql: """
+        SELECT triggerID, COUNT(*) AS used
+        FROM jit_trigger_wakeup_receipts
+        WHERE triggerID IN (\(placeholders)) AND budgetDay = ?
+          AND (state = 'delivered' OR (state = 'claimed' AND leaseExpiresAt > ?))
+        GROUP BY triggerID
+        """,
+      arguments: StatementArguments(arguments)
+    ).reduce(into: [:]) { counts, row in
+      let triggerID: String = row["triggerID"]
+      let used: Int = row["used"]
+      counts[triggerID] = used
+    }
+  }
+
   func claimAmbientNanoChange(
     contextID: String,
     semanticFingerprint: String,

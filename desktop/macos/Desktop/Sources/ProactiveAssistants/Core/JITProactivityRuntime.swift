@@ -40,10 +40,25 @@ actor JITProactivityRuntime {
     @Sendable (
       JITAmbientRuntimeContext, RuntimeOwnerAuthorizationSnapshot
     ) async -> JITAmbientNanoTriage
+  typealias ReconcileSnapshot =
+    @Sendable (JITTriggerSnapshot, RuntimeOwnerAuthorizationSnapshot) async throws -> JITTriggerMirrorReceipt
+  typealias CompileSnapshot =
+    @Sendable (JITTriggerMirrorReceipt, RuntimeOwnerAuthorizationSnapshot) async throws ->
+    [KnowledgeLedgerCompiledTrigger]
+  typealias ReadWakeupCounts = @Sendable ([String], String, Date) async throws -> [String: Int]
+  typealias ClaimWakeup =
+    @Sendable (String, String, JITProactivityLane, String, String, String, Int?, Date) async throws ->
+    JITTriggerWakeupClaim?
+  typealias AuthorizationCurrent = @Sendable (RuntimeOwnerAuthorizationSnapshot) -> Bool
   private let flags: FlagResolver
   private let snapshots: SnapshotResolver
   private let mirror: JITTriggerMirror
   private let nanoTriage: NanoTriage
+  private let reconcileSnapshot: ReconcileSnapshot?
+  private let compileSnapshot: CompileSnapshot?
+  private let readWakeupCounts: ReadWakeupCounts?
+  private let claimPlannedWakeup: ClaimWakeup?
+  private let authorizationCurrent: AuthorizationCurrent
   private var pending: [String: JITPlannedExecution] = [:]
 
   init(
@@ -84,12 +99,24 @@ actor JITProactivityRuntime {
         return .unknown
       }
     },
-    mirror: JITTriggerMirror = .shared
+    mirror: JITTriggerMirror = .shared,
+    reconcileSnapshot: ReconcileSnapshot? = nil,
+    compileSnapshot: CompileSnapshot? = nil,
+    readWakeupCounts: ReadWakeupCounts? = nil,
+    claimPlannedWakeup: ClaimWakeup? = nil,
+    authorizationCurrent: @escaping AuthorizationCurrent = { snapshot in
+      RuntimeOwnerIdentity.isAuthorizationCurrent(snapshot)
+    }
   ) {
     self.flags = flags
     self.snapshots = snapshots
     self.nanoTriage = nanoTriage
     self.mirror = mirror
+    self.reconcileSnapshot = reconcileSnapshot
+    self.compileSnapshot = compileSnapshot
+    self.readWakeupCounts = readWakeupCounts
+    self.claimPlannedWakeup = claimPlannedWakeup
+    self.authorizationCurrent = authorizationCurrent
   }
 
   func admission(
@@ -103,62 +130,141 @@ actor JITProactivityRuntime {
     }
     do {
       let snapshot = try await snapshots(authorizationSnapshot)
-      let receipt = try await mirror.reconcile(snapshot, authorizationSnapshot: authorizationSnapshot)
-      let triggers = try await mirror.compiledSnapshot(
+      let receipt = try await reconcile(snapshot, authorizationSnapshot: authorizationSnapshot)
+      let triggers = try await compiledSnapshot(
         receipt: receipt, authorizationSnapshot: authorizationSnapshot)
-      let day = Self.day(for: observation.occurredAt ?? Date())
-      var matches: [(KnowledgeLedgerCompiledTrigger, KnowledgeLedgerTriggerDecision)] = []
-      for trigger in triggers {
-        let decision = KnowledgeLedgerTriggerEvaluator.evaluate(
-          trigger, observation: observation, day: day)
-        if decision.status == .ambiguous {
-          // Ambient may run only after the complete planned set proves there
-          // is no winner. Missing selector evidence cannot make that proof.
-          return .suppressed(reason: "planned_match_ambiguous")
-        }
-        if decision.status == .match { matches.append((trigger, decision)) }
+      let now = observation.occurredAt ?? Date()
+      let day = Self.day(for: now)
+      let counts = try await wakeupCounts(
+        triggerIDs: triggers.map(\.id), budgetDay: day, now: now)
+      let receiptMatchesSnapshot =
+        snapshot.complete
+        && receipt.ownerID == snapshot.ownerID
+        && receipt.accountGeneration == snapshot.accountGeneration
+        && receipt.commitSequence == snapshot.commitSequence
+        && receipt.snapshotRevision == snapshot.snapshotRevision
+        && receipt.rowCount == snapshot.rows.count
+      let authority = KnowledgeLedgerTriggerRuntimeAuthority(
+        mode: .enabled,
+        killSwitchEnabled: false,
+        ownerID: authorizationSnapshot.ownerID,
+        accountGeneration: snapshot.accountGeneration,
+        snapshotOwnerID: snapshot.ownerID,
+        snapshotAccountGeneration: receipt.accountGeneration,
+        snapshotIsAuthoritative: receiptMatchesSnapshot,
+        authorizationIsCurrent: authorizationCurrent(authorizationSnapshot))
+      let runtimeResult = KnowledgeLedgerTriggerWatchlistRuntime.evaluate(
+        projection: .init(entries: triggers, quarantined: []),
+        observation: observation,
+        day: day,
+        authority: authority,
+        // No local model/version contract is available at this boundary.
+        embeddingContract: nil,
+        wakeupsUsedByTrigger: counts)
+      guard runtimeResult.status == .evaluated else {
+        return .suppressed(reason: "planned_runtime_rejected")
       }
-      guard let winner = matches.sorted(by: { $0.0.id < $1.0.id }).first else {
+      switch runtimeResult.nextLane {
+      case .ambientFallback:
         return await admitAmbient(
           context: ambient,
           observation: observation,
           receipt: receipt,
           authorizationSnapshot: authorizationSnapshot)
+      case .boundedPlannedTriage:
+        return .suppressed(reason: "planned_match_ambiguous")
+      case .none:
+        return .suppressed(reason: "planned_runtime_rejected")
+      case .plannedTrigger:
+        break
       }
-      guard let action = winner.0.action, action.isValid else {
+      guard let winner = runtimeResult.matches.first,
+        let trigger = triggers.first(where: { $0.id == winner.triggerID }),
+        let action = trigger.action,
+        action.isValid
+      else {
         return .suppressed(reason: "planned_action_invalid")
       }
-      let continuityFingerprint = winner.1.observationFingerprint
+      let continuityFingerprint = winner.decision.observationFingerprint
       // One receipt identifies one planned occurrence, not a context forever.
       // Day permits a recurring standing trigger to run again; trigger and
       // authoritative snapshot revision admit changed actions; the normalized
       // observation fingerprint suppresses duplicates within that occurrence.
       let continuityKey = Self.plannedContinuityKey(
-        triggerID: winner.0.id,
+        triggerID: trigger.id,
         snapshotRevision: receipt.snapshotRevision,
         budgetDay: day,
         observationFingerprint: continuityFingerprint)
       guard
-        let claim = try await mirror.claimWakeup(
+        let claim = try await claimWakeup(
           continuityKey: continuityKey,
-          triggerID: winner.0.id,
+          triggerID: trigger.id,
           lane: .planned,
           budgetDay: day,
           snapshotRevision: receipt.snapshotRevision,
           observationFingerprint: continuityFingerprint,
-          budget: winner.0.metadata.wakeupBudgetPerDay,
-          now: observation.occurredAt ?? Date())
+          budget: trigger.metadata.wakeupBudgetPerDay,
+          now: now)
       else { return .suppressed(reason: "planned_duplicate_or_budget") }
       pending[continuityKey] = JITPlannedExecution(
         lane: .planned,
-        triggerID: winner.0.id,
+        triggerID: trigger.id,
         continuityKey: continuityKey,
         prompt: action.prompt,
         claim: claim)
-      return .deliver(lane: .planned, id: winner.0.id, continuityKey: continuityKey)
+      return .deliver(lane: .planned, id: trigger.id, continuityKey: continuityKey)
     } catch {
       return .suppressed(reason: "authoritative_snapshot_unavailable")
     }
+  }
+
+  private func reconcile(
+    _ snapshot: JITTriggerSnapshot,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> JITTriggerMirrorReceipt {
+    if let reconcileSnapshot {
+      return try await reconcileSnapshot(snapshot, authorizationSnapshot)
+    }
+    return try await mirror.reconcile(snapshot, authorizationSnapshot: authorizationSnapshot)
+  }
+
+  private func compiledSnapshot(
+    receipt: JITTriggerMirrorReceipt,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> [KnowledgeLedgerCompiledTrigger] {
+    if let compileSnapshot { return try await compileSnapshot(receipt, authorizationSnapshot) }
+    return try await mirror.compiledSnapshot(
+      receipt: receipt, authorizationSnapshot: authorizationSnapshot)
+  }
+
+  private func wakeupCounts(triggerIDs: [String], budgetDay: String, now: Date) async throws -> [String: Int] {
+    if let readWakeupCounts { return try await readWakeupCounts(triggerIDs, budgetDay, now) }
+    return try await mirror.wakeupCounts(triggerIDs: triggerIDs, budgetDay: budgetDay, now: now)
+  }
+
+  private func claimWakeup(
+    continuityKey: String,
+    triggerID: String,
+    lane: JITProactivityLane,
+    budgetDay: String,
+    snapshotRevision: String,
+    observationFingerprint: String,
+    budget: Int?,
+    now: Date
+  ) async throws -> JITTriggerWakeupClaim? {
+    if let claimPlannedWakeup {
+      return try await claimPlannedWakeup(
+        continuityKey, triggerID, lane, budgetDay, snapshotRevision, observationFingerprint, budget, now)
+    }
+    return try await mirror.claimWakeup(
+      continuityKey: continuityKey,
+      triggerID: triggerID,
+      lane: lane,
+      budgetDay: budgetDay,
+      snapshotRevision: snapshotRevision,
+      observationFingerprint: observationFingerprint,
+      budget: budget,
+      now: now)
   }
 
   private func admitAmbient(

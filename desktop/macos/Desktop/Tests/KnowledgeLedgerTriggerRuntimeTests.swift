@@ -230,6 +230,49 @@ final class KnowledgeLedgerTriggerRuntimeTests: XCTestCase {
       ])
   }
 
+  func testRejectedOrQuarantinedPlannedAuthoritySuppressesAmbientUntilSafelyEvaluated() throws {
+    let rejected = try embeddingTrigger(
+      id: "missing-contract", modelID: "local-embedder", modelVersion: "v1", threshold: 0.8)
+    let rejectedResult = KnowledgeLedgerTriggerWatchlistRuntime.evaluate(
+      projection: try makeProjection([rejected]),
+      observation: KnowledgeLedgerTriggerObservation(embeddingScores: ["intent": 0.99]),
+      day: "2026-08-24",
+      authority: authority())
+    let quarantinedResult = KnowledgeLedgerTriggerWatchlistRuntime.evaluate(
+      projection: .init(
+        entries: [],
+        quarantined: [.init(id: "unsafe", failure: .malformed("invalid trigger"))]),
+      observation: KnowledgeLedgerTriggerObservation(),
+      day: "2026-08-24",
+      authority: authority())
+
+    for result in [rejectedResult, quarantinedResult] {
+      XCTAssertEqual(result.status, .evaluated)
+      XCTAssertEqual(result.nextLane, .none)
+      XCTAssertTrue(result.matches.isEmpty)
+      XCTAssertTrue(result.ambiguous.isEmpty)
+    }
+    XCTAssertEqual(rejectedResult.rejectedEntries.map(\.triggerID), ["missing-contract"])
+    XCTAssertEqual(quarantinedResult.projectionQuarantine.map(\.id), ["unsafe"])
+  }
+
+  func testConfirmedPlannedWinnerStillOutranksRejectedSibling() throws {
+    let confirmed = try keywordTrigger(id: "confirmed", keyword: "release")
+    let rejected = try embeddingTrigger(
+      id: "missing-contract", modelID: "local-embedder", modelVersion: "v1", threshold: 0.8)
+
+    let result = KnowledgeLedgerTriggerWatchlistRuntime.evaluate(
+      projection: try makeProjection([rejected, confirmed]),
+      observation: KnowledgeLedgerTriggerObservation(
+        text: "release", embeddingScores: ["intent": 0.99]),
+      day: "2026-08-24",
+      authority: authority())
+
+    XCTAssertEqual(result.nextLane, .plannedTrigger)
+    XCTAssertEqual(result.matches.map(\.triggerID), ["confirmed"])
+    XCTAssertEqual(result.rejectedEntries.map(\.triggerID), ["missing-contract"])
+  }
+
   func testEvaluationIsBoundedAndDeterministicAcrossProjectionOrder() throws {
     let rows = try (0..<12).map { try keywordTrigger(id: String(format: "trigger-%02d", $0), keyword: "release") }
     let first = KnowledgeLedgerTriggerWatchlistRuntime.evaluate(
@@ -275,6 +318,33 @@ final class KnowledgeLedgerTriggerRuntimeTests: XCTestCase {
       authority: authority())
     XCTAssertEqual(quarantineResult.rejection, .watchlistBoundsExceeded)
     XCTAssertTrue(quarantineResult.projectionQuarantine.isEmpty)
+  }
+
+  func testRuntimeCapMatchesAuthoritativeSnapshotCap() throws {
+    let atCap = try (0..<500).map {
+      try compiled(keywordTrigger(id: "at-cap-\($0)", keyword: "release"))
+    }
+    let aboveCap = try (0..<501).map {
+      try compiled(keywordTrigger(id: "above-cap-\($0)", keyword: "release"))
+    }
+
+    XCTAssertEqual(KnowledgeLedgerTriggerWatchlistRuntime.maxWatchlistEntries, 500)
+    XCTAssertEqual(
+      KnowledgeLedgerTriggerWatchlistRuntime.evaluate(
+        projection: .init(entries: atCap, quarantined: []),
+        observation: .init(text: "release"),
+        day: "2026-08-24",
+        authority: authority()
+      ).status,
+      .evaluated)
+    XCTAssertEqual(
+      KnowledgeLedgerTriggerWatchlistRuntime.evaluate(
+        projection: .init(entries: aboveCap, quarantined: []),
+        observation: .init(text: "release"),
+        day: "2026-08-24",
+        authority: authority()
+      ).rejection,
+      .watchlistBoundsExceeded)
   }
 
   private func authority(
