@@ -399,8 +399,85 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
     let memory = try decoder.decode(ServerMemory.self, from: json)
 
     XCTAssertEqual(memory.content, "Keep this memory text")
-    XCTAssertTrue(memory.evidenceIsExplicit)
+    XCTAssertFalse(memory.evidenceIsExplicit)
     XCTAssertTrue(memory.evidence.isEmpty)
+  }
+
+  func testMalformedEvidenceDoesNotDefaultUnrelatedMemoryDBFields() throws {
+    let json = Data(
+      """
+      {
+        "id": "mem-malformed-fields",
+        "uid": "uid-malformed-fields",
+        "content": "Preserve unrelated fields",
+        "category": "workflow",
+        "layer": "archive",
+        "created_at": "2026-06-21T10:00:00Z",
+        "updated_at": "2026-06-21T10:05:00Z",
+        "reviewed": true,
+        "visibility": "shared",
+        "manually_added": true,
+        "capture_confidence": 0.73,
+        "app_id": "com.example.editor",
+        "tags": ["important"],
+        "evidence": [{"evidence_id": "missing-independence-group"}]
+      }
+      """.utf8)
+
+    let memory = try decoder.decode(ServerMemory.self, from: json)
+
+    XCTAssertEqual(memory.content, "Preserve unrelated fields")
+    XCTAssertEqual(
+      memory.createdAt,
+      try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-06-21T10:00:00Z"))
+    )
+    XCTAssertEqual(
+      memory.updatedAt,
+      try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-06-21T10:05:00Z"))
+    )
+    XCTAssertEqual(memory.category, .workflow)
+    XCTAssertEqual(memory.tier, .archive)
+    XCTAssertTrue(memory.tierIsExplicit)
+    XCTAssertTrue(memory.reviewed)
+    XCTAssertEqual(memory.visibility, "shared")
+    XCTAssertTrue(memory.manuallyAdded)
+    XCTAssertEqual(memory.confidence, 0.73)
+    XCTAssertEqual(memory.sourceApp, "com.example.editor")
+    XCTAssertEqual(memory.tags, ["important"])
+    XCTAssertFalse(memory.evidenceIsExplicit)
+    XCTAssertTrue(memory.evidence.isEmpty)
+  }
+
+  func testExplicitEmptyEvidenceIsValidAndDistinguishedFromAbsent() throws {
+    let explicitJSON = Data(
+      """
+      {
+        "id": "mem-empty-evidence",
+        "content": "Explicitly no evidence",
+        "category": "workflow",
+        "created_at": "2026-06-21T10:00:00Z",
+        "updated_at": "2026-06-21T10:05:00Z",
+        "evidence": []
+      }
+      """.utf8)
+    let absentJSON = Data(
+      """
+      {
+        "id": "mem-absent-evidence",
+        "content": "Evidence omitted",
+        "category": "workflow",
+        "created_at": "2026-06-21T10:00:00Z",
+        "updated_at": "2026-06-21T10:05:00Z"
+      }
+      """.utf8)
+
+    let explicit = try decoder.decode(ServerMemory.self, from: explicitJSON)
+    let absent = try decoder.decode(ServerMemory.self, from: absentJSON)
+
+    XCTAssertTrue(explicit.evidenceIsExplicit)
+    XCTAssertTrue(explicit.evidence.isEmpty)
+    XCTAssertFalse(absent.evidenceIsExplicit)
+    XCTAssertTrue(absent.evidence.isEmpty)
   }
 
   func testFutureShapedEvidenceFailsClosedWithoutRejectingMemoryText() throws {
@@ -419,7 +496,7 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
     let memory = try decoder.decode(ServerMemory.self, from: json)
 
     XCTAssertEqual(memory.content, "Future evidence must not block reads")
-    XCTAssertTrue(memory.evidenceIsExplicit)
+    XCTAssertFalse(memory.evidenceIsExplicit)
     XCTAssertTrue(memory.evidence.isEmpty)
   }
 

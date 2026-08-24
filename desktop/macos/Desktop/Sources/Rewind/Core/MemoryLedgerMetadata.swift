@@ -78,10 +78,10 @@ enum MemoryLedgerEvidence {
   static let maxEvidenceEntries = 32
   static let maxEvidenceJSONBytes = 16 * 1024
 
-  static func normalize(_ wire: [OmiAPI.Evidence]?) -> [ServerMemoryEvidence] {
-    guard let wire, wire.count <= maxEvidenceEntries else { return [] }
+  static func normalize(_ wire: [OmiAPI.Evidence]) -> [ServerMemoryEvidence]? {
+    guard wire.count <= maxEvidenceEntries else { return nil }
     let values = wire.map(ServerMemoryEvidence.init)
-    guard values.allSatisfy(isValid), canonicalJSONString(values) != nil else { return [] }
+    guard values.allSatisfy(isValid), canonicalJSONString(values) != nil else { return nil }
     return values
   }
 

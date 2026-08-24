@@ -42,6 +42,10 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
   /// Additive generated-v3 evidence mirror. Evidence is audit metadata only;
   /// prompt projections must not read this column as authority.
   var ledgerEvidenceJson: String?
+  /// Server timestamp of the last valid evidence payload written locally.
+  /// This fence is independent from `updatedAt`, which can be advanced by an
+  /// unrelated local edit and therefore cannot protect redaction state.
+  var ledgerEvidenceRevision: Date?
 
   // Capture-device provenance (preserved through SQLite cache round-trip)
   var primaryCaptureDevice: String?
@@ -87,6 +91,7 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
     headline: String? = nil,
     ledgerMetadataJson: String? = nil,
     ledgerEvidenceJson: String? = nil,
+    ledgerEvidenceRevision: Date? = nil,
     primaryCaptureDevice: String? = nil,
     captureDeviceIdsJson: String? = nil,
     isRead: Bool = false,
@@ -121,6 +126,7 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
     self.headline = headline
     self.ledgerMetadataJson = ledgerMetadataJson
     self.ledgerEvidenceJson = ledgerEvidenceJson
+    self.ledgerEvidenceRevision = ledgerEvidenceRevision
     self.primaryCaptureDevice = primaryCaptureDevice
     self.captureDeviceIdsJson = captureDeviceIdsJson
     self.isRead = isRead
@@ -245,10 +251,8 @@ extension MemoryRecord {
       inputDeviceName: memory.inputDeviceName,
       headline: memory.headline,
       ledgerMetadataJson: Self.encodeLedgerMetadata(memory.ledgerMetadata),
-      ledgerEvidenceJson: Self.encodeLedgerEvidence(
-        memory.evidence,
-        preserveEmpty: memory.evidenceIsExplicit
-      ),
+      ledgerEvidenceJson: Self.encodeLedgerEvidence(memory.evidence, preserveEmpty: memory.evidenceIsExplicit),
+      ledgerEvidenceRevision: memory.evidenceIsExplicit ? memory.updatedAt : nil,
       primaryCaptureDevice: memory.primaryCaptureDevice,
       captureDeviceIdsJson: encodeCaptureDeviceIds(memory.captureDeviceIds),
       isRead: memory.isRead,
@@ -314,8 +318,12 @@ extension MemoryRecord {
       self.headline = headline
     }
     self.ledgerMetadataJson = Self.encodeLedgerMetadata(memory.ledgerMetadata)
-    if memory.evidenceIsExplicit {
+    if memory.evidenceIsExplicit,
+      ledgerEvidenceJson == nil
+        || (ledgerEvidenceRevision.map { memory.updatedAt >= $0 } ?? false)
+    {
       self.ledgerEvidenceJson = Self.encodeLedgerEvidence(memory.evidence, preserveEmpty: true)
+      self.ledgerEvidenceRevision = memory.updatedAt
     }
 
     // Preserve capture-device provenance through cache sync/reload
@@ -369,11 +377,17 @@ extension MemoryRecord {
   @discardableResult
   mutating func mergeAuthoritativeLedgerEvidenceFrom(_ memory: ServerMemory) -> Bool {
     guard memory.evidenceIsExplicit else { return false }
+    // A valid stale response must not resurrect active evidence after a newer
+    // redaction. Legacy rows without a revision are fenced conservatively.
+    if ledgerEvidenceJson != nil {
+      guard let revision = ledgerEvidenceRevision, memory.updatedAt >= revision else { return false }
+    }
     let current = MemoryLedgerEvidence.decode(ledgerEvidenceJson)
     guard ledgerEvidenceJson == nil || current != memory.evidence else {
       return false
     }
     ledgerEvidenceJson = Self.encodeLedgerEvidence(memory.evidence, preserveEmpty: true)
+    ledgerEvidenceRevision = memory.updatedAt
     return true
   }
 
@@ -519,8 +533,7 @@ extension ServerMemory {
       windowTitle: windowTitle,
       headline: headline,
       ledgerMetadata: ledgerMetadata,
-      evidence: evidence,
-      evidenceIsExplicit: evidenceIsExplicit,
+      evidenceState: evidenceState,
       primaryCaptureDevice: primaryCaptureDevice,
       captureDeviceIds: captureDeviceIds
     )
@@ -558,6 +571,7 @@ extension ServerMemory {
     ledgerMetadata: [String: String] = [:],
     evidence: [ServerMemoryEvidence] = [],
     evidenceIsExplicit: Bool = false,
+    evidenceState: ServerMemoryEvidenceState? = nil,
     primaryCaptureDevice: String? = nil,
     captureDeviceIds: [String] = []
   ) {
@@ -589,8 +603,7 @@ extension ServerMemory {
     self.windowTitle = windowTitle
     self.headline = headline
     self.ledgerMetadata = ledgerMetadata
-    self.evidence = evidence
-    self.evidenceIsExplicit = evidenceIsExplicit
+    self.evidenceState = evidenceState ?? (evidenceIsExplicit ? .valid(evidence) : .absent)
     self.primaryCaptureDevice = primaryCaptureDevice
     self.captureDeviceIds = captureDeviceIds
   }
