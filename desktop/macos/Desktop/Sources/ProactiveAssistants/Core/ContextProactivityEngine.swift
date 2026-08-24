@@ -217,6 +217,21 @@ actor ContextProactivityEngine {
         startedAt: fence.startedAt,
         endedAt: frameFreshness.endedAt)
     else { return }
+    let jitAdmission = await JITProactivityRuntime.shared.admission(
+      authorizationSnapshot: authorizationSnapshot)
+    switch jitAdmission {
+    case .legacyContextBucketFallback(let reason):
+      await ContextProactivityTelemetry.recordJITAdmission(outcome: "legacy_fallback", reason: reason)
+    case .suppressed(let reason):
+      await ContextProactivityTelemetry.recordJITAdmission(outcome: "suppressed", reason: reason)
+      return
+    case .deliver(let lane, _, _):
+      // Production admission cannot reach this until the authoritative action
+      // and durable receipt contract is installed.
+      await ContextProactivityTelemetry.recordJITAdmission(
+        outcome: "contract_missing", reason: lane.rawValue)
+      return
+    }
     await evaluateAndDeliver(
       fence: fence,
       snapshot: snapshot,
