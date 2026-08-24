@@ -218,6 +218,7 @@ async def test_bootstrap_forces_single_language_before_selecting_stt_for_onboard
         return 'test-stt', 'es', 'test-model'
 
     monkeypatch.setattr(runtime_module, 'load_listen_connect_base', lambda *_args, **_kwargs: _async_result(base))
+    monkeypatch.setattr(runtime_module.user_db, 'get_backend_onboarding_admission', lambda _uid: None)
     monkeypatch.setattr(runtime_module, 'get_stt_service_for_language', select_stt)
     monkeypatch.setattr(runtime_module, 'FAIR_USE_ENABLED', False)
     monkeypatch.setattr(runtime_module, 'should_load_speech_profile', lambda **_kwargs: False)
