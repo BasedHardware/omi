@@ -29,15 +29,16 @@ from __future__ import annotations
 from datetime import date, datetime, time, timedelta, timezone
 from enum import Enum
 from dataclasses import dataclass, field
+import atexit
 import importlib
 import os
 import re
+import threading
 from typing import Any, Dict, Iterable, List, Literal, Mapping, Optional, Tuple
 from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from google.cloud.firestore_v1 import FieldFilter
-from google.cloud.firestore_v1.field_path import FieldPath
 from google.cloud import firestore
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -50,6 +51,7 @@ from database.firestore_index_registry import (
     DAILY_SWEEP_ACTIVE_FACT_SUBJECT_CONTENT_QUERY,
     DAILY_SWEEP_ACTIVE_FACT_SUBJECT_QUERY,
     DAILY_SWEEP_ACTIVE_FACT_SLOT_QUERY,
+    DAILY_SWEEP_ONBOARDING_CONVERSATIONS_QUERY,
 )
 from database.memory_collections import MemoryCollections
 from models.memory_apply import MemoryControlState
@@ -82,8 +84,13 @@ MAX_COMPLETED_DAY_INPUT_CHARACTERS = 48_000
 MAX_ONBOARDING_CONVERSATIONS = 8
 MAX_ONBOARDING_SCAN_PAGES = 16
 MAX_ONBOARDING_INPUT_CHARACTERS = 24_000
+MAX_ONBOARDING_RECEIPT_KEYS = 4_096
+MAX_LEGACY_COMPAT_OCCUPANTS = 64
 MODEL_COST_PER_1K_INPUT_CHARACTERS_USD = 0.002
 ONBOARDING_CONSUMED_STATE_PATH = "memory_control/daily_memory_sweep_onboarding"
+ONBOARDING_PERMANENT_RECEIPT_PREFIX = "onboarding_source_"
+ONBOARDING_SOURCE_RECEIPT_PATH = "memory_control/daily_memory_sweep_onboarding_sources"
+ONBOARDING_STAGED_CANDIDATE_PATH = "memory_control/daily_memory_sweep_onboarding_staged"
 
 SCHEMA_VERSION = "daily_memory_sweep.v1"
 CURSOR_SCHEMA_VERSION = "daily_memory_sweep_cursor.v1"
@@ -91,6 +98,8 @@ RECEIPT_SCHEMA_VERSION = "daily_memory_sweep_receipt.v1"
 
 MAX_CATCH_UP_DAYS = 3
 MAX_CANDIDATES_PER_DAY = 32
+MAX_ONBOARDING_SOURCE_KEYS_PER_PACKET = MAX_CANDIDATES_PER_DAY
+MAX_ONBOARDING_STAGED_CANDIDATES = MAX_CANDIDATES_PER_DAY
 MAX_WRITES_PER_DAY = 16
 MAX_CONTENT_CHARACTERS = 1_200
 MAX_SOURCE_ID_CHARACTERS = 256
@@ -111,6 +120,13 @@ DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENV = "MEMORY_DAILY_MEMORY_SWEEP_TIME
 
 RECEIPT_LEASE = timedelta(minutes=10)
 MAX_AUTHORITATIVE_OCCUPANTS = 2
+
+# Cohort assignment is a read-only control-plane operation, but creating a
+# PostHog SDK client for every UID leaks transports and turns a bounded sweep
+# into an unbounded client factory.  Keep one client per (key, host, timeout)
+# and close each transport when the worker exits.
+_POSTHOG_CLIENTS: Dict[Tuple[str, str, float], Any] = {}
+_POSTHOG_CLIENTS_LOCK = threading.RLock()
 
 _ID_RE = re.compile(r"[a-z0-9][a-z0-9._:-]{0,127}")
 _FORBIDDEN_SOURCE_MARKERS = (
@@ -263,11 +279,16 @@ def read_daily_memory_sweep_cohort_assignment(
             timeout = float(os.getenv(DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_ENV, "3"))
             if timeout <= 0 or timeout > 10:
                 return False
-            reader = client_type(
-                project_api_key=api_key,
-                host=host,
-                feature_flags_request_timeout_seconds=timeout,
-            )
+            client_key = (api_key, host, timeout)
+            with _POSTHOG_CLIENTS_LOCK:
+                reader = _POSTHOG_CLIENTS.get(client_key)
+                if reader is None:
+                    reader = client_type(
+                        project_api_key=api_key,
+                        host=host,
+                        feature_flags_request_timeout_seconds=timeout,
+                    )
+                    _POSTHOG_CLIENTS[client_key] = reader
         except Exception:
             return False
     try:
@@ -289,6 +310,31 @@ def read_daily_memory_sweep_cohort_assignment(
     # deliberately not treated as enrollment: a flag configured with a named
     # variant must use a server-side boolean rollout or stay closed.
     return result is True
+
+
+def close_daily_memory_sweep_cohort_clients() -> None:
+    """Close cached PostHog transports at worker shutdown.
+
+    The SDK has used both ``shutdown`` and ``close`` across released versions;
+    invoke whichever lifecycle method the installed client exposes. Closing is
+    best effort and never changes the fail-closed assignment result.
+    """
+
+    with _POSTHOG_CLIENTS_LOCK:
+        clients = tuple(_POSTHOG_CLIENTS.values())
+        _POSTHOG_CLIENTS.clear()
+    for client in clients:
+        for method_name in ("shutdown", "close"):
+            method = getattr(client, method_name, None)
+            if callable(method):
+                try:
+                    method()
+                except Exception:
+                    pass
+                break
+
+
+atexit.register(close_daily_memory_sweep_cohort_clients)
 
 
 class DailySweepModelAuthority(BaseModel):
@@ -494,6 +540,7 @@ class DailySweepInput(BaseModel):
     window_id: str
     window_start_utc: datetime
     window_end_utc: datetime
+    window_kind: Literal["local_day", "timezone_transition"] = "local_day"
     complete: bool
     candidates: Tuple[DailySweepCandidate, ...] = ()
     # The producer attests the onboarding sources represented by this packet,
@@ -561,12 +608,23 @@ class DailySweepInput(BaseModel):
         except (ZoneInfoNotFoundError, ValueError) as exc:
             raise ValueError("input timezone must be an installed IANA timezone") from exc
         expected = completed_local_day_window(self.local_date, self.timezone_name)
-        if (
-            not self.complete
-            or self.window_id != expected.window_id
-            or self.window_start_utc != expected.start_utc
-            or self.window_end_utc != expected.end_utc
-        ):
+        exact_window = (
+            self.window_id == expected.window_id
+            and self.window_start_utc == expected.start_utc
+            and self.window_end_utc == expected.end_utc
+        )
+        transition_window = False
+        if self.window_kind == "timezone_transition" and self.window_start_utc < self.window_end_utc:
+            try:
+                transition = timezone_transition_window(
+                    self.local_date,
+                    self.timezone_name,
+                    coverage_start_utc=self.window_start_utc,
+                )
+                transition_window = self.window_id == transition.window_id and self.window_end_utc == transition.end_utc
+            except ValueError:
+                transition_window = False
+        if not self.complete or not (exact_window if self.window_kind == "local_day" else transition_window):
             raise ValueError("input must be an immutable complete exact local-day packet")
         return self
 
@@ -614,11 +672,23 @@ class DailySweepCursor(BaseModel):
     last_completed_window_id: Optional[str] = None
     last_completed_window_start_utc: Optional[datetime] = None
     last_completed_window_end_utc: Optional[datetime] = None
+    pending_transition_local_date: Optional[date] = None
+    pending_transition_window_id: Optional[str] = None
+    pending_transition_start_utc: Optional[datetime] = None
+    pending_transition_end_utc: Optional[datetime] = None
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-    @field_validator("updated_at", "last_completed_window_start_utc", "last_completed_window_end_utc")
+    @field_validator(
+        "updated_at",
+        "last_completed_window_start_utc",
+        "last_completed_window_end_utc",
+        "pending_transition_start_utc",
+        "pending_transition_end_utc",
+    )
     @classmethod
-    def validate_timestamp(cls, value: datetime) -> datetime:
+    def validate_timestamp(cls, value: Optional[datetime]) -> Optional[datetime]:
+        if value is None:
+            return None
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("cursor timestamps must be timezone-aware")
         return value.astimezone(timezone.utc)
@@ -652,6 +722,44 @@ class DailySweepCursor(BaseModel):
             and self.last_completed_window_end_utc
         ):
             raise ValueError("completed cursor rows require an exact UTC window identity")
+        transition_values = (
+            self.pending_transition_local_date,
+            self.pending_transition_window_id,
+            self.pending_transition_start_utc,
+            self.pending_transition_end_utc,
+        )
+        if any(value is not None for value in transition_values) and not all(
+            value is not None for value in transition_values
+        ):
+            raise ValueError("timezone transition cursor rows require an exact pending window identity")
+        if (
+            self.pending_transition_start_utc is not None
+            and self.pending_transition_end_utc is not None
+            and self.pending_transition_end_utc <= self.pending_transition_start_utc
+        ):
+            raise ValueError("timezone transition window must advance in UTC")
+        if any(value is not None for value in transition_values):
+            if self.last_completed_window_end_utc is None:
+                raise ValueError("timezone transition requires a completed UTC coverage anchor")
+            if self.pending_transition_start_utc != self.last_completed_window_end_utc:
+                raise ValueError("timezone transition must begin at the completed UTC coverage end")
+            pending_local_date = self.pending_transition_local_date
+            pending_start_utc = self.pending_transition_start_utc
+            if pending_local_date is None or pending_start_utc is None or self.timezone_name is None:
+                raise ValueError("timezone transition cursor window is incomplete")
+            try:
+                expected_transition = timezone_transition_window(
+                    pending_local_date,
+                    self.timezone_name,
+                    coverage_start_utc=pending_start_utc,
+                )
+            except (TypeError, ValueError) as exc:
+                raise ValueError("timezone transition cursor window is invalid") from exc
+            if (
+                self.pending_transition_window_id != expected_transition.window_id
+                or self.pending_transition_end_utc != expected_transition.end_utc
+            ):
+                raise ValueError("timezone transition cursor window identity mismatch")
         return self
 
 
@@ -703,6 +811,39 @@ def completed_local_day_window(local_date: date, timezone_name: str) -> Complete
         },
     )
     return CompletedLocalDayWindow(start_utc=start, end_utc=end, window_id=window_id)
+
+
+def timezone_transition_window(
+    local_date: date,
+    timezone_name: str,
+    *,
+    coverage_start_utc: datetime,
+) -> CompletedLocalDayWindow:
+    """Build the one bounded bridge window after a timezone preference change.
+
+    The new zone's local day ending at ``local_date + 1 midnight`` can begin
+    before or after the prior zone's UTC coverage end.  Clipping its start to
+    that prior end gives the first post-change packet a half-open interval
+    contiguous with the already completed history; subsequent new-zone days
+    use ordinary exact local-day windows.
+    """
+
+    expected = completed_local_day_window(local_date, timezone_name)
+    if coverage_start_utc.tzinfo is None or coverage_start_utc.utcoffset() is None:
+        raise ValueError("coverage_start_utc must be timezone-aware")
+    start = coverage_start_utc.astimezone(timezone.utc)
+    if start >= expected.end_utc:
+        raise ValueError("timezone transition bridge must end after its coverage start")
+    window_id = deterministic_contract_id(
+        "daily-memory-sweep-timezone-transition-window",
+        {
+            "local_date": local_date.isoformat(),
+            "timezone": timezone_name,
+            "start_utc": start.isoformat(),
+            "end_utc": expected.end_utc.isoformat(),
+        },
+    )
+    return CompletedLocalDayWindow(start_utc=start, end_utc=expected.end_utc, window_id=window_id)
 
 
 def _plan_id(uid: str, local_date: date) -> str:
@@ -803,6 +944,35 @@ def _onboarding_source_receipt_ref(
         )[:40]
     )
     return _receipt_ref(db_client, uid, source_receipt_id)
+
+
+def _onboarding_permanent_receipt_ref(db_client: Any, uid: str, source_key: str) -> Any:
+    """Return the once-only receipt keyed solely by the source identity.
+
+    Candidate receipts are generation and local-window scoped because they
+    protect a particular canonical write.  Onboarding source consumption is a
+    different invariant: a source must never re-enter merely because the
+    cursor or source generation rolled.  Keep that proof in its own bounded,
+    exhaustive document namespace.
+    """
+
+    receipt_id = (
+        ONBOARDING_PERMANENT_RECEIPT_PREFIX
+        + deterministic_contract_id(
+            "daily-memory-sweep-onboarding-permanent-source", {"uid": uid, "source_key": source_key}
+        )[:48]
+    )
+    return db_client.document(f"users/{uid}/{ONBOARDING_SOURCE_RECEIPT_PATH}/{receipt_id}")
+
+
+def _onboarding_staged_candidates_ref(db_client: Any, uid: str, source_key: str) -> Any:
+    stage_id = (
+        ONBOARDING_PERMANENT_RECEIPT_PREFIX
+        + deterministic_contract_id(
+            "daily-memory-sweep-onboarding-staged-candidates", {"uid": uid, "source_key": source_key}
+        )[:48]
+    )
+    return db_client.document(f"users/{uid}/{ONBOARDING_STAGED_CANDIDATE_PATH}/{stage_id}")
 
 
 def _receipt_id(
@@ -989,9 +1159,22 @@ def reconcile_daily_memory_sweep_timezone(
             return False
         if cursor.timezone_name == timezone_name:
             return True
-        # Receipt IDs include the sweep-owned generation.  Roll that namespace
-        # in the same transaction as the timezone anchor so an overlapping
-        # local date cannot collide with the old completed receipt set.
+        if cursor.last_completed_window_end_utc is None:
+            return False
+        # Receipt IDs include the sweep-owned generation. Roll that namespace
+        # in the same transaction as the timezone anchor. The first new-zone
+        # packet is a clipped bridge ending at that zone's next midnight; this
+        # preserves half-open UTC coverage even when NY -> LA/London shifts
+        # the boundary backwards or forwards.
+        transition_local_date = cursor.last_completed_window_end_utc.astimezone(ZoneInfo(timezone_name)).date()
+        try:
+            transition = timezone_transition_window(
+                transition_local_date,
+                timezone_name,
+                coverage_start_utc=cursor.last_completed_window_end_utc,
+            )
+        except ValueError:
+            return False
         now = datetime.now(timezone.utc)
         transaction.set(
             ref,
@@ -1003,10 +1186,16 @@ def reconcile_daily_memory_sweep_timezone(
                 "sweep_generation": cursor.sweep_generation + 1,
                 "generation": cursor.generation + 1,
                 "timezone_name": timezone_name,
-                "last_completed_local_date": cursor.last_completed_local_date,
+                "last_completed_local_date": (
+                    cursor.last_completed_local_date.isoformat() if cursor.last_completed_local_date else None
+                ),
                 "last_completed_window_id": cursor.last_completed_window_id,
                 "last_completed_window_start_utc": cursor.last_completed_window_start_utc,
                 "last_completed_window_end_utc": cursor.last_completed_window_end_utc,
+                "pending_transition_local_date": transition_local_date.isoformat(),
+                "pending_transition_window_id": transition.window_id,
+                "pending_transition_start_utc": transition.start_utc,
+                "pending_transition_end_utc": transition.end_utc,
                 "updated_at": now,
             },
         )
@@ -1139,6 +1328,7 @@ def _advance_cursor_txn(
     window_start_utc: datetime,
     window_end_utc: datetime,
     window_id: str,
+    window_kind: str,
     deletion_ref: Any,
     control_ref: Any,
     now: datetime,
@@ -1169,7 +1359,15 @@ def _advance_cursor_txn(
             return False
         prior = payload.get("last_completed_local_date")
         if isinstance(prior, str) and prior == local_date.isoformat():
-            return payload.get("last_completed_window_id") == window_id
+            if window_kind != "timezone_transition":
+                return payload.get("last_completed_window_id") == window_id
+        if window_kind == "timezone_transition" and (
+            payload.get("pending_transition_local_date") not in {local_date, local_date.isoformat()}
+            or payload.get("pending_transition_window_id") != window_id
+            or payload.get("pending_transition_start_utc") != window_start_utc
+            or payload.get("pending_transition_end_utc") != window_end_utc
+        ):
+            return False
         if isinstance(prior, str) and prior > local_date.isoformat():
             return False
     elif expected_generation != 0:
@@ -1188,6 +1386,10 @@ def _advance_cursor_txn(
             "last_completed_window_id": window_id,
             "last_completed_window_start_utc": window_start_utc,
             "last_completed_window_end_utc": window_end_utc,
+            "pending_transition_local_date": None,
+            "pending_transition_window_id": None,
+            "pending_transition_start_utc": None,
+            "pending_transition_end_utc": None,
             "updated_at": now,
         },
     )
@@ -1206,6 +1408,7 @@ def _advance_cursor(
     window_id: str,
     *,
     sweep_generation: Optional[int] = None,
+    window_kind: str = "local_day",
 ) -> bool:
     transaction = db_client.transaction()
     transactional = firestore.transactional(_advance_cursor_txn)
@@ -1224,6 +1427,7 @@ def _advance_cursor(
             window_start_utc,
             window_end_utc,
             window_id,
+            window_kind,
             deletion_ref,
             control_ref,
             datetime.now(timezone.utc),
@@ -1446,6 +1650,11 @@ def _finish_onboarding_sources(
     normalized_keys = tuple(sorted(set(source_keys)))
     if not normalized_keys:
         return True
+    if len(normalized_keys) > MAX_ONBOARDING_SOURCE_KEYS_PER_PACKET:
+        # Never silently drop the prefix of a once-only receipt set.  The
+        # source producer is bounded at the Firestore transaction-safe packet
+        # limit; this guard is for malformed or manually forged packets.
+        return False
     candidates_by_source: Dict[str, List[DailySweepCandidate]] = {key: [] for key in normalized_keys}
     for candidate in candidates:
         source_key = f"onboarding:{candidate.source_id.split(':', 1)[-1]}"
@@ -1468,6 +1677,13 @@ def _finish_onboarding_sources(
         consumed_payload = consumed_snapshot.to_dict() if getattr(consumed_snapshot, "exists", False) else {}
         raw_consumed = consumed_payload.get("consumed_source_keys", []) if isinstance(consumed_payload, dict) else []
         consumed_values = list(raw_consumed) if isinstance(raw_consumed, list) else []
+        if len(consumed_values) > MAX_ONBOARDING_RECEIPT_KEYS:
+            return False
+        if any(
+            not isinstance(value, str) or not value.startswith("onboarding:") or len(value) > MAX_SOURCE_ID_CHARACTERS
+            for value in consumed_values
+        ):
+            return False
         raw_offsets = consumed_payload.get("candidate_offsets", {}) if isinstance(consumed_payload, dict) else {}
         offsets = {
             key: int(value)
@@ -1475,10 +1691,12 @@ def _finish_onboarding_sources(
             if isinstance(key, str) and isinstance(value, int) and value >= 0
         }
         source_receipts: List[Tuple[Any, str]] = []
+        permanent_receipts: List[Tuple[Any, str]] = []
         candidate_receipts: List[Any] = []
         # Firestore requires all reads before writes.  Candidate receipts are
         # proof that canonical application completed for this whole source.
         for source_key in normalized_keys:
+            permanent_receipts.append((_onboarding_permanent_receipt_ref(db_client, uid, source_key), source_key))
             if source_key not in (source_progress or {}):
                 source_ref = _onboarding_source_receipt_ref(
                     db_client,
@@ -1506,33 +1724,70 @@ def _finish_onboarding_sources(
                     )
                 )
         source_snapshots = [transaction.get(ref) for ref, _ in source_receipts]
+        permanent_snapshots = [transaction.get(ref) for ref, _ in permanent_receipts]
         candidate_snapshots = [transaction.get(ref) for ref in candidate_receipts]
         for snapshot in candidate_snapshots:
             if not getattr(snapshot, "exists", False) or (snapshot.to_dict() or {}).get("receipt_state") != "committed":
                 return False
         next_consumed = list(consumed_values)
-        for (source_ref, source_key), snapshot in zip(source_receipts, source_snapshots):
-            if getattr(snapshot, "exists", False) and (snapshot.to_dict() or {}).get("receipt_state") == "committed":
-                if source_key not in next_consumed:
-                    next_consumed.append(source_key)
+        permanent_by_key = {
+            source_key: snapshot
+            for (_permanent_ref, source_key), snapshot in zip(permanent_receipts, permanent_snapshots)
+        }
+        source_by_key = {source_key: snapshot for (_, source_key), snapshot in zip(source_receipts, source_snapshots)}
+        for source_key in normalized_keys:
+            # A progress row means only a bounded prefix was staged and
+            # applied. Keep the source retryable until the tail is proven.
+            if source_key in (source_progress or {}):
                 continue
-            transaction.set(
-                source_ref,
-                {
-                    "schema_version": "daily_memory_sweep_onboarding_source.v1",
-                    "uid": uid,
-                    "local_date": local_date.isoformat(),
-                    "source_key": source_key,
-                    "account_generation": account_generation,
-                    "source_generation": source_generation,
-                    "sweep_generation": sweep_generation,
-                    "window_id": window.window_id,
-                    "window_start_utc": window.start_utc,
-                    "window_end_utc": window.end_utc,
-                    "receipt_state": "committed",
-                    "completed_at": datetime.now(timezone.utc),
-                },
+            permanent_snapshot = permanent_by_key[source_key]
+            source_snapshot = source_by_key.get(source_key)
+            permanent_payload = permanent_snapshot.to_dict() or {}
+            try:
+                permanent_generation = int(permanent_payload.get("account_generation", -1))
+            except (TypeError, ValueError):
+                permanent_generation = -1
+            permanent_committed = (
+                getattr(permanent_snapshot, "exists", False)
+                and permanent_payload.get("receipt_state") == "committed"
+                and permanent_generation == account_generation
             )
+            source_committed = (
+                source_snapshot is not None
+                and getattr(source_snapshot, "exists", False)
+                and (source_snapshot.to_dict() or {}).get("receipt_state") == "committed"
+            )
+            if not permanent_committed:
+                transaction.set(
+                    _onboarding_permanent_receipt_ref(db_client, uid, source_key),
+                    {
+                        "schema_version": "daily_memory_sweep_onboarding_permanent_source.v1",
+                        "uid": uid,
+                        "source_key": source_key,
+                        "account_generation": account_generation,
+                        "receipt_state": "committed",
+                        "completed_at": datetime.now(timezone.utc),
+                    },
+                    merge=True,
+                )
+            if not source_committed and source_snapshot is not None:
+                transaction.set(
+                    source_receipts[[item[1] for item in source_receipts].index(source_key)][0],
+                    {
+                        "schema_version": "daily_memory_sweep_onboarding_source.v1",
+                        "uid": uid,
+                        "local_date": local_date.isoformat(),
+                        "source_key": source_key,
+                        "account_generation": account_generation,
+                        "source_generation": source_generation,
+                        "sweep_generation": sweep_generation,
+                        "window_id": window.window_id,
+                        "window_start_utc": window.start_utc,
+                        "window_end_utc": window.end_utc,
+                        "receipt_state": "committed",
+                        "completed_at": datetime.now(timezone.utc),
+                    },
+                )
             if source_key not in next_consumed:
                 next_consumed.append(source_key)
             offsets.pop(source_key, None)
@@ -1544,12 +1799,14 @@ def _finish_onboarding_sources(
             # those proof reads makes retry/restart advance without dropping
             # the unprocessed tail.
             offsets[source_key] = offset
+        if len(set(next_consumed)) > MAX_ONBOARDING_RECEIPT_KEYS or len(offsets) > MAX_ONBOARDING_RECEIPT_KEYS:
+            return False
         transaction.set(
             consumed_ref,
             {
                 "schema_version": "daily_memory_sweep_onboarding.v1",
-                "consumed_source_keys": next_consumed[-MAX_CANDIDATES_PER_DAY:],
-                "candidate_offsets": dict(list(offsets.items())[-MAX_CANDIDATES_PER_DAY:]),
+                "consumed_source_keys": sorted(set(next_consumed)),
+                "candidate_offsets": dict(sorted(offsets.items())),
                 "account_generation": account_generation,
                 "source_generation": source_generation,
                 "sweep_generation": sweep_generation,
@@ -1607,6 +1864,7 @@ def _find_active_slot_or_subject(
         "subject_scope": candidate.subject_scope.value,
     }
     snapshots: List[Any] = []
+    used_legacy_compatibility = False
     try:
         if candidate.slot:
             query_spec = (
@@ -1652,6 +1910,7 @@ def _find_active_slot_or_subject(
                 if candidate.subject_entity_id is not None
                 else DAILY_SWEEP_ACTIVE_FACT_SUBJECT_QUERY
             )
+            used_legacy_compatibility = True
             legacy_query = legacy_spec.build(
                 collection,
                 {
@@ -1664,16 +1923,25 @@ def _find_active_slot_or_subject(
                 },
                 field_filter_factory=FieldFilter,
             )
-            snapshots = list(legacy_query.limit(MAX_AUTHORITATIVE_OCCUPANTS + 1).stream())
+            # Legacy rows predate ``normalized_content_key``.  Prove the
+            # complete bounded compatibility cohort before deciding that no
+            # duplicate exists; two rows is not a safe global cap for a user
+            # who accumulated several historical unslotted facts.
+            snapshots = list(legacy_query.limit(MAX_LEGACY_COMPAT_OCCUPANTS + 1).stream())
     except Exception as exc:
         raise SweepAuthoritativeQueryUnavailable("canonical occupant query failed") from exc
-    if len(snapshots) > MAX_AUTHORITATIVE_OCCUPANTS:
+    proof_limit = MAX_LEGACY_COMPAT_OCCUPANTS if used_legacy_compatibility else MAX_AUTHORITATIVE_OCCUPANTS
+    if len(snapshots) > proof_limit:
         raise SweepAuthoritativeQueryUnavailable("canonical occupant query exceeded proof budget")
     items: List[MemoryItem] = []
     for snapshot in snapshots:
         raw = snapshot.to_dict()
         if not isinstance(raw, dict):
             raise SweepAuthoritativeQueryUnavailable("canonical occupant row is malformed")
+        # ``MemoryItem`` derives the normalized key for legacy payloads during
+        # validation, so retain the raw-field absence before constructing it;
+        # otherwise the bounded read-repair below can never fire.
+        legacy_missing_normalized_key = not raw.get("normalized_content_key")
         item = MemoryItem.model_validate(raw)
         if (
             item.uid != uid
@@ -1682,9 +1950,24 @@ def _find_active_slot_or_subject(
             or item.subject_scope != candidate.subject_scope
             or item.subject_entity_id != candidate.subject_entity_id
             or (candidate.slot and item.slot != candidate.slot)
-            or (not candidate.slot and item.normalized_content_key != normalized_memory_content_key(candidate.content))
+            or (
+                not candidate.slot
+                and (item.normalized_content_key or normalized_memory_content_key(item.content))
+                != normalized_memory_content_key(candidate.content)
+            )
         ):
             continue
+        if not candidate.slot and legacy_missing_normalized_key:
+            # Best-effort read repair is bounded by the compatibility proof
+            # page and merges only the derived identity field. The decision is
+            # already safe if this transport does not expose a writable
+            # reference (as in hermetic fakes).
+            reference = getattr(snapshot, "reference", None)
+            try:
+                if reference is not None and callable(getattr(reference, "set", None)):
+                    reference.set({"normalized_content_key": normalized_memory_content_key(item.content)}, merge=True)
+            except Exception:
+                pass
         items.append(item)
     return sorted(items, key=lambda item: item.memory_id)[0] if items else None
 
@@ -1847,9 +2130,13 @@ def run_daily_memory_sweep(
         return _blocked_output(normalized_uid, "timezone_changed_requires_reconciliation")
     eligible_through = local_today - timedelta(days=1)
     first_pending = (
-        cursor.last_completed_local_date + timedelta(days=1)
-        if cursor.last_completed_local_date is not None
-        else eligible_through
+        cursor.pending_transition_local_date
+        if cursor.pending_transition_local_date is not None
+        else (
+            cursor.last_completed_local_date + timedelta(days=1)
+            if cursor.last_completed_local_date is not None
+            else eligible_through
+        )
     )
     pending_receipt_dates = _pending_receipt_dates(
         db_client,
@@ -1861,7 +2148,14 @@ def run_daily_memory_sweep(
     )
     if first_pending > eligible_through:
         return _blocked_output(normalized_uid, "no_completed_local_day", status="not_due")
-    if pending_receipt_dates:
+    if cursor.pending_transition_local_date is not None:
+        dates = [first_pending]
+        dates.extend(
+            day
+            for day in (first_pending + timedelta(days=index) for index in range(1, max_catch_up_days))
+            if day <= eligible_through
+        )
+    elif pending_receipt_dates:
         # A crash can leave a receipt for an older day while the wall clock
         # moves on. Recover that exact day first; do not demand a newer day's
         # source packet and accidentally turn a recoverable replay into a
@@ -1895,6 +2189,15 @@ def run_daily_memory_sweep(
         if packet.timezone_name != timezone_name:
             return _blocked_output(normalized_uid, "input_timezone_mismatch")
         expected_window = completed_local_day_window(local_date, timezone_name)
+        if packet.window_kind == "timezone_transition":
+            try:
+                expected_window = timezone_transition_window(
+                    local_date,
+                    timezone_name,
+                    coverage_start_utc=packet.window_start_utc,
+                )
+            except ValueError:
+                return _blocked_output(normalized_uid, "incomplete_or_wrong_window")
         if (
             not packet.complete
             or packet.window_id != expected_window.window_id
@@ -1987,8 +2290,11 @@ def run_daily_memory_sweep(
             sweep_generation=current_cursor.sweep_generation,
         ):
             return _blocked_output(normalized_uid, "onboarding_source_receipt_incomplete")
-        window = completed_local_day_window(local_date, timezone_name)
-        window_start_utc, window_end_utc, window_id = window.start_utc, window.end_utc, window.window_id
+        window_start_utc, window_end_utc, window_id = (
+            expected_window.start_utc,
+            expected_window.end_utc,
+            expected_window.window_id,
+        )
         if not _advance_cursor(
             db_client,
             normalized_uid,
@@ -2000,6 +2306,7 @@ def run_daily_memory_sweep(
             window_end_utc,
             window_id,
             sweep_generation=current_cursor.sweep_generation,
+            window_kind=packet.window_kind,
         ):
             return _blocked_output(normalized_uid, "cursor_conflict")
         current_cursor = current_cursor.model_copy(
@@ -2010,6 +2317,10 @@ def run_daily_memory_sweep(
                 "last_completed_window_id": window_id,
                 "last_completed_window_start_utc": window_start_utc,
                 "last_completed_window_end_utc": window_end_utc,
+                "pending_transition_local_date": None,
+                "pending_transition_window_id": None,
+                "pending_transition_start_utc": None,
+                "pending_transition_end_utc": None,
                 "updated_at": datetime.now(timezone.utc),
             }
         )
@@ -2108,10 +2419,14 @@ def build_daily_sweep_input(
     sweep_generation: int = 1,
     timezone_name: str,
     sources: DailySweepRuntimeSources,
+    window_override: Optional[CompletedLocalDayWindow] = None,
 ) -> DailySweepInput:
     """Adapt typed daily-summary/onboarding/trigger sources into one packet."""
 
-    window = completed_local_day_window(local_date, timezone_name)
+    window = window_override or completed_local_day_window(local_date, timezone_name)
+    window_kind: Literal["local_day", "timezone_transition"] = (
+        "timezone_transition" if window_override is not None else "local_day"
+    )
     return DailySweepInput(
         uid=uid,
         local_date=local_date,
@@ -2122,6 +2437,7 @@ def build_daily_sweep_input(
         window_id=window.window_id,
         window_start_utc=window.start_utc,
         window_end_utc=window.end_utc,
+        window_kind=window_kind,
         complete=sources.complete,
         candidates=sources.candidates(),
         onboarding_source_keys=sources.onboarding_source_keys,
@@ -2270,6 +2586,21 @@ def _completed_day_row_eligibility(raw: Mapping[str, Any]) -> Literal["eligible"
     return "eligible"
 
 
+def _onboarding_transcript_eligibility(raw: Mapping[str, Any]) -> Literal["eligible", "discarded", "unfinished"]:
+    """Require an onboarding transcript to be terminal and finalized."""
+
+    if bool(raw.get("discarded", False)):
+        return "discarded"
+    raw_status = raw.get("status")
+    status = getattr(raw_status, "value", raw_status)
+    if status != "completed" or not isinstance(raw.get("finished_at"), datetime):
+        return "unfinished"
+    finalization_status = raw.get("finalization_status")
+    if getattr(finalization_status, "value", finalization_status) != "completed":
+        return "unfinished"
+    return "eligible"
+
+
 def _extract_daily_memory_candidates(uid: str, text: str) -> Tuple[Any, ...]:
     """Invoke Omi's existing bounded memory extractor for sweep input."""
 
@@ -2337,6 +2668,31 @@ def _onboarding_consumed_keys(db_client: Any, uid: str) -> frozenset[str]:
     return frozenset(str(value) for value in values if isinstance(value, str))
 
 
+def _onboarding_source_receipt_is_committed(
+    db_client: Any,
+    uid: str,
+    source_key: str,
+    *,
+    account_generation: Optional[int] = None,
+) -> bool:
+    """Read the exhaustive once-only receipt for one bounded source row."""
+
+    try:
+        snapshot = _onboarding_permanent_receipt_ref(db_client, uid, source_key).get()
+    except Exception:
+        return False
+    payload = snapshot.to_dict() or {}
+    if not getattr(snapshot, "exists", False) or payload.get("receipt_state") != "committed":
+        return False
+    if account_generation is not None:
+        try:
+            if int(payload.get("account_generation", -1)) != account_generation:
+                return False
+        except (TypeError, ValueError):
+            return False
+    return True
+
+
 @dataclass(frozen=True)
 class OnboardingSourceProduction:
     """Named result for the bounded onboarding producer contract."""
@@ -2347,6 +2703,127 @@ class OnboardingSourceProduction:
     source_progress: Mapping[str, int] = field(default_factory=dict)
 
 
+def _load_or_stage_onboarding_candidates(
+    uid: str,
+    source_key: str,
+    conversation_id: str,
+    text: str,
+    *,
+    db_client: Any,
+    extractor: Any,
+    account_generation: Optional[int] = None,
+) -> Optional[Tuple[DailySweepCandidate, ...]]:
+    """Materialize one deterministic candidate page before continuation slicing.
+
+    Model extraction is intentionally outside the canonical write transaction,
+    but it must never be repeated to obtain page two.  A durable stage stores
+    the complete bounded page and both the transcript and candidate digests;
+    any changed retry is rejected rather than silently selecting a different
+    numeric slice from a nondeterministic model response.
+    """
+
+    stage_ref = _onboarding_staged_candidates_ref(db_client, uid, source_key)
+    transcript_digest = deterministic_contract_id(
+        "daily-sweep-onboarding-transcript", {"source_key": source_key, "text": text}
+    )
+
+    def read_staged(snapshot: Any) -> Optional[Tuple[DailySweepCandidate, ...]]:
+        if not getattr(snapshot, "exists", False):
+            return None
+        payload = snapshot.to_dict() or {}
+        if (
+            not isinstance(payload, dict)
+            or payload.get("uid") != uid
+            or payload.get("source_key") != source_key
+            or payload.get("transcript_digest") != transcript_digest
+            or not isinstance(payload.get("candidate_page"), list)
+            or len(payload.get("candidate_page", ())) > MAX_ONBOARDING_STAGED_CANDIDATES
+            or (account_generation is not None and payload.get("account_generation") != account_generation)
+        ):
+            return None
+        try:
+            staged = tuple(DailySweepCandidate.model_validate(item) for item in payload["candidate_page"])
+        except Exception:
+            return None
+        expected_digest = deterministic_contract_id(
+            "daily-sweep-onboarding-candidate-page", {"digests": [item.digest() for item in staged]}
+        )
+        if payload.get("candidate_digest") != expected_digest:
+            return None
+        return staged
+
+    try:
+        staged = read_staged(stage_ref.get())
+    except Exception:
+        return None
+    if staged is not None:
+        return staged
+
+    try:
+        extracted = tuple(extractor(uid, text) or ())
+        if len(extracted) > MAX_ONBOARDING_STAGED_CANDIDATES:
+            return None
+        staged_list: List[DailySweepCandidate] = []
+        for index, memory in enumerate(extracted):
+            content = str(getattr(memory, "content", "") or "").strip()
+            if not content:
+                continue
+            staged_list.append(
+                DailySweepCandidate(
+                    candidate_id=deterministic_contract_id(
+                        "daily-sweep-onboarding-candidate",
+                        {"uid": uid, "source": conversation_id, "index": index},
+                    )[:128],
+                    kind="fact",
+                    operation="add",
+                    content=content,
+                    source_id=source_key,
+                    source_type="onboarding",
+                    source_version="onboarding-memory-model.v1",
+                    source_refs=(f"conversation:{conversation_id}",),
+                    authority=SweepAuthority.direct_user_statement,
+                    subject_scope=MemorySubjectScope.primary_user,
+                    subject_entity_id=getattr(memory, "subject_entity_id", None),
+                )
+            )
+        if len(staged_list) > MAX_ONBOARDING_STAGED_CANDIDATES:
+            return None
+        staged = tuple(staged_list)
+        stage_payload = {
+            "schema_version": "daily_memory_sweep_onboarding_stage.v1",
+            "uid": uid,
+            "source_key": source_key,
+            "transcript_digest": transcript_digest,
+            "candidate_digest": deterministic_contract_id(
+                "daily-sweep-onboarding-candidate-page", {"digests": [item.digest() for item in staged]}
+            ),
+            "candidate_page": [item.model_dump(mode="json") for item in staged],
+            "candidate_count": len(staged),
+            "staged_at": datetime.now(timezone.utc),
+        }
+        if account_generation is not None:
+            stage_payload["account_generation"] = account_generation
+        create = getattr(stage_ref, "create", None)
+        if callable(create):
+            try:
+                # ``create`` is the atomic first-writer fence. A concurrent
+                # retry may extract a different model answer, but it can
+                # never overwrite the durable page selected by the winner.
+                create(stage_payload)
+            except Exception:
+                try:
+                    return read_staged(stage_ref.get())
+                except Exception:
+                    return None
+        else:
+            # Tiny hermetic fakes may expose only ``set``; production uses the
+            # atomic Firestore create path above.
+            stage_ref.set(stage_payload)
+        return staged
+    except Exception:
+        return None
+
+
 def _produce_onboarding_sources(
     uid: str,
     *,
@@ -2354,6 +2831,7 @@ def _produce_onboarding_sources(
     max_candidates: int,
     model_authority: DailySweepModelAuthority,
     model_extractor: Optional[Any] = None,
+    account_generation: Optional[int] = None,
 ) -> OnboardingSourceProduction:
     """Produce once-only facts from server-marked onboarding conversations.
 
@@ -2374,30 +2852,39 @@ def _produce_onboarding_sources(
         # bounded ordered pages and keep paging past consumed rows before the
         # processable cap. This cannot starve behind hundreds of old sources.
         snapshots: List[Any] = []
-        after_id = ""
+        after_snapshot: Optional[Any] = None
         for _ in range(MAX_ONBOARDING_SCAN_PAGES):
+            query: Any = DAILY_SWEEP_ONBOARDING_CONVERSATIONS_QUERY.build(
+                collection,
+                {"onboarding_marker": ""},
+                field_filter_factory=FieldFilter,
+            )
             try:
-                query: Any = where(filter=FieldFilter("external_data.onboarding_session_id", ">", ""))
-            except TypeError:
-                query = where("external_data.onboarding_session_id", ">", "")
-            if after_id:
-                try:
-                    query = query.where(filter=FieldFilter(FieldPath.document_id(), ">", after_id))
-                except TypeError:
-                    query = query.where(FieldPath.document_id(), ">", after_id)
-            try:
-                query = query.order_by(FieldPath.document_id())
+                query = query.order_by("external_data.onboarding_session_id")
             except (AttributeError, TypeError):
-                try:
-                    query = query.order_by("__name__")
-                except (AttributeError, TypeError):
-                    pass
+                return OnboardingSourceProduction()
+            if after_snapshot is not None:
+                start_after = getattr(query, "start_after", None)
+                if not callable(start_after):
+                    return OnboardingSourceProduction()
+                query = start_after(after_snapshot)
             page = list(query.limit(MAX_ONBOARDING_CONVERSATIONS).stream())
             if not page:
                 break
             snapshots.extend(page)
-            after_id = str(getattr(page[-1], "id", "") or "")
-            processable = sum(1 for row in snapshots if f"onboarding:{getattr(row, 'id', '')}" not in consumed)
+            after_snapshot = page[-1]
+            processable = sum(
+                1
+                for row in snapshots
+                if f"onboarding:{getattr(row, 'id', '')}" not in consumed
+                and not _onboarding_source_receipt_is_committed(
+                    db_client,
+                    uid,
+                    f"onboarding:{getattr(row, 'id', '')}",
+                    account_generation=account_generation,
+                )
+                and _onboarding_transcript_eligibility(row.to_dict() or {}) != "discarded"
+            )
             if processable >= MAX_ONBOARDING_CONVERSATIONS or len(page) < MAX_ONBOARDING_CONVERSATIONS:
                 break
     except Exception:
@@ -2430,8 +2917,17 @@ def _produce_onboarding_sources(
         if not isinstance(onboarding_session_id, str) or len(onboarding_session_id) < 16:
             continue
         source_key = f"onboarding:{conversation_id}"
-        if source_key in consumed:
+        if source_key in consumed or _onboarding_source_receipt_is_committed(
+            db_client, uid, source_key, account_generation=account_generation
+        ):
             continue
+        eligibility = _onboarding_transcript_eligibility(raw)
+        if eligibility == "discarded":
+            # Discarded captures are not consumed. If restored later, the
+            # marker remains discoverable and can be processed once finalized.
+            continue
+        if eligibility != "eligible":
+            return OnboardingSourceProduction()
         # Filtering occurs before the processable cap.  A consumed row never
         # occupies one of the eight source slots.
         if len(source_keys) >= MAX_ONBOARDING_CONVERSATIONS:
@@ -2472,51 +2968,29 @@ def _produce_onboarding_sources(
     processed_source_keys = list(zero_source_keys)
     try:
         for conversation_id, text in rows:
-            row_candidates: List[DailySweepCandidate] = []
             source_key = f"onboarding:{conversation_id}"
             offset = candidate_offsets.get(source_key, 0)
-            extracted = tuple(extractor(uid, text) or ())
-            if offset > len(extracted):
+            staged = _load_or_stage_onboarding_candidates(
+                uid,
+                source_key,
+                conversation_id,
+                text,
+                db_client=db_client,
+                extractor=extractor,
+                account_generation=account_generation,
+            )
+            if staged is None or offset > len(staged):
                 return OnboardingSourceProduction()
-            row_candidates_all: List[Tuple[int, DailySweepCandidate]] = []
-            for index, memory in enumerate(extracted[offset:], start=offset):
-                content = str(getattr(memory, "content", "") or "").strip()
-                if not content:
-                    continue
-                row_candidates_all.append(
-                    (
-                        index,
-                        DailySweepCandidate(
-                            candidate_id=deterministic_contract_id(
-                                "daily-sweep-onboarding-candidate",
-                                {"uid": uid, "source": conversation_id, "index": index},
-                            )[:128],
-                            kind="fact",
-                            operation="add",
-                            content=content,
-                            source_id=f"onboarding:{conversation_id}",
-                            source_type="onboarding",
-                            source_version="onboarding-memory-model.v1",
-                            source_refs=(f"conversation:{conversation_id}",),
-                            authority=SweepAuthority.direct_user_statement,
-                            subject_scope=MemorySubjectScope.primary_user,
-                            subject_entity_id=getattr(memory, "subject_entity_id", None),
-                        ),
-                    )
-                )
             available = max(0, max_candidates - len(candidates))
-            row_candidates = [candidate for _, candidate in row_candidates_all[:available]]
+            row_candidates = list(staged[offset : offset + available])
             candidates.extend(row_candidates)
-            if available == 0:
-                next_offset = offset
-            elif len(row_candidates_all) <= available:
-                next_offset = len(extracted)
-            else:
-                next_offset = row_candidates_all[available - 1][0] + 1
-            if next_offset >= len(extracted):
+            next_offset = offset + len(row_candidates)
+            if next_offset >= len(staged):
                 processed_source_keys.append(source_key)
             else:
-                # Preserve the unconsumed tail for a later bounded packet.
+                # Preserve the unconsumed tail for a later bounded packet. The
+                # page itself is durable, so this offset is never applied to a
+                # fresh nondeterministic model response.
                 source_progress[source_key] = next_offset
                 processed_source_keys.append(source_key)
             if len(candidates) >= max_candidates:
@@ -2542,6 +3016,7 @@ def produce_completed_day_daily_summary_sources(
     db_client: Any,
     model_authority: Optional[DailySweepModelAuthority] = None,
     model_extractor: Optional[Any] = None,
+    window_override: Optional[CompletedLocalDayWindow] = None,
 ) -> DailySweepRuntimeSources:
     """Produce the exact completed-day source, including its bounded model call.
 
@@ -2553,7 +3028,7 @@ def produce_completed_day_daily_summary_sources(
     conversations (or a summary explicitly attests zero conversations).
     """
 
-    window = completed_local_day_window(local_date, timezone_name)
+    window = window_override or completed_local_day_window(local_date, timezone_name)
     collection = db_client.collection(f"users/{uid}/daily_summaries")
     where = getattr(collection, "where", None)
     if not callable(where):
@@ -2761,6 +3236,7 @@ def firestore_daily_sweep_source_provider(
     *,
     db_client: Any,
     timezone_name: str = "UTC",
+    window_override: Optional[CompletedLocalDayWindow] = None,
 ) -> DailySweepRuntimeSources:
     """Read one bounded backend-produced source packet for the scheduler.
 
@@ -2784,6 +3260,7 @@ def firestore_daily_sweep_source_provider(
             timezone_name,
             control,
             db_client=db_client,
+            window_override=window_override,
         )
         model_authority = daily_memory_sweep_model_authority_from_environment()
         onboarding_production = _produce_onboarding_sources(
@@ -2791,6 +3268,7 @@ def firestore_daily_sweep_source_provider(
             db_client=db_client,
             max_candidates=model_authority.max_candidates,
             model_authority=model_authority,
+            account_generation=control.account_generation,
         )
         return DailySweepRuntimeSources.from_iterables(
             daily_summary=summary_sources.daily_summary,
@@ -2828,7 +3306,7 @@ def firestore_daily_sweep_source_provider(
         raise ValueError("daily sweep source packet timezone is required")
     if raw_timezone_name != timezone_name:
         raise ValueError("daily sweep source packet timezone mismatch")
-    expected_window = completed_local_day_window(local_date, timezone_name)
+    expected_window = window_override or completed_local_day_window(local_date, timezone_name)
     if (
         payload.get("complete") is not True
         or payload.get("window_id") != expected_window.window_id
@@ -2981,9 +3459,13 @@ def _pending_completed_dates(
     local_today = now.astimezone(ZoneInfo(timezone_name)).date()
     eligible_through = local_today - timedelta(days=1)
     first_pending = (
-        cursor.last_completed_local_date + timedelta(days=1)
-        if cursor.last_completed_local_date is not None
-        else eligible_through
+        cursor.pending_transition_local_date
+        if cursor.pending_transition_local_date is not None
+        else (
+            cursor.last_completed_local_date + timedelta(days=1)
+            if cursor.last_completed_local_date is not None
+            else eligible_through
+        )
     )
     if first_pending > eligible_through:
         return ()
@@ -3053,8 +3535,23 @@ def run_daily_memory_sweep_scheduler(
                 continue
             packets: Dict[date, DailySweepInput] = {}
             for local_date in pending_dates:
+                transition_window = None
+                if cursor.pending_transition_local_date == local_date:
+                    if cursor.pending_transition_start_utc is None:
+                        raise ValueError("timezone transition cursor is incomplete")
+                    transition_window = timezone_transition_window(
+                        local_date,
+                        timezone_name,
+                        coverage_start_utc=cursor.pending_transition_start_utc,
+                    )
                 try:
-                    sources = source_provider(uid, local_date, control, timezone_name=timezone_name)
+                    sources = source_provider(
+                        uid,
+                        local_date,
+                        control,
+                        timezone_name=timezone_name,
+                        window_override=transition_window,
+                    )
                 except TypeError:
                     # Preserve the narrow three-argument provider contract for
                     # existing test/deployment adapters.
@@ -3069,6 +3566,7 @@ def run_daily_memory_sweep_scheduler(
                     sweep_generation=cursor.sweep_generation,
                     timezone_name=timezone_name,
                     sources=sources,
+                    window_override=transition_window,
                 )
             output = run_daily_memory_sweep(
                 uid,
@@ -3117,6 +3615,10 @@ __all__ = [
     "MAX_COMPLETED_DAY_CONVERSATIONS",
     "MAX_COMPLETED_DAY_INPUT_CHARACTERS",
     "MAX_ONBOARDING_CONVERSATIONS",
+    "MAX_ONBOARDING_RECEIPT_KEYS",
+    "MAX_ONBOARDING_SOURCE_KEYS_PER_PACKET",
+    "MAX_LEGACY_COMPAT_OCCUPANTS",
+    "ONBOARDING_SOURCE_RECEIPT_PATH",
     "DAILY_MEMORY_SWEEP_ENABLED_ENV",
     "DAILY_MEMORY_SWEEP_KILL_SWITCH_ENV",
     "DAILY_MEMORY_SWEEP_MODEL_ENABLED_ENV",
@@ -3135,11 +3637,13 @@ __all__ = [
     "daily_memory_sweep_model_authority_from_environment",
     "daily_memory_sweep_cohort_authority_from_environment",
     "read_daily_memory_sweep_cohort_assignment",
+    "close_daily_memory_sweep_cohort_clients",
     "plan_daily_memory_sweep",
     "build_daily_sweep_input",
     "produce_completed_day_daily_summary_sources",
     "produce_onboarding_seed_sources",
     "completed_local_day_window",
+    "timezone_transition_window",
     "reconcile_daily_memory_sweep_timezone",
     "reconcile_daily_memory_sweep_timezones_for_maintenance",
     "daily_memory_sweep_authority_from_environment",

@@ -17,6 +17,7 @@ from database.firestore_index_registry import (
     CANONICAL_MEMORY_ATLAS_READ_QUERY,
     CONVERSATION_SOURCE_MEMORY_QUERY,
     DUE_MEMORY_OUTBOX_QUERY,
+    DAILY_SWEEP_ONBOARDING_CONVERSATIONS_QUERY,
     EXPIRED_SHORT_TERM_LIFECYCLE_QUERY,
     EXPIRED_MEMORY_OUTBOX_LEASE_QUERY,
     INDEX_ONLY_REQUIREMENTS,
@@ -367,6 +368,28 @@ def test_generated_firestore_manifest_matches_the_checked_in_contract():
             ('__name__', 'DESCENDING'),
         ),
     )
+
+
+def test_daily_sweep_onboarding_query_uses_one_deployable_range_order():
+    query = _RecordingQuery()
+    built = DAILY_SWEEP_ONBOARDING_CONVERSATIONS_QUERY.build(
+        query,
+        {"onboarding_marker": ""},
+        field_filter_factory=FieldFilter,
+    )
+
+    assert built is query
+    assert query.filters == [("external_data.onboarding_session_id", ">", "")]
+    assert DAILY_SWEEP_ONBOARDING_CONVERSATIONS_QUERY.query_signature == (
+        "conversations",
+        "COLLECTION",
+        (("external_data.onboarding_session_id", ">"),),
+    )
+    assert DAILY_SWEEP_ONBOARDING_CONVERSATIONS_QUERY.index_requirement.to_manifest() == {
+        "collectionGroup": "conversations",
+        "queryScope": "COLLECTION",
+        "fields": [{"fieldPath": "external_data.onboarding_session_id", "order": "ASCENDING"}],
+    }
 
 
 def _equality_plus_order_signature(collection_group, filters, orders):
