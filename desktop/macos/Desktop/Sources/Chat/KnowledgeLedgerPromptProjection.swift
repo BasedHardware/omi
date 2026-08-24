@@ -80,7 +80,6 @@ struct KnowledgeLedgerPromptProjection: Equatable, Sendable {
   /// homogeneous schema, so a truncated local prefix cannot hide older facts.
   var isCompleteLedgerSnapshot: Bool {
     hasAuthoritativeSnapshot
-      && !rows.isEmpty
       && rows.allSatisfy { $0.schemaVersion == Self.schemaVersion }
   }
 

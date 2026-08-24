@@ -97,6 +97,7 @@ from routers import (
     conversation_finalization,
     public_shared_conversation_chat,
     screen_frames,
+    jit_ledger_snapshot,
     jit_rollout,
 )
 from routers.listen.registry import proactive_message_dispatcher
@@ -242,6 +243,7 @@ app.include_router(tts.router)
 app.include_router(memory_admin.router)
 app.include_router(memory_product.router)
 app.include_router(task_recommendations.router)
+app.include_router(jit_ledger_snapshot.router)
 app.include_router(jit_rollout.router)
 app.include_router(desktop_core.router)
 app.include_router(desktop_agent_vm.router)

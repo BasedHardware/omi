@@ -164,18 +164,4 @@ final class APIClientMemoryLifecycleHeaderTests: XCTestCase {
     XCTAssertFalse(raw.contains("offset="), raw)
   }
 
-  func testLedgerPromptAuthorityRequiresExactServerHeaderAndKillWins() async throws {
-    let client = await makeClient()
-    MemoryLifecycleURLStub.headers = ["X-Omi-Knowledge-Ledger-Prompt-Mode": "enabled"]
-    XCTAssertEqual(try await client.getMemoriesPage().ledgerPromptAuthority, .enabled)
-
-    MemoryLifecycleURLStub.headers = ["X-Omi-Knowledge-Ledger-Prompt-Mode": "Enabled"]
-    XCTAssertEqual(try await client.getMemoriesPage().ledgerPromptAuthority, .disabled)
-
-    MemoryLifecycleURLStub.headers = [
-      "X-Omi-Knowledge-Ledger-Prompt-Mode": "enabled",
-      "X-Omi-Knowledge-Ledger-Prompt-Killed": "true",
-    ]
-    XCTAssertEqual(try await client.getMemoriesPage().ledgerPromptAuthority, .killed)
-  }
 }

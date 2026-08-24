@@ -177,6 +177,8 @@ def _ledger_item(
     valid_to=None,
     superseded_by=None,
     arguments=None,
+    intent_backed=True,
+    write_reason=LedgerWriteReason.onboarding,
 ):
     payload = {
         "memory_id": memory_id,
@@ -199,8 +201,8 @@ def _ledger_item(
         "kind": MemoryKind.fact,
         "subject_scope": MemorySubjectScope.primary_user,
         "slot": "home_city",
-        "intent_backed": True,
-        "write_reason": LedgerWriteReason.onboarding,
+        "intent_backed": intent_backed,
+        "write_reason": write_reason,
         "valid_from": updated_at - timedelta(days=2),
         "valid_to": valid_to,
         "superseded_by": superseded_by,
@@ -231,6 +233,16 @@ def test_read_ledger_history_is_explicit_bounded_and_preserves_tri_state(service
         valid_to=now - timedelta(hours=1),
         superseded_by="replacement",
     )
+    legacy_generated = _ledger_item(
+        service_mod,
+        "legacy-generated",
+        updated_at=now - timedelta(minutes=3, seconds=1),
+        status=MemoryItemStatus.superseded,
+        valid_to=now - timedelta(hours=2),
+        intent_backed=False,
+        write_reason=LedgerWriteReason.legacy_migration,
+        arguments={"history_class": "legacy_generated"},
+    )
     malformed_status_only = _ledger_item(
         service_mod,
         "malformed-status-only",
@@ -258,6 +270,7 @@ def test_read_ledger_history_is_explicit_bounded_and_preserves_tri_state(service
                 current,
                 malformed_status_only,
                 superseded,
+                legacy_generated,
                 hidden,
                 rejected,
                 invalidated,
@@ -268,7 +281,7 @@ def test_read_ledger_history_is_explicit_bounded_and_preserves_tri_state(service
     service = service_mod.MemoryService(db_client=_Db())
     rows = service.read_ledger_history("uid-test", limit=10)
 
-    assert [row.id for row in rows] == ["rejected", "invalidated", "superseded"]
+    assert [row.id for row in rows] == ["rejected", "invalidated", "superseded", "legacy-generated"]
     assert rows[0].user_review is False
     assert rows[1].user_review is True
     assert rows[1].invalid_at == invalidated.valid_to

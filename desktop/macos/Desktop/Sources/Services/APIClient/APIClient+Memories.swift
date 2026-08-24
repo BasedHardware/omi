@@ -582,26 +582,36 @@ extension APIClient {
   private static let defaultDeleteSupportedHeader = "X-Omi-Memory-Default-Delete-Supported"
   private static let nextCursorHeader = "X-Omi-Memory-Next-Cursor"
   private static let listTruncatedHeader = "X-Omi-List-Truncated"
-  private static let ledgerPromptModeHeader = "X-Omi-Knowledge-Ledger-Prompt-Mode"
-  private static let ledgerPromptKillHeader = "X-Omi-Knowledge-Ledger-Prompt-Killed"
 
-  enum KnowledgeLedgerPromptAuthority: Equatable, Sendable {
+  enum KnowledgeLedgerPromptAuthority: String, Decodable, Equatable, Sendable {
     case disabled
     case enabled
     case killed
+    case compatibility
+    case unknown
   }
 
-  struct KnowledgeLedgerPromptSnapshot {
-    let memories: [ServerMemory]
+  struct KnowledgeLedgerPromptSnapshot: Decodable {
+    let schemaVersion: String
     let authority: KnowledgeLedgerPromptAuthority
-  }
+    let reason: String
+    let sourceHeadCommitID: String?
+    let memories: [ServerMemory]
 
-  enum KnowledgeLedgerPromptSnapshotError: Error, Equatable {
-    case incompletePage
-    case pageLimitExceeded
-    case repeatedCursor
-    case duplicateMemoryID
-    case authorityChanged
+    var isAuthoritative: Bool {
+      authority == .enabled
+        && schemaVersion == KnowledgeLedgerPromptProjection.schemaVersion
+        && sourceHeadCommitID?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+        && Set(memories.map(\.id)).count == memories.count
+    }
+
+    enum CodingKeys: String, CodingKey {
+      case schemaVersion = "schema_version"
+      case authority = "mode"
+      case reason
+      case sourceHeadCommitID = "source_head_commit_id"
+      case memories = "rows"
+    }
   }
 
   struct MemoryListPage {
@@ -611,7 +621,6 @@ extension APIClient {
     let deviceScopeSupported: Bool?
     let defaultMemoryDeleteSupported: Bool
     let truncated: Bool
-    let ledgerPromptAuthority: KnowledgeLedgerPromptAuthority
   }
 
   /// Fetches memories from the API with optional filtering
@@ -709,94 +718,27 @@ extension APIClient {
       httpResponse.value(forHTTPHeaderField: Self.defaultDeleteSupportedHeader) == "true"
     let nextCursor = httpResponse.value(forHTTPHeaderField: Self.nextCursorHeader)
     let truncated = httpResponse.value(forHTTPHeaderField: Self.listTruncatedHeader) == "true"
-    let promptAuthority: KnowledgeLedgerPromptAuthority
-    if httpResponse.value(forHTTPHeaderField: Self.ledgerPromptKillHeader) == "true" {
-      promptAuthority = .killed
-    } else if httpResponse.value(forHTTPHeaderField: Self.ledgerPromptModeHeader) == "enabled" {
-      promptAuthority = .enabled
-    } else {
-      promptAuthority = .disabled
-    }
     return MemoryListPage(
       memories: memories,
       nextCursor: nextCursor?.isEmpty == false ? nextCursor : nil,
       canonicalLifecycleExposed: canonicalLifecycleExposed,
       deviceScopeSupported: deviceScopeSupported,
       defaultMemoryDeleteSupported: defaultMemoryDeleteSupported,
-      truncated: truncated,
-      ledgerPromptAuthority: promptAuthority
+      truncated: truncated
     )
   }
 
-  /// Fetch every row in one owner-pinned canonical list walk before allowing
-  /// the desktop prompt renderer to claim completeness. Any truncation,
-  /// cursor loop, rollout-state change, or safety-bound exhaustion fails
-  /// closed; callers retain the legacy prompt path and retry on a later turn.
+  /// Read the dedicated server-owned snapshot decision. The backend returns
+  /// `enabled` only after the shared JIT rollout and kill-switch decision,
+  /// migration completion and generation-fenced zero-legacy receipt, privacy
+  /// filtering, and strict response bounds all pass for this exact owner.
   func getKnowledgeLedgerPromptSnapshot(
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
-    pageLimit: Int = 40
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> KnowledgeLedgerPromptSnapshot {
-    let preflight = try await getMemoriesPage(
-      limit: 1,
+    try await get(
+      "v1/jit/knowledge-ledger/prompt-snapshot",
+      expectedOwnerId: authorizationSnapshot.ownerID,
       authorizationSnapshot: authorizationSnapshot)
-    guard preflight.ledgerPromptAuthority == .enabled else {
-      return KnowledgeLedgerPromptSnapshot(
-        memories: [], authority: preflight.ledgerPromptAuthority)
-    }
-    try await collectKnowledgeLedgerPromptSnapshot(pageLimit: pageLimit) { cursor in
-      let page = try await self.getMemoriesPage(
-        limit: 500,
-        cursor: cursor,
-        includeDismissed: true,
-        includeArchive: true,
-        authorizationSnapshot: authorizationSnapshot)
-      guard page.ledgerPromptAuthority == preflight.ledgerPromptAuthority else {
-        throw KnowledgeLedgerPromptSnapshotError.authorityChanged
-      }
-      return page
-    }
-  }
-
-  func collectKnowledgeLedgerPromptSnapshot(
-    pageLimit: Int,
-    fetchPage: (String?) async throws -> MemoryListPage
-  ) async throws -> KnowledgeLedgerPromptSnapshot {
-    guard pageLimit > 0 else { throw KnowledgeLedgerPromptSnapshotError.pageLimitExceeded }
-    var memories: [ServerMemory] = []
-    var cursor: String?
-    var seenCursors = Set<String>()
-    var seenMemoryIDs = Set<String>()
-    var expectedAuthority: KnowledgeLedgerPromptAuthority?
-
-    for _ in 0..<pageLimit {
-      let page = try await fetchPage(cursor)
-      guard !page.truncated else { throw KnowledgeLedgerPromptSnapshotError.incompletePage }
-      if let expectedAuthority {
-        guard page.ledgerPromptAuthority == expectedAuthority else {
-          throw KnowledgeLedgerPromptSnapshotError.authorityChanged
-        }
-      } else {
-        expectedAuthority = page.ledgerPromptAuthority
-      }
-      guard page.ledgerPromptAuthority == .enabled else {
-        return KnowledgeLedgerPromptSnapshot(
-          memories: [], authority: page.ledgerPromptAuthority)
-      }
-      for memory in page.memories {
-        guard seenMemoryIDs.insert(memory.id).inserted else {
-          throw KnowledgeLedgerPromptSnapshotError.duplicateMemoryID
-        }
-        memories.append(memory)
-      }
-      guard let next = page.nextCursor else {
-        return KnowledgeLedgerPromptSnapshot(memories: memories, authority: .enabled)
-      }
-      guard seenCursors.insert(next).inserted else {
-        throw KnowledgeLedgerPromptSnapshotError.repeatedCursor
-      }
-      cursor = next
-    }
-    throw KnowledgeLedgerPromptSnapshotError.pageLimitExceeded
   }
 
   /// Managed LLM synthesis takes longer than a normal API call (the profile route runs two

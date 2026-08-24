@@ -3175,6 +3175,21 @@ class MemoryService:
         MEMORY_HISTORICAL_MATERIALIZATION_TOTAL.labels(outcome="committed").inc()
         return True
 
+    def materialize_legacy_for_ledger_migration(self, uid: str, memory_id: str) -> MemoryItem:
+        """Adopt one live historical row through the existing canonical seam.
+
+        The physical legacy row is preserved. A canonical active ownership
+        record suppresses it from default compatibility reads while explicit
+        historical export/query remains available; the migration sweep then
+        adapts that canonical item in place to the ledger schema.
+        """
+        self.ensure_canonical_mutation_ready(uid)
+        self._ensure_canonical_target(uid, memory_id)
+        item = read_canonical_memory_item(uid, memory_id, db_client=self.db_client)
+        if item is None:
+            raise RuntimeError("legacy materialization did not produce canonical authority")
+        return item
+
     def update_content(self, uid: str, memory_id: str, content: str) -> MemoryDB:
         self.ensure_canonical_mutation_ready(uid)
         canonical_item = self._canonical_item_for_lineage(uid, memory_id)

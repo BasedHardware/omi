@@ -14246,6 +14246,72 @@
         "title": "InterventionSurface",
         "type": "string"
       },
+      "JITDecisionReason": {
+        "enum": [
+          "evaluated",
+          "rollout_enabled",
+          "rollout_disabled",
+          "kill_switch_enabled",
+          "provider_timeout",
+          "configuration_missing",
+          "malformed_response",
+          "provider_error",
+          "flag_absent"
+        ],
+        "title": "JITDecisionReason",
+        "type": "string"
+      },
+      "JITErrorClass": {
+        "enum": [
+          "none",
+          "timeout",
+          "configuration",
+          "malformed",
+          "provider",
+          "absent"
+        ],
+        "title": "JITErrorClass",
+        "type": "string"
+      },
+      "JITRolloutDecisionEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "cache_hit": {
+            "title": "Cache Hit",
+            "type": "boolean"
+          },
+          "cache_ttl_seconds": {
+            "title": "Cache Ttl Seconds",
+            "type": "integer"
+          },
+          "effective": {
+            "$ref": "#/components/schemas/TriState"
+          },
+          "error_class": {
+            "$ref": "#/components/schemas/JITErrorClass"
+          },
+          "kill_switch": {
+            "$ref": "#/components/schemas/TriState"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/JITDecisionReason"
+          },
+          "rollout": {
+            "$ref": "#/components/schemas/TriState"
+          }
+        },
+        "required": [
+          "rollout",
+          "kill_switch",
+          "effective",
+          "reason",
+          "error_class",
+          "cache_hit",
+          "cache_ttl_seconds"
+        ],
+        "title": "JITRolloutDecisionEnvelope",
+        "type": "object"
+      },
       "KnowledgeGraphResponse": {
         "properties": {
           "edge_count": {
@@ -14308,6 +14374,61 @@
         ],
         "title": "KnowledgeGraphResponse",
         "type": "object"
+      },
+      "LedgerPromptSnapshotEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/LedgerPromptSnapshotMode"
+          },
+          "reason": {
+            "maxLength": 64,
+            "title": "Reason",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/MemoryDB"
+            },
+            "maxItems": 64,
+            "title": "Rows",
+            "type": "array"
+          },
+          "schema_version": {
+            "default": "knowledge_ledger.v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_head_commit_id": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Head Commit Id"
+          }
+        },
+        "required": [
+          "mode",
+          "reason"
+        ],
+        "title": "LedgerPromptSnapshotEnvelope",
+        "type": "object"
+      },
+      "LedgerPromptSnapshotMode": {
+        "enum": [
+          "enabled",
+          "compatibility",
+          "disabled",
+          "killed",
+          "unknown"
+        ],
+        "title": "LedgerPromptSnapshotMode",
+        "type": "string"
       },
       "LedgerWriteReason": {
         "enum": [
@@ -23973,6 +24094,15 @@
         ],
         "title": "Translation",
         "type": "object"
+      },
+      "TriState": {
+        "enum": [
+          "enabled",
+          "disabled",
+          "unknown"
+        ],
+        "title": "TriState",
+        "type": "string"
       },
       "TrialMetadata": {
         "description": "Structured trial state for desktop clients to render countdown UI.",
@@ -44588,6 +44718,154 @@
         "tags": [
           "integrations"
         ]
+      }
+    },
+    "/v1/jit/knowledge-ledger/prompt-snapshot": {
+      "get": {
+        "operationId": "get_knowledge_ledger_prompt_snapshot_v1_jit_knowledge_ledger_prompt_snapshot_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LedgerPromptSnapshotEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Knowledge Ledger Prompt Snapshot"
+      }
+    },
+    "/v1/jit/rollout-decision": {
+      "get": {
+        "operationId": "get_jit_rollout_decision_v1_jit_rollout_decision_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JITRolloutDecisionEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Jit Rollout Decision"
       }
     },
     "/v1/knowledge-graph": {

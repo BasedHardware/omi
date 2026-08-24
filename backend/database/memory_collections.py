@@ -50,6 +50,11 @@ class MemoryCollections:
         return f"{self.user_root}/memory_control/knowledge_ledger_migration"
 
     @property
+    def knowledge_ledger_prompt_projection(self) -> str:
+        """Bounded prompt receipt produced by the canonical migration sweep."""
+        return f"{self.user_root}/memory_control/knowledge_ledger_prompt_projection"
+
+    @property
     def historical_graph_enrichment_cursor(self) -> str:
         return f"{self.user_root}/memory_control/historical_graph_enrichment"
 
