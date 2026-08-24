@@ -410,7 +410,10 @@ def test_trigger_snapshot_is_owner_authenticated_default_off_and_never_reads_mem
 
 
 def test_trigger_snapshot_serializes_exhaustive_action_receipt(monkeypatch):
+    observed: list[bool] = []
+
     async def resolve(uid: str, *, stage: JITDecisionStage, force_refresh: bool = False):
+        observed.append(force_refresh)
         evaluation = JITFlagEvaluation(TriState.ENABLED, TriState.DISABLED, JITDecisionReason.EVALUATED)
         return authority_module._effective_decision(evaluation, cache_hit=False, cache_ttl_seconds=20)
 
@@ -458,3 +461,104 @@ def test_trigger_snapshot_serializes_exhaustive_action_receipt(monkeypatch):
         'prompt': 'Give the next release step.',
     }
     assert '"action"' in payload['rows'][0]['trigger_condition_json']
+    assert observed == [False, True]
+
+
+@pytest.mark.parametrize(
+    ('rollout', 'kill_switch'),
+    [
+        (TriState.DISABLED, TriState.DISABLED),
+        (TriState.ENABLED, TriState.ENABLED),
+    ],
+    ids=['rollout-disabled-during-scan', 'kill-switch-enabled-during-scan'],
+)
+def test_trigger_snapshot_final_authority_fence_discards_scan_after_disable_or_kill(monkeypatch, rollout, kill_switch):
+    observed: list[bool] = []
+
+    async def resolve(uid: str, *, stage: JITDecisionStage, force_refresh: bool = False):
+        assert uid == 'owner'
+        observed.append(force_refresh)
+        evaluation = (
+            JITFlagEvaluation(TriState.ENABLED, TriState.DISABLED, JITDecisionReason.EVALUATED)
+            if not force_refresh
+            else JITFlagEvaluation(rollout, kill_switch, JITDecisionReason.EVALUATED)
+        )
+        return authority_module._effective_decision(evaluation, cache_hit=False, cache_ttl_seconds=20)
+
+    snapshot = AuthoritativeTriggerSnapshot(
+        owner_id='owner',
+        account_generation=7,
+        head_commit_id='head',
+        commit_sequence=11,
+        snapshot_revision='secret-revision',
+        complete=True,
+        rows=(),
+    )
+
+    async def immediate(_executor, function, uid):
+        assert function is jit_rollout.read_authoritative_trigger_snapshot
+        assert uid == 'owner'
+        return snapshot
+
+    monkeypatch.setattr(jit_rollout, 'resolve_jit_rollout', resolve)
+    monkeypatch.setattr(jit_rollout, 'run_blocking', immediate)
+    app = FastAPI()
+    app.include_router(jit_rollout.router)
+    app.dependency_overrides[get_current_user_uid] = lambda: 'owner'
+
+    payload = TestClient(app).get('/v1/jit/trigger-snapshot').json()
+
+    assert observed == [False, True]
+    assert payload == {
+        'owner_id': 'owner',
+        'account_generation': 0,
+        'head_commit_id': '',
+        'commit_sequence': 0,
+        'snapshot_revision': '',
+        'complete': False,
+        'rows': [],
+        'failure_reason': 'rollout_not_enabled',
+    }
+
+
+def test_trigger_snapshot_preserves_owner_generation_failure_as_non_actionable(monkeypatch):
+    observed: list[bool] = []
+
+    async def resolve(uid: str, *, stage: JITDecisionStage, force_refresh: bool = False):
+        assert uid == 'owner'
+        observed.append(force_refresh)
+        evaluation = JITFlagEvaluation(TriState.ENABLED, TriState.DISABLED, JITDecisionReason.EVALUATED)
+        return authority_module._effective_decision(evaluation, cache_hit=False, cache_ttl_seconds=20)
+
+    stale_snapshot = AuthoritativeTriggerSnapshot(
+        owner_id='owner',
+        account_generation=7,
+        head_commit_id='head-before-transition',
+        commit_sequence=11,
+        snapshot_revision='',
+        complete=False,
+        rows=(),
+        failure_reason='authority_changed',
+    )
+
+    async def immediate(_executor, function, uid):
+        assert function is jit_rollout.read_authoritative_trigger_snapshot
+        assert uid == 'owner'
+        return stale_snapshot
+
+    monkeypatch.setattr(jit_rollout, 'resolve_jit_rollout', resolve)
+    monkeypatch.setattr(jit_rollout, 'run_blocking', immediate)
+    app = FastAPI()
+    app.include_router(jit_rollout.router)
+    app.dependency_overrides[get_current_user_uid] = lambda: 'owner'
+
+    payload = TestClient(app).get('/v1/jit/trigger-snapshot').json()
+
+    assert observed == [False, True]
+    assert payload['owner_id'] == 'owner'
+    assert payload['account_generation'] == 7
+    assert payload['head_commit_id'] == 'head-before-transition'
+    assert payload['complete'] is False
+    assert payload['rows'] == []
+    assert payload['snapshot_revision'] == ''
+    assert payload['failure_reason'] == 'authority_changed'
