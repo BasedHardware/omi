@@ -405,6 +405,10 @@ overlay:
             value: '8'
           MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD:
             value: '0'
+          MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED:
+            value: 'false'
+          MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME:
+            value: ''
           OMI_BACKGROUND_FLEX_CAPABLE:
             value: 'true'
           PINECONE_INDEX_NAME:

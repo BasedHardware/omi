@@ -22,7 +22,7 @@ from database._client import db as default_db_client
 from database.notifications import get_user_time_zone
 from services.frame_request_retention import run_frame_request_retention_maintenance
 from utils.memory.canonical_short_term_maintenance_cron import (
-    bounded_canonical_memory_uid_inventory,
+    bounded_daily_memory_sweep_uid_inventory,
     run_canonical_short_term_maintenance_cron,
 )
 from utils.memory.daily_memory_sweep import (
@@ -58,7 +58,7 @@ def _run_daily_memory_sweep_if_authorized() -> None:
         logger.info("daily-memory-sweep disabled by backend authority")
         return
     now = datetime.now(timezone.utc)
-    inventory = bounded_canonical_memory_uid_inventory(default_db_client, limit=400, persist_cursor=False)
+    inventory = bounded_daily_memory_sweep_uid_inventory(default_db_client, limit=400, persist_cursor=False)
     summary = run_daily_memory_sweep_scheduler(
         db_client=default_db_client,
         now=now,

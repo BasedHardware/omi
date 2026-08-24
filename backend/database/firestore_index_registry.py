@@ -537,6 +537,26 @@ DAILY_SWEEP_ACTIVE_FACT_SLOT_QUERY = FirestoreQuerySpec(
     index_fields=DAILY_SWEEP_ACTIVE_FACT_SUBJECT_QUERY.index_fields + (_asc('slot'),),
 )
 
+# Entity-scoped variants are required when a candidate names a subject.  The
+# entity predicate must be applied before the proof limit; filtering it after a
+# three-row page can miss the authoritative occupant and create a duplicate.
+DAILY_SWEEP_ACTIVE_FACT_ENTITY_QUERY = FirestoreQuerySpec(
+    identifier='daily_sweep_active_fact_entity',
+    collection_group='memory_items',
+    query_scope='COLLECTION',
+    filters=DAILY_SWEEP_ACTIVE_FACT_SUBJECT_QUERY.filters
+    + (FirestoreQueryFilter('subject_entity_id', '==', 'subject_entity_id'),),
+    index_fields=DAILY_SWEEP_ACTIVE_FACT_SUBJECT_QUERY.index_fields + (_asc('subject_entity_id'),),
+)
+
+DAILY_SWEEP_ACTIVE_FACT_ENTITY_SLOT_QUERY = FirestoreQuerySpec(
+    identifier='daily_sweep_active_fact_entity_slot',
+    collection_group='memory_items',
+    query_scope='COLLECTION',
+    filters=DAILY_SWEEP_ACTIVE_FACT_ENTITY_QUERY.filters + (FirestoreQueryFilter('slot', '==', 'slot'),),
+    index_fields=DAILY_SWEEP_ACTIVE_FACT_ENTITY_QUERY.index_fields + (_asc('slot'),),
+)
+
 # Historical dual-stream keysets for effective updated_at-or-created_at order.
 # Docs with updated_at ride the updated stream; created stream skips those
 # duplicates in Python so each document is emitted once. Opposite-direction
@@ -1032,6 +1052,8 @@ QUERY_SPECS = (
     UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
     DAILY_SWEEP_ACTIVE_FACT_SUBJECT_QUERY,
     DAILY_SWEEP_ACTIVE_FACT_SLOT_QUERY,
+    DAILY_SWEEP_ACTIVE_FACT_ENTITY_QUERY,
+    DAILY_SWEEP_ACTIVE_FACT_ENTITY_SLOT_QUERY,
     UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY,
     UNIVERSAL_HISTORICAL_CREATED_LIST_SCAN_QUERY,
     CONVERSATION_SOURCE_MEMORY_QUERY,
