@@ -118,8 +118,10 @@ struct KnowledgeLedgerTriggerRuntimeResult: Equatable, Sendable {
 /// decision. It performs no I/O, persistence, scheduling, telemetry, model
 /// inference, notification, or full-agent wakeup.
 enum KnowledgeLedgerTriggerWatchlistRuntime {
-  static let maxWatchlistEntries = 256
-  static let maxWakeupCounterCandidates = 1_024
+  // Must remain aligned with backend/utils/memory/jit_trigger_snapshot.py.
+  // A complete server snapshot may contain this many active triggers.
+  static let maxWatchlistEntries = 500
+  static let maxWakeupCounterCandidates = 500
 
   static func evaluate(
     projection: KnowledgeLedgerTriggerWatchlistProjection,
@@ -205,6 +207,11 @@ enum KnowledgeLedgerTriggerWatchlistRuntime {
       nextLane = .plannedTrigger
     } else if !ambiguous.isEmpty {
       nextLane = .boundedPlannedTriage
+    } else if !rejectedEntries.isEmpty || !projection.quarantined.isEmpty {
+      // Ambient is authorized only after every authoritative planned entry
+      // safely proves no-match. An unevaluable or quarantined entry leaves
+      // planned authority unresolved and must not purchase another lane.
+      nextLane = .none
     } else {
       nextLane = .ambientFallback
     }
