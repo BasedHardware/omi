@@ -83,6 +83,12 @@ def _build_enabled_snapshot(
     )
 
 
+def _build_enabled_snapshot_with_default_client(uid: str) -> LedgerPromptSnapshotEnvelope:
+    """Acquire and use the synchronous Firestore client off the event loop."""
+
+    return _build_enabled_snapshot(uid, db_client=get_firestore_client())
+
+
 @router.get(_SNAPSHOT_PATH, response_model=LedgerPromptSnapshotEnvelope)
 async def get_knowledge_ledger_prompt_snapshot(
     uid: str = Depends(get_current_user_uid),
@@ -90,8 +96,7 @@ async def get_knowledge_ledger_prompt_snapshot(
     decision = await resolve_jit_rollout(uid, stage=JITDecisionStage.READ_ONLY)
     if not decision.permits_work:
         return _disabled_snapshot(decision)
-    db_client = get_firestore_client()
-    snapshot = await run_blocking(db_executor, _build_enabled_snapshot, uid, db_client=db_client)
+    snapshot = await run_blocking(db_executor, _build_enabled_snapshot_with_default_client, uid)
     if snapshot.mode != LedgerPromptSnapshotMode.enabled:
         return snapshot
     # A flag or kill switch can flip while the blocking receipt reads are in

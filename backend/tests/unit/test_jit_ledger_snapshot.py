@@ -159,3 +159,37 @@ async def test_flag_or_kill_flip_during_receipt_read_revokes_enabled_snapshot(
     result = await snapshot.get_knowledge_ledger_prompt_snapshot(uid="u1")
     assert result.mode.value == expected_mode
     assert result.rows == []
+
+
+@pytest.mark.asyncio
+async def test_sync_firestore_client_is_acquired_inside_blocking_boundary(monkeypatch):
+    events: list[str] = []
+
+    async def resolve(*_args, **_kwargs):
+        return decision(enabled=True)
+
+    async def run_in_executor(_executor, function, *args, **kwargs):
+        events.append("blocking-enter")
+        result = function(*args, **kwargs)
+        events.append("blocking-exit")
+        return result
+
+    def firestore_client():
+        events.append("firestore-client")
+        return object()
+
+    monkeypatch.setattr(snapshot, "resolve_jit_rollout", resolve)
+    monkeypatch.setattr(snapshot, "run_blocking", run_in_executor)
+    monkeypatch.setattr(snapshot, "get_firestore_client", firestore_client)
+    monkeypatch.setattr(
+        snapshot,
+        "_build_enabled_snapshot",
+        lambda *_args, **_kwargs: snapshot.LedgerPromptSnapshotEnvelope(
+            mode="enabled", reason="migration_complete_zero_legacy", source_head_commit_id="head-7", rows=[]
+        ),
+    )
+
+    result = await snapshot.get_knowledge_ledger_prompt_snapshot(uid="u1")
+
+    assert result.mode == snapshot.LedgerPromptSnapshotMode.enabled
+    assert events == ["blocking-enter", "firestore-client", "blocking-exit"]
