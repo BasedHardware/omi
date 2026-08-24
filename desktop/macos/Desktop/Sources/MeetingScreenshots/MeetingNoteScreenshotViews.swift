@@ -82,121 +82,94 @@ struct MeetingNoteBanner: View {
   let date: Date
 
   @State private var image: NSImage?
-  @State private var ground: [Color] = []
+  @State private var ground: MeetingBannerGround = MeetingBannerPalette.neutral
 
-  private static let height: CGFloat = 132
+  /// Below this the banner stacks instead of sitting the inset beside the title. A note pane can be
+  /// dragged genuinely narrow, and a side-by-side layout there crops the title to a word and a half.
+  private static let stackBelowWidth: CGFloat = 420
+
+  private var gradient: LinearGradient {
+    LinearGradient(
+      colors: ground.stops.map {
+        Color(hue: $0.hue, saturation: $0.saturation, brightness: $0.brightness)
+      },
+      startPoint: .topLeading,
+      endPoint: .bottomTrailing)
+  }
 
   var body: some View {
-    ZStack {
-      // The ground: two or three colours sampled from the frame itself, clamped well away from
-      // both ends of the luminance range so text over it is legible in either appearance.
-      LinearGradient(
-        colors: ground.isEmpty ? [Ink.rowFill, Ink.rowFillHover] : ground,
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing)
-
-      HStack(alignment: .center, spacing: OmiSpacing.lg) {
-        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-          Text(title)
-            .scaledFont(size: OmiType.title, weight: .semibold)
-            .foregroundStyle(.white)
-            .lineLimit(2)
-            .multilineTextAlignment(.leading)
-            .shadow(color: .black.opacity(0.35), radius: 8, y: 1)
-          Text(date.formatted(date: .abbreviated, time: .shortened))
-            .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundStyle(.white.opacity(0.82))
-            .shadow(color: .black.opacity(0.3), radius: 6, y: 1)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-
-        // The inset. Roughly a third of the width, never stretched, never blurred into a texture:
-        // at this size a screenshot reads as "here is the thing we were looking at", which is the
-        // only job it can actually do.
-        if let image {
-          Image(nsImage: image)
-            .resizable()
-            .aspectRatio(contentMode: .fill)
-            .frame(width: 176, height: 100)
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay(
-              RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .strokeBorder(.white.opacity(0.28), lineWidth: 1)
-            )
-            .shadow(color: .black.opacity(0.28), radius: 10, y: 3)
-            .accessibilityLabel(frame.caption.isEmpty ? "Screenshot from this meeting" : frame.caption)
+    GeometryReader { proxy in
+      let stacked = proxy.size.width < Self.stackBelowWidth
+      ZStack {
+        gradient
+        if stacked {
+          VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+            titleBlock
+            inset(width: min(proxy.size.width - OmiSpacing.lg * 2, 260))
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding(OmiSpacing.lg)
+        } else {
+          HStack(alignment: .center, spacing: OmiSpacing.lg) {
+            titleBlock
+              .frame(maxWidth: .infinity, alignment: .leading)
+            // The spec's 25-35% of banner width, clamped so it neither shrinks to a stamp in a
+            // narrow pane nor grows into the full-bleed treatment the measurement ruled out.
+            inset(width: min(max(proxy.size.width * 0.30, 150), 260))
+          }
+          .padding(.horizontal, OmiSpacing.lg)
         }
       }
-      .padding(.horizontal, OmiSpacing.lg)
+      .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
-    .frame(height: Self.height)
+    .frame(height: bannerHeight)
     .frame(maxWidth: .infinity)
-    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     .task(id: frame.id) { await load() }
   }
 
+  /// Tall enough for a two-line title over the inset when stacked.
+  private var bannerHeight: CGFloat { 132 }
+
+  private var titleBlock: some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+      Text(title)
+        .scaledFont(size: OmiType.title, weight: .semibold)
+        .foregroundStyle(.white)
+        .lineLimit(2)
+        .multilineTextAlignment(.leading)
+        .shadow(color: .black.opacity(0.35), radius: 8, y: 1)
+      Text(date.formatted(date: .abbreviated, time: .shortened))
+        .scaledFont(size: OmiType.caption, weight: .medium)
+        .foregroundStyle(.white.opacity(0.82))
+        .shadow(color: .black.opacity(0.3), radius: 6, y: 1)
+    }
+  }
+
+  /// The approved frame, never stretched, never blurred into a texture. At this size a screenshot
+  /// reads as "here is the thing we were looking at", which is the only job it can actually do.
+  @ViewBuilder private func inset(width: CGFloat) -> some View {
+    if let image {
+      Image(nsImage: image)
+        .resizable()
+        .aspectRatio(contentMode: .fill)
+        .frame(width: width, height: width * 10 / 16)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+          RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .strokeBorder(.white.opacity(0.28), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.28), radius: 10, y: 3)
+        .accessibilityLabel(
+          frame.caption.isEmpty ? "Screenshot from this meeting" : frame.caption)
+    }
+  }
+
   private func load() async {
-    guard let loaded = await RewindThumbnailLoader.shared.thumbnail(for: frame.moment.screenshot) else { return }
+    guard let loaded = await RewindThumbnailLoader.shared.thumbnail(for: frame.moment.screenshot)
+    else { return }
     image = loaded
     ground = MeetingBannerPalette.ground(from: loaded)
   }
-}
-
-// MARK: - Palette
-
-/// Two colours pulled out of a frame and forced into a range a white title survives.
-///
-/// A screenshot's own dominant colour is usually near-white (a document) or near-black (an editor),
-/// and either taken literally makes the title unreadable. So the sample sets the *hue*, and the
-/// luminance and saturation are ours.
-enum MeetingBannerPalette {
-  static func ground(from image: NSImage) -> [Color] {
-    #if canImport(AppKit)
-      guard let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return [] }
-      let width = 8
-      let height = 8
-      var pixels = [UInt8](repeating: 0, count: width * height * 4)
-      guard
-        let context = CGContext(
-          data: &pixels, width: width, height: height, bitsPerComponent: 8,
-          bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
-          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
-      else { return [] }
-      context.interpolationQuality = .low
-      context.draw(cg, in: CGRect(x: 0, y: 0, width: width, height: height))
-
-      // Average hue, weighted towards the more saturated pixels — the chrome of an app carries its
-      // identity, and a page of black text on white carries none.
-      var x = 0.0
-      var y = 0.0
-      var weight = 0.0
-      for i in stride(from: 0, to: pixels.count, by: 4) {
-        let colour = NSColor(
-          red: CGFloat(pixels[i]) / 255, green: CGFloat(pixels[i + 1]) / 255,
-          blue: CGFloat(pixels[i + 2]) / 255, alpha: 1)
-        var h: CGFloat = 0
-        var s: CGFloat = 0
-        var b: CGFloat = 0
-        var a: CGFloat = 0
-        colour.usingColorSpace(.deviceRGB)?.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
-        let w = Double(s) + 0.05
-        x += cos(Double(h) * 2 * .pi) * w
-        y += sin(Double(h) * 2 * .pi) * w
-        weight += w
-      }
-      guard weight > 0 else { return [] }
-      var hue = atan2(y / weight, x / weight) / (2 * .pi)
-      if hue < 0 { hue += 1 }
-
-      return [
-        Color(hue: hue, saturation: 0.42, brightness: 0.46),
-        Color(hue: (hue + 0.06).truncatingRemainder(dividingBy: 1), saturation: 0.55, brightness: 0.28),
-      ]
-    #else
-      return []
-    #endif
-  }
-
 }
 
 // MARK: - The section inside the note
