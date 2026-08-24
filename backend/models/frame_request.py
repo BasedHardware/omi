@@ -48,6 +48,11 @@ class FrameRequest(BaseModel):
     device_id: str = Field(min_length=1, max_length=256)
     account_generation: int = Field(default=0, ge=0)
     dedupe_key: str = Field(min_length=1, max_length=256)
+    # The identity is reusable after a terminal/expired attempt.  These fields
+    # make that boundary explicit instead of letting a forever-stable document
+    # id starve future requests.
+    dedupe_window: int = Field(default=0, ge=0)
+    attempt_number: int = Field(default=0, ge=0)
     conversation_id: str | None = Field(default=None, max_length=256)
     screenshot_id: str | None = Field(default=None, max_length=256)
     state: FrameRequestState = FrameRequestState.requested
@@ -114,6 +119,8 @@ class FrameRequest(BaseModel):
             raise ValueError("attached frame requests require a conversation")
         if self.state == FrameRequestState.attached and self.expires_at != self.created_at:
             raise ValueError("attached frame requests must not carry a time-based expiry")
+        if self.state == FrameRequestState.attached and self.terminal_reason:
+            raise ValueError("attached frame requests do not carry a terminal reason")
         if (
             self.state in TERMINAL_FRAME_REQUEST_STATES
             and self.state != FrameRequestState.attached
@@ -156,6 +163,14 @@ class FrameRequestStateUpdate(BaseModel):
         if "/" in value or "\\" in value or value.startswith(("http:", "https:")):
             raise ValueError("storage_id must be an opaque owner-scoped identifier")
         return value or None
+
+
+class FrameRequestPromotion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    device_id: str = Field(min_length=1, max_length=256)
+    account_generation: int = Field(default=0, ge=0)
+    conversation_id: str = Field(min_length=1, max_length=256)
 
 
 class FrameRequestEnvelope(BaseModel):

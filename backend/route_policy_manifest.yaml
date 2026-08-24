@@ -91,7 +91,19 @@ routes:
   - route_type: http
     method: POST
     path: /v1/screen-activity/sync
-    policy: *desktop_migration_policy
+    policy:
+      <<: *desktop_migration_policy
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      rate_limit:
+        policy_name: frame_requests:read
+        key_subject: uid
+        enforcement: fail_open
+        placement: dependency
   - route_type: http
     method: POST
     path: /v1/frame-requests
@@ -104,10 +116,10 @@ routes:
         scopes: []
       byok: not_applicable
       rate_limit:
-        policy_name: none
-        key_subject: none
-        enforcement: none
-        placement: none
+        policy_name: frame_requests:write
+        key_subject: uid
+        enforcement: fail_open
+        placement: dependency
       timeout_class: default_method
       surface: first_party_app
       visibility: first_party
@@ -118,11 +130,41 @@ routes:
   - route_type: http
     method: GET
     path: /v1/frame-requests/pending
-    policy: *jit_frame_request_policy
+    policy:
+      <<: *jit_frame_request_policy
+      rate_limit:
+        policy_name: frame_requests:read
+        key_subject: uid
+        enforcement: fail_open
+        placement: dependency
   - route_type: http
     method: POST
     path: /v1/frame-requests/{request_id}/state
     policy: *jit_frame_request_policy
+  - route_type: http
+    method: POST
+    path: /v1/frame-requests/{request_id}/upload
+    policy:
+      <<: *jit_frame_request_policy
+      rate_limit:
+        policy_name: frame_requests:upload
+        key_subject: uid
+        enforcement: fail_open
+        placement: dependency
+  - route_type: http
+    method: POST
+    path: /v1/frame-requests/{request_id}/promote
+    policy: *jit_frame_request_policy
+  - route_type: http
+    method: GET
+    path: /v1/conversations/{conversation_id}/photos/{photo_id}/image
+    policy:
+      <<: *jit_frame_request_policy
+      rate_limit:
+        policy_name: frame_requests:read
+        key_subject: uid
+        enforcement: fail_open
+        placement: dependency
   - route_type: http
     method: GET
     path: /v1/screen-activity

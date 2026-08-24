@@ -13,6 +13,7 @@ from database import users as users_db
 from database.action_items import get_action_item_ids
 from database.conversations import get_conversation_ids
 from database.screen_activity import get_screen_activity_ids
+from database import frame_requests as frame_requests_db
 from database.vector_db import (
     delete_action_item_vectors_batch,
     delete_conversation_vectors_batch,
@@ -29,6 +30,7 @@ from utils.memory.canonical_memory_adapter import purge_canonical_derived_user_d
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import delete_canonical_memory_maintenance_registry_entry
 from utils.other.storage import delete_all_conversation_recordings
+from utils.retrieval.frame_request_storage import delete_frame_request_pixels_for_user
 from utils.twilio_service import delete_user_caller_ids_strict as delete_user_caller_ids
 from utils.integration_telemetry import emit_posthog_event
 from services.users.agent_vm_account_cleanup import delete_agent_vm_for_account
@@ -161,6 +163,15 @@ def purge_derived_user_data(uid: str) -> PurgeResult:
     except Exception as e:
         record_failure('required_failures', 'conversation_recordings', e)
         logger.error(f'delete_account purge recordings failed for {uid}: {sanitize(str(e))}')
+
+    try:
+        # Firestore metadata is removed by the recursive user wipe below, but
+        # referenced pixels live in GCS and would otherwise become orphaned.
+        frame_storage_ids = frame_requests_db.list_frame_request_storage_ids(uid)
+        delete_frame_request_pixels_for_user(uid, frame_storage_ids)
+    except Exception as e:
+        record_failure('required_failures', 'frame_request_pixels', e)
+        logger.error(f'delete_account purge frame request pixels failed for {uid}: {sanitize(str(e))}')
 
     try:
         canonical_result = purge_canonical_derived_user_data(uid)

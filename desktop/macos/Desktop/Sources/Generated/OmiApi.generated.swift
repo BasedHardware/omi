@@ -1607,38 +1607,46 @@ public enum OmiAPI {
 
   public struct ConversationPhoto: Codable {
     public let base64: String
+    public let contentType: String?
     public let createdAt: String?
     public let dataProtectionLevel: String?
     public let description_: String?
     public let discarded: Bool?
     public let id: String?
+    public let storageId: String?
 
     private enum CodingKeys: String, CodingKey {
       case base64
+      case contentType = "content_type"
       case createdAt = "created_at"
       case dataProtectionLevel = "data_protection_level"
       case description_ = "description"
       case discarded
       case id
+      case storageId = "storage_id"
     }
 
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       base64 = try c.decode(String.self, forKey: .base64)
+      contentType = try c.decodeIfPresent(String.self, forKey: .contentType)
       createdAt = try c.decodeIfPresent(String.self, forKey: .createdAt)
       dataProtectionLevel = try c.decodeIfPresent(String.self, forKey: .dataProtectionLevel)
       description_ = try c.decodeIfPresent(String.self, forKey: .description_)
       discarded = try c.decodeIfPresent(Bool.self, forKey: .discarded)
       id = try c.decodeIfPresent(String.self, forKey: .id)
+      storageId = try c.decodeIfPresent(String.self, forKey: .storageId)
     }
 
-    public init(base64: String, createdAt: String? = nil, dataProtectionLevel: String? = nil, description_: String? = nil, discarded: Bool? = nil, id: String? = nil) {
+    public init(base64: String, contentType: String? = nil, createdAt: String? = nil, dataProtectionLevel: String? = nil, description_: String? = nil, discarded: Bool? = nil, id: String? = nil, storageId: String? = nil) {
       self.base64 = base64
+      self.contentType = contentType
       self.createdAt = createdAt
       self.dataProtectionLevel = dataProtectionLevel
       self.description_ = description_
       self.discarded = discarded
       self.id = id
+      self.storageId = storageId
     }
   }
 
@@ -2150,6 +2158,48 @@ public enum OmiAPI {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
       self = FeedbackSubjectKind(rawValue: raw) ?? ._unknown
+    }
+  }
+
+
+  public struct FrameRequestDelivery: Codable {
+    public let accountGeneration: Int
+    public let conversationId: String?
+    public let deviceId: String
+    public let expiresAt: String
+    public let requestId: String
+    public let screenshotId: String?
+    public let state: String
+
+    private enum CodingKeys: String, CodingKey {
+      case accountGeneration = "account_generation"
+      case conversationId = "conversation_id"
+      case deviceId = "device_id"
+      case expiresAt = "expires_at"
+      case requestId = "request_id"
+      case screenshotId = "screenshot_id"
+      case state
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      accountGeneration = try c.decode(Int.self, forKey: .accountGeneration)
+      conversationId = try c.decodeIfPresent(String.self, forKey: .conversationId)
+      deviceId = try c.decode(String.self, forKey: .deviceId)
+      expiresAt = try c.decode(String.self, forKey: .expiresAt)
+      requestId = try c.decode(String.self, forKey: .requestId)
+      screenshotId = try c.decodeIfPresent(String.self, forKey: .screenshotId)
+      state = try c.decode(String.self, forKey: .state)
+    }
+
+    public init(accountGeneration: Int, conversationId: String? = nil, deviceId: String, expiresAt: String, requestId: String, screenshotId: String? = nil, state: String) {
+      self.accountGeneration = accountGeneration
+      self.conversationId = conversationId
+      self.deviceId = deviceId
+      self.expiresAt = expiresAt
+      self.requestId = requestId
+      self.screenshotId = screenshotId
+      self.state = state
     }
   }
 
@@ -3446,6 +3496,89 @@ public enum OmiAPI {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
       self = RecommendationSubjectKind(rawValue: raw) ?? ._unknown
+    }
+  }
+
+
+  public struct ScreenActivityRow: Codable {
+    public let appName: String?
+    public let clientDeviceId: String?
+    public let deviceName: String?
+    public let embedding: [Double]?
+    public let id: Int
+    public let ocrText: String?
+    public let timestamp: String
+    public let windowTitle: String?
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      appName = try c.decodeIfPresent(String.self, forKey: .appName)
+      clientDeviceId = try c.decodeIfPresent(String.self, forKey: .clientDeviceId)
+      deviceName = try c.decodeIfPresent(String.self, forKey: .deviceName)
+      embedding = try c.decodeIfPresent([Double].self, forKey: .embedding)
+      id = try c.decode(Int.self, forKey: .id)
+      ocrText = try c.decodeIfPresent(String.self, forKey: .ocrText)
+      timestamp = try c.decode(String.self, forKey: .timestamp)
+      windowTitle = try c.decodeIfPresent(String.self, forKey: .windowTitle)
+    }
+
+    public init(appName: String? = nil, clientDeviceId: String? = nil, deviceName: String? = nil, embedding: [Double]? = nil, id: Int, ocrText: String? = nil, timestamp: String, windowTitle: String? = nil) {
+      self.appName = appName
+      self.clientDeviceId = clientDeviceId
+      self.deviceName = deviceName
+      self.embedding = embedding
+      self.id = id
+      self.ocrText = ocrText
+      self.timestamp = timestamp
+      self.windowTitle = windowTitle
+    }
+  }
+
+
+  public struct ScreenActivitySyncRequest: Codable {
+    public let accountGeneration: Int?
+    public let rows: [ScreenActivityRow]
+
+    private enum CodingKeys: String, CodingKey {
+      case accountGeneration = "account_generation"
+      case rows
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      accountGeneration = try c.decodeIfPresent(Int.self, forKey: .accountGeneration)
+      rows = try c.decode([ScreenActivityRow].self, forKey: .rows)
+    }
+
+    public init(accountGeneration: Int? = nil, rows: [ScreenActivityRow]) {
+      self.accountGeneration = accountGeneration
+      self.rows = rows
+    }
+  }
+
+
+  public struct ScreenActivitySyncResponse: Codable {
+    public let frameRequests: [FrameRequestDelivery]?
+    public let lastId: Int
+    public let synced: Int
+
+    private enum CodingKeys: String, CodingKey {
+      case frameRequests = "frame_requests"
+      case lastId = "last_id"
+      case synced
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      frameRequests = try c.decodeIfPresent([FrameRequestDelivery].self, forKey: .frameRequests)
+      lastId = try c.decode(Int.self, forKey: .lastId)
+      synced = try c.decode(Int.self, forKey: .synced)
+    }
+
+    public init(frameRequests: [FrameRequestDelivery]? = nil, lastId: Int, synced: Int) {
+      self.frameRequests = frameRequests
+      self.lastId = lastId
+      self.synced = synced
     }
   }
 
@@ -7727,6 +7860,30 @@ public enum OmiAPI {
     return try JSONDecoder().decode([ConversationPhoto].self, from: data)
   }
 
+  public static func getConversationPhotoImageV1ConversationsConversationIdPhotosPhotoIdImageGet(client: OmiApiClient, conversationId: String, photoId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v1/conversations/\(conversationId)/photos/\(photoId)/image"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
   public static func conversationHasAudioRecordingV1ConversationsConversationIdRecordingGet(client: OmiApiClient, conversationId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/conversations/\(conversationId)/recording"
     guard let components = URLComponents(string: client.baseURL + _path) else {
@@ -11223,7 +11380,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func syncScreenActivityV1ScreenActivitySyncPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> [String: Int] {
+  public static func syncScreenActivityV1ScreenActivitySyncPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: ScreenActivitySyncRequest) async throws -> ScreenActivitySyncResponse {
     let _path = "/v1/screen-activity/sync"
     guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -11246,7 +11403,7 @@ public enum OmiAPI {
     guard (200..<300).contains(http.statusCode) else {
       throw OmiApiError.httpError(status: http.statusCode, data: data)
     }
-    return try JSONDecoder().decode([String: Int].self, from: data)
+    return try JSONDecoder().decode(ScreenActivitySyncResponse.self, from: data)
   }
 
   public static func createConnectAccountEndpointV1StripeConnectAccountsPost(client: OmiApiClient, country: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
@@ -15327,5 +15484,5 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  // Total: 408 Swift client methods generated.
+  // Total: 409 Swift client methods generated.
 }

@@ -102,6 +102,9 @@ TARGET_SCHEMAS = (
     'ConversationSource',
     'ConversationStatus',
     'CategoryEnum',
+    'FrameRequestDelivery',
+    'ScreenActivitySyncRequest',
+    'ScreenActivitySyncResponse',
 )
 
 PRESENCE_AWARE_PATCH_SCHEMAS = {
