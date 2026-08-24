@@ -86,10 +86,10 @@ function invocationIdentity(invocation: AuthorizedRunToolInvocation) {
 }
 
 describe("RunToolCapabilityBroker", () => {
-  it("hard-denies JIT ask-mode writes while preserving historical reads", () => {
+  it("hard-denies ask-mode service writes without trusting an external-ref prefix", () => {
     const { store, session, run, attempt } = fixture("coordinator", "ask");
     store.execute(
-      "UPDATE sessions SET surface_kind = 'service', external_ref_kind = 'service', external_ref_id = 'jit-proactivity-test' WHERE session_id = ?",
+      "UPDATE sessions SET surface_kind = 'service', external_ref_kind = 'service', external_ref_id = 'arbitrary-label' WHERE session_id = ?",
       [session.sessionId],
     );
     const broker = createBroker(store);
@@ -107,6 +107,8 @@ describe("RunToolCapabilityBroker", () => {
       toolInput: {},
     };
 
+    expect(capability.builtInToolPolicy).toBe("read_only");
+
     expectCode(
       () => broker.authorize({ ...base, invocationId: "write", toolName: "create_memory" }),
       "tool_not_allowed",
@@ -114,6 +116,28 @@ describe("RunToolCapabilityBroker", () => {
     expect(
       broker.authorize({ ...base, invocationId: "read", toolName: "search_memories" }).effectClass,
     ).toBe("read_only");
+    store.close();
+  });
+
+  it("keeps ordinary ask-mode chat adapter built-ins and manifest writes on default authority", () => {
+    const { store, session, run, attempt } = fixture("coordinator", "ask");
+    const broker = createBroker(store);
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+    expect(capability.builtInToolPolicy).toBe("default");
+    expect(() => broker.authorize({
+      capabilityRef: capability.capabilityRef,
+      invocationId: "ordinary-write",
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      activeOwnerId: session.ownerId,
+      toolName: "create_memory",
+      toolInput: {},
+    })).not.toThrow();
     store.close();
   });
 

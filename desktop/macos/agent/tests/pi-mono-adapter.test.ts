@@ -68,6 +68,7 @@ function makeAttemptContext(overrides: AttemptContextOverrides = {}): AdapterAtt
     runId: overrides.runId ?? "run_runtime",
     attemptId,
     toolCapabilityRef: overrides.toolCapabilityRef ?? `cap_${attemptId}`,
+    builtInToolPolicy: overrides.builtInToolPolicy ?? "default",
     binding: {
       bindingId: "bind-runtime",
       sessionId,
@@ -496,6 +497,7 @@ describe("PiMonoAdapter prompt correlation", () => {
       runId: "run_runtime",
       attemptId: "att_runtime",
       toolCapabilityRef: "cap_runtime",
+      builtInToolPolicy: "read_only",
       binding: {
         bindingId: "bind-runtime",
         sessionId: "ses_runtime",
@@ -514,7 +516,11 @@ describe("PiMonoAdapter prompt correlation", () => {
 
     const execution = runtime.executeAttempt(attemptContext, () => {}, new AbortController().signal);
     const relayContext = JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8"));
-    expect(relayContext).toEqual({ capabilityRef: "cap_runtime", requestId: "request-runtime" });
+    expect(relayContext).toEqual({
+      capabilityRef: "cap_runtime",
+      requestId: "request-runtime",
+      builtInToolPolicy: "read_only",
+    });
 
     (adapter as any).handleTurnEnd(makeTurnEndEvent("done"));
     await expect(execution).resolves.toMatchObject({ terminalStatus: "succeeded" });
@@ -616,6 +622,7 @@ describe("PiMonoAdapter prompt correlation", () => {
       runId: "run_runtime",
       attemptId: "att_runtime",
       toolCapabilityRef: "cap_runtime",
+      builtInToolPolicy: "default",
       binding: {
         bindingId: "bind-runtime",
         sessionId: "ses_runtime",

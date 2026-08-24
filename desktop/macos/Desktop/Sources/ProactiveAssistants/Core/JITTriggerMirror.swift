@@ -353,16 +353,64 @@ actor JITTriggerMirror {
         now: now,
         in: db)
     else { return nil }
+    return claim
+  }
+
+  func completeAmbientNanoAttempt(
+    _ claim: JITTriggerWakeupClaim,
+    contextID: String,
+    semanticFingerprint: String,
+    now: Date = Date()
+  ) async -> Bool {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { return false }
+    return
+      (try? await pool.write { db in
+        try Self.completeAmbientNanoAttempt(
+          claim, contextID: contextID, semanticFingerprint: semanticFingerprint, now: now, in: db)
+      }) ?? false
+  }
+
+  static func completeAmbientNanoAttempt(
+    _ claim: JITTriggerWakeupClaim,
+    contextID: String,
+    semanticFingerprint: String,
+    now: Date,
+    in db: Database
+  ) throws -> Bool {
+    guard
+      claim.triggerID == "ambient-nano",
+      claim.continuityKey == "jit-nano:\(contextID):\(semanticFingerprint)",
+      let row = try Row.fetchOne(
+        db,
+        sql: """
+            SELECT state, leaseToken FROM jit_trigger_wakeup_receipts
+            WHERE continuityKey = ?
+          """,
+        arguments: [claim.continuityKey]),
+      let state: String = row["state"],
+      let leaseToken: String? = row["leaseToken"],
+      state == "claimed",
+      leaseToken == claim.leaseToken
+    else { return false }
     try db.execute(
       sql: """
-        INSERT INTO jit_ambient_context_state (contextID, semanticFingerprint, updatedAt)
-        VALUES (?, ?, ?)
-        ON CONFLICT(contextID) DO UPDATE SET
-          semanticFingerprint = excluded.semanticFingerprint,
-          updatedAt = excluded.updatedAt
+          UPDATE jit_trigger_wakeup_receipts
+          SET state = 'delivered', leaseToken = NULL, leaseExpiresAt = NULL, updatedAt = ?
+          WHERE continuityKey = ? AND leaseToken = ? AND state = 'claimed'
+        """,
+      arguments: [now, claim.continuityKey, claim.leaseToken])
+    guard db.changesCount == 1 else { return false }
+    try db.execute(
+      sql: """
+          INSERT INTO jit_ambient_context_state (contextID, semanticFingerprint, updatedAt)
+          VALUES (?, ?, ?)
+          ON CONFLICT(contextID) DO UPDATE SET
+            semanticFingerprint = excluded.semanticFingerprint,
+            updatedAt = excluded.updatedAt
         """,
       arguments: [contextID, semanticFingerprint, now])
-    return claim
+    return true
   }
 
   static func claimWakeup(

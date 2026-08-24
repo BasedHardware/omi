@@ -59,6 +59,8 @@ interface PiMonoRelayContext {
   requestId: string;
   /** Per-turn effort lane ("adaptive" | "fast") relayed to the gateway. */
   reasoningEffort?: string;
+  /** Kernel-derived adapter-native capability policy. */
+  builtInToolPolicy: "default" | "read_only";
 }
 
 interface PiAssistantMessageEvent {
@@ -1094,6 +1096,7 @@ export class PiMonoAdapter implements HarnessAdapter {
         capabilityRef: context.capabilityRef,
         requestId: context.requestId,
         ...(context.reasoningEffort ? { reasoningEffort: context.reasoningEffort } : {}),
+        builtInToolPolicy: context.builtInToolPolicy,
       })
     );
   }
@@ -1579,6 +1582,7 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
           capabilityRef: context.toolCapabilityRef,
           requestId: context.requestId,
           reasoningEffort: relayReasoningEffort(context.metadata),
+          builtInToolPolicy: context.builtInToolPolicy,
         }
       );
 
