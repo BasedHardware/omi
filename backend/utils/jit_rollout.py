@@ -14,14 +14,16 @@ import asyncio
 import importlib
 import logging
 import os
+import threading
 import time
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable, Mapping
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-from utils.executors import run_blocking, sync_executor
+from utils.executors import run_blocking
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +33,18 @@ MAX_JIT_ROLLOUT_CACHE_SECONDS = 30.0
 DEFAULT_JIT_ROLLOUT_CACHE_SECONDS = 20.0
 DEFAULT_JIT_ROLLOUT_TIMEOUT_SECONDS = 2.0
 DEFAULT_JIT_ROLLOUT_CACHE_ENTRIES = 4096
+POSTHOG_CONTROL_MAX_WORKERS = 4
+POSTHOG_CONTROL_MAX_QUEUE = 16
+POSTHOG_CONTROL_QUEUE_WAIT_SECONDS = 0.25
+
+# Feature-flag reads are control-plane calls and must not consume the shared
+# sync pipeline pool.  The semaphore bounds both active calls and submitted
+# work; a slot is held until the underlying thread actually finishes, even if
+# the async caller has already received a timeout/fail-off result.
+_posthog_control_executor = ThreadPoolExecutor(
+    max_workers=POSTHOG_CONTROL_MAX_WORKERS,
+    thread_name_prefix='posthog-control',
+)
 
 
 class TriState(str, Enum):
@@ -220,6 +234,9 @@ class PostHogJITFlagProvider:
         self._timeout_seconds = timeout_seconds
         self._client_factory = client_factory or self._build_client
         self._client: Any | None = None
+        self._client_lock = threading.Lock()
+        self._control_slots = asyncio.BoundedSemaphore(POSTHOG_CONTROL_MAX_WORKERS + POSTHOG_CONTROL_MAX_QUEUE)
+        self._inflight: dict[str, asyncio.Task[JITFlagEvaluation]] = {}
 
     def _build_client(self) -> Any | None:
         api_key = (os.getenv('POSTHOG_PROJECT_API_KEY') or os.getenv('POSTHOG_API_KEY') or '').strip()
@@ -237,7 +254,9 @@ class PostHogJITFlagProvider:
 
     def _fetch(self, uid: str) -> Mapping[str, Any]:
         if self._client is None:
-            self._client = self._client_factory()
+            with self._client_lock:
+                if self._client is None:
+                    self._client = self._client_factory()
         if self._client is None:
             raise LookupError('posthog_unconfigured')
         variants = self._client.get_feature_variants(uid)
@@ -246,9 +265,57 @@ class PostHogJITFlagProvider:
         return variants
 
     async def __call__(self, uid: str) -> JITFlagEvaluation:
+        # Requests for the same owner share one in-flight decision, preventing
+        # a cold-cache fanout from multiplying identical PostHog calls.
+        in_flight = self._inflight.get(uid)
+        if in_flight is None:
+            in_flight = asyncio.create_task(self._resolve_uncached(uid), name='posthog-jit-decide')
+            self._inflight[uid] = in_flight
+
+            def forget(completed: asyncio.Task[JITFlagEvaluation]) -> None:
+                if self._inflight.get(uid) is completed:
+                    self._inflight.pop(uid, None)
+                if not completed.cancelled():
+                    completed.exception()
+
+            in_flight.add_done_callback(forget)
+        return await asyncio.shield(in_flight)
+
+    async def _resolve_uncached(self, uid: str) -> JITFlagEvaluation:
+        try:
+            await asyncio.wait_for(
+                self._control_slots.acquire(),
+                timeout=POSTHOG_CONTROL_QUEUE_WAIT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            return JITFlagEvaluation(
+                TriState.UNKNOWN,
+                TriState.UNKNOWN,
+                JITDecisionReason.PROVIDER_TIMEOUT,
+                JITErrorClass.TIMEOUT,
+            )
+
+        try:
+            call = asyncio.create_task(
+                run_blocking(_posthog_control_executor, self._fetch, uid),
+                name='posthog-jit-fetch',
+            )
+        except BaseException:
+            self._control_slots.release()
+            raise
+
+        def release_slot(completed: asyncio.Task[Any]) -> None:
+            self._control_slots.release()
+            if not completed.cancelled():
+                completed.exception()
+
+        # Keep the bulkhead slot tied to the real executor work.  Cancelling
+        # wait_for must not release a slot while its thread is still blocked,
+        # otherwise repeated provider timeouts could grow the executor queue.
+        call.add_done_callback(release_slot)
         try:
             variants = await asyncio.wait_for(
-                run_blocking(sync_executor, self._fetch, uid),
+                asyncio.shield(call),
                 timeout=self._timeout_seconds,
             )
         except asyncio.TimeoutError:
