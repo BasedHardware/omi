@@ -26,10 +26,16 @@ def select_speaker_cluster(
     *,
     threshold: float = SPEAKER_CLUSTERING_THRESHOLD,
     max_speakers: int = SPEAKER_CLUSTERING_MAX_SPEAKERS,
-) -> tuple[int, bool, float]:
-    """Choose a cluster, merging to the nearest once the configured cap is full."""
+) -> tuple[int, bool, float, bool]:
+    """Choose a cluster, merging to the nearest once the configured cap is full.
+
+    Mirrors utils/stt/speaker_clustering.py (this image cannot import it); the
+    tests pin the two copies to the same behavior. The fourth value is True when
+    the merge was forced by the cap rather than earned by the threshold, so
+    callers can log it and keep the miss out of the centroid running mean.
+    """
     if not centroids:
-        return 0, True, float("inf")
+        return 0, True, float("inf"), False
 
     best_index = 0
     best_distance = float("inf")
@@ -40,7 +46,7 @@ def select_speaker_cluster(
             best_distance = candidate_distance
 
     if best_distance < threshold:
-        return best_index, False, best_distance
+        return best_index, False, best_distance, False
     if len(centroids) < max(1, max_speakers):
-        return len(centroids), True, best_distance
-    return best_index, False, best_distance
+        return len(centroids), True, best_distance, False
+    return best_index, False, best_distance, True

@@ -1373,8 +1373,22 @@ class ParakeetStreamingSocket(STTSocket):
             logger.warning(f"Parakeet diarization embed failed; reusing speaker {self._last_speaker}: {e}")
             return self._last_speaker
 
-        best_i, create_new, _ = select_speaker_cluster(emb, self._spk_centroids, compare_embeddings)
+        best_i, create_new, _, capped = select_speaker_cluster(emb, self._spk_centroids, compare_embeddings)
         if not create_new:
+            if capped:
+                # The cap forced this merge; the embedding missed every centroid,
+                # so folding it into a running mean would drag that centroid
+                # toward a different speaker. Report the degraded outcome.
+                record_fallback(
+                    component='other',
+                    from_mode='new_speaker_centroid',
+                    to_mode='nearest_centroid',
+                    reason='capacity_full',
+                    outcome='degraded',
+                    log=logger,
+                )
+                self._last_speaker = best_i
+                return best_i
             # Running-mean keeps the centroid stable as the speaker keeps talking.
             n = self._spk_counts[best_i]
             self._spk_centroids[best_i] = (self._spk_centroids[best_i] * n + emb) / (n + 1)

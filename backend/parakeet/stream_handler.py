@@ -716,8 +716,17 @@ class StreamSession:
             if emb is None:
                 return f"SPEAKER_{self._last_speaker}"
 
-            best_i, create_new, _ = select_speaker_cluster(emb, self._spk_centroids)
+            best_i, create_new, _, capped = select_speaker_cluster(emb, self._spk_centroids)
             if not create_new:
+                if capped:
+                    # This image cannot import the shared fallback helper, so a
+                    # log line is the cap telemetry. The miss stays out of the
+                    # running mean to avoid dragging the centroid off its speaker.
+                    logger.warning(
+                        f"Speaker cap ({len(self._spk_centroids)}) reached; merging miss into SPEAKER_{best_i}"
+                    )
+                    self._last_speaker = best_i
+                    return f"SPEAKER_{best_i}"
                 n = self._spk_counts[best_i]
                 self._spk_centroids[best_i] = (self._spk_centroids[best_i] * n + emb) / (n + 1)
                 self._spk_counts[best_i] = n + 1

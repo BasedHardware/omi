@@ -26,7 +26,10 @@ its provider-local labels enter the resumed conversation.
 threshold is not a clustering control. `speaker_clustering.py` owns the more
 permissive short-clip clustering threshold and the eight-centroid cap used by
 backend Parakeet paths. Once full, clustering merges a miss into the nearest
-centroid and keeps the transcript.
+centroid and keeps the transcript: the forced merge is reported through the
+shared fallback telemetry (`reason=capacity_full`) in backend paths — the
+Parakeet image logs it — and the miss is kept out of the centroid's running
+mean so a capped speaker cannot drag another speaker's centroid away.
 
 `speaker_identity.py` scopes provider labels before persistence. It maps
 `(speaker_id_scope, speaker)` to a small conversation-local integer after

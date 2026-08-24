@@ -32,6 +32,7 @@ from config.stt_provider_policy import (
 )
 from models.transcript_segment import TranscriptSegment
 from utils.byok import get_byok_key
+from utils.observability.fallback import record_fallback
 from utils.other.endpoints import timeit
 from utils.stt.outcomes import TranscriptionFailure
 from utils.stt.speaker_clustering import select_speaker_cluster
@@ -972,8 +973,20 @@ def _parakeet_assign_speaker_sync(
         seg_wav = _wrap_pcm_as_wav(seg_pcm, sample_rate, 1)
         emb = extract_embedding_from_bytes(seg_wav)
 
-        best_i, create_new, _ = select_speaker_cluster(emb, centroids, compare_embeddings)
+        best_i, create_new, _, capped = select_speaker_cluster(emb, centroids, compare_embeddings)
         if not create_new:
+            if capped:
+                # Forced by the cap: the embedding missed every centroid, so keep
+                # it out of the running mean and report the degraded merge.
+                record_fallback(
+                    component='other',
+                    from_mode='new_speaker_centroid',
+                    to_mode='nearest_centroid',
+                    reason='capacity_full',
+                    outcome='degraded',
+                    log=logger,
+                )
+                return f'SPEAKER_{best_i:02d}'
             n = counts[best_i]
             centroids[best_i] = (centroids[best_i] * n + emb) / (n + 1)
             counts[best_i] = n + 1

@@ -505,9 +505,12 @@ states distinct.
 Parakeet embedding diarization does not use the enrollment threshold. Short
 in-session clips use a clustering cosine-distance threshold of `0.60`, while
 voiceprint verification remains `0.45`. Clustering creates at most eight
-centroids per stream. After the cap, a miss is merged into its nearest centroid
-and updates that running mean; the segment is never dropped and no overflow
-speaker ID is invented. Backend-side defaults use
+centroids per stream. After the cap, a miss is merged into its nearest
+centroid; the merge is reported as a degraded fallback (`omi_fallback_total`,
+`reason=capacity_full`, or a log line in the standalone Parakeet image) and
+the miss does not update that centroid's running mean, so a capped speaker
+cannot drag another speaker's centroid away. The segment is never dropped and
+no overflow speaker ID is invented. Backend-side defaults use
 `SPEAKER_CLUSTERING_THRESHOLD` / `SPEAKER_CLUSTERING_MAX_SPEAKERS`; the
 Parakeet service uses the `PARAKEET_`-prefixed equivalents.
 

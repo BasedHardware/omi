@@ -279,11 +279,17 @@ def _diarize_segments(file_path: str, base: Dict[str, Any]) -> Dict[str, Any]:
                 seg["speaker"] = f"SPEAKER_{len(centroids) - 1}" if centroids else "SPEAKER_0"
                 continue
 
-            best_i, create_new, _ = select_speaker_cluster(emb, centroids)
+            best_i, create_new, _, capped = select_speaker_cluster(emb, centroids)
             if not create_new:
-                n = counts[best_i]
-                centroids[best_i] = (centroids[best_i] * n + emb) / (n + 1)
-                counts[best_i] = n + 1
+                if capped:
+                    # Standalone image: log is the cap telemetry (no shared
+                    # fallback helper here). Keep the miss out of the running
+                    # mean so the centroid keeps representing its own speaker.
+                    logger.warning(f"Speaker cap ({len(centroids)}) reached; merging miss into SPEAKER_{best_i}")
+                else:
+                    n = counts[best_i]
+                    centroids[best_i] = (centroids[best_i] * n + emb) / (n + 1)
+                    counts[best_i] = n + 1
                 seg["speaker"] = f"SPEAKER_{best_i}"
             else:
                 centroids.append(emb)
