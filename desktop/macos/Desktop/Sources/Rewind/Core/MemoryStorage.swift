@@ -611,10 +611,12 @@ actor MemoryStorage {
     )
   }
 
-  /// Reconcile an exhaustively fetched current canonical-ledger snapshot.
-  /// Only open v1 rows participate in absence deletion: closed/rejected rows
-  /// are supplied by the separate history contract and must remain available
-  /// for audit/revert when the current-list endpoint omits them.
+  /// Cache an exhaustively fetched current canonical-ledger snapshot.
+  ///
+  /// Absence is authoritative only for the turn's in-memory prompt projection;
+  /// it must never reuse the general `deleted` tombstone. Compatibility mode
+  /// reads that tombstone as a real user/server deletion, so mutating it here
+  /// would make flag-off, kill-switch, or stale-receipt rollback irreversible.
   @discardableResult
   func syncAuthoritativeKnowledgeLedgerSnapshot(
     _ memories: [ServerMemory],
@@ -623,45 +625,21 @@ actor MemoryStorage {
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
       throw KnowledgeLedgerMirrorSyncError.ownerChanged
     }
-    let keep = Set(
-      memories.lazy
-        .filter { MemoryLedgerMetadata.isSupportedVersion($0.ledgerMetadata) }
-        .map(\.id))
     let db = try await ensureInitialized()
-    let (removed, inserted) = try await db.write { database -> (Int, Int) in
+    let inserted = try await db.write { database -> Int in
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
         throw KnowledgeLedgerMirrorSyncError.ownerChanged
       }
       let (_, _, inserted) = try Self.reconcileServerMemories(memories, in: database)
-      let candidates =
-        try MemoryRecord
-        .filter(Column("backendId") != nil)
-        .filter(Column("deleted") == false)
-        .filter(Column("ledgerMetadataJson") != nil)
-        .fetchAll(database)
-      var removed = 0
-      for var record in candidates {
-        guard let backendID = record.backendId,
-          let memory = record.toServerMemory(),
-          MemoryLedgerMetadata.isSupportedVersion(memory.ledgerMetadata),
-          memory.userReview != false,
-          Self.isOpenLedgerRow(memory.ledgerMetadata),
-          Self.isLedgerPromptMirrorRow(memory.ledgerMetadata),
-          !keep.contains(backendID)
-        else { continue }
-        record.deleted = true
-        try record.update(database)
-        removed += 1
-      }
-      // Throwing from this GRDB write closure rolls back every upsert and
-      // tombstone above, so an owner transition can never commit a prefix.
+      // Throwing from this GRDB write closure rolls back every upsert above,
+      // so an owner transition can never commit a prefix.
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
         throw KnowledgeLedgerMirrorSyncError.ownerChanged
       }
-      return (removed, inserted)
+      return inserted
     }
-    if removed > 0 || inserted > 0 { HomeKnowledgeCountInvalidation.post() }
-    return removed
+    if inserted > 0 { HomeKnowledgeCountInvalidation.post() }
+    return inserted
   }
 
   private static func reconcileServerMemories(
@@ -715,30 +693,6 @@ actor MemoryStorage {
       }
     }
     return (skipped, adopted, inserted)
-  }
-
-  private static func isOpenLedgerRow(_ metadata: [String: String]) -> Bool {
-    let status = metadata["status"]?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    guard status == nil || status == "active" else { return false }
-    for key in ["invalid_at", "valid_to", "superseded_by"] {
-      guard let value = metadata[key] else { continue }
-      let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-      if !normalized.isEmpty && normalized != "null" { return false }
-    }
-    return true
-  }
-
-  private static func isLedgerPromptMirrorRow(_ metadata: [String: String]) -> Bool {
-    switch metadata["kind"] {
-    case "document", "trigger":
-      return true
-    case "fact":
-      return metadata["subject_scope"] == "primary_user"
-        && metadata["intent_backed"] == "true"
-        && !(metadata["slot"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    default:
-      return false
-    }
   }
 
   // MARK: - Local Extraction Operations
