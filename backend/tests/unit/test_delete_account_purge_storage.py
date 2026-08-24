@@ -134,7 +134,10 @@ def test_id_enumeration_happens_before_firestore_wipe(users_service):
         users_service.background_wipe_user_data("uid1")
     finally:
         _stop(patchers)
-    assert order == ["enumerate", "enumerate", "wipe"], order
+    # Conversation IDs feed the conversation-vector, transcript-vector, and
+    # permanent-photo pixel inventories. All three snapshots must finish
+    # before the recursive Firestore wipe removes their source documents.
+    assert order == ["enumerate", "enumerate", "enumerate", "wipe"], order
 
 
 def test_pinecone_failure_does_not_block_recordings_or_firestore_wipe(users_service):
