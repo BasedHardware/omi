@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+# ruff: noqa: E402 -- emulator safety/env bootstrapping must precede backend imports.
+
 import os
 import sys
 import uuid
@@ -24,9 +26,10 @@ from fastapi import HTTPException
 
 from database.memory_apply_store import tombstone_memory_items_firestore
 from database.memory_collections import MemoryCollections
-from models.memory_apply import MemoryControlState
+from models.memory_apply import MemoryControlState, WriterMode
 from models.product_memory import MemoryItem, MemoryItemStatus, MemorySubjectScope
 from utils.memory.knowledge_ledger import LedgerProvenance, LedgerWrite, save_ledger_write
+from utils.memory.knowledge_ledger_migration import rollback_ledger_writer_to_compatibility
 from utils.memory import memory_service as memory_service_module
 from utils.memory.memory_service import MemoryService
 from models.product_memory import LedgerWriteReason
@@ -107,6 +110,8 @@ def main() -> int:
             head_commit_id=INITIAL_HEAD,
             account_generation=11,
             source_generation=13,
+            writer_mode=WriterMode.ledger,
+            writer_epoch=1,
             commit_sequence=0,
             updated_at=NOW,
         )
@@ -132,6 +137,14 @@ def main() -> int:
             db_client=db_client,
         )
         prior_before = _read_item(db_client, collections, prior_id)
+        rolled_back = rollback_ledger_writer_to_compatibility(
+            uid,
+            db_client=db_client,
+            rollback_authorizer=lambda: True,
+            completed_at=NOW,
+        )
+        if rolled_back.writer_mode != WriterMode.compatibility or rolled_back.writer_epoch != 2:
+            raise AssertionError("correction harness did not enter bridge compatibility mode")
         before = _authority_snapshot(db_client, collections)
 
         service = MemoryService(db_client=db_client)

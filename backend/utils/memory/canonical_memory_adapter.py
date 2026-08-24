@@ -33,6 +33,7 @@ from database.memory_apply_store import (
     CanonicalReviewResolution,
     CanonicalReviewResolutionConflict,
     ConversationSourceReplacementConflict,
+    apply_direct_user_long_term_patch_firestore,
     apply_long_term_patch_firestore,
     replace_conversation_source_firestore,
     tombstone_memory_items_firestore,
@@ -57,8 +58,10 @@ from models.memories import Evidence, MemoryDB, MemoryCategory, SubjectAttributi
 from models.memory_apply import (
     ApplyStatus,
     MemoryControlState,
+    MemoryWriterClass,
     apply_long_term_patch_transaction,
     build_patch_mutation_identity,
+    require_writer_admitted,
 )
 from models.memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
 from models.memory_operations import MemoryOperation, MemoryOperationType
@@ -102,6 +105,8 @@ Payload = Dict[str, Any]
 SortKey = tuple[int, datetime | int]
 UserMutationPatchBuilder = Callable[[MemoryItem, datetime], Tuple[Payload, Payload]]
 _LEDGER_WRITE_AUTHORITY = object()
+_DIRECT_USER_LEDGER_WRITE_AUTHORITY = object()
+_DIRECT_USER_LEDGER_EVIDENCE_TYPES = {"explicit_user_correction", "explicit_user_revert"}
 # ``knowledge_ledger`` imports this adapter, so the wire discriminator cannot
 # be imported back without a cycle. Keep this private copy contract-tested.
 _LEDGER_SCHEMA_VERSION = "knowledge_ledger.v1"
@@ -1245,6 +1250,7 @@ def write_canonical_extraction_memory(
     db_client: Any = None,
     evidence_items: Optional[List[MemoryEvidence]] = None,
     _ledger_authority: object | None = None,
+    _direct_user_authority: object | None = None,
     required_source_item: Optional[MemoryItem] = None,
 ) -> str:
     """Persist one memory to memory_items + ledger (extraction or external/manual writes)."""
@@ -1252,6 +1258,16 @@ def write_canonical_extraction_memory(
         raise ValueError("knowledge ledger writes require the dedicated ledger authority")
     client = db_client if db_client is not None else default_db_client
     control = _ensure_control_state(uid, db_client=client)
+    direct_user_authorized = _direct_user_authority is _DIRECT_USER_LEDGER_WRITE_AUTHORITY
+    if direct_user_authorized:
+        writer_class = MemoryWriterClass.user
+    else:
+        writer_class = (
+            MemoryWriterClass.ledger
+            if data.get("ledger_schema_version") == _LEDGER_SCHEMA_VERSION
+            else MemoryWriterClass.compatibility
+        )
+    require_writer_admitted(control, writer_class)
     write, memory_id = _canonical_extraction_apply_write(
         uid,
         data,
@@ -1260,13 +1276,17 @@ def write_canonical_extraction_memory(
     )
     result = None
     for _attempt in range(3):
-        result = apply_long_term_patch_firestore(
+        apply_patch = (
+            apply_direct_user_long_term_patch_firestore if direct_user_authorized else apply_long_term_patch_firestore
+        )
+        result = apply_patch(
             uid=uid,
             operation_id=write.operation.operation_id,
             patch_payload=write.patch_payload,
             proposed_operation=write.operation,
             proposed_evidence=write.evidence,
             required_source_item=required_source_item,
+            allow_ledger_migration=False,
             db_client=client,
         )
         if result.status != ApplyStatus.retryable_head_mismatch:
@@ -1406,6 +1426,36 @@ def write_canonical_knowledge_ledger_memory(
     )
 
 
+def write_canonical_direct_user_knowledge_ledger_memory(
+    uid: str,
+    data: Dict[str, Any],
+    *,
+    db_client: Any = None,
+    required_source_item: Optional[MemoryItem] = None,
+) -> str:
+    """Dedicated append boundary for an explicit user correction or revert."""
+
+    evidence = _evidence_items_from_payload(data)
+    if (
+        data.get("ledger_schema_version") != _LEDGER_SCHEMA_VERSION
+        or data.get("write_reason") != LedgerWriteReason.direct_user_statement.value
+        or data.get("user_asserted") is not True
+        or not data.get("supersedes")
+        or not any(item.source_type in _DIRECT_USER_LEDGER_EVIDENCE_TYPES for item in evidence)
+    ):
+        raise ValueError("direct user ledger writes require an explicit correction or revert append")
+    client = db_client if db_client is not None else default_db_client
+    return write_canonical_extraction_memory(
+        uid,
+        data,
+        db_client=client,
+        _ledger_authority=_LEDGER_WRITE_AUTHORITY,
+        _direct_user_authority=_DIRECT_USER_LEDGER_WRITE_AUTHORITY,
+        required_source_item=required_source_item,
+        evidence_items=_reissued_external_evidence(uid, evidence, db_client=client),
+    )
+
+
 def close_canonical_ledger_item(
     uid: str,
     memory_id: str,
@@ -1529,6 +1579,7 @@ def close_canonical_legacy_generated_history(
             mutation_kind=f"legacy_short_term_adjudication:r{expected_item_revision}",
             build_patch=build_patch,
             operation_type=MemoryOperationType.ledger_mutation,
+            allow_ledger_migration=True,
             db_client=client,
         )
     except ValueError as exc:
@@ -1831,6 +1882,7 @@ def _apply_canonical_user_mutation(
     mutation_kind: str,
     build_patch: UserMutationPatchBuilder,
     operation_type: MemoryOperationType = MemoryOperationType.user_mutation,
+    allow_ledger_migration: bool = False,
     review_resolution: Optional[CanonicalReviewResolution] = None,
     db_client: Any,
 ) -> Tuple[MemoryItem, MemoryItem]:
@@ -1840,6 +1892,12 @@ def _apply_canonical_user_mutation(
         if item is None:
             raise ValueError(f"canonical memory not found: {memory_id}")
         control = _ensure_control_state(uid, db_client=db_client)
+        writer_class = MemoryWriterClass.ledger if allow_ledger_migration else MemoryWriterClass.user
+        require_writer_admitted(
+            control,
+            writer_class,
+            allow_ledger_migration=allow_ledger_migration,
+        )
         now = max(datetime.now(timezone.utc), item.captured_at, item.updated_at)
         logical_updates, patch_updates = build_patch(item, now)
         logical_payload: Payload = {
@@ -1895,12 +1953,16 @@ def _apply_canonical_user_mutation(
             **patch_updates,
         }
         patch_payload["mutation_metadata"] = mutation_identity
-        result = apply_long_term_patch_firestore(
+        apply_patch = (
+            apply_long_term_patch_firestore if allow_ledger_migration else apply_direct_user_long_term_patch_firestore
+        )
+        result = apply_patch(
             uid=uid,
             operation_id=operation.operation_id,
             patch_payload=patch_payload,
             proposed_operation=operation,
             review_resolution=review_resolution,
+            allow_ledger_migration=allow_ledger_migration,
             db_client=db_client,
         )
         if result.status in {ApplyStatus.committed, ApplyStatus.idempotent_skip}:
@@ -1973,6 +2035,7 @@ def adapt_canonical_memory_to_knowledge_ledger(
         mutation_kind=f"knowledge_ledger_migration:r{expected_item_revision}",
         build_patch=build_patch,
         operation_type=MemoryOperationType.ledger_mutation,
+        allow_ledger_migration=True,
         db_client=client,
     )
     return updated

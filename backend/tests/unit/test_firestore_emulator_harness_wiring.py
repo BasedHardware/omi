@@ -10,6 +10,9 @@ from tests.unit.test_firestore_security_rules import MEMORY_PROTECTED_COLLECTION
 _REPO_ROOT = Path(__file__).resolve().parents[2].parent
 _PYTHON_APPLY_SCRIPT = _REPO_ROOT / "backend" / "scripts" / "firestore_python_apply_emulator_test.py"
 _KNOWLEDGE_LEDGER_MIGRATION_SCRIPT = _REPO_ROOT / "backend" / "scripts" / "knowledge_ledger_migration_emulator_test.py"
+_KNOWLEDGE_LEDGER_WRITER_TRANSITION_SCRIPT = (
+    _REPO_ROOT / "backend" / "scripts" / "knowledge_ledger_writer_transition_emulator_test.py"
+)
 _KNOWLEDGE_LEDGER_CORRECTION_SCRIPT = (
     _REPO_ROOT / "backend" / "scripts" / "knowledge_ledger_correction_emulator_test.py"
 )
@@ -116,6 +119,25 @@ def test_knowledge_ledger_migration_emulator_harness_is_wired_to_real_migration(
     command = package["scripts"]["test:memory-knowledge-ledger-migration:emulator"]
     assert command.startswith("MEMORY_ENABLED=on npx --no-install firebase emulators:exec")
     assert "backend/.venv/bin/python backend/scripts/knowledge_ledger_migration_emulator_test.py" in command
+
+
+def test_knowledge_ledger_writer_transition_emulator_harness_is_wired_to_real_transition() -> None:
+    assert _KNOWLEDGE_LEDGER_WRITER_TRANSITION_SCRIPT.exists(), "missing writer-transition emulator harness"
+    script = _KNOWLEDGE_LEDGER_WRITER_TRANSITION_SCRIPT.read_text()
+    for required in (
+        "FIRESTORE_EMULATOR_HOST",
+        "publish_ledger_migration_cutover",
+        "rollback_ledger_writer_to_compatibility",
+        "read_ledger_migration_completion",
+        "knowledge_ledger_writer_transition_receipt",
+        "PASS: writer transition emulator proof",
+    ):
+        assert required in script
+
+    package = json.loads((_REPO_ROOT / "package.json").read_text())
+    command = package["scripts"]["test:memory-knowledge-ledger-writer-transition:emulator"]
+    assert command.startswith("MEMORY_ENABLED=on npx --no-install firebase emulators:exec")
+    assert "backend/.venv/bin/python backend/scripts/knowledge_ledger_writer_transition_emulator_test.py" in command
 
 
 def test_knowledge_ledger_correction_emulator_harness_is_wired_to_real_service() -> None:

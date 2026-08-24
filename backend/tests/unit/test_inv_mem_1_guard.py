@@ -12,7 +12,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Set, Tuple
 
-import pytest
 
 from database.memory_collections import MemoryCollections
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
@@ -51,6 +50,9 @@ _ALLOWED_MEMORY_COLLECTIONS_PROPERTIES = frozenset(
         # Bounded, owner-pinned prompt receipt under memory_control; canonical
         # ledger rows remain the only product-memory authority.
         "knowledge_ledger_prompt_projection",
+        # Content-free proof for writer-mode transition completion; it stores
+        # no product-memory content and establishes no second authority.
+        "knowledge_ledger_writer_transition_receipt",
         # Operational graph-enrichment sweep cursor under memory_control; it
         # stores no product-memory records or source content.
         "historical_graph_enrichment_cursor",

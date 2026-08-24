@@ -37,6 +37,7 @@ from utils.memory.canonical_memory_adapter import (
     close_canonical_ledger_item,
     memory_item_to_memorydb,
     read_canonical_memory_item,
+    write_canonical_direct_user_knowledge_ledger_memory,
     write_canonical_knowledge_ledger_memory,
 )
 
@@ -44,6 +45,7 @@ LEDGER_SCHEMA_VERSION = "knowledge_ledger.v1"
 DEFAULT_PROFILE_CHARACTER_BUDGET = PROFILE_CHARACTER_BUDGET
 MAX_PLAYBOOK_BODY_CHARACTERS = MAX_LEDGER_PLAYBOOK_BODY_CHARACTERS
 MAX_TRIGGER_CONDITION_KEYS = MAX_LEDGER_TRIGGER_CONDITION_KEYS
+_DIRECT_USER_AMEND_AUTHORITY = object()
 
 
 def _is_review_visible(item: MemoryItem) -> bool:
@@ -210,11 +212,17 @@ def save_ledger_write(
     *,
     db_client: Any = None,
     required_source_item: Optional[MemoryItem] = None,
+    _direct_user_authority: object | None = None,
 ) -> str:
     """Commit one idempotent semantic row through canonical apply."""
     memory_id = _row_id(uid, write)
     evidence_id = _evidence_id(uid, write.provenance)
-    return write_canonical_knowledge_ledger_memory(
+    write_memory = (
+        write_canonical_direct_user_knowledge_ledger_memory
+        if _direct_user_authority is _DIRECT_USER_AMEND_AUTHORITY
+        else write_canonical_knowledge_ledger_memory
+    )
+    return write_memory(
         uid,
         {
             "id": memory_id,
@@ -312,6 +320,48 @@ def amend_fact(
         ),
         db_client=db_client,
         required_source_item=required_source_item,
+    )
+
+
+def amend_user_fact(
+    uid: str,
+    prior_memory_id: str,
+    content: str,
+    *,
+    provenance: LedgerProvenance,
+    write_reason: LedgerWriteReason,
+    slot: Optional[str] = None,
+    subject_scope: MemorySubjectScope = MemorySubjectScope.primary_user,
+    subject_entity_id: Optional[str] = None,
+    curation_weight: int = 0,
+    visibility: Literal["private", "public", "shared"] = "private",
+    db_client: Any = None,
+    required_source_item: Optional[MemoryItem] = None,
+) -> str:
+    """Append a fact only through the explicit user correction/revert path."""
+
+    if write_reason != LedgerWriteReason.direct_user_statement or provenance.source_type not in {
+        "explicit_user_correction",
+        "explicit_user_revert",
+    }:
+        raise ValueError("direct user amendments require correction or revert provenance")
+    return save_ledger_write(
+        uid,
+        LedgerWrite(
+            kind=MemoryKind.fact,
+            content=content,
+            provenance=provenance,
+            write_reason=write_reason,
+            slot=slot,
+            subject_scope=subject_scope,
+            subject_entity_id=subject_entity_id,
+            curation_weight=curation_weight,
+            visibility=visibility,
+            supersedes=[prior_memory_id],
+        ),
+        db_client=db_client,
+        required_source_item=required_source_item,
+        _direct_user_authority=_DIRECT_USER_AMEND_AUTHORITY,
     )
 
 
@@ -440,6 +490,7 @@ __all__ = [
     "LedgerProvenance",
     "LedgerWrite",
     "amend_fact",
+    "amend_user_fact",
     "close_fact",
     "create_trigger",
     "evidence_id_for_ledger_provenance",
