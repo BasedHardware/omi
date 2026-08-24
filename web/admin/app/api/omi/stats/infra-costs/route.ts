@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth";
 import { getDb } from "@/lib/firebase/admin";
 import { getPayload, setPayload } from "@/lib/payload-cache";
+import { fetchGcpBilling, type GcpBillingSnapshot } from "@/lib/services/gcp-billing";
+import { fetchAnthropicDailyCosts, fetchOpenAiDailyCosts } from "@/lib/services/provider-costs";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 3600;
@@ -62,8 +64,58 @@ export interface InfraCostsPayload {
       mobileShare: number;
     };
     partial: boolean;
+    // Billing-mode metadata (absent on the legacy estimated path).
+    costSource?: "billing" | "estimated";
+    windowEnd?: string; // inclusive last usage day (D-2: the export back-fills ~2 days)
+    coverage?: {
+      gcpBilling: boolean;
+      anthropic: boolean;
+      openai: boolean;
+      trackedLlm: boolean;
+    };
+    shares?: PlatformShares;
   };
   generatedAt: number;
+}
+
+// Desktop/mobile split shares, produced by the omi-cost-analysis
+// usage-weighted cut (canonical method): LLM spend splits by the PostHog
+// memory-event mix, everything else by the all-core-event mix. Defaults are
+// the 2026-08-16 report; refresh via ADMIN_PLATFORM_COST_SHARES_JSON when a
+// new report is cut — they are measurements with an as-of date, not tunables.
+export interface PlatformShares {
+  llm: { desktop: number; mobile: number };
+  core: { desktop: number; mobile: number };
+  asOf: string;
+  method: string;
+}
+
+const DEFAULT_PLATFORM_SHARES: PlatformShares = {
+  llm: { desktop: 0.2273, mobile: 0.7727 },
+  core: { desktop: 0.4673, mobile: 0.5327 },
+  asOf: "2026-08-16",
+  method: "usage-weighted (omi-cost-analysis)",
+};
+
+export function loadPlatformShares(): PlatformShares {
+  const raw = process.env.ADMIN_PLATFORM_COST_SHARES_JSON;
+  if (!raw) return DEFAULT_PLATFORM_SHARES;
+  try {
+    const parsed = JSON.parse(raw);
+    const pair = (p: any, fallback: { desktop: number; mobile: number }) => {
+      const d = Number(p?.desktop);
+      const m = Number(p?.mobile);
+      return Number.isFinite(d) && Number.isFinite(m) && d >= 0 && m >= 0 ? { desktop: d, mobile: m } : fallback;
+    };
+    return {
+      llm: pair(parsed.llm, DEFAULT_PLATFORM_SHARES.llm),
+      core: pair(parsed.core, DEFAULT_PLATFORM_SHARES.core),
+      asOf: typeof parsed.asOf === "string" ? parsed.asOf : DEFAULT_PLATFORM_SHARES.asOf,
+      method: typeof parsed.method === "string" ? parsed.method : DEFAULT_PLATFORM_SHARES.method,
+    };
+  } catch {
+    return DEFAULT_PLATFORM_SHARES;
+  }
 }
 
 // Per-service last-30-day ACTUAL cost rows, sourced from the team-beasts
@@ -268,8 +320,136 @@ export function infraCostsCacheKey(days: number, overheadMonthly: number): strin
   return `infra-costs:v1:${days}:${overheadMonthly}`;
 }
 
+// Billing mode: every dollar comes from a billing system — GCP BigQuery
+// billing export (net = cost + credits, series ends D-2 because the export
+// back-fills) plus the Anthropic/OpenAI organization cost APIs. The Firestore
+// llm_usage scan stays as an attribution signal (perUserLlmUsd, coverage)
+// but is NOT added to totals: its cost_usd rows are provider spend already
+// present in the provider invoices / GCP bill — adding both double-counts.
+async function computeBillingInfraCosts(
+  days: number,
+  overheadMonthly: number,
+): Promise<InfraCostsPayload | null> {
+  const [gcpRes, anthropicRes, openaiRes, llmRes] = await Promise.allSettled([
+    fetchGcpBilling(days),
+    fetchAnthropicDailyCosts(days),
+    fetchOpenAiDailyCosts(days),
+    fetchLlmCostsPerDay(days),
+  ]);
+  const gcp: GcpBillingSnapshot | null = gcpRes.status === "fulfilled" ? gcpRes.value : null;
+  if (!gcp) return null;
+  const anthropic = anthropicRes.status === "fulfilled" ? anthropicRes.value : null;
+  const openai = openaiRes.status === "fulfilled" ? openaiRes.value : null;
+  const llmByDay = llmRes.status === "fulfilled" ? llmRes.value : null;
+
+  const shares = loadPlatformShares();
+  const round = (v: number) => Math.round(v * 100) / 100;
+  const anthropicByDay = new Map((anthropic ?? []).map((r) => [r.date, r.usd]));
+  const openaiByDay = new Map((openai ?? []).map((r) => [r.date, r.usd]));
+
+  // All legs clamp to the GCP window (ends D-2) so every plotted day has the
+  // same source coverage.
+  const daily: DailyCostPoint[] = gcp.daily.map((row) => {
+    const llmPool = row.llmNetUsd + (anthropicByDay.get(row.date) ?? 0) + (openaiByDay.get(row.date) ?? 0);
+    const otherPool = row.netUsd - row.llmNetUsd;
+    const desktop = llmPool * shares.llm.desktop + otherPool * shares.core.desktop;
+    const mobile = llmPool * shares.llm.mobile + otherPool * shares.core.mobile;
+    return {
+      date: row.date,
+      desktop: round(desktop),
+      mobile: round(mobile),
+      unknown: 0,
+      total: round(desktop + mobile),
+    };
+  });
+
+  const windowDays = daily.length;
+  const anthropicTotal = daily.reduce((s, d) => s + (anthropicByDay.get(d.date) ?? 0), 0);
+  const openaiTotal = daily.reduce((s, d) => s + (openaiByDay.get(d.date) ?? 0), 0);
+
+  const breakdown: ServiceCostRow[] = [
+    ...gcp.services.map((svc) => {
+      const share = svc.isLlm ? shares.llm : shares.core;
+      return {
+        service: svc.service,
+        mtdUsd: round(svc.netUsd),
+        aprProjectionUsd: round(svc.netUsd),
+        desktopProjectionUsd: round(svc.netUsd * share.desktop),
+        mobileProjectionUsd: round(svc.netUsd * share.mobile),
+      };
+    }),
+    ...(anthropic
+      ? [{
+          service: "Anthropic (billed)",
+          mtdUsd: round(anthropicTotal),
+          aprProjectionUsd: round(anthropicTotal),
+          desktopProjectionUsd: round(anthropicTotal * shares.llm.desktop),
+          mobileProjectionUsd: round(anthropicTotal * shares.llm.mobile),
+        }]
+      : []),
+    ...(openai
+      ? [{
+          service: "OpenAI (billed)",
+          mtdUsd: round(openaiTotal),
+          aprProjectionUsd: round(openaiTotal),
+          desktopProjectionUsd: round(openaiTotal * shares.llm.desktop),
+          mobileProjectionUsd: round(openaiTotal * shares.llm.mobile),
+        }]
+      : []),
+  ].sort((a, b) => b.mtdUsd - a.mtdUsd);
+
+  const totalCostUsd = daily.reduce((s, d) => s + d.total, 0);
+  const totalDesktopUsd = daily.reduce((s, d) => s + d.desktop, 0);
+  const totalMobileUsd = daily.reduce((s, d) => s + d.mobile, 0);
+  const perUserLlmUsd = Object.values(llmByDay ?? {}).reduce(
+    (s, r) => s + r.desktop + r.mobile + r.unknown,
+    0,
+  );
+  const otherPoolTotal = gcp.daily.reduce((s, r) => s + (r.netUsd - r.llmNetUsd), 0);
+
+  return {
+    days: windowDays,
+    daily,
+    breakdown,
+    summary: {
+      totalCostUsd: round(totalCostUsd),
+      totalDesktopUsd: round(totalDesktopUsd),
+      totalMobileUsd: round(totalMobileUsd),
+      totalUnknownUsd: 0,
+      perUserLlmUsd: round(perUserLlmUsd),
+      overheadUsd: round(otherPoolTotal),
+      assumptions: {
+        overheadMonthlyUsd: overheadMonthly,
+        desktopShare: Math.round(shares.core.desktop * 1000) / 1000,
+        mobileShare: Math.round(shares.core.mobile * 1000) / 1000,
+      },
+      partial: anthropic == null || openai == null || llmByDay == null,
+      costSource: "billing",
+      windowEnd: gcp.windowEnd,
+      coverage: {
+        gcpBilling: true,
+        anthropic: anthropic != null,
+        openai: openai != null,
+        trackedLlm: llmByDay != null,
+      },
+      shares,
+    },
+    generatedAt: Date.now(),
+  };
+}
+
 export async function computeInfraCosts(opts: { days: number; overheadMonthly: number }): Promise<InfraCostsPayload> {
   const { days, overheadMonthly } = opts;
+
+  // Billing mode is authoritative; the legacy estimated path (hardcoded
+  // April service table) survives only as a labeled fallback so the wall
+  // keeps rendering through a BigQuery outage.
+  try {
+    const billed = await computeBillingInfraCosts(days, overheadMonthly);
+    if (billed) return billed;
+  } catch (err) {
+    console.error("Billing-mode infra costs failed, falling back to estimates:", err);
+  }
 
   const llmByDay = await fetchLlmCostsPerDay(days);
     const partial = llmByDay == null;
@@ -345,6 +525,13 @@ export async function computeInfraCosts(opts: { days: number; overheadMonthly: n
           mobileShare: Math.round(mobileShare * 1000) / 1000,
         },
         partial,
+        costSource: "estimated",
+        coverage: {
+          gcpBilling: false,
+          anthropic: false,
+          openai: false,
+          trackedLlm: llmByDay != null,
+        },
       },
       generatedAt: Date.now(),
     };

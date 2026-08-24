@@ -401,6 +401,7 @@ async function listAllAuthSignups(): Promise<AuthSignup[] | null> {
 interface InfraCostsSnapshot {
   daily: { date: string; desktop: number; mobile: number; unknown: number; total: number }[];
   overheadMonthlyUsd: number;
+  costSource?: "billing" | "estimated";
 }
 
 // Compute infra costs directly (no internal HTTP round-trip) so this works off
@@ -414,7 +415,11 @@ async function fetchInfraCosts(days: number): Promise<InfraCostsSnapshot | null>
     const overheadMonthly = Number.isFinite(envOverhead) && envOverhead >= 0 ? envOverhead : 57447;
     const raw: InfraCostsPayload = await computeInfraCosts({ days, overheadMonthly });
     if (!raw?.daily) return null;
-    return { daily: raw.daily, overheadMonthlyUsd: raw?.summary?.assumptions?.overheadMonthlyUsd };
+    return {
+      daily: raw.daily,
+      overheadMonthlyUsd: raw?.summary?.assumptions?.overheadMonthlyUsd,
+      costSource: raw?.summary?.costSource,
+    };
   } catch (err) {
     console.error("Infra costs compute exception:", err);
     return null;
@@ -647,12 +652,20 @@ export async function computeProfitability(opts: { days: number; desktopCost: nu
       }
     }
 
-    const cost: DailyPoint[] = dateKeys.map((date, idx) => {
+    // In billing mode the infra series honestly ends at D-2 (the billing
+    // export back-fills ~2 days). Never pad those trailing days with the
+    // per-user assumption — a chart that ends two days ago beats one whose
+    // freshest points are fabricated.
+    const billingMode = infraCosts?.costSource === "billing";
+    const costDateKeys = billingMode ? dateKeys.filter((d) => infraByDate[d]) : dateKeys;
+    const costIdx = new Map(dateKeys.map((d, i) => [d, i] as const));
+
+    const cost: DailyPoint[] = costDateKeys.map((date) => {
       const real = infraByDate[date];
       if (real) {
         return { date, desktop: round2(real.desktop), mobile: round2(real.mobile), total: round2(real.total) };
       }
-      const row = activeUsers[idx];
+      const row = activeUsers[costIdx.get(date)!];
       const d = round2(row.desktop * desktopCost);
       const m = round2(row.mobile * mobileCost);
       return { date, desktop: d, mobile: m, total: round2(d + m) };
@@ -661,8 +674,8 @@ export async function computeProfitability(opts: { days: number; desktopCost: nu
     // Cost PER USER = total platform cost / platform active users for that
     // day. Falls back to the configured assumption when active users is 0 or
     // real cost is unavailable.
-    const costPerUser: DailyPoint[] = dateKeys.map((date, idx) => {
-      const active = activeUsers[idx];
+    const costPerUser: DailyPoint[] = costDateKeys.map((date, idx) => {
+      const active = activeUsers[costIdx.get(date)!];
       const costRow = cost[idx];
       const desktopRate =
         active.desktop > 0
@@ -680,8 +693,11 @@ export async function computeProfitability(opts: { days: number; desktopCost: nu
     });
 
     const totalCostUsd = cost.reduce((s, c) => s + c.total, 0);
-    const desktopActiveSum = activeUsers.reduce((s, a) => s + a.desktop, 0);
-    const mobileActiveSum = activeUsers.reduce((s, a) => s + a.mobile, 0);
+    // Average over the same (possibly D-2-trimmed) days as the cost series so
+    // numerator and denominator cover identical windows.
+    const costActive = costDateKeys.map((d) => activeUsers[costIdx.get(d)!]);
+    const desktopActiveSum = costActive.reduce((s, a) => s + a.desktop, 0);
+    const mobileActiveSum = costActive.reduce((s, a) => s + a.mobile, 0);
     const desktopCostSum = cost.reduce((s, c) => s + c.desktop, 0);
     const mobileCostSum = cost.reduce((s, c) => s + c.mobile, 0);
     const avgCostPerUserDesktop =
@@ -739,7 +755,9 @@ export async function computeProfitability(opts: { days: number; desktopCost: nu
           desktopCostPerUser: desktopCost,
           mobileCostPerUser: mobileCost,
           overheadMonthlyUsd: infraCosts?.overheadMonthlyUsd,
-          costSource: infraCosts != null ? "real" : "estimated",
+          // "real" only when the infra numbers came from billing systems;
+          // the legacy hardcoded-table path reports itself as estimated.
+          costSource: infraCosts?.costSource === "billing" ? "real" : "estimated",
         },
         partial,
         sources: {
