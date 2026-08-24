@@ -437,6 +437,7 @@ def _get_agentic_module():
         "get_entity_timeline_tool",
         "search_knowledge",
         "read_playbook",
+        "search_historical_facts",
     ]
     for name in tool_names:
         mock_tool = MagicMock()
@@ -670,10 +671,10 @@ def test_static_prefix_exceeds_minimum_cache_tokens():
 # ---------------------------------------------------------------------------
 
 
-def test_core_tools_has_29_tools():
-    """CORE_TOOLS must contain exactly 29 tools (web search is a built-in server tool)."""
+def test_core_tools_has_30_tools():
+    """CORE_TOOLS must contain exactly 30 tools (web search is a built-in server tool)."""
     agentic_mod = _get_agentic_module()
-    assert len(agentic_mod.CORE_TOOLS) == 29, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 29"
+    assert len(agentic_mod.CORE_TOOLS) == 30, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 30"
 
 
 def test_core_tools_list_creates_independent_copy():
@@ -696,9 +697,9 @@ def test_core_tools_list_creates_independent_copy():
     mock_app_tool.name = "custom_app_tool"
     tools_a.append(mock_app_tool)
 
-    assert len(tools_a) == 30
-    assert len(tools_b) == 29
-    assert len(agentic_mod.CORE_TOOLS) == 29, "CORE_TOOLS was mutated!"
+    assert len(tools_a) == 31
+    assert len(tools_b) == 30
+    assert len(agentic_mod.CORE_TOOLS) == 30, "CORE_TOOLS was mutated!"
 
 
 def test_core_tools_order_matches_exports():
@@ -738,6 +739,7 @@ def test_core_tools_order_matches_exports():
         "get_entity_timeline_tool",
         "search_knowledge",
         "read_playbook",
+        "search_historical_facts",
     ]
 
     actual_names = [t.name for t in agentic_mod.CORE_TOOLS]
@@ -809,18 +811,20 @@ def test_knowledge_ledger_tools_are_registered_with_progressive_disclosure_names
     for name, display in (
         ("search_knowledge", "Searching current knowledge"),
         ("read_playbook", "Reading playbook"),
+        ("search_historical_facts", "Searching historical facts"),
     ):
         assert name in schema_names
         assert name in tool_registry
         assert agentic_mod.get_tool_display_name(name) == display
 
 
-def test_historical_fact_tool_stays_unregistered_until_policy_gate_is_ratified():
-    """Rejected history cannot activate in ordinary chat before its policy gate is ratified."""
+def test_historical_fact_tool_is_registered_after_policy_ratification():
+    """The agent owns explicit history retrieval; rejected rows remain opt-in audit data."""
     agentic_mod = _get_agentic_module()
 
-    assert "search_historical_facts" not in {tool.name for tool in agentic_mod.CORE_TOOLS}
-    assert "search_historical_facts" not in agentic_mod.STANDARD_TOOL_NAMES
+    tool = next(tool for tool in agentic_mod.CORE_TOOLS if tool.name == "search_historical_facts")
+    assert "search_historical_facts" in agentic_mod.STANDARD_TOOL_NAMES
+    assert agentic_mod.get_tool_display_name(tool.name) == "Searching historical facts"
 
 
 def test_convert_tools_defers_app_tools():

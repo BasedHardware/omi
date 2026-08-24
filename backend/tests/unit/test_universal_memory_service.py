@@ -293,8 +293,10 @@ def test_ledger_history_page_reports_partial_provider_window_and_filters_privacy
     restricted = restricted.model_copy(update={"sensitivity_labels": ["health"]})
     future = _ledger_item(service_mod, "future", updated_at=now - timedelta(minutes=2), user_review=False)
     future = future.model_copy(update={"ledger_schema_version": "knowledge_ledger.v2"})
-    legacy = _ledger_item(service_mod, "legacy", updated_at=now - timedelta(minutes=3), user_review=False)
-    legacy = legacy.model_copy(update={"intent_backed": False})
+    passive = _ledger_item(service_mod, "passive", updated_at=now - timedelta(minutes=3), user_review=False)
+    passive = passive.model_copy(update={"intent_backed": False, "write_reason": None})
+    legacy = _ledger_item(service_mod, "legacy", updated_at=now - timedelta(minutes=4))
+    legacy = legacy.model_copy(update={"intent_backed": False, "write_reason": LedgerWriteReason.legacy_migration})
 
     provider_call = {}
 
@@ -314,10 +316,10 @@ def test_ledger_history_page_reports_partial_provider_window_and_filters_privacy
     monkeypatch.setattr(
         service_mod,
         "iter_authoritative_product_memory_items_newest_first",
-        lambda *args, **kwargs: iter([restricted, future, legacy]),
+        lambda *args, **kwargs: iter([restricted, future, passive, legacy]),
     )
     complete = service_mod.MemoryService(db_client=_Db()).read_ledger_history_page("uid-test", limit=10)
-    assert complete.memories == ()
+    assert [memory.id for memory in complete.memories] == ["legacy"]
     assert complete.truncated is False
 
 
@@ -339,8 +341,13 @@ def test_ledger_history_excludes_locked_rows(service_mod, monkeypatch):
 
 def test_historical_ledger_search_is_deterministic_and_does_not_fallback_to_legacy(service_mod, monkeypatch):
     now = datetime(2026, 8, 23, tzinfo=timezone.utc)
-    older = _ledger_item(service_mod, "older", updated_at=now - timedelta(minutes=1), user_review=False)
-    newer = _ledger_item(service_mod, "newer", updated_at=now, user_review=False)
+    older = _ledger_item(
+        service_mod,
+        "older",
+        updated_at=now - timedelta(minutes=1),
+        valid_to=now - timedelta(minutes=1),
+    )
+    newer = _ledger_item(service_mod, "newer", updated_at=now, valid_to=now)
     monkeypatch.setattr(
         service_mod,
         "iter_authoritative_product_memory_items_newest_first",
@@ -370,7 +377,7 @@ def test_historical_ledger_search_discloses_result_limit_truncation(service_mod,
             service_mod,
             f"home-city-{index}",
             updated_at=now - timedelta(seconds=index),
-            user_review=False,
+            valid_to=now - timedelta(seconds=index),
         )
         for index in range(9)
     ]
@@ -389,12 +396,22 @@ def test_historical_ledger_search_discloses_result_limit_truncation(service_mod,
     assert len(page.matches) == 8
     assert page.truncated is True
     assert page.scanned_count == 9
+    assert page.next_offset == 8
+
+    second_page = service_mod.MemoryService(db_client=_Db()).search_ledger_history_page(
+        "uid-test",
+        "home city",
+        limit=8,
+        offset=8,
+    )
+    assert [match.memory.id for match in second_page.matches] == ["home-city-8"]
+    assert second_page.next_offset is None
 
 
 def test_historical_ledger_search_breaks_same_timestamp_ties_by_memory_id(service_mod, monkeypatch):
     now = datetime(2026, 8, 23, tzinfo=timezone.utc)
-    first = _ledger_item(service_mod, "a-memory", updated_at=now, user_review=False)
-    second = _ledger_item(service_mod, "z-memory", updated_at=now, user_review=False)
+    first = _ledger_item(service_mod, "a-memory", updated_at=now, valid_to=now)
+    second = _ledger_item(service_mod, "z-memory", updated_at=now, valid_to=now)
     monkeypatch.setattr(
         service_mod,
         "iter_authoritative_product_memory_items_newest_first",
@@ -404,6 +421,44 @@ def test_historical_ledger_search_breaks_same_timestamp_ties_by_memory_id(servic
     page = service_mod.MemoryService(db_client=_Db()).search_ledger_history_page("uid-test", "home_city")
 
     assert [match.memory.id for match in page.matches] == ["a-memory", "z-memory"]
+
+
+def test_historical_ledger_search_excludes_rejected_unless_audit_is_explicit(service_mod, monkeypatch):
+    now = datetime(2026, 8, 23, tzinfo=timezone.utc)
+    rejected = _ledger_item(service_mod, "rejected", updated_at=now, user_review=False)
+    closed = _ledger_item(service_mod, "closed", updated_at=now - timedelta(seconds=1), valid_to=now)
+    monkeypatch.setattr(
+        service_mod,
+        "iter_authoritative_product_memory_items_newest_first",
+        lambda *args, **kwargs: iter([rejected, closed]),
+    )
+    service = service_mod.MemoryService(db_client=_Db())
+
+    ordinary = service.search_ledger_history_page("uid-test", "home city")
+    audit = service.search_ledger_history_page("uid-test", "home city", include_rejected=True)
+
+    assert [match.memory.id for match in ordinary.matches] == ["closed"]
+    assert [match.memory.id for match in audit.matches] == ["rejected", "closed"]
+
+
+def test_historical_ledger_search_admits_only_provenance_fenced_migrated_legacy(service_mod, monkeypatch):
+    now = datetime(2026, 8, 23, tzinfo=timezone.utc)
+    migrated = _ledger_item(service_mod, "migrated", updated_at=now)
+    migrated = migrated.model_copy(update={"intent_backed": False, "write_reason": LedgerWriteReason.legacy_migration})
+    passive = _ledger_item(service_mod, "passive", updated_at=now - timedelta(seconds=1))
+    passive = passive.model_copy(update={"intent_backed": False, "write_reason": None})
+    monkeypatch.setattr(
+        service_mod,
+        "iter_authoritative_product_memory_items_newest_first",
+        lambda *args, **kwargs: iter([migrated, passive]),
+    )
+
+    page = service_mod.MemoryService(db_client=_Db()).search_ledger_history_page(
+        "uid-test",
+        "home city",
+    )
+
+    assert [match.memory.id for match in page.matches] == ["migrated"]
 
 
 def test_historical_adapter_uses_injected_firestore_client(service_mod, monkeypatch):

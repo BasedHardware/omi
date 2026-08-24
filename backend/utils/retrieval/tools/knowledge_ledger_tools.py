@@ -20,6 +20,7 @@ from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]
 from models.memories import MemoryDB
 from models.product_memory import (
     MAX_LEDGER_PLAYBOOK_BODY_CHARACTERS,
+    LedgerWriteReason,
     MemoryAccessPolicy,
     MemoryItem,
     MemoryKind,
@@ -28,7 +29,7 @@ from models.product_memory import (
 from utils.memory.canonical_memory_adapter import read_canonical_memory_item
 from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
 from utils.memory.knowledge_ledger import LEDGER_SCHEMA_VERSION
-from utils.memory.memory_service import MemoryService
+from utils.memory.memory_service import MAX_LEDGER_HISTORY_PROVIDER_WINDOW, MemoryService
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,12 @@ HISTORICAL_OUTPUT_TRUNCATION_NOTICE = "[Historical output is bounded; use a narr
 HISTORICAL_PROVIDER_PARTIAL_NOTICE = (
     "[Partial historical search: the result limit, canonical provider window, or read budget ended; "
     "this is not exhaustive.]"
+)
+HISTORICAL_REJECTED_AUDIT_NOTICE = (
+    "[Rejected facts are audit-only negative evidence and must not be treated as true user knowledge.]"
+)
+HISTORICAL_LIVE_WINDOW_NOTICE = (
+    "[Pagination traverses a live bounded provider window; concurrent history changes can shift later offsets.]"
 )
 MAX_PLAYBOOK_ID_CHARACTERS = 256
 MAX_PLAYBOOK_DESCRIPTION_CHARACTERS = 600
@@ -143,17 +150,29 @@ def search_current_knowledge(
     ][:limit]
 
 
-def _is_historical_fact_memory(memory: MemoryDB, *, uid: str) -> bool:
+def _is_historical_fact_memory(memory: MemoryDB, *, uid: str, include_rejected: bool) -> bool:
     """Keep the agent seam fact-only even if the service grows new history kinds."""
 
     kind = memory.kind.value if isinstance(memory.kind, MemoryKind) else str(memory.kind or "")
+    write_reason = (
+        memory.write_reason.value
+        if isinstance(memory.write_reason, LedgerWriteReason)
+        else str(memory.write_reason or "")
+    )
+    is_preserved_legacy_history = not memory.intent_backed and write_reason == LedgerWriteReason.legacy_migration.value
     return (
         memory.uid == uid
         and memory.ledger_schema_version == LEDGER_SCHEMA_VERSION
         and kind == MemoryKind.fact.value
-        and memory.intent_backed
+        and (memory.intent_backed or is_preserved_legacy_history)
         and not memory.is_locked
-        and (memory.user_review is False or memory.invalid_at is not None or memory.superseded_by is not None)
+        and (include_rejected or memory.user_review is not False)
+        and (
+            is_preserved_legacy_history
+            or memory.user_review is False
+            or memory.invalid_at is not None
+            or memory.superseded_by is not None
+        )
     )
 
 
@@ -162,6 +181,8 @@ def _format_historical_fact_results(
     *,
     query: str,
     truncated: bool,
+    next_offset: Optional[int],
+    include_rejected: bool,
 ) -> str:
     """Render bounded historical fact handles without claiming exhaustive retrieval."""
 
@@ -174,6 +195,13 @@ def _format_historical_fact_results(
     reserved_footers = [HISTORICAL_OUTPUT_TRUNCATION_NOTICE]
     if truncated:
         reserved_footers.append(HISTORICAL_PROVIDER_PARTIAL_NOTICE)
+    if next_offset is not None:
+        reserved_footers.append(
+            f"[More matching facts are available; call search_historical_facts again with offset={next_offset}.]"
+        )
+        reserved_footers.append(HISTORICAL_LIVE_WINDOW_NOTICE)
+    if include_rejected:
+        reserved_footers.append(HISTORICAL_REJECTED_AUDIT_NOTICE)
 
     def fits(candidate: str) -> bool:
         return len("\n".join(lines + [candidate] + reserved_footers)) <= MAX_KNOWLEDGE_RESULT_CHARACTERS
@@ -181,6 +209,8 @@ def _format_historical_fact_results(
     for row in rows:
         if row.user_review is False:
             state = "rejected"
+        elif row.write_reason == LedgerWriteReason.legacy_migration:
+            state = "legacy-migrated"
         elif row.superseded_by:
             state = "superseded"
         elif row.invalid_at is not None:
@@ -214,6 +244,13 @@ def _format_historical_fact_results(
         lines.append(HISTORICAL_OUTPUT_TRUNCATION_NOTICE)
     if truncated:
         lines.append(HISTORICAL_PROVIDER_PARTIAL_NOTICE)
+    if next_offset is not None:
+        lines.append(
+            f"[More matching facts are available; call search_historical_facts again with offset={next_offset}.]"
+        )
+        lines.append(HISTORICAL_LIVE_WINDOW_NOTICE)
+    if include_rejected:
+        lines.append(HISTORICAL_REJECTED_AUDIT_NOTICE)
     rendered = "\n".join(lines)
     if len(rendered) > MAX_KNOWLEDGE_RESULT_CHARACTERS:
         # The admission check above reserves both notices. Keep a defensive
@@ -225,6 +262,15 @@ def _format_historical_fact_results(
                 "Historical result omitted because the bounded output budget was reached.",
                 HISTORICAL_OUTPUT_TRUNCATION_NOTICE,
                 *([HISTORICAL_PROVIDER_PARTIAL_NOTICE] if truncated else []),
+                *(
+                    [
+                        f"[More matching facts are available; call search_historical_facts again with offset={next_offset}.]"
+                    ]
+                    if next_offset is not None
+                    else []
+                ),
+                *([HISTORICAL_LIVE_WINDOW_NOTICE] if next_offset is not None else []),
+                *([HISTORICAL_REJECTED_AUDIT_NOTICE] if include_rejected else []),
             ]
         )
     return rendered
@@ -305,15 +351,22 @@ def search_knowledge(
 def search_historical_facts(
     query: str,
     limit: int = 8,
+    offset: int = 0,
+    include_rejected: bool = False,
     config: RunnableConfig = None,  # type: ignore[reportAssignmentType]
 ) -> str:
     """Search bounded canonical historical facts for the authenticated owner.
 
-    Matching uses the canonical service's exact lexical token semantics over
-    fact content and structured fact fields.  This tool does not expand aliases,
-    search legacy/vector storage, search playbook bodies or trigger conditions,
-    or claim exhaustive retrieval.  Partial provider-window results are marked
-    explicitly for the agent.
+    Call this tool when your reasoning determines that current knowledge is
+    insufficient and prior states may matter; do not decide from historical
+    keywords alone. Matching uses exact lexical token semantics over fact
+    content and structured fields. Rejected facts are excluded by default;
+    request ``include_rejected`` only for an explicit audit and never treat
+    those rows as true. Canonical rows preserved by legacy migration are
+    labelled historical generated data, not current truth. Use ``offset`` when
+    the response offers a next page. The tool does not expand aliases, search
+    legacy/vector storage, search playbook bodies or trigger conditions, or
+    claim exhaustive retrieval.
     """
 
     normalized_query = " ".join((query or "").split())
@@ -321,6 +374,11 @@ def search_historical_facts(
         return "Error: query must be non-empty and at most 500 characters"
     if limit < 1 or limit > MAX_KNOWLEDGE_SEARCH_LIMIT:
         return f"Error: limit must be between 1 and {MAX_KNOWLEDGE_SEARCH_LIMIT}"
+    if offset < 0 or offset + limit > MAX_LEDGER_HISTORY_PROVIDER_WINDOW:
+        return (
+            "Error: offset must be non-negative and offset plus limit must not exceed "
+            f"{MAX_LEDGER_HISTORY_PROVIDER_WINDOW}"
+        )
     uid = _resolve_uid(config)
     if not uid:
         return "Error: User ID not found in configuration"
@@ -332,12 +390,20 @@ def search_historical_facts(
             uid,
             normalized_query,
             limit=limit,
+            offset=offset,
+            include_rejected=include_rejected,
         )
-        rows = [match.memory for match in page.matches if _is_historical_fact_memory(match.memory, uid=uid)]
+        rows = [
+            match.memory
+            for match in page.matches
+            if _is_historical_fact_memory(match.memory, uid=uid, include_rejected=include_rejected)
+        ]
         return _format_historical_fact_results(
             rows,
             query=normalized_query,
             truncated=page.truncated,
+            next_offset=page.next_offset,
+            include_rejected=include_rejected,
         )
     except ValueError:
         return "Error: historical query must contain a searchable exact token"
