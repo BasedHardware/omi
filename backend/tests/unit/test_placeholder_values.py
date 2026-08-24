@@ -109,10 +109,42 @@ def test_a_real_admin_key_passes():
     assert find_placeholders({'ADMIN_KEY': '2f6c1b9e4a7d'}) == []
 
 
+# --- ADMIN_KEY: the rule needs real authentication in front of it to mean anything -----------------
+
+
+def test_an_empty_admin_key_is_allowed_in_local_development():
+    """LOCAL_DEVELOPMENT=true already resolves every invalid token to uid '123'.
+
+    The exposure this rule guards is an admin route accepting an empty ``secret_key`` header, which
+    is only an exposure while authentication is real. Where anyone is already inside, refusing the
+    empty declaration protects nothing — and it rejects harnesses that set it empty on purpose:
+    upstream's hermetic e2e conftest overwrites ADMIN_KEY to '' so a developer's shell cannot leak a
+    real key into a test run, which took the whole e2e tier down at import.
+    """
+    assert find_placeholders({'ADMIN_KEY': '', 'LOCAL_DEVELOPMENT': 'true'}) == []
+
+
+def test_an_empty_admin_key_is_still_refused_when_authentication_is_real():
+    (problem,) = find_placeholders({'ADMIN_KEY': '', 'LOCAL_DEVELOPMENT': 'false'})
+
+    assert 'ADMIN_KEY is declared EMPTY' in problem
+
+
+def test_local_development_does_not_excuse_a_published_secret():
+    """Only the ADMIN_KEY rule is conditional. A CHANGE_ME secret is published either way."""
+    (problem,) = find_placeholders({'ENCRYPTION_SECRET': 'CHANGE_ME', 'LOCAL_DEVELOPMENT': 'true'})
+
+    assert 'ENCRYPTION_SECRET' in problem
+
+
 # --- the boot gate ------------------------------------------------------------------------------
 
 
 def test_the_boot_gate_raises_and_names_every_problem(monkeypatch):
+    # Pinned, not inherited: the ADMIN_KEY rule only applies where authentication is real, and the
+    # unit sweep runs with LOCAL_DEVELOPMENT=true, so leaving it ambient made this assertion depend
+    # on who invoked pytest.
+    monkeypatch.setenv('LOCAL_DEVELOPMENT', 'false')
     monkeypatch.setenv('OIDC_ISSUER', 'https://<host>:8443/realms/omi')
     monkeypatch.setenv('ADMIN_KEY', '')
 

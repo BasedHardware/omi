@@ -113,7 +113,15 @@ def find_placeholders(environment: dict[str, str] | None = None) -> list[str]:
                 )
                 break
 
-    if 'ADMIN_KEY' in env and not (env.get('ADMIN_KEY') or '').strip():
+    # Not while the auth chain is already open. LOCAL_DEVELOPMENT=true makes every invalid token
+    # resolve to uid '123' (utils/other/endpoints.py) — our own backend.env.{prod,seed}.example pin it
+    # to false and say so. The exposure this rule guards is "an admin route accepts an empty
+    # secret_key header", which needs real authentication in front of it to mean anything; where
+    # anyone is already inside, refusing the empty declaration protects nothing and only rejects
+    # harnesses that set it empty on purpose (upstream's hermetic e2e conftest does, deliberately
+    # overwriting so a developer's shell cannot leak real keys into a test run).
+    local_development = (env.get('LOCAL_DEVELOPMENT') or '').strip().lower() == 'true'
+    if not local_development and 'ADMIN_KEY' in env and not (env.get('ADMIN_KEY') or '').strip():
         problems.append(
             'ADMIN_KEY is declared EMPTY, which is weaker than not declaring it: the admin routes that '
             'compare `secret_key != os.getenv("ADMIN_KEY")` then accept an empty secret_key header. '
