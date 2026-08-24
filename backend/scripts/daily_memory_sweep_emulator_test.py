@@ -32,6 +32,7 @@ from utils.memory.daily_memory_sweep import (  # noqa: E402
     DailySweepCandidate,
     DailySweepInput,
     SweepAuthorityState,
+    _invoke_model_once,
     completed_local_day_window,
     run_daily_memory_sweep,
 )
@@ -365,13 +366,71 @@ def main() -> int:
             raise AssertionError("overlapping runners did not finish")
         if len(_collection_ids(db_client, collections.memory_items)) > 1:
             raise AssertionError("overlapping runners duplicated canonical memory")
-        print("PASS: daily memory sweep Firestore emulator retry/interruption proof (crash/deletion/generation)")
+
+        # Paid-model/account-wipe race: the real Firestore transaction first
+        # claims one durable, top-level invocation identity. The simulated
+        # provider then publishes the deletion fence and removes all user
+        # documents before returning. Finalization must write no user payload,
+        # and retrying the exact identity must not invoke the paid provider a
+        # second time.
+        uid = f"daily-memory-sweep-paid-wipe-{uuid4().hex}"
+        uids.append(uid)
+        collections = MemoryCollections(uid=uid)
+        control, packet = _seed(db_client, uid, now)
+        paid_calls = 0
+        invocation_id = f"paid-wipe-{uuid4().hex}"
+
+        def paid_builder_then_wipe() -> tuple[dict[str, Any], ...]:
+            nonlocal paid_calls
+            paid_calls += 1
+            db_client.document(f"account_deletions/{uid}").set({"wipe_status": "running"})
+            _delete_user_documents(db_client, collections)
+            return ({"candidate_id": "must-not-survive-wipe"},)
+
+        identity = {
+            "account_generation": control.account_generation,
+            "source_generation": control.source_generation,
+            "sweep_generation": 0,
+            "window_id": packet.window_id,
+            "now": now,
+        }
+        first_model_result = _invoke_model_once(
+            db_client,
+            uid,
+            invocation_id,
+            candidate_builder=paid_builder_then_wipe,
+            **identity,
+        )
+        second_model_result = _invoke_model_once(
+            db_client,
+            uid,
+            invocation_id,
+            candidate_builder=paid_builder_then_wipe,
+            **identity,
+        )
+        if first_model_result is not None or second_model_result is not None:
+            raise AssertionError("paid model output escaped the account-wipe fence")
+        if paid_calls != 1:
+            raise AssertionError(f"paid provider invoked {paid_calls} times across wipe/retry")
+        if db_client.document(f"users/{uid}/{daily_sweep.MODEL_INVOCATION_PATH}/{invocation_id}").get().exists:
+            raise AssertionError("model finalization recreated user payload after account wipe")
+        durable_fence = db_client.document(f"{daily_sweep.MODEL_INVOCATION_FENCE_COLLECTION}/{invocation_id}").get()
+        durable_payload = durable_fence.to_dict() if durable_fence.exists else {}
+        if durable_payload.get("state") != "indeterminate" or "candidate_page" in durable_payload:
+            raise AssertionError(f"durable paid-call fence is not content-free/closed: {durable_payload}")
+
+        print(
+            "PASS: daily memory sweep Firestore emulator retry/interruption proof "
+            "(crash/deletion/generation/paid-wipe)"
+        )
         return 0
     finally:
         for uid in uids:
             cleanup = MemoryCollections(uid=uid)
             _delete_user_documents(db_client, cleanup)
             db_client.document(f"account_deletions/{uid}").delete()
+        for snapshot in db_client.collection(daily_sweep.MODEL_INVOCATION_FENCE_COLLECTION).stream():
+            snapshot.reference.delete()
 
 
 if __name__ == "__main__":

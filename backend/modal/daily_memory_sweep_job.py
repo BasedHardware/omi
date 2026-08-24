@@ -44,8 +44,11 @@ def _init_firebase() -> None:
 def run_daily_memory_sweep_job() -> None:
     authority = daily_memory_sweep_authority_from_environment()
     if not authority.may_write:
-        logger.info("daily-memory-sweep disabled by backend authority")
-        return
+        # The rollout authority gates only producer/model/canonical writes.
+        # Inventory plus the scheduler's bounded expiry janitor must continue
+        # to run while disabled or killed so staged user payloads cannot outlive
+        # their retention policy.
+        logger.info("daily-memory-sweep producer disabled by backend authority; running lifecycle cleanup only")
     page = bounded_daily_memory_sweep_uid_inventory(
         default_db_client,
         limit=400,
