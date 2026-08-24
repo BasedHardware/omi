@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -604,6 +605,102 @@ async def test_gateway_failure_releases_reserved_quota(monkeypatch):
 
     assert unavailable.value.status_code == 502
     assert released == [("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)]
+
+
+@pytest.mark.asyncio
+async def test_cancellation_during_provider_paid_boundary_refresh_releases_quota_once(monkeypatch):
+    resolutions = []
+    released = []
+    enabled = _rollout_decision(
+        rollout=TriState.ENABLED,
+        kill_switch=TriState.DISABLED,
+        effective=TriState.ENABLED,
+        reason=JITDecisionReason.ROLLOUT_ENABLED,
+    )
+
+    async def resolve(_uid, *, stage, force_refresh=False):
+        resolutions.append((stage, force_refresh))
+        if len(resolutions) == 3:
+            raise asyncio.CancelledError()
+        return enabled
+
+    async def consume(*_args):
+        return desktop_proactivity.ProactiveQuotaState(limit=150, remaining=149, reset_seconds=86400)
+
+    async def release(uid, operation):
+        released.append((uid, operation))
+
+    monkeypatch.setattr(desktop_proactivity, "resolve_jit_rollout", resolve)
+    monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
+    monkeypatch.setattr(desktop_proactivity, "_consume_quota", consume)
+    monkeypatch.setattr(desktop_proactivity, "_release_quota", release)
+    monkeypatch.setattr(
+        desktop_proactivity,
+        "_proactive_provider_request",
+        lambda *_args: desktop_proactivity._ProviderRequest(
+            url="http://gateway/v1/chat/completions",
+            headers={},
+            payload={"max_completion_tokens": 1024},
+            fallback_class="none",
+        ),
+    )
+
+    with pytest.raises(asyncio.CancelledError):
+        await desktop_proactivity._proactive_completion_unobserved(request(), Response(), uid="user-1")
+
+    assert resolutions == [
+        (desktop_proactivity.JITDecisionStage.INGRESS, False),
+        (desktop_proactivity.JITDecisionStage.PAID_BOUNDARY, True),
+        (desktop_proactivity.JITDecisionStage.PAID_BOUNDARY, True),
+    ]
+    assert released == [("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)]
+
+
+@pytest.mark.asyncio
+async def test_cancellation_during_provider_retry_releases_quota_once_without_retry_telemetry(monkeypatch):
+    calls = []
+    released = []
+    telemetry = []
+
+    class GatewayClient:
+        async def post(self, url, *, headers, json):
+            calls.append(json)
+            if len(calls) == 2:
+                raise asyncio.CancelledError()
+            return httpx.Response(
+                200,
+                request=httpx.Request("POST", url),
+                json={"choices": [{"finish_reason": "length", "message": {"content": '{"summary":'}}]},
+            )
+
+    class Semaphore:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+    async def consume(*_args):
+        return desktop_proactivity.ProactiveQuotaState(limit=150, remaining=149, reset_seconds=86400)
+
+    async def release(uid, operation):
+        released.append((uid, operation))
+
+    monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
+    monkeypatch.setenv("OMI_LLM_GATEWAY_URL", "http://gateway")
+    monkeypatch.setattr(desktop_proactivity, "_consume_quota", consume)
+    monkeypatch.setattr(desktop_proactivity, "_release_quota", release)
+    monkeypatch.setattr(desktop_proactivity, "record_fallback", lambda **values: telemetry.append(values))
+    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", lambda: GatewayClient())
+    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_semaphore", lambda: Semaphore())
+    monkeypatch.setattr(desktop_proactivity, "llm_gateway_headers", lambda **_: {})
+
+    with pytest.raises(asyncio.CancelledError):
+        await desktop_proactivity._proactive_completion_unobserved(request(), Response(), uid="user-1")
+
+    assert [payload["max_completion_tokens"] for payload in calls] == [1024, 2400]
+    assert released == [("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)]
+    assert telemetry == []
 
 
 def test_dev_direct_provider_fallback_is_scoped_to_proactivity(monkeypatch):
