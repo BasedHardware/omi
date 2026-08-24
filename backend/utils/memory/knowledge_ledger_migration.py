@@ -14,6 +14,7 @@ from typing import Any, Dict, Literal, Optional
 from pydantic import BaseModel, Field
 
 from database.memory_collections import MemoryCollections
+from models.knowledge_ledger_policy import LEDGER_SLOT_BY_LEGACY_PREDICATE
 from models.product_memory import (
     LedgerWriteReason,
     MemoryItem,
@@ -80,13 +81,6 @@ def read_ledger_migration_completion(uid: str, *, db_client: Any) -> Optional[Le
     return completion
 
 
-_STABLE_SLOT_BY_PREDICATE = {
-    "resides_in": "home_city",
-    "works_at": "employer",
-    "age_years": "age_years",
-}
-
-
 def _subject_scope(item: MemoryItem) -> MemorySubjectScope:
     attribution = str(((item.promotion or {}).get("source_attribution") or {}).get("subject_attribution") or "")
     if attribution == "third_party":
@@ -142,7 +136,7 @@ def plan_ledger_migration(item: MemoryItem) -> LedgerMigrationPlan:
             "ledger_schema_version": LEDGER_SCHEMA_VERSION,
             "kind": MemoryKind.fact.value,
             "subject_scope": scope.value,
-            "slot": _STABLE_SLOT_BY_PREDICATE.get(item.predicate or ""),
+            "slot": LEDGER_SLOT_BY_LEGACY_PREDICATE.get(item.predicate or ""),
             "valid_from": item.captured_at,
             # Preserve historical/expiry semantics. Clearing this boundary
             # would make a closed legacy row look current in the ledger view.

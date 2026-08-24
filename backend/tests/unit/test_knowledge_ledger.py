@@ -460,6 +460,175 @@ def test_profile_renderer_is_current_user_only_deterministic_and_bounded():
     assert render_profile([current], character_budget=10) == ""
 
 
+def test_ledger_slot_aliases_are_canonical_and_unknown_new_slots_fail_closed():
+    provenance = LedgerProvenance(
+        source_id="turn-slot",
+        source_type="chat_turn",
+        action_id="action-slot",
+    )
+    aliased = LedgerWrite(
+        kind=MemoryKind.fact,
+        content="Brooklyn",
+        provenance=provenance,
+        write_reason=LedgerWriteReason.direct_user_statement,
+        slot=" Home-Location ",
+    )
+
+    assert aliased.slot == "home_city"
+
+    with pytest.raises(ValueError, match="unsupported knowledge ledger slot"):
+        LedgerWrite(
+            kind=MemoryKind.fact,
+            content="Unknown",
+            provenance=provenance,
+            write_reason=LedgerWriteReason.agent_reusable_conclusion,
+            slot="invented_slot",
+        )
+
+    migrated = LedgerWrite(
+        kind=MemoryKind.fact,
+        content="Retained legacy knowledge",
+        provenance=provenance,
+        write_reason=LedgerWriteReason.legacy_migration,
+        slot="historic_custom_label",
+    )
+    assert migrated.slot is None
+
+
+def test_playbook_and_trigger_writes_require_their_own_authority():
+    provenance = LedgerProvenance(
+        source_id="turn-authority",
+        source_type="chat_turn",
+        action_id="action-authority",
+    )
+
+    with pytest.raises(ValueError, match="recurring_workflow authority"):
+        LedgerWrite(
+            kind=MemoryKind.document,
+            content="Release workflow",
+            body="Do the safe release steps.",
+            provenance=provenance,
+            write_reason=LedgerWriteReason.agent_reusable_conclusion,
+        )
+
+    with pytest.raises(ValueError, match="standing_trigger authority"):
+        LedgerWrite(
+            kind=MemoryKind.trigger,
+            content="Notify on release readiness",
+            trigger_condition={"keyword": "ready"},
+            provenance=provenance,
+            write_reason=LedgerWriteReason.agent_reusable_conclusion,
+        )
+
+    with pytest.raises(ValueError, match="primary_user scope"):
+        LedgerWrite(
+            kind=MemoryKind.document,
+            content="Third-party workflow",
+            body="Private third-party steps",
+            provenance=provenance,
+            write_reason=LedgerWriteReason.recurring_workflow,
+            subject_scope=MemorySubjectScope.third_party,
+            subject_entity_id="person-sarah",
+        )
+
+    for invalid_reason in (LedgerWriteReason.recurring_workflow, LedgerWriteReason.standing_trigger):
+        with pytest.raises(ValueError, match="facts cannot use document or trigger authority"):
+            LedgerWrite(
+                kind=MemoryKind.fact,
+                content="Wrong authority",
+                provenance=provenance,
+                write_reason=invalid_reason,
+                slot="home_city",
+            )
+
+
+def test_playbook_description_is_one_bounded_handle_in_write_and_projection():
+    provenance = LedgerProvenance(
+        source_id="turn-playbook",
+        source_type="chat_turn",
+        action_id="action-playbook",
+    )
+    write = LedgerWrite(
+        kind=MemoryKind.document,
+        content="Deploy safely\n1. Export artifacts\n2. Verify release",
+        body="Full private workflow",
+        provenance=provenance,
+        write_reason=LedgerWriteReason.recurring_workflow,
+    )
+    historical = _item(
+        "playbook-multiline",
+        kind=MemoryKind.document,
+        slot=None,
+        content="Deploy safely\n1. Export artifacts\n2. Verify release",
+        body="Full private workflow",
+        write_reason=LedgerWriteReason.recurring_workflow,
+    )
+    third_party = historical.model_copy(
+        update={
+            "memory_id": "third-party-playbook",
+            "subject_scope": MemorySubjectScope.third_party,
+            "subject_entity_id": "person-sarah",
+        }
+    )
+
+    assert write.content == "Deploy safely 1. Export artifacts 2. Verify release"
+    assert render_playbook_index([historical]) == (
+        "playbook-multiline: Deploy safely 1. Export artifacts 2. Verify release"
+    )
+    assert render_playbook_index([third_party, historical]) == (
+        "playbook-multiline: Deploy safely 1. Export artifacts 2. Verify release"
+    )
+
+    with pytest.raises(ValueError, match="compact handle limit"):
+        LedgerWrite(
+            kind=MemoryKind.document,
+            content="x" * 361,
+            body="Full private workflow",
+            provenance=provenance,
+            write_reason=LedgerWriteReason.recurring_workflow,
+        )
+
+
+def test_profile_renderer_selects_one_slot_winner_by_authority_then_recency():
+    direct = _item(
+        "direct",
+        content="Brooklyn",
+        valid_from=NOW,
+        curation_weight=-100,
+        write_reason=LedgerWriteReason.direct_user_statement,
+    )
+    newer_daily = _item(
+        "newer-daily",
+        content="Boston",
+        valid_from=NOW + timedelta(days=2),
+        curation_weight=100,
+        write_reason=LedgerWriteReason.daily_reconciliation,
+        user_asserted=False,
+    )
+    newer_direct = _item(
+        "newer-direct",
+        content="Queens",
+        valid_from=NOW + timedelta(days=1),
+        write_reason=LedgerWriteReason.direct_user_statement,
+    )
+    preferred_name = _item(
+        "preferred-name",
+        content="David",
+        slot="preferred_name",
+    )
+    unknown_historic = _item(
+        "unknown",
+        content="Must stay out of the prompt",
+        slot="future_slot",
+        write_reason=LedgerWriteReason.legacy_migration,
+    )
+
+    assert render_profile([newer_daily, unknown_historic, direct, preferred_name]) == (
+        "preferred_name: David\nhome_city: Brooklyn"
+    )
+    assert render_profile([direct, newer_direct]) == "home_city: Queens"
+
+
 def test_profile_renderer_rejects_promotion_without_changing_order_or_budget():
     """A rejected high-priority row must not consume the profile projection budget."""
     accepted_without_review = _item(

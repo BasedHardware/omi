@@ -70,6 +70,80 @@ def test_prompt_progressively_discloses_playbook_body():
     assert "read_playbook" in rendered
 
 
+def test_prompt_compacts_historical_multiline_playbook_description():
+    playbook = _row(
+        "playbook-multiline",
+        kind=MemoryKind.document,
+        slot=None,
+        content="Deploy safely\n1. Export artifacts\n2. Verify release",
+        body="private full workflow",
+        write_reason=LedgerWriteReason.recurring_workflow,
+    )
+
+    rendered = _render_ledger_prompt_context("David", [playbook])
+
+    assert "playbook-multiline: Deploy safely 1. Export artifacts 2. Verify release" in rendered
+    assert rendered.count("\n1. Export artifacts") == 0
+
+
+def test_prompt_excludes_unhydratable_third_party_playbook():
+    primary = _row(
+        "primary-playbook",
+        kind=MemoryKind.document,
+        slot=None,
+        content="Release safely",
+        body="private workflow",
+        write_reason=LedgerWriteReason.recurring_workflow,
+    )
+    third_party = _row(
+        "third-party-playbook",
+        kind=MemoryKind.document,
+        slot=None,
+        content="How Sarah releases",
+        body="third-party workflow",
+        write_reason=LedgerWriteReason.recurring_workflow,
+        subject_scope=MemorySubjectScope.third_party,
+        subject_entity_id="person-sarah",
+    )
+
+    rendered = _render_ledger_prompt_context("David", [third_party, primary])
+
+    assert "primary-playbook: Release safely" in rendered
+    assert "third-party-playbook" not in rendered
+    assert "How Sarah releases" not in rendered
+
+
+def test_prompt_uses_the_same_authority_first_slot_winner_policy():
+    direct = _row(
+        "direct",
+        content="Brooklyn",
+        valid_at=NOW,
+        curation_weight=-100,
+        write_reason=LedgerWriteReason.direct_user_statement,
+    )
+    newer_daily = _row(
+        "daily",
+        content="Boston",
+        valid_at=NOW.replace(day=24),
+        curation_weight=100,
+        write_reason=LedgerWriteReason.daily_reconciliation,
+    )
+    alias = _row(
+        "alias",
+        content="Queens",
+        slot="home_location",
+        valid_at=NOW.replace(day=22),
+        write_reason=LedgerWriteReason.direct_user_statement,
+    )
+
+    rendered = _render_ledger_prompt_context("David", [newer_daily, alias, direct])
+
+    assert rendered.count("home_city:") == 1
+    assert "home_city: Brooklyn" in rendered
+    assert "Boston" not in rendered
+    assert "Queens" not in rendered
+
+
 def test_prompt_projection_rejects_promotion_without_changing_order_or_bounds():
     """Rejected canonical rows must not displace visible facts or playbook handles."""
     accepted_fact_without_review = _row_from_promotion(
