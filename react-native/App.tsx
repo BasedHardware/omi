@@ -35,6 +35,7 @@ import {requireNativeComponent} from './src/native-component';
 import ArrowUp from 'lucide-react-native/icons/arrow-up';
 import Brain from 'lucide-react-native/icons/brain';
 import ChevronLeft from 'lucide-react-native/icons/chevron-left';
+import Ellipsis from 'lucide-react-native/icons/ellipsis';
 import GanttChartSquare from 'lucide-react-native/icons/square-chart-gantt';
 import House from 'lucide-react-native/icons/house';
 import ListChecks from 'lucide-react-native/icons/list-checks';
@@ -518,6 +519,108 @@ function ProjectionList({
   );
 }
 
+function projectionTimestamp(item: DesktopReadProjection): number | null {
+  if (item.kind === 'conversation') {
+    const value = Date.parse(item.startedAt ?? item.createdAt);
+    return Number.isFinite(value) ? value : null;
+  }
+  return item.kind === 'memory'
+    ? item.timestamp === null
+      ? null
+      : item.timestamp * 1000
+    : item.createdAt * 1000;
+}
+
+function HomeTimeline({
+  emptyCopy,
+  emptyTitle,
+  footer,
+  items,
+  loading,
+}: {
+  emptyCopy: string;
+  emptyTitle: string;
+  footer: React.ReactElement;
+  items: DesktopReadProjection[];
+  loading: boolean;
+}) {
+  const nowEpochMilliseconds = useRef(Date.now()).current;
+  const groups = useMemo(
+    () =>
+      items.reduce<Array<{label: string; items: DesktopReadProjection[]}>>(
+        (result, item) => {
+          const timestamp = projectionTimestamp(item);
+          const label =
+            timestamp === null
+              ? 'Date unavailable'
+              : conversationGroupLabel(
+                  new Date(timestamp).toISOString(),
+                  nowEpochMilliseconds,
+                );
+          const group = result.find(candidate => candidate.label === label);
+          if (group === undefined) {
+            result.push({label, items: [item]});
+          } else {
+            group.items.push(item);
+          }
+          return result;
+        },
+        [],
+      ),
+    [items, nowEpochMilliseconds],
+  );
+
+  const timelineItems = useMemo(
+    () =>
+      groups.flatMap(group => [
+        {group, item: null as DesktopReadProjection | null},
+        ...group.items.map(item => ({group, item})),
+      ]),
+    [groups],
+  );
+  const renderItem = useCallback(
+    ({item: {group, item}}: {item: (typeof timelineItems)[number]}) =>
+      item === null ? (
+        <View style={styles.macHomeDayHeading}>
+          <View style={styles.macHomeSpineDot} />
+          <Text accessibilityRole="header" style={styles.macHomeDayLabel}>
+            {group.label}
+          </Text>
+        </View>
+      ) : (
+        <View style={styles.macHomeDayItems}>
+          <ProjectionRow item={item} spine />
+        </View>
+      ),
+    [],
+  );
+  const empty = loading ? (
+    <View style={styles.macHomeInlineState}>
+      <ActivityIndicator color="#777b77" />
+      <Text style={styles.macHomeInlineCopy}>Loading timeline…</Text>
+    </View>
+  ) : (
+    <View style={styles.macHomeInlineState}>
+      <Text style={styles.macHomeInlineTitle}>{emptyTitle}</Text>
+      <Text style={styles.macHomeInlineCopy}>{emptyCopy}</Text>
+    </View>
+  );
+  return (
+    <FlatList
+      accessibilityLabel="Home chronological timeline"
+      contentContainerStyle={styles.macHomeTimelineContent}
+      data={timelineItems}
+      keyExtractor={({group, item}) =>
+        item === null ? `day:${group.label}` : `${item.kind}:${item.id}`
+      }
+      ListEmptyComponent={empty}
+      ListFooterComponent={footer}
+      renderItem={renderItem}
+      style={styles.macHomeTimeline}
+    />
+  );
+}
+
 function HomeSearchField({
   compact,
   desktop,
@@ -570,7 +673,7 @@ function HomeSearchField({
         onChangeText={onChangeText}
         onFocus={onFocus}
         onPressIn={onPressIn}
-        placeholder={desktop ? 'Filter saved…' : 'Search Omi'}
+        placeholder="Search Omi"
         placeholderTextColor={desktop ? '#8f918f' : '#777777'}
         ref={inputRef}
         showSoftInputOnFocus={searchArmed}
@@ -1551,6 +1654,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [searchArmed, setSearchArmed] = useState(false);
+  const [macMenuOpen, setMacMenuOpen] = useState(false);
   const [homeSearchFocusNonce, setHomeSearchFocusNonce] = useState(0);
   const [composerFocused, setComposerFocused] = useState(false);
   const projectionFilter: ProjectionFilter = 'all';
@@ -2022,52 +2126,103 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   );
 
   const macDesktopNav = (
-    <View style={styles.macTopNavFrame}>
+    <View
+      accessibilityLabel="Desktop application chrome"
+      style={styles.macTopNavFrame}>
       <OmiGlassPanel
         accessibilityLabel="Desktop navigation material"
         pointerEvents="none"
         style={styles.macGlassPanel}
       />
-      <View
-        accessibilityLabel="Desktop navigation"
-        accessibilityRole="tablist"
-        style={styles.macTopNav}>
-        {navigation.map(item => {
-          const Icon = item.icon;
-          const active = route === item.label;
-          return (
-            <FocusPressable
-              accessibilityLabel={`${item.label} navigation`}
-              accessibilityRole="tab"
-              accessibilityState={{selected: active}}
-              key={item.label}
-              onPress={() => {
-                setRoute(item.label as Route);
-                if (item.label === 'Home') {
-                  setHomeChatOpen(false);
-                }
-              }}
-              style={({pressed}) => [
-                styles.macTopNavItem,
-                active && styles.macTopNavItemActive,
-                pressed && styles.pressed,
+      <View accessibilityLabel="Desktop navigation" style={styles.macTopNav}>
+        <HomeSearchField
+          compact={false}
+          desktop
+          inputRef={searchRef}
+          onBlur={() => setSearchFocused(false)}
+          onChangeText={value => {
+            setRoute('Home');
+            setHomeChatOpen(false);
+            setSearchQuery(value);
+          }}
+          onFocus={() => setSearchFocused(true)}
+          onOpenChat={() => {
+            setRoute('Home');
+            setHomeChatOpen(true);
+          }}
+          onPressIn={() => setSearchArmed(true)}
+          query={searchQuery}
+          searchArmed={searchArmed}
+          searchFocused={searchFocused}
+        />
+        <View accessibilityRole="tablist" style={styles.macHomeTabs}>
+          <FocusPressable
+            accessibilityLabel="Home navigation"
+            accessibilityRole="tab"
+            accessibilityState={{selected: route === 'Home'}}
+            onPress={() => {
+              setRoute('Home');
+              setHomeChatOpen(false);
+              setMacMenuOpen(false);
+            }}
+            style={({pressed}) => [
+              styles.macTopNavItem,
+              route === 'Home' && styles.macTopNavItemActive,
+              pressed && styles.pressed,
+            ]}>
+            <House
+              accessible={false}
+              color={route === 'Home' ? '#141414' : '#8f918f'}
+              size={17}
+              strokeWidth={2}
+            />
+            <Text
+              style={[
+                styles.macTopNavText,
+                route === 'Home' && styles.macTopNavTextActive,
               ]}>
-              <Icon
-                accessible={false}
-                color={active ? '#141414' : '#505050'}
-                size={18}
-                strokeWidth={2}
-              />
-              <Text
-                style={[
-                  styles.macTopNavText,
-                  active && styles.macTopNavTextActive,
+              Home
+            </Text>
+          </FocusPressable>
+          <FocusPressable
+            accessibilityLabel="More navigation"
+            accessibilityRole="button"
+            accessibilityState={{expanded: macMenuOpen}}
+            onPress={() => setMacMenuOpen(value => !value)}
+            style={({pressed}) => [
+              styles.macOverflowButton,
+              pressed && styles.pressed,
+            ]}>
+            <Ellipsis
+              accessible={false}
+              color="#8f918f"
+              size={18}
+              strokeWidth={2}
+            />
+          </FocusPressable>
+        </View>
+        {macMenuOpen && (
+          <View
+            accessibilityLabel="More navigation menu"
+            style={styles.macNavigationMenu}>
+            {navigation.slice(1).map(item => (
+              <FocusPressable
+                accessibilityLabel={`${item.label} navigation`}
+                accessibilityRole="button"
+                key={item.label}
+                onPress={() => {
+                  setRoute(item.label as Route);
+                  setMacMenuOpen(false);
+                }}
+                style={({pressed}) => [
+                  styles.macNavigationMenuItem,
+                  pressed && styles.pressed,
                 ]}>
-                {item.label}
-              </Text>
-            </FocusPressable>
-          );
-        })}
+                <Text style={styles.macNavigationMenuText}>{item.label}</Text>
+              </FocusPressable>
+            ))}
+          </View>
+        )}
       </View>
     </View>
   );
@@ -2414,64 +2569,16 @@ function App({initialRoute}: AppProps): React.JSX.Element {
 
   const homeDesktop = (
     <View
-      accessibilityLabel="Home desktop query surface"
+      accessibilityLabel="Home desktop timeline surface"
       style={styles.macHomeSurface}>
-      <OmiGlassPanel
-        pointerEvents="none"
-        style={styles.macGlassPanel}
-        testID="home-workspace-material"
-      />
-      <View accessibilityLabel="Home query lane" style={styles.macHomeLane}>
-        <View style={styles.macHomeHeading}>
-          <Text style={styles.macHomeEyebrow}>OMI</Text>
-          <Text accessibilityRole="header" style={styles.macHomeTitle}>
-            What matters now
-          </Text>
-          <Text style={styles.macHomeSubtitle}>
-            Search the conversations and memories saved for you.
-          </Text>
-        </View>
-        <View
-          accessibilityLabel="Home query island"
-          style={styles.macHomeQueryIsland}>
-          <HomeSearchField
-            compact={false}
-            desktop
-            inputRef={searchRef}
-            onBlur={() => setSearchFocused(false)}
-            onChangeText={setSearchQuery}
-            onFocus={() => setSearchFocused(true)}
-            onOpenChat={() => setHomeChatOpen(true)}
-            onPressIn={() => setSearchArmed(true)}
-            query={searchQuery}
-            searchArmed={searchArmed}
-            searchFocused={searchFocused}
-          />
-        </View>
-        <View
-          accessibilityLabel="Home results panel"
-          style={[
-            styles.macHomeResultsPanel,
-            homeSpineHasRows
-              ? styles.macHomeResultsPanelFilled
-              : styles.macHomeResultsPanelResting,
-          ]}>
-          <ProjectionList
-            accessibilityLabel="Home chronological spine"
-            emptyCopy={homeDesktopEmptyCopy}
-            emptyTitle={homeDesktopEmptyTitle}
-            error={null}
-            footer={homeDesktopReadStatus}
-            items={homeResults}
-            loading={readsPhase === 'initial-loading'}
-            rowVariant="spine"
-            style={
-              homeSpineHasRows
-                ? styles.macHomeResultsList
-                : styles.macHomeResultsListResting
-            }
-          />
-        </View>
+      <View accessibilityLabel="Home timeline lane" style={styles.macHomeLane}>
+        <HomeTimeline
+          emptyCopy={homeDesktopEmptyCopy}
+          emptyTitle={homeDesktopEmptyTitle}
+          footer={homeDesktopReadStatus}
+          items={homeSpineHasRows ? homeResults : []}
+          loading={readsPhase === 'initial-loading'}
+        />
         {homeDesktopDeviceAffordance}
       </View>
     </View>
@@ -3116,18 +3223,18 @@ const styles = StyleSheet.create({
   },
   macTopNavFrame: {
     alignSelf: 'stretch',
-    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    height: 58,
+    height: 66,
     marginHorizontal: 18,
+    zIndex: 2,
   },
   macTopNav: {
     alignItems: 'center',
     backgroundColor: 'transparent',
     flexDirection: 'row',
-    gap: 2,
-    height: 58,
+    gap: 12,
+    height: 66,
     paddingHorizontal: 4,
+    position: 'relative',
   },
   macTopNavItem: {
     alignItems: 'center',
@@ -3141,6 +3248,37 @@ const styles = StyleSheet.create({
   macTopNavText: {color: '#8f918f', fontSize: 13, fontWeight: '600'},
   macTopNavTextActive: {color: '#f2f4f1'},
   macPrimaryText: {color: '#f2f4f1'},
+  macHomeTabs: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 2,
+  },
+  macOverflowButton: {
+    alignItems: 'center',
+    borderRadius: 18,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
+  },
+  macNavigationMenu: {
+    backgroundColor: '#252826',
+    borderColor: '#3b3f3c',
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 2,
+    padding: 6,
+    position: 'absolute',
+    right: 0,
+    top: 58,
+    width: 170,
+  },
+  macNavigationMenuItem: {
+    borderRadius: 8,
+    minHeight: 36,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  macNavigationMenuText: {color: '#e5e7e4', fontSize: 13, fontWeight: '600'},
   navigation: {backgroundColor: '#141414'},
   rail: {paddingHorizontal: 8, paddingVertical: 24},
   railHeader: {alignItems: 'flex-start', gap: 8},
@@ -3267,77 +3405,82 @@ const styles = StyleSheet.create({
   },
   macHomeSurface: {
     alignSelf: 'stretch',
-    backgroundColor: '#171918',
+    backgroundColor: 'transparent',
     flex: 1,
     overflow: 'hidden',
     position: 'relative',
   },
   macHomeLane: {
     flex: 1,
-    gap: 14,
+    gap: 8,
     paddingBottom: 18,
-    paddingHorizontal: 30,
-    paddingTop: 28,
-    width: '100%',
-  },
-  macHomeHeading: {gap: 3},
-  macHomeEyebrow: {
-    color: '#78bda5',
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1.5,
-  },
-  macHomeTitle: {
-    color: '#f2f4f1',
-    fontSize: 32,
-    fontWeight: '700',
-    letterSpacing: -1,
-    lineHeight: 38,
-  },
-  macHomeSubtitle: {color: '#8f918f', fontSize: 14, lineHeight: 20},
-  macHomeQueryIsland: {
-    backgroundColor: '#222523',
-    borderColor: '#363a37',
-    borderRadius: 14,
-    borderWidth: 1,
-    minHeight: 64,
-    overflow: 'hidden',
-    position: 'relative',
+    paddingHorizontal: 18,
+    paddingTop: 8,
     width: '100%',
   },
   // Horizontal inset only: the row owns vertical centering for the icon, text baseline, and action.
   macHomeQueryField: {
-    backgroundColor: '#222523',
-    borderColor: 'transparent',
-    borderWidth: 0,
-    gap: 14,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(31, 34, 32, 0.82)',
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    borderWidth: 1,
+    flex: 1,
+    gap: 10,
     marginBottom: 0,
     marginTop: 0,
-    minHeight: 64,
-    paddingLeft: 18,
-    paddingRight: 18,
+    maxWidth: 720,
+    minHeight: 44,
+    paddingLeft: 14,
+    paddingRight: 4,
+    width: 'auto',
   },
   macSearchInput: {
-    fontSize: 21,
-    height: 26,
+    fontSize: 15,
+    height: 24,
     minHeight: 0,
     paddingVertical: 0,
   },
-  macHomeResultsPanel: {
-    backgroundColor: '#1d201e',
-    borderColor: '#303431',
-    borderRadius: 14,
-    borderWidth: 1,
-    flex: 1,
-    minHeight: 120,
-    overflow: 'hidden',
-    position: 'relative',
-    width: '100%',
+  macHomeTimeline: {flex: 1, width: '100%'},
+  macHomeTimelineContent: {
+    flexGrow: 1,
+    paddingBottom: 18,
+    paddingHorizontal: 4,
+    paddingTop: 8,
   },
-  macHomeResultsPanelFilled: {flex: 1},
-  macHomeResultsPanelResting: {flex: 1},
-  macHomeResultsList: {flex: 1},
-  macHomeResultsListResting: {alignSelf: 'stretch', flex: 1},
+  macHomeDayHeading: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 8,
+  },
+  macHomeSpineDot: {
+    backgroundColor: '#78bda5',
+    borderRadius: 4,
+    height: 7,
+    width: 7,
+  },
+  macHomeDayLabel: {
+    color: '#aeb2ae',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  macHomeDayItems: {
+    borderLeftColor: 'rgba(120, 189, 165, 0.28)',
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    marginLeft: 3,
+    paddingLeft: 14,
+  },
+  macHomeInlineState: {
+    alignItems: 'flex-start',
+    gap: 5,
+    maxWidth: 520,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+  },
+  macHomeInlineTitle: {color: '#eef0ed', fontSize: 14, fontWeight: '600'},
+  macHomeInlineCopy: {color: '#999d99', fontSize: 13, lineHeight: 19},
   paneCompact: {borderRadius: 0, borderWidth: 0},
   paneCompactSurface: {backgroundColor: '#1c1c1a'},
   stageMotion: {flex: 1},
