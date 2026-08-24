@@ -2932,13 +2932,63 @@ class MemoryService:
         include_archive: bool = True,
         page_size: int = 500,
     ) -> Iterator[MemoryDB]:
-        """Stream each live logical memory once for account export.
+        """Stream each live logical memory once for compatibility consumers.
 
         Yields without building one giant merged list. Canonical active rows are
         emitted first; historical pages follow with per-page suppression checks.
         No export read performs materialization, LLM work, embedding, or graph
         admission.
         """
+        yield from self._iter_export_memories(
+            uid,
+            include_archive=include_archive,
+            page_size=page_size,
+            include_ledger_history=False,
+        )
+
+    def iter_portability_export_memories(
+        self,
+        uid: str,
+        *,
+        include_archive: bool = True,
+        page_size: int = 500,
+    ) -> Iterator[MemoryDB]:
+        """Stream owner-portable memories, including representable ledger history.
+
+        Compatibility readers and migration planning intentionally consume only
+        live rows through :meth:`iter_export_memories`. A user's data export has
+        a stronger preservation contract: superseded ledger rows and closed
+        ``legacy_migration`` history remain portable without becoming current
+        prompt authority. Hidden/tombstoned rows and source-purged content stay
+        excluded, while owner-visible locked or sensitive history is preserved.
+        """
+        yield from self._iter_export_memories(
+            uid,
+            include_archive=include_archive,
+            page_size=page_size,
+            include_ledger_history=True,
+        )
+
+    @staticmethod
+    def _is_portability_ledger_history(item: MemoryItem, row: MemoryDB) -> bool:
+        if item.ledger_schema_version != LEDGER_SCHEMA_VERSION:
+            return False
+        if item.status != MemoryItemStatus.superseded:
+            return False
+        if item.source_state in {SourceState.tombstoned, SourceState.purged}:
+            return False
+        # MemoryDB has no generic physical-status field. Admit only closure
+        # states represented honestly on the released wire shape.
+        return row.invalid_at is not None or row.superseded_by is not None
+
+    def _iter_export_memories(
+        self,
+        uid: str,
+        *,
+        include_archive: bool,
+        page_size: int,
+        include_ledger_history: bool,
+    ) -> Iterator[MemoryDB]:
         archive_explicit = include_archive
         page_size = max(1, min(int(page_size or 500), 500))
         client = self.db_client if self.db_client is not None else default_db_client
@@ -2948,13 +2998,24 @@ class MemoryService:
             raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
 
         canonical_ids: set[str] = set()
-        for item in canonical_items:
+        while True:
+            try:
+                item = next(canonical_items)
+            except StopIteration:
+                break
+            except Exception as exc:
+                raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
             canonical_ids.add(item.memory_id)
-            if item.status != MemoryItemStatus.active:
+            if item.source_state in {SourceState.tombstoned, SourceState.purged}:
                 continue
             if item.tier == MemoryTier.archive and not archive_explicit:
                 continue
-            yield memory_item_to_memorydb(item)
+            row = memory_item_to_memorydb(item)
+            if item.status == MemoryItemStatus.active:
+                yield row
+                continue
+            if include_ledger_history and self._is_portability_ledger_history(item, row):
+                yield row
 
         pending_historical: List[HistoricalMemoryRecord] = []
         for record in self.history.iter_all_live(uid, page_size=page_size):

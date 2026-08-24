@@ -88,7 +88,7 @@ def _spool_export_memories_json(uid: str) -> IO[str]:
     try:
         spool.write("[\n")
         first = True
-        for memory in MemoryService().iter_export_memories(uid, include_archive=True):
+        for memory in MemoryService().iter_portability_export_memories(uid, include_archive=True):
             if not first:
                 spool.write(",\n")
             first = False
