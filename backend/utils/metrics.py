@@ -414,6 +414,14 @@ AUTH_FLOW_DURATION_SECONDS = Histogram(
     ['provider', 'terminal_state'],
 )
 
+OMI_SUBSCRIPTION_EVENTS = Counter(
+    'omi_subscription_events_total',
+    'Stripe subscription lifecycle events observed via webhook. Counts webhook '
+    'deliveries, which Stripe may retry, so treat these as an operational trend '
+    'signal rather than a billing-grade figure; Stripe remains source of truth.',
+    ['event', 'plan', 'interval', 'reason'],
+)
+
 
 # Pusher readiness / drain gauges. Label-free (low cardinality) so they scrape
 # cheaply. Initialized to serving below so an idle healthy pod reads
