@@ -58,6 +58,11 @@ capture cutover gate.
   remains intact while optional retrieval is card then bounded window
 - `backend/tests/unit/test_jit_memory_save_policy.py` — explicit save precision,
   provenance retention, and secret/third-party rejection
+- `backend/tests/unit/test_entity_timeline_tools.py` and
+  `backend/tests/unit/test_entity_timeline_source_readers.py` — explicit
+  source/history authority, exact owner-scoped entity aliases, deterministic
+  collision suppression, multi-source merge, partial-source disclosure, and
+  content minimization
 - `backend/tests/unit/test_atomicity_lifecycle_regressions.py` — agent preference
   writes use retry-stable ledger provenance and fail closed without user authority
 - `backend/tests/unit/test_universal_memory_service.py` and

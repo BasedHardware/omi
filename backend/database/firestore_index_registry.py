@@ -674,6 +674,44 @@ CONVERSATIONS_ACTIVE_ORDERED_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('discarded'), _desc('created_at'), _desc('__name__')),
 )
 
+ENTITY_TIMELINE_CONVERSATIONS_QUERY = FirestoreQuerySpec(
+    identifier='conversations_entity_timeline_completed',
+    collection_group='conversations',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('discarded', '==', 'discarded'),
+        FirestoreQueryFilter('status', '==', 'status'),
+    ),
+    index_fields=(
+        _asc('discarded'),
+        _asc('status'),
+        _desc('created_at'),
+        _desc('__name__'),
+    ),
+)
+
+ENTITY_TIMELINE_MEETINGS_QUERY = FirestoreQuerySpec(
+    identifier='meetings_entity_timeline',
+    collection_group='meetings',
+    query_scope='COLLECTION',
+    filters=(),
+    index_fields=(
+        _desc('start_time'),
+        _desc('__name__'),
+    ),
+)
+
+ENTITY_TIMELINE_SCREEN_ACTIVITY_QUERY = FirestoreQuerySpec(
+    identifier='screen_activity_entity_timeline',
+    collection_group='screen_activity',
+    query_scope='COLLECTION',
+    filters=(),
+    index_fields=(
+        _desc('timestamp'),
+        _desc('__name__'),
+    ),
+)
+
 ACTION_ITEMS_COMPLETION_ID_SCAN_QUERY = FirestoreQuerySpec(
     identifier='action_items_completion_id_scan',
     collection_group='action_items',
@@ -852,6 +890,9 @@ QUERY_SPECS = (
     ACTIVE_ATTENTION_OVERRIDE_QUERY,
     LEGACY_CONVERSATION_RECOVERY_QUERY,
     STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
+    ENTITY_TIMELINE_CONVERSATIONS_QUERY,
+    ENTITY_TIMELINE_MEETINGS_QUERY,
+    ENTITY_TIMELINE_SCREEN_ACTIVITY_QUERY,
     CHAT_FIRST_DEFERRALS_DUE_QUERY,
     CHAT_FIRST_DEFERRALS_SUBJECT_QUERY,
     CURRENT_CHAT_SESSION_QUERY,

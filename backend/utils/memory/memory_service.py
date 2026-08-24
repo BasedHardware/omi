@@ -68,6 +68,7 @@ from utils.memory.knowledge_ledger import (
     evidence_id_for_ledger_provenance,
     reopen_standalone_fact,
 )
+from utils.memory.ledger_history_policy import is_ledger_history_item
 from utils.memory.rejected_memory_feedback import clear_rejected_memory_feedback_cache
 from utils.memory.required_promotion import required_processing_payload
 from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
@@ -2756,31 +2757,9 @@ class MemoryService:
 
     @staticmethod
     def _is_ledger_history_item(item: MemoryItem, row: MemoryDB) -> bool:
-        """Keep history reads canonical, privacy-filtered, and wire-representable."""
+        """Compatibility wrapper for callers that patch the legacy seam."""
 
-        if item.ledger_schema_version != LEDGER_SCHEMA_VERSION:
-            return False
-        is_preserved_legacy_history = not item.intent_backed and item.write_reason == LedgerWriteReason.legacy_migration
-        if not item.intent_backed and not is_preserved_legacy_history:
-            return False
-        if item.status in {MemoryItemStatus.hidden, MemoryItemStatus.tombstoned}:
-            return False
-        if item.processing_state != ProcessingState.processed:
-            return False
-        if item.source_state in {SourceState.tombstoned, SourceState.purged}:
-            return False
-        if set(item.sensitivity_labels).intersection(RESTRICTED_SENSITIVITY_LABELS):
-            return False
-        if row.is_locked:
-            return False
-        # Admit only states the public MemoryDB wire shape can represent. A
-        # status-only superseded row would otherwise serialize as current.
-        return (
-            is_preserved_legacy_history
-            or row.user_review is False
-            or row.invalid_at is not None
-            or row.superseded_by is not None
-        )
+        return is_ledger_history_item(item, row)
 
     def read_ledger_history_page(
         self,

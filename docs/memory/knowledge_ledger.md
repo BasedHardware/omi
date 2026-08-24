@@ -68,6 +68,23 @@ is an explicit second, owner-scoped lookup and admits only active primary-user
 documents. Historical ledger search remains gated on its separate retention
 and privacy policy, so these tools do not authorize a capture cutover.
 
+`get_entity_timeline` is a separate, owner-scoped multi-source read for an
+agent that has already selected a stable entity. The agent explicitly chooses
+ledger, conversation-summary, calendar-title, or screen-app/window sources;
+there is no query-word heuristic and the default remains the cheap ledger-only
+path. A people document ID is the entity authority. Current names, bounded
+retained names, and emails are exact match-only aliases and are never returned
+as timeline content. Aliases that collide with the owner or another bounded
+owner-scoped person record are suppressed; if the people scan is not exhaustive,
+alias joins fail closed while stable person-ID joins remain available. Source
+readers perform exact owner/entity joins, merge by
+stable time/source/record ordering, disclose unavailable or truncated sources,
+and return only compact source-appropriate facts, summaries, titles, and
+app/window metadata. Transcript text, calendar notes and attendees, OCR text,
+pixels, playbook bodies, and trigger payloads remain excluded. Closed or
+rejected ledger rows require the explicit history and audit flags; wording in
+the agent's query never enables them.
+
 The deterministic prompt view sorts open, intent-backed, primary-user slotted
 facts by descending curation weight, slot, validity time, and ID, then fits
 whole lines into 2,400 characters. The playbook index fits whole one-line
