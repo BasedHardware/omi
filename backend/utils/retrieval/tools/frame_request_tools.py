@@ -162,8 +162,15 @@ async def look_at_frame_tool(
     if not turn_id:
         return _result(uid, "unavailable", reason="stable_turn_authority_unavailable")
     session_id = session_id or "turn-scoped"
-    authority_key = hashlib.sha256(f"look_at_frame\0{session_id}\0{turn_id}\0{screen_id}".encode("utf-8")).hexdigest()
-    dedupe_key = authority_key
+    # Paid-work authority belongs to the human turn, not to a particular
+    # frame. An agent may ask for different frames in fresh runtime configs,
+    # but every process still converges on one durable provider invocation.
+    authority_key = hashlib.sha256(f"look_at_frame\0{session_id}\0{turn_id}".encode("utf-8")).hexdigest()
+    # Queue delivery remains frame-specific so a losing cross-frame request
+    # cannot alias the winning request's desktop upload.
+    dedupe_key = hashlib.sha256(
+        f"look_at_frame_queue\0{session_id}\0{turn_id}\0{screen_id}".encode("utf-8")
+    ).hexdigest()
     try:
         request, _ = await run_blocking(
             db_executor,

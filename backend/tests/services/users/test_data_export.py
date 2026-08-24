@@ -353,6 +353,67 @@ def test_memory_spool_is_streamed_in_bounded_chunks(monkeypatch):
     assert json.loads("".join(chunks)) == [{"id": "large", "content": large_content}]
 
 
+def test_frame_export_pulls_incrementally_instead_of_materializing_collection(monkeypatch):
+    monkeypatch.setattr(data_export, "get_user_profile", MagicMock(return_value={}))
+    monkeypatch.setattr(data_export.conversations_db, "iter_all_conversations", MagicMock(return_value=iter([])))
+    pulled = 0
+
+    def rows(_uid, name):
+        nonlocal pulled
+        if name != "frame_requests":
+            return iter([])
+
+        def generate():
+            nonlocal pulled
+            for index in range(100_000):
+                pulled += 1
+                yield {"request_id": f"frame-{index}", "state": "pruned"}
+
+        return generate()
+
+    monkeypatch.setattr(data_export, "_iter_user_subcollection", rows)
+    stream = data_export._iter_user_data_export_from_spool("uid1", StringIO("[]"))
+
+    for chunk in stream:
+        if '"frame_requests"' in chunk:
+            break
+
+    assert pulled == 1
+    assert next(stream) == "[\n"
+    assert pulled == 1
+
+
+def test_conversation_photo_manifest_spills_to_disk_instead_of_accumulating(monkeypatch):
+    monkeypatch.setattr(data_export, "get_user_profile", MagicMock(return_value={}))
+    monkeypatch.setattr(data_export, "get_people", MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export, "get_standalone_action_items", MagicMock(return_value=[]))
+    monkeypatch.setattr(
+        data_export.conversations_db, "iter_all_conversations", MagicMock(return_value=iter([{"id": "conv-1"}]))
+    )
+    monkeypatch.setattr(
+        data_export.conversations_db,
+        "get_conversation_photos",
+        MagicMock(return_value=[{"id": "photo-1", "base64": "x" * 1024}]),
+    )
+    monkeypatch.setattr(data_export.chat_db, "iter_all_messages", MagicMock(return_value=iter([])))
+    real_spooled_file = data_export.tempfile.SpooledTemporaryFile
+    created = []
+
+    def tiny_spool(*_args, **kwargs):
+        kwargs["max_size"] = 128
+        spool = real_spooled_file(**kwargs)
+        created.append(spool)
+        return spool
+
+    monkeypatch.setattr(data_export.tempfile, "SpooledTemporaryFile", tiny_spool)
+
+    payload = json.loads("".join(data_export._iter_user_data_export_from_spool("uid1", StringIO("[]"))))
+
+    assert payload["conversation_photo_manifest"][0]["bytes_base64"] == "x" * 1024
+    assert created[0]._rolled is True
+    assert created[0].closed is True
+
+
 def test_iter_user_data_export_paginates_complete_collections(monkeypatch):
     monkeypatch.setattr(data_export, "get_user_profile", MagicMock(return_value={}))
     monkeypatch.setattr(data_export, "get_people", MagicMock(return_value=[]))

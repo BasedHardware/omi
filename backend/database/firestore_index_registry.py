@@ -848,6 +848,32 @@ SCREEN_ACTIVITY_KEYFRAME_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('clientDeviceId'), _asc('accountGeneration'), _desc('timestamp'), _desc('__name__')),
 )
 
+FRAME_VISION_OUTPUT_EXPIRY_QUERY = FirestoreQuerySpec(
+    identifier='frame_vision_receipts_output_expiry',
+    collection_group='frame_vision_receipts',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('output_expires_at', '<=', 'now'),),
+    # Served by Firestore's automatic same-direction single-field index.
+    index_fields=(_asc('output_expires_at'), _asc('__name__')),
+)
+
+FRAME_REQUEST_METADATA_EXPIRY_QUERY = FirestoreQuerySpec(
+    identifier='frame_requests_terminal_metadata_expiry',
+    collection_group='frame_requests',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('state', 'in', 'terminal_states'),
+        FirestoreQueryFilter('cleanup_state', 'in', 'cleanup_states'),
+        FirestoreQueryFilter('expires_at', '<=', 'now'),
+    ),
+    index_fields=(
+        _asc('state'),
+        _asc('cleanup_state'),
+        _asc('expires_at'),
+        _asc('__name__'),
+    ),
+)
+
 QUERY_SPECS = (
     ACTION_ITEMS_COMPLETION_ID_SCAN_QUERY,
     ACTION_ITEMS_COMPLETED_DUE_RANGE_QUERY,
@@ -888,6 +914,8 @@ QUERY_SPECS = (
     MESSAGES_BY_APP_ORDERED_QUERY,
     CONVERSATION_KEYFRAME_JOBS_DEVICE_STATE_QUERY,
     SCREEN_ACTIVITY_KEYFRAME_QUERY,
+    FRAME_VISION_OUTPUT_EXPIRY_QUERY,
+    FRAME_REQUEST_METADATA_EXPIRY_QUERY,
 )
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)

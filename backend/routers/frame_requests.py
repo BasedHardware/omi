@@ -384,7 +384,7 @@ async def upload_frame_request(
     """Store an owner-authorized pixel and then commit its bounded metadata."""
 
     started = time.monotonic()
-    await _authorize(uid, account_generation, paid_boundary=True)
+    await _authorize(uid, account_generation, mutation=True)
     declared_content_type = file.content_type
     if not declared_content_type or declared_content_type.lower() not in set(_ALLOWED_IMAGE_FORMATS.values()):
         raise HTTPException(status_code=415, detail="frame_upload_requires_image")
@@ -395,6 +395,10 @@ async def upload_frame_request(
     payload = _canonicalize_frame_image(payload)
     content_type = "image/jpeg"
     storage_id = f"{TEMPORARY_STORAGE_PREFIX}{uuid4().hex}"
+    # Canonicalization can be deliberately expensive. Re-read rollout and
+    # account-generation authority immediately before the external write so a
+    # kill/reopen/delete during image processing produces no stored pixels.
+    await _authorize(uid, account_generation, mutation=True)
     try:
         await run_blocking(
             storage_executor,

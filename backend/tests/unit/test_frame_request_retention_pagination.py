@@ -270,6 +270,16 @@ def test_account_failure_advances_population_and_persists_convergent_retry(monke
     )
     monkeypatch.setattr(
         frame_request_retention,
+        "delete_expired_frame_request_metadata",
+        lambda *_args, **_kwargs: 0,
+    )
+    monkeypatch.setattr(
+        frame_request_retention,
+        "cleanup_expired_frame_vision_outputs",
+        lambda *_args, **_kwargs: 0,
+    )
+    monkeypatch.setattr(
+        frame_request_retention,
         "cleanup_ambiguous_frame_upload_pixels",
         lambda *_args, **_kwargs: 0,
     )
@@ -320,6 +330,50 @@ def test_failed_cleanup_page_does_not_hide_due_backlog_or_overstate_cleaned_coun
     pages = iter([FrameCleanupPage(processed=32, cleaned=0), FrameCleanupPage(processed=3, cleaned=3)])
 
     assert _drain_due_pages(lambda: next(pages), page_size=32) == (3, False)
+
+
+def test_maintenance_reports_and_drains_metadata_and_vision_output_cleanup(monkeypatch):
+    client = _Client(["a"])
+    monkeypatch.setattr(frame_request_retention, "prune_expired_frame_requests", lambda *_args, **_kwargs: 0)
+    monkeypatch.setattr(
+        frame_request_retention,
+        "cleanup_frame_request_pixels",
+        lambda *_args, **_kwargs: FrameCleanupPage(processed=0, cleaned=0),
+    )
+    monkeypatch.setattr(
+        frame_request_retention,
+        "delete_expired_frame_request_metadata",
+        lambda *_args, **_kwargs: FrameCleanupPage(processed=1, cleaned=1),
+    )
+    monkeypatch.setattr(
+        frame_request_retention,
+        "cleanup_expired_frame_vision_outputs",
+        lambda *_args, **_kwargs: FrameCleanupPage(processed=1, cleaned=1),
+    )
+    monkeypatch.setattr(
+        frame_request_retention,
+        "cleanup_ambiguous_frame_upload_pixels",
+        lambda *_args, **_kwargs: FrameCleanupPage(processed=0, cleaned=0),
+    )
+    monkeypatch.setattr(
+        frame_request_retention,
+        "cleanup_conversation_frame_deletion_outbox",
+        lambda *_args, **_kwargs: FrameCleanupPage(processed=0, cleaned=0),
+    )
+    monkeypatch.setattr(
+        frame_request_retention, "prune_expired_conversation_keyframe_jobs", lambda *_args, **_kwargs: 0
+    )
+    monkeypatch.setattr(frame_request_retention, "emit_posthog_event", lambda *_args, **_kwargs: None)
+
+    result = frame_request_retention.run_frame_request_retention_maintenance(
+        user_limit=1,
+        rows_per_user=2,
+        firestore_client=client,
+    )
+
+    assert result["metadata_deleted"] == 1
+    assert result["vision_outputs_stripped"] == 1
+    assert result["accounts_with_errors"] == 0
 
 
 def test_expired_old_worker_cannot_regress_fast_new_worker_cursor():
