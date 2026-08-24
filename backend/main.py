@@ -88,6 +88,7 @@ from routers import (
     task_recommendations,
     conversation_finalization,
     public_shared_conversation_chat,
+    jit_rollout,
 )
 
 from utils.other.timeout import TimeoutMiddleware
@@ -220,6 +221,7 @@ app.include_router(tts.router)
 app.include_router(memory_admin.router)
 app.include_router(memory_product.router)
 app.include_router(task_recommendations.router)
+app.include_router(jit_rollout.router)
 app.include_router(desktop_core.router)
 app.include_router(desktop_agent_vm.router)
 app.include_router(desktop_chat.router)
@@ -227,6 +229,7 @@ app.include_router(desktop_proxy.router)
 app.include_router(desktop_realtime.router)
 app.include_router(desktop_screen_crisp.router)
 app.include_router(desktop_tts_updates.router)
+jit_rollout.validate_jit_rollout_contract(app)
 
 
 methods_timeout = {

@@ -1,0 +1,43 @@
+---
+title: JIT rollout authority
+description: Read-only, backend-authoritative rollout decisions for just-in-time processing.
+---
+
+The backend owns JIT rollout eligibility. Clients cannot opt themselves in and
+cannot choose the identity evaluated by the control plane. Both the main API
+and desktop backend expose `GET /v1/jit/rollout-decision`; the route derives its
+only identity from the verified Firebase bearer token.
+
+## Decision contract
+
+The response reports three tri-state values: `rollout`, `kill_switch`, and
+`effective`. Each is `enabled`, `disabled`, or `unknown`. Work is permitted only
+when the rollout flag is known `enabled` and the independent kill switch is
+known `disabled`.
+
+The fixed PostHog keys are:
+
+- `jit-processing-v1` for staged exposure
+- `jit-processing-kill-switch-v1` for immediate shutdown
+
+Missing configuration, an absent flag, a non-boolean variant, provider errors,
+and timeouts resolve to `unknown` and fail off. Fully known answers may be
+cached per authenticated UID for at most 30 seconds; unknown/error answers are
+not cached. Query parameters and client feature state have no authority.
+
+## Paid-work enforcement
+
+`POST /v1/desktop/proactivity/completions` resolves the decision before quota
+reservation or provider selection. It then bypasses the cache and refreshes the
+kill switch immediately before constructing or calling the model provider. A
+late kill releases the quota reservation and makes no model call.
+
+The implementation is dark by default. It does not create PostHog flags or
+cohorts, bind a new secret to a runtime, deploy a service, or enroll a user.
+Those are separate operator actions.
+
+## Telemetry boundary
+
+Decision logs contain only bounded values for decision, reason, stage, latency,
+cost class, and error class. They never contain UID, prompt, memory, transcript,
+OCR, image, URL, or exception text.
