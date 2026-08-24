@@ -974,3 +974,22 @@ async def test_complete_invalid_json_returns_422_without_retry(monkeypatch):
     assert invalid.value.detail == desktop_proactivity._INVALID_STRUCTURED_OUTPUT_DETAIL
     assert len(calls) == 1
     assert released == [("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)]
+
+
+def test_proactive_gateway_request_marks_desktop_platform(monkeypatch):
+    """Desktop proactivity is desktop-only traffic; the ledger must say so."""
+    monkeypatch.setenv("OMI_LLM_GATEWAY_URL", "http://gateway.test")
+    captured = {}
+
+    def fake_headers(**kwargs):
+        captured.update(kwargs)
+        return {}
+
+    monkeypatch.setattr(desktop_proactivity, "llm_gateway_headers", fake_headers)
+    monkeypatch.setattr(desktop_proactivity, "_gateway_payload", lambda _request: {})
+
+    completion = request()
+    desktop_proactivity._proactive_provider_request(completion, "user-1", "request-1")
+
+    assert captured["platform"] == "desktop"
+    assert captured["feature"] == f"desktop_{completion.operation.value}"

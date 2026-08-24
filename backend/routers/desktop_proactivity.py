@@ -129,7 +129,8 @@ def _proactive_provider_request(request: "ProactiveCompletionRequest", uid: str,
     payload = _gateway_payload(request)
     gateway_url = os.getenv("OMI_LLM_GATEWAY_URL", "").strip()
     if gateway_url:
-        headers = llm_gateway_headers(feature=f"desktop_{request.operation.value}")
+        # This surface is desktop-only traffic, so the platform is known statically.
+        headers = llm_gateway_headers(feature=f"desktop_{request.operation.value}", platform="desktop")
         headers["X-Omi-User-Uid"] = uid
         headers["X-Omi-Request-ID"] = request_id
         return _ProviderRequest(

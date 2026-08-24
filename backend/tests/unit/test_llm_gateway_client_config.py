@@ -18,11 +18,13 @@ from utils.llm.gateway_client import (
     LLM_CHAT_AGENT_ROUTE_ENV_VAR,
     LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR,
     LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE_ENV_VAR,
+    LLM_GATEWAY_APP_PLATFORM_HEADER,
     LLM_GATEWAY_FEATURE_MODE_ENV_VAR,
     LLM_GATEWAY_URL_ENV_VAR,
     GatewayDirectModelSurfaceBlocked,
     feature_auto_lane_id,
     get_chat_agent_route,
+    llm_gateway_headers,
     raise_if_gateway_feature_mode_blocks_direct_model_surface,
     should_route_chat_agent_through_gateway,
     should_route_features_through_gateway,
@@ -498,3 +500,25 @@ def _load_perplexity_tools():
 
 async def _async_return(value):
     return value
+
+
+def test_llm_gateway_headers_sends_app_platform_when_known() -> None:
+    headers = llm_gateway_headers(feature='chat_agent', platform=' Desktop ')
+
+    assert headers[LLM_GATEWAY_APP_PLATFORM_HEADER] == 'desktop'
+    assert headers['X-Omi-LLM-Feature'] == 'chat_agent'
+    for platform in ('mobile', 'web'):
+        assert llm_gateway_headers(feature='chat_agent', platform=platform)[LLM_GATEWAY_APP_PLATFORM_HEADER] == platform
+
+
+def test_llm_gateway_headers_omits_app_platform_when_unknown() -> None:
+    """Callers that do not know the platform must not send a guessed value."""
+    assert LLM_GATEWAY_APP_PLATFORM_HEADER not in llm_gateway_headers(feature='chat_agent')
+    assert LLM_GATEWAY_APP_PLATFORM_HEADER not in llm_gateway_headers(feature='chat_agent', platform=None)
+    assert LLM_GATEWAY_APP_PLATFORM_HEADER not in llm_gateway_headers(feature='chat_agent', platform='   ')
+
+
+def test_llm_gateway_headers_never_forward_client_supplied_junk_platform() -> None:
+    """A client-controlled header value must not reach an outbound header verbatim."""
+    for junk in ('nintendo-switch', 'desktop\nX-Injected: 1', 'デスクトップ', 'desktop; drop table'):
+        assert LLM_GATEWAY_APP_PLATFORM_HEADER not in llm_gateway_headers(feature='chat_agent', platform=junk)

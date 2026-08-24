@@ -1864,3 +1864,17 @@ async def test_authorization_lookup_failure_is_not_reported_as_an_explicit_denia
     )
     assert 'tools' not in payload
     assert [fallback['reason'] for fallback in fallbacks] == ['authorization_unavailable']
+
+
+def test_gateway_request_headers_forward_the_client_app_platform():
+    """chat_agent gateway spend must carry the platform the request came from."""
+    headers = desktop_chat._gateway_request_headers('request-1', desktop_chat.CHAT_AGENT_AUTO_LANE_ID, 'desktop')
+
+    assert headers['X-Omi-App-Platform'] == 'desktop'
+    assert headers['X-Omi-LLM-Feature'] == 'chat_agent'
+
+
+def test_gateway_request_headers_omit_app_platform_when_client_sent_none():
+    headers = desktop_chat._gateway_request_headers('request-1', desktop_chat.CHAT_AGENT_AUTO_LANE_ID, None)
+
+    assert 'X-Omi-App-Platform' not in headers

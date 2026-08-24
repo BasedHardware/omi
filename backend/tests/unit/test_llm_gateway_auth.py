@@ -210,3 +210,46 @@ def test_both_service_token_vars_blank_fails_closed(monkeypatch):
     )
 
     assert response.status_code == 503
+
+
+def test_app_platform_header_is_parsed_and_not_response_serialized(monkeypatch):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+
+    response = TestClient(_protected_app()).get(
+        '/protected',
+        headers={
+            'authorization': 'Bearer shared-secret',
+            'x-omi-service-caller': 'backend',
+            'x-omi-app-platform': 'Desktop',
+        },
+    )
+
+    assert response.status_code == 200
+    assert 'app_platform' not in response.json()
+    assert ServiceCaller(name='backend', app_platform=' Desktop ').app_platform == 'desktop'
+    assert ServiceCaller(name='backend', app_platform='mobile').app_platform == 'mobile'
+    assert ServiceCaller(name='backend', app_platform='web').app_platform == 'web'
+
+
+def test_missing_app_platform_header_is_unattributed():
+    assert ServiceCaller(name='backend').app_platform is None
+    assert ServiceCaller(name='backend', app_platform=None).app_platform is None
+    assert ServiceCaller(name='backend', app_platform='   ').app_platform is None
+
+
+def test_unknown_app_platform_is_dropped_rather_than_rejected(monkeypatch):
+    """A junk platform header must never be stored verbatim, nor fail the request."""
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+
+    response = TestClient(_protected_app()).get(
+        '/protected',
+        headers={
+            'authorization': 'Bearer shared-secret',
+            'x-omi-service-caller': 'backend',
+            'x-omi-app-platform': 'nintendo-switch',
+        },
+    )
+
+    assert response.status_code == 200
+    assert ServiceCaller(name='backend', app_platform='nintendo-switch').app_platform is None
+    assert ServiceCaller(name='backend', app_platform='desktop; drop table').app_platform is None
