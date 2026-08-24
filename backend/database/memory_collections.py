@@ -90,6 +90,11 @@ class MemoryCollections:
         return f"{self.user_root}/memory_import_candidates"
 
     @property
+    def daily_memory_sweep_receipts(self) -> str:
+        """Content-free per-source receipts for the dark daily memory sweep."""
+        return f"{self.user_root}/daily_memory_sweep_receipts"
+
+    @property
     def non_active_memory_routes(self) -> str:
         return f"{self.user_root}/non_active_memory_routes"
 
@@ -128,6 +133,7 @@ class MemoryCollections:
             self.memory_import_runs,
             self.memory_import_artifacts,
             self.memory_import_candidates,
+            self.daily_memory_sweep_receipts,
             self.non_active_memory_routes,
             self.short_term_lifecycle_transitions,
             self.legacy_fallback,

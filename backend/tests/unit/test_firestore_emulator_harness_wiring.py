@@ -13,6 +13,7 @@ _KNOWLEDGE_LEDGER_MIGRATION_SCRIPT = _REPO_ROOT / "backend" / "scripts" / "knowl
 _KNOWLEDGE_LEDGER_CORRECTION_SCRIPT = (
     _REPO_ROOT / "backend" / "scripts" / "knowledge_ledger_correction_emulator_test.py"
 )
+_DAILY_MEMORY_SWEEP_SCRIPT = _REPO_ROOT / "backend" / "scripts" / "daily_memory_sweep_emulator_test.py"
 
 
 def test_memory_firestore_rules_emulator_harness_is_wired_to_all_protected_collections():
@@ -142,4 +143,24 @@ def test_knowledge_ledger_correction_emulator_harness_is_wired_to_real_service()
     assert package["scripts"]["test:memory-knowledge-ledger-correction:emulator"] == (
         "MEMORY_ENABLED=on npx --no-install firebase emulators:exec --only firestore --project demo-memory "
         '"backend/.venv/bin/python backend/scripts/knowledge_ledger_correction_emulator_test.py"'
+    )
+
+
+def test_daily_memory_sweep_emulator_harness_is_wired_to_real_runner() -> None:
+    assert _DAILY_MEMORY_SWEEP_SCRIPT.exists(), "missing daily-memory sweep emulator harness"
+    script = _DAILY_MEMORY_SWEEP_SCRIPT.read_text()
+    for required in (
+        "FIRESTORE_EMULATOR_HOST",
+        "run_daily_memory_sweep",
+        "daily_memory_sweep_receipts",
+        "interruption",
+        "idempotent",
+        "PASS: daily memory sweep Firestore emulator retry/interruption proof",
+    ):
+        assert required in script
+
+    package = json.loads((_REPO_ROOT / "package.json").read_text())
+    assert package["scripts"]["test:memory-daily-sweep:emulator"] == (
+        "MEMORY_ENABLED=on npx --no-install firebase emulators:exec --only firestore --project demo-daily-memory-sweep "
+        '"backend/.venv/bin/python backend/scripts/daily_memory_sweep_emulator_test.py"'
     )
