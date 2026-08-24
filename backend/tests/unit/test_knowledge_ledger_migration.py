@@ -685,7 +685,9 @@ def test_production_sweep_resumes_adapts_live_rows_and_preserves_history(monkeyp
     )
     db = _PublishingDB(_publisher_control())
 
-    result = run_ledger_migration_sweep("u1", db_client=db, completed_at=NOW)
+    result = run_ledger_migration_sweep(
+        "u1", db_client=db, mutation_authorizer=lambda _memory_id: True, completed_at=NOW
+    )
 
     assert applied == [("u1", "mem-1")]
     assert result.migrated_long_term_count == 1
@@ -737,7 +739,9 @@ def test_production_sweep_closes_short_term_as_legacy_generated_history(monkeypa
     )
     db = _PublishingDB(_publisher_control())
 
-    result = run_ledger_migration_sweep("u1", db_client=db, completed_at=NOW)
+    result = run_ledger_migration_sweep(
+        "u1", db_client=db, mutation_authorizer=lambda _memory_id: True, completed_at=NOW
+    )
 
     assert closed == [("u1", "mem-1", short_item.item_revision)]
     assert result.adjudicated_short_term_count == 1
@@ -829,10 +833,62 @@ def test_migration_mutation_budget_bounds_one_authorized_run(monkeypatch):
         lambda uid, plan, *, db_client: applied.append(plan.memory_id),
     )
 
-    result = run_ledger_migration_sweep("u1", db_client=object(), publish=False)
+    result = run_ledger_migration_sweep(
+        "u1", db_client=object(), mutation_authorizer=lambda _memory_id: True, publish=False
+    )
     assert len(applied) == knowledge_ledger_migration.MAX_LEDGER_MIGRATION_MUTATIONS_PER_RUN
     assert result.remaining_live_legacy_count == 1
     assert result.receipt is None
+
+
+def test_mid_batch_authority_flip_stops_before_every_later_row_write(monkeypatch):
+    import utils.memory.memory_service as memory_service
+
+    rows = [
+        _prompt_row(
+            f"mem-{index}",
+            ledger_schema_version=None,
+            kind=None,
+            subject_scope=None,
+            slot=None,
+            intent_backed=False,
+            write_reason=None,
+        )
+        for index in range(3)
+    ]
+
+    class Service:
+        def __init__(self, *, db_client):
+            pass
+
+        def iter_export_memories(self, uid, *, include_archive):
+            yield from rows
+
+    applied = []
+    decisions = iter([True, False])
+    monkeypatch.setattr(memory_service, "MemoryService", Service)
+    monkeypatch.setattr(
+        knowledge_ledger_migration,
+        "read_canonical_memory_item",
+        lambda _uid, memory_id, **_kwargs: _item(memory_id=memory_id),
+    )
+    monkeypatch.setattr(
+        knowledge_ledger_migration,
+        "apply_ledger_migration_plan",
+        lambda uid, plan, *, db_client: applied.append(plan.memory_id),
+    )
+
+    result = run_ledger_migration_sweep(
+        "u1",
+        db_client=object(),
+        publish=False,
+        mutation_authorizer=lambda _memory_id: next(decisions),
+    )
+
+    assert applied == ["mem-0"]
+    assert result.migrated_long_term_count == 1
+    assert result.remaining_live_legacy_count == 2
+    assert result.authorization_revoked is True
 
 
 def test_apply_plan_routes_only_automatic_long_term_adaptation(monkeypatch):

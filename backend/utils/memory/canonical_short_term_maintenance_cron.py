@@ -8,6 +8,7 @@ inventory; this module never scans all users or consults a UID allowlist.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from dataclasses import dataclass, field
@@ -65,6 +66,7 @@ GRAPH_BACKFILL_SCAN_PAGE_MULTIPLIER = 5
 DEFAULT_GRAPH_BACKFILL_SCAN_SIZE = DEFAULT_GRAPH_BACKFILL_PAGE_SIZE * GRAPH_BACKFILL_SCAN_PAGE_MULTIPLIER
 MAX_MAINTENANCE_UIDS_PER_RUN = 400
 MAX_LEDGER_MIGRATION_UIDS_PER_RUN = 20
+LEDGER_ROW_AUTHORIZATION_TIMEOUT_SECONDS = 15.0
 EXPIRY_ADJUDICATION_LOOKAHEAD = DEFAULT_SHORT_TERM_TTL / 2
 CANONICAL_MEMORY_MAINTENANCE_SEED_CURSOR_PATH = "canonical_memory_maintenance_control/seed_cursor"
 CANONICAL_MEMORY_MAINTENANCE_SEED_SCHEMA_VERSION = 1
@@ -888,6 +890,31 @@ async def run_canonical_short_term_maintenance_cron(
     if not candidate_uids:
         return summary
 
+    authority_loop = asyncio.get_running_loop()
+
+    def row_mutation_authorizer(uid: str) -> Callable[[str], bool]:
+        def authorize(_memory_id: str) -> bool:
+            future = asyncio.run_coroutine_threadsafe(
+                resolve_jit_rollout(
+                    uid,
+                    stage=JITDecisionStage.INGRESS,
+                    force_refresh=True,
+                ),
+                authority_loop,
+            )
+            try:
+                return future.result(timeout=LEDGER_ROW_AUTHORIZATION_TIMEOUT_SECONDS).permits_work
+            except Exception as exc:
+                future.cancel()
+                logger.warning(
+                    "canonical_short_term_maintenance_cron: uid=%s ledger_row_authorization_failed=%s",
+                    uid,
+                    type(exc).__name__,
+                )
+                return False
+
+        return authorize
+
     # Re-authorize each account immediately before its bounded mutation pass.
     # Resolving the whole page up front leaves later accounts holding stale
     # permission while earlier accounts scan and mutate.
@@ -907,6 +934,7 @@ async def run_canonical_short_term_maintenance_cron(
                 db_client=client,
                 completed_at=now,
                 publish=False,
+                mutation_authorizer=row_mutation_authorizer(uid),
             )
         except Exception as exc:
             summary.errors.append(f"uid={uid}: ledger_migration:{type(exc).__name__}")
@@ -917,6 +945,8 @@ async def run_canonical_short_term_maintenance_cron(
             )
             continue
         summary.ledger_migration_rows += result.migrated_long_term_count
+        if getattr(result, "authorization_revoked", False):
+            continue
         if result.remaining_live_legacy_count:
             continue
         final_decision = await resolve_jit_rollout(

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from enum import Enum
 from datetime import datetime, timezone
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Callable, Dict, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -315,6 +315,7 @@ class LedgerMigrationSweepResult(BaseModel):
     already_ledger_count: int = Field(ge=0)
     preserved_historical_legacy_count: int = Field(ge=0)
     remaining_live_legacy_count: int = Field(ge=0)
+    authorization_revoked: bool = False
     receipt: LedgerPromptProjectionReceipt | None = None
 
 
@@ -322,6 +323,7 @@ def run_ledger_migration_sweep(
     uid: str,
     *,
     db_client: Any,
+    mutation_authorizer: Callable[[str], bool],
     completed_at: datetime | None = None,
     publish: bool = True,
 ) -> LedgerMigrationSweepResult:
@@ -331,7 +333,9 @@ def run_ledger_migration_sweep(
     apply transaction. Already-adapted rows are idempotent resume points.
     Inactive/archive legacy rows are deliberately preserved for explicit
     historical export/query and never rewritten merely to satisfy prompt
-    cutover. Publication occurs only after a fresh complete proof scan.
+    cutover. Every canonical mutation requires a fresh affirmative decision
+    from ``mutation_authorizer``; revocation stops the resumable sweep before
+    the next write. Publication occurs only after a fresh complete proof scan.
     """
     from utils.memory.memory_service import MemoryService
 
@@ -356,18 +360,32 @@ def run_ledger_migration_sweep(
             preserved_historical += 1
 
     admitted_ids = live_legacy_ids[:MAX_LEDGER_MIGRATION_MUTATIONS_PER_RUN]
+    handled_rows = 0
+    authorization_revoked = False
+
     for memory_id in admitted_ids:
         item = read_canonical_memory_item(uid, memory_id, db_client=db_client)
         if item is None:
+            # Materialization is itself a canonical mutation. It needs a fresh
+            # authority decision independently of the later ledger adaptation.
+            if not mutation_authorizer(memory_id):
+                authorization_revoked = True
+                break
             try:
                 item = service.materialize_legacy_for_ledger_migration(uid, memory_id)
             except Exception as exc:
                 raise LedgerMigrationPublicationError("live legacy row lacks canonical migration authority") from exc
         plan = plan_ledger_migration(item)
         if plan.action == LedgerMigrationAction.adapt_long_term_history:
+            if not mutation_authorizer(memory_id):
+                authorization_revoked = True
+                break
             apply_ledger_migration_plan(uid, plan, db_client=db_client)
             migrated += 1
         elif plan.action == LedgerMigrationAction.adjudicate_short_term:
+            if not mutation_authorizer(memory_id):
+                authorization_revoked = True
+                break
             close_canonical_legacy_generated_history(
                 uid,
                 memory_id,
@@ -379,8 +397,9 @@ def run_ledger_migration_sweep(
             already_ledger += 1
         else:
             raise LedgerMigrationPublicationError(f"live legacy row remains blocked: {plan.reason}")
+        handled_rows += 1
 
-    remaining = max(0, len(live_legacy_ids) - len(admitted_ids))
+    remaining = max(0, len(live_legacy_ids) - handled_rows)
     if remaining and publish:
         raise LedgerMigrationPublicationError(
             f"migration mutation budget exhausted with {remaining} live rows remaining"
@@ -402,6 +421,7 @@ def run_ledger_migration_sweep(
         already_ledger_count=already_ledger,
         preserved_historical_legacy_count=preserved_historical,
         remaining_live_legacy_count=remaining,
+        authorization_revoked=authorization_revoked,
         receipt=receipt,
     )
 
