@@ -130,21 +130,38 @@ def access_token():
     return _token["value"]
 
 
+def contained(root, rel_path):
+    """`root / rel_path`, but only if it is still inside `root`.
+
+    `rel_path` and `video_root` both arrive in the request body, so a `../../..` component would
+    otherwise let a caller name any readable file on disk and have its pixels sent to the judge.
+    Loopback-only binding is not a substitute for this: any local process can post here.
+    """
+    try:
+        base = Path(root).expanduser().resolve()
+        candidate = (base / rel_path).resolve()
+    except (OSError, ValueError):
+        return None
+    if base != candidate and base not in candidate.parents:
+        return None
+    return candidate
+
+
 def resolve_chunk(rel_path, video_root=None):
     """Find a chunk. The client's own resolved Videos directory wins over any guess."""
     if not rel_path:
         return None
     if video_root:
-        candidate = Path(video_root) / rel_path
-        if candidate.is_file() and candidate.stat().st_size > 0:
+        candidate = contained(video_root, rel_path)
+        if candidate and candidate.is_file() and candidate.stat().st_size > 0:
             return candidate
     for root in VIDEO_ROOTS:
         if not root.exists():
             continue
         # root is .../users -- search each uid's Videos dir
         for videos in list(root.glob("*/Videos")) + [root]:
-            candidate = videos / rel_path
-            if candidate.is_file() and candidate.stat().st_size > 0:
+            candidate = contained(videos, rel_path)
+            if candidate and candidate.is_file() and candidate.stat().st_size > 0:
                 return candidate
     return None
 

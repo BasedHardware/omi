@@ -59,8 +59,14 @@ final class MeetingScreenshotsStore: ObservableObject {
   @Published private(set) var phase: Phase = .idle
   @Published private(set) var frames: [Frame] = []
   @Published private(set) var banner: Frame?
-  /// What the deterministic filter and the enforcement layer did, in the user's words. Shown behind
-  /// a disclosure so the run can be understood without reading a log.
+  /// What the deterministic filter and the enforcement layer did, in the user's words.
+  ///
+  /// **Nothing renders this yet, deliberately.** The shipping design has a "how these were
+  /// chosen" disclosure; this change is dark, so there is no surface to put one on. Keeping the
+  /// record and writing it to the log is what makes the gate auditable in the only place a
+  /// developer can look today — a gate whose corrections are invisible is a gate that looks like
+  /// it is not needed. It stays `@Published` so the eventual disclosure needs no plumbing, not
+  /// because a view reads it.
   @Published private(set) var diagnostics: [String] = []
 
   private static var cache: [String: (frames: [Frame], banner: Frame?, diagnostics: [String])] = [:]
@@ -93,6 +99,14 @@ final class MeetingScreenshotsStore: ObservableObject {
   deinit { task?.cancel() }
 
   static var isEnabled: Bool { MeetingNoteScreenshotsFeature.isEnabled }
+
+  /// Record the run's explanation and put it where a developer can actually read it.
+  private func publish(notes: [String]) {
+    diagnostics = notes
+    for note in notes {
+      log("MeetingScreenshots: · \(note)")
+    }
+  }
 
   func load(conversationID: String, title: String, start: Date, end: Date) {
     guard featureEnabled() else {
@@ -182,7 +196,7 @@ final class MeetingScreenshotsStore: ObservableObject {
         + "\(outcome.candidates.count) candidate(s), drops=\(outcome.drops)")
 
     guard !outcome.candidates.isEmpty else {
-      diagnostics = notes
+      publish(notes: notes)
       phase = .noCapture
       Self.cache[conversationID] = ([], nil, notes)
       return
@@ -196,7 +210,7 @@ final class MeetingScreenshotsStore: ObservableObject {
         candidates: outcome.candidates, meetingTitle: title)
     } catch {
       log("MeetingScreenshots: adjudication failed — \(error.localizedDescription)")
-      diagnostics = notes
+      publish(notes: notes)
       phase = .failed(error.localizedDescription)
       return
     }
@@ -225,7 +239,7 @@ final class MeetingScreenshotsStore: ObservableObject {
         + "\(bannerFrame.map { String($0.id) } ?? "none"), strip=\(strip.count)")
     frames = strip
     banner = bannerFrame
-    diagnostics = notes
+    publish(notes: notes)
     phase = published.isEmpty ? .noCapture : .ready
     Self.cache[conversationID] = (strip, bannerFrame, notes)
   }
