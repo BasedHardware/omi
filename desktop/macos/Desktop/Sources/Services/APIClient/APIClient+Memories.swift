@@ -138,6 +138,53 @@ private enum ServerMemoryAliasDecodeError {
   }
 }
 
+/// Domain adapter for the generated memory-evidence DTO. Evidence is retained
+/// only as a bounded local mirror; it is never prompt authority.
+struct ServerMemoryEvidence: Codable, Equatable {
+  let artifactRef: [String: OmiAnyCodable]?
+  let captureConfidence: Double?
+  let clientDeviceId: String?
+  let createdAt: String?
+  let evidenceId: String
+  let extractorId: String?
+  let extractorVersion: String?
+  let independenceGroup: String
+  let redactionStatus: String?
+  let sourceId: String?
+  let sourceSignal: String?
+  let sourceType: String?
+
+  init(_ wire: OmiAPI.Evidence) {
+    artifactRef = wire.artifactRef
+    captureConfidence = wire.captureConfidence
+    clientDeviceId = wire.clientDeviceId
+    createdAt = wire.createdAt
+    evidenceId = wire.evidenceId
+    extractorId = wire.extractorId
+    extractorVersion = wire.extractorVersion
+    independenceGroup = wire.independenceGroup
+    redactionStatus = wire.redactionStatus
+    sourceId = wire.sourceId
+    sourceSignal = wire.sourceSignal
+    sourceType = wire.sourceType
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case artifactRef = "artifact_ref"
+    case captureConfidence = "capture_confidence"
+    case clientDeviceId = "client_device_id"
+    case createdAt = "created_at"
+    case evidenceId = "evidence_id"
+    case extractorId = "extractor_id"
+    case extractorVersion = "extractor_version"
+    case independenceGroup = "independence_group"
+    case redactionStatus = "redaction_status"
+    case sourceId = "source_id"
+    case sourceSignal = "source_signal"
+    case sourceType = "source_type"
+  }
+}
+
 struct ServerMemory: Decodable, Identifiable {
   let id: String
   let content: String
@@ -179,10 +226,15 @@ struct ServerMemory: Decodable, Identifiable {
   /// Additive canonical-ledger fields. Kept as strings so an older desktop
   /// can mirror unknown ledger values without making them prompt-eligible.
   let ledgerMetadata: [String: String]
+  /// Optional generated-v3 evidence retained in a bounded local mirror.
+  let evidence: [ServerMemoryEvidence]
+  /// Whether the optional evidence field was present on the wire. An omitted
+  /// field must not erase a newer local mirror during compatibility sync.
+  let evidenceIsExplicit: Bool
 
   enum CodingKeys: String, CodingKey {
     case id, content, category, reviewed, visibility, scoring, source, confidence, tags, reasoning,
-      headline, tier, layer
+      headline, tier, layer, evidence
     case memoryId = "memory_id"
     case memoryTier = "memory_tier"
     case createdAt = "created_at"
@@ -321,6 +373,18 @@ struct ServerMemory: Decodable, Identifiable {
     primaryCaptureDevice = wire?.primaryCaptureDevice
     captureDeviceIds = wire?.captureDeviceIds ?? []
     headline = wire?.headline
+
+    // The generated DTO enforces the required evidence identity fields, but
+    // optional malformed evidence must not reject the authoritative memory
+    // text. The domain adapter applies count/size bounds and fails closed.
+    let decodedEvidence: [OmiAPI.Evidence]?
+    do {
+      decodedEvidence = try container.decodeIfPresent([OmiAPI.Evidence].self, forKey: .evidence)
+    } catch {
+      decodedEvidence = nil
+    }
+    evidence = MemoryLedgerEvidence.normalize(decodedEvidence)
+    evidenceIsExplicit = container.contains(.evidence)
 
     var metadata: [String: String] = [:]
     func addString(_ key: CodingKeys) {

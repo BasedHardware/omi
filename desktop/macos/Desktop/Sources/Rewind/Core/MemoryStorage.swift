@@ -660,6 +660,9 @@ actor MemoryStorage {
           if existingRecord.mergeAuthoritativeLedgerMetadataFrom(memory) {
             authoritativeFieldsChanged = true
           }
+          if existingRecord.mergeAuthoritativeLedgerEvidenceFrom(memory) {
+            authoritativeFieldsChanged = true
+          }
           if authoritativeFieldsChanged { try existingRecord.update(database) }
           skipped += 1
           continue

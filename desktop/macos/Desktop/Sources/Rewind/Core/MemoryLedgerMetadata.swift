@@ -67,3 +67,44 @@ enum MemoryLedgerMetadata {
     return normalized.isEmpty || normalized == "null"
   }
 }
+
+/// Bounds and canonical serialization for optional memory evidence.
+///
+/// Evidence is useful for audit/review and future local rendering, but this
+/// mirror intentionally has no prompt authority. Invalid, future-shaped, or
+/// oversized payloads become an empty mirror while the memory text remains
+/// readable.
+enum MemoryLedgerEvidence {
+  static let maxEvidenceEntries = 32
+  static let maxEvidenceJSONBytes = 16 * 1024
+
+  static func normalize(_ wire: [OmiAPI.Evidence]?) -> [ServerMemoryEvidence] {
+    guard let wire, wire.count <= maxEvidenceEntries else { return [] }
+    let values = wire.map(ServerMemoryEvidence.init)
+    guard values.allSatisfy(isValid), canonicalJSONString(values) != nil else { return [] }
+    return values
+  }
+
+  static func canonicalJSONString(_ values: [ServerMemoryEvidence]) -> String? {
+    guard values.count <= maxEvidenceEntries else { return nil }
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys]
+    guard let data = try? encoder.encode(values), data.count <= maxEvidenceJSONBytes else { return nil }
+    return String(data: data, encoding: .utf8)
+  }
+
+  static func decode(_ json: String?) -> [ServerMemoryEvidence] {
+    guard let json,
+      let data = json.data(using: .utf8),
+      let values = try? JSONDecoder().decode([ServerMemoryEvidence].self, from: data),
+      values.allSatisfy(isValid),
+      canonicalJSONString(values) != nil
+    else { return [] }
+    return values
+  }
+
+  private static func isValid(_ value: ServerMemoryEvidence) -> Bool {
+    !value.evidenceId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      && !value.independenceGroup.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+}

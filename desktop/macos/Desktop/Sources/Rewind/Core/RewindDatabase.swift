@@ -2592,6 +2592,12 @@ actor RewindDatabase {
       }
     }
 
+    migrator.registerMigration("addMemoryLedgerEvidence") { db in
+      try db.alter(table: "memories") { t in
+        t.add(column: "ledgerEvidenceJson", .text)
+      }
+    }
+
     try JITTriggerMirrorSchema.migrating(migrator, queue: queue)
     try ContextBucketSchema.removeMigratedLegacyDefaults(
       afterMigrating: queue,
