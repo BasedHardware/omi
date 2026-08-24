@@ -1039,13 +1039,17 @@ def cleanup_expired_daily_memory_sweep_stages(
     now: Optional[datetime] = None,
     limit: int = 128,
 ) -> int:
-    """Delete bounded, expired model stages and invocation payloads.
+    """Delete bounded, expired model stages while retaining invocation tombstones.
 
     Candidate pages are user data.  Their expiry is enforced both by this
     sweep-time janitor and by the read paths (which refuse an expired page),
     so a crash or permanently skipped account cannot retain model output
-    indefinitely.  The account-deletion recursive walk remains the final
-    backstop for all rows under ``users/{uid}``.
+    indefinitely.  Invocation identity is a different kind of data: it is a
+    content-free at-most-once tombstone and must never be deleted merely
+    because its returned payload expired.  Otherwise a retry could recreate
+    the same invocation and charge the provider twice.  The account-deletion
+    recursive walk remains the final backstop for all rows under
+    ``users/{uid}``.
     """
 
     cutoff = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
@@ -1068,24 +1072,86 @@ def cleanup_expired_daily_memory_sweep_stages(
             payload = row.to_dict() if hasattr(row, "to_dict") else None
             if not isinstance(payload, dict):
                 continue
-            if collection_path.endswith(MODEL_INVOCATION_PATH) and payload.get("state") == "pending":
-                # A provider may have returned immediately before the worker
-                # died. Never expire this ambiguity into an automatic retry.
-                continue
+            is_invocation = collection_path.endswith(MODEL_INVOCATION_PATH)
+            if is_invocation:
+                state = payload.get("state")
+                # Every invocation row is an at-most-once identity fence. A
+                # pending lease can expire, and an indeterminate provider
+                # outcome can be old, but neither proves that no paid call
+                # happened. Never delete either row or allow it to be
+                # recreated. They contain no candidate payload by design.
+                if state in {"pending", "indeterminate", "payload_expired"}:
+                    # Be defensive if a malformed/legacy indeterminate row
+                    # accidentally carries user output: remove only that
+                    # payload, retaining the identity fence.
+                    if state == "indeterminate" and "candidate_page" in payload:
+                        reference = getattr(row, "reference", None)
+                        setter = getattr(reference, "set", None)
+                        if callable(setter):
+                            try:
+                                setter(
+                                    {
+                                        "candidate_page": firestore.DELETE_FIELD,
+                                        "candidate_digest": firestore.DELETE_FIELD,
+                                        "returned_at": firestore.DELETE_FIELD,
+                                        "expires_at": firestore.DELETE_FIELD,
+                                    },
+                                    merge=True,
+                                )
+                            except Exception:
+                                pass
+                    continue
+                # Unknown invocation states fail closed too. Only a returned
+                # payload has an expiry that can be compacted; no invocation
+                # identity is safe to garbage-collect automatically.
+                if state != "returned":
+                    continue
             expires_raw = payload.get("expires_at") or payload.get("lease_expires_at")
+            expired = False
             try:
                 expires_at = (
                     expires_raw
                     if isinstance(expires_raw, datetime)
                     else datetime.fromisoformat(str(expires_raw).replace("Z", "+00:00"))
                 )
-                if expires_at.tzinfo is None or expires_at.astimezone(timezone.utc) > cutoff:
-                    continue
+                expired = expires_at.tzinfo is None or expires_at.astimezone(timezone.utc) <= cutoff
             except (TypeError, ValueError):
                 # Malformed expiry is treated as expired by the janitor. The
                 # read path already fails closed on malformed stages.
-                pass
+                expired = True
+            if not expired:
+                continue
             reference = getattr(row, "reference", None)
+            if is_invocation:
+                # Delete user/model output but preserve a durable, content-free
+                # fence. Firestore's field-delete sentinel removes the fields
+                # from the document while ``merge=True`` retains identity and
+                # state. A missing setter is fail-closed: retain the whole row
+                # rather than deleting the only at-most-once proof.
+                setter = getattr(reference, "set", None)
+                if not callable(setter):
+                    continue
+                try:
+                    setter(
+                        {
+                            "schema_version": MODEL_INVOCATION_SCHEMA_VERSION,
+                            "uid": uid,
+                            "invocation_id": payload.get("invocation_id", getattr(row, "id", "")),
+                            "state": "payload_expired",
+                            "at_most_once_tombstone": True,
+                            "payload_expired_at": cutoff,
+                            "candidate_page": firestore.DELETE_FIELD,
+                            "candidate_digest": firestore.DELETE_FIELD,
+                            "returned_at": firestore.DELETE_FIELD,
+                            "expires_at": firestore.DELETE_FIELD,
+                            "lease_expires_at": firestore.DELETE_FIELD,
+                        },
+                        merge=True,
+                    )
+                    deleted += 1
+                except Exception:
+                    continue
+                continue
             delete = getattr(reference, "delete", None)
             if callable(delete):
                 try:
@@ -1120,6 +1186,20 @@ def _invoke_model_once(
     def validated_output(invocation_payload: Any) -> Optional[Tuple[dict[str, Any], ...]]:
         if not isinstance(invocation_payload, dict):
             return None
+        # A returned page is user payload, not the durable receipt. Once its
+        # bounded retention has elapsed, fail closed even if the janitor has
+        # not compacted the payload yet.
+        expires_raw = invocation_payload.get("expires_at")
+        try:
+            expires_at = (
+                expires_raw
+                if isinstance(expires_raw, datetime)
+                else datetime.fromisoformat(str(expires_raw).replace("Z", "+00:00"))
+            )
+            if expires_at.tzinfo is None or expires_at.astimezone(timezone.utc) <= claim_now:
+                return None
+        except (TypeError, ValueError):
+            return None
         output = invocation_payload.get("candidate_page")
         if not isinstance(output, list) or any(not isinstance(item, dict) for item in output):
             return None
@@ -1150,6 +1230,7 @@ def _invoke_model_once(
             "uid": uid,
             "invocation_id": invocation_id,
             "state": "pending",
+            "at_most_once_tombstone": True,
             "claimed_at": claim_now,
             "lease_expires_at": claim_now + MODEL_INVOCATION_LEASE,
         }
@@ -1187,12 +1268,13 @@ def _invoke_model_once(
                 raise ValueError("model invocation candidate output is malformed")
             returned_payload = {
                 "state": "returned",
+                "at_most_once_tombstone": True,
                 "candidate_page": list(built),
                 "candidate_digest": deterministic_contract_id(
                     "daily-sweep-model-invocation-output", {"candidate_page": list(built)}
                 ),
-                "returned_at": datetime.now(timezone.utc),
-                "expires_at": datetime.now(timezone.utc) + STAGED_CANDIDATE_RETENTION,
+                "returned_at": claim_now,
+                "expires_at": claim_now + STAGED_CANDIDATE_RETENTION,
             }
             invocation_ref.set(returned_payload, merge=True)
             return built
@@ -1202,7 +1284,12 @@ def _invoke_model_once(
             # provider did, never an automatic second charge.
             try:
                 invocation_ref.set(
-                    {"state": "indeterminate", "indeterminate_at": datetime.now(timezone.utc)}, merge=True
+                    {
+                        "state": "indeterminate",
+                        "at_most_once_tombstone": True,
+                        "indeterminate_at": claim_now,
+                    },
+                    merge=True,
                 )
             except Exception:
                 pass

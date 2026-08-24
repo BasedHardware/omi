@@ -6,6 +6,7 @@ import time
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
+from google.cloud import firestore
 import pytest
 
 from models.memory_apply import MemoryControlState
@@ -892,11 +893,28 @@ def test_model_return_is_reused_after_stage_gap_and_pending_is_fail_closed():
 
 class _CleanupRow:
     def __init__(self, path, payload, store):
-        self.reference = SimpleNamespace(delete=lambda: store.pop(path, None))
+        self.id = path.rsplit("/", 1)[-1]
+        self._store = store
+        self._path = path
+        self.reference = self
         self._payload = payload
 
     def to_dict(self):
         return self._payload
+
+    def delete(self):
+        self._store.pop(self._path, None)
+
+    def set(self, value, merge=False):
+        current = dict(self._store.get(self._path, {})) if merge else {}
+        for key, item in value.items():
+            if item is firestore.DELETE_FIELD:
+                current.pop(key, None)
+            else:
+                current[key] = item
+        self._store[self._path] = current
+        self._payload.clear()
+        self._payload.update(current)
 
 
 class _CleanupCollection:
@@ -926,18 +944,106 @@ def test_expired_candidate_stages_are_bounded_but_indeterminate_claims_remain_cl
     db.store["users/user-1/daily_memory_sweep_daily_summary_staged/summary"] = {"expires_at": expired}
     db.store["users/user-1/daily_memory_sweep_onboarding_staged/onboarding"] = {"expires_at": expired}
     db.store["users/user-1/daily_memory_sweep_model_invocations/returned"] = {
+        "invocation_id": "returned",
         "state": "returned",
         "expires_at": expired,
+        "candidate_page": [{"content": "private fact"}],
+        "candidate_digest": "digest",
     }
     db.store["users/user-1/daily_memory_sweep_model_invocations/pending"] = {
+        "invocation_id": "pending",
         "state": "pending",
+        "lease_expires_at": expired,
+    }
+    db.store["users/user-1/daily_memory_sweep_model_invocations/indeterminate"] = {
+        "invocation_id": "indeterminate",
+        "state": "indeterminate",
         "lease_expires_at": expired,
     }
 
     assert cleanup_expired_daily_memory_sweep_stages("user-1", db_client=db) == 3
     assert not any("staged" in path for path in db.store)
-    assert "users/user-1/daily_memory_sweep_model_invocations/returned" not in db.store
+    returned = db.store["users/user-1/daily_memory_sweep_model_invocations/returned"]
+    assert returned["state"] == "payload_expired"
+    assert returned["at_most_once_tombstone"] is True
+    assert "candidate_page" not in returned
+    assert "candidate_digest" not in returned
     assert "users/user-1/daily_memory_sweep_model_invocations/pending" in db.store
+    assert "users/user-1/daily_memory_sweep_model_invocations/indeterminate" in db.store
+
+
+def test_indeterminate_tombstone_survives_expired_lease_and_blocks_second_paid_call():
+    db = _CleanupDb()
+    paid_call_count = 0
+
+    def provider_exception():
+        nonlocal paid_call_count
+        paid_call_count += 1
+        raise RuntimeError("provider response was indeterminate")
+
+    assert (
+        _invoke_model_once(
+            db,
+            "user-1",
+            "indeterminate-paid-call",
+            candidate_builder=provider_exception,
+        )
+        is None
+    )
+    assert paid_call_count == 1
+
+    # The provider exception leaves the original lease expired. Cleanup must
+    # retain the identity fence rather than treating expiry as a free retry.
+    invocation_path = "users/user-1/daily_memory_sweep_model_invocations/indeterminate-paid-call"
+    db.store[invocation_path]["lease_expires_at"] = datetime.now(timezone.utc) - timedelta(minutes=1)
+    assert cleanup_expired_daily_memory_sweep_stages("user-1", db_client=db) == 0
+    assert (
+        _invoke_model_once(
+            db,
+            "user-1",
+            "indeterminate-paid-call",
+            candidate_builder=lambda: (_ for _ in ()).throw(AssertionError("charged twice")),
+        )
+        is None
+    )
+    assert paid_call_count == 1
+
+
+def test_returned_payload_expiry_keeps_content_free_tombstone_and_blocks_replay():
+    db = _CleanupDb()
+    paid_call_count = 0
+
+    def provider_return():
+        nonlocal paid_call_count
+        paid_call_count += 1
+        return ({"candidate_id": "crashed-before-stage"},)
+
+    assert _invoke_model_once(
+        db,
+        "user-1",
+        "returned-before-stage",
+        candidate_builder=provider_return,
+    ) == ({"candidate_id": "crashed-before-stage"},)
+    assert paid_call_count == 1
+
+    # Simulate the source worker crashing before writing its candidate stage,
+    # then let the bounded returned payload expire.
+    invocation_path = "users/user-1/daily_memory_sweep_model_invocations/returned-before-stage"
+    db.store[invocation_path]["expires_at"] = datetime.now(timezone.utc) - timedelta(minutes=1)
+    assert cleanup_expired_daily_memory_sweep_stages("user-1", db_client=db) == 1
+    tombstone = db.store[invocation_path]
+    assert tombstone["state"] == "payload_expired"
+    assert "candidate_page" not in tombstone
+    assert (
+        _invoke_model_once(
+            db,
+            "user-1",
+            "returned-before-stage",
+            candidate_builder=lambda: (_ for _ in ()).throw(AssertionError("charged twice")),
+        )
+        is None
+    )
+    assert paid_call_count == 1
 
 
 def test_user_export_includes_both_candidate_stages_and_model_receipts(monkeypatch):
