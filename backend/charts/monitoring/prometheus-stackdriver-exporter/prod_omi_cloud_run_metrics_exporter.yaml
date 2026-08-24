@@ -15,10 +15,29 @@ serviceAccount:
   create: false
   name: "prod-omi-prometheus-stackdriver-exporter"
 
+# Sized from measurement, not from the idle case. A prod scrape returns ~28MB /
+# ~52k series and takes 6-10s of mostly-CPU work, and steady-state usage is
+# ~238m CPU / ~331Mi -- already above the previous 200m/256Mi ceiling. Under that
+# ceiling the process was throttled hard enough to miss both the 10s scrape
+# timeout and the 10s liveness timeout, so kubelet killed it before it could ever
+# deliver a sample: 120 restarts, up=0, scrape_samples_scraped=0. It looked
+# healthy for a day only because prod had no Cloud Run metrics to collect yet.
 resources:
   requests:
-    cpu: 50m
-    memory: 64Mi
-  limits:
     cpu: 200m
     memory: 256Mi
+  limits:
+    cpu: '2'
+    memory: 2Gi
+
+# This exporter collects from Cloud Monitoring at scrape time, so a slow upstream
+# makes the whole HTTP server slow, including '/'. Probes must outlast a scrape
+# or they turn a slow collection into a crash loop.
+livenessProbe:
+  timeoutSeconds: 25
+  periodSeconds: 30
+  failureThreshold: 5
+readinessProbe:
+  timeoutSeconds: 25
+  periodSeconds: 30
+  failureThreshold: 5
