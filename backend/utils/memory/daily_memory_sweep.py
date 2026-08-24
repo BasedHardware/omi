@@ -2,9 +2,9 @@
 
 This module is an authority seam, not a scheduler.  It accepts a server-built
 daily input, writes through the canonical ledger boundary, and stays completely
-inert until an explicit backend authority opens it.  The current daily-summary
-producer is intentionally unchanged; a later integration may adapt its
-structured output to :class:`DailySweepInput`.
+inert until an explicit backend authority opens it.  The completed-day producer
+reads only bounded, finished transcript text (with an optional typed summary
+packet), then invokes the existing memory model under an explicit cost budget.
 
 The contract is deliberately small:
 
@@ -42,10 +42,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.account_deletion_projection_fence import read_account_deletion_projection_fence
 from database.firestore_index_registry import (
-    DAILY_SWEEP_ACTIVE_FACT_ENTITY_QUERY,
     DAILY_SWEEP_ACTIVE_FACT_ENTITY_SLOT_QUERY,
+    DAILY_SWEEP_ACTIVE_FACT_ENTITY_CONTENT_QUERY,
+    DAILY_SWEEP_ACTIVE_FACT_SUBJECT_CONTENT_QUERY,
     DAILY_SWEEP_ACTIVE_FACT_SLOT_QUERY,
-    DAILY_SWEEP_ACTIVE_FACT_SUBJECT_QUERY,
 )
 from database.memory_collections import MemoryCollections
 from models.memory_apply import MemoryControlState
@@ -215,6 +215,19 @@ def daily_memory_sweep_cohort_authority_from_environment() -> DailySweepCohortAu
         enabled=os.getenv(DAILY_MEMORY_SWEEP_COHORT_ENABLED_ENV, "false").casefold() in truthy,
         cohort_name=os.getenv(DAILY_MEMORY_SWEEP_COHORT_NAME_ENV, "").strip(),
     )
+
+
+def read_daily_memory_sweep_cohort_assignment(uid: str, cohort_name: str) -> bool:
+    """Read-only per-user cohort seam used by the maintenance entrypoint.
+
+    The default is deliberately fail-closed.  A deployment may inject a
+    read-only PostHog resolver at this function boundary; this code never
+    creates flags, identifies users, or mutates PostHog state.
+    """
+
+    if not uid.strip() or not cohort_name.strip():
+        return False
+    return False
 
 
 class DailySweepModelAuthority(BaseModel):
@@ -418,6 +431,11 @@ class DailySweepInput(BaseModel):
     window_end_utc: datetime
     complete: bool
     candidates: Tuple[DailySweepCandidate, ...] = ()
+    # The producer attests the onboarding sources represented by this packet,
+    # including sources that yielded zero candidates.  Consumption is done
+    # after all candidate receipts commit, never once per candidate.
+    onboarding_source_keys: Tuple[str, ...] = ()
+    eligibility_proof: Literal["completed_transcript_v1", "none"] = "none"
 
     @field_validator("uid")
     @classmethod
@@ -447,6 +465,16 @@ class DailySweepInput(BaseModel):
         if len(value) > MAX_CANDIDATES_PER_DAY:
             raise ValueError("daily sweep candidate window exceeded")
         return value
+
+    @field_validator("onboarding_source_keys")
+    @classmethod
+    def validate_onboarding_source_keys(cls, value: Tuple[str, ...]) -> Tuple[str, ...]:
+        normalized = tuple(sorted({item.strip() for item in value if item.strip()}))
+        if len(normalized) > MAX_CANDIDATES_PER_DAY:
+            raise ValueError("daily sweep onboarding source budget exceeded")
+        if any(not item.startswith("onboarding:") or len(item) > MAX_SOURCE_ID_CHARACTERS for item in normalized):
+            raise ValueError("invalid onboarding source key")
+        return normalized
 
     @model_validator(mode="after")
     def validate_schema(self) -> "DailySweepInput":
@@ -673,6 +701,31 @@ def _receipt_ref(db_client: Any, uid: str, receipt_id: str) -> Any:
     return db_client.document(f"{MemoryCollections(uid=uid).daily_memory_sweep_receipts}/{receipt_id}")
 
 
+def _onboarding_source_receipt_ref(
+    db_client: Any,
+    uid: str,
+    local_date: date,
+    source_key: str,
+    *,
+    account_generation: int,
+    source_generation: int,
+) -> Any:
+    source_receipt_id = (
+        "source_"
+        + deterministic_contract_id(
+            "daily-memory-sweep-onboarding-source-receipt",
+            {
+                "uid": uid,
+                "local_date": local_date.isoformat(),
+                "source_key": source_key,
+                "account_generation": account_generation,
+                "source_generation": source_generation,
+            },
+        )[:40]
+    )
+    return _receipt_ref(db_client, uid, source_receipt_id)
+
+
 def _receipt_id(
     uid: str,
     local_date: date,
@@ -804,28 +857,50 @@ def reconcile_daily_memory_sweep_timezone(
         ZoneInfo(timezone_name)
     except (ZoneInfoNotFoundError, ValueError) as exc:
         raise ValueError("timezone_name must be a valid IANA timezone") from exc
-    control = ensure_canonical_apply_control_state(uid, db_client=db_client)
+    # Ensure the control document exists before entering the transaction; the
+    # transaction below still re-reads the live value and bumps its generation
+    # atomically with the cursor namespace.
+    ensure_canonical_apply_control_state(uid, db_client=db_client)
     ref = _cursor_ref(db_client, uid)
 
     def reconcile(transaction: Any) -> bool:
         deletion_ref, control_ref = _live_fence_refs(db_client, uid)
-        if not _transaction_fence_open(
-            transaction,
-            deletion_ref,
-            control_ref,
-            uid=uid,
-            account_generation=control.account_generation,
-            source_generation=control.source_generation,
+        deletion_snapshot = deletion_ref.get(transaction=transaction)
+        deletion_payload = deletion_snapshot.to_dict() if getattr(deletion_snapshot, "exists", False) else {}
+        if account_deletion_blocks_access(
+            normalize_account_deletion_status(
+                marker_exists=bool(getattr(deletion_snapshot, "exists", False)),
+                raw_status=deletion_payload.get("wipe_status") if isinstance(deletion_payload, dict) else None,
+            )
         ):
+            return False
+        control_snapshot = control_ref.get(transaction=transaction)
+        if not getattr(control_snapshot, "exists", False):
+            return False
+        control_payload = control_snapshot.to_dict() or {}
+        try:
+            live_control = MemoryControlState.model_validate(control_payload)
+        except Exception:
+            return False
+        if live_control.uid != uid:
             return False
         snapshot = ref.get(transaction=transaction)
         if not getattr(snapshot, "exists", False):
+            next_source_generation = live_control.source_generation + 1
+            transaction.set(
+                control_ref,
+                {
+                    **control_payload,
+                    "source_generation": next_source_generation,
+                    "updated_at": datetime.now(timezone.utc),
+                },
+            )
             transaction.set(
                 ref,
                 DailySweepCursor(
                     uid=uid,
-                    account_generation=control.account_generation,
-                    source_generation=control.source_generation,
+                    account_generation=live_control.account_generation,
+                    source_generation=next_source_generation,
                     timezone_name=timezone_name,
                 ).model_dump(mode="json"),
             )
@@ -836,26 +911,35 @@ def reconcile_daily_memory_sweep_timezone(
             return False
         if (
             cursor.uid != uid
-            or cursor.account_generation != control.account_generation
-            or cursor.source_generation != control.source_generation
+            or cursor.account_generation != live_control.account_generation
+            or cursor.source_generation != live_control.source_generation
         ):
             return False
         if cursor.timezone_name == timezone_name:
             return True
+        # Receipt IDs include source_generation.  Roll that namespace in the
+        # same transaction as the timezone anchor so an overlapping local date
+        # cannot collide with the old completed receipt set.
+        next_source_generation = live_control.source_generation + 1
+        now = datetime.now(timezone.utc)
+        transaction.set(
+            control_ref,
+            {**control_payload, "source_generation": next_source_generation, "updated_at": now},
+        )
         transaction.set(
             ref,
             {
                 "schema_version": CURSOR_SCHEMA_VERSION,
                 "uid": uid,
-                "account_generation": control.account_generation,
-                "source_generation": control.source_generation,
+                "account_generation": live_control.account_generation,
+                "source_generation": next_source_generation,
                 "generation": cursor.generation + 1,
                 "timezone_name": timezone_name,
                 "last_completed_local_date": None,
                 "last_completed_window_id": None,
                 "last_completed_window_start_utc": None,
                 "last_completed_window_end_utc": None,
-                "updated_at": datetime.now(timezone.utc),
+                "updated_at": now,
             },
         )
         return True
@@ -1201,17 +1285,6 @@ def _finish_receipt(
             or existing.get("window_end_utc") != window.end_utc
         ):
             raise RuntimeError("daily sweep receipt changed while completing")
-        consumed_ref = None
-        consumed_values: List[str] = []
-        if candidate.source_type == "onboarding" and callable(getattr(transaction, "get", None)):
-            # Firestore transactions require all reads before the first write.
-            consumed_ref = db_client.document(f"users/{uid}/{ONBOARDING_CONSUMED_STATE_PATH}")
-            consumed_snapshot = transaction.get(consumed_ref)
-            consumed_payload = consumed_snapshot.to_dict() if getattr(consumed_snapshot, "exists", False) else {}
-            raw_consumed_values = (
-                consumed_payload.get("consumed_source_keys", []) if isinstance(consumed_payload, dict) else []
-            )
-            consumed_values = list(raw_consumed_values) if isinstance(raw_consumed_values, list) else []
         payload: Dict[str, Any] = {
             "schema_version": RECEIPT_SCHEMA_VERSION,
             "receipt_state": "committed",
@@ -1228,30 +1301,127 @@ def _finish_receipt(
         if skip_reason:
             payload["skip_reason"] = skip_reason
         transaction.set(receipt_ref, payload, merge=True)
-        if consumed_ref is not None:
-            # The one-time onboarding marker shares the receipt transaction.
-            # A crash before receipt completion therefore leaves the source
-            # retryable, while a completed receipt cannot cause daily repeats.
-            # Consume the onboarding conversation source, not one particular
-            # candidate, so a multi-fact answer is not re-emitted when its
-            # first candidate happened to finish before a crash.
-            consumption_key = candidate.source_id
-            if consumption_key not in consumed_values:
-                consumed_values = (consumed_values + [consumption_key])[-MAX_CANDIDATES_PER_DAY:]
-            transaction.set(
-                consumed_ref,
-                {
-                    "schema_version": "daily_memory_sweep_onboarding.v1",
-                    "consumed_source_keys": consumed_values,
-                    "account_generation": account_generation,
-                    "source_generation": source_generation,
-                    "updated_at": datetime.now(timezone.utc),
-                },
-                merge=True,
-            )
 
     transaction = db_client.transaction()
     firestore.transactional(finish)(transaction)
+
+
+def _finish_onboarding_sources(
+    db_client: Any,
+    uid: str,
+    local_date: date,
+    source_keys: Iterable[str],
+    candidates: Iterable[DailySweepCandidate],
+    *,
+    account_generation: int,
+    source_generation: int,
+    window: CompletedLocalDayWindow,
+) -> bool:
+    """Atomically consume onboarding sources after every candidate is safe.
+
+    A source receipt is separate from candidate receipts.  If the process dies
+    after one canonical write, the source remains retryable; the next attempt
+    sees the committed candidate receipt and finishes the remaining candidates
+    before writing the source marker.  Empty model output still has a source
+    receipt and is therefore not re-run forever.
+    """
+
+    normalized_keys = tuple(sorted(set(source_keys)))
+    if not normalized_keys:
+        return True
+    candidates_by_source: Dict[str, List[DailySweepCandidate]] = {key: [] for key in normalized_keys}
+    for candidate in candidates:
+        source_key = f"onboarding:{candidate.source_id.split(':', 1)[-1]}"
+        if source_key in candidates_by_source:
+            candidates_by_source[source_key].append(candidate)
+    consumed_ref = db_client.document(f"users/{uid}/{ONBOARDING_CONSUMED_STATE_PATH}")
+
+    def complete(transaction: Any) -> bool:
+        deletion_ref, control_ref = _live_fence_refs(db_client, uid)
+        if not _transaction_fence_open(
+            transaction,
+            deletion_ref,
+            control_ref,
+            uid=uid,
+            account_generation=account_generation,
+            source_generation=source_generation,
+        ):
+            return False
+        consumed_snapshot = transaction.get(consumed_ref)
+        consumed_payload = consumed_snapshot.to_dict() if getattr(consumed_snapshot, "exists", False) else {}
+        raw_consumed = consumed_payload.get("consumed_source_keys", []) if isinstance(consumed_payload, dict) else []
+        consumed_values = list(raw_consumed) if isinstance(raw_consumed, list) else []
+        source_receipts: List[Tuple[Any, str]] = []
+        candidate_receipts: List[Any] = []
+        # Firestore requires all reads before writes.  Candidate receipts are
+        # proof that canonical application completed for this whole source.
+        for source_key in normalized_keys:
+            source_ref = _onboarding_source_receipt_ref(
+                db_client,
+                uid,
+                local_date,
+                source_key,
+                account_generation=account_generation,
+                source_generation=source_generation,
+            )
+            source_receipts.append((source_ref, source_key))
+            for candidate in candidates_by_source[source_key]:
+                candidate_receipts.append(
+                    _receipt_ref(
+                        db_client,
+                        uid,
+                        _receipt_id(
+                            uid,
+                            local_date,
+                            candidate,
+                            account_generation=account_generation,
+                            source_generation=source_generation,
+                        ),
+                    )
+                )
+        source_snapshots = [transaction.get(ref) for ref, _ in source_receipts]
+        candidate_snapshots = [transaction.get(ref) for ref in candidate_receipts]
+        for snapshot in candidate_snapshots:
+            if not getattr(snapshot, "exists", False) or (snapshot.to_dict() or {}).get("receipt_state") != "committed":
+                return False
+        next_consumed = list(consumed_values)
+        for (source_ref, source_key), snapshot in zip(source_receipts, source_snapshots):
+            if getattr(snapshot, "exists", False) and (snapshot.to_dict() or {}).get("receipt_state") == "committed":
+                if source_key not in next_consumed:
+                    next_consumed.append(source_key)
+                continue
+            transaction.set(
+                source_ref,
+                {
+                    "schema_version": "daily_memory_sweep_onboarding_source.v1",
+                    "uid": uid,
+                    "local_date": local_date.isoformat(),
+                    "source_key": source_key,
+                    "account_generation": account_generation,
+                    "source_generation": source_generation,
+                    "window_id": window.window_id,
+                    "window_start_utc": window.start_utc,
+                    "window_end_utc": window.end_utc,
+                    "receipt_state": "committed",
+                    "completed_at": datetime.now(timezone.utc),
+                },
+            )
+            if source_key not in next_consumed:
+                next_consumed.append(source_key)
+        transaction.set(
+            consumed_ref,
+            {
+                "schema_version": "daily_memory_sweep_onboarding.v1",
+                "consumed_source_keys": next_consumed[-MAX_CANDIDATES_PER_DAY:],
+                "account_generation": account_generation,
+                "source_generation": source_generation,
+                "updated_at": datetime.now(timezone.utc),
+            },
+            merge=True,
+        )
+        return True
+
+    return bool(firestore.transactional(complete)(db_client.transaction()))
 
 
 def _target_for_candidate(uid: str, candidate: DailySweepCandidate, *, db_client: Any) -> Optional[MemoryItem]:
@@ -1299,22 +1469,26 @@ def _find_active_slot_or_subject(
         "subject_scope": candidate.subject_scope.value,
     }
     try:
-        query = (
-            DAILY_SWEEP_ACTIVE_FACT_ENTITY_SLOT_QUERY
-            if candidate.subject_entity_id is not None and candidate.slot
-            else (
-                DAILY_SWEEP_ACTIVE_FACT_SLOT_QUERY
-                if candidate.slot
-                else (
-                    DAILY_SWEEP_ACTIVE_FACT_ENTITY_QUERY
-                    if candidate.subject_entity_id is not None
-                    else DAILY_SWEEP_ACTIVE_FACT_SUBJECT_QUERY
-                )
+        if candidate.slot:
+            query_spec = (
+                DAILY_SWEEP_ACTIVE_FACT_ENTITY_SLOT_QUERY
+                if candidate.subject_entity_id is not None
+                else DAILY_SWEEP_ACTIVE_FACT_SLOT_QUERY
             )
-        ).build(
+        else:
+            # Content equality is part of the Firestore predicate for the
+            # unslotted path.  Do not bound a broad subject page and then
+            # casefold/filter locally: the matching occupant could be row 4.
+            query_spec = (
+                DAILY_SWEEP_ACTIVE_FACT_ENTITY_CONTENT_QUERY
+                if candidate.subject_entity_id is not None
+                else DAILY_SWEEP_ACTIVE_FACT_SUBJECT_CONTENT_QUERY
+            )
+        query = query_spec.build(
             collection,
             {
                 **values,
+                "content": candidate.content,
                 **({"slot": candidate.slot} if candidate.slot else {}),
                 **(
                     {"subject_entity_id": candidate.subject_entity_id}
@@ -1342,7 +1516,7 @@ def _find_active_slot_or_subject(
             or item.subject_scope != candidate.subject_scope
             or item.subject_entity_id != candidate.subject_entity_id
             or (candidate.slot and item.slot != candidate.slot)
-            or (not candidate.slot and (item.content or "").casefold() != candidate.content.casefold())
+            or (not candidate.slot and item.content != candidate.content)
         ):
             continue
         items.append(item)
@@ -1624,6 +1798,17 @@ def run_daily_memory_sweep(
             except SweepFenceBlocked:
                 return _blocked_output(normalized_uid, "receipt_completion_fence_closed")
             committed_count += 1
+        if not _finish_onboarding_sources(
+            db_client,
+            normalized_uid,
+            local_date,
+            packet.onboarding_source_keys,
+            plan.candidates,
+            account_generation=control.account_generation,
+            source_generation=control.source_generation,
+            window=expected_window,
+        ):
+            return _blocked_output(normalized_uid, "onboarding_source_receipt_incomplete")
         window = completed_local_day_window(local_date, timezone_name)
         window_start_utc, window_end_utc, window_id = window.start_utc, window.end_utc, window.window_id
         if not _advance_cursor(
@@ -1687,6 +1872,11 @@ class DailySweepRuntimeSources:
     # candidate list is empty (the explicit complete-zero case is True).
     complete: bool = False
     source_status: Literal["complete", "complete_zero", "incomplete", "absent"] = "incomplete"
+    # All unconsumed onboarding source identities observed by the producer.
+    # This includes zero-candidate sources and is completed only after the
+    # corresponding candidate receipts are durable.
+    onboarding_source_keys: Tuple[str, ...] = ()
+    eligibility_proof: Literal["completed_transcript_v1", "none"] = "none"
     # Content-free accounting used to enforce the model budget.  It is never
     # emitted as a user-facing telemetry payload.
     model_cost_usd: float = 0.0
@@ -1700,14 +1890,26 @@ class DailySweepRuntimeSources:
         existing_trigger_reconciliation: Iterable[DailySweepCandidate] = (),
         complete: bool = False,
         source_status: Literal["complete", "complete_zero", "incomplete", "absent"] = "incomplete",
+        onboarding_source_keys: Iterable[str] = (),
+        eligibility_proof: Literal["completed_transcript_v1", "none"] = "none",
         model_cost_usd: float = 0.0,
     ) -> "DailySweepRuntimeSources":
+        summary_values = tuple(daily_summary)
+        onboarding_values = tuple(onboarding_cold_start)
+        trigger_values = tuple(existing_trigger_reconciliation)
+        normalized_status: Literal["complete", "complete_zero", "incomplete", "absent"] = (
+            "complete"
+            if complete and source_status == "complete_zero" and (summary_values or onboarding_values or trigger_values)
+            else source_status
+        )
         return cls(
-            daily_summary=tuple(daily_summary),
-            onboarding_cold_start=tuple(onboarding_cold_start),
-            existing_trigger_reconciliation=tuple(existing_trigger_reconciliation),
+            daily_summary=summary_values,
+            onboarding_cold_start=onboarding_values,
+            existing_trigger_reconciliation=trigger_values,
             complete=complete,
-            source_status=source_status,
+            source_status=normalized_status,
+            onboarding_source_keys=tuple(sorted(set(onboarding_source_keys))),
+            eligibility_proof=eligibility_proof,
             model_cost_usd=model_cost_usd,
         )
 
@@ -1738,6 +1940,8 @@ def build_daily_sweep_input(
         window_end_utc=window.end_utc,
         complete=sources.complete,
         candidates=sources.candidates(),
+        onboarding_source_keys=sources.onboarding_source_keys,
+        eligibility_proof=sources.eligibility_proof,
     )
 
 
@@ -1841,6 +2045,15 @@ def _read_completed_day_conversation_texts(
         raw = snapshot.to_dict() or {}
         if not conversation_id or not isinstance(raw, dict):
             return (), "incomplete"
+        # A timestamp range is not an eligibility proof.  Discarded rows are
+        # intentionally excluded, while processing/in-progress/unfinished
+        # rows keep the source incomplete so a later retry cannot advance the
+        # cursor past a transcript that may still change.
+        eligibility = _completed_day_row_eligibility(raw)
+        if eligibility == "discarded":
+            continue
+        if eligibility != "eligible":
+            return (), "incomplete"
         try:
             prepared = prepare_conversation_for_read(raw, uid)  # pyright: ignore[reportPrivateUsage]
             conversation = Conversation(**(prepared or {}))
@@ -1858,6 +2071,18 @@ def _read_completed_day_conversation_texts(
         rows.append((conversation_id, text))
     rows.sort(key=lambda row: row[0])
     return tuple(rows), "complete"
+
+
+def _completed_day_row_eligibility(raw: Mapping[str, Any]) -> Literal["eligible", "discarded", "unfinished"]:
+    """Return the pre-extraction eligibility proof for one conversation row."""
+
+    if bool(raw.get("discarded", False)):
+        return "discarded"
+    raw_status = raw.get("status")
+    status = getattr(raw_status, "value", raw_status)
+    if status != "completed" or not isinstance(raw.get("finished_at"), datetime):
+        return "unfinished"
+    return "eligible"
 
 
 def _extract_daily_memory_candidates(uid: str, text: str) -> Tuple[Any, ...]:
@@ -1882,6 +2107,15 @@ def _onboarding_consumed_keys(db_client: Any, uid: str) -> frozenset[str]:
     return frozenset(str(value) for value in values if isinstance(value, str))
 
 
+@dataclass(frozen=True)
+class OnboardingSourceProduction:
+    """Named result for the bounded onboarding producer contract."""
+
+    candidates: Tuple[DailySweepCandidate, ...] = ()
+    complete: bool = False
+    source_keys: Tuple[str, ...] = ()
+
+
 def _produce_onboarding_sources(
     uid: str,
     *,
@@ -1889,23 +2123,33 @@ def _produce_onboarding_sources(
     max_candidates: int,
     model_authority: DailySweepModelAuthority,
     model_extractor: Optional[Any] = None,
-) -> Tuple[Tuple[DailySweepCandidate, ...], bool]:
-    """Produce once-only onboarding facts from trusted onboarding conversations."""
+) -> OnboardingSourceProduction:
+    """Produce once-only facts from server-marked onboarding conversations.
+
+    ``request.source`` and client onboarding flags are not provenance.  The
+    listen runtime writes a random server-generated onboarding session marker
+    into ``external_data``; only that marker is accepted here.  The returned
+    source keys are consumed later, after all candidate receipts (or an
+    explicit zero-candidate source receipt) commit.
+    """
 
     collection = db_client.collection(f"users/{uid}/conversations")
     where = getattr(collection, "where", None)
     if not callable(where):
-        return (), False
+        return OnboardingSourceProduction()
     try:
+        # The server-generated marker is the only provenance predicate.  The
+        # inequality keeps ordinary conversations out of the bounded page so
+        # onboarding cannot starve behind a user's first N ambient recordings.
         try:
-            query: Any = where(filter=FieldFilter("source", "==", "onboarding"))
+            query: Any = where(filter=FieldFilter("external_data.onboarding_session_id", ">", ""))
         except TypeError:
-            query = where("source", "==", "onboarding")
+            query = where("external_data.onboarding_session_id", ">", "")
         snapshots = list(query.limit(MAX_ONBOARDING_CONVERSATIONS + 1).stream())
     except Exception:
-        return (), False
+        return OnboardingSourceProduction()
     if len(snapshots) > MAX_ONBOARDING_CONVERSATIONS:
-        return (), False
+        return OnboardingSourceProduction()
 
     consumed = _onboarding_consumed_keys(db_client, uid)
     from database.conversations import (  # pyright: ignore[reportPrivateUsage]
@@ -1914,50 +2158,63 @@ def _produce_onboarding_sources(
     from models.conversation import Conversation
 
     rows: List[Tuple[str, str]] = []
+    source_keys: List[str] = []
+    zero_source_keys: List[str] = []
     total_characters = 0
     for snapshot in snapshots:
         conversation_id = str(getattr(snapshot, "id", "") or "")
         raw = snapshot.to_dict() or {}
         if not conversation_id or not isinstance(raw, dict):
-            return (), False
+            return OnboardingSourceProduction()
+        external_data = raw.get("external_data")
+        onboarding_session_id = external_data.get("onboarding_session_id") if isinstance(external_data, dict) else None
+        if not isinstance(onboarding_session_id, str) or len(onboarding_session_id) < 16:
+            continue
         source_key = f"onboarding:{conversation_id}"
         if source_key in consumed:
             continue
+        source_keys.append(source_key)
         try:
             prepared = prepare_conversation_for_read(raw, uid)  # pyright: ignore[reportPrivateUsage]
             conversation = Conversation(**(prepared or {}))
             text = (conversation.get_transcript(include_timestamps=False) or "").strip()
         except Exception:
-            return (), False
+            return OnboardingSourceProduction()
         if not text:
             # An empty onboarding recording is a complete, consumed source; it
             # cannot become a direct memory later.
+            zero_source_keys.append(source_key)
             continue
         total_characters += len(text)
         if total_characters > MAX_ONBOARDING_INPUT_CHARACTERS:
-            return (), False
+            return OnboardingSourceProduction()
         rows.append((conversation_id, text))
     if not rows:
-        return (), True
+        # Includes non-empty source rows whose model output is empty and
+        # genuinely empty transcripts.  The caller still receives source_keys
+        # so the source is consumed exactly once after the day packet commits.
+        return OnboardingSourceProduction(complete=True, source_keys=tuple(source_keys))
     if not model_authority.route_is_budgeted:
-        return (), False
+        return OnboardingSourceProduction()
     extractor = model_extractor or _extract_daily_memory_candidates
     if model_extractor is None:
         from utils.llm.model_config import get_model
 
         if model_authority.model_name != get_model("memories"):
-            return (), False
+            return OnboardingSourceProduction()
     estimated_cost = (total_characters / 1000.0) * MODEL_COST_PER_1K_INPUT_CHARACTERS_USD
     if estimated_cost > model_authority.max_cost_usd:
-        return (), False
+        return OnboardingSourceProduction()
     candidates: List[DailySweepCandidate] = []
+    processed_source_keys = list(zero_source_keys)
     try:
         for conversation_id, text in rows:
+            row_candidates: List[DailySweepCandidate] = []
             for index, memory in enumerate(extractor(uid, text) or ()):
                 content = str(getattr(memory, "content", "") or "").strip()
                 if not content:
                     continue
-                candidates.append(
+                row_candidates.append(
                     DailySweepCandidate(
                         candidate_id=deterministic_contract_id(
                             "daily-sweep-onboarding-candidate",
@@ -1975,13 +2232,27 @@ def _produce_onboarding_sources(
                         subject_entity_id=getattr(memory, "subject_entity_id", None),
                     )
                 )
-                if len(candidates) >= max_candidates:
-                    break
+            if len(candidates) + len(row_candidates) > max_candidates:
+                # Do not partially consume a source whose output exceeded the
+                # bounded packet.  It will be retried with the same exact
+                # source identity rather than losing the tail silently.
+                return OnboardingSourceProduction(
+                    candidates=tuple(candidates),
+                    source_keys=tuple(processed_source_keys),
+                )
+            candidates.extend(row_candidates)
+            processed_source_keys.append(f"onboarding:{conversation_id}")
             if len(candidates) >= max_candidates:
                 break
     except Exception:
-        return (), False
-    return tuple(candidates), True
+        return OnboardingSourceProduction()
+    # Sources after the bounded candidate page remain retryable.  They are not
+    # included in the source-completion attestation for this packet.
+    return OnboardingSourceProduction(
+        candidates=tuple(candidates),
+        complete=True,
+        source_keys=tuple(sorted(set(processed_source_keys))),
+    )
 
 
 def produce_completed_day_daily_summary_sources(
@@ -2070,7 +2341,11 @@ def produce_completed_day_daily_summary_sources(
         # The query itself is the producer's complete-zero attestation.  A
         # missing summary is therefore safe only after this proof, never from
         # a missing Firestore document alone.
-        return DailySweepRuntimeSources.from_iterables(complete=True, source_status="complete_zero")
+        return DailySweepRuntimeSources.from_iterables(
+            complete=True,
+            source_status="complete_zero",
+            eligibility_proof="completed_transcript_v1",
+        )
     if not model.route_is_budgeted:
         return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
 
@@ -2125,6 +2400,7 @@ def produce_completed_day_daily_summary_sources(
         daily_summary=candidates,
         complete=True,
         source_status="complete" if candidates else "complete_zero",
+        eligibility_proof="completed_transcript_v1",
         model_cost_usd=estimated_cost,
     )
 
@@ -2138,19 +2414,18 @@ def produce_onboarding_seed_sources(
     """Return candidates from the real onboarding conversation source.
 
     The old adapter read ``users.onboarding.memory_candidates`` even though no
-    writer ever persisted that field.  Onboarding is actually represented by
-    conversations whose trusted ``source`` is ``onboarding``.  Consumption is
-    marked transactionally with the receipt completion, so retries are safe and
-    a daily run does not repeatedly emit the same seed.
+    writer ever persisted that field.  Onboarding is represented by
+    conversations carrying a server-generated session marker.  Consumption is
+    marked transactionally after the source's candidate receipts complete.
     """
 
-    candidates, _complete = _produce_onboarding_sources(
+    production = _produce_onboarding_sources(
         uid,
         db_client=db_client,
         max_candidates=max_candidates,
         model_authority=daily_memory_sweep_model_authority_from_environment(),
     )
-    return candidates
+    return production.candidates
 
 
 def _iter_active_standing_triggers(uid: str, *, db_client: Any) -> Tuple[MemoryItem, ...]:
@@ -2222,7 +2497,7 @@ def firestore_daily_sweep_source_provider(
             db_client=db_client,
         )
         model_authority = daily_memory_sweep_model_authority_from_environment()
-        onboarding, onboarding_complete = _produce_onboarding_sources(
+        onboarding_production = _produce_onboarding_sources(
             uid,
             db_client=db_client,
             max_candidates=model_authority.max_candidates,
@@ -2230,13 +2505,17 @@ def firestore_daily_sweep_source_provider(
         )
         return DailySweepRuntimeSources.from_iterables(
             daily_summary=summary_sources.daily_summary,
-            onboarding_cold_start=onboarding,
-            complete=summary_sources.complete and onboarding_complete,
+            onboarding_cold_start=onboarding_production.candidates,
+            onboarding_source_keys=onboarding_production.source_keys,
+            complete=summary_sources.complete and onboarding_production.complete,
             source_status=(
                 "incomplete"
-                if not (summary_sources.complete and onboarding_complete)
-                else ("complete" if summary_sources.candidates() else "complete_zero")
+                if not (summary_sources.complete and onboarding_production.complete)
+                else (
+                    "complete" if summary_sources.candidates() or onboarding_production.candidates else "complete_zero"
+                )
             ),
+            eligibility_proof=summary_sources.eligibility_proof,
             model_cost_usd=summary_sources.model_cost_usd,
         )
     raw_payload = snapshot.to_dict() or {}
@@ -2336,17 +2615,31 @@ def firestore_daily_sweep_source_provider(
         # not equivalent to an empty set. The source remains unavailable and
         # the scheduler must not advance its cursor.
         raise
+    parsed_daily_summary = parse("daily_summary", source_type="daily_summary", authority=SweepAuthority.sweep_inference)
+    parsed_onboarding = parse(
+        "onboarding_cold_start",
+        source_type="onboarding",
+        authority=SweepAuthority.direct_user_statement,
+        trusted_direct=True,
+    )
+    raw_onboarding_source_keys = payload.get("onboarding_source_keys", ())
+    if not isinstance(raw_onboarding_source_keys, (list, tuple)):
+        raise ValueError("daily sweep onboarding source keys must be a list")
+    onboarding_source_keys = tuple(
+        sorted({item.strip() for item in raw_onboarding_source_keys if isinstance(item, str) and item.strip()})
+    )
+    if len(onboarding_source_keys) > MAX_CANDIDATES_PER_DAY or any(
+        not item.startswith("onboarding:") for item in onboarding_source_keys
+    ):
+        raise ValueError("daily sweep onboarding source keys are invalid")
+    all_candidates = parsed_daily_summary + parsed_onboarding + tuple(trigger_repairs)
     return DailySweepRuntimeSources(
-        daily_summary=parse("daily_summary", source_type="daily_summary", authority=SweepAuthority.sweep_inference),
-        onboarding_cold_start=parse(
-            "onboarding_cold_start",
-            source_type="onboarding",
-            authority=SweepAuthority.direct_user_statement,
-            trusted_direct=True,
-        ),
+        daily_summary=parsed_daily_summary,
+        onboarding_cold_start=parsed_onboarding,
         existing_trigger_reconciliation=tuple(trigger_repairs),
+        onboarding_source_keys=onboarding_source_keys,
         complete=True,
-        source_status="complete" if trigger_repairs else "complete_zero",
+        source_status="complete" if all_candidates else "complete_zero",
     )
 
 
@@ -2533,6 +2826,7 @@ __all__ = [
     "DailySweepCohortAuthority",
     "daily_memory_sweep_model_authority_from_environment",
     "daily_memory_sweep_cohort_authority_from_environment",
+    "read_daily_memory_sweep_cohort_assignment",
     "plan_daily_memory_sweep",
     "build_daily_sweep_input",
     "produce_completed_day_daily_summary_sources",

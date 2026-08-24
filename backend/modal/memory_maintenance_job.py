@@ -28,6 +28,7 @@ from utils.memory.canonical_short_term_maintenance_cron import (
 from utils.memory.daily_memory_sweep import (
     daily_memory_sweep_authority_from_environment,
     firestore_daily_sweep_source_provider,
+    read_daily_memory_sweep_cohort_assignment,
     run_daily_memory_sweep_scheduler,
 )
 from utils.task_intelligence.workstream_association import (
@@ -67,6 +68,9 @@ def _run_daily_memory_sweep_if_authorized() -> None:
             uid, local_date, control, db_client=default_db_client, timezone_name=kwargs.get("timezone_name", "UTC")
         ),
         timezone_resolver=lambda uid: get_user_time_zone(uid) or "UTC",
+        # Read-only cohort evaluation; the resolver defaults closed and never
+        # mutates PostHog or any user state.
+        cohort_authorizer=read_daily_memory_sweep_cohort_assignment,
         authority=authority,
         max_users=400,
     )
