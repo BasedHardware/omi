@@ -7,19 +7,23 @@ module never writes legacy or canonical collections directly.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from enum import Enum
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+import database.memory_apply_store as memory_apply_store
+import utils.memory.memory_service as memory_service
 from database.memory_collections import MemoryCollections
 from models.knowledge_ledger_policy import (
     LEDGER_SLOT_BY_LEGACY_PREDICATE,
     select_profile_slot_winners,
 )
 from models.memories import MemoryDB
-from models.memory_apply import MemoryControlState
+from models.memory_apply import MemoryControlState, WriterMode
 from models.product_memory import (
     LedgerWriteReason,
     MemoryItem,
@@ -34,6 +38,13 @@ from utils.memory.canonical_memory_adapter import (
     read_canonical_memory_item,
 )
 from utils.memory.knowledge_ledger import LEDGER_SCHEMA_VERSION
+from utils.memory.knowledge_ledger_writer_transition import (
+    CompleteUnionProofReceipt,
+    WriterTransitionError,
+    abort_writer_transition,
+    begin_writer_transition,
+    complete_writer_transition,
+)
 
 MAX_LEDGER_MIGRATION_SCAN_ROWS = 20_000
 MAX_LEDGER_MIGRATION_MUTATIONS_PER_RUN = 100
@@ -62,6 +73,7 @@ class LedgerMigrationCompletion(BaseModel):
     status: str = "complete"
     completed_at: datetime
     source_head_commit_id: str
+    writer_epoch: int = Field(ge=1)
     migrated_long_term_count: int = Field(ge=0)
     adjudicated_short_term_count: int = Field(ge=0)
     blocking_row_count: int = Field(default=0, ge=0)
@@ -96,6 +108,7 @@ class LedgerPromptProjectionReceipt(BaseModel):
     source_head_commit_id: str
     account_generation: int = Field(ge=0)
     source_generation: int = Field(ge=0)
+    writer_epoch: int = Field(ge=1)
     legacy_row_count: Literal[0] = 0
     preserved_historical_legacy_count: int = Field(default=0, ge=0)
     blocking_row_count: Literal[0] = 0
@@ -120,6 +133,9 @@ class LedgerPromptProjectionReceipt(BaseModel):
             or self.source_head_commit_id != control.head_commit_id
             or self.account_generation != control.account_generation
             or self.source_generation != control.source_generation
+            or self.writer_epoch != completion.writer_epoch
+            or self.writer_epoch != control.writer_epoch
+            or control.writer_mode != WriterMode.ledger
         ):
             raise ValueError("ledger prompt projection control fence is stale")
         if len({row.id for row in self.rows}) != len(self.rows):
@@ -221,13 +237,60 @@ def _same_control_fence(left: MemoryControlState, right: MemoryControlState) -> 
         left.account_generation,
         left.source_generation,
         left.commit_sequence,
+        left.writer_mode,
+        left.writer_epoch,
+        left.writer_transition_owner,
     ) == (
         right.uid,
         right.head_commit_id,
         right.account_generation,
         right.source_generation,
         right.commit_sequence,
+        right.writer_mode,
+        right.writer_epoch,
+        right.writer_transition_owner,
     )
+
+
+def _same_writer_transition_authority(left: MemoryControlState, right: MemoryControlState) -> bool:
+    """Compare the transition fence while allowing its authorized drain to advance the head."""
+    return (
+        left.uid,
+        left.account_generation,
+        left.source_generation,
+        left.writer_mode,
+        left.writer_epoch,
+        left.writer_transition_owner,
+    ) == (
+        right.uid,
+        right.account_generation,
+        right.source_generation,
+        right.writer_mode,
+        right.writer_epoch,
+        right.writer_transition_owner,
+    )
+
+
+def _content_free_union_record(row: MemoryDB) -> dict[str, Any]:
+    """Return bounded lifecycle metadata for a proof digest, never memory content."""
+    return {
+        "id": row.id,
+        "ledger_schema_version": row.ledger_schema_version,
+        "updated_at": row.updated_at.isoformat(),
+        "invalid_at": row.invalid_at.isoformat() if row.invalid_at is not None else None,
+        "superseded_by": row.superseded_by,
+        "memory_tier": getattr(row.memory_tier, "value", row.memory_tier),
+        "kind": getattr(row.kind, "value", row.kind),
+    }
+
+
+def _content_free_union_digest(rows: list[dict[str, Any]]) -> str:
+    payload = json.dumps(
+        sorted(rows, key=lambda item: item["id"]),
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
 
 
 def publish_ledger_migration_cutover(
@@ -235,6 +298,7 @@ def publish_ledger_migration_cutover(
     *,
     db_client: Any,
     publication_authorizer: Callable[[], bool],
+    mutation_authorizer: Callable[[str], bool] | None = None,
     migrated_long_term_count: int,
     adjudicated_short_term_count: int,
     completed_at: datetime | None = None,
@@ -248,73 +312,287 @@ def publish_ledger_migration_cutover(
     The required authorizer is evaluated only after that complete proof scan
     and immediately before the atomic publication transaction is opened.
     """
-    from database.memory_apply_store import transactional
-    from utils.memory.memory_service import MemoryService
+    transition_owner = "knowledge-ledger-migration.v1"
 
-    observed_control = _read_control(uid, db_client=db_client)
-    scanned = 0
-    preserved_historical_legacy = 0
-    eligible: list[MemoryDB] = []
-    for row in MemoryService(db_client=db_client).iter_export_memories(uid, include_archive=True):
-        scanned += 1
-        if scanned > MAX_LEDGER_MIGRATION_SCAN_ROWS:
-            raise LedgerMigrationPublicationError("migration scan exceeds the controlled row limit")
-        if row.uid != uid:
-            raise LedgerMigrationPublicationError("migration scan returned a foreign row")
-        if row.ledger_schema_version != LEDGER_SCHEMA_VERSION:
-            if _legacy_prompt_serving(row):
-                raise LedgerMigrationPublicationError("live legacy prompt row survives migration")
-            preserved_historical_legacy += 1
-            continue
-        if _prompt_eligible(row):
-            eligible.append(row)
+    def require_publication_authority() -> None:
+        try:
+            authorized = publication_authorizer()
+        except Exception as exc:
+            raise LedgerMigrationPublicationError("ledger cutover publication authorization failed") from exc
+        if not authorized:
+            raise LedgerMigrationPublicationError("ledger cutover publication authorization denied")
 
-    projection = _bounded_prompt_projection(eligible)
-    published_at = completed_at or datetime.now(timezone.utc)
-    completion = LedgerMigrationCompletion(
-        completed_at=published_at,
-        source_head_commit_id=observed_control.head_commit_id,
-        migrated_long_term_count=migrated_long_term_count,
-        adjudicated_short_term_count=adjudicated_short_term_count,
-        blocking_row_count=0,
-    )
-    completion.validate_complete()
-    receipt = LedgerPromptProjectionReceipt(
-        uid=uid,
-        generated_at=published_at,
-        source_head_commit_id=observed_control.head_commit_id,
-        account_generation=observed_control.account_generation,
-        source_generation=observed_control.source_generation,
-        scanned_row_count=scanned,
-        preserved_historical_legacy_count=preserved_historical_legacy,
-        rows=projection,
-    )
-    receipt.validate_authoritative(uid=uid, completion=completion, control=observed_control)
-
-    @transactional
-    def publish(transaction: Any) -> None:
-        current_control = _read_control(uid, db_client=db_client, transaction=transaction)
-        if not _same_control_fence(current_control, observed_control):
-            raise LedgerMigrationPublicationError("canonical control changed during migration scan")
-        collections = MemoryCollections(uid=uid)
-        transaction.set(
-            db_client.document(collections.knowledge_ledger_migration_state),
-            completion.model_dump(mode="python"),
-        )
-        transaction.set(
-            db_client.document(collections.knowledge_ledger_prompt_projection),
-            receipt.model_dump(mode="python"),
-        )
+    # Entering a writer transition is itself rollout work. Resolve authority
+    # immediately before the control mutation, then resolve it again after the
+    # complete proof scan and immediately before publication.
+    require_publication_authority()
+    initial_control = _read_control(uid, db_client=db_client)
+    cutover_transition = False
+    if initial_control.writer_mode == WriterMode.ledger:
+        # Stable ledger writers may advance the canonical head after cutover.
+        # Reconciliation republishes a freshly fenced bounded projection
+        # without reopening the compatibility writer.
+        transition_control = initial_control
+    elif initial_control.writer_mode == WriterMode.compatibility:
+        cutover_transition = True
+        try:
+            transition_control = begin_writer_transition(
+                uid,
+                target_mode=WriterMode.ledger,
+                transition_owner=transition_owner,
+                expected_control=initial_control,
+                db_client=db_client,
+            )
+        except WriterTransitionError as exc:
+            raise LedgerMigrationPublicationError("ledger writer transition could not begin") from exc
+    elif (
+        initial_control.writer_mode == WriterMode.transitioning_to_ledger
+        and initial_control.writer_transition_owner == transition_owner
+    ):
+        cutover_transition = True
+        transition_control = initial_control
+    else:
+        raise LedgerMigrationPublicationError("another writer transition owns the account")
 
     try:
-        publication_authorized = publication_authorizer()
-    except Exception as exc:
-        raise LedgerMigrationPublicationError("ledger cutover publication authorization failed") from exc
-    if not publication_authorized:
-        raise LedgerMigrationPublicationError("ledger cutover publication authorization denied")
+        # A compatibility writer may have committed immediately before the
+        # transition CAS. The source-generation bump makes pre-CAS plans lose;
+        # this optional bounded drain catches rows that won before that bump.
+        if mutation_authorizer is not None:
+            final_drain = run_ledger_migration_sweep(
+                uid,
+                db_client=db_client,
+                mutation_authorizer=mutation_authorizer,
+                publication_authorizer=publication_authorizer,
+                publish=False,
+                completed_at=completed_at,
+            )
+            if final_drain.authorization_revoked:
+                raise LedgerMigrationPublicationError("ledger final drain authorization was revoked")
+            if final_drain.remaining_live_legacy_count:
+                raise LedgerMigrationPublicationError("ledger final drain exhausted its bounded mutation budget")
+            migrated_long_term_count += final_drain.migrated_long_term_count
+            adjudicated_short_term_count += final_drain.adjudicated_short_term_count
 
-    publish(db_client.transaction())
-    return receipt
+        observed_control = _read_control(uid, db_client=db_client)
+        if not _same_writer_transition_authority(observed_control, transition_control):
+            raise LedgerMigrationPublicationError("canonical control changed before migration proof scan")
+
+        scanned = 0
+        preserved_historical_legacy = 0
+        eligible: list[MemoryDB] = []
+        digest_rows: list[dict[str, Any]] = []
+        for row in memory_service.MemoryService(db_client=db_client).iter_export_memories(uid, include_archive=True):
+            scanned += 1
+            if scanned > MAX_LEDGER_MIGRATION_SCAN_ROWS:
+                raise LedgerMigrationPublicationError("migration scan exceeds the controlled row limit")
+            if row.uid != uid:
+                raise LedgerMigrationPublicationError("migration scan returned a foreign row")
+            digest_rows.append(_content_free_union_record(row))
+            if row.ledger_schema_version != LEDGER_SCHEMA_VERSION:
+                if _legacy_prompt_serving(row):
+                    raise LedgerMigrationPublicationError("live legacy prompt row survives migration")
+                preserved_historical_legacy += 1
+                continue
+            if _prompt_eligible(row):
+                eligible.append(row)
+
+        projection = _bounded_prompt_projection(eligible)
+        published_at = completed_at or datetime.now(timezone.utc)
+        completion = LedgerMigrationCompletion(
+            completed_at=published_at,
+            source_head_commit_id=observed_control.head_commit_id,
+            writer_epoch=observed_control.writer_epoch,
+            migrated_long_term_count=observed_control.ledger_migration_migrated_count,
+            adjudicated_short_term_count=observed_control.ledger_migration_adjudicated_count,
+            blocking_row_count=0,
+        )
+        completion.validate_complete()
+        receipt = LedgerPromptProjectionReceipt(
+            uid=uid,
+            generated_at=published_at,
+            source_head_commit_id=observed_control.head_commit_id,
+            account_generation=observed_control.account_generation,
+            source_generation=observed_control.source_generation,
+            writer_epoch=observed_control.writer_epoch,
+            scanned_row_count=scanned,
+            preserved_historical_legacy_count=preserved_historical_legacy,
+            rows=projection,
+        )
+        transition_receipt = None
+        if cutover_transition:
+            transition_receipt = CompleteUnionProofReceipt(
+                uid=uid,
+                transition_owner=transition_owner,
+                writer_mode=observed_control.writer_mode,
+                target_mode=WriterMode.ledger,
+                writer_epoch=observed_control.writer_epoch,
+                head_commit_id=observed_control.head_commit_id,
+                account_generation=observed_control.account_generation,
+                source_generation=observed_control.source_generation,
+                commit_sequence=observed_control.commit_sequence,
+                complete_union_digest=_content_free_union_digest(digest_rows),
+                complete_union_count=scanned,
+                generated_at=published_at,
+            )
+
+        @memory_apply_store.transactional
+        def publish(transaction: Any) -> None:
+            current_control = _read_control(uid, db_client=db_client, transaction=transaction)
+            if not _same_control_fence(current_control, observed_control):
+                raise LedgerMigrationPublicationError("canonical control changed during migration scan")
+            collections = MemoryCollections(uid=uid)
+            transaction.set(
+                db_client.document(collections.knowledge_ledger_migration_state),
+                completion.model_dump(mode="python"),
+            )
+            transaction.set(
+                db_client.document(collections.knowledge_ledger_prompt_projection),
+                receipt.model_dump(mode="python"),
+            )
+
+        require_publication_authority()
+        publish(db_client.transaction())
+        if transition_receipt is not None:
+            # Receipt publication is still invisible while the writer fence is
+            # transitioning. Re-resolve rollout authority at the exact action
+            # that makes stable ledger mode externally visible.
+            require_publication_authority()
+            completed_control = complete_writer_transition(
+                uid,
+                transition_owner=transition_owner,
+                expected_control=observed_control,
+                receipt=transition_receipt,
+                db_client=db_client,
+            )
+        else:
+            completed_control = _read_control(uid, db_client=db_client)
+            if not _same_control_fence(completed_control, observed_control):
+                raise LedgerMigrationPublicationError("canonical control changed after ledger reconciliation")
+        receipt.validate_authoritative(
+            uid=uid,
+            completion=completion,
+            control=completed_control,
+        )
+        return receipt
+    except Exception:
+        try:
+            current_control = _read_control(uid, db_client=db_client)
+            if (
+                current_control.writer_mode == WriterMode.transitioning_to_ledger
+                and current_control.writer_transition_owner == transition_owner
+            ):
+                abort_writer_transition(
+                    uid,
+                    transition_owner=transition_owner,
+                    expected_control=current_control,
+                    db_client=db_client,
+                )
+        except Exception:
+            # Preserve the original failure. A same-owner future run can resume
+            # a transition if the best-effort safety abort itself is unavailable.
+            pass
+        raise
+
+
+def rollback_ledger_writer_to_compatibility(
+    uid: str,
+    *,
+    db_client: Any,
+    rollback_authorizer: Callable[[], bool],
+    completed_at: datetime | None = None,
+) -> MemoryControlState:
+    """Fence ledger writers and restore the compatibility union without rewriting rows.
+
+    This bridge rollback is intentionally control-plane-only. Ledger rows,
+    preserved generated history, evidence, and prompt receipts remain durable;
+    compatibility readers resume their explicit mixed-schema union.
+    """
+    transition_owner = "knowledge-ledger-rollback.v1"
+
+    def require_rollback_authority() -> None:
+        try:
+            authorized = rollback_authorizer()
+        except Exception as exc:
+            raise LedgerMigrationPublicationError("ledger rollback authorization failed") from exc
+        if not authorized:
+            raise LedgerMigrationPublicationError("ledger rollback authorization denied")
+
+    require_rollback_authority()
+    initial_control = _read_control(uid, db_client=db_client)
+    if initial_control.writer_mode == WriterMode.compatibility:
+        return initial_control
+    if initial_control.writer_mode == WriterMode.ledger:
+        try:
+            transition_control = begin_writer_transition(
+                uid,
+                target_mode=WriterMode.compatibility,
+                transition_owner=transition_owner,
+                expected_control=initial_control,
+                db_client=db_client,
+            )
+        except WriterTransitionError as exc:
+            raise LedgerMigrationPublicationError("ledger rollback transition could not begin") from exc
+    elif (
+        initial_control.writer_mode == WriterMode.transitioning_to_compatibility
+        and initial_control.writer_transition_owner == transition_owner
+    ):
+        transition_control = initial_control
+    else:
+        raise LedgerMigrationPublicationError("another writer transition owns the account")
+
+    try:
+        scanned = 0
+        digest_rows: list[dict[str, Any]] = []
+        for row in memory_service.MemoryService(db_client=db_client).iter_export_memories(uid, include_archive=True):
+            scanned += 1
+            if scanned > MAX_LEDGER_MIGRATION_SCAN_ROWS:
+                raise LedgerMigrationPublicationError("rollback union scan exceeds the controlled row limit")
+            if row.uid != uid:
+                raise LedgerMigrationPublicationError("rollback union scan returned a foreign row")
+            digest_rows.append(_content_free_union_record(row))
+
+        observed_control = _read_control(uid, db_client=db_client)
+        if not _same_control_fence(observed_control, transition_control):
+            raise LedgerMigrationPublicationError("canonical control changed during rollback proof scan")
+        require_rollback_authority()
+        proof = CompleteUnionProofReceipt(
+            uid=uid,
+            transition_owner=transition_owner,
+            writer_mode=observed_control.writer_mode,
+            target_mode=WriterMode.compatibility,
+            writer_epoch=observed_control.writer_epoch,
+            head_commit_id=observed_control.head_commit_id,
+            account_generation=observed_control.account_generation,
+            source_generation=observed_control.source_generation,
+            commit_sequence=observed_control.commit_sequence,
+            complete_union_digest=_content_free_union_digest(digest_rows),
+            complete_union_count=scanned,
+            generated_at=completed_at or datetime.now(timezone.utc),
+        )
+        return complete_writer_transition(
+            uid,
+            transition_owner=transition_owner,
+            expected_control=observed_control,
+            receipt=proof,
+            db_client=db_client,
+        )
+    except Exception:
+        try:
+            current_control = _read_control(uid, db_client=db_client)
+            if (
+                current_control.writer_mode == WriterMode.transitioning_to_compatibility
+                and current_control.writer_transition_owner == transition_owner
+            ):
+                abort_writer_transition(
+                    uid,
+                    transition_owner=transition_owner,
+                    expected_control=current_control,
+                    db_client=db_client,
+                )
+        except Exception:
+            pass
+        raise
 
 
 class LedgerMigrationSweepResult(BaseModel):
@@ -348,9 +626,7 @@ def run_ledger_migration_sweep(
     from ``mutation_authorizer``; revocation stops the resumable sweep before
     the next write. Publication occurs only after a fresh complete proof scan.
     """
-    from utils.memory.memory_service import MemoryService
-
-    service = MemoryService(db_client=db_client)
+    service = memory_service.MemoryService(db_client=db_client)
     scanned = 0
     migrated = 0
     adjudicated = 0
@@ -422,6 +698,7 @@ def run_ledger_migration_sweep(
             uid,
             db_client=db_client,
             publication_authorizer=publication_authorizer,
+            mutation_authorizer=mutation_authorizer,
             migrated_long_term_count=migrated,
             adjudicated_short_term_count=adjudicated,
             completed_at=completed_at,
@@ -440,14 +717,23 @@ def run_ledger_migration_sweep(
 
 
 def read_ledger_migration_completion(uid: str, *, db_client: Any) -> Optional[LedgerMigrationCompletion]:
-    """Fail closed when the per-user completion proof is absent or malformed."""
+    """Fail closed unless completion belongs to the current stable ledger epoch."""
     snapshot = db_client.document(MemoryCollections(uid=uid).knowledge_ledger_migration_state).get()
     if not getattr(snapshot, "exists", False):
         return None
     try:
         completion = LedgerMigrationCompletion.model_validate(snapshot.to_dict() or {})
         completion.validate_complete()
+        control = _read_control(uid, db_client=db_client)
     except (TypeError, ValueError):
+        return None
+    except LedgerMigrationPublicationError:
+        return None
+    if (
+        control.writer_mode != WriterMode.ledger
+        or control.writer_epoch != completion.writer_epoch
+        or control.head_commit_id != completion.source_head_commit_id
+    ):
         return None
     return completion
 

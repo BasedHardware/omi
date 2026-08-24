@@ -34,10 +34,13 @@ from models.memory_apply import (
     ApplyResult,
     ApplyStatus,
     MemoryControlState,
+    MemoryWriterClass,
     MemoryOutboxEvent,
     MemoryOutboxEventType,
+    WriterAdmissionError,
     apply_long_term_patch_transaction,
     memory_content_hash,
+    require_writer_admitted,
 )
 from models.memory_operations import MemoryLedgerReopenReceipt, MemoryOperation, MemoryOperationType
 from models.memory_promotion import MemoryGraphAssertion, PromotionGraphPlan, build_memory_graph_assertion
@@ -45,6 +48,7 @@ from models.memory_review import build_memory_review_conflict
 from models.memory_source_replacement import ConversationSourceReplacementReceipt
 from models.product_memory import (
     RESTRICTED_SENSITIVITY_LABELS,
+    LedgerWriteReason,
     MemoryItem,
     MemoryItemStatus,
     MemoryKind,
@@ -77,6 +81,63 @@ def _require_canonical_intake_enabled() -> None:
 
 class MissingMemoryDocument(MemoryFirestoreApplyError):
     pass
+
+
+_DIRECT_USER_LEDGER_EVIDENCE_TYPES = {"explicit_user_correction", "explicit_user_revert"}
+_DIRECT_USER_WRITE_AUTHORITY = object()
+_DIRECT_USER_MUTATION_PATCH_FIELDS = frozenset(
+    {
+        "patch_id",
+        "packet_id",
+        "run_id",
+        "observed_head_commit_id",
+        "idempotency_key",
+        "decision",
+        "target_memory_id",
+        "result_status",
+        "mutation_metadata",
+        "evidence_ids",
+        "expected_item_revision",
+        "expected_content_hash",
+        "memory_text",
+        "target_tier",
+        "target_user_asserted",
+        "target_visibility",
+        "clear_graph_assertion",
+        "arguments",
+        "promotion_audit",
+        "expires_at",
+        "kg_extracted",
+        "valid_to",
+    }
+)
+_LEDGER_MIGRATION_PATCH_FIELDS = frozenset(
+    {
+        "patch_id",
+        "packet_id",
+        "run_id",
+        "observed_head_commit_id",
+        "idempotency_key",
+        "decision",
+        "target_memory_id",
+        "result_status",
+        "mutation_metadata",
+        "evidence_ids",
+        "expected_item_revision",
+        "expected_content_hash",
+        "ledger_schema_version",
+        "kind",
+        "subject_scope",
+        "slot",
+        "valid_from",
+        "valid_to",
+        "curation_weight",
+        "trigger_condition",
+        "intent_backed",
+        "write_reason",
+        "arguments",
+    }
+)
 
 
 class ConversationSourceReplacementConflict(MemoryFirestoreApplyError):
@@ -298,6 +359,8 @@ def apply_long_term_patch_firestore(
     review_resolution: Optional[CanonicalReviewResolution] = None,
     required_source_item: Optional[MemoryItem] = None,
     ledger_reopen_receipt: Optional[MemoryLedgerReopenReceipt] = None,
+    allow_ledger_migration: bool = False,
+    _direct_user_authority: object | None = None,
     db_client: Any = db,
 ) -> ApplyResult:
     """Apply a memory Long-term patch through the Firestore transaction boundary.
@@ -319,6 +382,43 @@ def apply_long_term_patch_firestore(
         review_resolution,
         required_source_item,
         ledger_reopen_receipt,
+        allow_ledger_migration,
+        _direct_user_authority is _DIRECT_USER_WRITE_AUTHORITY,
+    )
+
+
+def apply_direct_user_long_term_patch_firestore(
+    *,
+    uid: str,
+    operation_id: str,
+    patch_payload: Dict[str, Any],
+    proposed_operation: Optional[MemoryOperation] = None,
+    proposed_evidence: Optional[List[MemoryEvidence]] = None,
+    review_resolution: Optional[CanonicalReviewResolution] = None,
+    required_source_item: Optional[MemoryItem] = None,
+    ledger_reopen_receipt: Optional[MemoryLedgerReopenReceipt] = None,
+    allow_ledger_migration: bool = False,
+    db_client: Any = db,
+) -> ApplyResult:
+    """Apply a mutation admitted only through the trusted user-facing adapter.
+
+    User authority is an opaque in-process capability. It is deliberately not
+    inferred from operation ids, packet prefixes, evidence, or patch content.
+    """
+
+    if allow_ledger_migration:
+        raise ValueError("direct user authority cannot grant ledger migration capability")
+    return apply_long_term_patch_firestore(
+        uid=uid,
+        operation_id=operation_id,
+        patch_payload=patch_payload,
+        proposed_operation=proposed_operation,
+        proposed_evidence=proposed_evidence,
+        review_resolution=review_resolution,
+        required_source_item=required_source_item,
+        ledger_reopen_receipt=ledger_reopen_receipt,
+        _direct_user_authority=_DIRECT_USER_WRITE_AUTHORITY,
+        db_client=db_client,
     )
 
 
@@ -1177,6 +1277,32 @@ def _replace_conversation_source_firestore_transaction(
 
     if _control_fence(control) != _control_fence(observed_control):
         raise ConversationSourceReplacementConflict("memory control changed during conversation replacement")
+    replacement_writer_classes = {
+        (
+            MemoryWriterClass.ledger
+            if write.patch_payload.get("ledger_schema_version") == "knowledge_ledger.v1"
+            else MemoryWriterClass.compatibility
+        )
+        for write in writes
+    }
+    if not replacement_writer_classes:
+        replacement_writer_classes = {
+            (
+                MemoryWriterClass.ledger
+                if item.ledger_schema_version == "knowledge_ledger.v1"
+                else MemoryWriterClass.compatibility
+            )
+            for item in expected_source_items
+        }
+    if len(replacement_writer_classes) > 1:
+        raise ConversationSourceReplacementConflict("conversation replacement mixes writer authorities")
+    try:
+        require_writer_admitted(
+            control,
+            next(iter(replacement_writer_classes), MemoryWriterClass.compatibility),
+        )
+    except WriterAdmissionError as exc:
+        raise ConversationSourceReplacementConflict(str(exc)) from exc
     if (
         replacement_operation.uid != uid
         or replacement_operation.operation_type != MemoryOperationType.source_replacement
@@ -1577,6 +1703,10 @@ def _atomic_bump_source_generation_transaction(
         )
     else:
         control = parse_snapshot_strict(MemoryControlState, snapshot, payload_from_snapshot=_typed_doc)
+    try:
+        require_writer_admitted(control, MemoryWriterClass.compatibility)
+    except WriterAdmissionError as exc:
+        raise MemoryFirestoreApplyError(str(exc)) from exc
     bumped = control.model_copy(
         update={
             "source_generation": control.source_generation + 1,
@@ -1599,6 +1729,8 @@ def _apply_long_term_patch_firestore_transaction(
     review_resolution: Optional[CanonicalReviewResolution],
     required_source_item: Optional[MemoryItem],
     ledger_reopen_receipt: Optional[MemoryLedgerReopenReceipt],
+    allow_ledger_migration: bool = False,
+    direct_user_authorized: bool = False,
 ) -> ApplyResult:
     collections = MemoryCollections(uid=uid)
     # The deletion authority must be part of this very transaction, not only a
@@ -1645,6 +1777,7 @@ def _apply_long_term_patch_firestore_transaction(
         raise MemoryFirestoreApplyError("operation uid does not match requested uid")
     if operation.operation_id != operation_id:
         raise MemoryFirestoreApplyError("operation_id does not match requested operation document")
+    source_packet_id = operation.source_packet_id or ""
 
     committed_replay = apply_long_term_patch_transaction(
         control_state=control_state,
@@ -1756,6 +1889,73 @@ def _apply_long_term_patch_firestore_transaction(
     )
     if existing_item is not None:
         authoritative_payload["existing_item"] = existing_item.model_dump(mode="python")
+    if allow_ledger_migration:
+        migration_prefix = source_packet_id.startswith(
+            ("user_mutation:knowledge_ledger_migration:", "user_mutation:legacy_short_term_adjudication:")
+        )
+        invalid_migration_fields = set(patch_payload) - _LEDGER_MIGRATION_PATCH_FIELDS
+        if (
+            existing_item is None
+            or existing_item.ledger_schema_version is not None
+            or operation.operation_type != MemoryOperationType.ledger_mutation
+            or operation.logical_payload.decision != DurablePatchDecision.update.value
+            or patch_payload.get("ledger_schema_version") != "knowledge_ledger.v1"
+            or not migration_prefix
+            or invalid_migration_fields
+        ):
+            return ApplyResult(
+                status=ApplyStatus.invalid_patch,
+                control_state=control_state,
+                operation=operation,
+                reason="ledger migration capability requires an allowlisted pre-ledger schema adaptation",
+            )
+        writer_class = MemoryWriterClass.ledger
+    elif operation.operation_type != MemoryOperationType.deletion:
+        invalid_direct_user_fields = set(patch_payload) - _DIRECT_USER_MUTATION_PATCH_FIELDS
+        direct_user_update = (
+            direct_user_authorized
+            and existing_item is not None
+            and operation.logical_payload.decision == DurablePatchDecision.update.value
+            and operation.operation_type in {MemoryOperationType.user_mutation, MemoryOperationType.ledger_mutation}
+            and not invalid_direct_user_fields
+        )
+        direct_user_append = (
+            direct_user_authorized
+            and operation.operation_type == MemoryOperationType.ledger_mutation
+            and operation.logical_payload.decision == DurablePatchDecision.add.value
+            and patch_payload.get("ledger_schema_version") == "knowledge_ledger.v1"
+            and patch_payload.get("write_reason") == LedgerWriteReason.direct_user_statement.value
+            and patch_payload.get("user_asserted") is True
+            and bool(operation.logical_payload.supersedes)
+            and any(evidence.source_type in _DIRECT_USER_LEDGER_EVIDENCE_TYPES for evidence in evidence_items)
+        )
+        if direct_user_update or direct_user_append:
+            writer_class = MemoryWriterClass.user
+        else:
+            writer_class = (
+                MemoryWriterClass.ledger
+                if (
+                    (existing_item is not None and existing_item.ledger_schema_version == "knowledge_ledger.v1")
+                    or patch_payload.get("ledger_schema_version") == "knowledge_ledger.v1"
+                )
+                else MemoryWriterClass.compatibility
+            )
+    else:
+        writer_class = None
+    if writer_class is not None:
+        try:
+            require_writer_admitted(
+                control_state,
+                writer_class,
+                allow_ledger_migration=allow_ledger_migration,
+            )
+        except WriterAdmissionError as exc:
+            return ApplyResult(
+                status=ApplyStatus.invalid_patch,
+                control_state=control_state,
+                operation=operation,
+                reason=str(exc),
+            )
     if review_resolution is not None:
         if existing_item is None:
             raise CanonicalReviewResolutionConflict(
@@ -1797,6 +1997,17 @@ def _apply_long_term_patch_firestore_transaction(
                     operation=operation,
                     reason="add patch new_memory_id already exists",
                 )
+    if result.status == ApplyStatus.committed and allow_ledger_migration:
+        control_updates: Dict[str, Any]
+        if source_packet_id.startswith("user_mutation:knowledge_ledger_migration:"):
+            control_updates = {
+                "ledger_migration_migrated_count": result.control_state.ledger_migration_migrated_count + 1
+            }
+        else:
+            control_updates = {
+                "ledger_migration_adjudicated_count": result.control_state.ledger_migration_adjudicated_count + 1
+            }
+        result = result.model_copy(update={"control_state": result.control_state.model_copy(update=control_updates)})
     if result.status == ApplyStatus.committed:
         for evidence_ref, evidence in staged_evidence:
             transaction.set(evidence_ref, _firestore_data(evidence))

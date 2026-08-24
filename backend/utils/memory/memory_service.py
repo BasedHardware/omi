@@ -64,7 +64,7 @@ from utils.memory.product_memory_read_service import (
 from utils.memory.knowledge_ledger import (
     LEDGER_SCHEMA_VERSION,
     LedgerProvenance,
-    amend_fact,
+    amend_user_fact as amend_fact,
     evidence_id_for_ledger_provenance,
     reopen_standalone_fact,
 )

@@ -10,6 +10,8 @@ rerun. It deliberately never writes a migration completion marker.
 
 from __future__ import annotations
 
+# ruff: noqa: E402 -- emulator project/path bootstrapping must precede backend imports.
+
 import hashlib
 import os
 import sys
@@ -364,6 +366,10 @@ def main() -> int:
             raise AssertionError("full rerun attempted to re-plan a migrated row")
         apply_ledger_migration_plan(UID, plan, db_client=db_client)
     after_rerun_control = _required_doc(db_client, collections.memory_apply_control_state)
+    if after_rerun_control.get("ledger_migration_migrated_count") != 2:
+        raise AssertionError("migration control did not retain the cumulative migrated-row count")
+    if after_rerun_control.get("ledger_migration_adjudicated_count") != 0:
+        raise AssertionError("migration control unexpectedly counted an adjudicated Short-term row")
     if after_rerun_control != before_rerun_control:
         raise AssertionError("full migration rerun changed canonical control state")
     if _collection_snapshot(db_client, collections.memory_items) != before_rerun_items:
@@ -386,7 +392,7 @@ def main() -> int:
 
     print(
         "PASS: Firestore emulator migration proof "
-        "rows=2 migrated=2 resumed=2 provenance_complete=2 "
+        "rows=2 migrated=2 cumulative_migrated=2 resumed=2 provenance_complete=2 "
         f"profile_sha256={profile_sha256} final_commit_sequence={after_rerun_control['commit_sequence']}"
     )
     return 0

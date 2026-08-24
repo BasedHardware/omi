@@ -55,6 +55,11 @@ class MemoryCollections:
         return f"{self.user_root}/memory_control/knowledge_ledger_prompt_projection"
 
     @property
+    def knowledge_ledger_writer_transition_receipt(self) -> str:
+        """Content-free proof for the latest writer-mode transition."""
+        return f"{self.user_root}/memory_control/knowledge_ledger_writer_transition_receipt"
+
+    @property
     def historical_graph_enrichment_cursor(self) -> str:
         return f"{self.user_root}/memory_control/historical_graph_enrichment"
 

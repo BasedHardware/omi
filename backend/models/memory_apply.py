@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.memory_admission import valid_required_processing_receipt
@@ -72,6 +72,65 @@ class ApplyStatus(str, Enum):
     invalid_patch = "invalid_patch"
 
 
+class WriterMode(str, Enum):
+    """Authoritative memory-writer state for one user.
+
+    Transition modes are deliberate stop-the-world fences for ordinary memory
+    writers.  Account deletion and privacy enforcement are separate
+    authorities and must not be routed through this admission state.
+    """
+
+    compatibility = "compatibility"
+    transitioning_to_ledger = "transitioning_to_ledger"
+    ledger = "ledger"
+    transitioning_to_compatibility = "transitioning_to_compatibility"
+
+
+class MemoryWriterClass(str, Enum):
+    compatibility = "compatibility"
+    ledger = "ledger"
+    user = "user"
+
+
+class WriterAdmissionError(RuntimeError):
+    """The requested writer class is not admitted by the current control mode."""
+
+
+def require_writer_admitted(
+    control: "MemoryControlState",
+    writer_class: MemoryWriterClass,
+    *,
+    allow_ledger_migration: bool = False,
+) -> None:
+    """Raise unless the writer owns the stable mode or explicit migration seam."""
+    try:
+        requested = MemoryWriterClass(writer_class)
+    except ValueError as exc:
+        raise WriterAdmissionError("unknown memory writer class") from exc
+
+    if requested == MemoryWriterClass.user and control.writer_mode in {
+        WriterMode.compatibility,
+        WriterMode.ledger,
+    }:
+        return
+    if control.writer_mode == WriterMode.compatibility:
+        if requested == MemoryWriterClass.compatibility:
+            return
+        if requested == MemoryWriterClass.ledger and allow_ledger_migration:
+            return
+    elif control.writer_mode == WriterMode.ledger and requested == MemoryWriterClass.ledger:
+        return
+    elif (
+        control.writer_mode == WriterMode.transitioning_to_ledger
+        and requested == MemoryWriterClass.ledger
+        and allow_ledger_migration
+    ):
+        return
+    raise WriterAdmissionError(
+        f"{requested.value} writer is not admitted while writer mode is {control.writer_mode.value}"
+    )
+
+
 class MemoryOutboxEventType(str, Enum):
     projection_sync = "projection_sync"
     vector_sync = "vector_sync"
@@ -92,6 +151,11 @@ class MemoryControlState(BaseModel):
     head_commit_id: str
     account_generation: int
     source_generation: int
+    writer_mode: WriterMode = WriterMode.compatibility
+    writer_epoch: int = 0
+    writer_transition_owner: Optional[str] = None
+    ledger_migration_migrated_count: int = 0
+    ledger_migration_adjudicated_count: int = 0
     commit_sequence: int = 0
     projection_watermark_commit_id: Optional[str] = None
     projection_watermark_sequence: int = 0
@@ -113,6 +177,9 @@ class MemoryControlState(BaseModel):
     @field_validator(
         "account_generation",
         "source_generation",
+        "writer_epoch",
+        "ledger_migration_migrated_count",
+        "ledger_migration_adjudicated_count",
         "commit_sequence",
         "projection_watermark_sequence",
         "legacy_backfill_processed_count",
@@ -122,6 +189,30 @@ class MemoryControlState(BaseModel):
         if value < 0:
             raise ValueError("control counters must be nonnegative")
         return value
+
+    @field_validator("writer_epoch", mode="before")
+    @classmethod
+    def validate_writer_epoch_is_an_integer(cls, value: Any) -> Any:
+        # Writer epochs are CAS fences.  Coercing strings or booleans would let
+        # a malformed control document accidentally participate in a cutover.
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise ValueError("writer_epoch must be an integer")
+        return value
+
+    @model_validator(mode="after")
+    def validate_writer_transition_owner(self) -> "MemoryControlState":
+        transitioning = self.writer_mode in {
+            WriterMode.transitioning_to_ledger,
+            WriterMode.transitioning_to_compatibility,
+        }
+        owner = (self.writer_transition_owner or "").strip()
+        if transitioning and not owner:
+            raise ValueError("transitioning writer mode requires an owner")
+        if not transitioning and self.writer_transition_owner is not None:
+            raise ValueError("stable writer mode cannot retain a transition owner")
+        if self.writer_transition_owner is not None and self.writer_transition_owner != owner:
+            raise ValueError("writer transition owner must not contain surrounding whitespace")
+        return self
 
     @field_validator("last_promotion_run_at", "last_consolidation_run_at", "legacy_backfill_completed_at", "updated_at")
     @classmethod

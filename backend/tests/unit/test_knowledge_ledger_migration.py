@@ -6,6 +6,7 @@ import database.memory_apply_store as apply_store
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.knowledge_ledger_policy import LEDGER_SLOT_BY_LEGACY_PREDICATE, canonicalize_ledger_slot
 from models.memories import MemoryCategory, MemoryDB
+from models.memory_apply import WriterMode
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryLayer, ProcessingState
 from utils.memory import knowledge_ledger_migration
 from utils.memory import canonical_memory_adapter
@@ -18,6 +19,7 @@ from utils.memory.knowledge_ledger_migration import (
     publish_ledger_migration_cutover,
     read_ledger_migration_completion,
     read_ledger_prompt_projection_receipt,
+    rollback_ledger_writer_to_compatibility,
     run_ledger_migration_sweep,
 )
 from testing.jit_processing.migration_fixture import run_migration_fixture
@@ -145,10 +147,11 @@ class _Document:
 
 class _DB:
     def __init__(self):
-        self.doc = _Document()
+        self.docs = {}
+        self.doc = self.document("users/u1/memory_control/knowledge_ledger_migration")
 
-    def document(self, _path):
-        return self.doc
+    def document(self, path):
+        return self.docs.setdefault(path, _Document())
 
 
 def test_completion_marker_is_fail_closed_and_round_trips():
@@ -158,12 +161,23 @@ def test_completion_marker_is_fail_closed_and_round_trips():
     written = LedgerMigrationCompletion(
         completed_at=NOW,
         source_head_commit_id="head-7",
+        writer_epoch=1,
         migrated_long_term_count=8,
         adjudicated_short_term_count=2,
         blocking_row_count=0,
     )
     written.validate_complete()
     db.doc.set(written.model_dump(mode="json"))
+    db.document("users/u1/memory_state/apply_control").set(
+        {
+            "uid": "u1",
+            "head_commit_id": "head-7",
+            "account_generation": 1,
+            "source_generation": 1,
+            "writer_mode": "ledger",
+            "writer_epoch": 1,
+        }
+    )
 
     assert read_ledger_migration_completion("u1", db_client=db) == written
 
@@ -172,6 +186,7 @@ def test_completion_marker_rejects_unadjudicated_rows():
     completion = LedgerMigrationCompletion(
         completed_at=NOW,
         source_head_commit_id="head-7",
+        writer_epoch=1,
         migrated_long_term_count=8,
         adjudicated_short_term_count=0,
         blocking_row_count=1,
@@ -232,6 +247,7 @@ def test_prompt_projection_receipt_is_tied_to_current_head_and_generations():
     completion = LedgerMigrationCompletion(
         completed_at=NOW,
         source_head_commit_id="head-7",
+        writer_epoch=1,
         migrated_long_term_count=8,
         adjudicated_short_term_count=2,
     )
@@ -241,6 +257,7 @@ def test_prompt_projection_receipt_is_tied_to_current_head_and_generations():
         source_head_commit_id="head-7",
         account_generation=4,
         source_generation=9,
+        writer_epoch=1,
         scanned_row_count=10,
         rows=[_prompt_row()],
     )
@@ -252,6 +269,8 @@ def test_prompt_projection_receipt_is_tied_to_current_head_and_generations():
             "head_commit_id": "head-7",
             "account_generation": 4,
             "source_generation": 9,
+            "writer_mode": "ledger",
+            "writer_epoch": 1,
             "commit_sequence": 12,
         },
     }
@@ -269,6 +288,7 @@ def test_prompt_projection_receipt_rejects_control_head_change_during_read():
     completion = LedgerMigrationCompletion(
         completed_at=NOW,
         source_head_commit_id="head-7",
+        writer_epoch=1,
         migrated_long_term_count=0,
         adjudicated_short_term_count=0,
     )
@@ -278,13 +298,28 @@ def test_prompt_projection_receipt_rejects_control_head_change_during_read():
         source_head_commit_id="head-7",
         account_generation=1,
         source_generation=1,
+        writer_epoch=1,
         scanned_row_count=0,
         rows=[],
     )
     control_reads = iter(
         [
-            {"uid": "u1", "head_commit_id": "head-7", "account_generation": 1, "source_generation": 1},
-            {"uid": "u1", "head_commit_id": "head-8", "account_generation": 1, "source_generation": 1},
+            {
+                "uid": "u1",
+                "head_commit_id": "head-7",
+                "account_generation": 1,
+                "source_generation": 1,
+                "writer_mode": "ledger",
+                "writer_epoch": 1,
+            },
+            {
+                "uid": "u1",
+                "head_commit_id": "head-8",
+                "account_generation": 1,
+                "source_generation": 1,
+                "writer_mode": "ledger",
+                "writer_epoch": 1,
+            },
         ]
     )
 
@@ -306,6 +341,7 @@ def test_prompt_projection_receipt_rejects_playbook_bodies_and_duplicate_rows():
     completion = LedgerMigrationCompletion(
         completed_at=NOW,
         source_head_commit_id="head-7",
+        writer_epoch=1,
         migrated_long_term_count=0,
         adjudicated_short_term_count=0,
     )
@@ -314,6 +350,8 @@ def test_prompt_projection_receipt_rejects_playbook_bodies_and_duplicate_rows():
         head_commit_id="head-7",
         account_generation=1,
         source_generation=1,
+        writer_mode=WriterMode.ledger,
+        writer_epoch=1,
     )
     body_row = _prompt_row(
         kind="document",
@@ -327,6 +365,7 @@ def test_prompt_projection_receipt_rejects_playbook_bodies_and_duplicate_rows():
         source_head_commit_id="head-7",
         account_generation=1,
         source_generation=1,
+        writer_epoch=1,
         scanned_row_count=1,
         rows=[body_row],
     )
@@ -344,6 +383,7 @@ def test_prompt_projection_receipt_rejects_playbook_bodies_and_duplicate_rows():
             source_head_commit_id="head-7",
             account_generation=1,
             source_generation=1,
+            writer_epoch=1,
             scanned_row_count=65,
             rows=[_prompt_row(f"row-{index}") for index in range(65)],
         )
@@ -361,6 +401,7 @@ def test_prompt_projection_receipt_rejects_every_non_current_lifecycle_shape(upd
     completion = LedgerMigrationCompletion(
         completed_at=NOW,
         source_head_commit_id="head-7",
+        writer_epoch=1,
         migrated_long_term_count=0,
         adjudicated_short_term_count=0,
     )
@@ -369,6 +410,8 @@ def test_prompt_projection_receipt_rejects_every_non_current_lifecycle_shape(upd
         head_commit_id="head-7",
         account_generation=1,
         source_generation=1,
+        writer_mode=WriterMode.ledger,
+        writer_epoch=1,
     )
     receipt = LedgerPromptProjectionReceipt(
         uid="u1",
@@ -376,6 +419,7 @@ def test_prompt_projection_receipt_rejects_every_non_current_lifecycle_shape(upd
         source_head_commit_id="head-7",
         account_generation=1,
         source_generation=1,
+        writer_epoch=1,
         scanned_row_count=1,
         rows=[_prompt_row(**updates)],
     )
@@ -509,7 +553,7 @@ def test_cutover_publisher_requires_authority_and_denial_after_empty_scan_writes
             completed_at=NOW,
         )
 
-    assert db.events == ["scan-start", "scan-complete", "refresh"]
+    assert db.events == ["refresh"]
     assert db.transaction_count == 0
     assert not any("knowledge_ledger_" in path for path in db.values)
 
@@ -533,7 +577,7 @@ def test_cutover_publisher_authorization_error_or_timeout_fails_closed(monkeypat
             completed_at=NOW,
         )
 
-    assert db.events == ["scan-start", "scan-complete", "refresh"]
+    assert db.events == ["refresh"]
     assert db.transaction_count == 0
     assert not any("knowledge_ledger_" in path for path in db.values)
 
@@ -555,7 +599,35 @@ def test_cutover_publisher_refreshes_after_scan_immediately_before_transaction(m
         completed_at=NOW,
     )
 
-    assert db.events == ["scan-start", "scan-complete", "refresh", "transaction"]
+    assert db.events == [
+        "refresh",
+        "transaction",
+        "scan-start",
+        "scan-complete",
+        "refresh",
+        "transaction",
+        "refresh",
+        "transaction",
+    ]
+
+
+def test_cutover_revocation_after_receipt_publication_never_activates_ledger_mode(monkeypatch):
+    db = _PublishingDB(_publisher_control())
+    _install_publisher_fakes(monkeypatch, db, [_prompt_row()])
+    decisions = iter([True, True, False])
+
+    with pytest.raises(knowledge_ledger_migration.LedgerMigrationPublicationError, match="denied"):
+        publish_ledger_migration_cutover(
+            "u1",
+            db_client=db,
+            publication_authorizer=lambda: next(decisions),
+            migrated_long_term_count=0,
+            adjudicated_short_term_count=0,
+            completed_at=NOW,
+        )
+
+    assert db.values[db.control_path]["writer_mode"] == "compatibility"
+    assert read_ledger_migration_completion("u1", db_client=db) is None
 
 
 def test_kill_flip_during_publication_scan_never_opens_transaction(monkeypatch):
@@ -579,7 +651,11 @@ def test_kill_flip_during_publication_scan_never_opens_transaction(monkeypatch):
             completed_at=NOW,
         )
 
-    assert db.transaction_count == 0
+    # The first transaction enters the writer fence; the second restores
+    # compatibility after authority flips during the scan. No publication
+    # transaction is opened and no receipt survives.
+    assert db.transaction_count == 2
+    assert db.values[db.control_path]["writer_mode"] == "compatibility"
     assert not any("knowledge_ledger_" in path for path in db.values)
 
 
@@ -725,7 +801,14 @@ def test_cutover_publisher_rechecks_head_and_rolls_back_partial_transaction(monk
             adjudicated_short_term_count=0,
             completed_at=NOW,
         )
-    assert db.events == ["scan-start", "scan-complete", "refresh", "transaction"]
+    assert db.events == [
+        "refresh",
+        "transaction",
+        "scan-start",
+        "scan-complete",
+        "refresh",
+        "transaction",
+    ]
     assert not any("knowledge_ledger_" in path for path in db.values)
 
     db.values[db.control_path] = _publisher_control()
@@ -776,6 +859,53 @@ def test_cutover_publisher_can_republish_after_canonical_write_invalidation(monk
     assert second.source_head_commit_id == "head-8"
     assert [row.id for row in second.rows] == ["second"]
     assert read_ledger_prompt_projection_receipt("u1", db_client=db, completion=new_completion) == second
+
+
+def test_bridge_rollback_restores_compatibility_without_rewriting_union_rows(monkeypatch):
+    rows = [
+        _prompt_row("ledger-current"),
+        _prompt_row("legacy-history", ledger_schema_version=None, memory_tier="archive"),
+    ]
+    control = _publisher_control()
+    control.update({"writer_mode": "ledger", "writer_epoch": 4})
+    db = _PublishingDB(control)
+    _install_publisher_fakes(monkeypatch, db, rows)
+    before = [row.model_dump(mode="json") for row in rows]
+
+    completed = rollback_ledger_writer_to_compatibility(
+        "u1",
+        db_client=db,
+        rollback_authorizer=lambda: True,
+        completed_at=NOW,
+    )
+
+    assert completed.writer_mode == WriterMode.compatibility
+    assert completed.writer_epoch == 5
+    assert completed.source_generation == 2
+    assert [row.model_dump(mode="json") for row in rows] == before
+    proof = db.values["users/u1/memory_control/knowledge_ledger_writer_transition_receipt"]
+    assert proof["target_mode"] == "compatibility"
+    assert proof["complete_union_count"] == 2
+    assert not ({"content", "body", "rows", "memories", "memory_items"} & set(proof))
+
+
+def test_bridge_rollback_revocation_after_scan_aborts_back_to_ledger(monkeypatch):
+    control = _publisher_control()
+    control.update({"writer_mode": "ledger", "writer_epoch": 4})
+    db = _PublishingDB(control)
+    _install_publisher_fakes(monkeypatch, db, [_prompt_row()])
+    decisions = iter([True, False])
+
+    with pytest.raises(knowledge_ledger_migration.LedgerMigrationPublicationError, match="denied"):
+        rollback_ledger_writer_to_compatibility(
+            "u1",
+            db_client=db,
+            rollback_authorizer=lambda: next(decisions),
+            completed_at=NOW,
+        )
+
+    assert db.values[db.control_path]["writer_mode"] == "ledger"
+    assert "users/u1/memory_control/knowledge_ledger_writer_transition_receipt" not in db.values
 
 
 def test_production_sweep_resumes_adapts_live_rows_and_preserves_history(monkeypatch):
@@ -862,7 +992,7 @@ def test_production_sweep_closes_short_term_as_legacy_generated_history(monkeypa
         write_reason=None,
         memory_tier="short_term",
     )
-    scans = iter([[live_short], []])
+    scans = iter([[live_short], [], []])
 
     class Service:
         def __init__(self, *, db_client):

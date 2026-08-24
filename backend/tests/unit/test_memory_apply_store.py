@@ -895,6 +895,38 @@ def test_firestore_conversation_replacement_commits_old_and_new_generation_atomi
     assert all(raw["commit_sequence"] == 1 for raw in replacement_outbox)
 
 
+def test_firestore_conversation_replacement_cannot_bypass_writer_transition(store):
+    control = MemoryControlState(
+        uid="u1",
+        head_commit_id="head0",
+        account_generation=1,
+        source_generation=2,
+        writer_mode="transitioning_to_ledger",
+        writer_epoch=1,
+        writer_transition_owner="migration-owner",
+    )
+    old = _short_term_target(memory_id="mem1")
+    db = _db_with(control=control, target_items=[old])
+    replacement_id, replacement_digest, replacement_operation, write = _replacement_operation_and_write(store, control)
+
+    with pytest.raises(store.ConversationSourceReplacementConflict, match="not admitted"):
+        store.replace_conversation_source_firestore(
+            uid="u1",
+            conversation_id="conv1",
+            replacement_id=replacement_id,
+            replacement_digest=replacement_digest,
+            replacement_operation=replacement_operation,
+            observed_control=control,
+            expected_source_items=[old],
+            expected_reactivation_items=[],
+            writes=[write],
+            db_client=db,
+        )
+
+    assert db.docs["users/u1/memory_items/mem1"]["status"] == MemoryItemStatus.active.value
+    assert "users/u1/memory_items/mem2" not in db.docs
+
+
 def test_firestore_conversation_replacement_scrubs_semantics_and_keeps_lineage_outbox_fences(store):
     control = MemoryControlState(
         uid="u1",
@@ -1744,6 +1776,7 @@ def test_firestore_add_rejects_new_operation_that_collides_with_existing_ledger_
     )
     db = _db_with(operation=first_operation)
     db.docs.pop("users/u1/memory_evidence/ev1")
+    db.docs["users/u1/memory_state/apply_control"].update({"writer_mode": "ledger", "writer_epoch": 1})
 
     first = store.apply_long_term_patch_firestore(
         uid="u1",
@@ -1781,6 +1814,181 @@ def test_firestore_add_rejects_new_operation_that_collides_with_existing_ledger_
     assert collision.reason == "add patch new_memory_id already exists"
     assert db.docs["users/u1/memory_items/mem-ledger-stable-action"] == original
     assert "users/u1/memory_evidence/ev-ledger-v2" not in db.docs
+
+
+@pytest.mark.parametrize(
+    ("writer_mode", "writer_epoch", "transition_owner"),
+    [
+        ("transitioning_to_ledger", 1, "migration-owner"),
+        ("transitioning_to_compatibility", 2, "rollback-owner"),
+    ],
+)
+def test_firestore_apply_boundary_blocks_ordinary_writers_during_mode_transitions(
+    store, writer_mode, writer_epoch, transition_owner
+):
+    control = MemoryControlState(
+        uid="u1",
+        head_commit_id="head0",
+        account_generation=1,
+        source_generation=2,
+        writer_mode=writer_mode,
+        writer_epoch=writer_epoch,
+        writer_transition_owner=transition_owner,
+    )
+    operation = _operation()
+    db = _db_with(control=control, operation=operation)
+
+    result = store.apply_long_term_patch_firestore(
+        uid="u1",
+        operation_id=operation.operation_id,
+        patch_payload=_patch(),
+        proposed_operation=operation,
+        db_client=db,
+    )
+
+    assert result.status == ApplyStatus.invalid_patch
+    assert "not admitted" in (result.reason or "")
+    assert not any(path.startswith("users/u1/memory_items/") for path in db.docs)
+
+
+def test_firestore_apply_boundary_blocks_legacy_schema_writer_in_ledger_mode(store):
+    control = MemoryControlState(
+        uid="u1",
+        head_commit_id="head0",
+        account_generation=1,
+        source_generation=2,
+        writer_mode="ledger",
+        writer_epoch=1,
+    )
+    operation = _operation()
+    db = _db_with(control=control, operation=operation)
+
+    result = store.apply_long_term_patch_firestore(
+        uid="u1",
+        operation_id=operation.operation_id,
+        patch_payload=_patch(),
+        proposed_operation=operation,
+        db_client=db,
+    )
+
+    assert result.status == ApplyStatus.invalid_patch
+    assert "compatibility writer is not admitted" in (result.reason or "")
+    assert not any(path.startswith("users/u1/memory_items/") for path in db.docs)
+
+
+def test_firestore_apply_rejects_user_mutation_disguised_as_ledger_migration(store):
+    existing = _target_item()
+    control = MemoryControlState(
+        uid="u1",
+        head_commit_id="head0",
+        account_generation=1,
+        source_generation=2,
+        writer_mode="transitioning_to_ledger",
+        writer_epoch=1,
+        writer_transition_owner="migration-owner",
+    )
+    operation = _operation(
+        operation_type=MemoryOperationType.user_mutation,
+        source_packet_id="user_mutation:content_edit:mem1:r1:attack",
+        target_memory_id="mem1",
+        logical_payload={
+            "decision": "update",
+            "target_memory_id": "mem1",
+            "memory_text": "Unauthorized edit.",
+            "result_status": "active",
+        },
+    )
+    db = _db_with(control=control, operation=operation, target_items=[existing])
+    patch = _patch(
+        decision=DurablePatchDecision.update,
+        target_memory_id="mem1",
+        memory_text="Unauthorized edit.",
+        ledger_schema_version="knowledge_ledger.v1",
+    )
+
+    result = store.apply_long_term_patch_firestore(
+        uid="u1",
+        operation_id=operation.operation_id,
+        patch_payload=patch,
+        proposed_operation=operation,
+        allow_ledger_migration=True,
+        db_client=db,
+    )
+
+    assert result.status == ApplyStatus.invalid_patch
+    assert "allowlisted pre-ledger schema adaptation" in (result.reason or "")
+    assert db.docs["users/u1/memory_items/mem1"]["content"] == existing.content
+
+
+def test_firestore_apply_rejects_spoofed_user_prefix_for_ledger_append_in_compatibility(store):
+    operation = _operation(
+        operation_type=MemoryOperationType.ledger_mutation,
+        source_packet_id="user_mutation:spoofed-ledger-add",
+    )
+    db = _db_with(operation=operation)
+    patch = _patch(
+        ledger_schema_version="knowledge_ledger.v1",
+        initial_tier=MemoryTier.long_term,
+        intent_backed=True,
+        write_reason=LedgerWriteReason.direct_user_statement,
+        user_asserted=True,
+    )
+
+    result = store.apply_long_term_patch_firestore(
+        uid="u1",
+        operation_id=operation.operation_id,
+        patch_payload=patch,
+        proposed_operation=operation,
+        db_client=db,
+    )
+
+    assert result.status == ApplyStatus.invalid_patch
+    assert "ledger writer is not admitted" in (result.reason or "")
+
+
+def test_firestore_apply_rejects_spoofed_user_update_that_clears_ledger_schema_in_compatibility(store):
+    existing = _target_item(
+        ledger_schema_version="knowledge_ledger.v1",
+        kind=MemoryKind.fact,
+        subject_scope=MemorySubjectScope.primary_user,
+        intent_backed=True,
+        write_reason=LedgerWriteReason.direct_user_statement,
+        user_asserted=True,
+    )
+    operation = _operation(
+        operation_type=MemoryOperationType.user_mutation,
+        source_packet_id="user_mutation:spoofed-ledger-update",
+        target_memory_id=existing.memory_id,
+        logical_payload={
+            "decision": DurablePatchDecision.update.value,
+            "target_memory_id": existing.memory_id,
+            "memory_text": "Spoofed downgrade.",
+            "result_status": LifecycleState.active.value,
+        },
+    )
+    db = _db_with(operation=operation, target_items=[existing])
+    patch = _patch(
+        decision=DurablePatchDecision.update,
+        target_memory_id=existing.memory_id,
+        memory_text="Spoofed downgrade.",
+        ledger_schema_version=None,
+        expected_item_revision=existing.item_revision,
+        expected_content_hash=existing.content_hash,
+    )
+
+    result = store.apply_long_term_patch_firestore(
+        uid="u1",
+        operation_id=operation.operation_id,
+        patch_payload=patch,
+        proposed_operation=operation,
+        db_client=db,
+    )
+
+    assert result.status == ApplyStatus.invalid_patch
+    assert "ledger writer is not admitted" in (result.reason or "")
+    stored = db.docs[f"users/u1/memory_items/{existing.memory_id}"]
+    assert stored["ledger_schema_version"] == "knowledge_ledger.v1"
+    assert stored["content"] == existing.content
 
 
 def test_firestore_promotion_persists_long_term_item_and_structured_graph_assertion_atomically(store):
@@ -2006,10 +2214,18 @@ def test_firestore_apply_update_keeps_persisted_timestamps_monotonic_when_apply_
     assert restored.updated_at >= prior_updated_at
 
 
+@pytest.mark.parametrize(
+    ("writer_mode", "operation_type"),
+    [
+        ("transitioning_to_ledger", MemoryOperationType.long_term_apply),
+        ("transitioning_to_compatibility", MemoryOperationType.ledger_mutation),
+    ],
+)
 def test_firestore_apply_retries_committed_operation_from_stored_result_without_rereading_mutable_evidence_or_target(
-    store,
+    store, writer_mode, operation_type
 ):
     operation = _operation(
+        operation_type=operation_type,
         target_memory_id="mem1",
         logical_payload={
             "decision": "update",
@@ -2028,7 +2244,15 @@ def test_firestore_apply_retries_committed_operation_from_stored_result_without_
         source_state_reason=SourceStateReason.account_purged,
         artifact_preservation=ArtifactPreservationState.deleted_by_user,
     )
-    control = MemoryControlState(uid="u1", head_commit_id="head1", account_generation=1, source_generation=2)
+    control = MemoryControlState(
+        uid="u1",
+        head_commit_id="head1",
+        account_generation=1,
+        source_generation=2,
+        writer_mode=writer_mode,
+        writer_epoch=1,
+        writer_transition_owner="transition-owner",
+    )
     db = _db_with(control=control, operation=operation, evidence=purged_evidence)
     patch = _patch(decision=DurablePatchDecision.update, target_memory_id="mem1", memory_text="Updated.")
 

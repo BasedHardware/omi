@@ -993,6 +993,7 @@ async def run_canonical_short_term_maintenance_cron(
                 uid,
                 db_client=client,
                 publication_authorizer=authorizer,
+                mutation_authorizer=authorizer,
                 migrated_long_term_count=result.migrated_long_term_count,
                 adjudicated_short_term_count=result.adjudicated_short_term_count,
                 completed_at=now,
