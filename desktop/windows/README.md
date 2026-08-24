@@ -10,7 +10,7 @@ Omi for Windows — an Electron + React + TypeScript port of the Omi desktop app
 
 ```bash
 # 1. Install dependencies
-pnpm install
+pnpm install --frozen-lockfile
 
 # 2. Create your local env file (required — the app won't start without it)
 cp .env.example .env
