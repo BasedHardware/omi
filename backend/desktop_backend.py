@@ -17,6 +17,7 @@ from routers import (
     desktop_proxy,
     metrics,
     desktop_proactivity,
+    jit_ledger_snapshot,
     jit_rollout,
     desktop_realtime,
     desktop_screen_crisp,
@@ -97,6 +98,7 @@ def _build_app() -> FastAPI:
     app.include_router(desktop_chat.router)
     app.include_router(desktop_proxy.router)
     app.include_router(desktop_proactivity.router)
+    app.include_router(jit_ledger_snapshot.router)
     app.include_router(jit_rollout.router)
     app.include_router(desktop_realtime.router)
     app.include_router(desktop_screen_crisp.router)

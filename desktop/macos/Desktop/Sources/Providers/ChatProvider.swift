@@ -2487,8 +2487,8 @@ class ChatProvider: ObservableObject {
   // MARK: - Load Context (Memories)
 
   /// Loads prompt knowledge on every turn. The canonical path activates only
-  /// from an owner-pinned, exhaustively paginated server receipt; any missing
-  /// rollout header, kill switch, partial page, mixed schema, or auth race
+  /// from an owner-pinned dedicated server receipt; any disabled/unknown
+  /// rollout, kill switch, incomplete migration, mixed schema, or auth race
   /// retains the released local-cache behavior for rollback compatibility.
   private func refreshMemoriesForPrompt() async {
     cachedLedgerPromptProjection = nil
@@ -2505,7 +2505,7 @@ class ChatProvider: ObservableObject {
     do {
       let snapshot = try await APIClient.shared.getKnowledgeLedgerPromptSnapshot(
         authorizationSnapshot: authorization)
-      guard snapshot.authority == .enabled else { return }
+      guard snapshot.isAuthoritative else { return }
       let projection = KnowledgeLedgerPromptProjection(
         memories: snapshot.memories,
         hasAuthoritativeSnapshot: true)
@@ -2513,7 +2513,10 @@ class ChatProvider: ObservableObject {
         log("ChatProvider: canonical ledger prompt snapshot rejected as incomplete or mixed-version")
         return
       }
-      try await MemoryStorage.shared.syncAuthoritativeKnowledgeLedgerSnapshot(snapshot.memories)
+      try await MemoryStorage.shared.syncAuthoritativeKnowledgeLedgerSnapshot(
+        snapshot.memories,
+        authorizationSnapshot: authorization)
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
       cachedLedgerPromptProjection = projection
       log("ChatProvider: adopted authoritative ledger prompt snapshot (\(snapshot.memories.count) rows)")
     } catch {

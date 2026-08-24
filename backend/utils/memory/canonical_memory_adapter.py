@@ -63,10 +63,13 @@ from models.memory_apply import (
 from models.memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
 from models.memory_operations import MemoryOperation, MemoryOperationType
 from models.product_memory import (
+    LedgerWriteReason,
     MAX_MEMORY_ARGUMENTS_JSON_BYTES,
     MemoryAccessPolicy,
     MemoryItemStatus,
+    MemoryKind,
     MemoryLayer,
+    MemorySubjectScope,
     ProcessingState,
     MemoryItem,
     is_archive_access_eligible,
@@ -99,6 +102,9 @@ Payload = Dict[str, Any]
 SortKey = tuple[int, datetime | int]
 UserMutationPatchBuilder = Callable[[MemoryItem, datetime], Tuple[Payload, Payload]]
 _LEDGER_WRITE_AUTHORITY = object()
+# ``knowledge_ledger`` imports this adapter, so the wire discriminator cannot
+# be imported back without a cycle. Keep this private copy contract-tested.
+_LEDGER_SCHEMA_VERSION = "knowledge_ledger.v1"
 
 # Concurrent same-account canonical writes race the account-global control
 # CAS inside the conversation source replacement. Retraction — the delete and
@@ -1453,6 +1459,81 @@ def close_canonical_ledger_item(
         if closed is None:
             raise exc
         return closed
+    return updated
+
+
+def close_canonical_legacy_generated_history(
+    uid: str,
+    memory_id: str,
+    *,
+    expected_item_revision: int,
+    valid_to: Optional[datetime] = None,
+    db_client: Any = None,
+) -> MemoryItem:
+    """Idempotently close one surviving legacy Short-term row as history."""
+    client = db_client if db_client is not None else default_db_client
+
+    def already_closed() -> Optional[MemoryItem]:
+        item = _read_canonical_memory_item_for_lineage(uid, memory_id, db_client=client)
+        if (
+            item is not None
+            and item.status == MemoryItemStatus.superseded
+            and item.arguments.get("history_class") == "legacy_generated"
+            and item.valid_to is not None
+        ):
+            return item
+        return None
+
+    if closed := already_closed():
+        return closed
+
+    def build_patch(item: MemoryItem, now: datetime) -> Tuple[Payload, Payload]:
+        if item.item_revision != expected_item_revision:
+            raise ValueError("legacy Short-term adjudication source revision changed")
+        if (
+            item.tier != MemoryLayer.short_term
+            or item.status != MemoryItemStatus.active
+            or item.ledger_schema_version is not None
+        ):
+            raise ValueError("only active pre-ledger Short-term rows may be adjudicated")
+        closed_at = valid_to or now
+        if closed_at.tzinfo is None or closed_at.utcoffset() is None:
+            raise ValueError("legacy Short-term adjudication valid_to must be timezone-aware")
+        subject_scope = (
+            MemorySubjectScope.third_party
+            if item.subject_entity_id and item.subject_entity_id != "user"
+            else MemorySubjectScope.primary_user
+        )
+        # This is not merely an inactive pre-ledger row. Give the preserved
+        # record the canonical ledger shape and exact migration provenance so
+        # the explicit historical-fact tool can retrieve it while every
+        # current/default prompt path continues to exclude it.
+        return (
+            {"result_status": LifecycleState.superseded.value},
+            {
+                "valid_to": max(closed_at, item.captured_at),
+                "arguments": {**item.arguments, "history_class": "legacy_generated"},
+                "ledger_schema_version": _LEDGER_SCHEMA_VERSION,
+                "kind": MemoryKind.fact.value,
+                "subject_scope": subject_scope.value,
+                "intent_backed": False,
+                "write_reason": LedgerWriteReason.legacy_migration.value,
+            },
+        )
+
+    try:
+        _, updated = _apply_canonical_user_mutation(
+            uid,
+            memory_id,
+            mutation_kind=f"legacy_short_term_adjudication:r{expected_item_revision}",
+            build_patch=build_patch,
+            operation_type=MemoryOperationType.ledger_mutation,
+            db_client=client,
+        )
+    except ValueError as exc:
+        if closed := already_closed():
+            return closed
+        raise exc
     return updated
 
 

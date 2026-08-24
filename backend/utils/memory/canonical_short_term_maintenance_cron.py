@@ -8,6 +8,7 @@ inventory; this module never scans all users or consults a UID allowlist.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from dataclasses import dataclass, field
@@ -34,6 +35,11 @@ from utils.memory.memory_system import (
     CANONICAL_MEMORY_MAINTENANCE_REGISTRY_COLLECTION,
     CANONICAL_MEMORY_MAINTENANCE_REGISTRY_SCHEMA_VERSION,
 )
+from utils.jit_rollout import JITDecisionStage, resolve_jit_rollout
+from utils.memory.knowledge_ledger_migration import (
+    publish_ledger_migration_cutover,
+    run_ledger_migration_sweep,
+)
 from utils.memory.promotion_flex import (
     MEMORY_PROMOTION_FLEX_LEASE_SECONDS,
     PromotionFlexDeferred,
@@ -59,6 +65,7 @@ DEFAULT_GRAPH_BACKFILL_PAGE_SIZE = 5
 GRAPH_BACKFILL_SCAN_PAGE_MULTIPLIER = 5
 DEFAULT_GRAPH_BACKFILL_SCAN_SIZE = DEFAULT_GRAPH_BACKFILL_PAGE_SIZE * GRAPH_BACKFILL_SCAN_PAGE_MULTIPLIER
 MAX_MAINTENANCE_UIDS_PER_RUN = 400
+MAX_LEDGER_MIGRATION_UIDS_PER_RUN = 20
 EXPIRY_ADJUDICATION_LOOKAHEAD = DEFAULT_SHORT_TERM_TTL / 2
 CANONICAL_MEMORY_MAINTENANCE_SEED_CURSOR_PATH = "canonical_memory_maintenance_control/seed_cursor"
 CANONICAL_MEMORY_MAINTENANCE_SEED_SCHEMA_VERSION = 1
@@ -501,6 +508,9 @@ class CanonicalShortTermMaintenanceCronSummary:
     outbox_ack_failures_total: int = 0
     graph_enriched_total: int = 0
     graph_enrichment_blocked_total: int = 0
+    ledger_migration_users: int = 0
+    ledger_migration_rows: int = 0
+    completed_uids: tuple[str, ...] = ()
     errors: list[str] = field(default_factory=_empty_errors)
 
 
@@ -848,6 +858,7 @@ def run_universal_short_term_maintenance(
         summary.skipped_users,
         len(summary.errors),
     )
+    summary.completed_uids = tuple(sorted(completed_uids))
     return summary
 
 
@@ -862,7 +873,7 @@ async def run_canonical_short_term_maintenance_cron(
     inventory_limit: int = MAX_MAINTENANCE_UIDS_PER_RUN,
 ) -> CanonicalShortTermMaintenanceCronSummary:
     """Async entrypoint: offload sync Firestore maintenance to ``db_executor``."""
-    return await run_blocking(
+    summary = await run_blocking(
         db_executor,
         run_universal_short_term_maintenance,
         db_client=db_client,
@@ -873,3 +884,65 @@ async def run_canonical_short_term_maintenance_cron(
         uid_inventory=uid_inventory,
         inventory_limit=inventory_limit,
     )
+    client = db_client if db_client is not None else default_db_client
+    candidate_uids = summary.completed_uids[:MAX_LEDGER_MIGRATION_UIDS_PER_RUN]
+    if not candidate_uids:
+        return summary
+
+    # The same backend-owned PostHog authority and kill switch used by request
+    # paths selects the bounded maintenance cohort. No job-only rollout seam
+    # can accidentally migrate users outside the enabled cohort.
+    decision_coroutines = [
+        resolve_jit_rollout(
+            uid,
+            stage=JITDecisionStage.INGRESS,
+            force_refresh=True,
+        )
+        for uid in candidate_uids
+    ]
+    decisions = await asyncio.gather(*decision_coroutines)
+    for uid, decision in zip(candidate_uids, decisions):
+        if not decision.permits_work:
+            continue
+        try:
+            result = await run_blocking(
+                db_executor,
+                run_ledger_migration_sweep,
+                uid,
+                db_client=client,
+                completed_at=now,
+                publish=False,
+            )
+        except Exception as exc:
+            summary.errors.append(f"uid={uid}: ledger_migration:{type(exc).__name__}")
+            logger.warning(
+                "canonical_short_term_maintenance_cron: uid=%s ledger_migration_failed=%s",
+                uid,
+                type(exc).__name__,
+            )
+            continue
+        summary.ledger_migration_rows += result.migrated_long_term_count
+        if result.remaining_live_legacy_count:
+            continue
+        final_decision = await resolve_jit_rollout(
+            uid,
+            stage=JITDecisionStage.INGRESS,
+            force_refresh=True,
+        )
+        if not final_decision.permits_work:
+            continue
+        try:
+            await run_blocking(
+                db_executor,
+                publish_ledger_migration_cutover,
+                uid,
+                db_client=client,
+                migrated_long_term_count=result.migrated_long_term_count,
+                adjudicated_short_term_count=result.adjudicated_short_term_count,
+                completed_at=now,
+            )
+        except Exception as exc:
+            summary.errors.append(f"uid={uid}: ledger_publication:{type(exc).__name__}")
+            continue
+        summary.ledger_migration_users += 1
+    return summary

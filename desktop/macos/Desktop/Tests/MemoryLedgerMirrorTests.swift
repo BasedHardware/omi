@@ -5,14 +5,26 @@ import XCTest
 
 final class MemoryLedgerMirrorTests: XCTestCase {
   private var userDir: URL?
+  private var fixture: RewindStorageTestIsolation.Fixture?
+  private var authSnapshot: RewindStorageTestIsolation.AuthSnapshot?
 
   override func setUp() async throws {
     try await super.setUp()
     let fixture = try await RewindStorageTestIsolation.setUp(userIdPrefix: "memory-ledger-mirror")
+    self.fixture = fixture
     userDir = fixture.userDir
+    authSnapshot = await MainActor.run { RewindStorageTestIsolation.captureAuthSnapshot() }
+    await MainActor.run { RewindStorageTestIsolation.signInForTests(userId: fixture.testUserId) }
+    RuntimeOwnerAuthorizationAuthority.shared.beginTransition()
+    RuntimeOwnerAuthorizationAuthority.shared.endTransition(ownerID: fixture.testUserId)
   }
 
   override func tearDown() async throws {
+    if let authSnapshot {
+      await MainActor.run { RewindStorageTestIsolation.restoreAuthSnapshot(authSnapshot) }
+      RuntimeOwnerAuthorizationAuthority.shared.beginTransition()
+      RuntimeOwnerAuthorizationAuthority.shared.endTransition(ownerID: authSnapshot.userId)
+    }
     await RewindStorageTestIsolation.tearDown(userDir: userDir)
     try await super.tearDown()
   }
@@ -184,7 +196,9 @@ final class MemoryLedgerMirrorTests: XCTestCase {
     let future = makeMemory(id: "ledger-future-preserved", metadata: futureMetadata)
     try await MemoryStorage.shared.syncServerMemories([kept, removed, closed, rejected, future])
 
-    let count = try await MemoryStorage.shared.syncAuthoritativeKnowledgeLedgerSnapshot([kept])
+    let authorization = try XCTUnwrap(RuntimeOwnerIdentity.captureAuthorizationSnapshot())
+    let count = try await MemoryStorage.shared.syncAuthoritativeKnowledgeLedgerSnapshot(
+      [kept], authorizationSnapshot: authorization)
 
     XCTAssertEqual(count, 1)
     let keptRecord = try await MemoryStorage.shared.getMemoryByBackendId(kept.id)
@@ -197,6 +211,24 @@ final class MemoryLedgerMirrorTests: XCTestCase {
     XCTAssertFalse(try XCTUnwrap(closedRecord).deleted)
     XCTAssertFalse(try XCTUnwrap(rejectedRecord).deleted)
     XCTAssertFalse(try XCTUnwrap(futureRecord).deleted)
+  }
+
+  func testOwnerSwitchBeforeAuthoritativeSyncWritesNothing() async throws {
+    let incoming = makeMemory(id: "ledger-stale-owner", metadata: canonicalMetadata())
+    let authorization = try XCTUnwrap(RuntimeOwnerIdentity.captureAuthorizationSnapshot())
+    RuntimeOwnerAuthorizationAuthority.shared.beginTransition()
+
+    do {
+      _ = try await MemoryStorage.shared.syncAuthoritativeKnowledgeLedgerSnapshot(
+        [incoming], authorizationSnapshot: authorization)
+      XCTFail("Expected stale owner authority to fail closed")
+    } catch KnowledgeLedgerMirrorSyncError.ownerChanged {
+      // Expected.
+    }
+
+    let persisted = try await MemoryStorage.shared.getMemoryByBackendId(incoming.id)
+    XCTAssertNil(persisted)
+    RuntimeOwnerAuthorizationAuthority.shared.endTransition(ownerID: fixture?.testUserId)
   }
 
   private func canonicalMetadata(city: String = "Brooklyn") -> [String: String] {

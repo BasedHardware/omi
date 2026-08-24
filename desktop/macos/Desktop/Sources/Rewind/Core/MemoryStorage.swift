@@ -40,6 +40,10 @@ enum MemoryLedgerTriggerSnapshotError: Error, Equatable, Sendable {
   case invalidLimit(Int)
 }
 
+enum KnowledgeLedgerMirrorSyncError: Error, Equatable, Sendable {
+  case ownerChanged
+}
+
 enum MemoryLedgerTriggerSnapshotCompleteness: Equatable, Sendable {
   /// The bounded local query exhausted rows currently present in SQLite. This
   /// does not claim that the server mirror is complete: MemoryStorage has no
@@ -572,61 +576,7 @@ actor MemoryStorage {
     let db = try await ensureInitialized()
 
     let (skipped, adopted, inserted) = try await db.write { database -> (Int, Int, Int) in
-      var skipped = 0
-      var adopted = 0
-      var inserted = 0
-      for memory in memories {
-        if var existingRecord =
-          try MemoryRecord
-          .filter(Column("backendId") == memory.id)
-          .fetchOne(database)
-        {
-          // Skip full merge if local record is newer than incoming API data.
-          // This prevents auto-refresh from overwriting recent local edits,
-          // but server-authoritative tier and ledger metadata must still be
-          // reconciled without overwriting unrelated local edits.
-          if existingRecord.updatedAt > memory.updatedAt {
-            var authoritativeFieldsChanged = existingRecord.mergeAuthoritativeTierFrom(memory)
-            if existingRecord.mergeAuthoritativeLedgerMetadataFrom(memory) {
-              authoritativeFieldsChanged = true
-            }
-            if authoritativeFieldsChanged {
-              try existingRecord.update(database)
-            }
-            skipped += 1
-            continue
-          }
-          existingRecord.updateFrom(memory)
-          try existingRecord.update(database)
-        } else if var orphan =
-          try MemoryRecord
-          .filter(Column("backendSynced") == false)
-          .filter(Column("backendId") == nil)
-          .filter(Column("content") == memory.content)
-          .fetchOne(database)
-        {
-          // Adopt orphaned local record: link it to the backend ID.
-          // This heals records where insertLocalMemory succeeded but
-          // markSynced hasn't run yet (or failed).
-          orphan.backendId = memory.id
-          orphan.backendSynced = true
-          orphan.updateFrom(memory)
-          try orphan.update(database)
-          adopted += 1
-        } else {
-          do {
-            _ = try MemoryRecord.from(memory).inserted(database)
-            inserted += 1
-          } catch let dbError as DatabaseError where dbError.resultCode == .SQLITE_CONSTRAINT {
-            // Race: record already exists — update instead
-            if var record = try MemoryRecord.filter(Column("backendId") == memory.id).fetchOne(database) {
-              record.updateFrom(memory)
-              try record.update(database)
-            }
-          }
-        }
-      }
-      return (skipped, adopted, inserted)
+      try Self.reconcileServerMemories(memories, in: database)
     }
 
     if skipped > 0 || adopted > 0 {
@@ -666,14 +616,23 @@ actor MemoryStorage {
   /// are supplied by the separate history contract and must remain available
   /// for audit/revert when the current-list endpoint omits them.
   @discardableResult
-  func syncAuthoritativeKnowledgeLedgerSnapshot(_ memories: [ServerMemory]) async throws -> Int {
-    try await syncServerMemories(memories)
+  func syncAuthoritativeKnowledgeLedgerSnapshot(
+    _ memories: [ServerMemory],
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> Int {
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+      throw KnowledgeLedgerMirrorSyncError.ownerChanged
+    }
     let keep = Set(
       memories.lazy
         .filter { MemoryLedgerMetadata.isSupportedVersion($0.ledgerMetadata) }
         .map(\.id))
     let db = try await ensureInitialized()
-    let removed = try await db.write { database -> Int in
+    let (removed, inserted) = try await db.write { database -> (Int, Int) in
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+        throw KnowledgeLedgerMirrorSyncError.ownerChanged
+      }
+      let (_, _, inserted) = try Self.reconcileServerMemories(memories, in: database)
       let candidates =
         try MemoryRecord
         .filter(Column("backendId") != nil)
@@ -687,16 +646,75 @@ actor MemoryStorage {
           MemoryLedgerMetadata.isSupportedVersion(memory.ledgerMetadata),
           memory.userReview != false,
           Self.isOpenLedgerRow(memory.ledgerMetadata),
+          Self.isLedgerPromptMirrorRow(memory.ledgerMetadata),
           !keep.contains(backendID)
         else { continue }
         record.deleted = true
         try record.update(database)
         removed += 1
       }
-      return removed
+      // Throwing from this GRDB write closure rolls back every upsert and
+      // tombstone above, so an owner transition can never commit a prefix.
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+        throw KnowledgeLedgerMirrorSyncError.ownerChanged
+      }
+      return (removed, inserted)
     }
-    if removed > 0 { HomeKnowledgeCountInvalidation.post() }
+    if removed > 0 || inserted > 0 { HomeKnowledgeCountInvalidation.post() }
     return removed
+  }
+
+  private static func reconcileServerMemories(
+    _ memories: [ServerMemory],
+    in database: Database
+  ) throws -> (skipped: Int, adopted: Int, inserted: Int) {
+    var skipped = 0
+    var adopted = 0
+    var inserted = 0
+    for memory in memories {
+      if var existingRecord =
+        try MemoryRecord
+        .filter(Column("backendId") == memory.id)
+        .fetchOne(database)
+      {
+        if existingRecord.updatedAt > memory.updatedAt {
+          var authoritativeFieldsChanged = existingRecord.mergeAuthoritativeTierFrom(memory)
+          if existingRecord.mergeAuthoritativeLedgerMetadataFrom(memory) {
+            authoritativeFieldsChanged = true
+          }
+          if authoritativeFieldsChanged { try existingRecord.update(database) }
+          skipped += 1
+          continue
+        }
+        existingRecord.updateFrom(memory)
+        try existingRecord.update(database)
+      } else if var orphan =
+        try MemoryRecord
+        .filter(Column("backendSynced") == false)
+        .filter(Column("backendId") == nil)
+        .filter(Column("content") == memory.content)
+        .fetchOne(database)
+      {
+        orphan.backendId = memory.id
+        orphan.backendSynced = true
+        orphan.updateFrom(memory)
+        try orphan.update(database)
+        adopted += 1
+      } else {
+        do {
+          _ = try MemoryRecord.from(memory).inserted(database)
+          inserted += 1
+        } catch let dbError as DatabaseError where dbError.resultCode == .SQLITE_CONSTRAINT {
+          if var record = try MemoryRecord.filter(Column("backendId") == memory.id).fetchOne(database) {
+            record.updateFrom(memory)
+            try record.update(database)
+          } else {
+            throw dbError
+          }
+        }
+      }
+    }
+    return (skipped, adopted, inserted)
   }
 
   private static func isOpenLedgerRow(_ metadata: [String: String]) -> Bool {
@@ -708,6 +726,19 @@ actor MemoryStorage {
       if !normalized.isEmpty && normalized != "null" { return false }
     }
     return true
+  }
+
+  private static func isLedgerPromptMirrorRow(_ metadata: [String: String]) -> Bool {
+    switch metadata["kind"] {
+    case "document", "trigger":
+      return true
+    case "fact":
+      return metadata["subject_scope"] == "primary_user"
+        && metadata["intent_backed"] == "true"
+        && !(metadata["slot"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    default:
+      return false
+    }
   }
 
   // MARK: - Local Extraction Operations

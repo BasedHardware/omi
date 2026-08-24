@@ -4,13 +4,19 @@ import pytest
 
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.knowledge_ledger_policy import LEDGER_SLOT_BY_LEGACY_PREDICATE, canonicalize_ledger_slot
+from models.memories import MemoryCategory, MemoryDB
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryLayer, ProcessingState
 from utils.memory import knowledge_ledger_migration
+from utils.memory import canonical_memory_adapter
 from utils.memory.knowledge_ledger_migration import LedgerMigrationAction, migration_marker, plan_ledger_migration
 from utils.memory.knowledge_ledger_migration import (
     LedgerMigrationCompletion,
+    LedgerPromptProjectionReceipt,
     apply_ledger_migration_plan,
+    publish_ledger_migration_cutover,
     read_ledger_migration_completion,
+    read_ledger_prompt_projection_receipt,
+    run_ledger_migration_sweep,
 )
 from testing.jit_processing.migration_fixture import run_migration_fixture
 
@@ -188,6 +194,570 @@ def test_completion_reader_rejects_future_schema_and_naive_timestamp():
     db.doc.value["schema_version"] = "knowledge_ledger.v1"
     db.doc.value["completed_at"] = datetime(2026, 8, 23)
     assert read_ledger_migration_completion("u1", db_client=db) is None
+
+
+class _KeyedDB:
+    def __init__(self, values):
+        self.values = values
+
+    def document(self, path):
+        doc = _Document()
+        doc.value = self.values.get(path)
+        return doc
+
+
+def _prompt_row(memory_id="prompt-1", **updates):
+    payload = {
+        "id": memory_id,
+        "uid": "u1",
+        "content": "Lives in Brooklyn",
+        "category": MemoryCategory.manual,
+        "tags": [],
+        "created_at": NOW,
+        "updated_at": NOW,
+        "ledger_schema_version": "knowledge_ledger.v1",
+        "kind": "fact",
+        "subject_scope": "primary_user",
+        "slot": "home_city",
+        "intent_backed": True,
+        "write_reason": "direct_user_statement",
+    }
+    payload.update(updates)
+    return MemoryDB(**payload)
+
+
+def test_prompt_projection_receipt_is_tied_to_current_head_and_generations():
+    completion = LedgerMigrationCompletion(
+        completed_at=NOW,
+        source_head_commit_id="head-7",
+        migrated_long_term_count=8,
+        adjudicated_short_term_count=2,
+    )
+    receipt = LedgerPromptProjectionReceipt(
+        uid="u1",
+        generated_at=NOW,
+        source_head_commit_id="head-7",
+        account_generation=4,
+        source_generation=9,
+        scanned_row_count=10,
+        rows=[_prompt_row()],
+    )
+    base = "users/u1"
+    values = {
+        f"{base}/memory_control/knowledge_ledger_prompt_projection": receipt.model_dump(mode="json"),
+        f"{base}/memory_state/apply_control": {
+            "uid": "u1",
+            "head_commit_id": "head-7",
+            "account_generation": 4,
+            "source_generation": 9,
+            "commit_sequence": 12,
+        },
+    }
+    db = _KeyedDB(values)
+    assert read_ledger_prompt_projection_receipt("u1", db_client=db, completion=completion) == receipt
+
+    values[f"{base}/memory_state/apply_control"]["head_commit_id"] = "head-8"
+    assert read_ledger_prompt_projection_receipt("u1", db_client=db, completion=completion) is None
+    values[f"{base}/memory_state/apply_control"]["head_commit_id"] = "head-7"
+    values[f"{base}/memory_state/apply_control"]["account_generation"] = 5
+    assert read_ledger_prompt_projection_receipt("u1", db_client=db, completion=completion) is None
+
+
+def test_prompt_projection_receipt_rejects_control_head_change_during_read():
+    completion = LedgerMigrationCompletion(
+        completed_at=NOW,
+        source_head_commit_id="head-7",
+        migrated_long_term_count=0,
+        adjudicated_short_term_count=0,
+    )
+    receipt = LedgerPromptProjectionReceipt(
+        uid="u1",
+        generated_at=NOW,
+        source_head_commit_id="head-7",
+        account_generation=1,
+        source_generation=1,
+        scanned_row_count=0,
+        rows=[],
+    )
+    control_reads = iter(
+        [
+            {"uid": "u1", "head_commit_id": "head-7", "account_generation": 1, "source_generation": 1},
+            {"uid": "u1", "head_commit_id": "head-8", "account_generation": 1, "source_generation": 1},
+        ]
+    )
+
+    class SequencedDocument:
+        def __init__(self, is_control):
+            self.is_control = is_control
+
+        def get(self):
+            return _Snapshot(next(control_reads) if self.is_control else receipt.model_dump(mode="json"))
+
+    class SequencedDB:
+        def document(self, path):
+            return SequencedDocument(path.endswith("/memory_state/apply_control"))
+
+    assert read_ledger_prompt_projection_receipt("u1", db_client=SequencedDB(), completion=completion) is None
+
+
+def test_prompt_projection_receipt_rejects_playbook_bodies_and_duplicate_rows():
+    completion = LedgerMigrationCompletion(
+        completed_at=NOW,
+        source_head_commit_id="head-7",
+        migrated_long_term_count=0,
+        adjudicated_short_term_count=0,
+    )
+    control = knowledge_ledger_migration.MemoryControlState(
+        uid="u1",
+        head_commit_id="head-7",
+        account_generation=1,
+        source_generation=1,
+    )
+    body_row = _prompt_row(
+        kind="document",
+        slot=None,
+        body="secret full playbook",
+        write_reason="recurring_workflow",
+    )
+    receipt = LedgerPromptProjectionReceipt(
+        uid="u1",
+        generated_at=NOW,
+        source_head_commit_id="head-7",
+        account_generation=1,
+        source_generation=1,
+        scanned_row_count=1,
+        rows=[body_row],
+    )
+    with pytest.raises(ValueError, match="handles"):
+        receipt.validate_authoritative(uid="u1", completion=completion, control=control)
+
+    duplicate = receipt.model_copy(update={"rows": [_prompt_row(), _prompt_row()]})
+    with pytest.raises(ValueError, match="duplicate"):
+        duplicate.validate_authoritative(uid="u1", completion=completion, control=control)
+
+    with pytest.raises(ValueError, match="64"):
+        LedgerPromptProjectionReceipt(
+            uid="u1",
+            generated_at=NOW,
+            source_head_commit_id="head-7",
+            account_generation=1,
+            source_generation=1,
+            scanned_row_count=65,
+            rows=[_prompt_row(f"row-{index}") for index in range(65)],
+        )
+
+
+class _PublishingSnapshot(_Snapshot):
+    pass
+
+
+class _PublishingDocument:
+    def __init__(self, store, path):
+        self.store = store
+        self.path = path
+
+    def get(self, transaction=None):
+        values = transaction.pending if transaction is not None else self.store.values
+        return _PublishingSnapshot(values.get(self.path))
+
+
+class _PublishingTransaction:
+    def __init__(self, store):
+        self.store = store
+        self.pending = dict(store.values)
+        self.set_count = 0
+
+    def set(self, reference, value):
+        self.set_count += 1
+        if self.store.fail_on_set == self.set_count:
+            raise RuntimeError("simulated publication crash")
+        self.pending[reference.path] = value
+
+
+class _PublishingDB:
+    def __init__(self, control):
+        self.control_path = "users/u1/memory_state/apply_control"
+        self.values = {self.control_path: control}
+        self.fail_on_set = None
+
+    def document(self, path):
+        return _PublishingDocument(self, path)
+
+    def transaction(self):
+        return _PublishingTransaction(self)
+
+
+def _install_publisher_fakes(monkeypatch, db, rows):
+    import database.memory_apply_store as apply_store
+    import utils.memory.memory_service as memory_service
+
+    def transactional(function):
+        def wrapper(transaction, *args, **kwargs):
+            result = function(transaction, *args, **kwargs)
+            transaction.store.values = transaction.pending
+            return result
+
+        return wrapper
+
+    class Service:
+        def __init__(self, *, db_client):
+            assert db_client is db
+
+        def iter_export_memories(self, uid, *, include_archive):
+            assert uid == "u1" and include_archive is True
+            yield from rows
+
+    monkeypatch.setattr(apply_store, "transactional", transactional)
+    monkeypatch.setattr(memory_service, "MemoryService", Service)
+
+
+def _publisher_control(head="head-7", account_generation=1, source_generation=1):
+    return {
+        "uid": "u1",
+        "head_commit_id": head,
+        "account_generation": account_generation,
+        "source_generation": source_generation,
+        "commit_sequence": 7,
+    }
+
+
+def test_cutover_publisher_atomically_publishes_authoritative_empty_snapshot(monkeypatch):
+    db = _PublishingDB(_publisher_control())
+    _install_publisher_fakes(monkeypatch, db, [])
+
+    receipt = publish_ledger_migration_cutover(
+        "u1",
+        db_client=db,
+        migrated_long_term_count=0,
+        adjudicated_short_term_count=0,
+        completed_at=NOW,
+    )
+
+    assert receipt.rows == []
+    assert receipt.scanned_row_count == 0
+    assert "users/u1/memory_control/knowledge_ledger_migration" in db.values
+    assert "users/u1/memory_control/knowledge_ledger_prompt_projection" in db.values
+
+
+def test_cutover_preserves_inactive_legacy_history_outside_default_prompt(monkeypatch):
+    archived = _prompt_row(
+        "legacy-archive",
+        ledger_schema_version=None,
+        kind=None,
+        subject_scope=None,
+        slot=None,
+        intent_backed=False,
+        write_reason=None,
+        memory_tier="archive",
+    )
+    closed = _prompt_row(
+        "legacy-closed",
+        ledger_schema_version=None,
+        kind=None,
+        subject_scope=None,
+        slot=None,
+        intent_backed=False,
+        write_reason=None,
+        invalid_at=NOW,
+        superseded_by="replacement",
+        user_review=False,
+    )
+    source_rows = [archived, closed]
+    db = _PublishingDB(_publisher_control())
+    _install_publisher_fakes(monkeypatch, db, source_rows)
+
+    receipt = publish_ledger_migration_cutover(
+        "u1", db_client=db, migrated_long_term_count=0, adjudicated_short_term_count=0, completed_at=NOW
+    )
+
+    assert receipt.rows == []
+    assert receipt.preserved_historical_legacy_count == 2
+    assert source_rows == [archived, closed], "cutover must not rewrite or delete retained generated history"
+
+
+@pytest.mark.parametrize(
+    "rows",
+    [
+        [_prompt_row("legacy", ledger_schema_version=None)],
+        [_prompt_row("foreign", uid="u2")],
+        [
+            _prompt_row(
+                f"trigger-{index}",
+                kind="trigger",
+                slot=None,
+                write_reason="standing_trigger",
+            )
+            for index in range(65)
+        ],
+    ],
+)
+def test_cutover_publisher_fails_closed_without_any_receipt_for_invalid_or_overbound_scan(monkeypatch, rows):
+    db = _PublishingDB(_publisher_control())
+    _install_publisher_fakes(monkeypatch, db, rows)
+
+    with pytest.raises(knowledge_ledger_migration.LedgerMigrationPublicationError):
+        publish_ledger_migration_cutover(
+            "u1",
+            db_client=db,
+            migrated_long_term_count=0,
+            adjudicated_short_term_count=0,
+            completed_at=NOW,
+        )
+
+    assert not any("knowledge_ledger_" in path for path in db.values)
+
+
+def test_cutover_publisher_rechecks_head_and_rolls_back_partial_transaction(monkeypatch):
+    db = _PublishingDB(_publisher_control())
+
+    class MutatingRows(list):
+        def __iter__(self):
+            yield _prompt_row()
+            db.values[db.control_path] = _publisher_control(head="head-8")
+
+    _install_publisher_fakes(monkeypatch, db, MutatingRows())
+    with pytest.raises(knowledge_ledger_migration.LedgerMigrationPublicationError, match="changed"):
+        publish_ledger_migration_cutover(
+            "u1", db_client=db, migrated_long_term_count=1, adjudicated_short_term_count=0, completed_at=NOW
+        )
+    assert not any("knowledge_ledger_" in path for path in db.values)
+
+    db.values[db.control_path] = _publisher_control()
+    db.fail_on_set = 2
+    _install_publisher_fakes(monkeypatch, db, [_prompt_row()])
+    with pytest.raises(RuntimeError, match="publication crash"):
+        publish_ledger_migration_cutover(
+            "u1", db_client=db, migrated_long_term_count=1, adjudicated_short_term_count=0, completed_at=NOW
+        )
+    assert not any("knowledge_ledger_" in path for path in db.values)
+
+
+def test_cutover_publisher_can_republish_after_canonical_write_invalidation(monkeypatch):
+    db = _PublishingDB(_publisher_control())
+    _install_publisher_fakes(monkeypatch, db, [_prompt_row("first")])
+    first = publish_ledger_migration_cutover(
+        "u1", db_client=db, migrated_long_term_count=1, adjudicated_short_term_count=0, completed_at=NOW
+    )
+    completion = read_ledger_migration_completion("u1", db_client=db)
+    assert completion is not None
+    assert read_ledger_prompt_projection_receipt("u1", db_client=db, completion=completion) == first
+
+    db.values[db.control_path] = _publisher_control(head="head-8")
+    assert read_ledger_prompt_projection_receipt("u1", db_client=db, completion=completion) is None
+
+    _install_publisher_fakes(monkeypatch, db, [_prompt_row("second")])
+    second = publish_ledger_migration_cutover(
+        "u1", db_client=db, migrated_long_term_count=2, adjudicated_short_term_count=0, completed_at=NOW
+    )
+    new_completion = read_ledger_migration_completion("u1", db_client=db)
+    assert new_completion is not None
+    assert second.source_head_commit_id == "head-8"
+    assert [row.id for row in second.rows] == ["second"]
+    assert read_ledger_prompt_projection_receipt("u1", db_client=db, completion=new_completion) == second
+
+
+def test_production_sweep_resumes_adapts_live_rows_and_preserves_history(monkeypatch):
+    import database.memory_apply_store as apply_store
+    import utils.memory.memory_service as memory_service
+
+    live_legacy = _prompt_row(
+        "mem-1",
+        ledger_schema_version=None,
+        kind=None,
+        subject_scope=None,
+        slot=None,
+        intent_backed=False,
+        write_reason=None,
+    )
+    archived_legacy = _prompt_row(
+        "old-generated",
+        ledger_schema_version=None,
+        kind=None,
+        subject_scope=None,
+        slot=None,
+        intent_backed=False,
+        write_reason=None,
+        memory_tier="archive",
+    )
+    canonical = _prompt_row("mem-1")
+    scan_count = 0
+
+    class Service:
+        def __init__(self, *, db_client):
+            pass
+
+        def iter_export_memories(self, uid, *, include_archive):
+            nonlocal scan_count
+            scan_count += 1
+            yield from ([live_legacy, archived_legacy] if scan_count == 1 else [canonical, archived_legacy])
+
+    def transactional(function):
+        def wrapper(transaction, *args, **kwargs):
+            result = function(transaction, *args, **kwargs)
+            transaction.store.values = transaction.pending
+            return result
+
+        return wrapper
+
+    applied = []
+    monkeypatch.setattr(memory_service, "MemoryService", Service)
+    monkeypatch.setattr(apply_store, "transactional", transactional)
+    monkeypatch.setattr(knowledge_ledger_migration, "read_canonical_memory_item", lambda *_args, **_kwargs: _item())
+    monkeypatch.setattr(
+        knowledge_ledger_migration,
+        "apply_ledger_migration_plan",
+        lambda uid, plan, *, db_client: applied.append((uid, plan.memory_id)),
+    )
+    db = _PublishingDB(_publisher_control())
+
+    result = run_ledger_migration_sweep("u1", db_client=db, completed_at=NOW)
+
+    assert applied == [("u1", "mem-1")]
+    assert result.migrated_long_term_count == 1
+    assert result.preserved_historical_legacy_count == 1
+    assert result.receipt.preserved_historical_legacy_count == 1
+    assert archived_legacy.memory_tier.value == "archive"
+
+
+def test_production_sweep_closes_short_term_as_legacy_generated_history(monkeypatch):
+    import database.memory_apply_store as apply_store
+    import utils.memory.memory_service as memory_service
+
+    live_short = _prompt_row(
+        "mem-1",
+        ledger_schema_version=None,
+        kind=None,
+        subject_scope=None,
+        slot=None,
+        intent_backed=False,
+        write_reason=None,
+        memory_tier="short_term",
+    )
+    scans = iter([[live_short], []])
+
+    class Service:
+        def __init__(self, *, db_client):
+            pass
+
+        def iter_export_memories(self, uid, *, include_archive):
+            yield from next(scans)
+
+    def transactional(function):
+        def wrapper(transaction, *args, **kwargs):
+            result = function(transaction, *args, **kwargs)
+            transaction.store.values = transaction.pending
+            return result
+
+        return wrapper
+
+    short_item = _item(tier=MemoryLayer.short_term)
+    closed = []
+    monkeypatch.setattr(memory_service, "MemoryService", Service)
+    monkeypatch.setattr(apply_store, "transactional", transactional)
+    monkeypatch.setattr(knowledge_ledger_migration, "read_canonical_memory_item", lambda *_args, **_kwargs: short_item)
+    monkeypatch.setattr(
+        knowledge_ledger_migration,
+        "close_canonical_legacy_generated_history",
+        lambda uid, memory_id, **kwargs: closed.append((uid, memory_id, kwargs["expected_item_revision"])),
+    )
+    db = _PublishingDB(_publisher_control())
+
+    result = run_ledger_migration_sweep("u1", db_client=db, completed_at=NOW)
+
+    assert closed == [("u1", "mem-1", short_item.item_revision)]
+    assert result.adjudicated_short_term_count == 1
+    assert result.receipt is not None
+
+
+def test_short_term_adjudication_uses_canonical_close_and_marks_retained_history(monkeypatch):
+    item = _item(tier=MemoryLayer.short_term, arguments={"origin": "legacy"})
+    captured = {}
+
+    monkeypatch.setattr(
+        canonical_memory_adapter,
+        "_read_canonical_memory_item_for_lineage",
+        lambda *_args, **_kwargs: item,
+    )
+
+    def apply(uid, memory_id, *, build_patch, **_kwargs):
+        logical, updates = build_patch(item, NOW)
+        captured.update({"logical": logical, "updates": updates})
+        closed = item.model_copy(
+            update={
+                "status": MemoryItemStatus.superseded,
+                "valid_to": updates["valid_to"],
+                "arguments": updates["arguments"],
+                "ledger_schema_version": updates["ledger_schema_version"],
+                "kind": updates["kind"],
+                "subject_scope": updates["subject_scope"],
+                "intent_backed": updates["intent_backed"],
+                "write_reason": updates["write_reason"],
+            }
+        )
+        return item, closed
+
+    monkeypatch.setattr(canonical_memory_adapter, "_apply_canonical_user_mutation", apply)
+
+    closed = canonical_memory_adapter.close_canonical_legacy_generated_history(
+        "u1",
+        item.memory_id,
+        expected_item_revision=item.item_revision,
+        valid_to=NOW,
+        db_client=object(),
+    )
+
+    assert captured["logical"]["result_status"] == "superseded"
+    assert captured["updates"]["arguments"] == {
+        "origin": "legacy",
+        "history_class": "legacy_generated",
+    }
+    assert captured["updates"]["ledger_schema_version"] == "knowledge_ledger.v1"
+    assert captured["updates"]["kind"] == "fact"
+    assert captured["updates"]["subject_scope"] == "primary_user"
+    assert captured["updates"]["intent_backed"] is False
+    assert captured["updates"]["write_reason"] == "legacy_migration"
+    assert closed.status == MemoryItemStatus.superseded
+    assert closed.valid_to == NOW
+    assert closed.arguments["history_class"] == "legacy_generated"
+    assert closed.write_reason == "legacy_migration"
+
+
+def test_migration_mutation_budget_bounds_one_authorized_run(monkeypatch):
+    import utils.memory.memory_service as memory_service
+
+    rows = [
+        _prompt_row(
+            f"mem-{index}",
+            ledger_schema_version=None,
+            kind=None,
+            subject_scope=None,
+            slot=None,
+            intent_backed=False,
+            write_reason=None,
+        )
+        for index in range(101)
+    ]
+
+    class Service:
+        def __init__(self, *, db_client):
+            pass
+
+        def iter_export_memories(self, uid, *, include_archive):
+            yield from rows
+
+    applied = []
+    monkeypatch.setattr(memory_service, "MemoryService", Service)
+    monkeypatch.setattr(knowledge_ledger_migration, "read_canonical_memory_item", lambda *_args, **_kwargs: _item())
+    monkeypatch.setattr(
+        knowledge_ledger_migration,
+        "apply_ledger_migration_plan",
+        lambda uid, plan, *, db_client: applied.append(plan.memory_id),
+    )
+
+    result = run_ledger_migration_sweep("u1", db_client=object(), publish=False)
+    assert len(applied) == knowledge_ledger_migration.MAX_LEDGER_MIGRATION_MUTATIONS_PER_RUN
+    assert result.remaining_live_legacy_count == 1
+    assert result.receipt is None
 
 
 def test_apply_plan_routes_only_automatic_long_term_adaptation(monkeypatch):

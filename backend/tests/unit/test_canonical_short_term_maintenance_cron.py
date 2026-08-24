@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -596,3 +597,73 @@ def test_async_entrypoint_forwards_inventory_seam(monkeypatch):
     assert result is expected
     assert calls[0][1]["uid_inventory"] is inventory
     assert calls[0][1]["inventory_limit"] == 3
+
+
+def test_async_entrypoint_runs_shared_rollout_gated_ledger_sweep_for_completed_users(monkeypatch):
+    summary = cron.CanonicalShortTermMaintenanceCronSummary(
+        run_id="cron",
+        user_count=2,
+        completed_uids=("uid-enabled", "uid-disabled"),
+    )
+    sweep_calls = []
+    publication_calls = []
+
+    async def run_blocking(_executor, function, *args, **kwargs):
+        if function is cron.run_universal_short_term_maintenance:
+            return summary
+        if function is cron.run_ledger_migration_sweep:
+            sweep_calls.append((args, kwargs))
+            return SimpleNamespace(
+                migrated_long_term_count=3,
+                adjudicated_short_term_count=1,
+                remaining_live_legacy_count=0,
+            )
+        assert function is cron.publish_ledger_migration_cutover
+        publication_calls.append((args, kwargs))
+        return SimpleNamespace()
+
+    async def resolve(uid, *, stage, force_refresh):
+        assert stage == cron.JITDecisionStage.INGRESS
+        assert force_refresh is True
+        return SimpleNamespace(permits_work=uid == "uid-enabled")
+
+    monkeypatch.setattr(cron, "run_blocking", run_blocking)
+    monkeypatch.setattr(cron, "resolve_jit_rollout", resolve)
+
+    result = asyncio.run(cron.run_canonical_short_term_maintenance_cron(db_client=object(), now=NOW, run_id="cron"))
+
+    assert [call[0][0] for call in sweep_calls] == ["uid-enabled"]
+    assert [call[0][0] for call in publication_calls] == ["uid-enabled"]
+    assert sweep_calls[0][1]["publish"] is False
+    assert result.ledger_migration_users == 1
+    assert result.ledger_migration_rows == 3
+
+
+def test_kill_flip_after_bounded_migration_scan_prevents_cutover_publication(monkeypatch):
+    summary = cron.CanonicalShortTermMaintenanceCronSummary(run_id="cron", user_count=1, completed_uids=("uid-a",))
+    decisions = iter([True, False])
+    publications = []
+
+    async def run_blocking(_executor, function, *args, **kwargs):
+        if function is cron.run_universal_short_term_maintenance:
+            return summary
+        if function is cron.run_ledger_migration_sweep:
+            assert kwargs["publish"] is False
+            return SimpleNamespace(
+                migrated_long_term_count=100,
+                adjudicated_short_term_count=0,
+                remaining_live_legacy_count=0,
+            )
+        publications.append(function)
+
+    async def resolve(_uid, *, stage, force_refresh):
+        assert stage == cron.JITDecisionStage.INGRESS and force_refresh is True
+        return SimpleNamespace(permits_work=next(decisions))
+
+    monkeypatch.setattr(cron, "run_blocking", run_blocking)
+    monkeypatch.setattr(cron, "resolve_jit_rollout", resolve)
+
+    result = asyncio.run(cron.run_canonical_short_term_maintenance_cron(db_client=object(), now=NOW))
+    assert publications == []
+    assert result.ledger_migration_users == 0
+    assert result.ledger_migration_rows == 100

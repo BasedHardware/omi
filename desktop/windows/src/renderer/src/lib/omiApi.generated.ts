@@ -2214,6 +2214,20 @@ export interface InterventionRecord {
 
 export type InterventionSurface = "suggested" | "what_matters_now";
 
+export type JITDecisionReason = "evaluated" | "rollout_enabled" | "rollout_disabled" | "kill_switch_enabled" | "provider_timeout" | "configuration_missing" | "malformed_response" | "provider_error" | "flag_absent";
+
+export type JITErrorClass = "none" | "timeout" | "configuration" | "malformed" | "provider" | "absent";
+
+export interface JITRolloutDecisionEnvelope {
+  cache_hit: boolean;
+  cache_ttl_seconds: number;
+  effective: TriState;
+  error_class: JITErrorClass;
+  kill_switch: TriState;
+  reason: JITDecisionReason;
+  rollout: TriState;
+}
+
 export interface KnowledgeGraphResponse {
   edge_count?: number;
   edge_limit?: number | null;
@@ -2223,6 +2237,16 @@ export interface KnowledgeGraphResponse {
   nodes: Array<Record<string, unknown>>;
   truncated?: boolean;
 }
+
+export interface LedgerPromptSnapshotEnvelope {
+  mode: LedgerPromptSnapshotMode;
+  reason: string;
+  rows?: Array<MemoryDB>;
+  schema_version?: string;
+  source_head_commit_id?: string | null;
+}
+
+export type LedgerPromptSnapshotMode = "enabled" | "compatibility" | "disabled" | "killed" | "unknown";
 
 export type LedgerWriteReason = "direct_user_statement" | "explicit_remember" | "agent_reusable_conclusion" | "recurring_workflow" | "standing_trigger" | "onboarding" | "daily_reconciliation" | "legacy_migration";
 
@@ -3805,6 +3829,8 @@ export interface Translation {
   text: string;
 }
 
+export type TriState = "enabled" | "disabled" | "unknown";
+
 export interface TrialMetadata {
   plan_after_trial?: string;
   trial_duration_seconds?: number;
@@ -4508,7 +4534,12 @@ export interface OmiApiSchemas {
   "InterventionCreate": InterventionCreate;
   "InterventionRecord": InterventionRecord;
   "InterventionSurface": InterventionSurface;
+  "JITDecisionReason": JITDecisionReason;
+  "JITErrorClass": JITErrorClass;
+  "JITRolloutDecisionEnvelope": JITRolloutDecisionEnvelope;
   "KnowledgeGraphResponse": KnowledgeGraphResponse;
+  "LedgerPromptSnapshotEnvelope": LedgerPromptSnapshotEnvelope;
+  "LedgerPromptSnapshotMode": LedgerPromptSnapshotMode;
   "LedgerWriteReason": LedgerWriteReason;
   "LegacyMaterializePromptsResponse": LegacyMaterializePromptsResponse;
   "LegacyProactiveIntent": LegacyProactiveIntent;
@@ -4735,6 +4766,7 @@ export interface OmiApiSchemas {
   "TranscriptionPreferencesResponse": TranscriptionPreferencesResponse;
   "TranscriptionPreferencesUpdate": TranscriptionPreferencesUpdate;
   "Translation": Translation;
+  "TriState": TriState;
   "TrialMetadata": TrialMetadata;
   "TriggerType": TriggerType;
   "TtsSynthesizeRequest": TtsSynthesizeRequest;
@@ -6792,6 +6824,26 @@ export interface OmiApiPaths {
         "200": OAuthUrlResponse;
         "401": void;
         "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/jit/knowledge-ledger/prompt-snapshot": {
+    get: {
+      operationId: "get_knowledge_ledger_prompt_snapshot_v1_jit_knowledge_ledger_prompt_snapshot_get";
+      responses: {
+        "200": LedgerPromptSnapshotEnvelope;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/jit/rollout-decision": {
+    get: {
+      operationId: "get_jit_rollout_decision_v1_jit_rollout_decision_get";
+      responses: {
+        "200": JITRolloutDecisionEnvelope;
+        "401": void;
         "422": HTTPValidationError;
       };
     };
@@ -12844,6 +12896,44 @@ export async function get_oauth_url_v1_integrations__app_key__oauth_url_get(path
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_knowledge_ledger_prompt_snapshot_v1_jit_knowledge_ledger_prompt_snapshot_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<LedgerPromptSnapshotEnvelope> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/jit/knowledge-ledger/prompt-snapshot`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_jit_rollout_decision_v1_jit_rollout_decision_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<JITRolloutDecisionEnvelope> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/jit/rollout-decision`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_knowledge_graph_v1_knowledge_graph_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<KnowledgeGraphResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/knowledge-graph`;
@@ -16978,4 +17068,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 408 client methods generated.
+// Total: 410 client methods generated.

@@ -24,6 +24,7 @@ from models.knowledge_ledger_policy import (
 )
 from models.product_memory import (
     MAX_LEDGER_PLAYBOOK_BODY_CHARACTERS,
+    LedgerWriteReason,
     MemoryAccessPolicy,
     MemoryItem,
     MemoryKind,
@@ -165,7 +166,7 @@ def _is_historical_fact_memory(memory: MemoryDB, *, uid: str) -> bool:
         memory.uid == uid
         and memory.ledger_schema_version == LEDGER_SCHEMA_VERSION
         and kind == MemoryKind.fact.value
-        and memory.intent_backed
+        and (memory.intent_backed or memory.write_reason == LedgerWriteReason.legacy_migration)
         and not memory.is_locked
         and (memory.user_review is False or memory.invalid_at is not None or memory.superseded_by is not None)
     )

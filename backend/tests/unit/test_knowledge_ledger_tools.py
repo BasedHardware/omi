@@ -226,6 +226,15 @@ def test_search_historical_facts_is_fact_only_owner_scoped_and_partial(monkeypat
         invalid_at=NOW,
         is_locked=True,
     )
+    legacy_generated = _memory(
+        "legacy-generated",
+        kind=MemoryKind.fact,
+        content="Generated old preference",
+        invalid_at=NOW,
+        intent_backed=False,
+        write_reason=LedgerWriteReason.legacy_migration,
+        arguments={"history_class": "legacy_generated"},
+    )
 
     class FakeService:
         def __init__(self, *, db_client):
@@ -239,6 +248,7 @@ def test_search_historical_facts_is_fact_only_owner_scoped_and_partial(monkeypat
                     SimpleNamespace(memory=document),
                     SimpleNamespace(memory=trigger),
                     SimpleNamespace(memory=locked),
+                    SimpleNamespace(memory=legacy_generated),
                 ],
                 truncated=True,
                 scanned_count=501,
@@ -258,6 +268,8 @@ def test_search_historical_facts_is_fact_only_owner_scoped_and_partial(monkeypat
     assert "private workflow body" not in result
     assert "historical-trigger" not in result
     assert "historical-locked" not in result
+    assert "legacy-generated" in result
+    assert "Generated old preference" in result
     assert "valid_at=2026-08-23T12:00:00+00:00" in result
     assert "invalid_at=2026-08-23T12:00:00+00:00" in result
     assert "Partial historical search" in result
