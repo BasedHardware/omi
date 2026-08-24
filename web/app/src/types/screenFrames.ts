@@ -9,7 +9,7 @@
  * Pydantic models `ConversationScreenFrame` / `ConversationScreenFrameSet`
  * field-for-field.
  *
- * TODO(screen-frames): once `docs/api-reference/app-client-openapi.json` is
+ * TODO(screen-frames) #12155: once `docs/api-reference/app-client-openapi.json` is
  * regenerated with the `/v1/conversations/{id}/screenshots` routes, delete
  * this file and re-export the generated types from `@/types/conversation.ts`
  * instead — the house rule is to not hand-duplicate backend field sets, this
