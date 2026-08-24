@@ -1744,6 +1744,7 @@ def test_search_deduplicates_canonical_and_historical_candidates(service_mod):
     result = service.search("uid-test", "query", limit=10)
     assert [match.memory.id for match in result] == ["same", "legacy"]
     assert result[0].memory.content == "canonical"
+    service.history.search.assert_called_once()
 
 
 def test_search_applies_result_filter_before_final_limit(service_mod):
@@ -1765,6 +1766,68 @@ def test_search_applies_result_filter_before_final_limit(service_mod):
 
     assert [match.memory.id for match in result] == ["ledger-document"]
     assert service._canonical.search.call_args.kwargs["item_filter"] is not None
+
+
+def test_ledger_search_never_merges_stamped_legacy_rows(service_mod):
+    service = service_mod.MemoryService(db_client=_Db())
+    canonical = _memory(service_mod, "canonical-ledger").model_copy(
+        update={
+            "ledger_schema_version": "knowledge_ledger.v1",
+            "kind": MemoryKind.fact,
+            "intent_backed": True,
+        }
+    )
+    stamped_legacy = _memory(service_mod, "stamped-legacy").model_copy(
+        update={
+            "ledger_schema_version": "knowledge_ledger.v1",
+            "kind": MemoryKind.fact,
+            "intent_backed": True,
+        }
+    )
+    service._canonical.search = MagicMock(return_value=[service_mod.MemorySearchMatch(canonical, 0.9)])
+    service.history.search = MagicMock(return_value=[service_mod.MemorySearchMatch(stamped_legacy, 0.99)])
+
+    result = service.search(
+        "uid-test",
+        "query",
+        limit=5,
+        canonical_item_filter=lambda item: True,
+        result_filter=lambda memory: service_mod.is_ledger_row_admissible(
+            memory,
+            uid="uid-test",
+            surface=service_mod.LedgerSearchSurface.current,
+            kinds={MemoryKind.fact.value},
+        ),
+        ledger_kinds={MemoryKind.fact.value},
+    )
+
+    assert [match.memory.id for match in result] == ["canonical-ledger"]
+    service.history.search.assert_not_called()
+
+
+def test_ledger_search_survives_legacy_provider_outage(service_mod):
+    service = service_mod.MemoryService(db_client=_Db())
+    canonical = _memory(service_mod, "canonical-ledger").model_copy(
+        update={
+            "ledger_schema_version": "knowledge_ledger.v1",
+            "kind": MemoryKind.fact,
+            "intent_backed": True,
+        }
+    )
+    service._canonical.search = MagicMock(return_value=[service_mod.MemorySearchMatch(canonical, 0.9)])
+    service.history.search = MagicMock(side_effect=RuntimeError("legacy vector unavailable"))
+
+    result = service.search(
+        "uid-test",
+        "query",
+        limit=5,
+        canonical_item_filter=lambda item: True,
+        result_filter=lambda memory: memory.id == "canonical-ledger",
+        ledger_kinds={MemoryKind.fact.value},
+    )
+
+    assert [match.memory.id for match in result] == ["canonical-ledger"]
+    service.history.search.assert_not_called()
 
 
 def test_canonical_search_preserves_order_as_relevance_when_provider_omits_score(service_mod, monkeypatch):

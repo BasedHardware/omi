@@ -87,7 +87,8 @@ def test_search_current_knowledge_returns_only_requested_current_ledger_kinds(mo
         def __init__(self, *, db_client):
             assert db_client == "db"
 
-        def search(self, uid, query, *, limit, canonical_item_filter, result_filter):
+        def search(self, uid, query, *, limit, canonical_item_filter, result_filter, ledger_kinds=None):
+            assert ledger_kinds == frozenset({"document", "trigger"})
             assert (uid, query, limit) == ("u1", "release", 8)
             assert canonical_item_filter(_playbook()) is True
             assert canonical_item_filter(_playbook().model_copy(update={"kind": MemoryKind.fact})) is False

@@ -193,6 +193,63 @@ def fetch_authoritative_product_memory_items(
     )
 
 
+def fetch_authoritative_product_memory_items_by_ids(
+    uid: str,
+    memory_ids: Iterable[str],
+    *,
+    db_client: Any,
+) -> List[MemoryItem]:
+    """Load a bounded, owner- and document-id-checked canonical subset.
+
+    Search providers return candidates, not authority. This seam hydrates only
+    requested document ids so bounded ledger search does not scan or
+    materialize an entire user's canonical collection. Missing, malformed,
+    cross-owner, and payload/document-id-mismatched rows fail closed.
+    """
+
+    normalized_ids = list(
+        dict.fromkeys(
+            memory_id.strip() for memory_id in memory_ids if memory_id and memory_id.strip() and "/" not in memory_id
+        )
+    )
+    if len(normalized_ids) > MAX_PRODUCT_MEMORY_READ_LIMIT:
+        raise ValueError(f"memory_ids must contain at most {MAX_PRODUCT_MEMORY_READ_LIMIT} entries")
+    if not normalized_ids:
+        return []
+
+    collection_path = MemoryCollections(uid=uid).memory_items
+    refs = [db_client.document(f"{collection_path}/{memory_id}") for memory_id in normalized_ids]
+    get_all = getattr(db_client, "get_all", None)
+    snapshots: Iterable[Any]
+    if callable(get_all):
+        snapshots = cast(Iterable[Any], get_all(refs))
+    else:
+        # A point-read-capable fake/client may not expose get_all. Keep the
+        # same bounded identity fence without falling back to a collection
+        # scan; production Firestore uses the batch path above.
+        snapshots = (ref.get() for ref in refs)
+
+    expected_ids = set(normalized_ids)
+    items: List[MemoryItem] = []
+    for snapshot in snapshots:
+        document_id = getattr(snapshot, "id", None)
+        if not isinstance(document_id, str) or document_id not in expected_ids:
+            continue
+        if not getattr(snapshot, "exists", False):
+            continue
+        raw_payload: object = snapshot.to_dict()
+        payload = cast(Dict[str, Any], raw_payload) if isinstance(raw_payload, dict) else {}
+        try:
+            item = MemoryItem.model_validate(payload)
+        except Exception:
+            continue
+        if item.uid != uid or item.memory_id != document_id:
+            continue
+        items.append(item)
+    by_id = {item.memory_id: item for item in items}
+    return [by_id[memory_id] for memory_id in normalized_ids if memory_id in by_id]
+
+
 def fetch_authoritative_product_memory_items_for_source(
     uid: str,
     source_id: str,

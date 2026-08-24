@@ -15,6 +15,7 @@ from database.memory_vector_metadata import (
     build_archive_memory_vector_filter,
     build_canonical_memory_vector_delete_filter,
     build_default_memory_vector_filter,
+    build_ledger_memory_vector_filter,
     build_memory_vector_metadata,
     canonical_memory_provider_id,
     parse_memory_search_vector_hit,
@@ -615,22 +616,31 @@ def delete_canonical_memory_vectors(uid: str, memory_id: str | None = None) -> b
 
 
 def query_memory_vector_candidates(
-    uid: str, query: str, *, mode: SearchMode = SearchMode.default, limit: int = 10
+    uid: str,
+    query: str,
+    *,
+    mode: SearchMode = SearchMode.default,
+    limit: int = 10,
+    ledger_kinds: Optional[List[str]] = None,
 ) -> VectorCandidateQueryResult:
     """Query ns2 for canonical neutral-metadata memory vector candidates."""
     if index is None:
         logger.warning('Pinecone index not initialized, skipping canonical memory vector candidate search')
         return VectorCandidateQueryResult()
 
+    bounded_limit = max(1, min(int(limit or 10), 60))
     vector = embeddings.embed_query(query)
-    filter_data = (
-        build_archive_memory_vector_filter(uid)
-        if mode == SearchMode.archive_explicit
-        else build_default_memory_vector_filter(uid)
-    )
+    if ledger_kinds is not None and mode == SearchMode.default:
+        filter_data = build_ledger_memory_vector_filter(uid, ledger_kinds)
+    else:
+        filter_data = (
+            build_archive_memory_vector_filter(uid)
+            if mode == SearchMode.archive_explicit
+            else build_default_memory_vector_filter(uid)
+        )
     response = index.query(
         vector=vector,
-        top_k=limit,
+        top_k=bounded_limit,
         include_metadata=True,
         include_values=False,
         filter=filter_data,

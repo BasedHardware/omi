@@ -11,10 +11,16 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import timezone
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Collection, Dict, List, Optional, cast
 
 from database._client import db as default_db_client
 from database.memory_vector_metadata import canonical_memory_provider_id
+from models.knowledge_ledger_search import (
+    LEDGER_INDEX_VERSION,
+    LEDGER_SEARCH_KINDS,
+    build_ledger_index_metadata,
+    validate_ledger_kinds,
+)
 from models.memory_evidence import SourceState
 from models.product_memory import (
     RESTRICTED_SENSITIVITY_LABELS,
@@ -46,6 +52,14 @@ _REQUIRED_SCHEMA_FIELDS = {
     "entity_terms",
     "predicate",
     "created_at",
+}
+_LEDGER_SCHEMA_FIELDS = {
+    "ledger_index_version",
+    "ledger_schema_version",
+    "ledger_kind",
+    "ledger_row_state",
+    "ledger_has_slot",
+    "ledger_subject_scope",
 }
 
 
@@ -159,7 +173,7 @@ def _predicate_for_item(item: MemoryItem) -> str:
 
 def build_atom_keyword_document(item: MemoryItem) -> Dict[str, Any]:
     """Build a Typesense document for one indexable long-term atom."""
-    return {
+    document = {
         "id": canonical_memory_provider_id(item.uid, item.memory_id),
         "memory_id": item.memory_id,
         "userId": item.uid,
@@ -172,6 +186,11 @@ def build_atom_keyword_document(item: MemoryItem) -> Dict[str, Any]:
         "predicate": _predicate_for_item(item),
         "created_at": _created_at_epoch(item),
     }
+    # Generic atom rows remain backwards compatible.  Ledger rows carry an
+    # explicit version/state discriminator so a ledger query never treats an
+    # unlabelled legacy Typesense hit as canonical ledger evidence.
+    document.update(build_ledger_index_metadata(item))
+    return document
 
 
 def merge_memory_search_ids(keyword_ids: List[str], vector_ids: List[str]) -> List[str]:
@@ -197,6 +216,12 @@ def ensure_memories_collection() -> None:
                 {"name": "schema_version", "type": "int32", "facet": True},
                 {"name": "entity_terms", "type": "string", "optional": True},
                 {"name": "predicate", "type": "string", "optional": True},
+                {"name": "ledger_index_version", "type": "int32", "facet": True, "optional": True},
+                {"name": "ledger_schema_version", "type": "string", "facet": True, "optional": True},
+                {"name": "ledger_kind", "type": "string", "facet": True, "optional": True},
+                {"name": "ledger_row_state", "type": "string", "facet": True, "optional": True},
+                {"name": "ledger_has_slot", "type": "bool", "facet": True, "optional": True},
+                {"name": "ledger_subject_scope", "type": "string", "facet": True, "optional": True},
                 {"name": "created_at", "type": "int64"},
             ],
             "default_sorting_field": "created_at",
@@ -211,6 +236,20 @@ def ensure_memories_collection() -> None:
             f"Typesense collection {collection_name!r} is incompatible with canonical memory atoms; "
             f"missing fields: {missing}"
         )
+
+
+def ensure_ledger_keyword_schema() -> None:
+    """Fail closed when the provider has not adopted the ledger index fields."""
+
+    collection_name = memories_collection_name()
+    try:
+        schema = _payload_or_empty(_typesense_client().collections[collection_name].retrieve())
+    except Exception as exc:
+        raise RuntimeError("ledger keyword schema unavailable") from exc
+    actual_fields = {str(field.get("name")) for field in _payload_list(schema.get("fields")) if field.get("name")}
+    missing = sorted(_LEDGER_SCHEMA_FIELDS - actual_fields)
+    if missing:
+        raise RuntimeError(f"Typesense ledger keyword schema is missing fields: {missing}")
 
 
 def upsert_atom_keyword_doc(item: MemoryItem, *, db_client: Any = None) -> bool:
@@ -229,6 +268,8 @@ def upsert_atom_keyword_doc(item: MemoryItem, *, db_client: Any = None) -> bool:
         return False
     try:
         ensure_memories_collection()
+        if item.ledger_schema_version == "knowledge_ledger.v1":
+            ensure_ledger_keyword_schema()
         doc = build_atom_keyword_document(item)
         documents = _typesense_client().collections[memories_collection_name()].documents
         # Remove the former bare ``memory_id`` identity and any previous
@@ -351,6 +392,60 @@ def keyword_search_memory_ids(
         return memory_ids
     except Exception as exc:
         logger.warning("keyword_search_memory_ids failed uid=%s, falling back to vector-only: %s", uid, exc)
+        return []
+
+
+def keyword_search_ledger_memory_ids(
+    uid: str,
+    query: str,
+    *,
+    kinds: Collection[str] = LEDGER_SEARCH_KINDS,
+    limit: int = 5,
+    db_client: Any = None,
+) -> List[str]:
+    """Search only open ledger rows through the versioned keyword projection.
+
+    Older generic atom collections may not have the ledger fields.  Returning
+    no keyword candidates in that state is intentional: an unlabelled
+    provider document must never be promoted to canonical ledger evidence.
+    """
+
+    parsed_kinds = validate_ledger_kinds(kinds)
+    if not user_allows_atom_keyword_index(uid, db_client=db_client) or not (query or "").strip():
+        return []
+    try:
+        ensure_ledger_keyword_schema()
+        filter_by = (
+            f"userId:={_typesense_filter_literal(uid)} && layer:={MemoryLayer.long_term.value} "
+            f"&& status:={MemoryItemStatus.active.value} && schema_version:=1 "
+            f"&& ledger_index_version:={LEDGER_INDEX_VERSION} "
+            "&& ledger_schema_version:=`knowledge_ledger.v1` "
+            "&& ledger_row_state:=`open` "
+            f"&& ledger_kind:=[{','.join(_typesense_filter_literal(kind) for kind in sorted(parsed_kinds))}]"
+        )
+        results = _payload_or_empty(
+            _typesense_client()
+            .collections[memories_collection_name()]
+            .documents.search(
+                {
+                    "q": query,
+                    "query_by": "content,entity_terms,predicate",
+                    "filter_by": filter_by,
+                    "sort_by": "created_at:desc",
+                    "per_page": max(1, min(limit, 60)),
+                    "page": 1,
+                }
+            )
+        )
+        memory_ids: List[str] = []
+        for hit in _payload_list(results.get("hits")):
+            doc = _payload_or_empty(hit.get("document"))
+            memory_id = doc.get("memory_id") or doc.get("id")
+            if memory_id:
+                memory_ids.append(str(memory_id))
+        return memory_ids
+    except Exception as exc:
+        logger.warning("ledger keyword search failed closed uid=%s error_type=%s", uid, type(exc).__name__)
         return []
 
 

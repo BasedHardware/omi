@@ -30,6 +30,11 @@ from models.product_memory import (
     MemoryKind,
     MemorySubjectScope,
 )
+from models.knowledge_ledger_search import (
+    LedgerSearchSurface,
+    is_ledger_row_admissible,
+    validate_ledger_kinds,
+)
 from utils.memory.canonical_memory_adapter import read_canonical_memory_item
 from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
 from utils.memory.knowledge_ledger import LEDGER_SCHEMA_VERSION
@@ -79,40 +84,24 @@ def _resolve_uid(config: RunnableConfig | None) -> Optional[str]:
 def _parse_kinds(kinds: Optional[str]) -> frozenset[str]:
     if kinds is None or not kinds.strip():
         return _LEDGER_KINDS
-    parsed = frozenset(part.strip().casefold() for part in kinds.split(",") if part.strip())
-    if not parsed or not parsed.issubset(_LEDGER_KINDS):
-        raise ValueError("kinds must contain only fact, document, or trigger")
-    return parsed
+    return validate_ledger_kinds(kinds.split(","))
 
 
 def _is_current_ledger_memory(memory: MemoryDB, *, kinds: frozenset[str]) -> bool:
-    kind = memory.kind.value if isinstance(memory.kind, MemoryKind) else str(memory.kind or "")
-    subject_scope = (
-        memory.subject_scope.value
-        if isinstance(memory.subject_scope, MemorySubjectScope)
-        else str(memory.subject_scope or "")
-    )
-    return (
-        memory.ledger_schema_version == LEDGER_SCHEMA_VERSION
-        and kind in kinds
-        and memory.intent_backed
-        and memory.invalid_at is None
-        and memory.user_review is not False
-        and not memory.is_locked
-        and (kind != MemoryKind.document.value or subject_scope == MemorySubjectScope.primary_user.value)
+    return is_ledger_row_admissible(
+        memory,
+        uid=memory.uid,
+        surface=LedgerSearchSurface.current,
+        kinds=kinds,
     )
 
 
 def _is_current_ledger_item(item: MemoryItem, *, kinds: frozenset[str]) -> bool:
-    promotion = item.promotion or {}
-    return (
-        item.ledger_schema_version == LEDGER_SCHEMA_VERSION
-        and item.kind.value in kinds
-        and item.intent_backed
-        and item.valid_to is None
-        and promotion.get("is_locked") is not True
-        and promotion.get("user_review") is not False
-        and (item.kind != MemoryKind.document or item.subject_scope == MemorySubjectScope.primary_user)
+    return is_ledger_row_admissible(
+        item,
+        uid=item.uid,
+        surface=LedgerSearchSurface.current,
+        kinds=kinds,
     )
 
 
@@ -156,6 +145,7 @@ def search_current_knowledge(
         limit=limit,
         canonical_item_filter=lambda item: _is_current_ledger_item(item, kinds=kinds),
         result_filter=lambda memory: _is_current_ledger_memory(memory, kinds=kinds),
+        ledger_kinds=kinds,
     )
     return [
         match.memory
@@ -167,26 +157,12 @@ def search_current_knowledge(
 def _is_historical_fact_memory(memory: MemoryDB, *, uid: str, include_rejected: bool) -> bool:
     """Keep the agent seam fact-only even if the service grows new history kinds."""
 
-    kind = memory.kind.value if isinstance(memory.kind, MemoryKind) else str(memory.kind or "")
-    write_reason = (
-        memory.write_reason.value
-        if isinstance(memory.write_reason, LedgerWriteReason)
-        else str(memory.write_reason or "")
-    )
-    is_preserved_legacy_history = not memory.intent_backed and write_reason == LedgerWriteReason.legacy_migration.value
-    return (
-        memory.uid == uid
-        and memory.ledger_schema_version == LEDGER_SCHEMA_VERSION
-        and kind == MemoryKind.fact.value
-        and (memory.intent_backed or is_preserved_legacy_history)
-        and not memory.is_locked
-        and (include_rejected or memory.user_review is not False)
-        and (
-            is_preserved_legacy_history
-            or memory.user_review is False
-            or memory.invalid_at is not None
-            or memory.superseded_by is not None
-        )
+    return is_ledger_row_admissible(
+        memory,
+        uid=uid,
+        surface=LedgerSearchSurface.history,
+        kinds={MemoryKind.fact.value},
+        include_rejected=include_rejected,
     )
 
 

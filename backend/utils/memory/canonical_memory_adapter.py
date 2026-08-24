@@ -7,8 +7,9 @@ import hashlib
 import json
 import logging
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, cast
+from typing import Any, Callable, Collection, Dict, List, Optional, Sequence, Tuple, cast
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -90,6 +91,7 @@ from utils.retrieval.hybrid import rrf_rerank
 from utils.memory.canonical_vector_sync import delete_canonical_memory_vector
 from utils.memory.product_memory_read_service import (
     fetch_authoritative_product_memory_items,
+    fetch_authoritative_product_memory_items_by_ids,
     fetch_authoritative_product_memory_items_for_source,
     fetch_authoritative_superseded_memory_items_for_targets,
 )
@@ -505,8 +507,18 @@ def read_canonical_memories(
 
 _CANONICAL_SCAN_PAGE_MAX = 500
 _CANONICAL_SCAN_LINEAGE_MAX_HOPS = 12
+_LEDGER_SEARCH_MAX_PROVIDER_CANDIDATES = 60
 CanonicalScanCursor = tuple[datetime, str]
 CanonicalScanSlot = tuple[Optional[MemoryDB], CanonicalScanCursor]
+
+
+@dataclass(frozen=True)
+class BoundedLedgerSearchHydration:
+    """Named result for bounded provider-candidate and lineage hydration."""
+
+    candidate_items: Tuple[MemoryItem, ...]
+    lineage_items_by_id: Dict[str, MemoryItem]
+    survivor_items_by_id: Dict[str, MemoryItem]
 
 
 def _coerce_scan_updated_at(value: datetime) -> datetime:
@@ -586,6 +598,90 @@ def _read_canonical_memory_item_for_lineage(
     if item.uid != uid:
         raise ValueError(f"canonical memory uid mismatch: expected {uid}, got {item.uid}")
     return item
+
+
+def _hydrate_bounded_ledger_search_items(
+    uid: str,
+    candidate_ids: Sequence[str],
+    *,
+    db_client: Any,
+    policy: MemoryAccessPolicy,
+    now: datetime,
+    device_scope: str,
+    client_device_id: Optional[str],
+) -> BoundedLedgerSearchHydration:
+    """Hydrate provider candidates plus a bounded canonical lineage closure.
+
+    Ledger search must never turn a provider candidate into an account-wide
+    canonical collection scan. Candidate rows are read in one bounded batch;
+    each of at most twelve lineage hops reads only the next ids referenced by
+    that batch. Every point is checked against both the owning path and the
+    Firestore document id by the read-service seam.
+    """
+
+    requested_ids = list(dict.fromkeys(memory_id for memory_id in candidate_ids if memory_id))[
+        :_LEDGER_SEARCH_MAX_PROVIDER_CANDIDATES
+    ]
+    if not requested_ids:
+        return BoundedLedgerSearchHydration(
+            candidate_items=(),
+            lineage_items_by_id={},
+            survivor_items_by_id={},
+        )
+
+    hydrated_by_id: Dict[str, MemoryItem] = {}
+    frontier = fetch_authoritative_product_memory_items_by_ids(uid, requested_ids, db_client=db_client)
+    for item in frontier:
+        hydrated_by_id[item.memory_id] = item
+
+    seen_ids = set(requested_ids)
+    for _ in range(_CANONICAL_SCAN_LINEAGE_MAX_HOPS):
+        next_ids = [
+            target_id
+            for item in frontier
+            if (target_id := (item.canonical_memory_id or item.superseded_by or "").strip())
+            and target_id not in seen_ids
+        ]
+        next_ids = list(dict.fromkeys(next_ids))[:_LEDGER_SEARCH_MAX_PROVIDER_CANDIDATES]
+        if not next_ids:
+            break
+        seen_ids.update(next_ids)
+        frontier = fetch_authoritative_product_memory_items_by_ids(uid, next_ids, db_client=db_client)
+        for item in frontier:
+            hydrated_by_id[item.memory_id] = item
+
+    all_items = list(hydrated_by_id.values())
+    visible_items = filter_canonical_default_visible_items(all_items, policy=policy, now=now)
+    scoped_items = filter_items_by_device_scope(
+        visible_items,
+        device_scope=device_scope if device_scope in ("current", "all", "explicit") else "all",
+        client_device_id=client_device_id,
+    )
+    return BoundedLedgerSearchHydration(
+        candidate_items=tuple(hydrated_by_id[memory_id] for memory_id in requested_ids if memory_id in hydrated_by_id),
+        lineage_items_by_id=hydrated_by_id,
+        survivor_items_by_id={item.memory_id: item for item in scoped_items},
+    )
+
+
+def _ledger_search_lineage_is_complete(item: MemoryItem, *, lineage_items_by_id: Dict[str, MemoryItem]) -> bool:
+    """Require a candidate's canonical lineage to terminate in bounded data."""
+
+    current = item
+    visited: set[str] = set()
+    for _ in range(_CANONICAL_SCAN_LINEAGE_MAX_HOPS + 1):
+        if current.memory_id in visited:
+            return True
+        visited.add(current.memory_id)
+        target_id = (current.canonical_memory_id or current.superseded_by or "").strip()
+        if not target_id or target_id == current.memory_id:
+            return True
+        target = lineage_items_by_id.get(target_id)
+        if target is None:
+            return False
+        current = target
+    # The closure was bounded before a terminating root was observed.
+    return False
 
 
 def _canonical_scan_lineage_suppressed(
@@ -781,6 +877,7 @@ def search_canonical_memories(
     vector_query: Any = None,
     device_scope_request: Optional[DeviceScopeRequest] = None,
     item_filter: Optional[Callable[[MemoryItem], bool]] = None,
+    ledger_kinds: Optional[Collection[str]] = None,
 ) -> List[Dict[str, Any]]:
     """Hybrid search over default-visible Short-term and Long-term memories."""
     client = db_client if db_client is not None else default_db_client
@@ -791,6 +888,8 @@ def search_canonical_memories(
     normalized_query = (query or "").strip()
 
     if not normalized_query:
+        if ledger_kinds is not None:
+            return []
         memories = read_canonical_memories(
             uid,
             limit=capped_limit,
@@ -810,16 +909,37 @@ def search_canonical_memories(
             for memory in memories[:capped_limit]
         ]
 
-    from utils.memory.atom_keyword_index import keyword_search_memory_ids, merge_memory_search_ids
+    from utils.memory.atom_keyword_index import (
+        keyword_search_ledger_memory_ids,
+        keyword_search_memory_ids,
+        merge_memory_search_ids,
+    )
 
-    keyword_ids = keyword_search_memory_ids(uid, normalized_query, limit=fetch_limit, db_client=client)
+    if ledger_kinds is None:
+        keyword_ids = keyword_search_memory_ids(uid, normalized_query, limit=fetch_limit, db_client=client)
+    else:
+        keyword_ids = keyword_search_ledger_memory_ids(
+            uid,
+            normalized_query,
+            kinds=ledger_kinds,
+            limit=fetch_limit,
+            db_client=client,
+        )
     if vector_query is None:
         from database.vector_db import query_memory_vector_candidates
 
         vector_query_fn = query_memory_vector_candidates
     else:
         vector_query_fn = vector_query
-    vector_result = vector_query_fn(uid, normalized_query, limit=fetch_limit)
+    if ledger_kinds is None:
+        vector_result = vector_query_fn(uid, normalized_query, limit=fetch_limit)
+    else:
+        vector_result = vector_query_fn(
+            uid,
+            normalized_query,
+            limit=fetch_limit,
+            ledger_kinds=sorted(ledger_kinds),
+        )
     vector_ids = [hit.memory_id for hit in vector_result.hits if hit.memory_id]
     merged_ids = merge_memory_search_ids(keyword_ids, vector_ids)
     if not merged_ids:
@@ -827,19 +947,40 @@ def search_canonical_memories(
 
     now = datetime.now(timezone.utc)
     policy = MemoryAccessPolicy.for_omi_chat(archive_capability=False)
-    all_items = fetch_authoritative_product_memory_items(uid=uid, db_client=client)
-    visible_items = filter_canonical_default_visible_items(all_items, policy=policy, now=now)
-    scoped_items = filter_items_by_device_scope(
-        visible_items,
-        device_scope=device_scope if device_scope in ("current", "all", "explicit") else "all",
-        client_device_id=client_device_id,
-    )
-    lineage_items_by_id = {item.memory_id: item for item in all_items}
-    survivor_items_by_id = {item.memory_id: item for item in scoped_items}
+    if ledger_kinds is None:
+        all_items = fetch_authoritative_product_memory_items(uid=uid, db_client=client)
+        visible_items = filter_canonical_default_visible_items(all_items, policy=policy, now=now)
+        scoped_items = filter_items_by_device_scope(
+            visible_items,
+            device_scope=device_scope if device_scope in ("current", "all", "explicit") else "all",
+            client_device_id=client_device_id,
+        )
+        lineage_items_by_id = {item.memory_id: item for item in all_items}
+        survivor_items_by_id = {item.memory_id: item for item in scoped_items}
+        candidate_ids = merged_ids
+    else:
+        hydration = _hydrate_bounded_ledger_search_items(
+            uid,
+            merged_ids,
+            db_client=client,
+            policy=policy,
+            now=now,
+            device_scope=device_scope,
+            client_device_id=client_device_id,
+        )
+        candidate_items = list(hydration.candidate_items)
+        lineage_items_by_id = hydration.lineage_items_by_id
+        survivor_items_by_id = hydration.survivor_items_by_id
+        candidate_items = [
+            item
+            for item in candidate_items
+            if _ledger_search_lineage_is_complete(item, lineage_items_by_id=lineage_items_by_id)
+        ]
+        candidate_ids = [item.memory_id for item in candidate_items]
     vector_scores = {hit.memory_id: float(hit.score or 0.0) for hit in vector_result.hits}
 
     candidates: List[Payload] = []
-    for memory_id in merged_ids:
+    for memory_id in candidate_ids:
         item = survivor_items_by_id.get(memory_id)
         if item is None or (item_filter is not None and not item_filter(item)):
             continue
