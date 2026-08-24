@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import desktop_backend
+import main
 from routers import jit_rollout
 from utils import jit_rollout as authority_module
 from utils.jit_rollout import (
@@ -367,8 +368,6 @@ def test_read_only_route_uses_authenticated_uid_and_ignores_self_enrolment(monke
 
 
 def test_main_and_desktop_apps_mount_one_read_only_decision_contract():
-    import main
-
     for app in (main.app, desktop_backend._build_app()):
         jit_rollout.validate_jit_rollout_contract(app)
         route = next(route for route in app.routes if getattr(route, 'path', None) == '/v1/jit/rollout-decision')
