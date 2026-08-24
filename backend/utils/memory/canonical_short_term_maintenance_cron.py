@@ -17,8 +17,6 @@ from typing import Any, Iterable, Optional, Protocol, cast
 
 from pydantic import ValidationError
 from google.cloud import firestore
-from google.cloud.firestore_v1 import FieldFilter
-from google.cloud.firestore_v1.field_path import FieldPath
 
 from database._client import db as default_db_client
 from database.memory_collections import MemoryCollections
@@ -65,13 +63,6 @@ MAX_MAINTENANCE_UIDS_PER_RUN = 400
 EXPIRY_ADJUDICATION_LOOKAHEAD = DEFAULT_SHORT_TERM_TTL / 2
 CANONICAL_MEMORY_MAINTENANCE_SEED_CURSOR_PATH = "canonical_memory_maintenance_control/seed_cursor"
 CANONICAL_MEMORY_MAINTENANCE_SEED_SCHEMA_VERSION = 1
-DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_CURSOR_PATH = "daily_memory_sweep_control/onboarding_inventory_cursor"
-DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_SCHEMA_VERSION = 1
-DAILY_MEMORY_SWEEP_RETRY_COLLECTION = "daily_memory_sweep_control_retries"
-DAILY_MEMORY_SWEEP_RETRY_STATE_SCHEMA_VERSION = 1
-DAILY_MEMORY_SWEEP_RETRY_CURSOR_PATH = "daily_memory_sweep_control/retry_cursor"
-DAILY_MEMORY_SWEEP_RETRY_CURSOR_SCHEMA_VERSION = 1
-MAX_DAILY_MEMORY_SWEEP_RETRY_UIDS_PER_PAGE = 32
 CANONICAL_MEMORY_DREAMING_STATE_COLLECTION = "canonical_memory_dreaming_state"
 DREAMING_MIN_INTERVAL = timedelta(hours=20)
 OVERFLOW_SHORT_TERM_THRESHOLD = 10
@@ -92,19 +83,6 @@ class ExpiryOrderedMaintenanceInventory:
     uids: tuple[str, ...]
     candidate_item_count: int = 0
     expired_active_item_count: int = 0
-
-
-@dataclass(frozen=True)
-class DailySweepUIDInventoryPage:
-    """Bounded daily-sweep page with independent fair-cursor channels."""
-
-    uids: tuple[str, ...]
-    canonical_uids: tuple[str, ...] = ()
-    onboarding_uids: tuple[str, ...] = ()
-    retry_uids: tuple[str, ...] = ()
-    canonical_cursor_generation: int = 0
-    onboarding_cursor_generation: int = 0
-    retry_cursor_generation: int = 0
 
 
 def expiry_ordered_maintenance_uid_inventory(
@@ -210,63 +188,6 @@ def _persist_registry_cursor(db_client: Any, last_uid: str, *, expected_generati
         ref.set(next_payload, merge=True)
     except Exception as exc:
         raise CanonicalMaintenanceInventoryUnavailable("canonical maintenance cursor unavailable") from exc
-
-
-def _read_global_cursor_state(db_client: Any, path: str, schema_version: int) -> tuple[str, int]:
-    try:
-        snapshot = db_client.document(path).get()
-    except Exception as exc:
-        raise CanonicalMaintenanceInventoryUnavailable("daily sweep inventory cursor unavailable") from exc
-    payload = snapshot.to_dict() if getattr(snapshot, "exists", False) else {}
-    if not isinstance(payload, dict) or (payload and payload.get("schema_version") != schema_version):
-        raise CanonicalMaintenanceInventoryUnavailable("daily sweep inventory cursor is malformed")
-    last_uid = payload.get("last_uid", "")
-    generation = payload.get("generation", 0)
-    if not isinstance(last_uid, str) or not isinstance(generation, int) or generation < 0:
-        raise CanonicalMaintenanceInventoryUnavailable("daily sweep inventory cursor is malformed")
-    return last_uid.strip(), generation
-
-
-def _persist_global_cursor(
-    db_client: Any,
-    path: str,
-    schema_version: int,
-    last_uid: str,
-    *,
-    expected_generation: int,
-) -> None:
-    try:
-        ref = db_client.document(path)
-        snapshot = ref.get()
-        payload = snapshot.to_dict() if getattr(snapshot, "exists", False) else {}
-        current_generation = payload.get("generation", 0) if isinstance(payload, dict) else 0
-        if current_generation != expected_generation:
-            raise CanonicalMaintenanceInventoryUnavailable("daily sweep inventory cursor generation conflict")
-        next_payload = {"schema_version": schema_version, "last_uid": last_uid, "generation": current_generation + 1}
-        transaction_factory = getattr(db_client, "transaction", None)
-        if callable(transaction_factory):
-            try:
-                transaction = transaction_factory()
-
-                def write_transaction(tx: Any) -> None:
-                    live_snapshot = ref.get(transaction=tx)
-                    live_payload = live_snapshot.to_dict() if getattr(live_snapshot, "exists", False) else {}
-                    live_generation = live_payload.get("generation", 0) if isinstance(live_payload, dict) else 0
-                    if live_generation != expected_generation:
-                        raise CanonicalMaintenanceInventoryUnavailable(
-                            "daily sweep inventory cursor generation conflict"
-                        )
-                    tx.set(ref, next_payload, merge=True)
-
-                cast(Any, firestore.transactional(write_transaction))(transaction)
-                return
-            except TypeError:
-                pass
-        ref.set(next_payload, merge=True)
-    except CanonicalMaintenanceInventoryUnavailable:
-        raise
-    except Exception as exc:
-        raise CanonicalMaintenanceInventoryUnavailable("daily sweep inventory cursor unavailable") from exc
 
 
 def maintenance_flex_forced() -> bool:
@@ -496,213 +417,6 @@ def bounded_canonical_memory_uid_inventory(
         raise
     except Exception as exc:
         raise CanonicalMaintenanceInventoryUnavailable("bounded canonical UID registry query failed") from exc
-
-
-def bounded_daily_memory_sweep_uid_inventory(
-    db_client: Any,
-    *,
-    limit: int = MAX_MAINTENANCE_UIDS_PER_RUN,
-    persist_cursor: bool = True,
-    return_page: bool = False,
-) -> tuple[str, ...] | DailySweepUIDInventoryPage:
-    """Union canonical users with bounded onboarding cold-start users.
-
-    Canonical maintenance's neutral registry intentionally contains only users
-    who already have canonical state.  The daily sweep must also discover a
-    newly onboarded user before that state exists.  This read-only inventory
-    queries the trusted onboarding completion markers and never writes a
-    registry row or mutates a PostHog cohort.
-    """
-
-    bounded_limit = max(1, min(MAX_MAINTENANCE_UIDS_PER_RUN, int(limit)))
-    try:
-        retry_limit = max(1, min(MAX_DAILY_MEMORY_SWEEP_RETRY_UIDS_PER_PAGE, bounded_limit // 4))
-        retry_cursor, retry_cursor_generation = _read_global_cursor_state(
-            db_client, DAILY_MEMORY_SWEEP_RETRY_CURSOR_PATH, DAILY_MEMORY_SWEEP_RETRY_CURSOR_SCHEMA_VERSION
-        )
-        retry_collection = db_client.collection(DAILY_MEMORY_SWEEP_RETRY_COLLECTION)
-        retry_query = retry_collection.where("uid", ">", retry_cursor) if retry_cursor else retry_collection
-        retry_snapshots = retry_query.order_by("uid").limit(retry_limit).stream()
-        retry_page = list(retry_snapshots)
-        if retry_cursor and len(retry_page) < retry_limit:
-            retry_page.extend(retry_collection.order_by("uid").limit(retry_limit - len(retry_page)).stream())
-        retry_values: list[str] = []
-        for snapshot in retry_page:
-            payload = snapshot.to_dict() if hasattr(snapshot, "to_dict") else None
-            if (
-                not isinstance(payload, dict)
-                or payload.get("schema_version") != DAILY_MEMORY_SWEEP_RETRY_STATE_SCHEMA_VERSION
-            ):
-                raise CanonicalMaintenanceInventoryUnavailable("daily sweep retry state malformed")
-            uid = payload.get("uid")
-            if not isinstance(uid, str) or not uid.strip() or "/" in uid:
-                raise CanonicalMaintenanceInventoryUnavailable("daily sweep retry state malformed")
-            if uid.strip() not in retry_values:
-                retry_values.append(uid.strip())
-        retry_uids = tuple(retry_values)
-    except CanonicalMaintenanceInventoryUnavailable:
-        raise
-    except Exception as exc:
-        raise CanonicalMaintenanceInventoryUnavailable("daily sweep retry state unavailable") from exc
-    remaining_limit = bounded_limit - len(retry_uids)
-    if not remaining_limit:
-        page = DailySweepUIDInventoryPage(
-            uids=retry_uids,
-            retry_uids=retry_uids,
-            retry_cursor_generation=retry_cursor_generation,
-        )
-        return page if return_page else page.uids
-
-    # Reserve half the remaining bounded page for the cold-start channel. A canonical
-    # registry page can contain hundreds of existing users; without a reserve
-    # a newly onboarded account would never reach the sweep.
-    onboarding_limit = max(1, remaining_limit // 2) if remaining_limit > 1 else 1
-    canonical_limit = max(0, remaining_limit - onboarding_limit)
-    canonical = (
-        bounded_canonical_memory_uid_inventory(
-            db_client,
-            limit=canonical_limit,
-            persist_cursor=persist_cursor,
-        )
-        if canonical_limit
-        else ()
-    )
-    users = getattr(db_client, "collection", lambda _name: None)("users")
-    where = getattr(users, "where", None)
-    if not callable(where):
-        raise CanonicalMaintenanceInventoryUnavailable("onboarding cold-start inventory is unavailable")
-    discovered: list[str] = list(retry_uids)
-    for uid in canonical:
-        if uid not in discovered:
-            discovered.append(uid)
-    try:
-        onboarding_cursor, onboarding_cursor_generation = _read_global_cursor_state(
-            db_client,
-            DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_CURSOR_PATH,
-            DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_SCHEMA_VERSION,
-        )
-    except Exception as exc:
-        raise CanonicalMaintenanceInventoryUnavailable("onboarding inventory cursor unavailable") from exc
-    onboarding_uids: list[str] = []
-    candidate_rows: list[str] = []
-
-    def read_onboarding_page(*, after_uid: str = "") -> list[str]:
-        rows: list[str] = []
-        for field_name in ("onboarding.completed", "onboarding.device_onboarding_completed"):
-            try:
-                query: Any = where(filter=FieldFilter(field_name, "==", True))
-            except TypeError:
-                query = cast(Any, where)(field_name, "==", True)
-            if after_uid:
-                try:
-                    query = query.where(filter=FieldFilter(FieldPath.document_id(), ">", after_uid))
-                except TypeError:
-                    query = query.where(FieldPath.document_id(), ">", after_uid)
-            try:
-                query = query.order_by("__name__")
-            except (AttributeError, TypeError):
-                pass
-            for snapshot in query.limit(onboarding_limit).stream():
-                uid = str(getattr(snapshot, "id", "") or "").strip()
-                if uid and "/" not in uid and uid not in rows:
-                    rows.append(uid)
-        return rows
-
-    try:
-        candidate_rows = read_onboarding_page(after_uid=onboarding_cursor)
-        if onboarding_cursor and not candidate_rows:
-            candidate_rows = read_onboarding_page()
-    except Exception as exc:
-        raise CanonicalMaintenanceInventoryUnavailable("onboarding cold-start inventory query failed") from exc
-    candidate_rows.sort()
-    onboarding_uids = candidate_rows[:onboarding_limit]
-    for uid in onboarding_uids:
-        if uid not in discovered:
-            discovered.append(uid)
-    if persist_cursor and onboarding_uids:
-        _persist_global_cursor(
-            db_client,
-            DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_CURSOR_PATH,
-            DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_SCHEMA_VERSION,
-            onboarding_uids[-1],
-            expected_generation=onboarding_cursor_generation,
-        )
-        onboarding_cursor_generation = _read_global_cursor_state(
-            db_client,
-            DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_CURSOR_PATH,
-            DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_SCHEMA_VERSION,
-        )[1]
-    page = DailySweepUIDInventoryPage(
-        uids=tuple(discovered[:bounded_limit]),
-        canonical_uids=tuple(uid for uid in canonical if uid in discovered[:bounded_limit]),
-        onboarding_uids=tuple(uid for uid in onboarding_uids if uid in discovered[:bounded_limit]),
-        retry_uids=retry_uids,
-        canonical_cursor_generation=_read_registry_cursor_state(db_client)[1],
-        onboarding_cursor_generation=onboarding_cursor_generation,
-        retry_cursor_generation=retry_cursor_generation,
-    )
-    return page if return_page else page.uids
-
-
-def commit_daily_memory_sweep_uid_inventory(
-    db_client: Any,
-    page: DailySweepUIDInventoryPage,
-    *,
-    completed_uids: Iterable[str],
-    failed_uids: Iterable[str] = (),
-    advance_page: bool = True,
-) -> None:
-    """Advance fair cursors independently and durably requeue failures.
-
-    The page is read with ``persist_cursor=False`` before the daily sweep. A
-    failed account is placed in a bounded retry queue, while the independent
-    page cursor continues so one outage cannot starve later accounts.
-    """
-
-    completed = {uid.strip() for uid in completed_uids if uid.strip()}
-    failed = {uid.strip() for uid in failed_uids if uid.strip()}
-    completed.difference_update(failed)
-
-    if not advance_page and not completed and not failed:
-        return
-    # Persist retry state before advancing either source cursor. Each UID has
-    # an independent durable document, so outages cannot overflow one array or
-    # lose concurrent read/modify/write updates.
-    try:
-        for uid in sorted(failed):
-            db_client.document(f"{DAILY_MEMORY_SWEEP_RETRY_COLLECTION}/{uid}").set(
-                {"schema_version": DAILY_MEMORY_SWEEP_RETRY_STATE_SCHEMA_VERSION, "uid": uid},
-                merge=True,
-            )
-        for uid in sorted(completed):
-            db_client.document(f"{DAILY_MEMORY_SWEEP_RETRY_COLLECTION}/{uid}").delete()
-    except Exception as exc:
-        raise CanonicalMaintenanceInventoryUnavailable("daily sweep retry state unavailable") from exc
-
-    # A cursor write may fail and cause a duplicate page, but it must never
-    # happen before the retry state above is durable.
-    if advance_page and page.retry_uids:
-        _persist_global_cursor(
-            db_client,
-            DAILY_MEMORY_SWEEP_RETRY_CURSOR_PATH,
-            DAILY_MEMORY_SWEEP_RETRY_CURSOR_SCHEMA_VERSION,
-            page.retry_uids[-1],
-            expected_generation=page.retry_cursor_generation,
-        )
-    if advance_page and page.canonical_uids:
-        _persist_registry_cursor(
-            db_client,
-            page.canonical_uids[-1],
-            expected_generation=page.canonical_cursor_generation,
-        )
-    if advance_page and page.onboarding_uids:
-        _persist_global_cursor(
-            db_client,
-            DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_CURSOR_PATH,
-            DAILY_MEMORY_SWEEP_ONBOARDING_INVENTORY_SCHEMA_VERSION,
-            page.onboarding_uids[-1],
-            expected_generation=page.onboarding_cursor_generation,
-        )
 
 
 def _resolve_maintenance_uids(

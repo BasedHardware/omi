@@ -48,6 +48,7 @@ TASK_NESTED_EXPORT_COLLECTIONS = (
 # subcollections. These rows contain transcript-derived candidates and must
 # be included in export even though they are not product-facing collections.
 MEMORY_SWEEP_EXPORT_COLLECTIONS = (
+    'daily_memory_sweep_sources',
     'daily_memory_sweep_daily_summary_staged',
     'daily_memory_sweep_onboarding_staged',
     'daily_memory_sweep_model_invocations',

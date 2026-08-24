@@ -44,6 +44,7 @@ from utils.memory.daily_memory_sweep import (
     daily_memory_sweep_cohort_authority_from_environment,
     _POSTHOG_CLIENTS,
     MODEL_INVOCATION_PATH,
+    MODEL_INVOCATION_FENCE_COLLECTION,
     MODEL_INVOCATION_SCHEMA_VERSION,
     _invoke_model_once,
     cleanup_expired_daily_memory_sweep_stages,
@@ -544,6 +545,36 @@ def test_scheduler_never_treats_disabled_cohort_as_unrestricted(monkeypatch):
     assert summary.errors == ("cohort_disabled",)
 
 
+@pytest.mark.parametrize(
+    "authority, cohort",
+    [
+        (SweepAuthorityState(enabled=False), DailySweepCohortAuthority(enabled=False, cohort_name="")),
+        (
+            SweepAuthorityState(enabled=True, kill_switch_active=True),
+            DailySweepCohortAuthority(enabled=True, cohort_name="sweep"),
+        ),
+    ],
+)
+def test_scheduler_cleanup_runs_even_when_rollout_is_closed(monkeypatch, authority, cohort):
+    cleaned = []
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.cleanup_expired_daily_memory_sweep_stages",
+        lambda uid, **_kwargs: cleaned.append(uid),
+    )
+    summary = run_daily_memory_sweep_scheduler(
+        db_client=object(),
+        now=datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
+        uid_inventory=("user-1", "user-2"),
+        source_provider=lambda *_args, **_kwargs: None,
+        timezone_resolver=lambda _uid: "UTC",
+        authority=authority,
+        cohort_authority=cohort,
+        cohort_authorizer=None,
+    )
+    assert cleaned == ["user-1", "user-2"]
+    assert summary.attempted_users == 0
+
+
 @pytest.mark.parametrize("decision", [DailySweepCohortDecision.disabled, DailySweepCohortDecision.unavailable])
 def test_scheduler_cohort_gate_precedes_timezone_reconciliation_and_all_sweep_writes(decision):
     db = _Db()
@@ -850,6 +881,108 @@ def test_model_invocation_fence_is_at_most_once_under_overlapping_threads():
     assert invocation["state"] == "returned"
 
 
+def test_fenced_invocation_survives_wipe_race_without_recreating_user_state(monkeypatch):
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    claimed = threading.Event()
+    release_provider = threading.Event()
+    paid_call_count = 0
+    provider_results = []
+
+    def provider():
+        nonlocal paid_call_count
+        paid_call_count += 1
+        claimed.set()
+        assert release_provider.wait(timeout=2)
+        return ({"candidate_id": "after-wipe"},)
+
+    first = threading.Thread(
+        target=lambda: provider_results.append(
+            _invoke_model_once(
+                db,
+                "user-1",
+                "wipe-race-generation-4-source-7-window-a",
+                candidate_builder=provider,
+                account_generation=control.account_generation,
+                source_generation=control.source_generation,
+                sweep_generation=1,
+                window_id="window-a",
+            )
+        )
+    )
+    first.start()
+    assert claimed.wait(timeout=2)
+
+    # Simulate the account deletion transaction winning after claim: it
+    # removes every user subtree, but deliberately leaves the top-level
+    # content-free invocation fence behind.
+    db.document("account_deletions/user-1").set({"wipe_status": "running"})
+    for path in list(db.store):
+        if path.startswith("users/user-1/"):
+            db.store.pop(path)
+    second = threading.Thread(
+        target=lambda: provider_results.append(
+            _invoke_model_once(
+                db,
+                "user-1",
+                "wipe-race-generation-4-source-7-window-a",
+                candidate_builder=lambda: (_ for _ in ()).throw(AssertionError("paid twice")),
+                account_generation=control.account_generation,
+                source_generation=control.source_generation,
+                sweep_generation=1,
+                window_id="window-a",
+            )
+        )
+    )
+    second.start()
+    release_provider.set()
+    first.join(timeout=2)
+    second.join(timeout=2)
+
+    assert paid_call_count == 1
+    assert provider_results == [None, None]
+    assert db.store.keys() == {
+        "account_deletions/user-1",
+        f"{MODEL_INVOCATION_FENCE_COLLECTION}/wipe-race-generation-4-source-7-window-a",
+    }
+    fence = db.store[f"{MODEL_INVOCATION_FENCE_COLLECTION}/wipe-race-generation-4-source-7-window-a"]
+    assert fence["state"] == "indeterminate"
+    assert all(not path.startswith("users/user-1/") for path in db.store)
+
+
+def test_generation_roll_does_not_reuse_old_returned_payload(monkeypatch):
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    old_id = "generation-4-source-7-window-a"
+    assert _invoke_model_once(
+        db,
+        "user-1",
+        old_id,
+        candidate_builder=lambda: ({"candidate_id": "old"},),
+        account_generation=4,
+        source_generation=7,
+        sweep_generation=1,
+        window_id="window-a",
+    ) == ({"candidate_id": "old"},)
+    # A generation-fenced logical ID cannot consume the previous returned
+    # payload, even if a caller accidentally supplies the same source text.
+    assert (
+        _invoke_model_once(
+            db,
+            "user-1",
+            old_id,
+            candidate_builder=lambda: (_ for _ in ()).throw(AssertionError("old payload reused")),
+            account_generation=5,
+            source_generation=7,
+            sweep_generation=1,
+            window_id="window-a",
+        )
+        is None
+    )
+
+
 def test_model_return_is_reused_after_stage_gap_and_pending_is_fail_closed():
     db = _Db()
     calls = []
@@ -938,6 +1071,59 @@ class _CleanupDb(_Db):
         return _CleanupCollection(rows)
 
 
+class _ExpiryQuery(_CleanupCollection):
+    def __init__(self, rows):
+        super().__init__(rows)
+        self._limit = None
+
+    def where(self, *args, **kwargs):
+        predicate = kwargs.get("filter")
+        if predicate is None and len(args) == 3:
+            field, operator, value = args
+        else:
+            field = getattr(predicate, "field_path", "")
+            operator = getattr(predicate, "op_string", "")
+            value = getattr(predicate, "value", None)
+        assert field == "expires_at" and operator == "<="
+        return _ExpiryQuery(
+            [
+                row
+                for row in self.rows
+                if isinstance(row.to_dict().get("expires_at"), datetime) and row.to_dict()["expires_at"] <= value
+            ]
+        )
+
+    def order_by(self, _field):
+        self.rows = sorted(self.rows, key=lambda row: row.to_dict().get("expires_at"))
+        return self
+
+    def limit(self, count):
+        self._limit = count
+        return self
+
+    def start_after(self, row):
+        try:
+            index = self.rows.index(row)
+        except ValueError:
+            return self
+        result = _ExpiryQuery(self.rows[index + 1 :])
+        result._limit = self._limit
+        return result
+
+    def stream(self):
+        return iter(self.rows if self._limit is None else self.rows[: self._limit])
+
+
+class _ExpiryCleanupDb(_CleanupDb):
+    def collection(self, path):
+        rows = [
+            _CleanupRow(row_path, payload, self.store)
+            for row_path, payload in list(self.store.items())
+            if row_path.startswith(path + "/")
+        ]
+        return _ExpiryQuery(rows)
+
+
 def test_expired_candidate_stages_are_bounded_but_indeterminate_claims_remain_closed():
     db = _CleanupDb()
     expired = datetime.now(timezone.utc) - timedelta(minutes=1)
@@ -970,6 +1156,27 @@ def test_expired_candidate_stages_are_bounded_but_indeterminate_claims_remain_cl
     assert "candidate_digest" not in returned
     assert "users/user-1/daily_memory_sweep_model_invocations/pending" in db.store
     assert "users/user-1/daily_memory_sweep_model_invocations/indeterminate" in db.store
+
+
+def test_expiry_query_skips_more_than_one_page_of_permanent_tombstones():
+    db = _ExpiryCleanupDb()
+    expired = datetime.now(timezone.utc) - timedelta(minutes=1)
+    for index in range(140):
+        db.store[f"users/user-1/{MODEL_INVOCATION_PATH}/tombstone-{index}"] = {
+            "invocation_id": f"tombstone-{index}",
+            "state": "indeterminate",
+            "at_most_once_tombstone": True,
+        }
+    db.store[f"users/user-1/{MODEL_INVOCATION_PATH}/returned-after-tombstones"] = {
+        "invocation_id": "returned-after-tombstones",
+        "state": "returned",
+        "expires_at": expired,
+        "candidate_page": [{"content": "private"}],
+    }
+
+    assert cleanup_expired_daily_memory_sweep_stages("user-1", db_client=db, limit=128) == 1
+    assert "candidate_page" not in db.store[f"users/user-1/{MODEL_INVOCATION_PATH}/returned-after-tombstones"]
+    assert all(f"users/user-1/{MODEL_INVOCATION_PATH}/tombstone-{index}" in db.store for index in range(140))
 
 
 def test_indeterminate_tombstone_survives_expired_lease_and_blocks_second_paid_call():
@@ -1057,6 +1264,7 @@ def test_user_export_includes_both_candidate_stages_and_model_receipts(monkeypat
 
     def user_rows(_uid, collection):
         if collection in {
+            "daily_memory_sweep_sources",
             "daily_memory_sweep_daily_summary_staged",
             "daily_memory_sweep_onboarding_staged",
             "daily_memory_sweep_model_invocations",
@@ -1070,6 +1278,7 @@ def test_user_export_includes_both_candidate_stages_and_model_receipts(monkeypat
     export = __import__("json").loads(payload)
 
     assert {
+        "daily_memory_sweep_sources",
         "daily_memory_sweep_daily_summary_staged",
         "daily_memory_sweep_onboarding_staged",
         "daily_memory_sweep_model_invocations",

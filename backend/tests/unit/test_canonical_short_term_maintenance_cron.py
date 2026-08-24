@@ -11,6 +11,15 @@ from utils.memory.short_term_promotion import CanonicalShortTermLifecycleReport
 NOW = datetime(2026, 6, 24, 12, 0, tzinfo=timezone.utc)
 
 
+def test_legacy_cron_has_no_daily_sweep_inventory_owner():
+    """Daily sweep inventory has one owner in the independent job module."""
+
+    assert not hasattr(cron, "DailySweepUIDInventoryPage")
+    assert not hasattr(cron, "bounded_daily_memory_sweep_uid_inventory")
+    assert not hasattr(cron, "commit_daily_memory_sweep_uid_inventory")
+    assert not any(name.startswith("DAILY_MEMORY_SWEEP_") for name in vars(cron))
+
+
 class _Reference:
     def __init__(self, path):
         self.path = path

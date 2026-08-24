@@ -72,6 +72,7 @@ def test_iter_user_data_export_streams_all_top_level_sections(monkeypatch):
         "action_items": [{"id": "task1"}],
         "task_data": {
             **{name: [{"id": f"{name}-1"}] for name in data_export.TASK_EXPORT_COLLECTIONS},
+            **{name: [{"id": f"{name}-1"}] for name in data_export.MEMORY_SWEEP_EXPORT_COLLECTIONS},
             **{
                 export_name: [{"id": f"{parent}-{child}-1", "parent_id": f"{parent}-1"}]
                 for export_name, parent, child in data_export.TASK_NESTED_EXPORT_COLLECTIONS
