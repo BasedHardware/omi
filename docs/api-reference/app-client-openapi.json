@@ -7048,16 +7048,6 @@
             ],
             "title": "Processing Memory Id"
           },
-          "screen_frames": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ConversationScreenFrameSet"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "screenshot_sharing_enabled": {
             "default": true,
             "title": "Screenshot Sharing Enabled",
@@ -19745,16 +19735,6 @@
               }
             ],
             "title": "Processing Memory Id"
-          },
-          "screen_frames": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ConversationScreenFrameSet"
-              },
-              {
-                "type": "null"
-              }
-            ]
           },
           "screenshot_sharing_enabled": {
             "default": true,

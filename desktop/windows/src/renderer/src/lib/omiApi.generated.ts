@@ -1099,7 +1099,6 @@ export interface Conversation {
   private_cloud_sync_enabled?: boolean;
   processing_conversation_id?: string | null;
   processing_memory_id?: string | null;
-  screen_frames?: ConversationScreenFrameSet | null;
   screenshot_sharing_enabled?: boolean;
   source?: ConversationSource | null;
   starred?: boolean;
@@ -3254,7 +3253,6 @@ export interface SharedConversationResponse {
   private_cloud_sync_enabled?: boolean;
   processing_conversation_id?: string | null;
   processing_memory_id?: string | null;
-  screen_frames?: ConversationScreenFrameSet | null;
   screenshot_sharing_enabled?: boolean;
   source?: ConversationSource | null;
   starred?: boolean;

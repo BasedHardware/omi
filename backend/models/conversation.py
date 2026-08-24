@@ -19,7 +19,6 @@ from models.conversation_enums import (
 from models.conversation_photo import ConversationPhoto
 from models.geolocation import Geolocation
 from models.other import Person
-from models.screen_frame import ConversationScreenFrameSet
 from models.structured import Structured
 from models.transcript_segment import TranscriptSegment
 
@@ -186,16 +185,15 @@ class Conversation(BaseModel):
     conversation_audio: Optional[ConversationAudio] = None
     private_cloud_sync_enabled: bool = False
 
-    # Meeting-note screenshots (screen-frame egress). screen_frames is NOT
-    # eagerly populated by get_conversation() the way photos/audio_files are
-    # — it stays None unless a caller explicitly attaches it (see
-    # routers/screen_frames.py), since building it requires generating fresh
-    # 60-minute signed URLs for every persisted frame, which every existing
-    # conversation-read call site should not pay for by default. Conservative
-    # choice, flagged for review: a route that wants it inline can call
-    # utils.screen_frames.enforcement.build_frame_set_response(uid, id) and
-    # assign it onto the Conversation it already has.
-    screen_frames: Optional[ConversationScreenFrameSet] = None
+    # Meeting-note screenshots are deliberately NOT a field here. Building the set means minting
+    # fresh 60-minute signed URLs for every persisted frame, which no ordinary conversation read
+    # should pay for, so nothing ever populated it and the field was permanently None. A field
+    # that always says nothing is worse than absent on the most widely consumed model in the
+    # product: it tells every client — iOS, Android, web — that a conversation carries its
+    # screenshots inline, when the only way to get them is
+    # GET /v1/conversations/{id}/screenshots. It also pulled ConversationScreenFrameSet into the
+    # mobile Dart schema group, where the generator could not resolve it.
+    # Callers that want the set inline: utils.screen_frames.enforcement.build_frame_set_response.
     # Per-conversation opt-out of including screenshots in the public shared
     # note. Default true (David's ruling 2026-08-20) — shared notes include
     # screenshots unless the owner explicitly turns this off.
