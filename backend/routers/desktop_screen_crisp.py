@@ -4,7 +4,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from database.frame_requests import list_pending_frame_requests
+from database.frame_requests import list_recoverable_frame_requests
 from database.screen_activity import (
     normalize_screen_activity_timestamp,
     upsert_screen_activity,
@@ -15,11 +15,13 @@ from utils.executors import db_executor, run_blocking
 from utils.other.endpoints import get_current_user_uid, with_rate_limit
 from utils.observability.fallback import record_fallback
 from utils.retrieval.frame_request_authority import decision_for
-from utils.retrieval.frame_request_storage import delete_frame_request_pixels
 from utils.subscription import grants_cloud_screen_vectors, is_desktop_trial_paywalled
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+# Compatibility seam for existing route tests and downstream fakes; this name
+# now points at the recoverable requested/claimed/uploaded query.
+list_pending_frame_requests = list_recoverable_frame_requests
 
 
 class ScreenActivityRow(BaseModel):
@@ -147,7 +149,6 @@ async def sync_screen_activity(
                     uid,
                     device_id=device_id,
                     account_generation=request.account_generation,
-                    cleanup_storage=lambda storage_id: delete_frame_request_pixels(uid, storage_id),
                 )
                 response_payload["frame_requests"] = [
                     FrameRequestDelivery(

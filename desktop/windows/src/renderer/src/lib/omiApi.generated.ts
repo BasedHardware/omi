@@ -755,6 +755,10 @@ export interface Body_upload_file_chat_v2_files_post {
   files: Array<string>;
 }
 
+export interface Body_upload_frame_request_v1_frame_requests__request_id__upload_post {
+  file: string;
+}
+
 export interface Body_upload_profile_v3_upload_audio_post {
   file: string;
 }
@@ -1415,6 +1419,15 @@ export interface CreateFolderRequest {
   name: string;
 }
 
+export interface CreateFrameRequest {
+  account_generation?: number;
+  conversation_id?: string | null;
+  dedupe_key: string;
+  device_id: string;
+  requested_ttl_seconds?: number | null;
+  screenshot_id?: string | null;
+}
+
 export interface CreateGoalRequest {
   current_value?: number | null;
   desired_outcome?: string | null;
@@ -2014,6 +2027,37 @@ export interface FolderMutationResponse {
   status: string;
 }
 
+export interface FrameRequest {
+  account_generation?: number;
+  attached_at?: string | null;
+  attempt_number?: number;
+  byte_count?: number;
+  claimed_at?: string | null;
+  cleanup_attempts?: number;
+  cleanup_next_attempt_at?: string | null;
+  cleanup_state?: FrameRequestCleanupState;
+  content_type?: string | null;
+  conversation_id?: string | null;
+  created_at: string;
+  dedupe_key: string;
+  dedupe_window?: number;
+  device_id: string;
+  expires_at: string;
+  request_id: string;
+  screenshot_id?: string | null;
+  state?: FrameRequestState;
+  storage_id?: string | null;
+  terminal_reason?: string | null;
+  uid: string;
+  uploaded_at?: string | null;
+}
+
+export interface FrameRequestBatch {
+  requests?: Array<FrameRequest>;
+}
+
+export type FrameRequestCleanupState = "not_required" | "pending" | "failed" | "deleted" | "permanent";
+
 export interface FrameRequestDelivery {
   account_generation: number;
   conversation_id?: string | null;
@@ -2022,6 +2066,29 @@ export interface FrameRequestDelivery {
   request_id: string;
   screenshot_id?: string | null;
   state: string;
+}
+
+export interface FrameRequestEnvelope {
+  deduplicated?: boolean;
+  request: FrameRequest;
+}
+
+export interface FrameRequestPromotion {
+  account_generation?: number;
+  conversation_id: string;
+  device_id: string;
+}
+
+export type FrameRequestState = "requested" | "claimed" | "uploaded" | "attached" | "offline" | "pruned" | "failed" | "expired" | "cancelled";
+
+export interface FrameRequestStateUpdate {
+  account_generation?: number;
+  byte_count?: number;
+  content_type?: string | null;
+  device_id: string;
+  state: FrameRequestState;
+  storage_id?: string | null;
+  terminal_reason?: string | null;
 }
 
 export interface FullConversation {
@@ -4515,6 +4582,7 @@ export interface OmiApiSchemas {
   "Body_update_app_v1_apps__app_id__patch": Body_update_app_v1_apps__app_id__patch;
   "Body_upload_app_thumbnail_endpoint_v1_app_thumbnails_post": Body_upload_app_thumbnail_endpoint_v1_app_thumbnails_post;
   "Body_upload_file_chat_v2_files_post": Body_upload_file_chat_v2_files_post;
+  "Body_upload_frame_request_v1_frame_requests__request_id__upload_post": Body_upload_frame_request_v1_frame_requests__request_id__upload_post;
   "Body_upload_profile_v3_upload_audio_post": Body_upload_profile_v3_upload_audio_post;
   "BulkAssignSegmentsRequest": BulkAssignSegmentsRequest;
   "BulkMoveConversationsRequest": BulkMoveConversationsRequest;
@@ -4600,6 +4668,7 @@ export interface OmiApiSchemas {
   "CreateConversationResponse": CreateConversationResponse;
   "CreateConversationTranscriptSegment": CreateConversationTranscriptSegment;
   "CreateFolderRequest": CreateFolderRequest;
+  "CreateFrameRequest": CreateFrameRequest;
   "CreateGoalRequest": CreateGoalRequest;
   "CreateMemoryRequest": CreateMemoryRequest;
   "CreatePerson": CreatePerson;
@@ -4678,7 +4747,14 @@ export interface OmiApiSchemas {
   "FocusAssistantSettings": FocusAssistantSettings;
   "Folder": Folder;
   "FolderMutationResponse": FolderMutationResponse;
+  "FrameRequest": FrameRequest;
+  "FrameRequestBatch": FrameRequestBatch;
+  "FrameRequestCleanupState": FrameRequestCleanupState;
   "FrameRequestDelivery": FrameRequestDelivery;
+  "FrameRequestEnvelope": FrameRequestEnvelope;
+  "FrameRequestPromotion": FrameRequestPromotion;
+  "FrameRequestState": FrameRequestState;
+  "FrameRequestStateUpdate": FrameRequestStateUpdate;
   "FullConversation": FullConversation;
   "GenerateAppIconRequest": GenerateAppIconRequest;
   "GenerateAppRequest": GenerateAppRequest;
@@ -6767,6 +6843,56 @@ export interface OmiApiPaths {
       operationId: "bulk_move_conversations_v1_folders__folder_id__conversations_bulk_move_post";
       responses: {
         "200": BulkMoveConversationsResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/frame-requests": {
+    post: {
+      operationId: "create_frame_request_v1_frame_requests_post";
+      responses: {
+        "200": FrameRequestEnvelope;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/frame-requests/pending": {
+    get: {
+      operationId: "get_pending_frame_requests_v1_frame_requests_pending_get";
+      responses: {
+        "200": FrameRequestBatch;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/frame-requests/{request_id}/promote": {
+    post: {
+      operationId: "promote_frame_request_v1_frame_requests__request_id__promote_post";
+      responses: {
+        "200": FrameRequestEnvelope;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/frame-requests/{request_id}/state": {
+    post: {
+      operationId: "update_frame_request_state_v1_frame_requests__request_id__state_post";
+      responses: {
+        "200": FrameRequestEnvelope;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/frame-requests/{request_id}/upload": {
+    post: {
+      operationId: "upload_frame_request_v1_frame_requests__request_id__upload_post";
+      responses: {
+        "200": FrameRequestEnvelope;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -10051,7 +10177,7 @@ export async function get_notification_scopes_v1_app_proactive_notification_scop
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function upload_app_thumbnail_endpoint_v1_app_thumbnails_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<AppThumbnailUploadResponse> {
+export async function upload_app_thumbnail_endpoint_v1_app_thumbnails_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: FormData, init?: OmiApiClientInit): Promise<AppThumbnailUploadResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/app/thumbnails`;
   const _search = "";
@@ -10065,6 +10191,7 @@ export async function upload_app_thumbnail_endpoint_v1_app_thumbnails_post(heade
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
+    body: body,
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -10092,7 +10219,7 @@ export async function get_apps_v1_apps_get(query: { include_reviews?: boolean },
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function create_app_v1_apps_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<AppCreateResponse> {
+export async function create_app_v1_apps_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: FormData, init?: OmiApiClientInit): Promise<AppCreateResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/apps`;
   const _search = "";
@@ -10106,6 +10233,7 @@ export async function create_app_v1_apps_post(header: { authorization?: string, 
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
+    body: body,
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -10370,7 +10498,7 @@ export async function get_app_details_v1_apps__app_id__get(path: { app_id: strin
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function update_app_v1_apps__app_id__patch(path: { app_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<AppMutationResponse> {
+export async function update_app_v1_apps__app_id__patch(path: { app_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: FormData, init?: OmiApiClientInit): Promise<AppMutationResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/apps/${path.app_id}`;
   const _search = "";
@@ -10384,6 +10512,7 @@ export async function update_app_v1_apps__app_id__patch(path: { app_id: string }
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
+    body: body,
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -11566,7 +11695,7 @@ export async function get_conversation_photos_v1_conversations__conversation_id_
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_conversation_photo_image_v1_conversations__conversation_id__photos__photo_id__image_get(path: { conversation_id: string, photo_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<unknown> {
+export async function get_conversation_photo_image_v1_conversations__conversation_id__photos__photo_id__image_get(path: { conversation_id: string, photo_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Blob> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/conversations/${path.conversation_id}/photos/${path.photo_id}/image`;
   const _search = "";
@@ -11582,7 +11711,7 @@ export async function get_conversation_photo_image_v1_conversations__conversatio
     },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
-  return _res.status === 204 ? (undefined as any) : await _res.json();
+  return await _res.blob();
 }
 
 export async function conversation_has_audio_recording_v1_conversations__conversation_id__recording_get(path: { conversation_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ConversationRecordingResponse> {
@@ -12652,6 +12781,114 @@ export async function bulk_move_conversations_v1_folders__folder_id__conversatio
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function create_frame_request_v1_frame_requests_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: CreateFrameRequest, init?: OmiApiClientInit): Promise<FrameRequestEnvelope> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/frame-requests`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_pending_frame_requests_v1_frame_requests_pending_get(query: { device_id: string, account_generation?: number, limit?: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<FrameRequestBatch> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/frame-requests/pending`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function promote_frame_request_v1_frame_requests__request_id__promote_post(path: { request_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: FrameRequestPromotion, init?: OmiApiClientInit): Promise<FrameRequestEnvelope> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/frame-requests/${path.request_id}/promote`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function update_frame_request_state_v1_frame_requests__request_id__state_post(path: { request_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: FrameRequestStateUpdate, init?: OmiApiClientInit): Promise<FrameRequestEnvelope> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/frame-requests/${path.request_id}/state`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function upload_frame_request_v1_frame_requests__request_id__upload_post(path: { request_id: string }, query: { device_id: string, account_generation: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: FormData, init?: OmiApiClientInit): Promise<FrameRequestEnvelope> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/frame-requests/${path.request_id}/upload`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_current_goal_v1_goals_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<GoalResponse | null> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/goals`;
@@ -13150,7 +13387,7 @@ export async function cancel_import_job_v1_import_jobs__job_id__cancel_post(path
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function import_limitless_data_v1_import_limitless_post(query: { language?: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ImportJobResponse> {
+export async function import_limitless_data_v1_import_limitless_post(query: { language?: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: FormData, init?: OmiApiClientInit): Promise<ImportJobResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/import/limitless`;
   const _params = query ? Object.entries(query)
@@ -13167,6 +13404,7 @@ export async function import_limitless_data_v1_import_limitless_post(query: { la
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
+    body: body,
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -16773,7 +17011,7 @@ export async function materialize_prompts_v2_chat_materialize_prompts_post(heade
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function upload_file_chat_v2_files_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<FileChat>> {
+export async function upload_file_chat_v2_files_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: FormData, init?: OmiApiClientInit): Promise<Array<FileChat>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/files`;
   const _search = "";
@@ -16787,6 +17025,7 @@ export async function upload_file_chat_v2_files_post(header: { authorization?: s
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
+    body: body,
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -17033,7 +17272,7 @@ export async function create_sync_capture_manifest_v2_sync_capture_manifest_post
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function sync_local_files_v2_v2_sync_local_files_post(query: { conversation_id?: string }, header: { X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string, X_Request_ID?: string | null, X_Cloud_Trace_Context?: string | null, X_Omi_Sync_Capture_Manifest?: string | null, authorization?: string }, init?: OmiApiClientInit): Promise<void> {
+export async function sync_local_files_v2_v2_sync_local_files_post(query: { conversation_id?: string }, header: { X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string, X_Request_ID?: string | null, X_Cloud_Trace_Context?: string | null, X_Omi_Sync_Capture_Manifest?: string | null, authorization?: string }, body: FormData, init?: OmiApiClientInit): Promise<void> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/sync-local-files`;
   const _params = query ? Object.entries(query)
@@ -17053,6 +17292,7 @@ export async function sync_local_files_v2_v2_sync_local_files_post(query: { conv
       ...(header.X_Omi_Sync_Capture_Manifest !== undefined ? { "X-Omi-Sync-Capture-Manifest": String(header.X_Omi_Sync_Capture_Manifest) } : {}),
       ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
     },
+    body: body,
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return;
@@ -17522,7 +17762,7 @@ export async function get_speech_profile_status_v3_speech_profile_status_get(hea
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function upload_profile_v3_upload_audio_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<SpeechProfileUploadResponse> {
+export async function upload_profile_v3_upload_audio_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: FormData, init?: OmiApiClientInit): Promise<SpeechProfileUploadResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v3/upload-audio`;
   const _search = "";
@@ -17536,6 +17776,7 @@ export async function upload_profile_v3_upload_audio_post(header: { authorizatio
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
+    body: body,
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -17560,4 +17801,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 420 client methods generated.
+// Total: 425 client methods generated.

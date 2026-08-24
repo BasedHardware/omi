@@ -1,3 +1,4 @@
+# pyright: reportPrivateUsage=false
 """Owner-scoped pixel storage for frame-request evidence.
 
 The queue database stores only this opaque storage id.  Objects are never
@@ -11,11 +12,14 @@ import hashlib
 import os
 from typing import Any
 
-from utils.other.storage import _get_storage_client, private_cloud_sync_bucket
+from utils.other.storage import _get_storage_client
 
 
 def _bucket() -> Any:
-    bucket_name = (os.getenv("BUCKET_FRAME_REQUESTS") or private_cloud_sync_bucket).strip()
+    # A dedicated binding is part of the retention proof. Falling back to the
+    # audio/sync bucket would let an unrelated lifecycle policy delete attached
+    # conversation evidence.
+    bucket_name = (os.getenv("BUCKET_FRAME_REQUESTS") or "").strip()
     if not bucket_name:
         raise RuntimeError("frame-request storage bucket is not configured")
     return _get_storage_client().bucket(bucket_name)

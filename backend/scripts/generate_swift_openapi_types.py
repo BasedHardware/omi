@@ -103,6 +103,12 @@ TARGET_SCHEMAS = (
     'ConversationStatus',
     'CategoryEnum',
     'FrameRequestDelivery',
+    'FrameRequest',
+    'CreateFrameRequest',
+    'FrameRequestStateUpdate',
+    'FrameRequestPromotion',
+    'FrameRequestEnvelope',
+    'FrameRequestBatch',
     'ScreenActivitySyncRequest',
     'ScreenActivitySyncResponse',
 )
@@ -565,7 +571,6 @@ SKIP_SWIFT_CONTENT_PREFIXES = (
     'text/html',
     'application/xml',
     'audio/',
-    'image/',
     'multipart/form-data',
 )
 
@@ -575,6 +580,7 @@ _SWIFT_BUILTIN_TYPES = {
     'Double',
     'Bool',
     'OmiAnyCodable',
+    'Data',
 }
 
 
@@ -613,7 +619,7 @@ def _resolve_type(type_expr: str, emitted: set[str]) -> str:
 def _swift_response_type(operation: dict[str, Any]) -> str | None:
     """Return the Swift type for an operation's success response, or None to skip.
 
-    None => non-JSON success (binary/streaming/xml/multipart): skip the op.
+    None => non-JSON success (streaming/xml/multipart): skip the op.
     'Void' => 204-style no-content (or empty success content).
     """
     responses = operation.get('responses', {})
@@ -630,6 +636,8 @@ def _swift_response_type(operation: dict[str, Any]) -> str | None:
         if isinstance(json_content, dict):
             type_expr, _ = _swift_type(json_content.get('schema', {}), required=True)
             return type_expr
+        if any(isinstance(ct, str) and ct.startswith('image/') for ct in content):
+            return 'Data'
         # Non-JSON success response -> skip this operation entirely.
         for ct in content:
             if any(ct.startswith(p) or ct == p for p in SKIP_SWIFT_CONTENT_PREFIXES):
@@ -819,6 +827,8 @@ def generate_swift_client_methods(spec: dict[str, Any]) -> str:
             body_lines.append('  }')
             if return_type == 'Void':
                 body_lines.append('  return')
+            elif return_type == 'Data':
+                body_lines.append('  return data')
             else:
                 body_lines.append(f'  return try JSONDecoder().decode({return_type}.self, from: data)')
             body_lines.append('}')
