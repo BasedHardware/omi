@@ -13,6 +13,14 @@ from typing import Any, Dict, Iterable, List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from models.knowledge_ledger_policy import (
+    PLAYBOOK_HANDLE_CHARACTER_LIMIT,
+    PLAYBOOK_INDEX_CHARACTER_BUDGET,
+    PROFILE_CHARACTER_BUDGET,
+    canonicalize_ledger_slot,
+    normalize_playbook_handle,
+    render_bounded_profile,
+)
 from models.memory_contracts import deterministic_contract_id
 from models.product_memory import (
     MAX_LEDGER_PLAYBOOK_BODY_CHARACTERS,
@@ -33,7 +41,7 @@ from utils.memory.canonical_memory_adapter import (
 )
 
 LEDGER_SCHEMA_VERSION = "knowledge_ledger.v1"
-DEFAULT_PROFILE_CHARACTER_BUDGET = 2_400
+DEFAULT_PROFILE_CHARACTER_BUDGET = PROFILE_CHARACTER_BUDGET
 MAX_PLAYBOOK_BODY_CHARACTERS = MAX_LEDGER_PLAYBOOK_BODY_CHARACTERS
 MAX_TRIGGER_CONDITION_KEYS = MAX_LEDGER_TRIGGER_CONDITION_KEYS
 
@@ -106,8 +114,33 @@ class LedgerWrite(BaseModel):
             raise ValueError("playbook body exceeds the ledger limit")
         if self.kind == MemoryKind.document and not (self.body or "").strip():
             raise ValueError("playbooks require a non-empty body")
+        if self.kind == MemoryKind.document and self.write_reason != LedgerWriteReason.recurring_workflow:
+            raise ValueError("playbooks require recurring_workflow authority")
+        if self.kind == MemoryKind.document and self.subject_scope != MemorySubjectScope.primary_user:
+            raise ValueError("playbooks require primary_user scope")
+        if self.kind == MemoryKind.document:
+            description = normalize_playbook_handle(self.content)
+            if len(description) > PLAYBOOK_HANDLE_CHARACTER_LIMIT:
+                raise ValueError("playbook description exceeds the compact handle limit")
+            self.content = description
         if self.kind != MemoryKind.document and self.body is not None:
             raise ValueError("only playbooks may define a body")
+        if self.kind != MemoryKind.fact and self.slot is not None:
+            raise ValueError("only facts may define a slot")
+        if self.kind == MemoryKind.fact and self.slot is not None:
+            # Preserve unknown historical migration labels as unslotted facts;
+            # every new semantic write must use the stable registry.
+            self.slot = canonicalize_ledger_slot(
+                self.slot,
+                strict=self.write_reason != LedgerWriteReason.legacy_migration,
+            )
+        if self.kind == MemoryKind.fact and self.write_reason in {
+            LedgerWriteReason.recurring_workflow,
+            LedgerWriteReason.standing_trigger,
+        }:
+            raise ValueError("facts cannot use document or trigger authority")
+        if self.kind == MemoryKind.trigger and self.write_reason != LedgerWriteReason.standing_trigger:
+            raise ValueError("triggers require standing_trigger authority")
         if self.kind == MemoryKind.trigger and len(self.trigger_condition) > MAX_TRIGGER_CONDITION_KEYS:
             raise ValueError("trigger condition exceeds the ledger key limit")
         try:
@@ -366,30 +399,13 @@ def render_profile(
         and item.slot
         and (item.content or "").strip()
     ]
-    eligible.sort(
-        key=lambda item: (
-            -item.curation_weight,
-            item.slot or "",
-            item.valid_from or item.captured_at,
-            item.memory_id,
-        )
-    )
-    lines: List[str] = []
-    used = 0
-    for item in eligible:
-        line = f"{item.slot}: {(item.content or '').strip()}"
-        separator = 1 if lines else 0
-        if used + separator + len(line) > character_budget:
-            continue
-        lines.append(line)
-        used += separator + len(line)
-    return "\n".join(lines)
+    return render_bounded_profile(eligible, character_budget=character_budget)
 
 
 def render_playbook_index(
     items: Iterable[MemoryItem],
     *,
-    character_budget: int = 800,
+    character_budget: int = PLAYBOOK_INDEX_CHARACTER_BUDGET,
 ) -> str:
     """Render one-line progressive-disclosure handles, never playbook bodies."""
     active = [
@@ -397,6 +413,7 @@ def render_playbook_index(
         for item in items
         if item.ledger_schema_version == LEDGER_SCHEMA_VERSION
         and item.kind == MemoryKind.document
+        and item.subject_scope == MemorySubjectScope.primary_user
         and item.status == MemoryItemStatus.active
         and _is_review_visible(item)
         and item.valid_to is None
@@ -405,7 +422,10 @@ def render_playbook_index(
     lines: List[str] = []
     used = 0
     for item in active:
-        line = f"{item.memory_id}: {(item.content or '').strip()}"
+        description = normalize_playbook_handle(item.content)[:PLAYBOOK_HANDLE_CHARACTER_LIMIT]
+        if not description:
+            continue
+        line = f"{item.memory_id}: {description}"
         separator = 1 if lines else 0
         if used + separator + len(line) > character_budget:
             continue

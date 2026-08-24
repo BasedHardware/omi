@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
+from models.knowledge_ledger_policy import LEDGER_SLOT_BY_LEGACY_PREDICATE, canonicalize_ledger_slot
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryLayer, ProcessingState
 from utils.memory import knowledge_ledger_migration
 from utils.memory.knowledge_ledger_migration import LedgerMigrationAction, migration_marker, plan_ledger_migration
@@ -68,6 +69,14 @@ def test_user_asserted_long_term_row_retains_direct_authority():
 
     assert plan.updates["intent_backed"] is True
     assert plan.updates["write_reason"] == "direct_user_statement"
+
+
+@pytest.mark.parametrize(("predicate", "expected_slot"), LEDGER_SLOT_BY_LEGACY_PREDICATE.items())
+def test_every_migration_producer_slot_is_in_the_released_registry(predicate, expected_slot):
+    plan = plan_ledger_migration(_item(predicate=predicate, user_asserted=True))
+
+    assert plan.updates["slot"] == expected_slot
+    assert canonicalize_ledger_slot(expected_slot) == expected_slot
 
 
 def test_short_term_rows_fail_closed_to_separate_adjudication():
@@ -267,7 +276,9 @@ def test_hermetic_fixture_proves_counts_provenance_profile_and_resume_without_co
     assert first.report.resumed_count == 1
     assert first.report.blocking_row_count == 2
     assert first.report.provenance_complete_count == 2
-    assert first.report.profile_slot_count == 2
+    # Both migrated rows claim home_city. The released slot-governance
+    # contract renders one authority/recency winner per canonical slot.
+    assert first.report.profile_slot_count == 1
     assert first.report.profile_character_count > 0
     assert len(first.report.profile_sha256) == 64
     assert first.report.planner_admissible is False

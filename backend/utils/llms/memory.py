@@ -5,9 +5,16 @@ from cachetools import TTLCache
 
 from database._client import db as firestore_db
 from database.auth import get_user_name
+from models.knowledge_ledger_policy import (
+    PLAYBOOK_HANDLE_CHARACTER_LIMIT,
+    PLAYBOOK_INDEX_CHARACTER_BUDGET,
+    PROFILE_CHARACTER_BUDGET,
+    normalize_playbook_handle,
+    render_bounded_profile,
+)
 from models.memories import Memory, MemoryDB
 from models.product_memory import MemoryKind, MemorySubjectScope
-from utils.memory.knowledge_ledger import DEFAULT_PROFILE_CHARACTER_BUDGET, LEDGER_SCHEMA_VERSION
+from utils.memory.knowledge_ledger import LEDGER_SCHEMA_VERSION
 from utils.memory.knowledge_ledger_migration import read_ledger_migration_completion
 from utils.memory.memory_service import MemoryService
 import logging
@@ -113,21 +120,25 @@ def _render_ledger_prompt_context(user_name: Optional[str], rows: List[MemoryDB]
         and row.slot
         and row.content.strip()
     ]
-    facts.sort(key=lambda row: (-row.curation_weight, row.slot or '', row.valid_at or row.created_at, row.id))
-    profile = _bounded_lines(
-        [f"{row.slot}: {row.content.strip()}" for row in facts],
-        DEFAULT_PROFILE_CHARACTER_BUDGET,
-    )
+    profile = render_bounded_profile(facts, character_budget=PROFILE_CHARACTER_BUDGET)
     playbooks = [
         row
         for row in rows
         if row.kind == MemoryKind.document
+        and row.subject_scope == MemorySubjectScope.primary_user
         and row.user_review is not False
         and row.invalid_at is None
         and row.content.strip()
     ]
     playbooks.sort(key=lambda row: (-row.curation_weight, row.content, row.id))
-    playbook_index = _bounded_lines([f"{row.id}: {row.content.strip()}" for row in playbooks], 800)
+    playbook_index = _bounded_lines(
+        [
+            f"{row.id}: {normalize_playbook_handle(row.content)[:PLAYBOOK_HANDLE_CHARACTER_LIMIT]}"
+            for row in playbooks
+            if normalize_playbook_handle(row.content)
+        ],
+        PLAYBOOK_INDEX_CHARACTER_BUDGET,
+    )
     sections = [f"Current profile for {user_name or 'the user'}:\n{profile or '(no current slotted facts)'}"]
     if playbook_index:
         sections.append(

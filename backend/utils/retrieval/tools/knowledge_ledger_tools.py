@@ -18,6 +18,10 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]
 
 from models.memories import MemoryDB
+from models.knowledge_ledger_policy import (
+    PLAYBOOK_HANDLE_CHARACTER_LIMIT,
+    normalize_playbook_handle,
+)
 from models.product_memory import (
     MAX_LEDGER_PLAYBOOK_BODY_CHARACTERS,
     MemoryAccessPolicy,
@@ -42,7 +46,7 @@ HISTORICAL_PROVIDER_PARTIAL_NOTICE = (
     "this is not exhaustive.]"
 )
 MAX_PLAYBOOK_ID_CHARACTERS = 256
-MAX_PLAYBOOK_DESCRIPTION_CHARACTERS = 600
+MAX_PLAYBOOK_DESCRIPTION_CHARACTERS = PLAYBOOK_HANDLE_CHARACTER_LIMIT
 _PLAYBOOK_ID_PATTERN = re.compile(r"[A-Za-z0-9._:-]+")
 _LEDGER_KINDS = frozenset({kind.value for kind in MemoryKind})
 
@@ -76,6 +80,11 @@ def _parse_kinds(kinds: Optional[str]) -> frozenset[str]:
 
 def _is_current_ledger_memory(memory: MemoryDB, *, kinds: frozenset[str]) -> bool:
     kind = memory.kind.value if isinstance(memory.kind, MemoryKind) else str(memory.kind or "")
+    subject_scope = (
+        memory.subject_scope.value
+        if isinstance(memory.subject_scope, MemorySubjectScope)
+        else str(memory.subject_scope or "")
+    )
     return (
         memory.ledger_schema_version == LEDGER_SCHEMA_VERSION
         and kind in kinds
@@ -83,6 +92,7 @@ def _is_current_ledger_memory(memory: MemoryDB, *, kinds: frozenset[str]) -> boo
         and memory.invalid_at is None
         and memory.user_review is not False
         and not memory.is_locked
+        and (kind != MemoryKind.document.value or subject_scope == MemorySubjectScope.primary_user.value)
     )
 
 
@@ -95,6 +105,7 @@ def _is_current_ledger_item(item: MemoryItem, *, kinds: frozenset[str]) -> bool:
         and item.valid_to is None
         and promotion.get("is_locked") is not True
         and promotion.get("user_review") is not False
+        and (item.kind != MemoryKind.document or item.subject_scope == MemorySubjectScope.primary_user)
     )
 
 
@@ -104,7 +115,10 @@ def _format_search_results(rows: Iterable[MemoryDB], *, query: str) -> str:
     truncated = False
     for row in rows:
         kind = row.kind.value if isinstance(row.kind, MemoryKind) else str(row.kind or "unknown")
-        content = " ".join((row.content or "").split())
+        if kind == MemoryKind.document.value:
+            content = normalize_playbook_handle(row.content)[:PLAYBOOK_HANDLE_CHARACTER_LIMIT]
+        else:
+            content = " ".join((row.content or "").split())
         suffix = f" slot={row.slot}" if row.slot else ""
         candidate = f"- [{kind}] {row.id}{suffix}: {content}"
         if len("\n".join(lines + [candidate])) > MAX_KNOWLEDGE_RESULT_CHARACTERS:

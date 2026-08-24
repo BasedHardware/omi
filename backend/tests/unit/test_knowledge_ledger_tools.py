@@ -74,6 +74,12 @@ def test_search_current_knowledge_returns_only_requested_current_ledger_kinds(mo
         _memory("mem_rejected", kind=MemoryKind.document, user_review=False),
         _memory("mem_closed", kind=MemoryKind.document, invalid_at=NOW),
         _memory("mem_passive", kind=MemoryKind.document, intent_backed=False),
+        _memory(
+            "mem_third_party_doc",
+            kind=MemoryKind.document,
+            subject_scope=MemorySubjectScope.third_party,
+            body="private third-party body",
+        ),
         _memory("mem_wrong_owner", kind=MemoryKind.document, uid="u2"),
     ]
 
@@ -85,6 +91,10 @@ def test_search_current_knowledge_returns_only_requested_current_ledger_kinds(mo
             assert (uid, query, limit) == ("u1", "release", 8)
             assert canonical_item_filter(_playbook()) is True
             assert canonical_item_filter(_playbook().model_copy(update={"kind": MemoryKind.fact})) is False
+            assert (
+                canonical_item_filter(_playbook().model_copy(update={"subject_scope": MemorySubjectScope.third_party}))
+                is False
+            )
             return [SimpleNamespace(memory=row) for row in rows if result_filter(row)]
 
     monkeypatch.setattr(tools, "MemoryService", FakeService)
@@ -102,6 +112,23 @@ def test_search_current_knowledge_returns_only_requested_current_ledger_kinds(mo
     assert "[trigger] mem_trigger" in rendered
     assert "private body" not in rendered
     assert "keywords" not in rendered
+    assert "mem_third_party_doc" not in rendered
+
+
+def test_search_compacts_and_caps_legacy_playbook_handles():
+    row = _memory(
+        "legacy-long-playbook",
+        kind=MemoryKind.document,
+        content="Deploy safely\n" + ("x" * 4_000),
+        body="private full workflow",
+    )
+
+    rendered = tools._format_search_results([row], query="deploy")
+    handle = rendered.splitlines()[1].split(": ", 1)[1]
+
+    assert "\n" not in handle
+    assert len(handle) == tools.MAX_PLAYBOOK_DESCRIPTION_CHARACTERS
+    assert "private full workflow" not in rendered
 
 
 def test_read_current_playbook_applies_chat_visibility_and_ledger_semantics(monkeypatch):
