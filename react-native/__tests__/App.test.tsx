@@ -473,7 +473,19 @@ async function renderApp(initialRoute?: string) {
 }
 
 test('uses only allowlisted host-selected initial routes', () => {
-  expect(resolveInitialRoute('Chat')).toBe('Chat');
+  for (const route of [
+    'Home',
+    'Conversations',
+    'Memories',
+    'Tasks',
+    'Connectors',
+    'Settings',
+  ]) {
+    expect(resolveInitialRoute(route)).toBe(route);
+  }
+  for (const removed of ['Chat', 'Recaps', 'My Apps', 'Persona']) {
+    expect(resolveInitialRoute(removed)).toBe('Home');
+  }
   expect(resolveInitialRoute('Goals')).toBe('Home');
   expect(resolveInitialRoute()).toBe('Home');
 });
@@ -489,11 +501,12 @@ test('derives a stable, varied Omi dot palette from a stable identity', () => {
   );
 });
 
-test('opens host-selected Chat without changing the default route', async () => {
+test('rejects the removed Chat alias and keeps the Home destination selected', async () => {
   const chatRenderer = await renderApp('Chat');
   const chatOutput = JSON.stringify(chatRenderer.toJSON());
-  expect(chatOutput).toContain('I’m ready.');
-  expect(chatOutput).toContain('Ask anything...');
+  expect(chatOutput).toContain('Search Omi');
+  expect(chatOutput).not.toContain('Ask anything...');
+  expect(chatOutput).not.toContain('I’m ready.');
 
   const homeRenderer = await renderApp();
   const homeOutput = JSON.stringify(homeRenderer.toJSON());
@@ -533,6 +546,8 @@ test('keeps wide browser-like surfaces separate from the native macOS workspace'
     'Conversations',
     'Memories',
     'Tasks',
+    'Connectors',
+    'Settings',
   ]);
   expect(tabs[0].props.accessibilityState).toEqual({
     selected: true,
@@ -770,7 +785,7 @@ test('shows the desktop chronological spine at rest and filters that same loaded
   ).toBe('');
 });
 
-test('does not borrow Home active navigation semantics for Chat', async () => {
+test('keeps chat inside the Home destination', async () => {
   const renderer = await renderApp();
   await ReactTestRenderer.act(async () => {
     renderer.root
@@ -782,20 +797,17 @@ test('does not borrow Home active navigation semantics for Chat', async () => {
       String(node.type) === 'Pressable' &&
       node.props.accessibilityRole === 'tab',
   );
+  expect(tabs[0].props.accessibilityState.selected).toBe(true);
   expect(
-    tabs.every(tab => tab.props.accessibilityState.selected === false),
+    tabs.slice(1).every(tab => tab.props.accessibilityState.selected === false),
   ).toBe(true);
   expect(
     tabs.every(tab => tab.props.children[0].props.accessible === false),
   ).toBe(true);
-  const pill = renderer.root.find(
-    node =>
-      String(node.type) === 'AnimatedView' &&
-      node.props.accessibilityElementsHidden === true,
-  );
-  expect(pill.props.style).toEqual(
-    expect.arrayContaining([expect.objectContaining({opacity: 0})]),
-  );
+  expect(
+    renderer.root.find(node => node.props.accessibilityLabel === 'Home stage'),
+  ).toBeDefined();
+  expect(JSON.stringify(renderer.toJSON())).toContain('Ask anything...');
 });
 
 test('routes the native macOS search command to Home and focuses search', async () => {
@@ -866,9 +878,11 @@ test('shows a visible focus ring for keyboard-focused controls and search', asyn
 test('navigates to rewritten-backend read projections and replays the stage transition', async () => {
   const renderer = await renderApp();
   const destinations = [
-    ['Conversations', 'QA bridge check'],
+    ['Conversations', 'Recaps unavailable'],
     ['Memories', 'No memories yet.'],
     ['Tasks', 'No tasks yet.'],
+    ['Connectors', 'Apps and external services belong together here.'],
+    ['Settings', 'settings unavailable'],
   ];
 
   for (const [destination, emptyCopy] of destinations) {
@@ -907,6 +921,54 @@ test('navigates to rewritten-backend read projections and replays the stage tran
       useNativeDriver: true,
     }),
   );
+});
+
+test('exposes the source-grounded destination hierarchy without removed aliases', async () => {
+  const renderer = await renderApp();
+  const labels = renderer.root
+    .findAll(
+      node =>
+        String(node.type) === 'Pressable' &&
+        node.props.accessibilityRole === 'tab',
+    )
+    .map(node => node.props.children[1].props.children);
+
+  expect(labels).toEqual([
+    'Home',
+    'Conversations',
+    'Memories',
+    'Tasks',
+    'Connectors',
+    'Settings',
+  ]);
+  expect(labels).not.toEqual(expect.arrayContaining(['Chat', 'Recaps']));
+});
+
+test('keeps unsupported connectors and settings truthful and non-mutating', async () => {
+  const renderer = await renderApp();
+  const tabs = () =>
+    renderer.root.findAll(
+      node =>
+        String(node.type) === 'Pressable' &&
+        node.props.accessibilityRole === 'tab',
+    );
+
+  await ReactTestRenderer.act(async () => tabs()[4].props.onPress());
+  let output = JSON.stringify(renderer.toJSON());
+  expect(output).toContain('Connectors unavailable');
+  expect(output).toContain('No connector records or connection controls');
+  expect(output).not.toContain('Connect Google');
+  expect(output).not.toContain('Disconnect');
+
+  await ReactTestRenderer.act(async () => tabs()[5].props.onPress());
+  const privacy = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Privacy settings',
+  );
+  await ReactTestRenderer.act(async () => privacy.props.onPress());
+  output = JSON.stringify(renderer.toJSON());
+  expect(output).toContain('settings unavailable');
+  expect(output).toContain('No settings were inferred or changed.');
+  expect(output).not.toContain('Save settings');
 });
 
 test('renders memory body separately from provenance and searches only loaded rows', async () => {
@@ -1612,7 +1674,7 @@ test('uses a full dark macOS Home workspace over the owned window material', asy
         String(node.type) === 'Pressable' &&
         node.props.accessibilityRole === 'tab',
     ),
-  ).toHaveLength(4);
+  ).toHaveLength(6);
   expect(shell.props.style).toEqual(
     expect.arrayContaining([
       expect.objectContaining({backgroundColor: 'transparent'}),

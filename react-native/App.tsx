@@ -94,6 +94,8 @@ const navigation: Array<{label: string; icon: NavigationIcon}> = [
   {label: 'Conversations', icon: GanttChartSquare},
   {label: 'Memories', icon: Brain},
   {label: 'Tasks', icon: ListChecks},
+  {label: 'Connectors', icon: PanelLeftClose},
+  {label: 'Settings', icon: PanelLeft},
 ];
 const quickPrompts = [
   'What did I talk about today?',
@@ -104,14 +106,21 @@ const quickPrompts = [
 const omiLogo = {
   uri: 'data:image/png;base64,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',
 };
-type Route = 'Home' | 'Chat' | 'Conversations' | 'Memories' | 'Tasks';
+type Route =
+  | 'Home'
+  | 'Conversations'
+  | 'Memories'
+  | 'Tasks'
+  | 'Connectors'
+  | 'Settings';
 type AppProps = {initialRoute?: string};
 const routes: ReadonlySet<string> = new Set([
   'Home',
-  'Chat',
   'Conversations',
   'Memories',
   'Tasks',
+  'Connectors',
+  'Settings',
 ]);
 
 export function resolveInitialRoute(initialRoute?: string): Route {
@@ -481,7 +490,7 @@ function ProjectionList({
           spine && styles.homeSpineEmptyTitle,
         ]}>
         {error === null
-          ? emptyTitle ?? 'Nothing to show yet'
+          ? (emptyTitle ?? 'Nothing to show yet')
           : 'Unable to load'}
       </Text>
       <Text
@@ -731,6 +740,13 @@ function ConversationsPage({
         ]}>
         Conversations
       </Text>
+      <View style={styles.recapStatus}>
+        <Text style={styles.destinationSectionTitle}>Daily recaps</Text>
+        <Text style={styles.projectionEmptyCopy}>
+          Recaps unavailable. The v5 backend does not expose a daily recap
+          projection, so no recap cards or actions are shown.
+        </Text>
+      </View>
       <View style={styles.conversationDiscovery}>
         <View style={styles.conversationSearchBox}>
           <Search accessible={false} color="#777777" size={17} />
@@ -1220,6 +1236,81 @@ function TasksPage({
   );
 }
 
+function ConnectorsPage() {
+  return (
+    <ScrollView contentContainerStyle={styles.destinationPage}>
+      <Text style={styles.projectionTitle}>Connectors</Text>
+      <Text style={styles.destinationIntro}>
+        Apps and external services belong together here.
+      </Text>
+      <View style={styles.destinationSections}>
+        {['Explore', 'Installed', 'My Apps', 'Services'].map(label => (
+          <View key={label} style={styles.destinationSection}>
+            <Text style={styles.destinationSectionTitle}>{label}</Text>
+            <Text style={styles.projectionEmptyCopy}>
+              {label === 'Services'
+                ? 'External service connections are unavailable because the v5 backend does not expose connector authorization.'
+                : 'App records are unavailable because the v5 backend does not expose an app catalogue or installations.'}
+            </Text>
+          </View>
+        ))}
+      </View>
+      <Text style={styles.destinationUnavailable}>Connectors unavailable</Text>
+      <Text style={styles.projectionEmptyCopy}>
+        No connector records or connection controls are shown.
+      </Text>
+    </ScrollView>
+  );
+}
+
+function SettingsPage() {
+  const [section, setSection] = useState('Account');
+  return (
+    <ScrollView contentContainerStyle={styles.destinationPage}>
+      <Text style={styles.projectionTitle}>Settings</Text>
+      <View accessibilityRole="tablist" style={styles.destinationTabs}>
+        {['Account', 'Privacy', 'Developer'].map(label => (
+          <FocusPressable
+            accessibilityLabel={`${label} settings`}
+            accessibilityRole="tab"
+            accessibilityState={{selected: section === label}}
+            key={label}
+            onPress={() => setSection(label)}
+            style={({pressed}) => [
+              styles.destinationTab,
+              section === label && styles.destinationTabActive,
+              pressed && styles.pressed,
+            ]}>
+            <Text
+              style={[
+                styles.destinationTabText,
+                section === label && styles.destinationTabTextActive,
+              ]}>
+              {label}
+            </Text>
+          </FocusPressable>
+        ))}
+      </View>
+      <View style={styles.destinationSection}>
+        <Text style={styles.destinationSectionTitle}>{section}</Text>
+        <Text style={styles.destinationUnavailable}>
+          {section} settings unavailable
+        </Text>
+        <Text style={styles.projectionEmptyCopy}>
+          {section === 'Account'
+            ? 'Profile, plan, notification, and usage settings require authenticated account APIs that the v5 backend does not expose.'
+            : section === 'Privacy'
+              ? 'Recording, training, export, and deletion settings require authenticated privacy APIs that the v5 backend does not expose.'
+              : 'API keys, webhooks, and developer exports require authenticated developer APIs that the v5 backend does not expose.'}
+        </Text>
+        <Text style={styles.projectionEmptyCopy}>
+          No settings were inferred or changed.
+        </Text>
+      </View>
+    </ScrollView>
+  );
+}
+
 function ReadStatus({
   label,
   page,
@@ -1237,8 +1328,8 @@ function ReadStatus({
       ? `Showing the first 50 ${label.toLowerCase()}. More may be available.`
       : `More ${label.toLowerCase()} are available.`
     : page.completenessStatus === 'degraded'
-    ? `${label} may be temporarily incomplete.`
-    : `${label} are incomplete.`;
+      ? `${label} may be temporarily incomplete.`
+      : `${label} are incomplete.`;
   return (
     <View style={[styles.readStatus, mac && styles.macReadStatus]}>
       <Text style={[styles.readStatusText, mac && styles.macReadStatusText]}>
@@ -1451,6 +1542,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const [route, setRoute] = useState<Route>(() =>
     resolveInitialRoute(initialRoute),
   );
+  const [homeChatOpen, setHomeChatOpen] = useState(false);
   const [readOutcomes, setReadOutcomes] = useState<DesktopReadOutcomes | null>(
     null,
   );
@@ -1566,10 +1658,10 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   }, []);
 
   useEffect(() => {
-    if (route === 'Chat' && shouldFollowChat.current) {
+    if (route === 'Home' && homeChatOpen && shouldFollowChat.current) {
       chatScrollRef.current?.scrollToEnd({animated: !reduceMotion});
     }
-  }, [chatBusy, messages, reduceMotion, route]);
+  }, [chatBusy, homeChatOpen, messages, reduceMotion, route]);
 
   const refreshReads = useCallback(async (initial: boolean) => {
     const backend = omiBackend;
@@ -1665,21 +1757,26 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         item.kind === 'conversation'
           ? Date.parse(item.startedAt ?? item.createdAt)
           : item.kind === 'memory'
-          ? item.timestamp ?? 0
-          : 0;
+            ? (item.timestamp ?? 0)
+            : 0;
       return timestamp(right) - timestamp(left);
     });
   }, [readOutcomes]);
 
   const routeOutcome = useMemo(() => {
-    if (readOutcomes === null || route === 'Home' || route === 'Chat') {
+    if (readOutcomes === null || route === 'Home') {
       return null;
     }
-    return {
+    const outcomes = {
       Conversations: readOutcomes.conversations,
       Memories: readOutcomes.memories,
       Tasks: readOutcomes.tasks,
-    }[route] as DomainReadOutcome<DesktopReadProjection>;
+    };
+    return route === 'Conversations' ||
+      route === 'Memories' ||
+      route === 'Tasks'
+      ? outcomes[route]
+      : null;
   }, [readOutcomes, route]);
 
   const allHomeReadsUnavailable =
@@ -1717,6 +1814,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   useEffect(() => {
     const subscription = subscribeDesktopSearchCommand(() => {
       setRoute('Home');
+      setHomeChatOpen(false);
       setHomeSearchFocusNonce(current => current + 1);
     });
     return () => subscription.remove();
@@ -1768,7 +1866,12 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   }, [reduceMotion, route, stageOpacity, stageTranslateY]);
 
   useEffect(() => {
-    if (route !== 'Chat' || messages.length !== 0 || chatBusy) {
+    if (
+      !homeChatOpen ||
+      route !== 'Home' ||
+      messages.length !== 0 ||
+      chatBusy
+    ) {
       return;
     }
     restingOpacity.setValue(0);
@@ -1787,6 +1890,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     ]).start();
   }, [
     chatBusy,
+    homeChatOpen,
     messages.length,
     reduceMotion,
     restingOpacity,
@@ -1905,7 +2009,12 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             key={item.label}
             expanded={railExpanded}
             label={item.label}
-            onPress={() => setRoute(item.label as Route)}
+            onPress={() => {
+              setRoute(item.label as Route);
+              if (item.label === 'Home') {
+                setHomeChatOpen(false);
+              }
+            }}
           />
         ))}
       </View>
@@ -1932,7 +2041,12 @@ function App({initialRoute}: AppProps): React.JSX.Element {
               accessibilityRole="tab"
               accessibilityState={{selected: active}}
               key={item.label}
-              onPress={() => setRoute(item.label as Route)}
+              onPress={() => {
+                setRoute(item.label as Route);
+                if (item.label === 'Home') {
+                  setHomeChatOpen(false);
+                }
+              }}
               style={({pressed}) => [
                 styles.macTopNavItem,
                 active && styles.macTopNavItemActive,
@@ -2127,8 +2241,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
               activeGenerationId !== null
                 ? 'Stop response'
                 : omiBackend === undefined || omiBackend === null
-                ? 'Send message unavailable'
-                : 'Send message'
+                  ? 'Send message unavailable'
+                  : 'Send message'
             }
             accessibilityRole="button"
             disabled={
@@ -2170,8 +2284,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       ? nativeSnapshot === null
         ? 'Checking Bluetooth…'
         : nativeSnapshot.bluetooth === 'poweredOn'
-        ? 'Omi disconnected'
-        : bluetoothStatusLabel(nativeSnapshot.bluetooth)
+          ? 'Omi disconnected'
+          : bluetoothStatusLabel(nativeSnapshot.bluetooth)
       : `Connected · ${
           nativeSnapshot?.capture === 'recording' ? 'Listening' : 'Ready'
         }`;
@@ -2179,14 +2293,14 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     nativeSnapshot === null
       ? '#b4ad9f'
       : connectedDevice === null
-      ? '#d9826f'
-      : '#45b79b';
+        ? '#d9826f'
+        : '#45b79b';
   const bluetoothStatusColor =
     nativeSnapshot === null
       ? '#b4ad9f'
       : nativeSnapshot.bluetooth === 'poweredOn'
-      ? '#45b79b'
-      : '#d9826f';
+        ? '#45b79b'
+        : '#d9826f';
   const currentItems = reads.slice(0, 2);
 
   const homeDesktopReadStatus = (
@@ -2284,8 +2398,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     readsPhase === 'unavailable'
       ? 'Saved data unavailable'
       : homeSearching
-      ? 'No results'
-      : 'No saved conversations or memories yet.';
+        ? 'No results'
+        : 'No saved conversations or memories yet.';
   const homeDesktopEmptyCopy =
     readsPhase === 'unavailable'
       ? readOutcomes?.conversations.status === 'error' &&
@@ -2295,8 +2409,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         ? readOutcomes.conversations.error
         : 'Omi could not load saved conversations or memories. Your saved data has not been changed.'
       : homeSearching
-      ? 'Filter covers loaded conversations and memories only.'
-      : 'Loaded conversations and memories will appear here.';
+        ? 'Filter covers loaded conversations and memories only.'
+        : 'Loaded conversations and memories will appear here.';
 
   const homeDesktop = (
     <View
@@ -2327,7 +2441,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             onBlur={() => setSearchFocused(false)}
             onChangeText={setSearchQuery}
             onFocus={() => setSearchFocused(true)}
-            onOpenChat={() => setRoute('Chat')}
+            onOpenChat={() => setHomeChatOpen(true)}
             onPressIn={() => setSearchArmed(true)}
             query={searchQuery}
             searchArmed={searchArmed}
@@ -2592,7 +2706,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                     compact && styles.stageCompact,
                     desktopWorkspace && styles.desktopStage,
                   ]}>
-                  {route === 'Home' ? (
+                  {route === 'Home' && !homeChatOpen ? (
                     desktopWorkspace ? (
                       homeDesktop
                     ) : (
@@ -2649,11 +2763,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                         {readsPhase === 'initial-loading'
                                           ? 'Loading saved data…'
                                           : readsPhase === 'refreshing'
-                                          ? 'Refreshing saved data…'
-                                          : readsPhase ===
-                                            'saved-but-refresh-failed'
-                                          ? 'Showing saved data. Could not refresh.'
-                                          : 'Saved data is unavailable.'}
+                                            ? 'Refreshing saved data…'
+                                            : readsPhase ===
+                                                'saved-but-refresh-failed'
+                                              ? 'Showing saved data. Could not refresh.'
+                                              : 'Saved data is unavailable.'}
                                       </Text>
                                       {allHomeReadsUnavailable && (
                                         <Text
@@ -2811,7 +2925,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                           onBlur={() => setSearchFocused(false)}
                           onChangeText={setSearchQuery}
                           onFocus={() => setSearchFocused(true)}
-                          onOpenChat={() => setRoute('Chat')}
+                          onOpenChat={() => setHomeChatOpen(true)}
                           onPressIn={() => setSearchArmed(true)}
                           query={searchQuery}
                           searchArmed={searchArmed}
@@ -2819,7 +2933,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                         />
                       </View>
                     )
-                  ) : route === 'Chat' ? (
+                  ) : route === 'Home' ? (
                     <ScrollView
                       accessibilityLabel="Chat scroll region"
                       contentContainerStyle={styles.chatScrollContent}
@@ -2847,13 +2961,13 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                   : styles.chatHistoryCompact,
                               ]
                             : messages.length === 0 && !chatBusy
-                            ? styles.home
-                            : styles.chatHistory
+                              ? styles.home
+                              : styles.chatHistory
                         }>
                         <FocusPressable
                           accessibilityLabel="Back to Home"
                           accessibilityRole="button"
-                          onPress={() => setRoute('Home')}
+                          onPress={() => setHomeChatOpen(false)}
                           style={({pressed}) => [
                             styles.backButton,
                             pressed && styles.pressed,
@@ -2969,15 +3083,19 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                       loading={readsPhase === 'initial-loading'}
                       outcome={routeOutcome}
                     />
-                  ) : (
+                  ) : route === 'Tasks' ? (
                     <TasksPage
                       loading={readsPhase === 'initial-loading'}
                       outcome={routeOutcome}
                     />
+                  ) : route === 'Connectors' ? (
+                    <ConnectorsPage />
+                  ) : (
+                    <SettingsPage />
                   )}
                 </View>
               </Animated.View>
-              {route === 'Chat' && composer}
+              {route === 'Home' && homeChatOpen && composer}
             </KeyboardAvoidingView>
           </View>
         </View>
@@ -3848,6 +3966,52 @@ const styles = StyleSheet.create({
     position: 'absolute',
   },
   taskShortcut: {color: '#858585', fontSize: 11, fontWeight: '600'},
+  destinationPage: {
+    alignItems: 'stretch',
+    flexGrow: 1,
+    paddingHorizontal: 28,
+    paddingVertical: 24,
+  },
+  destinationIntro: {color: '#a0a0a0', fontSize: 14, marginTop: 8},
+  destinationSections: {gap: 10, marginTop: 20},
+  destinationSection: {
+    backgroundColor: '#202020',
+    borderColor: '#303030',
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 16,
+  },
+  destinationSectionTitle: {
+    color: '#e5e5e5',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  destinationUnavailable: {
+    color: '#d0d0d0',
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 20,
+    textAlign: 'center',
+  },
+  destinationTabs: {flexDirection: 'row', gap: 8, marginVertical: 20},
+  destinationTab: {
+    borderColor: '#3a3a3a',
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  destinationTabActive: {backgroundColor: '#eeeeee', borderColor: '#eeeeee'},
+  destinationTabText: {color: '#a0a0a0', fontSize: 13, fontWeight: '600'},
+  destinationTabTextActive: {color: '#181818'},
+  recapStatus: {
+    backgroundColor: '#202020',
+    borderColor: '#303030',
+    borderRadius: 14,
+    borderWidth: 1,
+    marginTop: 16,
+    padding: 14,
+  },
   projection: {flex: 1, paddingHorizontal: 28, paddingVertical: 24},
   projectionTitle: {color: '#ffffff', fontSize: 22, fontWeight: '600'},
   projectionEmpty: {
