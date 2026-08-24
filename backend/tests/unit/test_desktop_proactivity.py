@@ -1493,6 +1493,7 @@ async def test_direct_extraction_retries_length_once_without_extra_quota_reserva
     calls = []
     consumed = []
     fallbacks = []
+    events = []
 
     class DirectClient:
         async def post(self, url, *, headers, json):
@@ -1518,12 +1519,21 @@ async def test_direct_extraction_retries_length_once_without_extra_quota_reserva
         consumed.append((uid, operation))
         return _test_quota_state()
 
+    async def finalize(*_args):
+        events.append("finalize")
+        return 3600
+
     monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
     monkeypatch.delenv("OMI_LLM_GATEWAY_URL", raising=False)
     monkeypatch.setenv("OMI_ENV_STAGE", "dev")
     monkeypatch.setattr(desktop_proactivity, "get_openai_api_key", lambda: "dev-provider-key")
-    monkeypatch.setattr(desktop_proactivity, "record_fallback", lambda **values: fallbacks.append(values))
+    monkeypatch.setattr(
+        desktop_proactivity,
+        "record_fallback",
+        lambda **values: (fallbacks.append(values), events.append(values["to_mode"])),
+    )
     monkeypatch.setattr(desktop_proactivity, "_consume_quota", consume)
+    monkeypatch.setattr(desktop_proactivity, "_finalize_quota", finalize)
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", lambda: DirectClient())
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_semaphore", lambda: Semaphore())
 
@@ -1551,6 +1561,53 @@ async def test_direct_extraction_retries_length_once_without_extra_quota_reserva
         "outcome": "recovered",
         "log": None,
     }
+    assert events == ["finalize", "direct_openai_retry", "direct_openai"]
+
+
+@pytest.mark.asyncio
+async def test_length_retry_recovery_waits_for_successful_quota_finalization(monkeypatch):
+    calls = []
+    fallbacks = []
+
+    class DirectClient:
+        async def post(self, url, *, headers, json):
+            del headers, json
+            calls.append(True)
+            body = (
+                {"choices": [{"finish_reason": "length", "message": {"content": ""}}]}
+                if len(calls) == 1
+                else {
+                    "model": "gpt-5-nano",
+                    "choices": [{"finish_reason": "stop", "message": {"content": '{"summary":"ok"}'}}],
+                }
+            )
+            return httpx.Response(200, request=httpx.Request("POST", url), json=body)
+
+    async def finalize(*_args):
+        raise desktop_proactivity.HTTPException(status_code=503, detail="Proactive metering lease expired")
+
+    async def consume(*_args):
+        return _test_quota_state()
+
+    monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
+    monkeypatch.delenv("OMI_LLM_GATEWAY_URL", raising=False)
+    monkeypatch.setenv("OMI_ENV_STAGE", "dev")
+    monkeypatch.setattr(desktop_proactivity, "get_openai_api_key", lambda: "dev-provider-key")
+    monkeypatch.setattr(desktop_proactivity, "record_fallback", lambda **values: fallbacks.append(values))
+    monkeypatch.setattr(desktop_proactivity, "_consume_quota", consume)
+    monkeypatch.setattr(desktop_proactivity, "_finalize_quota", finalize)
+    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", lambda: DirectClient())
+    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_semaphore", lambda: _ImmediateSemaphore())
+
+    with pytest.raises(desktop_proactivity.HTTPException) as failed:
+        await asyncio.wait_for(
+            desktop_proactivity.proactive_completion(request(), Response(), uid="user-1"),
+            timeout=1,
+        )
+
+    assert failed.value.status_code == 503
+    assert len(calls) == 2
+    assert fallbacks == []
 
 
 @pytest.mark.asyncio
