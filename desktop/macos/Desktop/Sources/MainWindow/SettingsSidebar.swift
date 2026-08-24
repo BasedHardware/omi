@@ -76,6 +76,10 @@ struct SettingsSearchItem: Identifiable {
       name: "Data Retention", subtitle: "How long to keep screen recordings",
       keywords: ["retention", "storage", "delete old", "keep data"], section: .rewind,
       icon: "clock.arrow.circlepath", settingId: "rewind.retention"),
+    SettingsSearchItem(
+      name: "Meeting Screenshots", subtitle: "Add screenshots of what was on screen to meeting notes",
+      keywords: ["meeting", "screenshots", "notes", "banner", "photos"], section: .rewind,
+      icon: "photo.on.rectangle.angled", settingId: "rewind.meetingnotescreenshots"),
 
     // Transcription
     SettingsSearchItem(

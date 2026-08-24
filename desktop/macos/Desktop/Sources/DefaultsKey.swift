@@ -66,6 +66,10 @@ enum DefaultsKey: String {
   case pairedDeviceName = "pairedDeviceName"
   case pairedDeviceType = "pairedDeviceType"
   case chatScreenshotSharingEnabled = "chatScreenshotSharingEnabled"
+  /// Client-side mirror of the server's `meeting_note_screenshots_enabled` account setting
+  /// (contract §3/§9). Absent key means enabled (default on) — see
+  /// `MeetingNoteScreenshotsFeature.isEnabled`.
+  case meetingNoteScreenshotsEnabled = "meetingNoteScreenshotsEnabled"
   /// Test hook: forces TTS playback start to report failure (non-prod gauntlets).
   case forceTTSPlaybackStartFalse = "forceTTSPlaybackStartFalse"
   case shortcutPTTInputDeviceUID = "shortcut_pttInputDeviceUID"

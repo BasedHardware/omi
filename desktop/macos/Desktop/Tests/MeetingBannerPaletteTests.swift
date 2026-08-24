@@ -78,6 +78,33 @@ final class MeetingBannerPaletteTests: XCTestCase {
     }
   }
 
+  /// The neutral ground exists in three languages and nothing else guards their agreement.
+  ///
+  /// The server emits `ground` on every frame it approves, so clients normally draw what they are
+  /// given. A record persisted before `ground` existed has none, so each surface carries its own
+  /// copy of the fallback:
+  ///
+  ///   - here (`MeetingBannerPalette.neutral`)
+  ///   - `backend/utils/screen_frames/palette.py` (`_neutral_ground`)
+  ///   - `web/app/src/components/conversations/ConversationScreenFrameBanner.tsx`
+  ///     (`NEUTRAL_GROUND_STOPS`)
+  ///
+  /// Three copies of one constant drift silently, and the symptom would be a banner that is a
+  /// different colour on web than on macOS for exactly the oldest records — the ones least likely
+  /// to be opened during review. Pinning the hex here means changing the hue or either stop breaks
+  /// a test on every surface at once.
+  func testNeutralGroundMatchesTheOtherTwoSurfaces() {
+    let stops = MeetingBannerPalette.neutral.stops
+    func hex(_ stop: MeetingBannerGround.HSB) -> String {
+      let (r, g, b) = MeetingBannerPalette.rgb(h: stop.hue, s: stop.saturation, v: stop.brightness)
+      return String(
+        format: "#%02X%02X%02X",
+        Int((r * 255).rounded()), Int((g * 255).rounded()), Int((b * 255).rounded()))
+    }
+    XCTAssertEqual(hex(stops[0]), "#5A5D66")
+    XCTAssertEqual(hex(stops[1]), "#33363D")
+  }
+
   func testNeutralGroundAlsoClearsContrast() {
     let stop = MeetingBannerPalette.neutral.stops[0]
     XCTAssertGreaterThanOrEqual(

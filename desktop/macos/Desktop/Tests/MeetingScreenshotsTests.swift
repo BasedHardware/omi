@@ -1,31 +1,20 @@
+import CryptoKit
 import Foundation
 import XCTest
 
 @testable import Omi_Computer
 
+#if canImport(AppKit)
+  import AppKit
+#endif
+
 final class MeetingScreenshotsTests: XCTestCase {
-  func testFeatureRequiresBothLocalBundleAndExplicitOverride() {
-    XCTAssertFalse(
-      MeetingNoteScreenshotsFeature.isEnabled(
-        allowsLocalAutomation: false,
-        localOverrideValue: nil))
-    XCTAssertFalse(
-      MeetingNoteScreenshotsFeature.isEnabled(
-        allowsLocalAutomation: true,
-        localOverrideValue: nil))
-    XCTAssertFalse(
-      MeetingNoteScreenshotsFeature.isEnabled(
-        allowsLocalAutomation: true,
-        localOverrideValue: "0"))
+  func testFeatureDefaultsOnAndRespectsExplicitOverride() {
     XCTAssertTrue(
-      MeetingNoteScreenshotsFeature.isEnabled(
-        allowsLocalAutomation: true,
-        localOverrideValue: "1"))
-    XCTAssertFalse(
-      MeetingNoteScreenshotsFeature.isEnabled(
-        allowsLocalAutomation: false,
-        localOverrideValue: "1"),
-      "a shipped or external-preview bundle must stay dark even with a contaminated environment")
+      MeetingNoteScreenshotsFeature.isEnabled(storedValue: nil),
+      "absent local mirror must read as on, matching the contract's default")
+    XCTAssertTrue(MeetingNoteScreenshotsFeature.isEnabled(storedValue: true))
+    XCTAssertFalse(MeetingNoteScreenshotsFeature.isEnabled(storedValue: false))
   }
 
   @MainActor
@@ -40,7 +29,6 @@ final class MeetingScreenshotsTests: XCTestCase {
 
     store.load(
       conversationID: "conversation",
-      title: "Dark launch",
       start: Date(timeIntervalSince1970: 100),
       end: Date(timeIntervalSince1970: 200))
 
@@ -121,6 +109,31 @@ final class MeetingScreenshotsTests: XCTestCase {
     XCTAssertEqual(outcome.drops["same window, same minutes"], 1)
   }
 
+  func testSelectorCeilingMatchesServerMaxCandidates() async {
+    // Contract §3: `max_candidates=8` for `meeting_note_v1`. The selector's ceiling is pinned to
+    // the same constant so nothing needs a second trim at the upload boundary.
+    XCTAssertEqual(MeetingFrameSelector.candidateCeiling, 8)
+    XCTAssertEqual(MeetingFrameJudge.maxCandidatesPerRequest, 8)
+
+    let start = Date(timeIntervalSince1970: 4_000)
+    // 10 frames, each in its own bucket and app/window so none of them compact or dedup away —
+    // only the ceiling should reduce this set.
+    let frames = (0..<10).map { i in
+      candidate(
+        id: Int64(i), timestamp: start.addingTimeInterval(Double(i) * 300), appName: "App\(i)",
+        windowTitle: "Window\(i)")
+    }
+
+    let outcome = await MeetingFrameSelector.selectCandidates(
+      frames,
+      from: start,
+      to: start.addingTimeInterval(3_600),
+      perceptualHash: { _ in nil })
+
+    XCTAssertEqual(outcome.candidates.count, 8)
+    XCTAssertEqual(outcome.drops["over the candidate ceiling"], 2)
+  }
+
   func testTextAndHashSimilarityBoundaries() {
     let normalized = MeetingFrameSimilarity.shingles("One TWO, three four five six")
     XCTAssertEqual(normalized, MeetingFrameSimilarity.shingles("one two three four five six"))
@@ -133,48 +146,61 @@ final class MeetingScreenshotsTests: XCTestCase {
     XCTAssertEqual(MeetingFrameSimilarity.similarity(0, 1), 63.0 / 64.0, accuracy: 0.000_001)
   }
 
-  func testJudgeCapsPublishesInCaptureOrderAndDropsTrimmedBanner() {
-    let ids = (1...8).map(Int64.init)
-    let result = MeetingFrameJudge.enforce(
-      rawVerdicts: ids.reversed().map { verdict(id: $0) },
-      rawBanner: 8,
-      sentIDs: Set(ids),
-      order: ids)
+  #if canImport(AppKit)
+    func testMakeCandidateWireComputesDigestAndDimensions() throws {
+      let bytes = try Self.jpegData(width: 4, height: 3)
+      let timestamp = Date(timeIntervalSince1970: 5_000)
 
-    XCTAssertEqual(result.modelPublishedCount, 8)
-    XCTAssertEqual(result.published.map(\.frameID), Array(ids.prefix(MeetingFrameJudge.publishCap)))
-    XCTAssertNil(result.bannerFrameID)
-    XCTAssertTrue(result.corrections.contains { $0.contains("over the cap") })
-    XCTAssertTrue(result.corrections.contains { $0.contains("banner") })
-  }
+      let wire = MeetingFrameJudge.makeCandidateWire(id: 42, timestamp: timestamp, bytes: bytes)
 
-  func testJudgeSensitivityVetoesPublication() {
-    let result = MeetingFrameJudge.enforce(
-      rawVerdicts: [
-        verdict(id: 1, sensitivity: "sensitive"),
-        verdict(id: 2),
-      ],
-      rawBanner: 1,
-      sentIDs: [1, 2],
-      order: [1, 2])
+      let expectedDigest = Data(SHA256.hash(data: bytes)).base64EncodedString()
+      XCTAssertEqual(wire?.clientFrameID, "42")
+      XCTAssertEqual(wire?.capturedAt, timestamp)
+      XCTAssertEqual(wire?.mimeType, "image/jpeg")
+      XCTAssertEqual(wire?.declaredWidth, 4)
+      XCTAssertEqual(wire?.declaredHeight, 3)
+      XCTAssertEqual(wire?.sha256Base64, expectedDigest)
+      XCTAssertEqual(wire?.sha256Base64.count, 44, "a base64 SHA-256 digest is always 44 characters")
+      XCTAssertEqual(wire?.bytesBase64, bytes.base64EncodedString())
+    }
 
-    XCTAssertEqual(result.published.map(\.frameID), [2])
-    XCTAssertNil(result.bannerFrameID)
-    XCTAssertTrue(result.corrections.contains { $0.contains("vetoed 1") })
-  }
+    func testMakeCandidateWireRejectsUnreadableBytes() {
+      XCTAssertNil(MeetingFrameJudge.makeCandidateWire(id: 1, timestamp: Date(), bytes: Data()))
+      XCTAssertNil(
+        MeetingFrameJudge.makeCandidateWire(
+          id: 1, timestamp: Date(), bytes: Data([0x00, 0x01, 0x02])))
+    }
 
-  func testJudgeRejectsUnknownAndDuplicateFrameIDs() {
-    let result = MeetingFrameJudge.enforce(
-      rawVerdicts: [verdict(id: 99), verdict(id: 1), verdict(id: 1)],
-      rawBanner: 1,
-      sentIDs: [1],
-      order: [1, 1])
+    func testMimeTypeSniffsPNGAndDefaultsToJPEG() throws {
+      let pngData = try Self.pngData(width: 2, height: 2)
+      XCTAssertEqual(MeetingFrameJudge.mimeType(of: pngData), "image/png")
 
-    XCTAssertEqual(result.published.map(\.frameID), [1])
-    XCTAssertEqual(result.bannerFrameID, 1)
-    XCTAssertTrue(result.corrections.contains { $0.contains("never sent") })
-    XCTAssertTrue(result.corrections.contains { $0.contains("duplicate") })
-  }
+      let jpegData = try Self.jpegData(width: 2, height: 2)
+      XCTAssertEqual(MeetingFrameJudge.mimeType(of: jpegData), "image/jpeg")
+    }
+
+    private static func jpegData(width: Int, height: Int) throws -> Data {
+      guard
+        let rep = NSBitmapImageRep(
+          bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height, bitsPerSample: 8,
+          samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+          bytesPerRow: 0, bitsPerPixel: 0),
+        let data = rep.representation(using: .jpeg, properties: [:])
+      else { throw XCTSkip("could not build a fixture JPEG on this machine") }
+      return data
+    }
+
+    private static func pngData(width: Int, height: Int) throws -> Data {
+      guard
+        let rep = NSBitmapImageRep(
+          bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height, bitsPerSample: 8,
+          samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+          bytesPerRow: 0, bitsPerPixel: 0),
+        let data = rep.representation(using: .png, properties: [:])
+      else { throw XCTSkip("could not build a fixture PNG on this machine") }
+      return data
+    }
+  #endif
 
   private func candidate(
     id: Int64,
@@ -194,20 +220,5 @@ final class MeetingScreenshotsTests: XCTestCase {
       videoChunkPath: videoChunkPath,
       frameOffset: 0,
       ocrText: ocrText)
-  }
-
-  private func verdict(
-    id: Int64,
-    decision: String = "publish",
-    sensitivity: String = "clean"
-  ) -> [String: Any] {
-    [
-      "id": NSNumber(value: id),
-      "decision": decision,
-      "sensitivity": sensitivity,
-      "caption": "Frame \(id)",
-      "labels": ["meeting"],
-      "reason": "useful",
-    ]
   }
 }

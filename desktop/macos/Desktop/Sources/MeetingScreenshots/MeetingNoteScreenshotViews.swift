@@ -16,21 +16,19 @@
 //    note's ordinary header and still gets its strip. Absence of a banner never suppresses the
 //    strip; they are independent.
 //
-//  The strip is `SpineMomentsRow`, unchanged, from the Activity spine. Reusing the component was
-//  the point: the same tiles, the same edge fade, the same graceful behaviour when a chunk has
-//  been aged out and a frame has no pixels left.
+//  Frames are server-persisted now (contract §9): both the banner inset and the strip's tiles
+//  draw from `content_url`/`thumbnail_url`, signed for 60 minutes, not from local Rewind pixels.
+//  Neither view retries a broken URL — an expired one reports back to the store, which re-fetches
+//  the whole set (`MeetingScreenshotsStore.refreshPersistedSet()`) rather than the caller guessing
+//  at a new URL of its own.
 //
 
 import OmiTheme
 import SwiftUI
 
-#if canImport(AppKit)
-  import AppKit
-#endif
-
-/// Owns the feature state only after the developer gate has admitted this branch.
-/// `ConversationDetailView` renders its ordinary summary directly when the gate is off, so a
-/// shipped bundle constructs no screenshot store, child view, or task.
+/// Owns the feature state only after the gate has admitted this branch. `ConversationDetailView`
+/// renders its ordinary summary directly when the gate is off, so a build with the setting
+/// disabled constructs no screenshot store, child view, or task.
 struct MeetingNoteScreenshotsLayout<BeforeScreenshots: View, AfterScreenshots: View>: View {
   @StateObject private var store = MeetingScreenshotsStore()
 
@@ -71,30 +69,49 @@ struct MeetingNoteScreenshotBannerSlot: View {
       MeetingNoteBanner(
         frame: banner,
         title: conversation.structured.title.isEmpty ? "Untitled conversation" : conversation.structured.title,
-        date: date)
+        date: date,
+        onContentUnavailable: { Task { await store.refreshPersistedSet() } })
     }
   }
 }
 
 struct MeetingNoteBanner: View {
-  let frame: MeetingScreenshotsStore.Frame
+  let frame: ConversationScreenFrame
   let title: String
   let date: Date
+  /// The inset failed to load — most likely an expired signed URL. Called at most once.
+  var onContentUnavailable: (() -> Void)?
 
-  @State private var image: NSImage?
-  @State private var ground: MeetingBannerGround = MeetingBannerPalette.neutral
+  @State private var reportedUnavailable = false
 
   /// Below this the banner stacks instead of sitting the inset beside the title. A note pane can be
   /// dragged genuinely narrow, and a side-by-side layout there crops the title to a word and a half.
   private static let stackBelowWidth: CGFloat = 420
 
+  /// The gradient's two stops. The server computes `ground` once, over the canonical bytes, at
+  /// approval time (`ConversationScreenFrame.ground`) — both this client and web render from that
+  /// shared value instead of each re-deriving it from pixels, so the two surfaces can never drift
+  /// apart. `MeetingBannerPalette`'s on-device extraction stays in the tree and keeps its tests:
+  /// it is still the right code for the pre-commit path, where a locally-selected candidate that
+  /// has not been through adjudication yet has no server ground to give. This view only ever
+  /// renders an already-persisted `ConversationScreenFrame`, though, so when `ground` is absent
+  /// here it falls back straight to `MeetingBannerPalette.neutral` rather than re-extracting from
+  /// (possibly stale, possibly re-encoded) thumbnail pixels and risking a colour the server and
+  /// web never agreed to.
+  private var gradientColors: [Color] {
+    if let ground = frame.ground {
+      let parsed = ground.stops.compactMap { Color(hex: $0) }
+      if parsed.count == ground.stops.count, !parsed.isEmpty {
+        return parsed
+      }
+    }
+    return MeetingBannerPalette.neutral.stops.map {
+      Color(hue: $0.hue, saturation: $0.saturation, brightness: $0.brightness)
+    }
+  }
+
   private var gradient: LinearGradient {
-    LinearGradient(
-      colors: ground.stops.map {
-        Color(hue: $0.hue, saturation: $0.saturation, brightness: $0.brightness)
-      },
-      startPoint: .topLeading,
-      endPoint: .bottomTrailing)
+    LinearGradient(colors: gradientColors, startPoint: .topLeading, endPoint: .bottomTrailing)
   }
 
   var body: some View {
@@ -124,7 +141,7 @@ struct MeetingNoteBanner: View {
     }
     .frame(height: bannerHeight)
     .frame(maxWidth: .infinity)
-    .task(id: frame.id) { await load() }
+    .task(id: frame.id) { reportedUnavailable = false }
   }
 
   /// Tall enough for a two-line title over the inset when stacked.
@@ -147,28 +164,45 @@ struct MeetingNoteBanner: View {
 
   /// The approved frame, never stretched, never blurred into a texture. At this size a screenshot
   /// reads as "here is the thing we were looking at", which is the only job it can actually do.
+  /// Absent entirely — not a placeholder glyph — when the fetch has not landed or has failed: the
+  /// gradient and the title alone are a complete banner, so a slow or expired inset costs nothing.
+  ///
+  /// Loaded declaratively via `AsyncImage` rather than a manual `URLSession` fetch into an
+  /// `NSImage`: the gradient no longer needs the decoded pixels for anything (it reads
+  /// `frame.ground` instead), so the only reason left to fetch this image at all is to display it,
+  /// which SwiftUI already does — and doing it this way keeps a non-`Sendable` `NSImage`/`CGImage`
+  /// from ever needing to cross an isolation boundary here.
   @ViewBuilder private func inset(width: CGFloat) -> some View {
-    if let image {
-      Image(nsImage: image)
-        .resizable()
-        .aspectRatio(contentMode: .fill)
-        .frame(width: width, height: width * 10 / 16)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay(
-          RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .strokeBorder(.white.opacity(0.28), lineWidth: 1)
-        )
-        .shadow(color: .black.opacity(0.28), radius: 10, y: 3)
-        .accessibilityLabel(
-          frame.caption.isEmpty ? "Screenshot from this meeting" : frame.caption)
+    AsyncImage(url: URL(string: frame.thumbnailURL)) { phase in
+      switch phase {
+      case .success(let image):
+        image
+          .resizable()
+          .aspectRatio(contentMode: .fill)
+          .frame(width: width, height: width * 10 / 16)
+          .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+          .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+              .strokeBorder(.white.opacity(0.28), lineWidth: 1)
+          )
+          .shadow(color: .black.opacity(0.28), radius: 10, y: 3)
+          .accessibilityLabel(
+            frame.caption.isEmpty ? "Screenshot from this meeting" : frame.caption)
+      case .failure:
+        Color.clear
+          .onAppear { reportUnavailableOnce() }
+      case .empty:
+        Color.clear
+      @unknown default:
+        Color.clear
+      }
     }
   }
 
-  private func load() async {
-    guard let loaded = await RewindThumbnailLoader.shared.thumbnail(for: frame.moment.screenshot)
-    else { return }
-    image = loaded
-    ground = MeetingBannerPalette.ground(from: loaded)
+  private func reportUnavailableOnce() {
+    guard !reportedUnavailable else { return }
+    reportedUnavailable = true
+    onContentUnavailable?()
   }
 }
 
@@ -183,18 +217,27 @@ struct MeetingNoteScreenshotStrip: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
-      MeetingNoteScreenshotsSection(store: store) { moment in
-        expandedFrame = store.lightboxItem(for: moment.id)
+      MeetingNoteScreenshotsSection(store: store) { frame in
+        expandedFrame = store.lightboxItem(for: frame.id)
       }
     }
-    .screenFrameLightbox(item: $expandedFrame) { step in
-      expandedFrame = store.lightboxItem(steppingFrom: expandedFrame?.id, by: step)
-    }
+    .screenFrameLightbox(
+      item: $expandedFrame,
+      onStep: { step in
+        expandedFrame = store.lightboxItem(steppingFrom: expandedFrame?.id, by: step)
+      },
+      onDelete: { deletable in
+        await store.deleteFrame(frameID: deletable.frameID)
+        // The deleted frame (and any promoted banner) is only known after the refetch inside
+        // `deleteFrame` completes, so close the sheet rather than keep pointing at stale state.
+        expandedFrame = nil
+      },
+      onContentUnavailable: { Task { await store.refreshPersistedSet() } }
+    )
     .frame(maxWidth: .infinity, alignment: .leading)
     .task(id: conversation.id) {
       store.load(
         conversationID: conversation.id,
-        title: conversation.structured.title,
         start: date,
         end: conversation.finishedAt ?? date.addingTimeInterval(3600))
     }
@@ -203,7 +246,7 @@ struct MeetingNoteScreenshotStrip: View {
 
 struct MeetingNoteScreenshotsSection: View {
   @ObservedObject var store: MeetingScreenshotsStore
-  let onOpen: (SpineMoment) -> Void
+  let onOpen: (ConversationScreenFrame) -> Void
 
   var body: some View {
     switch store.phase {
@@ -222,13 +265,13 @@ struct MeetingNoteScreenshotsSection: View {
       label("Reviewing \(candidates) moment\(candidates == 1 ? "" : "s")…")
 
     case .noCapture:
-      // Deliberately silent. A meeting with no screen capture is the normal case for anyone who
-      // does not leave Rewind on, and an empty state announcing it is noise in every note.
+      // Deliberately silent. A meeting with no screen capture, or none of it approved, is the
+      // normal case, and an empty state announcing it is noise in every note.
       Color.clear.frame(height: 0)
 
     case .failed:
-      // The judge is developer-run prototype infrastructure. Its absence must not turn a meeting
-      // note into an error surface.
+      // No network, a 4xx/5xx, a timeout, an unprovisioned backend — all of it must not turn a
+      // meeting note into an error surface.
       Color.clear.frame(height: 0)
 
     case .ready:
@@ -242,10 +285,7 @@ struct MeetingNoteScreenshotsSection: View {
             .foregroundColor(Ink.secondary)
           Spacer()
         }
-        SpineMomentsRow(
-          moments: store.frames.map(\.moment),
-          total: store.frames.count,
-          onOpen: onOpen)
+        MeetingScreenshotStripRow(frames: store.frames, onOpen: onOpen)
       }
     }
   }
@@ -253,5 +293,98 @@ struct MeetingNoteScreenshotsSection: View {
   private func label(_ text: String) -> some View {
     Text(text)
       .inkStyle(.statusLabel, color: Ink.secondary)
+  }
+}
+
+// MARK: - Strip row
+
+/// The persisted strip, drawn from signed thumbnail URLs. Same shape as the Activity spine's
+/// `SpineMomentsRow` (same tile size, same edge fade) — reusing `SpineStripFade`/`SpineMetrics`
+/// directly rather than duplicating the layout math, but built on `ConversationScreenFrame`
+/// instead of a local `SpineMoment` because there is no local pixel store behind these tiles.
+struct MeetingScreenshotStripRow: View {
+  let frames: [ConversationScreenFrame]
+  let onOpen: (ConversationScreenFrame) -> Void
+
+  var body: some View {
+    ScrollView(.horizontal, showsIndicators: false) {
+      HStack(spacing: 9) {
+        ForEach(frames) { frame in
+          MeetingScreenshotTile(frame: frame, onOpen: { onOpen(frame) })
+        }
+      }
+      .padding(.vertical, 2)
+      // The strip runs past the panel's edge, and a tile sliced off square reads as a layout
+      // overflow rather than as "there is more this way".
+      .padding(.trailing, SpineStripFade.width)
+    }
+    .mask(SpineStripFade())
+  }
+}
+
+/// One strip tile. `AsyncImage` against the signed thumbnail URL; a load failure (most often an
+/// expired URL) is treated the same as "not loaded yet" — a neutral placeholder, never a broken-
+/// image glyph — because the surrounding row cannot itself refresh the set, only the caption tells
+/// the story.
+struct MeetingScreenshotTile: View {
+  let frame: ConversationScreenFrame
+  let onOpen: () -> Void
+
+  @State private var isHovering = false
+
+  private var shape: RoundedRectangle {
+    RoundedRectangle(cornerRadius: 12, style: .continuous)
+  }
+
+  private var glyphName: String {
+    switch frame.sourceBadge {
+    case "code": return "chevron.left.forwardslash.chevron.right"
+    case "browser": return "safari"
+    case "document": return "doc.text"
+    case "slides": return "rectangle.on.rectangle"
+    case "product": return "app.badge"
+    default: return "photo"
+    }
+  }
+
+  var body: some View {
+    Button(action: onOpen) {
+      VStack(alignment: .leading, spacing: 5) {
+        shape
+          .fill(Ink.rowFill)
+          .frame(width: SpineMetrics.thumbnailWidth, height: SpineMetrics.thumbnailHeight)
+          .overlay {
+            AsyncImage(url: URL(string: frame.thumbnailURL)) { phase in
+              switch phase {
+              case .success(let image):
+                image
+                  .resizable()
+                  .aspectRatio(contentMode: .fill)
+                  .frame(width: SpineMetrics.thumbnailWidth, height: SpineMetrics.thumbnailHeight)
+                  .clipped()
+              default:
+                Image(systemName: glyphName)
+                  .scaledFont(size: 20)
+                  .foregroundColor(Ink.secondary)
+              }
+            }
+          }
+          .clipShape(shape)
+          .overlay(shape.strokeBorder(isHovering ? Ink.hairline : Ink.separator, lineWidth: 1))
+        Text(frame.caption.isEmpty ? "Screenshot" : frame.caption)
+          .inkStyle(.statusLabel, color: Ink.secondary)
+          .lineLimit(1)
+          .truncationMode(.tail)
+          .frame(width: SpineMetrics.thumbnailWidth, alignment: .leading)
+      }
+      .opacity(isHovering ? 0.86 : 1)
+    }
+    .buttonStyle(.plain)
+    .onHover { isHovering = $0 }
+    .help(frame.caption.isEmpty ? "Screenshot from this meeting" : frame.caption)
+    .accessibilityLabel(
+      Text(frame.caption.isEmpty ? "Screenshot from this meeting" : frame.caption)
+    )
+    .accessibilityHint(Text("Opens this screenshot"))
   }
 }

@@ -19,6 +19,7 @@ from models.conversation_enums import (
 from models.conversation_photo import ConversationPhoto
 from models.geolocation import Geolocation
 from models.other import Person
+from models.screen_frame import ConversationScreenFrameSet
 from models.structured import Structured
 from models.transcript_segment import TranscriptSegment
 
@@ -184,6 +185,21 @@ class Conversation(BaseModel):
     audio_files: List[AudioFile] = []
     conversation_audio: Optional[ConversationAudio] = None
     private_cloud_sync_enabled: bool = False
+
+    # Meeting-note screenshots (screen-frame egress). screen_frames is NOT
+    # eagerly populated by get_conversation() the way photos/audio_files are
+    # — it stays None unless a caller explicitly attaches it (see
+    # routers/screen_frames.py), since building it requires generating fresh
+    # 60-minute signed URLs for every persisted frame, which every existing
+    # conversation-read call site should not pay for by default. Conservative
+    # choice, flagged for review: a route that wants it inline can call
+    # utils.screen_frames.enforcement.build_frame_set_response(uid, id) and
+    # assign it onto the Conversation it already has.
+    screen_frames: Optional[ConversationScreenFrameSet] = None
+    # Per-conversation opt-out of including screenshots in the public shared
+    # note. Default true (David's ruling 2026-08-20) — shared notes include
+    # screenshots unless the owner explicitly turns this off.
+    screenshot_sharing_enabled: bool = True
 
     apps_results: List[AppResult] = []
     suggested_summarization_apps: List[str] = []

@@ -12,6 +12,7 @@ import database.redis_db as redis_db
 import database.users as users_db
 from database.vector_db import delete_vector, delete_transcript_chunk_vectors
 from utils.other.storage import delete_conversation_audio_files
+from utils.screen_frames.store import delete_conversation_screen_frames
 from models.calendar_context import CalendarMeetingContext
 from models.conversation import (
     BulkAssignSegmentsRequest,
@@ -923,6 +924,16 @@ def delete_conversation(
 
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)
         background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
+
+    # Screen frames (meeting-note screenshots) are primary conversation
+    # content, not cascade-only derived data, so this runs unconditionally
+    # and synchronously — unlike audio_files above, a conversation typically
+    # carries at most 7 of these (contract §7 cap), so the GCS fan-out here
+    # is cheap. Must run before delete_conversation below: Firestore does
+    # not cascade subcollection deletes, and the GCS objects have no other
+    # cleanup path once the parent doc (and the frame_id it's keyed under)
+    # is gone.
+    delete_conversation_screen_frames(uid, conversation_id)
 
     conversations_db.delete_conversation(uid, conversation_id)
     delete_vector(uid, conversation_id)

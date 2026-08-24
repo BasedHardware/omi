@@ -149,6 +149,9 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # TTS — ElevenLabs proxy. Coarse outer ring; fine-grained burst + daily
     # char caps are enforced in database.redis_db.check_tts_rate_limit.
     "tts:synthesize": (300, 3600),
+    # Screen-frame egress adjudication — each call canonicalizes + judges up
+    # to 8 images (contract §1).
+    "screenshots:adjudicate": (30, 3600),
 }
 
 

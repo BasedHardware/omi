@@ -2085,3 +2085,187 @@ routes:
       deprecation:
         state: active
       owner: backend
+  - route_type: http
+    method: POST
+    path: /v1/screen-frame-egress/adjudications
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: screenshots:adjudicate
+        key_subject: uid
+        enforcement: fail_open
+        placement: dependency
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: conversations
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: GET
+    path: /v1/conversations/{conversation_id}/screenshots
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: conversations
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: DELETE
+    path: /v1/conversations/{conversation_id}/screenshots/{frame_id}
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: conversations
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: DELETE
+    path: /v1/conversations/{conversation_id}/screenshots
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: conversations
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: PATCH
+    path: /v1/conversations/{conversation_id}/screenshot-sharing
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: conversations
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: GET
+    path: /v1/conversations/{conversation_id}/shared/screenshots
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - public
+        placement: none
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: shared_public
+      visibility: public_undocumented
+      data_domain: conversations
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: GET
+    path: /v1/screen-frame-egress/settings
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: user_profile
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: PATCH
+    path: /v1/screen-frame-egress/settings
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: user_profile
+      deprecation:
+        state: active
+      owner: backend

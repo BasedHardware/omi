@@ -102,8 +102,11 @@ enum MeetingFrameSelector {
   /// the ~70% of frames OCR never ran on.
   static let imageSimilarityCeiling = 0.90
 
-  /// The most candidates the judge is ever shown. A ceiling, not a target.
-  static let candidateCeiling = 12
+  /// The most candidates ever uploaded. A ceiling, not a target — and no longer a locally chosen
+  /// number: the purpose registry's `max_candidates` for `meeting_note_v1` is 8 (contract §3), and
+  /// the wire type enforces it too (`ScreenFrameAdjudicationRequest.candidates`, `max_length=8`).
+  /// Kept equal here so nothing is silently trimmed a second time at the upload boundary.
+  static let candidateCeiling = MeetingFrameJudge.maxCandidatesPerRequest
 
   struct Outcome: Sendable {
     var candidates: [MeetingFrameCandidate] = []

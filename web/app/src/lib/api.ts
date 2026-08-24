@@ -2,6 +2,7 @@ import { getIdToken } from './firebase';
 import { getWebDeviceIdHash } from './clientDevice';
 import {
   invalidateCache,
+  invalidateCacheKey,
   invalidationPatterns,
   fetchWithCache,
   cacheKeys,
@@ -34,6 +35,10 @@ export type {
   CreateConversationResponse,
   ActionItemsResponse,
 };
+import type {
+  ConversationScreenFrameSet,
+  ScreenFrameSharingPatchRequest,
+} from '@/types/screenFrames';
 import type { Goal, GoalHistoryEntry } from '@/types/goals';
 import type { ChatSession } from '@/types/chatSessions';
 import type { Scores } from '@/types/scores';
@@ -227,6 +232,79 @@ export async function deleteConversation(id: string): Promise<void> {
     method: 'DELETE',
   });
   invalidateCache(invalidationPatterns.conversations);
+}
+
+// =============================================================================
+// Meeting-note screenshots ("screen frames")
+// =============================================================================
+// Types are hand-written in `@/types/screenFrames` until the OpenAPI spec is
+// regenerated to include the screen-frame-egress routes — see the comment at
+// the top of that file. Wire shape and route paths mirror the shared contract
+// (`data/reports/meeting-screenshots/DESIGN-sol.md` §1-2) exactly.
+
+/**
+ * Get the approved screenshot set (banner + strip) for a conversation.
+ * Uses the same fetch-with-cache idiom as `getConversation`; a short TTL
+ * balances against the frame set's signed URLs expiring after 60 minutes.
+ */
+export async function getConversationScreenFrames(
+  conversationId: string,
+): Promise<ConversationScreenFrameSet> {
+  return fetchWithCache<ConversationScreenFrameSet>(
+    cacheKeys.screenFrames(conversationId),
+    () =>
+      fetchWithAuth<ConversationScreenFrameSet>(
+        `/v1/conversations/${conversationId}/screenshots`,
+      ),
+    { ttl: CACHE_TTL.SHORT },
+  );
+}
+
+/**
+ * Delete a single screenshot. The server may promote another already-
+ * approved, already-persisted frame to banner (contract §8); the returned
+ * set is authoritative, so callers should replace their local state with it
+ * rather than trying to predict the promotion.
+ */
+export async function deleteScreenFrame(
+  conversationId: string,
+  frameId: string,
+): Promise<ConversationScreenFrameSet> {
+  const result = await fetchWithAuth<ConversationScreenFrameSet>(
+    `/v1/conversations/${conversationId}/screenshots/${frameId}`,
+    { method: 'DELETE' },
+  );
+  invalidateCacheKey(cacheKeys.screenFrames(conversationId));
+  return result;
+}
+
+/** Delete every screenshot for a conversation (banner + strip). */
+export async function deleteAllScreenFrames(
+  conversationId: string,
+): Promise<ConversationScreenFrameSet> {
+  const result = await fetchWithAuth<ConversationScreenFrameSet>(
+    `/v1/conversations/${conversationId}/screenshots`,
+    { method: 'DELETE' },
+  );
+  invalidateCacheKey(cacheKeys.screenFrames(conversationId));
+  return result;
+}
+
+/**
+ * Toggle whether this conversation's approved frames are visible on its
+ * public share link. Default for a new conversation is `enabled: true`.
+ */
+export async function patchScreenFrameSharing(
+  conversationId: string,
+  enabled: boolean,
+): Promise<ConversationScreenFrameSet> {
+  const body: ScreenFrameSharingPatchRequest = { enabled };
+  const result = await fetchWithAuth<ConversationScreenFrameSet>(
+    `/v1/conversations/${conversationId}/screenshot-sharing`,
+    { method: 'PATCH', body: JSON.stringify(body) },
+  );
+  invalidateCacheKey(cacheKeys.screenFrames(conversationId));
+  return result;
 }
 
 /**

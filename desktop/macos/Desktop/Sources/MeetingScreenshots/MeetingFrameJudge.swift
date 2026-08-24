@@ -1,253 +1,116 @@
 //
-//  MeetingFrameJudge.swift — the adjudication call, and the enforcement the model does not do.
+//  MeetingFrameJudge.swift — hands candidate bytes to the real adjudicator, and nothing else.
 //
-//  **This is a prototype stand-in, and the shape of it matters more than the transport.** In the
-//  shipping design the adjudicator is a backend route that canonicalises the bytes, judges those
-//  exact bytes, and mints a signed one-use approval; the client never decides what may be stored.
-//  Here it is a loopback sidecar and nothing is stored anywhere, so the trust question does not
-//  arise — but the *contract* is kept identical so the client half does not have to be rewritten
-//  when the server half lands: the client sends candidates, the adjudicator returns verdicts, and
-//  the client cannot manufacture a publish decision.
+//  **The client never decides what may be stored (contract §0).** This type uploads canonical
+//  candidate bytes to `POST /v1/screen-frame-egress/adjudications` and returns whatever
+//  `ConversationScreenFrameSet` the server hands back. There is exactly one method,
+//  `adjudicateAndCommit`, and it returns DTOs — never a verdict, never anything shaped like an
+//  approval. The four enforcement rules that used to live in this file (publish cap, sensitivity
+//  veto, survivor-only banner, capture-order sort) are gone: they are the server's job now
+//  (contract §7), because they were measured being violated on the *server's* copy of the model's
+//  raw output, not the client's, and the client was never the place to re-check server work.
 //
-//  Four enforcement rules live here rather than in the prompt, because each of them was measured
-//  being violated by the model on real frames:
-//
-//  1. **A publish cap in a prompt is advice.** Told "at most six", the model published 8 of 8,
-//     14 of 16 and 23 of 25. The cap is applied to its output.
-//  2. **Sensitivity is a veto, not a field.** The model returned `sensitive` and `publish` on the
-//     same frame, twice. Anything not explicitly clean is dropped, whatever it decided.
-//  3. **The banner must be something that survived.** Once the cap was enforced, the model's
-//     chosen banner turned out to have been trimmed out of the published set.
-//  4. **Order is not trust.** A verdict naming an id that was never sent is discarded.
+//  What is still this file's job: reading the candidate's local pixels (never AppKit — `Data`
+//  and `ImageIO` only, so nothing non-`Sendable` has to cross the actor boundary to
+//  `RewindStorage`), computing the transport-check digest, and staying under the wire's
+//  `max_candidates` of 8 even if a selection tuning change ever drifts from the purpose registry.
 //
 
+import CryptoKit
 import Foundation
-
-// MARK: - Wire types
-
-struct MeetingFrameVerdict: Sendable, Equatable {
-  enum Decision: String, Sendable { case publish, reject }
-  enum Sensitivity: String, Sendable { case clean, sensitive }
-
-  let frameID: Int64
-  let decision: Decision
-  let sensitivity: Sensitivity
-  let caption: String
-  let labels: [String]
-  let reason: String
-}
-
-struct MeetingFrameAdjudication: Sendable, Equatable {
-  var published: [MeetingFrameVerdict] = []
-  var bannerFrameID: Int64?
-  /// What enforcement had to correct after the model answered. Surfaced in the diagnostics panel
-  /// because a gate whose corrections are invisible is a gate that looks like it is not needed.
-  var corrections: [String] = []
-  var modelPublishedCount = 0
-}
-
-enum MeetingFrameJudgeError: Error, LocalizedError {
-  case sidecarUnavailable
-  case badResponse(String)
-
-  var errorDescription: String? {
-    switch self {
-    case .sidecarUnavailable:
-      return "The screenshot judge is not running. Start it with tools/meeting-shots-sidecar.py."
-    case .badResponse(let detail):
-      return "The screenshot judge returned something unusable: \(detail)"
-    }
-  }
-}
-
-// MARK: - Client
+import ImageIO
 
 actor MeetingFrameJudge {
   static let shared = MeetingFrameJudge()
 
-  /// The loopback adjudicator. Overridable so a build can point at a real backend route without a
-  /// code change once one exists.
-  private var endpoint: URL {
-    if let raw = ProcessInfo.processInfo.environment["OMI_MEETING_SHOTS_JUDGE_URL"],
-      let url = URL(string: raw)
-    {
-      return url
+  /// Contract §3: `max_candidates=8` for `meeting_note_v1`. `MeetingFrameSelector.candidateCeiling`
+  /// is kept equal to this so nothing is normally trimmed here — this is a defensive floor, not
+  /// the primary enforcement point.
+  static let maxCandidatesPerRequest = 8
+
+  enum MeetingFrameJudgeError: Error, LocalizedError, Equatable {
+    /// None of the selected candidates had pixels this process could still read (a chunk aged
+    /// out between selection and upload, or a zero-byte abandoned chunk). Normal, not a bug.
+    case noReadablePixels
+
+    var errorDescription: String? {
+      switch self {
+      case .noReadablePixels:
+        return "None of this meeting's candidate frames still had readable pixels."
+      }
     }
-    return URL(string: "http://127.0.0.1:10247/v1/screen-frame-egress/adjudications")!
   }
 
-  /// At most one banner plus six strip frames.
-  static let publishCap = 6
-
-  /// Rewind's Videos directory, once storage has finished opening.
+  /// Upload every candidate's canonical bytes and commit whatever the server approves.
   ///
-  /// `RewindStorage.videosDirectory` is nil until `initialize()` runs, so reading it once races
-  /// app launch: open a note early enough and the adjudicator is handed no path, decodes nothing,
-  /// and returns an empty verdict list that reads as "the judge rejected everything". This is the
-  /// same failure `SpineScreenIndex.poolWhenReady` exists to prevent for the database, and it is
-  /// answered the same way -- poll briefly rather than cache a wrong answer for the session.
-  static func videosDirectoryWhenReady(
-    timeout: Duration = .seconds(20),
-    pollInterval: Duration = .milliseconds(400)
-  ) async -> URL? {
-    var waited = Duration.zero
-    while waited < timeout {
-      if let directory = await RewindStorage.shared.getVideosDirectory() { return directory }
-      try? await Task.sleep(for: pollInterval)
-      waited += pollInterval
-    }
-    return nil
-  }
-
-  func adjudicate(
+  /// - Parameters:
+  ///   - candidates: On-device-selected frames (`MeetingFrameSelector`). Privacy denylisting and
+  ///     dedup have already run; this only decides which of *those* survivors can still be read.
+  ///   - subjectID: The conversation these frames belong to.
+  func adjudicateAndCommit(
     candidates: [MeetingFrameCandidate],
-    meetingTitle: String
-  ) async throws -> MeetingFrameAdjudication {
-    guard !candidates.isEmpty else { return MeetingFrameAdjudication() }
+    subjectID: String
+  ) async throws -> ConversationScreenFrameSet {
+    guard !candidates.isEmpty else { return .empty }
+    let bounded =
+      candidates.count > Self.maxCandidatesPerRequest
+      ? Array(candidates.prefix(Self.maxCandidatesPerRequest))
+      : candidates
 
-    var request = URLRequest(url: endpoint)
-    request.httpMethod = "POST"
-    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    request.timeoutInterval = 120
-
-    // The sidecar decodes the pixels itself from the local store, exactly as the shipping design
-    // has the server canonicalise them: the client does not get to choose the bytes that are
-    // judged. Here it names frames; there it uploads canonical bytes for judging.
-    // Built element by element with explicit types. As one nested literal the type-checker takes
-    // pathological time on it — the compiler says so out loud.
-    let stamp = ISO8601DateFormatter()
-    var wire: [[String: Any]] = []
-    wire.reserveCapacity(candidates.count)
-    for candidate in candidates {
-      var entry: [String: Any] = [:]
-      entry["id"] = NSNumber(value: candidate.id)
-      entry["timestamp"] = stamp.string(from: candidate.timestamp)
-      entry["app_name"] = candidate.appName
-      entry["window_title"] = candidate.windowTitle ?? ""
-      entry["video_chunk_path"] = candidate.videoChunkPath ?? ""
-      entry["frame_offset"] = NSNumber(value: candidate.frameOffset ?? 0)
-      entry["image_path"] = candidate.imagePath ?? ""
+    var wire: [ScreenFrameCandidateWire] = []
+    wire.reserveCapacity(bounded.count)
+    for candidate in bounded {
+      guard
+        let bytes = try? await RewindStorage.shared.loadScreenshotData(for: candidate.moment.screenshot),
+        let entry = Self.makeCandidateWire(
+          id: candidate.id, timestamp: candidate.timestamp, bytes: bytes)
+      else { continue }
       wire.append(entry)
     }
+    guard !wire.isEmpty else { throw MeetingFrameJudgeError.noReadablePixels }
 
-    var payload: [String: Any] = [:]
-    // Where the pixels actually are. The adjudicator must not have to guess a store location:
-    // a named dev bundle keeps its capture under its own profile root, not under the stable or
-    // beta app's, and a sidecar guessing from a hardcoded list silently decodes nothing and
-    // reports "0 published" — indistinguishable from a judge that rejected everything.
-    if let videos = await Self.videosDirectoryWhenReady() {
-      payload["video_root"] = videos.path
-    }
-    payload["purpose"] = "meeting_note_v1"
-    payload["meeting_title"] = meetingTitle
-    payload["max_publish"] = NSNumber(value: Self.publishCap)
-    payload["candidates"] = wire
-    request.httpBody = try JSONSerialization.data(withJSONObject: payload)
-
-    let data: Data
-    do {
-      let (body, response) = try await URLSession.shared.data(for: request)
-      guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-        throw MeetingFrameJudgeError.badResponse(
-          "status \((response as? HTTPURLResponse)?.statusCode ?? -1)")
-      }
-      data = body
-    } catch let error as MeetingFrameJudgeError {
-      throw error
-    } catch {
-      throw MeetingFrameJudgeError.sidecarUnavailable
-    }
-
-    guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-      let rawVerdicts = root["verdicts"] as? [[String: Any]]
-    else {
-      throw MeetingFrameJudgeError.badResponse("not an adjudication document")
-    }
-
-    return Self.enforce(
-      rawVerdicts: rawVerdicts,
-      rawBanner: root["banner_id"] as? Int64 ?? (root["banner_id"] as? NSNumber)?.int64Value,
-      sentIDs: Set(candidates.map(\.id)),
-      order: candidates.map(\.id))
+    let request = ScreenFrameAdjudicationRequestWire(subjectID: subjectID, candidates: wire)
+    let response = try await APIClient.shared.adjudicateScreenFrames(request)
+    return response.frameSet
   }
 
-  /// Everything the model is not trusted to have got right.
-  static func enforce(
-    rawVerdicts: [[String: Any]],
-    rawBanner: Int64?,
-    sentIDs: Set<Int64>,
-    order: [Int64]
-  ) -> MeetingFrameAdjudication {
-    var result = MeetingFrameAdjudication()
-    var parsed: [MeetingFrameVerdict] = []
+  // MARK: - Pure helpers (testable without a network or an actor hop)
 
-    for raw in rawVerdicts {
-      guard
-        let id = (raw["id"] as? NSNumber)?.int64Value ?? raw["id"] as? Int64,
-        sentIDs.contains(id)
-      else {
-        result.corrections.append("discarded a verdict for a frame that was never sent")
-        continue
-      }
-      let decision = MeetingFrameVerdict.Decision(rawValue: raw["decision"] as? String ?? "") ?? .reject
-      let sensitivity =
-        MeetingFrameVerdict.Sensitivity(rawValue: raw["sensitivity"] as? String ?? "") ?? .sensitive
-      parsed.append(
-        MeetingFrameVerdict(
-          frameID: id,
-          decision: decision,
-          sensitivity: sensitivity,
-          caption: raw["caption"] as? String ?? "",
-          labels: raw["labels"] as? [String] ?? [],
-          reason: raw["reason"] as? String ?? ""))
+  /// Build one wire candidate from a frame's raw bytes, or `nil` when the bytes cannot even be
+  /// sniffed for a size — malformed data is dropped here rather than sent to fail server-side.
+  static func makeCandidateWire(id: Int64, timestamp: Date, bytes: Data) -> ScreenFrameCandidateWire? {
+    guard !bytes.isEmpty, let size = pixelSize(of: bytes) else { return nil }
+    let digest = SHA256.hash(data: bytes)
+    return ScreenFrameCandidateWire(
+      clientFrameID: String(id),
+      capturedAt: timestamp,
+      mimeType: mimeType(of: bytes),
+      declaredWidth: size.width,
+      declaredHeight: size.height,
+      sha256Base64: Data(digest).base64EncodedString(),
+      bytesBase64: bytes.base64EncodedString())
+  }
+
+  /// Sniff by magic bytes rather than trust the storage path's extension — `loadScreenshotData`
+  /// re-encodes video-backed frames to JPEG but passes legacy on-disk images through unchanged,
+  /// and the wire type only accepts the two MIME types Pillow's canonicaliser reads.
+  static func mimeType(of bytes: Data) -> String {
+    let pngSignature: [UInt8] = [0x89, 0x50, 0x4E, 0x47]
+    if bytes.count >= pngSignature.count, bytes.prefix(pngSignature.count).elementsEqual(pngSignature) {
+      return "image/png"
     }
+    return "image/jpeg"
+  }
 
-    let modelPublished = parsed.filter { $0.decision == .publish }
-    result.modelPublishedCount = modelPublished.count
-
-    // Rule 2 — sensitivity vetoes publication, whatever the decision said.
-    let clean = modelPublished.filter { $0.sensitivity == .clean }
-    if clean.count != modelPublished.count {
-      result.corrections.append(
-        "vetoed \(modelPublished.count - clean.count) frame(s) the judge marked sensitive but chose to publish")
-    }
-
-    // A model may name one frame more than once. Identity is authoritative: one captured frame can
-    // occupy at most one publication slot.
-    var seen = Set<Int64>()
-    let unique = clean.filter { seen.insert($0.frameID).inserted }
-    if unique.count != clean.count {
-      result.corrections.append("discarded \(clean.count - unique.count) duplicate frame verdict(s)")
-    }
-
-    // Keep capture order so the strip reads as a timeline rather than as a ranking. Build the map
-    // without a trapping unique-key initializer because `order` is an enforcement input too.
-    var position: [Int64: Int] = [:]
-    for (index, id) in order.enumerated() where position[id] == nil {
-      position[id] = index
-    }
-    var ordered = unique.sorted {
-      let left = position[$0.frameID] ?? .max
-      let right = position[$1.frameID] ?? .max
-      return left == right ? $0.frameID < $1.frameID : left < right
-    }
-
-    // Rule 1 — the cap is applied, not requested.
-    if ordered.count > publishCap {
-      result.corrections.append(
-        "trimmed \(ordered.count - publishCap) frame(s) over the cap of \(publishCap)")
-      ordered = Array(ordered.prefix(publishCap))
-    }
-    result.published = ordered
-
-    // Rule 3 — a banner must be a frame that actually survived all of the above.
-    if let rawBanner, ordered.contains(where: { $0.frameID == rawBanner }) {
-      result.bannerFrameID = rawBanner
-    } else if rawBanner != nil {
-      result.corrections.append("dropped a banner the judge chose that is not in the published set")
-      result.bannerFrameID = nil
-    }
-
-    return result
+  /// Pixel dimensions via ImageIO's header parse — never decodes the image, so nothing here
+  /// touches AppKit or crosses an isolation boundary as anything richer than `Data`.
+  static func pixelSize(of bytes: Data) -> (width: Int, height: Int)? {
+    guard let source = CGImageSourceCreateWithData(bytes as CFData, nil),
+      let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+      let width = properties[kCGImagePropertyPixelWidth] as? Int,
+      let height = properties[kCGImagePropertyPixelHeight] as? Int,
+      width > 0, height > 0
+    else { return nil }
+    return (width, height)
   }
 }
