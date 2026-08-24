@@ -55,15 +55,29 @@ enum MeetingFrameSimilarity {
   /// not a failure: the frame simply cannot participate in image similarity and is kept.
   static func perceptualHash(of candidate: MeetingFrameCandidate) async -> UInt64? {
     #if canImport(AppKit)
-      guard
-        let image = await RewindThumbnailLoader.shared.thumbnail(for: candidate.moment.screenshot),
-        let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
-      else { return nil }
-      return dHash(cgImage)
+      return await hashOnMainActor(candidate.moment.screenshot)
     #else
       return nil
     #endif
   }
+
+  #if canImport(AppKit)
+    /// Hash the thumbnail where the thumbnail lives.
+    ///
+    /// `RewindThumbnailLoader` is `@MainActor` and `NSImage` is not `Sendable`, so handing the
+    /// picture back to a nonisolated caller is a strict-concurrency error — the pinned Xcode 16.4
+    /// toolchain rejects it even though newer Swift accepts it. Doing the whole hash on the main
+    /// actor and returning only the 64 bits means nothing non-`Sendable` crosses at all. The grid
+    /// is 9x8, so the draw is negligible work to keep there.
+    @MainActor
+    private static func hashOnMainActor(_ screenshot: Screenshot) async -> UInt64? {
+      guard
+        let image = await RewindThumbnailLoader.shared.thumbnail(for: screenshot),
+        let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+      else { return nil }
+      return dHash(cgImage)
+    }
+  #endif
 
   /// Fraction of the 64 bits two hashes agree on. 1.0 is identical.
   static func similarity(_ a: UInt64, _ b: UInt64) -> Double {
