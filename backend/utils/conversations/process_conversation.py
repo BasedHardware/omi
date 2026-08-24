@@ -138,6 +138,7 @@ from utils.conversations.meeting_context import (
     select_overlapping_meeting,
 )
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
+from utils.jit_first_open_policy import resolve_authorized_first_open_plan
 from utils.other.storage import (
     compute_audio_files_fingerprint,
     enqueue_conversation_artifact_build,
@@ -615,7 +616,7 @@ def _trigger_apps(
     usage_attribution: Optional[AppUsageAttribution] = None,
     language_code: str = 'en',
     people: Optional[List[Person]] = None,
-) -> None:
+) -> bool:
     if usage_attribution is None:
         usage_attribution = (
             AppUsageAttribution.NON_USER_REPROCESS if is_reprocess else AppUsageAttribution.AUTOMATIC_PROCESSING
@@ -723,11 +724,14 @@ def _trigger_apps(
             record_app_usage(uid, app.id, UsageHistoryType.memory_created_prompt, conversation_id=conversation.id)
 
     futures = [submit_with_context(llm_executor, execute_app, app) for app in filtered_apps]
+    succeeded = True
     for future in futures:
         try:
             future.result()
         except Exception as e:
+            succeeded = False
             logger.error(f"Error executing app: {e}")
+    return succeeded
 
     if app_id:
         # Explicit selection is fail-closed: the client asked for THIS app's summary, so a
@@ -738,13 +742,13 @@ def _trigger_apps(
             raise ExplicitAppSelectionFailedError(f'Selected app {app_id} produced no summary content')
 
 
-def _update_goal_progress(uid: str, conversation: Conversation) -> None:
+def _update_goal_progress(uid: str, conversation: Conversation) -> bool:
     """Extract and update goal progress from conversation text."""
     try:
         # Idempotency: skip if this conversation was already processed for goals
         if not redis_db.try_acquire_conversation_goal_lock(uid, conversation.id):
             logger.info(f"[GOAL] Skipping already-processed conversation {conversation.id}")
-            return
+            return True
 
         # Get conversation text
         text = ""
@@ -754,13 +758,16 @@ def _update_goal_progress(uid: str, conversation: Conversation) -> None:
             text = " ".join([s.text for s in conversation.transcript_segments[:20]])
 
         if not text or len(text) < 10:
-            return
+            return True
 
         # Use utility function to extract and update goal progress
         with track_usage(uid, Features.GOALS):
             extract_and_update_goal_progress(uid, text)
+        return True
     except Exception as e:
         logger.error(f"[GOAL] Error updating progress: {e}")
+        redis_db.release_conversation_goal_lock(uid, conversation.id)
+        return False
 
 
 def _parity_transcript_segments(conversation: Conversation) -> list[dict[str, Any]]:
@@ -1663,6 +1670,7 @@ def _store_deferred_conversation(
     if not persisted:
         logger.info('lazy: deferred conversation creation fenced uid=%s conv=%s', uid, conversation.id)
         return conversation
+
     logger.info("lazy: stored deferred desktop conversation uid=%s conv=%s", uid, conversation.id)
     return conversation
 
@@ -1957,6 +1965,24 @@ def process_conversation(
         )
         return conversation
 
+    # Enrollment is resolved only from backend authority plus the persisted
+    # conversation source. We create the durable obligation before omitting a
+    # single effect; authority/Firestore failure preserves full-eager behavior.
+    jit_defer_expensive = False
+    if not force_process and not is_reprocess and not discarded:
+        source_value = getattr(conversation.source, 'value', conversation.source)
+        first_open_plan = resolve_authorized_first_open_plan(uid=uid, source=str(source_value))
+        if first_open_plan.defer_derived_work:
+            try:
+                jit_defer_expensive = conversations_db.initialize_first_open_work(uid, conversation.id)
+            except Exception as error:
+                logger.warning(
+                    'JIT first-open initialization failed; using eager path uid=%s conv=%s: %s',
+                    uid,
+                    conversation.id,
+                    error,
+                )
+
     # Wrap every post-persistence derived effect so the durable finalizer can
     # defer the bundle until it transactionally claims ownership (#10468 r5).
     # Captured by _emit_derived_effects so an explicit-selection failure can fail the
@@ -2000,7 +2026,7 @@ def process_conversation(
 
         # AI-based folder assignment
         assigned_folder_id = None
-        if not discarded and not is_reprocess and not conversation.folder_id:
+        if not jit_defer_expensive and not discarded and not is_reprocess and not conversation.folder_id:
             try:
                 # Get user's folders
                 user_folders = folders_db.get_folders(uid)
@@ -2054,29 +2080,30 @@ def process_conversation(
             if insights_gained > 0:
                 record_usage(uid, insights_gained=insights_gained)
 
-            try:
-                _trigger_apps(
-                    uid,
-                    conversation,
-                    is_reprocess=is_reprocess,
-                    app_id=app_id,
-                    explicit_app=explicit_app,
-                    usage_attribution=app_usage_attribution,
-                    language_code=language_code,
-                    people=people,
-                )
-            except ExplicitAppSelectionFailedError as error:
-                # Fail closed without stranding the bundle: the write-back below still
-                # persists apps_results exactly as it does today (opt-in clears a stale
-                # selection) and the remaining derived effects still run; the error is
-                # re-raised after the bundle so the reprocess boundary returns a real
-                # failure instead of success-with-notes (SCA-359).
-                logger.error('Explicit app selection failed: %s', error)
-                explicit_selection_failures.append(error)
+            if not jit_defer_expensive:
+                try:
+                    _trigger_apps(
+                        uid,
+                        conversation,
+                        is_reprocess=is_reprocess,
+                        app_id=app_id,
+                        explicit_app=explicit_app,
+                        usage_attribution=app_usage_attribution,
+                        language_code=language_code,
+                        people=people,
+                    )
+                except ExplicitAppSelectionFailedError as error:
+                    # Fail closed without stranding the bundle: the write-back below still
+                    # persists apps_results exactly as it does today (opt-in clears a stale
+                    # selection) and the remaining derived effects still run; the error is
+                    # re-raised after the bundle so the reprocess boundary returns a real
+                    # failure instead of success-with-notes (SCA-359).
+                    logger.error('Explicit app selection failed: %s', error)
+                    explicit_selection_failures.append(error)
             # _trigger_apps only mutates the in-memory conversation and the durable write above already
             # happened, so persist its output the same way the calendar_event/folder_id/audio_files
             # write-backs do. Otherwise the app summary the LLM just produced is discarded.
-            if (
+            if not jit_defer_expensive and (
                 _conversation_apps_opt_in_only()
                 or conversation.apps_results
                 or conversation.suggested_summarization_apps
@@ -2096,7 +2123,8 @@ def process_conversation(
                 # unobserved future while reporting finalization as successful.
                 _extract_memories(uid, conversation)
             submit_with_context(postprocess_executor, _save_action_items, uid, conversation, people)
-            submit_with_context(postprocess_executor, _update_goal_progress, uid, conversation)
+            if not jit_defer_expensive:
+                submit_with_context(postprocess_executor, _update_goal_progress, uid, conversation)
 
         # Create audio files from chunks if private cloud sync was enabled
         if not is_reprocess and conversation.private_cloud_sync_enabled:
@@ -2143,6 +2171,64 @@ def process_conversation(
         raise conversation_processing_http_exception(failure) from failure
     logger.info(f'process_conversation completed conversation.id= {conversation.id}')
     return conversation
+
+
+def run_first_open_derived_work(uid: str, conversation_data: dict[str, Any]) -> None:
+    """Produce the three deferred effects from an authoritative persisted row.
+
+    The durable lease in ``database.conversations`` owns retries.  This worker
+    deliberately raises on a failed write so the route can re-arm the
+    obligation instead of silently marking partial work complete.
+    """
+    conversation = deserialize_conversation(conversation_data)
+    if conversation.discarded:
+        return
+    people: List[Person] = []
+    person_ids = conversation.get_person_ids()
+    if person_ids:
+        people = [Person(**item) for item in users_db.get_people_by_ids(uid, list(set(person_ids)))]
+
+    if not conversation.folder_id:
+        user_folders = folders_db.get_folders(uid) or folders_db.initialize_system_folders(uid)
+        if user_folders and conversation.structured:
+            category = conversation.structured.category.value if conversation.structured.category else 'other'
+            with track_usage(uid, Features.CONVERSATION_FOLDER):
+                folder_id, _confidence, _reasoning = assign_conversation_to_folder(
+                    title=conversation.structured.title or '',
+                    overview=conversation.structured.overview or '',
+                    category=category,
+                    user_folders=user_folders,
+                    category_folder_id=folders_db.resolve_category_folder_id(category, user_folders),
+                )
+            if folder_id:
+                conversation.folder_id = folder_id
+                if not conversations_db.update_conversation(uid, conversation.id, {'folder_id': folder_id}):
+                    raise RuntimeError('conversation disappeared during folder assignment')
+                folders_db.update_folder_conversation_count(uid, folder_id)
+
+    goals_succeeded = _update_goal_progress(uid, conversation)
+    if not goals_succeeded:
+        raise RuntimeError('goal progress first-open effect failed')
+    apps_succeeded = _trigger_apps(
+        uid,
+        conversation,
+        is_reprocess=False,
+        usage_attribution=AppUsageAttribution.AUTOMATIC_PROCESSING,
+        language_code=conversation.language or 'en',
+        people=people,
+    )
+    if _conversation_apps_opt_in_only() or conversation.apps_results or conversation.suggested_summarization_apps:
+        if not conversations_db.update_conversation(
+            uid,
+            conversation.id,
+            {
+                'apps_results': [result.dict() for result in conversation.apps_results],
+                'suggested_summarization_apps': conversation.suggested_summarization_apps,
+            },
+        ):
+            raise RuntimeError('conversation disappeared during app fanout')
+    if not apps_succeeded:
+        raise RuntimeError('app fanout first-open effect failed')
 
 
 def _send_important_conversation_notification_if_needed(uid: str, conversation: Conversation) -> None:  # type: ignore[reportUnusedFunction]  # reserved for re-enablement

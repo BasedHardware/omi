@@ -1431,6 +1431,14 @@ def try_acquire_conversation_goal_lock(uid: str, conversation_id: str, ttl: int 
     return result is not None
 
 
+def release_conversation_goal_lock(uid: str, conversation_id: str) -> None:
+    """Release a failed goal attempt so a durable first-open retry can rerun it."""
+    try:
+        r.delete(f'users:{uid}:conv_goal_lock:{conversation_id}')
+    except Exception as error:
+        logger.warning('Failed to release conversation goal lock uid=%s conv=%s: %s', uid, conversation_id, error)
+
+
 # ******************************************************
 # ************ SCREEN FRAME EGRESS (contract §5/§6) *****
 # ******************************************************

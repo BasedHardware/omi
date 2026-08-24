@@ -56,6 +56,7 @@ from models.shared import StatusResponse
 from utils.conversations.process_conversation import (
     AppUsageAttribution,
     process_conversation,
+    run_first_open_derived_work,
     retrieve_in_progress_conversation,
 )
 from utils.conversations import lifecycle as lifecycle_service
@@ -204,6 +205,40 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
     # Return immediately — still status=processing, no summary yet; the client polls for completion.
     conversation['deferred'] = False
     return conversation
+
+
+def _dispatch_first_open_work(uid: str, conversation: dict) -> None:
+    """Claim once and run in the background; failure remains retryable."""
+    conversation_id = conversation.get('id')
+    if not conversation_id or not conversation.get('jit_first_open'):
+        return
+    try:
+        token = conversations_db.claim_first_open_work(uid, conversation_id)
+    except Exception as error:
+        logger.warning('JIT first-open claim failed uid=%s conv=%s: %s', uid, conversation_id, error)
+        return
+    if token is None:
+        return
+
+    def _run() -> None:
+        succeeded = False
+        try:
+            latest = conversations_db.get_conversation(uid, conversation_id)
+            if latest is None:
+                raise RuntimeError('conversation disappeared before first-open work')
+            run_first_open_derived_work(uid, latest)
+            succeeded = True
+        except Exception as error:
+            logger.exception('JIT first-open worker failed uid=%s conv=%s: %s', uid, conversation_id, error)
+        finally:
+            try:
+                conversations_db.finish_first_open_work(uid, conversation_id, token, succeeded=succeeded)
+            except Exception as error:
+                logger.exception(
+                    'JIT first-open lease finalization failed uid=%s conv=%s: %s', uid, conversation_id, error
+                )
+
+    submit_with_context(postprocess_executor, _run)
 
 
 class ProcessConversationRequest(BaseModel):
@@ -676,6 +711,8 @@ def get_conversation_by_id(
     # enriched on first open. Other conversations are returned unchanged.
     if conversation.get('deferred'):
         conversation = _enrich_deferred_conversation(uid, conversation)
+    else:
+        _dispatch_first_open_work(uid, conversation)
     return conversation
 
 

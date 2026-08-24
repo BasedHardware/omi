@@ -6,9 +6,37 @@ from utils.jit_first_open_policy import (
     FirstOpenClientTier,
     FirstOpenOutcome,
     FirstOpenState,
+    resolve_authorized_first_open_plan,
     resolve_first_open_plan,
     transition_first_open,
 )
+
+
+class _AuthorityDecision:
+    def __init__(self, permits_work: bool) -> None:
+        self.permits_work = permits_work
+        self.kill_switch = "off"
+
+
+def test_backend_authority_enrolls_without_a_client_cohort_input() -> None:
+    async def authority(uid: str) -> _AuthorityDecision:
+        assert uid == "owner"
+        return _AuthorityDecision(True)
+
+    plan = resolve_authorized_first_open_plan(uid="owner", source="desktop", authority=authority)
+
+    assert plan.defer_derived_work is True
+    assert plan.client_tier is FirstOpenClientTier.DESKTOP
+
+
+def test_authority_error_fails_closed_to_legacy_eager_processing() -> None:
+    async def authority(_uid: str) -> _AuthorityDecision:
+        raise RuntimeError("authority unavailable")
+
+    plan = resolve_authorized_first_open_plan(uid="owner", source="mobile", authority=authority)
+
+    assert plan.enabled is False
+    assert plan.defer_derived_work is False
 
 
 @pytest.mark.parametrize("tier", list(FirstOpenClientTier))
