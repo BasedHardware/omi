@@ -811,8 +811,6 @@ async def _proactive_completion_unobserved(
             exc.detail,
         )
         raise
-    if length_retry_attempted:
-        _record_length_retry_outcome(provider_request, "recovered")
     usage = _usage_envelope(response_body)
     provider_model = response_body.get("model")
     assert provider_request is not None
@@ -827,6 +825,8 @@ async def _proactive_completion_unobserved(
             reservation_token=quota.reservation_token,
         ),
     )
+    if length_retry_attempted:
+        _record_length_retry_outcome(provider_request, "recovered")
     if provider_request.fallback_class == "dev_direct_openai":
         # A direct provider is only a recovered fallback once the response has
         # passed schema validation and the reservation has been committed. Do
