@@ -120,16 +120,28 @@ extension DesktopAutomationActionRegistry {
           ledgerMetadata: triggerMetadata
         )
         let projection = KnowledgeLedgerTriggerCompiler.project(memories: [triggerMemory, futureMemory])
-        guard let trigger = projection.entries.first else {
+        guard !projection.entries.isEmpty else {
           return ["error": "knowledge ledger trigger projection did not compile"]
         }
         let mirroredTriggerCondition = MemoryLedgerMetadata.triggerConditionJSON(
           from: triggerMemory.ledgerMetadata)
-        let decision = KnowledgeLedgerTriggerEvaluator.evaluate(
-          trigger,
+        let runtime = KnowledgeLedgerTriggerWatchlistRuntime.evaluate(
+          projection: projection,
           observation: .init(text: "focus now"),
-          day: "2026-08-23"
+          day: "2026-08-23",
+          authority: .init(
+            mode: .enabled,
+            killSwitchEnabled: false,
+            ownerID: "qa-owner",
+            accountGeneration: 1,
+            snapshotOwnerID: "qa-owner",
+            snapshotAccountGeneration: 1,
+            snapshotIsAuthoritative: true,
+            authorizationIsCurrent: true)
         )
+        guard let decision = runtime.matches.first?.decision else {
+          return ["error": "knowledge ledger trigger runtime did not produce the planned match"]
+        }
         return [
           "prompt_contains_profile_fact": prompt?.contains("home_city: Paris") == true ? "true" : "false",
           "trigger_metadata_roundtrip":
@@ -137,6 +149,9 @@ extension DesktopAutomationActionRegistry {
             ? "true" : "false",
           "trigger_projection_count": "\(projection.entries.count)",
           "trigger_projection_quarantine_count": "\(projection.quarantined.count)",
+          "trigger_runtime_status": runtime.status.rawValue,
+          "trigger_runtime_next_lane": runtime.nextLane.rawValue,
+          "trigger_runtime_match_count": "\(runtime.matches.count)",
           "trigger_status": decision.status.rawValue,
           "trigger_wakeups_used": "\(decision.wakeupsUsed)",
         ]
