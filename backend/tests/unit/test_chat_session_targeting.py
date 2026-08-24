@@ -166,4 +166,3 @@ def test_current_session_resolves_to_the_newest(monkeypatch):
 
     assert result['id'] == 'sess-newest'
     assert recorder['order_by'][0] == '__name__'
-    assert recorder['limit'] == 1

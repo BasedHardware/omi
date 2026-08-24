@@ -63,6 +63,29 @@ def _merge_docs_by_id(*groups: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return merged
 
 
+def _session_recency_key(data: Dict[str, Any]) -> tuple:
+    return (
+        data.get('created_at') is not None,
+        data.get('created_at') or datetime.min.replace(tzinfo=timezone.utc),
+        str(data.get('id') or ''),
+    )
+
+
+def _aggregation_count(query: Any) -> int:
+    result = query.count().get()
+    return int(result[0][0].value) if result and result[0] else 0
+
+
+def _reported_count(query: Any) -> int:
+    return _aggregation_count(query.where(filter=FieldFilter('reported', '==', True)))
+
+
+def _union_scope_counts(app_query: Any, plugin_query: Any, both_query: Any) -> tuple[int, int]:
+    total = max(0, _aggregation_count(app_query) + _aggregation_count(plugin_query) - _aggregation_count(both_query))
+    reported = max(0, _reported_count(app_query) + _reported_count(plugin_query) - _reported_count(both_query))
+    return total, reported
+
+
 class ClientMessageIdPayloadConflict(ValueError):
     """The same client id was reused for a different immutable message."""
 
@@ -383,15 +406,15 @@ def get_cache_aligned_messages(
     scoped_ref = user_ref.collection('messages')
     if chat_session_id:
         scoped_ref = scoped_ref.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
+        total = _aggregation_count(scoped_ref)
+        reported = _reported_count(scoped_ref)
     else:
-        scoped_ref = MESSAGES_BY_APP_ID_CREATED_QUERY.build(
+        app_query = MESSAGES_BY_APP_ID_CREATED_QUERY.build(
             scoped_ref, {'app_id': app_id}, field_filter_factory=FieldFilter
         )
-
-    total_result = scoped_ref.count().get()
-    total = int(total_result[0][0].value) if total_result and total_result[0] else 0
-    reported_result = scoped_ref.where(filter=FieldFilter('reported', '==', True)).count().get()
-    reported = int(reported_result[0][0].value) if reported_result and reported_result[0] else 0
+        plugin_query = scoped_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
+        both_query = app_query.where(filter=FieldFilter('plugin_id', '==', app_id))
+        total, reported = _union_scope_counts(app_query, plugin_query, both_query)
     visible_total = max(0, total - reported)
     visible_limit = cache_aligned_history_limit(visible_total)
     if visible_limit == 0:
@@ -433,12 +456,18 @@ def get_messages_reconcile_page(
 
     user_ref = db.collection('users').document(uid)
     messages_collection = user_ref.collection('messages')
-    query: Any = messages_collection
     if chat_session_id:
-        query = query.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
+        scoped_queries: List[Any] = [
+            messages_collection.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
+        ]
     else:
-        query = MESSAGES_BY_APP_ID_CREATED_QUERY.build(query, {'app_id': app_id}, field_filter_factory=FieldFilter)
-    query = query.order_by('created_at', direction=firestore.Query.DESCENDING)
+        scoped_queries = [
+            MESSAGES_BY_APP_ID_CREATED_QUERY.build(
+                messages_collection, {'app_id': app_id}, field_filter_factory=FieldFilter
+            ),
+            messages_collection.where(filter=FieldFilter('plugin_id', '==', app_id)),
+        ]
+    scoped_queries = [query.order_by('created_at', direction=firestore.Query.DESCENDING) for query in scoped_queries]
 
     cursor_snapshot: Any = None
     if cursor_message_id:
@@ -464,11 +493,27 @@ def get_messages_reconcile_page(
 
     while scanned < scan_budget and len(messages) < limit:
         batch_limit = min(100, scan_budget - scanned)
-        page_query = query.start_after(cursor_snapshot) if cursor_snapshot is not None else query
-        documents = list(page_query.limit(batch_limit).stream())
-        if not documents:
+        documents_by_id: Dict[str, Any] = {}
+        saw_full_batch = False
+        for scoped_query in scoped_queries:
+            page_query = scoped_query.start_after(cursor_snapshot) if cursor_snapshot is not None else scoped_query
+            batch = list(page_query.limit(batch_limit).stream())
+            if len(batch) >= batch_limit:
+                saw_full_batch = True
+            for document in batch:
+                documents_by_id[str(document.id)] = document
+        if not documents_by_id:
             has_more = False
             break
+
+        documents = sorted(
+            documents_by_id.values(),
+            key=lambda document: (
+                _typed_doc(document).get('created_at') or datetime.min.replace(tzinfo=timezone.utc),
+                str(document.id),
+            ),
+            reverse=True,
+        )[:batch_limit]
 
         reached_return_limit = False
         for document in documents:
@@ -487,7 +532,7 @@ def get_messages_reconcile_page(
             # collection tail; claiming continuation avoids a racey count query.
             has_more = True
             break
-        if len(documents) < batch_limit:
+        if len(documents) < batch_limit and not saw_full_batch:
             has_more = False
             break
         has_more = True
@@ -743,15 +788,18 @@ def get_chat_session(uid: str, app_id: Optional[str] = None) -> Optional[Dict[st
         .stream()
     )
     ordered_docs = [_typed_doc(session) for session in ordered_sessions]
+    plugin_docs = [
+        _typed_doc(session)
+        for session in collection.where(filter=FieldFilter('plugin_id', '==', app_id))
+        .limit(CURRENT_CHAT_SESSION_SCAN_LIMIT)
+        .stream()
+    ]
+    timestamped = [data for data in _merge_docs_by_id(ordered_docs, plugin_docs) if data.get('created_at') is not None]
+    if timestamped:
+        return max(timestamped, key=_session_recency_key)
+
     if ordered_docs:
-        return max(
-            ordered_docs,
-            key=lambda data: (
-                data.get('created_at') is not None,
-                data.get('created_at') or datetime.min.replace(tzinfo=timezone.utc),
-                str(data.get('id') or ''),
-            ),
-        )
+        return max(ordered_docs, key=_session_recency_key)
 
     legacy_session = (
         CURRENT_CHAT_SESSION_QUERY.build(
@@ -767,11 +815,16 @@ def get_chat_session(uid: str, app_id: Optional[str] = None) -> Optional[Dict[st
     if len(legacy_docs) > 1:
         legacy_docs = legacy_docs[:1]
 
+    untimestamped_plugin = [data for data in plugin_docs if data.get('created_at') is None]
+    if untimestamped_plugin:
+        plugin_pick = min(untimestamped_plugin, key=lambda data: str(data.get('id') or ''))
+        candidates = _merge_docs_by_id(legacy_docs, [plugin_pick])
+        return min(candidates, key=lambda data: str(data.get('id') or '')) if candidates else None
+
     newest: Optional[Dict[str, Any]] = None
     newest_key: Optional[tuple] = None
     for data in legacy_docs:
-        created = data.get('created_at')
-        key = (created is not None, created or datetime.min.replace(tzinfo=timezone.utc), str(data.get('id') or ''))
+        key = _session_recency_key(data)
         if newest_key is None or key > newest_key:
             newest, newest_key = data, key
 

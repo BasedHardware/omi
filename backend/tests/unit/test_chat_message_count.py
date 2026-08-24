@@ -122,7 +122,7 @@ def test_cache_aligned_history_caps_reported_overfetch_for_large_lifetime_count(
     messages_ref = _messages_ref(fake_db)
     messages_ref.where.return_value = messages_ref
     # 500 total, 300 reported → 200 visible; visible_limit = 10 + (190 % 8) = 10 + 6 = 16
-    messages_ref.count.return_value.get.side_effect = [_count(500), _count(300)]
+    messages_ref.count.return_value.get.side_effect = [_count(500)] * 3 + [_count(300)] * 3
     visible_messages = [{"id": f"m{i}"} for i in range(66)]
 
     with patch.object(chat_db, "db", fake_db), patch.object(
@@ -144,13 +144,61 @@ def test_cache_aligned_history_without_session_is_scoped_to_app():
     fake_db = MagicMock()
     messages_ref = _messages_ref(fake_db)
     messages_ref.where.return_value = messages_ref
-    messages_ref.count.return_value.get.side_effect = [_count(1), _count(0)]
+    messages_ref.count.return_value.get.side_effect = [_count(1)] * 3 + [_count(0)] * 3
 
     with patch.object(chat_db, "db", fake_db), patch.object(chat_db, "get_messages", return_value=[{"id": "m1"}]):
         assert chat_db.get_cache_aligned_messages("u1", app_id="app-1") == [{"id": "m1"}]
 
     scoped_filters = [call.kwargs["filter"] for call in messages_ref.where.call_args_list]
-    assert [(filter_.field_path, filter_.value) for filter_ in scoped_filters] == [
-        ("app_id", "app-1"),
-        ("reported", True),
-    ]
+    assert ("app_id", "app-1") in [(filter_.field_path, filter_.value) for filter_ in scoped_filters]
+    assert ("plugin_id", "app-1") in [(filter_.field_path, filter_.value) for filter_ in scoped_filters]
+
+
+class _ScopedCountQuery:
+    def __init__(self, totals):
+        self.totals = totals
+        self.fields = ()
+
+    def where(self, filter=None, **_kwargs):
+        query = _ScopedCountQuery(self.totals)
+        query.fields = self.fields + (filter.field_path,)
+        return query
+
+    def count(self):
+        if "app_id" in self.fields and "plugin_id" in self.fields:
+            key = "both_reported" if "reported" in self.fields else "both"
+        elif "plugin_id" in self.fields:
+            key = "plugin_reported" if "reported" in self.fields else "plugin"
+        else:
+            key = "app_reported" if "reported" in self.fields else "app"
+        result = MagicMock()
+        result.get.return_value = _count(self.totals[key])
+        return result
+
+
+def test_cache_aligned_history_counts_plugin_id_only_rows():
+    fake_db = MagicMock()
+    messages_ref = _messages_ref(fake_db)
+    messages_ref.where.side_effect = lambda filter=None, **kwargs: _ScopedCountQuery(
+        {
+            "app": 0,
+            "plugin": 3,
+            "both": 0,
+            "app_reported": 0,
+            "plugin_reported": 0,
+            "both_reported": 0,
+        }
+    ).where(filter=filter)
+
+    with patch.object(chat_db, "db", fake_db), patch.object(
+        chat_db, "get_messages", return_value=[{"id": "p1"}, {"id": "p2"}, {"id": "p3"}]
+    ) as get_messages:
+        result = chat_db.get_cache_aligned_messages("u1", app_id="app-1")
+
+    assert result == [{"id": "p1"}, {"id": "p2"}, {"id": "p3"}]
+    get_messages.assert_called_once_with(
+        "u1",
+        limit=3,
+        app_id="app-1",
+        chat_session_id=None,
+    )

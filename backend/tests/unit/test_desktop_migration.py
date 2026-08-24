@@ -747,6 +747,37 @@ class TestMessageReconcileKeyset:
             with pytest.raises(chat_db.MessageReconcileCursorError):
                 chat_db.get_messages_reconcile_page('uid', limit=2, cursor_message_id='other-app', app_id='requested')
 
+    def test_plugin_id_only_rows_are_included_in_app_scope(self):
+        now = datetime.now(timezone.utc)
+
+        class _FieldFilter:
+            def __init__(self, field_path, op_string, value):
+                self.field_path = field_path
+                self.op_string = op_string
+                self.value = value
+
+        class FilteringCollection(self.FakeCollection):
+            def where(self, **kwargs):
+                filter_ = kwargs.get('filter')
+                field = getattr(filter_, 'field_path', None)
+                value = getattr(filter_, 'value', None)
+                rows = [row for row in self.rows if field is None or row.to_dict().get(field) == value]
+                return TestMessageReconcileKeyset.FakeQuery(self.__class__(rows))
+
+        legacy = self.message('legacy-plugin', now, plugin_id='app-1')
+        payload = legacy.to_dict()
+        del payload['app_id']
+        collection = FilteringCollection(
+            [
+                TestMessageReconcileKeyset.FakeDocument('legacy-plugin', payload),
+                self.message('app-owned', now, plugin_id='app-1'),
+            ]
+        )
+        with self.patched_db(collection), patch.object(chat_db, 'FieldFilter', _FieldFilter):
+            rows, _cursor, _has_more = chat_db.get_messages_reconcile_page('uid', limit=2, app_id='app-1')
+
+        assert [row['id'] for row in rows] == ['legacy-plugin', 'app-owned']
+
 
 class TestGetChatSessionsQuery:
     """Verify get_chat_sessions query construction."""

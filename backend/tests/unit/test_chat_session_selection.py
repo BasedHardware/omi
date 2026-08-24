@@ -37,7 +37,15 @@ def _query_returning(docs):
     query.order_by.return_value = query
     query.limit.return_value = query
     timestamped = [doc for doc in docs if doc.to_dict().get('created_at') is not None]
-    query.stream.side_effect = [iter(timestamped), iter(docs)]
+    calls = {'n': 0}
+
+    def _stream():
+        calls['n'] += 1
+        if calls['n'] == 1:
+            return iter(timestamped)
+        return iter(list(docs))
+
+    query.stream.side_effect = _stream
     collection = MagicMock()
     collection.document.return_value.collection.return_value = query
     return collection, query
@@ -114,3 +122,56 @@ def test_legacy_fallback_uses_a_deterministic_document_order(monkeypatch):
 
     assert result['id'] == 'a'
     query.order_by.assert_any_call('__name__', direction=chat_db.firestore.Query.ASCENDING)
+
+
+class _ScopedSessionQuery:
+    def __init__(self, docs, field=None, value=None, limit=None):
+        self._docs = docs
+        self._field = field
+        self._value = value
+        self._limit = limit
+
+    def where(self, filter=None, **_kwargs):
+        return _ScopedSessionQuery(self._docs, field=filter.field_path, value=filter.value, limit=self._limit)
+
+    def order_by(self, *_args, **_kwargs):
+        return self
+
+    def limit(self, n):
+        return _ScopedSessionQuery(self._docs, field=self._field, value=self._value, limit=n)
+
+    def stream(self):
+        matched = []
+        for doc in self._docs:
+            data = doc.to_dict()
+            if self._field is None or data.get(self._field) == self._value:
+                matched.append(doc)
+        if self._limit is not None:
+            matched = matched[: self._limit]
+        return iter(matched)
+
+
+def test_plugin_id_only_session_is_selected(monkeypatch):
+    collection = _ScopedSessionQuery([_doc('legacy-plugin', NOW, plugin_id='app')])
+    db = MagicMock()
+    db.collection.return_value.document.return_value.collection.return_value = collection
+    monkeypatch.setattr(chat_db, 'db', db)
+
+    result = chat_db.get_chat_session('uid', 'app')
+
+    assert result is not None
+    assert result['id'] == 'legacy-plugin'
+
+
+def test_newer_plugin_id_only_session_wins_over_older_app_id_session(monkeypatch):
+    older = _doc('older-app', NOW - timedelta(days=2), plugin_id=None)
+    older.to_dict.return_value['app_id'] = 'app'
+    newer = _doc('newer-plugin', NOW, plugin_id='app')
+    collection = _ScopedSessionQuery([older, newer])
+    db = MagicMock()
+    db.collection.return_value.document.return_value.collection.return_value = collection
+    monkeypatch.setattr(chat_db, 'db', db)
+
+    result = chat_db.get_chat_session('uid', 'app')
+
+    assert result['id'] == 'newer-plugin'
