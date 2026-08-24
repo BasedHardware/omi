@@ -13,6 +13,7 @@ from typing import Any, cast
 
 from google.cloud.firestore_v1 import FieldFilter
 from google.cloud.firestore_v1.field_path import FieldPath
+from google.cloud import firestore
 
 from database.firestore_index_registry import (
     DAILY_SWEEP_ONBOARDING_COMPLETED_USERS_QUERY,
@@ -48,11 +49,17 @@ class DailySweepUIDInventoryPage:
         canonical_uids: tuple[str, ...] = (),
         onboarding_uids: tuple[str, ...] = (),
         retry_uids: tuple[str, ...] = (),
+        canonical_cursor_generation: int = 0,
+        onboarding_cursor_generation: int = 0,
+        retry_cursor_generation: int = 0,
     ) -> None:
         self.uids = uids
         self.canonical_uids = canonical_uids
         self.onboarding_uids = onboarding_uids
         self.retry_uids = retry_uids
+        self.canonical_cursor_generation = canonical_cursor_generation
+        self.onboarding_cursor_generation = onboarding_cursor_generation
+        self.retry_cursor_generation = retry_cursor_generation
 
 
 def _read_payload(ref: Any) -> dict[str, Any]:
@@ -68,19 +75,63 @@ def _read_payload(ref: Any) -> dict[str, Any]:
     return cast(dict[str, Any], payload)
 
 
-def _read_cursor(db_client: Any, path: str, schema_version: int) -> str:
+def _read_cursor_state(db_client: Any, path: str, schema_version: int) -> tuple[str, int]:
     payload = _read_payload(db_client.document(path))
     if payload and payload.get("schema_version") != schema_version:
         raise DailySweepInventoryUnavailable("daily sweep cursor malformed")
     value = payload.get("last_uid", "")
     if not isinstance(value, str):
         raise DailySweepInventoryUnavailable("daily sweep cursor malformed")
-    return value.strip()
+    generation = payload.get("generation", 0)
+    if not isinstance(generation, int) or generation < 0:
+        raise DailySweepInventoryUnavailable("daily sweep cursor malformed")
+    return value.strip(), generation
 
 
-def _write_cursor(db_client: Any, path: str, schema_version: int, last_uid: str) -> None:
+def _write_cursor(
+    db_client: Any,
+    path: str,
+    schema_version: int,
+    last_uid: str,
+    *,
+    expected_generation: int | None = None,
+) -> None:
     try:
-        db_client.document(path).set({"schema_version": schema_version, "last_uid": last_uid}, merge=True)
+        ref = db_client.document(path)
+        current_payload = _read_payload(ref)
+        current_generation = current_payload.get("generation", 0)
+        current_uid = current_payload.get("last_uid", "")
+        if not isinstance(current_generation, int) or current_generation < 0 or not isinstance(current_uid, str):
+            raise DailySweepInventoryUnavailable("daily sweep cursor malformed")
+        if expected_generation is not None and current_generation != expected_generation:
+            raise DailySweepInventoryUnavailable("daily sweep cursor generation conflict")
+        payload = {
+            "schema_version": schema_version,
+            "last_uid": last_uid,
+            "generation": current_generation + 1,
+        }
+        # Production Firestore uses a transaction so two overlapping workers
+        # cannot both observe the same generation and then overwrite one
+        # another. Small fakes may not support transactional reads; retain the
+        # CAS read/write fallback for those hermetic seams.
+        transaction_factory = getattr(db_client, "transaction", None)
+        if callable(transaction_factory):
+            try:
+                transaction = transaction_factory()
+
+                def write_transaction(tx: Any) -> None:
+                    snapshot = ref.get(transaction=tx)
+                    live = snapshot.to_dict() if getattr(snapshot, "exists", False) else {}
+                    live_generation = live.get("generation", 0) if isinstance(live, dict) else 0
+                    if live_generation != current_generation:
+                        raise DailySweepInventoryUnavailable("daily sweep cursor generation conflict")
+                    tx.set(ref, payload, merge=True)
+
+                cast(Any, firestore.transactional(write_transaction))(transaction)
+                return
+            except TypeError:
+                pass
+        ref.set(payload, merge=True)
     except Exception as exc:
         raise DailySweepInventoryUnavailable("daily sweep cursor unavailable") from exc
 
@@ -89,7 +140,9 @@ def _read_retry_uids(db_client: Any, *, limit: int) -> tuple[str, ...]:
     """Read a rotating bounded retry page without dropping malformed state."""
 
     try:
-        cursor = _read_cursor(db_client, DAILY_SWEEP_RETRY_CURSOR_PATH, DAILY_SWEEP_RETRY_CURSOR_SCHEMA_VERSION)
+        cursor, _generation = _read_cursor_state(
+            db_client, DAILY_SWEEP_RETRY_CURSOR_PATH, DAILY_SWEEP_RETRY_CURSOR_SCHEMA_VERSION
+        )
         collection = db_client.collection(DAILY_SWEEP_RETRY_COLLECTION)
         query = collection.where("uid", ">", cursor) if cursor else collection
         snapshots = query.order_by("uid").limit(limit).stream()
@@ -120,7 +173,9 @@ def _seed_registry(db_client: Any, *, limit: int) -> None:
     collection_group_factory = getattr(db_client, "collection_group", None)
     if not callable(collection_group_factory):
         return
-    seed_cursor = _read_cursor(db_client, DAILY_SWEEP_SEED_CURSOR_PATH, DAILY_SWEEP_SEED_SCHEMA_VERSION)
+    seed_cursor, seed_generation = _read_cursor_state(
+        db_client, DAILY_SWEEP_SEED_CURSOR_PATH, DAILY_SWEEP_SEED_SCHEMA_VERSION
+    )
     cursor_snapshot = None
     if seed_cursor:
         try:
@@ -153,7 +208,13 @@ def _seed_registry(db_client: Any, *, limit: int) -> None:
             )
             last_path = path
         if page:
-            _write_cursor(db_client, DAILY_SWEEP_SEED_CURSOR_PATH, DAILY_SWEEP_SEED_SCHEMA_VERSION, last_path)
+            _write_cursor(
+                db_client,
+                DAILY_SWEEP_SEED_CURSOR_PATH,
+                DAILY_SWEEP_SEED_SCHEMA_VERSION,
+                last_path,
+                expected_generation=seed_generation,
+            )
     except DailySweepInventoryUnavailable:
         raise
     except Exception as exc:
@@ -171,7 +232,9 @@ def bounded_canonical_daily_sweep_uids(
     if not callable(collection):
         raise DailySweepInventoryUnavailable("daily sweep registry unavailable")
     _seed_registry(db_client, limit=bounded_limit)
-    cursor = _read_cursor(db_client, DAILY_SWEEP_CANONICAL_CURSOR_PATH, DAILY_SWEEP_CANONICAL_REGISTRY_SCHEMA_VERSION)
+    cursor, cursor_generation = _read_cursor_state(
+        db_client, DAILY_SWEEP_CANONICAL_CURSOR_PATH, DAILY_SWEEP_CANONICAL_REGISTRY_SCHEMA_VERSION
+    )
     try:
         registry = cast(Any, collection(DAILY_SWEEP_CANONICAL_REGISTRY_COLLECTION))
         query = registry.where("uid", ">", cursor) if cursor else registry
@@ -192,6 +255,7 @@ def bounded_canonical_daily_sweep_uids(
                 DAILY_SWEEP_CANONICAL_CURSOR_PATH,
                 DAILY_SWEEP_CANONICAL_REGISTRY_SCHEMA_VERSION,
                 uids[-1],
+                expected_generation=cursor_generation,
             )
         return tuple(uids)
     except DailySweepInventoryUnavailable:
@@ -210,6 +274,9 @@ def bounded_daily_memory_sweep_uid_inventory(
     bounded_limit = max(1, min(MAX_DAILY_SWEEP_UIDS_PER_PAGE, int(limit)))
     retry_limit = max(1, min(MAX_DAILY_SWEEP_RETRY_UIDS_PER_PAGE, bounded_limit // 4))
     retry_uids = _read_retry_uids(db_client, limit=retry_limit)
+    _retry_cursor, retry_cursor_generation = _read_cursor_state(
+        db_client, DAILY_SWEEP_RETRY_CURSOR_PATH, DAILY_SWEEP_RETRY_CURSOR_SCHEMA_VERSION
+    )
     remaining = bounded_limit - len(retry_uids)
     if remaining:
         onboarding_limit = max(1, remaining // 2) if remaining > 1 else 1
@@ -227,10 +294,11 @@ def bounded_daily_memory_sweep_uid_inventory(
         if uid not in discovered:
             discovered.append(uid)
     onboarding: tuple[str, ...] = ()
+    onboarding_cursor_generation = 0
     users = getattr(db_client, "collection", lambda _name: None)("users")
     where = getattr(users, "where", None)
     if remaining and callable(where):
-        onboarding_cursor = _read_cursor(
+        onboarding_cursor, onboarding_cursor_generation = _read_cursor_state(
             db_client, DAILY_SWEEP_ONBOARDING_CURSOR_PATH, DAILY_SWEEP_ONBOARDING_CURSOR_SCHEMA_VERSION
         )
         rows: list[str] = []
@@ -275,6 +343,11 @@ def bounded_daily_memory_sweep_uid_inventory(
         canonical_uids=tuple(uid for uid in canonical if uid in discovered[:bounded_limit]),
         onboarding_uids=tuple(uid for uid in onboarding if uid in discovered[:bounded_limit]),
         retry_uids=retry_uids,
+        canonical_cursor_generation=_read_cursor_state(
+            db_client, DAILY_SWEEP_CANONICAL_CURSOR_PATH, DAILY_SWEEP_CANONICAL_REGISTRY_SCHEMA_VERSION
+        )[1],
+        onboarding_cursor_generation=onboarding_cursor_generation if remaining else 0,
+        retry_cursor_generation=retry_cursor_generation,
     )
     return page if return_page else page.uids
 
@@ -312,6 +385,7 @@ def commit_daily_memory_sweep_uid_inventory(
             DAILY_SWEEP_RETRY_CURSOR_PATH,
             DAILY_SWEEP_RETRY_CURSOR_SCHEMA_VERSION,
             page.retry_uids[-1],
+            expected_generation=page.retry_cursor_generation,
         )
     if advance_page and page.canonical_uids:
         _write_cursor(
@@ -319,6 +393,7 @@ def commit_daily_memory_sweep_uid_inventory(
             DAILY_SWEEP_CANONICAL_CURSOR_PATH,
             DAILY_SWEEP_CANONICAL_REGISTRY_SCHEMA_VERSION,
             page.canonical_uids[-1],
+            expected_generation=page.canonical_cursor_generation,
         )
     if advance_page and page.onboarding_uids:
         _write_cursor(
@@ -326,4 +401,5 @@ def commit_daily_memory_sweep_uid_inventory(
             DAILY_SWEEP_ONBOARDING_CURSOR_PATH,
             DAILY_SWEEP_ONBOARDING_CURSOR_SCHEMA_VERSION,
             page.onboarding_uids[-1],
+            expected_generation=page.onboarding_cursor_generation,
         )

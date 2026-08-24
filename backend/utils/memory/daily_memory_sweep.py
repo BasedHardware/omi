@@ -34,7 +34,7 @@ import importlib
 import os
 import re
 import threading
-from typing import Any, Dict, Iterable, List, Literal, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Literal, Mapping, Optional, Sequence, Tuple, cast
 from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -89,10 +89,12 @@ MAX_LEGACY_COMPAT_OCCUPANTS = 64
 MODEL_COST_PER_1K_INPUT_CHARACTERS_USD = 0.002
 ONBOARDING_CONSUMED_STATE_PATH = "memory_control/daily_memory_sweep_onboarding"
 ONBOARDING_PERMANENT_RECEIPT_PREFIX = "onboarding_source_"
-ONBOARDING_SOURCE_RECEIPT_PATH = "memory_control/daily_memory_sweep_onboarding_sources"
-ONBOARDING_STAGED_CANDIDATE_PATH = "memory_control/daily_memory_sweep_onboarding_staged"
-DAILY_SUMMARY_STAGED_CANDIDATE_PATH = "memory_control/daily_memory_sweep_daily_summary_staged"
+ONBOARDING_SOURCE_RECEIPT_PATH = "daily_memory_sweep_onboarding_sources"
+ONBOARDING_STAGED_CANDIDATE_PATH = "daily_memory_sweep_onboarding_staged"
+DAILY_SUMMARY_STAGED_CANDIDATE_PATH = "daily_memory_sweep_daily_summary_staged"
 DAILY_SUMMARY_STAGE_SCHEMA_VERSION = "daily_memory_sweep_daily_summary_stage.v1"
+MODEL_INVOCATION_PATH = "daily_memory_sweep_model_invocations"
+MODEL_INVOCATION_SCHEMA_VERSION = "daily_memory_sweep_model_invocation.v1"
 
 SCHEMA_VERSION = "daily_memory_sweep.v1"
 CURSOR_SCHEMA_VERSION = "daily_memory_sweep_cursor.v1"
@@ -121,6 +123,8 @@ DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_ENV = "MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOU
 DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENV = "MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED"
 
 RECEIPT_LEASE = timedelta(minutes=10)
+MODEL_INVOCATION_LEASE = timedelta(minutes=15)
+STAGED_CANDIDATE_RETENTION = timedelta(days=7)
 MAX_AUTHORITATIVE_OCCUPANTS = 2
 
 # Cohort assignment is a read-only control-plane operation, but creating a
@@ -129,6 +133,7 @@ MAX_AUTHORITATIVE_OCCUPANTS = 2
 # and close each transport when the worker exits.
 _POSTHOG_CLIENTS: Dict[Tuple[str, str, float], Any] = {}
 _POSTHOG_CLIENTS_LOCK = threading.RLock()
+_MODEL_INVOCATION_LOCK = threading.RLock()
 
 _ID_RE = re.compile(r"[a-z0-9][a-z0-9._:-]{0,127}")
 _FORBIDDEN_SOURCE_MARKERS = (
@@ -1013,6 +1018,195 @@ def _daily_summary_staged_candidates_ref(
         },
     )[:96]
     return db_client.document(f"users/{uid}/{DAILY_SUMMARY_STAGED_CANDIDATE_PATH}/{stage_id}")
+
+
+def _model_invocation_ref(db_client: Any, uid: str, invocation_id: str) -> Any:
+    """Return the durable model-invocation record for one source digest.
+
+    The invocation record is deliberately separate from the candidate stage.
+    A provider can return successfully and the process can die before the
+    stage write; the pending record then remains an indeterminate outcome and
+    a retry is refused rather than charging the provider a second time.
+    """
+
+    return db_client.document(f"users/{uid}/{MODEL_INVOCATION_PATH}/{invocation_id}")
+
+
+def cleanup_expired_daily_memory_sweep_stages(
+    uid: str,
+    *,
+    db_client: Any,
+    now: Optional[datetime] = None,
+    limit: int = 128,
+) -> int:
+    """Delete bounded, expired model stages and invocation payloads.
+
+    Candidate pages are user data.  Their expiry is enforced both by this
+    sweep-time janitor and by the read paths (which refuse an expired page),
+    so a crash or permanently skipped account cannot retain model output
+    indefinitely.  The account-deletion recursive walk remains the final
+    backstop for all rows under ``users/{uid}``.
+    """
+
+    cutoff = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    bounded_limit = max(1, min(256, int(limit)))
+    deleted = 0
+    collection_factory = getattr(db_client, "collection", None)
+    if not callable(collection_factory):
+        return 0
+    for collection_path in (
+        f"users/{uid}/{DAILY_SUMMARY_STAGED_CANDIDATE_PATH}",
+        f"users/{uid}/{ONBOARDING_STAGED_CANDIDATE_PATH}",
+        f"users/{uid}/{MODEL_INVOCATION_PATH}",
+    ):
+        try:
+            collection_ref = cast(Any, collection_factory(collection_path))
+            rows = list(collection_ref.limit(bounded_limit).stream())
+        except Exception:
+            continue
+        for row in rows:
+            payload = row.to_dict() if hasattr(row, "to_dict") else None
+            if not isinstance(payload, dict):
+                continue
+            if collection_path.endswith(MODEL_INVOCATION_PATH) and payload.get("state") == "pending":
+                # A provider may have returned immediately before the worker
+                # died. Never expire this ambiguity into an automatic retry.
+                continue
+            expires_raw = payload.get("expires_at") or payload.get("lease_expires_at")
+            try:
+                expires_at = (
+                    expires_raw
+                    if isinstance(expires_raw, datetime)
+                    else datetime.fromisoformat(str(expires_raw).replace("Z", "+00:00"))
+                )
+                if expires_at.tzinfo is None or expires_at.astimezone(timezone.utc) > cutoff:
+                    continue
+            except (TypeError, ValueError):
+                # Malformed expiry is treated as expired by the janitor. The
+                # read path already fails closed on malformed stages.
+                pass
+            reference = getattr(row, "reference", None)
+            delete = getattr(reference, "delete", None)
+            if callable(delete):
+                try:
+                    delete()
+                    deleted += 1
+                except Exception:
+                    continue
+    return deleted
+
+
+def _invoke_model_once(
+    db_client: Any,
+    uid: str,
+    invocation_id: str,
+    *,
+    candidate_builder: Any,
+    now: Optional[datetime] = None,
+) -> Optional[Tuple[dict[str, Any], ...]]:
+    """Claim and durably record one model invocation before returning output.
+
+    Firestore ``create`` is the cross-process first-writer fence.  The local
+    lock also makes the tiny in-memory fakes used by adversarial thread tests
+    behave like the production atomic create path.  Pending and indeterminate
+    records are fail-closed forever: their provider outcome cannot be proven,
+    so they must be repaired by an explicit operator path instead of being
+    retried implicitly.
+    """
+
+    invocation_ref = _model_invocation_ref(db_client, uid, invocation_id)
+    claim_now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+
+    def validated_output(invocation_payload: Any) -> Optional[Tuple[dict[str, Any], ...]]:
+        if not isinstance(invocation_payload, dict):
+            return None
+        output = invocation_payload.get("candidate_page")
+        if not isinstance(output, list) or any(not isinstance(item, dict) for item in output):
+            return None
+        expected_digest = deterministic_contract_id("daily-sweep-model-invocation-output", {"candidate_page": output})
+        if invocation_payload.get("candidate_digest") != expected_digest:
+            return None
+        return tuple(output)
+
+    with _MODEL_INVOCATION_LOCK:
+        try:
+            snapshot = invocation_ref.get()
+        except Exception:
+            return None
+        if getattr(snapshot, "exists", False):
+            payload = snapshot.to_dict() or {}
+            if not isinstance(payload, dict) or payload.get("schema_version") != MODEL_INVOCATION_SCHEMA_VERSION:
+                return None
+            state = payload.get("state")
+            if state == "returned":
+                return validated_output(payload)
+            # ``pending`` includes a lease that has expired. Expiry is not
+            # evidence that the provider did not return; reclaiming it would
+            # violate the at-most-once cost boundary.
+            return None
+
+        pending_payload = {
+            "schema_version": MODEL_INVOCATION_SCHEMA_VERSION,
+            "uid": uid,
+            "invocation_id": invocation_id,
+            "state": "pending",
+            "claimed_at": claim_now,
+            "lease_expires_at": claim_now + MODEL_INVOCATION_LEASE,
+        }
+        create = getattr(invocation_ref, "create", None)
+        if callable(create):
+            try:
+                create(pending_payload)
+            except Exception:
+                # Another process won the create race. Read the winner's
+                # durable result; a pending winner is intentionally blocked.
+                try:
+                    winner = invocation_ref.get()
+                    winner_payload = winner.to_dict() or {}
+                    if (
+                        getattr(winner, "exists", False)
+                        and isinstance(winner_payload, dict)
+                        and winner_payload.get("schema_version") == MODEL_INVOCATION_SCHEMA_VERSION
+                        and winner_payload.get("state") == "returned"
+                    ):
+                        return validated_output(winner_payload)
+                except Exception:
+                    pass
+                return None
+        else:
+            # Non-production fakes do not expose create. Keep this fallback
+            # deterministic; real Firestore always takes the atomic branch.
+            try:
+                invocation_ref.set(pending_payload)
+            except Exception:
+                return None
+
+        try:
+            built = tuple(candidate_builder())
+            if any(not isinstance(item, dict) for item in built):
+                raise ValueError("model invocation candidate output is malformed")
+            returned_payload = {
+                "state": "returned",
+                "candidate_page": list(built),
+                "candidate_digest": deterministic_contract_id(
+                    "daily-sweep-model-invocation-output", {"candidate_page": list(built)}
+                ),
+                "returned_at": datetime.now(timezone.utc),
+                "expires_at": datetime.now(timezone.utc) + STAGED_CANDIDATE_RETENTION,
+            }
+            invocation_ref.set(returned_payload, merge=True)
+            return built
+        except Exception:
+            # Preserve the pending marker as an indeterminate outcome. The
+            # only safe retry is an explicit repair that proves what the
+            # provider did, never an automatic second charge.
+            try:
+                invocation_ref.set(
+                    {"state": "indeterminate", "indeterminate_at": datetime.now(timezone.utc)}, merge=True
+                )
+            except Exception:
+                pass
+            return None
 
 
 def _receipt_id(
@@ -2756,6 +2950,17 @@ def _load_or_stage_onboarding_candidates(
         if not getattr(snapshot, "exists", False):
             return None
         payload = snapshot.to_dict() or {}
+        expires_raw = payload.get("expires_at") if isinstance(payload, dict) else None
+        try:
+            expires_at = (
+                expires_raw
+                if isinstance(expires_raw, datetime)
+                else datetime.fromisoformat(str(expires_raw).replace("Z", "+00:00"))
+            )
+            if expires_at.tzinfo is None or expires_at.astimezone(timezone.utc) <= datetime.now(timezone.utc):
+                return None
+        except (TypeError, ValueError):
+            return None
         if (
             not isinstance(payload, dict)
             or payload.get("uid") != uid
@@ -2790,10 +2995,15 @@ def _load_or_stage_onboarding_candidates(
         except Exception:
             return None
 
-    try:
+    invocation_id = deterministic_contract_id(
+        "daily-sweep-onboarding-model-invocation",
+        {"uid": uid, "source_key": source_key, "transcript_digest": transcript_digest},
+    )[:96]
+
+    def build_candidate_page() -> Tuple[dict[str, Any], ...]:
         extracted = tuple(extractor(uid, text) or ())
         if len(extracted) > MAX_ONBOARDING_STAGED_CANDIDATES:
-            return None
+            raise ValueError("onboarding model candidate budget exceeded")
         staged_list: List[DailySweepCandidate] = []
         for index, memory in enumerate(extracted):
             content = str(getattr(memory, "content", "") or "").strip()
@@ -2818,8 +3028,19 @@ def _load_or_stage_onboarding_candidates(
                 )
             )
         if len(staged_list) > MAX_ONBOARDING_STAGED_CANDIDATES:
+            raise ValueError("onboarding model candidate budget exceeded")
+        return tuple(item.model_dump(mode="json") for item in staged_list)
+
+    try:
+        raw_staged = _invoke_model_once(
+            db_client,
+            uid,
+            invocation_id,
+            candidate_builder=build_candidate_page,
+        )
+        if raw_staged is None:
             return None
-        staged = tuple(staged_list)
+        staged = tuple(DailySweepCandidate.model_validate(item) for item in raw_staged)
         stage_payload = {
             "schema_version": "daily_memory_sweep_onboarding_stage.v1",
             "uid": uid,
@@ -2831,6 +3052,8 @@ def _load_or_stage_onboarding_candidates(
             "candidate_page": [item.model_dump(mode="json") for item in staged],
             "candidate_count": len(staged),
             "staged_at": datetime.now(timezone.utc),
+            "expires_at": datetime.now(timezone.utc) + STAGED_CANDIDATE_RETENTION,
+            "model_invocation_id": invocation_id,
         }
         if account_generation is not None:
             stage_payload["account_generation"] = account_generation
@@ -3073,6 +3296,17 @@ def _load_or_stage_daily_summary_candidates(
         if not getattr(snapshot, "exists", False):
             return None
         payload = snapshot.to_dict() or {}
+        expires_raw = payload.get("expires_at") if isinstance(payload, dict) else None
+        try:
+            expires_at = (
+                expires_raw
+                if isinstance(expires_raw, datetime)
+                else datetime.fromisoformat(str(expires_raw).replace("Z", "+00:00"))
+            )
+            if expires_at.tzinfo is None or expires_at.astimezone(timezone.utc) <= datetime.now(timezone.utc):
+                return None
+        except (TypeError, ValueError):
+            return None
         if (
             not isinstance(payload, dict)
             or payload.get("schema_version") != DAILY_SUMMARY_STAGE_SCHEMA_VERSION
@@ -3111,7 +3345,12 @@ def _load_or_stage_daily_summary_candidates(
         # created by the first attempt.
         return read_staged(staged_snapshot)
 
-    try:
+    invocation_id = deterministic_contract_id(
+        "daily-sweep-daily-summary-model-invocation",
+        {"uid": uid, "local_date": local_date.isoformat(), "transcript_digest": transcript_digest},
+    )[:96]
+
+    def build_candidate_page() -> Tuple[dict[str, Any], ...]:
         candidates: List[DailySweepCandidate] = []
         for conversation_id, text in conversation_rows:
             extracted = extractor(uid, text)
@@ -3147,8 +3386,19 @@ def _load_or_stage_daily_summary_candidates(
             if len(candidates) >= max_candidates:
                 break
         if len(candidates) > MAX_CANDIDATES_PER_DAY:
+            raise ValueError("daily summary model candidate budget exceeded")
+        return tuple(item.model_dump(mode="json") for item in candidates)
+
+    try:
+        raw_candidates = _invoke_model_once(
+            db_client,
+            uid,
+            invocation_id,
+            candidate_builder=build_candidate_page,
+        )
+        if raw_candidates is None:
             return None
-        candidate_page = tuple(candidates)
+        candidate_page = tuple(DailySweepCandidate.model_validate(item) for item in raw_candidates)
         stage_payload = {
             "schema_version": DAILY_SUMMARY_STAGE_SCHEMA_VERSION,
             "uid": uid,
@@ -3166,6 +3416,8 @@ def _load_or_stage_daily_summary_candidates(
             "candidate_page": [item.model_dump(mode="json") for item in candidate_page],
             "candidate_count": len(candidate_page),
             "staged_at": datetime.now(timezone.utc),
+            "expires_at": datetime.now(timezone.utc) + STAGED_CANDIDATE_RETENTION,
+            "model_invocation_id": invocation_id,
         }
         create = getattr(stage_ref, "create", None)
         if callable(create):
@@ -3680,6 +3932,9 @@ def run_daily_memory_sweep_scheduler(
     for uid in bounded_uids:
         attempted += 1
         try:
+            # Keep crash-recovery model pages bounded even when a source is
+            # skipped for the account's current cohort/day.
+            cleanup_expired_daily_memory_sweep_stages(uid, db_client=db_client, now=now)
             # This callback is intentionally read-only.  A PostHog client can
             # be supplied by the maintenance deployment, but no
             # identify/flag mutation is performed by this scheduler.

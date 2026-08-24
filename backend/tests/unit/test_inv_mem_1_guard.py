@@ -69,6 +69,10 @@ _ALLOWED_MEMORY_COLLECTIONS_PROPERTIES = frozenset(
         # provenance and resumability state, never canonical product memories.
         "daily_memory_sweep_receipts",
         "daily_memory_sweep_sources",
+        "daily_memory_sweep_onboarding_sources",
+        "daily_memory_sweep_daily_summary_staged",
+        "daily_memory_sweep_onboarding_staged",
+        "daily_memory_sweep_model_invocations",
         "non_active_memory_routes",
         "short_term_lifecycle_transitions",
         "legacy_fallback",
