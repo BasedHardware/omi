@@ -431,6 +431,30 @@ def _stored_task_priority(value: Any) -> Optional[TaskPriority]:
         return None
 
 
+def _as_utc(value: Any) -> Optional[datetime]:
+    if not isinstance(value, datetime):
+        return None
+    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+
+
+def _suggestion_window_has_closed(
+    *,
+    status: str,
+    created_at: Optional[datetime],
+    expires_at: Optional[datetime],
+    now: datetime,
+) -> bool:
+    if status != CandidateStatus.pending.value:
+        return False
+    # Candidates written before suggestions had a deadline carry no `expires_at`.
+    # Derive one from creation so the pre-existing backlog ages out too, with no
+    # backfill.
+    deadline = expires_at or (created_at + SUGGESTION_TTL if created_at is not None else None)
+    if deadline is None:
+        return False
+    return deadline <= now
+
+
 def candidate_has_lapsed(candidate: CandidateRecord, *, now: datetime) -> bool:
     """Whether a pending Candidate's suggestion window has closed.
 
@@ -438,13 +462,30 @@ def candidate_has_lapsed(candidate: CandidateRecord, *, now: datetime) -> bool:
     readable. Every read path must ask this rather than trusting `status`.
     """
 
-    if candidate.status != CandidateStatus.pending:
-        return False
-    # Candidates written before suggestions had a deadline carry no `expires_at`.
-    # Derive one from creation so the pre-existing backlog ages out too, with no
-    # backfill.
-    deadline = candidate.expires_at or (candidate.created_at + SUGGESTION_TTL)
-    return deadline <= now
+    return _suggestion_window_has_closed(
+        status=candidate.status.value,
+        created_at=candidate.created_at,
+        expires_at=candidate.expires_at,
+        now=now,
+    )
+
+
+def stored_candidate_has_lapsed(candidate: dict[str, Any], *, now: datetime) -> bool:
+    """`candidate_has_lapsed` for a stored document that was never parsed into a record.
+
+    The recommendation reader loads canonical state as raw documents, so it cannot
+    ask the record-shaped question. It must still ask the same one: a deadline that
+    only one reader enforces is a deadline the other readers repeal.
+    """
+
+    stored_status = candidate.get('status')
+    status = getattr(stored_status, 'value', stored_status)
+    return _suggestion_window_has_closed(
+        status=str(status) if status else CandidateStatus.pending.value,
+        created_at=_as_utc(candidate.get('created_at')),
+        expires_at=_as_utc(candidate.get('expires_at')),
+        now=now,
+    )
 
 
 def create_candidate(
@@ -1361,6 +1402,7 @@ __all__ = [
     'pending_candidate_semantic_identity',
     'reconcile_migrated_candidate',
     'candidate_has_lapsed',
+    'stored_candidate_has_lapsed',
     'resolve_candidate_without_mutation',
     'resolve_task_candidate',
     'task_id_for_candidate',
