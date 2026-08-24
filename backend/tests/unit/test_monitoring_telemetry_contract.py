@@ -181,10 +181,14 @@ def test_cloud_run_metrics_exporter_can_outlast_its_own_scrape(path):
     ), f'{path.name}: measured steady state is ~238m and a scrape needs ~1 core'
     assert _memory_mebibytes(limits['memory']) >= 1024, f'{path.name}: measured steady state is ~331Mi'
 
+    # The chart hardcodes both probes and reads no probe values, so a probe block
+    # here would render nothing while looking like configuration. Reject it, and
+    # keep capacity as the lever that actually decides whether a probe survives.
     for probe in ('livenessProbe', 'readinessProbe'):
-        assert (
-            values[probe]['timeoutSeconds'] >= 20
-        ), f'{path.name}: {probe} must outlast a slow scrape or it turns latency into a crash loop'
+        assert probe not in values, (
+            f'{path.name}: prometheus-stackdriver-exporter templates {probe} with a fixed 10s timeout and '
+            f'exposes no values key for it; this block would be inert'
+        )
 
 
 @pytest.mark.parametrize('path', (CLOUD_RUN_EXPORTER, CLOUD_RUN_EXPORTER_DEV), ids=('prod', 'dev'))

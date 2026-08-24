@@ -30,14 +30,13 @@ resources:
     cpu: '2'
     memory: 2Gi
 
-# This exporter collects from Cloud Monitoring at scrape time, so a slow upstream
-# makes the whole HTTP server slow, including '/'. Probes must outlast a scrape
-# or they turn a slow collection into a crash loop.
-livenessProbe:
-  timeoutSeconds: 25
-  periodSeconds: 30
-  failureThreshold: 5
-readinessProbe:
-  timeoutSeconds: 25
-  periodSeconds: 30
-  failureThreshold: 5
+# Do not add livenessProbe/readinessProbe here. prometheus-stackdriver-exporter
+# hardcodes both probes in its Deployment template -- path /, timeoutSeconds 10 --
+# and exposes no values key for them, in 4.8.3 and in every later 4.x. A probe
+# block in this file renders nothing and reverts silently on the next upgrade,
+# which is worse than not having one: it reads as configuration.
+#
+# That makes CPU the only lever over probe survival. Both probes hit '/', which is
+# trivial to serve, so they only ever time out when the process is starved --
+# which is exactly what a 200m limit did while a collection was in flight. With
+# headroom, an in-cluster scrape completes in ~4.8s against the fixed 10s budget.
