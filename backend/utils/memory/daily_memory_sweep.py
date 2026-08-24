@@ -1264,10 +1264,55 @@ def firestore_daily_sweep_source_provider(
             item if isinstance(item, DailySweepCandidate) else DailySweepCandidate.model_validate(item) for item in raw
         )
 
+    trigger_repairs = list(parse("existing_trigger_reconciliation"))
+    # Reconcile only active, already-standing triggers whose strict compiled
+    # representation differs from the stored payload. This is repeatable and
+    # cannot invent a trigger from passive behavior.
+    try:
+        for index, item in enumerate(iter_authoritative_product_memory_items(uid, db_client=db_client)):
+            if index >= 128:
+                break
+            if (
+                item.status != MemoryItemStatus.active
+                or item.kind != MemoryKind.trigger
+                or item.write_reason != LedgerWriteReason.standing_trigger
+                or not item.content
+            ):
+                continue
+            try:
+                normalized_condition = compile_trigger_condition(item.trigger_condition).as_condition()
+            except Exception:
+                continue
+            if normalized_condition == item.trigger_condition:
+                continue
+            trigger_repairs.append(
+                DailySweepCandidate(
+                    candidate_id=f"trigger-repair-{item.memory_id}",
+                    kind="trigger",
+                    operation="repair",
+                    content=item.content,
+                    source_id=f"standing-trigger:{item.memory_id}",
+                    source_type="agent_conclusion",
+                    source_version="jit-trigger-compile.v1",
+                    source_refs=(f"memory:{item.memory_id}",),
+                    authority=SweepAuthority.agent_reusable_conclusion,
+                    target_memory_id=item.memory_id,
+                    slot=item.slot,
+                    subject_scope=item.subject_scope,
+                    subject_entity_id=item.subject_entity_id,
+                    trigger_condition=normalized_condition,
+                )
+            )
+            if len(trigger_repairs) >= MAX_WRITES_PER_DAY:
+                break
+    except (AttributeError, TypeError, ValueError):
+        # A missing collection seam is equivalent to no reconciliation input;
+        # malformed canonical rows are handled by the canonical read boundary.
+        pass
     return DailySweepRuntimeSources(
         daily_summary=parse("daily_summary"),
         onboarding_cold_start=parse("onboarding_cold_start"),
-        existing_trigger_reconciliation=parse("existing_trigger_reconciliation"),
+        existing_trigger_reconciliation=tuple(trigger_repairs),
     )
 
 
