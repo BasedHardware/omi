@@ -302,10 +302,12 @@ def commit_first_open_app_usage(
         receipts = dict(raw_receipts) if isinstance(raw_receipts, Mapping) else {}
         prior = receipts.get(app_id)
         receipt = dict(prior) if isinstance(prior, Mapping) else {}
-        if not plugin.exists or receipt.get('result_persisted') is not True:
+        if receipt.get('result_persisted') is not True:
             return False
         if receipt.get('usage_persisted') is True:
             return True
+        if not plugin.exists:
+            return False
         receipts[app_id] = {**receipt, 'usage_persisted': True}
         effects['app_fanout'] = {**app_effect, 'app_receipts': receipts}
         transaction.set(
