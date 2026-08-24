@@ -63,6 +63,11 @@ _stubs = [
     'utils.other.endpoints',
     'utils.other.list_budget',
     'utils.other.storage',
+    # routers.conversations imports utils.screen_frames.store at module load to close the
+    # screenshot deletion loop (Firestore does not cascade-delete subcollections), so this name
+    # has to be stubbed or collection dies with ModuleNotFoundError before any test runs.
+    'utils.screen_frames',
+    'utils.screen_frames.store',
     # Names only: this file's _AutoMockModule/_register_module wrap them. Parents
     # (including utils.conversations) are created by _register_module, so the
     # package itself is omitted here. See package_submodule_stubs.
