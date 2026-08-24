@@ -31,7 +31,6 @@ from routers import (
     desktop_screen_crisp,
     desktop_tts_updates,
 )
-from utils.executors import drain_background_tasks, drain_critical_compensation_tasks
 from utils.http_client import close_all_clients
 from utils.metrics import start_metrics_sidecar_server, stop_metrics_sidecar_server
 
@@ -77,8 +76,6 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
-        await drain_critical_compensation_tasks(timeout=10.0)
-        await drain_background_tasks(timeout=10.0)
         await close_all_clients()
         stop_metrics_sidecar_server()
 

@@ -1,4 +1,3 @@
-import asyncio
 import importlib
 
 import pytest
@@ -17,44 +16,6 @@ def _test_client(monkeypatch, app):
 
     monkeypatch.setattr(desktop_backend, "close_all_clients", close_clients)
     return TestClient(app)
-
-
-def test_desktop_backend_shutdown_drains_compensation_before_background(monkeypatch):
-    events = []
-    monkeypatch.setattr(desktop_backend, "prepare_google_credentials", lambda: events.append("prepare"))
-    monkeypatch.setattr(desktop_backend, "_initialize_firebase_admin", lambda: events.append("firebase"))
-    monkeypatch.setattr(desktop_backend, "start_metrics_sidecar_server", lambda: events.append("metrics_start"))
-    monkeypatch.setattr(desktop_backend, "stop_metrics_sidecar_server", lambda: events.append("metrics_stop"))
-
-    async def drain_compensation(*, timeout):
-        events.append(("drain_compensation", timeout))
-
-    async def drain_background(*, timeout):
-        events.append(("drain_background", timeout))
-
-    async def close_clients():
-        events.append("close_clients")
-
-    monkeypatch.setattr(desktop_backend, "drain_critical_compensation_tasks", drain_compensation)
-    monkeypatch.setattr(desktop_backend, "drain_background_tasks", drain_background)
-    monkeypatch.setattr(desktop_backend, "close_all_clients", close_clients)
-
-    async def exercise_lifespan():
-        async with desktop_backend.lifespan(desktop_backend.app):
-            events.append("yield")
-
-    asyncio.run(exercise_lifespan())
-
-    assert events == [
-        "prepare",
-        "firebase",
-        "metrics_start",
-        "yield",
-        ("drain_compensation", 10.0),
-        ("drain_background", 10.0),
-        "close_clients",
-        "metrics_stop",
-    ]
 
 
 def test_desktop_backend_cors_reads_allowlist_from_backend_env_file(tmp_path, monkeypatch):
