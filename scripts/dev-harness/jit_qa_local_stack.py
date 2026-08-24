@@ -39,6 +39,7 @@ DEFAULT_AUTH_PROJECT = "based-hardware"
 STATE_DIR_NAME = "jit-qa-local-dev-gcp"
 OWNERSHIP_PREFIX = "omi-jit-qa-local"
 HEALTH_TIMEOUT_SECONDS = 180
+CLOUD_READINESS_TIMEOUT_SECONDS = 30.0
 OWNED_SERVICES = frozenset({"firestore", "redis", "vertex-gateway", "main", "desktop"})
 
 
@@ -744,6 +745,7 @@ def _health(service: str) -> tuple[bool, str]:
             return False, f"HTTP {status}" if status else "unreachable"
         ready, ready_status = _http(
             f"http://127.0.0.1:{VERTEX_GATEWAY_PORT}/ready",
+            timeout=CLOUD_READINESS_TIMEOUT_SECONDS,
             expected_json={
                 "status": "ready",
                 "service": "omi-jit-qa-vertex-gateway",
