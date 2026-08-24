@@ -65,6 +65,10 @@ _ALLOWED_MEMORY_COLLECTIONS_PROPERTIES = frozenset(
         "memory_import_runs",
         "memory_import_artifacts",
         "memory_import_candidates",
+        # Daily-sweep source and receipt journals contain bounded candidate
+        # provenance and resumability state, never canonical product memories.
+        "daily_memory_sweep_receipts",
+        "daily_memory_sweep_sources",
         "non_active_memory_routes",
         "short_term_lifecycle_transitions",
         "legacy_fallback",

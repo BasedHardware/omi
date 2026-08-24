@@ -579,6 +579,19 @@ DAILY_SWEEP_ACTIVE_FACT_ENTITY_CONTENT_QUERY = FirestoreQuerySpec(
     index_fields=DAILY_SWEEP_ACTIVE_FACT_ENTITY_QUERY.index_fields + (_asc('normalized_content_key'),),
 )
 
+# Onboarding conversations are ordered by the same field used by the only
+# range predicate.  The old adapter added a second document-id inequality and
+# order, which requires an undeclared composite index and is rejected by some
+# Firestore deployments.  Pagination uses a document snapshot cursor instead;
+# the serving query itself remains a single, deployable range query.
+DAILY_SWEEP_ONBOARDING_CONVERSATIONS_QUERY = FirestoreQuerySpec(
+    identifier='daily_sweep_onboarding_conversations',
+    collection_group='conversations',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('external_data.onboarding_session_id', '>', 'onboarding_marker'),),
+    index_fields=(_asc('external_data.onboarding_session_id'),),
+)
+
 # Historical dual-stream keysets for effective updated_at-or-created_at order.
 # Docs with updated_at ride the updated stream; created stream skips those
 # duplicates in Python so each document is emitted once. Opposite-direction
@@ -1078,6 +1091,7 @@ QUERY_SPECS = (
     DAILY_SWEEP_ACTIVE_FACT_ENTITY_SLOT_QUERY,
     DAILY_SWEEP_ACTIVE_FACT_SUBJECT_CONTENT_QUERY,
     DAILY_SWEEP_ACTIVE_FACT_ENTITY_CONTENT_QUERY,
+    DAILY_SWEEP_ONBOARDING_CONVERSATIONS_QUERY,
     UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY,
     UNIVERSAL_HISTORICAL_CREATED_LIST_SCAN_QUERY,
     CONVERSATION_SOURCE_MEMORY_QUERY,

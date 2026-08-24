@@ -1,15 +1,20 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
+import sys
+from types import SimpleNamespace
+from zoneinfo import ZoneInfo
 
 import pytest
 
 from models.memory_apply import MemoryControlState
 from utils.memory.daily_memory_sweep import (
     DailySweepCandidate,
+    DailySweepCursor,
     DailySweepInput,
     MAX_CATCH_UP_DAYS,
     SweepAuthority,
     SweepAuthorityState,
     completed_local_day_window,
+    timezone_transition_window,
     plan_daily_memory_sweep,
     run_daily_memory_sweep,
 )
@@ -20,6 +25,12 @@ from utils.memory.daily_memory_sweep import (
     _finish_onboarding_sources,
     _receipt_id,
     _cached_summary_eligibility_attested,
+    _find_active_slot_or_subject,
+    _load_or_stage_onboarding_candidates,
+    _onboarding_transcript_eligibility,
+    _pending_completed_dates,
+    close_daily_memory_sweep_cohort_clients,
+    _POSTHOG_CLIENTS,
     read_daily_memory_sweep_cohort_assignment,
 )
 from models.product_memory import normalized_memory_content_key
@@ -433,7 +444,7 @@ def test_timezone_reconcile_rolls_sweep_namespace_without_global_generation_or_a
     assert updated_cursor["source_generation"] == control.source_generation
     assert updated_cursor["sweep_generation"] == 2
     assert updated_cursor["timezone_name"] == "UTC"
-    assert updated_cursor["last_completed_local_date"] == date(2026, 8, 23)
+    assert updated_cursor["last_completed_local_date"] == "2026-08-23"
 
 
 def test_cohort_reader_is_backend_read_only_and_injectable(monkeypatch):
@@ -514,3 +525,203 @@ def test_onboarding_source_receipt_consumes_multi_candidate_and_zero_sources(mon
         "onboarding:conversation-1",
         "onboarding:conversation-empty",
     }
+
+
+@pytest.mark.parametrize("new_timezone", ["America/Los_Angeles", "Europe/London"])
+def test_timezone_transition_bridge_is_contiguous_and_bounded(new_timezone):
+    prior = completed_local_day_window(date(2026, 8, 23), "America/New_York")
+    bridge_date = prior.end_utc.astimezone(ZoneInfo(new_timezone)).date()
+    bridge = timezone_transition_window(
+        bridge_date,
+        new_timezone,
+        coverage_start_utc=prior.end_utc,
+    )
+    next_window = completed_local_day_window(bridge_date + timedelta(days=1), new_timezone)
+    assert bridge.start_utc == prior.end_utc
+    assert bridge.end_utc == next_window.start_utc
+    cursor = DailySweepCursor(
+        uid="user-1",
+        account_generation=1,
+        source_generation=1,
+        timezone_name=new_timezone,
+        last_completed_local_date=date(2026, 8, 23),
+        last_completed_window_id=prior.window_id,
+        last_completed_window_start_utc=prior.start_utc,
+        last_completed_window_end_utc=prior.end_utc,
+        pending_transition_local_date=bridge_date,
+        pending_transition_window_id=bridge.window_id,
+        pending_transition_start_utc=bridge.start_utc,
+        pending_transition_end_utc=bridge.end_utc,
+    )
+    pending = _pending_completed_dates(
+        cursor,
+        timezone_name=new_timezone,
+        now=datetime(2026, 8, 28, 12, tzinfo=timezone.utc),
+    )
+    assert pending[0] == bridge_date
+    assert len(pending) == MAX_CATCH_UP_DAYS
+
+
+def test_onboarding_receipts_are_exhaustive_beyond_32(monkeypatch):
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    window = completed_local_day_window(date(2026, 8, 23), "America/New_York")
+    source_keys = tuple(f"onboarding:conversation-{index}" for index in range(33))
+    assert _finish_onboarding_sources(
+        db,
+        "user-1",
+        date(2026, 8, 23),
+        source_keys[:32],
+        (),
+        account_generation=4,
+        source_generation=7,
+        window=window,
+    )
+    assert _finish_onboarding_sources(
+        db,
+        "user-1",
+        date(2026, 8, 23),
+        source_keys[32:],
+        (),
+        account_generation=4,
+        source_generation=7,
+        window=window,
+    )
+    consumed = db.document("users/user-1/memory_control/daily_memory_sweep_onboarding").get().to_dict()
+    assert consumed["consumed_source_keys"] == sorted(source_keys)
+
+
+def test_onboarding_requires_non_discarded_completed_finalized_transcript():
+    finished = {"status": "completed", "finished_at": datetime(2026, 8, 23, tzinfo=timezone.utc)}
+    assert _onboarding_transcript_eligibility({**finished, "finalization_status": "completed"}) == "eligible"
+    assert _onboarding_transcript_eligibility({**finished, "finalization_status": "processing"}) == "unfinished"
+    assert (
+        _onboarding_transcript_eligibility({**finished, "finalization_status": "completed", "discarded": True})
+        == "discarded"
+    )
+
+
+def test_posthog_cohort_client_is_reused_and_closed(monkeypatch):
+    created = []
+    closed = []
+
+    class FakePosthog:
+        def __init__(self, **_kwargs):
+            created.append(self)
+
+        def get_feature_flag(self, *_args, **_kwargs):
+            return True
+
+        def shutdown(self):
+            closed.append(self)
+
+    monkeypatch.setitem(sys.modules, "posthog", SimpleNamespace(Posthog=FakePosthog))
+    monkeypatch.setenv("POSTHOG_PROJECT_API_KEY", "project-key")
+    monkeypatch.setenv("POSTHOG_HOST", "https://posthog.test")
+    _POSTHOG_CLIENTS.clear()
+    assert read_daily_memory_sweep_cohort_assignment("user-1", "memory-sweep")
+    assert read_daily_memory_sweep_cohort_assignment("user-2", "memory-sweep")
+    assert len(created) == 1
+    close_daily_memory_sweep_cohort_clients()
+    assert closed == created
+
+
+def test_onboarding_continuation_reuses_durable_candidate_page(monkeypatch):
+    db = _Db()
+    calls = []
+
+    def extractor(_uid, _text):
+        calls.append(True)
+        return tuple(SimpleNamespace(content=f"fact-{index}") for index in range(20))
+
+    first = _load_or_stage_onboarding_candidates(
+        "user-1",
+        "onboarding:conversation-1",
+        "conversation-1",
+        "stable transcript",
+        db_client=db,
+        extractor=extractor,
+    )
+    assert first is not None and len(first) == 20
+    staged = next(payload for path, payload in db.store.items() if "onboarding_staged" in path)
+    assert staged["candidate_count"] == 20
+
+    def should_not_extract(_uid, _text):
+        raise AssertionError("continuation reran nondeterministic extraction")
+
+    second = _load_or_stage_onboarding_candidates(
+        "user-1",
+        "onboarding:conversation-1",
+        "conversation-1",
+        "stable transcript",
+        db_client=db,
+        extractor=should_not_extract,
+    )
+    assert second == first
+    assert len(second[8:]) == 12
+    assert len(calls) == 1
+
+
+def test_legacy_compatibility_proof_allows_more_than_two_unslotted_facts():
+    from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState
+    from models.memory_evidence import SourceState
+
+    now = datetime(2026, 8, 24, tzinfo=timezone.utc)
+    rows = []
+    writes = []
+
+    class Snapshot:
+        def __init__(self, payload, row_id):
+            self.payload = payload
+            self.id = row_id
+            self.reference = SimpleNamespace(set=lambda value, merge=False: writes.append((row_id, value, merge)))
+
+        def to_dict(self):
+            return self.payload
+
+    for index in range(3):
+        rows.append(
+            Snapshot(
+                {
+                    "memory_id": f"memory-{index}",
+                    "uid": "user-1",
+                    "version": 1,
+                    "tier": MemoryTier.long_term.value,
+                    "status": MemoryItemStatus.active.value,
+                    "processing_state": ProcessingState.processed.value,
+                    "content": "Alice owns release review" if index == 1 else f"legacy fact {index}",
+                    "source_state": SourceState.active.value,
+                    "sensitivity_labels": [],
+                    "visibility": "private",
+                    "user_asserted": True,
+                    "captured_at": now,
+                    "updated_at": now,
+                    "ledger_commit_id": f"commit-{index}",
+                    "ledger_sequence": index + 1,
+                },
+                f"memory-{index}",
+            )
+        )
+
+    class Query:
+        def __init__(self, normalized=False):
+            self.normalized = normalized
+
+        def where(self, *, filter):
+            return Query(self.normalized or filter.field_path == "normalized_content_key")
+
+        def limit(self, _count):
+            return self
+
+        def stream(self):
+            return [] if self.normalized else rows
+
+    class Collection:
+        def where(self, *, filter):
+            return Query(filter.field_path == "normalized_content_key")
+
+    db = SimpleNamespace(collection=lambda _path: Collection())
+    occupant = _find_active_slot_or_subject("user-1", _candidate(slot=None), db_client=db)
+    assert occupant is not None and occupant.memory_id == "memory-1"
+    assert writes == [("memory-1", {"normalized_content_key": normalized_memory_content_key(occupant.content)}, True)]
