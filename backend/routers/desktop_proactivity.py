@@ -620,6 +620,15 @@ async def _proactive_completion_unobserved(
     _require_jit_rollout(paid_admission)
     quota = await _consume_quota(uid, request.operation)
     _apply_quota_headers(response, quota)
+    quota_released = False
+
+    async def release_quota_once() -> None:
+        nonlocal quota_released
+        if quota_released:
+            return
+        quota_released = True
+        await _release_quota(uid, request.operation)
+
     request_id = str(uuid4())
     provider_request: _ProviderRequest | None = None
     length_retry_attempted = False
@@ -654,15 +663,20 @@ async def _proactive_completion_unobserved(
                 uid=uid,
                 max_completion_tokens=retry_max,
             )
+    except asyncio.CancelledError:
+        # Cancellation is a failed attempt after reservation. Release exactly
+        # once, but keep cancellation visible to the request/task owner.
+        await release_quota_once()
+        raise
     except HTTPException as exc:
         if length_retry_attempted and provider_request is not None and not _is_jit_rollout_block(exc):
             _record_length_retry_outcome(provider_request, "exhausted")
-        await _release_quota(uid, request.operation)
+        await release_quota_once()
         raise
     except (httpx.HTTPError, ValueError, TypeError) as exc:
         if length_retry_attempted and provider_request is not None:
             _record_length_retry_outcome(provider_request, "exhausted")
-        await _release_quota(uid, request.operation)
+        await release_quota_once()
         if isinstance(exc, httpx.HTTPStatusError):
             logger.warning(
                 "desktop_proactivity_provider_http_error operation=%s fallback_class=%s status=%s",
@@ -681,14 +695,14 @@ async def _proactive_completion_unobserved(
     if not isinstance(response_body, dict):
         if length_retry_attempted:
             _record_length_retry_outcome(provider_request, "exhausted")
-        await _release_quota(uid, request.operation)
+        await release_quota_once()
         raise HTTPException(status_code=502, detail="Proactive model returned an invalid response")
     try:
         _validate_gateway_output(response_body, request)
     except HTTPException as exc:
         if length_retry_attempted:
             _record_length_retry_outcome(provider_request, "exhausted")
-        await _release_quota(uid, request.operation)
+        await release_quota_once()
         logger.warning(
             "desktop_proactivity_invalid_structured_output operation=%s fallback_class=%s "
             "provider_model=%s status=%s detail=%s",
