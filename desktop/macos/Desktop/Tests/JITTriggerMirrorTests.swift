@@ -79,6 +79,117 @@ final class JITTriggerMirrorTests: XCTestCase {
     XCTAssertNotEqual(first?.leaseToken, recovered?.leaseToken)
   }
 
+  func testPlannedClaimAtomicallyRejectsEverySnapshotAuthorityMismatch() throws {
+    let queue = try migratedQueue()
+    let currentRow = row(id: "trigger")
+    let current = snapshot(sequence: 4, revision: "revision-4", rows: [currentRow])
+    let receipt = try queue.write { db in
+      try JITTriggerMirror.reconcile(current, in: db, now: Date())
+    }
+    let mismatches = [
+      JITTriggerMirrorReceipt(
+        ownerID: "other", accountGeneration: receipt.accountGeneration,
+        commitSequence: receipt.commitSequence, snapshotRevision: receipt.snapshotRevision,
+        rowCount: receipt.rowCount),
+      JITTriggerMirrorReceipt(
+        ownerID: receipt.ownerID, accountGeneration: receipt.accountGeneration + 1,
+        commitSequence: receipt.commitSequence, snapshotRevision: receipt.snapshotRevision,
+        rowCount: receipt.rowCount),
+      JITTriggerMirrorReceipt(
+        ownerID: receipt.ownerID, accountGeneration: receipt.accountGeneration,
+        commitSequence: receipt.commitSequence + 1, snapshotRevision: receipt.snapshotRevision,
+        rowCount: receipt.rowCount),
+      JITTriggerMirrorReceipt(
+        ownerID: receipt.ownerID, accountGeneration: receipt.accountGeneration,
+        commitSequence: receipt.commitSequence, snapshotRevision: "other-revision",
+        rowCount: receipt.rowCount),
+      JITTriggerMirrorReceipt(
+        ownerID: receipt.ownerID, accountGeneration: receipt.accountGeneration,
+        commitSequence: receipt.commitSequence, snapshotRevision: receipt.snapshotRevision,
+        rowCount: receipt.rowCount + 1),
+    ]
+
+    for (index, mismatch) in mismatches.enumerated() {
+      let claim = try queue.write { db in
+        try JITTriggerMirror.claimPlannedWakeup(
+          plannedRequest(
+            continuityKey: "mismatch-\(index)", receipt: mismatch, triggerRow: currentRow),
+          in: db)
+      }
+      XCTAssertNil(claim, "authority mismatch \(index) must fail closed")
+    }
+    let inserted = try queue.read { db in
+      try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM jit_trigger_wakeup_receipts") ?? -1
+    }
+    XCTAssertEqual(inserted, 0)
+  }
+
+  func testPlannedClaimRejectsDeletedOrChangedMirrorMembership() throws {
+    for mutation in [
+      "DELETE FROM jit_trigger_mirror WHERE memoryID = 'trigger'",
+      "UPDATE jit_trigger_mirror SET actionPrompt = 'changed' WHERE memoryID = 'trigger'",
+      "UPDATE jit_trigger_mirror SET itemRevision = itemRevision + 1 WHERE memoryID = 'trigger'",
+    ] {
+      let queue = try migratedQueue()
+      let currentRow = row(id: "trigger")
+      let receipt = try queue.write { db in
+        let receipt = try JITTriggerMirror.reconcile(
+          snapshot(sequence: 4, revision: "revision-4", rows: [currentRow]),
+          in: db, now: Date())
+        try db.execute(sql: mutation)
+        return receipt
+      }
+
+      let claim = try queue.write { db in
+        try JITTriggerMirror.claimPlannedWakeup(
+          plannedRequest(receipt: receipt, triggerRow: currentRow), in: db)
+      }
+
+      XCTAssertNil(claim, "stale membership must fail closed after: \(mutation)")
+    }
+  }
+
+  func testPlannedClaimChecksAuthorityAndMembershipBeforeAtomicInsert() throws {
+    let queue = try migratedQueue()
+    let currentRow = row(id: "trigger")
+    let receipt = try queue.write { db in
+      try JITTriggerMirror.reconcile(
+        snapshot(sequence: 4, revision: "revision-4", rows: [currentRow]),
+        in: db, now: Date())
+    }
+
+    let claim = try queue.write { db in
+      try JITTriggerMirror.claimPlannedWakeup(
+        plannedRequest(receipt: receipt, triggerRow: currentRow), in: db)
+    }
+
+    XCTAssertNotNil(claim)
+  }
+
+  func testOwnerTransitionCannotReuseOldReceiptAgainstIdenticalMirrorRow() throws {
+    let queue = try migratedQueue()
+    let currentRow = row(id: "trigger")
+    let oldReceipt = try queue.write { db in
+      try JITTriggerMirror.reconcile(
+        snapshot(sequence: 4, revision: "revision-4", rows: [currentRow]),
+        in: db, now: Date())
+    }
+    let replacement = JITTriggerSnapshot(
+      ownerID: "new-owner", accountGeneration: 3, headCommitID: "new-head",
+      commitSequence: 4, snapshotRevision: "new-revision", complete: true,
+      rows: [currentRow], failureReason: nil)
+    try queue.write { db in
+      _ = try JITTriggerMirror.reconcile(replacement, in: db, now: Date())
+    }
+
+    let staleClaim = try queue.write { db in
+      try JITTriggerMirror.claimPlannedWakeup(
+        plannedRequest(receipt: oldReceipt, triggerRow: currentRow), in: db)
+    }
+
+    XCTAssertNil(staleClaim)
+  }
+
   func testNewAccountGenerationClearsPriorContinuityBudget() throws {
     let queue = try migratedQueue()
     try queue.write { db in
@@ -261,5 +372,16 @@ final class JITTriggerMirrorTests: XCTestCase {
       triggerConditionJSON: condition,
       action: JITTriggerSnapshotAction(type: "agent_prompt", prompt: prompt),
       wakeupBudgetPerDay: 1)
+  }
+
+  private func plannedRequest(
+    continuityKey: String = "planned", receipt: JITTriggerMirrorReceipt,
+    triggerRow: JITTriggerSnapshotRow
+  ) -> JITPlannedWakeupRequest {
+    JITPlannedWakeupRequest(
+      continuityKey: continuityKey, triggerID: triggerRow.memoryID, lane: .planned,
+      budgetDay: "2026-08-24", snapshotRevision: receipt.snapshotRevision,
+      observationFingerprint: "fingerprint", budget: triggerRow.wakeupBudgetPerDay,
+      now: Date(timeIntervalSince1970: 100), authority: receipt, triggerRow: triggerRow)
   }
 }

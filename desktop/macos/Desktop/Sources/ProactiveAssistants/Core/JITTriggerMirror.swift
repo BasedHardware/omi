@@ -69,6 +69,19 @@ struct JITTriggerWakeupClaim: Equatable, Sendable {
   let leaseToken: String
 }
 
+struct JITPlannedWakeupRequest: Equatable, Sendable {
+  let continuityKey: String
+  let triggerID: String
+  let lane: JITProactivityLane
+  let budgetDay: String
+  let snapshotRevision: String
+  let observationFingerprint: String
+  let budget: Int?
+  let now: Date
+  let authority: JITTriggerMirrorReceipt
+  let triggerRow: JITTriggerSnapshotRow
+}
+
 enum JITTriggerMirrorSchema {
   static func migrating(_ migrator: DatabaseMigrator, queue: DatabaseWriter) throws {
     var migrator = migrator
@@ -225,6 +238,12 @@ actor JITTriggerMirror {
         sql: "DELETE FROM jit_trigger_mirror WHERE memoryID NOT IN (\(placeholders))",
         arguments: StatementArguments(seen.sorted()))
     }
+    // The mirror is exhaustive and global to the active owner database. Keep
+    // exactly one receipt authority so an old owner cannot pair its retained
+    // receipt with an identical row installed by a later owner.
+    try db.execute(
+      sql: "DELETE FROM jit_trigger_snapshot_receipts WHERE ownerID != ?",
+      arguments: [snapshot.ownerID])
     try db.execute(
       sql: """
         INSERT INTO jit_trigger_snapshot_receipts
@@ -301,6 +320,16 @@ actor JITTriggerMirror {
         continuityKey: continuityKey, triggerID: triggerID, lane: lane, budgetDay: budgetDay,
         snapshotRevision: snapshotRevision, observationFingerprint: observationFingerprint,
         budget: budget, now: now, leaseSeconds: leaseSeconds, in: db)
+    }
+  }
+
+  func claimPlannedWakeup(_ request: JITPlannedWakeupRequest) async throws
+    -> JITTriggerWakeupClaim?
+  {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { throw JITTriggerMirrorError.databaseUnavailable }
+    return try await pool.write { db in
+      try Self.claimPlannedWakeup(request, in: db)
     }
   }
 
@@ -508,6 +537,55 @@ actor JITTriggerMirror {
         observationFingerprint, token, now.addingTimeInterval(max(30, leaseSeconds)), now,
       ])
     return JITTriggerWakeupClaim(continuityKey: continuityKey, triggerID: triggerID, leaseToken: token)
+  }
+
+  static func claimPlannedWakeup(
+    _ request: JITPlannedWakeupRequest,
+    leaseSeconds: TimeInterval = 180,
+    in db: Database
+  ) throws -> JITTriggerWakeupClaim? {
+    let authority = request.authority
+    guard request.lane == .planned,
+      request.snapshotRevision == authority.snapshotRevision,
+      request.triggerID == request.triggerRow.memoryID,
+      let receipt = try Row.fetchOne(
+        db,
+        sql: """
+          SELECT accountGeneration, commitSequence, snapshotRevision, rowCount
+          FROM jit_trigger_snapshot_receipts WHERE ownerID = ?
+          """,
+        arguments: [authority.ownerID]),
+      (receipt["accountGeneration"] as Int) == authority.accountGeneration,
+      (receipt["commitSequence"] as Int) == authority.commitSequence,
+      (receipt["snapshotRevision"] as String) == authority.snapshotRevision,
+      (receipt["rowCount"] as Int) == authority.rowCount,
+      let current = try Row.fetchOne(
+        db,
+        sql: """
+          SELECT accountGeneration, itemRevision, updatedAt, conditionJSON,
+                 actionType, actionPrompt, wakeupBudgetPerDay
+          FROM jit_trigger_mirror WHERE memoryID = ?
+          """,
+        arguments: [request.triggerID]),
+      (current["accountGeneration"] as Int) == authority.accountGeneration,
+      (current["itemRevision"] as Int) == request.triggerRow.itemRevision,
+      (current["updatedAt"] as Date) == request.triggerRow.updatedAt,
+      (current["conditionJSON"] as String) == request.triggerRow.triggerConditionJSON,
+      (current["actionType"] as String) == request.triggerRow.action.type,
+      (current["actionPrompt"] as String) == request.triggerRow.action.prompt,
+      (current["wakeupBudgetPerDay"] as Int?) == request.triggerRow.wakeupBudgetPerDay
+    else { return nil }
+    return try claimWakeup(
+      continuityKey: request.continuityKey,
+      triggerID: request.triggerID,
+      lane: request.lane,
+      budgetDay: request.budgetDay,
+      snapshotRevision: request.snapshotRevision,
+      observationFingerprint: request.observationFingerprint,
+      budget: request.budget,
+      now: request.now,
+      leaseSeconds: leaseSeconds,
+      in: db)
   }
 
   func finishWakeup(_ claim: JITTriggerWakeupClaim, delivered: Bool, now: Date = Date()) async {

@@ -1,3 +1,4 @@
+@preconcurrency import GRDB
 import XCTest
 
 @testable import Omi_Computer
@@ -66,7 +67,7 @@ final class JITProactivityRuntimeTests: XCTestCase {
       ("owner", "stale-revision", true),
       ("owner", "revision", false),
     ] {
-      let runtime = wiredRuntime(
+      let runtime = try wiredRuntime(
         triggers: [trigger],
         receiptOwner: receiptOwner,
         receiptRevision: receiptRevision,
@@ -82,7 +83,7 @@ final class JITProactivityRuntimeTests: XCTestCase {
   }
 
   func testNoPlannedMatchReachesExistingAmbientAdmissionOnlyAfterAuthoritativeEvaluation() async throws {
-    let runtime = wiredRuntime(
+    let runtime = try wiredRuntime(
       triggers: [try compiledTrigger(id: "planned", condition: ["keywords": ["release"]])])
 
     let decision = await runtime.admission(
@@ -98,7 +99,7 @@ final class JITProactivityRuntimeTests: XCTestCase {
       id: "z-confirmed",
       condition: ["keywords": ["release"]],
       prompt: "Use this exact standing action")
-    let runtime = wiredRuntime(triggers: [ambiguous, confirmed])
+    let runtime = try wiredRuntime(triggers: [ambiguous, confirmed])
 
     let decision = await runtime.admission(
       authorizationSnapshot: try snapshot(),
@@ -115,7 +116,7 @@ final class JITProactivityRuntimeTests: XCTestCase {
   }
 
   func testAmbiguousOnlySuppressesWithoutAmbientOrNewModelAuthority() async throws {
-    let runtime = wiredRuntime(
+    let runtime = try wiredRuntime(
       triggers: [try compiledTrigger(id: "ambiguous", condition: ["apps": ["Slack"]])])
 
     let decision = await runtime.admission(
@@ -127,7 +128,7 @@ final class JITProactivityRuntimeTests: XCTestCase {
   }
 
   func testEmbeddingScoreCannotActivateWithoutAnActualLocalEmbeddingContract() async throws {
-    let runtime = wiredRuntime(
+    let runtime = try wiredRuntime(
       triggers: [
         try compiledTrigger(
           id: "embedding",
@@ -144,9 +145,9 @@ final class JITProactivityRuntimeTests: XCTestCase {
   }
 
   func testAtomicClaimRemainsFinalRaceFence() async throws {
-    let runtime = wiredRuntime(
+    let runtime = try wiredRuntime(
       triggers: [try compiledTrigger(id: "planned", condition: ["keywords": ["release"]])],
-      claim: { _, _, _, _, _, _, _, _ in nil })
+      claim: { _ in nil })
 
     let decision = await runtime.admission(
       authorizationSnapshot: try snapshot(),
@@ -154,6 +155,61 @@ final class JITProactivityRuntimeTests: XCTestCase {
         text: "release", occurredAt: Date(timeIntervalSince1970: 1_777_248_000)))
 
     XCTAssertEqual(decision, .suppressed(reason: "planned_duplicate_or_budget"))
+  }
+
+  func testNewerAdmissionDeletingTriggerRejectsStaleClaimAfterActorReentrancy() async throws {
+    let queue = try migratedQueue()
+    let gate = AdmissionRaceGate()
+    let trigger = try compiledTrigger(id: "planned", condition: ["keywords": ["release"]])
+    let oldRow = try snapshotRow(for: trigger, revision: 1)
+    let oldSnapshot = serverSnapshot(sequence: 4, revision: "revision-4", rows: [oldRow])
+    let newSnapshot = serverSnapshot(sequence: 5, revision: "revision-5", rows: [])
+    let sequence = SnapshotSequence([oldSnapshot, newSnapshot])
+    let runtime = JITProactivityRuntime(
+      flags: { _ in JITProactivityFlags(rollout: .enabled, killSwitch: .disabled) },
+      snapshots: { _ in try await sequence.next() },
+      reconcileSnapshot: { snapshot, _ in
+        try queue.write { db in try JITTriggerMirror.reconcile(snapshot, in: db, now: Date()) }
+      },
+      compileSnapshot: { receipt, _ in
+        if receipt.snapshotRevision == "revision-4" {
+          await gate.suspendFirstAdmission()
+          return [trigger]
+        }
+        return []
+      },
+      readWakeupCounts: { _, _, _ in [:] },
+      claimPlannedWakeup: { request in
+        try queue.write { db in try JITTriggerMirror.claimPlannedWakeup(request, in: db) }
+      },
+      authorizationCurrent: { _ in true })
+    let observation = KnowledgeLedgerTriggerObservation(
+      text: "release", occurredAt: Date(timeIntervalSince1970: 1_777_248_000))
+    let firstAuthorization = try snapshot()
+
+    let first = Task {
+      await runtime.admission(authorizationSnapshot: firstAuthorization, observation: observation)
+    }
+    await gate.waitUntilSuspended()
+    let second = await runtime.admission(
+      authorizationSnapshot: try snapshot(), observation: .init(text: "anything"))
+    XCTAssertEqual(second, .suppressed(reason: "ambient_local_gate"))
+    await gate.resumeFirstAdmission()
+    let firstDecision = await first.value
+
+    XCTAssertEqual(firstDecision, .suppressed(reason: "planned_duplicate_or_budget"))
+    let claimCount = try await queue.read { db in
+      try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM jit_trigger_wakeup_receipts") ?? -1
+    }
+    XCTAssertEqual(claimCount, 0)
+    let fingerprint = KnowledgeLedgerTriggerEvaluator.evaluate(
+      trigger, observation: observation, day: "2026-04-26"
+    ).observationFingerprint
+    let staleKey = JITProactivityRuntime.plannedContinuityKey(
+      triggerID: trigger.id, snapshotRevision: "revision-4", budgetDay: "2026-04-26",
+      observationFingerprint: fingerprint)
+    let pending = await runtime.takeExecution(continuityKey: staleKey)
+    XCTAssertNil(pending)
   }
 
   func testAmbientLocalGateDoesNotUseHistoricalIntentWords() {
@@ -199,31 +255,24 @@ final class JITProactivityRuntimeTests: XCTestCase {
     receiptRevision: String = "revision",
     authorizationCurrent: Bool = true,
     claim: JITProactivityRuntime.ClaimWakeup? = nil
-  ) -> JITProactivityRuntime {
-    let serverSnapshot = JITTriggerSnapshot(
-      ownerID: "owner",
-      accountGeneration: 3,
-      headCommitID: "head",
-      commitSequence: 4,
-      snapshotRevision: "revision",
-      complete: true,
-      rows: [],
-      failureReason: nil)
+  ) throws -> JITProactivityRuntime {
+    let rows = try triggers.map { try snapshotRow(for: $0) }
+    let serverSnapshot = serverSnapshot(sequence: 4, revision: "revision", rows: rows)
     let receipt = JITTriggerMirrorReceipt(
       ownerID: receiptOwner,
       accountGeneration: 3,
       commitSequence: 4,
       snapshotRevision: receiptRevision,
-      rowCount: 0)
+      rowCount: rows.count)
     return JITProactivityRuntime(
       flags: { _ in JITProactivityFlags(rollout: .enabled, killSwitch: .disabled) },
       snapshots: { _ in serverSnapshot },
       reconcileSnapshot: { _, _ in receipt },
       compileSnapshot: { _, _ in triggers },
       readWakeupCounts: { _, _, _ in [:] },
-      claimPlannedWakeup: claim ?? { continuityKey, triggerID, _, _, _, _, _, _ in
+      claimPlannedWakeup: claim ?? { request in
         JITTriggerWakeupClaim(
-          continuityKey: continuityKey, triggerID: triggerID, leaseToken: "lease")
+          continuityKey: request.continuityKey, triggerID: request.triggerID, leaseToken: "lease")
       },
       authorizationCurrent: { _ in authorizationCurrent })
   }
@@ -250,5 +299,84 @@ final class JITProactivityRuntimeTests: XCTestCase {
       semanticFingerprint: String(repeating: "a", count: 64),
       locallyRelevant: true,
       boundedEvidence: "validated local change")
+  }
+
+  private func migratedQueue() throws -> DatabaseQueue {
+    let queue = try DatabaseQueue()
+    var migrator = DatabaseMigrator()
+    JITTriggerMirrorSchema.registerMigration(on: &migrator)
+    try migrator.migrate(queue)
+    return queue
+  }
+
+  private func serverSnapshot(
+    sequence: Int, revision: String, rows: [JITTriggerSnapshotRow]
+  ) -> JITTriggerSnapshot {
+    JITTriggerSnapshot(
+      ownerID: "owner", accountGeneration: 3, headCommitID: "head-\(sequence)",
+      commitSequence: sequence, snapshotRevision: revision, complete: true, rows: rows,
+      failureReason: nil)
+  }
+
+  private func snapshotRow(
+    for trigger: KnowledgeLedgerCompiledTrigger, revision: Int = 1
+  ) throws -> JITTriggerSnapshotRow {
+    let action = try XCTUnwrap(trigger.action)
+    var condition: [String: Any] = [
+      "schema_version": "jit_trigger.v1",
+      "match_mode": trigger.matchMode.rawValue,
+      "action": ["type": action.type, "prompt": action.prompt],
+    ]
+    if !trigger.keywords.isEmpty { condition["keywords"] = trigger.keywords }
+    if !trigger.apps.isEmpty { condition["apps"] = trigger.apps }
+    if let embedding = trigger.embedding {
+      condition["embedding"] = [
+        "prototype_id": embedding.prototypeID,
+        "min_similarity": embedding.minSimilarity,
+      ]
+    }
+    if let modelID = trigger.metadata.modelID { condition["model_id"] = modelID }
+    if let modelVersion = trigger.metadata.modelVersion { condition["model_version"] = modelVersion }
+    if let threshold = trigger.metadata.threshold { condition["threshold"] = threshold }
+    let data = try JSONSerialization.data(withJSONObject: condition, options: [.sortedKeys])
+    return JITTriggerSnapshotRow(
+      memoryID: trigger.id, itemRevision: revision, updatedAt: Date(timeIntervalSince1970: 10),
+      triggerConditionJSON: String(decoding: data, as: UTF8.self),
+      action: JITTriggerSnapshotAction(type: action.type, prompt: action.prompt),
+      wakeupBudgetPerDay: trigger.metadata.wakeupBudgetPerDay)
+  }
+}
+
+private actor SnapshotSequence {
+  private var snapshots: [JITTriggerSnapshot]
+
+  init(_ snapshots: [JITTriggerSnapshot]) { self.snapshots = snapshots }
+
+  func next() throws -> JITTriggerSnapshot {
+    guard !snapshots.isEmpty else { throw ProactiveLaneClientError.invalidResponse }
+    return snapshots.removeFirst()
+  }
+}
+
+private actor AdmissionRaceGate {
+  private var suspended = false
+  private var release: CheckedContinuation<Void, Never>?
+  private var waiters: [CheckedContinuation<Void, Never>] = []
+
+  func suspendFirstAdmission() async {
+    suspended = true
+    for waiter in waiters { waiter.resume() }
+    waiters.removeAll()
+    await withCheckedContinuation { release = $0 }
+  }
+
+  func waitUntilSuspended() async {
+    if suspended { return }
+    await withCheckedContinuation { waiters.append($0) }
+  }
+
+  func resumeFirstAdmission() {
+    release?.resume()
+    release = nil
   }
 }
