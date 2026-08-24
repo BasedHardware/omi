@@ -281,6 +281,34 @@ def test_timeline_limit_date_range_and_scan_count_are_explicit():
         timeline_tools.build_entity_timeline(items, "person:alice", start=NOW, end=NOW - timedelta(seconds=1))
 
 
+def test_character_budget_truncation_is_always_disclosed():
+    items = [
+        _item(
+            f"mem-{index:02d}",
+            occurred_at=NOW + timedelta(seconds=index),
+            content=f"entry-{index} " + ("x" * 700),
+        )
+        for index in range(40)
+    ]
+
+    timeline = timeline_tools.build_entity_timeline(items, "person:alice", limit=40)
+    timeline = timeline.model_copy(
+        update={
+            "truncated_sources": (timeline_tools.TimelineSource.conversations, timeline_tools.TimelineSource.calendar),
+            "unavailable_sources": (timeline_tools.TimelineSource.screen,),
+            "aliases_resolved": False,
+        }
+    )
+    rendered = timeline_tools.format_entity_timeline(timeline)
+
+    assert len(rendered) <= timeline_tools.MAX_TIMELINE_RESULT_CHARS
+    assert "Timeline output is bounded" in rendered
+    assert "Source windows were partial" in rendered
+    assert "Sources unavailable" in rendered
+    assert "No owner-scoped alias record" in rendered
+    assert sum(1 for line in rendered.splitlines() if line.startswith("- ")) < len(items)
+
+
 def test_tool_is_read_only_bounded_and_double_run_stable(monkeypatch):
     import database._client as database_client
 
@@ -399,3 +427,389 @@ def test_tool_scan_is_hard_bounded(monkeypatch):
 
     assert len(consumed) == timeline_tools.MAX_TIMELINE_SCAN + 1
     assert "Timeline output is bounded" in result
+
+
+class _AliasSnapshot:
+    def __init__(self, document_id, payload, *, exists=True):
+        self.id = document_id
+        self.exists = exists
+        self._payload = payload
+
+    def to_dict(self):
+        return dict(self._payload)
+
+
+class _AliasDocument:
+    def __init__(self, path, seen):
+        self._path = path
+        self._seen = seen
+
+    def collection(self, name):
+        return _AliasCollection((*self._path, name), self._seen)
+
+    def get(self):
+        self._seen.append(self._path)
+        payload = self._seen.payloads.get(self._path)
+        return _AliasSnapshot(self._path[-1], payload or {}, exists=payload is not None)
+
+
+class _AliasCollection:
+    def __init__(self, path, seen):
+        self._path = path
+        self._seen = seen
+        self._limit = timeline_tools.MAX_ALIAS_PEOPLE_SCAN + 1
+
+    def document(self, document_id):
+        return _AliasDocument((*self._path, document_id), self._seen)
+
+    def limit(self, value):
+        self._limit = value
+        return self
+
+    def stream(self):
+        rows = []
+        for path, payload in sorted(self._seen.payloads.items()):
+            if path[:-1] == self._path:
+                rows.append(_AliasSnapshot(path[-1], payload))
+        return iter(rows[: self._limit])
+
+
+class _AliasReads(list):
+    def __init__(self, payloads):
+        super().__init__()
+        self.payloads = payloads
+
+
+class _AliasFirestore:
+    def __init__(self, payloads):
+        self.seen = _AliasReads(payloads)
+
+    def collection(self, name):
+        return _AliasCollection((name,), self.seen)
+
+
+def test_alias_resolution_is_owner_scoped_by_stable_person_id_and_values_stay_match_only():
+    store = _AliasFirestore(
+        {
+            ("users", "u1"): {"name": "Owner"},
+            ("users", "u1", "people", "person-123"): {
+                "name": "Alice Smith",
+                "aliases": ["Alice", "A. Smith"],
+                "emails": ["alice@example.com"],
+            },
+            ("users", "u1", "people", "person-456"): {"name": "Bob"},
+        }
+    )
+    entity = timeline_tools.parse_entity_reference("person:person-123")
+
+    aliases = timeline_tools._resolve_entity_aliases("u1", entity, db_client=store)
+
+    assert aliases.resolved is True
+    assert aliases.values == ("a. smith", "alice", "alice smith", "alice@example.com")
+    assert store.seen == [("users", "u1", "people", "person-123"), ("users", "u1")]
+
+
+def test_alias_resolution_suppresses_owner_and_sibling_collisions_without_losing_stable_id():
+    store = _AliasFirestore(
+        {
+            ("users", "u1"): {"name": "Alice"},
+            ("users", "u1", "people", "person-123"): {
+                "name": "Alice Smith",
+                "aliases": ["Alice"],
+                "emails": ["alice@example.com"],
+            },
+            ("users", "u1", "people", "person-456"): {
+                "name": "Alice Smith",
+                "emails": ["other@example.com"],
+            },
+        }
+    )
+    entity = timeline_tools.parse_entity_reference("person:person-123")
+
+    aliases = timeline_tools._resolve_entity_aliases("u1", entity, db_client=store)
+
+    assert aliases.resolved is True
+    assert aliases.ambiguous is True
+    assert aliases.values == ("alice@example.com",)
+
+
+def test_alias_resolution_fails_alias_joins_closed_when_people_scan_is_not_exhaustive():
+    payloads = {
+        ("users", "u1", "people", "person-123"): {"name": "Alice", "email": "alice@example.com"},
+        **{
+            ("users", "u1", "people", f"sibling-{index:03d}"): {"name": f"Person {index}"}
+            for index in range(timeline_tools.MAX_ALIAS_PEOPLE_SCAN + 1)
+        },
+    }
+    aliases = timeline_tools._resolve_entity_aliases(
+        "u1",
+        timeline_tools.parse_entity_reference("person:person-123"),
+        db_client=_AliasFirestore(payloads),
+    )
+
+    assert aliases.resolved is True
+    assert aliases.ambiguous is True
+    assert aliases.values == ()
+
+
+def test_explicit_history_flag_controls_superseded_and_rejected_rows(monkeypatch):
+    import database._client as database_client
+
+    monkeypatch.setattr(database_client, "get_firestore_client", lambda: object())
+    monkeypatch.setattr(
+        timeline_tools,
+        "_resolve_entity_aliases",
+        lambda uid, entity, *, db_client: timeline_tools.EntityAliases(entity=entity, resolved=True),
+    )
+    current = _item("mem-current", content="Alice currently owns release review")
+    superseded = _item(
+        "mem-history",
+        status=MemoryItemStatus.superseded,
+        valid_to=NOW + timedelta(hours=1),
+        superseded_by="mem-current",
+        content="Alice previously owned release review",
+    )
+    rejected = _item("mem-rejected-audit", promotion={"user_review": False}, content="Rejected claim about Alice")
+    monkeypatch.setattr(
+        timeline_tools,
+        "_iter_authoritative_items",
+        lambda uid, *, db_client, limit: iter([current, superseded, rejected]),
+    )
+
+    current_only = timeline_tools.get_entity_timeline_tool.invoke(
+        {"entity": "person:alice", "sources": ["ledger"]},
+        config={"configurable": {"user_id": "u1"}},
+    )
+    with_history = timeline_tools.get_entity_timeline_tool.invoke(
+        {"entity": "person:alice", "sources": ["ledger"], "include_history": True},
+        config={"configurable": {"user_id": "u1"}},
+    )
+    audit = timeline_tools.get_entity_timeline_tool.invoke(
+        {
+            "entity": "person:alice",
+            "sources": ["ledger"],
+            "include_history": True,
+            "include_rejected": True,
+        },
+        config={"configurable": {"user_id": "u1"}},
+    )
+
+    assert "mem-current" in current_only
+    assert "mem-history" not in current_only
+    assert "mem-rejected-audit" not in current_only
+    assert "mem-history" in with_history
+    assert "mem-rejected-audit" not in with_history
+    assert "mem-rejected-audit" in audit
+
+
+def test_multi_source_alias_merge_is_deterministic_and_never_returns_transcript_ocr_or_email(monkeypatch):
+    import database._client as database_client
+
+    monkeypatch.setattr(database_client, "get_firestore_client", lambda: object())
+    monkeypatch.setattr(
+        timeline_tools,
+        "_resolve_entity_aliases",
+        lambda uid, entity, *, db_client: timeline_tools.EntityAliases(
+            entity=entity,
+            values=("alice smith", "alice@example.com"),
+            resolved=True,
+        ),
+    )
+    ledger = _item("mem-ledger", occurred_at=NOW, content="Alice owns the release review")
+    monkeypatch.setattr(
+        timeline_tools,
+        "_iter_authoritative_items",
+        lambda uid, *, db_client, limit: iter([ledger]),
+    )
+    monkeypatch.setattr(
+        timeline_tools,
+        "list_entity_timeline_conversations",
+        lambda *args, **kwargs: [
+            {
+                "id": "conversation-1",
+                "status": "completed",
+                "discarded": False,
+                "created_at": NOW,
+                "structured": {"title": "Release review", "overview": "Reviewed the ship checklist"},
+                "transcript_segments": [{"person_id": "alice", "text": "TRANSCRIPT_SECRET_SHOULD_NOT_RENDER"}],
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        timeline_tools,
+        "list_entity_timeline_meetings",
+        lambda *args, **kwargs: [
+            {
+                "id": "meeting-1",
+                "start_time": NOW,
+                "title": "Calendar release review",
+                "participants": [{"email": "alice@example.com"}],
+                "notes": "CALENDAR_NOTES_SECRET_SHOULD_NOT_RENDER",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        timeline_tools,
+        "list_entity_timeline_screen_activity",
+        lambda *args, **kwargs: [
+            {
+                "id": "screen-1",
+                "timestamp": NOW,
+                "appName": "Slack",
+                "windowTitle": "Release thread with Alice Smith alice@example.com",
+                "ocrText": "OCR_SECRET_SHOULD_NOT_RENDER alice@example.com",
+            }
+        ],
+    )
+
+    first = timeline_tools.get_entity_timeline_tool.invoke(
+        {
+            "entity": "person:alice",
+            "sources": ["screen", "calendar", "conversations", "ledger"],
+            "limit": 10,
+        },
+        config={"configurable": {"user_id": "u1"}},
+    )
+    second = timeline_tools.get_entity_timeline_tool.invoke(
+        {
+            "entity": "person:alice",
+            "sources": ["ledger", "conversations", "calendar", "screen"],
+            "limit": 10,
+        },
+        config={"configurable": {"user_id": "u1"}},
+    )
+
+    for record_id in ("mem-ledger", "conversation-1", "meeting-1", "screen-1"):
+        assert record_id in first
+        assert record_id in second
+    for secret in (
+        "TRANSCRIPT_SECRET_SHOULD_NOT_RENDER",
+        "CALENDAR_NOTES_SECRET_SHOULD_NOT_RENDER",
+        "OCR_SECRET_SHOULD_NOT_RENDER",
+        "alice@example.com",
+    ):
+        assert secret not in first
+        assert secret not in second
+    # Source argument order cannot affect the deterministic time/source/id merge.
+    assert [line for line in first.splitlines() if line.startswith("- ")] == [
+        line for line in second.splitlines() if line.startswith("- ")
+    ]
+
+
+def test_malformed_metadata_and_unicode_emails_never_cross_projection_boundary():
+    aliases = timeline_tools.EntityAliases(
+        entity=timeline_tools.parse_entity_reference("person:alice"),
+        values=("alice", "alice@example.com"),
+        resolved=True,
+    )
+    conversation = timeline_tools._conversation_entry(
+        {
+            "id": "conversation-1",
+            "created_at": NOW,
+            "structured": {
+                "title": {"transcript": "TRANSCRIPT_SECRET"},
+                "overview": ["CALENDAR_NOTE_SECRET"],
+            },
+            "transcript_segments": [{"person_id": "alice"}],
+        },
+        aliases,
+    )
+    calendar = timeline_tools._calendar_entry(
+        {
+            "id": "meeting-1",
+            "start_time": NOW,
+            "title": "Review with alice@例子.公司",
+            "participants": [{"email": "alice@example.com"}],
+        },
+        aliases,
+    )
+    screen = timeline_tools._screen_entry(
+        {
+            "id": "screen-1",
+            "timestamp": NOW,
+            "appName": {"frame": "FRAME_SECRET"},
+            "windowTitle": "Alice alice@例子.公司",
+            "ocrText": "Alice OCR_SECRET",
+        },
+        aliases,
+    )
+
+    assert conversation is not None and conversation.content == "Conversation"
+    assert calendar is not None and calendar.content == "Review with [redacted email]"
+    assert screen is not None and screen.content == "Screen activity — Alice [redacted email]"
+    combined = " ".join(entry.content for entry in (conversation, calendar, screen) if entry is not None)
+    for secret in ("TRANSCRIPT_SECRET", "CALENDAR_NOTE_SECRET", "FRAME_SECRET", "alice@例子.公司"):
+        assert secret not in combined
+
+
+def test_non_ledger_source_consumer_stays_bounded_when_reader_violates_its_limit(monkeypatch):
+    monkeypatch.setattr(timeline_tools.database_client, "get_firestore_client", lambda: object())
+    monkeypatch.setattr(
+        timeline_tools,
+        "_resolve_entity_aliases",
+        lambda uid, entity, *, db_client: timeline_tools.EntityAliases(
+            entity=entity,
+            values=("alice",),
+            resolved=True,
+        ),
+    )
+    rows = [
+        {
+            "id": f"meeting-{index}",
+            "start_time": NOW + timedelta(seconds=index),
+            "title": "Review",
+            "participants": [{"name": "Alice"}],
+        }
+        for index in range(timeline_tools.MAX_TIMELINE_SOURCE_SCAN + 50)
+    ]
+    monkeypatch.setattr(timeline_tools, "list_entity_timeline_meetings", lambda *args, **kwargs: rows)
+
+    result = timeline_tools.get_entity_timeline_tool.invoke(
+        {"entity": "person:alice", "sources": ["calendar"], "limit": 1},
+        config={"configurable": {"user_id": "u1"}},
+    )
+
+    assert "Source windows were partial: calendar" in result
+    assert f"meeting-{timeline_tools.MAX_TIMELINE_SOURCE_SCAN}" not in result
+
+
+def test_source_failure_is_partial_and_disclosed_without_falling_back(monkeypatch):
+    import database._client as database_client
+
+    monkeypatch.setattr(database_client, "get_firestore_client", lambda: object())
+    monkeypatch.setattr(
+        timeline_tools,
+        "_resolve_entity_aliases",
+        lambda uid, entity, *, db_client: timeline_tools.EntityAliases(entity=entity, resolved=True),
+    )
+
+    def unavailable(*args, **kwargs):
+        raise RuntimeError("private upstream detail")
+
+    monkeypatch.setattr(timeline_tools, "list_entity_timeline_conversations", unavailable)
+    result = timeline_tools.get_entity_timeline_tool.invoke(
+        {"entity": "person:alice", "sources": ["conversations"]},
+        config={"configurable": {"user_id": "u1"}},
+    )
+
+    assert "No entity timeline entries" in result
+    assert "Sources unavailable: conversations" in result
+    assert "private upstream detail" not in result
+
+
+def test_sources_and_history_audit_mode_are_explicitly_validated_before_storage(monkeypatch):
+    calls = []
+    monkeypatch.setattr(timeline_tools.database_client, "get_firestore_client", lambda: calls.append(True))
+
+    unknown = timeline_tools.get_entity_timeline_tool.invoke(
+        {"entity": "person:alice", "sources": ["semantic_guess"]},
+        config={"configurable": {"user_id": "u1"}},
+    )
+    invalid_audit = timeline_tools.get_entity_timeline_tool.invoke(
+        {"entity": "person:alice", "include_rejected": True},
+        config={"configurable": {"user_id": "u1"}},
+    )
+
+    assert "unsupported timeline source" in unknown
+    assert "include_rejected requires include_history" in invalid_audit
+    assert calls == []

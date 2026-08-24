@@ -2,7 +2,6 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal, Optional, TypedDict
 
-from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
 from ._client import db, delete_collection_recursive, document_id_from_seed, get_firestore_client
@@ -13,6 +12,7 @@ from database.account_deletion_transitions import (
     record_late_agent_vm_cleanup as _record_late_agent_vm_cleanup_txn,
 )
 from database.firestore_cache import CachePolicy, get_or_fetch, invalidate
+from database.person_aliases import rename_person_retaining_aliases
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict
 from database.redis_db import (
     delete_cached_user_geolocation,
@@ -885,18 +885,9 @@ def get_people_by_ids(uid: str, person_ids: list[str]):
 
 
 def update_person(uid: str, person_id: str, name: str) -> bool:
-    """Rename a person. Returns False when the person does not exist so callers can 404,
-    instead of letting Firestore .update() raise NotFound and surface as an HTTP 500."""
-    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
-    if not person_ref.get().exists:
-        return False
-    try:
-        person_ref.update({'name': name})
-    except NotFound:
-        # The person was deleted between the existence check and the update; treat as missing so
-        # the caller 404s instead of 500ing on the Firestore NotFound race.
-        return False
-    return True
+    """Rename a stable person and retain old names as owner-scoped aliases."""
+
+    return rename_person_retaining_aliases(db, uid, person_id, name)
 
 
 def delete_person(uid: str, person_id: str):
