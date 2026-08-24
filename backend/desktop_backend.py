@@ -7,6 +7,15 @@ import firebase_admin
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from utils.env_loader import firebase_admin_options, load_backend_env
+from utils.firebase_admin_runtime import (
+    firebase_verify_only_credential,
+    install_firebase_auth_mutation_guard,
+    install_google_adc_guard,
+)
+
+install_google_adc_guard()
+
 from database.google_credentials import prepare_google_credentials
 from routers import (
     auth,
@@ -21,7 +30,6 @@ from routers import (
     desktop_screen_crisp,
     desktop_tts_updates,
 )
-from utils.env_loader import firebase_admin_options, load_backend_env
 from utils.http_client import close_all_clients
 from utils.metrics import start_metrics_sidecar_server, stop_metrics_sidecar_server
 
@@ -37,7 +45,11 @@ def _initialize_firebase_admin() -> None:
     audience; ADC continues to use ``GOOGLE_CLOUD_PROJECT`` independently.
     """
     auth_emulator_host = os.environ.get("FIREBASE_AUTH_EMULATOR_HOST", "").strip()
-    if auth_emulator_host:
+    install_firebase_auth_mutation_guard()
+    verify_only_credential = firebase_verify_only_credential()
+    if verify_only_credential is not None:
+        firebase_admin.initialize_app(verify_only_credential, options=firebase_admin_options())
+    elif auth_emulator_host:
         for adc_key in ("GOOGLE_APPLICATION_CREDENTIALS", "SERVICE_ACCOUNT_JSON", "FIREBASE_AUTH_CREDENTIALS_PATH"):
             os.environ.pop(adc_key, None)
         firebase_project_id = (

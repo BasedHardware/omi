@@ -4,9 +4,15 @@ import logging
 import os
 
 from utils.env_loader import firebase_admin_options, load_backend_env
+from utils.firebase_admin_runtime import (
+    firebase_verify_only_credential,
+    install_firebase_auth_mutation_guard,
+    install_google_adc_guard,
+)
 from config.chat_first_e2e_fixture import is_chat_first_e2e_harness_runtime
 
 load_backend_env()  # No-op if no env files exist (production); stage + local overrides otherwise
+install_google_adc_guard()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -19,6 +25,7 @@ from starlette.staticfiles import StaticFiles
 from database.google_credentials import prepare_google_credentials
 
 prepare_google_credentials()
+install_firebase_auth_mutation_guard()
 
 from routers import (
     chat,
@@ -121,7 +128,10 @@ validate_stripe_price_ids()
 
 _auth_emulator_host = os.environ.get("FIREBASE_AUTH_EMULATOR_HOST", "").strip()
 _firebase_admin_options = firebase_admin_options()
-if _auth_emulator_host:
+_verify_only_credential = firebase_verify_only_credential()
+if _verify_only_credential is not None:
+    firebase_admin.initialize_app(_verify_only_credential, options=_firebase_admin_options)
+elif _auth_emulator_host:
     for _adc_key in ("GOOGLE_APPLICATION_CREDENTIALS", "SERVICE_ACCOUNT_JSON", "FIREBASE_AUTH_CREDENTIALS_PATH"):
         os.environ.pop(_adc_key, None)
     _firebase_project_id = (
