@@ -24,6 +24,9 @@ silently bypass, the currently locked tiered lifecycle.
   playbook bodies, or trigger bodies into the rendered user profile.
 - Mutate an old fact's semantic content in place. Amend by appending a new row
   and closing the prior row in the same canonical commit.
+- Reopen a standalone closed fact in place. An explicit user reopen may append
+  one fresh current tail, but the closed source remains immutable history and
+  a source-keyed receipt prevents duplicate tails.
 - Run scheduled Short-term consolidation or standalone profile synthesis as a
   user-knowledge writer.
 - Send screen pixels for interpretation until text/vector retrieval identifies
@@ -57,6 +60,9 @@ capture cutover gate.
   provenance retention, and secret/third-party rejection
 - `backend/tests/unit/test_atomicity_lifecycle_regressions.py` — agent preference
   writes use retry-stable ledger provenance and fail closed without user authority
+- `backend/tests/unit/test_universal_memory_service.py` and
+  `backend/tests/unit/test_memory_apply_store.py` — standalone closed-row
+  reopen policy, privacy fences, exact retry, and duplicate-tail receipt
 - `backend/tests/unit/test_jit_retrieval_eval.py` and
   `backend/tests/unit/test_jit_proactivity_eval.py` — deterministic Phase-0
   metric contracts without claiming rollout thresholds

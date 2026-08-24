@@ -40,6 +40,46 @@ _TERMINAL_STATUSES = {
 }
 
 
+class MemoryLedgerReopenReceipt(BaseModel):
+    """Atomic source-to-tail receipt for standalone ledger reopening.
+
+    This is journal metadata, not a second memory authority.  One receipt is
+    keyed by the closed source memory id so concurrent requests with different
+    client operation UUIDs cannot create multiple current tails.
+    """
+
+    schema_version: str = "memory_ledger_reopen_receipt.v1"
+    uid: str
+    source_memory_id: str
+    replacement_memory_id: str
+    operation_id: str
+    account_generation: int
+    source_generation: int
+    source_item_revision: int
+    source_content_hash: str
+    committed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @field_validator(
+        "uid",
+        "source_memory_id",
+        "replacement_memory_id",
+        "operation_id",
+        "source_content_hash",
+    )
+    @classmethod
+    def validate_required_nonblank(cls, value: str) -> str:
+        if not value or not value.strip():
+            raise ValueError("reopen receipt identifiers must not be blank")
+        return value
+
+    @field_validator("account_generation", "source_generation", "source_item_revision")
+    @classmethod
+    def validate_nonnegative(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("reopen receipt generations and revisions must be nonnegative")
+        return value
+
+
 class OperationLogicalPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -297,6 +337,7 @@ class MemoryOperation(BaseModel):
 
 
 __all__ = [
+    "MemoryLedgerReopenReceipt",
     "MemoryOperation",
     "MemoryOperationStatus",
     "MemoryOperationType",

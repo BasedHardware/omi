@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -25,8 +27,8 @@ from fastapi import HTTPException
 from database.memory_apply_store import tombstone_memory_items_firestore
 from database.memory_collections import MemoryCollections
 from models.memory_apply import MemoryControlState
-from models.product_memory import MemoryItem, MemoryItemStatus, MemorySubjectScope
-from utils.memory.knowledge_ledger import LedgerProvenance, LedgerWrite, save_ledger_write
+from models.product_memory import MemoryItem, MemoryItemStatus, MemoryKind, MemorySubjectScope
+from utils.memory.knowledge_ledger import LedgerProvenance, LedgerWrite, close_fact, save_ledger_write
 from utils.memory import memory_service as memory_service_module
 from utils.memory.memory_service import MemoryService
 from models.product_memory import LedgerWriteReason
@@ -37,6 +39,13 @@ ORIGINAL_CONTENT = "Lives in Boston"
 CORRECTED_CONTENT = "Lives in Brooklyn"
 REVERT_OPERATION_ID = "5f95a7a1-10c6-4ec3-946d-e76a0a2f7cc5"
 RACING_REVERT_OPERATION_ID = "e23f4058-49c3-4783-a750-377cfd9979b1"
+STANDALONE_REOPEN_OPERATION_ID = "a5cb390c-17f2-44db-a303-c6a7453b4975"
+STANDALONE_REOPEN_COMPETING_OPERATION_ID = "6a6164a0-46e9-4c96-92b0-95f63f7e76a9"
+STANDALONE_CONCURRENT_REOPEN_OPERATION_IDS = (
+    "26c4c933-da46-43d7-b2b7-e3d26e6e3fc6",
+    "3776d38f-b4e3-4639-b7f8-9bcf38d5bdef",
+)
+STANDALONE_PRIVACY_REOPEN_OPERATION_ID = "27a1ab89-b5e3-42f3-9d6a-d07e53bb8d49"
 
 
 def _assert_emulator_only() -> None:
@@ -75,6 +84,7 @@ def _authority_snapshot(db_client: Any, collections: MemoryCollections) -> dict[
         "items": _collection_snapshot(db_client, collections.memory_items),
         "evidence": _collection_snapshot(db_client, collections.memory_evidence),
         "operations": _collection_snapshot(db_client, collections.memory_operations),
+        "reopens": _collection_snapshot(db_client, collections.memory_ledger_reopens),
         "commits": _collection_snapshot(db_client, collections.memory_commits),
         "outbox": _collection_snapshot(db_client, collections.memory_outbox),
         "state": _collection_snapshot(db_client, collections.memory_state),
@@ -114,7 +124,7 @@ def main() -> int:
         prior_id = save_ledger_write(
             uid,
             LedgerWrite(
-                kind="fact",
+                kind=MemoryKind.fact,
                 content=ORIGINAL_CONTENT,
                 provenance=LedgerProvenance(
                     source_id="explicit-seed",
@@ -395,12 +405,229 @@ def main() -> int:
         ]:
             raise AssertionError("blocked privacy-raced revert invalidated prompt caches without a commit")
 
+        standalone_source_id = save_ledger_write(
+            uid,
+            LedgerWrite(
+                kind=MemoryKind.fact,
+                content="Keeps a winter base in Montreal",
+                provenance=LedgerProvenance(
+                    source_id="explicit-standalone-seed",
+                    source_type="explicit_user_statement",
+                    source_version="v1",
+                    action_id="ledger-correction-emulator-standalone-seed",
+                ),
+                write_reason=LedgerWriteReason.direct_user_statement,
+                slot="winter_base",
+                curation_weight=5,
+                visibility="private",
+            ),
+            db_client=db_client,
+        )
+        standalone_before_close = _read_item(db_client, collections, standalone_source_id)
+        standalone_closed = close_fact(
+            uid,
+            standalone_source_id,
+            valid_to=datetime.now(timezone.utc),
+            db_client=db_client,
+        )
+        if (
+            standalone_closed.status != MemoryItemStatus.superseded
+            or standalone_closed.valid_to is None
+            or standalone_closed.superseded_by
+            or standalone_closed.canonical_memory_id
+        ):
+            raise AssertionError("standalone seed did not become a closed, unlinked ledger row")
+
+        before_standalone_reopen = _authority_snapshot(db_client, collections)
+        reopened_authoritative = service.revert_superseded_ledger_fact(
+            uid, standalone_source_id, STANDALONE_REOPEN_OPERATION_ID
+        )
+        after_standalone_reopen = _authority_snapshot(db_client, collections)
+        reopened_id = reopened_authoritative.id
+        reopened_source = _read_item(db_client, collections, standalone_source_id)
+        reopened = _read_item(db_client, collections, reopened_id)
+        if reopened_id == standalone_source_id or set(after_standalone_reopen["items"]) != set(
+            before_standalone_reopen["items"]
+        ) | {reopened_id}:
+            raise AssertionError("standalone reopen did not append exactly one new current row")
+        if reopened_source != standalone_closed:
+            raise AssertionError("standalone reopen mutated the immutable closed source row")
+        if len(after_standalone_reopen["reopens"]) != len(before_standalone_reopen["reopens"]) + 1:
+            raise AssertionError("standalone reopen did not persist exactly one source receipt")
+        if (
+            reopened.status != MemoryItemStatus.active
+            or reopened.valid_to is not None
+            or reopened.superseded_by
+            or reopened.canonical_memory_id
+            or reopened.content != standalone_before_close.content
+            or reopened.slot != standalone_before_close.slot
+            or reopened.visibility != standalone_before_close.visibility
+            or not any(
+                evidence.source_type == "explicit_user_statement" and evidence.source_id == "explicit-standalone-seed"
+                for evidence in reopened.evidence
+            )
+            or not any(
+                evidence.source_type == "explicit_user_reopen"
+                and evidence.source_id == standalone_source_id
+                and evidence.source_version == f"item_revision:{standalone_closed.item_revision}"
+                for evidence in reopened.evidence
+            )
+        ):
+            raise AssertionError("standalone reopen did not preserve authority and provenance on the new tail")
+
+        before_standalone_retry = _authority_snapshot(db_client, collections)
+        reopened_retry = service.revert_superseded_ledger_fact(
+            uid, standalone_source_id, STANDALONE_REOPEN_OPERATION_ID
+        )
+        after_standalone_retry = _authority_snapshot(db_client, collections)
+        if reopened_retry.id != reopened_id or after_standalone_retry != before_standalone_retry:
+            raise AssertionError("standalone reopen retry was not an exact canonical no-op")
+
+        before_competing_reopen = _authority_snapshot(db_client, collections)
+        try:
+            service.revert_superseded_ledger_fact(uid, standalone_source_id, STANDALONE_REOPEN_COMPETING_OPERATION_ID)
+        except HTTPException as exc:
+            if exc.status_code != 409:
+                raise AssertionError(
+                    f"competing standalone reopen returned unexpected status: {exc.status_code}"
+                ) from exc
+        else:
+            raise AssertionError("competing standalone reopen created a duplicate current tail")
+        after_competing_reopen = _authority_snapshot(db_client, collections)
+        if after_competing_reopen != before_competing_reopen:
+            raise AssertionError("rejected competing standalone reopen mutated canonical state")
+
+        concurrent_source_id = save_ledger_write(
+            uid,
+            LedgerWrite(
+                kind=MemoryKind.fact,
+                content="Keeps a spring base in Reykjavik",
+                provenance=LedgerProvenance(
+                    source_id="explicit-standalone-concurrent-seed",
+                    source_type="explicit_user_statement",
+                    source_version="v1",
+                    action_id="ledger-correction-emulator-standalone-concurrent-seed",
+                ),
+                write_reason=LedgerWriteReason.direct_user_statement,
+                slot="spring_base",
+                curation_weight=5,
+                visibility="private",
+            ),
+            db_client=db_client,
+        )
+        concurrent_closed = close_fact(
+            uid,
+            concurrent_source_id,
+            valid_to=datetime.now(timezone.utc),
+            db_client=db_client,
+        )
+        before_concurrent_reopen = _authority_snapshot(db_client, collections)
+        concurrent_barrier = threading.Barrier(2)
+        original_concurrent_reopen = memory_service_module.reopen_standalone_fact
+
+        def synchronize_reopen_transactions(*args: Any, **kwargs: Any) -> str:
+            concurrent_barrier.wait(timeout=10)
+            return original_concurrent_reopen(*args, **kwargs)
+
+        def run_competing_reopen(operation_id: str) -> tuple[str, str | int]:
+            try:
+                result = service.revert_superseded_ledger_fact(uid, concurrent_source_id, operation_id)
+                return ("committed", result.id)
+            except HTTPException as exc:
+                return ("rejected", exc.status_code)
+
+        memory_service_module.reopen_standalone_fact = synchronize_reopen_transactions
+        try:
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                concurrent_results = list(
+                    executor.map(run_competing_reopen, STANDALONE_CONCURRENT_REOPEN_OPERATION_IDS)
+                )
+        finally:
+            memory_service_module.reopen_standalone_fact = original_concurrent_reopen
+
+        committed_results = [value for status, value in concurrent_results if status == "committed"]
+        rejected_results = [value for status, value in concurrent_results if status == "rejected"]
+        if len(committed_results) != 1 or rejected_results != [409]:
+            raise AssertionError(f"concurrent standalone reopen did not commit once: {concurrent_results}")
+        concurrent_reopened_id = str(committed_results[0])
+        after_concurrent_reopen = _authority_snapshot(db_client, collections)
+        if set(after_concurrent_reopen["items"]) != set(before_concurrent_reopen["items"]) | {concurrent_reopened_id}:
+            raise AssertionError("concurrent standalone reopen did not append exactly one current tail")
+        if len(after_concurrent_reopen["reopens"]) != len(before_concurrent_reopen["reopens"]) + 1:
+            raise AssertionError("concurrent standalone reopen did not persist exactly one source receipt")
+        if _read_item(db_client, collections, concurrent_source_id) != concurrent_closed:
+            raise AssertionError("concurrent standalone reopen mutated the immutable closed source row")
+
+        privacy_source_id = save_ledger_write(
+            uid,
+            LedgerWrite(
+                kind=MemoryKind.fact,
+                content="Keeps a privacy-raced summer base in Lisbon",
+                provenance=LedgerProvenance(
+                    source_id="explicit-standalone-privacy-seed",
+                    source_type="explicit_user_statement",
+                    source_version="v1",
+                    action_id="ledger-correction-emulator-standalone-privacy-seed",
+                ),
+                write_reason=LedgerWriteReason.direct_user_statement,
+                slot="summer_base",
+                curation_weight=5,
+                visibility="private",
+            ),
+            db_client=db_client,
+        )
+        privacy_closed = close_fact(
+            uid,
+            privacy_source_id,
+            valid_to=datetime.now(timezone.utc),
+            db_client=db_client,
+        )
+        privacy_evidence_id = privacy_closed.evidence[0].evidence_id
+        before_privacy_standalone = _authority_snapshot(db_client, collections)
+        privacy_race_state: dict[str, Any] = {}
+        original_reopen_fact = memory_service_module.reopen_standalone_fact
+
+        def tombstone_selected_evidence_before_append(*args: Any, **kwargs: Any) -> str:
+            evidence_path = f"{collections.memory_evidence}/{privacy_evidence_id}"
+            evidence_payload = _required_doc(db_client, evidence_path)
+            evidence_payload["redaction_status"] = "tombstoned"
+            evidence_payload["encryption_or_redaction_status"] = "tombstoned"
+            db_client.document(evidence_path).set(evidence_payload)
+            privacy_race_state["after_privacy"] = _authority_snapshot(db_client, collections)
+            return original_reopen_fact(*args, **kwargs)
+
+        memory_service_module.reopen_standalone_fact = tombstone_selected_evidence_before_append
+        try:
+            try:
+                service.revert_superseded_ledger_fact(uid, privacy_source_id, STANDALONE_PRIVACY_REOPEN_OPERATION_ID)
+            except HTTPException as exc:
+                if exc.status_code != 409:
+                    raise AssertionError(
+                        f"privacy-raced standalone reopen returned unexpected status: {exc.status_code}"
+                    ) from exc
+            else:
+                raise AssertionError("privacy-raced standalone reopen resurrected deleted source evidence")
+        finally:
+            memory_service_module.reopen_standalone_fact = original_reopen_fact
+
+        after_privacy_standalone = privacy_race_state.get("after_privacy")
+        if not isinstance(after_privacy_standalone, dict):
+            raise AssertionError("standalone privacy race did not execute the evidence tombstone")
+        after_blocked_privacy_standalone = _authority_snapshot(db_client, collections)
+        privacy_source_after = _read_item(db_client, collections, privacy_source_id)
+        if privacy_source_after != privacy_closed:
+            raise AssertionError("standalone evidence privacy race mutated the closed source row")
+        if after_blocked_privacy_standalone != after_privacy_standalone:
+            raise AssertionError("blocked standalone evidence privacy race mutated canonical state")
+
         print(
             "PASS: Firestore emulator explicit ledger correction and revert proof "
             f"prior={prior_id} replacement={replacement_id} correction_commit={correction_head} "
             f"restored={restored_id} revert_commit={revert_head} "
+            f"standalone_source={standalone_source_id} standalone_reopened={reopened_id} "
             f"preclose_revision={prior_before.item_revision} closed_revision={prior_after.item_revision} "
-            "retries=no-op privacy_race=blocked"
+            "retries=no-op competing_reopen=blocked concurrent_reopen=commit-once "
+            "privacy_race=blocked standalone_evidence_race=blocked"
         )
         return 0
     finally:

@@ -28,6 +28,11 @@ class MemoryCollections:
         return f"{self.user_root}/memory_source_replacements"
 
     @property
+    def memory_ledger_reopens(self) -> str:
+        """Immutable source-to-tail receipts for standalone ledger reopening."""
+        return f"{self.user_root}/memory_ledger_reopens"
+
+    @property
     def memory_outbox(self) -> str:
         return f"{self.user_root}/memory_outbox"
 
@@ -118,6 +123,7 @@ class MemoryCollections:
             self.memory_items,
             self.memory_operations,
             self.memory_source_replacements,
+            self.memory_ledger_reopens,
             self.memory_outbox,
             self.memory_lineage,
             self.memory_historical_overrides,

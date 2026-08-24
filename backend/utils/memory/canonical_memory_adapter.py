@@ -61,7 +61,7 @@ from models.memory_apply import (
     build_patch_mutation_identity,
 )
 from models.memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
-from models.memory_operations import MemoryOperation, MemoryOperationType
+from models.memory_operations import MemoryLedgerReopenReceipt, MemoryOperation, MemoryOperationType
 from models.product_memory import (
     MAX_MEMORY_ARGUMENTS_JSON_BYTES,
     MemoryAccessPolicy,
@@ -1240,6 +1240,7 @@ def write_canonical_extraction_memory(
     evidence_items: Optional[List[MemoryEvidence]] = None,
     _ledger_authority: object | None = None,
     required_source_item: Optional[MemoryItem] = None,
+    ledger_reopen_receipt: Optional[MemoryLedgerReopenReceipt] = None,
 ) -> str:
     """Persist one memory to memory_items + ledger (extraction or external/manual writes)."""
     if data.get("ledger_schema_version") is not None and _ledger_authority is not _LEDGER_WRITE_AUTHORITY:
@@ -1261,6 +1262,7 @@ def write_canonical_extraction_memory(
             proposed_operation=write.operation,
             proposed_evidence=write.evidence,
             required_source_item=required_source_item,
+            ledger_reopen_receipt=ledger_reopen_receipt,
             db_client=client,
         )
         if result.status != ApplyStatus.retryable_head_mismatch:
@@ -1381,22 +1383,29 @@ def write_canonical_knowledge_ledger_memory(
     *,
     db_client: Any = None,
     required_source_item: Optional[MemoryItem] = None,
+    ledger_reopen_receipt: Optional[MemoryLedgerReopenReceipt] = None,
 ) -> str:
     """Dedicated canonical boundary for exactly ``knowledge_ledger.v1`` rows."""
     if data.get("ledger_schema_version") != "knowledge_ledger.v1":
         raise ValueError("dedicated ledger writes require knowledge_ledger.v1")
     client = db_client if db_client is not None else default_db_client
+    reopen_evidence = (
+        _evidence_items_from_payload(data)
+        if ledger_reopen_receipt is not None
+        else _reissued_external_evidence(
+            uid,
+            _evidence_items_from_payload(data),
+            db_client=client,
+        )
+    )
     return write_canonical_extraction_memory(
         uid,
         data,
         db_client=client,
         _ledger_authority=_LEDGER_WRITE_AUTHORITY,
         required_source_item=required_source_item,
-        evidence_items=_reissued_external_evidence(
-            uid,
-            _evidence_items_from_payload(data),
-            db_client=client,
-        ),
+        ledger_reopen_receipt=ledger_reopen_receipt,
+        evidence_items=reopen_evidence,
     )
 
 

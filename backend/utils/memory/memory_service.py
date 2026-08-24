@@ -66,6 +66,7 @@ from utils.memory.knowledge_ledger import (
     LedgerProvenance,
     amend_fact,
     evidence_id_for_ledger_provenance,
+    reopen_standalone_fact,
 )
 from utils.memory.rejected_memory_feedback import clear_rejected_memory_feedback_cache
 from utils.memory.required_promotion import required_processing_payload
@@ -1734,6 +1735,117 @@ class MemoryService:
             raise HTTPException(status_code=409, detail="Knowledge ledger history cannot be restored")
 
     @staticmethod
+    def _is_standalone_closed_ledger_fact(item: MemoryItem) -> bool:
+        return (
+            item.ledger_schema_version == LEDGER_SCHEMA_VERSION
+            and item.kind == MemoryKind.fact
+            and item.intent_backed
+            and item.status == MemoryItemStatus.superseded
+            and item.valid_to is not None
+            and not (item.superseded_by or "").strip()
+            and not (item.canonical_memory_id or "").strip()
+        )
+
+    @staticmethod
+    def _is_exact_standalone_ledger_reopen(
+        selected: MemoryItem,
+        replacement: MemoryItem,
+        *,
+        evidence_id: str,
+    ) -> bool:
+        has_reopen_evidence = any(
+            evidence.evidence_id == evidence_id
+            and evidence.source_type == "explicit_user_reopen"
+            and evidence.source_id == selected.memory_id
+            and evidence.source_version == f"item_revision:{selected.item_revision}"
+            for evidence in replacement.evidence
+        )
+        return not (
+            replacement.uid != selected.uid
+            or replacement.status != MemoryItemStatus.active
+            or replacement.valid_to is not None
+            or (replacement.superseded_by or "").strip()
+            or (replacement.canonical_memory_id or "").strip()
+            or replacement.ledger_schema_version != LEDGER_SCHEMA_VERSION
+            or replacement.kind != MemoryKind.fact
+            or not replacement.intent_backed
+            or replacement.write_reason != LedgerWriteReason.direct_user_statement
+            or not replacement.user_asserted
+            or replacement.processing_state != ProcessingState.processed
+            or replacement.source_state != SourceState.active
+            or (replacement.content or "").strip() != (selected.content or "").strip()
+            or replacement.visibility != selected.visibility
+            or replacement.slot != selected.slot
+            or replacement.subject_scope != selected.subject_scope
+            or replacement.subject_entity_id != selected.subject_entity_id
+            or replacement.curation_weight != selected.curation_weight
+            or replacement.predicate != selected.predicate
+            or replacement.arguments != selected.arguments
+            or replacement.sensitivity_labels != selected.sensitivity_labels
+            or memory_item_to_memorydb(replacement).user_review is False
+            or not has_reopen_evidence
+        )
+
+    def reopen_standalone_closed_ledger_fact(
+        self,
+        uid: str,
+        memory_id: str,
+        operation_id: str,
+    ) -> MemoryDB:
+        """Append one current tail from a standalone closed ledger fact."""
+
+        self.ensure_canonical_mutation_ready(uid)
+        normalized_operation_id = self._normalized_revert_operation_id(operation_id)
+        selected = self._canonical_item_for_lineage(uid, memory_id)
+        if selected is None:
+            raise HTTPException(status_code=404, detail="Memory not found")
+        if not self._is_standalone_closed_ledger_fact(selected):
+            raise HTTPException(status_code=409, detail="Only standalone closed knowledge ledger facts may be reopened")
+        if (
+            selected.source_state != SourceState.active
+            or selected.processing_state != ProcessingState.processed
+            or set(selected.sensitivity_labels).intersection(RESTRICTED_SENSITIVITY_LABELS)
+            or memory_item_to_memorydb(selected).user_review is False
+        ):
+            raise HTTPException(status_code=409, detail="Knowledge ledger history cannot be reopened")
+        if memory_item_to_memorydb(selected).is_locked:
+            raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
+        if not (selected.content or "").strip() or selected.visibility not in {"private", "public", "shared"}:
+            raise HTTPException(status_code=409, detail="Knowledge ledger history cannot be reopened")
+
+        provenance = LedgerProvenance(
+            source_id=selected.memory_id,
+            source_type="explicit_user_reopen",
+            source_version=f"item_revision:{selected.item_revision}",
+            action_id=f"memory_ui_reopen:{normalized_operation_id}",
+            artifact_ref={
+                "artifact_id": f"memory-history-reopen:{normalized_operation_id}",
+                "preservation": "preserved",
+            },
+        )
+        expected_evidence_id = evidence_id_for_ledger_provenance(uid, provenance)
+        try:
+            replacement_id = reopen_standalone_fact(
+                uid,
+                selected,
+                operation_id=normalized_operation_id,
+                provenance=provenance,
+                db_client=self.db_client,
+            )
+        except (RuntimeError, ValueError) as exc:
+            raise HTTPException(status_code=409, detail="Knowledge ledger reopen conflicted") from exc
+
+        replacement = self._canonical_item_for_lineage(uid, replacement_id)
+        if replacement is None or not self._is_exact_standalone_ledger_reopen(
+            selected,
+            replacement,
+            evidence_id=expected_evidence_id,
+        ):
+            raise HTTPException(status_code=503, detail="Knowledge ledger reopen readback unavailable")
+        self._invalidate_prompt_cache(uid)
+        return memory_item_to_memorydb(replacement)
+
+    @staticmethod
     def _is_exact_ledger_fact_revert(
         selected: MemoryItem,
         prior_tail: MemoryItem,
@@ -1783,6 +1895,8 @@ class MemoryService:
         selected = self._canonical_item_for_lineage(uid, memory_id)
         if selected is None:
             raise HTTPException(status_code=404, detail="Memory not found")
+        if self._is_standalone_closed_ledger_fact(selected):
+            return self.reopen_standalone_closed_ledger_fact(uid, memory_id, normalized_operation_id)
         identity = self._ledger_revert_identity(selected)
         self._validate_ledger_revert_item(selected, identity=identity)
         if (
