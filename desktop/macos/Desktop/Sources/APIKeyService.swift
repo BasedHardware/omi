@@ -321,7 +321,7 @@ final class APIKeyService: ObservableObject {
     let statuses = await BYOKValidator.validateAll(snapshot)
     guard statuses[selectedProvider] == .ok else {
       try? await APIClient.shared.deactivateBYOK()
-      persistEnrolledFingerprints([:])
+      Self.persistEnrolledFingerprints([:])
       return
     }
 
@@ -331,6 +331,6 @@ final class APIKeyService: ObservableObject {
       }
     }
     try? await APIClient.shared.activateBYOK(fingerprints: fingerprints)
-    persistEnrolledFingerprints(fingerprints)
+    Self.persistEnrolledFingerprints(fingerprints)
   }
 }
