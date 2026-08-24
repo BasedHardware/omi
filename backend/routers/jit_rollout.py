@@ -80,6 +80,21 @@ class JITTriggerSnapshotEnvelope(BaseModel):
     failure_reason: str | None = None
 
 
+def _disabled_trigger_snapshot(uid: str) -> JITTriggerSnapshotEnvelope:
+    """Return a content-free receipt whenever trigger authority is absent."""
+
+    return JITTriggerSnapshotEnvelope(
+        owner_id=uid,
+        account_generation=0,
+        head_commit_id='',
+        commit_sequence=0,
+        snapshot_revision='',
+        complete=False,
+        rows=[],
+        failure_reason='rollout_not_enabled',
+    )
+
+
 @router.get(_DECISION_PATH, response_model=JITRolloutDecisionEnvelope)
 async def get_jit_rollout_decision(
     uid: str = Depends(get_current_user_uid),
@@ -98,17 +113,18 @@ async def get_jit_trigger_snapshot(
     response.headers['Cache-Control'] = 'no-store'
     decision = await resolve_jit_rollout(uid, stage=JITDecisionStage.READ_ONLY)
     if not decision.permits_work:
-        return JITTriggerSnapshotEnvelope(
-            owner_id=uid,
-            account_generation=0,
-            head_commit_id='',
-            commit_sequence=0,
-            snapshot_revision='',
-            complete=False,
-            rows=[],
-            failure_reason='rollout_not_enabled',
-        )
+        return _disabled_trigger_snapshot(uid)
     snapshot = await run_blocking(db_executor, read_authoritative_trigger_snapshot, uid)
+    # A flag or kill switch can flip while the blocking exhaustive scan is in
+    # flight. Re-resolve uncached immediately before releasing an actionable
+    # snapshot, matching the canonical prompt-snapshot authority fence.
+    final_decision = await resolve_jit_rollout(
+        uid,
+        stage=JITDecisionStage.READ_ONLY,
+        force_refresh=True,
+    )
+    if not final_decision.permits_work:
+        return _disabled_trigger_snapshot(uid)
     return JITTriggerSnapshotEnvelope(
         owner_id=snapshot.owner_id,
         account_generation=snapshot.account_generation,
