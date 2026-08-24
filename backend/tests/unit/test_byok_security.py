@@ -666,10 +666,8 @@ class TestBYOKSubscriptionEntitlements:
         from routers import users
 
         subscription = Subscription(plan=PlanType.basic)
-        byok_key = MagicMock(return_value=None)
         monkeypatch.setattr(users.users_db, 'is_byok_active', lambda _uid: True)
-        monkeypatch.setattr(users, 'has_validated_byok_keys', lambda: False)
-        monkeypatch.setattr(users, 'get_byok_key', byok_key)
+        monkeypatch.setattr(users, '_request_has_llm_byok_key', lambda: False)
         monkeypatch.setattr(users, 'get_user_subscription', lambda _uid: subscription, raising=False)
         monkeypatch.setattr(users, 'reconcile_basic_plan_with_stripe', lambda _uid, _subscription: None)
         monkeypatch.setattr(users, 'get_user_valid_subscription', lambda _uid: subscription, raising=False)
@@ -702,20 +700,107 @@ class TestBYOKSubscriptionEntitlements:
 
         assert response.subscription.plan == PlanType.basic
         assert response.transcription_seconds_limit == 37
-        byok_key.assert_not_called()
 
-    def test_validated_deepgram_byok_gets_unlimited_subscription(self, monkeypatch):
+    def test_validated_llm_byok_gets_unlimited_subscription(self, monkeypatch):
         from models.users import PlanType
         from routers import users
 
         monkeypatch.setattr(users.users_db, 'is_byok_active', lambda _uid: True)
-        monkeypatch.setattr(users, 'has_validated_byok_keys', lambda: True)
-        monkeypatch.setattr(users, 'get_byok_key', lambda provider: 'dg-key' if provider == 'deepgram' else None)
+        monkeypatch.setattr(users, '_request_has_llm_byok_key', lambda: True)
 
         response = users.get_user_subscription_endpoint(uid='validated-byok-user')
 
         assert response.subscription.plan == PlanType.unlimited
         assert response.subscription.features == ['byok']
+
+    def test_validated_deepgram_only_does_not_unlock_chat_unlimited(self, monkeypatch):
+        from models.users import PlanLimits, PlanType, Subscription
+        from routers import users
+
+        subscription = Subscription(plan=PlanType.basic)
+        monkeypatch.setattr(users.users_db, 'is_byok_active', lambda _uid: True)
+        monkeypatch.setattr(users, '_request_has_llm_byok_key', lambda: False)
+        monkeypatch.setattr(users, 'get_user_subscription', lambda _uid: subscription, raising=False)
+        monkeypatch.setattr(users, 'reconcile_basic_plan_with_stripe', lambda _uid, _subscription: None)
+        monkeypatch.setattr(users, 'get_user_valid_subscription', lambda _uid: subscription, raising=False)
+        monkeypatch.setattr(
+            users,
+            'get_plan_limits',
+            lambda _plan: PlanLimits(transcription_seconds=37, words_transcribed=50, insights_gained=3),
+        )
+        monkeypatch.setattr(users, 'get_plan_features', lambda _plan, simplified: [])
+        monkeypatch.setattr(users, 'should_show_new_plans', lambda _platform, _version: True)
+        monkeypatch.setattr(users, 'get_monthly_usage_for_subscription', lambda _uid: {})
+        monkeypatch.setattr(users, 'get_paid_plan_definitions', lambda: [])
+        monkeypatch.setattr(users, 'has_ever_purchased', lambda _uid, _subscription: False, raising=False)
+        monkeypatch.setattr(users, 'filter_plans_for_user', lambda _definitions, _plan, **_kwargs: [])
+        monkeypatch.setattr(users, 'should_hide_subscription_ui', lambda _uid, _platform, _version: False)
+        monkeypatch.setattr(
+            users,
+            'get_phone_call_quota_snapshot',
+            lambda _uid: MagicMock(to_client_dict=lambda: {'has_access': False, 'is_paid': False}),
+        )
+        monkeypatch.setattr(
+            users,
+            'get_chat_quota_snapshot',
+            lambda _uid, platform: {'used': 0, 'unit': 'questions', 'limit': 30, 'allowed': True, 'reset_at': None},
+        )
+        monkeypatch.setattr(users, 'neo_grandfather_until', lambda _subscription: None)
+        monkeypatch.setattr(users, 'wire_plan_for_client', lambda plan, _platform, _version: plan)
+
+        response = users.get_user_subscription_endpoint(uid='deepgram-only-user')
+
+        assert response.subscription.plan == PlanType.basic
+        assert response.transcription_seconds_limit == 37
+
+    def test_usage_quota_requires_validated_llm_capability(self, monkeypatch):
+        from models.users import PlanType
+        from routers import users
+
+        monkeypatch.setattr(users.users_db, 'is_byok_active', lambda _uid: True)
+        monkeypatch.setattr(users, '_request_has_llm_byok_key', lambda: False)
+        monkeypatch.setattr(
+            users,
+            'get_chat_quota_snapshot',
+            lambda _uid, platform=None: {
+                'plan': PlanType.basic,
+                'used': 4,
+                'unit': 'questions',
+                'limit': 30,
+                'allowed': True,
+                'reset_at': None,
+            },
+        )
+
+        response = users.get_user_chat_usage_quota(uid='deepgram-only-user')
+        assert response.plan_type == PlanType.basic.value
+        assert response.limit == 30
+
+        monkeypatch.setattr(users, '_request_has_llm_byok_key', lambda: True)
+        response = users.get_user_chat_usage_quota(uid='llm-byok-user')
+        assert response.plan_type == PlanType.unlimited.value
+        assert response.limit is None
+        assert response.allowed is True
+
+
+class TestRequestHasLLMByokKey:
+    def test_accepts_openrouter_and_gemini(self, monkeypatch):
+        from utils import subscription
+
+        monkeypatch.setattr(subscription, 'has_validated_byok_keys', lambda: True)
+        monkeypatch.setattr(subscription, 'get_byok_keys', lambda: {'openrouter': 'or-key'})
+        assert subscription._request_has_llm_byok_key() is True
+        monkeypatch.setattr(subscription, 'get_byok_keys', lambda: {'gemini': 'gm-key'})
+        assert subscription._request_has_llm_byok_key() is True
+        monkeypatch.setattr(subscription, 'get_byok_keys', lambda: {'deepgram': 'dg-key'})
+        assert subscription._request_has_llm_byok_key() is False
+
+    def test_requires_validated_context(self, monkeypatch):
+        from utils import subscription
+
+        monkeypatch.setattr(subscription, 'has_validated_byok_keys', lambda: False)
+        monkeypatch.setattr(subscription, 'get_byok_keys', lambda: {'openai': 'sk'})
+        assert subscription._request_has_llm_byok_key() is False
 
 
 class TestBYOKMiddlewareValidation:

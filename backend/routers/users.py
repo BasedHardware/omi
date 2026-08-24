@@ -86,6 +86,7 @@ from models.users import (
 from utils.phone_calls import get_quota_snapshot as get_phone_call_quota_snapshot
 from utils.apps import get_available_app_by_id
 from utils.subscription import (
+    _request_has_llm_byok_key,
     enforce_chat_quota,
     get_chat_quota_snapshot,
     get_default_basic_subscription,
@@ -127,9 +128,6 @@ from utils.other.storage import (
 )
 from utils.webhooks import webhook_first_time_setup
 from utils.byok import (
-    get_byok_key,
-    has_byok_keys,
-    has_validated_byok_keys,
     invalidate_byok_state_cache,
     peppered_fingerprint,
 )
@@ -1173,14 +1171,13 @@ def get_user_subscription_endpoint(
     x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
 ):
     """Gets the user's subscription plan and usage."""
-    # BYOK free plan: user supplies their own OpenAI/Anthropic/Gemini/Deepgram keys.
-    # Only return unlimited when the request actually carries BYOK headers (desktop).
-    # Mobile (no BYOK headers) should see the real subscription even if BYOK is active.
+    # BYOK free plan: unlimited chat/insights only for a validated LLM-capability
+    # key (same predicate as enforce_chat_quota). Deepgram-only does not unlock this.
     # Synthetic paid-tier quota for BYOK / marketplace-reviewer overrides so
     # these users aren't surprised by a disabled phone-call feature.
     unlimited_phone_quota = PhoneCallQuota(has_access=True, is_paid=True)
 
-    if users_db.is_byok_active(uid) and has_validated_byok_keys() and get_byok_key('deepgram'):
+    if users_db.is_byok_active(uid) and _request_has_llm_byok_key():
         return UserSubscriptionResponse(
             subscription=_byok_unlimited_subscription(),
             transcription_seconds_used=0,
@@ -1402,7 +1399,7 @@ def get_user_chat_usage_quota(
     # BYOK free plan: user brings their own keys, so there's no Omi-side cost
     # to meter. Only return unlimited when BYOK headers are on the request (desktop).
     # Mobile (no headers) should see real quota.
-    if users_db.is_byok_active(uid) and has_byok_keys():
+    if users_db.is_byok_active(uid) and _request_has_llm_byok_key():
         return ChatUsageQuota(
             plan='Free (BYOK)',
             plan_type=PlanType.unlimited.value,
