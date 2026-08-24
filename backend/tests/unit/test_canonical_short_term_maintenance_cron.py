@@ -636,6 +636,8 @@ def test_async_entrypoint_runs_shared_rollout_gated_ledger_sweep_for_completed_u
     assert [call[0][0] for call in publication_calls] == ["uid-enabled"]
     assert sweep_calls[0][1]["publish"] is False
     assert callable(sweep_calls[0][1]["mutation_authorizer"])
+    assert callable(sweep_calls[0][1]["publication_authorizer"])
+    assert callable(publication_calls[0][1]["publication_authorizer"])
     assert result.ledger_migration_users == 1
     assert result.ledger_migration_rows == 3
 

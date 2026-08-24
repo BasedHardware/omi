@@ -234,6 +234,7 @@ def publish_ledger_migration_cutover(
     uid: str,
     *,
     db_client: Any,
+    publication_authorizer: Callable[[], bool],
     migrated_long_term_count: int,
     adjudicated_short_term_count: int,
     completed_at: datetime | None = None,
@@ -244,6 +245,8 @@ def publish_ledger_migration_cutover(
     the complete compatibility union once, rejects every surviving legacy row,
     constructs the deterministic bounded prompt projection, then atomically
     joins completion and receipt to the still-current canonical control fence.
+    The required authorizer is evaluated only after that complete proof scan
+    and immediately before the atomic publication transaction is opened.
     """
     from database.memory_apply_store import transactional
     from utils.memory.memory_service import MemoryService
@@ -303,6 +306,13 @@ def publish_ledger_migration_cutover(
             receipt.model_dump(mode="python"),
         )
 
+    try:
+        publication_authorized = publication_authorizer()
+    except Exception as exc:
+        raise LedgerMigrationPublicationError("ledger cutover publication authorization failed") from exc
+    if not publication_authorized:
+        raise LedgerMigrationPublicationError("ledger cutover publication authorization denied")
+
     publish(db_client.transaction())
     return receipt
 
@@ -324,8 +334,9 @@ def run_ledger_migration_sweep(
     *,
     db_client: Any,
     mutation_authorizer: Callable[[str], bool],
+    publication_authorizer: Callable[[], bool],
+    publish: bool,
     completed_at: datetime | None = None,
-    publish: bool = True,
 ) -> LedgerMigrationSweepResult:
     """Resumable production sweep used by the canonical maintenance job.
 
@@ -409,6 +420,7 @@ def run_ledger_migration_sweep(
         receipt = publish_ledger_migration_cutover(
             uid,
             db_client=db_client,
+            publication_authorizer=publication_authorizer,
             migrated_long_term_count=migrated,
             adjudicated_short_term_count=adjudicated,
             completed_at=completed_at,

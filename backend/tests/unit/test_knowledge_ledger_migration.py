@@ -414,11 +414,15 @@ class _PublishingDB:
         self.control_path = "users/u1/memory_state/apply_control"
         self.values = {self.control_path: control}
         self.fail_on_set = None
+        self.transaction_count = 0
+        self.events = []
 
     def document(self, path):
         return _PublishingDocument(self, path)
 
     def transaction(self):
+        self.transaction_count += 1
+        self.events.append("transaction")
         return _PublishingTransaction(self)
 
 
@@ -440,7 +444,9 @@ def _install_publisher_fakes(monkeypatch, db, rows):
 
         def iter_export_memories(self, uid, *, include_archive):
             assert uid == "u1" and include_archive is True
+            db.events.append("scan-start")
             yield from rows
+            db.events.append("scan-complete")
 
     monkeypatch.setattr(apply_store, "transactional", transactional)
     monkeypatch.setattr(memory_service, "MemoryService", Service)
@@ -463,6 +469,7 @@ def test_cutover_publisher_atomically_publishes_authoritative_empty_snapshot(mon
     receipt = publish_ledger_migration_cutover(
         "u1",
         db_client=db,
+        publication_authorizer=lambda: True,
         migrated_long_term_count=0,
         adjudicated_short_term_count=0,
         completed_at=NOW,
@@ -472,6 +479,109 @@ def test_cutover_publisher_atomically_publishes_authoritative_empty_snapshot(mon
     assert receipt.scanned_row_count == 0
     assert "users/u1/memory_control/knowledge_ledger_migration" in db.values
     assert "users/u1/memory_control/knowledge_ledger_prompt_projection" in db.values
+
+
+def test_cutover_publisher_requires_authority_and_denial_after_empty_scan_writes_nothing(monkeypatch):
+    db = _PublishingDB(_publisher_control())
+    _install_publisher_fakes(monkeypatch, db, [])
+
+    with pytest.raises(TypeError):
+        publish_ledger_migration_cutover(  # type: ignore[call-arg]
+            "u1",
+            db_client=db,
+            migrated_long_term_count=0,
+            adjudicated_short_term_count=0,
+            completed_at=NOW,
+        )
+    assert db.events == []
+    assert db.transaction_count == 0
+
+    def deny():
+        db.events.append("refresh")
+        return False
+
+    with pytest.raises(knowledge_ledger_migration.LedgerMigrationPublicationError, match="denied"):
+        publish_ledger_migration_cutover(
+            "u1",
+            db_client=db,
+            publication_authorizer=deny,
+            migrated_long_term_count=0,
+            adjudicated_short_term_count=0,
+            completed_at=NOW,
+        )
+
+    assert db.events == ["scan-start", "scan-complete", "refresh"]
+    assert db.transaction_count == 0
+    assert not any("knowledge_ledger_" in path for path in db.values)
+
+
+@pytest.mark.parametrize("authorization_error", [TimeoutError("timed out"), RuntimeError("resolver failed")])
+def test_cutover_publisher_authorization_error_or_timeout_fails_closed(monkeypatch, authorization_error):
+    db = _PublishingDB(_publisher_control())
+    _install_publisher_fakes(monkeypatch, db, [])
+
+    def fail_authorization():
+        db.events.append("refresh")
+        raise authorization_error
+
+    with pytest.raises(knowledge_ledger_migration.LedgerMigrationPublicationError, match="authorization failed"):
+        publish_ledger_migration_cutover(
+            "u1",
+            db_client=db,
+            publication_authorizer=fail_authorization,
+            migrated_long_term_count=0,
+            adjudicated_short_term_count=0,
+            completed_at=NOW,
+        )
+
+    assert db.events == ["scan-start", "scan-complete", "refresh"]
+    assert db.transaction_count == 0
+    assert not any("knowledge_ledger_" in path for path in db.values)
+
+
+def test_cutover_publisher_refreshes_after_scan_immediately_before_transaction(monkeypatch):
+    db = _PublishingDB(_publisher_control())
+    _install_publisher_fakes(monkeypatch, db, [_prompt_row()])
+
+    def authorize():
+        db.events.append("refresh")
+        return True
+
+    publish_ledger_migration_cutover(
+        "u1",
+        db_client=db,
+        publication_authorizer=authorize,
+        migrated_long_term_count=0,
+        adjudicated_short_term_count=0,
+        completed_at=NOW,
+    )
+
+    assert db.events == ["scan-start", "scan-complete", "refresh", "transaction"]
+
+
+def test_kill_flip_during_publication_scan_never_opens_transaction(monkeypatch):
+    db = _PublishingDB(_publisher_control())
+    authority = {"enabled": True}
+
+    class Rows(list):
+        def __iter__(self):
+            yield _prompt_row()
+            authority["enabled"] = False
+
+    _install_publisher_fakes(monkeypatch, db, Rows())
+
+    with pytest.raises(knowledge_ledger_migration.LedgerMigrationPublicationError, match="denied"):
+        publish_ledger_migration_cutover(
+            "u1",
+            db_client=db,
+            publication_authorizer=lambda: authority["enabled"],
+            migrated_long_term_count=0,
+            adjudicated_short_term_count=0,
+            completed_at=NOW,
+        )
+
+    assert db.transaction_count == 0
+    assert not any("knowledge_ledger_" in path for path in db.values)
 
 
 def test_cutover_filters_historical_slot_winner_before_arbitrating_valid_runner_up(monkeypatch):
@@ -508,7 +618,12 @@ def test_cutover_filters_historical_slot_winner_before_arbitrating_valid_runner_
     _install_publisher_fakes(monkeypatch, db, [valid, superseded, archived_handle, dismissed_trigger])
 
     receipt = publish_ledger_migration_cutover(
-        "u1", db_client=db, migrated_long_term_count=0, adjudicated_short_term_count=0, completed_at=NOW
+        "u1",
+        db_client=db,
+        publication_authorizer=lambda: True,
+        migrated_long_term_count=0,
+        adjudicated_short_term_count=0,
+        completed_at=NOW,
     )
 
     assert [row.id for row in receipt.rows] == ["valid-runner-up"]
@@ -542,7 +657,12 @@ def test_cutover_preserves_inactive_legacy_history_outside_default_prompt(monkey
     _install_publisher_fakes(monkeypatch, db, source_rows)
 
     receipt = publish_ledger_migration_cutover(
-        "u1", db_client=db, migrated_long_term_count=0, adjudicated_short_term_count=0, completed_at=NOW
+        "u1",
+        db_client=db,
+        publication_authorizer=lambda: True,
+        migrated_long_term_count=0,
+        adjudicated_short_term_count=0,
+        completed_at=NOW,
     )
 
     assert receipt.rows == []
@@ -574,6 +694,7 @@ def test_cutover_publisher_fails_closed_without_any_receipt_for_invalid_or_overb
         publish_ledger_migration_cutover(
             "u1",
             db_client=db,
+            publication_authorizer=lambda: True,
             migrated_long_term_count=0,
             adjudicated_short_term_count=0,
             completed_at=NOW,
@@ -591,18 +712,35 @@ def test_cutover_publisher_rechecks_head_and_rolls_back_partial_transaction(monk
             db.values[db.control_path] = _publisher_control(head="head-8")
 
     _install_publisher_fakes(monkeypatch, db, MutatingRows())
+
+    def authorize_after_changed_scan():
+        db.events.append("refresh")
+        return True
+
     with pytest.raises(knowledge_ledger_migration.LedgerMigrationPublicationError, match="changed"):
         publish_ledger_migration_cutover(
-            "u1", db_client=db, migrated_long_term_count=1, adjudicated_short_term_count=0, completed_at=NOW
+            "u1",
+            db_client=db,
+            publication_authorizer=authorize_after_changed_scan,
+            migrated_long_term_count=1,
+            adjudicated_short_term_count=0,
+            completed_at=NOW,
         )
+    assert db.events == ["scan-start", "scan-complete", "refresh", "transaction"]
     assert not any("knowledge_ledger_" in path for path in db.values)
 
     db.values[db.control_path] = _publisher_control()
     db.fail_on_set = 2
+    db.events.clear()
     _install_publisher_fakes(monkeypatch, db, [_prompt_row()])
     with pytest.raises(RuntimeError, match="publication crash"):
         publish_ledger_migration_cutover(
-            "u1", db_client=db, migrated_long_term_count=1, adjudicated_short_term_count=0, completed_at=NOW
+            "u1",
+            db_client=db,
+            publication_authorizer=lambda: True,
+            migrated_long_term_count=1,
+            adjudicated_short_term_count=0,
+            completed_at=NOW,
         )
     assert not any("knowledge_ledger_" in path for path in db.values)
 
@@ -611,7 +749,12 @@ def test_cutover_publisher_can_republish_after_canonical_write_invalidation(monk
     db = _PublishingDB(_publisher_control())
     _install_publisher_fakes(monkeypatch, db, [_prompt_row("first")])
     first = publish_ledger_migration_cutover(
-        "u1", db_client=db, migrated_long_term_count=1, adjudicated_short_term_count=0, completed_at=NOW
+        "u1",
+        db_client=db,
+        publication_authorizer=lambda: True,
+        migrated_long_term_count=1,
+        adjudicated_short_term_count=0,
+        completed_at=NOW,
     )
     completion = read_ledger_migration_completion("u1", db_client=db)
     assert completion is not None
@@ -622,7 +765,12 @@ def test_cutover_publisher_can_republish_after_canonical_write_invalidation(monk
 
     _install_publisher_fakes(monkeypatch, db, [_prompt_row("second")])
     second = publish_ledger_migration_cutover(
-        "u1", db_client=db, migrated_long_term_count=2, adjudicated_short_term_count=0, completed_at=NOW
+        "u1",
+        db_client=db,
+        publication_authorizer=lambda: True,
+        migrated_long_term_count=2,
+        adjudicated_short_term_count=0,
+        completed_at=NOW,
     )
     new_completion = read_ledger_migration_completion("u1", db_client=db)
     assert new_completion is not None
@@ -686,7 +834,12 @@ def test_production_sweep_resumes_adapts_live_rows_and_preserves_history(monkeyp
     db = _PublishingDB(_publisher_control())
 
     result = run_ledger_migration_sweep(
-        "u1", db_client=db, mutation_authorizer=lambda _memory_id: True, completed_at=NOW
+        "u1",
+        db_client=db,
+        mutation_authorizer=lambda _memory_id: True,
+        publication_authorizer=lambda: True,
+        publish=True,
+        completed_at=NOW,
     )
 
     assert applied == [("u1", "mem-1")]
@@ -740,7 +893,12 @@ def test_production_sweep_closes_short_term_as_legacy_generated_history(monkeypa
     db = _PublishingDB(_publisher_control())
 
     result = run_ledger_migration_sweep(
-        "u1", db_client=db, mutation_authorizer=lambda _memory_id: True, completed_at=NOW
+        "u1",
+        db_client=db,
+        mutation_authorizer=lambda _memory_id: True,
+        publication_authorizer=lambda: True,
+        publish=True,
+        completed_at=NOW,
     )
 
     assert closed == [("u1", "mem-1", short_item.item_revision)]
@@ -834,7 +992,11 @@ def test_migration_mutation_budget_bounds_one_authorized_run(monkeypatch):
     )
 
     result = run_ledger_migration_sweep(
-        "u1", db_client=object(), mutation_authorizer=lambda _memory_id: True, publish=False
+        "u1",
+        db_client=object(),
+        mutation_authorizer=lambda _memory_id: True,
+        publication_authorizer=lambda: True,
+        publish=False,
     )
     assert len(applied) == knowledge_ledger_migration.MAX_LEDGER_MIGRATION_MUTATIONS_PER_RUN
     assert result.remaining_live_legacy_count == 1
@@ -865,6 +1027,7 @@ def test_mid_batch_authority_flip_stops_before_every_later_row_write(monkeypatch
             yield from rows
 
     applied = []
+    publication_authorizations = []
     decisions = iter([True, False])
     monkeypatch.setattr(memory_service, "MemoryService", Service)
     monkeypatch.setattr(
@@ -878,17 +1041,20 @@ def test_mid_batch_authority_flip_stops_before_every_later_row_write(monkeypatch
         lambda uid, plan, *, db_client: applied.append(plan.memory_id),
     )
 
-    result = run_ledger_migration_sweep(
-        "u1",
-        db_client=object(),
-        publish=False,
-        mutation_authorizer=lambda _memory_id: next(decisions),
-    )
+    with pytest.raises(
+        knowledge_ledger_migration.LedgerMigrationPublicationError,
+        match="2 live rows remaining",
+    ):
+        run_ledger_migration_sweep(
+            "u1",
+            db_client=object(),
+            publish=True,
+            mutation_authorizer=lambda _memory_id: next(decisions),
+            publication_authorizer=lambda: publication_authorizations.append(True) or True,
+        )
 
     assert applied == ["mem-0"]
-    assert result.migrated_long_term_count == 1
-    assert result.remaining_live_legacy_count == 2
-    assert result.authorization_revoked is True
+    assert publication_authorizations == []
 
 
 def test_apply_plan_routes_only_automatic_long_term_adaptation(monkeypatch):
