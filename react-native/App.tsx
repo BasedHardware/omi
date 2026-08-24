@@ -1857,13 +1857,12 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         ? readOutcomes.memories.value.items
         : []),
     ].sort((left, right) => {
-      const timestamp = (item: DesktopReadProjection) =>
-        item.kind === 'conversation'
-          ? Date.parse(item.startedAt ?? item.createdAt)
-          : item.kind === 'memory'
-            ? (item.timestamp ?? 0)
-            : 0;
-      return timestamp(right) - timestamp(left);
+      const leftTs = projectionTimestamp(left);
+      const rightTs = projectionTimestamp(right);
+      return (
+        (rightTs ?? Number.NEGATIVE_INFINITY) -
+        (leftTs ?? Number.NEGATIVE_INFINITY)
+      );
     });
   }, [readOutcomes]);
 

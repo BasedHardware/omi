@@ -790,6 +790,103 @@ test('shows the desktop chronological spine at rest and filters that same loaded
   ).toBe('');
 });
 
+test('orders macos Home timeline by normalized conversation and memory time', async () => {
+  mockPlatformOS = 'macos';
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/chat-messages?limit=50') {
+      return {
+        id: request.id,
+        status: 200,
+        body: '{"messages":[],"page":{"olderCursor":null,"hasOlder":false}}',
+      };
+    }
+    if (request.path.startsWith('/v1/conversations')) {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'older-conversation',
+            structured: {title: 'Older conversation', overview: 'Earlier'},
+            created_at: '2026-08-07T09:00:00.000Z',
+            updated_at: '2026-08-07T09:00:00.000Z',
+            started_at: '2026-08-07T09:00:00.000Z',
+            finished_at: '2026-08-07T09:10:00.000Z',
+            source: 'omi',
+            status: 'completed',
+            discarded: false,
+            starred: false,
+            visibility: 'private',
+            is_locked: false,
+            folder_id: null,
+          },
+        ]),
+      };
+    }
+    if (request.path === '/v1/tasks') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          contractVersion: '1.0.0',
+          items: [],
+          window: {
+            status: 'complete',
+            complete: true,
+            hasMore: false,
+            nextCursor: null,
+          },
+          completeness: {
+            version: 'tasks-completeness-v1',
+            status: 'complete',
+            reasons: [],
+          },
+          absence: null,
+        }),
+      };
+    }
+    return {
+      id: request.id,
+      status: 200,
+      body: JSON.stringify({
+        contractVersion: '1.0.0',
+        items: [
+          {
+            id: 'newer-memory',
+            text: 'Newer memory',
+            citations: [],
+            provenance: {
+              synthesisVersion: 'v1',
+              inputDigest: 'input',
+              outputDigest: 'output',
+            },
+            updatedAt: 1786251600,
+          },
+        ],
+        window: {
+          status: 'complete',
+          complete: true,
+          hasMore: false,
+          nextCursor: null,
+        },
+        completeness: {
+          version: 'recall-completeness-v1',
+          status: 'complete',
+          reasons: [],
+        },
+        absence: null,
+      }),
+    };
+  });
+  const renderer = await renderApp();
+  const output = JSON.stringify(renderer.toJSON());
+  expect(output).toContain('Home chronological timeline');
+  expect(output.indexOf('Newer memory')).toBeGreaterThan(-1);
+  expect(output.indexOf('Newer memory')).toBeLessThan(
+    output.indexOf('Older conversation'),
+  );
+});
+
 test('keeps chat inside the Home destination', async () => {
   const renderer = await renderApp();
   await ReactTestRenderer.act(async () => {
