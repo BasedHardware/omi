@@ -97,14 +97,6 @@ final class StartupWarmupPolicyTests: XCTestCase {
       StartupWarmupPolicy.deferredWarmupDelay
     )
   }
-
-  func testRecurringTaskSchedulerWaitsUntilAfterDeferredWarmupStarts() {
-    XCTAssertGreaterThan(
-      StartupWarmupPolicy.recurringTaskSchedulerInitialDelay,
-      StartupWarmupPolicy.deferredWarmupDelay
-    )
-  }
-
   func testDashboardNetworkRefreshWaitsUntilAfterDeferredWarmupStarts() {
     XCTAssertGreaterThan(
       StartupWarmupPolicy.dashboardNetworkRefreshDelay,

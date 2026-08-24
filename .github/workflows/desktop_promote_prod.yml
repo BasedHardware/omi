@@ -210,8 +210,11 @@ jobs:
           set -euo pipefail
           ACCESS_TOKEN=$(gcloud auth print-access-token)
           BASE="https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents"
+          # The workspace is the candidate tag, which can predate this workflow.
+          # The validated tag grammar leaves '+' as the only path-reserved byte.
+          ENCODED_RELEASE_TAG="${RELEASE_TAG/+/%2B}"
           curl -fsS -H "Authorization: Bearer $ACCESS_TOKEN" "$BASE/desktop_update_channels/macos-stable" > /tmp/final-stable-pointer.json
-          curl -fsS -H "Authorization: Bearer $ACCESS_TOKEN" "$BASE/desktop_release_manifests/$RELEASE_TAG" > /tmp/final-stable-manifest.json
+          curl -fsS -H "Authorization: Bearer $ACCESS_TOKEN" "$BASE/desktop_release_manifests/$ENCODED_RELEASE_TAG" > /tmp/final-stable-manifest.json
           python3 - <<'PY'
           import json, os, sys
           pointer = json.load(open('/tmp/final-stable-pointer.json')).get('fields', {})

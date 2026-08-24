@@ -1043,6 +1043,7 @@ public enum OmiAPI {
     public let compatibility: CandidateCompatibilityMetadata?
     public let createdAt: String
     public let evidenceRefs: [EvidenceRef]
+    public let expiresAt: String?
     public let goalId: String?
     public let idempotencyKey: String
     public let ownershipConfidence: Double
@@ -1066,6 +1067,7 @@ public enum OmiAPI {
       case compatibility
       case createdAt = "created_at"
       case evidenceRefs = "evidence_refs"
+      case expiresAt = "expires_at"
       case goalId = "goal_id"
       case idempotencyKey = "idempotency_key"
       case ownershipConfidence = "ownership_confidence"
@@ -1091,6 +1093,7 @@ public enum OmiAPI {
       compatibility = try c.decodeIfPresent(CandidateCompatibilityMetadata.self, forKey: .compatibility)
       createdAt = try c.decode(String.self, forKey: .createdAt)
       evidenceRefs = try c.decode([EvidenceRef].self, forKey: .evidenceRefs)
+      expiresAt = try c.decodeIfPresent(String.self, forKey: .expiresAt)
       goalId = try c.decodeIfPresent(String.self, forKey: .goalId)
       idempotencyKey = try c.decode(String.self, forKey: .idempotencyKey)
       ownershipConfidence = try c.decode(Double.self, forKey: .ownershipConfidence)
@@ -1119,13 +1122,14 @@ public enum OmiAPI {
       workstreamProposal = try c.decodeIfPresent(WorkstreamProposalOutput.self, forKey: .workstreamProposal)
     }
 
-    public init(accountGeneration: Int, candidateId: String, captureConfidence: Double, compatibility: CandidateCompatibilityMetadata? = nil, createdAt: String, evidenceRefs: [EvidenceRef], goalId: String? = nil, idempotencyKey: String, ownershipConfidence: Double, proposedAction: CandidateAction, resolutionReason: String? = nil, resolvedAt: String? = nil, resultTaskId: String? = nil, resultWorkstreamId: String? = nil, sourceSurface: String, status: CandidateStatus? = nil, subjectKind: CandidateSubjectKind, taskChange: CandidateTaskChange? = nil, taskId: String? = nil, workstreamId: String? = nil, workstreamProposal: WorkstreamProposalOutput? = nil) {
+    public init(accountGeneration: Int, candidateId: String, captureConfidence: Double, compatibility: CandidateCompatibilityMetadata? = nil, createdAt: String, evidenceRefs: [EvidenceRef], expiresAt: String? = nil, goalId: String? = nil, idempotencyKey: String, ownershipConfidence: Double, proposedAction: CandidateAction, resolutionReason: String? = nil, resolvedAt: String? = nil, resultTaskId: String? = nil, resultWorkstreamId: String? = nil, sourceSurface: String, status: CandidateStatus? = nil, subjectKind: CandidateSubjectKind, taskChange: CandidateTaskChange? = nil, taskId: String? = nil, workstreamId: String? = nil, workstreamProposal: WorkstreamProposalOutput? = nil) {
       self.accountGeneration = accountGeneration
       self.candidateId = candidateId
       self.captureConfidence = captureConfidence
       self.compatibility = compatibility
       self.createdAt = createdAt
       self.evidenceRefs = evidenceRefs
+      self.expiresAt = expiresAt
       self.goalId = goalId
       self.idempotencyKey = idempotencyKey
       self.ownershipConfidence = ownershipConfidence

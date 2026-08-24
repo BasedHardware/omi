@@ -5,7 +5,6 @@ import Foundation
 enum TaskDetailPanelAction: String, CaseIterable, Hashable {
   case toggleCompletion
   case edit
-  case execute
   case openThread
   case decreaseIndent
   case increaseIndent
@@ -101,9 +100,6 @@ enum TaskDetailPanelActionPolicy {
     var actions: Set<TaskDetailPanelAction> = [
       .toggleCompletion, .edit, .copyLink, .delete,
     ]
-    if !task.completed {
-      actions.insert(.execute)
-    }
     if hasChat {
       actions.insert(.openThread)
     }
@@ -257,15 +253,6 @@ enum TaskDetailSourceLinkPolicy {
     }
     if let confidence = task.confidence {
       fields.append(TaskDetailField(label: "Confidence", value: "\(Int(confidence * 100))%"))
-    }
-    if let agentStatus = task.agentStatus, !agentStatus.isEmpty {
-      fields.append(TaskDetailField(label: "Agent", value: agentStatus.capitalized))
-    }
-    if let files = task.agentEditedFiles, !files.isEmpty {
-      fields.append(TaskDetailField(label: "Edited files", value: files.joined(separator: ", ")))
-    }
-    if let prompt = task.agentPrompt, !prompt.isEmpty {
-      fields.append(TaskDetailField(label: "Agent prompt", value: String(prompt.prefix(2000))))
     }
     fields.append(contentsOf: metadataFields(for: task))
     return fields

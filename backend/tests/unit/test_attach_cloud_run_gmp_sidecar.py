@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import re
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import yaml
 
 SCRIPT = Path(__file__).resolve().parents[2] / 'scripts' / 'attach_cloud_run_gmp_sidecar.py'
 
@@ -243,3 +245,280 @@ def test_patch_service_refuses_a_different_latest_created_revision():
             config_secret='cloud-run-gmp-config',
             config_secret_version='7',
         )
+
+
+def test_gcloud_export_loader_preserves_on_off_env_values_as_strings() -> None:
+    """gcloud writes `value: on` unquoted; YAML 1.1 would make that a boolean.
+
+    These bytes are copied from a real `gcloud run services describe
+    --format=export` of the production backend service. Under yaml.safe_load
+    the three flags come back as booleans and the dump back through
+    `services replace` rewrites them to 'true'/'false', which is what broke
+    development deploys at the post-deploy runtime-env validator.
+    """
+    module = _load_module()
+    export = """\
+spec:
+  template:
+    spec:
+      containerConcurrency: 80
+      containers:
+      - name: backend-1
+        env:
+        - name: MEMORY_ENABLED
+          value: on
+        - name: ACCOUNT_CUTOVER_ENFORCEMENT
+          value: off
+        - name: PUBLIC_SHARED_CONVERSATION_CHAT_MODE
+          value: off
+        - name: MEMORY_V3_CURSOR_SECRET_VERSION
+          value: prod-v1
+        - name: REDIS_DB_PORT
+          value: '13151'
+        ports:
+        - containerPort: 8080
+        readinessProbe:
+          periodSeconds: 240
+"""
+    loaded = yaml.load(export, Loader=module.GcloudExportLoader)
+    container = loaded['spec']['template']['spec']['containers'][0]
+    env = {entry['name']: entry['value'] for entry in container['env']}
+
+    assert env['MEMORY_ENABLED'] == 'on'
+    assert env['ACCOUNT_CUTOVER_ENFORCEMENT'] == 'off'
+    assert env['PUBLIC_SHARED_CONVERSATION_CHAT_MODE'] == 'off'
+    assert all(isinstance(value, str) for value in env.values())
+
+    # structural numbers must still load as numbers, not strings
+    assert container['ports'][0]['containerPort'] == 8080
+    assert container['readinessProbe']['periodSeconds'] == 240
+    assert loaded['spec']['template']['spec']['containerConcurrency'] == 80
+
+    # and the round trip back out must reproduce what gcloud gave us
+    round_tripped = yaml.load(yaml.safe_dump(loaded), Loader=module.GcloudExportLoader)
+    assert round_tripped == loaded
+
+
+def test_gcloud_export_loader_still_reads_real_booleans() -> None:
+    """Only the YAML 1.1 extras are dropped; the 1.2 core set is intact."""
+    module = _load_module()
+    loaded = yaml.load('a: true\nb: false\nc: on\nd: off\ne: yes\nf: no\n', Loader=module.GcloudExportLoader)
+    assert loaded == {'a': True, 'b': False, 'c': 'on', 'd': 'off', 'e': 'yes', 'f': 'no'}
+
+
+def test_attach_refuses_to_replace_when_export_retypes_expected_env(monkeypatch, tmp_path) -> None:
+    module = _load_module()
+    expected_state = tmp_path / 'runtime-env-state.json'
+    expected_state.write_text(
+        json.dumps(
+            {
+                'services': {
+                    'backend': {
+                        'env': [
+                            {'name': 'PUBLIC_SHARED_CONVERSATION_CHAT_MODE', 'value': 'off'},
+                        ]
+                    }
+                }
+            }
+        ),
+        encoding='utf-8',
+    )
+    config = tmp_path / 'cloud-run-gmp-sidecar.yaml'
+    config.write_text('kind: RunMonitoring\n', encoding='utf-8')
+    calls: list[list[str]] = []
+    secret_calls: list[dict[str, object]] = []
+
+    export = """\
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: backend
+spec:
+  template:
+    metadata: {}
+    spec:
+      containers:
+      - name: backend-1
+        env:
+        - name: PUBLIC_SHARED_CONVERSATION_CHAT_MODE
+          value: off
+  traffic:
+  - latestRevision: false
+    revisionName: backend-serving
+    percent: 100
+"""
+
+    def fake_run(args, *, capture_output=False):
+        calls.append(list(args))
+        if '--format=export' in args:
+            return module.subprocess.CompletedProcess(args, 0, export, '')
+        if '--format=value(status.latestCreatedRevisionName)' in args:
+            return module.subprocess.CompletedProcess(args, 0, 'backend-base\n', '')
+        if args[1:4] == ['run', 'services', 'replace']:
+            return module.subprocess.CompletedProcess(args, 0, '{}', '')
+        if '--format=value(status.url)' in args:
+            return module.subprocess.CompletedProcess(args, 0, 'https://backend.example\n', '')
+        raise AssertionError(args)
+
+    def fake_ensure_config_secret(**kwargs):
+        secret_calls.append(kwargs)
+        return '7'
+
+    monkeypatch.setattr(module, 'ensure_config_secret', fake_ensure_config_secret)
+    monkeypatch.setattr(module, '_project_number', lambda _project: '1031333818730')
+    monkeypatch.setattr(module, '_run', fake_run)
+    # Simulate the exact regression: parsing gcloud's YAML 1.2 export with
+    # PyYAML's YAML 1.1 resolver turns the literal string `off` into False.
+    monkeypatch.setattr(module, 'GcloudExportLoader', yaml.SafeLoader)
+
+    with pytest.raises(ValueError, match="expected 'off', found 'false'"):
+        module.attach_sidecar(
+            SimpleNamespace(
+                project='based-hardware',
+                region='us-central1',
+                service='backend',
+                base_revision='backend-base',
+                final_revision='backend-final',
+                ingress_container='backend-1',
+                config=config,
+                config_secret='cloud-run-gmp-config',
+                expected_env_state=expected_state,
+                tag='',
+            )
+        )
+
+    assert not any(args[1:4] == ['run', 'services', 'replace'] for args in calls)
+    assert secret_calls == []
+
+
+# A project ID in run.googleapis.com/secrets crashes the NEXT gcloud run deploy.
+# Cloud Run accepts the ID and stores it, so nothing fails at attach time and the
+# breakage lands on whoever deploys next. Production carried
+# `cloud-run-gmp-config:projects/based-hardware/secrets/cloud-run-gmp-config` and
+# every deploy died with "Invalid secret path" until the live service was repaired.
+PROJECT_NUMBER = '208440318997'
+
+
+def test_project_id_path_is_rewritten_to_project_number():
+    module = _load_module()
+    repaired = module._normalize_secret_annotation(
+        'cloud-run-gmp-config:projects/based-hardware/secrets/cloud-run-gmp-config',
+        project_number=PROJECT_NUMBER,
+    )
+    assert repaired == f'cloud-run-gmp-config:projects/{PROJECT_NUMBER}/secrets/cloud-run-gmp-config'
+
+
+def test_already_numeric_path_needs_no_change():
+    module = _load_module()
+    annotation = f'cloud-run-gmp-config:projects/{PROJECT_NUMBER}/secrets/cloud-run-gmp-config'
+    assert module._normalize_secret_annotation(annotation, project_number=PROJECT_NUMBER) is None
+
+
+def test_every_entry_is_repaired_not_just_the_sidecar_secret():
+    module = _load_module()
+    repaired = module._normalize_secret_annotation(
+        'other-secret:projects/based-hardware/secrets/other-secret,'
+        f'cloud-run-gmp-config:projects/{PROJECT_NUMBER}/secrets/cloud-run-gmp-config',
+        project_number=PROJECT_NUMBER,
+    )
+    assert repaired == (
+        f'cloud-run-gmp-config:projects/{PROJECT_NUMBER}/secrets/cloud-run-gmp-config,'
+        f'other-secret:projects/{PROJECT_NUMBER}/secrets/other-secret'
+    )
+
+
+@pytest.mark.parametrize('value', ['not-an-entry', '', None])
+def test_unrecognised_annotation_is_left_alone_rather_than_guessed_at(value):
+    module = _load_module()
+    assert module._normalize_secret_annotation(value, project_number=PROJECT_NUMBER) is None
+
+
+def test_attach_merge_heals_a_stale_entry_for_another_secret():
+    module = _load_module()
+    merged = module._merge_secret_annotation(
+        'other-secret:projects/based-hardware/secrets/other-secret',
+        project_number=PROJECT_NUMBER,
+        secret='cloud-run-gmp-config',
+    )
+    assert 'projects/based-hardware/' not in merged
+    assert f'other-secret:projects/{PROJECT_NUMBER}/secrets/other-secret' in merged
+
+
+def test_repair_is_a_no_op_when_the_annotation_is_already_correct(monkeypatch):
+    """Idempotence: a second repair run must not issue a services replace."""
+    module = _load_module()
+    good = f'cloud-run-gmp-config:projects/{PROJECT_NUMBER}/secrets/cloud-run-gmp-config'
+    service = {
+        'metadata': {'name': 'backend'},
+        'spec': {'template': {'metadata': {'annotations': {module.SECRET_ANNOTATION: good}}}},
+    }
+    calls = []
+
+    def fake_run(argv, **kwargs):
+        calls.append(argv)
+        if 'describe' in argv:
+            return SimpleNamespace(returncode=0, stdout=yaml.safe_dump(service), stderr='')
+        raise AssertionError(f'unexpected gcloud call: {argv}')
+
+    monkeypatch.setattr(module, '_run', fake_run)
+    monkeypatch.setattr(module, '_project_number', lambda project: PROJECT_NUMBER)
+    args = SimpleNamespace(project='based-hardware', region='us-central1', service='backend', dry_run=False)
+    assert module.repair_secret_annotations(args) == 0
+    assert not any('replace' in argv for argv in calls)
+
+
+# gcloud's own validation rule, copied verbatim from googlecloudsdk's secret-path
+# parser so a vendor upgrade that tightens it fails here rather than on the next
+# production deploy. This is the strict consumer that FC-metadata-format-validated-
+# only-on-next-read exists for: Cloud Run's API accepts a project ID here, gcloud
+# does not, and the mismatch surfaces on an unrelated later deploy.
+GCLOUD_SECRET_PATH_RULE = re.compile(r'^projects/[0-9]{1,19}/secrets/[^/:]+$')
+
+
+@pytest.mark.parametrize(
+    'existing',
+    [
+        None,
+        '',
+        'cloud-run-gmp-config:projects/based-hardware/secrets/cloud-run-gmp-config',
+        'other-secret:projects/based-hardware/secrets/other-secret',
+        f'cloud-run-gmp-config:projects/{PROJECT_NUMBER}/secrets/cloud-run-gmp-config',
+    ],
+)
+def test_every_written_entry_satisfies_gclouds_actual_rule(existing):
+    module = _load_module()
+    merged = module._merge_secret_annotation(existing, project_number=PROJECT_NUMBER, secret='cloud-run-gmp-config')
+    for entry in merged.split(','):
+        _, _, resource = entry.partition(':')
+        assert GCLOUD_SECRET_PATH_RULE.match(resource), f'gcloud would reject {resource!r}'
+
+
+def test_repair_drops_a_stale_pinned_revision_name_before_replace():
+    """A failed deploy leaves its revision name pinned in the export.
+
+    `services replace` then fails with ALREADY_EXISTS because it would recreate
+    that exact name with different configuration. Repair must drop the pin.
+    """
+    module = _load_module()
+    service = {
+        'spec': {
+            'template': {
+                'metadata': {
+                    'name': 'backend-465cd0f-32620507075-1',
+                    'annotations': {module.SECRET_ANNOTATION: 'x:projects/p/secrets/x'},
+                }
+            }
+        }
+    }
+    removed = module._drop_pinned_revision_name(service)
+    assert removed == 'backend-465cd0f-32620507075-1'
+    assert 'name' not in service['spec']['template']['metadata']
+    # Annotations must survive untouched.
+    assert service['spec']['template']['metadata']['annotations'][module.SECRET_ANNOTATION]
+
+
+def test_dropping_a_pin_that_is_absent_is_not_an_error():
+    module = _load_module()
+    service = {'spec': {'template': {'metadata': {'annotations': {}}}}}
+    assert module._drop_pinned_revision_name(service) is None
+    assert module._drop_pinned_revision_name({}) is None

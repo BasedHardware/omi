@@ -1490,4 +1490,57 @@ void main() {
       provider.dispose();
     });
   });
+
+  group('in-progress conversation poll cycle', () {
+    // The socket starts this cycle on every connect. Restarting an already
+    // running cycle put its attempt counter back to zero, so a connection that
+    // reconnects more often than the give-up window kept the app polling
+    // GET /v1/conversations?...&statuses=in_progress indefinitely instead of
+    // ever reaching the cap.
+    test('a reconnect mid-cycle does not reset the attempt counter', () {
+      fakeAsync((async) {
+        final provider = CaptureProvider(inProgressConversationLoader: () async {});
+        provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
+        provider.updateRecordingState(RecordingState.deviceRecord);
+
+        provider.startInProgressConversationRefreshForTesting();
+        async.elapse(const Duration(seconds: 10));
+        async.flushMicrotasks();
+
+        final attemptsBeforeReconnect = provider.inProgressConversationRefreshAttemptsForTesting;
+        expect(attemptsBeforeReconnect, greaterThan(0));
+
+        // Simulate a socket reconnect landing while the cycle is still running.
+        provider.startInProgressConversationRefreshForTesting();
+
+        expect(
+          provider.inProgressConversationRefreshAttemptsForTesting,
+          attemptsBeforeReconnect,
+          reason: 'a reconnect must not restart an already-running poll cycle',
+        );
+
+        provider.dispose();
+      });
+    });
+
+    test('the cycle self-terminates at its cap when nothing interrupts it', () {
+      fakeAsync((async) {
+        var loadCalls = 0;
+        final provider = CaptureProvider(
+          inProgressConversationLoader: () async => loadCalls++,
+        );
+        provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
+        provider.updateRecordingState(RecordingState.deviceRecord);
+
+        provider.startInProgressConversationRefreshForTesting();
+        async.elapse(const Duration(seconds: 90));
+        async.flushMicrotasks();
+
+        expect(provider.inProgressConversationRefreshActiveForTesting, isFalse);
+        expect(loadCalls, 30);
+
+        provider.dispose();
+      });
+    });
+  });
 }

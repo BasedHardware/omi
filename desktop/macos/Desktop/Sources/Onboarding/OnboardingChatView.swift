@@ -505,22 +505,24 @@ struct OnboardingChatView: View {
     }
   }
 
-  /// Open System Settings to the correct pane for a permission type
   private func openSettingsForPermission(_ type: String) {
-    if type == "screen_recording" {
-      ScreenCaptureService.openScreenRecordingPreferences()
-      return
-    }
     if type == "notifications" {
       appState.openNotificationPreferences()
       return
+    }
+    switch type {
+    case "screen_recording":
+      ScreenCaptureService.openScreenRecordingPreferences()
+      return
+    case "accessibility":
+      appState.openAccessibilityPreferences()
+      return
+    default: break
     }
     let urlString: String? = {
       switch type {
       case "microphone":
         return "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
-      case "accessibility":
-        return "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
       case "automation":
         return "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation"
       case "full_disk_access":
@@ -529,12 +531,10 @@ struct OnboardingChatView: View {
         return nil
       }
     }()
-    if let urlString, let url = URL(string: urlString) {
-      NSWorkspace.shared.open(url)
-      // Full Disk Access uses the same drag-to-grant mechanic as Screen Recording.
-      if type == "full_disk_access" {
-        Task { await PermissionDragGuidance.presentDragToGrantHelper() }
-      }
+    guard let urlString, let url = URL(string: urlString) else { return }
+    NSWorkspace.shared.open(url)
+    if type == "full_disk_access" {
+      Task { await PermissionDragGuidance.presentDragToGrantHelper() }
     }
   }
 

@@ -586,6 +586,11 @@ def test_canonical_capture_logs_text_free_regime_and_attribution_decision(monkey
         "distinct_speaker_ids": 2,
         "memory_id": mock_service.replace_conversation_memories.call_args.args[2][0]["id"],
         "model_about": "primary_user",
+        # One speaker was flagged as the owner here. 0 (owner never identified) and
+        # >1 (impossible -- an account has one owner) are the states that decide
+        # whether anything from this conversation can ever be promoted, and neither
+        # is derivable from distinct_speaker_ids.
+        "owner_speaker_ids": 1,
         "stage": "capture",
         "subject_attribution": "third_party",
         "uid": "uid-decision-log",

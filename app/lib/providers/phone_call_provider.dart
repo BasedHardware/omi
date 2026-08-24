@@ -235,11 +235,14 @@ class PhoneCallProvider extends ChangeNotifier {
     if (generation != _sessionGeneration) return false;
 
     // Get Twilio token
-    var token = await api.getPhoneCallToken();
+    var tokenResult = await api.getPhoneCallToken();
     if (generation != _sessionGeneration) return false;
+    var token = tokenResult.token;
     if (token == null) {
       _callState = PhoneCallState.idle;
-      _error = 'Failed to get call token. Verify your phone number first.';
+      // The backend refuses for several different reasons (no verified number, quota
+      // exhausted, plan without calling). Reporting its own reason beats guessing one.
+      _error = tokenResult.error ?? 'Failed to get call token. Please try again.';
       notifyListeners();
       return false;
     }
@@ -437,7 +440,7 @@ class PhoneCallProvider extends ChangeNotifier {
       if (generation != _sessionGeneration || !_sessionEnabled) return;
       if (_callState != PhoneCallState.active && _callState != PhoneCallState.ringing) return;
       Logger.info('PhoneCallProvider: refreshing call token');
-      var token = await api.getPhoneCallToken();
+      var token = (await api.getPhoneCallToken()).token;
       if (generation != _sessionGeneration || !_sessionEnabled) return;
       if (token != null) {
         await _nativeService.initialize(token.accessToken);

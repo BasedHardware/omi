@@ -556,19 +556,36 @@ final class OmiSoundController {
   private let systemUISoundsEnabled: () -> Bool
   private let defaults: UserDefaults
 
+  /// How long the bed is allowed to play before it fades itself out.
+  ///
+  /// The bed loops from one decoded buffer with `.loops`, so without a cap it plays
+  /// for as long as the process lives — nothing in the cinematic stops it if the
+  /// user leaves onboarding open, and that is what is heard as intro music that
+  /// never ends. Ten seconds is enough to read as the app arriving.
+  static let maxMusicDuration: TimeInterval = 10
+
   private var available: Set<OmiSoundAsset> = []
   private var didPrepare = false
+  /// Bumped whenever the bed starts or stops, so a cap scheduled for an older run
+  /// recognises itself as stale instead of cutting a bed someone started since.
+  private var musicGeneration = 0
+  private let scheduleCap: (TimeInterval, @escaping @Sendable () -> Void) -> Void
 
   init(
     output: OmiSoundOutput,
     locator: OmiSoundAssetLocator,
     systemUISoundsEnabled: @escaping () -> Bool,
-    defaults: UserDefaults = .standard
+    defaults: UserDefaults = .standard,
+    // Injectable so the cap is testable without a wall-clock wait.
+    scheduleCap: @escaping (TimeInterval, @escaping @Sendable () -> Void) -> Void = { delay, body in
+      DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: body)
+    }
   ) {
     self.output = output
     self.locator = locator
     self.systemUISoundsEnabled = systemUISoundsEnabled
     self.defaults = defaults
+    self.scheduleCap = scheduleCap
     // Absent means on: an install that has never seen the control still gets the bed.
     self.isMusicEnabled = defaults.object(forKey: Self.musicEnabledDefaultsKey) as? Bool ?? true
     self.areEffectsEnabled = defaults.object(forKey: Self.effectsEnabledDefaultsKey) as? Bool ?? true
@@ -634,12 +651,30 @@ final class OmiSoundController {
     guard isMusicEnabled, available.contains(.pad), !isMusicPlaying else { return }
     isMusicPlaying = true
     output.startLoop(.pad, fadeIn: max(0, fadeIn))
+    scheduleMusicCap()
   }
 
   func stopMusic(fadeOut: TimeInterval) {
+    musicGeneration &+= 1
     guard isMusicPlaying else { return }
     isMusicPlaying = false
     output.stopLoop(fadeOut: max(0, fadeOut))
+  }
+
+  /// Fades the bed out once its allowance is spent, so a loop that nothing else
+  /// stops cannot keep playing for the life of the process.
+  private func scheduleMusicCap() {
+    musicGeneration &+= 1
+    let generation = musicGeneration
+    scheduleCap(Self.maxMusicDuration) { [weak self] in
+      MainActor.assumeIsolated {
+        guard let self, self.musicGeneration == generation, self.isMusicPlaying else { return }
+        // Logged because the cap is otherwise only audible: without this line the
+        // only way to tell a build has it is to sit and listen to onboarding.
+        log("onboarding sound: bed reached its \(Int(Self.maxMusicDuration))s cap; fading out")
+        self.stopMusic(fadeOut: OmiOnboardingMusic.defaultFadeOut)
+      }
+    }
   }
 }
 

@@ -82,17 +82,37 @@ final class IntegrationNudgeCatalogTests: XCTestCase {
     }
   }
 
-  /// Real window titles, observed from the actual sites. Synthesizing a title
-  /// out of the keyword ("Some Page — \(keyword)") would match by construction
-  /// and prove nothing — which is exactly how a round of domain-style keywords
-  /// (`chatgpt.com`, `claude.ai`, `notion.so`) passed while matching nothing a
-  /// browser ever puts in a window title.
+  /// Real window titles, read out of a developer's own Chrome and Arc history
+  /// (95,577 titles) and filtered to the sites themselves. Only the account
+  /// addresses are replaced; every shape here is one a browser really produced.
+  ///
+  /// Synthesizing a title out of the keyword ("Some Page — \(keyword)") would
+  /// match by construction and prove nothing — which is exactly how a round of
+  /// domain-style keywords (`chatgpt.com`, `claude.ai`, `notion.so`) passed
+  /// while matching nothing a browser ever puts in a window title. The same trap
+  /// caught two entries in the previous version of this fixture: "Reviewing a
+  /// diff \\ Claude" and "Swift concurrency question - ChatGPT" were invented,
+  /// and neither shape occurs once in the corpus.
   private static let observedBrowserTitles: [String: [String]] = [
-    "gmail_web": ["Inbox (12) - me@corp.com - Gmail", "Omi launch - me@corp.com - Gmail"],
-    "x_web": ["Home / X", "(3) Home / X", "Archit on X: \"shipping\" / X"],
-    "chatgpt_web": ["ChatGPT", "Swift concurrency question - ChatGPT"],
-    "claude_web": ["Claude", "Reviewing a diff \\ Claude"],
-    "gemini_web": ["Gemini", "Trip planning - Gemini"],
+    "gmail_web": ["Gmail", "Inbox (16,993) - me@gmail.com - Gmail"],
+    // Google Workspace names the mailbox after the organization, so "Gmail"
+    // never appears. 51% of the corpus's Gmail visits look like this.
+    "gmail_workspace_web": [
+      "Inbox (3,012) - me@umn.edu - University of Minnesota Twin Cities Mail"
+    ],
+    "x_web": ["Home / X", "(3) Home / X", "Sam Altman (@sama) / X"],
+    // 2,108 of 2,798 chatgpt.com visits (75%) are titled exactly "ChatGPT"; the
+    // rest carry the conversation's own name and are unrecognizable by title.
+    "chatgpt_web": ["ChatGPT"],
+    "claude_web": [
+      "Claude", "New chat - Claude",
+      "Monthly recurring revenue to annual projection - Claude",
+    ],
+    // Gemini prefixes its title with an invisible left-to-right mark.
+    "gemini_web": [
+      "Google Gemini", "\u{200E}Google Gemini",
+      "BCI Input Ideas: Games, Typing, Music - Google Gemini",
+    ],
   ]
 
   /// Every browser trigger must match a title a browser actually produces, and
@@ -111,8 +131,10 @@ final class IntegrationNudgeCatalogTests: XCTestCase {
             )
           }
 
-        case .browserTitleSuffix(let suffixes):
-          XCTAssertFalse(suffixes.isEmpty, "\(trigger.id) declares no suffixes")
+        case .browserTitleSite, .browserTitleGoogleWorkspaceMailbox:
+          if case .browserTitleSite(let names) = trigger.match {
+            XCTAssertFalse(names.isEmpty, "\(trigger.id) declares no site names")
+          }
           guard let titles = Self.observedBrowserTitles[trigger.id] else {
             // `continue`, not `return`: returning here would skip every later
             // entry's assertions, including the native-app round-trips.

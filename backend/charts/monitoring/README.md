@@ -617,7 +617,7 @@ specifically for failures that stay green on every other signal, and are documen
 
 | Rule | Catches |
 |---|---|
-| `omi-llm-gateway-invalid-request-rejections` | Requests rejected during validation, **before** a route is selected. These are counted by `llm_gateway_request_rejections_total` and never reach `llm_gateway_requests_total`, so the affected lane keeps reporting 100% success. |
+| `omi-llm-gateway-invalid-requests` | Requests rejected during validation, **before** a route is selected. These are counted by `llm_gateway_request_rejections_total` and never reach `llm_gateway_requests_total`, so the affected lane keeps reporting 100% success. |
 | `omi-llm-gateway-lane-failure-ratio` | A lane failing more than a quarter of its real requests over an hour. |
 | `omi-llm-gateway-lane-zero-success` | A lane with attempts but no successful request in six hours. The `or ... * 0` zero-fill is required: a lane that has never succeeded has no `outcome="success"` series, so a plain ratio produces no series and no alert. |
 | `omi-journey-signal-dead` | A journey counter that stopped reporting while the platform is demonstrably serving traffic. Every real-traffic journey rule assumes its counter is scraped; when that breaks, the rule goes quiet rather than failing loudly. |

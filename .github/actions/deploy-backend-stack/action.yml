@@ -281,18 +281,6 @@ runs:
         fi
         python3 "$DEPLOY_CONTROL_SCRIPTS/preflight-cloud-run-deploy.py" "${PREFLIGHT_ARGS[@]}"
 
-    - name: Validate backend runtime env before deploy
-      shell: bash
-      env:
-        SYNC_LEDGER_FENCE_MODE: ${{ env.SYNC_LEDGER_FENCE_MODE }}
-      run: |
-        python3 "$DEPLOY_CONTROL_SCRIPTS/validate-backend-runtime-env.py" \
-          --env ${{ inputs.runtime_env }} \
-          --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
-          --check-workflows \
-          --workflow-root "$DEPLOY_WORKFLOW_ROOT" \
-          --check-rendered-cloud-run
-
     - name: Build runtime image
       uses: docker/build-push-action@v7
       with:
@@ -435,7 +423,20 @@ runs:
       run: |
         python3 "$DEPLOY_CONTROL_SCRIPTS/render_backend_runtime_env.py" \
           --env ${{ inputs.runtime_env }} \
-          --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" >> "$GITHUB_OUTPUT"
+          --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
+          --state-output "$RUNNER_TEMP/backend-runtime-env-state.json" >> "$GITHUB_OUTPUT"
+
+    - name: Validate backend runtime env before deploy
+      shell: bash
+      env:
+        SYNC_LEDGER_FENCE_MODE: ${{ env.SYNC_LEDGER_FENCE_MODE }}
+      run: |
+        python3 "$DEPLOY_CONTROL_SCRIPTS/validate-backend-runtime-env.py" \
+          --env ${{ inputs.runtime_env }} \
+          --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
+          --check-workflows \
+          --workflow-root "$DEPLOY_WORKFLOW_ROOT" \
+          --cloud-run-state "$RUNNER_TEMP/backend-runtime-env-state.json"
 
     - name: Migrate legacy public Cloud Run bindings
       shell: bash
@@ -494,6 +495,7 @@ runs:
           --final-revision="backend-${{ steps.image-tag.outputs.revision_suffix }}"
           --ingress-container=backend-1
           --config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sidecar.yaml"
+          --expected-env-state="$RUNNER_TEMP/backend-runtime-env-state.json"
         )
         if [[ -n "$GMP_CANDIDATE_TAG" ]]; then
           args+=(--tag="$GMP_CANDIDATE_TAG")

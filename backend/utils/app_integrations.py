@@ -593,12 +593,18 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
     )
 
     # ── Gather full context (expensive: vector search + recent convos) ───
+    #
+    # The two sources are guarded separately on purpose: semantic search needs an embedding
+    # provider and a vector store, recent-by-time needs neither. Under one shared try/except a
+    # single embedding failure (missing key, quota, provider outage) also took down the
+    # recent-conversations fetch that follows it, leaving the mentor with no past context at
+    # all — silently, because the draft is still written from the live transcript alone.
     past_conversations_str = ''
+    all_past: list[dict] = []
+
+    # Vector search for semantically relevant conversations
     try:
         conversation_text = ' '.join(msg.get('text', '') for msg in conversation_messages)
-        all_past = []
-
-        # Vector search for semantically relevant conversations
         if conversation_text.strip():
             vector = generate_embedding(conversation_text[:2000])
             memory_ids = query_vectors_by_metadata(
@@ -608,19 +614,25 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
                 vector_convos = conversations_db.get_conversations_by_id(uid, memory_ids)
                 if vector_convos:
                     all_past.extend([c for c in vector_convos if not c.get('is_locked')])
+    except Exception as e:
+        logger.error(f"mentor_proactive vector_search_failed uid={uid} error={e}")
 
-        # Also fetch recent conversations by time for additional context
+    # Also fetch recent conversations by time for additional context
+    try:
         recent_convos = conversations_db.get_conversations(uid, limit=5, offset=0)
         if recent_convos:
             existing_ids = {c.get('id') for c in all_past}
             for rc in recent_convos:
                 if rc.get('id') not in existing_ids and not rc.get('is_locked'):
                     all_past.append(rc)
+    except Exception as e:
+        logger.error(f"mentor_proactive recent_conversations_failed uid={uid} error={e}")
 
+    try:
         if all_past:
             past_conversations_str = conversations_to_string(deserialize_conversations(all_past[:5]))
     except Exception as e:
-        logger.error(f"mentor_proactive past_conversations_failed uid={uid} error={e}")
+        logger.error(f"mentor_proactive past_conversations_render_failed uid={uid} error={e}")
 
     # Resolve the user's output language once so the notification is generated in it, not English
     # (the daily summary already respects this setting) (#5214).

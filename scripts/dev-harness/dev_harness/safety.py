@@ -13,7 +13,6 @@ import json
 import os
 import re
 import signal
-import socket
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -123,8 +122,6 @@ _PROVIDER_SECRET_RE = re.compile(
     r"(API_KEY|ACCESS_TOKEN|AUTH_TOKEN|SECRET|DEEPGRAM|OPENAI|ANTHROPIC|GROQ|ELEVENLABS)", re.IGNORECASE
 )
 _LOOPBACK_NAMES = {"localhost"}
-_LOOPBACK_V4_PREFIX = "127."
-_LOOPBACK_V6 = {"::1", "0:0:0:0:0:0:0:1"}
 _DANGEROUS_NAMES = {"", ".", ".."}
 
 
@@ -181,15 +178,12 @@ def _host_from_emulator_value(value: str) -> str:
 
 def is_loopback_host(value: str) -> bool:
     host = _host_from_emulator_value(value)
-    if host in _LOOPBACK_NAMES or host in _LOOPBACK_V6:
-        return True
-    if host.startswith(_LOOPBACK_V4_PREFIX):
+    if host in _LOOPBACK_NAMES:
         return True
     try:
-        ip = socket.inet_pton(socket.AF_INET6, host)
-    except OSError:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
         return False
-    return ip == socket.inet_pton(socket.AF_INET6, "::1")
 
 
 def validate_loopback_emulator_host(value: str, *, name: str = "emulator") -> str:

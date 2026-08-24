@@ -501,14 +501,21 @@ extension PostHogManager {
   // but it actually tracks when a conversation/recording is created, not a "memory".
   // This matches Flutter's naming for analytics consistency.
 
-  func conversationCreated(conversationId _: String, source: String, durationSeconds: Int? = nil) {
+  static func conversationCreatedProperties(source: String, durationSeconds: Int?) -> [String: Any] {
     var properties: [String: Any] = [
-      "source": source
+      "conversation_source": source
     ]
     if let duration = durationSeconds {
       properties["duration_seconds"] = duration
     }
-    track("Memory Created", properties: properties)
+    return properties
+  }
+
+  func conversationCreated(conversationId _: String, source: String, durationSeconds: Int? = nil) {
+    track(
+      "Memory Created",
+      properties: Self.conversationCreatedProperties(source: source, durationSeconds: durationSeconds)
+    )
   }
 
   func memoryDeleted(conversationId: String) {
