@@ -360,6 +360,7 @@ def is_trial_paywalled(
 
 def clear_trial_paywall_cache(uid: str) -> None:
     redis_db.delete_generic_cache(f"trial_paywall:expired:{uid}:gemini")
+    redis_db.delete_generic_cache(f"trial_paywall:expired:{uid}:openai")
     redis_db.delete_generic_cache(f"trial_paywall:expired:{uid}")
 
 

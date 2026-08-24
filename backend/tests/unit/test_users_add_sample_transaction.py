@@ -45,6 +45,7 @@ def users_db():
     google_exceptions_stub.NotFound = NotFound
 
     firestore_stub.transactional = lambda func: func
+    firestore_stub.DELETE_FIELD = object()
 
     fv1_stub = ModuleType("google.cloud.firestore_v1")
     fv1_stub.FieldFilter = MagicMock()
@@ -190,7 +191,11 @@ def test_byok_activation_replaces_existing_provider_fingerprints(users_db):
 
     assert transaction.updated_ref is user_ref
     assert transaction.merge is True
-    assert transaction.updated_data['byok']['fingerprints'] == {'openrouter': 'openrouter-fingerprint'}
+    fingerprints = transaction.updated_data['byok']['fingerprints']
+    assert fingerprints['openrouter'] == 'openrouter-fingerprint'
+    assert fingerprints['openai'] is users_db.firestore.DELETE_FIELD
+    assert fingerprints['gemini'] is users_db.firestore.DELETE_FIELD
+    assert set(fingerprints) == {'openrouter', 'openai', 'gemini'}
     assert transaction.updated_data['byok']['active'] is True
 
 

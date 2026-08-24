@@ -154,8 +154,10 @@ class TestCacheInvalidationBehavioral:
         assert 'trial_paywall:expired:' in fn_body
         delete_count = fn_body.count('delete_generic_cache')
         assert (
-            delete_count == 2
+            delete_count == 3
         ), f"clear_trial_paywall_cache should clear general and provider-specific keys, got {delete_count}"
+        assert ':gemini' in fn_body
+        assert ':openai' in fn_body
 
 
 class TestPlatformFiltering:
@@ -329,7 +331,10 @@ class TestIsTrialPaywalledBehavioral:
 
     def test_clear_cache_calls_redis_delete(self):
         self._sub.clear_trial_paywall_cache('test-uid-123')
-        self._sub.redis_db.delete_generic_cache.assert_called_with('trial_paywall:expired:test-uid-123')
+        self._sub.redis_db.delete_generic_cache.assert_any_call('trial_paywall:expired:test-uid-123:gemini')
+        self._sub.redis_db.delete_generic_cache.assert_any_call('trial_paywall:expired:test-uid-123:openai')
+        self._sub.redis_db.delete_generic_cache.assert_any_call('trial_paywall:expired:test-uid-123')
+        assert self._sub.redis_db.delete_generic_cache.call_count == 3
 
 
 class TestByokRequestEscapeHatch:
