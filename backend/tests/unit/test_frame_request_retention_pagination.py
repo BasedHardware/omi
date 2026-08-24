@@ -281,7 +281,7 @@ def test_account_failure_advances_population_and_persists_convergent_retry(monke
     monkeypatch.setattr(frame_request_retention, "emit_posthog_event", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         frame_request_retention,
-        "reconcile_pending_conversation_keyframe_jobs_for_user",
+        "prune_expired_conversation_keyframe_jobs",
         lambda *_args, **_kwargs: 0,
     )
 

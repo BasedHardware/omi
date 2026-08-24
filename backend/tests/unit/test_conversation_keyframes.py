@@ -128,6 +128,43 @@ def test_finalization_retry_cannot_regress_requested_job(monkeypatch):
         client_device_id="mac-1",
     )
     assert conversation_keyframes.ensure_conversation_keyframe_job("uid", conversation, firestore_client=Client())
+    assert ref.data["expires_at"] == conversation.finished_at + timedelta(days=7)
     ref.data["state"] = "requested"
     assert conversation_keyframes.ensure_conversation_keyframe_job("uid", conversation, firestore_client=Client())
     assert ref.data["state"] == "requested"
+
+
+def test_expired_keyframe_cleanup_deletes_only_bounded_operational_jobs():
+    deleted = []
+
+    class Snapshot:
+        def __init__(self, identifier):
+            self.reference = SimpleNamespace(delete=lambda: deleted.append(identifier))
+
+    class Query:
+        def collection(self, _name):
+            return self
+
+        def document(self, _name):
+            return self
+
+        def where(self, *, filter):
+            assert filter.field_path == "expires_at"
+            return self
+
+        def limit(self, value):
+            assert value == 2
+            return self
+
+        def stream(self):
+            return [Snapshot("pending-job"), Snapshot("requested-job")]
+
+    count = conversation_keyframes.prune_expired_conversation_keyframe_jobs(
+        "uid",
+        firestore_client=Query(),
+        now=datetime(2026, 8, 24, tzinfo=timezone.utc),
+        limit=2,
+    )
+
+    assert count == 2
+    assert deleted == ["pending-job", "requested-job"]

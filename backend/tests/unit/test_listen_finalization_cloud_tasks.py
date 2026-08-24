@@ -67,7 +67,16 @@ def prod_backend_sync_runtime_env(monkeypatch):
 @pytest.fixture(autouse=True)
 def _isolate_keyframe_outbox(monkeypatch):
     """Keyframe lifecycle behavior is covered by its focused service tests."""
-    monkeypatch.setattr(persisted_finalizer, "ensure_conversation_keyframe_job", lambda *_args, **_kwargs: False)
+
+    async def disabled(*_args, **_kwargs):
+        return SimpleNamespace(enabled=False, account_generation=None)
+
+    monkeypatch.setattr(persisted_finalizer, "resolve_frame_request_authority", disabled)
+    monkeypatch.setattr(
+        persisted_finalizer,
+        "ensure_conversation_keyframe_job",
+        lambda *_args, **_kwargs: pytest.fail("dark rollout must create zero keyframe jobs"),
+    )
 
 
 def _finalization_task_client():

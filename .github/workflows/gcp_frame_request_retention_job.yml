@@ -151,6 +151,15 @@ jobs:
           else
             gcloud scheduler jobs create http "$SCHEDULER_JOB" "${common[@]}"
           fi
+          scheduler_state=$(gcloud scheduler jobs describe "$SCHEDULER_JOB" --location="$REGION" \
+            --project="${{ vars.GCP_PROJECT_ID }}" --format='value(state)')
+          if [[ "$scheduler_state" == "PAUSED" ]]; then
+            gcloud scheduler jobs resume "$SCHEDULER_JOB" --location="$REGION" \
+              --project="${{ vars.GCP_PROJECT_ID }}"
+          elif [[ "$scheduler_state" != "ENABLED" ]]; then
+            echo "ERROR: unexpected Scheduler state before validation: $scheduler_state" >&2
+            exit 1
+          fi
           state_file=$(mktemp)
           trap 'rm -f "$state_file"' EXIT
           gcloud scheduler jobs describe "$SCHEDULER_JOB" --location="$REGION" \

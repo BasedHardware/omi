@@ -26,7 +26,7 @@ from database.frame_requests import (
 )
 from utils.integration_telemetry import emit_posthog_event
 from utils.retrieval.frame_request_storage import delete_frame_request_pixels
-from services.conversation_keyframes import reconcile_pending_conversation_keyframe_jobs_for_user
+from services.conversation_keyframes import prune_expired_conversation_keyframe_jobs
 
 logger = logging.getLogger(__name__)
 _STATE_COLLECTION = "maintenance_state"
@@ -222,7 +222,11 @@ def run_frame_request_retention_maintenance(
             continue
         attempted += 1
         try:
-            reconcile_pending_conversation_keyframe_jobs_for_user(uid, firestore_client=client)
+            prune_expired_conversation_keyframe_jobs(
+                uid,
+                firestore_client=client,
+                limit=rows_per_user,
+            )
             changed, more_due = _drain_due_pages(
                 lambda: prune_expired_frame_requests(uid, limit=rows_per_user, firestore_client=client),
                 page_size=rows_per_user,

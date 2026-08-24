@@ -12,9 +12,10 @@ from database.screen_activity import (
 from database.vector_db import upsert_screen_activity_vectors
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.executors import db_executor, run_blocking
+from utils.jit_rollout import JITDecisionStage
 from utils.other.endpoints import get_current_user_uid, with_rate_limit
 from utils.observability.fallback import record_fallback
-from utils.retrieval.frame_request_authority import decision_for
+from utils.retrieval.frame_request_authority import resolve_frame_request_authority
 from utils.subscription import grants_cloud_screen_vectors, is_desktop_trial_paywalled
 from services.conversation_keyframes import reconcile_conversation_keyframe_jobs
 
@@ -157,7 +158,11 @@ async def sync_screen_activity(
         device_id = request.rows[0].client_device_id
         same_device_batch = bool(device_id) and all(row.client_device_id == device_id for row in request.rows)
         routed_device_id = device_id if isinstance(device_id, str) else ""
-        decision = decision_for(uid)
+        decision = await resolve_frame_request_authority(
+            uid,
+            stage=JITDecisionStage.INGRESS,
+            force_refresh=True,
+        )
         if decision.enabled and decision.account_generation == request.account_generation and same_device_batch:
             try:
                 await run_blocking(

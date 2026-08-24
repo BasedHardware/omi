@@ -7,10 +7,11 @@ from PIL import Image
 
 from models.frame_request import FrameRequest, FrameRequestCleanupState, FrameRequestPromotion, FrameRequestState
 from routers import frame_requests
+from utils.jit_rollout import JITDecisionStage, TriState
 from utils.retrieval import frame_request_authority
 
 
-async def _allow(_uid: str, _generation: int) -> None:
+async def _allow(_uid: str, _generation: int, **_kwargs) -> None:
     return None
 
 
@@ -129,8 +130,6 @@ async def test_ambiguous_upload_commit_reconciles_without_deleting_object(monkey
     monkeypatch.setattr(frame_requests, "upload_frame_request_pixels", lambda *args: None)
 
     async def run_blocking(_executor, function, *args, **kwargs):
-        if function is frame_requests.authorize:
-            return None
         if function is frame_requests.upload_frame_request_pixels:
             nonlocal uploaded_storage_id
             uploaded_storage_id = args[1]
@@ -161,26 +160,44 @@ async def test_ambiguous_upload_commit_reconciles_without_deleting_object(monkey
     assert result.request.state == FrameRequestState.uploaded
 
 
-def test_posthog_authority_requires_cohort_and_independent_kill_switch(monkeypatch):
-    class FakePostHog:
-        def __init__(self):
-            self.values = {"cohort": True, "kill": False}
+@pytest.mark.asyncio
+async def test_frame_authority_reuses_shared_rollout_and_generation_fence(monkeypatch):
+    calls = []
 
-        def get_feature_flag(self, name, uid):
-            return self.values[name]
+    async def resolve(uid, *, stage, force_refresh):
+        calls.append((uid, stage, force_refresh))
+        return type("Rollout", (), {"permits_work": True, "kill_switch": TriState.DISABLED})()
 
-    fake = FakePostHog()
-    monkeypatch.setattr(frame_request_authority, "get_posthog_client_for_decisions", lambda: fake)
+    async def run_blocking(_executor, function, uid):
+        assert function is frame_request_authority._account_generation
+        assert uid == "user-1"
+        return 9
+
+    monkeypatch.setattr(frame_request_authority, "resolve_jit_rollout", resolve)
+    monkeypatch.setattr(frame_request_authority, "run_blocking", run_blocking)
+
+    enabled = await frame_request_authority.resolve_frame_request_authority(
+        "user-1", stage=JITDecisionStage.PAID_BOUNDARY, force_refresh=True
+    )
+
+    assert enabled.enabled is True and enabled.account_generation == 9
+    assert calls == [("user-1", JITDecisionStage.PAID_BOUNDARY, True)]
+
+
+@pytest.mark.asyncio
+async def test_frame_authority_fails_closed_before_generation_read(monkeypatch):
+    async def resolve(*_args, **_kwargs):
+        return type("Rollout", (), {"permits_work": False, "kill_switch": TriState.ENABLED})()
+
+    monkeypatch.setattr(frame_request_authority, "resolve_jit_rollout", resolve)
     monkeypatch.setattr(
         frame_request_authority,
-        "get_account_cutover_record",
-        lambda uid: type("Record", (), {"account_generation": 9})(),
+        "run_blocking",
+        lambda *_args, **_kwargs: pytest.fail("disabled rollout must not read account generation"),
     )
-    authority = frame_request_authority.PostHogFrameRequestAuthority(cohort_flag="cohort", kill_switch_flag="kill")
 
-    enabled = authority.decide("user-1")
-    assert enabled.enabled is True and enabled.account_generation == 9
+    killed = await frame_request_authority.resolve_frame_request_authority(
+        "user-1", stage=JITDecisionStage.INGRESS, force_refresh=True
+    )
 
-    fake.values["kill"] = True
-    killed = authority.decide("user-1")
     assert killed.enabled is False and killed.kill_switch is True

@@ -7,26 +7,22 @@ from fastapi.testclient import TestClient
 from models.frame_request import FrameRequest, FrameRequestState
 from routers import frame_requests
 from utils.other.endpoints import get_current_user_uid
-from utils.retrieval.frame_request_authority import (
-    DisabledFrameRequestAuthority,
-    FrameRequestAuthorityDecision,
-    set_frame_request_authority_for_tests,
-)
-
-
-class _EnabledAuthority:
-    def __init__(self, generation: int):
-        self.generation = generation
-
-    def decide(self, uid: str) -> FrameRequestAuthorityDecision:
-        return FrameRequestAuthorityDecision(enabled=True, account_generation=self.generation)
 
 
 @pytest.fixture(autouse=True)
-def _reset_authority():
-    set_frame_request_authority_for_tests(DisabledFrameRequestAuthority())
-    yield
-    set_frame_request_authority_for_tests(DisabledFrameRequestAuthority())
+def _deny_authority(monkeypatch):
+    async def deny(*_args, **_kwargs):
+        raise PermissionError("disabled")
+
+    monkeypatch.setattr(frame_requests, "authorize_frame_request", deny)
+
+
+def _enable_authority(monkeypatch, generation: int) -> None:
+    async def allow(_uid, account_generation, **_kwargs):
+        if account_generation != generation:
+            raise PermissionError("generation mismatch")
+
+    monkeypatch.setattr(frame_requests, "authorize_frame_request", allow)
 
 
 def _client() -> TestClient:
@@ -58,7 +54,7 @@ def test_frame_request_routes_are_inert_without_rollout_authority():
 
 
 def test_create_route_is_idempotent_and_returns_metadata_only(monkeypatch):
-    set_frame_request_authority_for_tests(_EnabledAuthority(7))
+    _enable_authority(monkeypatch, 7)
     calls = {}
 
     def enqueue(*args, **kwargs):
@@ -84,7 +80,7 @@ def test_create_route_is_idempotent_and_returns_metadata_only(monkeypatch):
 
 
 def test_create_route_accepts_temporary_non_conversation_requests(monkeypatch):
-    set_frame_request_authority_for_tests(_EnabledAuthority(0))
+    _enable_authority(monkeypatch, 0)
     calls = {}
 
     def enqueue(*args, **kwargs):
@@ -108,7 +104,7 @@ def test_create_route_accepts_temporary_non_conversation_requests(monkeypatch):
 
 
 def test_temporary_image_read_is_owner_fenced_and_never_promotes(monkeypatch):
-    set_frame_request_authority_for_tests(_EnabledAuthority(7))
+    _enable_authority(monkeypatch, 7)
     now = datetime.now(timezone.utc)
     temporary = FrameRequest(
         request_id="frame-1",
@@ -139,7 +135,7 @@ def test_temporary_image_read_is_owner_fenced_and_never_promotes(monkeypatch):
 
 
 def test_temporary_image_read_rejects_conversation_owned_pixels(monkeypatch):
-    set_frame_request_authority_for_tests(_EnabledAuthority(7))
+    _enable_authority(monkeypatch, 7)
     row = _request().model_copy(update={"account_generation": 7, "conversation_id": "conversation-1"})
     monkeypatch.setattr(frame_requests, "get_frame_request", lambda *_args: row)
 
@@ -149,7 +145,7 @@ def test_temporary_image_read_rejects_conversation_owned_pixels(monkeypatch):
 
 
 def test_status_read_reports_uploaded_without_promoting(monkeypatch):
-    set_frame_request_authority_for_tests(_EnabledAuthority(7))
+    _enable_authority(monkeypatch, 7)
     row = _request().model_copy(update={"account_generation": 7, "state": FrameRequestState.claimed})
     monkeypatch.setattr(frame_requests, "get_frame_request", lambda *_args: row)
 
@@ -160,7 +156,7 @@ def test_status_read_reports_uploaded_without_promoting(monkeypatch):
 
 
 def test_temporary_image_read_rejects_stale_account_generation(monkeypatch):
-    set_frame_request_authority_for_tests(_EnabledAuthority(7))
+    _enable_authority(monkeypatch, 7)
     row = _request().model_copy(update={"account_generation": 6})
     monkeypatch.setattr(frame_requests, "get_frame_request", lambda *_args: row)
 
@@ -170,7 +166,7 @@ def test_temporary_image_read_rejects_stale_account_generation(monkeypatch):
 
 
 def test_pending_route_is_owner_device_scoped(monkeypatch):
-    set_frame_request_authority_for_tests(_EnabledAuthority(0))
+    _enable_authority(monkeypatch, 0)
     monkeypatch.setattr(
         frame_requests,
         "list_pending_frame_requests",
@@ -182,7 +178,7 @@ def test_pending_route_is_owner_device_scoped(monkeypatch):
 
 
 def test_state_route_maps_owner_mismatch_to_forbidden(monkeypatch):
-    set_frame_request_authority_for_tests(_EnabledAuthority(0))
+    _enable_authority(monkeypatch, 0)
 
     def reject(*args, **kwargs):
         raise PermissionError("frame request owner or account generation mismatch")

@@ -27,9 +27,10 @@ from database.frame_requests import (
 from utils.retrieval.frame_request_policy import FRAME_REQUEST_MAX_TTL_SECONDS
 from models.frame_request import FrameRequestState
 from utils.executors import db_executor, run_blocking, storage_executor
+from utils.jit_rollout import JITDecisionStage
 from utils.llm.openglass import describe_image
 from utils.product_telemetry import emit_product_event
-from utils.retrieval.frame_request_authority import decision_for
+from utils.retrieval.frame_request_authority import resolve_frame_request_authority
 from utils.retrieval.frame_request_storage import download_frame_request_pixels
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,26 @@ def _configurable(config: RunnableConfig) -> dict[str, Any]:
     if not isinstance(raw, dict) or not isinstance(raw.get("configurable"), dict):
         return {}
     return cast(dict[str, Any], raw["configurable"])
+
+
+def frame_request_runtime_config(messages: list[Any], chat_session: Any | None) -> dict[str, Any]:
+    """Build stable per-human-turn authority outside the oversized agent host."""
+
+    human = next(
+        (message for message in reversed(messages) if getattr(message.sender, "value", message.sender) == "human"),
+        None,
+    )
+    turn_id = getattr(human, "id", None)
+    session_id = getattr(chat_session, "id", None) or (
+        getattr(human, "chat_session_id", None) or getattr(human, "session_id", None) if human else None
+    )
+    return {
+        "frame_request_turn_id": turn_id,
+        "frame_request_session_id": session_id,
+        # RunnableConfig copies the outer map; this nested budget intentionally
+        # remains shared across tool calls in the same request.
+        "frame_request_budget": {"reserved": False},
+    }
 
 
 def _admitted_screen_reference(configurable: dict[str, Any], screenshot_id: str) -> bool:
@@ -89,8 +110,8 @@ def _audit(uid: str, state: str, *, vision_invoked: bool = False) -> None:
     )
 
 
-def _result(uid: str, state: str, **fields: Any) -> str:
-    _audit(uid, state, vision_invoked=state == "available")
+def _result(uid: str, state: str, *, vision_invoked: bool = False, **fields: Any) -> str:
+    _audit(uid, state, vision_invoked=vision_invoked)
     return json.dumps({"state": state, **fields})
 
 
@@ -120,7 +141,11 @@ async def look_at_frame_tool(
     if budget.get("reserved") is True:
         return _result(uid, "budget_exhausted", reason="one_frame_per_request")
     budget["reserved"] = True
-    decision = await run_blocking(db_executor, decision_for, uid)
+    decision = await resolve_frame_request_authority(
+        uid,
+        stage=JITDecisionStage.INGRESS,
+        force_refresh=True,
+    )
     if not decision.enabled or decision.account_generation is None:
         return _result(uid, "unavailable", reason="frame_requests_disabled")
     try:
@@ -129,6 +154,9 @@ async def look_at_frame_tool(
         )
     except KeyError:
         return _result(uid, "pruned", reason="screen_metadata_unavailable")
+    except Exception as exc:
+        logger.warning("look_at_frame routing unavailable failure=%s", type(exc).__name__)
+        return _result(uid, "unavailable", reason="screen_routing_unavailable")
     turn_id = str(configurable.get("frame_request_turn_id") or "").strip()
     session_id = str(configurable.get("frame_request_session_id") or "").strip()
     if not turn_id:
@@ -136,19 +164,23 @@ async def look_at_frame_tool(
     session_id = session_id or "turn-scoped"
     authority_key = hashlib.sha256(f"look_at_frame\0{session_id}\0{turn_id}\0{screen_id}".encode("utf-8")).hexdigest()
     dedupe_key = authority_key
-    request, _ = await run_blocking(
-        db_executor,
-        enqueue_frame_request,
-        uid,
-        device_id=device_id,
-        account_generation=decision.account_generation,
-        dedupe_key=dedupe_key,
-        screenshot_id=local_screenshot_id,
-        requested_ttl_seconds=FRAME_REQUEST_MAX_TTL_SECONDS,
-        device_retention_seconds=device_retention_seconds,
-    )
-    # Refresh after enqueue so a concurrent desktop upload is observable.
-    request = await run_blocking(db_executor, get_frame_request, uid, request.request_id)
+    try:
+        request, _ = await run_blocking(
+            db_executor,
+            enqueue_frame_request,
+            uid,
+            device_id=device_id,
+            account_generation=decision.account_generation,
+            dedupe_key=dedupe_key,
+            screenshot_id=local_screenshot_id,
+            requested_ttl_seconds=FRAME_REQUEST_MAX_TTL_SECONDS,
+            device_retention_seconds=device_retention_seconds,
+        )
+        # Refresh after enqueue so a concurrent desktop upload is observable.
+        request = await run_blocking(db_executor, get_frame_request, uid, request.request_id)
+    except Exception as exc:
+        logger.warning("look_at_frame queue unavailable failure=%s", type(exc).__name__)
+        return _result(uid, "unavailable", reason="frame_queue_unavailable")
     if request.uid != uid or request.account_generation != decision.account_generation:
         return _result(uid, "unavailable", reason="request_authority_mismatch")
     if request.expires_at <= datetime.now(timezone.utc):
@@ -163,6 +195,17 @@ async def look_at_frame_tool(
         if exc.__class__.__name__ not in {"NotFound", "NotFoundError", "FileNotFoundError"}:
             logger.warning("look_at_frame pixel read failed outcome=unavailable failure=%s", type(exc).__name__)
         return _result(uid, "pruned", reason="pixels_unavailable")
+    paid_decision = await resolve_frame_request_authority(
+        uid,
+        stage=JITDecisionStage.PAID_BOUNDARY,
+        force_refresh=True,
+    )
+    if (
+        not paid_decision.enabled
+        or paid_decision.account_generation is None
+        or paid_decision.account_generation != decision.account_generation
+    ):
+        return _result(uid, "unavailable", reason="vision_authority_changed")
     try:
         receipt = await run_blocking(
             db_executor,
@@ -174,6 +217,9 @@ async def look_at_frame_tool(
         )
     except PermissionError:
         return _result(uid, "unavailable", reason="vision_authority_mismatch")
+    except Exception as exc:
+        logger.warning("look_at_frame vision receipt unavailable failure=%s", type(exc).__name__)
+        return _result(uid, "unavailable", reason="vision_receipt_unavailable")
     if receipt.get("state") == "completed" and isinstance(receipt.get("description"), str):
         return _result(
             uid,
@@ -184,26 +230,74 @@ async def look_at_frame_tool(
         )
     if receipt.get("reserved") is not True:
         return _result(uid, "unavailable", reason="vision_outcome_pending_or_unknown")
-    description = await describe_image(
-        uid, base64.b64encode(payload).decode("ascii"), request.content_type or "image/jpeg"
-    )
+    try:
+        description: Any = await describe_image(
+            uid,
+            base64.b64encode(payload).decode("ascii"),
+            request.content_type or "image/jpeg",
+        )
+    except Exception as exc:
+        logger.warning("look_at_frame vision unavailable failure=%s", type(exc).__name__)
+        return _result(
+            uid,
+            "unavailable",
+            vision_invoked=True,
+            reason="vision_provider_unavailable",
+        )
+    if not isinstance(description, str):
+        return _result(
+            uid,
+            "unavailable",
+            vision_invoked=True,
+            reason="vision_provider_malformed",
+        )
     bounded_description = description[:4000]
-    await run_blocking(
-        db_executor,
-        complete_frame_vision_invocation,
-        uid,
-        authority_key,
-        request_id=request.request_id,
-        account_generation=decision.account_generation,
-        description=bounded_description,
-    )
+    try:
+        await run_blocking(
+            db_executor,
+            complete_frame_vision_invocation,
+            uid,
+            authority_key,
+            request_id=request.request_id,
+            account_generation=decision.account_generation,
+            description=bounded_description,
+        )
+    except Exception as exc:
+        logger.warning("look_at_frame result persistence unavailable failure=%s", type(exc).__name__)
+        try:
+            reconciled = await run_blocking(
+                db_executor,
+                reserve_frame_vision_invocation,
+                uid,
+                authority_key,
+                request_id=request.request_id,
+                account_generation=decision.account_generation,
+            )
+        except Exception:
+            reconciled = {}
+        if reconciled.get("state") == "completed" and isinstance(reconciled.get("description"), str):
+            return _result(
+                uid,
+                "available",
+                vision_invoked=True,
+                request_id=request.request_id,
+                evidence_id=f"screen:{screen_id}",
+                description=str(reconciled["description"])[:4000],
+            )
+        return _result(
+            uid,
+            "unavailable",
+            vision_invoked=True,
+            reason="vision_result_persistence_unavailable",
+        )
     return _result(
         uid,
         "available",
+        vision_invoked=True,
         request_id=request.request_id,
         evidence_id=f"screen:{screen_id}",
         description=bounded_description,
     )
 
 
-__all__ = ["look_at_frame_tool"]
+__all__ = ["frame_request_runtime_config", "look_at_frame_tool"]

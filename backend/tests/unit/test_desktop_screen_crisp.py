@@ -8,11 +8,7 @@ from fastapi.testclient import TestClient
 from database import vector_db
 from routers import desktop_screen_crisp
 from utils.other.endpoints import get_current_user_uid
-from utils.retrieval.frame_request_authority import (
-    DisabledFrameRequestAuthority,
-    FrameRequestAuthorityDecision,
-    set_frame_request_authority_for_tests,
-)
+from utils.retrieval.frame_request_authority import FrameRequestAuthorityDecision
 
 
 def make_client() -> TestClient:
@@ -23,10 +19,11 @@ def make_client() -> TestClient:
 
 
 @pytest.fixture(autouse=True)
-def _reset_frame_request_authority():
-    set_frame_request_authority_for_tests(DisabledFrameRequestAuthority())
-    yield
-    set_frame_request_authority_for_tests(DisabledFrameRequestAuthority())
+def _disable_frame_request_authority(monkeypatch):
+    async def disabled(*_args, **_kwargs):
+        return FrameRequestAuthorityDecision(enabled=False)
+
+    monkeypatch.setattr(desktop_screen_crisp, "resolve_frame_request_authority", disabled)
 
 
 def test_crisp_unread_route_is_removed():
@@ -42,12 +39,11 @@ def _entitle(monkeypatch, entitled: bool = True) -> None:
     monkeypatch.setattr(desktop_screen_crisp, "grants_cloud_screen_vectors", lambda uid: entitled)
 
 
-def _enable_frame_requests(generation: int = 7) -> None:
-    class _Authority:
-        def decide(self, uid: str) -> FrameRequestAuthorityDecision:
-            return FrameRequestAuthorityDecision(enabled=True, account_generation=generation)
+def _enable_frame_requests(monkeypatch, generation: int = 7) -> None:
+    async def enabled(*_args, **_kwargs):
+        return FrameRequestAuthorityDecision(enabled=True, account_generation=generation)
 
-    set_frame_request_authority_for_tests(_Authority())
+    monkeypatch.setattr(desktop_screen_crisp, "resolve_frame_request_authority", enabled)
 
 
 def test_screen_activity_sync_writes_rows_and_embeddings(monkeypatch):
@@ -137,7 +133,7 @@ def test_screen_activity_sync_writes_rows_and_embeddings(monkeypatch):
 
 def test_enabled_screen_sync_returns_only_device_routed_frame_metadata(monkeypatch):
     _entitle(monkeypatch)
-    _enable_frame_requests()
+    _enable_frame_requests(monkeypatch)
     monkeypatch.setattr(desktop_screen_crisp, "upsert_screen_activity", lambda uid, rows: len(rows))
     monkeypatch.setattr(desktop_screen_crisp, "upsert_screen_activity_vectors", lambda uid, rows: None)
     monkeypatch.setattr(desktop_screen_crisp, "reconcile_conversation_keyframe_jobs", lambda *args, **kwargs: 0)
