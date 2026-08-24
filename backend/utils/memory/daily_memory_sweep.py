@@ -94,6 +94,11 @@ ONBOARDING_STAGED_CANDIDATE_PATH = "daily_memory_sweep_onboarding_staged"
 DAILY_SUMMARY_STAGED_CANDIDATE_PATH = "daily_memory_sweep_daily_summary_staged"
 DAILY_SUMMARY_STAGE_SCHEMA_VERSION = "daily_memory_sweep_daily_summary_stage.v1"
 MODEL_INVOCATION_PATH = "daily_memory_sweep_model_invocations"
+# This collection is intentionally outside ``users/{uid}``.  Account deletion
+# recursively removes every user subcollection, but an in-flight provider call
+# must retain a content-free identity fence so a source retry cannot charge the
+# same logical invocation again.
+MODEL_INVOCATION_FENCE_COLLECTION = "daily_memory_sweep_model_invocation_fences"
 MODEL_INVOCATION_SCHEMA_VERSION = "daily_memory_sweep_model_invocation.v1"
 
 SCHEMA_VERSION = "daily_memory_sweep.v1"
@@ -988,11 +993,28 @@ def _onboarding_permanent_receipt_ref(db_client: Any, uid: str, source_key: str)
     return db_client.document(f"users/{uid}/{ONBOARDING_SOURCE_RECEIPT_PATH}/{receipt_id}")
 
 
-def _onboarding_staged_candidates_ref(db_client: Any, uid: str, source_key: str) -> Any:
+def _onboarding_staged_candidates_ref(
+    db_client: Any,
+    uid: str,
+    source_key: str,
+    *,
+    account_generation: Optional[int] = None,
+    source_generation: Optional[int] = None,
+    sweep_generation: int = 1,
+    window_id: Optional[str] = None,
+) -> Any:
     stage_id = (
         ONBOARDING_PERMANENT_RECEIPT_PREFIX
         + deterministic_contract_id(
-            "daily-memory-sweep-onboarding-staged-candidates", {"uid": uid, "source_key": source_key}
+            "daily-memory-sweep-onboarding-staged-candidates",
+            {
+                "uid": uid,
+                "source_key": source_key,
+                "account_generation": account_generation,
+                "source_generation": source_generation,
+                "sweep_generation": sweep_generation,
+                "window_id": window_id,
+            },
         )[:48]
     )
     return db_client.document(f"users/{uid}/{ONBOARDING_STAGED_CANDIDATE_PATH}/{stage_id}")
@@ -1006,6 +1028,7 @@ def _daily_summary_staged_candidates_ref(
     account_generation: int,
     source_generation: int,
     window_id: str,
+    sweep_generation: int = 1,
 ) -> Any:
     stage_id = deterministic_contract_id(
         "daily-memory-sweep-daily-summary-staged-candidates",
@@ -1014,6 +1037,7 @@ def _daily_summary_staged_candidates_ref(
             "local_date": local_date.isoformat(),
             "account_generation": account_generation,
             "source_generation": source_generation,
+            "sweep_generation": sweep_generation,
             "window_id": window_id,
         },
     )[:96]
@@ -1030,6 +1054,12 @@ def _model_invocation_ref(db_client: Any, uid: str, invocation_id: str) -> Any:
     """
 
     return db_client.document(f"users/{uid}/{MODEL_INVOCATION_PATH}/{invocation_id}")
+
+
+def _model_invocation_fence_ref(db_client: Any, invocation_id: str) -> Any:
+    """Return the non-expiring, content-free invocation identity fence."""
+
+    return db_client.document(f"{MODEL_INVOCATION_FENCE_COLLECTION}/{invocation_id}")
 
 
 def cleanup_expired_daily_memory_sweep_stages(
@@ -1065,7 +1095,46 @@ def cleanup_expired_daily_memory_sweep_stages(
     ):
         try:
             collection_ref = cast(Any, collection_factory(collection_path))
-            rows = list(collection_ref.limit(bounded_limit).stream())
+            # Query by expiry first.  Permanent invocation tombstones do not
+            # carry an expiry, so they must never consume the janitor's page
+            # budget and starve returned user payloads behind them.
+            where = getattr(collection_ref, "where", None)
+            if not callable(where):
+                # Tiny unit fakes from older callers have no query surface;
+                # production Firestore always takes the queryable branch.  A
+                # full stream here keeps that compatibility path privacy-safe
+                # without imposing a hard first-page cap.
+                rows = list(collection_ref.stream())
+            else:
+                try:
+                    query: Any = where(filter=FieldFilter("expires_at", "<=", cutoff))
+                except TypeError:
+                    query = where("expires_at", "<=", cutoff)
+                try:
+                    query = query.order_by("expires_at")
+                except (AttributeError, TypeError):
+                    # Filtering remains useful even when an emulator fake
+                    # does not model explicit ordering.
+                    pass
+                rows = []
+                cursor = None
+                while True:
+                    page_query: Any = query
+                    if cursor is not None:
+                        start_after = getattr(page_query, "start_after", None)
+                        if not callable(start_after):
+                            break
+                        page_query = start_after(cursor)
+                    page = list(page_query.limit(bounded_limit).stream())
+                    if not page:
+                        break
+                    rows.extend(page)
+                    if len(page) < bounded_limit:
+                        break
+                    next_cursor = page[-1]
+                    if next_cursor is cursor:
+                        break
+                    cursor = next_cursor
         except Exception:
             continue
         for row in rows:
@@ -1106,6 +1175,8 @@ def cleanup_expired_daily_memory_sweep_stages(
                 # identity is safe to garbage-collect automatically.
                 if state != "returned":
                     continue
+            # Queryable collections have already proved the expiry condition;
+            # the fallback path still checks both fields for legacy rows.
             expires_raw = payload.get("expires_at") or payload.get("lease_expires_at")
             expired = False
             try:
@@ -1162,7 +1233,7 @@ def cleanup_expired_daily_memory_sweep_stages(
     return deleted
 
 
-def _invoke_model_once(
+def _invoke_model_once_legacy(
     db_client: Any,
     uid: str,
     invocation_id: str,
@@ -1294,6 +1365,277 @@ def _invoke_model_once(
             except Exception:
                 pass
             return None
+
+
+def _invoke_model_once(
+    db_client: Any,
+    uid: str,
+    invocation_id: str,
+    *,
+    candidate_builder: Any,
+    account_generation: Optional[int] = None,
+    source_generation: Optional[int] = None,
+    sweep_generation: Optional[int] = None,
+    window_id: Optional[str] = None,
+    now: Optional[datetime] = None,
+) -> Optional[Tuple[dict[str, Any], ...]]:
+    """Run one fenced provider call with a durable cross-account-delete claim.
+
+    The user subcollection stores only bounded model output and may be
+    recursively deleted.  The top-level fence is content-free and survives
+    that deletion, so a worker that loses its payload after a provider call
+    cannot recreate the logical invocation and pay twice.  ``pending`` and
+    ``indeterminate`` are manual-repair-only states; lease expiry never
+    reopens them.
+
+    The optional identity arguments exist solely for old hermetic unit callers
+    that predate generation fencing. Every production scheduler path supplies
+    all four values and therefore takes the transactional branch below.
+    """
+
+    fenced = (
+        account_generation is not None
+        and source_generation is not None
+        and sweep_generation is not None
+        and isinstance(window_id, str)
+        and bool(window_id)
+    )
+    if not fenced:
+        return _invoke_model_once_legacy(
+            db_client,
+            uid,
+            invocation_id,
+            candidate_builder=candidate_builder,
+            now=now,
+        )
+
+    account_generation = int(cast(int, account_generation))
+    source_generation = int(cast(int, source_generation))
+    sweep_generation = int(cast(int, sweep_generation))
+    claim_now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    invocation_ref = _model_invocation_ref(db_client, uid, invocation_id)
+    fence_ref = _model_invocation_fence_ref(db_client, invocation_id)
+    deletion_ref, control_ref = _live_fence_refs(db_client, uid)
+    identity = {
+        "uid": uid,
+        "invocation_id": invocation_id,
+        "account_generation": account_generation,
+        "source_generation": source_generation,
+        "sweep_generation": sweep_generation,
+        "window_id": window_id,
+    }
+
+    def _identity_matches(payload: Any) -> bool:
+        return isinstance(payload, dict) and all(payload.get(key) == value for key, value in identity.items())
+
+    def _validated_output(payload: Any) -> Optional[Tuple[dict[str, Any], ...]]:
+        if not isinstance(payload, dict) or payload.get("state") != "returned" or not _identity_matches(payload):
+            return None
+        expires_raw = payload.get("expires_at")
+        try:
+            expires_at = (
+                expires_raw
+                if isinstance(expires_raw, datetime)
+                else datetime.fromisoformat(str(expires_raw).replace("Z", "+00:00"))
+            )
+            if expires_at.tzinfo is None or expires_at.astimezone(timezone.utc) <= claim_now:
+                return None
+        except (TypeError, ValueError):
+            return None
+        output = payload.get("candidate_page")
+        if not isinstance(output, list) or any(not isinstance(item, dict) for item in output):
+            return None
+        expected_digest = deterministic_contract_id("daily-sweep-model-invocation-output", {"candidate_page": output})
+        if payload.get("candidate_digest") != expected_digest:
+            return None
+        return tuple(output)
+
+    def _read(ref: Any, transaction: Any) -> Any:
+        return ref.get(transaction=transaction)
+
+    def _create_or_set(transaction: Any, ref: Any, payload: dict[str, Any]) -> None:
+        # Firestore Transaction.create is atomic. Small test doubles lack it,
+        # so their transaction.set fallback remains deterministic under the
+        # module lock used by the adversarial unit tests.
+        create = getattr(transaction, "create", None)
+        if callable(create):
+            create(ref, payload)
+        else:
+            transaction.set(ref, payload)
+
+    def claim(transaction: Any) -> Tuple[str, Optional[Tuple[dict[str, Any], ...]]]:
+        if not _transaction_fence_open(
+            transaction,
+            deletion_ref,
+            control_ref,
+            uid=uid,
+            account_generation=account_generation,
+            source_generation=source_generation,
+        ):
+            return "blocked", None
+        fence_snapshot = _read(fence_ref, transaction)
+        user_snapshot = _read(invocation_ref, transaction)
+        fence_payload = fence_snapshot.to_dict() if getattr(fence_snapshot, "exists", False) else None
+        user_payload = user_snapshot.to_dict() if getattr(user_snapshot, "exists", False) else None
+        if fence_payload is not None:
+            if not _identity_matches(fence_payload):
+                return "blocked", None
+            if fence_payload.get("state") == "returned":
+                return "returned", _validated_output(user_payload)
+            # Existing pending, indeterminate, and payload-expired fences are
+            # deliberately closed forever without an explicit repair receipt.
+            return "blocked", None
+        # A user payload without its top-level identity fence is an orphan,
+        # usually the result of an interrupted account wipe. Never recreate it.
+        if user_payload is not None:
+            return "blocked", None
+        pending = {
+            **identity,
+            "schema_version": MODEL_INVOCATION_SCHEMA_VERSION,
+            "state": "pending",
+            "at_most_once_tombstone": True,
+            "claimed_at": claim_now,
+        }
+        _create_or_set(transaction, fence_ref, pending)
+        transaction.set(
+            invocation_ref,
+            {**pending, "lease_expires_at": claim_now + MODEL_INVOCATION_LEASE},
+        )
+        return "claimed", None
+
+    def run_transaction(callback: Any) -> Any:
+        transaction = db_client.transaction()
+        return firestore.transactional(callback)(transaction)
+
+    with _MODEL_INVOCATION_LOCK:
+        try:
+            claim_state, existing_output = run_transaction(claim)
+        except Exception:
+            return None
+        if claim_state == "returned":
+            return existing_output
+        if claim_state != "claimed":
+            return None
+
+        try:
+            built = tuple(candidate_builder())
+            if any(not isinstance(item, dict) for item in built):
+                raise ValueError("model invocation candidate output is malformed")
+        except Exception:
+            # The fence is top-level and therefore still writable after a
+            # recursive account wipe. Do not recreate the user payload.
+            def mark_indeterminate(transaction: Any) -> bool:
+                snapshot = _read(fence_ref, transaction)
+                payload = snapshot.to_dict() if getattr(snapshot, "exists", False) else None
+                if not _identity_matches(payload):
+                    return False
+                assert isinstance(payload, dict)
+                if payload.get("state") != "pending":
+                    return False
+                transaction.set(
+                    fence_ref,
+                    {
+                        **identity,
+                        "schema_version": MODEL_INVOCATION_SCHEMA_VERSION,
+                        "state": "indeterminate",
+                        "at_most_once_tombstone": True,
+                        "indeterminate_at": claim_now,
+                    },
+                    merge=True,
+                )
+                user_snapshot = _read(invocation_ref, transaction)
+                if getattr(user_snapshot, "exists", False):
+                    transaction.set(
+                        invocation_ref,
+                        {"state": "indeterminate", "at_most_once_tombstone": True, "indeterminate_at": claim_now},
+                        merge=True,
+                    )
+                return True
+
+            try:
+                run_transaction(mark_indeterminate)
+            except Exception:
+                pass
+            return None
+
+        returned_payload = {
+            **identity,
+            "schema_version": MODEL_INVOCATION_SCHEMA_VERSION,
+            "state": "returned",
+            "at_most_once_tombstone": True,
+            "candidate_page": list(built),
+            "candidate_digest": deterministic_contract_id(
+                "daily-sweep-model-invocation-output", {"candidate_page": list(built)}
+            ),
+            "returned_at": claim_now,
+            "expires_at": claim_now + STAGED_CANDIDATE_RETENTION,
+        }
+
+        def finalize(transaction: Any) -> bool:
+            if not _transaction_fence_open(
+                transaction,
+                deletion_ref,
+                control_ref,
+                uid=uid,
+                account_generation=account_generation,
+                source_generation=source_generation,
+            ):
+                return False
+            fence_snapshot = _read(fence_ref, transaction)
+            fence_payload = fence_snapshot.to_dict() if getattr(fence_snapshot, "exists", False) else None
+            user_snapshot = _read(invocation_ref, transaction)
+            user_payload = user_snapshot.to_dict() if getattr(user_snapshot, "exists", False) else None
+            # Never recreate a user payload after recursive deletion, even if
+            # the deletion marker is briefly unavailable to this transaction.
+            if not _identity_matches(fence_payload):
+                return False
+            if not isinstance(fence_payload, dict) or fence_payload.get("state") != "pending":
+                return False
+            if not _identity_matches(user_payload):
+                return False
+            if not isinstance(user_payload, dict) or user_payload.get("state") != "pending":
+                return False
+            transaction.set(
+                fence_ref,
+                {key: value for key, value in returned_payload.items() if key not in {"candidate_page", "expires_at"}},
+                merge=True,
+            )
+            transaction.set(invocation_ref, returned_payload)
+            return True
+
+        try:
+            if not run_transaction(finalize):
+                # A closed generation/account is an indeterminate provider
+                # outcome. Mark only the durable fence; never recreate user
+                # payload, stage, receipt, canonical item, or cursor state.
+                def mark_closed(transaction: Any) -> bool:
+                    snapshot = _read(fence_ref, transaction)
+                    payload = snapshot.to_dict() if getattr(snapshot, "exists", False) else None
+                    if not _identity_matches(payload):
+                        return False
+                    if not isinstance(payload, dict) or payload.get("state") != "pending":
+                        return False
+                    transaction.set(
+                        fence_ref,
+                        {
+                            **identity,
+                            "schema_version": MODEL_INVOCATION_SCHEMA_VERSION,
+                            "state": "indeterminate",
+                            "at_most_once_tombstone": True,
+                            "indeterminate_at": claim_now,
+                        },
+                        merge=True,
+                    )
+                    return True
+
+                try:
+                    run_transaction(mark_closed)
+                except Exception:
+                    pass
+                return None
+        except Exception:
+            return None
+        return built
 
 
 def _receipt_id(
@@ -3018,6 +3360,9 @@ def _load_or_stage_onboarding_candidates(
     db_client: Any,
     extractor: Any,
     account_generation: Optional[int] = None,
+    source_generation: Optional[int] = None,
+    sweep_generation: Optional[int] = None,
+    window_id: Optional[str] = None,
 ) -> Optional[Tuple[DailySweepCandidate, ...]]:
     """Materialize one deterministic candidate page before continuation slicing.
 
@@ -3028,7 +3373,15 @@ def _load_or_stage_onboarding_candidates(
     numeric slice from a nondeterministic model response.
     """
 
-    stage_ref = _onboarding_staged_candidates_ref(db_client, uid, source_key)
+    stage_ref = _onboarding_staged_candidates_ref(
+        db_client,
+        uid,
+        source_key,
+        account_generation=account_generation,
+        source_generation=source_generation,
+        sweep_generation=sweep_generation or 1,
+        window_id=window_id,
+    )
     transcript_digest = deterministic_contract_id(
         "daily-sweep-onboarding-transcript", {"source_key": source_key, "text": text}
     )
@@ -3056,6 +3409,9 @@ def _load_or_stage_onboarding_candidates(
             or not isinstance(payload.get("candidate_page"), list)
             or len(payload.get("candidate_page", ())) > MAX_ONBOARDING_STAGED_CANDIDATES
             or (account_generation is not None and payload.get("account_generation") != account_generation)
+            or (source_generation is not None and payload.get("source_generation") != source_generation)
+            or (sweep_generation is not None and payload.get("sweep_generation") != sweep_generation)
+            or (window_id is not None and payload.get("window_id") != window_id)
         ):
             return None
         try:
@@ -3084,7 +3440,15 @@ def _load_or_stage_onboarding_candidates(
 
     invocation_id = deterministic_contract_id(
         "daily-sweep-onboarding-model-invocation",
-        {"uid": uid, "source_key": source_key, "transcript_digest": transcript_digest},
+        {
+            "uid": uid,
+            "source_key": source_key,
+            "transcript_digest": transcript_digest,
+            "account_generation": account_generation,
+            "source_generation": source_generation,
+            "sweep_generation": sweep_generation,
+            "window_id": window_id,
+        },
     )[:96]
 
     def build_candidate_page() -> Tuple[dict[str, Any], ...]:
@@ -3124,6 +3488,10 @@ def _load_or_stage_onboarding_candidates(
             uid,
             invocation_id,
             candidate_builder=build_candidate_page,
+            account_generation=account_generation,
+            source_generation=source_generation,
+            sweep_generation=sweep_generation,
+            window_id=window_id,
         )
         if raw_staged is None:
             return None
@@ -3144,22 +3512,58 @@ def _load_or_stage_onboarding_candidates(
         }
         if account_generation is not None:
             stage_payload["account_generation"] = account_generation
-        create = getattr(stage_ref, "create", None)
-        if callable(create):
+        if source_generation is not None:
+            stage_payload["source_generation"] = source_generation
+        if sweep_generation is not None:
+            stage_payload["sweep_generation"] = sweep_generation
+        if window_id is not None:
+            stage_payload["window_id"] = window_id
+
+        if (
+            account_generation is not None
+            and source_generation is not None
+            and sweep_generation is not None
+            and window_id
+        ):
+
+            def stage_if_open(transaction: Any) -> bool:
+                deletion_ref, control_ref = _live_fence_refs(db_client, uid)
+                if not _transaction_fence_open(
+                    transaction,
+                    deletion_ref,
+                    control_ref,
+                    uid=uid,
+                    account_generation=account_generation,
+                    source_generation=source_generation,
+                ):
+                    return False
+                existing = stage_ref.get(transaction=transaction)
+                if getattr(existing, "exists", False):
+                    return False
+                create = getattr(transaction, "create", None)
+                if callable(create):
+                    create(stage_ref, stage_payload)
+                else:
+                    transaction.set(stage_ref, stage_payload)
+                return True
+
             try:
-                # ``create`` is the atomic first-writer fence. A concurrent
-                # retry may extract a different model answer, but it can
-                # never overwrite the durable page selected by the winner.
-                create(stage_payload)
+                if not firestore.transactional(stage_if_open)(db_client.transaction()):
+                    return read_staged(stage_ref.get())
             except Exception:
                 try:
                     return read_staged(stage_ref.get())
                 except Exception:
                     return None
         else:
-            # Tiny hermetic fakes may expose only ``set``; production uses the
-            # atomic Firestore create path above.
-            stage_ref.set(stage_payload)
+            create = getattr(stage_ref, "create", None)
+            if callable(create):
+                try:
+                    create(stage_payload)
+                except Exception:
+                    return read_staged(stage_ref.get())
+            else:
+                stage_ref.set(stage_payload)
         return staged
     except Exception:
         return None
@@ -3173,6 +3577,8 @@ def _produce_onboarding_sources(
     model_authority: DailySweepModelAuthority,
     model_extractor: Optional[Any] = None,
     account_generation: Optional[int] = None,
+    source_generation: Optional[int] = None,
+    sweep_generation: Optional[int] = None,
 ) -> OnboardingSourceProduction:
     """Produce once-only facts from server-marked onboarding conversations.
 
@@ -3319,6 +3725,9 @@ def _produce_onboarding_sources(
                 db_client=db_client,
                 extractor=extractor,
                 account_generation=account_generation,
+                source_generation=source_generation,
+                sweep_generation=sweep_generation,
+                window_id=f"onboarding:{source_key}" if source_generation is not None else None,
             )
             if staged is None or offset > len(staged):
                 return OnboardingSourceProduction()
@@ -3359,6 +3768,7 @@ def _load_or_stage_daily_summary_candidates(
     db_client: Any,
     extractor: Any,
     max_candidates: int,
+    sweep_generation: int = 1,
 ) -> Optional[Tuple[DailySweepCandidate, ...]]:
     """Stage the complete bounded daily-summary candidate page before apply."""
 
@@ -3369,6 +3779,7 @@ def _load_or_stage_daily_summary_candidates(
         account_generation=control.account_generation,
         source_generation=control.source_generation,
         window_id=window.window_id,
+        sweep_generation=sweep_generation,
     )
     transcript_digest = deterministic_contract_id(
         "daily-sweep-daily-summary-transcript",
@@ -3402,6 +3813,7 @@ def _load_or_stage_daily_summary_candidates(
             or payload.get("timezone_name") != timezone_name
             or payload.get("account_generation") != control.account_generation
             or payload.get("source_generation") != control.source_generation
+            or payload.get("sweep_generation") != sweep_generation
             or payload.get("window_id") != window.window_id
             or payload.get("window_start_utc") != window.start_utc
             or payload.get("window_end_utc") != window.end_utc
@@ -3434,7 +3846,15 @@ def _load_or_stage_daily_summary_candidates(
 
     invocation_id = deterministic_contract_id(
         "daily-sweep-daily-summary-model-invocation",
-        {"uid": uid, "local_date": local_date.isoformat(), "transcript_digest": transcript_digest},
+        {
+            "uid": uid,
+            "local_date": local_date.isoformat(),
+            "transcript_digest": transcript_digest,
+            "account_generation": control.account_generation,
+            "source_generation": control.source_generation,
+            "sweep_generation": sweep_generation,
+            "window_id": window.window_id,
+        },
     )[:96]
 
     def build_candidate_page() -> Tuple[dict[str, Any], ...]:
@@ -3482,6 +3902,10 @@ def _load_or_stage_daily_summary_candidates(
             uid,
             invocation_id,
             candidate_builder=build_candidate_page,
+            account_generation=control.account_generation,
+            source_generation=control.source_generation,
+            sweep_generation=sweep_generation,
+            window_id=window.window_id,
         )
         if raw_candidates is None:
             return None
@@ -3493,6 +3917,7 @@ def _load_or_stage_daily_summary_candidates(
             "timezone_name": timezone_name,
             "account_generation": control.account_generation,
             "source_generation": control.source_generation,
+            "sweep_generation": sweep_generation,
             "window_id": window.window_id,
             "window_start_utc": window.start_utc,
             "window_end_utc": window.end_utc,
@@ -3506,14 +3931,33 @@ def _load_or_stage_daily_summary_candidates(
             "expires_at": datetime.now(timezone.utc) + STAGED_CANDIDATE_RETENTION,
             "model_invocation_id": invocation_id,
         }
-        create = getattr(stage_ref, "create", None)
-        if callable(create):
-            try:
-                create(stage_payload)
-            except Exception:
+
+        def stage_if_open(transaction: Any) -> bool:
+            deletion_ref, control_ref = _live_fence_refs(db_client, uid)
+            if not _transaction_fence_open(
+                transaction,
+                deletion_ref,
+                control_ref,
+                uid=uid,
+                account_generation=control.account_generation,
+                source_generation=control.source_generation,
+            ):
+                return False
+            existing = stage_ref.get(transaction=transaction)
+            if getattr(existing, "exists", False):
+                return False
+            create = getattr(transaction, "create", None)
+            if callable(create):
+                create(stage_ref, stage_payload)
+            else:
+                transaction.set(stage_ref, stage_payload)
+            return True
+
+        try:
+            if not firestore.transactional(stage_if_open)(db_client.transaction()):
                 return read_staged(stage_ref.get())
-        else:
-            stage_ref.set(stage_payload)
+        except Exception:
+            return read_staged(stage_ref.get())
         return candidate_page
     except Exception:
         return None
@@ -3529,6 +3973,7 @@ def produce_completed_day_daily_summary_sources(
     model_authority: Optional[DailySweepModelAuthority] = None,
     model_extractor: Optional[Any] = None,
     window_override: Optional[CompletedLocalDayWindow] = None,
+    sweep_generation: int = 1,
 ) -> DailySweepRuntimeSources:
     """Produce the exact completed-day source, including its bounded model call.
 
@@ -3646,6 +4091,7 @@ def produce_completed_day_daily_summary_sources(
         db_client=db_client,
         extractor=extractor,
         max_candidates=model.max_candidates,
+        sweep_generation=sweep_generation,
     )
     if candidates is None:
         # Model/provider failures and malformed existing stages are source
@@ -3674,11 +4120,16 @@ def produce_onboarding_seed_sources(
     marked transactionally after the source's candidate receipts complete.
     """
 
+    control = ensure_canonical_apply_control_state(uid, db_client=db_client)
+    cursor = _read_cursor(db_client, uid, control)
     production = _produce_onboarding_sources(
         uid,
         db_client=db_client,
         max_candidates=max_candidates,
         model_authority=daily_memory_sweep_model_authority_from_environment(),
+        account_generation=control.account_generation,
+        source_generation=control.source_generation,
+        sweep_generation=cursor.sweep_generation,
     )
     return production.candidates
 
@@ -3754,6 +4205,7 @@ def firestore_daily_sweep_source_provider(
             control,
             db_client=db_client,
             window_override=window_override,
+            sweep_generation=current_cursor.sweep_generation,
         )
         model_authority = daily_memory_sweep_model_authority_from_environment()
         onboarding_production = _produce_onboarding_sources(
@@ -3762,6 +4214,8 @@ def firestore_daily_sweep_source_provider(
             max_candidates=model_authority.max_candidates,
             model_authority=model_authority,
             account_generation=control.account_generation,
+            source_generation=control.source_generation,
+            sweep_generation=current_cursor.sweep_generation,
         )
         return DailySweepRuntimeSources.from_iterables(
             daily_summary=summary_sources.daily_summary,
@@ -3996,6 +4450,20 @@ def run_daily_memory_sweep_scheduler(
     authority remains closed.
     """
 
+    if now.tzinfo is None or now.utcoffset() is None:
+        raise ValueError("now must be timezone-aware")
+    bounded_uids = tuple(sorted({uid.strip() for uid in uid_inventory if uid.strip()}))[: max(1, min(400, max_users))]
+    # Crash-recovery cleanup is a privacy lifecycle operation, not a rollout
+    # decision. Run it before authority, kill-switch, and cohort gates so a
+    # disabled/skipped account cannot retain transcript-derived pages forever.
+    for uid in bounded_uids:
+        try:
+            cleanup_expired_daily_memory_sweep_stages(uid, db_client=db_client, now=now)
+        except Exception:
+            # Cleanup is fail-closed for each row; a transient janitor error
+            # must not open writes or alter the rollout result.
+            continue
+
     resolved_authority = authority or daily_memory_sweep_authority_from_environment()
     if not resolved_authority.may_write:
         return DailySweepSchedulerSummary()
@@ -4008,9 +4476,6 @@ def run_daily_memory_sweep_scheduler(
         return DailySweepSchedulerSummary(errors=("cohort_disabled",))
     if not resolved_cohort.cohort_name:
         return DailySweepSchedulerSummary(errors=("cohort_name_missing",))
-    if now.tzinfo is None or now.utcoffset() is None:
-        raise ValueError("now must be timezone-aware")
-    bounded_uids = tuple(sorted({uid.strip() for uid in uid_inventory if uid.strip()}))[: max(1, min(400, max_users))]
     attempted = committed_users = blocked_users = 0
     committed = idempotent = skipped = 0
     errors: List[str] = []
@@ -4019,9 +4484,6 @@ def run_daily_memory_sweep_scheduler(
     for uid in bounded_uids:
         attempted += 1
         try:
-            # Keep crash-recovery model pages bounded even when a source is
-            # skipped for the account's current cohort/day.
-            cleanup_expired_daily_memory_sweep_stages(uid, db_client=db_client, now=now)
             # This callback is intentionally read-only.  A PostHog client can
             # be supplied by the maintenance deployment, but no
             # identify/flag mutation is performed by this scheduler.
