@@ -34,8 +34,10 @@ enum RewindEvidenceCardPresentationPolicy {
 
   static func subtitle(
     for card: RewindEvidenceCardModel,
-    availability: RewindEvidenceCardAvailability
+    availability: RewindEvidenceCardAvailability,
+    hasOpenHandler: Bool = true
   ) -> String {
+    guard hasOpenHandler else { return "Unavailable to open here · frame \(card.screenshotID)" }
     switch availability {
     case .checking: return "Checking local Rewind · frame \(card.screenshotID)"
     case .available: return card.subtitle
@@ -211,7 +213,11 @@ struct RewindEvidenceCardView: View {
   }
 
   private var subtitle: String {
-    RewindEvidenceCardPresentationPolicy.subtitle(for: card, availability: availability)
+    RewindEvidenceCardPresentationPolicy.subtitle(
+      for: card,
+      availability: availability,
+      hasOpenHandler: onOpen != nil
+    )
   }
 
   private var trailingIcon: String {
