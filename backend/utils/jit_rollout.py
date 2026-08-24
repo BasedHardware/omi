@@ -21,7 +21,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from utils.executors import run_blocking
 
@@ -130,6 +130,13 @@ class JITRolloutDecision:
 FlagProvider = Callable[[str], Awaitable[JITFlagEvaluation]]
 
 
+@runtime_checkable
+class _ForceRefreshProvider(Protocol):
+    """Optional provider seam for uncached authority reads."""
+
+    def force_refresh(self, uid: str) -> Awaitable[JITFlagEvaluation]: ...
+
+
 @dataclass(frozen=True)
 class _CacheEntry:
     evaluation: JITFlagEvaluation
@@ -208,7 +215,10 @@ class JITRolloutAuthority:
                     return decision
                 del self._cache[uid]
 
-        evaluation = await self._provider(uid)
+        if force_refresh and isinstance(self._provider, _ForceRefreshProvider):
+            evaluation = await self._provider.force_refresh(uid)
+        else:
+            evaluation = await self._provider(uid)
         finished_at = self._monotonic()
         # Cache only complete provider answers. Unknown/error snapshots retry on
         # the next request instead of extending an outage into an authorization.
@@ -325,6 +335,14 @@ class PostHogJITFlagProvider:
 
             in_flight.add_done_callback(forget)
         return await asyncio.shield(entry[0])
+
+    async def force_refresh(self, uid: str) -> JITFlagEvaluation:
+        """Read flags independently of any stale same-owner coalesced call."""
+
+        # A final authority fence must not join a request that started before a
+        # kill switch changed. Keep the bulkhead and provider timeout, but use a
+        # fresh in-flight task rather than the normal same-UID coalescer.
+        return await self._resolve_uncached(uid, asyncio.Event())
 
     async def _resolve_uncached(self, uid: str, control_done: asyncio.Event) -> JITFlagEvaluation:
         try:

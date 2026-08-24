@@ -5,7 +5,7 @@ import threading
 from datetime import datetime, timezone
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.testclient import TestClient
 
 import desktop_backend
@@ -257,6 +257,75 @@ async def test_posthog_decide_coalesces_same_uid_calls():
     results = await asyncio.gather(*tasks)
     assert client.calls == 1
     assert all(result.rollout == TriState.ENABLED for result in results)
+
+
+@pytest.mark.asyncio
+async def test_trigger_snapshot_final_refresh_bypasses_stale_posthog_call(monkeypatch):
+    started = threading.Event()
+    release = threading.Event()
+
+    class SequencedPostHog:
+        def __init__(self):
+            self.calls = 0
+
+        def get_feature_variants(self, _uid: str):
+            self.calls += 1
+            if self.calls == 1:
+                started.set()
+                release.wait(1)
+                return {'jit-processing-v1': True, 'jit-processing-kill-switch-v1': False}
+            return {'jit-processing-v1': True, 'jit-processing-kill-switch-v1': True}
+
+    client = SequencedPostHog()
+    provider = PostHogJITFlagProvider(timeout_seconds=1, client_factory=lambda: client)
+    authority = JITRolloutAuthority(provider)
+    stale_call = asyncio.create_task(provider('owner'))
+    for _ in range(100):
+        if started.is_set():
+            break
+        await asyncio.sleep(0.001)
+    assert started.is_set()
+
+    async def resolve(uid: str, *, stage: JITDecisionStage, force_refresh: bool = False):
+        if not force_refresh:
+            evaluation = JITFlagEvaluation(TriState.ENABLED, TriState.DISABLED, JITDecisionReason.EVALUATED)
+            return authority_module._effective_decision(evaluation, cache_hit=False, cache_ttl_seconds=20)
+        return await authority.resolve(uid, stage=stage, force_refresh=True)
+
+    snapshot = AuthoritativeTriggerSnapshot(
+        owner_id='owner',
+        account_generation=7,
+        head_commit_id='head',
+        commit_sequence=11,
+        snapshot_revision='secret-revision',
+        complete=True,
+        rows=(),
+    )
+
+    async def immediate(_executor, function, uid):
+        assert function is jit_rollout.read_authoritative_trigger_snapshot
+        assert uid == 'owner'
+        return snapshot
+
+    monkeypatch.setattr(jit_rollout, 'resolve_jit_rollout', resolve)
+    monkeypatch.setattr(jit_rollout, 'run_blocking', immediate)
+
+    try:
+        response = await asyncio.wait_for(
+            jit_rollout.get_jit_trigger_snapshot(Response(), uid='owner'),
+            timeout=1,
+        )
+    finally:
+        release.set()
+
+    stale_result = await stale_call
+    assert stale_result.rollout == TriState.ENABLED
+    assert stale_result.kill_switch == TriState.DISABLED
+    assert client.calls == 2
+    assert response.complete is False
+    assert response.rows == []
+    assert response.snapshot_revision == ''
+    assert response.failure_reason == 'rollout_not_enabled'
 
 
 @pytest.mark.asyncio
