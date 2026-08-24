@@ -339,6 +339,10 @@ describe("omi tool manifest", () => {
       canonicalName: "semantic_search",
       wasAlias: true,
     });
+    expect(normalizeOmiToolName("local-agent-api", "look_at_frame")).toEqual({
+      canonicalName: "get_screenshot",
+      wasAlias: true,
+    });
   });
 
   it("builds a debuggable availability snapshot", () => {

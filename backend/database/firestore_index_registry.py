@@ -257,6 +257,12 @@ INDEX_ONLY_REQUIREMENTS = (
         'COLLECTION',
         (_asc('account_generation'), _asc('status'), _asc('__name__')),
     ),
+    FirestoreIndexRequirement(
+        'frame_requests_device_state_created',
+        'frame_requests',
+        'COLLECTION',
+        (_asc('device_id'), _asc('state'), _asc('created_at'), _asc('__name__')),
+    ),
 )
 
 

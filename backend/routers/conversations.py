@@ -6,6 +6,8 @@ from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 
 import database.conversations as conversations_db
+import database.frame_requests as frame_requests_db
+from utils.retrieval.frame_request_policy import local_frame_requests_enabled
 import database._client as db_client_module
 import database.action_items as action_items_db
 import database.redis_db as redis_db
@@ -985,6 +987,12 @@ def delete_conversation(
     # cleanup path once the parent doc (and the frame_id it's keyed under)
     # is gone.
     delete_conversation_screen_frames(uid, conversation_id)
+
+    # Requested-frame metadata and conversation-attached keyframe references
+    # share the conversation's owner-authorized deletion boundary. Temporary
+    # requested frames are otherwise pruned by their bounded retention worker.
+    if local_frame_requests_enabled():
+        frame_requests_db.delete_frame_requests_for_conversation(uid, conversation_id)
 
     conversations_db.delete_conversation(uid, conversation_id)
     delete_vector(uid, conversation_id)

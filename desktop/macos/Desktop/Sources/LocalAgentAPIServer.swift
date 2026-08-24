@@ -315,13 +315,14 @@ final class LocalAgentAPIServer: @unchecked Sendable {
     }
 
     var arguments = json["arguments"] as? [String: Any] ?? [:]
-    guard Self.tools.contains(where: { $0.name == toolName }) else {
+    let canonicalToolName = toolName == "look_at_frame" ? "get_screenshot" : toolName
+    guard Self.tools.contains(where: { $0.name == canonicalToolName }) else {
       return errorResponse("unknown_tool: \(toolName)", statusCode: 404)
     }
     if toolName == "get_work_context" {
       return await workContextResponse(arguments: arguments)
     }
-    if toolName == "get_screenshot" {
+    if canonicalToolName == "get_screenshot" {
       return await screenshotToolResponse(toolName: toolName, arguments: arguments)
     }
     if toolName == "execute_sql" {

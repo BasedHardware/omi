@@ -12668,6 +12668,63 @@
         "title": "FolderMutationResponse",
         "type": "object"
       },
+      "FrameRequestDelivery": {
+        "additionalProperties": false,
+        "description": "Metadata-only queue item delivered to the owning desktop device.",
+        "properties": {
+          "account_generation": {
+            "title": "Account Generation",
+            "type": "integer"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "screenshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Screenshot Id"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "device_id",
+          "account_generation",
+          "state",
+          "expires_at"
+        ],
+        "title": "FrameRequestDelivery",
+        "type": "object"
+      },
       "FullConversation": {
         "properties": {
           "apps_results": {
@@ -19618,6 +19675,12 @@
       },
       "ScreenActivitySyncRequest": {
         "properties": {
+          "account_generation": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Account Generation",
+            "type": "integer"
+          },
           "rows": {
             "items": {
               "$ref": "#/components/schemas/ScreenActivityRow"
@@ -19630,6 +19693,40 @@
           "rows"
         ],
         "title": "ScreenActivitySyncRequest",
+        "type": "object"
+      },
+      "ScreenActivitySyncResponse": {
+        "additionalProperties": false,
+        "description": "Additive sync response; old clients decode the two required fields.",
+        "properties": {
+          "frame_requests": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FrameRequestDelivery"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frame Requests"
+          },
+          "last_id": {
+            "title": "Last Id",
+            "type": "integer"
+          },
+          "synced": {
+            "title": "Synced",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "synced",
+          "last_id"
+        ],
+        "title": "ScreenActivitySyncResponse",
         "type": "object"
       },
       "ScreenFrameAdjudicationRequest": {
@@ -19845,8 +19942,6 @@
           "id"
         ],
         "title": "ScreenFrameSubjectIn",
-        "type": "object"
-      },
       "SearchConversationsResponse": {
         "properties": {
           "current_page": {
@@ -48940,11 +49035,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "integer"
-                  },
-                  "title": "Response Sync Screen Activity V1 Screen Activity Sync Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ScreenActivitySyncResponse"
                 }
               }
             },
