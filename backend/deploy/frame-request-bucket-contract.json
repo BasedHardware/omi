@@ -1,6 +1,10 @@
 {
   "bucket_env_var": "BUCKET_FRAME_REQUESTS",
   "conversation_attachment_policy": "conversation_lifetime",
+  "allowed_locations": ["US", "US-CENTRAL1"],
+  "uniform_bucket_level_access": true,
+  "public_access_prevention": "enforced",
+  "encryption_at_rest": "google_managed_or_cmek",
   "lifecycle": {
     "expires_objects": false
   }

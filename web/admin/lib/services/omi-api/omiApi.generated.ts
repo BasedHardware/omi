@@ -6606,6 +6606,28 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/frame-requests/status/{request_id}": {
+    get: {
+      operationId: "get_frame_request_status_v1_frame_requests_status__request_id__get";
+      responses: {
+        "200": FrameRequestEnvelope;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/frame-requests/temporary/{request_id}/image": {
+    get: {
+      operationId: "consume_temporary_frame_request_image_v1_frame_requests_temporary__request_id__image_get";
+      responses: {
+        "200": unknown;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/frame-requests/{request_id}/promote": {
     post: {
       operationId: "promote_frame_request_v1_frame_requests__request_id__promote_post";
@@ -12411,6 +12433,50 @@ export async function get_pending_frame_requests_v1_frame_requests_pending_get(q
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_frame_request_status_v1_frame_requests_status__request_id__get(path: { request_id: string }, query: { account_generation?: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<FrameRequestEnvelope> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/frame-requests/status/${path.request_id}`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function consume_temporary_frame_request_image_v1_frame_requests_temporary__request_id__image_get(path: { request_id: string }, query: { account_generation?: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Blob> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/frame-requests/temporary/${path.request_id}/image`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return await _res.blob();
+}
+
 export async function promote_frame_request_v1_frame_requests__request_id__promote_post(path: { request_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: FrameRequestPromotion, init?: OmiApiClientInit): Promise<FrameRequestEnvelope> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/frame-requests/${path.request_id}/promote`;
@@ -17270,4 +17336,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 414 client methods generated.
+// Total: 416 client methods generated.

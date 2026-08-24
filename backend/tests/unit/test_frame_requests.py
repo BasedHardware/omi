@@ -1,8 +1,8 @@
 from datetime import datetime, timezone
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-import pytest
 
 from models.frame_request import FrameRequest, FrameRequestState
 from routers import frame_requests
@@ -83,17 +83,90 @@ def test_create_route_is_idempotent_and_returns_metadata_only(monkeypatch):
     assert "image_base64" not in response.text
 
 
-def test_create_route_rejects_non_conversation_requests_before_enqueue(monkeypatch):
+def test_create_route_accepts_temporary_non_conversation_requests(monkeypatch):
     set_frame_request_authority_for_tests(_EnabledAuthority(0))
-    monkeypatch.setattr(
-        frame_requests, "enqueue_frame_request", lambda *args, **kwargs: pytest.fail("must reject early")
-    )
+    calls = {}
+
+    def enqueue(*args, **kwargs):
+        calls.update(kwargs)
+        return _request(), False
+
+    monkeypatch.setattr(frame_requests, "enqueue_frame_request", enqueue)
     response = _client().post(
         "/v1/frame-requests",
-        json={"device_id": "mac-1", "dedupe_key": "dedupe-1", "account_generation": 0},
+        json={
+            "device_id": "mac-1",
+            "dedupe_key": "dedupe-1",
+            "account_generation": 0,
+            "screenshot_id": "42",
+            "requested_ttl_seconds": 604800,
+        },
     )
-    assert response.status_code == 400
-    assert response.json() == {"detail": "conversation_id_required"}
+    assert response.status_code == 200
+    assert calls["conversation_id"] is None
+    assert calls["requested_ttl_seconds"] == 604800
+
+
+def test_temporary_image_read_is_owner_fenced_and_never_promotes(monkeypatch):
+    set_frame_request_authority_for_tests(_EnabledAuthority(7))
+    now = datetime.now(timezone.utc)
+    temporary = FrameRequest(
+        request_id="frame-1",
+        uid="uid-1",
+        device_id="mac-1",
+        account_generation=7,
+        dedupe_key="dedupe-1",
+        screenshot_id="42",
+        state=FrameRequestState.uploaded,
+        created_at=now,
+        expires_at=now.replace(year=now.year + 1),
+        uploaded_at=now,
+        byte_count=3,
+        content_type="image/jpeg",
+        storage_id="storage-1",
+        cleanup_state="pending",
+        cleanup_next_attempt_at=now,
+    )
+    monkeypatch.setattr(frame_requests, "get_frame_request", lambda *_args: temporary)
+    monkeypatch.setattr(frame_requests, "download_frame_request_pixels", lambda *_args: b"jpg")
+
+    response = _client().get("/v1/frame-requests/temporary/frame-1/image?account_generation=7")
+
+    assert response.status_code == 200
+    assert response.content == b"jpg"
+    assert response.headers["content-type"] == "image/jpeg"
+    assert temporary.state == FrameRequestState.uploaded
+
+
+def test_temporary_image_read_rejects_conversation_owned_pixels(monkeypatch):
+    set_frame_request_authority_for_tests(_EnabledAuthority(7))
+    row = _request().model_copy(update={"account_generation": 7, "conversation_id": "conversation-1"})
+    monkeypatch.setattr(frame_requests, "get_frame_request", lambda *_args: row)
+
+    response = _client().get("/v1/frame-requests/temporary/frame-1/image?account_generation=7")
+
+    assert response.status_code == 404
+
+
+def test_status_read_reports_uploaded_without_promoting(monkeypatch):
+    set_frame_request_authority_for_tests(_EnabledAuthority(7))
+    row = _request().model_copy(update={"account_generation": 7, "state": FrameRequestState.claimed})
+    monkeypatch.setattr(frame_requests, "get_frame_request", lambda *_args: row)
+
+    response = _client().get("/v1/frame-requests/status/frame-1?account_generation=7")
+
+    assert response.status_code == 200
+    assert response.json()["request"]["state"] == "claimed"
+
+
+def test_temporary_image_read_rejects_stale_account_generation(monkeypatch):
+    set_frame_request_authority_for_tests(_EnabledAuthority(7))
+    row = _request().model_copy(update={"account_generation": 6})
+    monkeypatch.setattr(frame_requests, "get_frame_request", lambda *_args: row)
+
+    response = _client().get("/v1/frame-requests/temporary/frame-1/image?account_generation=7")
+
+    assert response.status_code == 404
 
 
 def test_pending_route_is_owner_device_scoped(monkeypatch):

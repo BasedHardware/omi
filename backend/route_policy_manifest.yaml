@@ -138,6 +138,26 @@ routes:
         enforcement: fail_open
         placement: dependency
   - route_type: http
+    method: GET
+    path: /v1/frame-requests/status/{request_id}
+    policy:
+      <<: *jit_frame_request_policy
+      rate_limit:
+        policy_name: frame_requests:read
+        key_subject: uid
+        enforcement: fail_open
+        placement: dependency
+  - route_type: http
+    method: GET
+    path: /v1/frame-requests/temporary/{request_id}/image
+    policy:
+      <<: *jit_frame_request_policy
+      rate_limit:
+        policy_name: frame_requests:read
+        key_subject: uid
+        enforcement: fail_open
+        placement: dependency
+  - route_type: http
     method: POST
     path: /v1/frame-requests/{request_id}/state
     policy: *jit_frame_request_policy

@@ -130,6 +130,7 @@ overlay:
     - .github/workflows/gcp_backend.yml
     - .github/workflows/gcp_notifications_job.yml
     - .github/workflows/gcp_memory_maintenance_job.yml
+    - .github/workflows/gcp_frame_request_retention_job.yml
     network:
       flags:
         --network:
@@ -396,3 +397,10 @@ overlay:
             value: 'true'
           PINECONE_INDEX_NAME:
             value: memories-backend
+      frame-request-retention-job:
+        flags:
+          --task-timeout: 900s
+          --max-retries: '3'
+        env:
+          GOOGLE_CLOUD_PROJECT:
+            value: based-hardware
