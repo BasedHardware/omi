@@ -11,6 +11,7 @@ import pytest
 
 from models.memory_apply import MemoryControlState
 from models.memory_contracts import deterministic_contract_id
+from services.users import data_export
 from utils.memory.daily_memory_sweep import (
     DailySweepCandidate,
     DailySweepCohortAuthority,
@@ -1254,8 +1255,6 @@ def test_returned_payload_expiry_keeps_content_free_tombstone_and_blocks_replay(
 
 
 def test_user_export_includes_both_candidate_stages_and_model_receipts(monkeypatch):
-    from services.users import data_export
-
     monkeypatch.setattr(data_export, "get_user_profile", lambda _uid: {})
     monkeypatch.setattr(data_export.conversations_db, "iter_all_conversations", lambda *_args, **_kwargs: ())
     monkeypatch.setattr(data_export, "get_people", lambda _uid: ())
