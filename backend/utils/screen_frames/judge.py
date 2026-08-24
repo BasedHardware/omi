@@ -20,13 +20,30 @@ logger = logging.getLogger(__name__)
 
 _JUDGE_FEATURE = "screen_frame_judge"
 
-# The identifiable_person reject rule is gated on REJECT_IDENTIFIABLE_PERSONS
-# (utils/screen_frames/policy.py) so flipping that one constant actually
-# changes judge behavior, not just documentation. See that constant's
-# comment for the "David has not yet ruled" context.
+# Gated on REJECT_IDENTIFIABLE_PERSONS (utils/screen_frames/policy.py) so the constant
+# changes judge behaviour rather than documentation. Currently False per David's 2026-08-24
+# ruling — see that constant's comment.
+#
+# Two halves have to move together. Removing the reject rule is not enough on its own,
+# because the approval criterion below independently demanded "no identifying information",
+# which would have kept the model refusing faces with the flag already off. A gate you can
+# flip that does not actually change the outcome is worse than no gate.
 _IDENTIFIABLE_PERSON_RULE = (
     "- identifiable_person: a recognisable human face, especially a third party\n"
     if REJECT_IDENTIFIABLE_PERSONS
+    else ""
+)
+
+_PEOPLE_GUIDANCE = (
+    """
+People are expected in a meeting screenshot and are not a reason to reject. A video-call
+grid, a participant on camera, or a face in shared content is fine, provided the frame is
+otherwise meeting-relevant and clears every rule above. A face never rescues a frame that
+fails one of those rules: a face on a banking screen, in a medical portal, or in a DM thread
+is rejected for that reason. A personal photo library or a social feed is not
+meeting-relevant content and is rejected as such.
+"""
+    if not REJECT_IDENTIFIABLE_PERSONS
     else ""
 )
 
@@ -51,13 +68,17 @@ Reject the frame (outcome="rejected") if it shows any of:
 
 Only approve (outcome="approved_clean") a frame that shows shared, meeting-relevant content
 with none of the above: code, a browser tab showing public/shared content, a document,
-slides, or a product/app UI, with no private or identifying information visible.
+slides, a product/app UI, or the meeting itself — with no private information visible.
+{_PEOPLE_GUIDANCE}
 
 For every frame, regardless of outcome, also produce:
 - caption: a short (<=160 char) neutral description of what the frame shows
 - labels: up to 8 short topical labels
 - source_badge: one of "code", "browser", "document", "slides", "product", or null if none fit
-- banner_suitability: 0..1, how well this specific frame would work as a note's hero banner
+- banner_suitability: 0..1, how well this specific frame would work as a note's hero banner.
+  The banner exists to remind someone later what the meeting was and who it was with, so
+  score for recall, not decoration. A frame showing the people in the meeting usually
+  carries more of that than a wall of code or text.
   image (favor a single clear focal subject, readable at a glance, not dense text-only content)
 
 If you reject the frame, still fill in reject_reason with the single best-matching reason

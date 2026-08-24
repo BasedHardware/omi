@@ -13,6 +13,7 @@ import pytest
 
 from models.screen_frame import ScreenFrameJudgement
 from utils.screen_frames import judge as judge_mod
+from utils.screen_frames import policy as policy_mod
 from utils.screen_frames.judge import ScreenFrameJudgeError, judge_frame
 
 UID = "user-1"
@@ -90,10 +91,12 @@ class TestCleanOutputPassesThrough:
         assert result.banner_suitability == 0.7
 
     def test_rejected_with_reason_is_returned(self, monkeypatch):
+        # Sample reason deliberately not identifiable_person: faces are published per David's
+        # 2026-08-24 ruling, so using one here would pin an outcome the product no longer wants.
         rejected = ScreenFrameJudgement(
             outcome="rejected",
-            reject_reason="identifiable_person",
-            caption="a video call",
+            reject_reason="credentials",
+            caption="a login form with a filled password field",
             labels=[],
             source_badge=None,
             banner_suitability=0.0,
@@ -101,4 +104,36 @@ class TestCleanOutputPassesThrough:
         monkeypatch.setattr(judge_mod, "get_llm", lambda feature: _fake_llm(rejected))
         result = judge_frame(UID, b"fake-jpeg-bytes")
         assert result.outcome == "rejected"
-        assert result.reject_reason == "identifiable_person"
+        assert result.reject_reason == "credentials"
+
+
+class TestFacePolicy:
+    """David's ruling, 2026-08-24: faces are included.
+
+    Pinned as two assertions rather than one because the policy lives in two halves of the
+    prompt, and moving only one silently does nothing. Removing the identifiable_person
+    reject rule while the approval criterion still demanded "no identifying information"
+    would have left the model refusing faces with the flag already flipped — a gate that
+    looks flipped and is not.
+    """
+
+    def test_a_face_is_not_a_reject_rule(self):
+        assert policy_mod.REJECT_IDENTIFIABLE_PERSONS is False
+        assert "identifiable_person" not in judge_mod._PRIVACY_PROMPT
+
+    def test_the_approval_criterion_admits_people(self):
+        prompt = judge_mod._PRIVACY_PROMPT
+        assert "People are expected in a meeting screenshot" in prompt
+        # The other half: the approve line must not re-forbid what the reject list allowed.
+        assert "no private or identifying information" not in prompt
+
+    def test_every_other_reject_reason_survives(self):
+        prompt = judge_mod._PRIVACY_PROMPT
+        for reason in ("credentials", "private_messages", "email", "banking", "medical", "personal_document"):
+            assert f"- {reason}:" in prompt, f"{reason} must still reject"
+
+    def test_a_face_does_not_rescue_an_otherwise_rejectable_frame(self):
+        # The guidance has to say so explicitly, or "faces are fine" reads as "frames with
+        # faces are fine" and a face on a banking screen becomes publishable.
+        prompt = judge_mod._PRIVACY_PROMPT
+        assert "A face never rescues a frame" in prompt

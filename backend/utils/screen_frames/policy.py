@@ -9,13 +9,20 @@ from dataclasses import dataclass
 
 from models.screen_frame import ScreenFrameEgressPurpose, ScreenFrameRetentionClass
 
-# ASSUMPTION flagged for David (contract §4, "Face policy"): a frame showing a
-# recognisable third-party face is rejected outright, never published. A
-# meeting participant did not consent to appearing in someone else's stored
-# note, and this is the reversible direction — we can loosen this later, we
-# cannot un-store a person's face. David has not yet ruled on this; flipping
-# it is a one-line change here once he does.
-REJECT_IDENTIFIABLE_PERSONS = True
+# David's ruling, 2026-08-24: faces are INCLUDED. "Faces are the fastest way to remind a
+# person what their meeting was about and who it was with."
+#
+# This supersedes the earlier conservative default, which rejected any recognisable face.
+# The reasoning is worth keeping because it also changes what a good banner is: the point
+# of a note's hero image is recall, and a participant's face carries more of that than any
+# amount of the code or documents that dominate this user's capture.
+#
+# What did NOT change: a face does not make a frame publishable on its own. The frame still
+# has to be meeting-relevant shared content, and every other reject reason still applies —
+# a face in a medical portal, a banking screen, or a DM thread is rejected for those
+# reasons, not for being a face. A personal photo library or a social feed is rejected as
+# not meeting-relevant.
+REJECT_IDENTIFIABLE_PERSONS = False
 
 
 @dataclass(frozen=True)
