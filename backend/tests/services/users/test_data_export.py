@@ -71,6 +71,8 @@ def test_iter_user_data_export_streams_all_top_level_sections(monkeypatch):
         "memories": [{"id": "mem1"}],
         "people": [{"id": "person1"}],
         "action_items": [{"id": "task1"}],
+        "frame_vision_receipts": [{"id": "frame_vision_receipts-1"}],
+        "conversation_keyframe_jobs": [{"id": "conversation_keyframe_jobs-1"}],
         "task_data": {
             **{name: [{"id": f"{name}-1"}] for name in data_export.TASK_EXPORT_COLLECTIONS},
             **{

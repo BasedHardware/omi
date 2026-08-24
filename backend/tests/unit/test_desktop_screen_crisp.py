@@ -92,6 +92,9 @@ def test_screen_activity_sync_writes_rows_and_embeddings(monkeypatch):
                     "clientDeviceId": "mac-a",
                     "embedding": [0.1],
                     "storageId": "mac-a-4",
+                    "accountGeneration": 0,
+                    "deviceRetentionSeconds": None,
+                    "captureEligible": False,
                 },
                 {
                     "id": 7,
@@ -103,6 +106,9 @@ def test_screen_activity_sync_writes_rows_and_embeddings(monkeypatch):
                     "clientDeviceId": None,
                     "embedding": None,
                     "storageId": "7",
+                    "accountGeneration": 0,
+                    "deviceRetentionSeconds": None,
+                    "captureEligible": False,
                 },
             ],
         ),
@@ -120,6 +126,9 @@ def test_screen_activity_sync_writes_rows_and_embeddings(monkeypatch):
                     "clientDeviceId": "mac-a",
                     "embedding": [0.1],
                     "storageId": "mac-a-4",
+                    "accountGeneration": 0,
+                    "deviceRetentionSeconds": None,
+                    "captureEligible": False,
                 }
             ],
         ),
@@ -131,6 +140,7 @@ def test_enabled_screen_sync_returns_only_device_routed_frame_metadata(monkeypat
     _enable_frame_requests()
     monkeypatch.setattr(desktop_screen_crisp, "upsert_screen_activity", lambda uid, rows: len(rows))
     monkeypatch.setattr(desktop_screen_crisp, "upsert_screen_activity_vectors", lambda uid, rows: None)
+    monkeypatch.setattr(desktop_screen_crisp, "reconcile_conversation_keyframe_jobs", lambda *args, **kwargs: 0)
     monkeypatch.setattr(
         desktop_screen_crisp,
         "list_pending_frame_requests",

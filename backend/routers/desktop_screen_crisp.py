@@ -16,6 +16,7 @@ from utils.other.endpoints import get_current_user_uid, with_rate_limit
 from utils.observability.fallback import record_fallback
 from utils.retrieval.frame_request_authority import decision_for
 from utils.subscription import grants_cloud_screen_vectors, is_desktop_trial_paywalled
+from services.conversation_keyframes import reconcile_conversation_keyframe_jobs
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -35,6 +36,10 @@ class ScreenActivityRow(BaseModel):
     device_name: str | None = Field(default=None, alias="deviceName")
     client_device_id: str | None = Field(default=None, alias="clientDeviceId")
     embedding: list[float] | None = None
+    # Released/unknown clients omit this field, which must fail closed for
+    # automatic evidence capture. The production Mac explicitly attests only
+    # rows already admitted by Rewind's local exclusion policy.
+    capture_eligible: bool = Field(default=False, alias="captureEligible")
 
     @field_validator("timestamp")
     @classmethod
@@ -47,6 +52,9 @@ class ScreenActivityRow(BaseModel):
 
 class ScreenActivitySyncRequest(BaseModel):
     account_generation: int = Field(default=0, ge=0)
+    device_retention_seconds: int | None = Field(
+        default=None, alias="deviceRetentionSeconds", ge=1, le=6 * 24 * 60 * 60
+    )
     rows: list[ScreenActivityRow]
 
 
@@ -102,8 +110,16 @@ async def sync_screen_activity(
     if len(request.rows) > 100:
         raise HTTPException(status_code=400, detail="Maximum 100 rows per batch")
     if not request.rows:
-        return {"synced": 0, "last_id": 0}
-    rows = [{**row.model_dump(by_alias=True), "storageId": row.storage_id()} for row in request.rows]
+        return ScreenActivitySyncResponse(synced=0, last_id=0)
+    rows = [
+        {
+            **row.model_dump(by_alias=True),
+            "storageId": row.storage_id(),
+            "accountGeneration": request.account_generation,
+            "deviceRetentionSeconds": request.device_retention_seconds,
+        }
+        for row in request.rows
+    ]
     parity_capture = SurfaceParityCapture.from_environ(
         principal_id=uid,
         session_id=f"{rows[0]['storageId']}:{rows[-1]['storageId']}",
@@ -140,14 +156,23 @@ async def sync_screen_activity(
         # the payload metadata-only: no image bytes, URLs, or OCR are returned.
         device_id = request.rows[0].client_device_id
         same_device_batch = bool(device_id) and all(row.client_device_id == device_id for row in request.rows)
+        routed_device_id = device_id if isinstance(device_id, str) else ""
         decision = decision_for(uid)
         if decision.enabled and decision.account_generation == request.account_generation and same_device_batch:
             try:
+                await run_blocking(
+                    db_executor,
+                    reconcile_conversation_keyframe_jobs,
+                    uid,
+                    device_id=routed_device_id,
+                    account_generation=request.account_generation,
+                    device_retention_seconds=request.device_retention_seconds,
+                )
                 pending = await run_blocking(
                     db_executor,
                     list_pending_frame_requests,
                     uid,
-                    device_id=device_id,
+                    device_id=routed_device_id,
                     account_generation=request.account_generation,
                 )
                 response_payload["frame_requests"] = [

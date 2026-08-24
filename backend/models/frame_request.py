@@ -153,7 +153,7 @@ class CreateFrameRequest(BaseModel):
     dedupe_key: str = Field(min_length=1, max_length=256)
     conversation_id: str | None = Field(default=None, max_length=256)
     screenshot_id: str | None = Field(default=None, max_length=256)
-    requested_ttl_seconds: int | None = Field(default=None, ge=1, le=7 * 24 * 60 * 60)
+    requested_ttl_seconds: int | None = Field(default=None, ge=1, le=6 * 24 * 60 * 60)
 
 
 class FrameRequestStateUpdate(BaseModel):

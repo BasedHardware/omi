@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import datetime, timezone
+from uuid import uuid4
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from google.cloud import firestore
@@ -25,10 +26,54 @@ from database.frame_requests import (
 )
 from utils.integration_telemetry import emit_posthog_event
 from utils.retrieval.frame_request_storage import delete_frame_request_pixels
+from services.conversation_keyframes import reconcile_pending_conversation_keyframe_jobs_for_user
 
 logger = logging.getLogger(__name__)
 _STATE_COLLECTION = "maintenance_state"
 _STATE_DOCUMENT = "frame_request_retention"
+_LEASE_SECONDS = 20 * 60
+
+
+def _acquire_lease(client: Any, *, owner: str, now: datetime) -> int | None:
+    ref = client.collection(_STATE_COLLECTION).document(_STATE_DOCUMENT)
+    transaction = client.transaction()
+
+    @firestore.transactional
+    def _claim(transaction: Any) -> int | None:
+        snapshot = ref.get(transaction=transaction)
+        row = snapshot.to_dict() if snapshot.exists else {}
+        expires = (row or {}).get("lease_expires_at")
+        if isinstance(expires, datetime) and expires > now:
+            return None
+        generation = max(0, int((row or {}).get("lease_generation") or 0)) + 1
+        transaction.set(
+            ref,
+            {
+                "lease_owner": owner,
+                "lease_generation": generation,
+                "lease_expires_at": now + timedelta(seconds=_LEASE_SECONDS),
+            },
+            merge=True,
+        )
+        return generation
+
+    return _claim(transaction)
+
+
+def _release_lease(client: Any, *, owner: str, generation: int) -> bool:
+    ref = client.collection(_STATE_COLLECTION).document(_STATE_DOCUMENT)
+    transaction = client.transaction()
+
+    @firestore.transactional
+    def _release(transaction: Any) -> bool:
+        snapshot = ref.get(transaction=transaction)
+        row = snapshot.to_dict() if snapshot.exists else {}
+        if row.get("lease_owner") != owner or row.get("lease_generation") != generation:
+            return False
+        transaction.update(ref, {"lease_expires_at": datetime.now(timezone.utc), "lease_owner": ""})
+        return True
+
+    return _release(transaction)
 
 
 def _retry_collection(client: Any) -> Any:
@@ -98,15 +143,35 @@ def _load_user_page(client: Any, *, user_limit: int) -> tuple[list[Any], str | N
     return retry_rows + selected, next_cursor, retry_uids
 
 
-def _store_user_cursor(client: Any, cursor_uid: str | None, retry_cursor_uid: str | None = None) -> None:
-    client.collection(_STATE_COLLECTION).document(_STATE_DOCUMENT).set(
-        {
-            "cursor_uid": cursor_uid or "",
-            "retry_cursor_uid": retry_cursor_uid or "",
-            "updated_at": datetime.now(timezone.utc),
-        },
-        merge=True,
-    )
+def _store_user_cursor(
+    client: Any,
+    cursor_uid: str | None,
+    retry_cursor_uid: str | None = None,
+    *,
+    lease_owner: str | None = None,
+    lease_generation: int | None = None,
+) -> bool:
+    ref = client.collection(_STATE_COLLECTION).document(_STATE_DOCUMENT)
+    data = {
+        "cursor_uid": cursor_uid or "",
+        "retry_cursor_uid": retry_cursor_uid or "",
+        "updated_at": datetime.now(timezone.utc),
+    }
+    if lease_owner is None or lease_generation is None:
+        ref.set(data, merge=True)
+        return True
+    transaction = client.transaction()
+
+    @firestore.transactional
+    def _fenced_store(transaction: Any) -> bool:
+        snapshot = ref.get(transaction=transaction)
+        row = snapshot.to_dict() if snapshot.exists else {}
+        if row.get("lease_owner") != lease_owner or row.get("lease_generation") != lease_generation:
+            return False
+        transaction.set(ref, data, merge=True)
+        return True
+
+    return _fenced_store(transaction)
 
 
 def _drain_due_pages(operation: Any, *, page_size: int, max_pages: int = 8) -> tuple[int, bool]:
@@ -135,6 +200,17 @@ def run_frame_request_retention_maintenance(
         raise ValueError("maintenance limits must be positive")
     started = time.monotonic()
     client = firestore_client or get_firestore_client()
+    lease_owner = uuid4().hex
+    lease_generation = _acquire_lease(client, owner=lease_owner, now=datetime.now(timezone.utc))
+    if lease_generation is None:
+        return {
+            "users_scanned": 0,
+            "rows_pruned": 0,
+            "pixels_cleaned": 0,
+            "users_page_full": 0,
+            "accounts_with_errors": 0,
+            "lease_skipped": 1,
+        }
     users, next_cursor, retry_uids = _load_user_page(client, user_limit=user_limit)
     users_truncated = next_cursor is not None
     attempted = cleaned = pruned = failures = 0
@@ -146,6 +222,7 @@ def run_frame_request_retention_maintenance(
             continue
         attempted += 1
         try:
+            reconcile_pending_conversation_keyframe_jobs_for_user(uid, firestore_client=client)
             changed, more_due = _drain_due_pages(
                 lambda: prune_expired_frame_requests(uid, limit=rows_per_user, firestore_client=client),
                 page_size=rows_per_user,
@@ -195,13 +272,22 @@ def run_frame_request_retention_maintenance(
             logger.exception("frame retention maintenance failed for one account")
             failures += 1
             retry_collection.document(uid).set({"uid": uid, "updated_at": datetime.now(timezone.utc)}, merge=True)
-    _store_user_cursor(client, next_cursor, retry_uids[-1] if retry_uids else None)
+    cursor_committed = _store_user_cursor(
+        client,
+        next_cursor,
+        retry_uids[-1] if retry_uids else None,
+        lease_owner=lease_owner,
+        lease_generation=lease_generation,
+    )
+    _release_lease(client, owner=lease_owner, generation=lease_generation)
     result = {
         "users_scanned": attempted,
         "rows_pruned": pruned,
         "pixels_cleaned": cleaned,
         "users_page_full": int(users_truncated),
         "accounts_with_errors": failures,
+        "lease_skipped": 0,
+        "cursor_committed": int(cursor_committed),
     }
     elapsed_ms = max(0, int((time.monotonic() - started) * 1000))
     emit_posthog_event(

@@ -99,12 +99,12 @@ def test_create_route_accepts_temporary_non_conversation_requests(monkeypatch):
             "dedupe_key": "dedupe-1",
             "account_generation": 0,
             "screenshot_id": "42",
-            "requested_ttl_seconds": 604800,
+            "requested_ttl_seconds": 518400,
         },
     )
     assert response.status_code == 200
     assert calls["conversation_id"] is None
-    assert calls["requested_ttl_seconds"] == 604800
+    assert calls["requested_ttl_seconds"] == 518400
 
 
 def test_temporary_image_read_is_owner_fenced_and_never_promotes(monkeypatch):

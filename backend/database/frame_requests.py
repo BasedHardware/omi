@@ -39,6 +39,7 @@ USERS_COLLECTION = "users"
 FRAME_REQUESTS_COLLECTION = "frame_requests"
 FRAME_UPLOAD_ORPHANS_COLLECTION = "frame_upload_orphans"
 FRAME_DELETION_OUTBOX_COLLECTION = "frame_deletion_outbox"
+FRAME_VISION_RECEIPTS_COLLECTION = "frame_vision_receipts"
 
 
 @dataclass(frozen=True)
@@ -84,6 +85,79 @@ def _deletion_outbox_collection(uid: str, *, firestore_client: Any | None = None
 
 def _deletion_receipt_id(conversation_id: str, storage_id: str) -> str:
     return hashlib.sha256(f"{conversation_id}\0{storage_id}".encode("utf-8")).hexdigest()
+
+
+def reserve_frame_vision_invocation(
+    uid: str,
+    authority_key: str,
+    *,
+    request_id: str,
+    account_generation: int,
+    now: datetime | None = None,
+    firestore_client: Any | None = None,
+) -> dict[str, Any]:
+    """Durably reserve the sole paid invocation for one stable chat turn.
+
+    The receipt is written *before* provider egress. An expired lease is an
+    honest indeterminate outcome, not permission to pay twice after a crash.
+    """
+    if not authority_key.strip():
+        raise ValueError("stable vision authority is required")
+    current = _utc(now or datetime.now(timezone.utc))
+    client = _get_client(firestore_client)
+    receipt_id = hashlib.sha256(authority_key.encode("utf-8")).hexdigest()
+    ref = (
+        client.collection(USERS_COLLECTION)
+        .document(uid)
+        .collection(FRAME_VISION_RECEIPTS_COLLECTION)
+        .document(receipt_id)
+    )
+    transaction = client.transaction()
+
+    @firestore.transactional
+    def _reserve(transaction: Any) -> dict[str, Any]:
+        snapshot = ref.get(transaction=transaction)
+        if snapshot.exists:
+            row = snapshot.to_dict() or {}
+            if row.get("request_id") != request_id or row.get("account_generation") != account_generation:
+                raise PermissionError("vision receipt authority mismatch")
+            return row
+        row = {
+            "request_id": request_id,
+            "account_generation": account_generation,
+            "state": "invoked",
+            "created_at": current,
+            "lease_expires_at": current + timedelta(minutes=5),
+        }
+        transaction.create(ref, row)
+        return {**row, "reserved": True}
+
+    return _reserve(transaction)
+
+
+def complete_frame_vision_invocation(
+    uid: str,
+    authority_key: str,
+    *,
+    request_id: str,
+    account_generation: int,
+    description: str,
+    firestore_client: Any | None = None,
+) -> None:
+    """Store only the bounded derived result; never pixels or prompt content."""
+    bounded = description[:4000]
+    ref = (
+        _get_client(firestore_client)
+        .collection(USERS_COLLECTION)
+        .document(uid)
+        .collection(FRAME_VISION_RECEIPTS_COLLECTION)
+        .document(hashlib.sha256(authority_key.encode("utf-8")).hexdigest())
+    )
+    snapshot = ref.get()
+    row = snapshot.to_dict() if snapshot.exists else {}
+    if row.get("request_id") != request_id or row.get("account_generation") != account_generation:
+        raise PermissionError("vision receipt authority mismatch")
+    ref.update({"state": "completed", "description": bounded, "completed_at": datetime.now(timezone.utc)})
 
 
 def persist_conversation_frame_deletion_outbox(
@@ -1053,6 +1127,9 @@ def delete_frame_requests_for_conversation(
             .stream()
         )
         if not rows:
+            client.collection(USERS_COLLECTION).document(uid).collection("conversation_keyframe_jobs").document(
+                conversation_id
+            ).delete()
             return deleted
         batch = client.batch()
         for snapshot in rows:

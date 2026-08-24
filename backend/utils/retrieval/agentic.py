@@ -1430,6 +1430,29 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
     configurable = {
         "user_id": uid,
         "thread_id": str(uuid.uuid4()),
+        # Stable across a retry of the same persisted human turn; unlike the
+        # tracing/thread UUID this is durable idempotency authority.
+        "frame_request_turn_id": next(
+            (
+                message.id
+                for message in reversed(messages)
+                if getattr(message.sender, "value", message.sender) == "human"
+            ),
+            None,
+        ),
+        "frame_request_session_id": (
+            chat_session.id
+            if chat_session
+            else next(
+                (
+                    message.chat_session_id or message.session_id
+                    for message in reversed(messages)
+                    if getattr(message.sender, "value", message.sender) == "human"
+                    and (message.chat_session_id or message.session_id)
+                ),
+                None,
+            )
+        ),
         "conversations_collected": conversations_collected,
         "evidence_references": evidence_references,
         # Shared mutable object: RunnableConfig copies the outer mapping for

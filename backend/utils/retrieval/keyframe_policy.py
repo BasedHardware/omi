@@ -1,9 +1,9 @@
 """Deterministic metadata-only selection for one conversation keyframe.
 
-Capture/storage adapters supply candidates after applying their local screen
-exclusion policy.  This boundary never receives pixels and leaves exact image
-dimensions/egress budgets to the owning client contract; it only chooses a
-stable winner and declares the conversation-lifetime retention class.
+Capture/storage adapters supply candidates after applying their local Rewind
+exclusion policy. This boundary never receives pixels; the upload boundary
+decodes, strips metadata, and enforces the dimensions/egress budget. Here we
+choose a stable winner and declare conversation-lifetime retention.
 """
 
 from __future__ import annotations
@@ -28,11 +28,29 @@ class KeyframeCandidate:
 class ConversationKeyframe:
     frame_id: str
     captured_at: datetime
-    app_name: str
-    window_title: str
+    # Sensitive surface names are deliberately not returned. They are inputs
+    # to the fail-closed selection policy, not durable keyframe metadata.
     content_hash: str
     retention_class: str = "conversation_lifetime"
     expires_at: None = None
+
+
+_SENSITIVE_SURFACE_MARKERS = (
+    "1password",
+    "bitwarden",
+    "keychain",
+    "password",
+    "private browsing",
+    "incognito",
+    "secret",
+    "security code",
+    "authentication code",
+)
+
+
+def _sensitive(candidate: KeyframeCandidate) -> bool:
+    surface = f"{candidate.app_name}\n{candidate.window_title}".casefold()
+    return any(marker in surface for marker in _SENSITIVE_SURFACE_MARKERS)
 
 
 def select_conversation_keyframe(candidates: Iterable[KeyframeCandidate]) -> ConversationKeyframe | None:
@@ -50,6 +68,7 @@ def select_conversation_keyframe(candidates: Iterable[KeyframeCandidate]) -> Con
         and candidate.content_hash.strip()
         and candidate.capture_complete
         and not candidate.excluded
+        and not _sensitive(candidate)
     ]
     if not eligible:
         return None
@@ -57,8 +76,6 @@ def select_conversation_keyframe(candidates: Iterable[KeyframeCandidate]) -> Con
     return ConversationKeyframe(
         frame_id=winner.frame_id,
         captured_at=_utc(winner.captured_at),
-        app_name=winner.app_name.strip(),
-        window_title=winner.window_title.strip(),
         content_hash=winner.content_hash,
     )
 

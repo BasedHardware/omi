@@ -1,11 +1,15 @@
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 
 from services import frame_request_retention
+import pytest
 from database.frame_requests import FrameCleanupPage
 from services.frame_request_retention import (
     _drain_due_pages,
     _load_user_page,
     _store_user_cursor,
+    _acquire_lease,
+    _release_lease,
 )
 
 
@@ -47,16 +51,21 @@ class _StateDocument:
     def __init__(self, cursor_uid: str = ""):
         self.cursor_uid = cursor_uid
         self.retry_cursor_uid = ""
+        self.data = {"cursor_uid": cursor_uid, "retry_cursor_uid": ""}
         self.writes = []
         self.retries = _RetryCollection()
 
-    def get(self):
-        return _Snapshot({"cursor_uid": self.cursor_uid, "retry_cursor_uid": self.retry_cursor_uid})
+    def get(self, transaction=None):
+        return _Snapshot(dict(self.data))
 
     def set(self, data, merge=False):
         self.writes.append((data, merge))
-        self.cursor_uid = data["cursor_uid"]
-        self.retry_cursor_uid = data.get("retry_cursor_uid", "")
+        self.cursor_uid = data.get("cursor_uid", self.cursor_uid)
+        self.retry_cursor_uid = data.get("retry_cursor_uid", self.retry_cursor_uid)
+        self.data.update(data)
+
+    def update(self, data):
+        self.data.update(data)
 
     def collection(self, name):
         assert name == "retry_accounts"
@@ -163,6 +172,25 @@ class _Client:
         assert name == "users"
         return self.users
 
+    def transaction(self):
+        state = self.state
+
+        class Transaction:
+            @staticmethod
+            def set(ref, data, merge=False):
+                ref.set(data, merge=merge)
+
+            @staticmethod
+            def update(ref, data):
+                ref.update(data)
+
+        return Transaction()
+
+
+@pytest.fixture(autouse=True)
+def _plain_firestore_transactions(monkeypatch):
+    monkeypatch.setattr(frame_request_retention.firestore, "transactional", lambda function: function)
+
 
 def test_user_pagination_advances_and_wraps_without_repeating_first_page_forever():
     client = _Client(["a", "b", "c", "d", "e"])
@@ -251,6 +279,11 @@ def test_account_failure_advances_population_and_persists_convergent_retry(monke
         lambda *_args, **_kwargs: 0,
     )
     monkeypatch.setattr(frame_request_retention, "emit_posthog_event", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        frame_request_retention,
+        "reconcile_pending_conversation_keyframe_jobs_for_user",
+        lambda *_args, **_kwargs: 0,
+    )
 
     degraded = frame_request_retention.run_frame_request_retention_maintenance(user_limit=2, firestore_client=client)
     assert degraded["accounts_with_errors"] == 1
@@ -287,3 +320,26 @@ def test_failed_cleanup_page_does_not_hide_due_backlog_or_overstate_cleaned_coun
     pages = iter([FrameCleanupPage(processed=32, cleaned=0), FrameCleanupPage(processed=3, cleaned=3)])
 
     assert _drain_due_pages(lambda: next(pages), page_size=32) == (3, False)
+
+
+def test_expired_old_worker_cannot_regress_fast_new_worker_cursor():
+    client = _Client(["a", "b"])
+    now = datetime(2026, 8, 24, tzinfo=timezone.utc)
+    old_generation = _acquire_lease(client, owner="slow-old", now=now)
+    assert old_generation == 1
+    assert _acquire_lease(client, owner="overlap", now=now + timedelta(minutes=1)) is None
+    new_generation = _acquire_lease(client, owner="fast-new", now=now + timedelta(minutes=21))
+    assert new_generation == 2
+    assert _store_user_cursor(client, "b", lease_owner="fast-new", lease_generation=new_generation) is True
+    assert _store_user_cursor(client, "a", lease_owner="slow-old", lease_generation=old_generation) is False
+    assert client.state.cursor_uid == "b"
+
+
+def test_lease_expiry_allows_recovery_and_old_release_is_fenced():
+    client = _Client([])
+    now = datetime(2026, 8, 24, tzinfo=timezone.utc)
+    first = _acquire_lease(client, owner="crashed", now=now)
+    recovered = _acquire_lease(client, owner="recovery", now=now + timedelta(minutes=21))
+    assert first == 1 and recovered == 2
+    assert _release_lease(client, owner="crashed", generation=first) is False
+    assert _release_lease(client, owner="recovery", generation=recovered) is True

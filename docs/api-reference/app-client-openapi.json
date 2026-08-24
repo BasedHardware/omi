@@ -9135,7 +9135,7 @@
           "requested_ttl_seconds": {
             "anyOf": [
               {
-                "maximum": 604800.0,
+                "maximum": 518400.0,
                 "minimum": 1.0,
                 "type": "integer"
               },
@@ -20172,6 +20172,11 @@
             "title": "Appname",
             "type": "string"
           },
+          "captureEligible": {
+            "default": false,
+            "title": "Captureeligible",
+            "type": "boolean"
+          },
           "clientDeviceId": {
             "anyOf": [
               {
@@ -20262,6 +20267,19 @@
             "minimum": 0.0,
             "title": "Account Generation",
             "type": "integer"
+          },
+          "deviceRetentionSeconds": {
+            "anyOf": [
+              {
+                "maximum": 518400.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deviceretentionseconds"
           },
           "rows": {
             "items": {
