@@ -491,3 +491,34 @@ def test_every_written_entry_satisfies_gclouds_actual_rule(existing):
     for entry in merged.split(','):
         _, _, resource = entry.partition(':')
         assert GCLOUD_SECRET_PATH_RULE.match(resource), f'gcloud would reject {resource!r}'
+
+
+def test_repair_drops_a_stale_pinned_revision_name_before_replace():
+    """A failed deploy leaves its revision name pinned in the export.
+
+    `services replace` then fails with ALREADY_EXISTS because it would recreate
+    that exact name with different configuration. Repair must drop the pin.
+    """
+    module = _load_module()
+    service = {
+        'spec': {
+            'template': {
+                'metadata': {
+                    'name': 'backend-465cd0f-32620507075-1',
+                    'annotations': {module.SECRET_ANNOTATION: 'x:projects/p/secrets/x'},
+                }
+            }
+        }
+    }
+    removed = module._drop_pinned_revision_name(service)
+    assert removed == 'backend-465cd0f-32620507075-1'
+    assert 'name' not in service['spec']['template']['metadata']
+    # Annotations must survive untouched.
+    assert service['spec']['template']['metadata']['annotations'][module.SECRET_ANNOTATION]
+
+
+def test_dropping_a_pin_that_is_absent_is_not_an_error():
+    module = _load_module()
+    service = {'spec': {'template': {'metadata': {'annotations': {}}}}}
+    assert module._drop_pinned_revision_name(service) is None
+    assert module._drop_pinned_revision_name({}) is None
