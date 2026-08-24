@@ -148,9 +148,12 @@ final class JITTriggerMirrorTests: XCTestCase {
         snapshotRevision: "r", budget: 8, now: now.addingTimeInterval(181), in: db)
       XCTAssertNotNil(recovered)
       XCTAssertNotEqual(first?.leaseToken, recovered?.leaseToken)
+      guard let recovered else {
+        return XCTFail("expired ambient lease should be recoverable")
+      }
       XCTAssertTrue(
         try JITTriggerMirror.completeAmbientNanoAttempt(
-          recovered!, contextID: "bucket", semanticFingerprint: "stable",
+          recovered, contextID: "bucket", semanticFingerprint: "stable",
           now: now.addingTimeInterval(182), in: db))
 
       let unchangedAfterCompletion = try JITTriggerMirror.claimAmbientNanoChange(

@@ -25,6 +25,7 @@ from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, bud
 logger = logging.getLogger(__name__)
 
 conversations_collection = 'conversations'
+FIRST_OPEN_EFFECTS = ('folder_assignment', 'goal_progress', 'app_fanout')
 
 
 _LIFECYCLE_FIELDS = frozenset({'status', 'discarded'})
@@ -811,7 +812,7 @@ def initialize_first_open_work(uid: str, conversation_id: str, *, firestore_clie
                     'version': 1,
                     'state': 'pending',
                     'attempt': 0,
-                    'effects': ['folder_assignment', 'goal_progress', 'app_fanout'],
+                    'effects': {effect: {'state': 'pending'} for effect in FIRST_OPEN_EFFECTS},
                     'updated_at': firestore.SERVER_TIMESTAMP,
                 }
             },
@@ -819,6 +820,63 @@ def initialize_first_open_work(uid: str, conversation_id: str, *, firestore_clie
         return True
 
     return bool(run_transactional(client, _initialize))
+
+
+def _first_open_effects(state: Mapping[str, Any]) -> Dict[str, Dict[str, Any]]:
+    """Normalize the original effect-name list into durable per-effect state."""
+    raw = state.get('effects')
+    if isinstance(raw, Mapping):
+        normalized: Dict[str, Dict[str, Any]] = {}
+        for effect in FIRST_OPEN_EFFECTS:
+            value = raw.get(effect)
+            normalized[effect] = dict(value) if isinstance(value, Mapping) else {'state': 'pending'}
+        return normalized
+    return {effect: {'state': 'pending'} for effect in FIRST_OPEN_EFFECTS}
+
+
+def complete_first_open_effect(
+    uid: str,
+    conversation_id: str,
+    token: str,
+    effect: str,
+    *,
+    firestore_client: Any = None,
+) -> bool:
+    """Commit one converged effect under the active aggregate lease fence."""
+    if effect not in FIRST_OPEN_EFFECTS:
+        raise ValueError(f'unknown first-open effect: {effect}')
+    client = firestore_client or get_firestore_client()
+    ref = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+
+    @firestore.transactional
+    def _complete(transaction):
+        snapshot = ref.get(transaction=transaction)
+        if not snapshot.exists:
+            return False
+        state = (snapshot.to_dict() or {}).get('jit_first_open') or {}
+        if state.get('state') != 'in_flight' or state.get('lease_token') != token:
+            return False
+        effects = _first_open_effects(state)
+        if effects[effect].get('state') == 'complete':
+            return True
+        effects[effect] = {
+            **effects[effect],
+            'state': 'complete',
+            'completed_at': firestore.SERVER_TIMESTAMP,
+        }
+        transaction.update(
+            ref,
+            {
+                'jit_first_open': {
+                    **state,
+                    'effects': effects,
+                    'updated_at': firestore.SERVER_TIMESTAMP,
+                }
+            },
+        )
+        return True
+
+    return bool(run_transactional(client, _complete))
 
 
 def claim_first_open_work(
@@ -854,6 +912,7 @@ def claim_first_open_work(
                 'jit_first_open': {
                     **state,
                     'version': 1,
+                    'effects': _first_open_effects(state),
                     'state': 'in_flight',
                     'attempt': attempt + 1,
                     'lease_token': token,
@@ -882,9 +941,14 @@ def finish_first_open_work(
         state = (snapshot.to_dict() or {}).get('jit_first_open') or {}
         if state.get('state') != 'in_flight' or state.get('lease_token') != token:
             return False
+        effects = _first_open_effects(state)
+        all_effects_complete = all(value.get('state') == 'complete' for value in effects.values())
         next_state = {
             **state,
-            'state': 'complete' if succeeded else 'pending',
+            'effects': effects,
+            # Completion is derived from durable effect receipts, never from
+            # the worker's in-memory success flag alone.
+            'state': 'complete' if all_effects_complete else 'pending',
             'updated_at': firestore.SERVER_TIMESTAMP,
         }
         next_state.pop('lease_token', None)

@@ -749,6 +749,7 @@ def _append_goal_progress_event(
     *,
     idempotency_key: Optional[str],
     account_generation: Optional[int],
+    first_write_wins: bool = False,
     firestore_client: Any = None,
 ) -> GoalProgressEvent:
     client = _get_db(firestore_client)
@@ -779,7 +780,7 @@ def _append_goal_progress_event(
                 evidence_refs=record.evidence_refs,
                 metric=record.metric,
             )
-            if stored_proposal != event:
+            if stored_proposal != event and not first_write_wins:
                 raise GoalConflictError('progress event idempotency key was reused with different content')
             return record
         goal = normalize_goal_storage(_goal_dict(goal_snapshot), goal_id=goal_id)
@@ -845,6 +846,8 @@ def update_goal_progress(
     goal_id: str,
     current_value: float,
     *,
+    idempotency_key: Optional[str] = None,
+    account_generation: Optional[int] = None,
     firestore_client: Any = None,
 ) -> Optional[Dict[str, Any]]:
     goal = get_goal_by_id(uid, goal_id, firestore_client=firestore_client)
@@ -852,7 +855,7 @@ def update_goal_progress(
         return None
     metric = _metric_from_storage(goal) or GoalMetric(type=GoalType.numeric, current=0, target=0)
     metric = metric.model_copy(update={'current': current_value})
-    _append_goal_progress_event(
+    record = _append_goal_progress_event(
         uid,
         goal_id,
         GoalProgressEventCreate(
@@ -860,12 +863,26 @@ def update_goal_progress(
             summary='Metric updated',
             metric=metric,
         ),
-        idempotency_key=None,
-        account_generation=None,
+        idempotency_key=idempotency_key,
+        account_generation=account_generation,
+        # First-open retries may re-run a nondeterministic extraction after a
+        # process crash. The event selected by the first committed attempt is
+        # authoritative for this internal conversation/goal identity.
+        first_write_wins=idempotency_key is not None,
         firestore_client=firestore_client,
     )
-    save_goal_progress_history(uid, goal_id, current_value, firestore_client=firestore_client)
+    persisted_value = record.metric.current if record.metric is not None else current_value
+    save_goal_progress_history(uid, goal_id, persisted_value, firestore_client=firestore_client)
     return get_goal_by_id(uid, goal_id, firestore_client=firestore_client)
+
+
+def get_task_workflow_account_generation(uid: str, *, firestore_client: Any = None) -> int:
+    """Read the generation fence needed by internal idempotent goal events."""
+    client = _get_db(firestore_client)
+    snapshot = _goal_control_ref(uid, firestore_client=client).get()
+    if not snapshot.exists:
+        return 0
+    return int(parse_snapshot_strict(TaskWorkflowControl, snapshot).account_generation)
 
 
 def save_goal_progress_history(
