@@ -13,18 +13,6 @@ range; Node 24+ breaks the jsdom test suites — see `scripts/check-node-version
 With [nvm](https://github.com/nvm-sh/nvm) installed, `nvm use` in this directory
 picks up the pinned version from `.nvmrc` automatically.
 
-```bash
-# 1. Install dependencies
-nvm use   # or: nvm install (first time)
-pnpm install --frozen-lockfile
-
-# 2. Create your local env file (required — the app won't start without it)
-cp .env.example .env
-
-# 3. Start the app
-pnpm run dev
-```
-
 This directory is pnpm-managed — running `npm install` instead will corrupt
 `package.json`/`pnpm-lock.yaml`/`pnpm-workspace.yaml` (npm doesn't understand
 pnpm-workspace semantics) and leave a stray, untracked `package-lock.json`
@@ -37,6 +25,18 @@ different major (e.g. 8 or 11+), `.npmrc`'s `node-linker=hoisted` setting can
 be silently ignored, breaking postinstall with a confusing "closure
 package(s) do not resolve on disk" error — use `npx pnpm@10 <command>`
 instead of downgrading a system-managed pnpm install.
+
+```bash
+# 1. Install dependencies
+nvm use   # or: nvm install (first time)
+pnpm install --frozen-lockfile
+
+# 2. Create your local env file (required — the app won't start without it)
+cp .env.example .env
+
+# 3. Start the app
+pnpm run dev
+```
 
 `.env` is gitignored. `.env.example` ships with Omi's **public** Firebase + PostHog
 config, so after `cp .env.example .env` the app runs and sign-in works with no extra
