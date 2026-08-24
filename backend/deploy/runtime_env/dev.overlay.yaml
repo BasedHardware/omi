@@ -213,6 +213,7 @@ overlay:
     - .github/workflows/gcp_notifications_job.yml
     - .github/workflows/gcp_memory_maintenance_job.yml
     - .github/workflows/gcp_memory_maintenance_job_auto_dev.yml
+    - .github/workflows/gcp_frame_request_retention_job.yml
     network:
       flags:
         --network: omi-dev-vpc-1
@@ -472,3 +473,10 @@ overlay:
             value: '25'
           PINECONE_INDEX_NAME:
             value: memories-backend-dev
+      frame-request-retention-job:
+        flags:
+          --task-timeout: 900s
+          --max-retries: '3'
+        env:
+          GOOGLE_CLOUD_PROJECT:
+            value: based-hardware

@@ -1,0 +1,93 @@
+name: Deploy Frame Request Retention Job to Cloud Run
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        required: true
+        default: development
+        type: choice
+        options: [development, prod]
+      branch:
+        required: true
+        default: main
+        type: string
+
+env:
+  SERVICE: frame-request-retention-job
+  SCHEDULER_JOB: frame-request-retention-hourly
+  REGION: us-central1
+
+concurrency:
+  group: deploy-frame-request-retention-${{ github.event.inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.inputs.branch }}
+      - uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+      - run: gcloud auth configure-docker
+      - uses: docker/setup-buildx-action@v4
+      - name: Compute image tag
+        id: image-tag
+        run: echo "short_sha=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Install deploy dependencies
+        run: python3 -m pip install -q pyyaml
+      - name: Build retention image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: backend/modal/Dockerfile.frame_request_retention_job
+          push: false
+          load: true
+          tags: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+      - name: Verify and publish retention image
+        run: |
+          image=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+          python3 backend/scripts/runtime_image_contracts.py smoke \
+            --dockerfile backend/modal/Dockerfile.frame_request_retention_job --image "$image"
+          docker push "$image"
+      - name: Require dedicated permanent bucket contract from live GCP
+        run: |
+          bucket="${{ vars.ENV }}-omi-frame-requests"
+          state_file=$(mktemp)
+          trap 'rm -f "$state_file"' EXIT
+          gcloud storage buckets describe "gs://$bucket" \
+            --project="${{ vars.GCP_PROJECT_ID }}" --format=json > "$state_file"
+          python3 backend/scripts/validate_frame_request_bucket_contract.py \
+            --runtime-env backend/deploy/runtime_env.yaml \
+            --contract backend/deploy/frame-request-bucket-contract.json \
+            --bucket "$bucket" --lifecycle-json "$state_file"
+      - name: Render retention runtime env
+        id: runtime-env
+        run: python3 backend/scripts/render_backend_runtime_env.py --env ${{ vars.ENV }} --job frame-request-retention-job >> "$GITHUB_OUTPUT"
+      - name: Validate runtime contracts
+        run: python3 backend/scripts/validate-backend-runtime-env.py --env "${{ vars.ENV }}" --check-workflows
+      - name: Deploy retention job
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          job: ${{ env.SERVICE }}
+          region: ${{ env.REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+          flags: ${{ steps.runtime-env.outputs.cloud_run_flags }} ${{ steps.runtime-env.outputs.frame_request_retention_job_flags }}
+          env_vars: ${{ steps.runtime-env.outputs.frame_request_retention_job_env_vars }}
+          secrets: ${{ steps.runtime-env.outputs.frame_request_retention_job_secrets }}
+      - name: Require independent hourly Scheduler target
+        run: |
+          state_file=$(mktemp)
+          trap 'rm -f "$state_file"' EXIT
+          gcloud scheduler jobs describe "$SCHEDULER_JOB" --location="$REGION" \
+            --project="${{ vars.GCP_PROJECT_ID }}" --format=json > "$state_file"
+          python3 backend/scripts/validate_memory_maintenance_scheduler.py \
+            --state-file "$state_file" --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "$REGION" --scheduler-job "$SCHEDULER_JOB" --cloud-run-job "$SERVICE"

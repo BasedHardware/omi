@@ -7,17 +7,16 @@ multipart route; conversation deletion owns permanent attached evidence.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from uuid import uuid4
 import time
+from datetime import datetime, timezone
+from uuid import uuid4
 
-import database.conversations as conversations_db
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 
 from database.frame_requests import (
     attach_frame_request_to_conversation,
     enqueue_frame_request,
     get_frame_request,
-    list_attached_frame_requests,
     list_pending_frame_requests,
     reconcile_ambiguous_frame_upload,
     transition_frame_request,
@@ -27,21 +26,30 @@ from models.frame_request import (
     FrameRequest,
     FrameRequestBatch,
     FrameRequestEnvelope,
-    FrameRequestStateUpdate,
     FrameRequestPromotion,
     FrameRequestState,
+    FrameRequestStateUpdate,
 )
-from utils.other.endpoints import get_current_user_uid, with_rate_limit
 from utils.executors import db_executor, run_blocking, storage_executor
-from utils.retrieval.frame_request_authority import authorize
-from utils.retrieval.frame_request_storage import delete_frame_request_pixels, upload_frame_request_pixels
 from utils.integration_telemetry import emit_posthog_event
+from utils.other.endpoints import get_current_user_uid, with_rate_limit
+from utils.retrieval.frame_request_authority import authorize
+from utils.retrieval.frame_request_storage import (
+    delete_frame_request_pixels,
+    download_frame_request_pixels,
+    upload_frame_request_pixels,
+)
 
 router = APIRouter()
 
 
 def _record_frame_lifecycle(
-    uid: str, event: str, *, state: FrameRequestState, started: float, byte_count: int = 0
+    uid: str,
+    event: str,
+    *,
+    state: FrameRequestState,
+    started: float,
+    byte_count: int = 0,
 ) -> None:
     """Emit content-free bounded outcome/latency telemetry."""
 
@@ -51,7 +59,12 @@ def _record_frame_lifecycle(
     emit_posthog_event(
         uid,
         event,
-        {"state": state.value, "latency_bucket": latency, "byte_bucket": size, "surface": "frame_request"},
+        {
+            "state": state.value,
+            "latency_bucket": latency,
+            "byte_bucket": size,
+            "surface": "frame_request",
+        },
     )
 
 
@@ -84,7 +97,7 @@ async def _reconcile_uploaded_object(
             byte_count=byte_count,
             content_type=content_type,
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 - ambiguous commit must preserve pixels on any storage/DB failure
         # A failed read/reconcile cannot prove ownership or terminality. Keep
         # the object for the independent retry worker rather than deleting it.
         return None
@@ -97,10 +110,6 @@ async def create_frame_request(
 ) -> FrameRequestEnvelope:
     started = time.monotonic()
     await _authorize(uid, request.account_generation)
-    if not request.conversation_id:
-        # A request without a conversation has no supported permanent evidence
-        # read path. Reject it before it can strand pixels in an owner bucket.
-        raise HTTPException(status_code=400, detail="conversation_id_required")
     try:
         frame_request, deduplicated = await run_blocking(
             db_executor,
@@ -122,6 +131,80 @@ async def create_frame_request(
         started=started,
     )
     return FrameRequestEnvelope(request=frame_request, deduplicated=deduplicated)
+
+
+@router.get("/v1/frame-requests/status/{request_id}", response_model=FrameRequestEnvelope)
+async def get_frame_request_status(
+    request_id: str,
+    account_generation: int = Query(default=0, ge=0),
+    uid: str = Depends(with_rate_limit(get_current_user_uid, "frame_requests:read")),
+) -> FrameRequestEnvelope:
+    """Return honest owner-scoped lifecycle state without exposing pixels."""
+
+    await _authorize(uid, account_generation)
+    try:
+        frame_request = await run_blocking(db_executor, get_frame_request, uid, request_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="frame_request_not_found") from exc
+    if frame_request.account_generation != account_generation:
+        raise HTTPException(status_code=404, detail="frame_request_not_found")
+    return FrameRequestEnvelope(request=frame_request)
+
+
+@router.get(
+    "/v1/frame-requests/temporary/{request_id}/image",
+    response_class=Response,
+    responses={
+        200: {
+            "content": {
+                "image/jpeg": {"schema": {"type": "string", "format": "binary"}},
+                "image/png": {"schema": {"type": "string", "format": "binary"}},
+                "image/webp": {"schema": {"type": "string", "format": "binary"}},
+            }
+        }
+    },
+)
+async def consume_temporary_frame_request_image(
+    request_id: str,
+    account_generation: int = Query(default=0, ge=0),
+    uid: str = Depends(with_rate_limit(get_current_user_uid, "frame_requests:read")),
+) -> Response:
+    """Read one uploaded, unattached temporary frame for JIT vision.
+
+    Conversation evidence is deliberately excluded: permanent images remain
+    reachable only through the conversation-owned endpoint. This read neither
+    promotes nor extends the temporary request's at-most-seven-day expiry.
+    """
+
+    started = time.monotonic()
+    await _authorize(uid, account_generation)
+    try:
+        frame_request = await run_blocking(db_executor, get_frame_request, uid, request_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="frame_request_not_found") from exc
+    if frame_request.account_generation != account_generation or frame_request.conversation_id is not None:
+        raise HTTPException(status_code=404, detail="frame_request_not_found")
+    if frame_request.expires_at <= datetime.now(timezone.utc):
+        raise HTTPException(status_code=410, detail="frame_request_expired")
+    if frame_request.state != FrameRequestState.uploaded or not frame_request.storage_id:
+        raise HTTPException(status_code=409, detail=f"frame_request_{frame_request.state.value}")
+    try:
+        payload = await run_blocking(
+            storage_executor,
+            download_frame_request_pixels,
+            uid,
+            frame_request.storage_id,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=404, detail="frame_request_pixels_unavailable") from exc
+    _record_frame_lifecycle(
+        uid,
+        "frame_request_pixels_consumed",
+        state=frame_request.state,
+        started=started,
+        byte_count=frame_request.byte_count,
+    )
+    return Response(content=payload, media_type=frame_request.content_type or "image/jpeg")
 
 
 @router.get("/v1/frame-requests/pending", response_model=FrameRequestBatch)
@@ -191,7 +274,7 @@ async def upload_frame_request(
     request_id: str,
     device_id: str,
     account_generation: int,
-    file: UploadFile = File(...),
+    file: UploadFile = File(...),  # noqa: B008 - FastAPI injection contract
     uid: str = Depends(with_rate_limit(get_current_user_uid, "frame_requests:upload")),
 ) -> FrameRequestEnvelope:
     """Store an owner-authorized pixel and then commit its bounded metadata."""
@@ -206,7 +289,14 @@ async def upload_frame_request(
         raise HTTPException(status_code=413, detail="frame_upload_too_large")
     storage_id = f"frame-{uuid4().hex}"
     try:
-        await run_blocking(storage_executor, upload_frame_request_pixels, uid, storage_id, payload, content_type)
+        await run_blocking(
+            storage_executor,
+            upload_frame_request_pixels,
+            uid,
+            storage_id,
+            payload,
+            content_type,
+        )
     except Exception:
         # The object was not handed to Firestore yet, so a failed storage write
         # is safe to clean up.
@@ -324,7 +414,11 @@ async def upload_frame_request(
             return FrameRequestEnvelope(request=reconciled)
         raise
     _record_frame_lifecycle(
-        uid, "frame_request_uploaded", state=frame_request.state, started=started, byte_count=frame_request.byte_count
+        uid,
+        "frame_request_uploaded",
+        state=frame_request.state,
+        started=started,
+        byte_count=frame_request.byte_count,
     )
     return FrameRequestEnvelope(request=frame_request)
 
