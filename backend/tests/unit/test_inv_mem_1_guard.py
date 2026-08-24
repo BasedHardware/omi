@@ -48,6 +48,9 @@ _ALLOWED_MEMORY_COLLECTIONS_PROPERTIES = frozenset(
         # Knowledge-ledger cutover proof under memory_control; it is not a
         # second product-memory collection or authority.
         "knowledge_ledger_migration_state",
+        # Bounded, owner-pinned prompt receipt under memory_control; canonical
+        # ledger rows remain the only product-memory authority.
+        "knowledge_ledger_prompt_projection",
         # Operational graph-enrichment sweep cursor under memory_control; it
         # stores no product-memory records or source content.
         "historical_graph_enrichment_cursor",
