@@ -48,6 +48,7 @@ from utils.retrieval.tools import (
     create_chart_tool,
     get_screen_activity_tool,
     search_screen_activity_tool,
+    frame_request_runtime_config,
     look_at_frame_tool,
     save_user_preference_tool,
     fetch_url_tool,
@@ -290,7 +291,6 @@ def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str
         'create_chart_tool': 'Creating chart',
         'get_screen_activity_tool': 'Checking screen activity',
         'search_screen_activity_tool': 'Searching screen activity',
-        'look_at_frame': 'Asking your Mac for a frame',
         'save_user_preference_tool': 'Saving preference',
         'fetch_url_tool': 'Reading page',
     }
@@ -1414,14 +1414,11 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
 
     callback = AsyncStreamingCallback()
 
-    # Conversations collected by tools for citation
     conversations_collected = []
     evidence_references = []
 
-    # Safety guard
     safety_guard = AgentSafetyGuard(max_tool_calls=25, max_context_tokens=500000)
 
-    # Generate run_id for LangSmith tracing
     langsmith_run_id = str(uuid.uuid4())
 
     chat_scope = build_chat_scope(context)
@@ -1430,34 +1427,9 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
     configurable = {
         "user_id": uid,
         "thread_id": str(uuid.uuid4()),
-        # Stable across a retry of the same persisted human turn; unlike the
-        # tracing/thread UUID this is durable idempotency authority.
-        "frame_request_turn_id": next(
-            (
-                message.id
-                for message in reversed(messages)
-                if getattr(message.sender, "value", message.sender) == "human"
-            ),
-            None,
-        ),
-        "frame_request_session_id": (
-            chat_session.id
-            if chat_session
-            else next(
-                (
-                    message.chat_session_id or message.session_id
-                    for message in reversed(messages)
-                    if getattr(message.sender, "value", message.sender) == "human"
-                    and (message.chat_session_id or message.session_id)
-                ),
-                None,
-            )
-        ),
+        **frame_request_runtime_config(messages, chat_session),
         "conversations_collected": conversations_collected,
         "evidence_references": evidence_references,
-        # Shared mutable object: RunnableConfig copies the outer mapping for
-        # each tool call, while this request budget must survive those copies.
-        "frame_request_budget": {"reserved": False},
         "safety_guard": safety_guard,
         "chat_session_id": chat_session.id if chat_session else None,
         "client_kind": client_kind,

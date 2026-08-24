@@ -193,9 +193,7 @@ def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str]) -> Iter
     # Frame-request metadata is user-owned audit history. Keep it separate from
     # conversation JSON and include a byte manifest for each referenced object.
     frame_request_rows = [
-        row
-        for row in _iter_user_subcollection(uid, "frame_requests")
-        if isinstance(row, Mapping) and isinstance(row.get("state"), str)
+        row for row in _iter_user_subcollection(uid, "frame_requests") if isinstance(row.get("state"), str)
     ]
     if photo_manifests:
         yield '  "conversation_photo_manifest": '
@@ -228,7 +226,7 @@ def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str]) -> Iter
         ("frame_vision_receipts", "frame_vision_receipts"),
         ("conversation_keyframe_jobs", "conversation_keyframe_jobs"),
     ):
-        rows = [row for row in _iter_user_subcollection(uid, collection_name) if isinstance(row, Mapping)]
+        rows = list(_iter_user_subcollection(uid, collection_name))
         if rows:
             yield f'  "{export_name}": '
             yield from _yield_json_array(rows)

@@ -6,8 +6,6 @@ from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 
 import database.conversations as conversations_db
-import database.frame_requests as frame_requests_db
-from utils.retrieval.frame_request_storage import delete_frame_request_pixels_for_user, download_frame_request_pixels
 import database._client as db_client_module
 import database.action_items as action_items_db
 import database.redis_db as redis_db
@@ -86,6 +84,7 @@ from utils.app_integrations import trigger_external_integrations
 from utils.request_validation import NonNegativeOffset, PositiveLimit
 from utils.journey_metrics_contract import resolve_client_kind
 from utils.product_telemetry import emit_product_event
+from services.conversation_frame_evidence import delete_conversation_and_frame_evidence
 from utils.other.list_budget import (
     OMI_LIST_TRUNCATED_HEADER,
     OMI_LIST_TRUNCATED_VALUE,
@@ -926,45 +925,10 @@ def patch_conversation_segment_text(
     "/v1/conversations/{conversation_id}/photos", response_model=List[ConversationPhoto], tags=['conversations']
 )
 def get_conversation_photos(
-    conversation_id: str,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "frame_requests:read")),
+    conversation_id: str, uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "frame_requests:read"))
 ):
     _get_valid_conversation_by_id(uid, conversation_id)
     return conversations_db.get_conversation_photos(uid, conversation_id)
-
-
-@router.get(
-    "/v1/conversations/{conversation_id}/photos/{photo_id}/image",
-    tags=['conversations'],
-    response_class=Response,
-    responses={
-        200: {
-            "content": {
-                "image/jpeg": {"schema": {"type": "string", "format": "binary"}},
-                "image/png": {"schema": {"type": "string", "format": "binary"}},
-                "image/webp": {"schema": {"type": "string", "format": "binary"}},
-            }
-        }
-    },
-)
-def get_conversation_photo_image(
-    conversation_id: str,
-    photo_id: str,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "frame_requests:read")),
-):
-    """Serve owner-authorized frame evidence from conversation-lifetime storage."""
-
-    _get_valid_conversation_by_id(uid, conversation_id)
-    photos = conversations_db.get_conversation_photos(uid, conversation_id) or []
-    photo = next((item for item in photos if item.get('id') == photo_id and item.get('storage_id')), None)
-    if not photo:
-        raise HTTPException(status_code=404, detail="Photo not found")
-    try:
-        payload = download_frame_request_pixels(uid, str(photo['storage_id']))
-    except Exception as exc:
-        logger.exception("Conversation frame evidence read failed for uid=%s", uid)
-        raise HTTPException(status_code=404, detail="Photo not found") from exc
-    return Response(content=payload, media_type=photo.get('content_type') or "image/jpeg")
 
 
 @router.get(
@@ -981,17 +945,14 @@ def get_conversation_transcripts_by_models(conversation_id: str, uid: str = Depe
 def delete_conversation(
     conversation_id: str,
     background_tasks: BackgroundTasks,
-    # TODO(Q8-gated): ratified default is cascade=true — NOT flipped; needs explicit owner sign-off
-    # before changing production behavior for all users. See test_ws_j_delete_privacy.py +
-    # docs/memory/domain_model.md §Delete/privacy matrix.
+    # TODO(Q8-gated): cascade=true needs owner sign-off; see test_ws_j_delete_privacy.py and the delete matrix.
     cascade: bool = Query(False),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     logger.info(f'delete_conversation {conversation_id} {uid} cascade={cascade}')
 
     if cascade:
-        # Delete associated memories and action items before removing the conversation doc
-        # so a partial failure cannot orphan derived data.
+        # Delete associated memories and action items first so partial failure cannot orphan derived data.
         db_client = getattr(db_client_module, 'db', None)
         memory_service = MemoryService(db_client=db_client)
         # Retraction is fenced with canonical intake (MEMORY_MODE). Skipping it
@@ -1025,29 +986,7 @@ def delete_conversation(
     # is gone.
     delete_conversation_screen_frames(uid, conversation_id)
 
-    # Snapshot both current photo metadata and queue metadata before deleting
-    # the conversation, and durably outbox every object before the metadata can
-    # disappear. If the owner-authorized delete fails, no pixel is removed and
-    # the still-live evidence plus idempotent receipts remain retryable.
-    photo_storage_ids = [
-        str(photo.get("storage_id"))
-        for photo in (conversations_db.get_conversation_photos(uid, conversation_id) or [])
-        if isinstance(photo, dict) and isinstance(photo.get("storage_id"), str) and photo.get("storage_id")
-    ]
-    frame_storage_ids = frame_requests_db.list_all_frame_request_storage_ids(uid, conversation_id=conversation_id)
-    storage_ids = list(dict.fromkeys(photo_storage_ids + frame_storage_ids))
-    frame_requests_db.persist_conversation_frame_deletion_outbox(uid, conversation_id, storage_ids)
-    conversations_db.delete_conversation(uid, conversation_id)
-    for storage_id in storage_ids:
-        try:
-            delete_frame_request_pixels_for_user(uid, [storage_id])
-        except Exception:
-            # The durable outbox is now the authority; the independent worker
-            # retries without requiring the deleted conversation to exist.
-            logger.exception("Conversation frame deletion deferred for uid=%s", uid)
-        else:
-            frame_requests_db.acknowledge_conversation_frame_deletion(uid, conversation_id, storage_id)
-    frame_requests_db.delete_frame_requests_for_conversation(uid, conversation_id)
+    delete_conversation_and_frame_evidence(uid, conversation_id)
 
     delete_vector(uid, conversation_id)
     delete_transcript_chunk_vectors(uid, conversation_id)

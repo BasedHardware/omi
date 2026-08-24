@@ -18,11 +18,11 @@ from database.frame_requests import enqueue_frame_request
 from utils.retrieval.keyframe_policy import KeyframeCandidate, select_conversation_keyframe
 from utils.integration_telemetry import emit_posthog_event
 from utils.retrieval.frame_request_policy import FRAME_REQUEST_MAX_TTL_SECONDS
-from utils.retrieval.frame_request_authority import decision_for
 
 _COLLECTION = "conversation_keyframe_jobs"
 _MAX_CANDIDATES = 500
 _MAX_CANDIDATE_PAGES = 10
+_JOB_RETENTION = timedelta(days=7)
 
 
 def _utc(value: datetime) -> datetime:
@@ -105,6 +105,7 @@ def ensure_conversation_keyframe_job(uid: str, conversation: Any, *, firestore_c
                 "started_at": _utc(started),
                 "finished_at": _utc(finished),
                 "state": "pending",
+                "expires_at": _utc(finished) + _JOB_RETENTION,
                 "updated_at": datetime.now(timezone.utc),
             },
         )
@@ -220,38 +221,42 @@ def reconcile_conversation_keyframe_jobs(
     return enqueued
 
 
-def reconcile_pending_conversation_keyframe_jobs_for_user(
-    uid: str, *, firestore_client: Any | None = None, limit: int = 16
+def prune_expired_conversation_keyframe_jobs(
+    uid: str,
+    *,
+    firestore_client: Any | None = None,
+    now: datetime | None = None,
+    limit: int = 32,
 ) -> int:
-    """Hourly recovery for jobs created while rollout/device sync was unavailable."""
-    decision = decision_for(uid)
-    if not decision.enabled or decision.account_generation is None:
-        return 0
-    client = firestore_client or get_firestore_client()
-    jobs = (
-        client.collection("users")
+    """Delete bounded expired operational intents, independent of rollout.
+
+    Attached conversation evidence lives in the permanent photo/request rows,
+    not in this delivery intent. Expiring an unsatisfied or already-requested
+    intent therefore bounds dark/disabled metadata without shortening an
+    attached image's conversation lifetime.
+    """
+
+    if not 1 <= limit <= 128:
+        raise ValueError("keyframe job cleanup limit is outside the bounded window")
+    current = _utc(now or datetime.now(timezone.utc))
+    rows = (
+        (firestore_client or get_firestore_client())
+        .collection("users")
         .document(uid)
         .collection(_COLLECTION)
-        .where(filter=firestore.FieldFilter("state", "==", "pending"))
+        .where(filter=firestore.FieldFilter("expires_at", "<=", current))
         .limit(limit)
         .stream()
     )
-    devices = {str((snapshot.to_dict() or {}).get("device_id") or "").strip() for snapshot in jobs}
-    return sum(
-        reconcile_conversation_keyframe_jobs(
-            uid,
-            device_id=device,
-            account_generation=decision.account_generation,
-            firestore_client=client,
-            limit=limit,
-        )
-        for device in devices
-        if device
-    )
+    deleted = 0
+    for snapshot in rows:
+        snapshot.reference.delete()
+        deleted += 1
+    return deleted
 
 
 __all__ = [
     "ensure_conversation_keyframe_job",
+    "prune_expired_conversation_keyframe_jobs",
     "reconcile_conversation_keyframe_jobs",
-    "reconcile_pending_conversation_keyframe_jobs_for_user",
 ]
