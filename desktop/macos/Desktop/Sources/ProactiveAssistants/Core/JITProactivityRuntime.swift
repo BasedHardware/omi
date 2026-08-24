@@ -47,8 +47,7 @@ actor JITProactivityRuntime {
     [KnowledgeLedgerCompiledTrigger]
   typealias ReadWakeupCounts = @Sendable ([String], String, Date) async throws -> [String: Int]
   typealias ClaimWakeup =
-    @Sendable (String, String, JITProactivityLane, String, String, String, Int?, Date) async throws ->
-    JITTriggerWakeupClaim?
+    @Sendable (JITPlannedWakeupRequest) async throws -> JITTriggerWakeupClaim?
   typealias AuthorizationCurrent = @Sendable (RuntimeOwnerAuthorizationSnapshot) -> Bool
   private let flags: FlagResolver
   private let snapshots: SnapshotResolver
@@ -180,6 +179,7 @@ actor JITProactivityRuntime {
       }
       guard let winner = runtimeResult.matches.first,
         let trigger = triggers.first(where: { $0.id == winner.triggerID }),
+        let triggerRow = snapshot.rows.first(where: { $0.memoryID == winner.triggerID }),
         let action = trigger.action,
         action.isValid
       else {
@@ -204,7 +204,9 @@ actor JITProactivityRuntime {
           snapshotRevision: receipt.snapshotRevision,
           observationFingerprint: continuityFingerprint,
           budget: trigger.metadata.wakeupBudgetPerDay,
-          now: now)
+          now: now,
+          authority: receipt,
+          triggerRow: triggerRow)
       else { return .suppressed(reason: "planned_duplicate_or_budget") }
       pending[continuityKey] = JITPlannedExecution(
         lane: .planned,
@@ -250,13 +252,11 @@ actor JITProactivityRuntime {
     snapshotRevision: String,
     observationFingerprint: String,
     budget: Int?,
-    now: Date
+    now: Date,
+    authority: JITTriggerMirrorReceipt,
+    triggerRow: JITTriggerSnapshotRow
   ) async throws -> JITTriggerWakeupClaim? {
-    if let claimPlannedWakeup {
-      return try await claimPlannedWakeup(
-        continuityKey, triggerID, lane, budgetDay, snapshotRevision, observationFingerprint, budget, now)
-    }
-    return try await mirror.claimWakeup(
+    let request = JITPlannedWakeupRequest(
       continuityKey: continuityKey,
       triggerID: triggerID,
       lane: lane,
@@ -264,7 +264,13 @@ actor JITProactivityRuntime {
       snapshotRevision: snapshotRevision,
       observationFingerprint: observationFingerprint,
       budget: budget,
-      now: now)
+      now: now,
+      authority: authority,
+      triggerRow: triggerRow)
+    if let claimPlannedWakeup {
+      return try await claimPlannedWakeup(request)
+    }
+    return try await mirror.claimPlannedWakeup(request)
   }
 
   private func admitAmbient(
