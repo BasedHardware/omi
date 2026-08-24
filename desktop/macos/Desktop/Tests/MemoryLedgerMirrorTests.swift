@@ -158,59 +158,42 @@ final class MemoryLedgerMirrorTests: XCTestCase {
     XCTAssertNil(persistedFuture.ledgerTriggerConditionJSON)
   }
 
-  func testAuthoritativeCurrentSnapshotPrunesOnlyAbsentOpenAcceptedV1Rows() async throws {
+  func testAuthoritativeProjectionAbsenceRollsBackWithoutRevivingUserDeletion() async throws {
     let kept = makeMemory(id: "ledger-kept", metadata: canonicalMetadata())
-    let removed = makeMemory(id: "ledger-removed", metadata: canonicalMetadata())
-    let closed = makeMemory(
-      id: "ledger-closed-preserved", metadata: canonicalMetadata(), status: "superseded")
-    var rejected = makeMemory(id: "ledger-rejected-preserved", metadata: canonicalMetadata())
-    rejected = ServerMemory(
-      id: rejected.id,
-      content: rejected.content,
-      category: rejected.category,
-      tier: rejected.tier,
-      tierIsExplicit: rejected.tierIsExplicit,
-      createdAt: rejected.createdAt,
-      updatedAt: rejected.updatedAt,
-      conversationId: rejected.conversationId,
-      reviewed: rejected.reviewed,
-      userReview: false,
-      visibility: rejected.visibility,
-      manuallyAdded: rejected.manuallyAdded,
-      scoring: rejected.scoring,
-      source: rejected.source,
-      confidence: rejected.confidence,
-      sourceApp: rejected.sourceApp,
-      contextSummary: rejected.contextSummary,
-      isRead: rejected.isRead,
-      isDismissed: rejected.isDismissed,
-      tags: rejected.tags,
-      reasoning: rejected.reasoning,
-      currentActivity: rejected.currentActivity,
-      inputDeviceName: rejected.inputDeviceName,
-      windowTitle: rejected.windowTitle,
-      headline: rejected.headline,
-      ledgerMetadata: rejected.ledgerMetadata)
-    var futureMetadata = canonicalMetadata()
-    futureMetadata[MemoryLedgerMetadata.schemaVersionKey] = "knowledge_ledger.v2"
-    let future = makeMemory(id: "ledger-future-preserved", metadata: futureMetadata)
-    try await MemoryStorage.shared.syncServerMemories([kept, removed, closed, rejected, future])
+    let temporarilyAbsent = makeMemory(id: "ledger-temporarily-absent", metadata: canonicalMetadata())
+    let userDeleted = makeMemory(id: "ledger-user-deleted", metadata: canonicalMetadata())
+    try await MemoryStorage.shared.syncServerMemories([kept, temporarilyAbsent, userDeleted])
+    try await MemoryStorage.shared.deleteMemory(surfacedId: userDeleted.id)
 
     let authorization = try XCTUnwrap(RuntimeOwnerIdentity.captureAuthorizationSnapshot())
-    let count = try await MemoryStorage.shared.syncAuthoritativeKnowledgeLedgerSnapshot(
+    let firstProjection = KnowledgeLedgerPromptProjection(
+      memories: [kept], hasAuthoritativeSnapshot: true)
+    XCTAssertEqual(firstProjection.rows.map(\.id), [kept.id])
+    XCTAssertFalse(firstProjection.rows.map(\.id).contains(temporarilyAbsent.id))
+    let inserted = try await MemoryStorage.shared.syncAuthoritativeKnowledgeLedgerSnapshot(
       [kept], authorizationSnapshot: authorization)
+    XCTAssertEqual(inserted, 0)
 
-    XCTAssertEqual(count, 1)
-    let keptRecord = try await MemoryStorage.shared.getMemoryByBackendId(kept.id)
-    let removedRecord = try await MemoryStorage.shared.getMemoryByBackendId(removed.id)
-    let closedRecord = try await MemoryStorage.shared.getMemoryByBackendId(closed.id)
-    let rejectedRecord = try await MemoryStorage.shared.getMemoryByBackendId(rejected.id)
-    let futureRecord = try await MemoryStorage.shared.getMemoryByBackendId(future.id)
-    XCTAssertFalse(try XCTUnwrap(keptRecord).deleted)
-    XCTAssertTrue(try XCTUnwrap(removedRecord).deleted)
-    XCTAssertFalse(try XCTUnwrap(closedRecord).deleted)
-    XCTAssertFalse(try XCTUnwrap(rejectedRecord).deleted)
-    XCTAssertFalse(try XCTUnwrap(futureRecord).deleted)
+    // Compatibility/disabled/killed/stale-receipt fallback reads this exact
+    // legacy cache on the next turn. Projection absence must not poison it.
+    let compatibilityIDs = Set(try await MemoryStorage.shared.getLocalMemories(limit: 100).map(\.id))
+    XCTAssertTrue(compatibilityIDs.contains(kept.id))
+    XCTAssertTrue(compatibilityIDs.contains(temporarilyAbsent.id))
+    XCTAssertFalse(compatibilityIDs.contains(userDeleted.id))
+
+    let restoredProjection = KnowledgeLedgerPromptProjection(
+      memories: [kept, temporarilyAbsent], hasAuthoritativeSnapshot: true)
+    try await MemoryStorage.shared.syncAuthoritativeKnowledgeLedgerSnapshot(
+      [kept, temporarilyAbsent], authorizationSnapshot: authorization)
+    XCTAssertTrue(restoredProjection.rows.map(\.id).contains(temporarilyAbsent.id))
+    let restoredRecord = try await MemoryStorage.shared.getMemoryByBackendId(temporarilyAbsent.id)
+    XCTAssertFalse(try XCTUnwrap(restoredRecord).deleted)
+
+    // A later ordinary reconciliation must not blanket-revive a genuine local
+    // user deletion just because the server response raced it.
+    try await MemoryStorage.shared.syncServerMemories([userDeleted])
+    let deletedRecord = try await MemoryStorage.shared.getMemoryByBackendId(userDeleted.id)
+    XCTAssertTrue(try XCTUnwrap(deletedRecord).deleted)
   }
 
   func testOwnerSwitchBeforeAuthoritativeSyncWritesNothing() async throws {
