@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 import firebase_admin
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
+from starlette.staticfiles import StaticFiles
 
 from database.google_credentials import prepare_google_credentials
 
@@ -107,6 +108,7 @@ from services.conversation_finalization import reconcile_listen_finalization_job
 from services.conversation_finalization import reconcile_meeting_receipts
 from services.conversation_finalization import reconcile_stale_processing_conversations
 from services.users.account_deletion import reconcile_pending_deletion_wipes
+from utils.other.local_storage import local_storage_root_from_env
 
 # Log LangSmith tracing status at startup
 log_langsmith_status()
@@ -131,6 +133,11 @@ else:
     firebase_admin.initialize_app(options=_firebase_admin_options)  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
 
 app = FastAPI()
+
+_local_storage_root = local_storage_root_from_env()
+if _local_storage_root is not None:
+    _local_storage_root.mkdir(parents=True, exist_ok=True)
+    app.mount('/_local/storage', StaticFiles(directory=_local_storage_root), name='local-storage')
 
 # Explicit, default-deny CORS: this API is Bearer-token authenticated (mobile/
 # desktop apps, not ambient browser cookies), so no cross-origin browser

@@ -19,16 +19,14 @@ except Exception as e:
     _opus_import_error: Optional[Exception] = e
 else:
     _opus_import_error = None
-from google.cloud import storage
-from google.oauth2 import service_account
-from google.cloud.exceptions import NotFound as BlobNotFound
-from google.cloud.exceptions import NotFound
+from google.cloud.exceptions import NotFound, NotFound as BlobNotFound
 
 from database.redis_db import cache_signed_url, get_cached_signed_url
 from utils import encryption
 from utils.cloud_tasks import enqueue_audio_merge_job, is_audio_merge_dispatch_enabled
 from utils.observability.fallback import record_fallback
 from utils.other.deferred_delete import DeferredDeleter
+from utils.other.local_storage import create_storage_client, local_public_url
 from database import users as users_db
 import logging
 
@@ -67,15 +65,7 @@ def _get_storage_client() -> Any:
     if storage_client is None:
         with _storage_client_lock:
             if storage_client is None:
-                if os.environ.get('SERVICE_ACCOUNT_JSON'):
-                    service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
-                    credentials = service_account.Credentials.from_service_account_info(service_account_info)  # type: ignore[reportUnknownMemberType]  # google.oauth2 partial stubs
-                    storage_client = storage.Client(credentials=credentials)
-                else:
-                    _gcs_project = (
-                        os.environ.get('GOOGLE_CLOUD_PROJECT') or os.environ.get('FIREBASE_PROJECT_ID') or ''
-                    ).strip()
-                    storage_client = storage.Client(project=_gcs_project) if _gcs_project else storage.Client()
+                storage_client = create_storage_client()
     return storage_client
 
 
@@ -126,7 +116,7 @@ def upload_profile_audio(file_path: str, uid: str) -> str:
     path = f'{uid}/speech_profile.wav'
     blob = bucket.blob(path)
     blob.upload_from_filename(file_path)
-    return f'https://storage.googleapis.com/{speech_profiles_bucket}/{path}'
+    return blob.public_url
 
 
 def get_user_has_speech_profile(uid: str) -> bool:
@@ -293,7 +283,7 @@ def upload_postprocessing_audio(file_path: str) -> str:
     bucket = _get_storage_client().bucket(postprocessing_audio_bucket)
     blob = bucket.blob(file_path)
     blob.upload_from_filename(file_path)
-    return f'https://storage.googleapis.com/{postprocessing_audio_bucket}/{file_path}'
+    return blob.public_url
 
 
 def delete_postprocessing_audio(file_path: str) -> None:
@@ -309,9 +299,9 @@ def delete_postprocessing_audio(file_path: str) -> None:
 
 def upload_sdcard_audio(file_path: str) -> str:
     bucket = _get_storage_client().bucket(postprocessing_audio_bucket)
-    blob = bucket.blob(file_path)
+    blob = bucket.blob(f'sdcard/{file_path}')
     blob.upload_from_filename(file_path)
-    return f'https://storage.googleapis.com/{postprocessing_audio_bucket}/sdcard/{file_path}'
+    return blob.public_url
 
 
 def download_postprocessing_audio(file_path: str, destination_file_path: str) -> None:
@@ -330,7 +320,7 @@ def upload_conversation_recording(file_path: str, uid: str, conversation_id: str
     path = f'{uid}/{conversation_id}.wav'
     blob = bucket.blob(path)
     blob.upload_from_filename(file_path)
-    return f'https://storage.googleapis.com/{memories_recordings_bucket}/{path}'
+    return blob.public_url
 
 
 def get_conversation_recording_if_exists(uid: str, memory_id: str) -> Optional[str]:
@@ -371,7 +361,7 @@ def get_syncing_file_temporal_url(file_path: str):
     bucket = _get_storage_client().bucket(syncing_local_bucket)
     blob = bucket.blob(file_path)
     blob.upload_from_filename(file_path)
-    return f'https://storage.googleapis.com/{syncing_local_bucket}/{file_path}'
+    return blob.public_url
 
 
 def get_syncing_file_temporal_signed_url(file_path: str):
@@ -1532,7 +1522,7 @@ def upload_app_logo(file_path: str, app_id: str):
     blob = bucket.blob(path)
     blob.cache_control = 'public, no-cache'
     blob.upload_from_filename(file_path)
-    return f'https://storage.googleapis.com/{omi_apps_bucket}/{path}'
+    return blob.public_url
 
 
 def delete_app_logo(img_url: str):
@@ -1555,13 +1545,15 @@ def upload_app_thumbnail(file_path: str, thumbnail_id: str) -> str:
     blob = bucket.blob(path)
     blob.cache_control = 'public, no-cache'
     blob.upload_from_filename(file_path)
-    public_url = f'https://storage.googleapis.com/{app_thumbnails_bucket}/{path}'
-    return public_url
+    return blob.public_url
 
 
 def get_app_thumbnail_url(thumbnail_id: str) -> str:
     path = f'{thumbnail_id}.jpg'
-    return f'https://storage.googleapis.com/{app_thumbnails_bucket}/{path}'
+    return (
+        local_public_url(app_thumbnails_bucket, path)
+        or f'https://storage.googleapis.com/{app_thumbnails_bucket}/{path}'
+    )
 
 
 # **********************************
@@ -1589,7 +1581,7 @@ def upload_multi_chat_files(files_name: List[str], uid: str) -> Dict[str, str]:
                 blob.make_public()
             except Exception as e:
                 logger.warning(f"Could not make blob public (may need bucket-level IAM): {e}")
-            dictFiles[name] = f'https://storage.googleapis.com/{chat_files_bucket}/{uid}/{name}'
+            dictFiles[name] = blob.public_url
         except Exception as e:
             logger.error("Failed to upload {} due to exception: {}".format(name, e))
     return dictFiles
