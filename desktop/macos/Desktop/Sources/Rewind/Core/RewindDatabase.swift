@@ -2592,11 +2592,7 @@ actor RewindDatabase {
       }
     }
 
-    migrator.registerMigration("addMemoryLedgerEvidence") { db in
-      try db.alter(table: "memories") { t in
-        t.add(column: "ledgerEvidenceJson", .text)
-      }
-    }
+    Self.registerMemoryLedgerEvidenceMigrations(on: &migrator)
 
     try JITTriggerMirrorSchema.migrating(migrator, queue: queue)
     try ContextBucketSchema.removeMigratedLegacyDefaults(
@@ -2617,6 +2613,21 @@ actor RewindDatabase {
         ON screenshots(screenActivitySyncState, id)
         WHERE screenActivitySyncState IN (0, 1)
         """)
+  }
+
+  /// Registers the evidence columns separately so an upgrade from a populated
+  /// pre-evidence table exercises the same path as the production migrator.
+  static func registerMemoryLedgerEvidenceMigrations(on migrator: inout DatabaseMigrator) {
+    migrator.registerMigration("addMemoryLedgerEvidence") { db in
+      try db.alter(table: "memories") { t in
+        t.add(column: "ledgerEvidenceJson", .text)
+      }
+    }
+    migrator.registerMigration("addMemoryLedgerEvidenceRevision") { db in
+      try db.alter(table: "memories") { t in
+        t.add(column: "ledgerEvidenceRevision", .datetime)
+      }
+    }
   }
 
   // MARK: - OCR Precision Reduction Migration

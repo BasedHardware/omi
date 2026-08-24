@@ -156,6 +156,100 @@ final class MemoryLedgerMirrorTests: XCTestCase {
     XCTAssertTrue(persisted.toServerMemory()?.evidenceIsExplicit == true)
   }
 
+  func testInvalidEvidencePreservesPreviousMirror() async throws {
+    let id = "ledger-evidence-invalid-\(UUID().uuidString)"
+    let initial = makeMemory(
+      id: id,
+      updatedAt: Date(timeIntervalSince1970: 1_000),
+      metadata: [:],
+      evidence: [makeEvidence("ev-preserved-through-invalid")],
+      evidenceIsExplicit: true
+    )
+    try await MemoryStorage.shared.syncServerMemory(initial)
+
+    let invalid = makeMemory(
+      id: id,
+      updatedAt: Date(timeIntervalSince1970: 2_000),
+      metadata: [:],
+      evidenceState: .invalid
+    )
+    try await MemoryStorage.shared.syncServerMemory(invalid)
+
+    let persistedRecord = try await MemoryStorage.shared.getMemoryByBackendId(id)
+    let persisted = try XCTUnwrap(persistedRecord)
+    XCTAssertEqual(persisted.ledgerEvidence.map(\.evidenceId), ["ev-preserved-through-invalid"])
+  }
+
+  func testNewerRedactedEvidenceCannotBeResurrectedByOlderActiveResponse() async throws {
+    let id = "ledger-evidence-redaction-fence-\(UUID().uuidString)"
+    let initial = makeMemory(
+      id: id,
+      updatedAt: Date(timeIntervalSince1970: 1_000),
+      metadata: [:],
+      evidence: [makeEvidence("ev-redaction", redactionStatus: "active")],
+      evidenceIsExplicit: true
+    )
+    try await MemoryStorage.shared.syncServerMemory(initial)
+
+    let newerRedacted = makeMemory(
+      id: id,
+      updatedAt: Date(timeIntervalSince1970: 3_000),
+      metadata: [:],
+      evidence: [makeEvidence("ev-redaction", redactionStatus: "tombstoned")],
+      evidenceIsExplicit: true
+    )
+    try await MemoryStorage.shared.syncServerMemory(newerRedacted)
+
+    let olderActive = makeMemory(
+      id: id,
+      updatedAt: Date(timeIntervalSince1970: 2_000),
+      metadata: [:],
+      evidence: [makeEvidence("ev-redaction", redactionStatus: "active")],
+      evidenceIsExplicit: true
+    )
+    try await MemoryStorage.shared.syncServerMemory(olderActive)
+
+    let persistedRecord = try await MemoryStorage.shared.getMemoryByBackendId(id)
+    let persisted = try XCTUnwrap(persistedRecord)
+    XCTAssertEqual(persisted.ledgerEvidence.first?.redactionStatus, "tombstoned")
+    XCTAssertEqual(persisted.ledgerEvidenceRevision, Date(timeIntervalSince1970: 3_000))
+  }
+
+  func testEvidenceMigrationPreservesPopulatedPreColumnMemories() throws {
+    let queue = try DatabaseQueue()
+    try queue.write { database in
+      try database.create(table: "memories") { table in
+        table.autoIncrementedPrimaryKey("id")
+        table.column("backendId", .text)
+        table.column("content", .text).notNull()
+        table.column("updatedAt", .datetime).notNull()
+      }
+      try database.execute(
+        sql: "INSERT INTO memories (backendId, content, updatedAt) VALUES (?, ?, ?)",
+        arguments: ["pre-evidence-memory", "Keep this populated row", Date(timeIntervalSince1970: 42)]
+      )
+    }
+
+    var migrator = DatabaseMigrator()
+    RewindDatabase.registerMemoryLedgerEvidenceMigrations(on: &migrator)
+    try migrator.migrate(queue)
+
+    try queue.read { database in
+      let columns = try database.columns(in: "memories").map(\.name)
+      XCTAssertTrue(columns.contains("ledgerEvidenceJson"))
+      XCTAssertTrue(columns.contains("ledgerEvidenceRevision"))
+      let row = try Row.fetchOne(
+        database,
+        sql: "SELECT backendId, content, ledgerEvidenceJson, ledgerEvidenceRevision FROM memories WHERE backendId = ?",
+        arguments: ["pre-evidence-memory"]
+      )
+      XCTAssertEqual(row?["backendId"] as String?, "pre-evidence-memory")
+      XCTAssertEqual(row?["content"] as String?, "Keep this populated row")
+      XCTAssertNil(row?["ledgerEvidenceJson"] as String?)
+      XCTAssertNil(row?["ledgerEvidenceRevision"] as Date?)
+    }
+  }
+
   func testAbsentLedgerRowIsSoftDeletedWithoutErasingMirrorMetadata() async throws {
     let memory = makeMemory(id: "ledger-delete-\(UUID().uuidString)", metadata: canonicalMetadata())
     try await MemoryStorage.shared.syncServerMemory(memory)
@@ -306,7 +400,8 @@ final class MemoryLedgerMirrorTests: XCTestCase {
     metadata: [String: String],
     status: String? = nil,
     evidence: [ServerMemoryEvidence] = [],
-    evidenceIsExplicit: Bool = false
+    evidenceIsExplicit: Bool = false,
+    evidenceState: ServerMemoryEvidenceState? = nil
   ) -> ServerMemory {
     var metadata = metadata
     if let status { metadata["status"] = status }
@@ -338,15 +433,21 @@ final class MemoryLedgerMirrorTests: XCTestCase {
       headline: nil,
       ledgerMetadata: metadata,
       evidence: evidence,
-      evidenceIsExplicit: evidenceIsExplicit
+      evidenceIsExplicit: evidenceIsExplicit,
+      evidenceState: evidenceState
     )
   }
 
-  private func makeEvidence(_ id: String, group: String = "conversation-group") -> ServerMemoryEvidence {
+  private func makeEvidence(
+    _ id: String,
+    group: String = "conversation-group",
+    redactionStatus: String? = nil
+  ) -> ServerMemoryEvidence {
     ServerMemoryEvidence(
       OmiAPI.Evidence(
         evidenceId: id,
         independenceGroup: group,
+        redactionStatus: redactionStatus,
         sourceSignal: "transcript",
         sourceType: "conversation"
       )

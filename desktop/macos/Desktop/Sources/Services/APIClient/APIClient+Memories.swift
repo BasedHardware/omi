@@ -185,6 +185,16 @@ struct ServerMemoryEvidence: Codable, Equatable {
   }
 }
 
+/// The wire field has three materially different meanings for cache sync.
+/// An omitted field is a compatibility response, a valid field (including an
+/// empty array) is an authoritative replacement, and an invalid field must
+/// never erase a previously validated local mirror.
+enum ServerMemoryEvidenceState: Equatable {
+  case absent
+  case valid([ServerMemoryEvidence])
+  case invalid
+}
+
 struct ServerMemory: Decodable, Identifiable {
   let id: String
   let content: String
@@ -227,10 +237,17 @@ struct ServerMemory: Decodable, Identifiable {
   /// can mirror unknown ledger values without making them prompt-eligible.
   let ledgerMetadata: [String: String]
   /// Optional generated-v3 evidence retained in a bounded local mirror.
-  let evidence: [ServerMemoryEvidence]
-  /// Whether the optional evidence field was present on the wire. An omitted
-  /// field must not erase a newer local mirror during compatibility sync.
-  let evidenceIsExplicit: Bool
+  let evidenceState: ServerMemoryEvidenceState
+  var evidence: [ServerMemoryEvidence] {
+    guard case .valid(let values) = evidenceState else { return [] }
+    return values
+  }
+  /// Whether the optional evidence field was present and valid on the wire.
+  /// An omitted or malformed field must not erase a local mirror.
+  var evidenceIsExplicit: Bool {
+    if case .valid = evidenceState { return true }
+    return false
+  }
 
   enum CodingKeys: String, CodingKey {
     case id, content, category, reviewed, visibility, scoring, source, confidence, tags, reasoning,
@@ -245,6 +262,8 @@ struct ServerMemory: Decodable, Identifiable {
     case userReview = "user_review"
     case manuallyAdded = "manually_added"
     case sourceApp = "source_app"
+    case appId = "app_id"
+    case captureConfidence = "capture_confidence"
     case contextSummary = "context_summary"
     case isRead = "is_read"
     case isDismissed = "is_dismissed"
@@ -306,14 +325,17 @@ struct ServerMemory: Decodable, Identifiable {
     }
 
     content = try wire?.content ?? container.decode(String.self, forKey: .content)
-    category = wire?.category.map(MemoryCategory.init) ?? .system
+    category =
+      wire?.category.map(MemoryCategory.init)
+      ?? (try? container.decode(MemoryCategory.self, forKey: .category))
+      ?? .system
     capturedAt = try container.decodeIfPresent(Date.self, forKey: .capturedAt)
     let f = ISO8601DateFormatter()
     f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     let std = ISO8601DateFormatter()
-    let createdAtString = wire?.createdAt
+    let createdAtString = wire?.createdAt ?? (try? container.decode(String.self, forKey: .createdAt))
     createdAt = (createdAtString.flatMap { f.date(from: $0) ?? std.date(from: $0) }) ?? capturedAt ?? Date()
-    let updatedAtString = wire?.updatedAt
+    let updatedAtString = wire?.updatedAt ?? (try? container.decode(String.self, forKey: .updatedAt))
     updatedAt = (updatedAtString.flatMap { f.date(from: $0) ?? std.date(from: $0) }) ?? createdAt
     expiresAt = try container.decodeIfPresent(Date.self, forKey: .expiresAt)
 
@@ -353,38 +375,51 @@ struct ServerMemory: Decodable, Identifiable {
       self.tier = .longTerm
     }
 
-    conversationId = wire?.conversationId
-    reviewed = wire?.reviewed ?? false
-    userReview = wire?.userReview
-    visibility = wire?.visibility ?? "private"
-    manuallyAdded = wire?.manuallyAdded ?? false
-    scoring = wire?.scoring
+    conversationId = wire?.conversationId ?? (try? container.decode(String.self, forKey: .conversationId))
+    reviewed = wire?.reviewed ?? (try? container.decode(Bool.self, forKey: .reviewed)) ?? false
+    userReview = wire?.userReview ?? (try? container.decode(Bool.self, forKey: .userReview))
+    visibility = wire?.visibility ?? (try? container.decode(String.self, forKey: .visibility)) ?? "private"
+    manuallyAdded =
+      wire?.manuallyAdded ?? (try? container.decode(Bool.self, forKey: .manuallyAdded)) ?? false
+    scoring = wire?.scoring ?? (try? container.decode(String.self, forKey: .scoring))
     source = try container.decodeIfPresent(String.self, forKey: .source)
-    confidence = wire?.captureConfidence
-    sourceApp = wire?.appId
+    confidence =
+      wire?.captureConfidence
+      ?? (try? container.decode(Double.self, forKey: .captureConfidence))
+      ?? (try? container.decode(Double.self, forKey: .confidence))
+    sourceApp =
+      wire?.appId
+      ?? (try? container.decode(String.self, forKey: .appId))
+      ?? (try? container.decode(String.self, forKey: .sourceApp))
     contextSummary = try container.decodeIfPresent(String.self, forKey: .contextSummary)
     isRead = try container.decodeIfPresent(Bool.self, forKey: .isRead) ?? false
     isDismissed = try container.decodeIfPresent(Bool.self, forKey: .isDismissed) ?? false
-    tags = wire?.tags ?? []
+    tags = wire?.tags ?? (try? container.decode([String].self, forKey: .tags)) ?? []
     reasoning = try container.decodeIfPresent(String.self, forKey: .reasoning)
     currentActivity = try container.decodeIfPresent(String.self, forKey: .currentActivity)
     inputDeviceName = try container.decodeIfPresent(String.self, forKey: .inputDeviceName)
     windowTitle = try container.decodeIfPresent(String.self, forKey: .windowTitle)
-    primaryCaptureDevice = wire?.primaryCaptureDevice
-    captureDeviceIds = wire?.captureDeviceIds ?? []
-    headline = wire?.headline
+    primaryCaptureDevice =
+      wire?.primaryCaptureDevice ?? (try? container.decode(String.self, forKey: .primaryCaptureDevice))
+    captureDeviceIds =
+      wire?.captureDeviceIds ?? (try? container.decode([String].self, forKey: .captureDeviceIds)) ?? []
+    headline = wire?.headline ?? (try? container.decode(String.self, forKey: .headline))
 
     // The generated DTO enforces the required evidence identity fields, but
     // optional malformed evidence must not reject the authoritative memory
     // text. The domain adapter applies count/size bounds and fails closed.
-    let decodedEvidence: [OmiAPI.Evidence]?
-    do {
-      decodedEvidence = try container.decodeIfPresent([OmiAPI.Evidence].self, forKey: .evidence)
-    } catch {
-      decodedEvidence = nil
+    if !container.contains(.evidence) {
+      evidenceState = .absent
+    } else if (try? container.decodeNil(forKey: .evidence)) == true {
+      evidenceState = .invalid
+    } else {
+      do {
+        let decodedEvidence = try container.decode([OmiAPI.Evidence].self, forKey: .evidence)
+        evidenceState = MemoryLedgerEvidence.normalize(decodedEvidence).map(ServerMemoryEvidenceState.valid) ?? .invalid
+      } catch {
+        evidenceState = .invalid
+      }
     }
-    evidence = MemoryLedgerEvidence.normalize(decodedEvidence)
-    evidenceIsExplicit = container.contains(.evidence)
 
     var metadata: [String: String] = [:]
     func addString(_ key: CodingKeys) {
