@@ -18743,6 +18743,131 @@
         "title": "ScreenActivitySyncRequest",
         "type": "object"
       },
+      "ScreenFrameAdjudicationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "attempt_id": {
+            "format": "uuid",
+            "title": "Attempt Id",
+            "type": "string"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/ScreenFrameCandidateIn"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Candidates",
+            "type": "array"
+          },
+          "purpose": {
+            "const": "meeting_note_v1",
+            "title": "Purpose",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/ScreenFrameSubjectIn"
+          }
+        },
+        "required": [
+          "schema_version",
+          "attempt_id",
+          "purpose",
+          "subject",
+          "candidates"
+        ],
+        "title": "ScreenFrameAdjudicationRequest",
+        "type": "object"
+      },
+      "ScreenFrameAdjudicationResponse": {
+        "properties": {
+          "attempt_id": {
+            "format": "uuid",
+            "title": "Attempt Id",
+            "type": "string"
+          },
+          "frame_set": {
+            "$ref": "#/components/schemas/ConversationScreenFrameSet"
+          },
+          "outcome": {
+            "enum": [
+              "committed",
+              "no_approved_frames"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          }
+        },
+        "required": [
+          "attempt_id",
+          "outcome",
+          "frame_set"
+        ],
+        "title": "ScreenFrameAdjudicationResponse",
+        "type": "object"
+      },
+      "ScreenFrameCandidateIn": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes_base64": {
+            "title": "Bytes Base64",
+            "type": "string"
+          },
+          "captured_at": {
+            "format": "date-time",
+            "title": "Captured At",
+            "type": "string"
+          },
+          "client_frame_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Client Frame Id",
+            "type": "string"
+          },
+          "declared_height": {
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Declared Height",
+            "type": "integer"
+          },
+          "declared_width": {
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Declared Width",
+            "type": "integer"
+          },
+          "mime_type": {
+            "enum": [
+              "image/jpeg",
+              "image/png"
+            ],
+            "title": "Mime Type",
+            "type": "string"
+          },
+          "sha256_base64": {
+            "maxLength": 44,
+            "minLength": 44,
+            "title": "Sha256 Base64",
+            "type": "string"
+          }
+        },
+        "required": [
+          "client_frame_id",
+          "captured_at",
+          "mime_type",
+          "declared_width",
+          "declared_height",
+          "sha256_base64",
+          "bytes_base64"
+        ],
+        "title": "ScreenFrameCandidateIn",
+        "type": "object"
+      },
       "ScreenFrameGround": {
         "additionalProperties": false,
         "description": "Gradient stops derived from the canonical bytes at approval time.\n\nBoth clients render the banner from these; neither samples pixels. A\nsigned cross-origin URL cannot be read back from a canvas (no guaranteed\nCORS headers), and two independent extractions (Swift on macOS, JS on\nweb) would drift from each other anyway. Extracted once, server-side,\nfrom the canonical JPEG — see utils/screen_frames/palette.py, a port of\ndesktop/macos/Desktop/Sources/MeetingScreenshots/MeetingBannerPalette.swift.",
@@ -18768,6 +18893,35 @@
         "title": "ScreenFrameGround",
         "type": "object"
       },
+      "ScreenFrameSettings": {
+        "additionalProperties": false,
+        "description": "The account-level setting gating screen-frame egress admission\n(contract §6, setting_key=\"meeting_note_screenshots_enabled\"). Shared and\nauthoritative across every device — desktop, web, a reinstall — because\nit protects the user from themselves (accidentally leaving the feature\non), not third parties from the user; the privacy judge is what protects\npeople appearing in frames. It does not need to be tamper-proof, only\nconsistent, so it is a plain user-profile field, not a signed claim.",
+        "properties": {
+          "meeting_note_screenshots_enabled": {
+            "title": "Meeting Note Screenshots Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "meeting_note_screenshots_enabled"
+        ],
+        "title": "ScreenFrameSettings",
+        "type": "object"
+      },
+      "ScreenFrameSettingsUpdateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "meeting_note_screenshots_enabled": {
+            "title": "Meeting Note Screenshots Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "meeting_note_screenshots_enabled"
+        ],
+        "title": "ScreenFrameSettingsUpdateRequest",
+        "type": "object"
+      },
       "ScreenFrameSharingUpdateRequest": {
         "additionalProperties": false,
         "properties": {
@@ -18780,6 +18934,28 @@
           "enabled"
         ],
         "title": "ScreenFrameSharingUpdateRequest",
+        "type": "object"
+      },
+      "ScreenFrameSubjectIn": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "conversation",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id"
+        ],
+        "title": "ScreenFrameSubjectIn",
         "type": "object"
       },
       "SearchConversationsResponse": {
@@ -47668,6 +47844,256 @@
           }
         ],
         "summary": "Sync Screen Activity"
+      }
+    },
+    "/v1/screen-frame-egress/adjudications": {
+      "post": {
+        "operationId": "adjudicate_screen_frames_v1_screen_frame_egress_adjudications_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScreenFrameAdjudicationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScreenFrameAdjudicationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Adjudicate Screen Frames",
+        "tags": [
+          "screen_frames"
+        ]
+      }
+    },
+    "/v1/screen-frame-egress/settings": {
+      "get": {
+        "description": "Account-level, shared across every device (desktop, web, a\nreinstall) — this is the setting the adjudication route's admission\ncheck reads (contract §6). It protects the user from themselves, not\nthird parties from the user (the privacy judge does that), so it lives\nas a plain user-profile field rather than a signed claim.",
+        "operationId": "get_screen_frame_settings_v1_screen_frame_egress_settings_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScreenFrameSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Screen Frame Settings",
+        "tags": [
+          "screen_frames"
+        ]
+      },
+      "patch": {
+        "operationId": "update_screen_frame_settings_v1_screen_frame_egress_settings_patch",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScreenFrameSettingsUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScreenFrameSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Update Screen Frame Settings",
+        "tags": [
+          "screen_frames"
+        ]
       }
     },
     "/v1/stripe/connect-accounts": {

@@ -3081,13 +3081,50 @@ export interface ScreenActivitySyncRequest {
   rows: Array<ScreenActivityRow>;
 }
 
+export interface ScreenFrameAdjudicationRequest {
+  attempt_id: string;
+  candidates: Array<ScreenFrameCandidateIn>;
+  purpose: "meeting_note_v1";
+  schema_version: 1;
+  subject: ScreenFrameSubjectIn;
+}
+
+export interface ScreenFrameAdjudicationResponse {
+  attempt_id: string;
+  frame_set: ConversationScreenFrameSet;
+  outcome: "committed" | "no_approved_frames";
+}
+
+export interface ScreenFrameCandidateIn {
+  bytes_base64: string;
+  captured_at: string;
+  client_frame_id: string;
+  declared_height: number;
+  declared_width: number;
+  mime_type: "image/jpeg" | "image/png";
+  sha256_base64: string;
+}
+
 export interface ScreenFrameGround {
   is_neutral: boolean;
   stops: Array<string>;
 }
 
+export interface ScreenFrameSettings {
+  meeting_note_screenshots_enabled: boolean;
+}
+
+export interface ScreenFrameSettingsUpdateRequest {
+  meeting_note_screenshots_enabled: boolean;
+}
+
 export interface ScreenFrameSharingUpdateRequest {
   enabled: boolean;
+}
+
+export interface ScreenFrameSubjectIn {
+  id: string;
+  kind: "conversation";
 }
 
 export interface SearchConversationsResponse {
@@ -4623,8 +4660,14 @@ export interface OmiApiSchemas {
   "ScreenActivityRow": ScreenActivityRow;
   "ScreenActivitySummaryResponse": ScreenActivitySummaryResponse;
   "ScreenActivitySyncRequest": ScreenActivitySyncRequest;
+  "ScreenFrameAdjudicationRequest": ScreenFrameAdjudicationRequest;
+  "ScreenFrameAdjudicationResponse": ScreenFrameAdjudicationResponse;
+  "ScreenFrameCandidateIn": ScreenFrameCandidateIn;
   "ScreenFrameGround": ScreenFrameGround;
+  "ScreenFrameSettings": ScreenFrameSettings;
+  "ScreenFrameSettingsUpdateRequest": ScreenFrameSettingsUpdateRequest;
   "ScreenFrameSharingUpdateRequest": ScreenFrameSharingUpdateRequest;
+  "ScreenFrameSubjectIn": ScreenFrameSubjectIn;
   "SearchConversationsResponse": SearchConversationsResponse;
   "SearchRequest": SearchRequest;
   "SearchedMemory": SearchedMemory;
@@ -7386,6 +7429,34 @@ export interface OmiApiPaths {
       operationId: "sync_screen_activity_v1_screen_activity_sync_post";
       responses: {
         "200": Record<string, number>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/screen-frame-egress/adjudications": {
+    post: {
+      operationId: "adjudicate_screen_frames_v1_screen_frame_egress_adjudications_post";
+      responses: {
+        "200": ScreenFrameAdjudicationResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/screen-frame-egress/settings": {
+    get: {
+      operationId: "get_screen_frame_settings_v1_screen_frame_egress_settings_get";
+      responses: {
+        "200": ScreenFrameSettings;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    patch: {
+      operationId: "update_screen_frame_settings_v1_screen_frame_egress_settings_patch";
+      responses: {
+        "200": ScreenFrameSettings;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -13946,6 +14017,67 @@ export async function sync_screen_activity_v1_screen_activity_sync_post(header: 
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function adjudicate_screen_frames_v1_screen_frame_egress_adjudications_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ScreenFrameAdjudicationRequest, init?: OmiApiClientInit): Promise<ScreenFrameAdjudicationResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/screen-frame-egress/adjudications`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_screen_frame_settings_v1_screen_frame_egress_settings_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ScreenFrameSettings> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/screen-frame-egress/settings`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function update_screen_frame_settings_v1_screen_frame_egress_settings_patch(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ScreenFrameSettingsUpdateRequest, init?: OmiApiClientInit): Promise<ScreenFrameSettings> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/screen-frame-egress/settings`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "PATCH",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function create_connect_account_endpoint_v1_stripe_connect_accounts_post(query: { country?: string | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<StripeConnectAccountResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/stripe/connect-accounts`;
@@ -17051,4 +17183,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 411 client methods generated.
+// Total: 414 client methods generated.

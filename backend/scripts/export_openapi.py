@@ -80,6 +80,7 @@ APP_CLIENT_PREFIXES = (
     '/v1/persons',
     '/v1/phone',
     '/v1/screen-activity',
+    '/v1/screen-frame-egress',
     '/v1/stripe',
     '/v1/sync',
     '/v1/task-integrations',
