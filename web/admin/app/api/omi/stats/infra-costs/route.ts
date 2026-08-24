@@ -85,6 +85,11 @@ export interface InfraCostsPayload {
 // new report is cut — they are measurements with an as-of date, not tunables.
 export interface PlatformShares {
   llm: { desktop: number; mobile: number };
+  // Chat spend (Anthropic) splits by the chat-event mix, NOT the llm/memory
+  // mix: the tracked-token base is ~99.9% conversation extraction with no
+  // chat in it, so smearing Anthropic by it pushes desktop's own Claude
+  // floating-bar/chat spend onto mobile (2026-08-24 methodology audit).
+  chat: { desktop: number; mobile: number };
   core: { desktop: number; mobile: number };
   asOf: string;
   method: string;
@@ -92,9 +97,10 @@ export interface PlatformShares {
 
 const DEFAULT_PLATFORM_SHARES: PlatformShares = {
   llm: { desktop: 0.2273, mobile: 0.7727 },
+  chat: { desktop: 0.5464, mobile: 0.4536 },
   core: { desktop: 0.4673, mobile: 0.5327 },
   asOf: "2026-08-16",
-  method: "usage-weighted (omi-cost-analysis)",
+  method: "usage-weighted (omi-cost-analysis), chat mix per 2026-08-24 audit",
 };
 
 export function loadPlatformShares(): PlatformShares {
@@ -109,6 +115,7 @@ export function loadPlatformShares(): PlatformShares {
     };
     return {
       llm: pair(parsed.llm, DEFAULT_PLATFORM_SHARES.llm),
+      chat: pair(parsed.chat, DEFAULT_PLATFORM_SHARES.chat),
       core: pair(parsed.core, DEFAULT_PLATFORM_SHARES.core),
       asOf: typeof parsed.asOf === "string" ? parsed.asOf : DEFAULT_PLATFORM_SHARES.asOf,
       method: typeof parsed.method === "string" ? parsed.method : DEFAULT_PLATFORM_SHARES.method,
@@ -350,10 +357,15 @@ async function computeBillingInfraCosts(
   // All legs clamp to the GCP window (ends D-2) so every plotted day has the
   // same source coverage.
   const daily: DailyCostPoint[] = gcp.daily.map((row) => {
-    const llmPool = row.llmNetUsd + (anthropicByDay.get(row.date) ?? 0) + (openaiByDay.get(row.date) ?? 0);
+    // Extraction-model spend (Vertex/Gemini in the GCP bill + OpenAI) splits
+    // by the memory-token mix; Anthropic is chat and splits by the chat mix.
+    const llmPool = row.llmNetUsd + (openaiByDay.get(row.date) ?? 0);
+    const chatPool = anthropicByDay.get(row.date) ?? 0;
     const otherPool = row.netUsd - row.llmNetUsd;
-    const desktop = llmPool * shares.llm.desktop + otherPool * shares.core.desktop;
-    const mobile = llmPool * shares.llm.mobile + otherPool * shares.core.mobile;
+    const desktop =
+      llmPool * shares.llm.desktop + chatPool * shares.chat.desktop + otherPool * shares.core.desktop;
+    const mobile =
+      llmPool * shares.llm.mobile + chatPool * shares.chat.mobile + otherPool * shares.core.mobile;
     return {
       date: row.date,
       desktop: round(desktop),
@@ -383,8 +395,8 @@ async function computeBillingInfraCosts(
           service: "Anthropic (billed)",
           mtdUsd: round(anthropicTotal),
           aprProjectionUsd: round(anthropicTotal),
-          desktopProjectionUsd: round(anthropicTotal * shares.llm.desktop),
-          mobileProjectionUsd: round(anthropicTotal * shares.llm.mobile),
+          desktopProjectionUsd: round(anthropicTotal * shares.chat.desktop),
+          mobileProjectionUsd: round(anthropicTotal * shares.chat.mobile),
         }]
       : []),
     ...(openai

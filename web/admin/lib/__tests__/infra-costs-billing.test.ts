@@ -71,13 +71,13 @@ describe("computeInfraCosts billing mode", () => {
     // trackedLlm leg failed -> partial, but the dollars are still real.
     expect(payload.summary.partial).toBe(true);
 
-    // Day 1: llm pool = 400 (gcp llm) + 100 (anthropic) = 500; other = 600.
+    // Day 1: extraction pool = 400 (gcp llm); chat = 100 (anthropic); other = 600.
     const d0 = payload.daily[0];
     expect(d0.date).toBe("2026-08-20");
-    expect(d0.desktop).toBeCloseTo(500 * 0.2273 + 600 * 0.4673, 2);
-    expect(d0.mobile).toBeCloseTo(500 * 0.7727 + 600 * 0.5327, 2);
+    expect(d0.desktop).toBeCloseTo(400 * 0.2273 + 100 * 0.5464 + 600 * 0.4673, 2);
+    expect(d0.mobile).toBeCloseTo(400 * 0.7727 + 100 * 0.4536 + 600 * 0.5327, 2);
     expect(d0.total).toBeCloseTo(d0.desktop + d0.mobile, 2);
-    // Day 2: llm pool = 500 + 50; other = 1500.
+    // Day 2: extraction pool = 500 + 50 (openai); no chat; other = 1500.
     const d1 = payload.daily[1];
     expect(d1.desktop).toBeCloseTo(550 * 0.2273 + 1500 * 0.4673, 2);
 
@@ -119,6 +119,7 @@ describe("computeInfraCosts billing mode", () => {
   it("honors ADMIN_PLATFORM_COST_SHARES_JSON overrides", async () => {
     process.env.ADMIN_PLATFORM_COST_SHARES_JSON = JSON.stringify({
       llm: { desktop: 0.5, mobile: 0.5 },
+      chat: { desktop: 0.5, mobile: 0.5 },
       core: { desktop: 0.5, mobile: 0.5 },
       asOf: "2026-09-01",
       method: "test",
