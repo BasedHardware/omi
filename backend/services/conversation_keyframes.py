@@ -14,6 +14,10 @@ from typing import Any, Callable
 from google.cloud import firestore
 
 from database._client import get_firestore_client
+from database.firestore_index_registry import (
+    CONVERSATION_KEYFRAME_JOBS_DEVICE_STATE_QUERY,
+    SCREEN_ACTIVITY_KEYFRAME_QUERY,
+)
 from database.frame_requests import enqueue_frame_request
 from utils.retrieval.keyframe_policy import KeyframeCandidate, select_conversation_keyframe
 from utils.integration_telemetry import emit_posthog_event
@@ -126,13 +130,12 @@ def reconcile_conversation_keyframe_jobs(
     """Select and enqueue one deterministic eligible frame for pending jobs."""
     client = firestore_client or get_firestore_client()
     user = client.collection("users").document(uid)
-    jobs = (
-        user.collection(_COLLECTION)
-        .where(filter=firestore.FieldFilter("device_id", "==", device_id))
-        .where(filter=firestore.FieldFilter("state", "==", "pending"))
-        .limit(limit)
-        .stream()
+    jobs = CONVERSATION_KEYFRAME_JOBS_DEVICE_STATE_QUERY.build(
+        user.collection(_COLLECTION),
+        {"device_id": device_id, "state": "pending"},
+        field_filter_factory=firestore.FieldFilter,
     )
+    jobs = jobs.limit(limit).stream()
     enqueued = 0
     for snapshot in jobs:
         row = snapshot.to_dict() or {}
@@ -140,22 +143,16 @@ def reconcile_conversation_keyframe_jobs(
         if not isinstance(started, datetime) or not isinstance(finished, datetime):
             snapshot.reference.update({"state": "pruned", "terminal_reason": "invalid_conversation_window"})
             continue
-        base_query = (
-            user.collection("screen_activity")
-            .where(filter=firestore.FieldFilter("clientDeviceId", "==", device_id))
-            .where(filter=firestore.FieldFilter("accountGeneration", "==", account_generation))
-            .where(
-                filter=firestore.FieldFilter(
-                    "timestamp", ">=", started.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")[:23]
-                )
-            )
-            .where(
-                filter=firestore.FieldFilter(
-                    "timestamp", "<=", finished.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")[:23]
-                )
-            )
-            .order_by("timestamp", direction=firestore.Query.DESCENDING)
-        )
+        base_query = SCREEN_ACTIVITY_KEYFRAME_QUERY.build(
+            user.collection("screen_activity"),
+            {
+                "device_id": device_id,
+                "account_generation": account_generation,
+                "started_at": started.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")[:23],
+                "finished_at": finished.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")[:23],
+            },
+            field_filter_factory=firestore.FieldFilter,
+        ).order_by("timestamp", direction=firestore.Query.DESCENDING)
 
         def fetch_page(cursor: Any | None) -> list[Any]:
             query = base_query.start_after(cursor) if cursor is not None else base_query
