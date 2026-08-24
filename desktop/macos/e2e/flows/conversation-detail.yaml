@@ -20,6 +20,9 @@ covers:
   - desktop/macos/Desktop/Sources/MeetingScreenshots/MeetingNoteScreenshotViews.swift
   - desktop/macos/Desktop/Sources/MeetingScreenshots/MeetingScreenshotsStore.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/ScreenFrameLightbox.swift
+  - desktop/macos/Desktop/Sources/MeetingScreenshots/MeetingBannerPalette.swift
+  - desktop/macos/Desktop/Sources/MeetingScreenshots/ScreenFrameEgressWireTypes.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+ScreenFrames.swift
 preconditions:
   - automation_bridge_ready
 
