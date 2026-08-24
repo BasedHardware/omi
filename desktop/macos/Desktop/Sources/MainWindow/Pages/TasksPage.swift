@@ -3383,6 +3383,9 @@ struct TasksPage: View {
   @ObservedObject var viewModel: TasksViewModel
   @ObservedObject private var suggestedStore = SuggestedTasksStore.shared
   var chatProvider: ChatProvider?
+  /// Optional host-owned route handoff. Keeping this callback at the shell boundary lets the task
+  /// panel render local evidence cards without owning sidebar selection or a second Rewind page.
+  var onOpenRewindEvidence: ((Int64) -> Void)?
 
   // Chat panel state
   // NOTE: NOT @ObservedObject — observing coordinator here would re-render the
@@ -3417,10 +3420,16 @@ struct TasksPage: View {
   @State private var isDraggingDivider = false
   @State private var dragStartWidth: Double = 0
 
-  init(viewModel: TasksViewModel, chatCoordinator: TaskChatCoordinator, chatProvider: ChatProvider? = nil) {
+  init(
+    viewModel: TasksViewModel,
+    chatCoordinator: TaskChatCoordinator,
+    chatProvider: ChatProvider? = nil,
+    onOpenRewindEvidence: ((Int64) -> Void)? = nil
+  ) {
     self.viewModel = viewModel
     self.chatCoordinator = chatCoordinator
     self.chatProvider = chatProvider
+    self.onOpenRewindEvidence = onOpenRewindEvidence
   }
 
   var body: some View {
@@ -3474,7 +3483,8 @@ struct TasksPage: View {
         TaskChatSidePanelView(
           coordinator: chatCoordinator,
           viewModel: viewModel,
-          onClose: { closeChatPanel() }
+          onClose: { closeChatPanel() },
+          onOpenRewindEvidence: onOpenRewindEvidence
         )
         .frame(width: chatPanelWidth)
         .transition(.move(edge: .trailing))
@@ -4594,6 +4604,7 @@ private struct TaskChatSidePanelView: View {
   @ObservedObject var coordinator: TaskChatCoordinator
   let viewModel: TasksViewModel
   let onClose: () -> Void
+  let onOpenRewindEvidence: ((Int64) -> Void)?
 
   private var activeTask: TaskActionItem? {
     guard let taskId = coordinator.activeTaskId else { return nil }
@@ -4606,7 +4617,8 @@ private struct TaskChatSidePanelView: View {
         taskState: taskState,
         coordinator: coordinator,
         task: activeTask,
-        onClose: onClose
+        onClose: onClose,
+        onOpenRewindEvidence: onOpenRewindEvidence
       )
     } else {
       TaskChatPanelPlaceholder(

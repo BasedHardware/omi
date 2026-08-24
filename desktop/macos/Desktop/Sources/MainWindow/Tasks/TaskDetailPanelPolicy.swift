@@ -17,6 +17,7 @@ enum TaskDetailSourceRoute: Equatable {
   case capture(id: String)
   case memory(id: String)
   case rewind
+  case rewindFrame(id: Int64)
   case external(URL)
 }
 
@@ -155,12 +156,20 @@ enum TaskDetailSourceLinkPolicy {
         subtitle = evidenceID
         systemImage = "brain.head.profile"
       case .local_screen:
-        // Rewind is the established desktop source surface. The current
-        // Rewind page has no selection/deep-link contract for a frame id, so
-        // do not pretend the opaque evidence id selects a particular frame.
-        route = .rewind
-        title = "Screen context"
-        subtitle = "Open Rewind"
+        if let screenshotID = RewindEvidenceCardPolicy.card(
+          for: evidence,
+          currentDeviceID: ClientDeviceService.shared.clientDeviceId
+        )?.screenshotID {
+          route = .rewindFrame(id: screenshotID)
+          title = "Screen evidence"
+          subtitle = "Open Rewind · frame \(screenshotID)"
+        } else {
+          // Keep old/malformed/foreign/future refs as an inert Rewind route rather than treating an
+          // opaque id as a local row. This preserves legacy navigation without crossing owners.
+          route = .rewind
+          title = "Screen context"
+          subtitle = "Open Rewind"
+        }
         systemImage = "rectangle.dashed.and.paperclip"
       case .external:
         guard let url = URL(string: evidenceID), url.scheme != nil else { continue }
@@ -298,6 +307,7 @@ enum TaskDetailSourceLinkPolicy {
     case .capture(let id): return "capture:\(id)"
     case .memory(let id): return "memory:\(id)"
     case .rewind: return "rewind"
+    case .rewindFrame(let id): return "rewind:\(id)"
     case .external(let url): return "external:\(url.absoluteString)"
     }
   }

@@ -27,6 +27,9 @@ enum TaskDetailSourceNavigator {
       }
     case .rewind:
       NotificationCenter.default.post(name: .navigateToRewind, object: nil)
+    case .rewindFrame(let id):
+      RewindCitationFocusState.shared.request(id)
+      NotificationCenter.default.post(name: .navigateToRewind, object: nil)
     case .external(let url):
       NSWorkspace.shared.open(url)
     }

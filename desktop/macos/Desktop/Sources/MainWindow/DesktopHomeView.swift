@@ -1551,7 +1551,11 @@ private struct PageContentView: View {
           TasksPage(
             viewModel: viewModelContainer.tasksViewModel,
             chatCoordinator: viewModelContainer.taskChatCoordinator,
-            chatProvider: viewModelContainer.chatProvider))
+            chatProvider: viewModelContainer.chatProvider,
+            onOpenRewindEvidence: { screenshotID in
+              RewindCitationFocusState.shared.request(screenshotID)
+              selectedTabIndex = SidebarNavItem.rewind.rawValue
+            }))
       case 7:
         RewindPage(appState: appState)
       case 8:
