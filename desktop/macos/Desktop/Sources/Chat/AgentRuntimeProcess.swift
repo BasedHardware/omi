@@ -2593,9 +2593,8 @@ actor AgentRuntimeProcess {
     try assertStartupAuthority(
       authorizationSnapshot,
       expectedAuthorityEpoch: admissionAuthorityEpoch)
-    if !rustBase.isEmpty {
-      env["OMI_API_BASE_URL"] = rustBase.hasSuffix("/") ? "\(rustBase)v2" : "\(rustBase)/v2"
-    } else if preferredAdapterId == .piMono {
+    env = Self.childBackendRoutingEnvironment(baseEnvironment: env, rustBase: rustBase)
+    if rustBase.isEmpty && preferredAdapterId == .piMono {
       log("AgentRuntimeProcess: pi-mono start refused, OMI_DESKTOP_API_URL is not configured")
       throw BridgeError.bridgeScriptNotFound
     }

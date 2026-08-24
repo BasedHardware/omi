@@ -1147,6 +1147,42 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertTrue(source.contains(#"env["OMI_HERMES_ADAPTER_COMMAND"]"#))
   }
 
+  func testJITQABackendTupleIsPreservedInAgentChildEnvironment() {
+    let localTuple = [
+      "OMI_PYTHON_API_URL": "http://127.0.0.1:18080",
+      "OMI_DESKTOP_API_URL": "http://127.0.0.1:18081",
+      "OMI_AUTH_API_URL": "http://127.0.0.1:18080",
+      "OMI_ENV_STAGE": "dev",
+    ]
+    let localChild = AgentRuntimeProcess.childBackendRoutingEnvironment(
+      baseEnvironment: localTuple,
+      rustBase: "http://127.0.0.1:18081"
+    )
+    XCTAssertEqual(localChild["OMI_PYTHON_API_URL"], "http://127.0.0.1:18080")
+    XCTAssertEqual(localChild["OMI_DESKTOP_API_URL"], "http://127.0.0.1:18081")
+    XCTAssertEqual(localChild["OMI_AUTH_API_URL"], "http://127.0.0.1:18080")
+    XCTAssertEqual(localChild["OMI_ENV_STAGE"], "dev")
+    XCTAssertEqual(localChild["OMI_API_BASE_URL"], "http://127.0.0.1:18081/v2")
+
+    let deployedTuple = [
+      "OMI_PYTHON_API_URL": "https://api.omiapi.com",
+      "OMI_DESKTOP_API_URL": "https://desktop-backend-dt5lrfkkoa-uc.a.run.app",
+      "OMI_AUTH_API_URL": "https://api.omiapi.com",
+      "OMI_ENV_STAGE": "dev",
+    ]
+    let deployedChild = AgentRuntimeProcess.childBackendRoutingEnvironment(
+      baseEnvironment: deployedTuple,
+      rustBase: "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/"
+    )
+    XCTAssertEqual(deployedChild["OMI_PYTHON_API_URL"], "https://api.omiapi.com")
+    XCTAssertEqual(deployedChild["OMI_AUTH_API_URL"], "https://api.omiapi.com")
+    XCTAssertEqual(
+      deployedChild["OMI_API_BASE_URL"],
+      "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/v2"
+    )
+    XCTAssertFalse(deployedChild.values.contains { $0.contains("api.omi.me") })
+  }
+
   @MainActor
   func testUsableByokEnvironmentSuppressesAllKeysWhenOneProviderIsKnownBad() {
     let savedKeys = Dictionary(

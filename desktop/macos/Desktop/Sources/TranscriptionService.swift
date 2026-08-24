@@ -120,7 +120,12 @@ class TranscriptionService: @unchecked Sendable {
   /// Resolution order: explicit OMI_PYTHON_API_URL → production https://api.omi.me/
   /// NOTE: Do NOT fall back to OMI_DESKTOP_API_URL — that points to the Rust desktop-backend
   /// (Cloud Run), which does not have /v2/voice-message/* or /v4/listen endpoints.
-  private static let pythonBackendBaseURL: String = DesktopBackendEnvironment.pythonBaseURL()
+  // Resolve at use time. BundleEnvironment loads the packaged tuple during
+  // startup, and a static snapshot could otherwise freeze a value touched
+  // before that load (or retain a prior value in an in-process test).
+  static var pythonBackendBaseURL: String {
+    DesktopBackendEnvironment.pythonBaseURL()
+  }
 
   private static func sanitizedContextKeywords(_ keywords: [String]) -> [String] {
     let stopWords: Set<String> = [
