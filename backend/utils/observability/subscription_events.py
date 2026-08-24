@@ -98,8 +98,10 @@ def _resolve_plan(subscription_obj: Mapping[str, Any]) -> str:
         plan = resolve_stripe_price_plan(price_id)
     except Exception:
         return 'unknown'
-    value = plan.value if isinstance(plan, PlanType) else str(plan)
-    return value if value in _PLANS else 'unknown'
+    # resolve_stripe_price_plan is typed to always return PlanType; still bound
+    # the result against the closed label set rather than trusting the type
+    # contract, in case the catalog ever adds a member this metric doesn't know.
+    return plan.value if plan.value in _PLANS else 'unknown'
 
 
 def _resolve_interval(subscription_obj: Mapping[str, Any]) -> str:
