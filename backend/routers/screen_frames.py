@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 import database.conversations as conversations_db
 import database.redis_db as redis_db
+import database.screen_frames as screen_frames_db
 import database.users as users_db
 from models.conversation_enums import ConversationStatus, ConversationVisibility
 from models.screen_frame import (
@@ -226,7 +227,7 @@ def adjudicate_screen_frames(
     # is exactly the case this exists for. `revision` cannot record it, because nothing was
     # approved to bump it, so without this the client cannot tell that it already offered these
     # frames and had them refused, and re-uploads them on every reopen.
-    conversations_db.mark_conversation_screen_frames_adjudicated(uid, request.subject.id)
+    screen_frames_db.mark_conversation_screen_frames_adjudicated(uid, request.subject.id)
 
     frame_set, committed = enforcement.enforce_and_persist(uid, request.subject.id, policy.max_persisted, new_frames)
     response = ScreenFrameAdjudicationResponse(
@@ -277,7 +278,7 @@ def delete_conversation_screenshot(conversation_id: str, frame_id: str, uid: str
 def delete_all_conversation_screenshots(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     _get_owned_conversation(uid, conversation_id)
     screen_frame_store.delete_conversation_screen_frames(uid, conversation_id)
-    conversations_db.bump_conversation_screen_frames_revision(uid, conversation_id)
+    screen_frames_db.bump_conversation_screen_frames_revision(uid, conversation_id)
     return enforcement.build_frame_set_response(uid, conversation_id)
 
 
@@ -290,7 +291,7 @@ def update_conversation_screenshot_sharing(
     conversation_id: str, request: ScreenFrameSharingUpdateRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
     _get_owned_conversation(uid, conversation_id)
-    conversations_db.set_conversation_screenshot_sharing_enabled(uid, conversation_id, request.enabled)
+    screen_frames_db.set_conversation_screenshot_sharing_enabled(uid, conversation_id, request.enabled)
     return enforcement.build_frame_set_response(uid, conversation_id)
 
 
@@ -320,7 +321,7 @@ def get_shared_conversation_screenshots(conversation_id: str):
     if not visibility or visibility == ConversationVisibility.private:
         return EMPTY_FRAME_SET
 
-    if not conversations_db.get_conversation_screenshot_sharing_enabled(conversation):
+    if not screen_frames_db.get_conversation_screenshot_sharing_enabled(conversation):
         return EMPTY_FRAME_SET
 
     return enforcement.build_frame_set_response(uid, conversation_id)

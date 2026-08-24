@@ -120,8 +120,8 @@ class TestCaptureOrderSort:
 
 class TestBuildFrameSetResponse:
     def test_builds_banner_and_sorted_strip_with_fresh_signed_urls(self, monkeypatch):
-        fake_conversations_db = MagicMock()
-        fake_conversations_db.get_conversation_screen_frames.return_value = [
+        fake_screen_frames_db = MagicMock()
+        fake_screen_frames_db.get_conversation_screen_frames.return_value = [
             {
                 "id": "banner-frame",
                 "captured_at": _t(5),
@@ -159,8 +159,8 @@ class TestBuildFrameSetResponse:
                 "ground": {"stops": ["#555555", "#666666"], "is_neutral": False},
             },
         ]
-        fake_conversations_db.get_conversation_screen_frames_revision.return_value = 3
-        monkeypatch.setattr(enforcement_mod, "conversations_db", fake_conversations_db)
+        fake_screen_frames_db.get_conversation_screen_frames_revision.return_value = 3
+        monkeypatch.setattr(enforcement_mod, "screen_frames_db", fake_screen_frames_db)
 
         fake_storage = MagicMock()
         fake_storage.get_screen_frame_signed_url.side_effect = lambda uid, cid, fid: f"https://signed/{fid}"
@@ -192,13 +192,13 @@ class TestAnAllRejectedPassIsStillRecorded:
     """
 
     def test_adjudicated_at_is_carried_even_when_nothing_survived(self, monkeypatch):
-        fake_conversations_db = MagicMock()
-        fake_conversations_db.get_conversation_screen_frames.return_value = []
-        fake_conversations_db.get_conversation_screen_frames_revision.return_value = 0
-        fake_conversations_db.get_conversation_screen_frames_adjudicated_at.return_value = datetime(
+        fake_screen_frames_db = MagicMock()
+        fake_screen_frames_db.get_conversation_screen_frames.return_value = []
+        fake_screen_frames_db.get_conversation_screen_frames_revision.return_value = 0
+        fake_screen_frames_db.get_conversation_screen_frames_adjudicated_at.return_value = datetime(
             2026, 8, 24, 12, 0, tzinfo=timezone.utc
         )
-        monkeypatch.setattr(enforcement_mod, "conversations_db", fake_conversations_db)
+        monkeypatch.setattr(enforcement_mod, "screen_frames_db", fake_screen_frames_db)
 
         frame_set = enforcement_mod.build_frame_set_response(UID, CONVERSATION_ID)
 
@@ -210,11 +210,11 @@ class TestAnAllRejectedPassIsStillRecorded:
         assert frame_set.adjudicated_at == datetime(2026, 8, 24, 12, 0, tzinfo=timezone.utc)
 
     def test_a_conversation_never_attempted_has_no_stamp(self, monkeypatch):
-        fake_conversations_db = MagicMock()
-        fake_conversations_db.get_conversation_screen_frames.return_value = []
-        fake_conversations_db.get_conversation_screen_frames_revision.return_value = 0
-        fake_conversations_db.get_conversation_screen_frames_adjudicated_at.return_value = None
-        monkeypatch.setattr(enforcement_mod, "conversations_db", fake_conversations_db)
+        fake_screen_frames_db = MagicMock()
+        fake_screen_frames_db.get_conversation_screen_frames.return_value = []
+        fake_screen_frames_db.get_conversation_screen_frames_revision.return_value = 0
+        fake_screen_frames_db.get_conversation_screen_frames_adjudicated_at.return_value = None
+        monkeypatch.setattr(enforcement_mod, "screen_frames_db", fake_screen_frames_db)
 
         frame_set = enforcement_mod.build_frame_set_response(UID, CONVERSATION_ID)
 

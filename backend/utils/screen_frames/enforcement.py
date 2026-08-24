@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-import database.conversations as conversations_db
+import database.screen_frames as screen_frames_db
 import utils.other.storage as storage
 from models.screen_frame import ConversationScreenFrame, ConversationScreenFrameSet, ScreenFrameGround
 from utils.screen_frames import store as screen_frame_store
@@ -149,8 +149,8 @@ def build_frame_set_response(uid: str, conversation_id: str) -> ConversationScre
     with freshly-generated signed URLs. Never recomputes role/rank/ground —
     those are only touched by enforcement / the palette module respectively.
     """
-    frames = conversations_db.get_conversation_screen_frames(uid, conversation_id)
-    revision = conversations_db.get_conversation_screen_frames_revision(uid, conversation_id)
+    frames = screen_frames_db.get_conversation_screen_frames(uid, conversation_id)
+    revision = screen_frames_db.get_conversation_screen_frames_revision(uid, conversation_id)
 
     banner: Optional[ConversationScreenFrame] = None
     strip: List[ConversationScreenFrame] = []
@@ -161,7 +161,7 @@ def build_frame_set_response(uid: str, conversation_id: str) -> ConversationScre
         else:
             strip.append(api_frame)
     strip.sort(key=lambda f: f.captured_at)
-    adjudicated_at = conversations_db.get_conversation_screen_frames_adjudicated_at(uid, conversation_id)
+    adjudicated_at = screen_frames_db.get_conversation_screen_frames_adjudicated_at(uid, conversation_id)
     return ConversationScreenFrameSet(
         revision=revision,
         banner=banner,
@@ -183,7 +183,7 @@ def enforce_and_persist(
     of `new_frames` survived into the persisted set (i.e. wasn't immediately
     evicted by the cap) — this drives the adjudication response's "outcome".
     """
-    existing = conversations_db.get_conversation_screen_frames(uid, conversation_id)
+    existing = screen_frames_db.get_conversation_screen_frames(uid, conversation_id)
     new_docs = [_frame_doc(f) for f in new_frames]
     new_ids = {f.frame_id for f in new_frames}
 
@@ -195,7 +195,7 @@ def enforce_and_persist(
         screen_frame_store.delete_screen_frame(uid, conversation_id, doc['id'])
 
     if new_docs:
-        conversations_db.bump_conversation_screen_frames_revision(uid, conversation_id)
+        screen_frames_db.bump_conversation_screen_frames_revision(uid, conversation_id)
 
     committed = any(doc['id'] in new_ids for doc in survivors)
     return build_frame_set_response(uid, conversation_id), committed
@@ -210,9 +210,9 @@ def promote_banner_after_deletion(uid: str, conversation_id: str) -> Conversatio
     smaller remaining pool with no new candidates and no cap in play (the
     pool already shrank, never grew).
     """
-    remaining = conversations_db.get_conversation_screen_frames(uid, conversation_id)
+    remaining = screen_frames_db.get_conversation_screen_frames(uid, conversation_id)
     if remaining:
         survivors, _evicted = _apply_cap_and_roles(remaining, [], max_persisted=len(remaining))
         screen_frame_store.persist_screen_frame_docs(uid, conversation_id, survivors)
-    conversations_db.bump_conversation_screen_frames_revision(uid, conversation_id)
+    screen_frames_db.bump_conversation_screen_frames_revision(uid, conversation_id)
     return build_frame_set_response(uid, conversation_id)

@@ -75,6 +75,7 @@ def _stub_admission_dependencies(monkeypatch):
     fake_conversations_db.get_conversation.return_value = _conversation()
     fake_conversations_db.is_soft_deleted.return_value = False
     monkeypatch.setattr(screen_frames_mod, "conversations_db", fake_conversations_db)
+    monkeypatch.setattr(screen_frames_mod, "screen_frames_db", fake_conversations_db)
 
     fake_users_db = MagicMock()
     fake_users_db.get_meeting_note_screenshots_enabled.return_value = True
@@ -174,6 +175,7 @@ class TestSharedScreenshotsRoute:
         )
         fake_conversations_db.is_soft_deleted.return_value = False
         monkeypatch.setattr(screen_frames_mod, "conversations_db", fake_conversations_db)
+        monkeypatch.setattr(screen_frames_mod, "screen_frames_db", fake_conversations_db)
 
         result = screen_frames_mod.get_shared_conversation_screenshots(CONVERSATION_ID)
         assert result == screen_frames_mod.EMPTY_FRAME_SET
@@ -190,6 +192,7 @@ class TestSharedScreenshotsRoute:
         fake_conversations_db.is_soft_deleted.return_value = False
         fake_conversations_db.get_conversation_screenshot_sharing_enabled.return_value = False
         monkeypatch.setattr(screen_frames_mod, "conversations_db", fake_conversations_db)
+        monkeypatch.setattr(screen_frames_mod, "screen_frames_db", fake_conversations_db)
 
         result = screen_frames_mod.get_shared_conversation_screenshots(CONVERSATION_ID)
         assert result == screen_frames_mod.EMPTY_FRAME_SET
@@ -206,6 +209,7 @@ class TestSharedScreenshotsRoute:
         fake_conversations_db.is_soft_deleted.return_value = False
         fake_conversations_db.get_conversation_screenshot_sharing_enabled.return_value = True
         monkeypatch.setattr(screen_frames_mod, "conversations_db", fake_conversations_db)
+        monkeypatch.setattr(screen_frames_mod, "screen_frames_db", fake_conversations_db)
 
         fake_enforcement = MagicMock()
         sentinel = object()
