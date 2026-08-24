@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -17,6 +18,7 @@ from utils.jit_rollout import (
     JITRolloutDecision,
     TriState,
 )
+from utils.executors import drain_critical_compensation_tasks, get_critical_compensation_task_count
 from utils.observability import journeys
 from utils.subscription import (
     DESKTOP_ACCESS_TIER_ARCHITECT,
@@ -485,6 +487,47 @@ async def test_quota_reservation_cancellation_releases_late_admission_once(monke
     unblock_reservation.set()
     await asyncio.wait_for(release_seen.wait(), timeout=1)
     await asyncio.sleep(0)
+    assert released == [("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)]
+
+
+@pytest.mark.asyncio
+async def test_shutdown_drain_observes_blocked_quota_reservation_before_release(monkeypatch):
+    reservation_started = threading.Event()
+    unblock_reservation = threading.Event()
+    release_seen = asyncio.Event()
+    released = []
+
+    def blocked_reservation(*_args):
+        reservation_started.set()
+        assert unblock_reservation.wait(timeout=2)
+        return True, 149, 86400
+
+    async def release(uid, operation):
+        released.append((uid, operation))
+        release_seen.set()
+
+    monkeypatch.setattr(desktop_proactivity, "_customer_subscription", lambda *_: None)
+    monkeypatch.setattr(desktop_proactivity.redis_db, "reserve_rate_limit", blocked_reservation)
+    monkeypatch.setattr(desktop_proactivity, "_release_quota", release)
+
+    reservation = asyncio.create_task(
+        desktop_proactivity._consume_quota("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)
+    )
+    await asyncio.wait_for(asyncio.to_thread(reservation_started.wait, 1), timeout=2)
+    reservation.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await reservation
+    assert get_critical_compensation_task_count() == 1
+
+    async def emulate_shutdown_unblock():
+        await asyncio.sleep(0)
+        unblock_reservation.set()
+
+    asyncio.create_task(emulate_shutdown_unblock())
+    drained = await drain_critical_compensation_tasks(timeout=1.0)
+
+    assert drained == 1
+    await asyncio.wait_for(release_seen.wait(), timeout=1)
     assert released == [("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)]
 
 

@@ -20,7 +20,7 @@ from database import redis_db, users as users_db
 from config.plan_catalog import DESKTOP_PROFILE_DEFAULTS
 from models.users import PlanType, Subscription
 from utils.env_loader import EnvStage, resolve_stage_from_env
-from utils.executors import critical_executor, db_executor, run_blocking, start_background_task
+from utils.executors import critical_executor, db_executor, run_blocking, start_critical_compensation_task
 from utils.http_client import get_llm_gateway_client, get_llm_gateway_semaphore
 from utils.llm.desktop_llm_stub import llm_stub_enabled
 from utils.llm.gateway_client import llm_gateway_headers
@@ -286,7 +286,7 @@ async def _consume_quota(uid: str, operation: ProactiveOperation) -> ProactiveQu
                 if reservation_allowed:
                     await _release_quota(uid, operation)
 
-            start_background_task(
+            start_critical_compensation_task(
                 release_late_reservation(),
                 name=f"proactive-quota-release-after-cancel:{operation_value}",
             )
