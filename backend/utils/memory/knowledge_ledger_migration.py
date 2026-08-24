@@ -401,6 +401,7 @@ def run_ledger_migration_sweep(
                 uid,
                 memory_id,
                 expected_item_revision=plan.source_revision,
+                expected_tier=item.tier,
                 db_client=db_client,
             )
             adjudicated += 1
