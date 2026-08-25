@@ -180,6 +180,18 @@ class AppUsageAttribution(str, Enum):
     NON_USER_REPROCESS = 'non_user_reprocess'
 
 
+class ExplicitAppSelectionFailedError(RuntimeError):
+    """A reprocess that named one summarization app ended without its result.
+
+    Raised by `_trigger_apps` when an explicit `app_id` selection leaves no
+    non-empty result for that app — the execution failed (the executor loop
+    already logged the exception) or the model returned empty content.
+    First-party notes are a display fallback, not a substitute for the
+    selection the user made, so the reprocess boundary must surface a real
+    error instead of returning success with empty `apps_results` (SCA-359).
+    """
+
+
 def summary_pipeline_mode() -> SummaryPipelineMode:
     """Resolve the pipeline mode once. `CONVERSATION_NOTES_V2_ENABLED` is the only switch.
 
@@ -716,6 +728,14 @@ def _trigger_apps(
             future.result()
         except Exception as e:
             logger.error(f"Error executing app: {e}")
+
+    if app_id:
+        # Explicit selection is fail-closed: the client asked for THIS app's summary, so a
+        # missing result (execution failed above) or empty content must not masquerade as
+        # success while first-party notes shadow the selection the user made (SCA-359).
+        selected_result = next((r for r in conversation.apps_results if r.app_id == app_id), None)
+        if selected_result is None or not selected_result.content.strip():
+            raise ExplicitAppSelectionFailedError(f'Selected app {app_id} produced no summary content')
 
 
 def _update_goal_progress(uid: str, conversation: Conversation) -> None:
@@ -1939,6 +1959,12 @@ def process_conversation(
 
     # Wrap every post-persistence derived effect so the durable finalizer can
     # defer the bundle until it transactionally claims ownership (#10468 r5).
+    # Captured by _emit_derived_effects so an explicit-selection failure can fail the
+    # reprocess AFTER the derived-effect bundle (persist-as-today, action items, goals)
+    # instead of stranding it mid-way. Only reachable when `app_id` was set; automatic
+    # app selection stays fail-open (SCA-359).
+    explicit_selection_failures: list[ExplicitAppSelectionFailedError] = []
+
     def _emit_derived_effects() -> None:
         # Calendar auto-linking calls and mutates a user's Google Calendar during generic
         # conversation processing. Keep it opt-in so normal sync/reprocess jobs do not
@@ -2028,16 +2054,25 @@ def process_conversation(
             if insights_gained > 0:
                 record_usage(uid, insights_gained=insights_gained)
 
-            _trigger_apps(
-                uid,
-                conversation,
-                is_reprocess=is_reprocess,
-                app_id=app_id,
-                explicit_app=explicit_app,
-                usage_attribution=app_usage_attribution,
-                language_code=language_code,
-                people=people,
-            )
+            try:
+                _trigger_apps(
+                    uid,
+                    conversation,
+                    is_reprocess=is_reprocess,
+                    app_id=app_id,
+                    explicit_app=explicit_app,
+                    usage_attribution=app_usage_attribution,
+                    language_code=language_code,
+                    people=people,
+                )
+            except ExplicitAppSelectionFailedError as error:
+                # Fail closed without stranding the bundle: the write-back below still
+                # persists apps_results exactly as it does today (opt-in clears a stale
+                # selection) and the remaining derived effects still run; the error is
+                # re-raised after the bundle so the reprocess boundary returns a real
+                # failure instead of success-with-notes (SCA-359).
+                logger.error('Explicit app selection failed: %s', error)
+                explicit_selection_failures.append(error)
             # _trigger_apps only mutates the in-memory conversation and the durable write above already
             # happened, so persist its output the same way the calendar_event/folder_id/audio_files
             # write-backs do. Otherwise the app summary the LLM just produced is discarded.
@@ -2100,6 +2135,12 @@ def process_conversation(
             derived_effects_observer(_emit_derived_effects)
         return conversation
     _emit_derived_effects()
+    if explicit_selection_failures:
+        # Same contract the structured-summary boundary already enforces: a failed
+        # processing step is a real error, never a 200 whose payload quietly
+        # substitutes first-party notes for the selected app's summary (SCA-359).
+        failure = explicit_selection_failures[0]
+        raise conversation_processing_http_exception(failure) from failure
     logger.info(f'process_conversation completed conversation.id= {conversation.id}')
     return conversation
 
