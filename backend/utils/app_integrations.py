@@ -894,6 +894,9 @@ async def _async_trigger_realtime_integrations(
             messages = []
             for key, message in mentor_results.items():
                 messages.append(await run_blocking(db_executor, add_app_message, message, key, uid))
+                await run_blocking(
+                    db_executor, redis_db.publish_proactive_message, uid, key, 'Omi', message, conversation_id
+                )
             return messages
         return {}
 
@@ -1007,11 +1010,14 @@ async def _async_trigger_realtime_integrations(
     # Merge mentor results with app results
     all_results = {**mentor_results, **results}
 
+    app_name_by_id = {app.id: app.name for app in filtered_apps}
     messages = []
     for key, message in all_results.items():
         if not message:
             continue
         messages.append(await run_blocking(db_executor, add_app_message, message, key, uid))
+        title = 'Omi' if key == 'mentor' else app_name_by_id.get(key, 'Omi')
+        await run_blocking(db_executor, redis_db.publish_proactive_message, uid, key, title, message, conversation_id)
 
     return messages
 
