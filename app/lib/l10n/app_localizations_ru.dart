@@ -9936,4 +9936,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Последняя ошибка: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Предзапись';
 }

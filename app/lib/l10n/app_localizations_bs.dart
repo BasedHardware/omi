@@ -9928,4 +9928,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Posljednja greška: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Unaprijed snimljeno';
 }

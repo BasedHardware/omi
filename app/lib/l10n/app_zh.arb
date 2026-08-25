@@ -3253,5 +3253,6 @@
     "appReEnableFailedTitle": "无法重新启用",
     "appReEnableFailedBody": "无法重新启用此应用，请重试。",
     "appDisabledOn": "于 {date} 停用。",
-    "appDisabledLastError": "最后的错误：{error}"
+    "appDisabledLastError": "最后的错误：{error}",
+    "prerecordedTranscript": "预录"
 }

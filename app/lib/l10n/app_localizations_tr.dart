@@ -9911,4 +9911,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Son hata: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Önceden kaydedilmiş';
 }

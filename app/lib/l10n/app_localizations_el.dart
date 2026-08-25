@@ -9969,4 +9969,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Τελευταίο σφάλμα: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Προηχογραφημένο';
 }

@@ -3231,5 +3231,6 @@
     "appReEnableFailedTitle": "Neizdevās iespējot atkārtoti",
     "appReEnableFailedBody": "Šo lietotni neizdevās iespējot atkārtoti. Mēģiniet vēlreiz.",
     "appDisabledOn": "Atspējota {date}.",
-    "appDisabledLastError": "Pēdējā kļūda: {error}."
+    "appDisabledLastError": "Pēdējā kļūda: {error}.",
+    "prerecordedTranscript": "Iepriekš ierakstīts"
 }

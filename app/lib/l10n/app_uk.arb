@@ -3231,5 +3231,6 @@
     "appReEnableFailedTitle": "Не вдалося ввімкнути знову",
     "appReEnableFailedBody": "Не вдалося повторно ввімкнути цей застосунок. Спробуйте ще раз.",
     "appDisabledOn": "Вимкнено {date}.",
-    "appDisabledLastError": "Остання помилка: {error}."
+    "appDisabledLastError": "Остання помилка: {error}.",
+    "prerecordedTranscript": "Попередній запис"
 }

@@ -9904,4 +9904,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'শেষ ত্রুটি: $error';
   }
+
+  @override
+  String get prerecordedTranscript => 'প্রি-রেকর্ডেড';
 }

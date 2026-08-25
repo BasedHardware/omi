@@ -3231,5 +3231,6 @@
     "appReEnableFailedTitle": "Uuesti sisselülitamine ebaõnnestus",
     "appReEnableFailedBody": "Seda rakendust ei õnnestunud uuesti sisse lülitada. Proovi uuesti.",
     "appDisabledOn": "Välja lülitatud {date}.",
-    "appDisabledLastError": "Viimane viga: {error}."
+    "appDisabledLastError": "Viimane viga: {error}.",
+    "prerecordedTranscript": "Eelsalvestatud"
 }

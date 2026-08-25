@@ -9990,4 +9990,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Huling error: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Paunang-rekord';
 }

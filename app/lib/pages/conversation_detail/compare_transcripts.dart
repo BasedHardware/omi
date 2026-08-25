@@ -47,11 +47,11 @@ class _CompareTranscriptsPageState extends State<CompareTranscriptsPage> {
               padding: EdgeInsets.zero,
               indicatorPadding: EdgeInsets.zero,
               labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
-              tabs: const [
-                Tab(text: 'Deepgram'),
-                Tab(text: 'Soniox'),
-                Tab(text: 'SpeechMatics'),
-                Tab(text: 'Prerecorded'),
+              tabs: [
+                const Tab(text: 'Deepgram'),
+                const Tab(text: 'Soniox'),
+                const Tab(text: 'SpeechMatics'),
+                Tab(text: context.l10n.prerecordedTranscript),
               ],
               indicator: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(16)),
             ),

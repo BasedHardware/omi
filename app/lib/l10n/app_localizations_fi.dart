@@ -9900,4 +9900,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Viimeisin virhe: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Esitallenne';
 }
