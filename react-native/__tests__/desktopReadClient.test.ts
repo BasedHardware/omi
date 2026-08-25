@@ -45,6 +45,18 @@ test('keeps first-run onboarding copy off the retired host', () => {
   expect(recoverySource).not.toContain('8787');
 });
 
+test('gates the macOS search toolbar off first-run onboarding', () => {
+  const orchestrator = readFileSync(
+    resolve(__dirname, '../src/app/AppOrchestrator.tsx'),
+    'utf8',
+  );
+
+  expect(orchestrator).toContain('onboardingRequired');
+  expect(orchestrator).toMatch(
+    /macDesktop\s*\?\s*onboardingRequired\s*\?\s*null\s*:\s*macDesktopNav|macDesktop\s*&&\s*!onboardingRequired\s*\?\s*macDesktopNav/,
+  );
+});
+
 test('treats onboarding as complete in the JavaScript-only adapter', async () => {
   expect(await browserOmiAuth.hasCompletedOnboarding()).toBe(true);
   await expect(

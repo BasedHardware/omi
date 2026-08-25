@@ -35,7 +35,10 @@ test('uses standard visible macOS traffic lights with native window dragging', (
   expect(source).toMatch(
     /window\.toolbarStyle = NSWindowToolbarStyle(?:Automatic|Preference);/,
   );
-  expect(source).toContain('window.title = @"";');
+  expect(source).toContain('window.title = @"omi";');
+  expect(source).toContain('window.titleVisibility = NSWindowTitleVisible');
+  expect(source).not.toContain('window.title = @"";');
+  expect(source).not.toContain('NSWindowTitleHidden');
   expect(source).toContain('positionOmiTrafficLights');
   expect(source).toContain('OmiTrafficLightLeading');
   expect(source).toMatch(/OmiTrafficLightLeading\s*=\s*1[234]\.0/);

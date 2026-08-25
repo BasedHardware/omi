@@ -1741,6 +1741,42 @@ test('fills the macOS content area with first-run onboarding', async () => {
       ].includes(String(node.type)),
     ),
   ).toHaveLength(0);
+  expect(rendered).not.toContain('Search Omi');
+  expect(rendered).not.toContain('Home search dock');
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'Desktop application chrome' ||
+        node.props.accessibilityLabel === 'Home navigation' ||
+        node.props.accessibilityLabel === 'Home search dock',
+    ),
+  ).toHaveLength(0);
+});
+
+test('hides Search Omi and Home search dock during first-run onboarding', async () => {
+  mockPlatformOS = 'macos';
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(false);
+  mockAuth.hasCloudSession.mockResolvedValue(false);
+
+  const renderer = await renderApp();
+  const output = JSON.stringify(renderer.toJSON());
+
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'First-run onboarding',
+    ),
+  ).toBeDefined();
+  expect(output).toContain('Welcome');
+  expect(output).toContain('Sign in');
+  expect(output).not.toContain('Search Omi');
+  expect(output).not.toContain('Home search dock');
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'Desktop application chrome' ||
+        node.props.accessibilityLabel === 'Home navigation',
+    ),
+  ).toHaveLength(0);
 });
 
 test('keeps macOS Home gated while the auth probe is unresolved', async () => {
@@ -1852,6 +1888,13 @@ test('signs in from first-run onboarding, records completion, and shows Home', a
       node => node.props.accessibilityLabel === 'Home desktop timeline surface',
     ),
   ).toBeDefined();
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Desktop application chrome',
+    ),
+  ).toBeDefined();
+  expect(JSON.stringify(renderer.toJSON())).toContain('Search Omi');
+  expect(JSON.stringify(renderer.toJSON())).toContain('Home search dock');
 });
 
 test('keeps macOS Home as search chrome followed by compact navigation and timeline', async () => {
