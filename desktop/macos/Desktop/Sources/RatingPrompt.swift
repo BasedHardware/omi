@@ -8,9 +8,15 @@ import SwiftUI
 /// asked their 3rd question, and never again after a submit or a dismiss.
 enum RatingPromptPolicy {
   static let questionThreshold = 3
+  /// Remote kill switch (PostHog feature flag, preloaded at analytics init).
+  /// Kill-switch polarity: enabling the flag DISABLES the prompt, so an unset
+  /// or unreachable flag (dev builds never initialize PostHog) changes nothing.
+  static let killSwitchFlag = "desktop-rating-prompt-disabled"
 
-  static func shouldShow(questionCount: Int, submittedRating: Int, dismissed: Bool) -> Bool {
-    questionCount >= questionThreshold && submittedRating == 0 && !dismissed
+  static func shouldShow(
+    questionCount: Int, submittedRating: Int, dismissed: Bool, remotelyDisabled: Bool = false
+  ) -> Bool {
+    !remotelyDisabled && questionCount >= questionThreshold && submittedRating == 0 && !dismissed
   }
 }
 
@@ -91,11 +97,16 @@ final class RatingPromptManager: ObservableObject {
     refresh()
   }
 
+  var isRemotelyDisabled: Bool {
+    PostHogManager.shared.isFeatureEnabled(RatingPromptPolicy.killSwitchFlag)
+  }
+
   private func refresh() {
     isVisible = RatingPromptPolicy.shouldShow(
       questionCount: questionCount,
       submittedRating: submittedRating,
-      dismissed: isDismissed)
+      dismissed: isDismissed,
+      remotelyDisabled: isRemotelyDisabled)
   }
 }
 
