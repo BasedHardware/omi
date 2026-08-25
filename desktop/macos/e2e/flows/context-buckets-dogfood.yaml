@@ -30,8 +30,11 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextFactWritePolicy.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/JITProactivityCoordinator.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/JITProactivityDelivery.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/JITProactivityReservationClient.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/JITProactivityRuntime.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/JITTriggerFeedbackClient.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/JITTriggerMirror.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/KnowledgeLedgerMirrorSnapshot.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextProactivityEngine.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/EnvironmentalSpeakerContext.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextSubjectBindingService.swift
