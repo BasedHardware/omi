@@ -54,7 +54,7 @@ final class ShellMouseInterceptionSync {
 
   init(window: NSWindow) {
     self.window = window
-    let scheduleReconciliation: @Sendable () -> Void = {
+    let scheduleReconciliation: @Sendable () -> Void = { [weak self] in
       DispatchQueue.main.async { [weak self] in self?.sync() }
     }
     if let global = NSEvent.addGlobalMonitorForEvents(
