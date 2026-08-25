@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from database import llm_oauth as llm_oauth_db
 from utils.byok import invalidate_byok_state_cache
-from utils.executors import critical_executor, db_executor, llm_executor, run_blocking
+from utils.executors import critical_executor, db_executor, oauth_executor, run_blocking
 from utils.other.endpoints import enforce_rate_limit
 from utils.subscription import clear_trial_paywall_cache
 from utils.llm.oauth import LLMOAuthError, exchange_authorization_code, oauth_configuration, supported_provider
@@ -64,7 +64,7 @@ async def complete(
     await run_blocking(critical_executor, enforce_rate_limit, uid, 'llm_oauth:exchange', fail_closed=True)
     try:
         credential = await run_blocking(
-            llm_executor,
+            oauth_executor,
             exchange_authorization_code,
             provider,
             data.code,
