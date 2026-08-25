@@ -12,6 +12,7 @@ typedef LocationPermissionRequester = Future<LocationPermission> Function();
 typedef CurrentPositionReader = Future<Position> Function();
 typedef LastPositionReader = Future<Position?> Function();
 typedef GeolocationUploader = Future<bool> Function(Geolocation geolocation);
+typedef LocationGrantHandler = Future<void> Function();
 
 /// Captures the location that belongs to a recording before the backend can
 /// finalize its conversation.
@@ -31,14 +32,17 @@ class ConversationLocationCapture {
     CurrentPositionReader? getCurrentPosition,
     LastPositionReader? getLastKnownPosition,
     GeolocationUploader? upload,
+    LocationGrantHandler? onNewlyGranted,
     this.currentPositionTimeout = const Duration(seconds: 2),
     this.totalTimeout = const Duration(seconds: 3),
+    this.lastKnownMaxAge = const Duration(minutes: 5),
   })  : _isLocationServiceEnabled = isLocationServiceEnabled ?? Geolocator.isLocationServiceEnabled,
         _checkPermission = checkPermission ?? Geolocator.checkPermission,
         _requestPermission = requestPermission ?? Geolocator.requestPermission,
         _getCurrentPosition = getCurrentPosition ?? _defaultCurrentPosition,
         _getLastKnownPosition = getLastKnownPosition ?? _defaultLastKnownPosition,
-        _upload = upload ?? ((geolocation) => updateUserGeolocation(geolocation: geolocation));
+        _upload = upload ?? ((geolocation) => updateUserGeolocation(geolocation: geolocation)),
+        _onNewlyGranted = onNewlyGranted;
 
   final LocationServiceEnabled _isLocationServiceEnabled;
   final LocationPermissionReader _checkPermission;
@@ -46,8 +50,10 @@ class ConversationLocationCapture {
   final CurrentPositionReader _getCurrentPosition;
   final LastPositionReader _getLastKnownPosition;
   final GeolocationUploader _upload;
+  final LocationGrantHandler? _onNewlyGranted;
   final Duration currentPositionTimeout;
   final Duration totalTimeout;
+  final Duration lastKnownMaxAge;
 
   /// Medium accuracy maps to Android PRIORITY_BALANCED_POWER_ACCURACY so a
   /// while-in-use / approximate grant can still return a fix. Default "best"
@@ -64,7 +70,13 @@ class ConversationLocationCapture {
         await Geolocator.getLastKnownPosition(forceAndroidLocationManager: true);
   }
 
+  bool _isFresh(Position position) {
+    final age = DateTime.now().toUtc().difference(position.timestamp.toUtc());
+    return !age.isNegative && age <= lastKnownMaxAge;
+  }
+
   Future<bool> captureAndUpload() async {
+    var timedOut = false;
     try {
       if (!await _isLocationServiceEnabled()) {
         Logger.log('Location service is not enabled, skipping conversation location');
@@ -72,18 +84,34 @@ class ConversationLocationCapture {
       }
 
       var permission = await _checkPermission();
+      var newlyGranted = false;
       if (permission == LocationPermission.denied) {
         // Prompt at record start so a skipped onboarding page still gets a fix
         // when the activity is visible. deniedForever is not re-prompted.
         permission = await _requestPermission();
+        newlyGranted = permission == LocationPermission.whileInUse || permission == LocationPermission.always;
       }
       if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
         Logger.log('Location permission not granted, skipping conversation location');
         return false;
       }
+      if (newlyGranted) {
+        try {
+          await _onNewlyGranted?.call();
+        } catch (e) {
+          Logger.log('Post-grant location hook failed: $e');
+        }
+      }
 
-      return await _captureAndUpload().timeout(totalTimeout);
+      return await _captureAndUpload(isCancelled: () => timedOut).timeout(
+        totalTimeout,
+        onTimeout: () {
+          timedOut = true;
+          throw TimeoutException('conversation location');
+        },
+      );
     } on TimeoutException {
+      timedOut = true;
       Logger.log('Conversation location capture timed out; recording will continue');
       return false;
     } catch (e) {
@@ -92,23 +120,28 @@ class ConversationLocationCapture {
     }
   }
 
-  Future<bool> _captureAndUpload() async {
-    Position? position;
+  Future<bool> _captureAndUpload({required bool Function() isCancelled}) async {
+    Position? lastKnown;
     try {
-      position = await _getLastKnownPosition();
+      lastKnown = await _getLastKnownPosition();
     } catch (e) {
       Logger.log('Last-known conversation location failed: $e');
     }
 
-    if (position == null) {
+    late final Position position;
+    if (lastKnown != null && _isFresh(lastKnown)) {
+      position = lastKnown;
+    } else {
       try {
         position = await _getCurrentPosition().timeout(currentPositionTimeout);
       } catch (e) {
         Logger.log('Fresh conversation location fix failed: $e');
-        return false;
+        if (lastKnown == null) return false;
+        position = lastKnown;
       }
     }
-    if (position == null) return false;
+
+    if (isCancelled()) return false;
 
     return _upload(
       Geolocation(

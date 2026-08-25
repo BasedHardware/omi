@@ -28,6 +28,7 @@ import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_metrics_tracker.dart';
 import 'package:omi/services/capture/conversation_source_for_device.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
+import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/services/capture/freemium_threshold_tracker.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/services.dart';
@@ -187,7 +188,8 @@ class CaptureController extends ChangeNotifier
     Future<void> Function()? inProgressConversationLoader,
     Future<BleAudioCodec> Function(String deviceId)? audioCodecLoader,
   })  : externalActions = externalActions ?? const NoopCaptureExternalActions(),
-        _conversationLocationCapture = conversationLocationCapture ?? ConversationLocationCapture(),
+        _conversationLocationCapture = conversationLocationCapture ??
+            ConversationLocationCapture(onNewlyGranted: _startAndroidLocationForegroundTask),
         _inProgressConversationLoader = inProgressConversationLoader,
         _audioCodecLoader = audioCodecLoader {
     // Restore a persisted device mute so it survives an app kill/restart. When
@@ -198,6 +200,12 @@ class CaptureController extends ChangeNotifier
       onConnectionStateChanged(isConnected);
     });
     BleBridge.instance.addBatchRecordingFinalizedListener(_onOfflineRecordingFinalized);
+  }
+
+  static Future<void> _startAndroidLocationForegroundTask() async {
+    if (!Platform.isAndroid) return;
+    await ForegroundUtil.initializeForegroundService();
+    await ForegroundUtil.startForegroundTask();
   }
 
   // True while the audio session is interrupted (phone call, Siri, alarm).

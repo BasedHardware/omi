@@ -14,6 +14,13 @@ void _startForegroundCallback() {
 class _ForegroundFirstTaskHandler extends TaskHandler {
   DateTime? _locationUpdatedAt;
 
+  static const Duration _lastKnownMaxAge = Duration(minutes: 5);
+
+  bool _isLastKnownFresh(Position position) {
+    final age = DateTime.now().toUtc().difference(position.timestamp.toUtc());
+    return !age.isNegative && age <= _lastKnownMaxAge;
+  }
+
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter taskStarter) async {
     Logger.debug("Starting foreground task");
@@ -27,24 +34,27 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
     if (await Geolocator.isLocationServiceEnabled()) {
       final permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
-        Position? locationData;
+        Position? lastKnown;
         try {
-          locationData = await Geolocator.getLastKnownPosition() ??
+          lastKnown = await Geolocator.getLastKnownPosition() ??
               await Geolocator.getLastKnownPosition(forceAndroidLocationManager: true);
         } catch (_) {}
-        try {
-          locationData ??= await Geolocator.getCurrentPosition(
-            locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium),
-          ).timeout(const Duration(seconds: 8));
-        } catch (e) {
-          Object loc = {'error': 'Location fix failed: $e'};
-          FlutterForegroundTask.sendDataToMain(loc);
-          return;
-        }
-        if (locationData == null) {
-          Object loc = {'error': 'Location fix unavailable'};
-          FlutterForegroundTask.sendDataToMain(loc);
-          return;
+        late final Position locationData;
+        if (lastKnown != null && _isLastKnownFresh(lastKnown)) {
+          locationData = lastKnown;
+        } else {
+          try {
+            locationData = await Geolocator.getCurrentPosition(
+              locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium),
+            ).timeout(const Duration(seconds: 8));
+          } catch (e) {
+            if (lastKnown == null) {
+              Object loc = {'error': 'Location fix failed: $e'};
+              FlutterForegroundTask.sendDataToMain(loc);
+              return;
+            }
+            locationData = lastKnown;
+          }
         }
         if (_locationUpdatedAt == null ||
             _locationUpdatedAt!.isBefore(DateTime.now().subtract(const Duration(minutes: 5)))) {

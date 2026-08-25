@@ -53,6 +53,7 @@ void main() {
   test('does not upload without location permission', () async {
     var uploads = 0;
     var requests = 0;
+    var grants = 0;
     final capture = ConversationLocationCapture(
       isLocationServiceEnabled: () async => true,
       checkPermission: () async => LocationPermission.deniedForever,
@@ -62,6 +63,9 @@ void main() {
       },
       getCurrentPosition: () async => _position(latitude: 1, longitude: 2),
       getLastKnownPosition: () async => null,
+      onNewlyGranted: () async {
+        grants++;
+      },
       upload: (_) async {
         uploads++;
         return true;
@@ -71,10 +75,12 @@ void main() {
     expect(await capture.captureAndUpload(), isFalse);
     expect(uploads, 0);
     expect(requests, 0);
+    expect(grants, 0);
   });
 
   test('requests while-in-use at record start when permission is denied', () async {
     var requests = 0;
+    var grants = 0;
     Geolocation? uploaded;
     final capture = ConversationLocationCapture(
       isLocationServiceEnabled: () async => true,
@@ -85,6 +91,9 @@ void main() {
       },
       getCurrentPosition: () async => _position(latitude: 37.7749, longitude: -122.4194),
       getLastKnownPosition: () async => null,
+      onNewlyGranted: () async {
+        grants++;
+      },
       upload: (geolocation) async {
         uploaded = geolocation;
         return true;
@@ -93,8 +102,27 @@ void main() {
 
     expect(await capture.captureAndUpload(), isTrue);
     expect(requests, 1);
+    expect(grants, 1);
     expect(uploaded?.latitude, 37.7749);
     expect(uploaded?.longitude, -122.4194);
+  });
+
+  test('does not start a post-grant hook when permission was already granted', () async {
+    var grants = 0;
+    final capture = ConversationLocationCapture(
+      isLocationServiceEnabled: () async => true,
+      checkPermission: () async => LocationPermission.whileInUse,
+      requestPermission: () async => LocationPermission.whileInUse,
+      getCurrentPosition: () async => _position(latitude: 1, longitude: 2),
+      getLastKnownPosition: () async => _position(latitude: 1, longitude: 2),
+      onNewlyGranted: () async {
+        grants++;
+      },
+      upload: (_) async => true,
+    );
+
+    expect(await capture.captureAndUpload(), isTrue);
+    expect(grants, 0);
   });
 
   test('does not time out while the user answers the location permission prompt', () async {
@@ -159,13 +187,68 @@ void main() {
     expect(await capture.captureAndUpload(), isFalse);
     expect(uploads, 0);
   });
+
+  test('refreshes a stale last-known position before upload', () async {
+    var currentCalls = 0;
+    Geolocation? uploaded;
+    final capture = ConversationLocationCapture(
+      isLocationServiceEnabled: () async => true,
+      checkPermission: () async => LocationPermission.whileInUse,
+      getCurrentPosition: () async {
+        currentCalls++;
+        return _position(latitude: 48.8566, longitude: 2.3522);
+      },
+      getLastKnownPosition: () async => _position(
+        latitude: 51.5072,
+        longitude: -0.1276,
+        timestamp: DateTime.now().toUtc().subtract(const Duration(minutes: 10)),
+      ),
+      upload: (geolocation) async {
+        uploaded = geolocation;
+        return true;
+      },
+      lastKnownMaxAge: const Duration(minutes: 5),
+    );
+
+    expect(await capture.captureAndUpload(), isTrue);
+    expect(currentCalls, 1);
+    expect(uploaded?.latitude, 48.8566);
+    expect(uploaded?.longitude, 2.3522);
+  });
+
+  test('uses a stale last-known when the current fix fails', () async {
+    Geolocation? uploaded;
+    final capture = ConversationLocationCapture(
+      isLocationServiceEnabled: () async => true,
+      checkPermission: () async => LocationPermission.whileInUse,
+      getCurrentPosition: () async => throw TimeoutException('gps'),
+      getLastKnownPosition: () async => _position(
+        latitude: 35.6762,
+        longitude: 139.6503,
+        timestamp: DateTime.now().toUtc().subtract(const Duration(hours: 2)),
+      ),
+      upload: (geolocation) async {
+        uploaded = geolocation;
+        return true;
+      },
+      lastKnownMaxAge: const Duration(minutes: 5),
+    );
+
+    expect(await capture.captureAndUpload(), isTrue);
+    expect(uploaded?.latitude, 35.6762);
+    expect(uploaded?.longitude, 139.6503);
+  });
 }
 
-Position _position({required double latitude, required double longitude}) {
+Position _position({
+  required double latitude,
+  required double longitude,
+  DateTime? timestamp,
+}) {
   return Position(
     latitude: latitude,
     longitude: longitude,
-    timestamp: DateTime.utc(2026, 7, 21),
+    timestamp: timestamp ?? DateTime.now().toUtc(),
     accuracy: 8,
     altitude: 220,
     altitudeAccuracy: 2,
