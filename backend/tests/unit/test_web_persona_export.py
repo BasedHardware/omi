@@ -197,3 +197,38 @@ def test_get_user_messages_propagates_worker_failures(tmp_path, monkeypatch):
         module.get_user_messages_with_bot_name()
 
     assert not (tmp_path / 'user_messages_with_bot_name.json').exists()
+
+
+
+def test_export_files_are_owner_only(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    module = _load_web_module(
+        messages_by_uid={'uid-1': [{'botName': 'Coach', 'text': 'first'}]},
+        plugin_documents=[{'id': 'plugin-coach', 'name': 'Coach', 'uid': 'owner-1'}],
+    )
+    module.get_users_uid = lambda: ['uid-1']
+
+    module.get_user_messages_with_bot_name()
+    module.map_plugin_data_by_persona_name()
+
+    for name in ('user_messages_with_bot_name.json', 'plugin_data_by_persona_name.json'):
+        mode = (tmp_path / name).stat().st_mode & 0o777
+        assert mode == 0o600, f'{name} mode {oct(mode)}'
+
+
+def test_get_user_messages_does_not_keep_a_shared_in_memory_map(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    module = _load_web_module(
+        messages_by_uid={
+            'uid-1': [{'botName': 'Coach', 'text': 'first'}],
+            'uid-2': [{'botName': 'Coach', 'text': 'second'}],
+        }
+    )
+    module.get_users_uid = lambda: ['uid-1', 'uid-2']
+
+    module.get_user_messages_with_bot_name()
+
+    assert json.loads((tmp_path / 'user_messages_with_bot_name.json').read_text(encoding='utf-8')) == {
+        'uid-1': [{'botName': 'Coach', 'text': 'first'}],
+        'uid-2': [{'botName': 'Coach', 'text': 'second'}],
+    }

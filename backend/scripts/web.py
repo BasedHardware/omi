@@ -1,13 +1,14 @@
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict, List, cast
+from typing import Any, Dict, List, Tuple, cast
 
 from database._client import get_firestore_client, get_users_uid, db
 from pathlib import Path
 
-
 import json
+import os
 
 USER_BATCH_SIZE = 20
+EXPORT_FILE_MODE = 0o600
 
 
 def clear_export_artifacts() -> None:
@@ -15,13 +16,23 @@ def clear_export_artifacts() -> None:
     Path("plugin_data_by_persona_name.json").unlink(missing_ok=True)
 
 
+def _owner_only_open(path: str):
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    fd = os.open(path, flags, EXPORT_FILE_MODE)
+    try:
+        os.fchmod(fd, EXPORT_FILE_MODE)
+        return os.fdopen(fd, "w")
+    except Exception:
+        os.close(fd)
+        raise
+
+
 def get_user_messages_with_bot_name() -> List[str]:
-    user_messages_with_bot_name: Dict[str, List[Dict[str, Any]]] = {}
     uids = get_users_uid()
     users_ref = db.collection("users")
     print(len(uids))
 
-    def process_user(uid: str) -> None:
+    def process_user(uid: str) -> Tuple[str, List[Dict[str, Any]]]:
         messages_ref = users_ref.document(uid).collection("messages")
         messages = messages_ref.stream()
         filtered_messages: List[Dict[str, Any]] = []
@@ -30,15 +41,32 @@ def get_user_messages_with_bot_name() -> List[str]:
             data: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
             if 'botName' in data:
                 filtered_messages.append(data)
-        if filtered_messages:
-            user_messages_with_bot_name[uid] = filtered_messages
+        return uid, filtered_messages
 
-    for start in range(0, len(uids), USER_BATCH_SIZE):
-        with ThreadPoolExecutor(max_workers=USER_BATCH_SIZE) as executor:
-            list(executor.map(process_user, uids[start : start + USER_BATCH_SIZE]))
-
-    with open("user_messages_with_bot_name.json", "w") as f:
-        json.dump(user_messages_with_bot_name, f, default=str)
+    tmp_path = "user_messages_with_bot_name.json.tmp"
+    try:
+        wrote_any = False
+        with _owner_only_open(tmp_path) as f:
+            f.write("{")
+            for start in range(0, len(uids), USER_BATCH_SIZE):
+                with ThreadPoolExecutor(max_workers=USER_BATCH_SIZE) as executor:
+                    results = list(executor.map(process_user, uids[start : start + USER_BATCH_SIZE]))
+                for uid, filtered_messages in results:
+                    if not filtered_messages:
+                        continue
+                    if wrote_any:
+                        f.write(",")
+                    f.write(json.dumps(uid))
+                    f.write(":")
+                    f.write(json.dumps(filtered_messages, default=str))
+                    wrote_any = True
+                f.flush()
+            f.write("}")
+        os.replace(tmp_path, "user_messages_with_bot_name.json")
+        os.chmod("user_messages_with_bot_name.json", EXPORT_FILE_MODE)
+    except Exception:
+        Path(tmp_path).unlink(missing_ok=True)
+        raise
 
     return uids
 
@@ -91,7 +119,7 @@ def map_plugin_data_by_persona_name(*, firestore_client: Any = None) -> None:
             for message in messages
         ]
 
-    with open("plugin_data_by_persona_name.json", "w") as f:
+    with _owner_only_open("plugin_data_by_persona_name.json") as f:
         json.dump(plugin_data_by_persona, f, indent=2, default=str)
 
     print(f"Mapped {len(plugin_data_by_persona)} personas to plugin_data_by_persona_name.json")
