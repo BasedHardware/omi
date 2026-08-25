@@ -26,12 +26,16 @@ void main() {
     expect(uploaded?.longitude, 77.2090);
   });
 
-  test('uses the last known position when a fresh fix is slow', () async {
+  test('uploads last-known immediately when a fresh fix would be slow', () async {
+    var currentCalls = 0;
     Geolocation? uploaded;
     final capture = ConversationLocationCapture(
       isLocationServiceEnabled: () async => true,
       checkPermission: () async => LocationPermission.whileInUse,
-      getCurrentPosition: () => Completer<Position>().future,
+      getCurrentPosition: () {
+        currentCalls++;
+        return Completer<Position>().future;
+      },
       getLastKnownPosition: () async => _position(latitude: 51.5072, longitude: -0.1276),
       upload: (geolocation) async {
         uploaded = geolocation;
@@ -43,14 +47,82 @@ void main() {
     expect(await capture.captureAndUpload(), isTrue);
     expect(uploaded?.latitude, 51.5072);
     expect(uploaded?.longitude, -0.1276);
+    expect(currentCalls, 0);
   });
 
   test('does not upload without location permission', () async {
     var uploads = 0;
+    var requests = 0;
+    final capture = ConversationLocationCapture(
+      isLocationServiceEnabled: () async => true,
+      checkPermission: () async => LocationPermission.deniedForever,
+      requestPermission: () async {
+        requests++;
+        return LocationPermission.deniedForever;
+      },
+      getCurrentPosition: () async => _position(latitude: 1, longitude: 2),
+      getLastKnownPosition: () async => null,
+      upload: (_) async {
+        uploads++;
+        return true;
+      },
+    );
+
+    expect(await capture.captureAndUpload(), isFalse);
+    expect(uploads, 0);
+    expect(requests, 0);
+  });
+
+  test('requests while-in-use at record start when permission is denied', () async {
+    var requests = 0;
+    Geolocation? uploaded;
     final capture = ConversationLocationCapture(
       isLocationServiceEnabled: () async => true,
       checkPermission: () async => LocationPermission.denied,
-      getCurrentPosition: () async => _position(latitude: 1, longitude: 2),
+      requestPermission: () async {
+        requests++;
+        return LocationPermission.whileInUse;
+      },
+      getCurrentPosition: () async => _position(latitude: 37.7749, longitude: -122.4194),
+      getLastKnownPosition: () async => null,
+      upload: (geolocation) async {
+        uploaded = geolocation;
+        return true;
+      },
+    );
+
+    expect(await capture.captureAndUpload(), isTrue);
+    expect(requests, 1);
+    expect(uploaded?.latitude, 37.7749);
+    expect(uploaded?.longitude, -122.4194);
+  });
+
+  test('uses last-known when a fresh fix throws', () async {
+    Geolocation? uploaded;
+    final capture = ConversationLocationCapture(
+      isLocationServiceEnabled: () async => true,
+      checkPermission: () async => LocationPermission.whileInUse,
+      getCurrentPosition: () async => throw TimeoutException('gps'),
+      getLastKnownPosition: () async => _position(latitude: 1.3521, longitude: 103.8198),
+      upload: (geolocation) async {
+        uploaded = geolocation;
+        return true;
+      },
+    );
+
+    expect(await capture.captureAndUpload(), isTrue);
+    expect(uploaded?.latitude, 1.3521);
+    expect(uploaded?.longitude, 103.8198);
+  });
+
+  test('falls back to last-known after a fresh-fix error when last-known is the only fix', () async {
+    // last-known is tried first; if it is null, a failed current fix must not
+    // upload. This guards the Android cold-start case.
+    var uploads = 0;
+    final capture = ConversationLocationCapture(
+      isLocationServiceEnabled: () async => true,
+      checkPermission: () async => LocationPermission.whileInUse,
+      getCurrentPosition: () async => throw TimeoutException('gps'),
       getLastKnownPosition: () async => null,
       upload: (_) async {
         uploads++;
