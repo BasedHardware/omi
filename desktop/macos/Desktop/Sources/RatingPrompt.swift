@@ -134,7 +134,9 @@ struct RatingPromptBar: View {
               .stroke(Color.primary.opacity(0.08), lineWidth: 1)
           )
       )
-      .padding(.bottom, OmiSpacing.lg)
+      // Clears the chat composer row pinned to the window's bottom edge —
+      // the prompt must never sit on top of the field the user types in.
+      .padding(.bottom, 76)
       .transition(.move(edge: .bottom).combined(with: .opacity))
     }
   }

@@ -39,6 +39,21 @@ extension DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "rating_prompt_record_question",
+      summary:
+        "Count one asked question through RatingPromptManager.recordQuestionAsked — the exact call the chatMessageSent analytics funnel makes"
+    ) { _ in
+      await MainActor.run {
+        RatingPromptManager.shared.recordQuestionAsked()
+        let manager = RatingPromptManager.shared
+        return [
+          "question_count": "\(manager.questionCount)",
+          "visible": manager.isVisible ? "true" : "false",
+        ]
+      }
+    }
+
+    register(
       name: "rating_prompt_reset",
       summary: "Reset persisted rating-prompt state so the trigger can be exercised again"
     ) { _ in
