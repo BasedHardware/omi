@@ -565,14 +565,18 @@ class TestChatToolCircuitBreaker:
 
         mock_cb = MagicMock()
         mock_cb.allow_request.return_value = False
+        mock_resolve = MagicMock(side_effect=_passthrough_safe_target)
 
         with (
             patch.object(mod, "is_app_webhook_disabled", return_value=False),
-            patch.object(mod, "safe_request_target", side_effect=_passthrough_safe_target),
+            patch.object(mod, "safe_request_target", mock_resolve),
             patch.object(mod, "get_webhook_circuit_breaker", return_value=mock_cb),
         ):
             result = await mod._call_tool_endpoint({}, config, tool, "app-1")
         assert "temporarily unavailable" in result
+        # An open breaker must short-circuit BEFORE the developer-controlled DNS lookup,
+        # so a resolver outage on that host cannot occupy the shared resolver bulkhead.
+        mock_resolve.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_success_records_health(self):
@@ -689,6 +693,48 @@ class TestChatToolCircuitBreaker:
         assert "Timeout" in result
         mock_cb.record_failure.assert_called_once()
         mock_fail.assert_called_once_with("app-1", 0, "TimeoutException", "chat_tool")
+
+    @pytest.mark.asyncio
+    async def test_dns_resolution_failure_records_health_and_releases_probe(self):
+        """A resolution failure must feed the same breaker + health-accounting path as
+        connect/timeout errors — repeated DNS failures otherwise never open the circuit
+        or auto-disable the endpoint — and release any consumed HALF_OPEN probe."""
+        from models.app import ChatTool
+        from utils.http_client import UnsafeWebhookURLError
+
+        tool = ChatTool(
+            name="test_tool",
+            description="test",
+            endpoint="https://example.com/tool",
+            method="POST",
+        )
+        config = {'configurable': {'user_id': 'uid-1'}}
+        mod = self._app_tools
+
+        mock_cb = MagicMock()
+        mock_cb.allow_request.return_value = True
+
+        with (
+            patch.object(mod, "is_app_webhook_disabled", return_value=False),
+            patch.object(
+                mod,
+                "safe_request_target",
+                side_effect=UnsafeWebhookURLError("Could not resolve host example.com"),
+            ),
+            patch.object(mod, "get_webhook_circuit_breaker", return_value=mock_cb),
+            patch.object(mod, "record_app_webhook_failure", return_value=0) as mock_fail,
+            patch.object(mod, "_handle_app_webhook_disable") as mock_disable,
+        ):
+            result = await mod._call_tool_endpoint({}, config, tool, "app-1")
+
+        assert "invalid or unavailable" in result
+        mock_cb.release_probe.assert_called_once()
+        mock_cb.record_failure.assert_called_once()
+        mock_fail.assert_called_once()
+        assert mock_fail.call_args.args[0] == "app-1"
+        assert mock_fail.call_args.args[1] == 0
+        assert "DNS resolution failed" in mock_fail.call_args.args[2]
+        mock_disable.assert_called_once_with("app-1", 0, mock_fail.call_args.args[2])
 
 
 def _patch_sync_httpx_client(response=None, side_effect=None):

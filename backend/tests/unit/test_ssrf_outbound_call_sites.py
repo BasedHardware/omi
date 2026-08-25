@@ -435,12 +435,19 @@ async def test_call_tool_endpoint_rejects_non_public():
         patch.object(app_tools, 'is_app_webhook_disabled', return_value=False),
         patch.object(app_tools, 'safe_request_target', side_effect=UnsafeWebhookURLError('private')),
         patch.object(app_tools, 'get_webhook_circuit_breaker') as mock_cb_factory,
+        patch.object(app_tools, 'record_app_webhook_failure', return_value=0) as mock_fail,
+        patch.object(app_tools, '_handle_app_webhook_disable'),
         patch('httpx.AsyncClient') as mock_client_cls,
     ):
         mock_cb_factory.return_value.allow_request.return_value = True
         result = await app_tools._call_tool_endpoint({}, config, tool, 'app-1')
 
     assert 'invalid or unavailable' in result
+    # Resolution failure must count on the same failure path (breaker + health accounting).
+    mock_cb_factory.return_value.record_failure.assert_called_once()
+    mock_fail.assert_called_once()
+    assert mock_fail.call_args.args[0] == 'app-1'
+    assert mock_fail.call_args.args[1] == 0
     assert '127.0.0.1' not in result
     mock_cb_factory.assert_called_once_with(tool.endpoint)
     mock_cb_factory.return_value.release_probe.assert_called_once()

@@ -321,8 +321,15 @@ async def _call_tool_endpoint(
 
     try:
         pinned_url, pin_kwargs = await run_blocking(resolver_executor, safe_request_target, app_tool.endpoint)
-    except (UnsafeWebhookURLError, ValueError):
+    except (UnsafeWebhookURLError, ValueError) as e:
+        # No request can be attempted: release a consumed HALF_OPEN probe, then count the
+        # failure on the same path as connect/timeout errors so repeated DNS failures open
+        # the circuit breaker and feed app-webhook health accounting / auto-disable.
         cb.release_probe()
+        cb.record_failure()
+        detail = f'DNS resolution failed: {e}'[:200]
+        action = await run_blocking(db_executor, record_app_webhook_failure, app_id, 0, detail, ENDPOINT_CHAT_TOOL)
+        await run_blocking(db_executor, _handle_app_webhook_disable, app_id, action, detail)
         return f"Error: The {app_tool.name} tool endpoint is invalid or unavailable."
 
     try:
