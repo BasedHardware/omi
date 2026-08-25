@@ -3491,6 +3491,20 @@ class ChatProvider: ObservableObject {
   /// carry (non-nil) wins, so this stays correct if the journal schema later
   /// starts persisting one of them.
   static func carryingLocalOnlyFields(_ projected: ChatMessage, from existing: ChatMessage) -> ChatMessage {
+    // A streaming journal snapshot scheduled before the latest reveal tick lags
+    // the visible row: its text is a prefix of what the user already sees, and
+    // replaying it would truncate characters already consumed from the stream.
+    // Keep the newer local content until a terminal row settles the turn.
+    if projected.journalStatus == .streaming,
+      projected.isStreaming,
+      projected.text.isEmpty || existing.text.hasPrefix(projected.text)
+    {
+      var kept = existing
+      kept.journalStatus = projected.journalStatus
+      if kept.rating == nil { kept.rating = projected.rating }
+      if kept.resources.isEmpty { kept.resources = projected.resources }
+      return kept
+    }
     var merged = projected
     if merged.rating == nil { merged.rating = existing.rating }
     if merged.metadata == nil { merged.metadata = existing.metadata }
@@ -5085,7 +5099,7 @@ class ChatProvider: ObservableObject {
         else {
           throw BridgeError.stopped
         }
-        flushStreamingBuffer(revealAll: false)
+        flushStreamingBuffer(revealAll: false, callerOwnsRevealClock: true)
         if streamingBuffer.hasPendingSegments {
           try? await Task.sleep(nanoseconds: 35_000_000)
           guard
@@ -5967,16 +5981,21 @@ class ChatProvider: ObservableObject {
   }
 
   /// Flush accumulated text and thinking deltas to the published messages array.
-  private func flushStreamingBuffer(revealAll: Bool = true) {
+  /// `callerOwnsRevealClock` lets a settle loop that already sleeps between
+  /// slices drive pacing itself, so the buffer does not schedule a competing
+  /// timer that halves the intended reveal interval.
+  private func flushStreamingBuffer(revealAll: Bool = true, callerOwnsRevealClock: Bool = false) {
     if revealAll {
       streamingBuffer.flush(messages: &messages, normalizeText: Self.normalizeStreaming)
     } else {
       streamingBuffer.flushMetered(
         messages: &messages,
         normalizeText: Self.normalizeStreaming,
-        scheduleFlush: { [weak self] in
-          self?.flushStreamingBuffer(revealAll: false)
-        }
+        scheduleFlush: callerOwnsRevealClock
+          ? {}
+          : { [weak self] in
+            self?.flushStreamingBuffer(revealAll: false)
+          }
       )
     }
     materializePendingSpawnProjections()

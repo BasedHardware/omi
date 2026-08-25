@@ -328,6 +328,36 @@ final class ChatJournalWritePathTests: XCTestCase {
     XCTAssertEqual(carried.rating, -1, "A nil projected rating falls back to the local value")
   }
 
+  /// A coalesced `.streaming` write that refreshes back into the transcript
+  /// must not replace the visible row with an older prefix: those characters
+  /// were already consumed from `ChatStreamingBuffer` and cannot be replayed,
+  /// so settlement would otherwise persist a truncated answer.
+  func testStreamingReplayDoesNotTruncateTheNewerLocalPrefix() throws {
+    let provider = ChatProvider()
+    let surface = provider.mainChatSurfaceReference()
+
+    provider.projectJournalTurn(
+      try makeTurn(surface: surface, turnId: "assistant-stream", turnSeq: 1, content: "", status: .streaming))
+    let index = try XCTUnwrap(provider.messages.firstIndex { $0.id == "assistant-stream" })
+    // Reveal ticks advance the visible text beyond the last journaled snapshot.
+    provider.messages[index].text = "Paced streaming reveals"
+
+    provider.projectJournalTurn(
+      try makeTurn(surface: surface, turnId: "assistant-stream", turnSeq: 1, content: "Paced", status: .streaming))
+    XCTAssertEqual(
+      provider.messages[index].text, "Paced streaming reveals",
+      "A stale streaming snapshot must not truncate the newer local prefix")
+
+    // Terminal authority still settles the row with kernel content.
+    provider.projectJournalTurn(
+      try makeTurn(
+        surface: surface, turnId: "assistant-stream", turnSeq: 1,
+        content: "Paced streaming reveals this response.", status: .completed))
+    let settled = try XCTUnwrap(provider.messages.first { $0.id == "assistant-stream" })
+    XCTAssertEqual(settled.text, "Paced streaming reveals this response.")
+    XCTAssertEqual(settled.isStreaming, false)
+  }
+
   // MARK: - Helpers
 
   private func makeTurn(
