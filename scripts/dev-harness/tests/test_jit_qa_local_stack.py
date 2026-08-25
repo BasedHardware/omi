@@ -191,6 +191,9 @@ def test_start_service_rejects_malformed_record_before_spawning(
 def test_start_service_terminates_exact_process_when_metadata_save_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # GitHub runners export a narrow terminal width.  The ownership marker is
+    # late in the supervisor argv and must remain visible to the ps probe.
+    monkeypatch.setenv("COLUMNS", "40")
     state = tmp_path / "jit-qa-local-dev-gcp"
     (state / "logs").mkdir(parents=True)
     spawned: list[subprocess.Popen[bytes]] = []
@@ -234,7 +237,9 @@ def test_start_service_terminates_exact_process_when_metadata_save_fails(
 
 def test_stop_terminates_owned_group_after_supervisor_leader_crash(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("COLUMNS", "40")
     state = tmp_path / "jit-qa-local-dev-gcp"
     state.mkdir()
     marker = f"{jit_stack.OWNERSHIP_PREFIX}:main:{'0' * 32}"

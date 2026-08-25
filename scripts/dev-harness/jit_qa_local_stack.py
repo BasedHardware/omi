@@ -561,7 +561,7 @@ def _owned_marker_process_count(process_group: int, marker: str) -> int:
         return 0
     try:
         output = subprocess.check_output(
-            ["ps", "-g", str(process_group), "-o", "command="],
+            ["ps", "-ww", "-g", str(process_group), "-o", "command="],
             text=True,
             stderr=subprocess.DEVNULL,
         )
