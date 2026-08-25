@@ -255,12 +255,26 @@ interface ActivationStats {
   freshAt?: number;
 }
 
+interface KFactorSignalTotals {
+  friends: number;
+  referrals: number;
+  shares: number;
+  total: number;
+}
 interface KFactorData {
   days: number;
   available: boolean;
   kFactor: number | null;
   reason: string;
-  funnel?: { issued: number; captured: number; granted: number };
+  daily?: {
+    date: string;
+    friends: number;
+    referrals: number;
+    shares: number;
+    total: number;
+  }[];
+  totals?: KFactorSignalTotals;
+  weekly?: KFactorSignalTotals;
 }
 
 interface MacosVersionBreakdown {
@@ -1814,13 +1828,15 @@ export default function AnalyticsPage() {
   const netWauChange = calculatePeriodChange(netWauNow, netWauPrev, "vs previous complete week");
 
   const growthGoalItems = useMemo<ChartItem[]>(() => {
-    const referralGrants = kFactorData?.funnel?.granted;
-    const kFactorValue = kFactorData?.available && referralGrants != null
-      ? referralGrants.toLocaleString()
+    const kTotals = kFactorData?.totals;
+    const kWeekly = kFactorData?.weekly;
+    const kFactorValue = kFactorData?.available && kTotals != null
+      ? kTotals.total.toLocaleString()
       : "Not tracked";
-    const kFactorSubtitle = kFactorData?.funnel
-      ? `${kFactorData.funnel.issued} issued / ${kFactorData.funnel.captured} captured / ${kFactorData.funnel.granted} granted`
-      : kFactorData?.reason ?? "Referral funnel is unavailable";
+    const kFactorSubtitle = kTotals
+      ? `${kTotals.friends} friend · ${kTotals.referrals} referral · ${kTotals.shares} share (30d) · ${(kWeekly?.total ?? 0).toLocaleString()}/wk`
+      : kFactorData?.reason ?? "K-factor signals unavailable";
+    const kFactorDaily = kFactorData?.daily ?? [];
 
     return [
       {
@@ -1949,7 +1965,7 @@ export default function AnalyticsPage() {
       },
       {
         id: "kpi-k-factor",
-        title: "Referral grants",
+        title: "K-Factor (30d)",
         variant: "kpi",
         icon: <Share2 className="h-3.5 w-3.5" />,
         initialLayout: { cols: 3, rows: 1 },
@@ -1958,6 +1974,47 @@ export default function AnalyticsPage() {
           <div>
             <div className="text-2xl font-bold">{kFactorLoading ? "..." : kFactorValue}</div>
             <p className="truncate text-xs text-muted-foreground">{kFactorSubtitle}</p>
+          </div>
+        ),
+      },
+      {
+        id: "kfactor-daily",
+        title: "K-Factor · Daily Viral Signals",
+        subtitle: "friend sign-ups + referral opens + conversation shares",
+        icon: <Share2 className="h-4 w-4" />,
+        periodChange: latestPeriodChange(kFactorDaily, (point) => point.total, "vs previous day"),
+        initialLayout: { cols: 12, rows: 4 },
+        removable: false,
+        render: () => (
+          <div className="flex h-full flex-col">
+            {kFactorDaily.length > 0 && (
+              <div className="mb-2 text-right text-sm text-muted-foreground">
+                {kFactorDaily.reduce((s, p) => s + p.total, 0).toLocaleString()} signals · last {kFactorDaily.length}d
+              </div>
+            )}
+            <div className="min-h-0 flex-1">
+              {kFactorLoading ? (
+                <div className="flex items-center justify-center h-full">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : kFactorDaily.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={kFactorDaily}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis dataKey="date" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} />
+                    <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                    <Tooltip labelFormatter={fullDate} contentStyle={tooltipStyle} />
+                    <Legend />
+                    <Bar dataKey="friends" name="Friend sign-ups" stackId="k" fill="#6366f1" />
+                    <Bar dataKey="referrals" name="Referral opens" stackId="k" fill="#22c55e" />
+                    <Bar dataKey="shares" name="Conversation shares" stackId="k" fill="#f97316" radius={[2, 2, 0, 0]} />
+                    <Line type="monotone" dataKey="total" name="K-Factor (total)" stroke="#e11d48" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex items-center justify-center h-full text-muted-foreground">No data available</div>
+              )}
+            </div>
           </div>
         ),
       },
