@@ -1,9 +1,9 @@
 from datetime import datetime
-from typing import List, Dict, Any, Optional, Union, cast
+from typing import Any, List, Dict, Optional, Union, cast
 
 from google.cloud import firestore
 
-from ._client import db
+from ._client import db, get_firestore_client
 import logging
 
 logger = logging.getLogger(__name__)
@@ -15,12 +15,32 @@ USERS_COLLECTION = 'users'
 DateInput = Union[datetime, str]
 
 
-def get_screen_activity_ids(uid: str) -> List[str]:
+def get_screen_activity_ids(uid: str, firestore_client: Any = None) -> List[str]:
     """Return all screen activity document IDs for a user (IDs-only projection).
 
     Used for bulk operations like account deletion (e.g. to purge derived Pinecone vectors)."""
-    coll = db.collection(USERS_COLLECTION).document(uid).collection(SCREEN_ACTIVITY_COLLECTION)
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    coll = client.collection(USERS_COLLECTION).document(uid).collection(SCREEN_ACTIVITY_COLLECTION)
     return [str(doc.id) for doc in coll.select([]).stream()]
+
+
+def delete_screen_activity(uid: str, ids: List[str], firestore_client: Any = None) -> int:
+    """Batch-delete screen activity rows from Firestore users/{uid}/screen_activity/{id}."""
+    if not ids:
+        return 0
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    collection_ref = client.collection(USERS_COLLECTION).document(uid).collection(SCREEN_ACTIVITY_COLLECTION)
+
+    deleted = 0
+    # Firestore batch limit is 500
+    for i in range(0, len(ids), 500):
+        chunk = ids[i : i + 500]
+        batch = client.batch()
+        for doc_id in chunk:
+            batch.delete(collection_ref.document(str(doc_id)))
+        batch.commit()
+        deleted += len(chunk)
+    return deleted
 
 
 def upsert_screen_activity(uid: str, rows: List[Dict[str, Any]]) -> int:
