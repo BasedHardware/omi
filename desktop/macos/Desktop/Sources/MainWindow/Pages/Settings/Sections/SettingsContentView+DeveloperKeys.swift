@@ -278,12 +278,12 @@ extension SettingsContentView {
           APIKeyService.persistEnrolledFingerprints(fingerprints)
           await FloatingBarUsageLimiter.shared.fetchPlan()
           await MainActor.run {
-          // Clear any sticky paywall flag from a prior `freemium_threshold_reached`
-          // event — once the selected LLM BYOK key validates, the user is on the
-          // free BYOK plan and shouldn't be locked out of capture/transcription.
-          AppState.current?.isPaywalled = false
-          byokKeyStatuses = results
-          byokActivationError = nil
+            // Clear any sticky paywall flag from a prior `freemium_threshold_reached`
+            // event — once the selected LLM BYOK key validates, the user is on the
+            // free BYOK plan and shouldn't be locked out of capture/transcription.
+            AppState.current?.isPaywalled = false
+            byokKeyStatuses = results
+            byokActivationError = nil
           }
         } catch {
           await MainActor.run {

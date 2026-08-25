@@ -803,7 +803,7 @@ class TestBYOKSubscriptionEntitlements:
         monkeypatch.setattr(
             users,
             'get_chat_quota_snapshot',
-            lambda _uid, platform=None: {
+            lambda _uid, platform=None, **_kwargs: {
                 'plan': PlanType.basic,
                 'used': 4,
                 'unit': 'questions',
