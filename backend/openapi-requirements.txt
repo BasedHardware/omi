@@ -119,5 +119,5 @@ typing-inspect==0.9.0
 uritemplate==4.1.1
 urllib3==2.7.0
 uuid-utils==0.16.2
-websockets==15.0
+websockets==12.0
 xxhash==3.7.0
