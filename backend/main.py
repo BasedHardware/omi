@@ -105,6 +105,7 @@ from utils.executors import (
 )
 from utils.executors import start_background_task
 from utils.cloud_tasks import validate_account_deletion_dispatch_configuration
+from services.conversation_finalization import reconcile_abandoned_byok_finalization_jobs
 from services.conversation_finalization import reconcile_listen_finalization_jobs
 from services.conversation_finalization import reconcile_meeting_receipts
 from services.conversation_finalization import reconcile_stale_processing_conversations
@@ -289,6 +290,10 @@ async def startup_event():
         name='startup_stale_processing_reconcile',
     )
     start_background_task(
+        run_blocking(db_executor, _drain_abandoned_byok_finalization_jobs),
+        name='startup_byok_abandonment_reconcile',
+    )
+    start_background_task(
         run_blocking(db_executor, _drain_meeting_receipts),
         name='startup_meeting_receipt_reconcile',
     )
@@ -345,6 +350,16 @@ def _drain_stale_processing_conversations():
         logger.error(f"Startup stale-processing reconciliation failed: {e}")
 
 
+def _drain_abandoned_byok_finalization_jobs():
+    """Best-effort disposition of BYOK finalization jobs no live session can claim."""
+    try:
+        result = reconcile_abandoned_byok_finalization_jobs()
+        if result.get('abandoned'):
+            logger.info(f"Startup byok-abandonment reconciliation: {result}")
+    except Exception as e:
+        logger.error(f"Startup byok-abandonment reconciliation failed: {e}")
+
+
 def _drain_meeting_receipts():
     """Best-effort repair of missing meeting receipt intents and historical receipts."""
     try:
@@ -382,6 +397,12 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int | None =
                 logger.info(f"Periodic stale-processing reconciliation: {stale_result}")
         except Exception as e:
             logger.error(f"Periodic stale-processing reconciliation failed: {e}")
+        try:
+            byok_result = await run_blocking(db_executor, reconcile_abandoned_byok_finalization_jobs)
+            if byok_result.get('abandoned'):
+                logger.info(f"Periodic byok-abandonment reconciliation: {byok_result}")
+        except Exception as e:
+            logger.error(f"Periodic byok-abandonment reconciliation failed: {e}")
         try:
             receipt_result = await run_blocking(db_executor, reconcile_meeting_receipts)
             if receipt_result.get('repaired') or receipt_result.get('backfilled'):
