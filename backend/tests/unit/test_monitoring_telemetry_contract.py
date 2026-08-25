@@ -23,6 +23,7 @@ PROD_VALUES = MONITORING / 'kube-prometheus-stack' / 'prod_omi_monitoring_values
 ALERT_RULES = MONITORING / 'alert-rules.json'
 PARAKEET_SERVICEMONITOR = REPO / 'backend/charts/parakeet' / 'templates' / 'servicemonitor.yaml'
 STACKDRIVER_EXPORTER = MONITORING / 'prometheus-stackdriver-exporter' / 'prod_omi_stackdriver_exporter.yaml'
+STACKDRIVER_EXPORTER_DEV = MONITORING / 'prometheus-stackdriver-exporter' / 'dev_omi_stackdriver_exporter.yaml'
 CLOUD_RUN_EXPORTER = MONITORING / 'prometheus-stackdriver-exporter' / 'prod_omi_cloud_run_metrics_exporter.yaml'
 CLOUD_RUN_EXPORTER_DEV = MONITORING / 'prometheus-stackdriver-exporter' / 'dev_omi_cloud_run_metrics_exporter.yaml'
 
@@ -125,6 +126,31 @@ def test_stackdriver_exporter_values_present():
     assert STACKDRIVER_EXPORTER.is_file()
     inventory = _load_inventory()
     assert any(job['name'] == 'prometheus-stackdriver-metrics' for job in inventory['scrape_jobs'])
+
+
+@pytest.mark.parametrize(
+    'path',
+    (STACKDRIVER_EXPORTER, STACKDRIVER_EXPORTER_DEV),
+    ids=('prod', 'dev'),
+)
+def test_stackdriver_exporter_ingests_firestore_read_count(path):
+    """A Firestore cost runaway is invisible unless this prefix is scraped.
+
+    document/read_count was absent from every Prometheus metric name during the
+    2026-08-23 cost incident, so nothing could alert on it. Both environments
+    are asserted: the dev values file is what the automatic post-merge rollout
+    installs, so leaving it unpinned lets dev drift away from the contract prod
+    is held to (same rationale as the Cloud Run exporter parametrization above).
+    """
+    values = yaml.safe_load(path.read_text(encoding='utf-8'))
+    prefixes = values['stackdriver']['metrics']['prefixes']
+
+    assert (
+        'firestore.googleapis.com/document/read_count' in prefixes
+    ), f'{path.name}: missing the firestore.googleapis.com/document/read_count prefix'
+    # The existing loadbalancing prefixes must survive the edit untouched.
+    assert 'loadbalancing.googleapis.com/https/backend_request_count' in prefixes
+    assert 'loadbalancing.googleapis.com/https/internal/backend_latencies' in prefixes
 
 
 # Cloud Monitoring rejects a filter that mixes AND with OR across resource.labels
