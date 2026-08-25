@@ -253,7 +253,7 @@ Never block the event loop — it freezes health checks, HPA scaling, and all co
   - Semaphores: always wrap calls — `async with get_webhook_semaphore(): await client.post(...)`
   - Circuit breakers: `get_webhook_circuit_breaker(url)` for external targets — call `cb.record_success()`/`cb.record_failure()`
   - Lifecycle: lazy singletons, closed at shutdown via `close_all_clients()`
-- **Lane 2 — Executors** (`utils/executors.py`): 8 purpose-specific thread pools. Never ad-hoc `Thread`/`ThreadPoolExecutor`.
+- **Lane 2 — Executors** (`utils/executors.py`): 9 purpose-specific thread pools. Never ad-hoc `Thread`/`ThreadPoolExecutor`.
   - **Async dispatch rules** (choose the right primitive):
     - `await run_blocking(executor, fn)` — sync/CPU-bound work where the caller needs the result before continuing.
     - `start_background_task(coro, name=...)` — async fire-and-forget work (pipelines, post-processing). Tracks the task, logs exceptions, cleans up references. Never use bare `asyncio.create_task()` for production background work.
@@ -267,6 +267,7 @@ Never block the event loop — it freezes health checks, HPA scaling, and all co
     - `stripe_executor` (4w) — Stripe API calls
     - `sync_executor` (16w) — sync endpoint pipeline work, parent calls that fan out to storage_executor
     - `postprocess_executor` (24w) — post-conversation processing, coordinator functions
+    - `cleanup_executor` (4w) — account-deletion wipes (vectors, recordings, Firestore subcollections)
     - `storage_executor` (128w) — GCS uploads/downloads, audio chunk I/O (fan-out gated by semaphores: 32 global chunks, 8 per-call window, 4 concurrent precache files)
   - **Deadlock prevention — 4 rules:**
     1. **Worker threads are leaf operations only.** Never `.result()` on another pool from inside a worker thread. If pool A thread submits to pool B and calls `.result()`, and vice versa, both pools deadlock.
