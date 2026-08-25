@@ -999,7 +999,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                 if (provider.isConnected) ...[
                   const SizedBox(height: 16),
                   _buildSectionHeader(context.l10n.customizationSection),
-                  _buildCustomizationSection(provider.connectedDevice ?? provider.pairedDevice, provider),
+                  _buildCustomizationSection(provider.pairedDevice ?? provider.connectedDevice, provider),
                   const SizedBox(height: 32),
                   _buildSectionHeader(context.l10n.deviceInfoSection),
                   _buildDeviceInfoSection(provider.pairedDevice, provider),
