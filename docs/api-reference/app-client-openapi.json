@@ -14484,19 +14484,13 @@
             "type": "array"
           },
           "oauth2": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/McpSseAuthMethodResponse"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/McpSseAuthMethodResponse"
           }
         },
         "required": [
           "methods",
-          "api_key"
+          "api_key",
+          "oauth2"
         ],
         "title": "McpSseAuthenticationResponse",
         "type": "object"

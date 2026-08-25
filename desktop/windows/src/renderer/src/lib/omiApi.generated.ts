@@ -2357,7 +2357,7 @@ export interface McpSseAuthMethodResponse {
 export interface McpSseAuthenticationResponse {
   api_key: McpSseAuthMethodResponse;
   methods: Array<string>;
-  oauth2?: McpSseAuthMethodResponse | null;
+  oauth2: McpSseAuthMethodResponse;
 }
 
 export interface McpSseInfoResponse {

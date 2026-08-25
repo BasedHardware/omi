@@ -110,18 +110,53 @@ def test_protected_resource_head_matches_get_availability_under_misconfig(monkey
     assert oauth_protected_resource_metadata_head().status_code == 200
 
 
-def test_mcp_sse_info_omits_builtin_oauth_under_oidc(monkeypatch):
-    # /v1/mcp/sse/info must not advertise the built-in oauth2 (authorize/token 501 under OIDC); only api_key
-    # (cubic PR 10887 mcp_sse.py:1889).
+def test_mcp_sse_info_advertises_no_builtin_oauth_endpoints_under_oidc(monkeypatch):
+    """/v1/mcp/sse/info must not advertise the built-in oauth2 endpoints (authorize/token 501 under
+    OIDC) — while still returning the ``oauth2`` OBJECT, which the released app-client contract lists
+    in ``authentication.required`` (cubic PR 10887 mcp_sse.py:1889).
+
+    This used to assert the block was absent. Dropping it was a breaking change to a released contract
+    and bought nothing: ``methods`` is the field that states availability, and the released schema
+    already declares every endpoint here ``anyOf: [string, null]``. Null says "not here" inside the
+    contract; absence said it outside.
+    """
     from types import SimpleNamespace
     from routers.mcp_sse import mcp_sse_info
 
     req = SimpleNamespace(base_url="https://api.example/")
     monkeypatch.setenv("AUTH_BACKEND", "oidc")
+    monkeypatch.setenv("MCP_RESOURCE_URL", "https://self.example/v1/mcp/sse")
     info = mcp_sse_info(req)
+    oauth2 = info["authentication"]["oauth2"]
     assert info["authentication"]["methods"] == ["api_key"]
-    assert "oauth2" not in info["authentication"]
+    assert oauth2.get("authorization_endpoint") is None
+    assert oauth2.get("token_endpoint") is None
+    # What it CAN state: the resource a token must be audienced to, and the scopes that exist — what a
+    # client needs to use the RFC 9728 discovery path (/.well-known/oauth-protected-resource).
+    assert oauth2["resource"] == "https://self.example/v1/mcp/sse"
+    assert oauth2["scopes"]
 
     monkeypatch.setenv("AUTH_BACKEND", "firebase")
     info_fb = mcp_sse_info(req)
-    assert "oauth2" in info_fb["authentication"]
+    assert info_fb["authentication"]["methods"] == ["oauth2", "api_key"]
+    assert info_fb["authentication"]["oauth2"]["authorization_endpoint"]
+
+
+def test_mcp_sse_info_never_advertises_upstreams_resource_on_a_self_host(monkeypatch):
+    """The L48 defect, one endpoint over from where it was fixed.
+
+    ``mcp_sse_info`` read the ``MCP_RESOURCE_URL`` constant directly, which falls back to upstream's
+    ``https://api.omi.me/v1/mcp/sse``. A self-host that never declared its own would have published
+    somebody else's resource here, beside its own authorization server — exactly what the discovery
+    endpoint already refuses to do. It reports null instead: unknown, not borrowed.
+    """
+    from types import SimpleNamespace
+    from routers.mcp_sse import mcp_sse_info
+
+    req = SimpleNamespace(base_url="https://self.example/")
+    monkeypatch.setenv("AUTH_BACKEND", "oidc")
+    monkeypatch.delenv("MCP_RESOURCE_URL", raising=False)
+    oauth2 = mcp_sse_info(req)["authentication"]["oauth2"]
+    assert oauth2["resource"] is None, "an undeclared self-host must not inherit upstream's resource"
+    # The rest of the payload still works: one unset variable must not take down the api-key path.
+    assert mcp_sse_info(req)["authentication"]["api_key"]["header"] == "Authorization"

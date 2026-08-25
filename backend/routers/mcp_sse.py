@@ -730,6 +730,24 @@ MCP_TOOLS: List[Dict[str, Any]] = [
 ]
 
 
+def _configured_protected_resource() -> Optional[str]:
+    """The MCP resource URL this deployment can honestly claim, or ``None`` when it has declared none.
+
+    Split out of :func:`_protected_resource_identity` so the two callers get the treatment their purpose
+    deserves. Discovery exists to STATE the resource, so it refuses (501) without one. ``/v1/mcp/sse/info``
+    also carries the transport, the API-key method and the setup instructions, and killing all of that
+    over one unset variable would be out of proportion — it reports ``resource: null`` instead, which the
+    released contract declares that field to be.
+
+    What neither does is fall back to ``PRODUCTION_MCP_RESOURCE_URL`` outside firebase: that is the L48
+    defect, a self-host advertising upstream's resource beside its own authorization server.
+    """
+    configured = (os.getenv("MCP_RESOURCE_URL") or "").strip()
+    if configured:
+        return configured
+    return MCP_RESOURCE_URL if auth_backend_name() == "firebase" else None
+
+
 def _protected_resource_identity() -> str:
     """The ``resource`` to advertise: the URL of THIS deployment's MCP endpoint.
 
@@ -742,11 +760,9 @@ def _protected_resource_identity() -> str:
     The default stays for ``AUTH_BACKEND=firebase``, which IS that deployment. Under any other backend it
     is a misconfiguration, and the same rule applies as one function below: surface it.
     """
-    configured = (os.getenv("MCP_RESOURCE_URL") or "").strip()
-    if configured:
-        return configured
-    if auth_backend_name() == "firebase":
-        return MCP_RESOURCE_URL
+    resource = _configured_protected_resource()
+    if resource is not None:
+        return resource
     raise HTTPException(
         status_code=501,
         detail=(
@@ -1557,9 +1573,11 @@ class McpSseAuthMethodResponse(BaseModel):
 class McpSseAuthenticationResponse(BaseModel):
     methods: list[str]
     api_key: McpSseAuthMethodResponse
-    # Optional: the built-in OAuth flow is Firebase-only, so it is omitted under non-firebase backends
-    # rather than advertising endpoints that 501 under OIDC (cubic PR 10887 mcp_sse.py:1889).
-    oauth2: Optional[McpSseAuthMethodResponse] = None
+    # Always present, as upstream declares it: `authentication.required` names oauth2, and dropping it
+    # broke a RELEASED app-client contract. What the built-in OAuth flow being Firebase-only actually
+    # requires is that we not advertise endpoints that 501 — and the released schema already declares
+    # every field here `anyOf: [string, null]`, so a client must handle null endpoints. See mcp_sse_info.
+    oauth2: McpSseAuthMethodResponse
 
 
 class McpSseInstructionsResponse(BaseModel):
@@ -1960,21 +1978,25 @@ def mcp_sse_info(request: Request):
     base_url = str(request.base_url).rstrip("/")
     api_key_method = {"header": "Authorization", "format": "Bearer <api_key>"}
     if auth_backend_name() == "firebase":
-        authentication: Dict[str, Any] = {
-            "methods": ["oauth2", "api_key"],
-            "api_key": api_key_method,
-            "oauth2": {
-                "authorization_endpoint": MCP_AUTHORIZATION_ENDPOINT,
-                "token_endpoint": MCP_TOKEN_ENDPOINT,
-                "resource": MCP_RESOURCE_URL,
-                "scopes": MCP_SCOPES_SUPPORTED,
-            },
+        methods = ["oauth2", "api_key"]
+        oauth2: Dict[str, Any] = {
+            "authorization_endpoint": MCP_AUTHORIZATION_ENDPOINT,
+            "token_endpoint": MCP_TOKEN_ENDPOINT,
+            "resource": MCP_RESOURCE_URL,
+            "scopes": MCP_SCOPES_SUPPORTED,
         }
     else:
-        # Non-firebase (OIDC): the built-in OAuth flow is unavailable (authorize/token 501), so advertise
-        # only api_key here — clients use an Omi MCP API key; OIDC discovery lives at the issuer (cubic
-        # PR 10887 mcp_sse.py:1889).
-        authentication = {"methods": ["api_key"], "api_key": api_key_method}
+        # Non-firebase (OIDC): this server hosts no authorization endpoints — the built-in authorize and
+        # token return 501 (_guard_firebase_authorize_backend) — so both are null, which the released
+        # schema already declares them to be (`anyOf: [string, null]`). Omitting the whole block instead
+        # was a BREAKING change to a released app-client contract, and it bought nothing: `methods` is
+        # the field that states availability, and the MCP spec's own discovery path for the
+        # authorization server is /.well-known/oauth-protected-resource (RFC 9728), which returns the
+        # configured OIDC issuer. What the block CAN still say is what a client needs to use that path:
+        # which resource its tokens must be audienced to, and which scopes exist.
+        methods = ["api_key"]
+        oauth2 = {"resource": _configured_protected_resource(), "scopes": MCP_SCOPES_SUPPORTED}
+    authentication: Dict[str, Any] = {"methods": methods, "api_key": api_key_method, "oauth2": oauth2}
     return {
         "endpoint": "/v1/mcp/sse",
         "transport": "streamable-http",
