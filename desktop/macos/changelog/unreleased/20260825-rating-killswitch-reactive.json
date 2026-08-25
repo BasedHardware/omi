@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "The rating-prompt kill switch now takes effect within minutes, without waiting for another question."
+  ]
+}
