@@ -143,3 +143,56 @@ def test_create_routes_do_not_publish_generic_persistence_value_errors_as_422(
 
     with pytest.raises(ValueError, match="internal persistence detail"):
         handler(payload, uid="user-1")
+
+
+def _stubbed_mcp_create(monkeypatch) -> MagicMock:
+    """Stub the database layer so the route under test returns a decodable key."""
+    key_data = MagicMock()
+    key_data.model_dump.return_value = {
+        "id": "key-1",
+        "name": "safe",
+        "key_prefix": "omi_mcp",
+        "created_at": "2026-06-19T12:00:00+00:00",
+    }
+    create = MagicMock(return_value=("omi_mcp_raw", key_data))
+    monkeypatch.setattr(routes.mcp_api_key_db, "create_mcp_key", create)
+    return create
+
+
+def test_create_mcp_key_keeps_omitted_scopes_on_the_legacy_full_access_path(monkeypatch):
+    """A client that omits scopes still mints a working full-access key.
+
+    Released mobile and desktop clients POST ``{"name"}`` alone — that is the
+    legacy-principal contract. Rejecting omission (or making ``scopes`` required)
+    would break those callers day one and fail the released app-client OpenAPI
+    compatibility check; the database layer records the resolved full-access list
+    on the key document either way.
+    """
+    create = _stubbed_mcp_create(monkeypatch)
+
+    created = routes.create_mcp_key(routes.McpApiKeyCreate(name="Desktop"), uid="user-1")
+
+    assert created.key == "omi_mcp_raw"
+    create.assert_called_once_with("user-1", "Desktop", scopes=None)
+
+
+def test_create_mcp_key_passes_an_explicit_scope_list_through_unchanged(monkeypatch):
+    """Per-key scoping: an explicit known-scope list reaches the database layer as-is."""
+    create = _stubbed_mcp_create(monkeypatch)
+
+    routes.create_mcp_key(routes.McpApiKeyCreate(name="Reader", scopes=["memories.read"]), uid="user-1")
+
+    create.assert_called_once_with("user-1", "Reader", scopes=["memories.read"])
+
+
+@pytest.mark.parametrize("scopes", [[], ["not.a.scope"], ["memories.read", "not.a.scope"]])
+def test_create_mcp_key_rejects_present_but_empty_or_unknown_scope_lists_with_400(monkeypatch, scopes):
+    """Only *omitted* scopes take the legacy path; a present bad list fails closed with 400."""
+    create = _stubbed_mcp_create(monkeypatch)
+
+    with pytest.raises(HTTPException) as caught:
+        routes.create_mcp_key(routes.McpApiKeyCreate(name="scoped", scopes=scopes), uid="user-1")
+
+    assert caught.value.status_code == 400
+    assert str(sorted(routes.MCP_FULL_ACCESS_SCOPES)) in caught.value.detail
+    create.assert_not_called()

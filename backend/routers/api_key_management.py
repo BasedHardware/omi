@@ -47,6 +47,17 @@ def get_mcp_keys(uid: str = Depends(get_current_user_id)):
     operation_id="create_key_v1_mcp_keys_post",
 )
 def create_mcp_key(key_data: McpApiKeyCreate, uid: str = Depends(get_current_user_id)):
+    """Mint an MCP key and return its raw secret exactly once.
+
+    Scope contract: an explicit non-empty list of known scopes authorizes exactly
+    those tools; a present-but-empty or unknown-only list is rejected with 400.
+    Omitted ``scopes`` is the legacy full-access default, not a validation gap:
+    released mobile/desktop clients mint with ``{"name"}`` alone and the released
+    app-client contract keeps the field optional, so omission must keep resolving
+    to full access instead of breaking those callers on day one. The resolved
+    scope list is recorded on the key document either way (see
+    ``database.mcp_api_key.create_mcp_key``).
+    """
     if not key_data.name or len(key_data.name.strip()) == 0:
         raise HTTPException(status_code=422, detail="Key name cannot be empty")
 
