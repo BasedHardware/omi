@@ -428,10 +428,12 @@ struct QueryShellHome: View {
   }
 
   /// The one send. `Try again` on a failed turn enters here too, so a retry is the same turn through
-  /// the same provider and never a second send path (INV-6).
-  private func send(_ question: String) {
+  /// the same provider and never a second send path (INV-6). A retry is the SAME logical question,
+  /// so it keeps the analytics event but never re-counts toward the rating-prompt trigger.
+  private func send(_ question: String, isRetry: Bool = false) {
     AnalyticsManager.shared.chatMessageSent(
-      messageLength: question.count, hasSelectedAppContext: false, source: "query_shell")
+      messageLength: question.count, hasSelectedAppContext: false, source: "query_shell",
+      countsAsQuestion: !isRetry)
     chatProvider.dismissOnboardingOpener()
     Task { await chatProvider.sendMessage(question) }
   }
@@ -439,7 +441,7 @@ struct QueryShellHome: View {
   /// Re-sends the question that failed, not whatever the bar holds now — the send emptied it.
   private func retry() {
     guard !lastAskedQuestion.isEmpty else { return }
-    send(lastAskedQuestion)
+    send(lastAskedQuestion, isRetry: true)
   }
 
   /// Asks for the caret. Monotonic, so a claim is never swallowed for already having been made — the
