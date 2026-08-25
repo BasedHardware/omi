@@ -19,6 +19,7 @@ extension DesktopAutomationActionRegistry {
           "submitted_rating": "\(manager.submittedRating)",
           "dismissed": manager.isDismissed ? "true" : "false",
           "thank_you": "\(manager.thankYouRating ?? 0)",
+          "remotely_disabled": manager.isRemotelyDisabled ? "true" : "false",
         ]
       }
     }

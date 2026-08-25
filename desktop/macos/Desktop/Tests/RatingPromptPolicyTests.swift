@@ -20,4 +20,13 @@ final class RatingPromptPolicyTests: XCTestCase {
   func testDismissalSilencesThePromptForever() {
     XCTAssertFalse(RatingPromptPolicy.shouldShow(questionCount: 10, submittedRating: 0, dismissed: true))
   }
+
+  func testRemoteKillSwitchOverridesADuePrompt() {
+    XCTAssertTrue(
+      RatingPromptPolicy.shouldShow(
+        questionCount: 3, submittedRating: 0, dismissed: false, remotelyDisabled: false))
+    XCTAssertFalse(
+      RatingPromptPolicy.shouldShow(
+        questionCount: 3, submittedRating: 0, dismissed: false, remotelyDisabled: true))
+  }
 }
