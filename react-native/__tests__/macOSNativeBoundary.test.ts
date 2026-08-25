@@ -70,10 +70,14 @@ test('keeps every traffic light at its native standard size and moves only its o
   expect(methodSource).not.toMatch(/button\.frame\s*=\s*NSMakeRect/);
 });
 
-test('defaults the macOS backend to cloud and keeps local 8787 as fallback', () => {
+test('pairs the macOS backend origin and credentials in one validated policy', () => {
   const source = readNativeSource('OmiBackendModule.mm');
 
-  expect(source).toContain('OmiResolvedBaseURL');
+  expect(source).toContain('OmiResolvedBackendPolicy');
+  expect(source).not.toContain('OmiResolvedBaseURL');
+  expect(source).not.toContain('OmiResolvedToken');
+  expect(source).toContain('OmiBackendCredentialKindCloud');
+  expect(source).toContain('OmiBackendCredentialKindLocal');
   expect(source).toContain('https://api.omi.me');
   expect(source).toContain('OmiIsCloudHost');
   expect(source).toContain('environment[@"OMI_CLOUD_API_TOKEN"]');
@@ -90,11 +94,36 @@ test('defaults the macOS backend to cloud and keeps local 8787 as fallback', () 
   );
   expect(source).toContain('environment[@"OMI_LOCAL_API_TOKEN"]');
   expect(source).toContain('environment[@"OMI_LOCAL_API_CLIENT_ID"]');
+  expect(source).toMatch(
+    /if \(localToken\.length > 0 && localClient\.length > 0\) \{[^]*OmiLocalBaseURL/,
+  );
+  expect(source).not.toMatch(
+    /if \([^\n]*localURL\.length > 0[^\n]*\) \{\s*return OmiLocalBaseURL/,
+  );
+  expect(source).toContain('OmiBackendPolicyIsValid');
+  expect(source).toContain('OmiApplyAuthorization');
+  expect(
+    source.match(/OmiResolvedBackendPolicy\(/g)?.length,
+  ).toBeGreaterThanOrEqual(4);
+  expect(source.match(/resolveBackendPolicyWithCompletion/g)).toHaveLength(4);
+  expect(source.match(/OmiApplyAuthorization\(/g)?.length).toBe(4);
+  expect(source.match(/Bearer %@/g)).toHaveLength(1);
   expect(source).toContain('OmiExamplePlatformRequestSupported');
   expect(source).toContain('OmiDevelopmentBackendUnsupportedResponse');
   expect(source).toContain(
     'self.examplePlatformBackend && !OmiExamplePlatformRequestSupported(method, path)',
   );
+  const cloudBranch = source.slice(
+    source.indexOf('OmiBackendCredentialKindCloud'),
+    source.indexOf('static BOOL OmiBackendPolicyIsValid'),
+  );
+  expect(cloudBranch).toContain('OmiOwnKeychainCloudToken');
+  expect(cloudBranch).toContain('environment[@"OMI_CLOUD_API_TOKEN"]');
+  expect(cloudBranch).toContain('environment[@"OMI_API_TOKEN"]');
+  expect(source.match(/environment\[@"OMI_CLOUD_API_TOKEN"\]/g)).toHaveLength(
+    1,
+  );
+  expect(source.match(/environment\[@"OMI_API_TOKEN"\]/g)).toHaveLength(1);
 });
 
 test('owns an in-app PKCE sign-in session and stores its cloud token locally', () => {
@@ -120,6 +149,72 @@ test('owns an in-app PKCE sign-in session and stores its cloud token locally', (
   );
   expect(backend).not.toContain('OmiKeychainCloudToken');
   expect(backend).not.toContain('com.omi.desktop.firebase-rest-session');
+});
+
+test('refreshes expiring macOS cloud sessions without using stale tokens', () => {
+  const auth = readNativeSource('OmiAuthModule.mm');
+  const backend = readNativeSource('OmiBackendModule.mm');
+
+  for (const source of [auth, backend]) {
+    expect(source).toContain('expiryTime');
+    expect(source).toContain('refreshToken');
+    expect(source).toContain('firebaseApiKey');
+    expect(source).toContain('https://securetoken.googleapis.com/v1/token');
+  }
+  expect(backend).toContain('grant_type" value:@"refresh_token');
+  expect(backend).toContain('OmiClearOwnKeychainCloudSession');
+  expect(backend).toContain('OmiCloudRefreshFailureIsDefinitive');
+  expect(backend).not.toMatch(
+    /NSLog\([^\n]*(idToken|refreshToken|Authorization)/i,
+  );
+  expect(auth).toContain('grant_type=refresh_token');
+  expect(auth).toContain('OmiAuthClearSession');
+  expect(auth).toContain('OmiAuthRefreshFailureIsDefinitive');
+  expect(auth).toMatch(
+    /hasCloudSessionWithResolver:[^]*\[self resolveStoredToken:[^]*resolve\(@\(token\.length > 0\)\)/,
+  );
+  expect(auth).toMatch(
+    /if \(refreshToken\.length == 0\) \{[^]*OmiAuthClearSession\(\);[^]*completion\(nil, nil\)/,
+  );
+  expect(auth).not.toMatch(
+    /NSLog\([^\n]*(idToken|refreshToken|Authorization)/i,
+  );
+});
+
+test('validates loopback callbacks before success and keeps listening past probes', () => {
+  const auth = readNativeSource('OmiAuthModule.mm');
+
+  expect(auth).toContain('struct sockaddr_storage');
+  expect(auth).toContain('getpeername');
+  expect(auth).toContain('OmiAuthPeerIsLoopback');
+  expect(auth).toContain('OmiAuthValidatedCallbackURL');
+  expect(auth).toMatch(
+    /while \(NSDate\.date\.timeIntervalSince1970 < deadline\)/,
+  );
+  expect(auth).toMatch(/if \(callbackURL == nil\) \{[^]*continue;/);
+  expect(auth.indexOf('OmiAuthValidatedCallbackURL')).toBeLessThan(
+    auth.indexOf('HTTP/1.1 200 OK'),
+  );
+  expect(auth).toContain('isEqualToString:@"GET"');
+  expect(auth).toMatch(/HTTP\/1\.0[^]*HTTP\/1\.1/);
+  expect(auth).toContain('HTTP/1.1 400 Bad Request');
+  expect(auth).toMatch(
+    /callback\.scheme[^]*callback\.host[^]*callback\.port[^]*callback\.path/,
+  );
+  expect(auth).toMatch(/values\[@"state"\][^]*values\[@"code"\]/);
+});
+
+test('fences overlapping native macOS sign-in attempts', () => {
+  const auth = readNativeSource('OmiAuthModule.mm');
+
+  expect(auth).toContain('@property(nonatomic) NSUInteger signInAttempt;');
+  expect(auth).toContain(
+    '@property(nonatomic, copy) RCTPromiseRejectBlock pendingSignInReject;',
+  );
+  expect(auth).toMatch(
+    /self\.signInAttempt \+= 1;[^]*\[self\.authenticationSession cancel\];[^]*\[self closeLoopback\];[^]*previousReject\(@"OMI_AUTH_UNAUTHORIZED"/,
+  );
+  expect(auth).toMatch(/if \(attempt != self\.signInAttempt\) return;/);
 });
 
 test('persists completed macOS onboarding in this app NSUserDefaults', () => {

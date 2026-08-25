@@ -368,6 +368,27 @@ test('groups timeline rows through one canonical timestamp policy', () => {
   ]);
 });
 
+test('normalizes memory epoch seconds to timeline milliseconds', () => {
+  const memorySeconds = 1785900200;
+  const row: MemoryProjection = {
+    kind: 'memory',
+    id: 'memory-with-date',
+    title: 'Dated',
+    summary: '',
+    searchableText: 'Dated',
+    citations: [],
+    timestamp: memorySeconds,
+    provenance: {
+      label: null,
+      synthesisVersion: 'v1',
+      inputDigest: 'a',
+      outputDigest: 'b',
+    },
+  };
+
+  expect(projectionTimestamp(row)).toBe(memorySeconds * 1000);
+});
+
 test('preserves absent memory timestamps without inventing an order', async () => {
   const result = await loadMemories(
     backendFor(() => ({
