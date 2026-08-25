@@ -15,14 +15,21 @@ final class RatingPromptKillSwitchTests: XCTestCase {
     manager.resetForTesting()
   }
 
-  func testLateLoadedDisableFlagHidesAVisiblePrompt() {
+  func testLateLoadedDisableFlagHidesAVisiblePrompt() async {
     let manager = RatingPromptManager.shared
     manager.resetForTesting()
     for _ in 0..<3 { manager.recordQuestionAsked() }
     XCTAssertTrue(manager.isVisible)
 
+    // Drive the REAL boundary: the exact Notification.Name the PostHog SDK
+    // posts after a flag payload lands (PostHogRemoteConfig ->
+    // NotificationCenter.post(PostHogSDK.didReceiveFeatureFlags)) — the same
+    // compile-checked symbol the manager's observer subscribes to.
     manager.remoteDisableCheck = { true }
-    manager.flagsDidUpdate()
+    NotificationCenter.default.post(name: PostHogManager.featureFlagsDidLoad, object: nil)
+    for _ in 0..<50 where manager.isVisible {
+      try? await Task.sleep(nanoseconds: 20_000_000)
+    }
     XCTAssertFalse(manager.isVisible)
   }
 
