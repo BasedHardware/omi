@@ -89,6 +89,7 @@ from utils.subscription import (
     request_has_llm_byok_key,
     enforce_chat_quota,
     get_chat_quota_snapshot,
+    get_basic_plan_limits,
     get_default_basic_subscription,
     get_paid_plan_definitions,
     get_plan_display_name,
@@ -128,6 +129,7 @@ from utils.other.storage import (
 )
 from utils.webhooks import webhook_first_time_setup
 from utils.byok import (
+    get_byok_key,
     invalidate_byok_state_cache,
     peppered_fingerprint,
 )
@@ -1148,15 +1150,21 @@ def deactivate_byok_endpoint(uid: str = Depends(auth.get_current_user_uid_no_byo
     return {"active": False}
 
 
-def _byok_unlimited_subscription() -> Subscription:
-    """BYOK free plan: unlimited limits, marked with the `byok` feature flag."""
+def _byok_unlimited_subscription(
+    transcription_seconds: Optional[int] = None, words_transcribed: Optional[int] = None
+) -> Subscription:
+    """BYOK free plan: unlimited limits, marked with the `byok` feature flag.
+
+    LLM-only requests pass the free-tier transcription/words allowances so the
+    snapshot stays metered where Omi still pays for STT; unlimited stays `None`.
+    """
     return Subscription(
         plan=PlanType.unlimited,
         status=SubscriptionStatus.active,
         features=["byok"],
         limits=PlanLimits(
-            transcription_seconds=None,
-            words_transcribed=None,
+            transcription_seconds=transcription_seconds,
+            words_transcribed=words_transcribed,
             insights_gained=None,
         ),
     )
@@ -1178,12 +1186,37 @@ def get_user_subscription_endpoint(
     unlimited_phone_quota = PhoneCallQuota(has_access=True, is_paid=True)
 
     if users_db.is_byok_active(uid) and request_has_llm_byok_key():
+        # Snapshot split: a validated LLM key unlocks unlimited chat/insights, but
+        # backend transcription credits still flow through Omi's Deepgram, so the
+        # transcription/words fields stay metered on the free tier unless this
+        # request also carries a validated Deepgram key (same predicate as
+        # has_transcription_credits).
+        if get_byok_key('deepgram'):
+            return UserSubscriptionResponse(
+                subscription=_byok_unlimited_subscription(),
+                transcription_seconds_used=0,
+                transcription_seconds_limit=0,
+                words_transcribed_used=0,
+                words_transcribed_limit=0,
+                insights_gained_used=0,
+                insights_gained_limit=0,
+                available_plans=[],
+                show_subscription_ui=False,
+                phone_call_quota=unlimited_phone_quota,
+            )
+        usage = get_monthly_usage_for_subscription(uid)
+        basic_limits = get_basic_plan_limits()
         return UserSubscriptionResponse(
-            subscription=_byok_unlimited_subscription(),
-            transcription_seconds_used=0,
-            transcription_seconds_limit=0,
-            words_transcribed_used=0,
-            words_transcribed_limit=0,
+            subscription=_byok_unlimited_subscription(
+                transcription_seconds=basic_limits.transcription_seconds,
+                words_transcribed=basic_limits.words_transcribed,
+            ),
+            transcription_seconds_used=usage.get('transcription_seconds', 0),
+            # Wire convention (see WIRE BRIDGE below): unlimited remains 0; a
+            # finite allowance must be the real positive limit.
+            transcription_seconds_limit=basic_limits.transcription_seconds or 0,
+            words_transcribed_used=usage.get('words_transcribed', 0),
+            words_transcribed_limit=basic_limits.words_transcribed or 0,
             insights_gained_used=0,
             insights_gained_limit=0,
             available_plans=[],
