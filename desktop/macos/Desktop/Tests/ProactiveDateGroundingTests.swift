@@ -109,4 +109,24 @@ final class ProactiveDateGroundingTests: XCTestCase {
     XCTAssertEqual(morning, "2026-08-25 (Tuesday)")
     XCTAssertEqual(morning, night)
   }
+
+  /// The re-ranking lane weighs "Time urgency (due date proximity)" against UTC ISO
+  /// dues with no anchor — the model judged proximity from its training-cutoff date.
+  /// The prompt now states today and labels the dues as UTC (SCA-358).
+  func testTaskRerankPromptCarriesTodaysDateAndLabelsUTCDues() {
+    let prompt = TaskPrioritizationService.rerankPrompt(
+      totalCount: 12,
+      windowFirst: 1,
+      windowLast: 8,
+      contextSection: "",
+      taskLines: "1. [id:t1] Ship the cache change [due: 2026-08-26T04:00:00Z]",
+      maxMoves: 5,
+      today: "2026-08-25 (Tuesday)"
+    )
+
+    XCTAssertTrue(prompt.contains("Today is 2026-08-25 (Tuesday)."))
+    XCTAssertTrue(prompt.contains("UTC ISO timestamps"))
+    XCTAssertTrue(prompt.contains("[due: 2026-08-26T04:00:00Z]"))
+    XCTAssertTrue(prompt.contains("Time urgency (due date proximity)"))
+  }
 }
