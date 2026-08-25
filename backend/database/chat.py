@@ -64,11 +64,8 @@ def _merge_docs_by_id(*groups: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 def _session_recency_key(data: Dict[str, Any]) -> tuple:
-    return (
-        data.get('created_at') is not None,
-        data.get('created_at') or datetime.min.replace(tzinfo=timezone.utc),
-        str(data.get('id') or ''),
-    )
+    created = data.get('created_at')
+    return (created is not None, created or datetime.min.replace(tzinfo=timezone.utc), str(data.get('id') or ''))
 
 
 def _aggregation_count(query: Any) -> int:

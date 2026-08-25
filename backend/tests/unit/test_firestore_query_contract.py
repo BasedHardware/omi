@@ -16,6 +16,8 @@ from database.firestore_index_registry import (
     ACTIVE_ATTENTION_OVERRIDE_QUERY,
     CANONICAL_CONSOLIDATION_QUERY,
     CANONICAL_MEMORY_ATLAS_READ_QUERY,
+    CHAT_SESSIONS_BY_APP_ID_STARRED_UPDATED_QUERY,
+    CHAT_SESSIONS_BY_APP_ID_UPDATED_QUERY,
     CONVERSATION_SOURCE_MEMORY_QUERY,
     CONVERSATIONS_ACTIVE_ORDERED_QUERY,
     DUE_MEMORY_OUTBOX_QUERY,
@@ -369,6 +371,28 @@ def test_generated_firestore_manifest_matches_the_checked_in_contract():
             ('__name__', 'DESCENDING'),
         ),
     )
+
+
+def test_chat_session_list_indexes_use_desc_name_tiebreakers():
+    """list queries order updated_at DESC, so Firestore's implicit __name__ is DESC."""
+    for spec in (
+        CHAT_SESSIONS_BY_APP_ID_UPDATED_QUERY,
+        CHAT_SESSIONS_BY_APP_ID_STARRED_UPDATED_QUERY,
+    ):
+        name_field = spec.index_fields[-1]
+        assert name_field.field_path == '__name__'
+        assert name_field.order == 'DESCENDING'
+    plugin_ids = {
+        'chat_sessions_plugin_id_updated_at',
+        'chat_sessions_plugin_id_starred_updated_at',
+        'chat_sessions_app_id_updated_at',
+        'chat_sessions_app_id_starred_updated_at',
+    }
+    matched = [req for req in INDEX_ONLY_REQUIREMENTS if req.identifier in plugin_ids]
+    assert {req.identifier for req in matched} == plugin_ids
+    for req in matched:
+        assert req.fields[-1].field_path == '__name__'
+        assert req.fields[-1].order == 'DESCENDING'
 
 
 def _equality_plus_order_signature(collection_group, filters, orders):

@@ -236,13 +236,13 @@ INDEX_ONLY_REQUIREMENTS = (
         'chat_sessions_app_id_updated_at',
         'chat_sessions',
         'COLLECTION',
-        (_asc('app_id'), _desc('updated_at'), _asc('__name__')),
+        (_asc('app_id'), _desc('updated_at'), _desc('__name__')),
     ),
     FirestoreIndexRequirement(
         'chat_sessions_app_id_starred_updated_at',
         'chat_sessions',
         'COLLECTION',
-        (_asc('app_id'), _asc('starred'), _desc('updated_at'), _asc('__name__')),
+        (_asc('app_id'), _asc('starred'), _desc('updated_at'), _desc('__name__')),
     ),
     # Messages composite index for agent-proxy history queries:
     # app_id + chat_session_id equality, then created_at DESC for newest-first.
@@ -263,13 +263,13 @@ INDEX_ONLY_REQUIREMENTS = (
         'chat_sessions_plugin_id_updated_at',
         'chat_sessions',
         'COLLECTION',
-        (_asc('plugin_id'), _desc('updated_at'), _asc('__name__')),
+        (_asc('plugin_id'), _desc('updated_at'), _desc('__name__')),
     ),
     FirestoreIndexRequirement(
         'chat_sessions_plugin_id_starred_updated_at',
         'chat_sessions',
         'COLLECTION',
-        (_asc('plugin_id'), _asc('starred'), _desc('updated_at'), _asc('__name__')),
+        (_asc('plugin_id'), _asc('starred'), _desc('updated_at'), _desc('__name__')),
     ),
 )
 
@@ -808,7 +808,7 @@ CHAT_SESSIONS_BY_APP_ID_UPDATED_QUERY = FirestoreQuerySpec(
     collection_group='chat_sessions',
     query_scope='COLLECTION',
     filters=(FirestoreQueryFilter('app_id', '==', 'app_id'),),
-    index_fields=(_asc('app_id'), _desc('updated_at'), _asc('__name__')),
+    index_fields=(_asc('app_id'), _desc('updated_at'), _desc('__name__')),
 )
 
 CHAT_SESSIONS_BY_APP_ID_STARRED_UPDATED_QUERY = FirestoreQuerySpec(
@@ -819,7 +819,7 @@ CHAT_SESSIONS_BY_APP_ID_STARRED_UPDATED_QUERY = FirestoreQuerySpec(
         FirestoreQueryFilter('app_id', '==', 'app_id'),
         FirestoreQueryFilter('starred', '==', 'starred'),
     ),
-    index_fields=(_asc('app_id'), _asc('starred'), _desc('updated_at'), _asc('__name__')),
+    index_fields=(_asc('app_id'), _asc('starred'), _desc('updated_at'), _desc('__name__')),
 )
 
 MEETING_RECEIPTS_DUE_QUERY = FirestoreQuerySpec(
