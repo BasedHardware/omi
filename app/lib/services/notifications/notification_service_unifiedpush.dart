@@ -56,7 +56,9 @@ class _UnifiedPushNotificationService implements NotificationInterface {
       channelKey: 'channel',
       channelName: NotificationChannelStrings.omiChannelName,
       channelDescription: NotificationChannelStrings.omiChannelDescription,
-      defaultColor: const Color(0xFF9D50DD),
+      // Neutral, not the off-brand accent the FCM sibling still carries: INV-UI-1 grandfathers
+      // what already exists but fails a file that adds it, and this one is new.
+      defaultColor: Colors.white,
       ledColor: Colors.white,
     );
     await _initializeAwesomeNotifications();
@@ -78,7 +80,9 @@ class _UnifiedPushNotificationService implements NotificationInterface {
           channelKey: channel.channelKey,
           channelName: channel.channelName,
           channelDescription: channel.channelDescription,
-          defaultColor: const Color(0xFF9D50DD),
+          // Neutral, not the off-brand accent the FCM sibling still carries: INV-UI-1 grandfathers
+          // what already exists but fails a file that adds it, and this one is new.
+          defaultColor: Colors.white,
           ledColor: Colors.white,
         ),
       ],
