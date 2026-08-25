@@ -252,3 +252,52 @@ describe('a failed key creation reports inside the dialog that stays open', () =
     assert.match(source, /createError \?[\s\S]{0,120}role="alert"/);
   });
 });
+
+/**
+ * STATIC TRIPWIRES — not behavioral coverage. The lane cannot render a
+ * component or dispatch a clipboard event.
+ *
+ * CopyButton used to swallow clipboard failures (`catch {}` with no state
+ * change), so in a non-secure context or on permission denial the user saw a
+ * button that appeared to do nothing.
+ */
+describe('a failed copy is surfaced, not silent', () => {
+  const source = readFileSync(
+    path.join(SURFACE, 'components', 'copy-button.tsx'),
+    'utf8',
+  );
+
+  it('the catch path flips a visible failed state', () => {
+    const catchBlock = source.slice(source.indexOf('catch {'));
+    assert.ok(catchBlock.includes('setFailed(true)'), 'catch must set the failed state');
+  });
+
+  it('the failed state renders text and an aria-label, not just an icon swap', () => {
+    assert.match(source, /Copy failed/);
+    assert.match(source, /aria-label=\{failed \? 'Copy failed'/);
+  });
+});
+
+/**
+ * STATIC TRIPWIRE — not behavioral coverage. React runs a child's mount effects
+ * before its parent's, so MemoryWidget's synchronous ready postMessage fired
+ * before EmbedPreview subscribed and the live preview never observed readiness.
+ * Emissions are deferred one macrotask so same-commit parents subscribe first;
+ * this pins that ordering against reverting to a synchronous post.
+ */
+describe('widget UI events are deferred past same-commit parent subscription', () => {
+  const source = readFileSync(
+    path.join(SURFACE, 'components', 'memory-widget.tsx'),
+    'utf8',
+  );
+
+  for (const eventType of ['WIDGET_READY_EVENT', 'WIDGET_RESIZE_EVENT']) {
+    it(`${eventType} is posted inside a deferred callback`, () => {
+      const effect = source.slice(
+        source.indexOf(`type: ${eventType}`) - 400,
+        source.indexOf(`type: ${eventType}`) + 200,
+      );
+      assert.match(effect, /setTimeout/, `${eventType} must not be posted synchronously`);
+    });
+  }
+});

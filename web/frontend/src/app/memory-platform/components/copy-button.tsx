@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Check, Copy } from 'lucide-react';
+import { Check, Copy, X } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 
 interface CopyButtonProps {
@@ -16,19 +16,25 @@ export default function CopyButton({
   className,
 }: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    if (!copied) return;
-    const timer = setTimeout(() => setCopied(false), 1600);
+    if (!copied && !failed) return;
+    const timer = setTimeout(() => {
+      setCopied(false);
+      setFailed(false);
+    }, 1600);
     return () => clearTimeout(timer);
-  }, [copied]);
+  }, [copied, failed]);
 
   const copy = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(value);
       setCopied(true);
     } catch {
-      setCopied(false);
+      // Clipboard writes fail in non-secure contexts and when permission is
+      // denied. Surface it — a silent reset leaves the button looking idle.
+      setFailed(true);
     }
   }, [value]);
 
@@ -36,18 +42,20 @@ export default function CopyButton({
     <button
       type="button"
       onClick={copy}
-      aria-label={copied ? 'Copied' : label}
+      aria-label={failed ? 'Copy failed' : copied ? 'Copied' : label}
       className={cn(
         'inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-neutral-300 transition-colors hover:border-white/20 hover:text-white',
         className,
       )}
     >
-      {copied ? (
+      {failed ? (
+        <X className="h-3.5 w-3.5 text-[#ff806a]" aria-hidden="true" />
+      ) : copied ? (
         <Check className="h-3.5 w-3.5 text-[#b9f36b]" aria-hidden="true" />
       ) : (
         <Copy className="h-3.5 w-3.5" aria-hidden="true" />
       )}
-      {copied ? 'Copied' : label}
+      {failed ? 'Copy failed' : copied ? 'Copied' : label}
     </button>
   );
 }
