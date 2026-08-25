@@ -33,8 +33,28 @@ final class RatingPromptManager: ObservableObject {
   @Published private(set) var isVisible = false
 
   private let defaults = UserDefaults.standard
+  private var flagObserver: NSObjectProtocol?
+  private var flagPollTask: Task<Void, Never>?
+
+  /// Injectable for tests; production reads the preloaded PostHog flag.
+  var remoteDisableCheck: () -> Bool = {
+    PostHogManager.shared.isFeatureEnabled(RatingPromptPolicy.killSwitchFlag)
+  }
 
   private init() {
+    refresh()
+    // The kill switch must not wait for the next question: recompute whenever
+    // PostHog delivers a flag payload (initial preload can finish AFTER this
+    // singleton initializes, and reloads deliver mid-session flips).
+    flagObserver = NotificationCenter.default.addObserver(
+      forName: Notification.Name("PostHogDidReceiveFeatureFlags"),
+      object: nil, queue: nil
+    ) { _ in
+      Task { @MainActor in RatingPromptManager.shared.flagsDidUpdate() }
+    }
+  }
+
+  func flagsDidUpdate() {
     refresh()
   }
 
@@ -98,7 +118,7 @@ final class RatingPromptManager: ObservableObject {
   }
 
   var isRemotelyDisabled: Bool {
-    PostHogManager.shared.isFeatureEnabled(RatingPromptPolicy.killSwitchFlag)
+    remoteDisableCheck()
   }
 
   private func refresh() {
@@ -107,6 +127,20 @@ final class RatingPromptManager: ObservableObject {
       submittedRating: submittedRating,
       dismissed: isDismissed,
       remotelyDisabled: isRemotelyDisabled)
+    // While the prompt is on screen, poll for a remote disable so an active
+    // kill switch takes effect within minutes, not at the next app launch.
+    if isVisible, flagPollTask == nil {
+      flagPollTask = Task { @MainActor [weak self] in
+        while let self, self.isVisible, !Task.isCancelled {
+          try? await Task.sleep(nanoseconds: 5 * 60 * 1_000_000_000)
+          PostHogManager.shared.reloadFeatureFlags()
+        }
+        self?.flagPollTask = nil
+      }
+    } else if !isVisible {
+      flagPollTask?.cancel()
+      flagPollTask = nil
+    }
   }
 }
 
