@@ -33,6 +33,7 @@ DESKTOP_PORT = 18081
 FIRESTORE_PORT = 18082
 REDIS_PORT = 18083
 VERTEX_GATEWAY_PORT = 18084
+POSTHOG_CONTROL_PORT = 18085
 LOCAL_FIREBASE_PROJECT = "demo-omi-jit-qa"
 DEV_GCP_PROJECT = "based-hardware-dev"
 DEFAULT_AUTH_PROJECT = "based-hardware"
@@ -40,7 +41,8 @@ STATE_DIR_NAME = "jit-qa-local-dev-gcp"
 OWNERSHIP_PREFIX = "omi-jit-qa-local"
 HEALTH_TIMEOUT_SECONDS = 180
 CLOUD_READINESS_TIMEOUT_SECONDS = 30.0
-OWNED_SERVICES = frozenset({"firestore", "redis", "vertex-gateway", "main", "desktop"})
+OWNED_SERVICES = frozenset({"firestore", "redis", "vertex-gateway", "posthog-control", "main", "desktop"})
+POSTHOG_PROJECT_KEY = "omi-jit-qa-demo-project-key"
 
 
 class SafetyError(RuntimeError):
@@ -387,11 +389,12 @@ def _local_secret(state: Path, name: str) -> str:
 
 def _child_env(state: Path, identity: dict[str, str], service: str) -> dict[str, str]:
     # Start from a small host-runtime allowlist. OMI_HARNESS_INSTANCE makes the
-    # backend skip every dotenv file, and omitting provider/service credentials
-    # prevents a local QA action from reaching PostHog, storage, payment,
-    # third-party LLM, or other shared systems. Only the narrow Vertex broker
-    # receives development ADC; general backend children get private HOME/XDG
-    # roots and cannot discover the host's gcloud credentials.
+    # backend skip every dotenv file, and omitting real provider/service
+    # credentials prevents a local QA action from reaching PostHog, storage,
+    # payment, third-party LLM, or other shared systems. Main/desktop receive
+    # only the fixed dummy PostHog key and loopback host below. Only the narrow
+    # Vertex broker receives development ADC; general backend children get
+    # private HOME/XDG roots and cannot discover the host's gcloud credentials.
     host_runtime_keys = {
         "LANG",
         "LC_ALL",
@@ -437,6 +440,22 @@ def _child_env(state: Path, identity: dict[str, str], service: str) -> dict[str,
         )
         return env
 
+    if service == "posthog-control":
+        private_home = state / "posthog-control-home"
+        _ensure_private_dir(private_home)
+        env.update(
+            {
+                "HOME": str(private_home),
+                "OMI_JIT_QA_LOCAL_STACK": "1",
+                "OMI_JIT_QA_TARGET": "local-dev-gcp",
+                "OMI_JIT_QA_POSTHOG_CONTROL_TOKEN": _local_secret(state, "posthog-control"),
+                "OMI_JIT_QA_POSTHOG_STATE_FILE": str(state / "posthog-flags.json"),
+                "OMI_JIT_QA_POSTHOG_PROJECT_KEY": POSTHOG_PROJECT_KEY,
+                "PORT": str(POSTHOG_CONTROL_PORT),
+            }
+        )
+        return env
+
     private_home = state / f"{service}-home"
     _ensure_private_dir(private_home)
     env.update(
@@ -476,9 +495,19 @@ def _child_env(state: Path, identity: dict[str, str], service: str) -> dict[str,
             "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION": "false",
             "ENCRYPTION_SECRET": _local_secret(state, "encryption"),
             "ADMIN_KEY": _local_secret(state, "admin"),
+            # The isolated QA app children exercise canonical intake against
+            # the owned Firestore emulator. This is the product switch only;
+            # maintenance/scheduler flags are deliberately not set here.
+            "MEMORY_ENABLED": "on",
         }
     )
     env.pop("FIREBASE_AUTH_EMULATOR_HOST", None)
+    env.update(
+        {
+            "POSTHOG_PROJECT_API_KEY": POSTHOG_PROJECT_KEY,
+            "POSTHOG_HOST": f"http://127.0.0.1:{POSTHOG_CONTROL_PORT}",
+        }
+    )
     if service == "desktop":
         env["PORT"] = str(DESKTOP_PORT)
     else:
@@ -538,6 +567,16 @@ def _command(repo_root: Path, state: Path, identity: dict[str, str], service: st
             repo_root,
             "vertex-gateway.log",
             VERTEX_GATEWAY_PORT,
+        )
+    if service == "posthog-control":
+        return (
+            [
+                sys.executable,
+                str(repo_root / "backend" / "dev_harness" / "jit_posthog_control.py"),
+            ],
+            repo_root,
+            "posthog-control.log",
+            POSTHOG_CONTROL_PORT,
         )
     python = sys.executable
     module = "main:app" if service == "main" else "desktop_backend:app"
@@ -752,6 +791,18 @@ def _health(service: str) -> tuple[bool, str]:
             },
         )
         return ready, (f"health HTTP {status}; ready HTTP {ready_status}" if ready_status else "ready unavailable")
+    if service == "posthog-control":
+        ok, status = _http(
+            f"http://127.0.0.1:{POSTHOG_CONTROL_PORT}/health",
+            expected_json={"status": "healthy", "service": "omi-jit-qa-posthog"},
+        )
+        if not ok:
+            return False, f"HTTP {status}" if status else "unreachable"
+        ready, ready_status = _http(
+            f"http://127.0.0.1:{POSTHOG_CONTROL_PORT}/ready",
+            expected_json={"status": "ready", "service": "omi-jit-qa-posthog"},
+        )
+        return ready, (f"health HTTP {status}; ready HTTP {ready_status}" if ready_status else "ready unavailable")
     ok, status = _http(
         f"http://127.0.0.1:{DESKTOP_PORT}/health",
         expected_json={"status": "healthy", "service": "omi-desktop-backend"},
@@ -846,19 +897,25 @@ def _stop(state: Path) -> int:
 
 def _check(repo_root: Path) -> int:
     identity = _validate_contract(repo_root)
-    _firebase_cli(repo_root)
-    required = ["redis-server"]
-    missing = [name for name in required if shutil.which(name) is None]
-    if shutil.which("java") is None:
-        missing.append("java")
-    if missing:
-        raise SafetyError("missing local prerequisites: " + ", ".join(missing))
+    # JIT_QA_TEST_MODE proves only the endpoint/project/credential contract in
+    # hermetic launcher tests. It cannot start services (enforced in main), so
+    # requiring host runtimes here would couple a pure policy check to npm,
+    # Redis, and Java installation. Real operator checks remain fail-closed.
+    if os.environ.get("JIT_QA_TEST_MODE") != "1":
+        _firebase_cli(repo_root)
+        required = ["redis-server"]
+        missing = [name for name in required if shutil.which(name) is None]
+        if shutil.which("java") is None:
+            missing.append("java")
+        if missing:
+            raise SafetyError("missing local prerequisites: " + ", ".join(missing))
     print("JIT QA local stack contract: safe")
     print(f"  main: http://127.0.0.1:{MAIN_PORT}")
     print(f"  desktop: http://127.0.0.1:{DESKTOP_PORT}")
     print(f"  firestore: emulator-only 127.0.0.1:{FIRESTORE_PORT}")
     print(f"  redis: owned loopback 127.0.0.1:{REDIS_PORT}")
     print(f"  vertex_gateway: ADC-isolated loopback 127.0.0.1:{VERTEX_GATEWAY_PORT}")
+    print(f"  posthog_control: authenticated loopback 127.0.0.1:{POSTHOG_CONTROL_PORT}")
     print(f"  firebase_auth_project: {identity['auth_project']}")
     print(f"  vertex_project: {identity['gcp_project']}")
     return 0
@@ -927,7 +984,8 @@ def main(argv: list[str] | None = None) -> int:
             _start_service(repo_root, state, identity, "firestore")
             _start_service(repo_root, state, identity, "redis")
             _start_service(repo_root, state, identity, "vertex-gateway")
-            failures = _wait_for_health(["firestore", "redis", "vertex-gateway"], timeout=45)
+            _start_service(repo_root, state, identity, "posthog-control")
+            failures = _wait_for_health(["firestore", "redis", "vertex-gateway", "posthog-control"], timeout=45)
             if failures:
                 raise SafetyError("dependencies did not become healthy: " + "; ".join(failures))
             _start_service(repo_root, state, identity, "main")

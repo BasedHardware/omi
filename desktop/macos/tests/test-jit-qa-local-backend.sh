@@ -36,6 +36,7 @@ grep -Fqx '  desktop: http://127.0.0.1:18081' <<< "$safe_output"
 grep -Fqx '  firestore: emulator-only 127.0.0.1:18082' <<< "$safe_output"
 grep -Fqx '  redis: owned loopback 127.0.0.1:18083' <<< "$safe_output"
 grep -Fqx '  vertex_gateway: ADC-isolated loopback 127.0.0.1:18084' <<< "$safe_output"
+grep -Fqx '  posthog_control: authenticated loopback 127.0.0.1:18085' <<< "$safe_output"
 
 # Test mode exists only for the pure contract matrix; it can never start a
 # stack whose readiness has not refreshed real development ADC.
@@ -112,5 +113,7 @@ grep -Fq 'jit_vertex_gateway:app' "$PY"
 grep -Fq 'OMI_HARNESS_PRIVATE_UMASK' "$REPO_ROOT/scripts/dev-harness/dev_harness/supervise.py"
 grep -Fq 'desktop/macos/scripts/jit-qa-local-backend up' "$DOC"
 grep -Fq 'jit-qa-local-backend down' "$DOC"
+grep -Fq 'jit_qa_orchestrated_dogfood.py' "$DOC"
+grep -Fq '127.0.0.1:18085' "$DOC"
 
 echo 'PASS: JIT QA local hybrid stack is fixed-port and fail-closed'

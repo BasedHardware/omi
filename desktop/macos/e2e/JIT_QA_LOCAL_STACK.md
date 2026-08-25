@@ -7,7 +7,10 @@ process that receives development ADC. The main and desktop backends use
 private HOME/XDG roots, cannot discover host cloud credentials, and route
 supported text inference through that broker. Firestore is always forced to
 the stack-owned local emulator; Redis is always a stack-owned loopback process.
-No flag enables a shared Firestore or production API path.
+A hermetic PostHog-compatible decide service runs on loopback with a fixed demo
+project key, so the production rollout provider can be exercised without a
+real PostHog flag or cohort mutation. No flag enables a shared Firestore or
+production API path.
 
 The launcher owns its process groups, per-run ownership nonces, logs, generated
 Firebase config, local Redis data, and private local secrets below
@@ -59,7 +62,8 @@ From the repository root:
 # Validate tools, ADC, project identity, endpoints, and emulator-only data mode.
 desktop/macos/scripts/jit-qa-local-backend check
 
-# Start Firestore, Redis, the ADC-isolated Vertex broker, and both backends.
+# Start Firestore, Redis, the ADC-isolated Vertex broker, the hermetic PostHog
+# control plane, and both backends.
 desktop/macos/scripts/jit-qa-local-backend up
 
 # Inspect owned PIDs and health without exposing environment values.
@@ -68,6 +72,14 @@ desktop/macos/scripts/jit-qa-local-backend health
 
 # Run the reserved bundle against that stack.
 desktop/macos/scripts/omi-jit-qa local-dev-gcp --fast-only
+
+# With the signed-in QA bundle running, exercise the integrated app/control
+# path plus the complete emulator-backed JIT contract matrix.
+FIRESTORE_EMULATOR_HOST=127.0.0.1:18082 \
+GOOGLE_CLOUD_PROJECT=demo-omi-jit-qa \
+backend/.venv/bin/python backend/scripts/jit_qa_orchestrated_dogfood.py \
+  --control-plane-url http://127.0.0.1:18085 \
+  --output .dev/jit-qa-local-dev-gcp/orchestrated-dogfood-evidence.json
 
 # Stop only processes recorded as owned by this stack.
 desktop/macos/scripts/jit-qa-local-backend down
@@ -80,15 +92,27 @@ uses `127.0.0.1:18082`; Redis uses `127.0.0.1:18083`.
 The Vertex broker uses `127.0.0.1:18084`; its local bearer token is private
 stack state and its only cloud-capable provider is Gemini on Vertex in
 `based-hardware-dev`.
+The hermetic PostHog control plane uses `127.0.0.1:18085`; its control token
+and mutable flag state are private stack files. It starts with rollout unknown
+and the kill switch disabled, and the dogfood driver restores that initial
+state after testing fail-closed, rollout-on, kill-switch, and roll-forward
+decisions through the production provider.
 
 If ADC, the selected Auth project, Java/Firebase tooling, or a required local
 dependency cannot be proved, `check`/`up` fail closed. This is intentional:
 use the existing `deployed-dev` target for a deliberate cloud-dev session,
 not a local launcher override.
 
-This hybrid target proves local Firestore/Redis state transitions, history,
-and supported text-only Vertex-backed Gemini paths without giving the backend
-broad ADC. It intentionally omits PostHog and third-party model credentials.
-Tool-calling, multimodal ambient-proactivity, exact production provider routing,
-and server-authoritative cohort-on behavior require deployed development;
-exercise those slices with `deployed-dev`, not by weakening this local boundary.
+This hybrid target proves local Firestore/Redis state transitions, the real
+PostHog SDK decision path, signed-in canonical memory create/list, and supported
+text-only Vertex-backed Gemini paths without giving the backend broad ADC. The
+dogfood report labels history/reopen, daily sweep, first-open, proactivity,
+keyframe/request, and writer-transition groups as emulator-only; it does not
+misrepresent them as app-driven flows. Because no Pinecone authority exists,
+synthetic app-memory cleanup may fall back to deleting and re-scanning only
+documents containing the fixed harness marker in the demo Firestore emulator.
+
+Real PostHog cohorts, third-party model providers, full multimodal ambient
+proactivity, and representative deployed-development metrics still require a
+deliberate `deployed-dev` session. Do not weaken the local boundary to simulate
+those external gates.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 from pathlib import Path
 import signal
@@ -8,16 +9,24 @@ import stat
 import subprocess
 import sys
 import time
+import threading
+import urllib.error
+import urllib.request
 
 import pytest
 import google.auth
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "jit_qa_local_stack.py"
 VERTEX_GATEWAY_PATH = MODULE_PATH.parent / "dev_harness" / "jit_vertex_gateway.py"
+POSTHOG_CONTROL_PATH = MODULE_PATH.parents[2] / "backend" / "dev_harness" / "jit_posthog_control.py"
 SPEC = importlib.util.spec_from_file_location("jit_qa_local_stack", MODULE_PATH)
 assert SPEC is not None and SPEC.loader is not None
 jit_stack = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(jit_stack)
+POSTHOG_SPEC = importlib.util.spec_from_file_location("jit_posthog_control", POSTHOG_CONTROL_PATH)
+assert POSTHOG_SPEC is not None and POSTHOG_SPEC.loader is not None
+jit_posthog = importlib.util.module_from_spec(POSTHOG_SPEC)
+POSTHOG_SPEC.loader.exec_module(jit_posthog)
 
 
 def test_backend_children_cannot_discover_adc_and_only_vertex_broker_gets_host_home(
@@ -44,7 +53,9 @@ def test_backend_children_cannot_discover_adc_and_only_vertex_broker_gets_host_h
     assert main_env["OMI_LLM_GATEWAY_URL"] == "http://127.0.0.1:18084"
     assert main_env["OMI_LLM_GATEWAY_FEATURE_MODE"] == "gateway"
     assert "GOOGLE_APPLICATION_CREDENTIALS" not in main_env
-    assert "POSTHOG_PROJECT_API_KEY" not in main_env
+    assert main_env["POSTHOG_PROJECT_API_KEY"] == jit_stack.POSTHOG_PROJECT_KEY
+    assert main_env["POSTHOG_HOST"] == "http://127.0.0.1:18085"
+    assert "POSTHOG_API_KEY" not in main_env
 
     assert vertex_env["HOME"] == str(host_home)
     assert vertex_env["XDG_CONFIG_HOME"] == str(host_config)
@@ -52,6 +63,7 @@ def test_backend_children_cannot_discover_adc_and_only_vertex_broker_gets_host_h
     assert vertex_env["OMI_JIT_QA_VERTEX_GATEWAY"] == "1"
     assert "GOOGLE_APPLICATION_CREDENTIALS" not in vertex_env
     assert "POSTHOG_PROJECT_API_KEY" not in vertex_env
+    assert "POSTHOG_HOST" not in vertex_env
     assert vertex_env["OMI_LLM_GATEWAY_SERVICE_TOKEN"] == main_env["OMI_LLM_GATEWAY_SERVICE_TOKEN"]
 
 
@@ -67,6 +79,136 @@ def test_vertex_broker_has_one_cloud_provider_and_no_shared_mutation_imports() -
         "database.",
     ):
         assert forbidden not in source
+
+
+def test_memory_intake_is_app_only_and_stays_on_owned_firestore_emulator(
+    tmp_path: Path,
+) -> None:
+    state = tmp_path / "jit-qa-local-dev-gcp"
+    state.mkdir()
+    identity = {"auth_project": "based-hardware", "gcp_project": "based-hardware-dev"}
+
+    app_envs = {service: jit_stack._child_env(state, identity, service) for service in ("main", "desktop")}
+    for env in app_envs.values():
+        assert env["MEMORY_ENABLED"] == "on"
+        assert "MEMORY_CANONICAL_MAINTENANCE_ENABLED" not in env
+        assert env["FIRESTORE_EMULATOR_HOST"] == "127.0.0.1:18082"
+        assert env["GOOGLE_CLOUD_PROJECT"] == jit_stack.LOCAL_FIREBASE_PROJECT
+
+    non_app_envs = {
+        service: jit_stack._child_env(state, identity, service)
+        for service in ("firestore", "redis", "vertex-gateway", "posthog-control")
+    }
+    for env in non_app_envs.values():
+        assert "MEMORY_ENABLED" not in env
+        assert "MEMORY_CANONICAL_MAINTENANCE_ENABLED" not in env
+    assert non_app_envs["vertex-gateway"]["GOOGLE_CLOUD_PROJECT"] == jit_stack.DEV_GCP_PROJECT
+    assert "FIRESTORE_EMULATOR_HOST" not in non_app_envs["vertex-gateway"]
+    assert "FIRESTORE_EMULATOR_HOST" not in non_app_envs["firestore"]
+    assert "FIRESTORE_EMULATOR_HOST" not in non_app_envs["redis"]
+    assert "POSTHOG_HOST" not in non_app_envs["posthog-control"]
+
+
+def test_contract_only_check_does_not_require_installed_service_runtimes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("JIT_QA_TEST_MODE", "1")
+    monkeypatch.setattr(
+        jit_stack,
+        "_validate_contract",
+        lambda _root: {"auth_project": "based-hardware", "gcp_project": "based-hardware-dev"},
+    )
+    monkeypatch.setattr(
+        jit_stack,
+        "_firebase_cli",
+        lambda _root: (_ for _ in ()).throw(AssertionError("runtime probe must not run")),
+    )
+    monkeypatch.setattr(
+        jit_stack.shutil,
+        "which",
+        lambda _name: (_ for _ in ()).throw(AssertionError("runtime probe must not run")),
+    )
+
+    assert jit_stack._check(tmp_path) == 0
+    assert "JIT QA local stack contract: safe" in capsys.readouterr().out
+
+
+def test_posthog_control_child_isolated_and_owned_by_harness(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    state = tmp_path / "jit-qa-local-dev-gcp"
+    state.mkdir()
+    monkeypatch.setenv("POSTHOG_PROJECT_API_KEY", "real-secret-must-not-leak")
+    monkeypatch.setenv("POSTHOG_HOST", "https://app.posthog.com")
+    env = jit_stack._child_env(state, {"auth_project": "based-hardware"}, "posthog-control")
+
+    assert env["OMI_JIT_QA_LOCAL_STACK"] == "1"
+    assert env["OMI_JIT_QA_TARGET"] == "local-dev-gcp"
+    assert env["OMI_JIT_QA_POSTHOG_PROJECT_KEY"] == jit_stack.POSTHOG_PROJECT_KEY
+    assert env["OMI_JIT_QA_POSTHOG_STATE_FILE"] == str(state / "posthog-flags.json")
+    assert len(env["OMI_JIT_QA_POSTHOG_CONTROL_TOKEN"]) >= 32
+    assert "POSTHOG_PROJECT_API_KEY" not in env
+    assert "POSTHOG_HOST" not in env
+    assert jit_stack._valid_marker("posthog-control", "omi-jit-qa-local:posthog-control:" + "0" * 32)
+
+
+def test_posthog_fixture_exercises_real_sdk_and_authenticated_switch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state_root = tmp_path / "jit-qa-local-dev-gcp"
+    state_root.mkdir()
+    state_path = state_root / "posthog-flags.json"
+    token = "t" * 48
+    monkeypatch.setenv("OMI_HARNESS_STATE_ROOT", str(state_root))
+    monkeypatch.setenv("OMI_JIT_QA_POSTHOG_STATE_FILE", str(state_path))
+    monkeypatch.setenv("OMI_JIT_QA_POSTHOG_CONTROL_TOKEN", token)
+    monkeypatch.setenv("OMI_JIT_QA_POSTHOG_PROJECT_KEY", jit_posthog.DUMMY_PROJECT_KEY)
+    fixture = jit_posthog._FixtureState(state_path)
+    assert stat.S_IMODE(state_path.stat().st_mode) == 0o600
+    with pytest.raises(jit_posthog.ControlError, match="loopback"):
+        jit_posthog._Server(fixture, host="0.0.0.0", port=0)
+    server = jit_posthog._Server(fixture, port=0)
+    thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
+    thread.start()
+    try:
+        from posthog import Posthog
+
+        host = f"http://127.0.0.1:{server.server_port}"
+        client = Posthog(
+            project_api_key=jit_posthog.DUMMY_PROJECT_KEY,
+            host=host,
+            send=False,
+            sync_mode=True,
+            feature_flags_request_timeout_seconds=1,
+        )
+        assert client.get_feature_variants("local-qa-user") == {jit_posthog.FLAG_KILL_SWITCH: False}
+        assert fixture.snapshot()["rollout"] == "unknown"
+        assert fixture.snapshot()["kill_switch"] == "disabled"
+
+        request = urllib.request.Request(
+            f"{host}/control/flags",
+            data=json.dumps({"rollout": "enabled", "kill_switch": "disabled"}).encode(),
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=2) as response:
+            assert response.status == 200
+        assert client.get_feature_variants("local-qa-user") == {
+            jit_posthog.FLAG_ROLLOUT: True,
+            jit_posthog.FLAG_KILL_SWITCH: False,
+        }
+
+        unauthorized = urllib.request.Request(
+            f"{host}/control/flags",
+            data=b'{"rollout":"disabled"}',
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with pytest.raises(urllib.error.HTTPError) as error:
+            urllib.request.urlopen(unauthorized, timeout=2)
+        assert error.value.code == 401
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
 
 
 def test_local_stack_adc_requires_dev_quota_project(
