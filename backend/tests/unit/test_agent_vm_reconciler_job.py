@@ -94,6 +94,7 @@ def test_reconcile_starts_a_current_vm_only_after_fenced_start_request(monkeypat
     class StartRequestedApi:
         starts = 0
         waits: list[tuple[str, str, AgentVmRelease]] = []
+        purges: list[tuple[str, str]] = []
 
         def __init__(self, _project: str, _zone: str) -> None:
             self.instance = {
@@ -134,9 +135,14 @@ def test_reconcile_starts_a_current_vm_only_after_fenced_start_request(monkeypat
         ) -> None:
             type(self).waits.append((private_ip, auth_token, release))
 
+        async def purge_screen_activity(self, ip: str, auth_token: str) -> list[str]:
+            type(self).purges.append((ip, auth_token))
+            return ["screenshots", "proactive_extractions"]
+
     updates: list[dict[str, Any]] = []
     StartRequestedApi.starts = 0
     StartRequestedApi.waits = []
+    StartRequestedApi.purges = []
     monkeypatch.setattr(reconciler, "GceAgentVmClient", StartRequestedApi)
     monkeypatch.setattr(reconciler, "claim_vm_lease", lambda *_args: True)
     monkeypatch.setattr(reconciler, "renew_vm_lease", lambda *_args: True)
@@ -165,6 +171,190 @@ def test_reconcile_starts_a_current_vm_only_after_fenced_start_request(monkeypat
         "privateIp": "10.128.0.9",
         "ip": "34.1.2.3",
     }
+
+
+def test_reconcile_purges_retained_screen_data_before_stamping_the_privacy_marker(monkeypatch):
+    """A legacy VM's omi.db must be purged before screenPrivacyVersion lands.
+
+    Stamping the marker without the purge would make the proxy re-admit mobile
+    sessions onto a reused state disk that still holds uploaded OCR tables,
+    and every later reconciliation would trust that marker.
+    """
+    events: list[str] = []
+
+    class LegacyVmApi(FakeApi):
+        instances = {
+            "omi-agent-user": {
+                "status": "STOPPED",
+                "metadata": {},
+                "serviceAccounts": [],
+                "disks": [{"boot": True, "source": "projects/project/zones/us-central1-a/disks/omi-agent-user"}],
+                "networkInterfaces": [{"networkIP": "10.128.0.9"}],
+            }
+        }
+
+        async def request(self, _method: str, _url: str) -> Any:
+            class Response:
+                @staticmethod
+                def raise_for_status() -> None:
+                    return None
+
+                @staticmethod
+                def json() -> dict[str, str]:
+                    return {"sourceImage": "projects/project/global/images/omi-agent-20260805"}
+
+            return Response()
+
+        async def start(self, _vm_name: str) -> None:
+            events.append("start")
+            type(self).instances["omi-agent-user"]["status"] = "RUNNING"
+
+        def private_instance_ip(self, _instance: dict[str, Any]) -> str:
+            return "10.128.0.9"
+
+        def instance_ip(self, _instance: dict[str, Any]) -> str | None:
+            return None
+
+        async def wait_for_runtime(
+            self, private_ip: str, auth_token: str, release: AgentVmRelease, **_kwargs: Any
+        ) -> None:
+            events.append(f"wait:{private_ip}")
+
+        async def purge_screen_activity(self, ip: str, auth_token: str) -> list[str]:
+            events.append(f"purge:{ip}")
+            return ["screenshots"]
+
+    updates: list[dict[str, Any]] = []
+    monkeypatch.setattr(reconciler, "GceAgentVmClient", LegacyVmApi)
+    monkeypatch.setattr(reconciler, "claim_vm_lease", lambda *_args: True)
+    monkeypatch.setattr(reconciler, "renew_vm_lease", lambda *_args: True)
+    monkeypatch.setattr(reconciler, "drift_reasons", lambda *_args: [])
+    monkeypatch.setattr(
+        reconciler, "update_vm_reconcile", lambda *args, **kwargs: updates.append((args, kwargs)) or True
+    )
+
+    result = asyncio.run(
+        reconciler.reconcile_one(
+            "user",
+            {"vmName": "omi-agent-user", "authToken": "token", "reconcile": {"startRequested": True}},
+            RELEASE,
+            owner="worker",
+            project="project",
+        )
+    )
+
+    assert result.state == "ready"
+    # The runtime must be healthy before the purge, and the ready write (which
+    # carries the marker) only happens after the purge returned.
+    assert events == ["start", "wait:10.128.0.9", "purge:10.128.0.9"]
+    final_fields = updates[-1][1]["vm_fields"]
+    assert final_fields["screenPrivacyVersion"] == reconciler.SCREEN_PRIVACY_VERSION
+
+
+def test_reconcile_never_stamps_the_privacy_marker_when_the_purge_fails(monkeypatch):
+    class FailingPurgeApi(LegacyPurgeStub):
+        async def purge_screen_activity(self, ip: str, auth_token: str) -> list[str]:
+            raise RuntimeError("purge failed with HTTP 500")
+
+    updates: list[dict[str, Any]] = []
+    monkeypatch.setattr(reconciler, "GceAgentVmClient", FailingPurgeApi)
+    monkeypatch.setattr(reconciler, "claim_vm_lease", lambda *_args: True)
+    monkeypatch.setattr(reconciler, "renew_vm_lease", lambda *_args: True)
+    monkeypatch.setattr(reconciler, "drift_reasons", lambda *_args: [])
+    monkeypatch.setattr(
+        reconciler, "update_vm_reconcile", lambda *args, **kwargs: updates.append((args, kwargs)) or True
+    )
+
+    result = asyncio.run(
+        reconciler.reconcile_one(
+            "user",
+            {"vmName": "omi-agent-user", "authToken": "token", "reconcile": {"startRequested": True}},
+            RELEASE,
+            owner="worker",
+            project="project",
+        )
+    )
+
+    assert result.state in {"retry", "quarantined"}
+    for _args, kwargs in updates:
+        fields = kwargs.get("vm_fields") or {}
+        assert "screenPrivacyVersion" not in fields
+
+
+def test_reconcile_skips_the_purge_when_the_marker_is_already_current(monkeypatch):
+    class MarkedVmApi(LegacyPurgeStub):
+        purges: list[tuple[str, str]] = []
+
+        async def purge_screen_activity(self, ip: str, auth_token: str) -> list[str]:
+            type(self).purges.append((ip, auth_token))
+            return []
+
+    MarkedVmApi.purges = []
+    monkeypatch.setattr(reconciler, "GceAgentVmClient", MarkedVmApi)
+    monkeypatch.setattr(reconciler, "claim_vm_lease", lambda *_args: True)
+    monkeypatch.setattr(reconciler, "renew_vm_lease", lambda *_args: True)
+    monkeypatch.setattr(reconciler, "drift_reasons", lambda *_args: [])
+    monkeypatch.setattr(reconciler, "update_vm_reconcile", lambda *_args, **kwargs: True)
+
+    result = asyncio.run(
+        reconciler.reconcile_one(
+            "user",
+            {
+                "vmName": "omi-agent-user",
+                "authToken": "token",
+                "screenPrivacyVersion": reconciler.SCREEN_PRIVACY_VERSION,
+                "reconcile": {"startRequested": True},
+            },
+            RELEASE,
+            owner="worker",
+            project="project",
+        )
+    )
+
+    assert result.state == "ready"
+    assert MarkedVmApi.purges == []
+
+
+class LegacyPurgeStub(FakeApi):
+    """Fake API for marker-migration tests: healthy VM with a private IP."""
+
+    def __init__(self, _project: str, _zone: str) -> None:
+        self.instances = {
+            "omi-agent-user": {
+                "status": "STOPPED",
+                "metadata": {},
+                "serviceAccounts": [],
+                "disks": [{"boot": True, "source": "projects/project/zones/us-central1-a/disks/omi-agent-user"}],
+                "networkInterfaces": [{"networkIP": "10.128.0.9"}],
+            }
+        }
+
+    async def request(self, _method: str, _url: str) -> Any:
+        class Response:
+            @staticmethod
+            def raise_for_status() -> None:
+                return None
+
+            @staticmethod
+            def json() -> dict[str, str]:
+                return {"sourceImage": "projects/project/global/images/omi-agent-20260805"}
+
+        return Response()
+
+    async def start(self, _vm_name: str) -> None:
+        self.instances["omi-agent-user"]["status"] = "RUNNING"
+
+    def private_instance_ip(self, _instance: dict[str, Any]) -> str:
+        return "10.128.0.9"
+
+    def instance_ip(self, _instance: dict[str, Any]) -> str | None:
+        return None
+
+    async def wait_for_runtime(self, private_ip: str, auth_token: str, release: AgentVmRelease, **_kwargs: Any) -> None:
+        return None
+
+    async def purge_screen_activity(self, ip: str, auth_token: str) -> list[str]:
+        return ["screenshots"]
 
 
 def test_boot_image_drift_requires_operator_recreate_without_mutating_vm(monkeypatch):

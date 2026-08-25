@@ -59,6 +59,7 @@ from services.agent_vm_lifecycle import (
     record_boot_image_state_disks,
     retry_delay_seconds,
     rollout_selected,
+    screen_privacy_migration_required,
     update_vm_reconcile,
     validate_release_manifest,
 )
@@ -1573,6 +1574,14 @@ async def reconcile_one(
             release,
             require_state=state_disk_info is not None,
         )
+        # The deletion half of the privacy migration must complete before the
+        # marker is written. A legacy state disk keeps the omi.db it was
+        # uploaded with — including its OCR tables — so stamping
+        # ``screenPrivacyVersion`` without a verified purge would re-admit
+        # mobile sessions onto retained screen data forever. A failed purge
+        # raises into the retry path and leaves the marker unwritten.
+        if screen_privacy_migration_required(vm):
+            await api.purge_screen_activity(private_ip, auth_token)
         public_ip = api.instance_ip(latest)
         finished_at = time.time()
         if not await _update_reconcile(

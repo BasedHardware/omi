@@ -39,12 +39,12 @@ from utils.executors import (
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from services.agent_vm_lifecycle import (
     SESSION_LEASE_TTL_SECONDS,
-    SCREEN_PRIVACY_VERSION,
     claim_session_lease,
     heartbeat_session_lease,
     reconcile_requested,
     release_session_lease,
     request_vm_start,
+    screen_privacy_migration_required,
 )
 from services.agent_vm_read import demoted_updating_vm
 
@@ -71,7 +71,6 @@ AGENT_VM_SESSION_LEASES_ENABLED = os.getenv("AGENT_VM_SESSION_LEASES_ENABLED", "
     "true",
     "yes",
 }
-_SCREEN_PRIVACY_VERSION = SCREEN_PRIVACY_VERSION
 
 
 def _utc_now() -> datetime:
@@ -342,11 +341,6 @@ async def _ensure_vm_running_or_close(
         return None, True
 
 
-def _screen_privacy_migration_required(vm: Dict[str, Any]) -> bool:
-    version = vm.get("screenPrivacyVersion")
-    return not isinstance(version, int) or isinstance(version, bool) or version < _SCREEN_PRIVACY_VERSION
-
-
 async def _prepare_vm_for_session(
     websocket: WebSocket,
     uid: str,
@@ -357,7 +351,7 @@ async def _prepare_vm_for_session(
     vm_ip = vm.get("ip")
     vm_token = vm.get("authToken")
 
-    if _screen_privacy_migration_required(vm):
+    if screen_privacy_migration_required(vm):
         await _send_startup_event(websocket, uid, {"type": "status", "message": "Updating your agent VM..."})
         candidate_vm, deletion_blocked = await _ensure_vm_running_or_close(websocket, uid, vm, health_failed=True)
         if deletion_blocked or lease_lost.is_set():

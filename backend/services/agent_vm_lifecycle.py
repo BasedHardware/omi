@@ -260,6 +260,17 @@ def rollout_selected(uid: str, release_id: str, target_percent: int) -> bool:
     return bucket < target_percent
 
 
+def screen_privacy_migration_required(vm: Mapping[str, Any]) -> bool:
+    """True when the owner record has not proven the privacy migration complete.
+
+    A missing or stale ``screenPrivacyVersion`` means the VM's state disk may
+    still hold uploaded screen/OCR tables. The reconciler must purge them and
+    only then persist the marker; the proxy refuses admission until it is set.
+    """
+    version = vm.get("screenPrivacyVersion")
+    return not isinstance(version, int) or isinstance(version, bool) or version < SCREEN_PRIVACY_VERSION
+
+
 def reconcile_requested(vm: Mapping[str, Any], now: float | None = None) -> bool:
     reconcile = vm.get("reconcile")
     if not isinstance(reconcile, Mapping):
@@ -1995,8 +2006,8 @@ class GceAgentVmClient:
         )
 
     @staticmethod
-    def _trusted_runtime_url(ip: str) -> str:
-        """Return an HTTP URL only when routing itself is a trusted boundary.
+    def _trusted_runtime_base(ip: str) -> str:
+        """Return an HTTP base URL only when routing itself is a trusted boundary.
 
         The VM runtime does not currently terminate TLS. Production therefore
         requires a private VPC path; local development may explicitly opt into
@@ -2008,12 +2019,37 @@ class GceAgentVmClient:
             raise TrustedAgentVmHealthChannelUnavailable("Agent VM readiness address is invalid") from exc
         channel = os.getenv("AGENT_VM_TRUSTED_HEALTH_CHANNEL", "").strip().lower()
         if channel == "private-vpc" and GceAgentVmClient._is_rfc1918(address):
-            return f"http://{address}:8080/health"
+            return f"http://{address}:8080"
         if channel == "loopback-dev" and address.is_loopback and os.getenv("ENVIRONMENT") != "production":
-            return f"http://{address}:8080/health"
+            return f"http://{address}:8080"
         raise TrustedAgentVmHealthChannelUnavailable(
             "Agent VM readiness requires AGENT_VM_TRUSTED_HEALTH_CHANNEL=private-vpc and private VPC reachability"
         )
+
+    @classmethod
+    def _trusted_runtime_url(cls, ip: str) -> str:
+        return f"{cls._trusted_runtime_base(ip)}/health"
+
+    async def purge_screen_activity(self, ip: str, auth_token: str) -> list[str]:
+        """Drop every retained screen-data table on this VM's omi.db.
+
+        Returns the list of tables the runtime reports purging. Any non-2xx,
+        malformed body, or unreachable runtime raises so the caller can retry
+        the whole reconciliation without ever persisting the privacy marker.
+        """
+        url = f"{self._trusted_runtime_base(ip)}/purge-screen-activity"
+        try:
+            async with httpx.AsyncClient(timeout=60) as client:
+                response = await client.post(url, headers={"Authorization": f"Bearer {auth_token}"})
+            payload = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            raise RuntimeError(f"Agent VM screen-activity purge request failed: {type(exc).__name__}") from exc
+        if response.status_code != 200 or not isinstance(payload, Mapping):
+            raise RuntimeError(f"Agent VM screen-activity purge failed with HTTP {response.status_code}")
+        purged = payload.get("purged")
+        if not isinstance(purged, list):
+            raise RuntimeError("Agent VM screen-activity purge returned no table list")
+        return [str(table) for table in purged]
 
     async def wait_for_runtime(
         self,
@@ -2108,6 +2144,7 @@ __all__ = [
     "heartbeat_session_lease",
     "mark_boot_image_migration_candidate_deleted",
     "reconcile_requested",
+    "screen_privacy_migration_required",
     "release_manifest_bytes",
     "record_boot_image_candidate",
     "record_boot_image_state_disks",
