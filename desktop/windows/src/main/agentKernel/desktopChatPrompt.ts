@@ -142,13 +142,13 @@ function localIsoParts(now: Date, timeZone: string): { iso: string; offset: stri
 }
 
 /**
- * Prefix a per-turn request with the host's authoritative local time.
+ * The host's authoritative local-time block, without any prompt attached:
+ * "# Current Time\n<local ISO-8601 with offset> (<IANA zone>)".
  *
- * The system prompt stays byte-stable so the pi binding can be reused; this
- * volatile block rides in the user turn, matching macOS's chat behavior.
+ * Volatile by design — it rides in a user turn or uncached section, never in a
+ * byte-stable system prompt (the pi binding reuse keys on that hash).
  */
-export function currentTimePrompt(
-  prompt: string,
+export function currentTimeBlock(
   now: Date = new Date(),
   timeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
 ): string {
@@ -160,7 +160,21 @@ export function currentTimePrompt(
     zone = 'UTC'
     parts = localIsoParts(now, zone)
   }
-  return `# Current Time\n${parts.iso} (${zone})\n\n${prompt}`
+  return `# Current Time\n${parts.iso} (${zone})`
+}
+
+/**
+ * Prefix a per-turn request with the host's authoritative local time.
+ *
+ * The system prompt stays byte-stable so the pi binding can be reused; this
+ * volatile block rides in the user turn, matching macOS's chat behavior.
+ */
+export function currentTimePrompt(
+  prompt: string,
+  now: Date = new Date(),
+  timeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+): string {
+  return `${currentTimeBlock(now, timeZone)}\n\n${prompt}`
 }
 
 // ---------------------------------------------------------------------------
