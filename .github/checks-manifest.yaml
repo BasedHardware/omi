@@ -142,9 +142,9 @@ checks:
     reason: "every AGENTS.md is loaded into agent context; budgets ratchet down, never up"
   - id: agent-doc-references
     command: ["python3", ".github/scripts/check_agent_doc_references.py"]
-    triggers: ["AGENTS.md", "**/AGENTS.md", "CLAUDE.md", "PRODUCT.md", "docs/agents/**", ".github/scripts/check_agent_doc_references.py"]
+    triggers: ["AGENTS.md", "**/AGENTS.md", "CLAUDE.md", "PRODUCT.md", "docs/agents/**", "*.md", "*.mdx", "**/*.md", "**/*.mdx", ".github/scripts/check_agent_doc_references.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "agents cannot tell a stale pointer from a live one; CLAUDE.md and the desktop/app guides had shipped dead paths"
+    reason: "agents cannot tell a stale pointer from a live one; CLAUDE.md and the desktop/app guides had shipped dead paths. The cp-template rule extends the same class to setup commands inside fenced blocks: README.md sent every macOS reader to backend/.env.example, and thirteen plugin setup docs told the reader to copy a .env template that was not there"
   - id: agent-doc-claims
     command: ["python3", ".github/scripts/check_agent_doc_claims.py"]
     triggers: [".cursor/cloud-agent-environment.md", "backend/test.sh", "backend/docs/test_isolation.md", ".github/scripts/check_agent_doc_claims.py", ".github/checks-manifest.yaml"]
