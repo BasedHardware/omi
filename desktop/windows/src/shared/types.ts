@@ -127,7 +127,12 @@ export type ChatMessage = {
  * See lib/sync/outbox.ts for the transition rules and dedupe strategy.
  */
 export type ConversationSyncState =
-  'local_only' | 'pending' | 'posting' | 'done' | 'failed' | 'unconfirmed'
+  | 'local_only'
+  | 'pending'
+  | 'posting'
+  | 'done'
+  | 'failed'
+  | 'unconfirmed'
 
 /** One transcript segment in the `/v1/conversations/from-segments` request shape
  * (snake_case matches the wire verbatim). `start`/`end` are WALL-CLOCK
@@ -226,6 +231,10 @@ export type ListenStartArgs = {
    *  of stranding a half-recorded one. Regenerated per conversation (after each
    *  finalize/silence boundary); re-used across reconnects within one conversation. */
   clientConversationId?: string
+  /** Conversation mode only: refuse this start when another conversation socket
+   *  is already open for this user, instead of racing it. Set by secondary
+   *  lanes (the wearable) so the primary microphone always keeps the slot. */
+  requireExclusiveConversation?: boolean
 }
 
 export type ListenMessage =
@@ -738,6 +747,9 @@ export type OmiBridgeApi = {
   listenFinalize: (sessionId: string) => void
   /** Subscribe to status/segment/event messages from every listen session. */
   onListenMessage: (cb: (msg: ListenMessage) => void) => () => void
+  /** True when a conversation-mode listen socket is already open for this user.
+   *  Only one is safe per uid, so the wearable lane checks before opening. */
+  listenConversationActive: () => Promise<boolean>
   // --- Capture window bridge (Phase 2) ---
   /** Send a capture command. From a UI window it's forwarded to the hidden
    *  capture window; the capture window itself services them. Fire-and-forget. */
@@ -754,6 +766,53 @@ export type OmiBridgeApi = {
   /** Subscribe to events from the capture window (audio errors, live-store ops,
    *  PTT chunks/levels). Returns an unsubscribe fn. */
   onCaptureEvent: (cb: (e: CaptureEvent) => void) => () => void
+  // --- Device window bridge (wearables) ---
+  /** Send a device command. From a UI window main forwards it to the hidden
+   *  device window; pairing and lifecycle commands are main-window only. */
+  deviceCommand: (cmd: DeviceCommand) => void
+  /** Device window: receive commands forwarded by main. Returns unsubscribe. */
+  onDeviceCommand: (cb: (cmd: DeviceCommand) => void) => () => void
+  /** Device window → main: emit an event. Main accepts it ONLY from the device
+   *  window (spoof guard) and fans it out to the UI windows. */
+  deviceEmit: (event: DeviceEvent) => void
+  /** Subscribe to device events (state, battery, pairing candidates). */
+  onDeviceEvent: (cb: (e: DeviceEvent) => void) => () => void
+  /** Read the persisted device settings (paired device, auto-reconnect). */
+  deviceGetSettings: () => Promise<DeviceSettings>
+  /** Patch the persisted device settings; returns the sanitized result. */
+  deviceSetSettings: (patch: Partial<DeviceSettings>) => Promise<DeviceSettings>
+  /** Answer an open Bluetooth chooser with the user's pick (null cancels). */
+  deviceSelect: (deviceId: string | null) => Promise<void>
+  /** Device window only: hand one recovered recording to the offline log.
+   *  `duplicate` means this recording is already there, which happens whenever
+   *  an interrupted transfer re-reads records it already delivered. */
+  deviceStoreRecovered: (audio: {
+    bytes: Uint8Array
+    timerStart: number
+    seconds: number
+    totalFrames: number
+    codec: string
+    sampleRate: number
+    frameSize: number
+    device: string
+  }) => Promise<'stored' | 'duplicate' | 'failed'>
+  // --- Offline audio capture ---
+  /** Current state of the offline-audio log. */
+  walSnapshot: () => Promise<WalSyncSnapshot | null>
+  /** Bytes the stored audio occupies on disk. */
+  walStorageBytes: () => Promise<number>
+  /** Retry one recording now, clearing its attempt history. */
+  walRetry: (id: string) => Promise<void>
+  /** Delete one recording and its audio. */
+  walDiscard: (id: string) => Promise<void>
+  /** Release every recording the server has confirmed. */
+  walReleaseConfirmed: () => Promise<number>
+  /** Subscribe to log changes. Returns an unsubscribe fn. */
+  onWalSnapshot: (cb: (snapshot: WalSyncSnapshot) => void) => () => void
+  /** Read the offline-capture preferences. */
+  walGetSettings: () => Promise<OfflineCaptureSettings>
+  /** Patch them; returns the sanitized result. */
+  walSetSettings: (patch: Partial<OfflineCaptureSettings>) => Promise<OfflineCaptureSettings>
   /** True when OMI_ALLOW_VIRTUAL_MIC=1 — lets test harnesses feed a VB-Cable as
    *  the mic. When false, capture steers away from virtual/loopback default
    *  inputs (see lib/audio acquireMicStream). */
@@ -1709,7 +1768,13 @@ export type MemoryExportResult = {
 }
 
 export type IndexedFileType =
-  'document' | 'code' | 'image' | 'media' | 'archive' | 'application' | 'other'
+  | 'document'
+  | 'code'
+  | 'image'
+  | 'media'
+  | 'archive'
+  | 'application'
+  | 'other'
 
 export type IndexedFileRecord = {
   path: string
@@ -1803,7 +1868,14 @@ export type RebuildResult = {
 // the macOS-parity local graph synthesized from indexed_files + memories and
 // consumed by the chat pre-step. Never conflate the two mechanisms.
 export type LocalKGNodeType =
-  'project' | 'app' | 'technology' | 'person' | 'org' | 'interest' | 'file_group' | 'card' // background-synthesized natural-language overview served to the chat floor
+  | 'project'
+  | 'app'
+  | 'technology'
+  | 'person'
+  | 'org'
+  | 'interest'
+  | 'file_group'
+  | 'card' // background-synthesized natural-language overview served to the chat floor
 
 export type LocalKGNode = {
   id: string // `${slug(label)}:${nodeType}` — stable across re-synthesis
@@ -2703,4 +2775,164 @@ export interface VoiceTurnOutboxEntry {
   attempts: number
   lastError: string | null
   updatedAtMs: number
+}
+
+// --- Wearable device (BLE) ---------------------------------------------------
+
+/** Supported wearable families. Mirrors the renderer's DeviceType union; kept
+ *  as a shared literal so main can persist a paired device without importing
+ *  renderer code. */
+export type WearableDeviceType =
+  | 'omi'
+  | 'openglass'
+  | 'frame'
+  | 'appleWatch'
+  | 'plaud'
+  | 'bee'
+  | 'fieldy'
+  | 'friendPendant'
+  | 'limitless'
+
+/** The identity main persists and shows in the tray, tabs, and toasts. */
+export type WearableDeviceInfo = {
+  id: string
+  name: string
+  type: WearableDeviceType
+}
+
+/** A candidate offered by Chromium's Bluetooth chooser during pairing. */
+export type WearableDeviceCandidate = {
+  deviceId: string
+  deviceName: string
+}
+
+export type WearableConnectionState =
+  | 'idle'
+  | 'scanning'
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'error'
+
+/** Persisted device settings (main owns them: reconnect must work with no UI
+ *  window open, so none of this lives in localStorage). */
+export type DeviceSettings = {
+  pairedDevice: WearableDeviceInfo | null
+  /** Reconnect to the paired device automatically after a drop. */
+  autoReconnect: boolean
+  /** Stream device audio into a transcription session. */
+  deviceListenEnabled: boolean
+}
+
+/** UI window (or main) → device window. */
+export type DeviceCommand =
+  // Begin pairing: the device window opens the Bluetooth chooser, which main
+  // answers with the user's pick from the candidate list.
+  | { type: 'device-pair' }
+  | { type: 'device-pair-cancel' }
+  /** The user picked a candidate from the chooser list (or null to cancel). */
+  | { type: 'device-pair-select'; deviceId: string | null }
+  | { type: 'device-connect'; deviceId: string }
+  | { type: 'device-disconnect' }
+  /** Re-publish current device state; a UI opened after the fact needs it. */
+  | { type: 'device-request-state' }
+  | { type: 'device-forget' }
+  /** Push updated settings into the device window (auto-reconnect, listening). */
+  | { type: 'device-settings'; settings: DeviceSettings }
+  /** Sign-in changed: the window rebuilds its lane with the new identity.
+   *  Carries the uid so an account SWITCH (both sides signed in) is detected. */
+  | { type: 'auth-changed'; uid: string | null }
+  /** Recover the audio the device recorded while it was away from this machine.
+   *  User-initiated: a transfer can run for minutes and competes with the live
+   *  session, so it never starts on its own. */
+  | { type: 'device-storage-recover' }
+  /** Stop a recovery in progress. */
+  | { type: 'device-storage-cancel' }
+
+/** Device window → main (fanned out to UI windows). */
+export type DeviceEvent =
+  | { type: 'device-state'; state: WearableConnectionState; device: WearableDeviceInfo | null }
+  /** Chooser candidates, streamed while pairing is open. */
+  | { type: 'device-candidates'; candidates: WearableDeviceCandidate[] }
+  | { type: 'device-paired'; device: WearableDeviceInfo }
+  | { type: 'device-forgotten' }
+  | { type: 'device-battery'; level: number; isCharging?: boolean }
+  /** Audio codec negotiated for the current session. */
+  | { type: 'device-codec'; codec: string }
+  /** Decoded audio is arriving but quality is degraded (repeated decode misses). */
+  | { type: 'device-audio-degraded'; degraded: boolean }
+  | { type: 'device-listen-state'; state: string }
+  | { type: 'device-error'; message: string }
+  /** The device host mounted and can service commands. Main holds commands
+   *  issued before this (a window created on demand for pairing is still
+   *  loading when the first command arrives) and flushes them on it. */
+  | { type: 'device-ready' }
+  /** Main-originated: the device window was recreated, so standing commands
+   *  must be re-issued. */
+  | { type: 'device-window-restarted' }
+  /** What the connected device is holding in its own storage, and how a
+   *  recovery of it is going. */
+  | { type: 'device-storage'; storage: DeviceStorageState }
+
+/** Device-side stored audio, as the Device tab renders it. */
+export type DeviceStorageState = {
+  phase: 'unknown' | 'unsupported' | 'empty' | 'available' | 'recovering' | 'failed'
+  /** Ring packets or stored files the device is holding. */
+  items: number
+  /** Estimated seconds of audio, for a size hint only. */
+  estimatedSeconds: number
+  /** Recordings written to the offline log by the pass in progress or the last
+   *  one that ran. */
+  recovered: number
+  /** Progress line while recovering, or why the last attempt stopped. */
+  message: string | null
+}
+// --- Offline audio capture (write-ahead log) ---------------------------------
+
+/** One stored recording as the sync UI sees it. */
+export type WalRecordingView = {
+  id: string
+  /** Capture start, unix seconds. */
+  timerStart: number
+  seconds: number
+  /** Capture source the audio came from. */
+  device: string
+  sizeBytes: number
+  /** Explicit sync state; every value gets its own label in the UI. */
+  state:
+    | 'syncing'
+    | 'uploaded'
+    | 'synced'
+    | 'waiting'
+    | 'retrying'
+    | 'failed'
+    | 'corrupted'
+    | 'outsideRecoveryWindow'
+  retryCount: number
+}
+
+export type WalSyncSnapshot = {
+  stats: {
+    total: number
+    pending: number
+    uploaded: number
+    synced: number
+    failed: number
+    bytes: number
+  }
+  /** True while the backend has asked sync to pause. */
+  paused: boolean
+  recordings: WalRecordingView[]
+}
+
+/** Offline-capture preferences (main owns them: capture runs with no UI open). */
+export type OfflineCaptureSettings = {
+  /** Upload stored recordings automatically. */
+  autoSync: boolean
+  /** Keep every window, not only the ones that lost audio. */
+  retainEverything: boolean
+  /** Confirmed recordings older than this are released. */
+  retentionDays: number
+  /** Bytes the stored audio may occupy. */
+  maxBytes: number
 }

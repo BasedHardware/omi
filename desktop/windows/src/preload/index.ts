@@ -20,6 +20,11 @@ import type {
   ListenMessage,
   CaptureCommand,
   CaptureEvent,
+  DeviceCommand,
+  DeviceEvent,
+  DeviceSettings,
+  OfflineCaptureSettings,
+  WalSyncSnapshot,
   ExportMemory,
   GoogleSource,
   KnowledgeGraph,
@@ -125,6 +130,7 @@ const omi: OmiBridgeApi = {
     ipcRenderer.send('omi-listen:feed', sessionId, pcm)
   },
   listenFinalize: (sessionId: string) => ipcRenderer.send('omi-listen:finalize', sessionId),
+  listenConversationActive: () => ipcRenderer.invoke('omi-listen:conversation-active'),
   onListenMessage: (cb: (msg: ListenMessage) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, msg: ListenMessage): void => cb(msg)
     ipcRenderer.on('omi-listen:message', listener)
@@ -141,6 +147,47 @@ const omi: OmiBridgeApi = {
   },
   captureEmit: (event: CaptureEvent, ownerId?: number) =>
     ipcRenderer.send('omi-capture:event', { event, ownerId }),
+  deviceCommand: (cmd: DeviceCommand) => ipcRenderer.send('omi-device:cmd', cmd),
+  onDeviceCommand: (cb: (cmd: DeviceCommand) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, payload: { cmd: DeviceCommand }): void =>
+      cb(payload.cmd)
+    ipcRenderer.on('omi-device:cmd', listener)
+    return () => ipcRenderer.removeListener('omi-device:cmd', listener)
+  },
+  deviceEmit: (event: DeviceEvent) => ipcRenderer.send('omi-device:event', event),
+  onDeviceEvent: (cb: (e: DeviceEvent) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, ev: DeviceEvent): void => cb(ev)
+    ipcRenderer.on('omi-device:event', listener)
+    return () => ipcRenderer.removeListener('omi-device:event', listener)
+  },
+  deviceGetSettings: () => ipcRenderer.invoke('omi-device:get-settings'),
+  deviceSetSettings: (patch: Partial<DeviceSettings>) =>
+    ipcRenderer.invoke('omi-device:set-settings', patch),
+  deviceSelect: (deviceId: string | null) => ipcRenderer.invoke('omi-device:select', deviceId),
+  deviceStoreRecovered: (audio: {
+    bytes: Uint8Array
+    timerStart: number
+    seconds: number
+    totalFrames: number
+    codec: string
+    sampleRate: number
+    frameSize: number
+    device: string
+  }) => ipcRenderer.invoke('omi-device:store-recovered', audio),
+  walSnapshot: () => ipcRenderer.invoke('omi-wal:snapshot'),
+  walStorageBytes: () => ipcRenderer.invoke('omi-wal:storage-bytes'),
+  walRetry: (id: string) => ipcRenderer.invoke('omi-wal:retry', id),
+  walDiscard: (id: string) => ipcRenderer.invoke('omi-wal:discard', id),
+  walReleaseConfirmed: () => ipcRenderer.invoke('omi-wal:release-confirmed'),
+  walGetSettings: () => ipcRenderer.invoke('omi-wal:get-settings'),
+  walSetSettings: (patch: Partial<OfflineCaptureSettings>) =>
+    ipcRenderer.invoke('omi-wal:set-settings', patch),
+  onWalSnapshot: (cb: (snapshot: WalSyncSnapshot) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, snapshot: WalSyncSnapshot): void =>
+      cb(snapshot)
+    ipcRenderer.on('omi-wal:snapshot', listener)
+    return () => ipcRenderer.removeListener('omi-wal:snapshot', listener)
+  },
   onCaptureEvent: (cb: (e: CaptureEvent) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, ev: CaptureEvent): void => cb(ev)
     ipcRenderer.on('omi-capture:event', listener)
