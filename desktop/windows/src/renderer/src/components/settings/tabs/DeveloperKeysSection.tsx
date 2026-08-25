@@ -17,6 +17,7 @@ import { dismissUsageLimit } from '../../../lib/usageLimit'
 import { fetchSubscription, fetchChatQuota } from '../../../lib/billing'
 import {
   BYOK_PROVIDERS,
+  BYOK_LLM_PROVIDERS,
   isByokActive,
   type ByokProvider,
   type ByokValidationResults
@@ -68,6 +69,10 @@ export function DeveloperKeysSection(): React.JSX.Element {
   const [statuses, setStatuses] = useState<ByokValidationResults>({})
   const [checking, setChecking] = useState(false)
   const [activationError, setActivationError] = useState<string | null>(null)
+  // Whether the backend enrollment actually succeeded — the banner must not
+  // claim "Free plan active" off key presence alone: an invalid or rejected key
+  // stays in the fields while activation stays off.
+  const [enrolledActive, setEnrolledActive] = useState(false)
   const [reveal, setReveal] = useState<Record<ByokProvider, boolean>>({
     openrouter: false,
     openai: false,
@@ -82,7 +87,8 @@ export function DeveloperKeysSection(): React.JSX.Element {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Load stored keys once on mount so the fields reflect what's saved. We do NOT
-  // validate on open (no network on open) — the banner reflects presence only;
+  // validate on open (no network on open) — the banner reflects the LAST
+  // enrollment outcome (validated providers from main), not field presence;
   // badges populate after a change triggers enrollment (Mac parity).
   useEffect(() => {
     void window.omi.byokGetAll().then((stored) => {
@@ -90,12 +96,16 @@ export function DeveloperKeysSection(): React.JSX.Element {
       keysRef.current = merged
       setKeys(merged)
     })
+    void window.omi.byokValidatedProviders().then((validated) => {
+      const llm = new Set<string>(BYOK_LLM_PROVIDERS as readonly string[])
+      setEnrolledActive(validated.some((p) => llm.has(p)))
+    })
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
     }
   }, [])
 
-  const hasActiveLLMByok = isByokActive(keys)
+  const hasActiveLLMByok = enrolledActive
   const hasAnyKey = BYOK_PROVIDERS.some((p) => keys[p].trim().length > 0)
 
   // Persist the current key set, then reconcile backend activation. Runs
@@ -117,6 +127,7 @@ export function DeveloperKeysSection(): React.JSX.Element {
     setChecking(false)
     setStatuses(result.results)
     if (result.active) {
+      setEnrolledActive(true)
       setActivationError(null)
       // Mac parity: on activation, refresh plan/quota and clear any sticky
       // paywall so a user who just hit their limit isn't left blocked.
@@ -124,16 +135,22 @@ export function DeveloperKeysSection(): React.JSX.Element {
       void fetchSubscription().catch(() => {})
       void fetchChatQuota().catch(() => {})
     } else if (result.backendError) {
+      // The enroll POST failed — server state unknown, so keep the prior
+      // activation evidence instead of flipping the banner either way.
       setActivationError("Couldn't reach Omi to switch on the free plan. Try again.")
-    } else if (willValidate) {
-      const rejected = PROVIDERS.filter((p) => result.results[p.id] && !result.results[p.id]?.ok)
-        .map((p) => p.displayName)
-        .sort()
-      setActivationError(
-        rejected.length
-          ? `Rejected by provider: ${rejected.join(', ')}. Free plan stays off until an LLM key authenticates.`
-          : null
-      )
+    } else {
+      // Deactivate DELETE sent (or every LLM key rejected) — the free plan is off.
+      setEnrolledActive(false)
+      if (willValidate) {
+        const rejected = PROVIDERS.filter((p) => result.results[p.id] && !result.results[p.id]?.ok)
+          .map((p) => p.displayName)
+          .sort()
+        setActivationError(
+          rejected.length
+            ? `Rejected by provider: ${rejected.join(', ')}. Free plan stays off until an LLM key authenticates.`
+            : null
+        )
+      }
     }
   }
 
@@ -155,6 +172,7 @@ export function DeveloperKeysSection(): React.JSX.Element {
     setStatuses({})
     setActivationError(null)
     setChecking(false)
+    setEnrolledActive(false)
     await window.omi.byokClearAll()
     const token = await auth.currentUser?.getIdToken().catch(() => undefined)
     if (token) await window.omi.byokEnroll(token) // deactivates (empty set)
