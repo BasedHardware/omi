@@ -36,13 +36,13 @@ class ConversationLocationCapture {
     this.currentPositionTimeout = const Duration(seconds: 2),
     this.totalTimeout = const Duration(seconds: 3),
     this.lastKnownMaxAge = const Duration(minutes: 5),
-  }) : _isLocationServiceEnabled = isLocationServiceEnabled ?? Geolocator.isLocationServiceEnabled,
-       _checkPermission = checkPermission ?? Geolocator.checkPermission,
-       _requestPermission = requestPermission ?? Geolocator.requestPermission,
-       _getCurrentPosition = getCurrentPosition ?? _defaultCurrentPosition,
-       _getLastKnownPosition = getLastKnownPosition ?? _defaultLastKnownPosition,
-       _upload = upload ?? ((geolocation) => updateUserGeolocation(geolocation: geolocation)),
-       _onNewlyGranted = onNewlyGranted;
+  })  : _isLocationServiceEnabled = isLocationServiceEnabled ?? Geolocator.isLocationServiceEnabled,
+        _checkPermission = checkPermission ?? Geolocator.checkPermission,
+        _requestPermission = requestPermission ?? Geolocator.requestPermission,
+        _getCurrentPosition = getCurrentPosition ?? _defaultCurrentPosition,
+        _getLastKnownPosition = getLastKnownPosition ?? _defaultLastKnownPosition,
+        _upload = upload ?? ((geolocation) => updateUserGeolocation(geolocation: geolocation)),
+        _onNewlyGranted = onNewlyGranted;
 
   final LocationServiceEnabled _isLocationServiceEnabled;
   final LocationPermissionReader _checkPermission;
@@ -60,7 +60,9 @@ class ConversationLocationCapture {
   /// is HIGH_ACCURACY GPS and routinely exceeds the recording-start budget
   /// on Android, after which last-known is also often null.
   static Future<Position> _defaultCurrentPosition() {
-    return Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium));
+    return Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium),
+    );
   }
 
   static Future<Position?> _defaultLastKnownPosition() async {

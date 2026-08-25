@@ -16,15 +16,21 @@ class ChatPageContext {
   final String? startDate;
   final String? endDate;
 
-  const ChatPageContext({required this.type, this.id, this.title, this.startDate, this.endDate});
+  const ChatPageContext({
+    required this.type,
+    this.id,
+    this.title,
+    this.startDate,
+    this.endDate,
+  });
 
   Map<String, dynamic> toJson() => {
-    'type': type,
-    if (id != null) 'id': id,
-    if (title != null) 'title': title,
-    if (startDate != null) 'start_date': startDate,
-    if (endDate != null) 'end_date': endDate,
-  };
+        'type': type,
+        if (id != null) 'id': id,
+        if (title != null) 'title': title,
+        if (startDate != null) 'start_date': startDate,
+        if (endDate != null) 'end_date': endDate,
+      };
 
   ChatPageContext copyWith({
     String? type,
@@ -178,7 +184,11 @@ Stream<ServerMessageChunk> sendMessageStreamServer(
   }
 
   var messageId = "1000"; // Default new message
-  final body = <String, dynamic>{'text': text, 'file_ids': filesId, if (context != null) 'context': context.toJson()};
+  final body = <String, dynamic>{
+    'text': text,
+    'file_ids': filesId,
+    if (context != null) 'context': context.toJson(),
+  };
 
   await for (var line in makeStreamingApiCall(url: url, body: jsonEncode(body))) {
     if (line.startsWith('error:402:')) {

@@ -564,8 +564,8 @@ int? _parseRetryAfterSeconds(http.Response response) {
 /// Everything else remains a generic backend-capacity limit.
 SyncRateLimitKind syncRateLimitKindForResponse(http.Response response) =>
     response.headers['x-omi-rate-limit-reason']?.trim().toLowerCase() == 'fair_use'
-    ? SyncRateLimitKind.fairUse
-    : SyncRateLimitKind.backendCapacity;
+        ? SyncRateLimitKind.fairUse
+        : SyncRateLimitKind.backendCapacity;
 
 /// Upload-only: POST files and return as soon as the server acknowledges
 /// (HTTP 202 with a job_id, or the 200 fast-path with a finished result).

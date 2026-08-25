@@ -14,20 +14,20 @@ class _App {
 /// disagree with the natively-created `[DEFAULT]` app — see `duplicateApp()` in
 /// `firebase_core_platform_interface/src/firebase_core_exceptions.dart`.
 FirebaseException _duplicateApp() => FirebaseException(
-  plugin: 'core',
-  code: 'duplicate-app',
-  message: 'A Firebase App named "[DEFAULT]" already exists',
-);
+      plugin: 'core',
+      code: 'duplicate-app',
+      message: 'A Firebase App named "[DEFAULT]" already exists',
+    );
 
 /// Mirrors `Env.validateFirebaseProject`: the profile pins one project id.
 void Function(String) _validatorFor(String expectedProjectId) => (projectId) {
-  if (projectId != expectedProjectId) {
-    throw StateError(
-      'Mobile profile requires Firebase project $expectedProjectId, '
-      'but the app was initialized with $projectId.',
-    );
-  }
-};
+      if (projectId != expectedProjectId) {
+        throw StateError(
+          'Mobile profile requires Firebase project $expectedProjectId, '
+          'but the app was initialized with $projectId.',
+        );
+      }
+    };
 
 void main() {
   group('ensureFirebaseApp', () {
@@ -79,7 +79,13 @@ void main() {
           projectIdOf: (app) => app.projectId,
           validateProject: _validatorFor('omi-project'),
         ),
-        throwsA(isA<StateError>().having((e) => e.message, 'message', contains('someone-elses-project'))),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('someone-elses-project'),
+          ),
+        ),
       );
     });
 

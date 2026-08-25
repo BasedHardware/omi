@@ -92,7 +92,10 @@ class AccountCutoverRuntime extends ChangeNotifier {
   /// A null/empty [uid] clears to legacy defaults. Owner changes immediately
   /// clear prior-account state and block product traffic until the in-flight
   /// refresh for that owner completes. Stale in-flight results are discarded.
-  Future<void> bindAuthenticatedOwner(String? uid, {AccountCutoverControlClient? client}) async {
+  Future<void> bindAuthenticatedOwner(
+    String? uid, {
+    AccountCutoverControlClient? client,
+  }) async {
     final epoch = ++_refreshEpoch;
     final normalized = (uid == null || uid.isEmpty) ? null : uid;
 
@@ -160,7 +163,9 @@ class AccountCutoverRuntime extends ChangeNotifier {
         // last authoritative word was "allow", this fence is the client's own:
         // the blocking screen offers skip and keeps retrying (see
         // canSkipUnresolvedFence).
-        _control = AccountCutoverControl.unavailable(retaining: _hasAuthoritative ? _control : null);
+        _control = AccountCutoverControl.unavailable(
+          retaining: _hasAuthoritative ? _control : null,
+        );
         break;
       case AccountCutoverFetchKind.transportFailure:
         if (lastAuthAllow != null) {

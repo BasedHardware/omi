@@ -127,7 +127,8 @@ class _NullSocketCaptureProvider extends CaptureProvider {
     required bool force,
     String? source,
     CustomSttConfig? customSttConfig,
-  }) async => null;
+  }) async =>
+      null;
 }
 
 class _CountingSocketCaptureProvider extends CaptureProvider {
@@ -270,12 +271,14 @@ void main() {
 
   test('streamDeviceRecording does not wait for location capture', () async {
     final locationCapture = _HangingConversationLocationCapture();
-    final provider = CaptureProvider(conversationLocationCapture: locationCapture);
+    final provider = CaptureProvider(
+      conversationLocationCapture: locationCapture,
+    );
 
     await provider.streamDeviceRecording().timeout(
-      const Duration(seconds: 2),
-      onTimeout: () => fail('streamDeviceRecording blocked on location capture'),
-    );
+          const Duration(seconds: 2),
+          onTimeout: () => fail('streamDeviceRecording blocked on location capture'),
+        );
     expect(locationCapture.calls, 1);
     locationCapture.complete();
     provider.dispose();
@@ -283,7 +286,9 @@ void main() {
 
   test('homepage no-device streamDeviceRecording is check-only', () async {
     final locationCapture = _CountingConversationLocationCapture();
-    final provider = CaptureProvider(conversationLocationCapture: locationCapture);
+    final provider = CaptureProvider(
+      conversationLocationCapture: locationCapture,
+    );
 
     await provider.streamDeviceRecording();
     expect(locationCapture.calls, 1);
@@ -1422,11 +1427,12 @@ void main() {
       _GatedSocketCaptureProvider provider, {
       BleAudioCodec codec = BleAudioCodec.pcm16,
       int sampleRate = 16000,
-    }) => provider.changeAudioRecordProfile(
-      audioCodec: codec,
-      sampleRate: sampleRate,
-      source: ConversationSource.phone.name,
-    );
+    }) =>
+        provider.changeAudioRecordProfile(
+          audioCodec: codec,
+          sampleRate: sampleRate,
+          source: ConversationSource.phone.name,
+        );
 
     test('drops a reconnect attempt while one is still in flight', () async {
       final provider = _GatedSocketCaptureProvider();
@@ -1554,7 +1560,9 @@ void main() {
     test('the cycle self-terminates at its cap when nothing interrupts it', () {
       fakeAsync((async) {
         var loadCalls = 0;
-        final provider = CaptureProvider(inProgressConversationLoader: () async => loadCalls++);
+        final provider = CaptureProvider(
+          inProgressConversationLoader: () async => loadCalls++,
+        );
         provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
         provider.updateRecordingState(RecordingState.deviceRecord);
 

@@ -310,7 +310,11 @@ void main() {
   });
 }
 
-Position _position({required double latitude, required double longitude, DateTime? timestamp}) {
+Position _position({
+  required double latitude,
+  required double longitude,
+  DateTime? timestamp,
+}) {
   return Position(
     latitude: latitude,
     longitude: longitude,

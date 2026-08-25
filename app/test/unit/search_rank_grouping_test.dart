@@ -5,7 +5,12 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/providers/conversation_provider.dart';
 
 ServerConversation _convo({required String id, required DateTime startedAt}) {
-  return ServerConversation(id: id, createdAt: startedAt, startedAt: startedAt, structured: Structured(id, 'overview'));
+  return ServerConversation(
+    id: id,
+    createdAt: startedAt,
+    startedAt: startedAt,
+    structured: Structured(id, 'overview'),
+  );
 }
 
 void main() {
