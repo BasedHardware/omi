@@ -1,18 +1,19 @@
-import sys
-import types
+from pathlib import Path
+from types import ModuleType
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import database.memories as memories_db
-from tests.unit.memory_import_isolation import restore_sys_modules, snapshot_sys_modules
+from testing.import_isolation import load_module_fresh, stub_modules
 
-_MODULE_NAMES = ('routers.memory_platform', 'utils.other.endpoints')
+_BACKEND = Path(__file__).resolve().parents[2]
 
 
-def _auth_stub() -> types.ModuleType:
-    module = types.ModuleType('utils.other.endpoints')
+def _auth_stub() -> ModuleType:
+    module = ModuleType('utils.other.endpoints')
     module.get_current_user_uid = lambda: 'test-user'
 
     # `with_rate_limit` has to be stubbed too. Omitting it made
@@ -30,19 +31,14 @@ def _auth_stub() -> types.ModuleType:
 
 @pytest.fixture(scope='module')
 def memory_platform_router():
-    saved = snapshot_sys_modules(_MODULE_NAMES)
-    auth_module = _auth_stub()
-    sys.modules.pop('routers.memory_platform', None)
-    sys.modules['utils.other.endpoints'] = auth_module
-    other_package = sys.modules.get('utils.other')
-    if isinstance(other_package, types.ModuleType):
-        other_package.endpoints = auth_module
-    try:
-        import routers.memory_platform as module
+    """Load the router against a stubbed auth module via the sanctioned helper.
 
-        yield module
-    finally:
-        restore_sys_modules(saved)
+    `stub_modules` snapshots/restores `sys.modules` and the parent-package
+    attribute (the manual dance this fixture used to do), and evicts the fresh
+    exec on teardown so no stub-fed copy leaks to later files.
+    """
+    with stub_modules({'utils.other.endpoints': _auth_stub()}):
+        yield load_module_fresh('routers.memory_platform', str(_BACKEND / 'routers' / 'memory_platform.py'))
 
 
 @pytest.fixture(autouse=True)
@@ -154,7 +150,7 @@ def test_search_over_quota_returns_429_naming_the_plan(memory_platform_router, m
     monkeypatch.setattr(
         memory_platform_router,
         '_require_product_authorization',
-        lambda _uid, _db: types.SimpleNamespace(policy=object(), global_gate=object(), observability={}),
+        lambda _uid, _db: SimpleNamespace(policy=object(), global_gate=object(), observability={}),
     )
 
     def _over_quota(_uid):
@@ -248,16 +244,16 @@ def _seeded_search_client(memory_platform_router, monkeypatch):
     monkeypatch.setattr(memory_platform_router, 'get_firestore_client', lambda: db_client)
     monkeypatch.setattr(memory_platform_router, '_current_time', lambda: now)
     monkeypatch.setattr(memory_platform_router, 'enforce_platform_quota', lambda _uid: None)
-    gate = types.SimpleNamespace(
+    gate = SimpleNamespace(
         source_path='memory_state/read_gate',
-        read_decision=types.SimpleNamespace(value='USE_MEMORY'),
+        read_decision=SimpleNamespace(value='USE_MEMORY'),
         fallback_reason=None,
         reason='memory_reads_enabled',
     )
     monkeypatch.setattr(
         memory_platform_router,
         '_require_product_authorization',
-        lambda _uid, _db: types.SimpleNamespace(
+        lambda _uid, _db: SimpleNamespace(
             policy=MemoryAccessPolicy.for_omi_chat(),
             global_gate=gate,
             observability=_rollout_observability(),
