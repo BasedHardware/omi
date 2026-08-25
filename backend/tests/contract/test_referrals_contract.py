@@ -56,12 +56,16 @@ def referral(bind_store):
 def _claim(referral, *, is_new_user=True, referred=None, referrer=None):
     import database.referrals as referrals_db
 
-    return referrals_db.claim_referral_trial(
+    # Upstream widened the return to `(claimed, reason)` so the router can emit why a claim was
+    # refused. The contract these suites assert is the grant decision itself, identical on both
+    # backends, so the reason rides alongside rather than replacing it.
+    claimed, _reason = referrals_db.claim_referral_trial(
         referred or referral['referred'],
         referrer or referral['referrer'],
         is_new_user=is_new_user,
         firestore_client=_client(),
     )
+    return claimed
 
 
 def _user(referral, uid=None):

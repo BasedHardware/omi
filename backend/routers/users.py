@@ -22,6 +22,7 @@ from database import (
     llm_usage as llm_usage_db,
     users as users_db,
 )
+from database._client import get_customer_firestore_client
 from database.sync_jobs import release_job_run_lock, try_acquire_job_run_lock
 from services.users.data_export import iter_user_data_export
 from services.users.account_deletion import background_wipe_user_data, start_account_deletion
@@ -1407,7 +1408,14 @@ def get_user_chat_usage_quota(
             reset_at=None,
         )
 
-    snapshot = get_chat_quota_snapshot(uid, platform=x_app_platform)
+    # This is the desktop-only quota display (see docstring), so it must read the
+    # same customer Firestore project that enforce_desktop_chat_quota() enforces
+    # against — otherwise a named dev/named bundle shows the dev project's plan
+    # here while /v2/chat/completions gates on the customer project's, and the
+    # two disagree for the same uid (#11199).
+    snapshot = get_chat_quota_snapshot(
+        uid, platform=x_app_platform, firestore_client=get_customer_firestore_client(), provision=False
+    )
     plan = snapshot['plan']
 
     if snapshot['limit'] is not None and snapshot['limit'] > 0:

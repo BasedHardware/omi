@@ -286,10 +286,12 @@ def delete_postprocessing_audio(file_path: str) -> None:
 
 
 def upload_sdcard_audio(file_path: str) -> str:
-    _object_store().put_from_file(postprocessing_audio_bucket, file_path, file_path)
-    # Signed for the same reason as the sibling above (ADR-0087). NOTE the pre-existing asymmetry, left
-    # as found: the object is written at `file_path` and the URL is minted for `sdcard/{file_path}`.
-    return _signed_url(postprocessing_audio_bucket, f'sdcard/{file_path}', USER_AUDIO_URL_MINUTES)
+    # The asymmetry this used to carry — written at `file_path`, URL minted for `sdcard/{file_path}` —
+    # was upstream's, and upstream fixed it in #11992: the object goes where the URL says it is.
+    path = f'sdcard/{file_path}'
+    _object_store().put_from_file(postprocessing_audio_bucket, path, file_path)
+    # Signed for the same reason as the sibling above (ADR-0087).
+    return _signed_url(postprocessing_audio_bucket, path, USER_AUDIO_URL_MINUTES)
 
 
 def download_postprocessing_audio(file_path: str, destination_file_path: str) -> None:

@@ -391,6 +391,211 @@ spec:
     assert secret_calls == []
 
 
+def test_ingress_literal_env_treats_a_missing_value_key_as_empty_string():
+    """Cloud Run's export omits the `value` key entirely for an empty-string literal.
+
+    It never writes `value: ''`. Before the fix, an entry without a `value` key
+    was skipped outright, so a var legitimately set to '' vanished from the
+    literal-env map instead of resolving to ''. This is the exact shape of
+    OMI_PARITY_PACK_ALLOWED_PRINCIPALS in the live dev backend service.
+    """
+    module = _load_module()
+    service = {
+        'spec': {
+            'template': {
+                'spec': {
+                    'containers': [
+                        {
+                            'name': 'backend-1',
+                            'env': [
+                                {'name': 'SAFE', 'value': 'kept'},
+                                {'name': 'OMI_PARITY_PACK_ALLOWED_PRINCIPALS'},
+                            ],
+                        }
+                    ]
+                }
+            }
+        }
+    }
+
+    actual = module._ingress_literal_env(service, ingress_container_name='backend-1')
+
+    assert actual == {'SAFE': 'kept', 'OMI_PARITY_PACK_ALLOWED_PRINCIPALS': ''}
+
+
+def test_ingress_literal_env_excludes_valueFrom_secret_references():
+    """A secret-backed env var is not a literal and must not be coerced to ''.
+
+    Before the fix these were excluded only by accident, because they never
+    carry a `value` key either. The exclusion must stay deliberate now that a
+    missing `value` key means '' for a real literal.
+    """
+    module = _load_module()
+    service = {
+        'spec': {
+            'template': {
+                'spec': {
+                    'containers': [
+                        {
+                            'name': 'backend-1',
+                            'env': [
+                                {
+                                    'name': 'OPENAI_API_KEY',
+                                    'valueFrom': {'secretKeyRef': {'name': 'openai-api-key', 'key': 'latest'}},
+                                },
+                            ],
+                        }
+                    ]
+                }
+            }
+        }
+    }
+
+    actual = module._ingress_literal_env(service, ingress_container_name='backend-1')
+
+    assert actual == {}
+    assert 'OPENAI_API_KEY' not in actual
+
+
+def test_validate_expected_literal_env_accepts_empty_string_matching_a_missing_value_key():
+    module = _load_module()
+    service = {
+        'spec': {
+            'template': {
+                'spec': {
+                    'containers': [
+                        {'name': 'backend-1', 'env': [{'name': 'OMI_PARITY_PACK_ALLOWED_PRINCIPALS'}]},
+                    ]
+                }
+            }
+        }
+    }
+
+    # Must not raise.
+    module._validate_expected_literal_env(
+        service,
+        expected={'OMI_PARITY_PACK_ALLOWED_PRINCIPALS': ''},
+        ingress_container_name='backend-1',
+        phase='exported base revision',
+    )
+
+
+def test_validate_expected_literal_env_still_fails_closed_for_a_genuinely_absent_var():
+    """This guard exists to catch real env drift before a sidecar replace.
+
+    The fix must make it read Cloud Run correctly, not make it more permissive
+    about genuine drift: a var that is not present in the export at all must
+    still report <missing> and raise.
+    """
+    module = _load_module()
+    service = {
+        'spec': {
+            'template': {
+                'spec': {
+                    'containers': [
+                        {'name': 'backend-1', 'env': [{'name': 'SAFE', 'value': 'kept'}]},
+                    ]
+                }
+            }
+        }
+    }
+
+    with pytest.raises(ValueError, match="expected '', found '<missing>'"):
+        module._validate_expected_literal_env(
+            service,
+            expected={'OMI_PARITY_PACK_ALLOWED_PRINCIPALS': ''},
+            ingress_container_name='backend-1',
+            phase='exported base revision',
+        )
+
+
+def test_attach_accepts_a_literal_cloud_run_omits_for_being_empty(monkeypatch, tmp_path) -> None:
+    """End-to-end regression for the production failure blocking dev deploys.
+
+    ``ValueError: exported base revision env OMI_PARITY_PACK_ALLOWED_PRINCIPALS
+    mismatch ... expected '', found '<missing>'`` -- the export legitimately
+    omits `value` for this var because it is set to '', and Cloud Run never
+    writes `value: ''`. attach_sidecar must complete instead of refusing.
+    """
+    module = _load_module()
+    expected_state = tmp_path / 'runtime-env-state.json'
+    expected_state.write_text(
+        json.dumps(
+            {
+                'services': {
+                    'backend': {
+                        'env': [
+                            {'name': 'OMI_PARITY_PACK_ALLOWED_PRINCIPALS', 'value': ''},
+                        ]
+                    }
+                }
+            }
+        ),
+        encoding='utf-8',
+    )
+    config = tmp_path / 'cloud-run-gmp-sidecar.yaml'
+    config.write_text('kind: RunMonitoring\n', encoding='utf-8')
+
+    export = """\
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: backend
+spec:
+  template:
+    metadata: {}
+    spec:
+      containers:
+      - name: backend-1
+        env:
+        - name: OMI_PARITY_PACK_ALLOWED_PRINCIPALS
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: openai-api-key
+              key: latest
+  traffic:
+  - latestRevision: false
+    revisionName: backend-serving
+    percent: 100
+"""
+
+    calls: list[list[str]] = []
+
+    def fake_run(args, *, capture_output=False):
+        calls.append(list(args))
+        if '--format=export' in args:
+            return module.subprocess.CompletedProcess(args, 0, export, '')
+        if '--format=value(status.latestCreatedRevisionName)' in args:
+            return module.subprocess.CompletedProcess(args, 0, 'backend-base\n', '')
+        if args[1:4] == ['run', 'services', 'replace']:
+            return module.subprocess.CompletedProcess(args, 0, '{}', '')
+        if '--format=value(status.url)' in args:
+            return module.subprocess.CompletedProcess(args, 0, 'https://backend.example\n', '')
+        raise AssertionError(args)
+
+    monkeypatch.setattr(module, 'ensure_config_secret', lambda **kwargs: '7')
+    monkeypatch.setattr(module, '_project_number', lambda _project: '1031333818730')
+    monkeypatch.setattr(module, '_run', fake_run)
+
+    module.attach_sidecar(
+        SimpleNamespace(
+            project='based-hardware',
+            region='us-central1',
+            service='backend',
+            base_revision='backend-base',
+            final_revision='backend-final',
+            ingress_container='backend-1',
+            config=config,
+            config_secret='cloud-run-gmp-config',
+            expected_env_state=expected_state,
+            tag='',
+        )
+    )
+
+    assert any(args[1:4] == ['run', 'services', 'replace'] for args in calls)
+
+
 # A project ID in run.googleapis.com/secrets crashes the NEXT gcloud run deploy.
 # Cloud Run accepts the ID and stores it, so nothing fails at attach time and the
 # breakage lands on whoever deploys next. Production carried

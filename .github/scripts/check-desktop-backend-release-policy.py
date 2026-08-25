@@ -178,6 +178,32 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
     for fragment in required:
         if fragment not in text:
             errors.append(f"{workflow}: missing release boundary {fragment!r}")
+
+    # Bound to the step, not to the file. attach_cloud_run_gmp_sidecar.py made
+    # --expected-env-state required and only the backend caller was updated;
+    # argparse exits before the attach runs, so both desktop deploy paths failed
+    # at the same step while every fragment above was still present.
+    attach_name = (
+        "Attach Managed Prometheus sidecar to production candidate"
+        if production
+        else "Attach Managed Prometheus sidecar to development candidate"
+    )
+    attach_step = _step_block(text, attach_name)
+    if attach_step is None:
+        errors.append(f"{workflow}: missing step {attach_name!r}")
+    elif "--expected-env-state=" not in attach_step:
+        errors.append(
+            f"{workflow}: {attach_name!r} must pass --expected-env-state; the sidecar script requires it"
+        )
+
+    render_name = "Render desktop backend expected env state"
+    render_step = _step_block(text, render_name)
+    if render_step is None:
+        errors.append(f"{workflow}: missing step {render_name!r}")
+    elif "--desktop-state-output" not in render_step:
+        errors.append(f"{workflow}: {render_name!r} must render the state with --desktop-state-output")
+    elif attach_step is not None and text.find(render_name) > text.find(attach_name):
+        errors.append(f"{workflow}: {render_name!r} must run before {attach_name!r}")
     if ":latest" in "\n".join(line for line in text.splitlines() if "image:" in line or "tags:" in line):
         errors.append(f"{workflow}: deployment image must use an immutable source tag")
 

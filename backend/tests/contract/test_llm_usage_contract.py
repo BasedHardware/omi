@@ -112,20 +112,23 @@ def test_a_model_name_with_dots_stays_one_counter(usage):
     assert _counter(daily, 'chat', 'qwen2', '5:14b', 'input_tokens') == 0, 'the dot must not split'
 
 
-def test_the_two_backends_disagree_and_this_pins_both_reasons(usage, request):
-    """MEASURED DIVERGENCE (BACKLOG L50), pinned so neither side can drift without telling us. Two
-    independent upstream defects on the Firestore path, both found by running this suite:
+def test_the_backends_now_nest_alike_and_still_diverge_on_the_key_filter(usage, request):
+    """MEASURED DIVERGENCE (BACKLOG L50), pinned so neither side can drift without telling us. This
+    suite found two independent upstream defects on the Firestore path. **One of them is now closed**,
+    and this test is the record of that — it was
+    `test_the_two_backends_disagree_and_this_pins_both_reasons` while both were open.
 
-    1. `set(..., merge=True)` with a dotted key. Real Firestore does NOT treat a dot as a path in `set`
-       — only `update()` does — so it stores one field literally named `chat.model-a.input_tokens`.
-       `_aggregate_summary` iterates `feature -> {model -> {...}}` and skips anything that is not a
-       dict, so it sees nothing. Our Mongo facade nests, so the reader works.
-    2. `get_usage_summary` filters `where("__name__", ">=", cutoff_id)` with a STRING. Firestore
-       requires a Key there and rejects the query outright: `400 __key__ filter value must be a Key`.
-       On Mongo the facade maps `__name__` onto the document-name keyset, so a string is fine.
-
-    Neither is ours to fix — they are product code on the cloud path — and neither is a reason to make
-    our adapter bug-compatible. Written down, and pinned, so the day either changes we hear about it.
+    1. CLOSED. `set(..., merge=True)` with a dotted key: real Firestore does not treat a dot as a path
+       in `set` — only `update()` does — so it stored one field literally named
+       `chat.model-a.input_tokens`, and `_aggregate_summary`, which walks `feature -> model -> ...`,
+       skipped it. Our Mongo facade nested, so only the Firestore reader was blind. Upstream took the
+       fix (#12065) and now expands the dotted paths before writing, so **both backends nest and the
+       divergence is gone**. That is what the first assertion below is for: it fails the day the
+       expansion is dropped.
+    2. STILL OPEN. `get_usage_summary` filters `where("__name__", ">=", cutoff_id)` with a STRING.
+       Firestore requires a Key there and rejects the query outright: `400 __key__ filter value must be
+       a Key`. On Mongo the facade maps `__name__` onto the document-name keyset, so a string is fine.
+       Proposed upstream as #12066; pinned here until it lands.
     """
     from google.api_core.exceptions import InvalidArgument
 
@@ -134,13 +137,15 @@ def test_the_two_backends_disagree_and_this_pins_both_reasons(usage, request):
     usage_db.record_llm_usage(usage['uid'], 'chat', 'model-a', input_tokens=9, output_tokens=1)
     daily = usage_db.get_daily_usage(usage['uid'])
 
+    # Reason 1, now converged: identical shape on both backends.
+    assert daily['chat']['model-a']['input_tokens'] == 9
+    assert 'chat.model-a.input_tokens' not in daily, 'no literal dotted key survives on either backend'
+
+    # Reason 2, still divergent.
     if request.node.callspec.params['bind_store'] == 'firestore':
-        assert 'chat.model-a.input_tokens' in daily, 'Firestore keeps the dotted key literal'
-        assert daily['chat.model-a.input_tokens'] == 9
         with pytest.raises(InvalidArgument):
             usage_db.get_usage_summary(usage['uid'], days=1)
     else:
-        assert daily['chat']['model-a']['input_tokens'] == 9, 'our facade nests it'
         assert usage_db.get_usage_summary(usage['uid'], days=1)['chat']['input_tokens'] == 9
 
 
