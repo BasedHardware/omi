@@ -1,0 +1,3 @@
+{
+  "change": "Fixed cancelled and superseded tasks appearing as active across desktop task views"
+}

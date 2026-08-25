@@ -1682,7 +1682,7 @@ class TasksStore: ObservableObject {
         completed: nil,
         includeDeleted: true
       )
-      return items.filter { $0.deleted == true }
+      return items.filter(\.isRetired)
     }
   }
 
