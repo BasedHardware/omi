@@ -52,7 +52,8 @@ def run_daily_memory_sweep_job() -> None:
         authority = daily_memory_sweep_authority_from_environment()
         authority_open = getattr(authority, "may_write", False) is True
     except Exception:
-        authority_open = False
+        logger.info("daily-memory-sweep job closed by backend authority; exiting before inventory")
+        return
     if not authority_open:
         logger.info("daily-memory-sweep job closed by backend authority; exiting before inventory")
         return

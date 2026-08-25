@@ -574,6 +574,7 @@ def search_conversations_tool(
             logger.warning("search_conversations_tool rejected by JIT summary-search budget")
             return budget_error
 
+    conversations_data: List[Dict[str, Any]] = []
     try:
         keyword_ids: List[str] = []
         vector_ids: List[str] = []
