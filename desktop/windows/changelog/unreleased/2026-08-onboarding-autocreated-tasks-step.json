@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Onboarding now advances to the Auto-created Tasks screen after the Goal step instead of finishing immediately — the full 15-step wizard is now reachable."
+  ]
+}
