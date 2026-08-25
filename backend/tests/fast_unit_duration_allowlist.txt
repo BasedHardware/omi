@@ -27,6 +27,9 @@ tests/unit/test_memory_visibility_export_fixes.py::test_developer_list_requests_
 # Exhaustive compatibility and deployment regressions intentionally traverse large synthetic
 # Firestore datasets or repository manifests while remaining hermetic unit tests.
 tests/services/users/test_data_export.py::test_iter_user_data_export_paginates_complete_collections
+# Exercises the complete FastAPI export route so memory preflight failure is proven to occur
+# before streaming response headers; the full TestClient boundary costs ~0.17s CPU in isolation.
+tests/routers/test_users.py::test_export_all_user_data_returns_500_before_streaming_headers_when_memory_preflight_fails
 tests/unit/test_bounded_firestore_list_reads.py::test_knowledge_graph_route_exposes_truncation
 tests/unit/test_memory_replace_policy.py::test_universal_reextract_failure_preserves_existing_memories
 tests/unit/test_backend_runtime_env_validator.py::test_runtime_manifest_rejects_retired_per_user_memory_inventory
