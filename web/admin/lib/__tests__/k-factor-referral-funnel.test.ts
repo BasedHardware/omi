@@ -170,4 +170,43 @@ describe("computeKFactor viral signals", () => {
     expect(payload.summary.kFactor).toBe(payload.kFactor);
     expect(payload.kFactor).toBeGreaterThan(0);
   });
+
+  it("never double-counts the hours a rolling 24h window shares with yesterday", async () => {
+    configurePosthog();
+    const today = nycDate();
+    const yesterday = nycDate(86_400_000);
+    posthogResults.mockImplementation(async (_h, _p, _k, query: string) => {
+      if (query.includes("Onboarding How Did You Hear")) {
+        // 5 signups yesterday + 1 today; the trailing 24h window sees 4 of
+        // them (3 of yesterday's late-evening ones plus today's).
+        return query.includes("INTERVAL 7 DAY") ? [[4, 6]] : [[yesterday, 5], [today, 1]];
+      }
+      if (query.includes("Share Action")) {
+        return query.includes("INTERVAL 7 DAY") ? [[0, 0]] : [];
+      }
+      if (query.includes("min_ts")) {
+        return query.includes("INTERVAL 7 DAY") ? [[10, 20]] : [[yesterday, 10], [today, 10]];
+      }
+      return [[0]];
+    });
+    const payload: any = await compute("macos");
+
+    // Chart: the newest bar is the full rolling window…
+    const lastDaily = payload.daily[payload.daily.length - 1];
+    expect(lastDaily.friend).toBe(4);
+    // …but the 30d summary stays the sum of calendar days (5 + 1), NOT the
+    // calendar days with today swapped for the overlapping 24h window (5 + 4).
+    expect(payload.summary.friend).toBe(6);
+    // Weekly calendar buckets are aggregated pre-override too: everything but
+    // the last (rolling trailing 7d) bucket sums calendar values.
+    const weeklySum = payload.weekly.reduce(
+      (acc: number, w: any) => acc + w.friend,
+      0,
+    );
+    const lastWeekly = payload.weekly[payload.weekly.length - 1];
+    expect(lastWeekly.friend).toBe(6); // trailing-7d query value, a replacement
+    if (payload.weekly.length > 1) {
+      expect(weeklySum - lastWeekly.friend).toBeLessThanOrEqual(6);
+    }
+  });
 });
