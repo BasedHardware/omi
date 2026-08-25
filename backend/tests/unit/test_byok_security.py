@@ -331,12 +331,12 @@ class TestGeminiKeyNotInUrl:
 
 
 class TestChatQuotaBYOKBypass:
+    @patch('utils.subscription.get_byok_keys', return_value={'openai': 'sk-test'})
     @patch('utils.subscription.has_validated_byok_keys', return_value=True)
-    @patch('utils.subscription.get_byok_keys', return_value={'openai': 'sk-user'})
     @patch('utils.subscription.users_db')
     @patch('utils.subscription.is_trial_paywalled', return_value=False)
     def test_enforce_chat_quota_bypasses_for_validated_openai_key(
-        self, _mock_paywalled, mock_users_db, _mock_keys, _mock_validated
+        self, _mock_paywalled, mock_users_db, _mock_validated, _mock_keys
     ):
         mock_users_db.is_byok_active.return_value = True
         from utils.subscription import enforce_chat_quota
@@ -1168,10 +1168,13 @@ class TestMiddlewareIsolation:
 
 
 class TestQuotaBoundaryTests:
+    @patch('utils.subscription.get_byok_keys', return_value={'anthropic': 'sk-test'})
     @patch('utils.subscription.has_validated_byok_keys', return_value=True)
-    @patch('utils.subscription.get_byok_keys', return_value={'anthropic': 'sk-ant-user'})
     @patch('utils.subscription.users_db')
-    def test_chat_quota_bypasses_with_validated_anthropic_key_only(self, mock_users_db, _mock_keys, _mock_validated):
+    @patch('utils.subscription.is_trial_paywalled', return_value=False)
+    def test_chat_quota_bypasses_with_validated_anthropic_key_only(
+        self, _mock_paywalled, mock_users_db, _mock_validated, _mock_keys
+    ):
         """Anthropic-only BYOK should also bypass chat quota."""
         mock_users_db.is_byok_active.return_value = True
         from utils.subscription import enforce_chat_quota
@@ -1337,6 +1340,29 @@ class TestBYOKFingerprintValidation:
             assert set(get_byok_keys()) == set(self._enrolled_fingerprints)
         finally:
             _byok_ctx.reset(token)
+
+    def test_oauth_selection_stores_a_fresh_credential_for_the_request(self):
+        from utils.byok import (
+            _byok_ctx,
+            _byok_llm_provider_ctx,
+            _byok_oauth_credential_ctx,
+            get_byok_oauth_credential,
+            validate_byok_request,
+        )
+
+        credential = {'provider': 'chatgpt', 'access_token': 'access-2', 'refresh_token': 'refresh-2'}
+        key_token = _byok_ctx.set({})
+        provider_token = _byok_llm_provider_ctx.set('chatgpt')
+        credential_token = _byok_oauth_credential_ctx.set(None)
+        try:
+            with patch('utils.llm.oauth.get_credential', return_value=credential) as get_credential:
+                validate_byok_request('oauth-uid')
+            get_credential.assert_called_once_with('oauth-uid', 'chatgpt')
+            assert get_byok_oauth_credential() == credential
+        finally:
+            _byok_ctx.reset(key_token)
+            _byok_llm_provider_ctx.reset(provider_token)
+            _byok_oauth_credential_ctx.reset(credential_token)
 
     @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
     @patch('database.users.get_byok_state')
@@ -1661,6 +1687,31 @@ class TestWSAuthDependencyBYOK:
             await get_current_user_uid_ws_listen(websocket=ws, authorization='Bearer tok')
             assert get_byok_keys() == {'openai': 'sk-good'}
             assert has_validated_byok_keys()
+
+        asyncio.run(authenticate_and_assert_context())
+
+    @patch('utils.other.endpoints.get_user_deletion_wipe_status', return_value=None)
+    @patch('utils.other.endpoints.validate_byok_websocket_keys', return_value=({}, None))
+    @patch('utils.other.endpoints._verify_ws_auth', return_value='ws-uid')
+    def test_ws_listen_propagates_oauth_provider_so_credential_resolves(
+        self, _mock_auth, _mock_validate, _mock_deletion
+    ):
+        """WebSocket listen carries X-BYOK-LLM-Provider for OAuth-backed BYOK.
+
+        The listen WS path never sees x-byok-* key headers for ChatGPT/Grok; the
+        selected provider header must be propagated to the request context so
+        downstream get_llm() can resolve the stored OAuth credential by uid.
+        """
+        import asyncio
+        from utils.byok import get_byok_llm_provider, get_byok_uid
+        from utils.other.endpoints import get_current_user_uid_ws_listen
+
+        ws = self._make_ws({'x-byok-llm-provider': 'chatgpt'})
+
+        async def authenticate_and_assert_context():
+            await get_current_user_uid_ws_listen(websocket=ws, authorization='Bearer tok')
+            assert get_byok_llm_provider() == 'chatgpt'
+            assert get_byok_uid() == 'ws-uid'
 
         asyncio.run(authenticate_and_assert_context())
 

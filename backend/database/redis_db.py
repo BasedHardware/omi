@@ -461,6 +461,27 @@ def user_webhook_status_db(uid: str, wtype: str) -> Optional[bool]:
 
 
 def get_user_webhook_db(uid: str, wtype: str) -> str:
+    try:
+        from database.users import get_user_webhook_config
+
+        config = get_user_webhook_config(uid)
+        key = getattr(wtype, 'value', wtype)
+        mapping = {
+            'memory_created': 'on_conversation_created',
+            'realtime_transcript': 'on_transcript_stored',
+            'day_summary': 'day_summary',
+            'audio_bytes': 'audio_bytes_url',
+        }
+        field = mapping.get(str(key), str(key))
+        if field in config:
+            value = config.get(field)
+            if field == 'audio_bytes_url':
+                delay = config.get('audio_bytes_delay')
+                url = value or ''
+                return f'{url},{delay}' if url and delay is not None else (url or '')
+            return value or ''
+    except Exception:
+        pass
     url = r.get(f'users:{uid}:developer:webhook:{wtype}')
     if not url:
         return ''

@@ -82,6 +82,8 @@ enum DefaultsKey: String {
   case byokEnrolledFingerprints = "byok_enrolled_fingerprints"
   /// UID that last owned persisted BYOK keys on this Mac.
   case byokOwnerUid = "byok_owner_uid"
+  case chatGPTLLMOAuthConnected = "dev_chatgpt_llm_oauth_connected"
+  case grokLLMOAuthConnected = "dev_grok_llm_oauth_connected"
   case rewindDisableContentCache = "rewindDisableContentCache"
   // Task-order migration keys are typed so TasksPage and its tests share the
   // migration contract instead of repeating raw UserDefaults literals.

@@ -25,7 +25,15 @@ from config.plan_catalog import (
     resolve_stripe_price_plan,
 )
 from models.users import PlanType, SubscriptionStatus, Subscription, PlanLimits, TrialMetadata
-from utils.byok import get_byok_key, get_byok_keys, has_validated_byok_keys
+from utils.byok import (
+    get_byok_key,
+    get_byok_keys,
+    get_byok_llm_provider,
+    get_byok_oauth_credential,
+    get_byok_uid,
+    has_byok_keys,
+    has_validated_byok_keys,
+)
 from utils.log_sanitizer import sanitize
 from utils.observability.fallback import record_fallback
 import logging
@@ -215,6 +223,17 @@ _TRIAL_PAYWALL_CACHE_TTL_SECONDS = 300
 
 def request_has_llm_byok_key() -> bool:
     """Validated request has an enrolled LLM BYOK key (not Deepgram-only)."""
+    provider = get_byok_llm_provider()
+    if provider in {'chatgpt', 'grok'}:
+        if get_byok_oauth_credential() is not None:
+            return has_byok_keys()
+        uid = get_byok_uid()
+        if not uid:
+            return False
+        from database.llm_oauth import get_credential as get_stored_oauth_credential
+
+        stored = get_stored_oauth_credential(uid, provider)
+        return isinstance(stored, dict) and bool(stored.get('access_token') or stored.get('refresh_token'))
     return has_validated_byok_keys() and any(
         get_byok_keys().get(provider) for provider in ('openrouter', 'openai', 'anthropic', 'gemini')
     )

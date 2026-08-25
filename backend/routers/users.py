@@ -54,7 +54,7 @@ from database.users import (
     set_user_transcription_preferences,
 )
 from config.stt_provider_policy import supports_live_multilingual_mode
-from models.users import AvailableLanguage, AvailableLanguagesResponse
+from models.users import AvailableLanguage, AvailableLanguagesResponse, WebhookConfig
 from utils.user_language import PRIMARY_LANGUAGE_OPTIONS, normalize_user_language
 from database.users import *
 from models.conversation import Conversation
@@ -130,6 +130,7 @@ from utils.other.storage import (
 from utils.webhooks import webhook_first_time_setup
 from utils.byok import (
     get_byok_key,
+    has_byok_keys,
     invalidate_byok_state_cache,
     peppered_fingerprint,
 )
@@ -539,6 +540,63 @@ def get_user_webhooks_status(uid: str = Depends(auth.get_current_user_uid)):
         'realtime_transcript': realtime_transcript,
         'day_summary': day_summary,
     }
+
+
+# ***********************************************
+# ********* WEBHOOK CONFIG (SSOT) **************
+# ***********************************************
+
+
+def _legacy_webhook_config(uid: str) -> dict:
+    audio = get_user_webhook_db(uid, WebhookType.audio_bytes)
+    audio_url, _, audio_delay = audio.partition(',')
+    config = {
+        'on_conversation_created': get_user_webhook_db(uid, WebhookType.memory_created) or None,
+        'on_transcript_stored': get_user_webhook_db(uid, WebhookType.realtime_transcript) or None,
+        'audio_bytes_url': audio_url or None,
+        'audio_bytes_delay': int(audio_delay) if audio_delay.isdigit() else None,
+        'day_summary': get_user_webhook_db(uid, WebhookType.day_summary) or None,
+    }
+    return {key: value for key, value in config.items() if value is not None}
+
+
+def _apply_webhook_config(uid: str, config: dict) -> None:
+    set_user_webhook_config(uid, config)
+    memory = config.get('on_conversation_created') or ''
+    transcript = config.get('on_transcript_stored') or ''
+    day_summary = config.get('day_summary') or ''
+    audio_url = config.get('audio_bytes_url') or ''
+    audio_delay = config.get('audio_bytes_delay')
+    audio = f'{audio_url},{audio_delay}' if audio_url and audio_delay is not None else audio_url
+    set_user_webhook_db(uid, WebhookType.memory_created, memory)
+    set_user_webhook_db(uid, WebhookType.realtime_transcript, transcript)
+    set_user_webhook_db(uid, WebhookType.day_summary, day_summary)
+    set_user_webhook_db(uid, WebhookType.audio_bytes, audio)
+    for wtype, value in (
+        (WebhookType.memory_created, memory),
+        (WebhookType.realtime_transcript, transcript),
+        (WebhookType.day_summary, day_summary),
+        (WebhookType.audio_bytes, audio),
+    ):
+        if webhook_url_from_setting(wtype, value):
+            enable_user_webhook_db(uid, wtype)
+        else:
+            disable_user_webhook_db(uid, wtype)
+
+
+@router.get('/v1/user/webhook-config', tags=['v1'], response_model=WebhookConfig)
+def get_webhook_config(uid: str = Depends(auth.get_current_user_uid)):
+    """Get the server-authoritative webhook config."""
+    config = get_user_webhook_config(uid)
+    return config or _legacy_webhook_config(uid)
+
+
+@router.put('/v1/user/webhook-config', tags=['v1'], response_model=WebhookConfig)
+def put_webhook_config(body: WebhookConfig, uid: str = Depends(auth.get_current_user_uid)):
+    """Set the server-authoritative webhook config (full replace)."""
+    config = body.model_dump(exclude_none=True)
+    _apply_webhook_config(uid, config)
+    return config
 
 
 # *************************************************

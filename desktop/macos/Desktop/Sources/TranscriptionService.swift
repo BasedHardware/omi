@@ -461,6 +461,9 @@ class TranscriptionService: @unchecked Sendable {
     {
       request.setValue(entry.key, forHTTPHeaderField: provider.headerName)
     }
+    if APIKeyService.isByokActive {
+      request.setValue(APIKeyService.selectedBYOKLLMSelection.rawValue, forHTTPHeaderField: "X-BYOK-LLM-Provider")
+    }
 
     // Create URLSession and WebSocket task
     let configuration = URLSessionConfiguration.default
@@ -772,6 +775,9 @@ extension TranscriptionService {
       let entry = APIKeyService.activeBYOKSnapshot[provider]
     {
       request.setValue(entry.key, forHTTPHeaderField: provider.headerName)
+    }
+    if APIKeyService.isByokActive {
+      request.setValue(APIKeyService.selectedBYOKLLMSelection.rawValue, forHTTPHeaderField: "X-BYOK-LLM-Provider")
     }
     request.httpBody = audioData
 

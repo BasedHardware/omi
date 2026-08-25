@@ -219,3 +219,18 @@ class AvailableLanguage(BaseModel):
 
 class AvailableLanguagesResponse(BaseModel):
     languages: List[AvailableLanguage]
+
+
+class WebhookConfig(BaseModel):
+    """Server-authoritative webhook configuration (SSOT).
+
+    Stored in the user's Firestore document under ``webhook_config``.
+    The per-type Redis keys remain for backward compat; new clients should
+    use this consolidated endpoint instead.
+    """
+
+    on_conversation_created: Optional[str] = None
+    on_transcript_stored: Optional[str] = None
+    audio_bytes_url: Optional[str] = None
+    audio_bytes_delay: Optional[int] = None
+    day_summary: Optional[str] = None
