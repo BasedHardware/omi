@@ -87,13 +87,6 @@ static NSString *OmiOwnKeychainCloudToken(void) {
   return OmiKeychainTokenForServices(@[@"com.omi.rnruntime.firebase-rest-session"]);
 }
 
-static NSString *OmiKeychainCloudToken(void) {
-  return OmiKeychainTokenForServices(@[
-    @"com.omi.desktop.firebase-rest-session.v2.team.9536L8KLMP.bundle.com.omi.computer-macos",
-    @"com.omi.desktop.firebase-rest-session.v2.team.adhoc.com.omi.computer-macos.bundle.com.omi.computer-macos",
-  ]);
-}
-
 static NSString *OmiResolvedToken(NSDictionary<NSString *, NSString *> *environment) {
   NSString *localToken = environment[@"OMI_LOCAL_API_TOKEN"];
   NSString *localClient = environment[@"OMI_LOCAL_API_CLIENT_ID"];
@@ -106,8 +99,7 @@ static NSString *OmiResolvedToken(NSDictionary<NSString *, NSString *> *environm
   if (cloud.length > 0) {
     return [cloud copy];
   }
-  if ([environment[@"APP_SANDBOX_CONTAINER_ID"] length] > 0) return nil;
-  return [OmiKeychainCloudToken() copy];
+  return nil;
 }
 
 static BOOL OmiExamplePlatformRequestSupported(NSString *method, NSString *path) {
