@@ -32,6 +32,7 @@ from models.jit_proactivity import (
 from models.jit_trigger_feedback import JITTriggerFeedbackAction, JITTriggerFeedbackReceipt
 from database.jit_proactivity_store import JITProactivityReservationError, reserve_jit_proactivity_event
 from database.memory_apply_store import MemoryFirestoreApplyError
+from database.read_boundary import MalformedDocError
 
 router = APIRouter()
 _DECISION_PATH = '/v1/jit/rollout-decision'
@@ -305,6 +306,8 @@ async def reserve_jit_proactivity(
         )
     except (ValueError, JITProactivityReservationError) as exc:
         raise HTTPException(status_code=409, detail='JIT proactive budget or authority is unavailable') from exc
+    except MalformedDocError as exc:
+        raise HTTPException(status_code=503, detail='JIT proactive authority is temporarily unavailable') from exc
     return JITProactivityReservationEnvelope(reserved=reserved, receipt=receipt)
 
 

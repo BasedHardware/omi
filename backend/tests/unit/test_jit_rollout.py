@@ -30,6 +30,7 @@ from utils.other.endpoints import get_current_user_uid
 from models.jit_trigger_feedback import JITTriggerFeedbackReceipt
 from models.jit_proactivity import JITProactivityEventReceipt
 from models.product_memory import MemoryItemStatus
+from database.read_boundary import MalformedDocError
 
 
 class _Clock:
@@ -817,3 +818,38 @@ def test_proactivity_reservation_does_no_mutation_when_killed(monkeypatch):
     )
 
     assert response.status_code == 403
+
+
+def test_proactivity_reservation_maps_malformed_authority_to_retryable_unavailable(monkeypatch):
+    async def resolve(*_args, **_kwargs):
+        evaluation = JITFlagEvaluation(TriState.ENABLED, TriState.DISABLED, JITDecisionReason.EVALUATED)
+        return authority_module._effective_decision(evaluation, cache_hit=False, cache_ttl_seconds=20)
+
+    async def malformed_authority(*_args, **_kwargs):
+        raise MalformedDocError(
+            document_path='users/owner/jit_proactivity/control',
+            error_types=('missing',),
+            error_fields=('account_generation',),
+        )
+
+    monkeypatch.setattr(jit_rollout, 'resolve_jit_rollout', resolve)
+    monkeypatch.setattr(jit_rollout, 'run_blocking', malformed_authority)
+    app = FastAPI()
+    app.include_router(jit_rollout.router)
+    app.dependency_overrides[get_current_user_uid] = lambda: 'owner'
+
+    response = TestClient(app).post(
+        '/v1/jit/proactivity/reservations',
+        json={
+            'event_id': 'e' * 64,
+            'candidate_id': 'c' * 64,
+            'operation': 'ambient_notification',
+            'account_generation': 3,
+            'device_id': 'd' * 64,
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {'detail': 'JIT proactive authority is temporarily unavailable'}
+    assert 'users/owner' not in response.text
+    assert 'account_generation' not in response.text
