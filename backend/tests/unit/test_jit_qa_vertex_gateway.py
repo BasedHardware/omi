@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
-from pathlib import Path
 import time
-from types import SimpleNamespace
+from pathlib import Path
+from types import ModuleType, SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
@@ -14,7 +14,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 VERTEX_GATEWAY_PATH = REPO_ROOT / 'scripts' / 'dev-harness' / 'dev_harness' / 'jit_vertex_gateway.py'
 
 
-def _load_vertex_gateway(monkeypatch: pytest.MonkeyPatch):
+def _load_vertex_gateway(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     monkeypatch.syspath_prepend(str(REPO_ROOT / 'backend'))
     monkeypatch.setenv('OMI_LLM_GATEWAY_SERVICE_TOKEN', 's' * 32)
     monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'based-hardware-dev')
@@ -35,8 +35,13 @@ def _vertex_headers(**extra: str) -> dict[str, str]:
     }
 
 
-def test_vertex_broker_rejects_multimodal_and_tool_surfaces(monkeypatch: pytest.MonkeyPatch) -> None:
-    gateway = _load_vertex_gateway(monkeypatch)
+@pytest.fixture
+def gateway(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
+    """Load the standalone gateway outside each test's timed call phase."""
+    return _load_vertex_gateway(monkeypatch)
+
+
+def test_vertex_broker_rejects_multimodal_and_tool_surfaces(gateway: ModuleType) -> None:
 
     with pytest.raises(HTTPException) as image_error:
         gateway._reject_unsupported_surfaces(
@@ -62,9 +67,8 @@ def test_vertex_broker_rejects_multimodal_and_tool_surfaces(monkeypatch: pytest.
 
 
 def test_vertex_broker_behaviorally_enforces_auth_byok_tools_and_body_cap(
-    monkeypatch: pytest.MonkeyPatch,
+    gateway: ModuleType,
 ) -> None:
-    gateway = _load_vertex_gateway(monkeypatch)
     client = TestClient(gateway.app)
     endpoint = '/v1/chat/completions'
     payload = {'messages': [{'role': 'user', 'content': 'hello'}]}
@@ -108,8 +112,9 @@ def test_vertex_broker_behaviorally_enforces_auth_byok_tools_and_body_cap(
     )
 
 
-def test_vertex_broker_clamps_output_and_caps_nonstream_response(monkeypatch: pytest.MonkeyPatch) -> None:
-    gateway = _load_vertex_gateway(monkeypatch)
+def test_vertex_broker_clamps_output_and_caps_nonstream_response(
+    gateway: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
 
     class FakeProvider:
         def __init__(self) -> None:
@@ -149,8 +154,7 @@ def test_vertex_broker_clamps_output_and_caps_nonstream_response(monkeypatch: py
     assert gateway._in_flight == 0
 
 
-def test_vertex_broker_caps_stream_bytes_and_concurrency(monkeypatch: pytest.MonkeyPatch) -> None:
-    gateway = _load_vertex_gateway(monkeypatch)
+def test_vertex_broker_caps_stream_bytes_and_concurrency(gateway: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(gateway, 'MAX_RESPONSE_BYTES', 5)
 
     async def chunks():
@@ -176,8 +180,9 @@ def test_vertex_broker_caps_stream_bytes_and_concurrency(monkeypatch: pytest.Mon
     assert gateway._in_flight == 0
 
 
-def test_vertex_broker_readiness_refreshes_development_adc(monkeypatch: pytest.MonkeyPatch) -> None:
-    gateway = _load_vertex_gateway(monkeypatch)
+def test_vertex_broker_readiness_refreshes_development_adc(
+    gateway: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
     refreshed = 0
 
     def refresh() -> None:
@@ -190,8 +195,9 @@ def test_vertex_broker_readiness_refreshes_development_adc(monkeypatch: pytest.M
     assert refreshed == 1
 
 
-def test_vertex_broker_adc_requires_dev_detected_and_quota_projects(monkeypatch: pytest.MonkeyPatch) -> None:
-    gateway = _load_vertex_gateway(monkeypatch)
+def test_vertex_broker_adc_requires_dev_detected_and_quota_projects(
+    gateway: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
 
     class FakeCredentials:
         def __init__(self, quota_project_id: str | None) -> None:
