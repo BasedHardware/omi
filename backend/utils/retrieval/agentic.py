@@ -61,7 +61,6 @@ from utils.retrieval.tools import (
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.tools.conversation_jit_gate import (
     append_jit_conversation_retrieval_prompt,
-    is_jit_conversation_retrieval_enabled,
 )
 from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
 from utils.retrieval.chat_scope import build_chat_scope
@@ -81,6 +80,7 @@ from utils.llm.usage_tracker import reset_usage_context, set_usage_context
 from utils.byok import get_byok_key
 from utils.llm.chat import _get_agentic_qa_prompt, get_current_datetime_block, get_user_timezone
 from utils.executors import run_blocking, db_executor
+from utils.jit_rollout import JITDecisionStage, resolve_jit_rollout
 from database.redis_db import get_cached_user_geolocation
 from database.users import get_user_location_context_consent
 from models.geolocation import Geolocation
@@ -110,6 +110,28 @@ except ImportError:
 
 
 logger = logging.getLogger(__name__)
+
+
+async def _resolve_jit_conversation_retrieval(uid: str) -> bool:
+    """Resolve the server-owned JIT rollout before constructing chat config.
+
+    The conversation tools intentionally accept only the resulting per-request
+    boolean. They must not perform their own control-plane lookup, and a
+    caller-provided config value must never be able to enroll itself. Any
+    unknown/error result therefore stays on the released legacy path.
+    """
+    try:
+        decision = await resolve_jit_rollout(uid, stage=JITDecisionStage.READ_ONLY)
+    except Exception as error:
+        # The control plane is additive. A transient resolver failure must not
+        # take down an otherwise healthy chat request or activate JIT by
+        # accident. Keep logs type-only so provider details never enter logs.
+        logger.warning(
+            'JIT conversation retrieval authority unavailable; keeping gate off error_type=%s',
+            type(error).__name__,
+        )
+        return False
+    return decision.permits_work
 
 
 class _PerplexityWebSearchToolProxy:
@@ -1283,7 +1305,7 @@ async def execute_agentic_chat_stream(
             gateway_feature_mode = should_route_chat_agent_through_gateway() and not bool(get_byok_key('anthropic'))
             tz = tz or await run_blocking(db_executor, get_user_timezone, uid)
             city = await get_mobile_city(uid, platform) if current_datetime_block is None else None
-            jit_conversation_retrieval_enabled = is_jit_conversation_retrieval_enabled({"user_id": uid})
+            jit_conversation_retrieval_enabled = await _resolve_jit_conversation_retrieval(uid)
             system_prompt = await run_blocking(
                 db_executor,
                 _get_agentic_qa_prompt,
