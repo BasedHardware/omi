@@ -207,8 +207,6 @@ export async function computeKFactor(days: number, platform: PlatformScope = "ma
     });
   }
 
-  // The last daily bucket is a partial calendar day — replace it with the
-  // rolling last 24 hours so the newest bar is always a full-size window.
   const [friend24h, friend7d] = friendRollingRows?.[0] ?? [0, 0];
   const [shares24h, shares7d] = sharesRollingRows?.[0] ?? [0, 0];
   const [new24h, new7d] = newRollingRows?.[0] ?? [0, 0];
@@ -218,17 +216,23 @@ export async function computeKFactor(days: number, platform: PlatformScope = "ma
   const referral7d = referralTimes.filter(
     (ms) => ms >= Date.now() - 7 * 86_400_000,
   ).length;
-  const last = daily[daily.length - 1];
-  if (last && last.date === today) {
-    last.friend = Math.max(last.friend, Number(friend24h) || 0);
-    last.shares = Math.max(last.shares, Number(shares24h) || 0);
-    last.referral = Math.max(last.referral, referral24h);
-    last.newUsers = Math.max(last.newUsers, Number(new24h) || 0);
-    last.viralEvents = last.friend + last.referral + last.shares;
-    last.kFactor = last.newUsers > 0 ? last.viralEvents / last.newUsers : null;
-  }
 
-  // Weekly tracker: NYC Monday buckets aggregated from the daily series; the
+  // Window totals come from the CALENDAR buckets only. A trailing-24h window
+  // overlaps yesterday's calendar bucket, so summing it alongside yesterday
+  // would double-count the overlapping hours.
+  const totals = daily.reduce(
+    (acc, row) => ({
+      friend: acc.friend + row.friend,
+      referral: acc.referral + row.referral,
+      shares: acc.shares + row.shares,
+      newUsers: acc.newUsers + row.newUsers,
+    }),
+    { friend: 0, referral: 0, shares: 0, newUsers: 0 },
+  );
+  const viralEvents = totals.friend + totals.referral + totals.shares;
+
+  // Weekly tracker: NYC Monday buckets aggregated from the calendar daily
+  // series (same non-overlap rule as the totals above); only the
   // last bucket is the rolling trailing 7 days, never a partial calendar week.
   const weekOf = (ymd: string) => {
     const d = new Date(ymd + "T12:00:00Z");
@@ -273,16 +277,17 @@ export async function computeKFactor(days: number, platform: PlatformScope = "ma
     }
   }
 
-  const totals = daily.reduce(
-    (acc, row) => ({
-      friend: acc.friend + row.friend,
-      referral: acc.referral + row.referral,
-      shares: acc.shares + row.shares,
-      newUsers: acc.newUsers + row.newUsers,
-    }),
-    { friend: 0, referral: 0, shares: 0, newUsers: 0 },
-  );
-  const viralEvents = totals.friend + totals.referral + totals.shares;
+  // Display-only, applied AFTER every aggregation: the newest chart bar shows
+  // the rolling last 24 hours instead of a partial calendar day.
+  const last = daily[daily.length - 1];
+  if (last && last.date === today) {
+    last.friend = Math.max(last.friend, Number(friend24h) || 0);
+    last.shares = Math.max(last.shares, Number(shares24h) || 0);
+    last.referral = Math.max(last.referral, referral24h);
+    last.newUsers = Math.max(last.newUsers, Number(new24h) || 0);
+    last.viralEvents = last.friend + last.referral + last.shares;
+    last.kFactor = last.newUsers > 0 ? last.viralEvents / last.newUsers : null;
+  }
 
   const issued = Number(issuedRows?.[0]?.[0] ?? 0);
   const captured = Number(capturedRows?.[0]?.[0] ?? 0);
