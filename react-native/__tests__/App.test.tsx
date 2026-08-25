@@ -733,7 +733,7 @@ test('shows the desktop chronological spine at rest and filters that same loaded
                   inputDigest: 'input',
                   outputDigest: 'output',
                 },
-                updatedAt: Date.parse('2026-08-08T09:00:00.000Z'),
+                updatedAt: Date.parse('2026-08-08T09:00:00.000Z') / 1000,
               },
             ],
         window: {
@@ -1739,6 +1739,46 @@ test('fills the macOS content area with first-run onboarding', async () => {
         'PanelLeftClose',
         'Search',
       ].includes(String(node.type)),
+    ),
+  ).toHaveLength(0);
+});
+
+test('keeps macOS Home gated while the auth probe is unresolved', async () => {
+  mockPlatformOS = 'macos';
+  mockAuth.hasCompletedOnboarding.mockImplementation(
+    () => new Promise(() => {}),
+  );
+
+  const renderer = await renderApp();
+
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'First-run onboarding',
+    ),
+  ).toBeDefined();
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Home desktop timeline surface',
+    ),
+  ).toHaveLength(0);
+});
+
+test('keeps macOS Home gated when the auth probe rejects', async () => {
+  mockPlatformOS = 'macos';
+  mockAuth.hasCompletedOnboarding.mockRejectedValue(
+    new Error('Auth probe failed'),
+  );
+
+  const renderer = await renderApp();
+
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'First-run onboarding',
+    ),
+  ).toBeDefined();
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Home desktop timeline surface',
     ),
   ).toHaveLength(0);
 });

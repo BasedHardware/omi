@@ -68,6 +68,7 @@ import {
   conversationGroupLabel,
   loadDesktopReads,
   loadMemories,
+  projectionTimestamp,
   desktopBackendConfigurationCopy,
   desktopBackendUnauthorizedCopy,
   desktopRecoveryCopy,
@@ -1718,9 +1719,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const homeReadsLoadedRef = useRef(false);
   const [readsPhase, setReadsPhase] = useState<ReadsPhase>('initial-loading');
   const [signingIn, setSigningIn] = useState(false);
-  const [onboardingRequired, setOnboardingRequired] = useState(
-    macDesktop ? null : false,
-  );
+  const [onboardingRequired, setOnboardingRequired] = useState(macDesktop);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [searchArmed, setSearchArmed] = useState(false);
@@ -1941,7 +1940,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       })
       .catch(() => {
         if (active) {
-          setOnboardingRequired(false);
+          setOnboardingRequired(true);
         }
       });
     return () => {
@@ -1993,15 +1992,10 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       ...(readOutcomes.memories.status === 'success'
         ? readOutcomes.memories.value.items
         : []),
-    ].sort((left, right) => {
-      const timestamp = (item: DesktopReadProjection) =>
-        item.kind === 'conversation'
-          ? Date.parse(item.startedAt ?? item.createdAt)
-          : item.kind === 'memory'
-          ? item.timestamp ?? 0
-          : 0;
-      return timestamp(right) - timestamp(left);
-    });
+    ].sort(
+      (left, right) =>
+        (projectionTimestamp(right) ?? 0) - (projectionTimestamp(left) ?? 0),
+    );
   }, [readOutcomes]);
 
   const routeOutcome = useMemo(() => {
