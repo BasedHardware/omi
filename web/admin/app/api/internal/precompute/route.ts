@@ -208,9 +208,12 @@ export async function POST(request: NextRequest) {
   });
 
   // k-factor: no payload cache — calling compute warms its posthogResults
-  // query cache (Firestore) so the GET serves fast from there.
+  // query cache (Firestore) so the GET serves fast from there. All three
+  // platform scopes are warmed because each Grafana board queries its own.
   await run("kFactor", async () => {
-    await computeKFactor(K_FACTOR_DAYS);
+    await computeKFactor(K_FACTOR_DAYS, "macos");
+    await computeKFactor(K_FACTOR_DAYS, "mobile");
+    await computeKFactor(K_FACTOR_DAYS, "all");
   });
 
   const failedNames = Object.keys(failed);
