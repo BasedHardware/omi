@@ -996,6 +996,8 @@ extension Notification.Name {
   static let goalCompleted = Notification.Name("goalCompleted")
   /// Posted to navigate to AI Chat page
   static let navigateToChat = Notification.Name("navigateToChat")
+  /// Posted to open the refer-a-friend sheet (top bar owns its presentation)
+  static let openReferralSheet = Notification.Name("openReferralSheet")
   static let navigateToTasks = Notification.Name("navigateToTasks")
   /// Posted by keyboard shortcuts to navigate sidebar. userInfo: ["rawValue": Int]
   static let navigateToSidebarItem = Notification.Name("navigateToSidebarItem")

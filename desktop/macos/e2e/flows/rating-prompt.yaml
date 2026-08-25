@@ -45,7 +45,7 @@ steps:
       result.detail.visible: "true"
 
   - id: S5
-    name: Star submit records the rating and hides the bar
+    name: Star submit records the rating and shows the thank-you state
     bridge.action:
       name: rating_prompt_submit
       params:
@@ -54,6 +54,23 @@ steps:
       ok: true
       result.detail.submitted: "true"
       result.detail.rating: "5"
+
+  - id: S5b
+    name: A 5-star rating proposes refer-a-friend
+    bridge.action:
+      name: rating_prompt_state
+    expect:
+      ok: true
+      result.detail.thank_you: "5"
+      result.detail.visible: "false"
+
+  - id: S5c
+    name: The proposal opens the referral sheet
+    bridge.action:
+      name: rating_prompt_refer
+    expect:
+      ok: true
+      result.detail.opened: "true"
 
   - id: S6
     name: Further questions never re-show a rated prompt

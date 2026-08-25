@@ -49,11 +49,31 @@ final class RatingPromptManager: ObservableObject {
     refresh()
   }
 
+  /// Rating just submitted this session — drives the thank-you state. 4-5
+  /// star raters get a refer-a-friend proposal; lower ratings auto-hide.
+  @Published private(set) var thankYouRating: Int?
+
   func submit(rating: Int) {
     let clamped = min(max(rating, 1), 5)
     defaults.set(clamped, forKey: DefaultsKey.ratingPromptSubmittedRating.rawValue)
     AnalyticsManager.shared.desktopRatingSubmitted(rating: clamped)
+    thankYouRating = clamped
     refresh()
+    if clamped < 4 {
+      Task { @MainActor in
+        try? await Task.sleep(nanoseconds: 6_000_000_000)
+        if self.thankYouRating == clamped { self.closeThankYou() }
+      }
+    }
+  }
+
+  func closeThankYou() {
+    thankYouRating = nil
+  }
+
+  func referFriend() {
+    thankYouRating = nil
+    NotificationCenter.default.post(name: .openReferralSheet, object: nil)
   }
 
   func dismiss() {
@@ -64,6 +84,7 @@ final class RatingPromptManager: ObservableObject {
   /// Automation/testing hook: rewind the persisted state so the real trigger
   /// path can be exercised repeatedly on a dev bundle.
   func resetForTesting() {
+    thankYouRating = nil
     defaults.removeObject(forKey: DefaultsKey.ratingPromptQuestionCount.rawValue)
     defaults.removeObject(forKey: DefaultsKey.ratingPromptSubmittedRating.rawValue)
     defaults.removeObject(forKey: DefaultsKey.ratingPromptDismissed.rawValue)
@@ -87,57 +108,93 @@ struct RatingPromptBar: View {
   @State private var hoveredStar = 0
 
   var body: some View {
-    if manager.isVisible {
-      HStack(spacing: OmiSpacing.lg) {
-        Text("How would you rate Omi Desktop?")
-          .font(.system(size: 13, weight: .medium))
-          .foregroundColor(.primary)
-
-        HStack(spacing: OmiSpacing.xs) {
-          ForEach(1...5, id: \.self) { star in
-            Button {
-              manager.submit(rating: star)
-            } label: {
-              Image(systemName: star <= hoveredStar ? "star.fill" : "star")
-                .font(.system(size: 15))
-                .foregroundColor(star <= hoveredStar ? .yellow : .secondary)
-            }
-            .buttonStyle(.plain)
-            .onHover { inside in
-              if inside {
-                hoveredStar = star
-              } else if hoveredStar == star {
-                hoveredStar = star - 1
-              }
-            }
-            .accessibilityLabel("Rate \(star) star\(star == 1 ? "" : "s")")
-          }
-        }
-
-        Button {
-          manager.dismiss()
-        } label: {
-          Image(systemName: "xmark")
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundColor(.secondary)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Dismiss rating prompt")
-      }
-      .padding(.horizontal, OmiSpacing.xl)
-      .padding(.vertical, OmiSpacing.md)
-      .background(
-        RoundedRectangle(cornerRadius: 10)
-          .fill(.regularMaterial)
-          .overlay(
-            RoundedRectangle(cornerRadius: 10)
-              .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-          )
-      )
-      // Clears the chat composer row pinned to the window's bottom edge —
-      // the prompt must never sit on top of the field the user types in.
-      .padding(.bottom, 76)
-      .transition(.move(edge: .bottom).combined(with: .opacity))
+    if let rating = manager.thankYouRating {
+      thankYouContent(rating: rating)
+    } else if manager.isVisible {
+      starsContent
     }
+  }
+
+  private var starsContent: some View {
+    barChrome {
+      Text("How would you rate Omi Desktop?")
+        .font(.system(size: 13, weight: .medium))
+        .foregroundColor(.primary)
+
+      HStack(spacing: OmiSpacing.xs) {
+        ForEach(1...5, id: \.self) { star in
+          Button {
+            manager.submit(rating: star)
+          } label: {
+            Image(systemName: star <= hoveredStar ? "star.fill" : "star")
+              .font(.system(size: 15))
+              .foregroundColor(star <= hoveredStar ? .yellow : .secondary)
+          }
+          .buttonStyle(.plain)
+          .onHover { inside in
+            if inside {
+              hoveredStar = star
+            } else if hoveredStar == star {
+              hoveredStar = star - 1
+            }
+          }
+          .accessibilityLabel("Rate \(star) star\(star == 1 ? "" : "s")")
+        }
+      }
+
+      closeButton { manager.dismiss() }
+    }
+  }
+
+  private func thankYouContent(rating: Int) -> some View {
+    barChrome {
+      Text("Thank you!")
+        .font(.system(size: 13, weight: .semibold))
+        .foregroundColor(.primary)
+
+      if rating >= 4 {
+        Text("Enjoying Omi? Give a friend a free month.")
+          .font(.system(size: 13))
+          .foregroundColor(.secondary)
+        Button("Refer a friend") {
+          manager.referFriend()
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.small)
+        .tint(.primary)
+      }
+
+      closeButton { manager.closeThankYou() }
+    }
+  }
+
+  private func closeButton(_ action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+      Image(systemName: "xmark")
+        .font(.system(size: 11, weight: .semibold))
+        .foregroundColor(.secondary)
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel("Dismiss rating prompt")
+  }
+
+  private func barChrome<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+    HStack(spacing: OmiSpacing.lg) {
+      content()
+    }
+    .padding(.horizontal, OmiSpacing.xl)
+    .padding(.vertical, OmiSpacing.md)
+    .background(
+      RoundedRectangle(cornerRadius: 10)
+        .fill(.regularMaterial)
+        .overlay(
+          RoundedRectangle(cornerRadius: 10)
+            .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
+    )
+    // Clears the chat composer row pinned to the window's bottom edge —
+    // the prompt must never sit on top of the field the user types in.
+    .padding(.bottom, 76)
+    .transition(.move(edge: .bottom).combined(with: .opacity))
   }
 }

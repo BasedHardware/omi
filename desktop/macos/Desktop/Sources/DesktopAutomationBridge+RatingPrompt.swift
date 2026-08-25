@@ -13,11 +13,12 @@ extension DesktopAutomationActionRegistry {
       await MainActor.run {
         let manager = RatingPromptManager.shared
         return [
-          "schema": "visible,question_count,submitted_rating,dismissed",
+          "schema": "visible,question_count,submitted_rating,dismissed,thank_you",
           "visible": manager.isVisible ? "true" : "false",
           "question_count": "\(manager.questionCount)",
           "submitted_rating": "\(manager.submittedRating)",
           "dismissed": manager.isDismissed ? "true" : "false",
+          "thank_you": "\(manager.thankYouRating ?? 0)",
         ]
       }
     }
@@ -50,6 +51,19 @@ extension DesktopAutomationActionRegistry {
           "question_count": "\(manager.questionCount)",
           "visible": manager.isVisible ? "true" : "false",
         ]
+      }
+    }
+
+    register(
+      name: "rating_prompt_refer",
+      summary: "Trigger the thank-you bar's refer-a-friend proposal (same path as the button)"
+    ) { _ in
+      await MainActor.run {
+        guard RatingPromptManager.shared.thankYouRating != nil else {
+          return ["opened": "false", "reason": "no thank-you active"]
+        }
+        RatingPromptManager.shared.referFriend()
+        return ["opened": "true"]
       }
     }
 
