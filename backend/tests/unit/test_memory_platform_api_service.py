@@ -80,6 +80,22 @@ def test_platform_search_rejects_out_of_bounds_query(monkeypatch):
     assert error.value.status_code == 400
 
 
+def test_platform_search_fails_closed_when_memory_system_is_not_canonical(monkeypatch):
+    monkeypatch.setattr(memory_platform, 'resolve_memory_system', lambda uid: MemorySystem.LEGACY)
+
+    def unreachable(*args, **kwargs):
+        raise AssertionError('non-canonical principal must not reach rollout authorization or canonical reads')
+
+    monkeypatch.setattr(memory_platform, 'authorize_memory_product_memory_route', unreachable)
+    monkeypatch.setattr(memory_platform, 'fetch_default_product_memory_search', unreachable)
+
+    with pytest.raises(HTTPException) as error:
+        memory_platform.search_memory_platform(query='launch', limit=1, offset=0, uid='user-1')
+
+    assert error.value.status_code == 503
+    assert error.value.detail['reason'] == 'canonical_memory_system_required'
+
+
 def test_platform_ingest_uses_canonical_memory_service(monkeypatch):
     created = SimpleNamespace(id='memory-1')
     calls = []

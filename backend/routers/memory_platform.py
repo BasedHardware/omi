@@ -77,6 +77,17 @@ def _global_read_gate_observability(gate) -> dict:
 
 
 def _require_product_authorization(uid: str):
+    # Pin the memory system before any direct `memory_items` read. The rollout
+    # reader below consults persisted memory_control/state only, which can
+    # still enable omi_chat reads after a rollback removes this account from
+    # the canonical cohort; fail closed here rather than serving canonical
+    # state to a non-canonical principal.
+    memory_system = resolve_memory_system(uid)
+    if memory_system != MemorySystem.CANONICAL:
+        raise HTTPException(
+            status_code=503,
+            detail={'reason': 'canonical_memory_system_required', 'memory_system': memory_system.value},
+        )
     decision = authorize_memory_product_memory_route(
         ProductAuthorizationContext(uid=uid, consumer='omi_chat', surface='platform_search'),
         db_client=db,
