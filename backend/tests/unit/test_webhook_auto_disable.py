@@ -712,18 +712,18 @@ class TestReEnableRouterBehavior:
         self._validate = validate_app_endpoints_for_reenable
         monkeypatch.setattr('utils.apps.safe_request_target', _passthrough_safe_target)
 
-    def test_no_endpoints_returns_400(self):
+    async def test_no_endpoints_returns_400(self):
         """Re-enable with no configured endpoints should return 400."""
         from fastapi import HTTPException
 
         app = {'external_integration': {}, 'chat_tools': []}
         update = {}
         with pytest.raises(HTTPException) as exc_info:
-            self._validate(app, update, 'app-1')
+            await self._validate(app, update, 'app-1')
         assert exc_info.value.status_code == 400
         assert 'No configured endpoints' in exc_info.value.detail
 
-    def test_webhook_unhealthy_blocks_reenable(self):
+    async def test_webhook_unhealthy_blocks_reenable(self):
         """Webhook returning 500 should block re-enable."""
         from fastapi import HTTPException
 
@@ -733,29 +733,29 @@ class TestReEnableRouterBehavior:
         mock_resp.status_code = 500
         with _patch_sync_httpx_client(response=mock_resp)[0]:
             with pytest.raises(HTTPException) as exc_info:
-                self._validate(app, update, 'app-1')
+                await self._validate(app, update, 'app-1')
         assert exc_info.value.status_code == 400
         assert '500' in exc_info.value.detail
 
-    def test_webhook_healthy_allows_reenable(self):
+    async def test_webhook_healthy_allows_reenable(self):
         """Webhook returning 200 should allow re-enable."""
         app = {'external_integration': {'webhook_url': 'https://example.com/wh'}, 'chat_tools': []}
         update = {}
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         with _patch_sync_httpx_client(response=mock_resp)[0]:
-            self._validate(app, update, 'app-1')
+            await self._validate(app, update, 'app-1')
 
-    def test_mcp_non_2xx_allowed(self):
+    async def test_mcp_non_2xx_allowed(self):
         """MCP returning 401 (auth required) should still allow re-enable."""
         app = {'external_integration': {'mcp_server_url': 'https://mcp.example.com'}, 'chat_tools': []}
         update = {}
         mock_resp = MagicMock()
         mock_resp.status_code = 401
         with _patch_sync_httpx_client(response=mock_resp)[0]:
-            self._validate(app, update, 'app-1')
+            await self._validate(app, update, 'app-1')
 
-    def test_chat_tool_reachability_check_allows_non_2xx(self):
+    async def test_chat_tool_reachability_check_allows_non_2xx(self):
         """Chat tool health check uses HEAD for reachability only — non-2xx is acceptable."""
         app = {
             'external_integration': {},
@@ -765,9 +765,9 @@ class TestReEnableRouterBehavior:
         mock_resp = MagicMock()
         mock_resp.status_code = 404
         with _patch_sync_httpx_client(response=mock_resp)[0]:
-            self._validate(app, update, 'app-1')
+            await self._validate(app, update, 'app-1')
 
-    def test_timeout_blocks_reenable(self):
+    async def test_timeout_blocks_reenable(self):
         """Timeout on any endpoint should block re-enable."""
         from fastapi import HTTPException
 
@@ -775,11 +775,11 @@ class TestReEnableRouterBehavior:
         update = {}
         with _patch_sync_httpx_client(side_effect=httpx.TimeoutException("timeout"))[0]:
             with pytest.raises(HTTPException) as exc_info:
-                self._validate(app, update, 'app-1')
+                await self._validate(app, update, 'app-1')
         assert exc_info.value.status_code == 400
         assert 'timed out' in exc_info.value.detail
 
-    def test_connect_error_blocks_reenable(self):
+    async def test_connect_error_blocks_reenable(self):
         """Connection error on any endpoint should block re-enable."""
         from fastapi import HTTPException
 
@@ -787,11 +787,11 @@ class TestReEnableRouterBehavior:
         update = {}
         with _patch_sync_httpx_client(side_effect=httpx.ConnectError("refused"))[0]:
             with pytest.raises(HTTPException) as exc_info:
-                self._validate(app, update, 'app-1')
+                await self._validate(app, update, 'app-1')
         assert exc_info.value.status_code == 400
         assert 'Cannot connect' in exc_info.value.detail
 
-    def test_all_endpoints_checked(self):
+    async def test_all_endpoints_checked(self):
         """All configured endpoints must be probed before allowing re-enable."""
         app = {
             'external_integration': {'webhook_url': 'https://a.com/wh', 'mcp_server_url': 'https://b.com/mcp'},
@@ -807,7 +807,7 @@ class TestReEnableRouterBehavior:
             return resp
 
         with _patch_sync_httpx_client(side_effect=mock_request)[0]:
-            self._validate(app, update, 'app-1')
+            await self._validate(app, update, 'app-1')
 
         assert len(call_urls) == 3
         methods = [m for m, _ in call_urls]
@@ -818,7 +818,7 @@ class TestReEnableRouterBehavior:
         assert 'https://b.com/mcp' in urls
         assert 'https://c.com/tool' in urls
 
-    def test_second_webhook_failure_blocks_even_if_first_healthy(self):
+    async def test_second_webhook_failure_blocks_even_if_first_healthy(self):
         """If webhook is healthy but MCP fails with connect error, re-enable should be blocked."""
         from fastapi import HTTPException
 
@@ -839,11 +839,11 @@ class TestReEnableRouterBehavior:
 
         with _patch_sync_httpx_client(side_effect=mock_request)[0]:
             with pytest.raises(HTTPException) as exc_info:
-                self._validate(app, update, 'app-1')
+                await self._validate(app, update, 'app-1')
         assert exc_info.value.status_code == 400
         assert 'Cannot connect' in exc_info.value.detail
 
-    def test_updated_chat_tools_preferred_over_stale_db(self):
+    async def test_updated_chat_tools_preferred_over_stale_db(self):
         """update_dict chat_tools should override stale app chat_tools."""
         app = {
             'external_integration': {},
@@ -859,10 +859,10 @@ class TestReEnableRouterBehavior:
             return resp
 
         with _patch_sync_httpx_client(side_effect=mock_request)[0]:
-            self._validate(app, update, 'app-1')
+            await self._validate(app, update, 'app-1')
         assert probed_urls == ['https://new-fixed.example.com/api']
 
-    def test_exact_duplicate_url_deduped(self):
+    async def test_exact_duplicate_url_deduped(self):
         """Same URL in webhook_url and chat_tools should be probed only once."""
         app = {
             'external_integration': {'webhook_url': 'https://example.com/hook'},
@@ -878,10 +878,10 @@ class TestReEnableRouterBehavior:
             return resp
 
         with _patch_sync_httpx_client(side_effect=mock_request)[0]:
-            self._validate(app, update, 'app-1')
+            await self._validate(app, update, 'app-1')
         assert probed_urls == ['https://example.com/hook']
 
-    def test_same_host_different_path_both_checked(self):
+    async def test_same_host_different_path_both_checked(self):
         """Same host but different URL paths must both be probed."""
         app = {
             'external_integration': {'webhook_url': 'https://example.com/webhook'},
@@ -897,7 +897,7 @@ class TestReEnableRouterBehavior:
             return resp
 
         with _patch_sync_httpx_client(side_effect=mock_request)[0]:
-            self._validate(app, update, 'app-1')
+            await self._validate(app, update, 'app-1')
         assert len(probed_urls) == 2
         assert 'https://example.com/webhook' in probed_urls
         assert 'https://example.com/tool' in probed_urls

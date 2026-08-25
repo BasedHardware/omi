@@ -10,7 +10,7 @@ so removing the basename sanitize or the cleanup fails the suite.
 import asyncio
 import json
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -105,14 +105,15 @@ def _capture_upload(handler, tmp_path, filename):
         with open(path, 'wb') as f:
             f.write(contents)
 
-    async def _fake_run_blocking(_executor, func, *args):
+    async def _fake_run_blocking(_executor, func, *args, **kwargs):
         if func is apps_mod.get_user_from_uid:
             return {'display_name': 'Ada', 'email': 'ada@example.com'}
         if func is apps_mod.increment_username:
             return args[0]
         if func in (_fake_upload_app_logo, _fake_write_file):
             return func(*args)
-        return MagicMock()
+        # DB/cache helpers are module-level mocks patched by the caller — invoke them.
+        return func(*args, **kwargs)
 
     async def _fake_generate_persona_prompt(uid, data):
         return 'prompt'
@@ -130,7 +131,7 @@ def _capture_upload(handler, tmp_path, filename):
         patch.object(apps_mod, 'update_app_in_db', MagicMock()),
         patch.object(apps_mod, 'upsert_app_payment_link', MagicMock()),
         patch.object(apps_mod, 'delete_app_logo', MagicMock()),
-        patch.object(apps_mod, '_process_chat_tools_manifest', MagicMock(side_effect=lambda _ei, d: d)),
+        patch.object(apps_mod, '_process_chat_tools_manifest', AsyncMock(side_effect=lambda _ei, d: d)),
         patch.object(
             apps_mod,
             'get_available_app_by_id',
@@ -170,7 +171,9 @@ def _app_payload():
 
 def test_create_app_writes_uploads_inside_temp_apps_and_removes_them(tmp_path):
     seen = _capture_upload(
-        lambda upload: apps_mod.create_app(app_data=_app_payload(), file=upload, uid='uid1'),
+        lambda upload: asyncio.run(
+            apps_mod.create_app(app_data=_app_payload(), file=upload, uid='uid1')
+        ),
         tmp_path,
         '../../../../etc/passwd',
     )
@@ -184,7 +187,9 @@ def test_create_app_writes_uploads_inside_temp_apps_and_removes_them(tmp_path):
 
 def test_update_app_writes_uploads_inside_temp_apps_and_removes_them(tmp_path):
     seen = _capture_upload(
-        lambda upload: apps_mod.update_app(app_id='app-1', app_data=_app_payload(), file=upload, uid='uid1'),
+        lambda upload: asyncio.run(
+            apps_mod.update_app(app_id='app-1', app_data=_app_payload(), file=upload, uid='uid1')
+        ),
         tmp_path,
         '../../escape.png',
     )

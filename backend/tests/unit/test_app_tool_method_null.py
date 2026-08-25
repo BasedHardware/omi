@@ -24,19 +24,22 @@ def _allow_public_endpoint(monkeypatch):
     monkeypatch.setattr('utils.apps.assert_public_http_url', lambda url: '8.8.8.8')
 
 
-def test_null_method_defaults_to_post():
-    result = _validate_tool_definition(_tool(method=None))
+@pytest.mark.asyncio
+async def test_null_method_defaults_to_post():
+    result = await _validate_tool_definition(_tool(method=None))
     assert result is not None
     assert result['method'] == 'POST'
 
 
-def test_absent_method_defaults_to_post():
-    result = _validate_tool_definition(_tool())
+@pytest.mark.asyncio
+async def test_absent_method_defaults_to_post():
+    result = await _validate_tool_definition(_tool())
     assert result is not None
     assert result['method'] == 'POST'
 
 
-def test_string_method_is_uppercased():
-    result = _validate_tool_definition(_tool(method='get'))
+@pytest.mark.asyncio
+async def test_string_method_is_uppercased():
+    result = await _validate_tool_definition(_tool(method='get'))
     assert result is not None
     assert result['method'] == 'GET'

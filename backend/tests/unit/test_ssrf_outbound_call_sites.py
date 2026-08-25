@@ -298,17 +298,23 @@ async def test_post_dev_webhook_retries_each_validated_address():
 # ---------------------------------------------------------------------------
 
 
-def test_fetch_manifest_rejects_non_public_url(monkeypatch):
+def _async_web_fetch_client(response):
+    """Mock the shared async web-fetch client used by the manifest fetcher."""
+    client = AsyncMock()
+    client.get = AsyncMock(return_value=response)
+    return client
+
+
+@pytest.mark.asyncio
+async def test_fetch_manifest_rejects_non_public_url(monkeypatch):
     monkeypatch.setattr(apps_mod, 'safe_request_target', MagicMock(side_effect=UnsafeWebhookURLError('private')))
     monkeypatch.setattr(apps_mod, 'get_generic_cache', MagicMock(return_value=None))
-    client_cls = MagicMock()
-    monkeypatch.setattr(apps_mod.httpx, 'Client', client_cls)
 
-    assert apps_mod.fetch_app_chat_tools_from_manifest('http://169.254.169.254/manifest.json') is None
-    client_cls.assert_not_called()
+    assert await apps_mod.fetch_app_chat_tools_from_manifest('http://169.254.169.254/manifest.json') is None
 
 
-def test_fetch_manifest_uses_pinned_target(monkeypatch):
+@pytest.mark.asyncio
+async def test_fetch_manifest_uses_pinned_target(monkeypatch):
     pinned, pin_kwargs = _pin('https://app.example.com/.well-known/omi-tools.json')
     monkeypatch.setattr(apps_mod, 'safe_request_target', MagicMock(return_value=(pinned, pin_kwargs)))
     monkeypatch.setattr(apps_mod, 'get_generic_cache', MagicMock(return_value=None))
@@ -325,48 +331,86 @@ def test_fetch_manifest_uses_pinned_target(monkeypatch):
             }
         ]
     }
-    mock_client = MagicMock()
-    mock_client.get.return_value = mock_resp
-    mock_cm = MagicMock()
-    mock_cm.__enter__.return_value = mock_client
-    mock_cm.__exit__.return_value = None
-    monkeypatch.setattr(apps_mod.httpx, 'Client', MagicMock(return_value=mock_cm))
+    mock_client = _async_web_fetch_client(mock_resp)
+    monkeypatch.setattr(apps_mod, 'get_web_fetch_client', lambda: mock_client)
     monkeypatch.setattr(apps_mod, 'assert_public_http_url', MagicMock(return_value=PUBLIC_IP))
 
-    result = apps_mod.fetch_app_chat_tools_from_manifest('https://app.example.com/.well-known/omi-tools.json')
+    result = await apps_mod.fetch_app_chat_tools_from_manifest('https://app.example.com/.well-known/omi-tools.json')
     assert result is not None
     assert result['tools'][0]['name'] == 't'
     assert mock_client.get.call_args.args[0] == pinned
     assert mock_client.get.call_args.kwargs['follow_redirects'] is False
     assert mock_client.get.call_args.kwargs['extensions']['sni_hostname'] == 'app.example.com'
+    assert mock_client.get.call_args.kwargs['timeout'] == 10.0
 
 
-def test_validate_tool_definition_rejects_private_endpoint(monkeypatch):
+@pytest.mark.asyncio
+async def test_fetch_manifest_resolves_dns_off_the_event_loop(monkeypatch):
+    """The manifest URL (and every absolute tool endpoint) must be resolved on the
+    resolver pool — an unbounded tools array of stalled DNS lookups otherwise runs
+    inline on the caller's event loop / route worker."""
+    import threading
+
+    seen_threads = []
+
+    def _recording_target(url):
+        seen_threads.append(threading.current_thread())
+        return _pin(url)
+
+    monkeypatch.setattr(apps_mod, 'safe_request_target', _recording_target)
+    monkeypatch.setattr(apps_mod, 'get_generic_cache', MagicMock(return_value=None))
+    monkeypatch.setattr(apps_mod, 'set_generic_cache', MagicMock())
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {'tools': []}
+    monkeypatch.setattr(apps_mod, 'get_web_fetch_client', lambda: _async_web_fetch_client(mock_resp))
+
+    result = await apps_mod.fetch_app_chat_tools_from_manifest('https://app.example.com/.well-known/omi-tools.json')
+    assert result is not None
+    assert seen_threads
+    main_thread = threading.main_thread()
+    for thread in seen_threads:
+        assert thread is not main_thread
+
+
+@pytest.mark.asyncio
+async def test_validate_tool_definition_rejects_private_endpoint(monkeypatch):
     monkeypatch.setattr(apps_mod, 'assert_public_http_url', MagicMock(side_effect=UnsafeWebhookURLError('private')))
-    result = apps_mod._validate_tool_definition({'name': 't', 'description': 'd', 'endpoint': 'http://10.0.0.1/tool'})
+    result = await apps_mod._validate_tool_definition(
+        {'name': 't', 'description': 'd', 'endpoint': 'http://10.0.0.1/tool'}
+    )
     assert result is None
 
 
-def test_validate_tool_definition_keeps_path_relative_endpoint(monkeypatch):
+@pytest.mark.asyncio
+async def test_validate_tool_definition_keeps_path_relative_endpoint(monkeypatch):
     """The documented manifest format is relative ("/tools/x"); the router
     resolves it against app_home_url and invocation pins the resolved URL.
     Rejecting it here silently strips every tool from such an app."""
     monkeypatch.setattr(apps_mod, 'assert_public_http_url', MagicMock(side_effect=AssertionError('relative')))
-    result = apps_mod._validate_tool_definition({'name': 't', 'description': 'd', 'endpoint': '/tools/add_to_playlist'})
+    result = await apps_mod._validate_tool_definition(
+        {'name': 't', 'description': 'd', 'endpoint': '/tools/add_to_playlist'}
+    )
     assert result is not None
     assert result['endpoint'] == '/tools/add_to_playlist'
 
 
-def test_validate_tool_definition_rejects_scheme_relative_endpoint(monkeypatch):
+@pytest.mark.asyncio
+async def test_validate_tool_definition_rejects_scheme_relative_endpoint(monkeypatch):
     """ "//evil.example/x" is not app-relative -- it resolves to another origin."""
     monkeypatch.setattr(apps_mod, 'assert_public_http_url', MagicMock(side_effect=UnsafeWebhookURLError('scheme')))
-    assert apps_mod._validate_tool_definition({'name': 't', 'description': 'd', 'endpoint': '//evil.example/x'}) is None
+    result = await apps_mod._validate_tool_definition(
+        {'name': 't', 'description': 'd', 'endpoint': '//evil.example/x'}
+    )
+    assert result is None
 
 
-def test_reenable_health_check_rejects_non_public_url(monkeypatch):
+@pytest.mark.asyncio
+async def test_reenable_health_check_rejects_non_public_url(monkeypatch):
     monkeypatch.setattr('utils.apps.safe_request_target', MagicMock(side_effect=UnsafeWebhookURLError('private')))
     with pytest.raises(HTTPException) as exc_info:
-        validate_app_endpoints_for_reenable(
+        await validate_app_endpoints_for_reenable(
             {'external_integration': {'webhook_url': 'http://127.0.0.1/wh'}, 'chat_tools': []},
             {},
             'app-1',

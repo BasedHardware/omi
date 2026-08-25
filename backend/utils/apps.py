@@ -77,8 +77,13 @@ from utils.conversations.render import conversations_to_string
 from utils import stripe
 from utils.llm.persona import condense_conversations, condense_memories, generate_persona_description, condense_tweets
 from utils.llm.usage_tracker import track_usage, Features
-from utils.executors import run_blocking, db_executor, llm_executor, resolver_executor
-from utils.http_client import assert_public_http_url, safe_request_target, UnsafeWebhookURLError
+from utils.executors import run_blocking, db_executor, llm_executor, resolver_executor, postprocess_executor
+from utils.http_client import (
+    assert_public_http_url,
+    safe_request_target,
+    get_web_fetch_client,
+    UnsafeWebhookURLError,
+)
 from utils.social import get_twitter_timeline
 import logging
 
@@ -106,10 +111,15 @@ def _safe_build_app(app_dict: dict[str, Any]) -> Optional[App]:
         return None
 
 
-def validate_app_endpoints_for_reenable(app_dict: Dict[str, Any], update_dict: Dict[str, Any], app_id: str) -> None:
+async def validate_app_endpoints_for_reenable(
+    app_dict: Dict[str, Any], update_dict: Dict[str, Any], app_id: str
+) -> None:
     """Validate all configured endpoints before allowing a disabled app to be re-enabled.
 
-    Raises HTTPException(400) if any endpoint is unreachable or unhealthy.
+    Raises HTTPException(400) if any endpoint is unreachable or unhealthy. DNS
+    resolution runs on the resolver pool and each reachability probe on the
+    postprocess pool, so a manifest with many endpoints never occupies FastAPI
+    route workers or the event loop for sequential resolver timeouts.
     """
     updated_ext_raw: object = update_dict.get('external_integration')
     updated_ext: Dict[str, Any] = cast(Dict[str, Any], updated_ext_raw) if isinstance(updated_ext_raw, dict) else {}
@@ -142,42 +152,49 @@ def validate_app_endpoints_for_reenable(app_dict: Dict[str, Any], update_dict: D
         )
     for label, url, method, require_2xx in endpoints_to_check:
         try:
-            pinned_url, pin_kwargs = resolver_executor.submit(safe_request_target, url).result()
+            pinned_url, pin_kwargs = await run_blocking(resolver_executor, safe_request_target, url)
         except UnsafeWebhookURLError:
             raise HTTPException(
                 status_code=400,
                 detail=f'{label.capitalize()} endpoint is not a public http(s) URL. Fix it before re-enabling.',
             )
-        try:
-            with httpx.Client(timeout=10.0) as client:
-                resp = client.request(
-                    method,
-                    pinned_url,
-                    json={},
-                    follow_redirects=False,
-                    headers=pin_kwargs['headers'],
-                    extensions=pin_kwargs['extensions'],
-                )
-            if require_2xx and (resp.status_code < 200 or resp.status_code >= 300):
-                raise HTTPException(
-                    status_code=400,
-                    detail=f'{label.capitalize()} endpoint returned {resp.status_code}. Fix it before re-enabling.',
-                )
-        except httpx.TimeoutException:
-            raise HTTPException(
-                status_code=400, detail=f'{label.capitalize()} endpoint timed out. Fix it before re-enabling.'
+        await run_blocking(
+            postprocess_executor, _probe_endpoint_health, label, app_id, method, pinned_url, pin_kwargs, require_2xx
+        )
+
+
+def _probe_endpoint_health(
+    label: str, app_id: str, method: str, pinned_url: str, pin_kwargs: Dict[str, Any], require_2xx: bool
+) -> None:
+    """Single sync reachability probe for re-enable validation (leaf op on a worker pool)."""
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.request(
+                method,
+                pinned_url,
+                json={},
+                follow_redirects=False,
+                headers=pin_kwargs['headers'],
+                extensions=pin_kwargs['extensions'],
             )
-        except httpx.ConnectError:
+        if require_2xx and (resp.status_code < 200 or resp.status_code >= 300):
             raise HTTPException(
-                status_code=400, detail=f'Cannot connect to {label} endpoint. Fix it before re-enabling.'
+                status_code=400,
+                detail=f'{label.capitalize()} endpoint returned {resp.status_code}. Fix it before re-enabling.',
             )
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.warning(f'{label.capitalize()} health check failed for {app_id}: {e}')
-            raise HTTPException(
-                status_code=400, detail=f'{label.capitalize()} health check failed. Fix it before re-enabling.'
-            )
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=400, detail=f'{label.capitalize()} endpoint timed out. Fix it before re-enabling.'
+        )
+    except httpx.ConnectError:
+        raise HTTPException(status_code=400, detail=f'Cannot connect to {label} endpoint. Fix it before re-enabling.')
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f'{label.capitalize()} health check failed for {app_id}: {e}')
+        raise HTTPException(
+            status_code=400, detail=f'{label.capitalize()} health check failed. Fix it before re-enabling.'
+        )
 
 
 # ********************************
@@ -1469,7 +1486,7 @@ def build_capability_category_groups_response(
 # ********************************
 
 
-def fetch_app_chat_tools_from_manifest(
+async def fetch_app_chat_tools_from_manifest(
     manifest_url: str, timeout: int = 10, force_refresh: bool = False
 ) -> Dict[str, Any] | None:
     """
@@ -1479,6 +1496,9 @@ def fetch_app_chat_tools_from_manifest(
     tool definitions with: name, description, endpoint, method, parameters, auth_required, status_message.
 
     Implements caching with 2-hour TTL to reduce external requests.
+
+    DNS lookups (manifest URL and every absolute tool endpoint) are dispatched to the
+    resolver pool so unbounded manifests cannot stall route workers or the event loop.
 
     Args:
         manifest_url: Full URL to the manifest endpoint (e.g., https://my-app.com/.well-known/omi-tools.json)
@@ -1518,7 +1538,7 @@ def fetch_app_chat_tools_from_manifest(
     # Check cache first (unless force refresh)
     cache_key = f'manifest:{manifest_url}'
     if not force_refresh:
-        cached_result = get_generic_cache(cache_key)
+        cached_result = await run_blocking(db_executor, get_generic_cache, cache_key)
         if cached_result:
             logger.info(f"✅ Using cached manifest for: {manifest_url}")
             return cached_result
@@ -1527,7 +1547,7 @@ def fetch_app_chat_tools_from_manifest(
         logger.info(f"📥 Fetching chat tools manifest from: {manifest_url}")
 
         try:
-            pinned_url, pin_kwargs = safe_request_target(manifest_url)
+            pinned_url, pin_kwargs = await run_blocking(resolver_executor, safe_request_target, manifest_url)
         except UnsafeWebhookURLError as e:
             logger.warning(f"⚠️ Rejected non-public manifest URL: {e}")
             return None
@@ -1537,13 +1557,13 @@ def fetch_app_chat_tools_from_manifest(
             'User-Agent': 'Omi-App-Store/1.0',
             **pin_kwargs['headers'],
         }
-        with httpx.Client(timeout=float(timeout)) as client:
-            response = client.get(
-                pinned_url,
-                headers=headers,
-                extensions=pin_kwargs['extensions'],
-                follow_redirects=False,
-            )
+        response = await get_web_fetch_client().get(
+            pinned_url,
+            headers=headers,
+            extensions=pin_kwargs['extensions'],
+            follow_redirects=False,
+            timeout=float(timeout),
+        )
 
         if response.status_code != 200:
             logger.error(f"⚠️ Manifest fetch failed with status {response.status_code}: {manifest_url}")
@@ -1568,7 +1588,7 @@ def fetch_app_chat_tools_from_manifest(
         # Validate and normalize each tool
         validated_tools: List[Dict[str, Any]] = []
         for tool in tools:
-            validated_tool = _validate_tool_definition(tool)
+            validated_tool = await _validate_tool_definition(tool)
             if validated_tool:
                 validated_tools.append(validated_tool)
             else:
@@ -1598,7 +1618,7 @@ def fetch_app_chat_tools_from_manifest(
 
         # Cache for 2 hours (7200 seconds)
         if validated_tools:
-            set_generic_cache(cache_key, result, 60 * 60 * 2)
+            await run_blocking(db_executor, set_generic_cache, cache_key, result, 60 * 60 * 2)
 
         return result
 
@@ -1616,12 +1636,15 @@ def fetch_app_chat_tools_from_manifest(
         return None
 
 
-def _validate_tool_definition(tool: Dict[str, Any]) -> Dict[str, Any] | None:
+async def _validate_tool_definition(tool: Dict[str, Any]) -> Dict[str, Any] | None:
     """
     Validate and normalize a single tool definition from the manifest.
 
     Required fields: name, description, endpoint
     Optional fields: method, parameters, auth_required, status_message
+
+    Absolute endpoints are DNS-validated on the resolver pool (never the caller's
+    event loop / route worker).
 
     Returns normalized tool dict or None if invalid.
     """
@@ -1651,7 +1674,7 @@ def _validate_tool_definition(tool: Dict[str, Any]) -> Dict[str, Any] | None:
     # app-relative, so it is still validated here.
     if not (endpoint.startswith('/') and not endpoint.startswith('//')):
         try:
-            assert_public_http_url(endpoint)
+            await run_blocking(resolver_executor, assert_public_http_url, endpoint)
         except UnsafeWebhookURLError as e:
             logger.warning(f"⚠️ Tool '{name}' has non-public endpoint: {e}")
             return None

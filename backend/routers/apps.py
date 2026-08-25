@@ -21,6 +21,7 @@ from utils.executors import (
     llm_executor,
     resolver_executor,
     storage_executor,
+    stripe_executor,
     run_blocking,
     start_background_task,
 )
@@ -423,7 +424,7 @@ def _write_file(path: str, data: bytes):
         f.write(data)
 
 
-def _process_chat_tools_manifest(external_integration: dict, app_dict: dict) -> dict:
+async def _process_chat_tools_manifest(external_integration: dict, app_dict: dict) -> dict:
     """Fetch and process chat tools manifest, updating and returning app_dict.
 
     Fetches the manifest from chat_tools_manifest_url, resolves relative endpoints
@@ -440,7 +441,7 @@ def _process_chat_tools_manifest(external_integration: dict, app_dict: dict) -> 
     if not manifest_url:
         return app_dict
 
-    manifest_result = fetch_app_chat_tools_from_manifest(manifest_url)
+    manifest_result = await fetch_app_chat_tools_from_manifest(manifest_url)
     if not manifest_result:
         return app_dict
 
@@ -819,7 +820,7 @@ def get_popular_apps_endpoint(uid: str = Depends(auth.get_current_user_uid)):
 
 @router.post('/v1/apps', tags=['v1'], response_model=AppCreateResponse)
 @max_part_size(APP_IMAGE_MAX_PART_SIZE)
-def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)):
+async def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)):
     data = parse_form_json(dict, app_data, 'app_data')
     data['approved'] = False
     data['status'] = 'under-review'
@@ -827,7 +828,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     data['id'] = str(ULID())
     data['uid'] = uid
     if not data.get('author') and not data.get('email'):
-        user = get_user_from_uid(uid) or {}
+        user = await run_blocking(db_executor, get_user_from_uid, uid) or {}
         email = user.get('email')
         # author is required + non-null on AppCreate; display_name/email can both be null.
         data['author'] = user.get('display_name') or (email.split('@')[0] if email else None) or 'Anonymous'
@@ -868,10 +869,10 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
                         status_code=422,
                         detail=f'Unsupported action type. Supported types: {", ".join([action_type.value for action_type in ActionType])}',
                     )
+    contents = await file.read()
     with temp_upload_path('_temp/apps', file.filename) as file_path:
-        with open(file_path, 'wb') as f:
-            f.write(file.file.read())
-        img_url = upload_app_logo(file_path, data['id'])
+        await run_blocking(storage_executor, _write_file, file_path, contents)
+        img_url = await run_blocking(storage_executor, upload_app_logo, file_path, data['id'])
     data['image'] = img_url
     data['created_at'] = datetime.now(timezone.utc)
     # Backward compatibility: Set app_home_url from first auth step if not provided
@@ -888,12 +889,20 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
 
     # Fetch chat tools from manifest URL (only way to add chat tools)
     if external_integration := data.get('external_integration'):
-        app_dict = _process_chat_tools_manifest(external_integration, app_dict)
+        app_dict = await _process_chat_tools_manifest(external_integration, app_dict)
 
-    add_app_to_db(app_dict)
+    await run_blocking(db_executor, add_app_to_db, app_dict)
 
     # payment link
-    upsert_app_payment_link(app.id, app.is_paid, app.price, app.payment_plan, app.uid)
+    await run_blocking(
+        stripe_executor,
+        upsert_app_payment_link,
+        app.id,
+        app.is_paid,
+        app.price,
+        app.payment_plan,
+        app.uid,
+    )
 
     return {'status': 'ok', 'app_id': app.id}
 
@@ -1066,22 +1075,22 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
 
 @router.patch('/v1/apps/{app_id}', tags=['v1'], response_model=AppMutationResponse)
 @max_part_size(APP_IMAGE_MAX_PART_SIZE)
-def update_app(
+async def update_app(
     app_id: str, app_data: str = Form(...), file: UploadFile = File(None), uid=Depends(auth.get_current_user_uid)
 ):
     data = parse_form_json(dict, app_data, 'app_data')
-    app = get_available_app_by_id(app_id, uid)
+    app = await run_blocking(db_executor, get_available_app_by_id, app_id, uid)
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
     if app['uid'] != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if file:
         if 'image' in app and len(app['image']) > 0 and app['image'].startswith('https://storage.googleapis.com/'):
-            delete_app_logo(app['image'])
+            await run_blocking(storage_executor, delete_app_logo, app['image'])
+        contents = await file.read()
         with temp_upload_path('_temp/apps', file.filename) as file_path:
-            with open(file_path, 'wb') as f:
-                f.write(file.file.read())
-            img_url = upload_app_logo(file_path, app_id)
+            await run_blocking(storage_executor, _write_file, file_path, contents)
+            img_url = await run_blocking(storage_executor, upload_app_logo, file_path, app_id)
         data['image'] = img_url
     data['updated_at'] = datetime.now(timezone.utc)
 
@@ -1099,20 +1108,22 @@ def update_app(
 
     # Fetch chat tools from manifest URL (only way to add/update chat tools)
     if external_integration := data.get('external_integration'):
-        update_dict = _process_chat_tools_manifest(external_integration, update_dict)
+        update_dict = await _process_chat_tools_manifest(external_integration, update_dict)
 
     if update_dict.get('disabled') is False and app.get('disabled'):
-        validate_app_endpoints_for_reenable(app, update_dict, app_id)
-        clear_app_webhook_health(app_id)
+        await validate_app_endpoints_for_reenable(app, update_dict, app_id)
+        await run_blocking(db_executor, clear_app_webhook_health, app_id)
         update_dict.setdefault('disabled_reason', '')
         update_dict.setdefault('disabled_error', '')
         update_dict.setdefault('disabled_at', '')
         update_dict.setdefault('disabled_failure_duration_hours', 0)
 
-    update_app_in_db(update_dict)
+    await run_blocking(db_executor, update_app_in_db, update_dict)
 
     # payment link
-    upsert_app_payment_link(
+    await run_blocking(
+        stripe_executor,
+        upsert_app_payment_link,
         data.get('id'),
         data.get('is_paid', False),
         data.get('price'),
@@ -1122,20 +1133,20 @@ def update_app(
     )
 
     if app['approved'] and (app['private'] is None or app['private'] is False):
-        invalidate_approved_apps_cache()
-    delete_app_cache_by_id(app_id)
+        await run_blocking(db_executor, invalidate_approved_apps_cache)
+    await run_blocking(db_executor, delete_app_cache_by_id, app_id)
     return {'status': 'ok'}
 
 
 @router.post('/v1/apps/{app_id}/refresh-manifest', tags=['v1'], response_model=AppManifestRefreshResponse)
-def refresh_app_manifest(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+async def refresh_app_manifest(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """
     Refresh chat tools manifest for an app.
 
     Forces a fresh fetch of the manifest from the external URL, bypassing cache.
     Only the app owner can refresh their app's manifest.
     """
-    app = get_available_app_by_id(app_id, uid)
+    app = await run_blocking(db_executor, get_available_app_by_id, app_id, uid)
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
     if app['uid'] != uid:
@@ -1149,7 +1160,7 @@ def refresh_app_manifest(app_id: str, uid: str = Depends(auth.get_current_user_u
     if not manifest_url:
         raise HTTPException(status_code=400, detail='App does not have a chat tools manifest URL')
 
-    manifest_result = fetch_app_chat_tools_from_manifest(manifest_url, force_refresh=True)
+    manifest_result = await fetch_app_chat_tools_from_manifest(manifest_url, force_refresh=True)
     if not manifest_result:
         raise HTTPException(status_code=502, detail='Failed to fetch manifest from external URL')
 
@@ -1177,11 +1188,11 @@ def refresh_app_manifest(app_id: str, uid: str = Depends(auth.get_current_user_u
         ext_int_update['chat_messages_notify'] = False
     update_dict['external_integration'] = ext_int_update
 
-    update_app_in_db(update_dict)
+    await run_blocking(db_executor, update_app_in_db, update_dict)
 
     if app['approved'] and (app['private'] is None or app['private'] is False):
-        invalidate_approved_apps_cache()
-    delete_app_cache_by_id(app_id)
+        await run_blocking(db_executor, invalidate_approved_apps_cache)
+    await run_blocking(db_executor, delete_app_cache_by_id, app_id)
 
     tools_count = len(fetched_tools) if fetched_tools else 0
     return {'status': 'ok', 'tools_count': tools_count}
