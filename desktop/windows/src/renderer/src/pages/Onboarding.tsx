@@ -101,11 +101,6 @@ export function Onboarding(): React.JSX.Element {
     next()
   }
 
-  const finishToChat = (): void => {
-    setPendingRoute('/chat')
-    completeOnboarding()
-  }
-
   const finishToTasks = (): void => {
     setPendingRoute('/tasks')
     completeOnboarding()
