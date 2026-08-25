@@ -1,9 +1,11 @@
 // Daily spend from the external LLM providers' organization cost APIs.
 //
 // Both endpoints require ORG-ADMIN credentials — ordinary inference keys get
-// 401 (Anthropic) / 403 (OpenAI). The env var names deliberately avoid
-// ANTHROPIC_API_KEY / OPENAI_API_KEY, which the deploy contract's
+// 401 (Anthropic) / 403 (OpenAI). The env var names deliberately avoid the
+// providers' standard inference-key names, which the deploy contract's
 // remove_runtime_secrets list strips from the admin service on every deploy.
+// These organization-namespace endpoints carry no model traffic, so they sit
+// outside SCA-118's gateway-only rule (see check_web_llm_gateway_only.py).
 //
 // A missing key or a failed fetch returns null — callers treat the leg as
 // unavailable (partial), never as $0.
