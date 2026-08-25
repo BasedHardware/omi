@@ -825,6 +825,16 @@ export interface ToolActivityMessage extends QueryScopedOutbound {
   input?: Record<string, unknown>;
 }
 
+/**
+ * Content-free proof that the query-owning runtime is still servicing an
+ * admitted turn. Swift uses this lease to distinguish a quiet provider round
+ * from a frozen JSONL bridge; it must never be rendered as assistant output.
+ */
+export interface TurnActivityMessage extends QueryScopedOutbound {
+  type: "turn_activity";
+  phase: "running";
+}
+
 export interface ToolResultDisplayMessage extends QueryScopedOutbound {
   type: "tool_result_display";
   toolUseId: string;
@@ -1178,6 +1188,7 @@ export type OutboundMessage =
   | TextDeltaMessage
   | ToolUseMessage
   | ToolActivityMessage
+  | TurnActivityMessage
   | ToolResultDisplayMessage
   | ThinkingDeltaMessage
   | ResultMessage
@@ -1218,6 +1229,7 @@ export type OutboundMessageDraft =
   | DraftEnvelope<TextDeltaMessage>
   | DraftEnvelope<ToolUseMessage>
   | DraftEnvelope<ToolActivityMessage>
+  | DraftEnvelope<TurnActivityMessage>
   | DraftEnvelope<ToolResultDisplayMessage>
   | DraftEnvelope<ThinkingDeltaMessage>
   | DraftEnvelope<ResultMessage>

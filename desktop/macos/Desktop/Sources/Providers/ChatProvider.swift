@@ -4796,6 +4796,16 @@ class ChatProvider: ObservableObject {
           self.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
         }
       }
+      let turnActivityHandler: AgentClient.TurnActivityHandler = { [weak self] in
+        callbackQueue.submit { @MainActor [weak self] in
+          guard let self else { return }
+          let transitions = await stallDetector.step(
+            kind: .other,
+            atMs: ChatProvider.monotonicNowMs()
+          )
+          self.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
+        }
+      }
       let thinkingDeltaHandler: AgentClient.ThinkingDeltaHandler = { [weak self] text in
         callbackQueue.submit { @MainActor [weak self] in
           guard let self else { return }
@@ -4957,6 +4967,7 @@ class ChatProvider: ObservableObject {
           reasoningEffort: turnOwner.reasoningEffort,
           onTextDelta: textDeltaHandler,
           onToolActivity: toolActivityHandler,
+          onTurnActivity: turnActivityHandler,
           onThinkingDelta: thinkingDeltaHandler,
           onToolResultDisplay: toolResultDisplayHandler,
           onAuthRequired: { [weak self] methods, authUrl in

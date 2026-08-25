@@ -8,9 +8,15 @@ Omi for Windows — an Electron + React + TypeScript port of the Omi desktop app
 
 ## Run from source
 
+Requires Node 22.19+ (CI pins Node 22, matching `package.json`'s `engines.node`
+range; Node 24+ breaks the jsdom test suites — see `scripts/check-node-version.mjs`).
+With [nvm](https://github.com/nvm-sh/nvm) installed, `nvm use` in this directory
+picks up the pinned version from `.nvmrc` automatically.
+
 ```bash
 # 1. Install dependencies
-pnpm install
+nvm use   # or: nvm install (first time)
+pnpm install --frozen-lockfile
 
 # 2. Create your local env file (required — the app won't start without it)
 cp .env.example .env

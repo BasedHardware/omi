@@ -56,6 +56,7 @@ enum AgentClient {
   typealias TextDeltaHandler = AgentBridge.TextDeltaHandler
   typealias ToolCallHandler = AgentBridge.ToolCallHandler
   typealias ToolActivityHandler = AgentBridge.ToolActivityHandler
+  typealias TurnActivityHandler = AgentBridge.TurnActivityHandler
   typealias ThinkingDeltaHandler = AgentBridge.ThinkingDeltaHandler
   typealias ToolResultDisplayHandler = AgentBridge.ToolResultDisplayHandler
   typealias AuthRequiredHandler = AgentBridge.AuthRequiredHandler
@@ -517,6 +518,7 @@ enum AgentClient {
       reasoningEffort: String? = nil,
       onTextDelta: @escaping TextDeltaHandler,
       onToolActivity: @escaping ToolActivityHandler,
+      onTurnActivity: @escaping TurnActivityHandler = {},
       onThinkingDelta: @escaping ThinkingDeltaHandler = { _ in },
       onToolResultDisplay: @escaping ToolResultDisplayHandler = { _, _, _ in },
       onAuthRequired: @escaping AuthRequiredHandler = { _, _ in },
@@ -535,6 +537,7 @@ enum AgentClient {
         reasoningEffort: reasoningEffort,
         onTextDelta: onTextDelta,
         onToolActivity: onToolActivity,
+        onTurnActivity: onTurnActivity,
         onThinkingDelta: onThinkingDelta,
         onToolResultDisplay: onToolResultDisplay,
         onAuthRequired: onAuthRequired,
@@ -555,6 +558,7 @@ enum AgentClient {
       reasoningEffort: String? = nil,
       onTextDelta: @escaping TextDeltaHandler,
       onToolActivity: @escaping ToolActivityHandler,
+      onTurnActivity: @escaping TurnActivityHandler = {},
       onThinkingDelta: @escaping ThinkingDeltaHandler = { _ in },
       onToolResultDisplay: @escaping ToolResultDisplayHandler = { _, _, _ in },
       onAuthRequired: @escaping AuthRequiredHandler = { _, _ in },
@@ -585,6 +589,7 @@ enum AgentClient {
               reasoningEffort: reasoningEffort,
               onTextDelta: onTextDelta,
               onToolActivity: onToolActivity,
+              onTurnActivity: onTurnActivity,
               onThinkingDelta: onThinkingDelta,
               onToolResultDisplay: onToolResultDisplay,
               onAuthRequired: onAuthRequired,
@@ -614,6 +619,7 @@ enum AgentClient {
     onTextDelta: @escaping TextDeltaHandler = { _ in },
     onToolCall _: @escaping ToolCallHandler = { _, _, _ in "" },
     onToolActivity: @escaping ToolActivityHandler = { _, _, _, _ in },
+    onTurnActivity: @escaping TurnActivityHandler = {},
     onThinkingDelta: @escaping ThinkingDeltaHandler = { _ in },
     onToolResultDisplay: @escaping ToolResultDisplayHandler = { _, _, _ in },
     onAuthRequired: @escaping AuthRequiredHandler = { _, _ in },
@@ -677,6 +683,7 @@ enum AgentClient {
         expectedContext: snapshot.freshness,
         onTextDelta: onTextDelta,
         onToolActivity: onToolActivity,
+        onTurnActivity: onTurnActivity,
         onThinkingDelta: onThinkingDelta,
         onToolResultDisplay: onToolResultDisplay,
         onAuthRequired: onAuthRequired,

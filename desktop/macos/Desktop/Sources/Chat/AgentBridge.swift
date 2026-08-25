@@ -645,6 +645,7 @@ actor AgentBridge {
   typealias TextDeltaHandler = @Sendable (String) -> Void
   typealias ToolCallHandler = @Sendable (String, String, [String: Any]) async -> String
   typealias ToolActivityHandler = @Sendable (String, String, String?, [String: Any]?) -> Void
+  typealias TurnActivityHandler = @Sendable () -> Void
   typealias ThinkingDeltaHandler = @Sendable (String) -> Void
   typealias ToolResultDisplayHandler = @Sendable (String, String, String) -> Void
   typealias AuthRequiredHandler = @Sendable ([[String: Any]], String?) -> Void
@@ -1585,6 +1586,7 @@ actor AgentBridge {
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     onTextDelta: @escaping TextDeltaHandler,
     onToolActivity: @escaping ToolActivityHandler,
+    onTurnActivity: @escaping TurnActivityHandler = {},
     onThinkingDelta: @escaping ThinkingDeltaHandler = { _ in },
     onToolResultDisplay: @escaping ToolResultDisplayHandler = { _, _, _ in },
     onAuthRequired: @escaping AuthRequiredHandler = { _, _ in },
@@ -1617,6 +1619,7 @@ actor AgentBridge {
       authorizationSnapshot: authorization,
       onTextDelta: onTextDelta,
       onToolActivity: onToolActivity,
+      onTurnActivity: onTurnActivity,
       onThinkingDelta: onThinkingDelta,
       onToolResultDisplay: onToolResultDisplay,
       onAuthRequired: onAuthRequired,
@@ -1637,6 +1640,7 @@ actor AgentBridge {
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     onTextDelta: @escaping TextDeltaHandler,
     onToolActivity: @escaping ToolActivityHandler,
+    onTurnActivity: @escaping TurnActivityHandler = {},
     onThinkingDelta: @escaping ThinkingDeltaHandler = { _ in },
     onToolResultDisplay: @escaping ToolResultDisplayHandler = { _, _, _ in },
     onAuthRequired: @escaping AuthRequiredHandler = { _, _ in },
@@ -1707,6 +1711,10 @@ actor AgentBridge {
       bridgeOutputTracker.markOutput()
       onToolActivity(name, status, toolUseId, input)
     }
+    let trackedTurnActivity: TurnActivityHandler = {
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
+      onTurnActivity()
+    }
     let trackedThinkingDelta: ThinkingDeltaHandler = { delta in
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
       if !delta.isEmpty { bridgeOutputTracker.markOutput() }
@@ -1737,6 +1745,7 @@ actor AgentBridge {
         authorizationSnapshot: authorization,
         onTextDelta: trackedTextDelta,
         onToolActivity: trackedToolActivity,
+        onTurnActivity: trackedTurnActivity,
         onThinkingDelta: trackedThinkingDelta,
         onToolResultDisplay: trackedToolResultDisplay,
         onAuthRequired: guardedAuthRequired,
@@ -1777,6 +1786,7 @@ actor AgentBridge {
         authorizationSnapshot: authorization,
         onTextDelta: trackedTextDelta,
         onToolActivity: trackedToolActivity,
+        onTurnActivity: trackedTurnActivity,
         onThinkingDelta: trackedThinkingDelta,
         onToolResultDisplay: trackedToolResultDisplay,
         onAuthRequired: guardedAuthRequired,

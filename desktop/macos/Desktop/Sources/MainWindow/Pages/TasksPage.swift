@@ -191,8 +191,8 @@ enum TaskFilterTag: String, CaseIterable, Identifiable, Hashable {
     switch self {
     case .todo: return !task.completed
     case .done: return task.completed
-    case .removedByAI: return task.deleted == true && task.deletedBy != "user"
-    case .removedByMe: return task.deleted == true && task.deletedBy == "user"
+    case .removedByAI: return task.isRetired && task.deletedBy != "user"
+    case .removedByMe: return task.isRetired && task.deletedBy == "user"
     case .last7Days:
       let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date())!
       if let dueAt = task.dueAt {
@@ -2545,10 +2545,10 @@ class TasksViewModel: ObservableObject {
     guard !statusTags.isEmpty else { return tasks }
 
     return tasks.filter { task in
-      if statusTags.contains(.removedByAI) && task.deleted == true && task.deletedBy != "user" { return true }
-      if statusTags.contains(.removedByMe) && task.deleted == true && task.deletedBy == "user" { return true }
+      if statusTags.contains(.removedByAI) && task.isRetired && task.deletedBy != "user" { return true }
+      if statusTags.contains(.removedByMe) && task.isRetired && task.deletedBy == "user" { return true }
       if statusTags.contains(.done) && task.completed { return true }
-      if statusTags.contains(.todo) && !task.completed && task.deleted != true { return true }
+      if statusTags.contains(.todo) && !task.completed && !task.isRetired { return true }
       return false
     }
   }
@@ -3225,7 +3225,7 @@ class TasksViewModel: ObservableObject {
         priority: task.priority,
         metadata: task.metadata,
         category: task.category,
-        deleted: task.deleted,
+        deleted: task.isRetired,
         deletedBy: task.deletedBy,
         deletedAt: task.deletedAt,
         deletedReason: task.deletedReason,
@@ -3608,7 +3608,7 @@ struct TasksPage: View {
   /// Open chat for a task
   private func openChatForTask(_ task: TaskActionItem) {
     log(
-      "TaskChat: openChatForTask called for task \(task.id) (deleted=\(task.deleted ?? false), completed=\(task.completed))"
+      "TaskChat: openChatForTask called for task \(task.id) (retired=\(task.isRetired), completed=\(task.completed))"
     )
     viewModel.detailPanelTaskID = nil
     if !showChatPanel {
@@ -5497,7 +5497,7 @@ struct TaskRow: View {
 
   /// Whether this task is soft-deleted
   private var isDeletedTask: Bool {
-    task.deleted == true
+    task.isRetired
   }
 
   private var taskRowContent: some View {
