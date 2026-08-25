@@ -43,6 +43,13 @@ describe('ByokKeyStore', () => {
     expect(store.getCodexKey()).toBeNull()
   })
 
+  it('records Codex migration complete when no legacy OpenAI key exists', () => {
+    expect(store.getCodexKey()).toBeNull()
+    store.setKey('openai', 'sk-later')
+    expect(store.getCodexKey()).toBeNull()
+    expect(store.getKey('openai')).toBe('sk-later')
+  })
+
   it('migrates a legacy OpenAI Codex key without removing the BYOK slot', () => {
     store.setKey('openai', 'sk-legacy-codex')
     expect(store.getCodexKey()).toBe('sk-legacy-codex')

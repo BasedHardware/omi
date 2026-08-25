@@ -587,7 +587,10 @@ def get_llm(
             byok_key = byok_key_for_profile
 
     effective_provider = _effective_byok_provider(model, provider)
-    if byok_key and gateway_feature_mode and effective_provider == lane_provider:
+    # VertexGeminiProvider._reject_byok() — Gemini BYOK must use the direct
+    # OpenAI-compatible client, not the gateway lane.
+    gateway_accepts_byok = effective_provider != "gemini"
+    if byok_key and gateway_feature_mode and effective_provider == lane_provider and gateway_accepts_byok:
         result = get_or_create_omi_gateway_llm_for_byok(
             feature_auto_lane_id(feature),
             provider=effective_provider,

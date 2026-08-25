@@ -1044,7 +1044,13 @@ def get_chat_quota_snapshot(
     # Paywall test override — surface as exhausted Free-plan quota so the
     # client renders the same over-limit popup it shows for normal users
     # past 30/mo.
-    if is_trial_paywalled(uid, platform, firestore_client=firestore_client, provision=provision):
+    if is_trial_paywalled(
+        uid,
+        platform,
+        firestore_client=firestore_client,
+        provision=provision,
+        required_byok_provider=required_llm_provider,
+    ):
         usage = user_usage_db.get_monthly_chat_usage(uid, firestore_client=firestore_client)
         free_chat_limit = _effective_chat_limit(PlanType.basic)
         if free_chat_limit is None:

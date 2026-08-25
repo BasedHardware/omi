@@ -76,8 +76,10 @@ export class ByokKeyStore {
 
   private migrateLegacyCodexKey(): void {
     const stored = this.readFile()
-    if (stored.codex || stored.codexMigrationComplete || !stored.openai) return
-    stored.codex = stored.openai
+    if (stored.codexMigrationComplete) return
+    if (stored.openai && !stored.codex) {
+      stored.codex = stored.openai
+    }
     stored.codexMigrationComplete = true
     this.writeFile(stored)
   }

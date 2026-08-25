@@ -85,6 +85,7 @@ export function DeveloperKeysSection(): React.JSX.Element {
   // pending timer so rapid edits collapse into one validate/enroll.
   const keysRef = useRef<Record<ByokProvider, string>>(emptyKeys())
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const enrollGenRef = useRef(0)
 
   // Load stored keys once on mount so the fields reflect what's saved. We do NOT
   // validate on open (no network on open) — the banner reflects the LAST
@@ -111,6 +112,7 @@ export function DeveloperKeysSection(): React.JSX.Element {
   // Persist the current key set, then reconcile backend activation. Runs
   // debounced after edits (not per keystroke).
   const commit = async (): Promise<void> => {
+    const gen = ++enrollGenRef.current
     const cur = keysRef.current
     await Promise.all(BYOK_PROVIDERS.map((p) => window.omi.byokSet(p, cur[p].trim())))
     // Live-validate when an LLM key is configured; Deepgram remains optional.
@@ -124,6 +126,7 @@ export function DeveloperKeysSection(): React.JSX.Element {
       return
     }
     const result = await window.omi.byokEnroll(token)
+    if (gen !== enrollGenRef.current) return
     setChecking(false)
     setStatuses(result.results)
     if (result.active) {

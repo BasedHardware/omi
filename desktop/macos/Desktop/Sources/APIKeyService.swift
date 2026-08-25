@@ -241,7 +241,8 @@ final class APIKeyService: ObservableObject {
   /// The subscription-bypass gate: when this is true, the user is on the free
   /// plan and we attach their selected LLM key to every backend request.
   nonisolated static var isByokActive: Bool {
-    selectedBYOKLLMProvider != nil
+    guard let provider = selectedBYOKLLMProvider, let key = byokKey(provider) else { return false }
+    return enrolledFingerprints()[provider.rawValue] == byokFingerprint(key)
   }
 
   nonisolated static var hasTranscriptionBYOK: Bool {
@@ -346,9 +347,11 @@ final class APIKeyService: ObservableObject {
       return
     }
 
-    let fingerprints = Self.activeBYOKSnapshot.reduce(into: [String: String]()) { result, entry in
+    // Fingerprints must come from the captured snapshot, not a later UserDefaults
+    // edit that raced the provider check.
+    let fingerprints = snapshot.reduce(into: [String: String]()) { result, entry in
       if statuses[entry.key] == .ok {
-        result[entry.key.rawValue] = entry.value.fingerprint
+        result[entry.key.rawValue] = Self.byokFingerprint(entry.value)
       }
     }
     do {
