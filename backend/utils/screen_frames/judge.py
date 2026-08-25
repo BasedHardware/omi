@@ -83,7 +83,12 @@ For every frame, regardless of outcome, also produce:
 
 If you reject the frame, still fill in reject_reason with the single best-matching reason
 above, and still fill in caption/labels/source_badge/banner_suitability as best you can from
-what's visible (banner_suitability should generally be low for a rejected frame)."""
+what's visible (banner_suitability should generally be low for a rejected frame).
+
+If no image is attached to this request, or you cannot see one, you must reject with
+reject_reason "unreadable". Do not guess, and do not describe a frame you were not shown:
+this decision controls whether a screenshot of someone's screen is stored, and a confident
+answer about an image you never received is the worst outcome available to you."""
 
 
 class ScreenFrameJudgeError(Exception):

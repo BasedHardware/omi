@@ -137,3 +137,24 @@ class TestFacePolicy:
         # faces are fine" and a face on a banking screen becomes publishable.
         prompt = judge_mod._PRIVACY_PROMPT
         assert "A face never rescues a frame" in prompt
+
+
+def test_prompt_tells_the_model_to_reject_when_it_was_sent_no_image():
+    """Defence in depth against the exact fail-open found on 2026-08-25.
+
+    The gateway's Vertex translator silently dropped image parts, so the judge's
+    prompt arrived without its screenshot and the model returned a confident
+    verdict about a frame it had never seen — which the caller then treated as a
+    real decision. The provider bug is fixed (see
+    tests/unit/test_llm_gateway_vertex_provider.py), but the provider is not the
+    only thing that could drop an image, and nothing downstream of the model can
+    tell the difference between "looked and approved" and "saw nothing and
+    approved". So the prompt itself has to make a blind model fail closed.
+    """
+    from utils.screen_frames.judge import _PRIVACY_PROMPT
+
+    assert "no image is attached" in _PRIVACY_PROMPT
+    assert '"unreadable"' in _PRIVACY_PROMPT
+    # The rule is worthless if it does not name the reject path the schema allows.
+    tail = _PRIVACY_PROMPT.split("If no image is attached")[1]
+    assert "unreadable" in tail and "reject" in tail
