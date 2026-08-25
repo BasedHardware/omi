@@ -102,11 +102,16 @@ def conversation_tools_module(monkeypatch: pytest.MonkeyPatch):
             "merge_conversation_search_ids",
             "parse_exact_conversation_reference",
         ),
+        "utils.retrieval.chat_scope": (),
     }.items():
         module = types.ModuleType(name)
         for attr in attrs:
             setattr(module, attr, MagicMock())
         install(name, module)
+
+    chat_scope = sys.modules["utils.retrieval.chat_scope"]
+    chat_scope.chat_scope_from_config = lambda _configurable: None
+    chat_scope.apply_chat_scope_dates = lambda _scope, start_date, end_date: (start_date, end_date, None)
 
     jit_module_name = "utils.retrieval.tools.conversation_jit"
     jit_source = BACKEND_DIR / "utils/retrieval/tools/conversation_jit.py"

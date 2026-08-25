@@ -28,6 +28,7 @@ from utils.executors import run_blocking
 logger = logging.getLogger(__name__)
 
 JIT_PROCESSING_FLAG_KEY = 'jit-processing-v1'
+JIT_LEDGER_MIGRATION_FLAG_KEY = 'jit-processing-ledger-migration-v1'
 JIT_KILL_SWITCH_FLAG_KEY = 'jit-processing-kill-switch-v1'
 MAX_JIT_ROLLOUT_CACHE_SECONDS = 30.0
 DEFAULT_JIT_ROLLOUT_CACHE_SECONDS = 20.0
@@ -262,11 +263,15 @@ class PostHogJITFlagProvider:
         *,
         timeout_seconds: float = DEFAULT_JIT_ROLLOUT_TIMEOUT_SECONDS,
         client_factory: Callable[[], Any | None] | None = None,
+        rollout_flag_key: str = JIT_PROCESSING_FLAG_KEY,
     ) -> None:
         if timeout_seconds <= 0 or timeout_seconds > MAX_JIT_ROLLOUT_CACHE_SECONDS:
             raise ValueError('timeout_seconds must be positive and bounded')
         self._timeout_seconds = timeout_seconds
         self._client_factory = client_factory or self._build_client
+        if not rollout_flag_key.strip():
+            raise ValueError('rollout_flag_key is required')
+        self._rollout_flag_key = rollout_flag_key
         self._client: Any | None = None
         self._client_lock = threading.Lock()
         self._control_slots = asyncio.BoundedSemaphore(POSTHOG_CONTROL_MAX_WORKERS + POSTHOG_CONTROL_MAX_QUEUE)
@@ -416,12 +421,12 @@ class PostHogJITFlagProvider:
                 JITErrorClass.PROVIDER,
             )
 
-        rollout = _flag_state(variants, JIT_PROCESSING_FLAG_KEY)
+        rollout = _flag_state(variants, self._rollout_flag_key)
         kill_switch = _flag_state(variants, JIT_KILL_SWITCH_FLAG_KEY)
         if rollout == TriState.UNKNOWN or kill_switch == TriState.UNKNOWN:
             reason = (
                 JITDecisionReason.FLAG_ABSENT
-                if (JIT_PROCESSING_FLAG_KEY not in variants or JIT_KILL_SWITCH_FLAG_KEY not in variants)
+                if (self._rollout_flag_key not in variants or JIT_KILL_SWITCH_FLAG_KEY not in variants)
                 else JITDecisionReason.MALFORMED_RESPONSE
             )
             error_class = JITErrorClass.ABSENT if reason == JITDecisionReason.FLAG_ABSENT else JITErrorClass.MALFORMED
@@ -439,6 +444,9 @@ def _flag_state(flags: Mapping[str, Any], key: str) -> TriState:
 
 
 _authority = JITRolloutAuthority(PostHogJITFlagProvider())
+_ledger_migration_authority = JITRolloutAuthority(
+    PostHogJITFlagProvider(rollout_flag_key=JIT_LEDGER_MIGRATION_FLAG_KEY)
+)
 
 
 async def resolve_jit_rollout(
@@ -450,15 +458,28 @@ async def resolve_jit_rollout(
     return await _authority.resolve(uid, stage=stage, force_refresh=force_refresh)
 
 
+async def resolve_jit_ledger_migration_rollout(
+    uid: str,
+    *,
+    stage: JITDecisionStage,
+    force_refresh: bool = False,
+) -> JITRolloutDecision:
+    """Resolve the independent, default-off authority for migration/cutover writes."""
+
+    return await _ledger_migration_authority.resolve(uid, stage=stage, force_refresh=force_refresh)
+
+
 __all__ = [
     'JITDecisionStage',
     'JITDecisionReason',
     'JITErrorClass',
     'JITFlagEvaluation',
+    'JIT_LEDGER_MIGRATION_FLAG_KEY',
     'JITRolloutAuthority',
     'JITRolloutDecision',
     'PostHogJITFlagProvider',
     'TriState',
     'close_posthog_control_plane',
+    'resolve_jit_ledger_migration_rollout',
     'resolve_jit_rollout',
 ]

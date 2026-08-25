@@ -637,7 +637,7 @@ def test_async_entrypoint_runs_shared_rollout_gated_ledger_sweep_for_completed_u
         return SimpleNamespace(permits_work=uid == "uid-enabled")
 
     monkeypatch.setattr(cron, "run_blocking", run_blocking)
-    monkeypatch.setattr(cron, "resolve_jit_rollout", resolve)
+    monkeypatch.setattr(cron, "resolve_jit_ledger_migration_rollout", resolve)
 
     result = asyncio.run(cron.run_canonical_short_term_maintenance_cron(db_client=object(), now=NOW, run_id="cron"))
 
@@ -666,7 +666,7 @@ def test_kill_flip_before_user_mutation_prevents_every_migration_write(monkeypat
         return SimpleNamespace(permits_work=False)
 
     monkeypatch.setattr(cron, "run_blocking", run_blocking)
-    monkeypatch.setattr(cron, "resolve_jit_rollout", resolve)
+    monkeypatch.setattr(cron, "resolve_jit_ledger_migration_rollout", resolve)
 
     result = asyncio.run(cron.run_canonical_short_term_maintenance_cron(db_client=object(), now=NOW))
     assert mutation_calls == []
@@ -697,7 +697,7 @@ def test_kill_flip_between_users_reauthorizes_before_second_user_mutation(monkey
         return SimpleNamespace(permits_work=uid == "uid-before-flip")
 
     monkeypatch.setattr(cron, "run_blocking", run_blocking)
-    monkeypatch.setattr(cron, "resolve_jit_rollout", resolve)
+    monkeypatch.setattr(cron, "resolve_jit_ledger_migration_rollout", resolve)
 
     result = asyncio.run(cron.run_canonical_short_term_maintenance_cron(db_client=object(), now=NOW))
 
@@ -735,7 +735,7 @@ def test_production_row_authorizer_force_refreshes_and_revokes_mid_batch(monkeyp
         raise AssertionError("revoked migration authority must prevent publication")
 
     monkeypatch.setattr(cron, "run_blocking", run_blocking)
-    monkeypatch.setattr(cron, "resolve_jit_rollout", resolve)
+    monkeypatch.setattr(cron, "resolve_jit_ledger_migration_rollout", resolve)
 
     result = asyncio.run(cron.run_canonical_short_term_maintenance_cron(db_client=object(), now=NOW))
 

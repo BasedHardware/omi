@@ -18,7 +18,13 @@ known `disabled`.
 The fixed PostHog keys are:
 
 - `jit-processing-v1` for staged exposure
+- `jit-processing-ledger-migration-v1` for the separately admitted legacy-row migration and writer cutover
 - `jit-processing-kill-switch-v1` for immediate shutdown
+
+Enabling staged JIT exposure never authorizes migration or writer cutover. The
+migration flag is evaluated independently, defaults off when absent, and is
+checked again before every bounded migration mutation and publication step.
+The shared kill switch wins over both authorities.
 
 Missing configuration, an absent flag, a non-boolean variant, provider errors,
 and timeouts resolve to `unknown` and fail off. Fully known answers may be

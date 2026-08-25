@@ -17,6 +17,7 @@ from utils.memory.jit_trigger_contract import DEFAULT_TRIGGER_RUNTIME_POLICY
 from utils.memory.jit_trigger_snapshot import AuthoritativeTriggerRow, AuthoritativeTriggerSnapshot
 from utils import jit_rollout as authority_module
 from utils.jit_rollout import (
+    JIT_LEDGER_MIGRATION_FLAG_KEY,
     JITDecisionReason,
     JITDecisionStage,
     JITErrorClass,
@@ -201,6 +202,47 @@ async def test_posthog_provider_parses_only_exact_boolean_flags(
 
     assert client.uids == ['authenticated-user']
     assert result == JITFlagEvaluation(rollout, kill_switch, reason, error_class)
+
+
+@pytest.mark.asyncio
+async def test_general_jit_rollout_does_not_authorize_ledger_migration():
+    client = _FakePostHog(
+        {
+            'jit-processing-v1': True,
+            JIT_LEDGER_MIGRATION_FLAG_KEY: False,
+            'jit-processing-kill-switch-v1': False,
+        }
+    )
+    provider = PostHogJITFlagProvider(
+        client_factory=lambda: client,
+        rollout_flag_key=JIT_LEDGER_MIGRATION_FLAG_KEY,
+    )
+
+    result = await provider('qa-owner')
+
+    assert result.rollout == TriState.DISABLED
+    assert result.kill_switch == TriState.DISABLED
+    assert result.reason == JITDecisionReason.EVALUATED
+
+
+@pytest.mark.asyncio
+async def test_absent_ledger_migration_flag_fails_off_even_when_general_rollout_is_enabled():
+    provider = PostHogJITFlagProvider(
+        client_factory=lambda: _FakePostHog(
+            {
+                'jit-processing-v1': True,
+                'jit-processing-kill-switch-v1': False,
+            }
+        ),
+        rollout_flag_key=JIT_LEDGER_MIGRATION_FLAG_KEY,
+    )
+
+    result = await provider('qa-owner')
+
+    assert result.rollout == TriState.UNKNOWN
+    assert result.kill_switch == TriState.DISABLED
+    assert result.reason == JITDecisionReason.FLAG_ABSENT
+    assert result.error_class == JITErrorClass.ABSENT
 
 
 @pytest.mark.asyncio
