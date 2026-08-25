@@ -37,6 +37,29 @@ extension SettingsContentView {
             // Every notification below is produced by a frame-driven assistant, so while
             // screen frames are not distributed none of them can ever fire. Hidden rather
             // than shown as dead switches; the persisted values are untouched.
+            //
+            // The Task Notifications row is deliberately OUTSIDE this gate: contextual
+            // task interruptions also fire from non-frame events (meeting-state changes,
+            // resurfacing), and their only delivery gate is the toggle below — hiding it
+            // would leave interruptions users cannot turn off.
+            settingRow(
+              title: "Task Notifications",
+              subtitle: "Allow interruptions when a task needs attention",
+              settingId: "notifications.task"
+            ) {
+              Toggle("", isOn: $taskNotificationsEnabled)
+                .toggleStyle(OmiToggleStyle())
+                .labelsHidden()
+                .onChange(of: taskNotificationsEnabled) { _, newValue in
+                  TaskAssistantSettings.shared.notificationsEnabled = newValue
+                  SettingsSyncManager.shared.pushPartialUpdate(
+                    AssistantSettingsResponse(
+                      task: TaskSettingsResponse(notificationsEnabled: newValue)))
+                }
+            }
+
+            GlassSeparator()
+
             if ProactiveCapturePolicy.assistantFrameProcessingEnabled {
               // Sits under the master toggle and the frequency slider because both gate it:
               // frequency caps how often any proactive card is delivered, and this decides
@@ -51,24 +74,6 @@ extension SettingsContentView {
                   .labelsHidden()
                   .onChange(of: liveSuggestionsEnabled) { _, newValue in
                     SuggestionAssistantSettings.shared.applyUserEnabledChange(newValue)
-                  }
-              }
-
-              GlassSeparator()
-
-              settingRow(
-                title: "Task Notifications",
-                subtitle: "Allow interruptions when a task needs attention",
-                settingId: "notifications.task"
-              ) {
-                Toggle("", isOn: $taskNotificationsEnabled)
-                  .toggleStyle(OmiToggleStyle())
-                  .labelsHidden()
-                  .onChange(of: taskNotificationsEnabled) { _, newValue in
-                    TaskAssistantSettings.shared.notificationsEnabled = newValue
-                    SettingsSyncManager.shared.pushPartialUpdate(
-                      AssistantSettingsResponse(
-                        task: TaskSettingsResponse(notificationsEnabled: newValue)))
                   }
               }
 
