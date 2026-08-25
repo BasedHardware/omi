@@ -19,12 +19,14 @@ def main() -> int:
         "Update.begin",
         "Update.end",
     ]
-    sources = (ROOT / "omiGlass/firmware/src").glob("*")
+    firmware_src = ROOT / "omiGlass/firmware/src"
+    forbidden_names = {path.name for path in forbidden_paths}
+    sources = [path for path in firmware_src.rglob("*") if path.is_file()]
     failures = [
-        str(path.relative_to(ROOT)) for path in forbidden_paths if path.exists()
+        str(path.relative_to(ROOT)) for path in sources if path.name in forbidden_names
     ]
     for path in sources:
-        if path.suffix not in {".cpp", ".h"}:
+        if path.suffix not in {".c", ".cc", ".cpp", ".cxx", ".h", ".hpp"}:
             continue
         text = path.read_text(encoding="utf-8")
         failures.extend(
