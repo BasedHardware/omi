@@ -198,8 +198,13 @@ def _export_photo_manifest(uid: str, conversation_id: str, photo: Mapping[str, A
         "bytes_available": False,
     }
     inline = photo.get("base64")
-    if inline is not None:
-        if not isinstance(inline, str) or not inline:
+    # Some retained records have been migrated to durable storage while still
+    # carrying the legacy empty inline marker. An empty marker is therefore
+    # equivalent to an absent one, but a non-empty malformed inline payload is
+    # authoritative and must fail closed rather than falling back to another
+    # representation.
+    if inline not in (None, ""):
+        if not isinstance(inline, str):
             raise PortabilityExportIncomplete("retained inline image bytes are malformed")
         try:
             decoded = base64.b64decode(inline, validate=True)

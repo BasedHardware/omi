@@ -7,14 +7,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/widgets/conversation_photo_image.dart';
+import 'package:omi/widgets/media_viewer_page.dart';
 
 const _onePixelPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 
-ConversationPhoto _photo({String base64 = '', String? storageId = 'storage-1'}) {
+ConversationPhoto _photo({String base64 = '', String? storageId = 'storage-1', String? description}) {
   return ConversationPhoto(
     id: 'photo-1',
     base64: base64,
     storageId: storageId,
+    description: description,
     createdAt: DateTime.utc(2026, 8, 24),
   );
 }
@@ -74,6 +76,36 @@ void main() {
     expect(requestedConversationId, 'conversation-1');
     expect(requestedPhotoId, 'photo-1');
     expect(find.byType(Image), findsOneWidget);
+    expect(find.text('File unavailable'), findsNothing);
+  });
+
+  testWidgets('full-screen viewer preserves conversation id for storage-backed photos', (tester) async {
+    final expectedBytes = Uint8List.fromList(base64Decode(_onePixelPng));
+    var requestedConversationId = '';
+    final cache = ConversationPhotoBytesCache(
+      fetchStorageImage: (conversationId, _) async {
+        requestedConversationId = conversationId;
+        return expectedBytes;
+      },
+    );
+
+    await tester.pumpWidget(
+      _localized(
+        MediaViewerPage(
+          items: [
+            MediaViewerItem(
+              bytesLoader: () => cache.load(_photo(description: 'Ready'), 'conversation-1'),
+              showCaptionStrip: true,
+              caption: 'Ready',
+            ),
+          ],
+          initialIndex: 0,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(requestedConversationId, 'conversation-1');
     expect(find.text('File unavailable'), findsNothing);
   });
 

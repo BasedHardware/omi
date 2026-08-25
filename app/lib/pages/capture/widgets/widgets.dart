@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
@@ -18,6 +16,7 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/photo_viewer_page.dart';
 import 'package:omi/widgets/photos_grid.dart';
 import 'package:omi/widgets/transcript.dart';
 
@@ -159,12 +158,14 @@ class UpdateFirmwareCardWidget extends StatelessWidget {
 
 class PhotosPreviewWidget extends StatelessWidget {
   final List<ConversationPhoto> photos;
-  const PhotosPreviewWidget({super.key, required this.photos});
+  final String? conversationId;
+  const PhotosPreviewWidget({super.key, required this.photos, this.conversationId});
 
   @override
   Widget build(BuildContext context) {
     // Show the last 3 photos, newest first.
     final displayPhotos = photos.length > 3 ? photos.sublist(photos.length - 3) : photos;
+    final resolvedConversationId = conversationId ?? context.read<CaptureProvider>().topConversationId;
     return SizedBox(
       height: 80,
       child: Row(
@@ -177,10 +178,10 @@ class PhotosPreviewWidget extends StatelessWidget {
                 aspectRatio: 800 / 600,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(8.0),
-                  child: Image.memory(
-                    base64Decode(photo.base64),
+                  child: ConversationPhotoImage(
+                    photo: photo,
+                    conversationId: resolvedConversationId,
                     fit: BoxFit.cover,
-                    gaplessPlayback: true, // Avoids flicker when image updates
                   ),
                 ),
               ),

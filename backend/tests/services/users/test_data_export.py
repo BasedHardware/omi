@@ -251,7 +251,7 @@ def test_retained_image_read_failure_aborts_portability_export(monkeypatch):
         )
 
 
-@pytest.mark.parametrize("inline", ["", "not-base64!", 123])
+@pytest.mark.parametrize("inline", ["not-base64!", 123])
 def test_malformed_retained_inline_image_aborts_portability_export(inline):
     with pytest.raises(data_export.PortabilityExportIncomplete, match="inline image bytes"):
         data_export._export_photo_manifest(
@@ -259,6 +259,45 @@ def test_malformed_retained_inline_image_aborts_portability_export(inline):
             "conv-1",
             {"id": "photo-1", "base64": inline, "content_type": "image/jpeg"},
         )
+
+
+def test_empty_inline_marker_falls_back_to_permanent_storage(monkeypatch):
+    download = MagicMock(return_value=b"stored-image")
+    monkeypatch.setattr(data_export, "download_frame_request_pixels", download)
+
+    result = data_export._export_photo_manifest(
+        "uid1",
+        "conv-1",
+        {
+            "id": "photo-1",
+            "base64": "",
+            "storage_id": "storage-1",
+            "content_type": "image/jpeg",
+        },
+    )
+
+    assert result["bytes_available"] is True
+    assert result["bytes_base64"] == "c3RvcmVkLWltYWdl"
+    download.assert_called_once_with("uid1", "storage-1")
+
+
+def test_non_empty_malformed_inline_data_does_not_fall_back_to_storage(monkeypatch):
+    download = MagicMock(return_value=b"stored-image")
+    monkeypatch.setattr(data_export, "download_frame_request_pixels", download)
+
+    with pytest.raises(data_export.PortabilityExportIncomplete, match="inline image bytes"):
+        data_export._export_photo_manifest(
+            "uid1",
+            "conv-1",
+            {
+                "id": "photo-1",
+                "base64": "not-base64!",
+                "storage_id": "storage-1",
+                "content_type": "image/jpeg",
+            },
+        )
+
+    download.assert_not_called()
 
 
 def test_empty_retained_object_aborts_portability_export(monkeypatch):
