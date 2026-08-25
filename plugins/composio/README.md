@@ -33,7 +33,7 @@ This plugin allows users to connect various services through Composio to extract
 
 ### 3. Configuration
 
-1. Copy `.env.template` to `.env`
+1. Create a `.env` file in `plugins/composio/`
 2. Fill in your OMI and Notion credentials:
    ```
    OMI_APP_ID=your_app_id_here

@@ -62,12 +62,7 @@ If you need to authenticate, you can use:
 
 ### 3. Configure Environment
 
-```bash
-cd /Users/aaravgarg/omi-ai/Code/apps/slack
-cp .env.example .env
-```
-
-Edit `.env` with your credentials:
+Create a `.env` file in `plugins/omi-slack-app/` with your credentials:
 ```env
 SLACK_CLIENT_ID=your_client_id_here
 SLACK_CLIENT_SECRET=your_client_secret_here

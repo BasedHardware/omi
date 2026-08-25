@@ -94,7 +94,7 @@ When creating/updating the Omi app, use these URLs:
 
 ## Local Development
 
-1. Copy `.env.example` to `.env` and fill in your credentials
+1. Create a `.env` file with the variables listed in [Environment Variables](#environment-variables)
 2. Set `TWITTER_REDIRECT_URI=http://localhost:8080/auth/twitter/callback`
 3. Add this to your Twitter app's callback URIs
 4. Install dependencies: `pip install -r requirements.txt`

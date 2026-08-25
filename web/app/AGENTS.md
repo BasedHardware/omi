@@ -7,13 +7,13 @@ by Bun. Siblings: `web/admin`, `web/frontend`, `web/personas-open-source`.
 
 ```bash
 cd web/app
-bun install     # the Dockerfile uses the same bun.lock
-bun run dev     # full build, serve, rebuild on change (scripts/dev.ts)
+bun install                  # Bun only — Dockerfile uses this bun.lock
+cp .env.template .env.local  # required: build exits 1 on empty Firebase vars
+bun run dev                  # full build, serve, rebuild (scripts/dev.ts)
 ```
 
 `dev` runs the full build, not `moonshine dev`: `build:assets` injects
 `NEXT_PUBLIC_*` and writes the real server, and the app boots blank without it.
-Use Bun, never npm or pnpm — `Dockerfile` installs from `bun.lock`.
 
 ## Quality Gates
 

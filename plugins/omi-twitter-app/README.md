@@ -86,9 +86,8 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Configure environment
-cp .env.example .env
-# Edit .env with your API keys
+# Configure environment: create a .env file with the variables
+# listed under "Configuration" below
 ```
 
 ### Configuration
@@ -269,7 +268,6 @@ omi-twitter-app/
 ├── railway.toml            # Railway deployment config
 ├── runtime.txt             # Python version
 ├── Procfile                # Alternative deployment platforms
-├── .env.example            # Environment template
 ├── .gitignore             # Git ignore rules
 ├── LICENSE                # MIT License
 └── README.md              # This file

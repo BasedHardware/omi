@@ -165,9 +165,8 @@ source venv/bin/activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Copy environment file and configure
-cp .env.example .env
-# Edit .env with your credentials
+# Create a .env file with the variables listed under
+# "Environment Variables" below
 
 # Run the server
 python main.py

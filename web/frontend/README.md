@@ -95,12 +95,6 @@ docker build -t omi-frontend .
 docker run -p 3000:3000 omi-frontend
 ```
 
-### Using Docker Compose
-
-```bash
-docker-compose up --build
-```
-
 ## Project Structure
 
 ```

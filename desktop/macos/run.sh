@@ -1019,7 +1019,7 @@ if [ ! -f ".env" ] && [ "$YOLO_MODE" != "1" ] && [ "$NAMED_BUNDLE_DEFAULT_DEV_BA
     echo ""
     echo "Quick start:"
     echo "  1. cp .env.template .env"
-    echo "  2. Fill in required values (see comments in .env.example)"
+    echo "  2. Fill in required values (see comments in .env.template)"
     echo "  3. Place google-credentials.json in $BACKEND_DIR/"
     echo "     (GCP service account key with Firestore + Firebase Auth access)"
     echo ""

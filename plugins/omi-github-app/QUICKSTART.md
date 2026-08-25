@@ -30,12 +30,7 @@ pip install -r requirements.txt
 
 ### 4. Configure Environment (1 min)
 
-```bash
-cp .env.example .env
-nano .env  # or use any editor
-```
-
-Add your keys:
+Create a `.env` file in this directory with your keys:
 ```env
 GITHUB_CLIENT_ID=your_github_client_id_here
 GITHUB_CLIENT_SECRET=your_github_client_secret_here

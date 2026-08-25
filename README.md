@@ -66,7 +66,7 @@ uv --version
 ```bash
 git clone https://github.com/BasedHardware/omi.git
 cd omi/desktop/macos
-cp ../../backend/.env.example ../../backend/.env
+cp ../../backend/.env.template ../../backend/.env
 ```
 
 3. Build and run
