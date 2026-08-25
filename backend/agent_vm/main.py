@@ -8,7 +8,6 @@ import re
 import sqlite3
 import threading
 import time
-import zlib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -31,18 +30,28 @@ SYNC_TABLES = frozenset(
     }
 )
 SCREEN_DATA_TABLES = frozenset({"screenshots", "focus_sessions", "observations"})
-SCREEN_DATA_TABLE_PATTERN = re.compile(
-    r"(?:screenshots(?:_[A-Za-z0-9_]+)?|focus_sessions(?:_[A-Za-z0-9_]+)?|observations(?:_[A-Za-z0-9_]+)?|"
-    r"ocr_[A-Za-z0-9_]*|proactive_extractions(?:_[A-Za-z0-9_]+)?)",
-    re.I,
+# Every table family that can hold frame-derived content. Beyond the direct
+# capture tables this covers the retired proactive-extraction schema (including
+# its FTS shadow tables) and the context-bucket rollup schema, whose narrative,
+# fact, and version rows are derived from captured frames.
+_SCREEN_DATA_TABLE_BODY = (
+    r"screenshots(?:_[A-Za-z0-9_]+)?"
+    r"|focus_sessions(?:_[A-Za-z0-9_]+)?"
+    r"|observations(?:_[A-Za-z0-9_]+)?"
+    r"|ocr_[A-Za-z0-9_]*"
+    r"|proactive_extractions(?:_[A-Za-z0-9_]+)?"
+    r"|bucket_[A-Za-z0-9_]*"
+    r"|context_buckets(?:_[A-Za-z0-9_]+)?"
+    r"|context_visits(?:_[A-Za-z0-9_]+)?"
+    r"|proactive_candidates(?:_[A-Za-z0-9_]+)?"
+    r"|subject_bindings(?:_[A-Za-z0-9_]+)?"
 )
+SCREEN_DATA_TABLE_PATTERN = re.compile(rf"(?:{_SCREEN_DATA_TABLE_BODY})", re.I)
 SCREEN_DATA_QUERY_PATTERN = re.compile(
-    r"(?<![A-Za-z0-9_])(?:screenshots(?:_[A-Za-z0-9_]+)?|focus_sessions(?:_[A-Za-z0-9_]+)?|"
-    r"observations(?:_[A-Za-z0-9_]+)?|ocr_[A-Za-z0-9_]*|proactive_extractions(?:_[A-Za-z0-9_]+)?)(?![A-Za-z0-9_])",
+    rf"(?<![A-Za-z0-9_])(?:{_SCREEN_DATA_TABLE_BODY})(?![A-Za-z0-9_])",
     re.I,
 )
 IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-MAX_UPLOAD_BYTES = 10 * 1024 * 1024 * 1024
 
 
 class Runtime:
@@ -65,7 +74,6 @@ class Runtime:
         self.state_receipt_sha256 = ""
         self.state_database_expected = False
         self.lock = threading.RLock()
-        self.upload_lock = asyncio.Lock()
 
     def load_state_receipt(self) -> None:
         self.state_ready = False
@@ -144,7 +152,6 @@ runtime = Runtime()
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     runtime.db_path.parent.mkdir(parents=True, exist_ok=True)
     runtime.workspace_path.mkdir(parents=True, exist_ok=True)
-    runtime.db_path.with_suffix(runtime.db_path.suffix + ".uploading").unlink(missing_ok=True)
     previous = runtime.db_path.with_suffix(runtime.db_path.suffix + ".previous")
     if previous.is_file() and not runtime.db_path.exists():
         previous.replace(runtime.db_path)
@@ -152,6 +159,9 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     if runtime.open_database():
         previous.unlink(missing_ok=True)
     elif previous.is_file():
+        # A legacy state disk can carry a main database that no longer opens.
+        # The .previous copy from an older upload-era build is the last known
+        # good file; prefer it before reporting the database uninspectable.
         runtime.db_path.unlink(missing_ok=True)
         previous.replace(runtime.db_path)
         runtime.open_database()
@@ -223,17 +233,6 @@ def screen_data_tables() -> list[str]:
         return []
     rows = runtime.db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
     return [str(row[0]) for row in rows if is_screen_data_table(str(row[0]))]
-
-
-def database_screen_data_tables(path: Path) -> list[str]:
-    connection: sqlite3.Connection | None = None
-    try:
-        connection = sqlite3.connect(f"file:{quote(str(path))}?mode=ro", uri=True)
-        rows = connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
-        return [str(row[0]) for row in rows if is_screen_data_table(str(row[0]))]
-    finally:
-        if connection is not None:
-            connection.close()
 
 
 def json_value(value: Any) -> Any:
@@ -322,16 +321,6 @@ def bootstrap_sync_schema() -> bool:
         return False
 
 
-def validate_database_integrity(path: Path) -> list[Any]:
-    connection: sqlite3.Connection | None = None
-    try:
-        connection = sqlite3.connect(f"file:{quote(str(path))}?mode=ro", uri=True)
-        return [row[0] for row in connection.execute("PRAGMA integrity_check")]
-    finally:
-        if connection is not None:
-            connection.close()
-
-
 def fsync_file(path: Path) -> None:
     fd = os.open(str(path), os.O_RDONLY)
     try:
@@ -355,17 +344,6 @@ def fsync_database_files(path: Path) -> None:
         sidecar = Path(str(path) + suffix)
         if sidecar.is_file():
             fsync_file(sidecar)
-
-
-def remove_database_sidecars(path: Path) -> None:
-    removed = False
-    for suffix in ("-wal", "-shm"):
-        sidecar = Path(str(path) + suffix)
-        if sidecar.is_file():
-            sidecar.unlink()
-            removed = True
-    if removed:
-        fsync_directory(path.parent)
 
 
 def close_runtime_database() -> None:
@@ -402,76 +380,21 @@ async def run_thread_operation(function: Any, *args: Any) -> Any:
         raise
 
 
-def restore_previous_database(
-    previous: Path,
-    prior_moved: bool,
-    uploaded_moved: bool,
-    was_open: bool,
-    previous_available: bool,
-) -> None:
-    close_runtime_database()
-    if uploaded_moved:
-        remove_database_sidecars(runtime.db_path)
-    if prior_moved or (uploaded_moved and previous_available):
-        if not previous.is_file():
-            raise RuntimeError("Previous database is missing")
-        fsync_file(previous)
-        previous.replace(runtime.db_path)
-        fsync_directory(runtime.db_path.parent)
-    elif uploaded_moved:
-        runtime.db_path.unlink(missing_ok=True)
-        fsync_directory(runtime.db_path.parent)
-    if was_open and runtime.db is None and runtime.db_path.is_file() and not runtime.open_database():
-        raise RuntimeError("Failed to reopen previous database")
-    if was_open and runtime.db is not None:
-        fsync_database_files(runtime.db_path)
-        fsync_directory(runtime.db_path.parent)
-
-
-def install_uploaded_database(temporary: Path) -> None:
-    with runtime.lock:
-        previous = runtime.db_path.with_suffix(runtime.db_path.suffix + ".previous")
-        was_open = runtime.db is not None
-        previous_available = previous.is_file()
-        prior_moved = False
-        uploaded_moved = False
-        try:
-            if runtime.db is not None:
-                runtime.db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-            runtime.close_database()
-            if runtime.db_path.is_file():
-                fsync_file(runtime.db_path)
-            remove_database_sidecars(runtime.db_path)
-            if runtime.db_path.is_file():
-                runtime.db_path.replace(previous)
-                prior_moved = True
-                fsync_directory(runtime.db_path.parent)
-            temporary.replace(runtime.db_path)
-            uploaded_moved = True
-            fsync_directory(runtime.db_path.parent)
-            if not runtime.open_database():
-                raise RuntimeError("Failed to open uploaded database")
-            fsync_database_files(runtime.db_path)
-            fsync_directory(runtime.db_path.parent)
-            previous.unlink(missing_ok=True)
-        except Exception:
-            try:
-                restore_previous_database(previous, prior_moved, uploaded_moved, was_open, previous_available)
-            except Exception as restore_exc:
-                raise RuntimeError("Failed to restore previous database") from restore_exc
-            raise
-
-
 def screen_data_report() -> dict[str, Any]:
-    """Report whether this VM still holds screen/OCR data, without deleting anything.
+    """Report whether this VM still holds screen/OCR data.
 
-    Historical data is deliberately left in place: this build closes the ingress
-    and refuses to run a session while legacy screen rows are present, rather
-    than destroying records that no other copy may hold. The desktop treats a
-    non-empty report as fail-closed.
+    The report alone never deletes anything. Deletion happens only through
+    ``/purge-screen-activity``, which the reconciler calls once before it
+    stamps the privacy marker; until then the desktop treats any non-empty
+    (or uninspectable) report as fail-closed and starts no session.
     """
     with runtime.lock:
         if runtime.db is None:
+            # Fail closed when a database file exists but cannot be inspected
+            # (for example after SQLite corruption): "absent" must be provable,
+            # not assumed. The desktop refuses the session either way.
+            if runtime.db_path.is_file():
+                return {"present": True, "tables": [], "reason": "database_uninspectable"}
             return {"present": False, "tables": []}
         present: list[str] = []
         for table in screen_data_tables():
@@ -486,69 +409,43 @@ def screen_data_report() -> dict[str, Any]:
         return {"present": bool(present), "tables": sorted(present)}
 
 
-async def upload_database(request: Request) -> tuple[int, int]:
-    try:
-        content_length = int(request.headers.get("content-length", "0"))
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail="Invalid Content-Length") from exc
-    if content_length > MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail={"error": "File too large", "maxBytes": MAX_UPLOAD_BYTES})
-    encoding = request.headers.get("content-encoding", "").lower()
-    if encoding not in {"", "gzip", "deflate", "zlib"}:
-        raise HTTPException(status_code=415, detail="Unsupported Content-Encoding")
-    temporary = runtime.db_path.with_suffix(runtime.db_path.suffix + ".uploading")
-    received = 0
-    final_size = 0
-    decompressor: zlib.Decompress | None = None
-    if encoding == "gzip":
-        decompressor = zlib.decompressobj(16 + zlib.MAX_WBITS)
-    elif encoding in {"deflate", "zlib"}:
-        decompressor = zlib.decompressobj(-zlib.MAX_WBITS)
-    try:
-        with temporary.open("wb") as output:
-            async for chunk in request.stream():
-                received += len(chunk)
-                if received > MAX_UPLOAD_BYTES:
-                    raise HTTPException(
-                        status_code=413, detail={"error": "File too large", "maxBytes": MAX_UPLOAD_BYTES}
-                    )
-                data = decompressor.decompress(chunk) if decompressor else chunk
-                output.write(data)
-                final_size += len(data)
-                if final_size > MAX_UPLOAD_BYTES:
-                    raise HTTPException(
-                        status_code=413, detail={"error": "File too large", "maxBytes": MAX_UPLOAD_BYTES}
-                    )
-            if decompressor:
-                data = decompressor.flush()
-                output.write(data)
-                final_size += len(data)
-            output.flush()
-        await run_thread_operation(fsync_file, temporary)
-        await run_thread_operation(fsync_directory, temporary.parent)
-        if final_size > MAX_UPLOAD_BYTES:
-            raise HTTPException(status_code=413, detail={"error": "File too large", "maxBytes": MAX_UPLOAD_BYTES})
-        try:
-            integrity = await run_thread_operation(validate_database_integrity, temporary)
-        except sqlite3.Error as exc:
-            raise HTTPException(status_code=400, detail="Uploaded database is not valid SQLite") from exc
-        if integrity != ["ok"]:
-            raise HTTPException(status_code=400, detail="Uploaded database failed SQLite integrity check")
-        try:
-            if await run_thread_operation(database_screen_data_tables, temporary):
-                raise HTTPException(status_code=400, detail="Uploaded database contains screen activity")
-        except sqlite3.Error as exc:
-            raise HTTPException(status_code=400, detail="Uploaded database is not valid SQLite") from exc
+def purge_screen_data_tables() -> list[str]:
+    """Drop every screen-data table from this VM's retained omi.db.
 
-        await run_thread_operation(install_uploaded_database, temporary)
-        runtime.last_activity_at = time.monotonic()
-        return received, final_size
-    except HTTPException:
-        raise
-    except (OSError, zlib.error) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    finally:
-        temporary.unlink(missing_ok=True)
+    This is the deletion half of the reconciler-owned privacy migration: a
+    legacy state disk keeps its uploaded OCR tables until this runs, so the
+    reconciler calls it before persisting ``screenPrivacyVersion``. Dropping
+    the tables removes the rows, their indexes, and the FTS shadow tables in
+    one step; the WAL is checkpointed and every file fsynced so the purge
+    survives an abrupt VM stop.
+    """
+    with runtime.lock:
+        close_runtime_database()
+        dropped: list[str] = []
+        try:
+            connection = sqlite3.connect(runtime.db_path, check_same_thread=False)
+            try:
+                names = [
+                    str(row[0])
+                    for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                ]
+                for name in names:
+                    if not is_screen_data_table(name):
+                        continue
+                    connection.execute(f"DROP TABLE IF EXISTS {quoted(name)}")
+                    dropped.append(name)
+                connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                connection.commit()
+            finally:
+                connection.close()
+        except sqlite3.Error:
+            runtime.open_database()
+            raise
+    fsync_database_files(runtime.db_path)
+    fsync_directory(runtime.db_path.parent)
+    with runtime.lock:
+        runtime.open_database()
+    return sorted(dropped)
 
 
 async def fetch_backend_tools() -> list[dict[str, Any]]:
@@ -848,10 +745,22 @@ async def health(request: Request) -> dict[str, Any]:
 
 @app.post("/upload")
 async def upload(request: Request) -> dict[str, Any]:
+    """Retired tombstone for the full-database upload route.
+
+    LIFECYCLE: one-time
+    DELETE-AFTER: https://github.com/BasedHardware/omi/issues/11018
+
+    The local omi.db can hold screenshot/OCR rows, so shipping it here was
+    exactly the egress this change closes; current desktop builds no longer
+    call this route. The rejection happens BEFORE the request body is read so
+    an already-shipped legacy client that still uploads against a fresh or
+    reaped VM never transmits a single database byte: it gets its error
+    immediately and keeps its omi.db to itself. The response is deliberately
+    not retryable (410), so the shipped client's bounded retry gives up.
+    """
     runtime.require_auth(request)
-    async with runtime.upload_lock:
-        received, final_size = await upload_database(request)
-    return {"status": "ok", "bytesReceived": received, "finalSize": final_size, "databaseReady": True}
+    del request
+    raise HTTPException(status_code=410, detail="Database upload is retired")
 
 
 @app.post("/auth")
@@ -919,6 +828,23 @@ async def screen_activity_status(request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="Unable to inspect screen activity") from exc
     runtime.last_activity_at = time.monotonic()
     return {"status": "ok", **report}
+
+
+@app.post("/purge-screen-activity")
+async def purge_screen_activity(request: Request) -> dict[str, Any]:
+    """Drop every retained screen-data table from this VM's omi.db.
+
+    Called by the reconciler as the deletion half of the privacy migration:
+    only a successful purge lets it persist ``screenPrivacyVersion`` on the
+    owner record, which is what re-admits mobile sessions through the proxy.
+    """
+    runtime.require_auth(request)
+    try:
+        purged = await run_thread_operation(purge_screen_data_tables)
+    except (OSError, RuntimeError, sqlite3.Error) as exc:
+        raise HTTPException(status_code=500, detail="Unable to purge screen activity") from exc
+    runtime.last_activity_at = time.monotonic()
+    return {"status": "ok", "purged": purged}
 
 
 @app.websocket("/ws")

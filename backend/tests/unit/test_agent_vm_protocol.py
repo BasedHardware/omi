@@ -11,6 +11,7 @@ import types
 from pathlib import Path
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -90,570 +91,6 @@ def test_http_protocol_requires_vm_token(tmp_path: Path) -> None:
         assert client.post("/screen-activity-status").status_code == 401
         assert client.post("/auth?token=test-token", json={}).status_code == 400
         assert client.post("/ping?token=test-token").json() == {"status": "ok"}
-
-
-def test_invalid_database_upload_preserves_open_database(tmp_path: Path) -> None:
-    app, module = load_app(tmp_path)
-    connection = sqlite3.connect(module.runtime.db_path)
-    connection.execute("CREATE TABLE durable (value TEXT)")
-    connection.execute("INSERT INTO durable VALUES ('preserved')")
-    connection.commit()
-    connection.close()
-
-    with TestClient(app) as client:
-        response = client.post(
-            "/upload?token=test-token",
-            content=b"not sqlite",
-            headers={"Authorization": "Bearer test-token"},
-        )
-        value = module.runtime.db.execute("SELECT value FROM durable").fetchone()[0]
-
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Uploaded database is not valid SQLite"
-    assert value == "preserved"
-    assert not module.runtime.db_path.with_suffix(".db.uploading").exists()
-
-
-def test_database_upload_rejects_screen_data(tmp_path: Path) -> None:
-    app, module = load_app(tmp_path)
-    uploaded = tmp_path / "uploaded.db"
-    connection = sqlite3.connect(uploaded)
-    connection.execute("CREATE TABLE screenshots (id TEXT, ocrText TEXT)")
-    connection.execute("INSERT INTO screenshots VALUES ('one', 'secret')")
-    connection.commit()
-    connection.close()
-
-    with TestClient(app) as client:
-        response = client.post(
-            "/upload?token=test-token",
-            content=uploaded.read_bytes(),
-            headers={"Authorization": "Bearer test-token"},
-        )
-
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Uploaded database contains screen activity"
-    assert not module.runtime.db_path.exists()
-
-
-def test_malformed_database_validation_closes_connection_and_temp_file(tmp_path: Path, monkeypatch) -> None:
-    app, module = load_app(tmp_path)
-
-    class MalformedConnection:
-        closed = False
-
-        def execute(self, _statement):
-            raise sqlite3.DatabaseError("malformed")
-
-        def close(self):
-            self.closed = True
-
-    connection = MalformedConnection()
-    monkeypatch.setattr(module.sqlite3, "connect", lambda *_args, **_kwargs: connection)
-
-    with TestClient(app) as client:
-        response = client.post(
-            "/upload?token=test-token",
-            content=b"not sqlite",
-            headers={"Authorization": "Bearer test-token"},
-        )
-
-    assert response.status_code == 400
-    assert connection.closed
-    assert not module.runtime.db_path.with_suffix(".db.uploading").exists()
-
-
-def test_database_integrity_check_does_not_block_event_loop(tmp_path: Path, monkeypatch) -> None:
-    _, module = load_app(tmp_path)
-    payload = create_database(tmp_path / "uploaded.db", "replacement", "ready")
-    started = threading.Event()
-    release = threading.Event()
-    worker = None
-
-    def slow_validation(_path):
-        nonlocal worker
-        worker = threading.current_thread()
-        started.set()
-        assert release.wait(2)
-        return ["ok"]
-
-    monkeypatch.setattr(module, "validate_database_integrity", slow_validation)
-
-    class Request:
-        headers = {"content-length": str(len(payload))}
-
-        async def stream(self):
-            yield payload
-
-    async def run_upload():
-        upload_task = asyncio.create_task(module.upload_database(Request()))
-        assert await asyncio.to_thread(started.wait, 1)
-        await asyncio.sleep(0.01)
-        elapsed = time.monotonic() - started_at
-        release.set()
-        result = await upload_task
-        return elapsed, result
-
-    timer_fired = False
-
-    def hang_guard():
-        nonlocal timer_fired
-        timer_fired = True
-        release.set()
-
-    timer = threading.Timer(0.2, hang_guard)
-    started_at = time.monotonic()
-    timer.start()
-    try:
-        elapsed, result = asyncio.run(run_upload())
-    finally:
-        release.set()
-        timer.cancel()
-        module.runtime.close_database()
-
-    # The upload must release through its own path, not the 0.2 s hang guard:
-    # if the offloaded work never resumed, only the timer unblocks the await
-    # and the guard flag is set. The elapsed bound is deliberately generous —
-    # the precise signal is whether the guard fired, not a wall-clock race.
-    assert not timer_fired
-    assert elapsed < 2.0
-    assert worker is not threading.main_thread()
-    assert result == (len(payload), len(payload))
-
-
-def test_database_upload_fsync_does_not_block_event_loop(tmp_path: Path, monkeypatch) -> None:
-    _, module = load_app(tmp_path)
-    payload = create_database(tmp_path / "uploaded.db", "replacement", "ready")
-    started = threading.Event()
-    release = threading.Event()
-    worker = None
-    calls = 0
-
-    def slow_fsync(_path):
-        nonlocal calls, worker
-        calls += 1
-        if calls == 1:
-            worker = threading.current_thread()
-            started.set()
-            assert release.wait(2)
-
-    monkeypatch.setattr(module, "fsync_file", slow_fsync)
-
-    class Request:
-        headers = {"content-length": str(len(payload))}
-
-        async def stream(self):
-            yield payload
-
-    async def run_upload():
-        upload_task = asyncio.create_task(module.upload_database(Request()))
-        assert await asyncio.to_thread(started.wait, 1)
-        await asyncio.sleep(0.01)
-        elapsed = time.monotonic() - started_at
-        release.set()
-        result = await upload_task
-        return elapsed, result
-
-    timer_fired = False
-
-    def hang_guard():
-        nonlocal timer_fired
-        timer_fired = True
-        release.set()
-
-    timer = threading.Timer(0.2, hang_guard)
-    started_at = time.monotonic()
-    timer.start()
-    try:
-        elapsed, result = asyncio.run(run_upload())
-    finally:
-        release.set()
-        timer.cancel()
-        module.runtime.close_database()
-
-    # See the sibling test: the precise signal is the hang guard, not the wall clock.
-    assert not timer_fired
-    assert elapsed < 2.0
-    assert worker is not threading.main_thread()
-    assert result == (len(payload), len(payload))
-
-
-def test_database_installation_is_offloaded_and_serialized_with_db_use(tmp_path: Path, monkeypatch) -> None:
-    _, module = load_app(tmp_path)
-    create_database(module.runtime.db_path, "durable", "preserved")
-    uploaded = tmp_path / "uploaded.db"
-    payload = create_database(uploaded, "replacement", "ready")
-    assert module.runtime.open_database()
-
-    install_started = threading.Event()
-    release_install = threading.Event()
-    query_started = threading.Event()
-    install_thread = None
-    original_close = module.runtime.close_database
-    original_execute_sql = module.execute_sql
-
-    def blocking_close():
-        nonlocal install_thread
-        if not install_started.is_set():
-            install_thread = threading.current_thread()
-            install_started.set()
-            assert release_install.wait(2)
-        return original_close()
-
-    def tracked_execute_sql(query):
-        query_started.set()
-        return original_execute_sql(query)
-
-    monkeypatch.setattr(module.runtime, "close_database", blocking_close)
-    monkeypatch.setattr(module, "execute_sql", tracked_execute_sql)
-
-    class Request:
-        headers = {"content-length": str(len(payload))}
-
-        async def stream(self):
-            yield payload
-
-    async def run_upload():
-        upload_task = asyncio.create_task(module.upload_database(Request()))
-        assert await asyncio.to_thread(install_started.wait, 1)
-        query_task = asyncio.create_task(asyncio.to_thread(module.execute_sql, "SELECT 1"))
-        assert await asyncio.to_thread(query_started.wait, 1)
-        await asyncio.sleep(0.01)
-        query_blocked = not query_task.done()
-        release_install.set()
-        result = await upload_task
-        query_result = await query_task
-        return query_blocked, result, query_result
-
-    timer_fired = False
-
-    def hang_guard():
-        nonlocal timer_fired
-        timer_fired = True
-        release_install.set()
-
-    timer = threading.Timer(0.2, hang_guard)
-    started_at = time.monotonic()
-    timer.start()
-    try:
-        query_blocked, result, query_result = asyncio.run(run_upload())
-    finally:
-        release_install.set()
-        timer.cancel()
-        module.runtime.close_database()
-
-    # The install must release through its own path: if the query serialized
-    # behind the database install (the deadlock this test guards), only the
-    # 0.2 s hang guard unblocks it. The wall-clock bound is intentionally
-    # generous; the precise signal is whether the guard fired.
-    assert not timer_fired
-    assert time.monotonic() - started_at < 2.0
-    assert install_thread is not threading.main_thread()
-    assert query_blocked
-    assert result == (len(payload), len(payload))
-    assert json.loads(query_result) == {"rows": [{"1": 1}], "count": 1}
-
-
-def test_cancelled_database_upload_waits_for_install_before_reusing_temp_path(tmp_path: Path, monkeypatch) -> None:
-    _, module = load_app(tmp_path)
-    payload = create_database(tmp_path / "uploaded.db", "replacement", "ready")
-    temporary = module.runtime.db_path.with_suffix(".db.uploading")
-    install_started = threading.Event()
-    release_install = threading.Event()
-    worker_saw_temp_path = []
-    install_calls = 0
-
-    monkeypatch.setattr(module.runtime, "require_auth", lambda _request: None)
-
-    def blocking_install(path):
-        nonlocal install_calls
-        install_calls += 1
-        install_started.set()
-        assert release_install.wait(2)
-        worker_saw_temp_path.append(path.exists())
-
-    monkeypatch.setattr(module, "install_uploaded_database", blocking_install)
-
-    class Request:
-        headers = {"content-length": str(len(payload))}
-
-        async def stream(self):
-            yield payload
-
-    async def run_uploads():
-        first = asyncio.create_task(module.upload(Request()))
-        assert await asyncio.to_thread(install_started.wait, 1)
-        second = asyncio.create_task(module.upload(Request()))
-        await asyncio.sleep(0.01)
-        first.cancel()
-        await asyncio.sleep(0.01)
-        assert not first.done()
-        assert not second.done()
-        assert temporary.exists()
-        release_install.set()
-        with pytest.raises(asyncio.CancelledError):
-            await first
-        result = await second
-        return result
-
-    try:
-        result = asyncio.run(run_uploads())
-    finally:
-        release_install.set()
-        module.runtime.close_database()
-
-    assert result == {"status": "ok", "bytesReceived": len(payload), "finalSize": len(payload), "databaseReady": True}
-    assert install_calls == 2
-    assert worker_saw_temp_path == [True, True]
-    assert not temporary.exists()
-
-
-def test_valid_database_upload_atomically_replaces_open_database(tmp_path: Path) -> None:
-    app, module = load_app(tmp_path)
-    sqlite3.connect(module.runtime.db_path).close()
-    uploaded = tmp_path / "uploaded.db"
-    connection = sqlite3.connect(uploaded)
-    connection.execute("CREATE TABLE replacement (value TEXT)")
-    connection.execute("INSERT INTO replacement VALUES ('ready')")
-    connection.commit()
-    connection.close()
-
-    with TestClient(app) as client:
-        response = client.post(
-            "/upload?token=test-token",
-            content=uploaded.read_bytes(),
-            headers={"Authorization": "Bearer test-token"},
-        )
-        value = module.runtime.db.execute("SELECT value FROM replacement").fetchone()[0]
-
-    assert response.status_code == 200
-    assert value == "ready"
-    assert not module.runtime.db_path.with_suffix(".db.previous").exists()
-
-
-def test_database_upload_durability_order_keeps_rollback_until_new_db_is_synced(tmp_path: Path, monkeypatch) -> None:
-    app, module = load_app(tmp_path)
-    create_database(module.runtime.db_path, "durable", "preserved")
-    uploaded = tmp_path / "uploaded.db"
-    payload = create_database(uploaded, "replacement", "ready")
-    previous = module.runtime.db_path.with_suffix(".db.previous")
-    temporary = module.runtime.db_path.with_suffix(".db.uploading")
-    events = []
-    original_fsync_file = module.fsync_file
-    original_fsync_directory = module.fsync_directory
-    original_replace = Path.replace
-    original_unlink = Path.unlink
-
-    def record_fsync_file(path):
-        events.append(("file_fsync", Path(path)))
-        original_fsync_file(path)
-
-    def record_fsync_directory(path):
-        events.append(("directory_fsync", Path(path)))
-        original_fsync_directory(path)
-
-    def record_replace(source, target):
-        source_path = Path(source)
-        target_path = Path(target)
-        if source_path in {module.runtime.db_path, temporary}:
-            events.append(("replace", source_path, target_path))
-        return original_replace(source, target)
-
-    def record_unlink(path, *args, **kwargs):
-        if Path(path) == previous:
-            events.append(("unlink", previous))
-        return original_unlink(path, *args, **kwargs)
-
-    monkeypatch.setattr(module, "fsync_file", record_fsync_file)
-    monkeypatch.setattr(module, "fsync_directory", record_fsync_directory)
-    monkeypatch.setattr(Path, "replace", record_replace)
-    monkeypatch.setattr(Path, "unlink", record_unlink)
-
-    with TestClient(app) as client:
-        response = client.post(
-            "/upload?token=test-token",
-            content=payload,
-            headers={"Authorization": "Bearer test-token"},
-        )
-
-    prior_replace = events.index(("replace", module.runtime.db_path, previous))
-    uploaded_replace = events.index(("replace", temporary, module.runtime.db_path))
-    rollback_unlink = max(index for index, event in enumerate(events) if event == ("unlink", previous))
-    uploaded_fsync = events.index(("file_fsync", temporary))
-    new_db_fsync = max(index for index, event in enumerate(events) if event == ("file_fsync", module.runtime.db_path))
-
-    assert response.status_code == 200
-    assert uploaded_fsync < prior_replace
-    assert events[prior_replace + 1] == ("directory_fsync", module.runtime.db_path.parent)
-    assert events[uploaded_replace + 1] == ("directory_fsync", module.runtime.db_path.parent)
-    assert uploaded_replace < new_db_fsync < rollback_unlink
-
-
-def test_database_upload_directory_sync_failure_restores_prior_database(tmp_path: Path, monkeypatch) -> None:
-    app, module = load_app(tmp_path)
-    create_database(module.runtime.db_path, "durable", "preserved")
-    uploaded = tmp_path / "uploaded.db"
-    payload = create_database(uploaded, "replacement", "ready")
-    previous = module.runtime.db_path.with_suffix(".db.previous")
-    original_fsync_directory = module.fsync_directory
-    failed = False
-
-    def fail_after_uploaded_rename(path):
-        nonlocal failed
-        if not failed and module.runtime.db_path.is_file() and previous.is_file():
-            failed = True
-            raise OSError("power loss during database swap")
-        original_fsync_directory(path)
-
-    monkeypatch.setattr(module, "fsync_directory", fail_after_uploaded_rename)
-
-    with TestClient(app) as client:
-        response = client.post(
-            "/upload?token=test-token",
-            content=payload,
-            headers={"Authorization": "Bearer test-token"},
-        )
-        database_is_open = module.runtime.db is not None
-
-    assert response.status_code == 400
-    assert failed
-    assert database_is_open
-    assert read_database_value(module.runtime.db_path, "durable") == "preserved"
-    assert not previous.exists()
-    assert not module.runtime.db_path.with_suffix(".db.uploading").exists()
-
-
-def test_checkpoint_failure_cleans_upload_and_preserves_prior_database(tmp_path: Path) -> None:
-    app, module = load_app(tmp_path)
-    create_database(module.runtime.db_path, "durable", "preserved")
-    uploaded = tmp_path / "uploaded.db"
-    payload = create_database(uploaded, "replacement", "ready")
-
-    with TestClient(app) as client:
-        original = module.runtime.db
-
-        class FailingConnection:
-            def execute(self, _statement):
-                raise sqlite3.OperationalError("checkpoint failed")
-
-            def close(self):
-                original.close()
-
-        module.runtime.db = FailingConnection()
-        with pytest.raises(sqlite3.OperationalError, match="checkpoint failed"):
-            client.post(
-                "/upload?token=test-token",
-                content=payload,
-                headers={"Authorization": "Bearer test-token"},
-            )
-
-        assert read_database_value(module.runtime.db_path, "durable") == "preserved"
-        assert not module.runtime.db_path.with_suffix(".db.uploading").exists()
-
-
-def test_close_failure_cleans_upload_and_preserves_prior_database(tmp_path: Path, monkeypatch) -> None:
-    app, module = load_app(tmp_path)
-    create_database(module.runtime.db_path, "durable", "preserved")
-    uploaded = tmp_path / "uploaded.db"
-    payload = create_database(uploaded, "replacement", "ready")
-
-    with TestClient(app) as client:
-        original_close = module.runtime.close_database
-
-        def fail_close():
-            raise RuntimeError("close failed")
-
-        monkeypatch.setattr(module.runtime, "close_database", fail_close)
-        try:
-            with pytest.raises(RuntimeError, match="close failed"):
-                client.post(
-                    "/upload?token=test-token",
-                    content=payload,
-                    headers={"Authorization": "Bearer test-token"},
-                )
-        finally:
-            monkeypatch.setattr(module.runtime, "close_database", original_close)
-
-        assert read_database_value(module.runtime.db_path, "durable") == "preserved"
-        assert not module.runtime.db_path.with_suffix(".db.uploading").exists()
-
-
-def test_swap_failure_restores_prior_database_and_cleans_upload(tmp_path: Path, monkeypatch) -> None:
-    app, module = load_app(tmp_path)
-    create_database(module.runtime.db_path, "durable", "preserved")
-    uploaded = tmp_path / "uploaded.db"
-    payload = create_database(uploaded, "replacement", "ready")
-    original_replace = Path.replace
-
-    def fail_uploaded_replace(source, target):
-        if source == module.runtime.db_path.with_suffix(".db.uploading") and Path(target) == module.runtime.db_path:
-            raise OSError("swap failed")
-        return original_replace(source, target)
-
-    monkeypatch.setattr(Path, "replace", fail_uploaded_replace)
-    with TestClient(app) as client:
-        response = client.post(
-            "/upload?token=test-token",
-            content=payload,
-            headers={"Authorization": "Bearer test-token"},
-        )
-
-    assert response.status_code == 400
-    assert read_database_value(module.runtime.db_path, "durable") == "preserved"
-    assert not module.runtime.db_path.with_suffix(".db.uploading").exists()
-
-
-def test_uploaded_database_open_failure_restores_prior_database(tmp_path: Path, monkeypatch) -> None:
-    app, module = load_app(tmp_path)
-    create_database(module.runtime.db_path, "durable", "preserved")
-    uploaded = tmp_path / "uploaded.db"
-    payload = create_database(uploaded, "replacement", "ready")
-    original_open = module.runtime.open_database
-    calls = 0
-
-    def fail_uploaded_open():
-        nonlocal calls
-        calls += 1
-        if calls == 1:
-            return False
-        return original_open()
-
-    with TestClient(app) as client:
-        monkeypatch.setattr(module.runtime, "open_database", fail_uploaded_open)
-        with pytest.raises(RuntimeError, match="Failed to open uploaded database"):
-            client.post(
-                "/upload?token=test-token",
-                content=payload,
-                headers={"Authorization": "Bearer test-token"},
-            )
-
-        assert read_database_value(module.runtime.db_path, "durable") == "preserved"
-        assert not module.runtime.db_path.with_suffix(".db.uploading").exists()
-        assert not module.runtime.db_path.with_suffix(".db.previous").exists()
-
-
-def test_database_uploads_are_serialized(tmp_path: Path, monkeypatch) -> None:
-    _, module = load_app(tmp_path)
-    active = 0
-    maximum = 0
-
-    monkeypatch.setattr(module.runtime, "require_auth", lambda _request: None)
-
-    async def fake_upload(_request):
-        nonlocal active, maximum
-        active += 1
-        maximum = max(maximum, active)
-        await asyncio.sleep(0.01)
-        active -= 1
-        return 1, 1
-
-    monkeypatch.setattr(module, "upload_database", fake_upload)
-
-    async def run_uploads():
-        await asyncio.gather(module.upload(object()), module.upload(object()))
-
-    asyncio.run(run_uploads())
-
-    assert maximum == 1
 
 
 def test_startup_preserves_the_runtime_backend_default_when_override_is_empty():
@@ -949,11 +386,144 @@ def test_screen_activity_status_reports_absent_on_a_clean_vm(tmp_path: Path) -> 
     assert status.json()["tables"] == []
 
 
+def test_screen_activity_status_fails_closed_on_an_existing_uninspectable_database(tmp_path: Path) -> None:
+    """A corrupt omi.db is not evidence of absence.
+
+    An older runtime reported ``present: false`` whenever the database was
+    merely unopenable, which let the desktop start sync and hand over the
+    Firebase token while recoverable OCR bytes were still on disk. A database
+    that exists but cannot be inspected must read as present.
+    """
+    app, module = load_app(tmp_path)
+    module.runtime.db_path.write_bytes(b"this is not a sqlite database")
+
+    with TestClient(app) as client:
+        health = client.get("/health?token=test-token")
+        status = client.post("/screen-activity-status?token=test-token")
+
+    assert health.json()["databaseReady"] is False
+    assert status.status_code == 200
+    assert status.json()["present"] is True
+    assert status.json()["reason"] == "database_uninspectable"
+
+
+def test_screen_activity_status_stays_absent_when_no_database_file_exists(tmp_path: Path) -> None:
+    app, _ = load_app(tmp_path)
+
+    with TestClient(app) as client:
+        status = client.post("/screen-activity-status?token=test-token")
+
+    assert status.status_code == 200
+    assert status.json()["present"] is False
+
+
+def test_upload_is_rejected_without_consuming_the_body(tmp_path: Path) -> None:
+    """The retired upload route must refuse before any byte is transmitted.
+
+    An already-shipped desktop provisioning a fresh or reaped VM still POSTs
+    its full omi.db here; the rejection has to happen before the body is read
+    so the screenshot/OCR bytes never leave the Mac.
+    """
+    _, module = load_app(tmp_path)
+
+    class FakeRequest:
+        headers = {"authorization": "Bearer test-token"}
+
+        async def stream(self):
+            raise AssertionError("the retired upload route must not read the request body")
+
+    async def call() -> HTTPException:
+        try:
+            await module.upload(FakeRequest())
+        except HTTPException as exc:
+            return exc
+        raise AssertionError("expected HTTPException")
+
+    rejection = asyncio.run(call())
+
+    assert rejection.status_code == 410
+    assert not (tmp_path / "omi.db.uploading").exists()
+    assert not (tmp_path / "omi.db").exists()
+
+
+def test_purge_screen_activity_drops_every_legacy_frame_derived_table(tmp_path: Path) -> None:
+    """Old-schema databases lose every frame-derived table, and only those.
+
+    Legacy omi.db uploads carried the retired proactive-extraction schema
+    (including FTS shadow tables) and the context-bucket rollup schema whose
+    narrative/fact/version rows are derived from frames. The purge is what the
+    reconciler requires before it may stamp ``screenPrivacyVersion``.
+    """
+    app, module = load_app(tmp_path)
+    connection = sqlite3.connect(module.runtime.db_path)
+    connection.execute("CREATE TABLE screenshots (id TEXT PRIMARY KEY)")
+    connection.execute("CREATE TABLE focus_sessions (id TEXT PRIMARY KEY)")
+    connection.execute("CREATE TABLE observations (id TEXT PRIMARY KEY)")
+    connection.execute("CREATE TABLE ocr_texts (id TEXT PRIMARY KEY, text TEXT)")
+    connection.execute("CREATE TABLE proactive_extractions (id TEXT PRIMARY KEY, content TEXT)")
+    connection.execute("CREATE VIRTUAL TABLE proactive_extractions_fts USING fts5(content)")
+    connection.execute("CREATE TABLE bucket_entries (id TEXT PRIMARY KEY, narrative TEXT)")
+    connection.execute("INSERT INTO bucket_entries VALUES ('b1', 'ambient narrative')")
+    connection.execute("CREATE TABLE bucket_facts (id TEXT PRIMARY KEY, evidenceText TEXT)")
+    connection.execute("INSERT INTO bucket_facts VALUES ('f1', 'evidence')")
+    connection.execute("CREATE TABLE bucket_versions (id INTEGER PRIMARY KEY, header TEXT)")
+    connection.execute("CREATE TABLE context_buckets (id TEXT PRIMARY KEY)")
+    connection.execute("CREATE TABLE context_visits (id INTEGER PRIMARY KEY)")
+    connection.execute("CREATE TABLE subject_bindings (referenceHash TEXT PRIMARY KEY)")
+    connection.execute("CREATE TABLE proactive_candidates (id TEXT PRIMARY KEY)")
+    connection.execute("CREATE TABLE memories (id TEXT PRIMARY KEY, content TEXT)")
+    connection.execute("INSERT INTO memories VALUES ('m1', 'keep me')")
+    connection.commit()
+    connection.close()
+    assert module.runtime.open_database()
+
+    with TestClient(app) as client:
+        blocked_before = client.post(
+            "/sync?token=test-token",
+            json={"table": "proactive_extractions", "rows": [{"id": "x"}]},
+        )
+        purged = client.post("/purge-screen-activity?token=test-token")
+        status = client.post("/screen-activity-status?token=test-token")
+
+    assert blocked_before.status_code == 400
+    assert purged.status_code == 200
+    purged_tables = set(purged.json()["purged"])
+    assert {
+        "screenshots",
+        "focus_sessions",
+        "observations",
+        "ocr_texts",
+        "proactive_extractions",
+        "bucket_entries",
+        "bucket_facts",
+        "bucket_versions",
+        "context_buckets",
+        "context_visits",
+        "subject_bindings",
+        "proactive_candidates",
+    } <= purged_tables
+    assert status.status_code == 200
+    assert status.json()["present"] is False
+
+    assert module.runtime.open_database()
+    names = {
+        str(row[0])
+        for row in module.runtime.db.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    }
+    assert not any(module.is_screen_data_table(name) for name in names)
+    assert "memories" in names
+    assert module.runtime.db.execute("SELECT COUNT(*) FROM memories").fetchone()[0] == 1
+    # The FTS shadow tables went with their parent virtual table.
+    assert not any(name.startswith("proactive_extractions_fts") for name in names)
+
+
 def test_agent_vm_hides_and_rejects_legacy_ocr_tables(tmp_path: Path) -> None:
     _, module = load_app(tmp_path)
     connection = sqlite3.connect(module.runtime.db_path)
     connection.execute("CREATE TABLE memories (id TEXT)")
     connection.execute("CREATE TABLE ocr_texts (id TEXT, text TEXT)")
+    connection.execute("CREATE TABLE bucket_entries (id TEXT, narrative TEXT)")
+    connection.execute("CREATE TABLE proactive_extractions_fts_data (id TEXT)")
     connection.execute("INSERT INTO ocr_texts VALUES ('t1', 'secret')")
     connection.commit()
     connection.close()
@@ -962,6 +532,10 @@ def test_agent_vm_hides_and_rejects_legacy_ocr_tables(tmp_path: Path) -> None:
     assert json.loads(module.execute_sql("SELECT text FROM ocr_texts")) == {"error": "Screen activity is unavailable"}
     assert "ocr_texts:" not in module.database_schema()
     assert "memories:" in module.database_schema()
+    for table in ("bucket_entries", "proactive_extractions", "proactive_extractions_fts_data"):
+        query = f"SELECT id FROM {table}"
+        assert json.loads(module.execute_sql(query)) == {"error": "Screen activity is unavailable"}
+        assert f"{table}:" not in module.database_schema()
 
 
 def test_agent_session_starts_without_local_database(tmp_path: Path, monkeypatch) -> None:
