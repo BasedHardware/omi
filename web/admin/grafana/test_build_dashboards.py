@@ -364,5 +364,31 @@ class BuilderIdempotencyTests(unittest.TestCase):
                          load("omi-tv-mobile"))
 
 
+class ApplyPreservesLayoutTests(unittest.TestCase):
+    """An apply must never revert layout the user arranged in the Grafana UI
+    (#12212 era: three same-day applies stamped checked-in gridPos over
+    Nik's manual resizes). Live geometry wins for panels that already exist."""
+
+    def test_live_gridpos_wins_for_existing_panels(self) -> None:
+        import apply_omi_tv_dashboard as apply_mod
+        incoming = [
+            {"id": 7, "gridPos": {"h": 6, "w": 4, "x": 20, "y": 0}},
+            {"id": 992, "gridPos": {"h": 7, "w": 24, "x": 0, "y": 990}},
+        ]
+        live = [
+            {"id": 7, "gridPos": {"h": 9, "w": 12, "x": 0, "y": 3}},  # user resized
+        ]
+        apply_mod.preserve_live_layout(incoming, live)
+        self.assertEqual(incoming[0]["gridPos"], {"h": 9, "w": 12, "x": 0, "y": 3})
+        # A panel new to this apply keeps its authored position.
+        self.assertEqual(incoming[1]["gridPos"], {"h": 7, "w": 24, "x": 0, "y": 990})
+
+    def test_first_apply_of_a_new_board_keeps_authored_layout(self) -> None:
+        import apply_omi_tv_dashboard as apply_mod
+        incoming = [{"id": 1, "gridPos": {"h": 6, "w": 4, "x": 0, "y": 0}}]
+        apply_mod.preserve_live_layout(incoming, [])
+        self.assertEqual(incoming[0]["gridPos"], {"h": 6, "w": 4, "x": 0, "y": 0})
+
+
 if __name__ == "__main__":
     unittest.main()
