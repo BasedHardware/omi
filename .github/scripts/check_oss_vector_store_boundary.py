@@ -35,6 +35,13 @@ DEFAULT_BASELINE = Path('.github/scripts/vector_store_boundary_baseline.json')
 # client must fail this boundary too (the upstream migrations reach vectors only via the port; verified 0).
 EXCLUDED_PREFIXES = ('utils/vector/', 'tests/', 'testing/', 'scripts/', 'agent-proxy/')
 
+# Build scratch, which is not source and must never be scanned. CI creates `backend/.openapi-venv`
+# (the OpenAPI export's env) and `backend/.venv` in EARLIER STEPS OF THE SAME JOB, so by the time this
+# guard runs they are sitting in the tree — and a dependency shipping a Python-2 file (`aenum/_py2.py`)
+# made `ast.parse` raise SyntaxError and took the whole check down. Measured on CI, not theorised: the
+# same crash reproduces locally the moment a venv exists, and deleting it is treating the symptom.
+NOT_SOURCE_DIRS = frozenset({'.venv', '.openapi-venv', 'node_modules', '__pycache__', '.pytest_cache', '_temp'})
+
 # EXCEPT the ones the runtime actually imports. ADR-0023's premise — "scripts/ is not deployed runtime" —
 # is FALSE for two modules (BACKLOG L12): main.py imports scripts/reconcile_mongo_indexes.py and calls it at
 # boot, and utils/memory/canonical_short_term_maintenance_cron.py imports run_enrichment from
@@ -109,6 +116,8 @@ def collect_counts(repository_root: Path, scan_root: Path) -> dict[str, int]:
     root = repository_root / scan_root
     counts: dict[str, int] = {}
     for path in sorted(root.rglob('*.py')):
+        if NOT_SOURCE_DIRS.intersection(path.parts):
+            continue
         rel_to_scan = path.relative_to(root).as_posix()
         if rel_to_scan not in RUNTIME_REACHABLE_SCRIPTS and any(
             rel_to_scan.startswith(prefix) for prefix in EXCLUDED_PREFIXES
