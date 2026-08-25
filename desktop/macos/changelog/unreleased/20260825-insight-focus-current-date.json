@@ -1,0 +1,3 @@
+{
+  "change": "Insight and Focus cards no longer claim the system clock is stuck in 2026 or ask you to double-check 2026-dated items: the assistants now know today's date and only flag a date when it is genuinely wrong, not because its year is beyond their training data."
+}
