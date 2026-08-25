@@ -137,20 +137,28 @@ for _journey in CLIENT_JOURNEYS:
     for _outcome in CLIENT_JOURNEY_OUTCOMES:
         OMI_CLIENT_JOURNEY_DURATION_SECONDS.labels(journey=_journey, outcome=_outcome)
 
+# The three gauges below report one GLOBAL Firestore-derived quantity, and every
+# replica publishes the same value. Aggregate them with max(), never sum(): a
+# sum() multiplies the real number by the replica count and, while replicas run
+# different images, mixes two different answers to the same question.
 LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS = Gauge(
     'listen_finalization_oldest_nonterminal_age_seconds',
-    'Age of the oldest queued, leased, or blocked listen finalization job',
+    'Global age of the oldest queued, leased, or blocked listen finalization job; '
+    'replicated per process, aggregate with max() not sum()',
 )
 
 LISTEN_FINALIZATION_JOB_STATUS = Gauge(
     'listen_finalization_jobs',
-    'Current durable listen finalization job count by non-success status',
+    'Global durable listen finalization job count by non-success status; replicated '
+    'per process, aggregate with max() not sum(). dead_letter is cumulative and only '
+    'ever rises: it is an all-time terminal total, not a backlog',
     ['status'],
 )
 
 LISTEN_FINALIZATION_DURABLE_JOBS = Gauge(
     'listen_finalization_durable_jobs',
-    'Authoritative Firestore finalization jobs by closed durable lifecycle state',
+    'Global authoritative Firestore finalization jobs by closed durable lifecycle '
+    'state; replicated per process, aggregate with max() not sum()',
     ['state'],
 )
 
