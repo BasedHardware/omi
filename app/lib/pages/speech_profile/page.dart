@@ -99,7 +99,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
       if (mounted) {
         Provider.of<CaptureProvider>(context, listen: false).clearTranscripts();
         Provider.of<CaptureProvider>(context, listen: false).streamDeviceRecording(
-          device: Provider.of<SpeechProfileProvider>(context, listen: false).deviceProvider?.connectedDevice,
+          device: Provider.of<SpeechProfileProvider>(context, listen: false).deviceProvider?.capabilityNormalizedDevice,
         );
       }
     }
@@ -118,7 +118,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
           if (context.read<SpeechProfileProvider>().isInitialised) {
             final speechProvider = context.read<SpeechProfileProvider>();
             final captureProvider = context.read<CaptureProvider>();
-            final device = speechProvider.deviceProvider?.connectedDevice;
+            final device = speechProvider.deviceProvider?.capabilityNormalizedDevice;
 
             WidgetsBinding.instance.addPostFrameCallback((_) async {
               await speechProvider.close();

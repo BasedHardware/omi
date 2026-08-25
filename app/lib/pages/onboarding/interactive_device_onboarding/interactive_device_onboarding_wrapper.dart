@@ -65,7 +65,7 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
     // user starts the flow; exiting the intro must not discard an unrelated
     // in-flight Omi voice command. `_showIntro` stays true until `_startTutorial`.
     if (!_showIntro) {
-      _captureProvider?.cancelActiveVoiceSession();
+      _captureProvider?.cancelTutorialOwnedVoiceSession();
     }
     _captureProvider?.restoreBatchModeAfterOnboarding();
     _captureProvider?.deviceOnboardingProvider = null;
