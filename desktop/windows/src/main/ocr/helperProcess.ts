@@ -52,11 +52,20 @@ class HelperProcess {
     // (OutputType=Exe). Electron main is a GUI process with no console, so without
     // CREATE_NO_WINDOW the child allocates a NEW visible console — a stray taskbar
     // window. Its stdio is piped, so hiding the console loses nothing.
+    // detached (Linux only): makes the helper the leader of its OWN process
+    // group instead of sharing Electron main's. The Linux helper shells out to
+    // `tesseract` per OCR call (resources/linux-ocr-helper/omi-ocr-helper) — a
+    // grandchild that inherits whatever group its parent is in. Without this,
+    // killing just the helper's PID on a recycle/dispose leaves an in-flight
+    // tesseract orphaned (its own execFileSync timeout can't fire once the
+    // process enforcing it is gone) — see recycle()'s group-kill below, which
+    // this pairs with.
     const child =
       process.platform === 'linux'
         ? spawn(process.execPath, [exe], {
             stdio: ['pipe', 'pipe', 'pipe'],
-            env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }
+            env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+            detached: true
           })
         : spawn(exe, [], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
     this.child = child
@@ -128,7 +137,16 @@ class HelperProcess {
   private recycle(): void {
     if (this.child) {
       try {
-        this.child.kill()
+        // Linux: signal the whole process group (negative PID) so an in-flight
+        // `tesseract` grandchild dies with the helper instead of surviving as
+        // an orphan — see the `detached: true` spawn option above. Windows'
+        // helper does OCR in-process (no grandchild), so a plain kill suffices
+        // there; process groups also don't map the same way on Windows.
+        if (process.platform === 'linux' && this.child.pid) {
+          process.kill(-this.child.pid, 'SIGTERM')
+        } else {
+          this.child.kill()
+        }
       } catch {
         /* already dead */
       }
