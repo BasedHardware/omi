@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Deterministic dev-harness unit-test lane (checks-manifest: dev-harness-unit-tests).
 #
-# Prefers an interpreter that ALREADY has pytest + python-dotenv + Google ADC (the repo's
-# backend venv (POSIX or Windows layout), then the ambient python3) so the check needs no uv cache,
-# network, or ~/.cache write — keeping `make preflight` green in restricted
+# Prefers an interpreter that ALREADY has pytest + python-dotenv + Google ADC + PostHog (the
+# repo's backend venv (POSIX or Windows layout), then the ambient python3) so the check needs no
+# uv cache, network, or ~/.cache write — keeping `make preflight` green in restricted
 # local/agent environments. Only a truly bare environment falls back to uv,
 # and even then the cache is redirected to a writable temp dir. Real pytest
 # failures still fail the lane in every path.
@@ -22,7 +22,7 @@ for py in \
   backend/venv/Scripts/python.exe \
   python3; do
   if [ -x "$py" ] || command -v "$py" >/dev/null 2>&1; then
-    if "$py" -c 'import pytest, dotenv, google.auth, requests' >/dev/null 2>&1; then
+    if "$py" -c 'import pytest, dotenv, google.auth, posthog, requests' >/dev/null 2>&1; then
       run_pytest "$py"
     fi
   fi
@@ -36,9 +36,10 @@ if command -v uv >/dev/null 2>&1; then
     --with 'pytest==8.4.1' \
     --with 'python-dotenv==1.1.0' \
     --with 'google-auth==2.32.0' \
+    --with 'posthog==3.5.2' \
     --with 'requests~=2.33.0' \
     python -m pytest scripts/dev-harness/tests -q
 fi
 
-echo "dev-harness tests require pytest + python-dotenv + Google ADC via a backend venv, python3, or uv; none available" >&2
+echo "dev-harness tests require pytest + python-dotenv + Google ADC + PostHog via a backend venv, python3, or uv; none available" >&2
 exit 1
