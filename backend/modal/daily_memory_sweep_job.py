@@ -42,13 +42,20 @@ def _init_firebase() -> None:
 
 
 def run_daily_memory_sweep_job() -> None:
-    authority = daily_memory_sweep_authority_from_environment()
-    if not authority.may_write:
-        # The rollout authority gates only producer/model/canonical writes.
-        # Inventory plus the scheduler's bounded expiry janitor must continue
-        # to run while disabled or killed so staged user payloads cannot outlive
-        # their retention policy.
-        logger.info("daily-memory-sweep producer disabled by backend authority; running lifecycle cleanup only")
+    # Keep the deployed scheduler completely dark until the backend-owned
+    # authority is explicitly open.  In particular, do not inventory users or
+    # enter the scheduler's lifecycle janitor while the flag is disabled,
+    # killed, malformed, or otherwise unavailable.  ``getattr`` is deliberate:
+    # an unavailable authority provider must fail closed rather than allowing
+    # a newly deployed job to perform any user/data work.
+    try:
+        authority = daily_memory_sweep_authority_from_environment()
+        authority_open = getattr(authority, "may_write", False) is True
+    except Exception:
+        authority_open = False
+    if not authority_open:
+        logger.info("daily-memory-sweep job closed by backend authority; exiting before inventory")
+        return
     page = bounded_daily_memory_sweep_uid_inventory(
         default_db_client,
         limit=400,

@@ -11,6 +11,13 @@ The daily inventory owns `daily_memory_sweep_registry` and
 the legacy `canonical_memory_maintenance_registry` or its cursor must not
 delete, reset, or rewrite these records.
 
+The entrypoint resolves the backend-owned sweep authority before opening the
+inventory. A disabled, killed, malformed, or unavailable authority returns
+without reading or writing the UID registry, advancing inventory cursors,
+running lifecycle cleanup, invoking the scheduler/model, or committing page
+state. Inventory and lifecycle work are reachable only after the authority is
+explicitly open; the default remains closed.
+
 Per-account failures are durable retry documents under
 `daily_memory_sweep_control_retries/{uid}`. Retry state is written before a
 fair page cursor advances. A cursor write failure can duplicate a page, but
