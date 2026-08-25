@@ -95,7 +95,7 @@ def save_refreshed_credential(
         raise ValueError(f'Unsupported LLM OAuth provider: {provider}')
     if not generation:
         return False
-    stored = _stored_credential(uid, credential, generation)
+    stored = _stored_credential(uid, credential, uuid4().hex)
     client = firestore_client or get_firestore_client()
     user_ref = client.collection('users').document(uid)
     transaction = client.transaction()

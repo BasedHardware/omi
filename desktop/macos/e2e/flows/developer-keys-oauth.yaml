@@ -2,7 +2,7 @@ version: 2
 name: developer-keys-oauth
 tier: manual
 description: Developer-key OAuth provider selection and browser authorization handoff.
-app: com.omi.computer-macos
+app: com.omi.desktop-dev
 covers:
   - desktop/macos/Desktop/Sources/Providers/LLMOAuthConnector.swift
   - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+People.swift

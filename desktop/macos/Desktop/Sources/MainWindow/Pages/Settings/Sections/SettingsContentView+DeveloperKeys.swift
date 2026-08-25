@@ -214,10 +214,17 @@ extension SettingsContentView {
 
   @MainActor
   func refreshLLMOAuthStatus() async {
+    guard let snapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else { return }
     do {
-      let status = try await APIClient.shared.llmOAuthStatus()
+      let status = try await APIClient.shared.llmOAuthStatus(authorizationSnapshot: snapshot)
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(snapshot) else { return }
       for provider in LLMOAuthProvider.allCases {
         setLLMOAuthConnected(status.connected.contains(provider), provider: provider)
+      }
+      if UserDefaults.standard.string(forKey: DefaultsKey.byokLLMProvider.rawValue) == nil,
+        let selected = status.selected
+      {
+        UserDefaults.standard.set(selected.rawValue, forKey: .byokLLMProvider)
       }
     } catch {
       return
@@ -231,7 +238,10 @@ extension SettingsContentView {
     defer { isConnectingLLMOAuth = false }
     do {
       if isLLMOAuthConnected(provider) {
-        try await APIClient.shared.disconnectLLMOAuth(provider)
+        guard let snapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+          throw AuthError.userChangedDuringRequest
+        }
+        try await APIClient.shared.disconnectLLMOAuth(provider, authorizationSnapshot: snapshot)
         setLLMOAuthConnected(false, provider: provider)
       } else {
         try await LLMOAuthConnector.shared.connect(provider)
@@ -304,9 +314,10 @@ extension SettingsContentView {
     // correctly — decides there is nothing to do, which would have left the
     // backend believing BYOK was still active with no keys behind it. Both
     // paths only ever deactivate, so the duplicate call is harmless.
+    let snapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
     Task {
       for provider in LLMOAuthProvider.allCases {
-        try? await APIClient.shared.disconnectLLMOAuth(provider)
+        try? await APIClient.shared.disconnectLLMOAuth(provider, authorizationSnapshot: snapshot)
       }
       try? await APIClient.shared.deactivateBYOK()
       APIKeyService.persistEnrolledFingerprints([:])

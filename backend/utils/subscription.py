@@ -218,6 +218,8 @@ _TRIAL_PAYWALL_CACHE_TTL_SECONDS = 300
 
 def request_has_llm_byok_key() -> bool:
     """True when request carries validated LLM BYOK keys matching active enrollment."""
+    if get_byok_llm_provider() in {'chatgpt', 'grok'}:
+        return has_validated_byok_keys()
     uid = get_byok_uid()
     if not uid or not has_validated_byok_keys():
         return False
