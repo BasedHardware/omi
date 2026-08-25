@@ -82,6 +82,54 @@ def _new_wipe_intent(job_id='job-1'):
     return {'wipe_job_id': job_id, 'dispatch_claimed': True}
 
 
+@pytest.fixture(autouse=True)
+def _default_to_no_legal_hold(monkeypatch):
+    """Keep this isolated service suite independent of test import order.
+
+    The module is intentionally loaded against stubs, but another collected
+    test may already have imported the real legal-hold module.  Default every
+    account-deletion test to the permitted boundary; the dedicated hold tests
+    below override this patch explicitly.
+    """
+
+    monkeypatch.setattr(account_deletion, 'assert_account_deletion_permitted', MagicMock())
+    monkeypatch.setattr(account_deletion, 'acquire_destructive_operation', MagicMock())
+    monkeypatch.setattr(account_deletion, 'finish_destructive_operation', MagicMock())
+    # A previously collected test may have imported the real users module
+    # before this suite installs its stub finder. Never let a default worker
+    # path perform a real Firestore subscription read; billing-specific tests
+    # replace this boundary explicitly.
+    monkeypatch.setattr(account_deletion.users_db, 'get_user_subscription', MagicMock(return_value=None))
+
+
+def test_start_account_deletion_fails_closed_when_legal_hold_is_active(monkeypatch):
+    hold_error = RuntimeError('legal hold active')
+    monkeypatch.setattr(account_deletion, 'assert_account_deletion_permitted', MagicMock(side_effect=hold_error))
+    marker = MagicMock()
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_intent', marker)
+
+    with pytest.raises(RuntimeError, match='legal hold active'):
+        account_deletion.start_account_deletion('uid1')
+
+    marker.assert_not_called()
+
+
+def test_background_wipe_acquires_legal_hold_gate_before_running_marker(monkeypatch):
+    hold_error = RuntimeError('legal hold active')
+    acquire = MagicMock(side_effect=hold_error)
+    monkeypatch.setattr(account_deletion, 'acquire_destructive_operation', acquire)
+    running_marker = MagicMock()
+    failed_marker = MagicMock()
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_running', running_marker)
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_failed', failed_marker)
+
+    assert account_deletion.background_wipe_user_data('uid1') is False
+
+    acquire.assert_called_once()
+    running_marker.assert_not_called()
+    failed_marker.assert_called_once_with('uid1')
+
+
 class _ComputeResponse:
     def __init__(self, status_code=200, payload=None):
         self.status_code = status_code
@@ -202,6 +250,34 @@ def _configure_compute_cleanup(monkeypatch, client):
 
 @pytest.fixture(autouse=True)
 def _stub_new_external_cleanup_boundaries(monkeypatch):
+    monkeypatch.setattr(account_deletion.vector_db, 'index', object())
+    monkeypatch.setattr(account_deletion, 'get_conversation_ids', MagicMock(return_value=[]))
+    monkeypatch.setattr(account_deletion, 'get_conversation_photos', MagicMock(return_value=[]))
+    monkeypatch.setattr(account_deletion, '_historical_memory_ids', MagicMock(return_value=[]))
+    monkeypatch.setattr(account_deletion, 'get_action_item_ids', MagicMock(return_value=[]))
+    monkeypatch.setattr(account_deletion, 'get_screen_activity_ids', MagicMock(return_value=[]))
+    monkeypatch.setattr(
+        account_deletion.frame_requests_db,
+        'list_all_frame_request_storage_ids',
+        MagicMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        account_deletion.frame_requests_db,
+        'list_all_frame_upload_orphan_storage_ids',
+        MagicMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        account_deletion.frame_requests_db,
+        'list_all_frame_deletion_outbox_storage_ids',
+        MagicMock(return_value=[]),
+    )
+    monkeypatch.setattr(account_deletion, 'delete_frame_request_pixels_for_user', MagicMock())
+    monkeypatch.setattr(account_deletion, 'delete_all_frame_request_pixels_for_user', MagicMock())
+    monkeypatch.setattr(account_deletion, 'delete_all_conversation_recordings', MagicMock(return_value=0))
+    monkeypatch.setattr(account_deletion, 'delete_all_user_storage_objects', MagicMock(return_value=0))
+    monkeypatch.setattr(
+        account_deletion, 'purge_canonical_derived_user_data', MagicMock(return_value={'vector_ids': []})
+    )
     monkeypatch.setattr(account_deletion, 'delete_agent_vm_for_account', MagicMock())
     monkeypatch.setattr(account_deletion, 'delete_account_credentials', MagicMock())
     monkeypatch.setattr(account_deletion, '_delete_memory_maintenance_registry', MagicMock())

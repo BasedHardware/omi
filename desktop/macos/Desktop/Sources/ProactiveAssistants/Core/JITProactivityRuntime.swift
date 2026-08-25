@@ -10,6 +10,9 @@ struct JITPlannedExecution: Equatable, Sendable {
   /// Planned turns retain the exact authority that purchased their claim so the delivery path can
   /// revalidate it immediately before starting model work. Ambient turns have no ledger trigger.
   let plannedAuthority: JITPlannedExecutionAuthority?
+  let candidateID: String
+  let accountGeneration: Int
+  let policy: JITTriggerRuntimePolicy
 }
 
 struct JITPlannedExecutionAuthority: Equatable, Sendable {
@@ -31,8 +34,9 @@ struct JITAmbientRuntimeContext: Equatable, Sendable {
     let facts = validatedFacts.map {
       $0.split(whereSeparator: \.isWhitespace).joined(separator: " ").lowercased()
     }.filter { !$0.isEmpty }.sorted().prefix(20)
-    let payload = ([contextID.lowercased()] + facts).joined(separator: "\u{1f}")
-    return SHA256.hash(data: Data(payload.utf8)).map { String(format: "%02x", $0) }.joined()
+    return JITProactivityReservation.opaqueIdentifier(
+      ["semantic", contextID.lowercased()] + facts,
+      installationIdentity: ClientDeviceService.shared.installationIdentity)
   }
 }
 
@@ -59,6 +63,8 @@ actor JITProactivityRuntime {
   typealias BeginPlannedExecution =
     @Sendable (JITPlannedExecutionAuthority, JITTriggerWakeupClaim) async throws -> Bool
   typealias AuthorizationCurrent = @Sendable (RuntimeOwnerAuthorizationSnapshot) -> Bool
+  typealias Reserve =
+    @Sendable (JITProactivityReservation, RuntimeOwnerAuthorizationSnapshot) async -> Bool
   private let flags: FlagResolver
   private let snapshots: SnapshotResolver
   private let mirror: JITTriggerMirror
@@ -69,6 +75,7 @@ actor JITProactivityRuntime {
   private let claimPlannedWakeup: ClaimWakeup?
   private let beginPlannedExecution: BeginPlannedExecution?
   private let authorizationCurrent: AuthorizationCurrent
+  private let reserve: Reserve
   private var pending: [String: JITPlannedExecution] = [:]
   private struct ExecutionHeartbeat {
     let leaseToken: String
@@ -120,6 +127,10 @@ actor JITProactivityRuntime {
     readWakeupCounts: ReadWakeupCounts? = nil,
     claimPlannedWakeup: ClaimWakeup? = nil,
     beginPlannedExecution: BeginPlannedExecution? = nil,
+    reserve: @escaping Reserve = { reservation, snapshot in
+      await JITProactivityReservationClient.shared.reserve(
+        reservation, authorizationSnapshot: snapshot)
+    },
     authorizationCurrent: @escaping AuthorizationCurrent = { snapshot in
       RuntimeOwnerIdentity.isAuthorizationCurrent(snapshot)
     }
@@ -133,6 +144,7 @@ actor JITProactivityRuntime {
     self.readWakeupCounts = readWakeupCounts
     self.claimPlannedWakeup = claimPlannedWakeup
     self.beginPlannedExecution = beginPlannedExecution
+    self.reserve = reserve
     self.authorizationCurrent = authorizationCurrent
   }
 
@@ -148,9 +160,13 @@ actor JITProactivityRuntime {
     do {
       let snapshot = try await snapshots(authorizationSnapshot)
       let receipt = try await reconcile(snapshot, authorizationSnapshot: authorizationSnapshot)
-      let triggers = try await compiledSnapshot(
+      let allTriggers = try await compiledSnapshot(
         receipt: receipt, authorizationSnapshot: authorizationSnapshot)
       let now = observation.occurredAt ?? Date()
+      let triggers = allTriggers.filter { trigger in
+        guard let snoozedUntil = trigger.snoozedUntil else { return true }
+        return now >= snoozedUntil
+      }
       let day = Self.day(for: now)
       let counts = try await wakeupCounts(
         triggerIDs: triggers.map(\.id), budgetDay: day, now: now)
@@ -161,6 +177,8 @@ actor JITProactivityRuntime {
         && receipt.commitSequence == snapshot.commitSequence
         && receipt.snapshotRevision == snapshot.snapshotRevision
         && receipt.rowCount == snapshot.rows.count
+        && receipt.policy == snapshot.policy
+        && snapshot.policy.isValid
       let authority = KnowledgeLedgerTriggerRuntimeAuthority(
         mode: .enabled,
         killSwitchEnabled: false,
@@ -177,10 +195,12 @@ actor JITProactivityRuntime {
         authority: authority,
         // No local model/version contract is available at this boundary.
         embeddingContract: nil,
+        embeddingPolicy: snapshot.policy.embedding,
         wakeupsUsedByTrigger: counts)
       guard runtimeResult.status == .evaluated else {
         return .suppressed(reason: "planned_runtime_rejected")
       }
+      let winner: KnowledgeLedgerTriggerRuntimeEntryResult
       switch runtimeResult.nextLane {
       case .ambientFallback:
         return await admitAmbient(
@@ -189,21 +209,33 @@ actor JITProactivityRuntime {
           receipt: receipt,
           authorizationSnapshot: authorizationSnapshot)
       case .boundedPlannedTriage:
-        return .suppressed(reason: "planned_match_ambiguous")
+        guard let ambiguous = runtimeResult.ambiguous.first,
+          await approvePlannedAmbiguity(
+            ambiguous, observation: observation, snapshot: snapshot,
+            authorizationSnapshot: authorizationSnapshot)
+        else { return .suppressed(reason: "planned_match_ambiguous") }
+        winner = ambiguous
       case .none:
         return .suppressed(reason: "planned_runtime_rejected")
       case .plannedTrigger:
-        break
+        guard let matched = runtimeResult.matches.first else {
+          return .suppressed(reason: "planned_runtime_rejected")
+        }
+        winner = matched
       }
-      guard let winner = runtimeResult.matches.first,
-        let trigger = triggers.first(where: { $0.id == winner.triggerID }),
+      guard let trigger = triggers.first(where: { $0.id == winner.triggerID }),
         let triggerRow = snapshot.rows.first(where: { $0.memoryID == winner.triggerID }),
         let action = trigger.action,
         action.isValid
       else {
         return .suppressed(reason: "planned_action_invalid")
       }
-      let continuityFingerprint = winner.decision.observationFingerprint
+      // The evaluator may use a deterministic content fingerprint internally,
+      // but the mirror and reservation payloads must never retain that raw
+      // digest. Bind it to the random installation key before it crosses the
+      // local persistence or server boundary.
+      let continuityFingerprint = Self.opaqueObservationFingerprint(
+        winner.decision.observationFingerprint)
       // One receipt identifies one planned occurrence, not a context forever.
       // Day permits a recurring standing trigger to run again; trigger and
       // authoritative snapshot revision admit changed actions; the normalized
@@ -235,11 +267,42 @@ actor JITProactivityRuntime {
         continuityKey: continuityKey,
         prompt: action.prompt,
         claim: claim,
-        plannedAuthority: JITPlannedExecutionAuthority(receipt: receipt, triggerRow: triggerRow))
+        plannedAuthority: JITPlannedExecutionAuthority(receipt: receipt, triggerRow: triggerRow),
+        candidateID: JITProactivityReservation.identifier(
+          "planned", trigger.id, continuityFingerprint, day),
+        accountGeneration: snapshot.accountGeneration,
+        policy: snapshot.policy)
       return .deliver(lane: .planned, id: trigger.id, continuityKey: continuityKey)
     } catch {
       return .suppressed(reason: "authoritative_snapshot_unavailable")
     }
+  }
+
+  private func approvePlannedAmbiguity(
+    _ ambiguous: KnowledgeLedgerTriggerRuntimeEntryResult,
+    observation: KnowledgeLedgerTriggerObservation,
+    snapshot: JITTriggerSnapshot,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async -> Bool {
+    let opaqueFingerprint = Self.opaqueObservationFingerprint(
+      ambiguous.decision.observationFingerprint)
+    let candidateID = JITProactivityReservation.identifier(
+      "planned-ambiguity", ambiguous.triggerID, opaqueFingerprint)
+    guard
+      await reserve(
+        JITProactivityReservation(
+          eventID: JITProactivityReservation.identifier("nano", candidateID),
+          candidateID: candidateID, operation: .nanoTriage,
+          accountGeneration: snapshot.accountGeneration,
+          triggerMemoryID: nil, triggerRevision: nil),
+        authorizationSnapshot)
+    else { return false }
+    let context = JITAmbientRuntimeContext(
+      id: "planned:\(ambiguous.triggerID)",
+      semanticFingerprint: opaqueFingerprint,
+      locallyRelevant: true,
+      boundedEvidence: String(observation.text.prefix(8_000)))
+    return await nanoTriage(context, authorizationSnapshot) == .approved
   }
 
   private func reconcile(
@@ -304,33 +367,54 @@ actor JITProactivityRuntime {
     guard let context, context.permitsNanoTriage else {
       return .suppressed(reason: "ambient_local_gate")
     }
+    let opaqueContextID = Self.opaqueAmbientContextID(context.id)
+    let opaqueSemanticFingerprint = Self.opaqueObservationFingerprint(context.semanticFingerprint)
+    let retainedContext = JITAmbientRuntimeContext(
+      id: opaqueContextID,
+      semanticFingerprint: opaqueSemanticFingerprint,
+      locallyRelevant: context.locallyRelevant,
+      boundedEvidence: context.boundedEvidence)
     let day = Self.day(for: observation.occurredAt ?? Date())
     let nanoClaim: JITTriggerWakeupClaim?
     do {
       nanoClaim = try await mirror.claimAmbientNanoChange(
-        contextID: context.id,
-        semanticFingerprint: context.semanticFingerprint,
+        contextID: retainedContext.id,
+        semanticFingerprint: retainedContext.semanticFingerprint,
         budgetDay: day,
         snapshotRevision: receipt.snapshotRevision,
-        budget: 8,
+        budget: receipt.policy.ambiguousNanoTriagesPerDay,
         now: observation.occurredAt ?? Date())
     } catch {
       return .suppressed(reason: "ambient_nano_receipt_unavailable")
     }
     guard let nanoClaim else { return .suppressed(reason: "ambient_nano_budget") }
-    let triage = await nanoTriage(context, authorizationSnapshot)
+    let candidateID = JITProactivityReservation.identifier(
+      "ambient", retainedContext.id, retainedContext.semanticFingerprint, day)
+    guard
+      await reserve(
+        JITProactivityReservation(
+          eventID: JITProactivityReservation.identifier("nano", candidateID),
+          candidateID: candidateID, operation: .nanoTriage,
+          accountGeneration: receipt.accountGeneration,
+          triggerMemoryID: nil, triggerRevision: nil),
+        authorizationSnapshot)
+    else {
+      await mirror.finishWakeup(nanoClaim, delivered: false)
+      return .suppressed(reason: "ambient_nano_budget")
+    }
+    let triage = await nanoTriage(retainedContext, authorizationSnapshot)
     // Every provider attempt, including unknown/malformed, spends the bounded
     // nano budget so a flaky response cannot create an unbounded retry loop.
     guard
       await mirror.completeAmbientNanoAttempt(
         nanoClaim,
-        contextID: context.id,
-        semanticFingerprint: context.semanticFingerprint)
+        contextID: retainedContext.id,
+        semanticFingerprint: retainedContext.semanticFingerprint)
     else { return .suppressed(reason: "ambient_nano_receipt_unavailable") }
     guard triage == .approved else {
       return .suppressed(reason: "ambient_nano_rejected")
     }
-    let continuityKey = "jit-context:\(context.semanticFingerprint)"
+    let continuityKey = "jit-context:\(retainedContext.semanticFingerprint)"
     guard pending[continuityKey] == nil, executionHeartbeats[continuityKey] == nil else {
       return .suppressed(reason: "ambient_duplicate_or_budget")
     }
@@ -338,14 +422,14 @@ actor JITProactivityRuntime {
     do {
       claimed = try await mirror.claimWakeup(
         continuityKey: continuityKey,
-        triggerID: "ambient:\(context.id)",
+        triggerID: "ambient:\(retainedContext.id)",
         lane: .ambient,
         budgetDay: day,
         snapshotRevision: receipt.snapshotRevision,
-        observationFingerprint: context.semanticFingerprint,
+        observationFingerprint: retainedContext.semanticFingerprint,
         // One ambient full turn per stable semantic context/day. Planned
         // triggers retain their explicit ledger budget and always arbitrate first.
-        budget: 1,
+        budget: receipt.policy.fullAgentTurnsPerCandidate,
         now: observation.occurredAt ?? Date())
     } catch {
       return .suppressed(reason: "ambient_receipt_unavailable")
@@ -353,7 +437,7 @@ actor JITProactivityRuntime {
     guard let claim = claimed else { return .suppressed(reason: "ambient_duplicate_or_budget") }
     pending[continuityKey] = JITPlannedExecution(
       lane: .ambient,
-      triggerID: "ambient:\(context.id)",
+      triggerID: "ambient:\(retainedContext.id)",
       continuityKey: continuityKey,
       prompt: """
         Find at most one genuinely useful, non-obvious proactive insight from the current validated
@@ -361,7 +445,10 @@ actor JITProactivityRuntime {
         permanent trigger. Use task_candidate only when a concrete actionable task is supported.
         """,
       claim: claim,
-      plannedAuthority: nil)
+      plannedAuthority: nil,
+      candidateID: candidateID,
+      accountGeneration: receipt.accountGeneration,
+      policy: receipt.policy)
     return .deliver(lane: .ambient, id: context.id, continuityKey: continuityKey)
   }
 
@@ -434,6 +521,14 @@ actor JITProactivityRuntime {
   ) -> String {
     ["jit-planned", triggerID, snapshotRevision, budgetDay, observationFingerprint]
       .joined(separator: ":")
+  }
+
+  private static func opaqueObservationFingerprint(_ fingerprint: String) -> String {
+    JITProactivityReservation.identifier("observation", fingerprint)
+  }
+
+  private static func opaqueAmbientContextID(_ contextID: String) -> String {
+    JITProactivityReservation.identifier("ambient-context", contextID)
   }
 
   private static func day(for date: Date) -> String {

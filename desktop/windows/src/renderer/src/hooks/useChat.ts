@@ -255,6 +255,17 @@ export function useChat(): UseChat {
   // app-scoped session carries both app_id and session_id, Mac parity).
   const selectedAppIdRef = useRef<string | null>(null)
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null)
+
+  // JIT ownership follows the renderer-visible selection, not whichever chat
+  // turn happened to finish most recently. The optional bridge guard keeps the
+  // hook compatible with an older preload during staged rollouts.
+  const syncRendererConversationKey = (key: string | null): void => {
+    const setter = window.omi.setJitRendererConversationKey
+    if (typeof setter !== 'function') return
+    void setter(key).catch(() => {
+      /* A transient main-process teardown must not interrupt chat UI. */
+    })
+  }
   const startedAtRef = useRef<number>(0)
   // Synchronous mirror of `sending` for the re-entrancy guard. The `sending` state
   // captured in a `send` closure can be stale (e.g. a queued/auto-sent voice
@@ -362,6 +373,12 @@ export function useChat(): UseChat {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Selection-without-send: JIT must know the owning renderer session even when
+  // the user has only opened/switched a chat and has not typed a message yet.
+  useEffect(() => {
+    syncRendererConversationKey(chatIdRef.current)
+  }, [currentThreadId, selectedAppId])
 
   // Read the chat engine once at mount into engineRef (main appSettings is the
   // single source of truth). Guarded on the getter existing so the hook stays inert
@@ -1009,6 +1026,12 @@ export function useChat(): UseChat {
     if ((!text.trim() && getPendingAttachments().length === 0) || sendingRef.current) return
     const fromVoice = !!opts?.fromVoice
     setBusy(true)
+    // Per-launch reset defers minting the next visible conversation until the
+    // next send. Publish that key before any async upload/planner work begins.
+    if (!chatIdRef.current) {
+      chatIdRef.current = `chat-${crypto.randomUUID()}`
+      syncRendererConversationKey(chatIdRef.current)
+    }
     // Open a new generation. reset()/dismiss bumps genRef, so `isCurrent()` goes
     // false for this send and every write it attempts thereafter is dropped —
     // that is what stops a dismissed reply from resurfacing or unlatching a newer
@@ -1415,6 +1438,7 @@ export function useChat(): UseChat {
     if (mode !== 'infinite') {
       chatIdRef.current = null
       startedAtRef.current = 0
+      syncRendererConversationKey(null)
     }
   }
 
@@ -1532,6 +1556,7 @@ export function useChat(): UseChat {
     setCurrentThreadId(id)
     const appId = selectedAppIdRef.current
     chatIdRef.current = id ?? (appId ? `app-${appId}` : resolveDefaultChatId())
+    syncRendererConversationKey(chatIdRef.current)
     startedAtRef.current = 0
 
     // Load the target's transcript. Capture the generation so a slower load a newer
@@ -1649,6 +1674,7 @@ export function useChat(): UseChat {
     sessionIdRef.current = null
     setCurrentThreadId(null)
     chatIdRef.current = appId ? `app-${appId}` : resolveDefaultChatId()
+    syncRendererConversationKey(chatIdRef.current)
     startedAtRef.current = 0
 
     const myGen = genRef.current

@@ -54,6 +54,7 @@ from database.firestore_index_registry import (
     DAILY_SWEEP_ONBOARDING_CONVERSATIONS_QUERY,
 )
 from database.memory_collections import MemoryCollections
+from database.memory_apply_store import cleanup_expired_memory_deletion_receipts
 from models.memory_apply import MemoryControlState
 from models.memory_contracts import deterministic_contract_id
 from models.product_memory import (
@@ -4459,6 +4460,7 @@ def run_daily_memory_sweep_scheduler(
     for uid in bounded_uids:
         try:
             cleanup_expired_daily_memory_sweep_stages(uid, db_client=db_client, now=now)
+            cleanup_expired_memory_deletion_receipts(uid, db_client=db_client, now=now)
         except Exception:
             # Cleanup is fail-closed for each row; a transient janitor error
             # must not open writes or alter the rollout result.

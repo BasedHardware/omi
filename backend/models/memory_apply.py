@@ -697,7 +697,11 @@ def _coerce_iso_timestamp(value: str, *, field: str) -> Optional[datetime]:
 
 
 def apply_long_term_patch_transaction(
-    *, control_state: MemoryControlState, operation: MemoryOperation, patch_payload: Dict[str, Any]
+    *,
+    control_state: MemoryControlState,
+    operation: MemoryOperation,
+    patch_payload: Dict[str, Any],
+    allow_trigger_feedback_arguments: bool = False,
 ) -> ApplyResult:
     """Pure transaction skeleton for Milestone 3.
 
@@ -970,7 +974,12 @@ def apply_long_term_patch_transaction(
                 )
             )
             explicit_short_term_demotion = patch.target_tier == MemoryTier.short_term and patch.clear_graph_assertion
-            if semantic_change and not explicit_short_term_demotion and not graph_enrichment:
+            if (
+                semantic_change
+                and not explicit_short_term_demotion
+                and not graph_enrichment
+                and not allow_trigger_feedback_arguments
+            ):
                 return ApplyResult(
                     status=ApplyStatus.invalid_patch,
                     control_state=control_state,

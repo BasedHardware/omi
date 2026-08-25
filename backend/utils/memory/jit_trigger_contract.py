@@ -20,10 +20,20 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from models.jit_proactivity import (
+    JIT_AMBIGUOUS_NANO_TRIAGES_PER_DAY,
+    JIT_CONTENT_FREE_ID_PATTERN,
+    JIT_FULL_TURNS_PER_CANDIDATE,
+    JIT_MAX_CALENDAR_EVENTS,
+    JIT_PLANNED_NOTIFICATIONS_PER_TRIGGER_PER_DAY,
+    JIT_POLICY_VALID_FOR_SECONDS,
+    JIT_TOTAL_PROACTIVE_NOTIFICATIONS_PER_DAY,
+)
 from models.memory_evidence import SourceState
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryKind, MemorySubjectScope
 
 TRIGGER_SCHEMA_VERSION = "jit_trigger.v1"
+TRIGGER_POLICY_VERSION = "jit_trigger_policy.v1"
 MAX_CONDITION_KEYS = 12
 MAX_ENTITY_ALIASES = 16
 MAX_ENTITY_ALIAS_CHARS = 80
@@ -35,10 +45,17 @@ MAX_APPS = 16
 MAX_WINDOWS = 16
 MAX_WINDOW_CHARS = 120
 MAX_CONTEXT_TEXT_CHARS = 8_000
-MAX_CALENDAR_EVENTS = 32
+MAX_CALENDAR_EVENTS = JIT_MAX_CALENDAR_EVENTS
 MAX_FEEDBACK_IDS = 32
 MAX_FEEDBACK_NOTE_CHARS = 240
 MAX_TRIGGER_ACTION_PROMPT_CHARS = 2_000
+
+PLANNED_NOTIFICATIONS_PER_TRIGGER_PER_DAY = JIT_PLANNED_NOTIFICATIONS_PER_TRIGGER_PER_DAY
+TOTAL_PROACTIVE_NOTIFICATIONS_PER_DAY = JIT_TOTAL_PROACTIVE_NOTIFICATIONS_PER_DAY
+AMBIGUOUS_NANO_TRIAGES_PER_DAY = JIT_AMBIGUOUS_NANO_TRIAGES_PER_DAY
+FULL_AGENT_TURNS_PER_CANDIDATE = JIT_FULL_TURNS_PER_CANDIDATE
+EMBEDDING_MATCH_SIMILARITY = 0.82
+EMBEDDING_TRIAGE_SIMILARITY = 0.74
 
 
 class TriggerDecisionStatus(str, Enum):
@@ -48,6 +65,11 @@ class TriggerDecisionStatus(str, Enum):
 
 
 class TriggerFeedbackAction(str, Enum):
+    useful = "useful"
+    false_positive = "false_positive"
+    missed_or_late = "missed_or_late"
+    # Released aliases remain readable while new clients use the explicit
+    # product vocabulary above.
     reinforce = "reinforce"
     dismiss = "dismiss"
     snooze = "snooze"
@@ -110,22 +132,107 @@ class TriggerEmbeddingCondition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     prototype_id: str
-    min_similarity: float = 0.82
+    prototype_revision: str
+    model_id: str
+    model_version: str
+    language: str
+    min_similarity: float = EMBEDDING_MATCH_SIMILARITY
 
-    @field_validator("prototype_id")
+    @field_validator("prototype_id", "prototype_revision", "model_id", "model_version", "language")
     @classmethod
-    def validate_prototype_id(cls, value: str) -> str:
+    def validate_attestation_identifier(cls, value: str) -> str:
         normalized = (value or "").strip()
         if not normalized or len(normalized) > MAX_KEYWORD_CHARS:
-            raise ValueError("embedding prototype_id is invalid")
+            raise ValueError("embedding attestation identifier is invalid")
         return normalized
 
     @field_validator("min_similarity")
     @classmethod
     def validate_similarity(cls, value: float) -> float:
-        if not 0.0 <= value <= 1.0:
-            raise ValueError("embedding min_similarity must be between 0 and 1")
+        if float(value) != EMBEDDING_MATCH_SIMILARITY:
+            raise ValueError("embedding min_similarity must match the server policy")
         return float(value)
+
+
+class TriggerEmbeddingAttestation(BaseModel):
+    """Content-free identity of the exact local scorer that produced scores."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    model_id: str
+    model_version: str
+    language: str
+    prototype_revision: str
+
+    @field_validator("model_id", "model_version", "language", "prototype_revision")
+    @classmethod
+    def validate_identifier(cls, value: str) -> str:
+        normalized = (value or "").strip()
+        if not normalized or len(normalized) > MAX_KEYWORD_CHARS:
+            raise ValueError("embedding attestation identifier is invalid")
+        return normalized
+
+
+class TriggerEmbeddingPolicy(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    enabled: bool = False
+    match_similarity: float = EMBEDDING_MATCH_SIMILARITY
+    triage_similarity: float = EMBEDDING_TRIAGE_SIMILARITY
+    model_id: Optional[str] = None
+    model_version: Optional[str] = None
+    language: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_attested_enablement(self) -> "TriggerEmbeddingPolicy":
+        if self.match_similarity != EMBEDDING_MATCH_SIMILARITY or self.triage_similarity != EMBEDDING_TRIAGE_SIMILARITY:
+            raise ValueError("embedding policy thresholds must match the ratified v1 contract")
+        identifiers = (self.model_id, self.model_version, self.language)
+        if self.enabled and any(not (value or "").strip() for value in identifiers):
+            raise ValueError("enabled embedding policy requires a complete scorer attestation")
+        if not self.enabled and any(value is not None for value in identifiers):
+            raise ValueError("disabled embedding policy must not advertise a scorer")
+        return self
+
+
+class TriggerRuntimePolicy(BaseModel):
+    """Versioned, backend-authored budgets consumed by every JIT client."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: str = TRIGGER_POLICY_VERSION
+    planned_notifications_per_trigger_per_day: int = PLANNED_NOTIFICATIONS_PER_TRIGGER_PER_DAY
+    total_proactive_notifications_per_day: int = TOTAL_PROACTIVE_NOTIFICATIONS_PER_DAY
+    ambiguous_nano_triages_per_day: int = AMBIGUOUS_NANO_TRIAGES_PER_DAY
+    full_agent_turns_per_candidate: int = FULL_AGENT_TURNS_PER_CANDIDATE
+    max_calendar_events: int = MAX_CALENDAR_EVENTS
+    valid_for_seconds: int = JIT_POLICY_VALID_FOR_SECONDS
+    paid_boundary_refresh_required: bool = True
+    embedding: TriggerEmbeddingPolicy = Field(default_factory=TriggerEmbeddingPolicy)
+
+    @field_validator("schema_version")
+    @classmethod
+    def validate_policy_version(cls, value: str) -> str:
+        if value != TRIGGER_POLICY_VERSION:
+            raise ValueError("unsupported trigger policy version")
+        return value
+
+    @field_validator(
+        "planned_notifications_per_trigger_per_day",
+        "total_proactive_notifications_per_day",
+        "ambiguous_nano_triages_per_day",
+        "full_agent_turns_per_candidate",
+        "max_calendar_events",
+        "valid_for_seconds",
+    )
+    @classmethod
+    def validate_positive_budget(cls, value: int) -> int:
+        if type(value) is not int or value <= 0:
+            raise ValueError("trigger policy budgets must be positive integers")
+        return value
+
+
+DEFAULT_TRIGGER_RUNTIME_POLICY = TriggerRuntimePolicy()
 
 
 class TriggerAction(BaseModel):
@@ -290,7 +397,9 @@ class TriggerObservation(BaseModel):
     window_title: Optional[str] = None
     occurred_at: Optional[datetime] = None
     calendar_events: Tuple[CalendarObservation, ...] = ()
+    calendar_authorized: bool = False
     embedding_scores: Dict[str, float] = Field(default_factory=dict)
+    embedding_attestation: Optional[TriggerEmbeddingAttestation] = None
 
     @field_validator("occurred_at")
     @classmethod
@@ -333,6 +442,12 @@ class TriggerObservation(BaseModel):
             normalized[str(key).strip()] = float(score)
         return dict(sorted(normalized.items()))
 
+    @model_validator(mode="after")
+    def require_attestation_for_embedding_scores(self) -> "TriggerObservation":
+        if self.embedding_scores and self.embedding_attestation is None:
+            raise ValueError("embedding scores require an exact local scorer attestation")
+        return self
+
 
 class TriggerDecision(BaseModel):
     model_config = ConfigDict(frozen=True)
@@ -357,7 +472,10 @@ class TriggerFeedback(BaseModel):
     @field_validator("feedback_id")
     @classmethod
     def validate_feedback_id(cls, value: str) -> str:
-        return _bounded_term(value, MAX_KEYWORD_CHARS)
+        normalized = (value or "").strip()
+        if not re.fullmatch(JIT_CONTENT_FREE_ID_PATTERN, normalized):
+            raise ValueError("trigger feedback id must be a content-free SHA-256 digest")
+        return normalized
 
     @field_validator("recorded_at", "snoozed_until")
     @classmethod
@@ -460,9 +578,19 @@ def _time_matches(condition: TriggerTimeCondition, observed: Optional[datetime])
     return current >= condition.start or current <= condition.end
 
 
-def _calendar_matches(condition: TriggerCalendarCondition, events: Sequence[CalendarObservation]) -> Optional[bool]:
+def _calendar_matches(
+    condition: TriggerCalendarCondition,
+    events: Sequence[CalendarObservation],
+    *,
+    authorized: bool,
+) -> bool:
+    # Calendar is an opportunistic local signal. Missing authorization is a
+    # deterministic no-match and must never create an authorization prompt or
+    # spend an ambiguous-triage budget.
+    if not authorized:
+        return False
     if not events:
-        return None
+        return False
     for event in events:
         title = _normalize_text(event.title)
         kind = _normalize_text(event.event_type)
@@ -474,7 +602,10 @@ def _calendar_matches(condition: TriggerCalendarCondition, events: Sequence[Cale
 
 
 def evaluate_trigger(
-    condition: CompiledTrigger | Mapping[str, Any] | TriggerCondition, observation: TriggerObservation
+    condition: CompiledTrigger | Mapping[str, Any] | TriggerCondition,
+    observation: TriggerObservation,
+    *,
+    policy: TriggerRuntimePolicy = DEFAULT_TRIGGER_RUNTIME_POLICY,
 ) -> TriggerDecision:
     """Evaluate local evidence; missing/ambiguous context returns ``triage``."""
 
@@ -504,11 +635,37 @@ def evaluate_trigger(
     if compiled.condition.time:
         results["time"] = _time_matches(compiled.condition.time, observation.occurred_at)
     if compiled.condition.calendar:
-        results["calendar"] = _calendar_matches(compiled.condition.calendar, observation.calendar_events)
+        results["calendar"] = _calendar_matches(
+            compiled.condition.calendar,
+            observation.calendar_events,
+            authorized=observation.calendar_authorized,
+        )
     if compiled.condition.embedding:
         embedding = compiled.condition.embedding
-        score = observation.embedding_scores.get(embedding.prototype_id)
-        results[f"embedding:{embedding.prototype_id}"] = None if score is None else score >= embedding.min_similarity
+        if not policy.embedding.enabled:
+            results[f"embedding:{embedding.prototype_id}"] = False
+        else:
+            attestation = observation.embedding_attestation
+            policy_attested = (
+                embedding.model_id == policy.embedding.model_id
+                and embedding.model_version == policy.embedding.model_version
+                and embedding.language == policy.embedding.language
+            )
+            attested = (
+                policy_attested
+                and attestation is not None
+                and attestation.model_id == embedding.model_id
+                and attestation.model_version == embedding.model_version
+                and attestation.language == embedding.language
+                and attestation.prototype_revision == embedding.prototype_revision
+            )
+            score = observation.embedding_scores.get(embedding.prototype_id) if attested else None
+            if score is None:
+                results[f"embedding:{embedding.prototype_id}"] = False
+            elif policy.embedding.triage_similarity <= score < policy.embedding.match_similarity:
+                results[f"embedding:{embedding.prototype_id}"] = None
+            else:
+                results[f"embedding:{embedding.prototype_id}"] = score >= policy.embedding.match_similarity
 
     matched = tuple(sorted(key for key, value in results.items() if value is True))
     missing = tuple(sorted(key for key, value in results.items() if value is None))
@@ -537,7 +694,12 @@ def evaluate_trigger(
     )
 
 
-def evaluate_memory_item_trigger(item: MemoryItem, observation: TriggerObservation) -> TriggerDecision:
+def evaluate_memory_item_trigger(
+    item: MemoryItem,
+    observation: TriggerObservation,
+    *,
+    policy: TriggerRuntimePolicy = DEFAULT_TRIGGER_RUNTIME_POLICY,
+) -> TriggerDecision:
     """Apply row lifecycle/feedback gates before evaluating its local condition."""
 
     if item.kind != MemoryKind.trigger:
@@ -609,7 +771,7 @@ def evaluate_memory_item_trigger(item: MemoryItem, observation: TriggerObservati
                 reason="trigger_snoozed",
                 observation_fingerprint=_observation_fingerprint(observation),
             )
-    return evaluate_trigger(compile_memory_item_trigger(item), observation)
+    return evaluate_trigger(compile_memory_item_trigger(item), observation, policy=policy)
 
 
 def apply_trigger_feedback(item: MemoryItem, feedback: TriggerFeedback) -> FeedbackUpdate:
@@ -621,21 +783,36 @@ def apply_trigger_feedback(item: MemoryItem, feedback: TriggerFeedback) -> Feedb
     if not isinstance(state, Mapping):
         state = {}
     applied_ids = [str(value) for value in state.get("applied_feedback_ids", []) if value]
+    request_hash = hashlib.sha256(
+        json.dumps(feedback.model_dump(mode="json", exclude_none=True), sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    applied_hashes = {
+        str(key): str(value) for key, value in dict(state.get("applied_feedback_hashes", {})).items() if key and value
+    }
     if feedback.feedback_id in applied_ids:
+        if applied_hashes.get(feedback.feedback_id) not in {None, request_hash}:
+            raise ValueError("feedback id was reused with a different payload")
         return FeedbackUpdate(item=item, applied=False, reason="duplicate_feedback")
-    if len(applied_ids) >= MAX_FEEDBACK_IDS:
-        return FeedbackUpdate(item=item, applied=False, reason="feedback_history_full")
-    applied_ids = applied_ids + [feedback.feedback_id]
+    # Durable idempotency lives in the per-feedback receipt collection. The
+    # trigger keeps only a rolling local state window so an account can keep
+    # giving feedback for its lifetime without growing one Firestore document.
+    applied_ids = (applied_ids + [feedback.feedback_id])[-MAX_FEEDBACK_IDS:]
+    applied_hashes = {key: value for key, value in applied_hashes.items() if key in applied_ids}
     next_state: Dict[str, Any] = dict(state)
     next_state["applied_feedback_ids"] = applied_ids
+    next_state["applied_feedback_hashes"] = {
+        feedback_id: applied_hashes.get(feedback_id, request_hash if feedback_id == feedback.feedback_id else "")
+        for feedback_id in applied_ids
+        if applied_hashes.get(feedback_id) or feedback_id == feedback.feedback_id
+    }
     next_state["last_action"] = feedback.action.value
     next_state["feedback_count"] = int(state.get("feedback_count", 0)) + 1
 
     weight = item.curation_weight
     status = item.status
-    if feedback.action == TriggerFeedbackAction.reinforce:
+    if feedback.action in {TriggerFeedbackAction.useful, TriggerFeedbackAction.reinforce}:
         weight = min(100, weight + 1)
-    elif feedback.action == TriggerFeedbackAction.dismiss:
+    elif feedback.action in {TriggerFeedbackAction.false_positive, TriggerFeedbackAction.dismiss}:
         weight = max(-100, weight - 1)
     elif feedback.action == TriggerFeedbackAction.snooze:
         next_state["snoozed_until"] = feedback.snoozed_until.isoformat()  # type: ignore[union-attr]
@@ -666,9 +843,12 @@ __all__ = [
     "TriggerDecision",
     "TriggerDecisionStatus",
     "TriggerEmbeddingCondition",
+    "TriggerEmbeddingAttestation",
+    "TriggerEmbeddingPolicy",
     "TriggerFeedback",
     "TriggerFeedbackAction",
     "TriggerObservation",
+    "TriggerRuntimePolicy",
     "TriggerTimeCondition",
     "apply_trigger_feedback",
     "compile_memory_item_trigger",
@@ -678,4 +858,8 @@ __all__ = [
     "MAX_CONDITION_KEYS",
     "MAX_TRIGGER_ACTION_PROMPT_CHARS",
     "TRIGGER_SCHEMA_VERSION",
+    "TRIGGER_POLICY_VERSION",
+    "DEFAULT_TRIGGER_RUNTIME_POLICY",
+    "EMBEDDING_MATCH_SIMILARITY",
+    "EMBEDDING_TRIAGE_SIMILARITY",
 ]

@@ -60,6 +60,18 @@ describe('minIntervalMs (frequency table)', () => {
 })
 
 describe('NotificationThrottle.tryAllow', () => {
+  it('reserves a single local display slot and spends it only on commit', () => {
+    const t = new NotificationThrottle()
+    const slot = t.reserve(input())
+    expect('token' in slot).toBe(true)
+    expect(t.reserve(input({ assistantId: 'task', now: T0 + 1 }))).toEqual({
+      allowed: false,
+      reason: 'frequency'
+    })
+    t.cancel(slot as Extract<typeof slot, { token: string }>)
+    expect(t.tryAllow(input({ now: T0 + 1 })).allowed).toBe(true)
+  })
+
   it('level 0 (Off, the default) suppresses everything proactive', () => {
     const t = new NotificationThrottle()
     expect(t.tryAllow(input({ frequencyLevel: 0 }))).toEqual({
@@ -72,6 +84,18 @@ describe('NotificationThrottle.tryAllow', () => {
     const t = new NotificationThrottle()
     for (let i = 0; i < 5; i++)
       expect(t.tryAllow(input({ frequencyLevel: 5, now: T0 + i })).allowed).toBe(true)
+  })
+
+  it('level 5 still respects one exclusive pending display slot', () => {
+    const t = new NotificationThrottle()
+    const first = t.reserve(input({ frequencyLevel: 5 }))
+    expect('token' in first).toBe(true)
+    expect(t.decide(input({ frequencyLevel: 5, now: T0 + 1 }))).toEqual({
+      allowed: false,
+      reason: 'frequency'
+    })
+    t.cancel(first as Extract<typeof first, { token: string }>)
+    expect(t.decide(input({ frequencyLevel: 5, now: T0 + 1 }))).toEqual({ allowed: true })
   })
 
   it('holds an assistant off until its interval has elapsed', () => {

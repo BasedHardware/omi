@@ -222,6 +222,10 @@ export function useChatSessions(options?: {
     async (id: string) => {
       try {
         await client.deleteSession(id)
+        // Chat-session deletion is a separate backend surface from
+        // conversation deletion; clear any attached JIT evidence only after
+        // the server confirms the session is gone.
+        if (typeof window !== 'undefined') await window.omi?.deleteJitConversationKeyframe?.(id)
       } catch (e) {
         setError(errorMessage(e))
         throw e

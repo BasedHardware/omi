@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 import hashlib
 import json
 from typing import Any
@@ -14,8 +14,14 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from database._client import get_firestore_client
 from database.memory_collections import MemoryCollections
-from models.product_memory import MemoryItem, MemoryItemStatus, MemoryKind, MemorySubjectScope
-from utils.memory.jit_trigger_contract import TriggerAction, compile_memory_item_trigger
+from models.jit_proactivity import is_jit_trigger_paid_authority
+from models.product_memory import MemoryItem, MemoryItemStatus, MemoryKind
+from utils.memory.jit_trigger_contract import (
+    DEFAULT_TRIGGER_RUNTIME_POLICY,
+    TriggerAction,
+    TriggerRuntimePolicy,
+    compile_memory_item_trigger,
+)
 from utils.memory.v3.account_generation_source import read_memory_v3_trusted_account_generation
 
 MAX_AUTHORITATIVE_TRIGGERS = 500
@@ -28,7 +34,8 @@ class AuthoritativeTriggerRow:
     updated_at: datetime
     trigger_condition: dict[str, Any]
     action: TriggerAction
-    wakeup_budget_per_day: int | None
+    wakeup_budget_per_day: int
+    snoozed_until: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -41,6 +48,58 @@ class AuthoritativeTriggerSnapshot:
     complete: bool
     rows: tuple[AuthoritativeTriggerRow, ...]
     failure_reason: str | None = None
+    policy: TriggerRuntimePolicy = DEFAULT_TRIGGER_RUNTIME_POLICY
+
+
+def _authoritative_trigger_components(
+    item: MemoryItem,
+    at: datetime,
+) -> tuple[Any, int, datetime | None]:
+    """Validate one trigger and return its exact paid-work projection."""
+    if not is_jit_trigger_paid_authority(item, at=at):
+        raise ValueError('trigger is not paid-work authority')
+    compiled = compile_memory_item_trigger(item)
+    if compiled.condition.embedding is not None:
+        embedding_policy = DEFAULT_TRIGGER_RUNTIME_POLICY.embedding
+        if (
+            not embedding_policy.enabled
+            or compiled.condition.embedding.model_id != embedding_policy.model_id
+            or compiled.condition.embedding.model_version != embedding_policy.model_version
+            or compiled.condition.embedding.language != embedding_policy.language
+        ):
+            raise ValueError('embedding trigger is not locally attested')
+    if compiled.condition.action is None:
+        raise ValueError('trigger action is missing')
+    raw_budget = item.arguments.get('wakeup_budget_per_day')
+    if (
+        type(raw_budget) is not int
+        or raw_budget != DEFAULT_TRIGGER_RUNTIME_POLICY.planned_notifications_per_trigger_per_day
+    ):
+        raise ValueError('trigger wakeup budget is invalid')
+
+    feedback = item.arguments.get('jit_trigger_feedback', {})
+    if not isinstance(feedback, dict):
+        raise ValueError('trigger feedback state is malformed')
+    raw_snoozed_until = feedback.get('snoozed_until')
+    snoozed_until: datetime | None = None
+    if raw_snoozed_until is not None:
+        if isinstance(raw_snoozed_until, datetime):
+            snoozed_until = raw_snoozed_until
+        else:
+            snoozed_until = datetime.fromisoformat(str(raw_snoozed_until))
+        if snoozed_until.tzinfo is None or snoozed_until.utcoffset() is None:
+            raise ValueError('trigger snooze must be timezone-aware')
+    return compiled, int(raw_budget), snoozed_until
+
+
+def is_authoritative_trigger_for_paid_work(item: MemoryItem, at: datetime) -> bool:
+    """Use the exact snapshot compiler, snooze, and policy as the paid transaction gate."""
+
+    try:
+        _compiled, _budget, snoozed_until = _authoritative_trigger_components(item, at)
+    except Exception:
+        return False
+    return snoozed_until is None or at >= snoozed_until
 
 
 def _revision(
@@ -57,6 +116,7 @@ def _revision(
         'account_generation': account_generation,
         'head_commit_id': head_commit_id,
         'commit_sequence': commit_sequence,
+        'policy': DEFAULT_TRIGGER_RUNTIME_POLICY.model_dump(mode='json'),
         'items': [
             {
                 'id': item.memory_id,
@@ -77,6 +137,7 @@ def _revision(
                 'trigger_condition': row.trigger_condition,
                 'action': {'type': row.action.type, 'prompt': row.action.prompt},
                 'wakeup_budget_per_day': row.wakeup_budget_per_day,
+                'snoozed_until': row.snoozed_until.isoformat() if row.snoozed_until else None,
             }
             for ordinal, row in enumerate(ordered_rows)
         ],
@@ -123,6 +184,7 @@ def read_authoritative_trigger_snapshot(
 
     items: list[MemoryItem] = []
     rows: list[AuthoritativeTriggerRow] = []
+    authority_time = datetime.now(timezone.utc)
     try:
         for snapshot in snapshots:
             payload = snapshot.to_dict()
@@ -135,18 +197,9 @@ def read_authoritative_trigger_snapshot(
             is_open = item.status == MemoryItemStatus.active and item.valid_to is None and item.superseded_by is None
             if not is_open:
                 continue
-            if (
-                item.ledger_schema_version != 'knowledge_ledger.v1'
-                or item.subject_scope != MemorySubjectScope.primary_user
-                or not item.intent_backed
-            ):
-                raise ValueError('active trigger is not intent authoritative')
-            compiled = compile_memory_item_trigger(item)
+            compiled, budget, snoozed_until = _authoritative_trigger_components(item, authority_time)
             action = compiled.condition.action
-            if action is None:
-                raise ValueError('active trigger has no action')
-            raw_budget = item.arguments.get('wakeup_budget_per_day')
-            budget = raw_budget if type(raw_budget) is int and raw_budget > 0 else None
+            assert action is not None
             rows.append(
                 AuthoritativeTriggerRow(
                     memory_id=item.memory_id,
@@ -155,6 +208,7 @@ def read_authoritative_trigger_snapshot(
                     trigger_condition=compiled.as_condition(),
                     action=action,
                     wakeup_budget_per_day=budget,
+                    snoozed_until=snoozed_until,
                 )
             )
     except Exception:
@@ -197,5 +251,6 @@ __all__ = [
     'AuthoritativeTriggerRow',
     'AuthoritativeTriggerSnapshot',
     'MAX_AUTHORITATIVE_TRIGGERS',
+    'is_authoritative_trigger_for_paid_work',
     'read_authoritative_trigger_snapshot',
 ]

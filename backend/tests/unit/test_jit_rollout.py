@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import threading
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI, Response
@@ -10,8 +11,9 @@ from fastapi.testclient import TestClient
 
 import desktop_backend
 import main
-from routers import jit_rollout
+from routers import jit_ledger_snapshot, jit_rollout
 from utils.memory.jit_trigger_contract import TriggerAction
+from utils.memory.jit_trigger_contract import DEFAULT_TRIGGER_RUNTIME_POLICY
 from utils.memory.jit_trigger_snapshot import AuthoritativeTriggerRow, AuthoritativeTriggerSnapshot
 from utils import jit_rollout as authority_module
 from utils.jit_rollout import (
@@ -25,6 +27,9 @@ from utils.jit_rollout import (
 )
 from utils.executors import run_blocking, sync_executor
 from utils.other.endpoints import get_current_user_uid
+from models.jit_trigger_feedback import JITTriggerFeedbackReceipt
+from models.jit_proactivity import JITProactivityEventReceipt
+from models.product_memory import MemoryItemStatus
 
 
 class _Clock:
@@ -426,6 +431,7 @@ def test_read_only_route_uses_authenticated_uid_and_ignores_self_enrolment(monke
 
     monkeypatch.setattr(jit_rollout, 'resolve_jit_rollout', resolve)
     app = FastAPI()
+    app.include_router(jit_ledger_snapshot.router)
     app.include_router(jit_rollout.router)
     app.dependency_overrides[get_current_user_uid] = lambda: 'server-authenticated-user'
     jit_rollout.validate_jit_rollout_contract(app)
@@ -474,6 +480,7 @@ def test_trigger_snapshot_is_owner_authenticated_default_off_and_never_reads_mem
         'snapshot_revision': '',
         'complete': False,
         'rows': [],
+        'policy': DEFAULT_TRIGGER_RUNTIME_POLICY.model_dump(mode='json'),
         'failure_reason': 'rollout_not_enabled',
     }
 
@@ -505,7 +512,8 @@ def test_trigger_snapshot_serializes_exhaustive_action_receipt(monkeypatch):
                     'action': {'type': 'agent_prompt', 'prompt': 'Give the next release step.'},
                 },
                 action=TriggerAction(type='agent_prompt', prompt='Give the next release step.'),
-                wakeup_budget_per_day=2,
+                wakeup_budget_per_day=1,
+                snoozed_until=datetime(2026, 8, 25, tzinfo=timezone.utc),
             ),
         ),
     )
@@ -529,6 +537,8 @@ def test_trigger_snapshot_serializes_exhaustive_action_receipt(monkeypatch):
         'type': 'agent_prompt',
         'prompt': 'Give the next release step.',
     }
+    assert payload['rows'][0]['snoozed_until'] == '2026-08-25T00:00:00Z'
+    assert payload['policy'] == DEFAULT_TRIGGER_RUNTIME_POLICY.model_dump(mode='json')
     assert '"action"' in payload['rows'][0]['trigger_condition_json']
     assert observed == [False, True]
 
@@ -586,6 +596,7 @@ def test_trigger_snapshot_final_authority_fence_discards_scan_after_disable_or_k
         'snapshot_revision': '',
         'complete': False,
         'rows': [],
+        'policy': DEFAULT_TRIGGER_RUNTIME_POLICY.model_dump(mode='json'),
         'failure_reason': 'rollout_not_enabled',
     }
 
@@ -631,3 +642,178 @@ def test_trigger_snapshot_preserves_owner_generation_failure_as_non_actionable(m
     assert payload['rows'] == []
     assert payload['snapshot_revision'] == ''
     assert payload['failure_reason'] == 'authority_changed'
+
+
+def test_trigger_feedback_is_owner_authenticated_and_remains_available_while_rollout_is_off(monkeypatch):
+    observed = {}
+    receipt = JITTriggerFeedbackReceipt(
+        uid='owner',
+        feedback_id='f' * 64,
+        event_id='e' * 64,
+        trigger_memory_id='trigger-1',
+        account_generation=3,
+        expected_trigger_revision=4,
+        action='useful',
+        recorded_at=datetime(2026, 8, 24, tzinfo=timezone.utc),
+        request_hash='a' * 64,
+        applied_trigger_revision=5,
+    )
+
+    async def immediate(_executor, function, uid, memory_id, **kwargs):
+        observed.update(function=function, uid=uid, memory_id=memory_id, kwargs=kwargs)
+        return SimpleNamespace(
+            item=SimpleNamespace(memory_id=memory_id, item_revision=5, status=MemoryItemStatus.active),
+            applied=True,
+            receipt=receipt,
+        )
+
+    monkeypatch.setattr(jit_rollout, 'run_blocking', immediate)
+    app = FastAPI()
+    app.include_router(jit_rollout.router)
+    app.dependency_overrides[get_current_user_uid] = lambda: 'owner'
+
+    response = TestClient(app).post(
+        '/v1/jit/trigger-feedback?uid=attacker',
+        json={
+            'feedback_id': 'f' * 64,
+            'event_id': 'e' * 64,
+            'trigger_memory_id': 'trigger-1',
+            'account_generation': 3,
+            'trigger_revision': 4,
+            'action': 'useful',
+            'recorded_at': '2026-08-24T00:00:00Z',
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()['applied'] is True
+    assert response.json()['trigger_revision'] == 5
+    assert observed['function'] is jit_rollout.apply_canonical_trigger_feedback
+    assert observed['uid'] == 'owner'
+    assert observed['kwargs']['event_id'] == 'e' * 64
+
+
+def test_trigger_feedback_rejects_stale_authority_without_leaking_details(monkeypatch):
+    async def conflict(*_args, **_kwargs):
+        raise ValueError('secret stale target detail')
+
+    monkeypatch.setattr(jit_rollout, 'run_blocking', conflict)
+    app = FastAPI()
+    app.include_router(jit_rollout.router)
+    app.dependency_overrides[get_current_user_uid] = lambda: 'owner'
+
+    response = TestClient(app).post(
+        '/v1/jit/trigger-feedback',
+        json={
+            'feedback_id': 'f' * 64,
+            'event_id': 'e' * 64,
+            'trigger_memory_id': 'trigger-1',
+            'account_generation': 3,
+            'trigger_revision': 4,
+            'action': 'disable',
+            'recorded_at': '2026-08-24T00:00:00Z',
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()['detail'] == 'Trigger feedback authority changed or is unavailable'
+    assert 'secret' not in response.text
+
+
+def test_trigger_feedback_snooze_requires_a_later_expiry():
+    app = FastAPI()
+    app.include_router(jit_rollout.router)
+    app.dependency_overrides[get_current_user_uid] = lambda: 'owner'
+
+    response = TestClient(app).post(
+        '/v1/jit/trigger-feedback',
+        json={
+            'feedback_id': 'f' * 64,
+            'event_id': 'e' * 64,
+            'trigger_memory_id': 'trigger-1',
+            'account_generation': 3,
+            'trigger_revision': 4,
+            'action': 'snooze',
+            'recorded_at': '2026-08-24T00:00:00Z',
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_proactivity_reservation_force_refreshes_paid_authority_and_uses_authenticated_owner(monkeypatch):
+    observed = {}
+
+    async def resolve(uid: str, *, stage: JITDecisionStage, force_refresh: bool = False):
+        observed.update(resolve=(uid, stage, force_refresh))
+        evaluation = JITFlagEvaluation(TriState.ENABLED, TriState.DISABLED, JITDecisionReason.EVALUATED)
+        return authority_module._effective_decision(evaluation, cache_hit=False, cache_ttl_seconds=20)
+
+    receipt = JITProactivityEventReceipt(
+        uid='owner',
+        event_id='e' * 64,
+        candidate_id='c' * 64,
+        operation='full_turn',
+        account_generation=3,
+        budget_day='2026-08-24',
+        parent_event_id='a' * 64,
+        device_id='d' * 64,
+        created_at=datetime(2026, 8, 24, tzinfo=timezone.utc),
+        request_hash='b' * 64,
+    )
+
+    async def immediate(_executor, function, uid, **kwargs):
+        observed.update(function=function, uid=uid, kwargs=kwargs)
+        return receipt, True
+
+    monkeypatch.setattr(jit_rollout, 'resolve_jit_rollout', resolve)
+    monkeypatch.setattr(jit_rollout, 'run_blocking', immediate)
+    app = FastAPI()
+    app.include_router(jit_rollout.router)
+    app.dependency_overrides[get_current_user_uid] = lambda: 'owner'
+
+    response = TestClient(app).post(
+        '/v1/jit/proactivity/reservations?uid=attacker',
+        json={
+            'event_id': 'e' * 64,
+            'candidate_id': 'c' * 64,
+            'operation': 'full_turn',
+            'account_generation': 3,
+            'device_id': 'd' * 64,
+            'parent_event_id': 'a' * 64,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()['reserved'] is True
+    assert observed['resolve'] == ('owner', JITDecisionStage.PAID_BOUNDARY, True)
+    assert observed['function'] is jit_rollout.reserve_jit_proactivity_event
+    assert observed['uid'] == 'owner'
+
+
+def test_proactivity_reservation_does_no_mutation_when_killed(monkeypatch):
+    async def resolve(*_args, **_kwargs):
+        evaluation = JITFlagEvaluation(TriState.ENABLED, TriState.ENABLED, JITDecisionReason.EVALUATED)
+        return authority_module._effective_decision(evaluation, cache_hit=False, cache_ttl_seconds=20)
+
+    async def no_write(*_args, **_kwargs):
+        pytest.fail('kill switch must block reservation writes')
+
+    monkeypatch.setattr(jit_rollout, 'resolve_jit_rollout', resolve)
+    monkeypatch.setattr(jit_rollout, 'run_blocking', no_write)
+    app = FastAPI()
+    app.include_router(jit_rollout.router)
+    app.dependency_overrides[get_current_user_uid] = lambda: 'owner'
+
+    response = TestClient(app).post(
+        '/v1/jit/proactivity/reservations',
+        json={
+            'event_id': 'e' * 64,
+            'candidate_id': 'c' * 64,
+            'operation': 'ambient_notification',
+            'account_generation': 3,
+            'device_id': 'd' * 64,
+        },
+    )
+
+    assert response.status_code == 403

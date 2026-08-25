@@ -7,6 +7,7 @@ import re
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from functools import wraps
 from typing import Any, Callable, Collection, Dict, Iterator, List, Literal, NoReturn, Optional, Set, Tuple, cast
 from uuid import UUID
 
@@ -17,8 +18,17 @@ import database.memories as memories_db
 import database.vector_db as vector_db
 from database._client import db as default_db_client
 from database.memory_collections import MemoryCollections
+from database.memory_apply_store import privacy_deletion_receipt_id
+from database.memory_ledger import purge_source_replacement_receipts_for_memories
+from database.legal_holds import destructive_operation_gate
+from database.review_queue import purge_stale_review_conflicts_for_memories
 from database.vector_db import delete_memory_vector
 from models.memories import MemoryDB
+from models.knowledge_ledger_search import (
+    LedgerSearchSurface,
+    is_ledger_row_admissible,
+    ledger_row_is_rejected,
+)
 from models.product_memory import (
     MemoryAccessPolicy,
     MemoryConsumer,
@@ -32,18 +42,19 @@ from models.product_memory import (
     RESTRICTED_SENSITIVITY_LABELS,
     SourceState,
 )
-from models.knowledge_ledger_search import LedgerSearchSurface, is_ledger_row_admissible
 from utils.log_sanitizer import sanitize_validation_error
 from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_get_all
 from utils.memory.canonical_memory_adapter import (
     CanonicalBatchMutationLimitError,
     CanonicalMemoryNotFoundError,
     CanonicalScanCursor,
+    canonical_memory_lineage_ids,
     delete_default_canonical_memories,
     delete_all_canonical_memories,
     delete_canonical_memory,
     delete_canonical_memories_batch,
     memory_item_to_memorydb,
+    purge_canonical_memory_projections,
     read_canonical_memory_item,
     read_canonical_memories,
     read_canonical_scan_page,
@@ -99,6 +110,66 @@ McpSearchPayload = Dict[str, Any]
 MAX_LEDGER_HISTORY_PROVIDER_WINDOW = 500
 MAX_LEDGER_REVERT_CHAIN_LENGTH = 64
 _LEDGER_QUERY_TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9']{1,63}")
+
+
+def _legal_hold_gated_deletion(method: Callable[..., Any]) -> Callable[..., Any]:
+    """Hold one server-owned deletion gate across legacy and canonical layers."""
+
+    @wraps(method)
+    def wrapped(self: Any, uid: str, *args: Any, **kwargs: Any) -> Any:
+        with destructive_operation_gate(
+            uid,
+            kind="explicit_memory_deletion",
+            firestore_client=self.db_client,
+        ):
+            return method(self, uid, *args, **kwargs)
+
+    return wrapped
+
+
+def _returned_lineage_ids(result: object, fallback: List[str]) -> List[str]:
+    """Normalize the internal canonical deletion receipt for legacy test seams."""
+
+    if isinstance(result, list):
+        ids = [memory_id for memory_id in result if isinstance(memory_id, str) and memory_id]
+        if ids:
+            return list(dict.fromkeys(ids))
+    return list(dict.fromkeys(fallback))
+
+
+def _purge_required_canonical_projections(
+    uid: str,
+    memory_ids: List[str],
+    *,
+    db_client: Any,
+    reason: str,
+    preserve_source_replacement_receipts: bool = False,
+) -> None:
+    """Map provider failures to the released fail-closed deletion contract."""
+
+    try:
+        purge_canonical_memory_projections(
+            uid,
+            memory_ids,
+            db_client=db_client,
+            reason=reason,
+            include_review_queue=False,
+            preserve_source_replacement_receipts=preserve_source_replacement_receipts,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Canonical memory projection privacy cleanup unavailable",
+        ) from exc
+
+
+def _delete_historical_privacy_overrides(uid: str, memory_ids: List[str], *, db_client: Any) -> None:
+    """Remove content-derived override paths after physical legacy cleanup."""
+
+    client = db_client if db_client is not None else default_db_client
+    collections = MemoryCollections(uid=uid)
+    for memory_id in dict.fromkeys(memory_id for memory_id in memory_ids if memory_id):
+        client.document(f"{collections.memory_historical_overrides}/{memory_id}").delete()
 
 
 class DeviceScopeNotSupportedError(ValueError):
@@ -471,12 +542,12 @@ class CanonicalMemoryBackend:
     def update_visibility(self, uid: str, memory_id: str, visibility: str) -> None:
         update_canonical_memory_visibility(uid, memory_id, visibility, db_client=self._db_client)
 
-    def delete(self, uid: str, memory_id: str) -> None:
-        delete_canonical_memory(uid, memory_id, db_client=self._db_client)
+    def delete(self, uid: str, memory_id: str) -> List[str]:
+        return delete_canonical_memory(uid, memory_id, db_client=self._db_client)
 
-    def delete_batch(self, uid: str, memory_ids: List[str]) -> None:
+    def delete_batch(self, uid: str, memory_ids: List[str]) -> List[str]:
         """Atomically tombstone a bounded set of canonical identities."""
-        delete_canonical_memories_batch(uid, memory_ids, db_client=self._db_client)
+        return delete_canonical_memories_batch(uid, memory_ids, db_client=self._db_client)
 
     def delete_all(self, uid: str) -> None:
         delete_all_canonical_memories(uid, db_client=self._db_client)
@@ -940,22 +1011,46 @@ class HistoricalMemoryAdapter:
         ][:capped]
 
     @staticmethod
-    def cleanup(uid: str, memory_id: str, *, delete_vector: bool = True, db_client: Any = None) -> None:
-        """Best-effort physical cleanup after canonical authority commits."""
-        try:
-            kwargs = {"firestore_client": db_client} if db_client is not None else {}
-            memories_db.delete_memory(uid, memory_id, **kwargs)
-        except Exception:
-            logger.exception("historical memory cleanup failed uid=%s memory_id=%s", uid, memory_id)
+    def cleanup(
+        uid: str,
+        memory_id: str,
+        *,
+        delete_vector: bool = True,
+        db_client: Any = None,
+        required: bool = False,
+    ) -> None:
+        """Physically clean one historical row after canonical authority commits.
+
+        Explicit privacy deletion sets ``required``. It deletes the rebuildable
+        vector first so a later Firestore failure leaves the content row (and
+        therefore its retry identity) intact. Suppression/tombstones prevent
+        resurrection while the caller retries the failed request.
+        """
+        failures: List[str] = []
         if delete_vector:
+            if required and getattr(vector_db, "index", None) is None:
+                raise HTTPException(status_code=503, detail="Historical memory privacy cleanup unavailable")
             try:
                 delete_memory_vector(uid, memory_id)
             except Exception:
+                failures.append("vector")
                 logger.exception(
                     "historical vector cleanup failed uid=%s memory_id=%s",
                     uid,
                     memory_id,
                 )
+        if required and failures:
+            # Keep the content row as a durable retry identity until its vector
+            # has definitely been removed.
+            raise HTTPException(status_code=503, detail="Historical memory privacy cleanup incomplete")
+        try:
+            kwargs = {"firestore_client": db_client} if db_client is not None else {}
+            memories_db.delete_memory(uid, memory_id, **kwargs)
+        except Exception:
+            failures.append("content")
+            logger.exception("historical memory cleanup failed uid=%s memory_id=%s", uid, memory_id)
+        if required and failures:
+            raise HTTPException(status_code=503, detail="Historical memory privacy cleanup incomplete")
 
     def iter_all_live(
         self,
@@ -1036,15 +1131,19 @@ class HistoricalMemoryAdapter:
         return [memory_id for memory_id in selected if memory_id]
 
     @classmethod
-    def cleanup_all(cls, uid: str, *, db_client: Any = None) -> None:
-        """Best-effort physical cleanup after a canonical delete-all."""
+    def cleanup_all(cls, uid: str, *, db_client: Any = None, required: bool = False) -> None:
+        """Physically clean all historical rows after a canonical delete-all."""
         try:
             ids = cls.ids(uid, db_client=db_client)
-        except Exception:
+        except Exception as exc:
             logger.exception("historical delete-all id scan failed uid=%s", uid)
+            if required:
+                if isinstance(exc, HTTPException):
+                    raise
+                raise HTTPException(status_code=503, detail="Historical memory privacy cleanup unavailable") from exc
             return
         for memory_id in ids:
-            cls.cleanup(uid, memory_id, db_client=db_client)
+            cls.cleanup(uid, memory_id, db_client=db_client, required=required)
 
 
 # A page walks past rows it must not emit (canonical-suppressed historical rows,
@@ -1537,6 +1636,17 @@ class MemoryService:
 
             snapshot = client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").get()
             if getattr(snapshot, "exists", False) is not True:
+                receipt_id = privacy_deletion_receipt_id(uid, memory_id)
+                receipt = client.document(f"{MemoryCollections(uid=uid).memory_deletion_receipts}/{receipt_id}").get()
+                if getattr(receipt, "exists", False) is True:
+                    receipt_payload = receipt.to_dict()
+                    if (
+                        isinstance(receipt_payload, dict)
+                        and receipt_payload.get("schema_version") == "memory_deletion_receipt.v2"
+                        and receipt_payload.get("uid") == uid
+                        and receipt_payload.get("receipt_id") == receipt_id
+                    ):
+                        return MemoryItemStatus.tombstoned
                 override = client.document(
                     f"{MemoryCollections(uid=uid).memory_historical_overrides}/{memory_id}"
                 ).get()
@@ -3074,9 +3184,10 @@ class MemoryService:
         Compatibility readers and migration planning intentionally consume only
         live rows through :meth:`iter_export_memories`. A user's data export has
         a stronger preservation contract: superseded ledger rows and closed
-        ``legacy_migration`` history remain portable without becoming current
-        prompt authority. Hidden/tombstoned rows and source-purged content stay
-        excluded, while owner-visible locked or sensitive history is preserved.
+        ``legacy_migration`` history and explicitly rejected/hidden audit rows
+        remain portable without becoming current prompt authority. Privacy
+        tombstones and source-purged content stay excluded, while owner-visible
+        locked or sensitive history is preserved.
         """
         yield from self._iter_export_memories(
             uid,
@@ -3089,13 +3200,13 @@ class MemoryService:
     def _is_portability_ledger_history(item: MemoryItem, row: MemoryDB) -> bool:
         if item.ledger_schema_version != LEDGER_SCHEMA_VERSION:
             return False
-        if item.status != MemoryItemStatus.superseded:
+        if item.status not in {MemoryItemStatus.superseded, MemoryItemStatus.hidden}:
             return False
         if item.source_state in {SourceState.tombstoned, SourceState.purged}:
             return False
         # MemoryDB has no generic physical-status field. Admit only closure
         # states represented honestly on the released wire shape.
-        return row.invalid_at is not None or row.superseded_by is not None
+        return item.status == MemoryItemStatus.hidden or row.invalid_at is not None or row.superseded_by is not None
 
     def _iter_export_memories(
         self,
@@ -3128,6 +3239,8 @@ class MemoryService:
                 continue
             row = memory_item_to_memorydb(item)
             if item.status == MemoryItemStatus.active:
+                if not include_ledger_history and ledger_row_is_rejected(item):
+                    continue
                 yield row
                 continue
             if include_ledger_history and self._is_portability_ledger_history(item, row):
@@ -3360,12 +3473,52 @@ class MemoryService:
 
         return self.update_product_fields(uid, memory_id, is_baseline=value)
 
+    @_legal_hold_gated_deletion
     def delete(self, uid: str, memory_id: str) -> None:
         try:
             canonical_item = read_canonical_memory_item(uid, memory_id, db_client=self.db_client)
         except Exception as exc:
             raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
         if canonical_item is not None:
+            if getattr(canonical_item, "status", None) == MemoryItemStatus.tombstoned:
+                try:
+                    lineage_ids = canonical_memory_lineage_ids(
+                        uid,
+                        [memory_id],
+                        db_client=self.db_client,
+                    )
+                except Exception as exc:
+                    raise HTTPException(status_code=503, detail="Canonical memory privacy cleanup unavailable") from exc
+                self._write_historical_override(uid, memory_id, MemoryItemStatus.tombstoned)
+                _purge_required_canonical_projections(
+                    uid,
+                    lineage_ids,
+                    db_client=self.db_client,
+                    reason="canonical_memory_delete_retry",
+                )
+                try:
+                    purge_stale_review_conflicts_for_memories(
+                        uid,
+                        lineage_ids,
+                        reason="canonical_memory_delete_retry",
+                        db_client=self.db_client,
+                        include_legacy_commits=True,
+                    )
+                except Exception as exc:
+                    raise HTTPException(
+                        status_code=503,
+                        detail="Canonical memory review privacy cleanup unavailable",
+                    ) from exc
+                for lineage_memory_id in lineage_ids:
+                    HistoricalMemoryAdapter.cleanup(
+                        uid,
+                        lineage_memory_id,
+                        db_client=self.db_client,
+                        required=True,
+                    )
+                _delete_historical_privacy_overrides(uid, lineage_ids, db_client=self.db_client)
+                self._invalidate_prompt_cache(uid)
+                return
             if memory_item_to_memorydb(canonical_item).is_locked:
                 raise HTTPException(
                     status_code=402,
@@ -3376,26 +3529,51 @@ class MemoryService:
             # global write fence is paused and a cleanup failure cannot expose
             # the old physical row again.
             self._write_historical_override(uid, memory_id, MemoryItemStatus.tombstoned)
-            self._canonical.delete(uid, memory_id)
+            lineage_ids = _returned_lineage_ids(self._canonical.delete(uid, memory_id), [memory_id])
         else:
             status = self._canonical_status(uid, memory_id)
-            if status is not None:
+            if status == MemoryItemStatus.tombstoned:
+                lineage_ids = [memory_id]
+            elif status is not None:
                 raise HTTPException(status_code=404, detail="Memory not found")
-            record = self.history.get(uid, memory_id)
-            if record is None:
-                raise HTTPException(status_code=404, detail="Memory not found")
-            if record.memory.is_locked:
-                raise HTTPException(
-                    status_code=402,
-                    detail="A paid plan is required to access this memory.",
-                )
-            # A historical-only deletion does not need to manufacture an
-            # active canonical item.  The durable canonical suppression record
-            # is the authoritative privacy tombstone.
+            else:
+                record = self.history.get(uid, memory_id)
+                if record is None:
+                    raise HTTPException(status_code=404, detail="Memory not found")
+                if record.memory.is_locked:
+                    raise HTTPException(
+                        status_code=402,
+                        detail="A paid plan is required to access this memory.",
+                    )
+                # A historical-only deletion does not need to manufacture an
+                # active canonical item.  The durable canonical suppression record
+                # is the authoritative privacy tombstone.
+                lineage_ids = [memory_id]
         self._write_historical_override(uid, memory_id, MemoryItemStatus.tombstoned)
-        HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self.db_client)
+        try:
+            purge_stale_review_conflicts_for_memories(
+                uid,
+                lineage_ids,
+                reason="explicit_memory_delete",
+                db_client=self.db_client,
+                include_legacy_commits=True,
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="Memory review privacy cleanup unavailable",
+            ) from exc
+        for lineage_memory_id in lineage_ids:
+            HistoricalMemoryAdapter.cleanup(
+                uid,
+                lineage_memory_id,
+                db_client=self.db_client,
+                required=True,
+            )
+        _delete_historical_privacy_overrides(uid, lineage_ids, db_client=self.db_client)
         self._invalidate_prompt_cache(uid)
 
+    @_legal_hold_gated_deletion
     def delete_batch(self, uid: str, memory_ids: List[str]) -> None:
         """Delete canonical and historical memories with all-or-nothing validation.
 
@@ -3418,6 +3596,15 @@ class MemoryService:
             except Exception as exc:
                 raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
             if canonical_item is not None:
+                if getattr(canonical_item, "status", None) == MemoryItemStatus.tombstoned:
+                    try:
+                        historical_ids.extend(canonical_memory_lineage_ids(uid, [memory_id], db_client=self.db_client))
+                    except Exception as exc:
+                        raise HTTPException(
+                            status_code=503,
+                            detail="Canonical memory privacy cleanup unavailable",
+                        ) from exc
+                    continue
                 if memory_item_to_memorydb(canonical_item).is_locked:
                     raise HTTPException(
                         status_code=402,
@@ -3429,11 +3616,10 @@ class MemoryService:
             status = self._canonical_status(uid, memory_id)
             if status == MemoryItemStatus.tombstoned:
                 # A previous attempt may have committed the canonical tombstone
-                # and failed before cleanup/ledger completion. Preserve the
-                # identity in this retry so the suppression write is replayed.
-                record = self.history.get(uid, memory_id)
-                if record is not None:
-                    historical_ids.append(memory_id)
+                # and completed its opaque finalization. The keyed receipt
+                # proves this requested identity remains suppressed; raw alias
+                # IDs have already been scrubbed and must not be reconstructed.
+                historical_ids.append(memory_id)
                 continue
             if status is not None:
                 raise HTTPException(status_code=404, detail="Memory not found")
@@ -3454,8 +3640,11 @@ class MemoryService:
         self._write_historical_overrides(uid, requested, MemoryItemStatus.tombstoned)
 
         try:
-            if canonical_ids:
-                self._canonical.delete_batch(uid, canonical_ids)
+            canonical_lineage_ids = (
+                _returned_lineage_ids(self._canonical.delete_batch(uid, canonical_ids), canonical_ids)
+                if canonical_ids
+                else []
+            )
         except HTTPException:
             raise
         except CanonicalBatchMutationLimitError as exc:
@@ -3465,29 +3654,105 @@ class MemoryService:
             # expose the same released not-found contract without per-ID fallback.
             raise HTTPException(status_code=404, detail="Memory not found") from exc
 
-        for memory_id in historical_ids:
-            HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self.db_client)
+        cleanup_ids = list(dict.fromkeys(canonical_lineage_ids + historical_ids))
+        _purge_required_canonical_projections(
+            uid,
+            cleanup_ids,
+            db_client=self.db_client,
+            reason="canonical_memory_delete_batch_retry",
+        )
+        try:
+            purge_stale_review_conflicts_for_memories(
+                uid,
+                cleanup_ids,
+                reason="canonical_memory_delete_batch_retry",
+                db_client=self.db_client,
+                include_legacy_commits=True,
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="Canonical memory review privacy cleanup unavailable",
+            ) from exc
+
+        for memory_id in cleanup_ids:
+            HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self.db_client, required=True)
+
+        _delete_historical_privacy_overrides(uid, cleanup_ids, db_client=self.db_client)
 
         self._invalidate_prompt_cache(uid)
 
+    @_legal_hold_gated_deletion
     def delete_all(self, uid: str) -> None:
         historical_ids = self.history.ids(uid, db_client=self.db_client)
+        try:
+            canonical_ids = [
+                item.memory_id for item in iter_authoritative_product_memory_items(uid, db_client=self.db_client)
+            ]
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
         # Commit the historical privacy fence before canonical cleanup. A retry
         # can safely repeat this idempotent batch if canonical deletion fails.
         self._write_historical_overrides(uid, historical_ids, MemoryItemStatus.tombstoned)
         self._canonical.delete_all(uid)
-        # Cleanup is intentionally after canonical tombstones and is never the
-        # success condition.  The protected adapter remains read-only.
-        self.history.cleanup_all(uid, db_client=self.db_client)
+        try:
+            purge_stale_review_conflicts_for_memories(
+                uid,
+                list(dict.fromkeys(canonical_ids + historical_ids)),
+                reason="canonical_memory_delete_all_retry",
+                db_client=self.db_client,
+                include_legacy_commits=True,
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="Canonical memory review privacy cleanup unavailable",
+            ) from exc
+        self.history.cleanup_all(uid, db_client=self.db_client, required=True)
+        _delete_historical_privacy_overrides(
+            uid,
+            list(dict.fromkeys(canonical_ids + historical_ids)),
+            db_client=self.db_client,
+        )
         self._invalidate_prompt_cache(uid)
 
+    @_legal_hold_gated_deletion
     def delete_default(self, uid: str) -> None:
         historical_ids = self.history.ids(uid, db_client=self.db_client)
+        try:
+            canonical_ids = [
+                item.memory_id
+                for item in iter_authoritative_product_memory_items(uid, db_client=self.db_client)
+                # not_archive: this is explicit default-tier deletion scope,
+                # not a released default-read visibility predicate.
+                if item.tier != MemoryTier.archive
+            ]
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
         self._write_historical_overrides(uid, historical_ids, MemoryItemStatus.tombstoned)
         self._canonical.delete_default(uid)
-        self.history.cleanup_all(uid, db_client=self.db_client)
+        try:
+            purge_stale_review_conflicts_for_memories(
+                uid,
+                list(dict.fromkeys(canonical_ids + historical_ids)),
+                reason="canonical_memory_delete_default_retry",
+                db_client=self.db_client,
+                include_legacy_commits=True,
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="Canonical memory review privacy cleanup unavailable",
+            ) from exc
+        self.history.cleanup_all(uid, db_client=self.db_client, required=True)
+        _delete_historical_privacy_overrides(
+            uid,
+            list(dict.fromkeys(canonical_ids + historical_ids)),
+            db_client=self.db_client,
+        )
         self._invalidate_prompt_cache(uid)
 
+    @_legal_hold_gated_deletion
     def retract_conversation_memories(
         self,
         uid: str,
@@ -3518,10 +3783,42 @@ class MemoryService:
             # advances. A suppression failure leaves the callback unfired so
             # merge source-deletion does not proceed on a partial retract.
             self._write_historical_overrides(uid, all_ids, MemoryItemStatus.tombstoned)
-        # Physical historical cleanup is best effort and must not affect the
-        # already-advanced irreversible compensation fence.
+            _purge_required_canonical_projections(
+                uid,
+                all_ids,
+                db_client=self.db_client,
+                reason="conversation_memory_retraction",
+                preserve_source_replacement_receipts=True,
+            )
+            try:
+                purge_stale_review_conflicts_for_memories(
+                    uid,
+                    all_ids,
+                    reason="conversation_memory_retraction",
+                    db_client=self.db_client,
+                    include_legacy_commits=True,
+                    preserve_source_replacement_receipts=True,
+                )
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Conversation memory review privacy cleanup unavailable",
+                ) from exc
         for memory_id in historical_ids:
-            HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self.db_client)
+            HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self.db_client, required=True)
+        _delete_historical_privacy_overrides(uid, all_ids, db_client=self.db_client)
+        if retracted_ids:
+            try:
+                purge_source_replacement_receipts_for_memories(
+                    uid,
+                    retracted_ids,
+                    firestore_client=self.db_client,
+                )
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Conversation memory replacement receipt cleanup unavailable",
+                ) from exc
         return result
 
     def replace_conversation_memories(
@@ -3584,6 +3881,7 @@ class MemoryService:
         self._invalidate_prompt_cache(uid)
         return results
 
+    @_legal_hold_gated_deletion
     def delete_external_memory(
         self,
         uid: str,
@@ -3594,38 +3892,11 @@ class MemoryService:
         operation: str,
         delete_vector: bool = True,
     ) -> None:
-        del memory_system, consumer, operation
-        if delete_vector:
-            self.delete(uid, memory_id)
-            return
-
-        try:
-            canonical_item = read_canonical_memory_item(uid, memory_id, db_client=self.db_client)
-        except Exception as exc:
-            raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
-        if canonical_item is not None:
-            if memory_item_to_memorydb(canonical_item).is_locked:
-                raise HTTPException(
-                    status_code=402,
-                    detail="A paid plan is required to access this memory.",
-                )
-            self._write_historical_override(uid, memory_id, MemoryItemStatus.tombstoned)
-            self._canonical.delete(uid, memory_id)
-        else:
-            status = self._canonical_status(uid, memory_id)
-            if status is not None:
-                raise HTTPException(status_code=404, detail="Memory not found")
-            record = self.history.get(uid, memory_id)
-            if record is None:
-                raise HTTPException(status_code=404, detail="Memory not found")
-            if record.memory.is_locked:
-                raise HTTPException(
-                    status_code=402,
-                    detail="A paid plan is required to access this memory.",
-                )
-        self._write_historical_override(uid, memory_id, MemoryItemStatus.tombstoned)
-        HistoricalMemoryAdapter.cleanup(uid, memory_id, delete_vector=False, db_client=self.db_client)
-        self._invalidate_prompt_cache(uid)
+        # External callers do not get a weaker privacy mode. The legacy
+        # ``delete_vector`` argument is accepted for wire compatibility only;
+        # explicit deletion always purges canonical and legacy vectors/content.
+        del memory_system, consumer, operation, delete_vector
+        self.delete(uid, memory_id)
 
     def update_external_memory_content(
         self,

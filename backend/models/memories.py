@@ -14,7 +14,7 @@ from config.memory_confidence import (
 )
 from database._client import document_id_from_seed
 from models.memory_domain import tier_to_layer
-from models.product_memory import LedgerWriteReason, MemoryKind, MemorySubjectScope, MemoryTier
+from models.product_memory import LedgerWriteReason, MemoryItemStatus, MemoryKind, MemorySubjectScope, MemoryTier
 
 
 def decide_initial_memory_tier(manually_added: bool, durability: Optional[str]) -> MemoryTier:
@@ -596,6 +596,12 @@ class MemoryDB(Memory):
     valid_at: Optional[datetime] = None
     invalid_at: Optional[datetime] = None
     superseded_by: Optional[str] = None
+    # Canonical alias target for rows retained as labelled history. This is
+    # optional for legacy compatibility but required for complete portability.
+    canonical_memory_id: Optional[str] = None
+    # Physical ledger lifecycle is exposed for portability/audit without
+    # changing legacy current-memory semantics.
+    ledger_status: Optional[MemoryItemStatus] = None
 
     primary_capture_device: Optional[str] = None
     capture_device_ids: List[str] = Field(default_factory=list)

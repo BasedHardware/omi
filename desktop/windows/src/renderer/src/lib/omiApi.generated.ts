@@ -2367,6 +2367,40 @@ export type JITDecisionReason = "evaluated" | "rollout_enabled" | "rollout_disab
 
 export type JITErrorClass = "none" | "timeout" | "configuration" | "malformed" | "provider" | "absent";
 
+export interface JITProactivityEventReceipt {
+  account_generation: number;
+  budget_day: string;
+  budget_timezone?: string;
+  candidate_id: string;
+  created_at: string;
+  device_id: string;
+  event_id: string;
+  feedback_id?: string | null;
+  operation: "planned_notification" | "ambient_notification" | "nano_triage" | "full_turn";
+  parent_event_id?: string | null;
+  request_hash: string;
+  schema_version?: "jit_proactivity_event.v1";
+  trigger_memory_id?: string | null;
+  trigger_revision?: number | null;
+  uid: string;
+}
+
+export interface JITProactivityReservationEnvelope {
+  receipt: JITProactivityEventReceipt;
+  reserved: boolean;
+}
+
+export interface JITProactivityReservationRequest {
+  account_generation: number;
+  candidate_id: string;
+  device_id: string;
+  event_id: string;
+  operation: "planned_notification" | "ambient_notification" | "nano_triage" | "full_turn";
+  parent_event_id?: string | null;
+  trigger_memory_id?: string | null;
+  trigger_revision?: number | null;
+}
+
 export interface JITRolloutDecisionEnvelope {
   cache_hit: boolean;
   cache_ttl_seconds: number;
@@ -2382,6 +2416,40 @@ export interface JITTriggerActionEnvelope {
   type: string;
 }
 
+export interface JITTriggerFeedbackEnvelope {
+  applied: boolean;
+  receipt: JITTriggerFeedbackReceipt;
+  trigger_memory_id: string;
+  trigger_revision: number;
+  trigger_status: string;
+}
+
+export interface JITTriggerFeedbackReceipt {
+  account_generation: number;
+  action: "useful" | "false_positive" | "snooze" | "disable" | "missed_or_late";
+  applied_trigger_revision?: number | null;
+  event_id: string;
+  expected_trigger_revision: number;
+  feedback_id: string;
+  recorded_at: string;
+  request_hash: string;
+  schema_version?: "jit_trigger_feedback.v1";
+  snoozed_until?: string | null;
+  trigger_memory_id: string;
+  uid: string;
+}
+
+export interface JITTriggerFeedbackRequest {
+  account_generation: number;
+  action: "useful" | "false_positive" | "snooze" | "disable" | "missed_or_late";
+  event_id: string;
+  feedback_id: string;
+  recorded_at: string;
+  snoozed_until?: string | null;
+  trigger_memory_id: string;
+  trigger_revision: number;
+}
+
 export interface JITTriggerSnapshotEnvelope {
   account_generation: number;
   commit_sequence: number;
@@ -2389,6 +2457,7 @@ export interface JITTriggerSnapshotEnvelope {
   failure_reason?: string | null;
   head_commit_id: string;
   owner_id: string;
+  policy?: TriggerRuntimePolicy;
   rows: Array<JITTriggerSnapshotRowEnvelope>;
   snapshot_revision: string;
 }
@@ -2397,9 +2466,10 @@ export interface JITTriggerSnapshotRowEnvelope {
   action: JITTriggerActionEnvelope;
   item_revision: number;
   memory_id: string;
+  snoozed_until?: string | null;
   trigger_condition_json: string;
   updated_at: string;
-  wakeup_budget_per_day?: number | null;
+  wakeup_budget_per_day: number;
 }
 
 export interface KnowledgeGraphResponse {
@@ -2410,6 +2480,43 @@ export interface KnowledgeGraphResponse {
   node_limit?: number | null;
   nodes: Array<Record<string, unknown>>;
   truncated?: boolean;
+}
+
+export interface LedgerMirrorAliasEnvelope {
+  alias_memory_id: string;
+  canonical_memory_id: string;
+  reason: string;
+  source_memory_id: string;
+}
+
+export interface LedgerMirrorRowEnvelope {
+  canonical_memory_id?: string | null;
+  content_purged: boolean;
+  item_revision: number;
+  memory?: MemoryDB | null;
+  memory_id: string;
+  source_state: SourceState;
+  status: MemoryItemStatus;
+}
+
+export interface LedgerMirrorSnapshotEnvelope {
+  account_generation: number;
+  aliases?: Array<LedgerMirrorAliasEnvelope>;
+  chain_revision: string;
+  commit_sequence: number;
+  epoch_id: string;
+  failure_reason?: string | null;
+  final_page?: boolean;
+  head_commit_id: string;
+  next_cursor?: string | null;
+  owner_id: string;
+  page_revision: string;
+  projected_count: number;
+  rows?: Array<LedgerMirrorRowEnvelope>;
+  scanned_count: number;
+  schema_version?: string;
+  source_generation: number;
+  writer_epoch: number;
 }
 
 export interface LedgerPromptSnapshotEnvelope {
@@ -2645,6 +2752,7 @@ export interface MemoryDB {
   app_id?: string | null;
   arguments?: Record<string, unknown>;
   body?: string | null;
+  canonical_memory_id?: string | null;
   capture_confidence?: number | null;
   capture_device_ids?: Array<string>;
   category?: MemoryCategory;
@@ -2668,6 +2776,7 @@ export interface MemoryDB {
   kind?: MemoryKind | null;
   layer: string | null;
   ledger_schema_version?: string | null;
+  ledger_status?: MemoryItemStatus | null;
   manually_added?: boolean;
   memory_id?: string | null;
   memory_tier?: MemoryLayer | null;
@@ -2698,6 +2807,8 @@ export interface MemoryEditResponse {
   memory?: MemoryDB | null;
   status: string;
 }
+
+export type MemoryItemStatus = "active" | "superseded" | "hidden" | "tombstoned";
 
 export type MemoryKind = "fact" | "document" | "trigger";
 
@@ -3603,6 +3714,8 @@ export interface SnapshotReceipt {
   snapshot_id: string;
 }
 
+export type SourceState = "active" | "missing" | "tombstoned" | "purged";
+
 export interface SpeakerAnalytics {
   is_user?: boolean;
   person_id?: string | null;
@@ -4080,6 +4193,27 @@ export interface TrialMetadata {
   trial_started_at?: number | null;
 }
 
+export interface TriggerEmbeddingPolicy {
+  enabled?: boolean;
+  language?: string | null;
+  match_similarity?: number;
+  model_id?: string | null;
+  model_version?: string | null;
+  triage_similarity?: number;
+}
+
+export interface TriggerRuntimePolicy {
+  ambiguous_nano_triages_per_day?: number;
+  embedding?: TriggerEmbeddingPolicy;
+  full_agent_turns_per_candidate?: number;
+  max_calendar_events?: number;
+  paid_boundary_refresh_required?: boolean;
+  planned_notifications_per_trigger_per_day?: number;
+  schema_version?: string;
+  total_proactive_notifications_per_day?: number;
+  valid_for_seconds?: number;
+}
+
 export type TriggerType = "immediate" | "version_upgrade" | "firmware_upgrade";
 
 export interface TtsSynthesizeRequest {
@@ -4226,10 +4360,18 @@ export interface UsageStats {
 export interface UserDataExportResponse {
   action_items?: Array<Record<string, unknown>>;
   chat_messages?: Array<Record<string, unknown>>;
+  conversation_keyframe_jobs?: Array<Record<string, unknown>>;
+  conversation_photo_manifest?: Array<Record<string, unknown>>;
   conversations?: Array<Record<string, unknown>>;
+  frame_requests?: Array<Record<string, unknown>>;
+  frame_vision_receipts?: Array<Record<string, unknown>>;
+  jit_data?: Record<string, Array<Record<string, unknown>>>;
   memories?: Array<Record<string, unknown>>;
+  memory_ledger_data?: Record<string, Array<Record<string, unknown>>>;
+  memory_review_data?: Record<string, Array<Record<string, unknown>>>;
   people?: Array<Record<string, unknown>>;
   profile?: Record<string, unknown>;
+  task_data?: Record<string, Array<Record<string, unknown>>>;
 }
 
 export interface UserLanguageResponse {
@@ -4798,11 +4940,20 @@ export interface OmiApiSchemas {
   "InterventionSurface": InterventionSurface;
   "JITDecisionReason": JITDecisionReason;
   "JITErrorClass": JITErrorClass;
+  "JITProactivityEventReceipt": JITProactivityEventReceipt;
+  "JITProactivityReservationEnvelope": JITProactivityReservationEnvelope;
+  "JITProactivityReservationRequest": JITProactivityReservationRequest;
   "JITRolloutDecisionEnvelope": JITRolloutDecisionEnvelope;
   "JITTriggerActionEnvelope": JITTriggerActionEnvelope;
+  "JITTriggerFeedbackEnvelope": JITTriggerFeedbackEnvelope;
+  "JITTriggerFeedbackReceipt": JITTriggerFeedbackReceipt;
+  "JITTriggerFeedbackRequest": JITTriggerFeedbackRequest;
   "JITTriggerSnapshotEnvelope": JITTriggerSnapshotEnvelope;
   "JITTriggerSnapshotRowEnvelope": JITTriggerSnapshotRowEnvelope;
   "KnowledgeGraphResponse": KnowledgeGraphResponse;
+  "LedgerMirrorAliasEnvelope": LedgerMirrorAliasEnvelope;
+  "LedgerMirrorRowEnvelope": LedgerMirrorRowEnvelope;
+  "LedgerMirrorSnapshotEnvelope": LedgerMirrorSnapshotEnvelope;
   "LedgerPromptSnapshotEnvelope": LedgerPromptSnapshotEnvelope;
   "LedgerPromptSnapshotMode": LedgerPromptSnapshotMode;
   "LedgerWriteReason": LedgerWriteReason;
@@ -4840,6 +4991,7 @@ export interface OmiApiSchemas {
   "MemoryCategory": MemoryCategory;
   "MemoryDB": MemoryDB;
   "MemoryEditResponse": MemoryEditResponse;
+  "MemoryItemStatus": MemoryItemStatus;
   "MemoryKind": MemoryKind;
   "MemoryLayer": MemoryLayer;
   "MemoryLinkSpec": MemoryLinkSpec;
@@ -4973,6 +5125,7 @@ export interface OmiApiSchemas {
   "SimpleStructured": SimpleStructured;
   "SimpleTranscriptSegment": SimpleTranscriptSegment;
   "SnapshotReceipt": SnapshotReceipt;
+  "SourceState": SourceState;
   "SpeakerAnalytics": SpeakerAnalytics;
   "SpeechProfileMutationResponse": SpeechProfileMutationResponse;
   "SpeechProfileResponse": SpeechProfileResponse;
@@ -5043,6 +5196,8 @@ export interface OmiApiSchemas {
   "Translation": Translation;
   "TriState": TriState;
   "TrialMetadata": TrialMetadata;
+  "TriggerEmbeddingPolicy": TriggerEmbeddingPolicy;
+  "TriggerRuntimePolicy": TriggerRuntimePolicy;
   "TriggerType": TriggerType;
   "TtsSynthesizeRequest": TtsSynthesizeRequest;
   "TtsVoiceSettings": TtsVoiceSettings;
@@ -7240,6 +7395,16 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/jit/knowledge-ledger/mirror-snapshot": {
+    get: {
+      operationId: "get_knowledge_ledger_mirror_snapshot_v1_jit_knowledge_ledger_mirror_snapshot_get";
+      responses: {
+        "200": LedgerMirrorSnapshotEnvelope;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/jit/knowledge-ledger/prompt-snapshot": {
     get: {
       operationId: "get_knowledge_ledger_prompt_snapshot_v1_jit_knowledge_ledger_prompt_snapshot_get";
@@ -7250,11 +7415,31 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/jit/proactivity/reservations": {
+    post: {
+      operationId: "reserve_jit_proactivity_v1_jit_proactivity_reservations_post";
+      responses: {
+        "200": JITProactivityReservationEnvelope;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/jit/rollout-decision": {
     get: {
       operationId: "get_jit_rollout_decision_v1_jit_rollout_decision_get";
       responses: {
         "200": JITRolloutDecisionEnvelope;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/jit/trigger-feedback": {
+    post: {
+      operationId: "post_jit_trigger_feedback_v1_jit_trigger_feedback_post";
+      responses: {
+        "200": JITTriggerFeedbackEnvelope;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -13614,6 +13799,28 @@ export async function get_oauth_url_v1_integrations__app_key__oauth_url_get(path
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_knowledge_ledger_mirror_snapshot_v1_jit_knowledge_ledger_mirror_snapshot_get(query: { cursor?: string | null, page_size?: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<LedgerMirrorSnapshotEnvelope> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/jit/knowledge-ledger/mirror-snapshot`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_knowledge_ledger_prompt_snapshot_v1_jit_knowledge_ledger_prompt_snapshot_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<LedgerPromptSnapshotEnvelope> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/jit/knowledge-ledger/prompt-snapshot`;
@@ -13633,6 +13840,27 @@ export async function get_knowledge_ledger_prompt_snapshot_v1_jit_knowledge_ledg
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function reserve_jit_proactivity_v1_jit_proactivity_reservations_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: JITProactivityReservationRequest, init?: OmiApiClientInit): Promise<JITProactivityReservationEnvelope> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/jit/proactivity/reservations`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_jit_rollout_decision_v1_jit_rollout_decision_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<JITRolloutDecisionEnvelope> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/jit/rollout-decision`;
@@ -13647,6 +13875,27 @@ export async function get_jit_rollout_decision_v1_jit_rollout_decision_get(heade
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function post_jit_trigger_feedback_v1_jit_trigger_feedback_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: JITTriggerFeedbackRequest, init?: OmiApiClientInit): Promise<JITTriggerFeedbackEnvelope> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/jit/trigger-feedback`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -17869,4 +18118,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 425 client methods generated.
+// Total: 430 client methods generated.

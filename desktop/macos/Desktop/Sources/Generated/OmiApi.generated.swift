@@ -3111,6 +3111,7 @@ public enum OmiAPI {
     public let appId: String?
     public let arguments: [String: OmiAnyCodable]?
     public let body: String?
+    public let canonicalMemoryId: String?
     public let captureConfidence: Double?
     public let captureDeviceIds: [String]?
     public let category: MemoryCategory?
@@ -3134,6 +3135,7 @@ public enum OmiAPI {
     public let kind: MemoryKind?
     public let layer: String?
     public let ledgerSchemaVersion: String?
+    public let ledgerStatus: MemoryItemStatus?
     public let manuallyAdded: Bool?
     public let memoryId: String?
     public let memoryTier: MemoryLayer?
@@ -3163,6 +3165,7 @@ public enum OmiAPI {
       case appId = "app_id"
       case arguments
       case body
+      case canonicalMemoryId = "canonical_memory_id"
       case captureConfidence = "capture_confidence"
       case captureDeviceIds = "capture_device_ids"
       case category
@@ -3186,6 +3189,7 @@ public enum OmiAPI {
       case kind
       case layer
       case ledgerSchemaVersion = "ledger_schema_version"
+      case ledgerStatus = "ledger_status"
       case manuallyAdded = "manually_added"
       case memoryId = "memory_id"
       case memoryTier = "memory_tier"
@@ -3217,6 +3221,7 @@ public enum OmiAPI {
       appId = try c.decodeIfPresent(String.self, forKey: .appId)
       arguments = try c.decodeIfPresent([String: OmiAnyCodable].self, forKey: .arguments)
       body = try c.decodeIfPresent(String.self, forKey: .body)
+      canonicalMemoryId = try c.decodeIfPresent(String.self, forKey: .canonicalMemoryId)
       captureConfidence = try c.decodeIfPresent(Double.self, forKey: .captureConfidence)
       captureDeviceIds = try c.decodeIfPresent([String].self, forKey: .captureDeviceIds)
       category = try c.decodeIfPresent(MemoryCategory.self, forKey: .category)
@@ -3240,6 +3245,7 @@ public enum OmiAPI {
       kind = try c.decodeIfPresent(MemoryKind.self, forKey: .kind)
       layer = try c.decodeIfPresent(String.self, forKey: .layer)
       ledgerSchemaVersion = try c.decodeIfPresent(String.self, forKey: .ledgerSchemaVersion)
+      ledgerStatus = try c.decodeIfPresent(MemoryItemStatus.self, forKey: .ledgerStatus)
       manuallyAdded = try c.decodeIfPresent(Bool.self, forKey: .manuallyAdded)
       memoryId = try c.decodeIfPresent(String.self, forKey: .memoryId)
       memoryTier = try c.decodeIfPresent(MemoryLayer.self, forKey: .memoryTier)
@@ -3266,10 +3272,11 @@ public enum OmiAPI {
       writeReason = try c.decodeIfPresent(LedgerWriteReason.self, forKey: .writeReason)
     }
 
-    public init(appId: String? = nil, arguments: [String: OmiAnyCodable]? = nil, body: String? = nil, captureConfidence: Double? = nil, captureDeviceIds: [String]? = nil, category: MemoryCategory? = nil, content: String, conversationId: String? = nil, createdAt: String, curationWeight: Int? = nil, dataProtectionLevel: String? = nil, durability: String? = nil, edited: Bool? = nil, evidence: [Evidence]? = nil, headline: String? = nil, id: String, intentBacked: Bool? = nil, invalidAt: String? = nil, isBaseline: Bool? = nil, isDismissed: Bool? = nil, isLocked: Bool? = nil, isRead: Bool? = nil, kgExtracted: Bool? = nil, kind: MemoryKind? = nil, layer: String? = nil, ledgerSchemaVersion: String? = nil, manuallyAdded: Bool? = nil, memoryId: String? = nil, memoryTier: MemoryLayer? = nil, objectEntityIds: [String]? = nil, predicate: String? = nil, primaryCaptureDevice: String? = nil, qualifiers: [String: OmiAnyCodable]? = nil, reviewed: Bool? = nil, scoring: String? = nil, slot: String? = nil, subjectAttribution: SubjectAttribution? = nil, subjectEntityId: String? = nil, subjectScope: MemorySubjectScope? = nil, supersededBy: String? = nil, tags: [String]? = nil, triggerCondition: [String: OmiAnyCodable]? = nil, uid: String, uncertaintyReasons: [String]? = nil, updatedAt: String, userReview: Bool? = nil, validAt: String? = nil, veracity: Double? = nil, visibility: String? = nil, writeReason: LedgerWriteReason? = nil) {
+    public init(appId: String? = nil, arguments: [String: OmiAnyCodable]? = nil, body: String? = nil, canonicalMemoryId: String? = nil, captureConfidence: Double? = nil, captureDeviceIds: [String]? = nil, category: MemoryCategory? = nil, content: String, conversationId: String? = nil, createdAt: String, curationWeight: Int? = nil, dataProtectionLevel: String? = nil, durability: String? = nil, edited: Bool? = nil, evidence: [Evidence]? = nil, headline: String? = nil, id: String, intentBacked: Bool? = nil, invalidAt: String? = nil, isBaseline: Bool? = nil, isDismissed: Bool? = nil, isLocked: Bool? = nil, isRead: Bool? = nil, kgExtracted: Bool? = nil, kind: MemoryKind? = nil, layer: String? = nil, ledgerSchemaVersion: String? = nil, ledgerStatus: MemoryItemStatus? = nil, manuallyAdded: Bool? = nil, memoryId: String? = nil, memoryTier: MemoryLayer? = nil, objectEntityIds: [String]? = nil, predicate: String? = nil, primaryCaptureDevice: String? = nil, qualifiers: [String: OmiAnyCodable]? = nil, reviewed: Bool? = nil, scoring: String? = nil, slot: String? = nil, subjectAttribution: SubjectAttribution? = nil, subjectEntityId: String? = nil, subjectScope: MemorySubjectScope? = nil, supersededBy: String? = nil, tags: [String]? = nil, triggerCondition: [String: OmiAnyCodable]? = nil, uid: String, uncertaintyReasons: [String]? = nil, updatedAt: String, userReview: Bool? = nil, validAt: String? = nil, veracity: Double? = nil, visibility: String? = nil, writeReason: LedgerWriteReason? = nil) {
       self.appId = appId
       self.arguments = arguments
       self.body = body
+      self.canonicalMemoryId = canonicalMemoryId
       self.captureConfidence = captureConfidence
       self.captureDeviceIds = captureDeviceIds
       self.category = category
@@ -3293,6 +3300,7 @@ public enum OmiAPI {
       self.kind = kind
       self.layer = layer
       self.ledgerSchemaVersion = ledgerSchemaVersion
+      self.ledgerStatus = ledgerStatus
       self.manuallyAdded = manuallyAdded
       self.memoryId = memoryId
       self.memoryTier = memoryTier
@@ -3334,6 +3342,20 @@ public enum OmiAPI {
     public init(memory: MemoryDB? = nil, status: String) {
       self.memory = memory
       self.status = status
+    }
+  }
+
+
+  public enum MemoryItemStatus: String, Codable, CaseIterable {
+    case active
+    case superseded
+    case hidden
+    case tombstoned
+    case _unknown = "__unknown__"
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.singleValueContainer()
+      let raw = try c.decode(String.self)
+      self = MemoryItemStatus(rawValue: raw) ?? ._unknown
     }
   }
 
@@ -10631,6 +10653,38 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
+  public static func getKnowledgeLedgerMirrorSnapshotV1JitKnowledgeLedgerMirrorSnapshotGet(client: OmiApiClient, cursor: String? = nil, pageSize: Int? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v1/jit/knowledge-ledger/mirror-snapshot"
+    guard var components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    var queryItems: [URLQueryItem] = []
+    if let cursor {
+      queryItems.append(URLQueryItem(name: "cursor", value: String(cursor)))
+    }
+    if let pageSize {
+      queryItems.append(URLQueryItem(name: "page_size", value: String(pageSize)))
+    }
+    if !queryItems.isEmpty { components.queryItems = queryItems }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
   public static func getKnowledgeLedgerPromptSnapshotV1JitKnowledgeLedgerPromptSnapshotGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/jit/knowledge-ledger/prompt-snapshot"
     guard let components = URLComponents(string: client.baseURL + _path) else {
@@ -10655,6 +10709,32 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
+  public static func reserveJitProactivityV1JitProactivityReservationsPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
+    let _path = "/v1/jit/proactivity/reservations"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
   public static func getJitRolloutDecisionV1JitRolloutDecisionGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/jit/rollout-decision"
     guard let components = URLComponents(string: client.baseURL + _path) else {
@@ -10671,6 +10751,32 @@ public enum OmiAPI {
     if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
     if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
     if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func postJitTriggerFeedbackV1JitTriggerFeedbackPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
+    let _path = "/v1/jit/trigger-feedback"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
     let (data, resp) = try await URLSession.shared.data(for: req)
     guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
     guard (200..<300).contains(http.statusCode) else {
@@ -16231,5 +16337,5 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  // Total: 425 Swift client methods generated.
+  // Total: 430 Swift client methods generated.
 }

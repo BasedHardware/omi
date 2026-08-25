@@ -2593,8 +2593,9 @@ actor RewindDatabase {
     }
 
     Self.registerMemoryLedgerEvidenceMigrations(on: &migrator)
-
-    try JITTriggerMirrorSchema.migrating(migrator, queue: queue)
+    JITTriggerMirrorSchema.registerMigration(on: &migrator)
+    KnowledgeLedgerMirrorStagingSchema.registerMigration(on: &migrator)
+    try migrator.migrate(queue)
     try ContextBucketSchema.removeMigratedLegacyDefaults(
       afterMigrating: queue,
       defaults: .standard,

@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
+from fastapi import Response
 
 from models.memories import MemoryCategory, MemoryDB
 from models.product_memory import LedgerWriteReason, MemoryKind, MemorySubjectScope
@@ -156,7 +157,7 @@ async def test_flag_or_kill_flip_during_receipt_read_revokes_enabled_snapshot(
         ),
     )
 
-    result = await snapshot.get_knowledge_ledger_prompt_snapshot(uid="u1")
+    result = await snapshot.get_knowledge_ledger_prompt_snapshot(response=Response(), uid="u1")
     assert result.mode.value == expected_mode
     assert result.rows == []
 
@@ -189,7 +190,7 @@ async def test_sync_firestore_client_is_acquired_inside_blocking_boundary(monkey
         ),
     )
 
-    result = await snapshot.get_knowledge_ledger_prompt_snapshot(uid="u1")
+    result = await snapshot.get_knowledge_ledger_prompt_snapshot(response=Response(), uid="u1")
 
     assert result.mode == snapshot.LedgerPromptSnapshotMode.enabled
     assert events == ["blocking-enter", "firestore-client", "blocking-exit"]

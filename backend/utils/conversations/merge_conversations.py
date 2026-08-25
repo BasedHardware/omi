@@ -10,9 +10,10 @@ This module provides functions for merging multiple conversations into one.
 
 import copy
 import uuid
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Callable, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 import database.conversations as conversations_db
 from database._client import db as firestore_db
@@ -39,6 +40,16 @@ from utils.other.storage import (
     private_cloud_sync_bucket,
     _get_extension_for_path,
 )
+
+try:
+    from utils.other.storage import owner_storage_write_gate
+except ImportError:
+    # Narrow test-double compatibility for import-isolated merge tests whose
+    # storage module predates the owner-write fence.
+    def owner_storage_write_gate(uid: Any, bucket: Any = None) -> Any:
+        return nullcontext()
+
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -539,7 +550,8 @@ def _copy_audio_chunks_for_merge(
             original_filename = chunk["path"].split("/")[-1]
             new_path = f"chunks/{uid}/{new_conversation_id}/{original_filename}"
             source_blob = bucket.blob(chunk["path"])
-            bucket.copy_blob(source_blob, bucket, new_path)
+            with owner_storage_write_gate(uid, bucket):
+                bucket.copy_blob(source_blob, bucket, new_path)
 
     # Create AudioFile records from copied chunks
     if has_chunks:

@@ -125,6 +125,9 @@ import { registerMemoryAssistant } from './assistants/memory/register'
 import { registerTaskAssistant, bringUpTaskEmbeddingIndex } from './assistants/tasks/register'
 import { startTaskPromotionService } from './assistants/tasks/promotionService'
 import { registerGoalGeneration } from './assistants/goals/register'
+import { registerJitAssistant } from './jit/register'
+import { registerJitFeedbackHandlers } from './jit/jitFeedbackIpc'
+import { clearRendererConversationBinding } from './jit/rendererConversationBinding'
 import { startRendererServer, rendererBaseUrl } from './rendererServer'
 import { startRewindCapture } from './rewind/captureService'
 import {
@@ -441,6 +444,7 @@ import {
   getLocalConversation,
   listLocalConversations,
   deleteLocalConversation,
+  deleteJitConversationKeyframe,
   updateLocalConversationTitle,
   updateLocalConversationSync,
   claimConversationForPosting,
@@ -793,6 +797,9 @@ app.whenReady().then(async () => {
   ipcMain.handle('db:deleteLocalConversation', async (_e, id: string) =>
     deleteLocalConversation(id)
   )
+  ipcMain.handle('jit:conversationDeleted', async (_e, id: string) =>
+    deleteJitConversationKeyframe(id)
+  )
   ipcMain.handle('db:updateLocalConversationTitle', async (_e, id: string, title: string) =>
     updateLocalConversationTitle(id, title)
   )
@@ -886,10 +893,20 @@ app.whenReady().then(async () => {
   registerIntegrationsHandlers()
   registerUsageHandlers()
   registerMemoryCleanupHandlers()
-  registerRewindHandlers()
+  registerRewindHandlers({
+    focusFrame: (frameId) => {
+      withMainWindow((win) => {
+        if (win.isMinimized()) win.restore()
+        win.show()
+        win.focus()
+        win.webContents.send('rewind:focus-frame', frameId)
+      })
+    }
+  })
   registerScreenHandlers()
   registerChatPrivacyHandlers()
   registerAssistantSettingsHandlers()
+  registerJitFeedbackHandlers()
   registerBillingIpc()
   registerAppsIpc()
   // Cross-window conversations refresh: any renderer that writes a local
@@ -987,6 +1004,7 @@ app.whenReady().then(async () => {
   onSessionReset(() => {
     resetPendingDeletes()
     resetBackendDegraded()
+    clearRendererConversationBinding()
   })
   // FIX (ii): keep the in-memory task-embedding index consistent — every hard-delete
   // path in the sync engine (deleteTask + the reconcile sweep) hands the storage-
@@ -1247,7 +1265,8 @@ app.whenReady().then(async () => {
         // peer — it's a time-triggered job (no screen frames). Registers the manual
         // Suggest IPC and starts the periodic scheduler; both no-op until a session is
         // relayed and the goalAutoGenerationEnabled toggle is on (default OFF).
-        { name: 'goalGeneration', run: () => registerGoalGeneration() }
+        { name: 'goalGeneration', run: () => registerGoalGeneration() },
+        { name: 'jitAssistant', run: () => registerJitAssistant() }
       ],
       undefined,
       undefined,

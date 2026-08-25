@@ -167,6 +167,13 @@ actor ProactiveLaneClient {
     guard let snapshot = try? decoder.decode(JITTriggerSnapshot.self, from: data),
       snapshot.ownerID == authorizationSnapshot.ownerID
     else { throw ProactiveLaneClientError.invalidResponse }
+    guard snapshot.complete, snapshot.failureReason == nil else { return snapshot }
+    // The trigger snapshot is a cheap authoritative head read. A matching
+    // local mirror receipt takes the fast path; otherwise the coordinator
+    // resumes its durable cursor chain before exposing planned authority.
+    _ = try await KnowledgeLedgerMirrorCoordinator.shared.sync(
+      authorizationSnapshot: authorizationSnapshot,
+      knownAuthority: snapshot)
     return snapshot
   }
 

@@ -212,7 +212,13 @@ def test_review_reject_is_idempotent_after_tombstone(review_queue_module):
 
     memory_service_module = types.ModuleType("utils.memory.memory_service")
     memory_service_module.MemoryService = lambda db_client=None: memory_service
-    with stub_modules({"utils.memory.memory_service": memory_service_module}):
+    canonical_adapter_module = AutoMockModule("utils.memory.canonical_memory_adapter")
+    with stub_modules(
+        {
+            "utils.memory.memory_service": memory_service_module,
+            "utils.memory.canonical_memory_adapter": canonical_adapter_module,
+        }
+    ):
         result = review_queue_module.append_resolution_commit(
             "u1",
             {

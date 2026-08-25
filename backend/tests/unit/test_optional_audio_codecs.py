@@ -83,6 +83,14 @@ def _install_storage_import_stubs(monkeypatch):
             delete_cached_signed_url=MagicMock(),
         ),
         "database.users": _module("database.users"),
+        # This test isolates storage's optional native-audio dependency. The
+        # legal-hold coordinator has its own Firestore contract coverage and
+        # must not make this import probe depend on the Firestore SDK package
+        # shape installed by the storage stubs above.
+        "database.legal_holds": _module(
+            "database.legal_holds",
+            destructive_operation_gate=MagicMock(),
+        ),
         "utils.encryption": _module("utils.encryption"),
         "utils.cloud_tasks": _module(
             "utils.cloud_tasks",

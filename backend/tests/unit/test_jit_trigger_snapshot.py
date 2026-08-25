@@ -1,4 +1,6 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+
+import pytest
 
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.memory_state_head import MEMORY_STATE_HEAD_SCHEMA_VERSION, MEMORY_STATE_HEAD_SOURCE
@@ -11,7 +13,10 @@ from models.product_memory import (
     MemorySubjectScope,
     ProcessingState,
 )
-from utils.memory.jit_trigger_snapshot import read_authoritative_trigger_snapshot
+from utils.memory.jit_trigger_snapshot import (
+    is_authoritative_trigger_for_paid_work,
+    read_authoritative_trigger_snapshot,
+)
 
 NOW = datetime(2026, 8, 24, tzinfo=timezone.utc)
 
@@ -116,7 +121,7 @@ def _trigger(identifier='trigger-1', *, generation=3, status=MemoryItemStatus.ac
         },
         intent_backed=True,
         write_reason=LedgerWriteReason.standing_trigger,
-        arguments={'wakeup_budget_per_day': 2},
+        arguments={'wakeup_budget_per_day': 1},
     )
 
 
@@ -132,7 +137,44 @@ def test_exhaustive_snapshot_carries_head_generation_revision_and_action():
     assert result.commit_sequence == 7
     assert len(result.snapshot_revision) == 64
     assert result.rows[0].action.prompt == 'Find the next release step.'
-    assert result.rows[0].wakeup_budget_per_day == 2
+    assert result.rows[0].wakeup_budget_per_day == 1
+    assert result.rows[0].snoozed_until is None
+
+
+def test_snapshot_carries_snooze_and_paid_authority_resumes_only_after_expiry():
+    snoozed_until = NOW + timedelta(days=2)
+    base_trigger = _trigger()
+    trigger = base_trigger.model_copy(
+        update={
+            'arguments': {
+                **base_trigger.arguments,
+                'jit_trigger_feedback': {
+                    'snoozed_until': snoozed_until.isoformat(),
+                },
+            }
+        }
+    )
+
+    result = read_authoritative_trigger_snapshot('owner', firestore_client=_Client([_row(trigger)]))
+
+    assert result.complete is True
+    assert result.rows[0].snoozed_until == snoozed_until
+    assert is_authoritative_trigger_for_paid_work(trigger, NOW + timedelta(days=1)) is False
+    assert is_authoritative_trigger_for_paid_work(trigger, snoozed_until) is True
+    assert (
+        result.snapshot_revision
+        != read_authoritative_trigger_snapshot('owner', firestore_client=_Client([_row(_trigger())])).snapshot_revision
+    )
+
+
+def test_malformed_snooze_invalidates_snapshot_and_paid_authority():
+    trigger = _trigger().model_copy(update={'arguments': {'jit_trigger_feedback': {'snoozed_until': 'not-a-time'}}})
+
+    result = read_authoritative_trigger_snapshot('owner', firestore_client=_Client([_row(trigger)]))
+
+    assert result.complete is False
+    assert result.failure_reason == 'row_invalid'
+    assert is_authoritative_trigger_for_paid_work(trigger, NOW) is False
 
 
 def test_closed_rows_are_exhaustively_observed_but_deleted_from_active_projection():
@@ -202,9 +244,52 @@ def test_revision_binds_condition_action_budget_and_canonical_order():
             'owner', firestore_client=_Client([_row(changed_condition), _row(second)])
         ).snapshot_revision
     )
-    assert (
-        baseline.snapshot_revision
-        != read_authoritative_trigger_snapshot(
-            'owner', firestore_client=_Client([_row(changed_budget), _row(second)])
-        ).snapshot_revision
+    invalid_budget = read_authoritative_trigger_snapshot(
+        'owner', firestore_client=_Client([_row(changed_budget), _row(second)])
     )
+    assert invalid_budget.complete is False
+    assert invalid_budget.failure_reason == 'row_invalid'
+
+
+@pytest.mark.parametrize("arguments", [{}, {"wakeup_budget_per_day": 0}, {"wakeup_budget_per_day": 2}])
+def test_missing_zero_or_nonpolicy_trigger_budget_invalidates_the_snapshot(arguments):
+    invalid = _trigger().model_copy(update={"arguments": arguments})
+
+    result = read_authoritative_trigger_snapshot("owner", firestore_client=_Client([_row(invalid)]))
+
+    assert result.complete is False
+    assert result.failure_reason == "row_invalid"
+
+
+def test_embedding_trigger_is_nonactionable_until_the_policy_attests_a_real_local_scorer():
+    embedding = _trigger().model_copy(
+        update={
+            "trigger_condition": {
+                "embedding": {
+                    "prototype_id": "release-review",
+                    "prototype_revision": "prototype-v1",
+                    "model_id": "local-embedder",
+                    "model_version": "v1",
+                    "language": "en",
+                    "min_similarity": 0.82,
+                },
+                "action": {"type": "agent_prompt", "prompt": "Find the next release step."},
+            }
+        }
+    )
+
+    result = read_authoritative_trigger_snapshot("owner", firestore_client=_Client([_row(embedding)]))
+
+    assert result.complete is False
+    assert result.failure_reason == "row_invalid"
+
+
+def test_purged_or_evidence_less_active_trigger_invalidates_the_snapshot():
+    trigger = _trigger()
+    for invalid in (
+        trigger.model_copy(update={"source_state": SourceState.purged}),
+        trigger.model_copy(update={"evidence": []}),
+    ):
+        result = read_authoritative_trigger_snapshot("owner", firestore_client=_Client([_row(invalid)]))
+        assert result.complete is False
+        assert result.failure_reason == "row_invalid"

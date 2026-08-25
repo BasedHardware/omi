@@ -340,6 +340,12 @@ class MemoryItem(BaseModel):
 MemoryItem = MemoryItem
 
 
+def memory_item_has_lifecycle_metadata(item: MemoryItem) -> bool:
+    """Return whether a row still carries legacy lifecycle audit metadata."""
+
+    return item.promotion is not None
+
+
 def new_memory_id() -> str:
     return f"mem_{uuid.uuid4().hex}"
 

@@ -70,6 +70,7 @@ class GeneratedMemoryDB {
   final String? appId;
   final Map<String, dynamic>? arguments;
   final String? body;
+  final String? canonicalMemoryId;
   final double? captureConfidence;
   final List<String>? captureDeviceIds;
   final String category;
@@ -93,6 +94,7 @@ class GeneratedMemoryDB {
   final String? kind;
   final String? layer;
   final String? ledgerSchemaVersion;
+  final String? ledgerStatus;
   final bool manuallyAdded;
   final String? memoryId;
   final String? memoryTier;
@@ -122,6 +124,7 @@ class GeneratedMemoryDB {
     this.appId,
     this.arguments,
     this.body,
+    this.canonicalMemoryId,
     this.captureConfidence,
     this.captureDeviceIds,
     this.category = "interesting",
@@ -145,6 +148,7 @@ class GeneratedMemoryDB {
     this.kind,
     required this.layer,
     this.ledgerSchemaVersion,
+    this.ledgerStatus,
     this.manuallyAdded = false,
     this.memoryId,
     this.memoryTier,
@@ -176,6 +180,7 @@ class GeneratedMemoryDB {
       appId: _readFieldValue<String>(_readField(json, const ["app_id"]), "app_id", _readString, requiredField: false, nullable: true),
       arguments: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["arguments"]), "arguments", _readMap, requiredField: false, nullable: true),
       body: _readFieldValue<String>(_readField(json, const ["body"]), "body", _readString, requiredField: false, nullable: true),
+      canonicalMemoryId: _readFieldValue<String>(_readField(json, const ["canonical_memory_id"]), "canonical_memory_id", _readString, requiredField: false, nullable: true),
       captureConfidence: _readFieldValue<double>(_readField(json, const ["capture_confidence"]), "capture_confidence", _readDouble, requiredField: false, nullable: true),
       captureDeviceIds: _readFieldValue<List<String>>(_readField(json, const ["capture_device_ids"]), "capture_device_ids", _readStringList, requiredField: false, nullable: true),
       category: _required(_readFieldValue<String>(_readField(json, const ["category"]), "category", _readString, requiredField: false, nullable: false, defaultValue: "interesting"), "category"),
@@ -199,6 +204,7 @@ class GeneratedMemoryDB {
       kind: _readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: false, nullable: true),
       layer: _readFieldValue<String>(_readField(json, const ["layer"]), "layer", _readString, requiredField: true, nullable: true),
       ledgerSchemaVersion: _readFieldValue<String>(_readField(json, const ["ledger_schema_version"]), "ledger_schema_version", _readString, requiredField: false, nullable: true),
+      ledgerStatus: _readFieldValue<String>(_readField(json, const ["ledger_status"]), "ledger_status", _readString, requiredField: false, nullable: true),
       manuallyAdded: _required(_readFieldValue<bool>(_readField(json, const ["manually_added"]), "manually_added", _readBool, requiredField: false, nullable: false, defaultValue: false), "manually_added"),
       memoryId: _readFieldValue<String>(_readField(json, const ["memory_id"]), "memory_id", _readString, requiredField: false, nullable: true),
       memoryTier: _readFieldValue<String>(_readField(json, const ["memory_tier"]), "memory_tier", _readString, requiredField: false, nullable: true),
@@ -231,6 +237,7 @@ class GeneratedMemoryDB {
       'app_id': appId,
       'arguments': arguments,
       'body': body,
+      'canonical_memory_id': canonicalMemoryId,
       'capture_confidence': captureConfidence,
       'capture_device_ids': captureDeviceIds,
       'category': category,
@@ -254,6 +261,7 @@ class GeneratedMemoryDB {
       'kind': kind,
       'layer': layer,
       'ledger_schema_version': ledgerSchemaVersion,
+      'ledger_status': ledgerStatus,
       'manually_added': manuallyAdded,
       'memory_id': memoryId,
       'memory_tier': memoryTier,

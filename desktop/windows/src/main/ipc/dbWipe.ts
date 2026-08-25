@@ -7,8 +7,10 @@
 // sync outbox, live captions, the local knowledge graph, onboarding brain-map,
 // app-usage stats, rewind frames, proactive insights, indexed files). On a
 // user-initiated sign-out we DELETE all rows so a different account signing in
-// on the same machine starts clean (privacy). Rows only, not schema (DELETE, not
-// DROP), so the next session reuses the already-migrated tables.
+// on the same machine starts clean (privacy). The two JIT keyframe cleanup
+// tables are intentionally excluded: they are install-scoped retry authority
+// and are retired only after their physical image files unlink successfully (or
+// return ENOENT). Rows only, not schema (DELETE, not DROP), are changed here.
 
 export const USER_DATA_TABLES = [
   'caption_event',
@@ -52,7 +54,19 @@ export const USER_DATA_TABLES = [
   // these DELETEs, so they are deliberately absent (like rewind_frames_fts). DDL
   // lives in taskStore.ts, which dbWipe.test.ts's drift guard also scans.
   'action_items',
-  'staged_tasks'
+  'staged_tasks',
+  'jit_trigger_mirror',
+  'jit_fact_mirror',
+  'jit_history_mirror',
+  'jit_playbook_mirror',
+  'jit_alias_mirror',
+  'jit_snapshot_receipt',
+  'jit_ledger_snapshot_receipt',
+  'jit_wakeup_receipt',
+  'jit_ambient_context_state',
+  'jit_feedback_outbox',
+  'jit_proactivity_reservation_receipt',
+  'jit_temporary_frame'
 ] as const
 
 // Minimal DB surface the wipe needs — satisfied by both better-sqlite3 (prod)

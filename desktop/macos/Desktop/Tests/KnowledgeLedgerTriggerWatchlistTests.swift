@@ -14,7 +14,7 @@ final class KnowledgeLedgerTriggerWatchlistTests: XCTestCase {
         "keywords": ["release"],
         "apps": ["Slack"],
         "windows": ["#release"],
-        "embedding": ["prototype_id": "release-intent", "min_similarity": 0.8],
+        "embedding": embeddingCondition("release-intent"),
         "action": ["type": "agent_prompt", "prompt": "Give me the next release step."],
       ],
       modelID: "local-trigger-model",
@@ -37,7 +37,7 @@ final class KnowledgeLedgerTriggerWatchlistTests: XCTestCase {
       entityLabels: ["Omi"],
       appName: "Slack",
       windowTitle: "#release",
-      embeddingScores: ["release-intent": 0.81]
+      embeddingScores: ["release-intent": 0.82]
     )
     let decision = KnowledgeLedgerTriggerEvaluator.evaluate(trigger, observation: observation, day: "2026-08-23")
     XCTAssertEqual(decision.status, .match)
@@ -229,7 +229,7 @@ final class KnowledgeLedgerTriggerWatchlistTests: XCTestCase {
       id: "ambiguous",
       triggerCondition: [
         "entity_aliases": ["project": ["acme"], "person": ["acme"]],
-        "embedding": ["prototype_id": "prototype", "min_similarity": 0.8],
+        "embedding": embeddingCondition("prototype"),
       ]
     )
     let trigger = try compiled(row)
@@ -248,6 +248,28 @@ final class KnowledgeLedgerTriggerWatchlistTests: XCTestCase {
     )
     XCTAssertEqual(mismatch.status, .noMatch)
     XCTAssertEqual(mismatch.reason, "condition_not_satisfied")
+  }
+
+  func testEmbeddingPolicyBoundariesAreExactAndDisabledIsDeterministicNoMatch() throws {
+    let trigger = try compiled(
+      KnowledgeLedgerTriggerRow(
+        id: "embedding-boundary",
+        triggerCondition: ["embedding": embeddingCondition("prototype")]))
+    func decision(_ score: Double, enabled: Bool = true) -> KnowledgeLedgerTriggerDecisionStatus {
+      KnowledgeLedgerTriggerEvaluator.evaluate(
+        trigger,
+        observation: .init(embeddingScores: ["prototype": score]),
+        day: "2026-08-24",
+        embeddingEvaluationEnabled: enabled,
+        embeddingTriageSimilarity: enabled ? 0.74 : nil
+      ).status
+    }
+
+    XCTAssertEqual(decision(0.739_999), .noMatch)
+    XCTAssertEqual(decision(0.74), .ambiguous)
+    XCTAssertEqual(decision(0.819_999), .ambiguous)
+    XCTAssertEqual(decision(0.82), .match)
+    XCTAssertEqual(decision(0.99, enabled: false), .noMatch)
   }
 
   func testTimeCalendarAndEmbeddingUseOnlySuppliedLocalEvidence() throws {
@@ -307,6 +329,14 @@ final class KnowledgeLedgerTriggerWatchlistTests: XCTestCase {
       throw KnowledgeLedgerTriggerCompileFailure.malformed("test fixture failed")
     }
     return trigger
+  }
+
+  private func embeddingCondition(_ prototypeID: String) -> [String: Any] {
+    [
+      "prototype_id": prototypeID, "prototype_revision": "prototype-v1",
+      "model_id": "model-a", "model_version": "v1", "language": "en",
+      "min_similarity": 0.82,
+    ]
   }
 
   private func requireFailure(_ row: KnowledgeLedgerTriggerRow) throws -> KnowledgeLedgerCompiledTrigger {

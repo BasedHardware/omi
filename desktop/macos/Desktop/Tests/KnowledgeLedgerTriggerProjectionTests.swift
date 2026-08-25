@@ -29,7 +29,11 @@ final class KnowledgeLedgerTriggerProjectionTests: XCTestCase {
     XCTAssertEqual(entry.calendar?.eventKeywords, ["planning"])
     XCTAssertEqual(entry.calendar?.eventTypes, ["meeting"])
     XCTAssertEqual(entry.embedding?.prototypeID, "release-intent")
-    XCTAssertEqual(entry.embedding?.minSimilarity, 0.8)
+    XCTAssertEqual(entry.embedding?.prototypeRevision, "prototype-v1")
+    XCTAssertEqual(entry.embedding?.modelID, "local-jit-embedding")
+    XCTAssertEqual(entry.embedding?.modelVersion, "1")
+    XCTAssertEqual(entry.embedding?.language, "en")
+    XCTAssertEqual(entry.embedding?.minSimilarity, 0.82)
   }
 
   func testRecordProjectionOrdersNewestFirstAndDeduplicatesIndependentOfInputOrder() {
@@ -102,7 +106,7 @@ final class KnowledgeLedgerTriggerProjectionTests: XCTestCase {
       "subject_scope": "primary_user",
       "intent_backed": "true",
       "trigger_condition_json":
-        "{\"apps\":[\"Slack\"],\"calendar\":{\"event_keywords\":[\"planning\"],\"event_types\":[\"meeting\"]},\"embedding\":{\"min_similarity\":0.8,\"prototype_id\":\"release-intent\"},\"entity_aliases\":{\"project\":[\"Omi\",\"Omi App\"]},\"keywords\":[\"release\"],\"match_mode\":\"all\",\"schema_version\":\"jit_trigger.v1\",\"time\":{\"end\":\"10:00\",\"start\":\"09:00\",\"timezone\":\"UTC\",\"weekdays\":[0]},\"windows\":[\"#release\"]}",
+        "{\"apps\":[\"Slack\"],\"calendar\":{\"event_keywords\":[\"planning\"],\"event_types\":[\"meeting\"]},\"embedding\":{\"language\":\"en\",\"min_similarity\":0.82,\"model_id\":\"local-jit-embedding\",\"model_version\":\"1\",\"prototype_id\":\"release-intent\",\"prototype_revision\":\"prototype-v1\"},\"entity_aliases\":{\"project\":[\"Omi\",\"Omi App\"]},\"keywords\":[\"release\"],\"match_mode\":\"all\",\"schema_version\":\"jit_trigger.v1\",\"time\":{\"end\":\"10:00\",\"start\":\"09:00\",\"timezone\":\"UTC\",\"weekdays\":[0]},\"windows\":[\"#release\"]}",
     ]
   }
 

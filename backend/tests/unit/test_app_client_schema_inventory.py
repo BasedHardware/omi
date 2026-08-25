@@ -128,6 +128,24 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
     ) not in unmodeled_operations
     assert ('GET', '/v1/users/language', 'get_user_language_v1_users_language_get') not in unmodeled_operations
     assert ('GET', '/v1/users/export', 'export_all_user_data_v1_users_export_get') not in unmodeled_operations
+    spec = json.loads(SPEC_PATH.read_text())
+    export_properties = spec['components']['schemas']['UserDataExportResponse']['properties']
+    assert {
+        'profile',
+        'conversations',
+        'conversation_photo_manifest',
+        'frame_requests',
+        'frame_vision_receipts',
+        'conversation_keyframe_jobs',
+        'memories',
+        'memory_review_data',
+        'memory_ledger_data',
+        'jit_data',
+        'people',
+        'action_items',
+        'task_data',
+        'chat_messages',
+    } <= set(export_properties)
     assert ('POST', '/v2/sync-local-files', 'sync_local_files_v2_v2_sync_local_files_post') not in unmodeled_operations
     assert (
         'POST',

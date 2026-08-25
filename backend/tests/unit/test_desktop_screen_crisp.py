@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -212,6 +213,7 @@ def test_screen_activity_storage_ids_are_device_scoped():
 
 def test_screen_activity_vector_treats_canonical_naive_timestamp_as_utc(monkeypatch):
     upserts = []
+    monkeypatch.setattr(vector_db, "destructive_operation_gate", lambda *_args, **_kwargs: nullcontext())
     monkeypatch.setattr(
         vector_db,
         "index",

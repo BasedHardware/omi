@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import logging
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
+from database._client import db as default_db_client
+from database.legal_holds import destructive_operation_gate
 from models.memory_evidence import SourceState
 from models.product_memory import (
     RESTRICTED_SENSITIVITY_LABELS,
@@ -36,6 +38,7 @@ def sync_canonical_memory_vector(
     *,
     projection_commit_id: Optional[str] = None,
     on_hard_failure: Optional[Callable[[], None]] = None,
+    db_client: Any = None,
 ) -> bool:
     """Converge one live canonical item without indexing restricted content."""
     if set(item.sensitivity_labels).intersection(RESTRICTED_SENSITIVITY_LABELS):
@@ -57,7 +60,12 @@ def sync_canonical_memory_vector(
     try:
         from database.vector_db import upsert_canonical_memory_vector
 
-        result = upsert_canonical_memory_vector(item, projection_commit_id=projection_commit_id)
+        with destructive_operation_gate(
+            item.uid,
+            kind="external_data_write",
+            firestore_client=db_client if db_client is not None else default_db_client,
+        ):
+            result = upsert_canonical_memory_vector(item, projection_commit_id=projection_commit_id)
     except Exception:
         logger.exception(
             "canonical vector sync failed memory_id=%s uid=%s",

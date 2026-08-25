@@ -17,6 +17,7 @@ backend/docs/test_isolation.md and testing/import_isolation.load_module_fresh.
 """
 
 import os
+from contextlib import contextmanager
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock
@@ -71,6 +72,16 @@ def vector_db():
     clients_stub = ModuleType("utils.llm.clients")
     clients_stub.embeddings = MagicMock()
 
+    legal_holds_stub = ModuleType("database.legal_holds")
+
+    @contextmanager
+    def allow_external_provider_write(uid, *, kind, firestore_client):
+        assert uid
+        assert kind == "external_data_write"
+        yield "writer-token"
+
+    legal_holds_stub.destructive_operation_gate = allow_external_provider_write
+
     fakes = {
         "pinecone": pinecone_stub,
         "firebase_admin": firebase_stub,
@@ -78,6 +89,7 @@ def vector_db():
         "google": google_pkg,
         "google.cloud": google_cloud_pkg,
         "google.cloud.firestore": firestore_stub,
+        "database.legal_holds": legal_holds_stub,
         "utils.llm.clients": clients_stub,
     }
     with stub_modules(fakes):

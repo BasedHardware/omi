@@ -6,6 +6,7 @@ import os
 import re
 import types
 import importlib
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -276,6 +277,21 @@ def _universal_memory(monkeypatch):
     )
     configure_universal_memory(monkeypatch, CANONICAL_UID)
     monkeypatch.setattr(atom_index, "ensure_canonical_apply_control_state", lambda *args, **kwargs: None)
+
+    @contextmanager
+    def allow_external_provider_write(uid, *, kind, firestore_client):
+        assert uid
+        assert kind in {"external_data_write", "explicit_memory_deletion"}
+        assert firestore_client is not None
+        yield "writer-token"
+
+    monkeypatch.setattr(atom_index, "destructive_operation_gate", allow_external_provider_write)
+    monkeypatch.setattr(canonical_adapter, "destructive_operation_gate", allow_external_provider_write)
+    monkeypatch.setattr(
+        canonical_adapter,
+        "current_destructive_operation_token",
+        lambda uid, *, kind: "writer-token",
+    )
 
 
 @pytest.fixture

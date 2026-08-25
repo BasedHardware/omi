@@ -24,6 +24,11 @@ class MemoryCollections:
         return f"{self.user_root}/memory_operations"
 
     @property
+    def memory_deletion_receipts(self) -> str:
+        """Content-free, 30-day anti-resurrection receipts."""
+        return f"{self.user_root}/memory_deletion_receipts"
+
+    @property
     def memory_source_replacements(self) -> str:
         return f"{self.user_root}/memory_source_replacements"
 
@@ -31,6 +36,23 @@ class MemoryCollections:
     def memory_ledger_reopens(self) -> str:
         """Immutable source-to-tail receipts for standalone ledger reopening."""
         return f"{self.user_root}/memory_ledger_reopens"
+
+    @property
+    def jit_trigger_feedback(self) -> str:
+        """Content-free idempotency receipts for explicit trigger feedback."""
+        return f"{self.user_root}/jit_trigger_feedback"
+
+    @property
+    def jit_proactivity_events(self) -> str:
+        return f"{self.user_root}/jit_proactivity_events"
+
+    @property
+    def jit_proactivity_daily_budgets(self) -> str:
+        return f"{self.user_root}/jit_proactivity_daily_budgets"
+
+    @property
+    def jit_proactivity_candidate_turns(self) -> str:
+        return f"{self.user_root}/jit_proactivity_candidate_turns"
 
     @property
     def memory_outbox(self) -> str:
@@ -158,8 +180,13 @@ class MemoryCollections:
         return [
             self.memory_items,
             self.memory_operations,
+            self.memory_deletion_receipts,
             self.memory_source_replacements,
             self.memory_ledger_reopens,
+            self.jit_trigger_feedback,
+            self.jit_proactivity_events,
+            self.jit_proactivity_daily_budgets,
+            self.jit_proactivity_candidate_turns,
             self.memory_outbox,
             self.memory_lineage,
             self.memory_historical_overrides,

@@ -679,6 +679,7 @@ export type OmiBridgeApi = {
   getLocalConversation: (id: string) => Promise<LocalConversation | null>
   listLocalConversations: () => Promise<LocalConversation[]>
   deleteLocalConversation: (id: string) => Promise<void>
+  deleteJitConversationKeyframe: (id: string) => Promise<void>
   updateLocalConversationTitle: (id: string, title: string) => Promise<void>
   /** Persist an outbox transition for a local conversation (cloud sync). */
   updateLocalConversationSync: (id: string, patch: ConversationSyncPatch) => Promise<void>
@@ -993,10 +994,18 @@ export type OmiBridgeApi = {
   rewindDayBounds: () => Promise<{ min: number; max: number } | null>
   /** Total captured frames, all time — a COUNT(*), not a row fetch. */
   rewindFrameCount: () => Promise<number>
+  /** Resolve one local frame for a JIT evidence deep link. */
+  rewindFrameById: (id: number) => Promise<RewindFrame | null>
+  /** Main-process focus/navigation to the exact Rewind frame. */
+  rewindFocusFrame: (id: number) => Promise<{
+    ok: boolean
+    state: 'available' | 'unavailable' | 'pruned'
+  }>
   /** Fires (no payload) each time a frame is actually stored, so a live view of
    *  the frame count (the Hub's "Screenshots" stat) can re-read `rewindFrameCount`
    *  instead of freezing at its mount-time value. */
   onRewindCaptured: (cb: () => void) => () => void
+  onRewindFocusFrame: (cb: (frameId: number) => void) => () => void
   /** Phase 1 of a Rewind search: KEYWORD (FTS5/BM25) results, immediately. Never
    *  waits on the network — semantic hits follow on `onRewindSearchResults`. */
   rewindSearch: (query: string) => Promise<RewindSearchGroup[]>
@@ -1068,6 +1077,17 @@ export type OmiBridgeApi = {
   insightHoverEnd: () => void
   /** Settings → main: deliver an example insight (a test). */
   insightTest: () => void
+  /** Explicit JIT feedback; silence is never interpreted as feedback. */
+  jitFeedback: (input: {
+    eventId: string
+    lane: 'planned' | 'ambient'
+    action: 'useful' | 'false_positive' | 'snooze' | 'disable' | 'missed_or_late'
+    subjectId: string
+    triggerRevision: number | null
+    accountGeneration: number
+    snoozedUntil?: string | null
+  }) => Promise<{ queued: true }>
+  jitFeedbackDrain: () => Promise<{ sent: number; failed: number }>
   /** Toast renderer subscribes to receive the payload to render. */
   onInsightShow: (cb: (p: InsightPayload) => void) => () => void
   // --- Meeting detection (Phase 5) ---
@@ -1293,6 +1313,10 @@ export type OmiBridgeApi = {
   mainChatCancel: (runId: string) => Promise<boolean>
   /** Subscribe to streaming main-chat events. Returns an unsubscribe function. */
   onMainChatEvent: (cb: (event: MainChatEvent) => void) => () => void
+  /** Report the renderer-visible chat/session selected by the user. This is
+   * independent of sending so proactive JIT artifacts can retain the exact
+   * deletion key for their owning surface. Optional for older preload builds. */
+  setJitRendererConversationKey?: (key: string | null) => Promise<boolean>
   // --- shared-thread agent cards (B4, INV-CHAT-1) ---
   /** The durable spawn/completion cards for a main_chat thread, oldest-first. Read
    *  on chat load so a completion that landed while the window was closed still
@@ -2230,6 +2254,22 @@ export type InsightPayload = {
   category: InsightCategory
   sourceApp: string
   confidence: number // 0..1
+  /** Present only for a JIT toast with a supported feedback receipt (currently
+   * planned triggers; ambient candidates have no trigger revision fence yet).
+   * Explicit user actions are the sole feedback source and are sent through the
+   * durable main-process outbox. */
+  jit?: {
+    lane: 'planned' | 'ambient'
+    eventId: string
+    subjectId: string
+    candidateId: string
+    triggerRevision: number | null
+    accountGeneration: number
+    /** HashRouter-compatible Rewind link for the single attached keyframe. */
+    rewindDeepLink?: string
+    /** Frame id consumed by the main-process navigation bridge. */
+    rewindFrameId?: number
+  }
 }
 
 // Stored row: powers both toast dedupe and the Insights history page. `dismissed`

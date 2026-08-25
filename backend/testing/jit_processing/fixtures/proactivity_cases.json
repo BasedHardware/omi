@@ -1,10 +1,20 @@
 {
   "schema_version": "jit_proactivity_eval.v1",
   "candidate_config": {
-    "ratified": false,
+    "ratified": true,
     "wakeup_on": "match_only",
-    "triage_action": "defer_without_wakeup",
-    "ratified_thresholds": null
+    "triage_action": "bounded_nano_without_full_wakeup",
+    "ratified_thresholds": {"embedding_match": 0.82, "embedding_triage": 0.74},
+    "runtime_policy": {
+      "embedding": {
+        "enabled": true,
+        "match_similarity": 0.82,
+        "triage_similarity": 0.74,
+        "model_id": "synthetic-eval-embedding",
+        "model_version": "v1",
+        "language": "en"
+      }
+    }
   },
   "exposure": {
     "source": "synthetic_fixture",
@@ -134,6 +144,7 @@
       "observation": {
         "event_id": "synthetic-calendar-001",
         "occurred_at": "2026-08-23T14:30:00+00:00",
+        "calendar_authorized": true,
         "calendar_events": [{"title": "Release review", "event_type": "meeting"}]
       },
       "expected": {
@@ -171,20 +182,21 @@
         "text": "Calendar access is unavailable."
       },
       "expected": {
-        "status": "triage",
-        "reason": "insufficient_or_ambiguous_context",
+        "status": "no_match",
+        "reason": "condition_not_satisfied",
         "matched_conditions": [],
-        "missing_conditions": ["calendar"],
+        "missing_conditions": [],
         "matched_fraction": 0.0
       }
     },
     {
       "case_id": "embedding-clear-match",
       "category": "embedding",
-      "condition": {"embedding": {"prototype_id": "release-review", "min_similarity": 0.8}},
+      "condition": {"embedding": {"prototype_id": "release-review", "prototype_revision": "v1", "model_id": "synthetic-eval-embedding", "model_version": "v1", "language": "en", "min_similarity": 0.82}},
       "observation": {
         "event_id": "synthetic-embedding-001",
         "text": "The semantic context is close to release review.",
+        "embedding_attestation": {"prototype_revision": "v1", "model_id": "synthetic-eval-embedding", "model_version": "v1", "language": "en"},
         "embedding_scores": {"release-review": 0.91}
       },
       "expected": {
@@ -198,29 +210,31 @@
     {
       "case_id": "embedding-ambiguous-boundary",
       "category": "embedding_ambiguous_hit",
-      "condition": {"embedding": {"prototype_id": "release-review", "min_similarity": 0.8}},
+      "condition": {"embedding": {"prototype_id": "release-review", "prototype_revision": "v1", "model_id": "synthetic-eval-embedding", "model_version": "v1", "language": "en", "min_similarity": 0.82}},
       "observation": {
         "event_id": "synthetic-embedding-002",
         "text": "The score is exactly on the candidate boundary.",
+        "embedding_attestation": {"prototype_revision": "v1", "model_id": "synthetic-eval-embedding", "model_version": "v1", "language": "en"},
         "embedding_scores": {"release-review": 0.8}
       },
       "expected": {
-        "status": "match",
-        "reason": "all_conditions_satisfied",
-        "matched_conditions": ["embedding:release-review"],
-        "missing_conditions": [],
-        "matched_fraction": 1.0
+        "status": "triage",
+        "reason": "insufficient_or_ambiguous_context",
+        "matched_conditions": [],
+        "missing_conditions": ["embedding:release-review"],
+        "matched_fraction": 0.0
       },
-      "limitation": "The current pure contract accepts a single prototype score at min_similarity; it has no multi-hit ambiguity state."
+      "limitation": "The ratified scorer contract triages the 0.74 through 0.82 ambiguity band without a full-agent wakeup."
     },
     {
       "case_id": "embedding-negative",
       "category": "embedding",
-      "condition": {"embedding": {"prototype_id": "release-review", "min_similarity": 0.8}},
+      "condition": {"embedding": {"prototype_id": "release-review", "prototype_revision": "v1", "model_id": "synthetic-eval-embedding", "model_version": "v1", "language": "en", "min_similarity": 0.82}},
       "observation": {
         "event_id": "synthetic-embedding-003",
         "text": "The semantic context is unrelated.",
-        "embedding_scores": {"release-review": 0.79}
+        "embedding_attestation": {"prototype_revision": "v1", "model_id": "synthetic-eval-embedding", "model_version": "v1", "language": "en"},
+        "embedding_scores": {"release-review": 0.7}
       },
       "expected": {
         "status": "no_match",
@@ -233,16 +247,16 @@
     {
       "case_id": "embedding-unavailable-device",
       "category": "unavailable_device",
-      "condition": {"embedding": {"prototype_id": "release-review", "min_similarity": 0.8}},
+      "condition": {"embedding": {"prototype_id": "release-review", "prototype_revision": "v1", "model_id": "synthetic-eval-embedding", "model_version": "v1", "language": "en", "min_similarity": 0.82}},
       "observation": {
         "event_id": "synthetic-device-003",
         "text": "Embedding capture is unavailable."
       },
       "expected": {
-        "status": "triage",
-        "reason": "insufficient_or_ambiguous_context",
+        "status": "no_match",
+        "reason": "condition_not_satisfied",
         "matched_conditions": [],
-        "missing_conditions": ["embedding:release-review"],
+        "missing_conditions": [],
         "matched_fraction": 0.0
       }
     },
@@ -252,17 +266,17 @@
       "condition": {
         "time": {"weekdays": [6], "start": "09:00", "end": "17:00", "timezone": "UTC"},
         "calendar": {"event_types": ["meeting"]},
-        "embedding": {"prototype_id": "release-review", "min_similarity": 0.8}
+        "embedding": {"prototype_id": "release-review", "prototype_revision": "v1", "model_id": "synthetic-eval-embedding", "model_version": "v1", "language": "en", "min_similarity": 0.82}
       },
       "observation": {
         "event_id": "synthetic-device-004",
         "text": "No local time, calendar, or embedding evidence was supplied."
       },
       "expected": {
-        "status": "triage",
-        "reason": "insufficient_or_ambiguous_context",
+        "status": "no_match",
+        "reason": "condition_not_satisfied",
         "matched_conditions": [],
-        "missing_conditions": ["calendar", "embedding:release-review", "time"],
+        "missing_conditions": ["time"],
         "matched_fraction": 0.0
       }
     },

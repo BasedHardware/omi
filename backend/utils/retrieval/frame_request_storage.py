@@ -12,7 +12,7 @@ import hashlib
 import os
 from typing import Any
 
-from utils.other.storage import _get_storage_client
+from utils.other.storage import _get_storage_client, owner_storage_write_gate
 
 TEMPORARY_STORAGE_PREFIX = "temporary-"
 PERMANENT_STORAGE_PREFIX = "permanent-"
@@ -54,8 +54,10 @@ def upload_frame_request_pixels(uid: str, storage_id: str, data: bytes, content_
         raise ValueError("frame upload is empty")
     if not storage_id.startswith(TEMPORARY_STORAGE_PREFIX):
         raise ValueError("new frame uploads must use temporary storage")
-    blob = _bucket(permanent=False).blob(_object_name(uid, storage_id))
-    blob.upload_from_string(data, content_type=content_type)
+    bucket = _bucket(permanent=False)
+    blob = bucket.blob(_object_name(uid, storage_id))
+    with owner_storage_write_gate(uid, bucket):
+        blob.upload_from_string(data, content_type=content_type)
 
 
 def delete_frame_request_pixels(uid: str, storage_id: str) -> None:
@@ -83,7 +85,8 @@ def copy_frame_request_pixels_to_permanent(uid: str, temporary_storage_id: str, 
     source_bucket = _bucket(permanent=_is_permanent(temporary_storage_id))
     destination_bucket = _bucket(permanent=True)
     source = source_bucket.blob(_object_name(uid, temporary_storage_id))
-    source_bucket.copy_blob(source, destination_bucket, new_name=_object_name(uid, permanent_storage_id))
+    with owner_storage_write_gate(uid, destination_bucket):
+        source_bucket.copy_blob(source, destination_bucket, new_name=_object_name(uid, permanent_storage_id))
 
 
 def delete_frame_request_pixels_for_user(uid: str, storage_ids: list[str]) -> int:
@@ -94,9 +97,34 @@ def delete_frame_request_pixels_for_user(uid: str, storage_ids: list[str]) -> in
     return deleted
 
 
+def delete_all_frame_request_pixels_for_user(uid: str) -> int:
+    """Enumerate both frame-request tiers so orphaned IDs cannot survive a wipe."""
+
+    if not uid:
+        return 0
+    deleted = 0
+    for permanent in (False, True):
+        env_name = "BUCKET_FRAME_REQUESTS" if permanent else "BUCKET_FRAME_REQUESTS_TEMPORARY"
+        if not (os.getenv(env_name) or '').strip():
+            # A tier that is not configured cannot contain uploads from this
+            # deployment; preserve the existing local/offline no-op behavior.
+            continue
+        bucket = _bucket(permanent=permanent)
+        prefix = f'frame-requests/{uid}/'
+        blobs = list(bucket.list_blobs(prefix=prefix))
+        for blob in blobs:
+            blob.delete()
+            deleted += 1
+        remaining = list(bucket.list_blobs(prefix=prefix))
+        if remaining:
+            raise RuntimeError(f'frame-request purge left {len(remaining)} objects under {prefix}')
+    return deleted
+
+
 __all__ = [
     "delete_frame_request_pixels",
     "delete_frame_request_pixels_for_user",
+    "delete_all_frame_request_pixels_for_user",
     "download_frame_request_pixels",
     "copy_frame_request_pixels_to_permanent",
     "PERMANENT_STORAGE_PREFIX",

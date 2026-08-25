@@ -360,3 +360,18 @@ def test_memory_item_to_memorydb_round_trips_read_dismiss_state():
     assert memory.is_read is True
     assert memory.is_dismissed is True
     assert truncate_locked_memory_preview(memory).content == "tip"
+
+
+def test_memory_item_to_memorydb_preserves_canonical_alias_for_portability():
+    now = datetime(2026, 8, 12, 12, 0, tzinfo=timezone.utc)
+    item = _item(
+        "alias-row",
+        tier=MemoryLayer.long_term,
+        content="legacy alias",
+        updated_at=now,
+    ).model_copy(update={"canonical_memory_id": "canonical-row"})
+
+    projected = memory_item_to_memorydb(item)
+
+    assert projected.canonical_memory_id == "canonical-row"
+    assert projected.model_dump(mode="json")["canonical_memory_id"] == "canonical-row"

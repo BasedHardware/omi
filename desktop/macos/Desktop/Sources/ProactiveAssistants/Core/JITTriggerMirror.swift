@@ -12,15 +12,200 @@ struct JITTriggerSnapshotRow: Codable, Equatable, Sendable {
   let updatedAt: Date
   let triggerConditionJSON: String
   let action: JITTriggerSnapshotAction
-  let wakeupBudgetPerDay: Int?
+  let wakeupBudgetPerDay: Int
+  /// The server-owned wall-clock instant before which this standing trigger is
+  /// ineligible. Date is an absolute instant, so offsets in the wire ISO-8601
+  /// value cannot change the fence when it is evaluated locally.
+  let snoozedUntil: Date?
 
-  enum CodingKeys: String, CodingKey {
+  init(
+    memoryID: String,
+    itemRevision: Int,
+    updatedAt: Date,
+    triggerConditionJSON: String,
+    action: JITTriggerSnapshotAction,
+    wakeupBudgetPerDay: Int,
+    snoozedUntil: Date? = nil
+  ) {
+    self.memoryID = memoryID
+    self.itemRevision = itemRevision
+    self.updatedAt = updatedAt
+    self.triggerConditionJSON = triggerConditionJSON
+    self.action = action
+    self.wakeupBudgetPerDay = wakeupBudgetPerDay
+    self.snoozedUntil = snoozedUntil
+  }
+
+  enum CodingKeys: String, CodingKey, CaseIterable {
     case memoryID = "memory_id"
     case itemRevision = "item_revision"
     case updatedAt = "updated_at"
     case triggerConditionJSON = "trigger_condition_json"
     case action
     case wakeupBudgetPerDay = "wakeup_budget_per_day"
+    case snoozedUntil = "snoozed_until"
+  }
+}
+
+struct JITTriggerEmbeddingPolicy: Codable, Equatable, Sendable {
+  let enabled: Bool
+  let matchSimilarity: Double
+  let triageSimilarity: Double
+  let modelID: String?
+  let modelVersion: String?
+  let language: String?
+
+  enum CodingKeys: String, CodingKey, CaseIterable {
+    case enabled
+    case matchSimilarity = "match_similarity"
+    case triageSimilarity = "triage_similarity"
+    case modelID = "model_id"
+    case modelVersion = "model_version"
+    case language
+  }
+
+  init(
+    enabled: Bool, matchSimilarity: Double, triageSimilarity: Double,
+    modelID: String?, modelVersion: String?, language: String?
+  ) {
+    self.enabled = enabled
+    self.matchSimilarity = matchSimilarity
+    self.triageSimilarity = triageSimilarity
+    self.modelID = modelID
+    self.modelVersion = modelVersion
+    self.language = language
+  }
+
+  init(from decoder: Decoder) throws {
+    let raw = try decoder.container(keyedBy: JITPolicyDynamicKey.self)
+    let allowed = Set(CodingKeys.allCases.map(\.stringValue))
+    guard raw.allKeys.allSatisfy({ allowed.contains($0.stringValue) }) else {
+      throw DecodingError.dataCorrupted(
+        .init(codingPath: decoder.codingPath, debugDescription: "unknown embedding policy key"))
+    }
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    self.init(
+      enabled: try container.decode(Bool.self, forKey: .enabled),
+      matchSimilarity: try container.decode(Double.self, forKey: .matchSimilarity),
+      triageSimilarity: try container.decode(Double.self, forKey: .triageSimilarity),
+      modelID: try container.decodeIfPresent(String.self, forKey: .modelID),
+      modelVersion: try container.decodeIfPresent(String.self, forKey: .modelVersion),
+      language: try container.decodeIfPresent(String.self, forKey: .language))
+  }
+
+  var isValid: Bool {
+    guard matchSimilarity == 0.82, triageSimilarity == 0.74 else { return false }
+    let identifiers = [modelID, modelVersion, language]
+    if enabled {
+      return identifiers.allSatisfy {
+        guard let value = $0?.trimmingCharacters(in: .whitespacesAndNewlines) else { return false }
+        return !value.isEmpty && value.count <= 80
+      }
+    }
+    return identifiers.allSatisfy { $0 == nil }
+  }
+
+  static let disabled = JITTriggerEmbeddingPolicy(
+    enabled: false, matchSimilarity: 0.82, triageSimilarity: 0.74,
+    modelID: nil, modelVersion: nil, language: nil)
+}
+
+struct JITTriggerRuntimePolicy: Codable, Equatable, Sendable {
+  let schemaVersion: String
+  let plannedNotificationsPerTriggerPerDay: Int
+  let totalProactiveNotificationsPerDay: Int
+  let ambiguousNanoTriagesPerDay: Int
+  let fullAgentTurnsPerCandidate: Int
+  let maxCalendarEvents: Int
+  let validForSeconds: Int
+  let paidBoundaryRefreshRequired: Bool
+  let embedding: JITTriggerEmbeddingPolicy
+
+  enum CodingKeys: String, CodingKey, CaseIterable {
+    case schemaVersion = "schema_version"
+    case plannedNotificationsPerTriggerPerDay = "planned_notifications_per_trigger_per_day"
+    case totalProactiveNotificationsPerDay = "total_proactive_notifications_per_day"
+    case ambiguousNanoTriagesPerDay = "ambiguous_nano_triages_per_day"
+    case fullAgentTurnsPerCandidate = "full_agent_turns_per_candidate"
+    case maxCalendarEvents = "max_calendar_events"
+    case validForSeconds = "valid_for_seconds"
+    case paidBoundaryRefreshRequired = "paid_boundary_refresh_required"
+    case embedding
+  }
+
+  init(
+    schemaVersion: String, plannedNotificationsPerTriggerPerDay: Int,
+    totalProactiveNotificationsPerDay: Int, ambiguousNanoTriagesPerDay: Int,
+    fullAgentTurnsPerCandidate: Int, maxCalendarEvents: Int, validForSeconds: Int,
+    paidBoundaryRefreshRequired: Bool, embedding: JITTriggerEmbeddingPolicy
+  ) {
+    self.schemaVersion = schemaVersion
+    self.plannedNotificationsPerTriggerPerDay = plannedNotificationsPerTriggerPerDay
+    self.totalProactiveNotificationsPerDay = totalProactiveNotificationsPerDay
+    self.ambiguousNanoTriagesPerDay = ambiguousNanoTriagesPerDay
+    self.fullAgentTurnsPerCandidate = fullAgentTurnsPerCandidate
+    self.maxCalendarEvents = maxCalendarEvents
+    self.validForSeconds = validForSeconds
+    self.paidBoundaryRefreshRequired = paidBoundaryRefreshRequired
+    self.embedding = embedding
+  }
+
+  init(from decoder: Decoder) throws {
+    let raw = try decoder.container(keyedBy: JITPolicyDynamicKey.self)
+    let allowed = Set(CodingKeys.allCases.map(\.stringValue))
+    guard raw.allKeys.allSatisfy({ allowed.contains($0.stringValue) }) else {
+      throw DecodingError.dataCorrupted(
+        .init(codingPath: decoder.codingPath, debugDescription: "unknown runtime policy key"))
+    }
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    self.init(
+      schemaVersion: try container.decode(String.self, forKey: .schemaVersion),
+      plannedNotificationsPerTriggerPerDay: try container.decode(
+        Int.self, forKey: .plannedNotificationsPerTriggerPerDay),
+      totalProactiveNotificationsPerDay: try container.decode(
+        Int.self, forKey: .totalProactiveNotificationsPerDay),
+      ambiguousNanoTriagesPerDay: try container.decode(Int.self, forKey: .ambiguousNanoTriagesPerDay),
+      fullAgentTurnsPerCandidate: try container.decode(Int.self, forKey: .fullAgentTurnsPerCandidate),
+      maxCalendarEvents: try container.decode(Int.self, forKey: .maxCalendarEvents),
+      validForSeconds: try container.decode(Int.self, forKey: .validForSeconds),
+      paidBoundaryRefreshRequired: try container.decode(Bool.self, forKey: .paidBoundaryRefreshRequired),
+      embedding: try container.decode(JITTriggerEmbeddingPolicy.self, forKey: .embedding))
+  }
+
+  var isValid: Bool {
+    schemaVersion == "jit_trigger_policy.v1"
+      && plannedNotificationsPerTriggerPerDay == 1
+      && totalProactiveNotificationsPerDay == 3
+      && ambiguousNanoTriagesPerDay == 8
+      && fullAgentTurnsPerCandidate == 1
+      && maxCalendarEvents == KnowledgeLedgerTriggerObservation.maxCalendarEvents
+      && validForSeconds == 30
+      && paidBoundaryRefreshRequired
+      && embedding.isValid
+  }
+
+  static let ratifiedV1 = JITTriggerRuntimePolicy(
+    schemaVersion: "jit_trigger_policy.v1",
+    plannedNotificationsPerTriggerPerDay: 1,
+    totalProactiveNotificationsPerDay: 3,
+    ambiguousNanoTriagesPerDay: 8,
+    fullAgentTurnsPerCandidate: 1,
+    maxCalendarEvents: 32,
+    validForSeconds: 30,
+    paidBoundaryRefreshRequired: true,
+    embedding: .disabled)
+}
+
+private struct JITPolicyDynamicKey: CodingKey {
+  let stringValue: String
+  let intValue: Int?
+  init?(stringValue: String) {
+    self.stringValue = stringValue
+    intValue = nil
+  }
+  init?(intValue: Int) {
+    stringValue = String(intValue)
+    self.intValue = intValue
   }
 }
 
@@ -32,6 +217,7 @@ struct JITTriggerSnapshot: Codable, Equatable, Sendable {
   let snapshotRevision: String
   let complete: Bool
   let rows: [JITTriggerSnapshotRow]
+  let policy: JITTriggerRuntimePolicy
   let failureReason: String?
 
   enum CodingKeys: String, CodingKey {
@@ -40,8 +226,24 @@ struct JITTriggerSnapshot: Codable, Equatable, Sendable {
     case headCommitID = "head_commit_id"
     case commitSequence = "commit_sequence"
     case snapshotRevision = "snapshot_revision"
-    case complete, rows
+    case complete, rows, policy
     case failureReason = "failure_reason"
+  }
+
+  init(
+    ownerID: String, accountGeneration: Int, headCommitID: String, commitSequence: Int,
+    snapshotRevision: String, complete: Bool, rows: [JITTriggerSnapshotRow],
+    policy: JITTriggerRuntimePolicy = .ratifiedV1, failureReason: String?
+  ) {
+    self.ownerID = ownerID
+    self.accountGeneration = accountGeneration
+    self.headCommitID = headCommitID
+    self.commitSequence = commitSequence
+    self.snapshotRevision = snapshotRevision
+    self.complete = complete
+    self.rows = rows
+    self.policy = policy
+    self.failureReason = failureReason
   }
 }
 
@@ -61,6 +263,19 @@ struct JITTriggerMirrorReceipt: Equatable, Sendable {
   let commitSequence: Int
   let snapshotRevision: String
   let rowCount: Int
+  let policy: JITTriggerRuntimePolicy
+
+  init(
+    ownerID: String, accountGeneration: Int, commitSequence: Int, snapshotRevision: String,
+    rowCount: Int, policy: JITTriggerRuntimePolicy = .ratifiedV1
+  ) {
+    self.ownerID = ownerID
+    self.accountGeneration = accountGeneration
+    self.commitSequence = commitSequence
+    self.snapshotRevision = snapshotRevision
+    self.rowCount = rowCount
+    self.policy = policy
+  }
 }
 
 struct JITTriggerWakeupClaim: Equatable, Sendable {
@@ -134,6 +349,61 @@ enum JITTriggerMirrorSchema {
         table.column("updatedAt", .datetime).notNull()
       }
     }
+    migrator.registerMigration("addJITTriggerRuntimePolicy") { db in
+      let encoder = JSONEncoder()
+      encoder.outputFormatting = [.sortedKeys]
+      let defaultPolicyJSON = String(decoding: try encoder.encode(JITTriggerRuntimePolicy.ratifiedV1), as: UTF8.self)
+      try db.alter(table: "jit_trigger_snapshot_receipts") { table in
+        table.add(
+          column: "policyJSON", .text
+        ).notNull().defaults(to: defaultPolicyJSON)
+      }
+    }
+    migrator.registerMigration("addJITTriggerSnoozedUntil") { db in
+      try db.alter(table: "jit_trigger_mirror") { table in
+        table.add(column: "snoozedUntil", .datetime)
+      }
+    }
+    migrator.registerMigration("createJITKnowledgeLedgerMirror") { db in
+      try db.create(table: "jit_knowledge_ledger_mirror_receipts") { table in
+        table.column("ownerID", .text).primaryKey()
+        table.column("accountGeneration", .integer).notNull()
+        table.column("sourceGeneration", .integer).notNull()
+        table.column("writerEpoch", .integer).notNull()
+        table.column("headCommitID", .text).notNull()
+        table.column("commitSequence", .integer).notNull()
+        table.column("epochID", .text).notNull()
+        table.column("contentRevision", .text).notNull()
+        table.column("chainRevision", .text).notNull()
+        table.column("scannedCount", .integer).notNull()
+        table.column("projectedCount", .integer).notNull()
+        table.column("rowCount", .integer).notNull()
+        table.column("aliasCount", .integer).notNull()
+        table.column("updatedAt", .datetime).notNull()
+      }
+      try db.create(table: "jit_knowledge_ledger_mirror_members") { table in
+        table.column("ownerID", .text).notNull()
+        table.column("memoryID", .text).notNull()
+        table.column("itemRevision", .integer).notNull()
+        table.column("status", .text).notNull()
+        table.column("sourceState", .text).notNull()
+        table.column("canonicalMemoryID", .text)
+        table.column("contentPurged", .boolean).notNull()
+        table.primaryKey(["ownerID", "memoryID"])
+      }
+      try db.create(table: "jit_knowledge_ledger_mirror_aliases") { table in
+        table.column("ownerID", .text).notNull()
+        table.column("aliasMemoryID", .text).notNull()
+        table.column("canonicalMemoryID", .text).notNull()
+        table.column("sourceMemoryID", .text).notNull()
+        table.column("reason", .text).notNull()
+        table.primaryKey(["ownerID", "aliasMemoryID", "canonicalMemoryID", "reason"])
+      }
+      try db.create(
+        index: "idx_jit_knowledge_ledger_canonical_alias",
+        on: "jit_knowledge_ledger_mirror_aliases",
+        columns: ["ownerID", "canonicalMemoryID"])
+    }
   }
 }
 
@@ -167,7 +437,9 @@ actor JITTriggerMirror {
   static func reconcile(_ snapshot: JITTriggerSnapshot, in db: Database, now: Date) throws
     -> JITTriggerMirrorReceipt
   {
-    guard snapshot.complete, !snapshot.ownerID.isEmpty, !snapshot.snapshotRevision.isEmpty else {
+    guard snapshot.complete, !snapshot.ownerID.isEmpty, !snapshot.snapshotRevision.isEmpty,
+      snapshot.policy.isValid
+    else {
       throw JITTriggerMirrorError.incomplete
     }
     if let prior = try Row.fetchOne(
@@ -204,11 +476,14 @@ actor JITTriggerMirror {
         row.action.type == "agent_prompt",
         !row.action.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
         row.action.prompt.count <= KnowledgeLedgerTriggerAction.maximumPromptCharacters,
+        row.snoozedUntil.map({ $0.timeIntervalSinceReferenceDate.isFinite }) ?? true,
         let conditionData = row.triggerConditionJSON.data(using: .utf8),
         case .success(let compiled) = KnowledgeLedgerTriggerCompiler.compileAuthoritativeSnapshotRow(
           id: row.memoryID,
           triggerConditionJSON: conditionData,
-          wakeupBudgetPerDay: row.wakeupBudgetPerDay),
+          wakeupBudgetPerDay: row.wakeupBudgetPerDay,
+          snoozedUntil: row.snoozedUntil),
+        row.wakeupBudgetPerDay == snapshot.policy.plannedNotificationsPerTriggerPerDay,
         compiled.action
           == KnowledgeLedgerTriggerAction(
             type: row.action.type, prompt: row.action.prompt)
@@ -216,8 +491,8 @@ actor JITTriggerMirror {
       try db.execute(
         sql: """
           INSERT INTO jit_trigger_mirror
-            (memoryID, accountGeneration, itemRevision, updatedAt, conditionJSON, actionType, actionPrompt, wakeupBudgetPerDay)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (memoryID, accountGeneration, itemRevision, updatedAt, conditionJSON, actionType, actionPrompt, wakeupBudgetPerDay, snoozedUntil)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(memoryID) DO UPDATE SET
             accountGeneration = excluded.accountGeneration,
             itemRevision = excluded.itemRevision,
@@ -225,11 +500,13 @@ actor JITTriggerMirror {
             conditionJSON = excluded.conditionJSON,
             actionType = excluded.actionType,
             actionPrompt = excluded.actionPrompt,
-            wakeupBudgetPerDay = excluded.wakeupBudgetPerDay
+            wakeupBudgetPerDay = excluded.wakeupBudgetPerDay,
+            snoozedUntil = excluded.snoozedUntil
           """,
         arguments: [
           row.memoryID, snapshot.accountGeneration, row.itemRevision, row.updatedAt,
           row.triggerConditionJSON, row.action.type, row.action.prompt, row.wakeupBudgetPerDay,
+          row.snoozedUntil,
         ])
     }
     if seen.isEmpty {
@@ -249,26 +526,34 @@ actor JITTriggerMirror {
     try db.execute(
       sql: """
         INSERT INTO jit_trigger_snapshot_receipts
-          (ownerID, accountGeneration, headCommitID, commitSequence, snapshotRevision, rowCount, updatedAt)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+          (ownerID, accountGeneration, headCommitID, commitSequence, snapshotRevision, rowCount, policyJSON, updatedAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(ownerID) DO UPDATE SET
           accountGeneration = excluded.accountGeneration,
           headCommitID = excluded.headCommitID,
           commitSequence = excluded.commitSequence,
           snapshotRevision = excluded.snapshotRevision,
           rowCount = excluded.rowCount,
+          policyJSON = excluded.policyJSON,
           updatedAt = excluded.updatedAt
         """,
       arguments: [
         snapshot.ownerID, snapshot.accountGeneration, snapshot.headCommitID,
-        snapshot.commitSequence, snapshot.snapshotRevision, snapshot.rows.count, now,
+        snapshot.commitSequence, snapshot.snapshotRevision, snapshot.rows.count,
+        try Self.policyJSON(snapshot.policy), now,
       ])
     return JITTriggerMirrorReceipt(
       ownerID: snapshot.ownerID,
       accountGeneration: snapshot.accountGeneration,
       commitSequence: snapshot.commitSequence,
       snapshotRevision: snapshot.snapshotRevision,
-      rowCount: snapshot.rows.count)
+      rowCount: snapshot.rows.count, policy: snapshot.policy)
+  }
+
+  private static func policyJSON(_ policy: JITTriggerRuntimePolicy) throws -> String {
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys]
+    return String(decoding: try encoder.encode(policy), as: UTF8.self)
   }
 
   func compiledSnapshot(
@@ -281,23 +566,29 @@ actor JITTriggerMirror {
     let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
     guard let pool else { throw JITTriggerMirrorError.databaseUnavailable }
     return try await pool.read { db in
-      let current: String? = try String.fetchOne(
+      let current = try Row.fetchOne(
         db,
         sql:
-          "SELECT snapshotRevision FROM jit_trigger_snapshot_receipts WHERE ownerID = ? AND accountGeneration = ? AND commitSequence = ?",
+          "SELECT snapshotRevision, policyJSON FROM jit_trigger_snapshot_receipts WHERE ownerID = ? AND accountGeneration = ? AND commitSequence = ?",
         arguments: [receipt.ownerID, receipt.accountGeneration, receipt.commitSequence])
-      guard current == receipt.snapshotRevision else { throw JITTriggerMirrorError.staleRevision }
+      guard let current,
+        (current["snapshotRevision"] as String) == receipt.snapshotRevision,
+        (current["policyJSON"] as String) == (try Self.policyJSON(receipt.policy))
+      else { throw JITTriggerMirrorError.staleRevision }
       return try Row.fetchAll(
         db,
-        sql: "SELECT memoryID, conditionJSON, wakeupBudgetPerDay FROM jit_trigger_mirror ORDER BY memoryID"
+        sql:
+          "SELECT memoryID, conditionJSON, wakeupBudgetPerDay, snoozedUntil FROM jit_trigger_mirror ORDER BY memoryID"
       )
       .map { row in
         let id: String = row["memoryID"]
         let json: String = row["conditionJSON"]
         let budget: Int? = row["wakeupBudgetPerDay"]
+        let snoozedUntil: Date? = row["snoozedUntil"]
         guard let data = json.data(using: .utf8),
           case .success(let trigger) = KnowledgeLedgerTriggerCompiler.compileAuthoritativeSnapshotRow(
-            id: id, triggerConditionJSON: data, wakeupBudgetPerDay: budget)
+            id: id, triggerConditionJSON: data, wakeupBudgetPerDay: budget,
+            snoozedUntil: snoozedUntil)
         else { throw JITTriggerMirrorError.malformedRow }
         return trigger
       }
@@ -602,7 +893,7 @@ actor JITTriggerMirror {
         db,
         sql: """
           SELECT accountGeneration, itemRevision, updatedAt, conditionJSON,
-                 actionType, actionPrompt, wakeupBudgetPerDay
+                 actionType, actionPrompt, wakeupBudgetPerDay, snoozedUntil
           FROM jit_trigger_mirror WHERE memoryID = ?
           """,
         arguments: [request.triggerID]),
@@ -612,7 +903,9 @@ actor JITTriggerMirror {
       (current["conditionJSON"] as String) == request.triggerRow.triggerConditionJSON,
       (current["actionType"] as String) == request.triggerRow.action.type,
       (current["actionPrompt"] as String) == request.triggerRow.action.prompt,
-      (current["wakeupBudgetPerDay"] as Int?) == request.triggerRow.wakeupBudgetPerDay
+      (current["wakeupBudgetPerDay"] as Int?) == request.triggerRow.wakeupBudgetPerDay,
+      (current["snoozedUntil"] as Date?) == request.triggerRow.snoozedUntil,
+      request.triggerRow.snoozedUntil.map({ request.now >= $0 }) ?? true
     else { return nil }
     return try claimWakeup(
       continuityKey: request.continuityKey,
@@ -651,7 +944,7 @@ actor JITTriggerMirror {
         db,
         sql: """
           SELECT accountGeneration, itemRevision, updatedAt, conditionJSON,
-                 actionType, actionPrompt, wakeupBudgetPerDay
+                 actionType, actionPrompt, wakeupBudgetPerDay, snoozedUntil
           FROM jit_trigger_mirror WHERE memoryID = ?
           """,
         arguments: [claim.triggerID]),
@@ -662,6 +955,8 @@ actor JITTriggerMirror {
       (currentTrigger["actionType"] as String) == triggerRow.action.type,
       (currentTrigger["actionPrompt"] as String) == triggerRow.action.prompt,
       (currentTrigger["wakeupBudgetPerDay"] as Int?) == triggerRow.wakeupBudgetPerDay,
+      (currentTrigger["snoozedUntil"] as Date?) == triggerRow.snoozedUntil,
+      triggerRow.snoozedUntil.map({ now >= $0 }) ?? true,
       let wakeup = try Row.fetchOne(
         db,
         sql: """
@@ -759,12 +1054,14 @@ extension KnowledgeLedgerTriggerCompiler {
   static func compileAuthoritativeSnapshotRow(
     id: String,
     triggerConditionJSON: Data,
-    wakeupBudgetPerDay: Int?
+    wakeupBudgetPerDay: Int?,
+    snoozedUntil: Date? = nil
   ) -> Result<KnowledgeLedgerCompiledTrigger, KnowledgeLedgerTriggerCompileFailure> {
     compile(
       KnowledgeLedgerTriggerRow(
         id: id,
         triggerConditionJSON: triggerConditionJSON,
-        wakeupBudgetPerDay: wakeupBudgetPerDay))
+        wakeupBudgetPerDay: wakeupBudgetPerDay),
+      snoozedUntil: snoozedUntil)
   }
 }

@@ -14788,6 +14788,229 @@
         "title": "JITErrorClass",
         "type": "string"
       },
+      "JITProactivityEventReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "account_generation": {
+            "minimum": 0.0,
+            "title": "Account Generation",
+            "type": "integer"
+          },
+          "budget_day": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "title": "Budget Day",
+            "type": "string"
+          },
+          "budget_timezone": {
+            "default": "UTC",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Budget Timezone",
+            "type": "string"
+          },
+          "candidate_id": {
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "feedback_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feedback Id"
+          },
+          "operation": {
+            "enum": [
+              "planned_notification",
+              "ambient_notification",
+              "nano_triage",
+              "full_turn"
+            ],
+            "title": "Operation",
+            "type": "string"
+          },
+          "parent_event_id": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Event Id"
+          },
+          "request_hash": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Request Hash",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "jit_proactivity_event.v1",
+            "default": "jit_proactivity_event.v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "trigger_memory_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Memory Id"
+          },
+          "trigger_revision": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Revision"
+          },
+          "uid": {
+            "title": "Uid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "uid",
+          "event_id",
+          "candidate_id",
+          "operation",
+          "account_generation",
+          "budget_day",
+          "device_id",
+          "created_at",
+          "request_hash"
+        ],
+        "title": "JITProactivityEventReceipt",
+        "type": "object"
+      },
+      "JITProactivityReservationEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "receipt": {
+            "$ref": "#/components/schemas/JITProactivityEventReceipt"
+          },
+          "reserved": {
+            "title": "Reserved",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "reserved",
+          "receipt"
+        ],
+        "title": "JITProactivityReservationEnvelope",
+        "type": "object"
+      },
+      "JITProactivityReservationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "account_generation": {
+            "minimum": 0.0,
+            "title": "Account Generation",
+            "type": "integer"
+          },
+          "candidate_id": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "device_id": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Device Id",
+            "type": "string"
+          },
+          "event_id": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "operation": {
+            "enum": [
+              "planned_notification",
+              "ambient_notification",
+              "nano_triage",
+              "full_turn"
+            ],
+            "title": "Operation",
+            "type": "string"
+          },
+          "parent_event_id": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Event Id"
+          },
+          "trigger_memory_id": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "pattern": "^[^/]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Memory Id"
+          },
+          "trigger_revision": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Revision"
+          }
+        },
+        "required": [
+          "event_id",
+          "candidate_id",
+          "operation",
+          "account_generation",
+          "device_id"
+        ],
+        "title": "JITProactivityReservationRequest",
+        "type": "object"
+      },
       "JITRolloutDecisionEnvelope": {
         "additionalProperties": false,
         "properties": {
@@ -14846,6 +15069,208 @@
         "title": "JITTriggerActionEnvelope",
         "type": "object"
       },
+      "JITTriggerFeedbackEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "applied": {
+            "title": "Applied",
+            "type": "boolean"
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/JITTriggerFeedbackReceipt"
+          },
+          "trigger_memory_id": {
+            "title": "Trigger Memory Id",
+            "type": "string"
+          },
+          "trigger_revision": {
+            "minimum": 1.0,
+            "title": "Trigger Revision",
+            "type": "integer"
+          },
+          "trigger_status": {
+            "title": "Trigger Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "applied",
+          "trigger_memory_id",
+          "trigger_revision",
+          "trigger_status",
+          "receipt"
+        ],
+        "title": "JITTriggerFeedbackEnvelope",
+        "type": "object"
+      },
+      "JITTriggerFeedbackReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "account_generation": {
+            "minimum": 0.0,
+            "title": "Account Generation",
+            "type": "integer"
+          },
+          "action": {
+            "enum": [
+              "useful",
+              "false_positive",
+              "snooze",
+              "disable",
+              "missed_or_late"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "applied_trigger_revision": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applied Trigger Revision"
+          },
+          "event_id": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "expected_trigger_revision": {
+            "minimum": 1.0,
+            "title": "Expected Trigger Revision",
+            "type": "integer"
+          },
+          "feedback_id": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Feedback Id",
+            "type": "string"
+          },
+          "recorded_at": {
+            "format": "date-time",
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "request_hash": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Request Hash",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "jit_trigger_feedback.v1",
+            "default": "jit_trigger_feedback.v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "snoozed_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snoozed Until"
+          },
+          "trigger_memory_id": {
+            "title": "Trigger Memory Id",
+            "type": "string"
+          },
+          "uid": {
+            "title": "Uid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "uid",
+          "feedback_id",
+          "event_id",
+          "trigger_memory_id",
+          "account_generation",
+          "expected_trigger_revision",
+          "action",
+          "recorded_at",
+          "request_hash"
+        ],
+        "title": "JITTriggerFeedbackReceipt",
+        "type": "object"
+      },
+      "JITTriggerFeedbackRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "account_generation": {
+            "minimum": 0.0,
+            "title": "Account Generation",
+            "type": "integer"
+          },
+          "action": {
+            "enum": [
+              "useful",
+              "false_positive",
+              "snooze",
+              "disable",
+              "missed_or_late"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "event_id": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "feedback_id": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Feedback Id",
+            "type": "string"
+          },
+          "recorded_at": {
+            "format": "date-time",
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "snoozed_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snoozed Until"
+          },
+          "trigger_memory_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "pattern": "^[^/]+$",
+            "title": "Trigger Memory Id",
+            "type": "string"
+          },
+          "trigger_revision": {
+            "minimum": 1.0,
+            "title": "Trigger Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "feedback_id",
+          "event_id",
+          "trigger_memory_id",
+          "account_generation",
+          "trigger_revision",
+          "action",
+          "recorded_at"
+        ],
+        "title": "JITTriggerFeedbackRequest",
+        "type": "object"
+      },
       "JITTriggerSnapshotEnvelope": {
         "additionalProperties": false,
         "properties": {
@@ -14881,6 +15306,24 @@
           "owner_id": {
             "title": "Owner Id",
             "type": "string"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/TriggerRuntimePolicy",
+            "default": {
+              "ambiguous_nano_triages_per_day": 8,
+              "embedding": {
+                "enabled": false,
+                "match_similarity": 0.82,
+                "triage_similarity": 0.74
+              },
+              "full_agent_turns_per_candidate": 1,
+              "max_calendar_events": 32,
+              "paid_boundary_refresh_required": true,
+              "planned_notifications_per_trigger_per_day": 1,
+              "schema_version": "jit_trigger_policy.v1",
+              "total_proactive_notifications_per_day": 3,
+              "valid_for_seconds": 30
+            }
           },
           "rows": {
             "items": {
@@ -14920,6 +15363,18 @@
             "title": "Memory Id",
             "type": "string"
           },
+          "snoozed_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snoozed Until"
+          },
           "trigger_condition_json": {
             "title": "Trigger Condition Json",
             "type": "string"
@@ -14930,15 +15385,9 @@
             "type": "string"
           },
           "wakeup_budget_per_day": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Wakeup Budget Per Day"
+            "minimum": 1.0,
+            "title": "Wakeup Budget Per Day",
+            "type": "integer"
           }
         },
         "required": [
@@ -14946,7 +15395,8 @@
           "item_revision",
           "updated_at",
           "trigger_condition_json",
-          "action"
+          "action",
+          "wakeup_budget_per_day"
         ],
         "title": "JITTriggerSnapshotRowEnvelope",
         "type": "object"
@@ -15012,6 +15462,217 @@
           "edges"
         ],
         "title": "KnowledgeGraphResponse",
+        "type": "object"
+      },
+      "LedgerMirrorAliasEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "alias_memory_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Alias Memory Id",
+            "type": "string"
+          },
+          "canonical_memory_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Canonical Memory Id",
+            "type": "string"
+          },
+          "reason": {
+            "pattern": "^(canonical_memory_id|superseded_by)$",
+            "title": "Reason",
+            "type": "string"
+          },
+          "source_memory_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Source Memory Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "alias_memory_id",
+          "canonical_memory_id",
+          "source_memory_id",
+          "reason"
+        ],
+        "title": "LedgerMirrorAliasEnvelope",
+        "type": "object"
+      },
+      "LedgerMirrorRowEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "canonical_memory_id": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Memory Id"
+          },
+          "content_purged": {
+            "title": "Content Purged",
+            "type": "boolean"
+          },
+          "item_revision": {
+            "minimum": 1.0,
+            "title": "Item Revision",
+            "type": "integer"
+          },
+          "memory": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemoryDB"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "memory_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Memory Id",
+            "type": "string"
+          },
+          "source_state": {
+            "$ref": "#/components/schemas/SourceState"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MemoryItemStatus"
+          }
+        },
+        "required": [
+          "memory_id",
+          "item_revision",
+          "status",
+          "source_state",
+          "content_purged"
+        ],
+        "title": "LedgerMirrorRowEnvelope",
+        "type": "object"
+      },
+      "LedgerMirrorSnapshotEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "account_generation": {
+            "minimum": 0.0,
+            "title": "Account Generation",
+            "type": "integer"
+          },
+          "aliases": {
+            "items": {
+              "$ref": "#/components/schemas/LedgerMirrorAliasEnvelope"
+            },
+            "title": "Aliases",
+            "type": "array"
+          },
+          "chain_revision": {
+            "title": "Chain Revision",
+            "type": "string"
+          },
+          "commit_sequence": {
+            "minimum": 0.0,
+            "title": "Commit Sequence",
+            "type": "integer"
+          },
+          "epoch_id": {
+            "title": "Epoch Id",
+            "type": "string"
+          },
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reason"
+          },
+          "final_page": {
+            "default": false,
+            "title": "Final Page",
+            "type": "boolean"
+          },
+          "head_commit_id": {
+            "title": "Head Commit Id",
+            "type": "string"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "owner_id": {
+            "title": "Owner Id",
+            "type": "string"
+          },
+          "page_revision": {
+            "title": "Page Revision",
+            "type": "string"
+          },
+          "projected_count": {
+            "minimum": 0.0,
+            "title": "Projected Count",
+            "type": "integer"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/LedgerMirrorRowEnvelope"
+            },
+            "maxItems": 500,
+            "title": "Rows",
+            "type": "array"
+          },
+          "scanned_count": {
+            "minimum": 0.0,
+            "title": "Scanned Count",
+            "type": "integer"
+          },
+          "schema_version": {
+            "default": "knowledge_ledger_mirror.v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_generation": {
+            "minimum": 0.0,
+            "title": "Source Generation",
+            "type": "integer"
+          },
+          "writer_epoch": {
+            "minimum": 0.0,
+            "title": "Writer Epoch",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "owner_id",
+          "account_generation",
+          "source_generation",
+          "writer_epoch",
+          "head_commit_id",
+          "commit_sequence",
+          "epoch_id",
+          "page_revision",
+          "chain_revision",
+          "scanned_count",
+          "projected_count"
+        ],
+        "title": "LedgerMirrorSnapshotEnvelope",
         "type": "object"
       },
       "LedgerPromptSnapshotEnvelope": {
@@ -16399,6 +17060,17 @@
             ],
             "title": "Body"
           },
+          "canonical_memory_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Memory Id"
+          },
           "capture_confidence": {
             "anyOf": [
               {
@@ -16575,6 +17247,16 @@
               }
             ],
             "title": "Ledger Schema Version"
+          },
+          "ledger_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemoryItemStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "manually_added": {
             "default": false,
@@ -16826,6 +17508,16 @@
         ],
         "title": "MemoryEditResponse",
         "type": "object"
+      },
+      "MemoryItemStatus": {
+        "enum": [
+          "active",
+          "superseded",
+          "hidden",
+          "tombstoned"
+        ],
+        "title": "MemoryItemStatus",
+        "type": "string"
       },
       "MemoryKind": {
         "description": "Semantic kind for the intent-backed knowledge ledger.\n\n``tier`` remains a storage-compatibility projection during the client\nmigration. It is not the lifecycle authority for ledger rows.",
@@ -21969,6 +22661,16 @@
         "title": "SnapshotReceipt",
         "type": "object"
       },
+      "SourceState": {
+        "enum": [
+          "active",
+          "missing",
+          "tombstoned",
+          "purged"
+        ],
+        "title": "SourceState",
+        "type": "string"
+      },
       "SpeakerAnalytics": {
         "properties": {
           "is_user": {
@@ -24858,6 +25560,112 @@
         "title": "TrialMetadata",
         "type": "object"
       },
+      "TriggerEmbeddingPolicy": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "match_similarity": {
+            "default": 0.82,
+            "title": "Match Similarity",
+            "type": "number"
+          },
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          },
+          "triage_similarity": {
+            "default": 0.74,
+            "title": "Triage Similarity",
+            "type": "number"
+          }
+        },
+        "title": "TriggerEmbeddingPolicy",
+        "type": "object"
+      },
+      "TriggerRuntimePolicy": {
+        "additionalProperties": false,
+        "description": "Versioned, backend-authored budgets consumed by every JIT client.",
+        "properties": {
+          "ambiguous_nano_triages_per_day": {
+            "default": 8,
+            "title": "Ambiguous Nano Triages Per Day",
+            "type": "integer"
+          },
+          "embedding": {
+            "$ref": "#/components/schemas/TriggerEmbeddingPolicy"
+          },
+          "full_agent_turns_per_candidate": {
+            "default": 1,
+            "title": "Full Agent Turns Per Candidate",
+            "type": "integer"
+          },
+          "max_calendar_events": {
+            "default": 32,
+            "title": "Max Calendar Events",
+            "type": "integer"
+          },
+          "paid_boundary_refresh_required": {
+            "default": true,
+            "title": "Paid Boundary Refresh Required",
+            "type": "boolean"
+          },
+          "planned_notifications_per_trigger_per_day": {
+            "default": 1,
+            "title": "Planned Notifications Per Trigger Per Day",
+            "type": "integer"
+          },
+          "schema_version": {
+            "default": "jit_trigger_policy.v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "total_proactive_notifications_per_day": {
+            "default": 3,
+            "title": "Total Proactive Notifications Per Day",
+            "type": "integer"
+          },
+          "valid_for_seconds": {
+            "default": 30,
+            "title": "Valid For Seconds",
+            "type": "integer"
+          }
+        },
+        "title": "TriggerRuntimePolicy",
+        "type": "object"
+      },
       "TriggerType": {
         "enum": [
           "immediate",
@@ -25859,6 +26667,22 @@
             "title": "Chat Messages",
             "type": "array"
           },
+          "conversation_keyframe_jobs": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Conversation Keyframe Jobs",
+            "type": "array"
+          },
+          "conversation_photo_manifest": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Conversation Photo Manifest",
+            "type": "array"
+          },
           "conversations": {
             "items": {
               "additionalProperties": true,
@@ -25867,6 +26691,33 @@
             "title": "Conversations",
             "type": "array"
           },
+          "frame_requests": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Frame Requests",
+            "type": "array"
+          },
+          "frame_vision_receipts": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Frame Vision Receipts",
+            "type": "array"
+          },
+          "jit_data": {
+            "additionalProperties": {
+              "items": {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "title": "Jit Data",
+            "type": "object"
+          },
           "memories": {
             "items": {
               "additionalProperties": true,
@@ -25874,6 +26725,28 @@
             },
             "title": "Memories",
             "type": "array"
+          },
+          "memory_ledger_data": {
+            "additionalProperties": {
+              "items": {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "title": "Memory Ledger Data",
+            "type": "object"
+          },
+          "memory_review_data": {
+            "additionalProperties": {
+              "items": {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "title": "Memory Review Data",
+            "type": "object"
           },
           "people": {
             "items": {
@@ -25886,6 +26759,17 @@
           "profile": {
             "additionalProperties": true,
             "title": "Profile",
+            "type": "object"
+          },
+          "task_data": {
+            "additionalProperties": {
+              "items": {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "title": "Task Data",
             "type": "object"
           }
         },
@@ -46229,6 +47113,106 @@
         ]
       }
     },
+    "/v1/jit/knowledge-ledger/mirror-snapshot": {
+      "get": {
+        "operationId": "get_knowledge_ledger_mirror_snapshot_v1_jit_knowledge_ledger_mirror_snapshot_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LedgerMirrorSnapshotEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Knowledge Ledger Mirror Snapshot"
+      }
+    },
     "/v1/jit/knowledge-ledger/prompt-snapshot": {
       "get": {
         "operationId": "get_knowledge_ledger_prompt_snapshot_v1_jit_knowledge_ledger_prompt_snapshot_get",
@@ -46303,6 +47287,91 @@
         "summary": "Get Knowledge Ledger Prompt Snapshot"
       }
     },
+    "/v1/jit/proactivity/reservations": {
+      "post": {
+        "description": "Reserve one content-free cross-device budget immediately before work.",
+        "operationId": "reserve_jit_proactivity_v1_jit_proactivity_reservations_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JITProactivityReservationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JITProactivityReservationEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Reserve Jit Proactivity"
+      }
+    },
     "/v1/jit/rollout-decision": {
       "get": {
         "operationId": "get_jit_rollout_decision_v1_jit_rollout_decision_get",
@@ -46375,6 +47444,91 @@
           }
         ],
         "summary": "Get Jit Rollout Decision"
+      }
+    },
+    "/v1/jit/trigger-feedback": {
+      "post": {
+        "description": "Persist one explicit, content-free user feedback event.\n\nThis privacy/user-authority path intentionally remains available while the\nproactive rollout is disabled or killed. It performs no matching, model\nwork, notification, or automatic trigger rewrite.",
+        "operationId": "post_jit_trigger_feedback_v1_jit_trigger_feedback_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JITTriggerFeedbackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JITTriggerFeedbackEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Post Jit Trigger Feedback"
       }
     },
     "/v1/jit/trigger-snapshot": {
@@ -55279,7 +56433,7 @@
     },
     "/v1/users/export": {
       "get": {
-        "description": "Export all user data for GDPR/CCPA compliance. Streams response to avoid timeouts.",
+        "description": "Export all user data for GDPR/CCPA compliance from a disk-backed spool.",
         "operationId": "export_all_user_data_v1_users_export_get",
         "parameters": [
           {

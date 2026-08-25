@@ -2512,6 +2512,14 @@ class ChatProvider: ObservableObject {
         await loadAIProfileIfNeeded()
         return
       }
+      Task {
+        do {
+          _ = try await KnowledgeLedgerMirrorCoordinator.shared.sync(
+            authorizationSnapshot: authorization)
+        } catch {
+          log("ChatProvider: exhaustive ledger mirror convergence deferred")
+        }
+      }
       let projection = KnowledgeLedgerPromptProjection(
         memories: snapshot.memories,
         hasAuthoritativeSnapshot: true)

@@ -294,6 +294,7 @@ def test_persisted_wipe_recovers_after_enqueue_crash_and_handler_runs_once(monke
     )
     monkeypatch.setitem(service_globals, 'users_db', users_db)
     monkeypatch.setitem(service_globals, 'auth', types.SimpleNamespace(delete_account=lambda _uid: None))
+    monkeypatch.setitem(service_globals, 'assert_account_deletion_permitted', lambda _uid: None)
     monkeypatch.setitem(service_globals, 'is_account_deletion_dispatch_enabled', lambda: True)
     monkeypatch.setitem(service_globals, 'enqueue_account_deletion_wipe', enqueue_task)
 

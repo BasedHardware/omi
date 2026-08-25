@@ -12,6 +12,7 @@ losing the vector only drops the task out of semantic search until it is next
 indexed, which is strictly better than reporting a committed write as failed.
 """
 
+from contextlib import nullcontext
 from unittest.mock import MagicMock
 
 import pytest
@@ -37,6 +38,7 @@ class _EmbeddingsOutage:
 def embeddings_down(monkeypatch):
     monkeypatch.setattr(vector_db, 'index', MagicMock(), raising=False)
     monkeypatch.setattr(vector_db, 'embeddings', _EmbeddingsOutage(), raising=False)
+    monkeypatch.setattr(vector_db, 'destructive_operation_gate', lambda *args, **kwargs: nullcontext())
 
 
 def test_upsert_action_item_vector_degrades_to_none(embeddings_down):
@@ -66,6 +68,7 @@ def committed_description_edit(monkeypatch):
         action_items_router.action_items_db, 'get_action_item', lambda *args, **kwargs: updated, raising=False
     )
     monkeypatch.setattr(action_items_router, 'sync_action_item_reminder', lambda *args, **kwargs: None, raising=False)
+    monkeypatch.setattr(action_items_router, '_wake_task_changes', lambda *args, **kwargs: None, raising=False)
 
 
 def test_patch_action_item_succeeds_while_embeddings_are_down(embeddings_down, committed_description_edit):

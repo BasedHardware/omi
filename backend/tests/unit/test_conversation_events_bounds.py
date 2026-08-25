@@ -160,6 +160,7 @@ def router():
         "utils.apps": _pkg("utils.apps"),
         "database.users": _pkg("database.users"),
         "database.vector_db": _pkg("database.vector_db"),
+        "services.conversation_frame_evidence": _pkg("services.conversation_frame_evidence"),
         # firebase
         "firebase_admin": _pkg("firebase_admin"),
         "firebase_admin.messaging": _pkg("firebase_admin.messaging"),

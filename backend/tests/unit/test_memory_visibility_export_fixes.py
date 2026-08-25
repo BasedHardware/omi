@@ -183,6 +183,7 @@ def test_portability_export_preserves_closed_ledger_history_without_changing_com
 ):
     now = datetime(2026, 8, 24, 12, tzinfo=timezone.utc)
     active = _ledger_item("active")
+    rejected_active = _ledger_item("rejected-active", promotion={"user_review": False})
     closed = _ledger_item(
         "closed",
         status=MemoryItemStatus.superseded,
@@ -207,7 +208,12 @@ def test_portability_export_preserves_closed_ledger_history_without_changing_com
         valid_to=now,
         source_state=SourceState.purged,
     )
-    hidden = _ledger_item("hidden", status=MemoryItemStatus.hidden, valid_to=now)
+    hidden = _ledger_item(
+        "hidden",
+        status=MemoryItemStatus.hidden,
+        valid_to=now,
+        canonical_memory_id="active",
+    )
     non_ledger_closed = _ledger_item(
         "legacy-closed",
         status=MemoryItemStatus.superseded,
@@ -217,7 +223,9 @@ def test_portability_export_preserves_closed_ledger_history_without_changing_com
     monkeypatch.setattr(
         service_mod,
         "iter_authoritative_product_memory_items",
-        lambda **_kwargs: iter([active, closed, migrated, active_purged, purged, hidden, non_ledger_closed]),
+        lambda **_kwargs: iter(
+            [active, rejected_active, closed, migrated, active_purged, purged, hidden, non_ledger_closed]
+        ),
     )
     service = service_mod.MemoryService(db_client=MagicMock())
     service.history.iter_all_live = MagicMock(return_value=iter(()))
@@ -226,11 +234,23 @@ def test_portability_export_preserves_closed_ledger_history_without_changing_com
     portability_rows = list(service.iter_portability_export_memories("uid-test"))
 
     assert compatibility_ids == ["active"]
-    assert [row.id for row in portability_rows] == ["active", "closed", "legacy-generated"]
+    assert [row.id for row in portability_rows] == [
+        "active",
+        "rejected-active",
+        "closed",
+        "legacy-generated",
+        "hidden",
+    ]
     closed_row = next(row for row in portability_rows if row.id == "closed")
     assert closed_row.invalid_at == now
     assert closed_row.is_locked is True
     assert closed_row.content == "content-closed"
+    hidden_row = next(row for row in portability_rows if row.id == "hidden")
+    assert hidden_row.ledger_status == MemoryItemStatus.hidden
+    assert hidden_row.canonical_memory_id == "active"
+    rejected_row = next(row for row in portability_rows if row.id == "rejected-active")
+    assert rejected_row.user_review is False
+    assert rejected_row.ledger_status == MemoryItemStatus.active
 
 
 def test_portability_export_closed_canonical_identity_suppresses_legacy_duplicate(service_mod, monkeypatch):

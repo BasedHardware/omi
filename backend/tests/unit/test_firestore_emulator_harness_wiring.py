@@ -17,6 +17,28 @@ _KNOWLEDGE_LEDGER_CORRECTION_SCRIPT = (
     _REPO_ROOT / "backend" / "scripts" / "knowledge_ledger_correction_emulator_test.py"
 )
 _DAILY_MEMORY_SWEEP_SCRIPT = _REPO_ROOT / "backend" / "scripts" / "daily_memory_sweep_emulator_test.py"
+_JIT_PROACTIVITY_RESERVATION_SCRIPT = (
+    _REPO_ROOT / "backend" / "scripts" / "jit_proactivity_reservation_emulator_test.py"
+)
+
+
+def test_jit_proactivity_reservation_emulator_harness_uses_real_transactional_store() -> None:
+    assert _JIT_PROACTIVITY_RESERVATION_SCRIPT.exists()
+    script = _JIT_PROACTIVITY_RESERVATION_SCRIPT.read_text()
+    for required in (
+        "FIRESTORE_EMULATOR_HOST",
+        "reserve_jit_proactivity_event",
+        "ThreadPoolExecutor",
+        "planned_notification",
+        "full_turn",
+        "PASS: Firestore emulator serialized cross-device JIT",
+    ):
+        assert required in script
+
+    package = json.loads((_REPO_ROOT / "package.json").read_text())
+    command = package["scripts"]["test:memory-jit-proactivity-reservations:emulator"]
+    assert command.startswith("MEMORY_ENABLED=on npx --no-install firebase emulators:exec")
+    assert "backend/.venv/bin/python backend/scripts/jit_proactivity_reservation_emulator_test.py" in command
 
 
 def test_memory_firestore_rules_emulator_harness_is_wired_to_all_protected_collections():

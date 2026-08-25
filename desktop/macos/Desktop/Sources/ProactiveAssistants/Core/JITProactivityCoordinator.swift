@@ -12,12 +12,15 @@ actor JITProactivityCoordinator {
     frame: CapturedFrame,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async -> Bool {
+    let calendarEvents = await SystemCalendarMeetingContextService.shared.authorizedTriggerEvents(
+      around: frame.captureTime)
     let observation = KnowledgeLedgerTriggerObservation(
       eventID: frame.screenshotId.map(String.init),
       text: snapshot.validatedFacts.joined(separator: "\n"),
       appName: frame.appName,
       windowTitle: frame.windowTitle,
-      occurredAt: frame.captureTime)
+      occurredAt: frame.captureTime,
+      calendarEvents: calendarEvents)
     let decision = await JITProactivityRuntime.shared.admission(
       authorizationSnapshot: authorizationSnapshot,
       observation: observation,

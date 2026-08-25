@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 @preconcurrency import GRDB
 
@@ -42,6 +43,53 @@ enum MemoryLedgerTriggerSnapshotError: Error, Equatable, Sendable {
 
 enum KnowledgeLedgerMirrorSyncError: Error, Equatable, Sendable {
   case ownerChanged
+  case invalidSnapshot
+  case staleAuthority
+  case conflictingAuthority
+}
+
+struct KnowledgeLedgerMirrorReceipt: Equatable, Sendable {
+  let ownerID: String
+  let accountGeneration: Int
+  let commitSequence: Int
+  let epochID: String
+  let contentRevision: String
+  let rowCount: Int
+  let aliasCount: Int
+}
+
+/// The server authority which names one mirror epoch. Cursors are only
+/// meaningful inside this authority; a cursor from an older head must never
+/// be allowed to activate rows from that older epoch.
+struct KnowledgeLedgerMirrorAuthority: Equatable, Sendable {
+  let ownerID: String
+  let accountGeneration: Int
+  let sourceGeneration: Int
+  let writerEpoch: Int
+  let headCommitID: String
+  let commitSequence: Int
+  let epochID: String
+
+  func matches(_ snapshot: JITTriggerSnapshot) -> Bool {
+    ownerID == snapshot.ownerID
+      && accountGeneration == snapshot.accountGeneration
+      && headCommitID == snapshot.headCommitID
+      && commitSequence == snapshot.commitSequence
+  }
+}
+
+struct KnowledgeLedgerMirrorMember: Equatable, Sendable {
+  let memoryID: String
+  let itemRevision: Int
+  let status: String
+  let sourceState: String
+  let canonicalMemoryID: String?
+  let contentPurged: Bool
+}
+
+enum KnowledgeLedgerMirrorStageResult: Sendable {
+  case next(String)
+  case activated(KnowledgeLedgerMirrorReceipt)
 }
 
 enum MemoryLedgerTriggerSnapshotCompleteness: Equatable, Sendable {
@@ -640,6 +688,669 @@ actor MemoryStorage {
     }
     if inserted > 0 { HomeKnowledgeCountInvalidation.post() }
     return inserted
+  }
+
+  /// Atomically activates a complete, server-fenced mirror epoch. General
+  /// memory-cache rows are only upserted; absence and privacy tombstones live
+  /// in dedicated membership so compatibility rollback never loses history.
+  @discardableResult
+  func syncAuthoritativeKnowledgeLedgerMirror(
+    _ snapshot: KnowledgeLedgerMirrorSnapshot,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> KnowledgeLedgerMirrorReceipt {
+    guard snapshot.ownerID == authorizationSnapshot.ownerID,
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+    else { throw KnowledgeLedgerMirrorSyncError.ownerChanged }
+    let db = try await ensureInitialized()
+    let receipt = try await db.write { database in
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+        throw KnowledgeLedgerMirrorSyncError.ownerChanged
+      }
+      let result = try Self.reconcileAuthoritativeKnowledgeLedgerMirror(
+        snapshot,
+        in: database,
+        now: Date())
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+        throw KnowledgeLedgerMirrorSyncError.ownerChanged
+      }
+      return result
+    }
+    HomeKnowledgeCountInvalidation.post()
+    return receipt
+  }
+
+  /// Durably stages one signed cursor page. Partial chains survive process
+  /// interruption but can never replace the active epoch; only a valid final
+  /// page performs compatibility-cache reconciliation and activation.
+  func stageAuthoritativeKnowledgeLedgerMirrorPage(
+    _ page: KnowledgeLedgerMirrorPage,
+    requestedCursor: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> KnowledgeLedgerMirrorStageResult {
+    guard page.ownerID == authorizationSnapshot.ownerID,
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+    else { throw KnowledgeLedgerMirrorSyncError.ownerChanged }
+    let db = try await ensureInitialized()
+    let result = try await db.write { database in
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+        throw KnowledgeLedgerMirrorSyncError.ownerChanged
+      }
+      let result = try Self.stageAuthoritativeKnowledgeLedgerMirrorPage(
+        page,
+        requestedCursor: requestedCursor,
+        in: database,
+        now: Date())
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+        throw KnowledgeLedgerMirrorSyncError.ownerChanged
+      }
+      return result
+    }
+    if case .activated = result { HomeKnowledgeCountInvalidation.post() }
+    return result
+  }
+
+  static func stageAuthoritativeKnowledgeLedgerMirrorPage(
+    _ page: KnowledgeLedgerMirrorPage,
+    requestedCursor: String?,
+    in database: Database,
+    now: Date
+  ) throws -> KnowledgeLedgerMirrorStageResult {
+    try validateKnowledgeLedgerMirrorPage(page)
+    let ownerID = page.ownerID
+    if requestedCursor == nil {
+      try clearKnowledgeLedgerMirrorStaging(ownerID: ownerID, in: database)
+      try database.execute(
+        sql: """
+          INSERT INTO jit_knowledge_ledger_mirror_staging_epochs
+            (ownerID, accountGeneration, sourceGeneration, writerEpoch, headCommitID,
+             commitSequence, epochID, expectedCursorHash, expectedCursor, contentRevision,
+             chainRevision, scannedCount, projectedCount, pageCount, updatedAt)
+          VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, '', '', 0, 0, 0, ?)
+          """,
+        arguments: [
+          ownerID, page.accountGeneration, page.sourceGeneration, page.writerEpoch,
+          page.headCommitID, page.commitSequence, page.epochID, now,
+        ])
+    }
+
+    guard
+      let state = try Row.fetchOne(
+        database,
+        sql: "SELECT * FROM jit_knowledge_ledger_mirror_staging_epochs WHERE ownerID = ?",
+        arguments: [ownerID])
+    else { throw KnowledgeLedgerMirrorSyncError.invalidSnapshot }
+    let expectedCursorHash: String? = state["expectedCursorHash"]
+    let actualCursorHash = requestedCursor.map(cursorDigest)
+    guard expectedCursorHash == actualCursorHash,
+      (state["accountGeneration"] as Int) == page.accountGeneration,
+      (state["sourceGeneration"] as Int) == page.sourceGeneration,
+      (state["writerEpoch"] as Int) == page.writerEpoch,
+      (state["headCommitID"] as String) == page.headCommitID,
+      (state["commitSequence"] as Int) == page.commitSequence,
+      (state["epochID"] as String) == page.epochID
+    else { throw KnowledgeLedgerMirrorSyncError.conflictingAuthority }
+
+    let priorScanned: Int = state["scannedCount"]
+    let priorProjected: Int = state["projectedCount"]
+    guard page.scannedCount >= priorScanned,
+      page.projectedCount >= priorProjected,
+      page.projectedCount - priorProjected == page.rows.count,
+      page.scannedCount - priorScanned >= page.rows.count
+    else { throw KnowledgeLedgerMirrorSyncError.invalidSnapshot }
+
+    let encoder = JSONEncoder()
+    for row in page.rows {
+      guard
+        try Int.fetchOne(
+          database,
+          sql: """
+            SELECT COUNT(*) FROM jit_knowledge_ledger_mirror_staging_members
+            WHERE ownerID = ? AND memoryID = ?
+            """,
+          arguments: [ownerID, row.memoryID]) == 0
+      else { throw KnowledgeLedgerMirrorSyncError.invalidSnapshot }
+      let encodedRecord: Data?
+      if let memory = row.memory {
+        encodedRecord = try encoder.encode(MemoryRecord.from(memory))
+      } else {
+        encodedRecord = nil
+      }
+      try database.execute(
+        sql: """
+          INSERT INTO jit_knowledge_ledger_mirror_staging_members
+            (ownerID, epochID, memoryID, itemRevision, status, sourceState,
+             canonicalMemoryID, contentPurged, memoryRecordJSON)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          """,
+        arguments: [
+          ownerID, page.epochID, row.memoryID, row.itemRevision, row.status, row.sourceState,
+          row.canonicalMemoryID, row.contentPurged, encodedRecord,
+        ])
+    }
+    for alias in page.aliases {
+      let priorTargets = try String.fetchAll(
+        database,
+        sql: """
+          SELECT DISTINCT canonicalMemoryID FROM jit_knowledge_ledger_mirror_staging_aliases
+          WHERE ownerID = ? AND aliasMemoryID = ?
+          """,
+        arguments: [ownerID, alias.aliasMemoryID])
+      guard priorTargets.isEmpty || priorTargets == [alias.canonicalMemoryID] else {
+        throw KnowledgeLedgerMirrorSyncError.invalidSnapshot
+      }
+      try database.execute(
+        sql: """
+          INSERT OR IGNORE INTO jit_knowledge_ledger_mirror_staging_aliases
+            (ownerID, epochID, aliasMemoryID, canonicalMemoryID, sourceMemoryID, reason)
+          VALUES (?, ?, ?, ?, ?, ?)
+          """,
+        arguments: [
+          ownerID, page.epochID, alias.aliasMemoryID, alias.canonicalMemoryID,
+          alias.sourceMemoryID, alias.reason,
+        ])
+    }
+
+    let priorContentRevision: String = state["contentRevision"]
+    let contentRevision = chainedPageRevision(
+      prior: priorContentRevision,
+      pageRevision: page.pageRevision)
+    let nextCursorHash: String?
+    if let nextCursor = page.nextCursor {
+      let digest = cursorDigest(nextCursor)
+      let seen =
+        try Int.fetchOne(
+          database,
+          sql: """
+            SELECT COUNT(*) FROM jit_knowledge_ledger_mirror_staging_cursors
+            WHERE ownerID = ? AND cursorHash = ?
+            """,
+          arguments: [ownerID, digest]) ?? 0
+      guard seen == 0 else { throw KnowledgeLedgerMirrorSyncError.invalidSnapshot }
+      try database.execute(
+        sql: """
+          INSERT INTO jit_knowledge_ledger_mirror_staging_cursors (ownerID, cursorHash)
+          VALUES (?, ?)
+          """,
+        arguments: [ownerID, digest])
+      nextCursorHash = digest
+    } else {
+      nextCursorHash = nil
+    }
+    try database.execute(
+      sql: """
+        UPDATE jit_knowledge_ledger_mirror_staging_epochs SET
+          expectedCursorHash = ?, expectedCursor = ?, contentRevision = ?, chainRevision = ?,
+          scannedCount = ?, projectedCount = ?, pageCount = pageCount + 1, updatedAt = ?
+        WHERE ownerID = ?
+        """,
+      arguments: [
+        nextCursorHash, page.nextCursor, contentRevision, page.chainRevision, page.scannedCount,
+        page.projectedCount, now, ownerID,
+      ])
+
+    guard page.finalPage else {
+      guard let nextCursor = page.nextCursor else {
+        throw KnowledgeLedgerMirrorSyncError.invalidSnapshot
+      }
+      return .next(nextCursor)
+    }
+    guard page.nextCursor == nil else { throw KnowledgeLedgerMirrorSyncError.invalidSnapshot }
+    let receipt = try activateStagedKnowledgeLedgerMirror(
+      ownerID: ownerID,
+      page: page,
+      contentRevision: contentRevision,
+      in: database,
+      now: now)
+    try clearKnowledgeLedgerMirrorStaging(ownerID: ownerID, in: database)
+    return .activated(receipt)
+  }
+
+  private static func activateStagedKnowledgeLedgerMirror(
+    ownerID: String,
+    page: KnowledgeLedgerMirrorPage,
+    contentRevision: String,
+    in database: Database,
+    now: Date
+  ) throws -> KnowledgeLedgerMirrorReceipt {
+    let memberRows = try Row.fetchAll(
+      database,
+      sql: """
+        SELECT * FROM jit_knowledge_ledger_mirror_staging_members
+        WHERE ownerID = ? ORDER BY memoryID
+        """,
+      arguments: [ownerID])
+    guard memberRows.count == page.projectedCount else {
+      throw KnowledgeLedgerMirrorSyncError.invalidSnapshot
+    }
+    let decoder = JSONDecoder()
+    let rows = try memberRows.map { row -> KnowledgeLedgerMirrorRow in
+      let contentPurged: Bool = row["contentPurged"]
+      let payload: Data? = row["memoryRecordJSON"]
+      let memory: ServerMemory?
+      if contentPurged {
+        guard payload == nil else { throw KnowledgeLedgerMirrorSyncError.invalidSnapshot }
+        memory = nil
+      } else {
+        guard let payload,
+          let decoded = try? decoder.decode(MemoryRecord.self, from: payload),
+          let restored = decoded.toServerMemory(),
+          restored.id == (row["memoryID"] as String)
+        else { throw KnowledgeLedgerMirrorSyncError.invalidSnapshot }
+        memory = restored
+      }
+      return KnowledgeLedgerMirrorRow(
+        memoryID: row["memoryID"],
+        itemRevision: row["itemRevision"],
+        status: row["status"],
+        sourceState: row["sourceState"],
+        canonicalMemoryID: row["canonicalMemoryID"],
+        contentPurged: contentPurged,
+        memory: memory)
+    }
+    let aliases = try Row.fetchAll(
+      database,
+      sql: """
+        SELECT * FROM jit_knowledge_ledger_mirror_staging_aliases
+        WHERE ownerID = ? ORDER BY aliasMemoryID, canonicalMemoryID, reason
+        """,
+      arguments: [ownerID]
+    ).map { row in
+      KnowledgeLedgerMirrorAlias(
+        aliasMemoryID: row["aliasMemoryID"],
+        canonicalMemoryID: row["canonicalMemoryID"],
+        sourceMemoryID: row["sourceMemoryID"],
+        reason: row["reason"])
+    }
+    try validateKnowledgeLedgerMirrorAliases(aliases, rowIDs: Set(rows.map(\.memoryID)))
+    return try reconcileAuthoritativeKnowledgeLedgerMirror(
+      KnowledgeLedgerMirrorSnapshot(
+        ownerID: ownerID,
+        accountGeneration: page.accountGeneration,
+        sourceGeneration: page.sourceGeneration,
+        writerEpoch: page.writerEpoch,
+        headCommitID: page.headCommitID,
+        commitSequence: page.commitSequence,
+        epochID: page.epochID,
+        contentRevision: contentRevision,
+        chainRevision: page.chainRevision,
+        scannedCount: page.scannedCount,
+        projectedCount: page.projectedCount,
+        rows: rows,
+        aliases: aliases),
+      in: database,
+      now: now)
+  }
+
+  private static func validateKnowledgeLedgerMirrorPage(_ page: KnowledgeLedgerMirrorPage) throws {
+    let statuses: Set<String> = ["active", "superseded", "hidden", "tombstoned"]
+    let sourceStates: Set<String> = ["active", "missing", "tombstoned", "purged"]
+    guard page.schemaVersion == KnowledgeLedgerMirrorSnapshot.schemaVersion,
+      !page.ownerID.isEmpty,
+      page.accountGeneration >= 0,
+      page.sourceGeneration >= 0,
+      page.writerEpoch >= 0,
+      page.commitSequence >= 0,
+      !page.headCommitID.isEmpty,
+      isDigest(page.epochID), isDigest(page.pageRevision), isDigest(page.chainRevision),
+      page.scannedCount >= 0, page.projectedCount >= 0,
+      page.failureReason == nil,
+      page.finalPage == (page.nextCursor == nil),
+      page.nextCursor.map({ !$0.isEmpty && $0.count <= 2_048 }) ?? true,
+      Set(page.rows.map(\.memoryID)).count == page.rows.count
+    else { throw KnowledgeLedgerMirrorSyncError.invalidSnapshot }
+    for row in page.rows {
+      guard !row.memoryID.isEmpty, row.memoryID.count <= 256, !row.memoryID.contains("/"),
+        row.itemRevision > 0, statuses.contains(row.status), sourceStates.contains(row.sourceState)
+      else { throw KnowledgeLedgerMirrorSyncError.invalidSnapshot }
+      if row.contentPurged {
+        guard row.status == "tombstoned", ["tombstoned", "purged"].contains(row.sourceState),
+          row.memory == nil
+        else { throw KnowledgeLedgerMirrorSyncError.invalidSnapshot }
+      } else {
+        guard let memory = row.memory, memory.id == row.memoryID,
+          memory.ledgerMetadata["ledger_schema_version"] == "knowledge_ledger.v1"
+        else { throw KnowledgeLedgerMirrorSyncError.invalidSnapshot }
+      }
+    }
+    for alias in page.aliases {
+      guard !alias.aliasMemoryID.isEmpty, alias.aliasMemoryID.count <= 256,
+        !alias.aliasMemoryID.contains("/"), !alias.canonicalMemoryID.isEmpty,
+        alias.canonicalMemoryID.count <= 256, !alias.canonicalMemoryID.contains("/"),
+        alias.sourceMemoryID == alias.aliasMemoryID,
+        alias.aliasMemoryID != alias.canonicalMemoryID,
+        alias.reason == "canonical_memory_id" || alias.reason == "superseded_by"
+      else { throw KnowledgeLedgerMirrorSyncError.invalidSnapshot }
+    }
+  }
+
+  private static func validateKnowledgeLedgerMirrorAliases(
+    _ aliases: [KnowledgeLedgerMirrorAlias], rowIDs: Set<String>
+  ) throws {
+    var targets: [String: String] = [:]
+    for alias in aliases {
+      guard rowIDs.contains(alias.aliasMemoryID), rowIDs.contains(alias.canonicalMemoryID),
+        targets[alias.aliasMemoryID].map({ $0 == alias.canonicalMemoryID }) ?? true
+      else { throw KnowledgeLedgerMirrorSyncError.invalidSnapshot }
+      targets[alias.aliasMemoryID] = alias.canonicalMemoryID
+    }
+    for start in targets.keys {
+      var seen = Set<String>()
+      var current: String? = start
+      while let node = current, let next = targets[node] {
+        guard seen.insert(node).inserted else {
+          throw KnowledgeLedgerMirrorSyncError.invalidSnapshot
+        }
+        current = next
+      }
+    }
+  }
+
+  private static func clearKnowledgeLedgerMirrorStaging(ownerID: String, in database: Database) throws {
+    for table in [
+      "jit_knowledge_ledger_mirror_staging_members",
+      "jit_knowledge_ledger_mirror_staging_aliases",
+      "jit_knowledge_ledger_mirror_staging_cursors",
+      "jit_knowledge_ledger_mirror_staging_epochs",
+    ] {
+      try database.execute(sql: "DELETE FROM \(table) WHERE ownerID = ?", arguments: [ownerID])
+    }
+  }
+
+  func stagedKnowledgeLedgerMirrorCursor(ownerID: String) async throws -> String? {
+    let db = try await ensureInitialized()
+    return try await db.read { database in
+      try String.fetchOne(
+        database,
+        sql: "SELECT expectedCursor FROM jit_knowledge_ledger_mirror_staging_epochs WHERE ownerID = ?",
+        arguments: [ownerID])
+    }
+  }
+
+  func stagedKnowledgeLedgerMirrorAuthority(ownerID: String) async throws
+    -> KnowledgeLedgerMirrorAuthority?
+  {
+    let db = try await ensureInitialized()
+    return try await db.read { database in
+      guard
+        let row = try Row.fetchOne(
+          database,
+          sql: """
+            SELECT accountGeneration, sourceGeneration, writerEpoch, headCommitID,
+                   commitSequence, epochID
+            FROM jit_knowledge_ledger_mirror_staging_epochs WHERE ownerID = ?
+            """,
+          arguments: [ownerID])
+      else { return nil }
+      return KnowledgeLedgerMirrorAuthority(
+        ownerID: ownerID,
+        accountGeneration: row["accountGeneration"],
+        sourceGeneration: row["sourceGeneration"],
+        writerEpoch: row["writerEpoch"],
+        headCommitID: row["headCommitID"],
+        commitSequence: row["commitSequence"],
+        epochID: row["epochID"])
+    }
+  }
+
+  func authoritativeKnowledgeLedgerMirrorIsFresh(
+    ownerID: String,
+    accountGeneration: Int,
+    headCommitID: String,
+    commitSequence: Int
+  ) async throws -> Bool {
+    let db = try await ensureInitialized()
+    return try await db.read { database in
+      guard
+        let row = try Row.fetchOne(
+          database,
+          sql: """
+            SELECT accountGeneration, headCommitID, commitSequence
+            FROM jit_knowledge_ledger_mirror_receipts WHERE ownerID = ?
+            """,
+          arguments: [ownerID])
+      else { return false }
+      return (row["accountGeneration"] as Int) == accountGeneration
+        && (row["headCommitID"] as String) == headCommitID
+        && (row["commitSequence"] as Int) == commitSequence
+    }
+  }
+
+  func authoritativeKnowledgeLedgerMirrorReceipt(ownerID: String) async throws
+    -> KnowledgeLedgerMirrorReceipt?
+  {
+    let db = try await ensureInitialized()
+    return try await db.read { database in
+      guard
+        let row = try Row.fetchOne(
+          database,
+          sql: """
+            SELECT accountGeneration, commitSequence, epochID, contentRevision, rowCount, aliasCount
+            FROM jit_knowledge_ledger_mirror_receipts WHERE ownerID = ?
+            """,
+          arguments: [ownerID])
+      else { return nil }
+      return KnowledgeLedgerMirrorReceipt(
+        ownerID: ownerID,
+        accountGeneration: row["accountGeneration"],
+        commitSequence: row["commitSequence"],
+        epochID: row["epochID"],
+        contentRevision: row["contentRevision"],
+        rowCount: row["rowCount"],
+        aliasCount: row["aliasCount"])
+    }
+  }
+
+  /// Re-reads the active receipt's complete authority after activation. This
+  /// is intentionally separate from the freshness fast path so callers can
+  /// prove that the epoch they just activated is still the known server head.
+  func authoritativeKnowledgeLedgerMirrorAuthority(ownerID: String) async throws
+    -> KnowledgeLedgerMirrorAuthority?
+  {
+    let db = try await ensureInitialized()
+    return try await db.read { database in
+      guard
+        let row = try Row.fetchOne(
+          database,
+          sql: """
+            SELECT accountGeneration, sourceGeneration, writerEpoch, headCommitID,
+                   commitSequence, epochID
+            FROM jit_knowledge_ledger_mirror_receipts WHERE ownerID = ?
+            """,
+          arguments: [ownerID])
+      else { return nil }
+      return KnowledgeLedgerMirrorAuthority(
+        ownerID: ownerID,
+        accountGeneration: row["accountGeneration"],
+        sourceGeneration: row["sourceGeneration"],
+        writerEpoch: row["writerEpoch"],
+        headCommitID: row["headCommitID"],
+        commitSequence: row["commitSequence"],
+        epochID: row["epochID"])
+    }
+  }
+
+  func clearKnowledgeLedgerMirrorStaging(ownerID: String) async throws {
+    let db = try await ensureInitialized()
+    try await db.write { database in
+      try Self.clearKnowledgeLedgerMirrorStaging(ownerID: ownerID, in: database)
+    }
+  }
+
+  private static func cursorDigest(_ cursor: String) -> String {
+    SHA256.hash(data: Data(cursor.utf8)).map { String(format: "%02x", $0) }.joined()
+  }
+
+  private static func chainedPageRevision(prior: String, pageRevision: String) -> String {
+    let payload = prior.isEmpty ? pageRevision : "\(prior)\n\(pageRevision)"
+    return SHA256.hash(data: Data(payload.utf8)).map { String(format: "%02x", $0) }.joined()
+  }
+
+  private static func isDigest(_ value: String) -> Bool {
+    value.count == 64 && value.allSatisfy { $0.isHexDigit && !$0.isUppercase }
+  }
+
+  static func reconcileAuthoritativeKnowledgeLedgerMirror(
+    _ snapshot: KnowledgeLedgerMirrorSnapshot,
+    in database: Database,
+    now: Date
+  ) throws -> KnowledgeLedgerMirrorReceipt {
+    guard !snapshot.ownerID.isEmpty,
+      snapshot.accountGeneration >= 0,
+      snapshot.sourceGeneration >= 0,
+      snapshot.writerEpoch >= 0,
+      snapshot.commitSequence >= 0,
+      snapshot.epochID.count == 64,
+      snapshot.contentRevision.count == 64,
+      snapshot.chainRevision.count == 64,
+      snapshot.projectedCount == snapshot.rows.count,
+      snapshot.scannedCount >= snapshot.projectedCount
+    else { throw KnowledgeLedgerMirrorSyncError.invalidSnapshot }
+    let uniqueRows = Set(snapshot.rows.map(\.memoryID))
+    guard uniqueRows.count == snapshot.rows.count,
+      snapshot.rows.allSatisfy({ row in
+        !row.memoryID.isEmpty && row.itemRevision > 0
+          && (row.contentPurged ? row.memory == nil : row.memory?.id == row.memoryID)
+      })
+    else { throw KnowledgeLedgerMirrorSyncError.invalidSnapshot }
+
+    if let prior = try Row.fetchOne(
+      database,
+      sql: """
+        SELECT accountGeneration, commitSequence, epochID, contentRevision, rowCount, aliasCount
+        FROM jit_knowledge_ledger_mirror_receipts WHERE ownerID = ?
+        """,
+      arguments: [snapshot.ownerID])
+    {
+      let priorGeneration: Int = prior["accountGeneration"]
+      let priorSequence: Int = prior["commitSequence"]
+      let priorEpoch: String = prior["epochID"]
+      let priorContentRevision: String = prior["contentRevision"]
+      if snapshot.accountGeneration < priorGeneration
+        || (snapshot.accountGeneration == priorGeneration && snapshot.commitSequence < priorSequence)
+      {
+        throw KnowledgeLedgerMirrorSyncError.staleAuthority
+      }
+      if snapshot.accountGeneration == priorGeneration, snapshot.commitSequence == priorSequence {
+        guard snapshot.epochID == priorEpoch, snapshot.contentRevision == priorContentRevision else {
+          throw KnowledgeLedgerMirrorSyncError.conflictingAuthority
+        }
+        return KnowledgeLedgerMirrorReceipt(
+          ownerID: snapshot.ownerID,
+          accountGeneration: snapshot.accountGeneration,
+          commitSequence: snapshot.commitSequence,
+          epochID: snapshot.epochID,
+          contentRevision: snapshot.contentRevision,
+          rowCount: prior["rowCount"],
+          aliasCount: prior["aliasCount"])
+      }
+    }
+
+    let purgedMemoryIDs = snapshot.rows.filter(\.contentPurged).map(\.memoryID)
+    for memoryID in purgedMemoryIDs {
+      // Explicit content deletion is stronger than the compatibility mirror:
+      // remove the local row (including content and evidence) in this same
+      // SQLite transaction. Merely absent legacy rows never enter this list.
+      _ =
+        try MemoryRecord
+        .filter(Column("backendId") == memoryID)
+        .deleteAll(database)
+    }
+    _ = try reconcileServerMemories(snapshot.rows.compactMap(\.memory), in: database)
+    try database.execute(
+      sql: "DELETE FROM jit_knowledge_ledger_mirror_members WHERE ownerID = ?",
+      arguments: [snapshot.ownerID])
+    try database.execute(
+      sql: "DELETE FROM jit_knowledge_ledger_mirror_aliases WHERE ownerID = ?",
+      arguments: [snapshot.ownerID])
+    for row in snapshot.rows {
+      try database.execute(
+        sql: """
+          INSERT INTO jit_knowledge_ledger_mirror_members
+            (ownerID, memoryID, itemRevision, status, sourceState, canonicalMemoryID, contentPurged)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+          """,
+        arguments: [
+          snapshot.ownerID, row.memoryID, row.itemRevision, row.status, row.sourceState,
+          row.canonicalMemoryID, row.contentPurged,
+        ])
+    }
+    for alias in snapshot.aliases {
+      guard uniqueRows.contains(alias.aliasMemoryID), uniqueRows.contains(alias.canonicalMemoryID) else {
+        throw KnowledgeLedgerMirrorSyncError.invalidSnapshot
+      }
+      try database.execute(
+        sql: """
+          INSERT INTO jit_knowledge_ledger_mirror_aliases
+            (ownerID, aliasMemoryID, canonicalMemoryID, sourceMemoryID, reason)
+          VALUES (?, ?, ?, ?, ?)
+          """,
+        arguments: [
+          snapshot.ownerID, alias.aliasMemoryID, alias.canonicalMemoryID, alias.sourceMemoryID,
+          alias.reason,
+        ])
+    }
+    try database.execute(
+      sql: "DELETE FROM jit_knowledge_ledger_mirror_receipts WHERE ownerID != ?",
+      arguments: [snapshot.ownerID])
+    try database.execute(
+      sql: """
+        INSERT INTO jit_knowledge_ledger_mirror_receipts
+          (ownerID, accountGeneration, sourceGeneration, writerEpoch, headCommitID, commitSequence,
+           epochID, contentRevision, chainRevision, scannedCount, projectedCount, rowCount, aliasCount, updatedAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(ownerID) DO UPDATE SET
+          accountGeneration = excluded.accountGeneration,
+          sourceGeneration = excluded.sourceGeneration,
+          writerEpoch = excluded.writerEpoch,
+          headCommitID = excluded.headCommitID,
+          commitSequence = excluded.commitSequence,
+          epochID = excluded.epochID,
+          contentRevision = excluded.contentRevision,
+          chainRevision = excluded.chainRevision,
+          scannedCount = excluded.scannedCount,
+          projectedCount = excluded.projectedCount,
+          rowCount = excluded.rowCount,
+          aliasCount = excluded.aliasCount,
+          updatedAt = excluded.updatedAt
+        """,
+      arguments: [
+        snapshot.ownerID, snapshot.accountGeneration, snapshot.sourceGeneration, snapshot.writerEpoch,
+        snapshot.headCommitID, snapshot.commitSequence, snapshot.epochID, snapshot.contentRevision,
+        snapshot.chainRevision, snapshot.scannedCount, snapshot.projectedCount, snapshot.rows.count,
+        snapshot.aliases.count, now,
+      ])
+    return KnowledgeLedgerMirrorReceipt(
+      ownerID: snapshot.ownerID,
+      accountGeneration: snapshot.accountGeneration,
+      commitSequence: snapshot.commitSequence,
+      epochID: snapshot.epochID,
+      contentRevision: snapshot.contentRevision,
+      rowCount: snapshot.rows.count,
+      aliasCount: snapshot.aliases.count)
+  }
+
+  func getAuthoritativeKnowledgeLedgerMirrorMembers(ownerID: String) async throws
+    -> [KnowledgeLedgerMirrorMember]
+  {
+    let db = try await ensureInitialized()
+    return try await db.read { database in
+      try Row.fetchAll(
+        database,
+        sql: """
+          SELECT memoryID, itemRevision, status, sourceState, canonicalMemoryID, contentPurged
+          FROM jit_knowledge_ledger_mirror_members WHERE ownerID = ? ORDER BY memoryID
+          """,
+        arguments: [ownerID]
+      ).map { row in
+        KnowledgeLedgerMirrorMember(
+          memoryID: row["memoryID"],
+          itemRevision: row["itemRevision"],
+          status: row["status"],
+          sourceState: row["sourceState"],
+          canonicalMemoryID: row["canonicalMemoryID"],
+          contentPurged: row["contentPurged"])
+      }
+    }
   }
 
   private static func reconcileServerMemories(

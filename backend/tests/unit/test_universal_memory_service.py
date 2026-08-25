@@ -1,6 +1,7 @@
 """Focused behavioral checks for the universal MemoryService seam."""
 
 from unittest.mock import MagicMock
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -17,6 +18,7 @@ from models.product_memory import (
 
 from tests.unit.test_memory_service_parity import (
     _load_memory_service,
+    _purge_stub_memory_modules,
     _sample_memory_dict,
 )
 
@@ -47,6 +49,10 @@ class _Ref:
         else:
             self.db.docs[self.path] = dict(payload)
         self.db.events.append(("set", self.path))
+
+    def delete(self):
+        self.db.docs.pop(self.path, None)
+        self.db.events.append(("delete", self.path))
 
 
 class _Batch:
@@ -118,7 +124,19 @@ def _historical(service_mod, memory_id, *, content=None):
 @pytest.fixture
 def service_mod(monkeypatch):
     monkeypatch.setenv("MEMORY_MODE", "read")
-    return _load_memory_service(monkeypatch)
+    module = _load_memory_service(monkeypatch)
+
+    @contextmanager
+    def permitted_gate(*_args, **_kwargs):
+        yield "test-gate-token"
+
+    monkeypatch.setattr(module, "destructive_operation_gate", permitted_gate)
+    monkeypatch.setattr(module, "purge_canonical_memory_projections", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(module, "purge_source_replacement_receipts_for_memories", lambda *_args, **_kwargs: [])
+    try:
+        yield module
+    finally:
+        _purge_stub_memory_modules()
 
 
 def test_global_write_pause_blocks_intake_but_not_reads_or_privacy_delete(service_mod, monkeypatch):
@@ -131,6 +149,8 @@ def test_global_write_pause_blocks_intake_but_not_reads_or_privacy_delete(servic
     service._canonical.write = MagicMock()
     service._canonical.delete = MagicMock()
     service._write_historical_override = MagicMock()
+    review_cleanup = MagicMock()
+    monkeypatch.setattr(service_mod, "purge_stale_review_conflicts_for_memories", review_cleanup)
     monkeypatch.setattr(service_mod.HistoricalMemoryAdapter, "cleanup", MagicMock())
     monkeypatch.setenv("MEMORY_MODE", "off")
 
@@ -143,6 +163,13 @@ def test_global_write_pause_blocks_intake_but_not_reads_or_privacy_delete(servic
     service._canonical.delete.assert_not_called()
     service._write_historical_override.assert_called_once_with(
         "uid-test", "memory-1", service_mod.MemoryItemStatus.tombstoned
+    )
+    review_cleanup.assert_called_once_with(
+        "uid-test",
+        ["memory-1"],
+        reason="explicit_memory_delete",
+        db_client=service.db_client,
+        include_legacy_commits=True,
     )
 
 
@@ -1769,21 +1796,64 @@ def test_canonical_materialization_failure_never_falls_back_to_legacy_write(serv
     legacy_edit.assert_not_called()
 
 
-def test_delete_all_commits_historical_tombstones_before_cleanup(service_mod, monkeypatch):
+def test_delete_all_commits_historical_fence_before_cleanup_then_purges_it(service_mod, monkeypatch):
     db = _Db()
     service = service_mod.MemoryService(db_client=db)
     service._canonical.delete_all = MagicMock(side_effect=lambda uid: db.events.append(("canonical_delete", uid)))
     service.history.ids = MagicMock(return_value=["legacy-1", "legacy-2"])
     cleanup = MagicMock(side_effect=lambda uid, **kwargs: db.events.append(("cleanup", uid)))
+    review_cleanup = MagicMock()
+    monkeypatch.setattr(service_mod, "iter_authoritative_product_memory_items", lambda *args, **kwargs: iter(()))
+    monkeypatch.setattr(service_mod, "purge_stale_review_conflicts_for_memories", review_cleanup)
     monkeypatch.setattr(service_mod.HistoricalMemoryAdapter, "cleanup_all", cleanup)
 
     service.delete_all("uid-test")
     assert db.events[0][0] in {"set", "batch_commit"}
     assert any(event == ("canonical_delete", "uid-test") for event in db.events)
-    assert db.events[-1] == ("cleanup", "uid-test")
+    cleanup_index = db.events.index(("cleanup", "uid-test"))
+    assert any(event[0] == "delete" for event in db.events[cleanup_index + 1 :])
     assert any(event[0] == "batch_commit" for event in db.events)
-    assert db.docs["users/uid-test/memory_historical_overrides/legacy-1"]["status"] == "tombstoned"
+    assert "users/uid-test/memory_historical_overrides/legacy-1" not in db.docs
     cleanup.assert_called_once()
+    review_cleanup.assert_called_once_with(
+        "uid-test",
+        ["legacy-1", "legacy-2"],
+        reason="canonical_memory_delete_all_retry",
+        db_client=service.db_client,
+        include_legacy_commits=True,
+    )
+
+
+def test_delete_default_retries_required_review_scrub_for_canonical_and_historical_ids(service_mod, monkeypatch):
+    service = service_mod.MemoryService(db_client=_Db())
+    default_item = MagicMock(memory_id="canonical-default", tier=service_mod.MemoryTier.long_term)
+    archive_item = MagicMock(memory_id="canonical-archive", tier=service_mod.MemoryTier.archive)
+    service.history.ids = MagicMock(return_value=["legacy-default"])
+    service._canonical.delete_default = MagicMock()
+    service.history.cleanup_all = MagicMock()
+    review_cleanup = MagicMock()
+    monkeypatch.setattr(
+        service_mod,
+        "iter_authoritative_product_memory_items",
+        lambda *args, **kwargs: iter([default_item, archive_item]),
+    )
+    monkeypatch.setattr(service_mod, "purge_stale_review_conflicts_for_memories", review_cleanup)
+
+    service.delete_default("uid-test")
+
+    review_cleanup.assert_called_once_with(
+        "uid-test",
+        ["canonical-default", "legacy-default"],
+        reason="canonical_memory_delete_default_retry",
+        db_client=service.db_client,
+        include_legacy_commits=True,
+    )
+    service._canonical.delete_default.assert_called_once_with("uid-test")
+    service.history.cleanup_all.assert_called_once_with(
+        "uid-test",
+        db_client=service.db_client,
+        required=True,
+    )
 
 
 def test_search_deduplicates_canonical_and_historical_candidates(service_mod):
@@ -2050,9 +2120,14 @@ def test_delete_batch_tombstones_historical_without_materializing_then_cleans(se
     monkeypatch.setattr(
         service, "_materialize_legacy", MagicMock(side_effect=AssertionError("privacy delete must not materialize"))
     )
-    service._canonical.delete_batch = MagicMock(
-        side_effect=lambda _uid, ids: events.append(("canonical_batch", list(ids)))
-    )
+
+    def delete_batch(_uid, ids):
+        events.append(("canonical_batch", list(ids)))
+        return ["canonical", "canonical-alias"]
+
+    service._canonical.delete_batch = MagicMock(side_effect=delete_batch)
+    review_cleanup = MagicMock()
+    monkeypatch.setattr(service_mod, "purge_stale_review_conflicts_for_memories", review_cleanup)
     monkeypatch.setattr(
         service,
         "_write_historical_overrides",
@@ -2069,8 +2144,17 @@ def test_delete_batch_tombstones_historical_without_materializing_then_cleans(se
     assert events == [
         ("override", ["canonical", "legacy"], service_mod.MemoryItemStatus.tombstoned),
         ("canonical_batch", ["canonical"]),
+        ("cleanup", "canonical"),
+        ("cleanup", "canonical-alias"),
         ("cleanup", "legacy"),
     ]
+    review_cleanup.assert_called_once_with(
+        "uid-test",
+        ["canonical", "canonical-alias", "legacy"],
+        reason="canonical_memory_delete_batch_retry",
+        db_client=service.db_client,
+        include_legacy_commits=True,
+    )
 
 
 def test_delete_batch_retries_already_tombstoned_historical_identity(service_mod, monkeypatch):
@@ -2078,18 +2162,116 @@ def test_delete_batch_retries_already_tombstoned_historical_identity(service_mod
     historical = _historical(service_mod, "legacy")
     monkeypatch.setattr(service_mod, "read_canonical_memory_item", lambda *args, **kwargs: None)
     monkeypatch.setattr(service, "_canonical_status", MagicMock(return_value=service_mod.MemoryItemStatus.tombstoned))
+    monkeypatch.setattr(
+        service_mod,
+        "canonical_memory_lineage_ids",
+        MagicMock(return_value=["legacy", "legacy-alias"]),
+    )
     monkeypatch.setattr(service.history, "get", MagicMock(return_value=historical))
     overrides = MagicMock()
     cleanup = MagicMock()
+    review_cleanup = MagicMock()
     monkeypatch.setattr(service, "_write_historical_overrides", overrides)
     monkeypatch.setattr(service_mod.HistoricalMemoryAdapter, "cleanup", cleanup)
+    monkeypatch.setattr(service_mod, "purge_stale_review_conflicts_for_memories", review_cleanup)
     service._canonical.delete_batch = MagicMock()
 
     service.delete_batch("uid-test", ["legacy"])
 
     service._canonical.delete_batch.assert_not_called()
     overrides.assert_called_once_with("uid-test", ["legacy"], service_mod.MemoryItemStatus.tombstoned)
-    cleanup.assert_called_once_with("uid-test", "legacy", db_client=service.db_client)
+    review_cleanup.assert_called_once_with(
+        "uid-test",
+        ["legacy"],
+        reason="canonical_memory_delete_batch_retry",
+        db_client=service.db_client,
+        include_legacy_commits=True,
+    )
+    assert cleanup.call_args_list == [
+        (("uid-test", "legacy"), {"db_client": service.db_client, "required": True}),
+    ]
+
+
+def test_required_historical_cleanup_keeps_content_when_vector_delete_fails(service_mod, monkeypatch):
+    delete_content = MagicMock()
+    monkeypatch.setattr(service_mod, "delete_memory_vector", MagicMock(side_effect=RuntimeError("vector down")))
+    monkeypatch.setattr(service_mod.memories_db, "delete_memory", delete_content)
+
+    with pytest.raises(service_mod.HTTPException) as exc_info:
+        service_mod.HistoricalMemoryAdapter.cleanup(
+            "uid-test",
+            "legacy",
+            db_client=_Db(),
+            required=True,
+        )
+
+    assert exc_info.value.status_code == 503
+    delete_content.assert_not_called()
+
+
+def test_required_historical_cleanup_requires_initialized_vector_authority(service_mod, monkeypatch):
+    delete_content = MagicMock()
+    delete_vector = MagicMock()
+    monkeypatch.setattr(service_mod.vector_db, "index", None)
+    monkeypatch.setattr(service_mod, "delete_memory_vector", delete_vector)
+    monkeypatch.setattr(service_mod.memories_db, "delete_memory", delete_content)
+
+    with pytest.raises(service_mod.HTTPException) as exc_info:
+        service_mod.HistoricalMemoryAdapter.cleanup(
+            "uid-test",
+            "legacy",
+            db_client=_Db(),
+            required=True,
+        )
+
+    assert exc_info.value.status_code == 503
+    delete_vector.assert_not_called()
+    delete_content.assert_not_called()
+
+
+def test_required_historical_cleanup_deletes_vector_before_content(service_mod, monkeypatch):
+    events = []
+    monkeypatch.setattr(service_mod.vector_db, "index", object())
+    monkeypatch.setattr(service_mod, "delete_memory_vector", lambda *_args: events.append("vector"))
+    monkeypatch.setattr(
+        service_mod.memories_db,
+        "delete_memory",
+        lambda *_args, **_kwargs: events.append("content"),
+    )
+
+    service_mod.HistoricalMemoryAdapter.cleanup(
+        "uid-test",
+        "legacy",
+        db_client=_Db(),
+        required=True,
+    )
+
+    assert events == ["vector", "content"]
+
+
+def test_single_delete_retries_cleanup_after_canonical_tombstone(service_mod, monkeypatch):
+    service = service_mod.MemoryService(db_client=_Db())
+    tombstone = MagicMock(status=service_mod.MemoryItemStatus.tombstoned)
+    monkeypatch.setattr(service_mod, "read_canonical_memory_item", MagicMock(return_value=tombstone))
+    monkeypatch.setattr(service_mod, "canonical_memory_lineage_ids", MagicMock(return_value=["legacy"]))
+    cleanup = MagicMock()
+    review_cleanup = MagicMock()
+    monkeypatch.setattr(service_mod.HistoricalMemoryAdapter, "cleanup", cleanup)
+    monkeypatch.setattr(service_mod, "purge_stale_review_conflicts_for_memories", review_cleanup)
+    service._canonical.delete = MagicMock()
+    service._write_historical_override = MagicMock()
+
+    service.delete("uid-test", "legacy")
+
+    service._canonical.delete.assert_not_called()
+    review_cleanup.assert_called_once_with(
+        "uid-test",
+        ["legacy"],
+        reason="canonical_memory_delete_retry",
+        db_client=service.db_client,
+        include_legacy_commits=True,
+    )
+    cleanup.assert_called_once_with("uid-test", "legacy", db_client=service.db_client, required=True)
 
 
 def test_retract_conversation_suppresses_and_cleans_historical_memories(service_mod, monkeypatch):
@@ -2108,13 +2290,23 @@ def test_retract_conversation_suppresses_and_cleans_historical_memories(service_
     service.history.all_live = MagicMock(return_value=[historical])
     overrides = MagicMock()
     cleanup = MagicMock()
+    review_cleanup = MagicMock()
     monkeypatch.setattr(service, "_write_historical_overrides", overrides)
     monkeypatch.setattr(service_mod.HistoricalMemoryAdapter, "cleanup", cleanup)
+    monkeypatch.setattr(service_mod, "purge_stale_review_conflicts_for_memories", review_cleanup)
 
     service.retract_conversation_memories("uid-test", "conversation-1")
 
     overrides.assert_called_once_with("uid-test", ["canonical", "legacy"], service_mod.MemoryItemStatus.tombstoned)
-    cleanup.assert_called_once_with("uid-test", "legacy", db_client=service.db_client)
+    review_cleanup.assert_called_once_with(
+        "uid-test",
+        ["canonical", "legacy"],
+        reason="conversation_memory_retraction",
+        db_client=service.db_client,
+        include_legacy_commits=True,
+        preserve_source_replacement_receipts=True,
+    )
+    cleanup.assert_called_once_with("uid-test", "legacy", db_client=service.db_client, required=True)
 
 
 def test_retract_irreversible_callback_fires_immediately_after_canonical_commit(service_mod, monkeypatch):
@@ -2140,6 +2332,11 @@ def test_retract_irreversible_callback_fires_immediately_after_canonical_commit(
     service.history.all_live = MagicMock(return_value=[historical])
     monkeypatch.setattr(service, "_write_historical_overrides", write_overrides)
     monkeypatch.setattr(service_mod.HistoricalMemoryAdapter, "cleanup", cleanup)
+    monkeypatch.setattr(
+        service_mod,
+        "purge_stale_review_conflicts_for_memories",
+        lambda *_args, **_kwargs: events.append("review_cleanup"),
+    )
 
     service.retract_conversation_memories(
         "uid-test",
@@ -2147,7 +2344,7 @@ def test_retract_irreversible_callback_fires_immediately_after_canonical_commit(
         on_authoritative_commit=lambda: events.append("callback"),
     )
 
-    assert events == ["canonical", "callback", "suppress", "cleanup"]
+    assert events == ["canonical", "callback", "suppress", "review_cleanup", "cleanup"]
 
 
 def test_retract_irreversible_callback_still_fires_when_later_suppression_fails(service_mod, monkeypatch):

@@ -10,6 +10,7 @@ before copying, mirroring the decrypt-then-reencrypt pattern already used by mig
 """
 
 import os
+from contextlib import contextmanager
 from unittest.mock import MagicMock
 
 import pytest
@@ -25,6 +26,7 @@ os.environ.setdefault(
 # so no client is constructed and no network is touched on import. Fakes are injected per-test via
 # the firestore_client parameter and monkeypatch on the module's encryption singleton.
 from database import memories  # noqa: E402
+from database.legal_holds import DestructiveOperationInProgress  # noqa: E402
 
 
 class FakeEnc:
@@ -48,6 +50,15 @@ class FakeEnc:
 def enc(monkeypatch):
     """Inject the per-user keyed fake encryption onto the module's lazy singleton (no sys.modules mutation)."""
     monkeypatch.setattr(memories, "encryption", FakeEnc)
+
+    @contextmanager
+    def allow_external_write(uid, *, kind, firestore_client):
+        assert uid == "newuid"
+        assert kind == "external_data_write"
+        assert firestore_client is not None
+        yield "writer-token"
+
+    monkeypatch.setattr(memories, "destructive_operation_gate", allow_external_write)
     return FakeEnc
 
 
@@ -122,3 +133,20 @@ def test_mixed_batch_rekeys_only_enhanced(enc):
     written = _written(batch)
     assert enc.decrypt(written[0]["content"], "newuid") == "alpha"
     assert written[1]["content"] == "beta"
+
+
+def test_destination_deletion_fence_blocks_background_migration_before_any_copy(enc, monkeypatch):
+    @contextmanager
+    def blocked_external_write(uid, *, kind, firestore_client):
+        assert uid == "newuid"
+        assert kind == "external_data_write"
+        raise DestructiveOperationInProgress("account deletion owns destination")
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(memories, "destructive_operation_gate", blocked_external_write)
+    db, batch = _make_db([{"id": "m1", "content": "private", "data_protection_level": "standard"}])
+
+    with pytest.raises(DestructiveOperationInProgress, match="account deletion"):
+        memories.migrate_memories("prevuid", "newuid", firestore_client=db)
+    batch.set.assert_not_called()
+    batch.commit.assert_not_called()

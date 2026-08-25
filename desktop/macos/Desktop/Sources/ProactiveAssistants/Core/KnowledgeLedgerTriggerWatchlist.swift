@@ -304,6 +304,7 @@ struct KnowledgeLedgerCompiledTrigger: Equatable, Sendable {
   let calendar: CalendarCondition?
   let embedding: EmbeddingCondition?
   let action: KnowledgeLedgerTriggerAction?
+  let snoozedUntil: Date?
 
   enum MatchMode: String, Equatable, Sendable {
     case all
@@ -324,6 +325,10 @@ struct KnowledgeLedgerCompiledTrigger: Equatable, Sendable {
 
   struct EmbeddingCondition: Equatable, Sendable {
     let prototypeID: String
+    let prototypeRevision: String
+    let modelID: String
+    let modelVersion: String
+    let language: String
     let minSimilarity: Double
   }
 
@@ -341,6 +346,7 @@ struct KnowledgeLedgerCompiledTrigger: Equatable, Sendable {
       && lhs.calendar == rhs.calendar
       && lhs.embedding == rhs.embedding
       && lhs.action == rhs.action
+      && lhs.snoozedUntil == rhs.snoozedUntil
   }
 }
 
@@ -358,7 +364,9 @@ struct KnowledgeLedgerTriggerEvaluator {
     _ trigger: KnowledgeLedgerCompiledTrigger,
     observation: KnowledgeLedgerTriggerObservation,
     day: String,
-    wakeupsUsed: Int = 0
+    wakeupsUsed: Int = 0,
+    embeddingEvaluationEnabled: Bool = true,
+    embeddingTriageSimilarity: Double? = nil
   ) -> KnowledgeLedgerTriggerDecision {
     let text = normalize(observation.text)
     var results: [String: ConditionResult] = [:]
@@ -397,8 +405,18 @@ struct KnowledgeLedgerTriggerEvaluator {
       record("calendar", calendarMatches(calendar, observation.calendarEvents))
     }
     if let embedding = trigger.embedding {
-      if let score = observation.embeddingScores[embedding.prototypeID] {
-        record("embedding:\(embedding.prototypeID)", score >= embedding.minSimilarity)
+      if !embeddingEvaluationEnabled {
+        // Disabled scorer policy is a deterministic no-match, never ambiguity
+        // and never implicit permission for a model call.
+        record("embedding:\(embedding.prototypeID)", false)
+      } else if let score = observation.embeddingScores[embedding.prototypeID] {
+        if score >= embedding.minSimilarity {
+          record("embedding:\(embedding.prototypeID)", true)
+        } else if let embeddingTriageSimilarity, score >= embeddingTriageSimilarity {
+          record("embedding:\(embedding.prototypeID)", nil)
+        } else {
+          record("embedding:\(embedding.prototypeID)", false)
+        }
       } else {
         record("embedding:\(embedding.prototypeID)", nil)
       }
@@ -519,7 +537,7 @@ enum KnowledgeLedgerTriggerCompiler {
   static let maxApps = 16
   static let maxWindows = 16
 
-  static func compile(_ row: KnowledgeLedgerTriggerRow) -> Result<
+  static func compile(_ row: KnowledgeLedgerTriggerRow, snoozedUntil: Date? = nil) -> Result<
     KnowledgeLedgerCompiledTrigger, KnowledgeLedgerTriggerCompileFailure
   > {
     guard row.ledgerSchemaVersion == KnowledgeLedgerTriggerRow.schemaVersion else {
@@ -534,7 +552,7 @@ enum KnowledgeLedgerTriggerCompiler {
     do {
       try StrictJSONKeyValidator.validate(row.triggerConditionJSON)
       let payload = try JSONDecoder().decode(ConditionPayload.self, from: row.triggerConditionJSON)
-      let compiled = try compile(payload: payload, rowID: id, metadata: metadata)
+      let compiled = try compile(payload: payload, rowID: id, metadata: metadata, snoozedUntil: snoozedUntil)
       return .success(compiled)
     } catch let failure as KnowledgeLedgerTriggerCompileFailure {
       return .failure(failure)
@@ -567,7 +585,8 @@ enum KnowledgeLedgerTriggerCompiler {
   private static func compile(
     payload: ConditionPayload,
     rowID: String,
-    metadata: KnowledgeLedgerTriggerMetadata
+    metadata: KnowledgeLedgerTriggerMetadata,
+    snoozedUntil: Date?
   ) throws -> KnowledgeLedgerCompiledTrigger {
     guard payload.schemaVersion == "jit_trigger.v1" else {
       throw KnowledgeLedgerTriggerCompileFailure.unsupportedSchema(payload.schemaVersion)
@@ -621,7 +640,8 @@ enum KnowledgeLedgerTriggerCompiler {
       time: time,
       calendar: calendar,
       embedding: embedding,
-      action: payload.action
+      action: payload.action,
+      snoozedUntil: snoozedUntil
     )
   }
 
@@ -888,10 +908,18 @@ private struct CalendarPayload: Decodable {
 
 private struct EmbeddingPayload: Decodable {
   let prototypeID: String
+  let prototypeRevision: String
+  let modelID: String
+  let modelVersion: String
+  let language: String
   let minSimilarity: Double
 
   enum CodingKeys: String, CodingKey, CaseIterable {
     case prototypeID = "prototype_id"
+    case prototypeRevision = "prototype_revision"
+    case modelID = "model_id"
+    case modelVersion = "model_version"
+    case language
     case minSimilarity = "min_similarity"
   }
 
@@ -903,6 +931,10 @@ private struct EmbeddingPayload: Decodable {
     }
     let container = try decoder.container(keyedBy: CodingKeys.self)
     prototypeID = try container.decode(String.self, forKey: .prototypeID)
+    prototypeRevision = try container.decode(String.self, forKey: .prototypeRevision)
+    modelID = try container.decode(String.self, forKey: .modelID)
+    modelVersion = try container.decode(String.self, forKey: .modelVersion)
+    language = try container.decode(String.self, forKey: .language)
     minSimilarity = try container.decodeIfPresent(Double.self, forKey: .minSimilarity) ?? 0.82
   }
 }
@@ -959,10 +991,17 @@ extension KnowledgeLedgerCompiledTrigger.CalendarCondition {
 extension KnowledgeLedgerCompiledTrigger.EmbeddingCondition {
   fileprivate init(_ payload: EmbeddingPayload) throws {
     let prototypeID = payload.prototypeID.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !prototypeID.isEmpty, prototypeID.count <= 80, payload.minSimilarity.isFinite,
-      (0...1).contains(payload.minSimilarity)
+    let attestations = [
+      payload.prototypeRevision, payload.modelID, payload.modelVersion, payload.language,
+    ].map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+    guard !prototypeID.isEmpty, prototypeID.count <= 80,
+      attestations.allSatisfy({ !$0.isEmpty && $0.count <= 80 }),
+      payload.minSimilarity == 0.82
     else { throw KnowledgeLedgerTriggerCompileFailure.malformed("embedding condition invalid") }
-    self.init(prototypeID: prototypeID, minSimilarity: payload.minSimilarity)
+    self.init(
+      prototypeID: prototypeID, prototypeRevision: attestations[0], modelID: attestations[1],
+      modelVersion: attestations[2], language: attestations[3],
+      minSimilarity: payload.minSimilarity)
   }
 }
 

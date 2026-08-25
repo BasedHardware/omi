@@ -17,6 +17,11 @@ from utils.memory.memory_service import MemoryService
 
 JsonRecord = dict[str, Any]
 
+
+class PortabilityExportIncomplete(RuntimeError):
+    """A retained user-data object could not be included in the export."""
+
+
 # Primary/user-visible task intelligence records. Derived projections, leases,
 # idempotency receipts, and outboxes are intentionally excluded: they are
 # implementation state, not additional user-authored product data.
@@ -55,6 +60,41 @@ MEMORY_SWEEP_EXPORT_COLLECTIONS = (
     'daily_memory_sweep_daily_summary_staged',
     'daily_memory_sweep_onboarding_staged',
     'daily_memory_sweep_model_invocations',
+)
+
+# JIT is user-visible product history, not disposable implementation state.
+# Export the content-free feedback and proactivity ledgers so a portability
+# export can reconstruct what was shown, reserved, and explicitly corrected.
+JIT_EXPORT_COLLECTIONS = (
+    'jit_trigger_feedback',
+    'jit_proactivity_events',
+    'jit_proactivity_daily_budgets',
+    'jit_proactivity_candidate_turns',
+)
+
+# Review decisions and corrections are retained user-owned memory history.
+# Pending/accepted rows can contain candidate text, evidence, corrections, and
+# explicit user reasons, so they belong in portability export rather than being
+# treated as rebuildable projections. Privacy-scrubbed rows remain portable as
+# content-free audit history.
+MEMORY_REVIEW_EXPORT_COLLECTIONS = (
+    'memory_review_queue',
+    'memory_corrections',
+)
+
+# Account-lifetime canonical ledger history and lineage authority. These rows
+# are retained independently of the user-facing MemoryDB projection and must
+# remain portable, including content-free tombstones and receipts.
+MEMORY_LEDGER_EXPORT_COLLECTIONS = (
+    'memory_items',
+    'memory_operations',
+    'memory_commits',
+    'memory_deletion_receipts',
+    'memory_source_replacements',
+    'memory_ledger_reopens',
+    'memory_lineage',
+    'memory_historical_overrides',
+    'memory_evidence',
 )
 
 
@@ -158,21 +198,31 @@ def _export_photo_manifest(uid: str, conversation_id: str, photo: Mapping[str, A
         "bytes_available": False,
     }
     inline = photo.get("base64")
-    if isinstance(inline, str) and inline:
+    if inline is not None:
+        if not isinstance(inline, str) or not inline:
+            raise PortabilityExportIncomplete("retained inline image bytes are malformed")
+        try:
+            decoded = base64.b64decode(inline, validate=True)
+        except Exception as exc:
+            raise PortabilityExportIncomplete("retained inline image bytes are malformed") from exc
+        if not decoded:
+            raise PortabilityExportIncomplete("retained inline image bytes are empty")
         result["bytes_base64"] = inline
         result["bytes_available"] = True
         return result
     storage_id = photo.get("storage_id")
     if isinstance(storage_id, str) and storage_id:
-        try:
-            payload = download_frame_request_pixels(uid, storage_id)
-        except Exception:
-            # The manifest remains explicit when an external object cannot be
-            # read; never silently claim that export contains image bytes.
-            return result
+        # A retained image is part of the portability boundary.  If its bytes
+        # cannot be read, abort the export so the job can retry; returning a
+        # nominally successful archive with ``bytes_available: false`` would
+        # silently omit durable user data.
+        payload = download_frame_request_pixels(uid, storage_id)
+        if not payload:
+            raise PortabilityExportIncomplete("retained image object is empty")
         result["bytes_base64"] = base64.b64encode(payload).decode("ascii")
         result["bytes_available"] = True
-    return result
+        return result
+    raise PortabilityExportIncomplete("retained image bytes reference is missing or malformed")
 
 
 def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str]) -> Iterator[str]:
@@ -232,7 +282,15 @@ def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str]) -> Iter
                 continue
             request = dict(row)
             storage_id = request.get("storage_id")
-            if isinstance(storage_id, str) and storage_id:
+            state = request["state"]
+            cleanup_state = request.get("cleanup_state")
+            # Uploaded and attached rows necessarily represent retained bytes.
+            # A missing/malformed reference must abort before a 200 response;
+            # metadata-only terminal states are allowed to omit pixels. Cleanup
+            # deliberately preserves storage_id as audit metadata after object
+            # deletion, so that stale identifier alone is not byte authority.
+            cleanup_converged = cleanup_state in {"deleted", "not_required"}
+            if state in {"uploaded", "attached"} or (not cleanup_converged and storage_id is not None):
                 request["image_manifest"] = _export_photo_manifest(
                     uid,
                     str(request.get("conversation_id") or ""),
@@ -270,6 +328,29 @@ def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str]) -> Iter
     while chunk := memories_spool.read(64 * 1024):
         yield chunk
     yield ',\n'
+
+    yield '  "memory_review_data": {\n'
+    for index, collection_name in enumerate(MEMORY_REVIEW_EXPORT_COLLECTIONS):
+        yield f"    {json.dumps(collection_name)}: "
+        yield from _yield_json_array(_iter_user_subcollection(uid, collection_name))
+        yield ",\n" if index < len(MEMORY_REVIEW_EXPORT_COLLECTIONS) - 1 else "\n"
+    yield '  },\n'
+
+    yield '  "memory_ledger_data": {\n'
+    for index, collection_name in enumerate(MEMORY_LEDGER_EXPORT_COLLECTIONS):
+        yield f"    {json.dumps(collection_name)}: "
+        yield from _yield_json_array(_iter_user_subcollection(uid, collection_name))
+        yield ",\n" if index < len(MEMORY_LEDGER_EXPORT_COLLECTIONS) - 1 else "\n"
+    yield '  },\n'
+
+    # JIT rows are content-free control/history records, but remain part of
+    # the user's retained product history and therefore must be portable.
+    yield '  "jit_data": {\n'
+    for index, collection_name in enumerate(JIT_EXPORT_COLLECTIONS):
+        yield f"    {json.dumps(collection_name)}: "
+        yield from _yield_json_array(_iter_user_subcollection(uid, collection_name))
+        yield ",\n" if index < len(JIT_EXPORT_COLLECTIONS) - 1 else "\n"
+    yield '  },\n'
 
     people = cast(Sequence[Mapping[str, Any]], get_people(uid))
     yield '  "people": ' + json.dumps(people, default=_json_default, indent=2) + ",\n"
@@ -318,18 +399,29 @@ def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str]) -> Iter
     yield "}\n"
 
 
-def _iter_user_data_export_and_close_spool(uid: str, memories_spool: IO[str]) -> Iterator[str]:
+def _iter_spooled_export_and_close(export_spool: IO[str]) -> Iterator[str]:
     try:
-        yield from _iter_user_data_export_from_spool(uid, memories_spool)
+        while chunk := export_spool.read(64 * 1024):
+            yield chunk
     finally:
-        memories_spool.close()
+        export_spool.close()
 
 
 def iter_user_data_export(uid: str) -> Iterator[str]:
-    # Build the remote/authority-sensitive section before the first response
-    # byte. A canonical memory read failure can then become the real HTTP error
-    # instead of a 200 response containing truncated JSON. This function must
-    # remain a regular function: making it a generator defers this preflight
-    # until after StreamingResponse has committed its status and headers.
+    # Build the complete export before the first response byte. Every retained
+    # image object and every authority-sensitive section must either be present
+    # or raise a real HTTP error; a 200 response containing a truncated archive
+    # is not a successful portability export. Both spools spill to disk after a
+    # bounded in-memory prefix, so this remains safe for large accounts.
     memories_spool = _spool_export_memories_json(uid)
-    return _iter_user_data_export_and_close_spool(uid, memories_spool)
+    export_spool = tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024, mode="w+", encoding="utf-8")
+    try:
+        for chunk in _iter_user_data_export_from_spool(uid, memories_spool):
+            export_spool.write(chunk)
+        export_spool.seek(0)
+    except BaseException:
+        export_spool.close()
+        raise
+    finally:
+        memories_spool.close()
+    return _iter_spooled_export_and_close(export_spool)

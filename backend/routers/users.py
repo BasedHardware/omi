@@ -192,9 +192,17 @@ class UserWebhookUrlResponse(BaseModel):
 class UserDataExportResponse(BaseModel):
     profile: Dict[str, Any] = Field(default_factory=dict)
     conversations: List[Dict[str, Any]] = Field(default_factory=list)
+    conversation_photo_manifest: List[Dict[str, Any]] = Field(default_factory=list)
+    frame_requests: List[Dict[str, Any]] = Field(default_factory=list)
+    frame_vision_receipts: List[Dict[str, Any]] = Field(default_factory=list)
+    conversation_keyframe_jobs: List[Dict[str, Any]] = Field(default_factory=list)
     memories: List[Dict[str, Any]] = Field(default_factory=list)
+    memory_review_data: Dict[str, List[Dict[str, Any]]] = Field(default_factory=dict)
+    memory_ledger_data: Dict[str, List[Dict[str, Any]]] = Field(default_factory=dict)
+    jit_data: Dict[str, List[Dict[str, Any]]] = Field(default_factory=dict)
     people: List[Dict[str, Any]] = Field(default_factory=list)
     action_items: List[Dict[str, Any]] = Field(default_factory=list)
+    task_data: Dict[str, List[Dict[str, Any]]] = Field(default_factory=dict)
     chat_messages: List[Dict[str, Any]] = Field(default_factory=list)
 
 
@@ -1942,9 +1950,9 @@ def get_llm_top_features(
 # the responses= override documents the streamed shape in OpenAPI without enforcing response_model validation.
 @router.get('/v1/users/export', tags=['v1'], responses={200: {'model': UserDataExportResponse}})
 def export_all_user_data(uid: str = Depends(auth.get_current_user_uid)):
-    """Export all user data for GDPR/CCPA compliance. Streams response to avoid timeouts."""
-    # Iterator construction eagerly spools canonical memories so an authority
-    # failure is raised before StreamingResponse commits HTTP 200 and headers.
+    """Export all user data for GDPR/CCPA compliance from a disk-backed spool."""
+    # Iterator construction eagerly validates and spools the complete export,
+    # including retained image bytes, before HTTP 200 and headers are committed.
     export_stream = iter_user_data_export(uid)
     return StreamingResponse(
         export_stream,

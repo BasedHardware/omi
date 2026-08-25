@@ -10,6 +10,7 @@ fanning out N requests per memory.
 
 import sys
 import types
+from contextlib import nullcontext
 from unittest.mock import MagicMock
 
 import pytest
@@ -49,6 +50,10 @@ sys.modules['google.cloud.firestore'].DELETE_FIELD = object()
 sys.modules['google.cloud.firestore'].FieldFilter = MagicMock
 sys.modules['google.cloud.firestore'].Query = MagicMock
 sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
+
+legal_holds_stub = types.ModuleType('database.legal_holds')
+legal_holds_stub.destructive_operation_gate = lambda *_args, **_kwargs: nullcontext()
+sys.modules['database.legal_holds'] = legal_holds_stub
 
 # Stub `utils.llm.clients.embeddings` only. Don't overwrite `utils` or
 # `utils.llm` as packages — other real submodules (utils.rate_limit_config,

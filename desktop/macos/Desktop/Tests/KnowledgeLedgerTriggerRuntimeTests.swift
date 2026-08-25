@@ -108,11 +108,11 @@ final class KnowledgeLedgerTriggerRuntimeTests: XCTestCase {
         "windows": ["#release"],
         "time": ["weekdays": [0], "start": "09:00", "end": "10:00", "timezone": "UTC"],
         "calendar": ["event_keywords": ["planning"], "event_types": ["meeting"]],
-        "embedding": ["prototype_id": "release-intent", "min_similarity": 0.8],
+        "embedding": embeddingCondition("release-intent"),
       ],
       modelID: "local-embedder",
       modelVersion: "v1",
-      threshold: 0.8,
+      threshold: 0.82,
       wakeupBudgetPerDay: 2)
     var date = DateComponents()
     date.calendar = Calendar(identifier: .gregorian)
@@ -136,7 +136,9 @@ final class KnowledgeLedgerTriggerRuntimeTests: XCTestCase {
         embeddingScores: ["release-intent": 0.9]),
       day: "2026-08-24",
       authority: authority(),
-      embeddingContract: .init(modelID: "local-embedder", modelVersion: "v1"))
+      embeddingContract: .init(
+        modelID: "local-embedder", modelVersion: "v1", language: "en",
+        prototypeRevision: "prototype-v1"))
 
     XCTAssertEqual(result.status, .evaluated)
     XCTAssertEqual(result.nextLane, .plannedTrigger)
@@ -151,7 +153,7 @@ final class KnowledgeLedgerTriggerRuntimeTests: XCTestCase {
   func testAmbiguousPlannedTriggerPrecedesAmbientAndNeverInvokesAFullModelLane() throws {
     let trigger = try KnowledgeLedgerTriggerRow(
       id: "needs-local-score",
-      triggerCondition: ["embedding": ["prototype_id": "intent", "min_similarity": 0.82]],
+      triggerCondition: ["embedding": embeddingCondition("intent")],
       modelID: "local-embedder",
       modelVersion: "v1",
       threshold: 0.82)
@@ -161,7 +163,9 @@ final class KnowledgeLedgerTriggerRuntimeTests: XCTestCase {
       observation: KnowledgeLedgerTriggerObservation(text: "unrelated"),
       day: "2026-08-24",
       authority: authority(),
-      embeddingContract: .init(modelID: "local-embedder", modelVersion: "v1"))
+      embeddingContract: .init(
+        modelID: "local-embedder", modelVersion: "v1", language: "en",
+        prototypeRevision: "prototype-v1"))
 
     XCTAssertEqual(result.nextLane, .boundedPlannedTriage)
     XCTAssertEqual(result.ambiguous.map(\.triggerID), ["needs-local-score"])
@@ -201,13 +205,11 @@ final class KnowledgeLedgerTriggerRuntimeTests: XCTestCase {
     }
   }
 
-  func testEmbeddingModelVersionAndThresholdContractsRejectOnlyUnsafeEntries() throws {
+  func testEmbeddingModelAndVersionContractsRejectOnlyUnsafeEntries() throws {
     let safe = try keywordTrigger(id: "keyword", keyword: "release")
     let unsafe = [
-      try embeddingTrigger(id: "missing", modelID: nil, modelVersion: "v1", threshold: 0.8),
-      try embeddingTrigger(id: "model", modelID: "other-embedder", modelVersion: "v1", threshold: 0.8),
-      try embeddingTrigger(id: "threshold", modelID: "local-embedder", modelVersion: "v1", threshold: 0.9),
-      try embeddingTrigger(id: "version", modelID: "local-embedder", modelVersion: "v2", threshold: 0.8),
+      try embeddingTrigger(id: "model", modelID: "other-embedder", modelVersion: "v1", threshold: 0.82),
+      try embeddingTrigger(id: "version", modelID: "local-embedder", modelVersion: "v2", threshold: 0.82),
     ]
     let projection = try makeProjection(unsafe + [safe])
 
@@ -216,16 +218,16 @@ final class KnowledgeLedgerTriggerRuntimeTests: XCTestCase {
       observation: KnowledgeLedgerTriggerObservation(text: "release", embeddingScores: ["intent": 0.99]),
       day: "2026-08-24",
       authority: authority(),
-      embeddingContract: .init(modelID: "local-embedder", modelVersion: "v1"))
+      embeddingContract: .init(
+        modelID: "local-embedder", modelVersion: "v1", language: "en",
+        prototypeRevision: "prototype-v1"))
 
     XCTAssertEqual(result.nextLane, .plannedTrigger)
     XCTAssertEqual(result.matches.map(\.triggerID), ["keyword"])
     XCTAssertEqual(
       result.rejectedEntries,
       [
-        .init(triggerID: "missing", reason: .incompleteEmbeddingContract),
         .init(triggerID: "model", reason: .embeddingModelMismatch),
-        .init(triggerID: "threshold", reason: .embeddingThresholdMismatch),
         .init(triggerID: "version", reason: .embeddingVersionMismatch),
       ])
   }
@@ -380,10 +382,23 @@ final class KnowledgeLedgerTriggerRuntimeTests: XCTestCase {
   ) throws -> KnowledgeLedgerTriggerRow {
     try KnowledgeLedgerTriggerRow(
       id: id,
-      triggerCondition: ["embedding": ["prototype_id": "intent", "min_similarity": 0.8]],
+      triggerCondition: [
+        "embedding": embeddingCondition(
+          "intent", modelID: modelID ?? "local-embedder", modelVersion: modelVersion ?? "v1")
+      ],
       modelID: modelID,
       modelVersion: modelVersion,
       threshold: threshold)
+  }
+
+  private func embeddingCondition(
+    _ prototypeID: String, modelID: String = "local-embedder", modelVersion: String = "v1"
+  ) -> [String: Any] {
+    [
+      "prototype_id": prototypeID, "prototype_revision": "prototype-v1",
+      "model_id": modelID, "model_version": modelVersion, "language": "en",
+      "min_similarity": 0.82,
+    ]
   }
 
   private func makeProjection<S: Sequence>(_ rows: S) throws -> KnowledgeLedgerTriggerWatchlistProjection

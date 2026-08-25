@@ -40,9 +40,18 @@ _ALLOWED_MEMORY_COLLECTIONS_PROPERTIES = frozenset(
         # Immutable source-replacement receipts are journal metadata, not a
         # second product-memory collection or product tier.
         "memory_source_replacements",
+        # Optional anti-resurrection receipts are content-free, expire after
+        # 30 days, and do not establish another product-memory authority.
+        "memory_deletion_receipts",
         # Standalone ledger reopen receipts are journal metadata, not a
         # second product-memory collection or product tier.
         "memory_ledger_reopens",
+        # JIT feedback and proactivity ledgers are content-free user-history
+        # journals; they are not an additional product-memory tier.
+        "jit_trigger_feedback",
+        "jit_proactivity_events",
+        "jit_proactivity_daily_budgets",
+        "jit_proactivity_candidate_turns",
         "memory_outbox",
         "memory_control_state",
         # Migration checkpoint under memory_control (not a product-memory tier store).

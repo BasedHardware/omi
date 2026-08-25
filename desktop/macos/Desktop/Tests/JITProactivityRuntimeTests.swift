@@ -1,3 +1,4 @@
+import CryptoKit
 @preconcurrency import GRDB
 import XCTest
 
@@ -127,12 +128,34 @@ final class JITProactivityRuntimeTests: XCTestCase {
     XCTAssertEqual(decision, .suppressed(reason: "planned_match_ambiguous"))
   }
 
-  func testEmbeddingScoreCannotActivateWithoutAnActualLocalEmbeddingContract() async throws {
+  func testAmbiguousPlannedMatchUsesOneServerReservedNanoBeforeDelivery() async throws {
+    let reservations = ReservationRecorder()
+    let runtime = try wiredRuntime(
+      triggers: [try compiledTrigger(id: "ambiguous", condition: ["apps": ["Slack"]])],
+      nano: { _, _ in .approved },
+      reserve: { reservation, _ in
+        await reservations.record(reservation)
+        return true
+      })
+
+    let decision = await runtime.admission(
+      authorizationSnapshot: try snapshot(),
+      observation: .init(text: "bounded evidence", occurredAt: Date(timeIntervalSince1970: 1_777_248_000)))
+
+    guard case .deliver(.planned, "ambiguous", _) = decision else {
+      return XCTFail("approved bounded nano should admit the planned trigger: \(decision)")
+    }
+    let recorded = await reservations.values
+    XCTAssertEqual(recorded.map(\.operation), [.nanoTriage])
+    XCTAssertTrue(recorded.allSatisfy { $0.eventID.count == 64 && $0.candidateID.count == 64 })
+  }
+
+  func testDisabledEmbeddingPolicyIsDeterministicNoMatchDespiteLocalScore() async throws {
     let runtime = try wiredRuntime(
       triggers: [
         try compiledTrigger(
           id: "embedding",
-          condition: ["embedding": ["prototype_id": "intent", "min_similarity": 0.8]])
+          condition: ["embedding": embeddingCondition(prototypeID: "intent")])
       ])
 
     let decision = await runtime.admission(
@@ -141,7 +164,7 @@ final class JITProactivityRuntimeTests: XCTestCase {
         occurredAt: Date(timeIntervalSince1970: 1_777_248_000),
         embeddingScores: ["intent": 0.99]))
 
-    XCTAssertEqual(decision, .suppressed(reason: "planned_runtime_rejected"))
+    XCTAssertEqual(decision, .suppressed(reason: "ambient_local_gate"))
   }
 
   func testAtomicClaimRemainsFinalRaceFence() async throws {
@@ -155,6 +178,26 @@ final class JITProactivityRuntimeTests: XCTestCase {
         text: "release", occurredAt: Date(timeIntervalSince1970: 1_777_248_000)))
 
     XCTAssertEqual(decision, .suppressed(reason: "planned_duplicate_or_budget"))
+  }
+
+  func testSnoozedPlannedTriggerSuppressesBeforeExpiryAndAdmitsAtExactExpiry() async throws {
+    let expiry = Date(timeIntervalSince1970: 500)
+    let trigger = try compiledTrigger(
+      id: "snoozed", condition: ["keywords": ["release"]], snoozedUntil: expiry)
+    let runtime = try wiredRuntime(triggers: [trigger])
+    let authorization = try snapshot()
+
+    let before = await runtime.admission(
+      authorizationSnapshot: authorization,
+      observation: .init(text: "release", occurredAt: expiry.addingTimeInterval(-0.001)))
+    XCTAssertEqual(before, .suppressed(reason: "ambient_local_gate"))
+
+    let atExpiry = await runtime.admission(
+      authorizationSnapshot: authorization,
+      observation: .init(text: "release", occurredAt: expiry))
+    guard case .deliver(.planned, "snoozed", _) = atExpiry else {
+      return XCTFail("trigger must become eligible at its exact snooze expiry: (atExpiry)")
+    }
   }
 
   func testRunningExecutionSuppressesSameProcessReclaimBeyondDatabaseLease() async throws {
@@ -311,13 +354,61 @@ final class JITProactivityRuntimeTests: XCTestCase {
     XCTAssertNotEqual(first, changed)
   }
 
+  func testRetainedJITIdentifiersAreHMACOpaqueToKnownContentAndInstallationKeys() {
+    let knownInstallation = "known-installation-secret"
+    let components = ["semantic", "bucket-1", "release owner changed"]
+    let opaque = JITProactivityReservation.opaqueIdentifier(
+      components, installationIdentity: knownInstallation)
+    let plainDigest = SHA256.hash(data: Data(components.joined(separator: "\u{1f}").utf8))
+      .map { String(format: "%02x", $0) }.joined()
+
+    XCTAssertEqual(opaque.count, 64)
+    XCTAssertNotEqual(
+      opaque, plainDigest,
+      "a known context must not derive the retained identifier without the installation key")
+    XCTAssertEqual(
+      opaque,
+      JITProactivityReservation.opaqueIdentifier(
+        components, installationIdentity: knownInstallation),
+      "local dedupe remains stable for one installation")
+    XCTAssertNotEqual(
+      opaque,
+      JITProactivityReservation.opaqueIdentifier(
+        components, installationIdentity: "different-installation-secret"),
+      "the same context on another installation must not share a predictable identifier")
+  }
+
+  func testInstallationIdentityIsPersistedRandomMaterialNotMachineDerived() {
+    let suiteName = "JITProactivityRuntimeTests.identity.\(UUID().uuidString)"
+    guard let defaults = UserDefaults(suiteName: suiteName) else {
+      return XCTFail("test suite defaults unavailable")
+    }
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let service = ClientDeviceService(
+      bundleIdentifier: AppBuild.desktopDevBundleIdentifier,
+      userDefaults: defaults)
+
+    let first = service.installationIdentity
+    let second = ClientDeviceService(
+      bundleIdentifier: AppBuild.desktopDevBundleIdentifier,
+      userDefaults: defaults
+    ).installationIdentity
+
+    XCTAssertFalse(first.isEmpty)
+    XCTAssertEqual(first, second)
+    XCTAssertNotEqual(first.lowercased(), "macbook-pro")
+    XCTAssertNotEqual(first.lowercased(), "localhost")
+  }
+
   private func wiredRuntime(
     triggers: [KnowledgeLedgerCompiledTrigger],
     receiptOwner: String = "owner",
     receiptRevision: String = "revision",
     authorizationCurrent: Bool = true,
     claim: JITProactivityRuntime.ClaimWakeup? = nil,
-    begin: JITProactivityRuntime.BeginPlannedExecution? = nil
+    begin: JITProactivityRuntime.BeginPlannedExecution? = nil,
+    nano: @escaping JITProactivityRuntime.NanoTriage = { _, _ in .unknown },
+    reserve: @escaping JITProactivityRuntime.Reserve = { _, _ in true }
   ) throws -> JITProactivityRuntime {
     let rows = try triggers.map { try snapshotRow(for: $0) }
     let serverSnapshot = serverSnapshot(sequence: 4, revision: "revision", rows: rows)
@@ -330,6 +421,7 @@ final class JITProactivityRuntimeTests: XCTestCase {
     return JITProactivityRuntime(
       flags: { _ in JITProactivityFlags(rollout: .enabled, killSwitch: .disabled) },
       snapshots: { _ in serverSnapshot },
+      nanoTriage: nano,
       reconcileSnapshot: { _, _ in receipt },
       compileSnapshot: { _, _ in triggers },
       readWakeupCounts: { _, _, _ in [:] },
@@ -338,19 +430,29 @@ final class JITProactivityRuntimeTests: XCTestCase {
           continuityKey: request.continuityKey, triggerID: request.triggerID, leaseToken: "lease")
       },
       beginPlannedExecution: begin,
+      reserve: reserve,
       authorizationCurrent: { _ in authorizationCurrent })
   }
 
   private func compiledTrigger(
     id: String,
     condition: [String: Any],
-    prompt: String = "Run the standing action"
+    prompt: String = "Run the standing action",
+    snoozedUntil: Date? = nil
   ) throws -> KnowledgeLedgerCompiledTrigger {
     var triggerCondition = condition
     triggerCondition["schema_version"] = "jit_trigger.v1"
     triggerCondition["action"] = ["type": "agent_prompt", "prompt": prompt]
     let row = try KnowledgeLedgerTriggerRow(
-      id: id, triggerCondition: triggerCondition, wakeupBudgetPerDay: 2)
+      id: id, triggerCondition: triggerCondition, wakeupBudgetPerDay: 1)
+    if let snoozedUntil {
+      let data = try JSONSerialization.data(withJSONObject: triggerCondition, options: [.sortedKeys])
+      guard
+        case .success(let trigger) = KnowledgeLedgerTriggerCompiler.compileAuthoritativeSnapshotRow(
+          id: id, triggerConditionJSON: data, wakeupBudgetPerDay: 1, snoozedUntil: snoozedUntil)
+      else { throw KnowledgeLedgerTriggerCompileFailure.malformed("test trigger did not compile") }
+      return trigger
+    }
     guard case .success(let trigger) = KnowledgeLedgerTriggerCompiler.compile(row) else {
       throw KnowledgeLedgerTriggerCompileFailure.malformed("test trigger did not compile")
     }
@@ -363,6 +465,17 @@ final class JITProactivityRuntimeTests: XCTestCase {
       semanticFingerprint: String(repeating: "a", count: 64),
       locallyRelevant: true,
       boundedEvidence: "validated local change")
+  }
+
+  private func embeddingCondition(prototypeID: String) -> [String: Any] {
+    [
+      "prototype_id": prototypeID,
+      "prototype_revision": "prototype-v1",
+      "model_id": "local-jit-embedding",
+      "model_version": "1",
+      "language": "en",
+      "min_similarity": 0.82,
+    ]
   }
 
   private func migratedQueue() throws -> DatabaseQueue {
@@ -396,6 +509,10 @@ final class JITProactivityRuntimeTests: XCTestCase {
     if let embedding = trigger.embedding {
       condition["embedding"] = [
         "prototype_id": embedding.prototypeID,
+        "prototype_revision": embedding.prototypeRevision,
+        "model_id": embedding.modelID,
+        "model_version": embedding.modelVersion,
+        "language": embedding.language,
         "min_similarity": embedding.minSimilarity,
       ]
     }
@@ -407,7 +524,8 @@ final class JITProactivityRuntimeTests: XCTestCase {
       memoryID: trigger.id, itemRevision: revision, updatedAt: Date(timeIntervalSince1970: 10),
       triggerConditionJSON: String(decoding: data, as: UTF8.self),
       action: JITTriggerSnapshotAction(type: action.type, prompt: action.prompt),
-      wakeupBudgetPerDay: trigger.metadata.wakeupBudgetPerDay)
+      wakeupBudgetPerDay: trigger.metadata.wakeupBudgetPerDay ?? 1,
+      snoozedUntil: trigger.snoozedUntil)
   }
 }
 
@@ -420,6 +538,11 @@ private actor SnapshotSequence {
     guard !snapshots.isEmpty else { throw ProactiveLaneClientError.invalidResponse }
     return snapshots.removeFirst()
   }
+}
+
+private actor ReservationRecorder {
+  private(set) var values: [JITProactivityReservation] = []
+  func record(_ value: JITProactivityReservation) { values.append(value) }
 }
 
 private actor AdmissionRaceGate {

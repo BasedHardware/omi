@@ -17,7 +17,9 @@ from utils.memory.jit_trigger_contract import (
     TriggerDecisionStatus,
     TriggerFeedback,
     TriggerFeedbackAction,
+    TriggerEmbeddingPolicy,
     TriggerObservation,
+    TriggerRuntimePolicy,
     apply_trigger_feedback,
     compile_memory_item_trigger,
     compile_trigger_condition,
@@ -26,6 +28,28 @@ from utils.memory.jit_trigger_contract import (
 )
 
 NOW = datetime(2026, 8, 23, 14, 30, tzinfo=timezone.utc)
+EMBEDDING = {
+    "prototype_id": "release-review",
+    "prototype_revision": "prototype-v1",
+    "model_id": "local-embedder",
+    "model_version": "v1",
+    "language": "en",
+    "min_similarity": 0.82,
+}
+EMBEDDING_ATTESTATION = {
+    "prototype_revision": "prototype-v1",
+    "model_id": "local-embedder",
+    "model_version": "v1",
+    "language": "en",
+}
+ENABLED_EMBEDDING_POLICY = TriggerRuntimePolicy(
+    embedding=TriggerEmbeddingPolicy(
+        enabled=True,
+        model_id="local-embedder",
+        model_version="v1",
+        language="en",
+    )
+)
 
 
 def _trigger(condition: dict, **updates) -> MemoryItem:
@@ -76,7 +100,7 @@ def test_compiler_normalizes_all_local_watchlist_selectors_deterministically():
         "windows": ["#release"],
         "time": {"weekdays": [5], "start": "09:00", "end": "17:00", "timezone": "UTC"},
         "calendar": {"event_keywords": ["release review"]},
-        "embedding": {"prototype_id": "release-review", "min_similarity": 0.8},
+        "embedding": EMBEDDING,
     }
 
     compiled = compile_trigger_condition(condition)
@@ -91,7 +115,7 @@ def test_compiler_normalizes_all_local_watchlist_selectors_deterministically():
         "windows": ["#release"],
         "time": {"weekdays": [5], "start": "09:00:00", "end": "17:00:00", "timezone": "UTC"},
         "calendar": {"event_keywords": ["release review"], "event_types": []},
-        "embedding": {"prototype_id": "release-review", "min_similarity": 0.8},
+        "embedding": EMBEDDING,
     }
     assert compiled.as_condition() == compile_trigger_condition(compiled.as_condition()).as_condition()
 
@@ -141,7 +165,7 @@ def test_all_conditions_match_and_double_run_is_byte_stable():
             "windows": ["#release"],
             "time": {"weekdays": [6], "start": "09:00", "end": "17:00", "timezone": "UTC"},
             "calendar": {"event_keywords": ["release review"]},
-            "embedding": {"prototype_id": "release-review", "min_similarity": 0.8},
+            "embedding": EMBEDDING,
         }
     )
     observation = TriggerObservation(
@@ -151,11 +175,13 @@ def test_all_conditions_match_and_double_run_is_byte_stable():
         window_title="#release",
         occurred_at=NOW,
         calendar_events=[{"title": "Release review", "event_type": "meeting"}],
+        calendar_authorized=True,
         embedding_scores={"release-review": 0.91},
+        embedding_attestation=EMBEDDING_ATTESTATION,
     )
 
-    first = evaluate_trigger(compiled, observation)
-    second = evaluate_trigger(compiled, observation)
+    first = evaluate_trigger(compiled, observation, policy=ENABLED_EMBEDDING_POLICY)
+    second = evaluate_trigger(compiled, observation, policy=ENABLED_EMBEDDING_POLICY)
 
     assert first.status == TriggerDecisionStatus.match
     assert first.reason == "all_conditions_satisfied"
@@ -173,22 +199,42 @@ def test_all_conditions_match_and_double_run_is_byte_stable():
     assert first.model_dump() == second.model_dump()
 
 
-def test_missing_context_is_triage_not_a_false_match():
+@pytest.mark.parametrize(
+    ("score", "expected"),
+    [
+        (0.739999, TriggerDecisionStatus.no_match),
+        (0.74, TriggerDecisionStatus.triage),
+        (0.819999, TriggerDecisionStatus.triage),
+        (0.82, TriggerDecisionStatus.match),
+    ],
+)
+def test_embedding_boundaries_require_an_enabled_attested_runtime_policy(score, expected):
+    compiled = compile_trigger_condition({"embedding": EMBEDDING})
+    observation = TriggerObservation(
+        embedding_scores={"release-review": score},
+        embedding_attestation=EMBEDDING_ATTESTATION,
+    )
+
+    assert evaluate_trigger(compiled, observation).status == TriggerDecisionStatus.no_match
+    assert evaluate_trigger(compiled, observation, policy=ENABLED_EMBEDDING_POLICY).status == expected
+
+
+def test_missing_calendar_authority_and_embedding_scorer_fail_closed_without_triage():
     compiled = compile_trigger_condition(
         {
             "entity_aliases": {"owner": ["David", "Dave"]},
             "time": {"weekdays": [5], "start": "09:00", "end": "17:00", "timezone": "UTC"},
             "calendar": {"event_types": ["meeting"]},
-            "embedding": {"prototype_id": "release", "min_similarity": 0.8},
+            "embedding": {**EMBEDDING, "prototype_id": "release"},
         }
     )
     decision = evaluate_trigger(
         compiled,
         TriggerObservation(text="David mentioned the release but no local context was attached."),
     )
-    assert decision.status == TriggerDecisionStatus.triage
-    assert decision.reason == "insufficient_or_ambiguous_context"
-    assert decision.missing_conditions == ("calendar", "embedding:release", "time")
+    assert decision.status == TriggerDecisionStatus.no_match
+    assert decision.reason == "condition_not_satisfied"
+    assert decision.missing_conditions == ("time",)
 
 
 def test_ambiguous_entity_alias_is_triage_and_mismatch_is_no_match():
@@ -265,12 +311,12 @@ def test_trigger_observation_rejects_naive_time():
 def test_feedback_is_bounded_idempotent_and_changes_trigger_state():
     item = _trigger({"keywords": ["release"]})
     reinforce = TriggerFeedback(
-        feedback_id="feedback-1", action=TriggerFeedbackAction.reinforce, recorded_at=NOW + timedelta(minutes=1)
+        feedback_id="1" * 64, action=TriggerFeedbackAction.reinforce, recorded_at=NOW + timedelta(minutes=1)
     )
     reinforced = apply_trigger_feedback(item, reinforce)
     duplicate = apply_trigger_feedback(reinforced.item, reinforce)
     snooze = TriggerFeedback(
-        feedback_id="feedback-2",
+        feedback_id="2" * 64,
         action=TriggerFeedbackAction.snooze,
         recorded_at=NOW + timedelta(minutes=2),
         snoozed_until=NOW + timedelta(hours=1),
@@ -287,7 +333,7 @@ def test_feedback_is_bounded_idempotent_and_changes_trigger_state():
 
     disabled = apply_trigger_feedback(
         snoozed.item,
-        TriggerFeedback(feedback_id="feedback-3", action=TriggerFeedbackAction.disable, recorded_at=NOW),
+        TriggerFeedback(feedback_id="3" * 64, action=TriggerFeedbackAction.disable, recorded_at=NOW),
     )
     assert disabled.item.status == MemoryItemStatus.hidden
     assert evaluate_memory_item_trigger(disabled.item, TriggerObservation(text="release", occurred_at=NOW)).status == (
@@ -311,7 +357,7 @@ def test_snooze_without_observation_time_triages_without_wall_clock():
     snoozed = apply_trigger_feedback(
         _trigger({"keywords": ["release"]}),
         TriggerFeedback(
-            feedback_id="feedback-snooze",
+            feedback_id="4" * 64,
             action=TriggerFeedbackAction.snooze,
             recorded_at=NOW,
             snoozed_until=NOW + timedelta(hours=1),
@@ -324,7 +370,7 @@ def test_snooze_without_observation_time_triages_without_wall_clock():
     assert decision.reason == "trigger_snooze_requires_observation_time"
 
 
-def test_feedback_history_fails_closed_instead_of_evicting_idempotency_keys():
+def test_feedback_state_keeps_a_bounded_rolling_window_while_durable_receipts_own_idempotency():
     item = _trigger(
         {"keywords": ["release"]},
         arguments={
@@ -334,12 +380,27 @@ def test_feedback_history_fails_closed_instead_of_evicting_idempotency_keys():
     update = apply_trigger_feedback(
         item,
         TriggerFeedback(
-            feedback_id="feedback-new",
+            feedback_id="f" * 64,
             action=TriggerFeedbackAction.reinforce,
             recorded_at=NOW,
         ),
     )
 
-    assert update.applied is False
-    assert update.reason == "feedback_history_full"
-    assert update.item == item
+    assert update.applied is True
+    state = update.item.arguments["jit_trigger_feedback"]
+    assert len(state["applied_feedback_ids"]) == MAX_FEEDBACK_IDS
+    assert state["applied_feedback_ids"][0] == "feedback-1"
+    assert state["applied_feedback_ids"][-1] == "f" * 64
+
+
+def test_same_feedback_id_with_different_payload_is_rejected():
+    first = apply_trigger_feedback(
+        _trigger({"keywords": ["release"]}),
+        TriggerFeedback(feedback_id="a" * 64, action=TriggerFeedbackAction.useful, recorded_at=NOW),
+    )
+
+    with pytest.raises(ValueError, match="different payload"):
+        apply_trigger_feedback(
+            first.item,
+            TriggerFeedback(feedback_id="a" * 64, action=TriggerFeedbackAction.false_positive, recorded_at=NOW),
+        )

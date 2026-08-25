@@ -56,6 +56,150 @@ enum JITProactivityOutputPolicy {
   }
 }
 
+struct JITProactivityPaidBoundaryPlan: Equatable, Sendable {
+  let notificationAdmission: JITProactivityReservation
+  let fullTurn: JITProactivityReservation
+
+  static func make(for execution: JITPlannedExecution) -> Self? {
+    guard execution.accountGeneration >= 0,
+      JITProactivityReservation.isIdentifier(execution.candidateID)
+    else { return nil }
+
+    let operation: JITProactivityOperation
+    let triggerID: String?
+    let triggerRevision: Int?
+    switch execution.lane {
+    case .planned:
+      guard let authority = execution.plannedAuthority,
+        authority.receipt.accountGeneration == execution.accountGeneration,
+        authority.triggerRow.memoryID == execution.triggerID
+      else { return nil }
+      operation = .plannedNotification
+      triggerID = authority.triggerRow.memoryID
+      triggerRevision = authority.triggerRow.itemRevision
+    case .ambient:
+      guard execution.plannedAuthority == nil else { return nil }
+      operation = .ambientNotification
+      triggerID = nil
+      triggerRevision = nil
+    }
+
+    let notificationEventID = JITProactivityReservation.identifier(
+      "notification", execution.candidateID)
+    let notification = JITProactivityReservation(
+      eventID: notificationEventID,
+      candidateID: execution.candidateID,
+      operation: operation,
+      accountGeneration: execution.accountGeneration,
+      triggerMemoryID: triggerID,
+      triggerRevision: triggerRevision)
+    return Self(
+      notificationAdmission: notification,
+      fullTurn: JITProactivityReservation(
+        eventID: JITProactivityReservation.identifier("full-turn", execution.candidateID),
+        candidateID: execution.candidateID,
+        operation: .fullTurn,
+        accountGeneration: execution.accountGeneration,
+        triggerMemoryID: triggerID,
+        triggerRevision: triggerRevision,
+        parentEventID: notificationEventID))
+  }
+}
+
+extension JITTriggerFeedbackContext {
+  /// Builds the user-visible feedback provenance from the exact reservation
+  /// admitted immediately before model work. The event ID is deliberately
+  /// the planned-notification reservation event, never the candidate ID.
+  static func planned(
+    ownerID: String,
+    execution: JITPlannedExecution,
+    paidPlan: JITProactivityPaidBoundaryPlan
+  ) -> Self? {
+    guard let authority = execution.plannedAuthority,
+      paidPlan.notificationAdmission.operation == .plannedNotification,
+      paidPlan.notificationAdmission.accountGeneration == execution.accountGeneration,
+      paidPlan.notificationAdmission.triggerMemoryID == authority.triggerRow.memoryID,
+      paidPlan.notificationAdmission.triggerRevision == authority.triggerRow.itemRevision
+    else { return nil }
+    return Self(
+      ownerID: ownerID,
+      eventID: paidPlan.notificationAdmission.eventID,
+      triggerMemoryID: authority.triggerRow.memoryID,
+      accountGeneration: execution.accountGeneration,
+      triggerRevision: authority.triggerRow.itemRevision)
+  }
+}
+
+enum JITProactivityPaidBoundaryError: Error, Equatable {
+  case notificationReservationDenied
+  case fullTurnReservationDenied
+}
+
+enum JITProactivityPaidBoundary {
+  typealias Reserve = @Sendable (JITProactivityReservation, RuntimeOwnerAuthorizationSnapshot) async -> Bool
+  typealias AgentRunner = @Sendable () async throws -> JITProactivityAgentResult
+
+  /// The last model-work boundary: notification admission, then its
+  /// parent-bound full-turn admission, then exactly one agent invocation.
+  /// Keeping this sequence as a small production helper makes it possible to
+  /// prove that a denied reservation never reaches the model runner.
+  static func run(
+    plan: JITProactivityPaidBoundaryPlan,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    reserve: @escaping Reserve,
+    agentRunner: @escaping AgentRunner
+  ) async throws -> JITProactivityAgentResult {
+    guard await reserve(plan.notificationAdmission, authorizationSnapshot) else {
+      throw JITProactivityPaidBoundaryError.notificationReservationDenied
+    }
+    guard await reserve(plan.fullTurn, authorizationSnapshot) else {
+      throw JITProactivityPaidBoundaryError.fullTurnReservationDenied
+    }
+    return try await agentRunner()
+  }
+}
+
+/// The notification/detail UI uses this router so every visible feedback
+/// control has one auditable path to the delivery actor. Tests can inject the
+/// recorder and exercise all buttons without relying on SwiftUI hit testing.
+enum JITTriggerFeedbackActionRouter {
+  static let visibleActions: [JITTriggerFeedbackAction] = [
+    .useful, .falsePositive, .snooze, .disable, .missedOrLate,
+  ]
+
+  typealias Record =
+    @Sendable (
+      JITTriggerFeedbackAction,
+      JITTriggerFeedbackContext,
+      Date?,
+      RuntimeOwnerAuthorizationSnapshot
+    ) async -> Void
+
+  static func record(
+    _ action: JITTriggerFeedbackAction,
+    context: JITTriggerFeedbackContext,
+    snoozedUntil: Date? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    authorizationCurrent: @escaping @Sendable (RuntimeOwnerAuthorizationSnapshot) -> Bool =
+      RuntimeOwnerIdentity.isAuthorizationCurrent,
+    recorder: @escaping Record = { action, context, snoozedUntil, authorizationSnapshot in
+      await JITProactivityDelivery.shared.recordExplicitFeedback(
+        action: action,
+        eventID: context.eventID,
+        triggerMemoryID: context.triggerMemoryID,
+        accountGeneration: context.accountGeneration,
+        triggerRevision: context.triggerRevision,
+        snoozedUntil: snoozedUntil,
+        authorizationSnapshot: authorizationSnapshot)
+    }
+  ) async {
+    guard authorizationCurrent(authorizationSnapshot),
+      visibleActions.contains(action)
+    else { return }
+    await recorder(action, context, snoozedUntil, authorizationSnapshot)
+  }
+}
+
 /// The single full-agent consumer shared by planned and ambient JIT admission.
 /// Admission and durable claims live in ``JITProactivityRuntime``; this actor
 /// owns the existing context delivery ledger, evidence, CandidateSink, and
@@ -68,6 +212,8 @@ actor JITProactivityDelivery {
   private let store = ContextBucketStore.shared
   private let agentRunner: JITProactivityAgentAuthority.Runner
   private let candidateGraduator: CandidateGraduator
+  typealias Reserve = JITProactivityRuntime.Reserve
+  private let reserve: Reserve
 
   init(
     agentRunner: @escaping JITProactivityAgentAuthority.Runner = { request in
@@ -87,10 +233,15 @@ actor JITProactivityDelivery {
     candidateGraduator: @escaping CandidateGraduator = { deliveryID, factIDs, authorization in
       await CandidateSink.shared.graduateValidatedFacts(
         deliveryID: deliveryID, factIDs: factIDs, authorizationSnapshot: authorization)
+    },
+    reserve: @escaping Reserve = { reservation, snapshot in
+      await JITProactivityReservationClient.shared.reserve(
+        reservation, authorizationSnapshot: snapshot)
     }
   ) {
     self.agentRunner = agentRunner
     self.candidateGraduator = candidateGraduator
+    self.reserve = reserve
   }
 
   func deliver(
@@ -156,19 +307,29 @@ actor JITProactivityDelivery {
       await terminalize(deliveryID, failure: "jit_trigger_authority_changed", state: "suppressed")
       return await finish(execution, delivered: false)
     }
+    guard let paidPlan = JITProactivityPaidBoundaryPlan.make(for: execution) else {
+      await terminalize(deliveryID, failure: "jit_paid_boundary_invalid", state: "suppressed")
+      return await finish(execution, delivered: false)
+    }
     do {
-      let result = try await JITProactivityAgentAuthority.run(
-        JITProactivityAgentRequest(
-          surface: .service("jit-proactivity-\(execution.continuityKey)"),
-          prompt: prompt,
-          systemPrompt: """
-            You are Omi's bounded proactive agent. This is one read-only turn. Use tools only to
-            inspect context or history when necessary. Never mutate data, create a trigger, send a
-            message, or take an external action. Return only the requested JSON notification object.
-            """,
-          mode: "ask",
-          authorizationSnapshot: authorizationSnapshot),
-        runner: agentRunner)
+      let result = try await JITProactivityPaidBoundary.run(
+        plan: paidPlan,
+        authorizationSnapshot: authorizationSnapshot,
+        reserve: reserve
+      ) {
+        try await JITProactivityAgentAuthority.run(
+          JITProactivityAgentRequest(
+            surface: .service("jit-proactivity-\(execution.continuityKey)"),
+            prompt: prompt,
+            systemPrompt: """
+              You are Omi's bounded proactive agent. This is one read-only turn. Use tools only to
+              inspect context or history when necessary. Never mutate data, create a trigger, send a
+              message, or take an external action. Return only the requested JSON notification object.
+              """,
+            mode: "ask",
+            authorizationSnapshot: authorizationSnapshot),
+          runner: self.agentRunner)
+      }
       let decision = try JITProactivityOutputPolicy.decode(result.text, lane: execution.lane)
       let factIDs = await store.validatedFactIDs(
         decision.factIDs, snapshotFacts: snapshot.validatedFacts, bucketID: snapshot.bucketID)
@@ -205,6 +366,8 @@ actor JITProactivityDelivery {
           "output_tokens": result.outputTokens,
         ], options: [.sortedKeys])
       let provenanceJSON = String(data: provenanceData, encoding: .utf8) ?? "{}"
+      let feedbackContext = JITTriggerFeedbackContext.planned(
+        ownerID: ownerID, execution: execution, paidPlan: paidPlan)
       try await store.completeDelivery(
         id: deliveryID, decisionType: decision.decision, provenanceJSON: provenanceJSON,
         message: decision.message, state: "policy_approved")
@@ -220,6 +383,7 @@ actor JITProactivityDelivery {
             assistantId: execution.lane == .planned ? "jit-planned-trigger" : "jit-ambient",
             contextSummary: decision.reasoning, detail: execution.triggerID,
             provenanceRef: deliveryID),
+          jitFeedbackContext: feedbackContext,
           onPresented: { [weak self] in
             Task {
               _ = try? await self?.store.completeDelivery(
@@ -235,6 +399,12 @@ actor JITProactivityDelivery {
             }
           })
       }
+    } catch JITProactivityPaidBoundaryError.notificationReservationDenied {
+      await terminalize(deliveryID, failure: "jit_notification_budget", state: "suppressed")
+      await finish(execution, delivered: false)
+    } catch JITProactivityPaidBoundaryError.fullTurnReservationDenied {
+      await terminalize(deliveryID, failure: "jit_full_turn_budget", state: "suppressed")
+      await finish(execution, delivered: false)
     } catch {
       await terminalize(deliveryID, failure: "jit_execution", state: "failed")
       await finish(execution, delivered: false)
@@ -249,6 +419,31 @@ actor JITProactivityDelivery {
   ) async -> CandidateGraduationReason {
     guard decisionType == "task_candidate" else { return .graduated }
     return await candidateGraduator(deliveryID, factIDs, authorizationSnapshot)
+  }
+
+  /// Called only by an explicit user action in the notification/detail UI.
+  /// No delivery timeout, dismissal, or silence path calls this method.
+  func recordExplicitFeedback(
+    action: JITTriggerFeedbackAction,
+    eventID: String,
+    triggerMemoryID: String,
+    accountGeneration: Int,
+    triggerRevision: Int,
+    snoozedUntil: Date? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async {
+    let feedbackID = JITProactivityReservation.identifier(
+      "feedback", eventID, action.rawValue, String(triggerRevision))
+    await JITTriggerFeedbackClient.shared.record(
+      JITTriggerFeedback(
+        feedbackID: feedbackID,
+        eventID: eventID,
+        triggerMemoryID: triggerMemoryID,
+        accountGeneration: accountGeneration,
+        triggerRevision: triggerRevision,
+        action: action,
+        snoozedUntil: snoozedUntil),
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   private func ambientPromptContext(

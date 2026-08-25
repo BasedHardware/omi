@@ -443,6 +443,412 @@ final class MemoryLedgerMirrorTests: XCTestCase {
     RuntimeOwnerAuthorizationAuthority.shared.endTransition(ownerID: fixture?.testUserId)
   }
 
+  func testDurableLedgerMirrorStagesPagesAndActivatesOnlyOnFinalPage() async throws {
+    let authorization = try XCTUnwrap(RuntimeOwnerIdentity.captureAuthorizationSnapshot())
+    let first = makeMemory(id: "ledger-stage-first", metadata: canonicalMetadata())
+    let second = makeMemory(id: "ledger-stage-second", metadata: canonicalMetadata())
+    let epoch = String(repeating: "a", count: 64)
+
+    let firstResult = try await MemoryStorage.shared.stageAuthoritativeKnowledgeLedgerMirrorPage(
+      mirrorPage(
+        ownerID: authorization.ownerID,
+        epochID: epoch,
+        commitSequence: 10,
+        pageRevision: String(repeating: "b", count: 64),
+        chainRevision: String(repeating: "c", count: 64),
+        scannedCount: 1,
+        projectedCount: 1,
+        rows: [mirrorRow(first)],
+        nextCursor: "cursor-one",
+        finalPage: false),
+      requestedCursor: nil,
+      authorizationSnapshot: authorization)
+    guard case .next("cursor-one") = firstResult else {
+      return XCTFail("Expected the staged chain to request its next signed cursor")
+    }
+    let partialMembers = try await MemoryStorage.shared.getAuthoritativeKnowledgeLedgerMirrorMembers(
+      ownerID: authorization.ownerID)
+    XCTAssertTrue(partialMembers.isEmpty)
+
+    let finalResult = try await MemoryStorage.shared.stageAuthoritativeKnowledgeLedgerMirrorPage(
+      mirrorPage(
+        ownerID: authorization.ownerID,
+        epochID: epoch,
+        commitSequence: 10,
+        pageRevision: String(repeating: "d", count: 64),
+        chainRevision: String(repeating: "e", count: 64),
+        scannedCount: 2,
+        projectedCount: 2,
+        rows: [mirrorRow(second)],
+        aliases: [
+          KnowledgeLedgerMirrorAlias(
+            aliasMemoryID: first.id,
+            canonicalMemoryID: second.id,
+            sourceMemoryID: first.id,
+            reason: "superseded_by")
+        ],
+        nextCursor: nil,
+        finalPage: true),
+      requestedCursor: "cursor-one",
+      authorizationSnapshot: authorization)
+    guard case .activated(let receipt) = finalResult else {
+      return XCTFail("Expected final-page activation")
+    }
+    XCTAssertEqual(receipt.rowCount, 2)
+    let activatedMembers = try await MemoryStorage.shared.getAuthoritativeKnowledgeLedgerMirrorMembers(
+      ownerID: authorization.ownerID)
+    XCTAssertEqual(activatedMembers.map(\.memoryID), [first.id, second.id])
+  }
+
+  func testContentPurgedMirrorRowHardPurgesCachedMemoryButAbsentRowKeepsLegacyHistory() async throws {
+    let authorization = try XCTUnwrap(RuntimeOwnerIdentity.captureAuthorizationSnapshot())
+    let retained = makeMemory(id: "ledger-retained-legacy", metadata: canonicalMetadata())
+    let purged = makeMemory(id: "ledger-explicit-purge", metadata: canonicalMetadata())
+    try await MemoryStorage.shared.syncServerMemories([retained, purged])
+
+    let tombstone = KnowledgeLedgerMirrorRow(
+      memoryID: purged.id,
+      itemRevision: 2,
+      status: "tombstoned",
+      sourceState: "purged",
+      canonicalMemoryID: nil,
+      contentPurged: true,
+      memory: nil)
+    let epoch = String(repeating: "9", count: 64)
+    _ = try await MemoryStorage.shared.stageAuthoritativeKnowledgeLedgerMirrorPage(
+      mirrorPage(
+        ownerID: authorization.ownerID,
+        epochID: String(repeating: "8", count: 64),
+        commitSequence: 19,
+        pageRevision: String(repeating: "6", count: 64),
+        chainRevision: String(repeating: "7", count: 64),
+        scannedCount: 1,
+        projectedCount: 1,
+        rows: [mirrorRow(purged)],
+        nextCursor: "stale-cursor",
+        finalPage: false),
+      requestedCursor: nil,
+      authorizationSnapshot: authorization)
+    let newerKnownAuthority = JITTriggerSnapshot(
+      ownerID: authorization.ownerID,
+      accountGeneration: 1,
+      headCommitID: String(repeating: "f", count: 64),
+      commitSequence: 20,
+      snapshotRevision: String(repeating: "e", count: 64),
+      complete: true,
+      rows: [],
+      failureReason: nil)
+    let stagedAuthority = try await MemoryStorage.shared
+      .stagedKnowledgeLedgerMirrorAuthority(ownerID: authorization.ownerID)
+    XCTAssertFalse(stagedAuthority?.matches(newerKnownAuthority) == true)
+    // This is the coordinator's resume guard: a pre-deletion cursor from the
+    // old head is discarded before the newer tombstone head can activate.
+    try await MemoryStorage.shared.clearKnowledgeLedgerMirrorStaging(ownerID: authorization.ownerID)
+    let result = try await MemoryStorage.shared.stageAuthoritativeKnowledgeLedgerMirrorPage(
+      mirrorPage(
+        ownerID: authorization.ownerID,
+        epochID: epoch,
+        commitSequence: 20,
+        pageRevision: String(repeating: "a", count: 64),
+        chainRevision: String(repeating: "b", count: 64),
+        scannedCount: 1,
+        projectedCount: 1,
+        rows: [tombstone],
+        nextCursor: nil,
+        finalPage: true),
+      requestedCursor: nil,
+      authorizationSnapshot: authorization)
+    guard case .activated = result else { return XCTFail("purge tombstone must activate") }
+
+    let purgedRecord = try await MemoryStorage.shared.getMemoryByBackendId(purged.id)
+    let retainedRecord = try await MemoryStorage.shared.getMemoryByBackendId(retained.id)
+    XCTAssertNil(purgedRecord)
+    XCTAssertNotNil(retainedRecord)
+    guard let database = await RewindDatabase.shared.getDatabaseQueue() else {
+      return XCTFail("database queue unavailable")
+    }
+    let staleStageCount = try await database.read { db in
+      try Int.fetchOne(
+        db,
+        sql: "SELECT COUNT(*) FROM jit_knowledge_ledger_mirror_staging_members WHERE ownerID = ?",
+        arguments: [authorization.ownerID]) ?? -1
+    }
+    XCTAssertEqual(staleStageCount, 0)
+    let members = try await MemoryStorage.shared.getAuthoritativeKnowledgeLedgerMirrorMembers(
+      ownerID: authorization.ownerID)
+    XCTAssertEqual(members.map(\.memoryID), [purged.id])
+    XCTAssertTrue(members[0].contentPurged)
+  }
+
+  func testKnownAuthorityOverlapDiscardsOlderInFlightActivationBeforeTombstoneHead() async throws {
+    let authorization = try XCTUnwrap(RuntimeOwnerIdentity.captureAuthorizationSnapshot())
+    let oldMemory = makeMemory(id: "ledger-overlap-deleted", metadata: canonicalMetadata())
+    let oldEpoch = String(repeating: "a", count: 64)
+    let newEpoch = String(repeating: "b", count: 64)
+    let oldFirst = mirrorPage(
+      ownerID: authorization.ownerID,
+      epochID: oldEpoch,
+      commitSequence: 10,
+      headCommitID: "old-head",
+      pageRevision: String(repeating: "c", count: 64),
+      chainRevision: String(repeating: "d", count: 64),
+      scannedCount: 1,
+      projectedCount: 1,
+      rows: [mirrorRow(oldMemory)],
+      nextCursor: "old-next",
+      finalPage: false)
+    let oldFinal = mirrorPage(
+      ownerID: authorization.ownerID,
+      epochID: oldEpoch,
+      commitSequence: 10,
+      headCommitID: "old-head",
+      pageRevision: String(repeating: "e", count: 64),
+      chainRevision: String(repeating: "f", count: 64),
+      scannedCount: 1,
+      projectedCount: 1,
+      rows: [],
+      nextCursor: nil,
+      finalPage: true)
+    let tombstone = KnowledgeLedgerMirrorRow(
+      memoryID: oldMemory.id,
+      itemRevision: 2,
+      status: "tombstoned",
+      sourceState: "purged",
+      canonicalMemoryID: nil,
+      contentPurged: true,
+      memory: nil)
+    let newFinal = mirrorPage(
+      ownerID: authorization.ownerID,
+      epochID: newEpoch,
+      commitSequence: 20,
+      headCommitID: "new-head",
+      pageRevision: String(repeating: "1", count: 64),
+      chainRevision: String(repeating: "2", count: 64),
+      scannedCount: 1,
+      projectedCount: 1,
+      rows: [tombstone],
+      nextCursor: nil,
+      finalPage: true)
+    let knownAuthority = JITTriggerSnapshot(
+      ownerID: authorization.ownerID,
+      accountGeneration: 1,
+      headCommitID: "new-head",
+      commitSequence: 20,
+      snapshotRevision: String(repeating: "3", count: 64),
+      complete: true,
+      rows: [],
+      failureReason: nil)
+    let gate = MirrorPageFetchGate()
+    let fetcher = OverlapMirrorPageFetcher(
+      oldFirst: oldFirst, oldFinal: oldFinal, newFinal: newFinal, gate: gate)
+    let coordinator = KnowledgeLedgerMirrorCoordinator(
+      pageFetcher: { cursor, authorizationSnapshot in
+        try await fetcher.fetch(cursor: cursor, authorizationSnapshot: authorizationSnapshot)
+      })
+
+    let olderSync = Task {
+      try await coordinator.sync(authorizationSnapshot: authorization)
+    }
+    await gate.waitUntilEntered()
+    let fetchEntered = await gate.hasEntered
+    XCTAssertTrue(fetchEntered)
+
+    // The second call joins while the older nil-authority sync is suspended
+    // between pages. Releasing it lets the old epoch activate, after which the
+    // known-authority caller must immediately restart from the new head.
+    let knownSync = Task {
+      try await coordinator.sync(
+        authorizationSnapshot: authorization, knownAuthority: knownAuthority)
+    }
+    await Task.yield()
+    await Task.yield()
+    await gate.release()
+    _ = try await olderSync.value
+    _ = try await knownSync.value
+
+    let oldRecord = try await MemoryStorage.shared.getMemoryByBackendId(oldMemory.id)
+    XCTAssertNil(oldRecord)
+    let members = try await MemoryStorage.shared.getAuthoritativeKnowledgeLedgerMirrorMembers(
+      ownerID: authorization.ownerID)
+    XCTAssertEqual(members.map(\.memoryID), [oldMemory.id])
+    XCTAssertTrue(members[0].contentPurged)
+    let activeAuthority = try await MemoryStorage.shared
+      .authoritativeKnowledgeLedgerMirrorAuthority(ownerID: authorization.ownerID)
+    XCTAssertTrue(activeAuthority?.matches(knownAuthority) == true)
+  }
+
+  func testInterruptedOrLoopedLedgerMirrorChainPreservesPriorActiveEpoch() async throws {
+    let authorization = try XCTUnwrap(RuntimeOwnerIdentity.captureAuthorizationSnapshot())
+    let active = makeMemory(id: "ledger-active-before-stage", metadata: canonicalMetadata())
+    _ = try await MemoryStorage.shared.stageAuthoritativeKnowledgeLedgerMirrorPage(
+      mirrorPage(
+        ownerID: authorization.ownerID,
+        epochID: String(repeating: "1", count: 64),
+        commitSequence: 1,
+        pageRevision: String(repeating: "2", count: 64),
+        chainRevision: String(repeating: "3", count: 64),
+        scannedCount: 1,
+        projectedCount: 1,
+        rows: [mirrorRow(active)],
+        nextCursor: nil,
+        finalPage: true),
+      requestedCursor: nil,
+      authorizationSnapshot: authorization)
+
+    let staged = makeMemory(id: "ledger-incomplete-stage", metadata: canonicalMetadata())
+    _ = try await MemoryStorage.shared.stageAuthoritativeKnowledgeLedgerMirrorPage(
+      mirrorPage(
+        ownerID: authorization.ownerID,
+        epochID: String(repeating: "4", count: 64),
+        commitSequence: 2,
+        pageRevision: String(repeating: "5", count: 64),
+        chainRevision: String(repeating: "6", count: 64),
+        scannedCount: 1,
+        projectedCount: 1,
+        rows: [mirrorRow(staged)],
+        nextCursor: "looping-cursor",
+        finalPage: false),
+      requestedCursor: nil,
+      authorizationSnapshot: authorization)
+
+    do {
+      _ = try await MemoryStorage.shared.stageAuthoritativeKnowledgeLedgerMirrorPage(
+        mirrorPage(
+          ownerID: authorization.ownerID,
+          epochID: String(repeating: "4", count: 64),
+          commitSequence: 2,
+          pageRevision: String(repeating: "7", count: 64),
+          chainRevision: String(repeating: "8", count: 64),
+          scannedCount: 1,
+          projectedCount: 1,
+          rows: [],
+          nextCursor: "looping-cursor",
+          finalPage: false),
+        requestedCursor: "looping-cursor",
+        authorizationSnapshot: authorization)
+      XCTFail("Expected a repeated cursor to fail closed")
+    } catch KnowledgeLedgerMirrorSyncError.invalidSnapshot {
+      // Expected. The failed page transaction must not affect active state.
+    }
+    let preservedMembers = try await MemoryStorage.shared.getAuthoritativeKnowledgeLedgerMirrorMembers(
+      ownerID: authorization.ownerID)
+    let stagedMemory = try await MemoryStorage.shared.getMemoryByBackendId(staged.id)
+    XCTAssertEqual(preservedMembers.map(\.memoryID), [active.id])
+    XCTAssertNil(stagedMemory)
+  }
+
+  private func mirrorRow(_ memory: ServerMemory) -> KnowledgeLedgerMirrorRow {
+    KnowledgeLedgerMirrorRow(
+      memoryID: memory.id,
+      itemRevision: 1,
+      status: "active",
+      sourceState: "active",
+      canonicalMemoryID: nil,
+      contentPurged: false,
+      memory: memory)
+  }
+
+  private actor MirrorPageFetchGate {
+    private var releaseContinuation: CheckedContinuation<Void, Never>?
+    private var enteredContinuation: CheckedContinuation<Void, Never>?
+    private var released = false
+    private(set) var hasEntered = false
+
+    func waitUntilEntered() async {
+      if hasEntered { return }
+      await withCheckedContinuation { continuation in
+        enteredContinuation = continuation
+      }
+    }
+
+    func waitUntilRelease() async {
+      hasEntered = true
+      enteredContinuation?.resume()
+      enteredContinuation = nil
+      if released { return }
+      await withCheckedContinuation { continuation in
+        releaseContinuation = continuation
+      }
+    }
+
+    func release() {
+      released = true
+      releaseContinuation?.resume()
+      releaseContinuation = nil
+    }
+  }
+
+  private actor OverlapMirrorPageFetcher {
+    private let oldFirst: KnowledgeLedgerMirrorPage
+    private let oldFinal: KnowledgeLedgerMirrorPage
+    private let newFinal: KnowledgeLedgerMirrorPage
+    private let gate: MirrorPageFetchGate
+    private var nilPageCalls = 0
+
+    init(
+      oldFirst: KnowledgeLedgerMirrorPage,
+      oldFinal: KnowledgeLedgerMirrorPage,
+      newFinal: KnowledgeLedgerMirrorPage,
+      gate: MirrorPageFetchGate
+    ) {
+      self.oldFirst = oldFirst
+      self.oldFinal = oldFinal
+      self.newFinal = newFinal
+      self.gate = gate
+    }
+
+    func fetch(
+      cursor: String?, authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    ) async throws -> KnowledgeLedgerMirrorPage {
+      guard authorizationSnapshot.ownerID == oldFirst.ownerID else {
+        throw KnowledgeLedgerMirrorSnapshotError.ownerChanged
+      }
+      if cursor == nil {
+        nilPageCalls += 1
+        return nilPageCalls == 1 ? oldFirst : newFinal
+      }
+      guard cursor == "old-next" else {
+        throw KnowledgeLedgerMirrorSnapshotError.invalidPage
+      }
+      await gate.waitUntilRelease()
+      return oldFinal
+    }
+  }
+
+  private func mirrorPage(
+    ownerID: String,
+    epochID: String,
+    commitSequence: Int,
+    headCommitID: String? = nil,
+    pageRevision: String,
+    chainRevision: String,
+    scannedCount: Int,
+    projectedCount: Int,
+    rows: [KnowledgeLedgerMirrorRow],
+    aliases: [KnowledgeLedgerMirrorAlias] = [],
+    nextCursor: String?,
+    finalPage: Bool
+  ) -> KnowledgeLedgerMirrorPage {
+    KnowledgeLedgerMirrorPage(
+      schemaVersion: KnowledgeLedgerMirrorSnapshot.schemaVersion,
+      ownerID: ownerID,
+      accountGeneration: 1,
+      sourceGeneration: 1,
+      writerEpoch: 1,
+      headCommitID: headCommitID ?? "head-\(commitSequence)",
+      commitSequence: commitSequence,
+      epochID: epochID,
+      pageRevision: pageRevision,
+      chainRevision: chainRevision,
+      scannedCount: scannedCount,
+      projectedCount: projectedCount,
+      rows: rows,
+      aliases: aliases,
+      nextCursor: nextCursor,
+      finalPage: finalPage,
+      failureReason: nil)
+  }
+
   private func canonicalMetadata(city: String = "Brooklyn") -> [String: String] {
     [
       "ledger_schema_version": "knowledge_ledger.v1",

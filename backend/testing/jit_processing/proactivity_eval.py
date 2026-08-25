@@ -17,6 +17,7 @@ from utils.memory.jit_trigger_contract import (
     TriggerDecision,
     TriggerDecisionStatus,
     TriggerObservation,
+    TriggerRuntimePolicy,
     compile_trigger_condition,
     evaluate_trigger,
 )
@@ -150,7 +151,7 @@ def _assert_expected_shape(case: Mapping[str, Any], decision: TriggerDecision) -
         )
 
 
-def _evaluate_case(case: Mapping[str, Any]) -> ProactivityCaseResult:
+def _evaluate_case(case: Mapping[str, Any], *, policy: TriggerRuntimePolicy) -> ProactivityCaseResult:
     case_id = _required_string(case, "case_id")
     category = _required_string(case, "category")
     condition = case.get("condition")
@@ -160,7 +161,7 @@ def _evaluate_case(case: Mapping[str, Any]) -> ProactivityCaseResult:
     # The expected decision is deliberately read only after this pure evaluation
     # has produced its result. It cannot influence compilation or matching.
     compiled = compile_trigger_condition(condition)
-    decision = evaluate_trigger(compiled, _observation(case))
+    decision = evaluate_trigger(compiled, _observation(case), policy=policy)
     _assert_expected_shape(case, decision)
     return ProactivityCaseResult(
         case_id=case_id,
@@ -230,16 +231,20 @@ def evaluate_fixture(path: Path | None = None) -> ProactivityEvalReport:
     """Evaluate all fixture cases and calculate descriptive offline metrics."""
 
     fixture = load_fixture(path)
+    candidate_config = fixture.get("candidate_config", {})
+    if not isinstance(candidate_config, Mapping):
+        raise ValueError("candidate_config must be an object")
+    runtime_policy = candidate_config.get("runtime_policy", {})
+    if not isinstance(runtime_policy, Mapping):
+        raise ValueError("candidate_config.runtime_policy must be an object")
+    policy = TriggerRuntimePolicy.model_validate(dict(runtime_policy))
     raw_cases = fixture["cases"]
-    cases = tuple(_evaluate_case(case) for case in raw_cases if isinstance(case, Mapping))
+    cases = tuple(_evaluate_case(case, policy=policy) for case in raw_cases if isinstance(case, Mapping))
     if len(cases) != len(raw_cases):
         raise ValueError("proactivity fixture cases must be objects")
     case_ids = [case.case_id for case in cases]
     if len(case_ids) != len(set(case_ids)):
         raise ValueError("proactivity fixture case_id values must be unique")
-    candidate_config = fixture.get("candidate_config", {})
-    if not isinstance(candidate_config, Mapping):
-        raise ValueError("candidate_config must be an object")
     return ProactivityEvalReport(
         schema_version=fixture["schema_version"],
         candidate_config=dict(candidate_config),

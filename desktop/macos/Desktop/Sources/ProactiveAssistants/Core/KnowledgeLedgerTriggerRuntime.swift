@@ -41,16 +41,28 @@ struct KnowledgeLedgerTriggerEmbeddingContract: Equatable, Sendable {
 
   let modelID: String
   let modelVersion: String
+  let language: String
+  let prototypeRevision: String
 
-  init?(modelID: String, modelVersion: String) {
+  init?(
+    modelID: String, modelVersion: String, language: String = "und",
+    prototypeRevision: String = "unknown"
+  ) {
     let normalizedModelID = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
     let normalizedModelVersion = modelVersion.trimmingCharacters(in: .whitespacesAndNewlines)
+    let normalizedLanguage = language.trimmingCharacters(in: .whitespacesAndNewlines)
+    let normalizedPrototypeRevision = prototypeRevision.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !normalizedModelID.isEmpty, !normalizedModelVersion.isEmpty,
       normalizedModelID.count <= Self.maxIdentifierCharacters,
-      normalizedModelVersion.count <= Self.maxIdentifierCharacters
+      normalizedModelVersion.count <= Self.maxIdentifierCharacters,
+      !normalizedLanguage.isEmpty, normalizedLanguage.count <= Self.maxIdentifierCharacters,
+      !normalizedPrototypeRevision.isEmpty,
+      normalizedPrototypeRevision.count <= Self.maxIdentifierCharacters
     else { return nil }
     self.modelID = normalizedModelID
     self.modelVersion = normalizedModelVersion
+    self.language = normalizedLanguage
+    self.prototypeRevision = normalizedPrototypeRevision
   }
 }
 
@@ -129,6 +141,7 @@ enum KnowledgeLedgerTriggerWatchlistRuntime {
     day: String,
     authority: KnowledgeLedgerTriggerRuntimeAuthority = .defaultOff,
     embeddingContract: KnowledgeLedgerTriggerEmbeddingContract? = nil,
+    embeddingPolicy: JITTriggerEmbeddingPolicy? = nil,
     wakeupsUsedByTrigger: [String: Int] = [:]
   ) -> KnowledgeLedgerTriggerRuntimeResult {
     // Rollback authority must win before inspecting any new-runtime state.
@@ -183,8 +196,19 @@ enum KnowledgeLedgerTriggerWatchlistRuntime {
     var ambiguous: [KnowledgeLedgerTriggerRuntimeEntryResult] = []
     var noMatches: [KnowledgeLedgerTriggerRuntimeEntryResult] = []
     var rejectedEntries: [KnowledgeLedgerTriggerRuntimeRejectedEntry] = []
+    let eligibilityNow = observation.occurredAt ?? Date()
     for entry in sortedEntries {
-      if let rejection = embeddingRejection(for: entry, contract: embeddingContract) {
+      // Snooze is a server-owned absolute instant carried by the authoritative
+      // snapshot. Keep this eligibility fence here as well as at paid claim so
+      // every watchlist caller suppresses the standing trigger before expiry.
+      if let snoozedUntil = entry.snoozedUntil,
+        eligibilityNow < snoozedUntil
+      {
+        continue
+      }
+      if embeddingPolicy?.enabled != false,
+        let rejection = embeddingRejection(for: entry, contract: embeddingContract)
+      {
         rejectedEntries.append(.init(triggerID: entry.id, reason: rejection))
         continue
       }
@@ -192,7 +216,10 @@ enum KnowledgeLedgerTriggerWatchlistRuntime {
         entry,
         observation: observation,
         day: day,
-        wakeupsUsed: max(0, wakeupsUsedByTrigger[entry.id] ?? 0)
+        wakeupsUsed: max(0, wakeupsUsedByTrigger[entry.id] ?? 0),
+        embeddingEvaluationEnabled: embeddingPolicy?.enabled != false,
+        embeddingTriageSimilarity: embeddingPolicy?.enabled == true
+          ? embeddingPolicy?.triageSimilarity : nil
       )
       let item = KnowledgeLedgerTriggerRuntimeEntryResult(triggerID: entry.id, decision: decision)
       switch decision.status {
@@ -232,14 +259,14 @@ enum KnowledgeLedgerTriggerWatchlistRuntime {
     contract: KnowledgeLedgerTriggerEmbeddingContract?
   ) -> KnowledgeLedgerTriggerRuntimeEntryRejection? {
     guard let embedding = trigger.embedding else { return nil }
-    guard let expectedModelID = trigger.metadata.modelID,
-      let expectedModelVersion = trigger.metadata.modelVersion,
-      let expectedThreshold = trigger.metadata.threshold,
-      let contract
+    guard let contract
     else { return .incompleteEmbeddingContract }
-    guard expectedModelID == contract.modelID else { return .embeddingModelMismatch }
-    guard expectedModelVersion == contract.modelVersion else { return .embeddingVersionMismatch }
-    guard expectedThreshold == embedding.minSimilarity else { return .embeddingThresholdMismatch }
+    guard embedding.modelID == contract.modelID else { return .embeddingModelMismatch }
+    guard embedding.modelVersion == contract.modelVersion,
+      embedding.language == contract.language,
+      embedding.prototypeRevision == contract.prototypeRevision
+    else { return .embeddingVersionMismatch }
+    guard embedding.minSimilarity == 0.82 else { return .embeddingThresholdMismatch }
     return nil
   }
 

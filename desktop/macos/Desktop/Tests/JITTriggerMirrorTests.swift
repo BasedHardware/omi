@@ -4,6 +4,96 @@ import XCTest
 @testable import Omi_Computer
 
 final class JITTriggerMirrorTests: XCTestCase {
+  func testSnoozedUntilDecodesTimezoneAwareAndMalformedValueFailsClosed() throws {
+    let expiry = Date(timeIntervalSince1970: 1_787_572_800)
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .iso8601
+    let encoded = try encoder.encode(row(id: "snoozed", snoozedUntil: expiry))
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    var malformed = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+    malformed["snoozed_until"] = "2026-08-24T08:00:00-04:00"
+    let offsetDecoded = try decoder.decode(
+      JITTriggerSnapshotRow.self,
+      from: JSONSerialization.data(withJSONObject: malformed))
+    let expectedOffset = try XCTUnwrap(
+      ISO8601DateFormatter().date(from: "2026-08-24T12:00:00Z"))
+    XCTAssertEqual(offsetDecoded.snoozedUntil, expectedOffset)
+
+    malformed["snoozed_until"] = "not-an-instant"
+    XCTAssertThrowsError(
+      try decoder.decode(
+        JITTriggerSnapshotRow.self,
+        from: JSONSerialization.data(withJSONObject: malformed)))
+  }
+
+  func testSnoozedUntilPaidClaimRejectsBeforeExpiryAndAllowsAtExactInstant() throws {
+    let queue = try migratedQueue()
+    let expiry = Date(timeIntervalSince1970: 200)
+    let currentRow = row(id: "snoozed", snoozedUntil: expiry)
+    let receipt = try queue.write { db in
+      try JITTriggerMirror.reconcile(
+        snapshot(sequence: 4, revision: "revision-with-snooze", rows: [currentRow]),
+        in: db, now: Date(timeIntervalSince1970: 100))
+    }
+
+    let before = try queue.write { db in
+      try JITTriggerMirror.claimPlannedWakeup(
+        plannedRequest(
+          continuityKey: "before", receipt: receipt, triggerRow: currentRow,
+          now: expiry.addingTimeInterval(-0.001)),
+        in: db)
+    }
+    XCTAssertNil(before)
+
+    let atExpiry = try queue.write { db in
+      try JITTriggerMirror.claimPlannedWakeup(
+        plannedRequest(
+          continuityKey: "at-expiry", receipt: receipt, triggerRow: currentRow, now: expiry),
+        in: db)
+    }
+    XCTAssertNotNil(atExpiry)
+  }
+
+  func testRuntimePolicyDecodingIsStrictAndReconciliationRequiresRowAgreement() throws {
+    let encoded = try JSONEncoder().encode(JITTriggerRuntimePolicy.ratifiedV1)
+    let decoded = try JSONDecoder().decode(JITTriggerRuntimePolicy.self, from: encoded)
+    XCTAssertEqual(decoded, .ratifiedV1)
+    XCTAssertTrue(decoded.isValid)
+
+    var object = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+    object["unknown_policy"] = true
+    XCTAssertThrowsError(
+      try JSONDecoder().decode(
+        JITTriggerRuntimePolicy.self,
+        from: JSONSerialization.data(withJSONObject: object)))
+
+    object.removeValue(forKey: "unknown_policy")
+    object["total_proactive_notifications_per_day"] = 4
+    let nonRatified = try JSONDecoder().decode(
+      JITTriggerRuntimePolicy.self,
+      from: JSONSerialization.data(withJSONObject: object))
+    XCTAssertFalse(nonRatified.isValid)
+
+    let queue = try migratedQueue()
+    let mismatched = JITTriggerSnapshotRow(
+      memoryID: "mismatch", itemRevision: 1, updatedAt: Date(),
+      triggerConditionJSON:
+        "{\"action\":{\"prompt\":\"Do it\",\"type\":\"agent_prompt\"},\"keywords\":[\"release\"],\"schema_version\":\"jit_trigger.v1\"}",
+      action: JITTriggerSnapshotAction(type: "agent_prompt", prompt: "Do it"),
+      wakeupBudgetPerDay: 2)
+    XCTAssertThrowsError(
+      try queue.write { db in
+        _ = try JITTriggerMirror.reconcile(
+          snapshot(sequence: 1, revision: "policy", rows: [mismatched]),
+          in: db, now: Date())
+      }
+    ) { error in
+      XCTAssertEqual(error as? JITTriggerMirrorError, .malformedRow)
+    }
+  }
+
   func testExhaustiveSnapshotPrunesDeletedRowsAndRejectsConflictingReceipt() throws {
     let queue = try migratedQueue()
     let first = snapshot(sequence: 4, revision: "revision-4", rows: [row(id: "a"), row(id: "b")])
@@ -456,7 +546,9 @@ final class JITTriggerMirrorTests: XCTestCase {
       failureReason: nil)
   }
 
-  private func row(id: String, revision: Int = 1) -> JITTriggerSnapshotRow {
+  private func row(
+    id: String, revision: Int = 1, snoozedUntil: Date? = nil
+  ) -> JITTriggerSnapshotRow {
     let prompt = "Tell me the next release step"
     let condition = """
       {"action":{"prompt":"\(prompt)","type":"agent_prompt"},"keywords":["release"],"match_mode":"all","schema_version":"jit_trigger.v1"}
@@ -465,17 +557,19 @@ final class JITTriggerMirrorTests: XCTestCase {
       memoryID: id, itemRevision: revision, updatedAt: Date(timeIntervalSince1970: 10),
       triggerConditionJSON: condition,
       action: JITTriggerSnapshotAction(type: "agent_prompt", prompt: prompt),
-      wakeupBudgetPerDay: 1)
+      wakeupBudgetPerDay: 1,
+      snoozedUntil: snoozedUntil)
   }
 
   private func plannedRequest(
     continuityKey: String = "planned", receipt: JITTriggerMirrorReceipt,
-    triggerRow: JITTriggerSnapshotRow
+    triggerRow: JITTriggerSnapshotRow,
+    now: Date = Date(timeIntervalSince1970: 100)
   ) -> JITPlannedWakeupRequest {
     JITPlannedWakeupRequest(
       continuityKey: continuityKey, triggerID: triggerRow.memoryID, lane: .planned,
       budgetDay: "2026-08-24", snapshotRevision: receipt.snapshotRevision,
       observationFingerprint: "fingerprint", budget: triggerRow.wakeupBudgetPerDay,
-      now: Date(timeIntervalSince1970: 100), authority: receipt, triggerRow: triggerRow)
+      now: now, authority: receipt, triggerRow: triggerRow)
   }
 }

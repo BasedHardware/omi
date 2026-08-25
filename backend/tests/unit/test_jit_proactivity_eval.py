@@ -37,21 +37,24 @@ def test_fixture_covers_the_required_local_trigger_surfaces_and_expected_decisio
     } <= categories
 
 
-def test_fixture_metrics_are_descriptive_and_no_ratified_threshold_is_claimed() -> None:
+def test_fixture_metrics_are_descriptive_and_use_the_ratified_threshold_contract() -> None:
     report = evaluate_fixture(FIXTURE)
 
     assert report.metrics.case_count == 16
-    assert report.metrics.expected_match_count == 7
-    assert report.metrics.predicted_match_count == 7
-    assert report.metrics.true_positives == 7
+    assert report.metrics.expected_match_count == 6
+    assert report.metrics.predicted_match_count == 6
+    assert report.metrics.true_positives == 6
     assert report.metrics.false_positives == 0
     assert report.metrics.false_negatives == 0
-    assert report.metrics.true_negatives == 5
-    assert report.metrics.triage_count == 4
+    assert report.metrics.true_negatives == 8
+    assert report.metrics.triage_count == 2
     assert report.metrics.precision == 1.0
     assert report.metrics.recall == 1.0
-    assert report.candidate_config["ratified"] is False
-    assert report.candidate_config["ratified_thresholds"] is None
+    assert report.candidate_config["ratified"] is True
+    assert report.candidate_config["ratified_thresholds"] == {
+        "embedding_match": 0.82,
+        "embedding_triage": 0.74,
+    }
 
 
 def test_exposure_rates_and_supplied_cost_fields_are_reported_without_inference() -> None:
@@ -79,10 +82,9 @@ def test_double_run_is_byte_stable_and_ambiguous_embedding_limit_is_explicit() -
     assert first == second
 
     ambiguous = next(case for case in load_fixture(FIXTURE)["cases"] if case["category"] == "embedding_ambiguous_hit")
-    assert "no multi-hit ambiguity state" in ambiguous["limitation"]
+    assert "0.74 through 0.82 ambiguity band" in ambiguous["limitation"]
     result = next(case for case in evaluate_fixture(FIXTURE).cases if case.category == "embedding_ambiguous_hit")
-    # This is current pure-evaluator behavior, not a ratified production gate.
-    assert result.actual_status == "match"
+    assert result.actual_status == "triage"
 
 
 def test_unavailable_device_cases_never_match() -> None:

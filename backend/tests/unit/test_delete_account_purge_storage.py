@@ -39,6 +39,7 @@ def users_service():
         "database.screen_activity": AutoMockModule("database.screen_activity"),
         "database.frame_requests": AutoMockModule("database.frame_requests"),
         "database.vector_db": AutoMockModule("database.vector_db"),
+        "database.legal_holds": AutoMockModule("database.legal_holds"),
         "database.dev_api_key": AutoMockModule("database.dev_api_key"),
         "database.mcp_api_key": AutoMockModule("database.mcp_api_key"),
         "database.mcp_oauth": AutoMockModule("database.mcp_oauth"),

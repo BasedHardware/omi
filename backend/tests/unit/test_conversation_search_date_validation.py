@@ -48,6 +48,7 @@ _stubs = [
     'database.redis_db',
     'database.users',
     'database.vector_db',
+    'services.conversation_frame_evidence',
     'firebase_admin',
     'firebase_admin.messaging',
     'firebase_admin.auth',

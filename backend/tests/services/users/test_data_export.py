@@ -69,6 +69,9 @@ def test_iter_user_data_export_streams_all_top_level_sections(monkeypatch):
         "profile": {"created_at": "2026-01-02T03:04:05+00:00"},
         "conversations": [{"id": "conv1", "is_locked": True}, {"id": "conv2"}],
         "memories": [{"id": "mem1"}],
+        "memory_review_data": {name: [{"id": f"{name}-1"}] for name in data_export.MEMORY_REVIEW_EXPORT_COLLECTIONS},
+        "memory_ledger_data": {name: [{"id": f"{name}-1"}] for name in data_export.MEMORY_LEDGER_EXPORT_COLLECTIONS},
+        "jit_data": {name: [{"id": f"{name}-1"}] for name in data_export.JIT_EXPORT_COLLECTIONS},
         "people": [{"id": "person1"}],
         "action_items": [{"id": "task1"}],
         "frame_vision_receipts": [{"id": "frame_vision_receipts-1"}],
@@ -87,6 +90,81 @@ def test_iter_user_data_export_streams_all_top_level_sections(monkeypatch):
     data_export.get_standalone_action_items.assert_called_once_with("uid1", limit=1000, offset=0)
     data_export.conversations_db.iter_all_conversations.assert_called_once_with("uid1", include_discarded=True)
     data_export.chat_db.iter_all_messages.assert_called_once_with("uid1")
+
+
+def test_iter_user_data_export_includes_all_jit_history_collections(monkeypatch):
+    monkeypatch.setattr(data_export, "get_user_profile", MagicMock(return_value={}))
+    monkeypatch.setattr(
+        data_export,
+        "MemoryService",
+        MagicMock(return_value=MagicMock(iter_portability_export_memories=MagicMock(return_value=iter([])))),
+    )
+    monkeypatch.setattr(data_export, "get_people", MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export, "get_standalone_action_items", MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export.conversations_db, "iter_all_conversations", MagicMock(return_value=iter([])))
+    monkeypatch.setattr(data_export.chat_db, "iter_all_messages", MagicMock(return_value=iter([])))
+    monkeypatch.setattr(
+        data_export,
+        "_iter_user_subcollection",
+        lambda _uid, name: iter([{"id": f"{name}-1"}]) if name in data_export.JIT_EXPORT_COLLECTIONS else iter([]),
+    )
+
+    payload = json.loads("".join(data_export.iter_user_data_export("uid1")))
+
+    assert set(payload["jit_data"]) == set(data_export.JIT_EXPORT_COLLECTIONS)
+    assert payload["jit_data"]["jit_trigger_feedback"] == [{"id": "jit_trigger_feedback-1"}]
+
+
+def test_iter_user_data_export_includes_review_and_correction_history(monkeypatch):
+    monkeypatch.setattr(data_export, "get_user_profile", MagicMock(return_value={}))
+    monkeypatch.setattr(
+        data_export,
+        "MemoryService",
+        MagicMock(return_value=MagicMock(iter_portability_export_memories=MagicMock(return_value=iter([])))),
+    )
+    monkeypatch.setattr(data_export, "get_people", MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export, "get_standalone_action_items", MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export.conversations_db, "iter_all_conversations", MagicMock(return_value=iter([])))
+    monkeypatch.setattr(data_export.chat_db, "iter_all_messages", MagicMock(return_value=iter([])))
+    monkeypatch.setattr(
+        data_export,
+        "_iter_user_subcollection",
+        lambda _uid, name: (
+            iter([{"id": f"{name}-1", "candidate": {"content": "portable"}}])
+            if name in data_export.MEMORY_REVIEW_EXPORT_COLLECTIONS
+            else iter([])
+        ),
+    )
+
+    payload = json.loads("".join(data_export.iter_user_data_export("uid1")))
+
+    assert set(payload["memory_review_data"]) == set(data_export.MEMORY_REVIEW_EXPORT_COLLECTIONS)
+    assert payload["memory_review_data"]["memory_review_queue"][0]["candidate"]["content"] == "portable"
+
+
+def test_iter_user_data_export_includes_retained_ledger_history(monkeypatch):
+    monkeypatch.setattr(data_export, "get_user_profile", MagicMock(return_value={}))
+    monkeypatch.setattr(
+        data_export,
+        "MemoryService",
+        MagicMock(return_value=MagicMock(iter_portability_export_memories=MagicMock(return_value=iter([])))),
+    )
+    monkeypatch.setattr(data_export, "get_people", MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export, "get_standalone_action_items", MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export.conversations_db, "iter_all_conversations", MagicMock(return_value=iter([])))
+    monkeypatch.setattr(data_export.chat_db, "iter_all_messages", MagicMock(return_value=iter([])))
+    monkeypatch.setattr(
+        data_export,
+        "_iter_user_subcollection",
+        lambda _uid, name: (
+            iter([{"id": f"{name}-1"}]) if name in data_export.MEMORY_LEDGER_EXPORT_COLLECTIONS else iter([])
+        ),
+    )
+
+    payload = json.loads("".join(data_export.iter_user_data_export("uid1")))
+
+    assert set(payload["memory_ledger_data"]) == set(data_export.MEMORY_LEDGER_EXPORT_COLLECTIONS)
+    assert payload["memory_ledger_data"]["memory_commits"] == [{"id": "memory_commits-1"}]
 
 
 def test_iter_user_data_export_uses_empty_profile_object(monkeypatch):
@@ -155,6 +233,154 @@ def test_iter_user_data_export_includes_frame_metadata_and_photo_bytes(monkeypat
     }
 
 
+def test_retained_image_read_failure_aborts_portability_export(monkeypatch):
+    def unavailable(*_args):
+        raise RuntimeError("object store temporarily unavailable")
+
+    monkeypatch.setattr(data_export, "download_frame_request_pixels", unavailable)
+
+    with pytest.raises(RuntimeError, match="temporarily unavailable"):
+        data_export._export_photo_manifest(
+            "uid1",
+            "conv-1",
+            {
+                "id": "photo-1",
+                "storage_id": "storage-1",
+                "content_type": "image/jpeg",
+            },
+        )
+
+
+@pytest.mark.parametrize("inline", ["", "not-base64!", 123])
+def test_malformed_retained_inline_image_aborts_portability_export(inline):
+    with pytest.raises(data_export.PortabilityExportIncomplete, match="inline image bytes"):
+        data_export._export_photo_manifest(
+            "uid1",
+            "conv-1",
+            {"id": "photo-1", "base64": inline, "content_type": "image/jpeg"},
+        )
+
+
+def test_empty_retained_object_aborts_portability_export(monkeypatch):
+    monkeypatch.setattr(data_export, "download_frame_request_pixels", lambda *_args: b"")
+
+    with pytest.raises(data_export.PortabilityExportIncomplete, match="object is empty"):
+        data_export._export_photo_manifest(
+            "uid1",
+            "conv-1",
+            {"id": "photo-1", "storage_id": "storage-1", "content_type": "image/jpeg"},
+        )
+
+
+@pytest.mark.parametrize("storage_id", [None, "", 123])
+def test_missing_or_malformed_retained_image_reference_aborts_portability_export(storage_id):
+    with pytest.raises(data_export.PortabilityExportIncomplete, match="reference is missing or malformed"):
+        data_export._export_photo_manifest(
+            "uid1",
+            "conv-1",
+            {"id": "photo-1", "storage_id": storage_id, "content_type": "image/jpeg"},
+        )
+
+
+def test_referenced_image_failure_is_raised_before_export_stream_is_returned(monkeypatch):
+    monkeypatch.setattr(data_export, "get_user_profile", MagicMock(return_value={}))
+    monkeypatch.setattr(
+        data_export,
+        "MemoryService",
+        MagicMock(return_value=MagicMock(iter_portability_export_memories=MagicMock(return_value=iter([])))),
+    )
+    monkeypatch.setattr(data_export, "get_people", MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export, "get_standalone_action_items", MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export.conversations_db, "iter_all_conversations", MagicMock(return_value=iter([])))
+    monkeypatch.setattr(data_export.chat_db, "iter_all_messages", MagicMock(return_value=iter([])))
+    monkeypatch.setattr(
+        data_export,
+        "_iter_user_subcollection",
+        lambda _uid, name: iter(
+            [{"request_id": "frame-1", "state": "attached", "storage_id": "storage-1"}]
+            if name == "frame_requests"
+            else []
+        ),
+    )
+
+    def unavailable(*_args):
+        raise RuntimeError("retained object unavailable")
+
+    monkeypatch.setattr(data_export, "download_frame_request_pixels", unavailable)
+
+    with pytest.raises(RuntimeError, match="retained object unavailable"):
+        data_export.iter_user_data_export("uid1")
+
+
+@pytest.mark.parametrize("state", ["uploaded", "attached"])
+def test_retained_frame_without_storage_reference_fails_before_stream(monkeypatch, state):
+    monkeypatch.setattr(data_export, "get_user_profile", MagicMock(return_value={}))
+    monkeypatch.setattr(
+        data_export,
+        "MemoryService",
+        MagicMock(return_value=MagicMock(iter_portability_export_memories=MagicMock(return_value=iter([])))),
+    )
+    monkeypatch.setattr(data_export, "get_people", MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export, "get_standalone_action_items", MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export.conversations_db, "iter_all_conversations", MagicMock(return_value=iter([])))
+    monkeypatch.setattr(data_export.chat_db, "iter_all_messages", MagicMock(return_value=iter([])))
+    monkeypatch.setattr(
+        data_export,
+        "_iter_user_subcollection",
+        lambda _uid, name: iter([{"request_id": "frame-1", "state": state}]) if name == "frame_requests" else iter([]),
+    )
+
+    with pytest.raises(data_export.PortabilityExportIncomplete, match="reference is missing or malformed"):
+        data_export.iter_user_data_export("uid1")
+
+
+@pytest.mark.parametrize("cleanup_state", ["deleted", "not_required"])
+def test_terminal_frame_with_converged_cleanup_exports_metadata_despite_audit_storage_id(
+    monkeypatch,
+    cleanup_state,
+):
+    monkeypatch.setattr(data_export, "get_user_profile", MagicMock(return_value={}))
+    monkeypatch.setattr(
+        data_export,
+        "MemoryService",
+        MagicMock(return_value=MagicMock(iter_portability_export_memories=MagicMock(return_value=iter([])))),
+    )
+    monkeypatch.setattr(data_export, "get_people", MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export, "get_standalone_action_items", MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export.conversations_db, "iter_all_conversations", MagicMock(return_value=iter([])))
+    monkeypatch.setattr(data_export.chat_db, "iter_all_messages", MagicMock(return_value=iter([])))
+    monkeypatch.setattr(
+        data_export,
+        "_iter_user_subcollection",
+        lambda _uid, name: iter(
+            [
+                {
+                    "request_id": "frame-cleaned",
+                    "state": "expired",
+                    "storage_id": "deleted-object-audit-id",
+                    "cleanup_state": cleanup_state,
+                }
+            ]
+            if name == "frame_requests"
+            else []
+        ),
+    )
+    download = MagicMock(side_effect=AssertionError("deleted pixels must not be downloaded"))
+    monkeypatch.setattr(data_export, "download_frame_request_pixels", download)
+
+    payload = json.loads("".join(data_export.iter_user_data_export("uid1")))
+
+    assert payload["frame_requests"] == [
+        {
+            "request_id": "frame-cleaned",
+            "state": "expired",
+            "storage_id": "deleted-object-audit-id",
+            "cleanup_state": cleanup_state,
+        }
+    ]
+    download.assert_not_called()
+
+
 def test_iter_user_data_export_includes_legacy_photo_subcollection_without_marker(monkeypatch):
     monkeypatch.setattr(data_export, "get_user_profile", MagicMock(return_value={}))
     monkeypatch.setattr(
@@ -182,7 +408,7 @@ def test_iter_user_data_export_includes_legacy_photo_subcollection_without_marke
     assert payload["conversation_photo_manifest"][0]["bytes_available"] is True
 
 
-def test_iter_user_data_export_yields_before_heavy_reads(monkeypatch):
+def test_iter_user_data_export_preflights_heavy_reads_before_streaming(monkeypatch):
     get_profile = MagicMock(return_value={})
     monkeypatch.setattr(data_export, "get_user_profile", get_profile)
     monkeypatch.setattr(
@@ -201,8 +427,8 @@ def test_iter_user_data_export_yields_before_heavy_reads(monkeypatch):
 
     chunks = data_export.iter_user_data_export("uid1")
 
-    assert next(chunks) == "{\n"
-    get_profile.assert_not_called()
+    get_profile.assert_called_once_with("uid1")
+    assert json.loads("".join(chunks))["profile"] == {}
 
 
 def test_json_default_raises_type_error_for_unsupported_types():
@@ -327,9 +553,8 @@ def test_iter_user_data_export_closes_completed_memory_spool(monkeypatch):
 
     stream = data_export.iter_user_data_export("uid1")
 
-    assert not spool.closed
-    assert "".join(stream) == "export-body"
     assert spool.closed
+    assert "".join(stream) == "export-body"
 
 
 def test_memory_spool_is_streamed_in_bounded_chunks(monkeypatch):
