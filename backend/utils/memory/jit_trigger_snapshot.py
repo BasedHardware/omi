@@ -17,6 +17,7 @@ from database.memory_collections import MemoryCollections
 from models.jit_proactivity import is_jit_trigger_paid_authority
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryKind
 from utils.memory.jit_trigger_contract import (
+    CompiledTrigger,
     DEFAULT_TRIGGER_RUNTIME_POLICY,
     TriggerAction,
     TriggerRuntimePolicy,
@@ -51,10 +52,19 @@ class AuthoritativeTriggerSnapshot:
     policy: TriggerRuntimePolicy = DEFAULT_TRIGGER_RUNTIME_POLICY
 
 
+@dataclass(frozen=True)
+class AuthoritativeTriggerComponents:
+    """Validated paid-work projection for one trigger row."""
+
+    compiled: CompiledTrigger
+    wakeup_budget_per_day: int
+    snoozed_until: datetime | None
+
+
 def _authoritative_trigger_components(
     item: MemoryItem,
     at: datetime,
-) -> tuple[Any, int, datetime | None]:
+) -> AuthoritativeTriggerComponents:
     """Validate one trigger and return its exact paid-work projection."""
     if not is_jit_trigger_paid_authority(item, at=at):
         raise ValueError('trigger is not paid-work authority')
@@ -89,17 +99,21 @@ def _authoritative_trigger_components(
             snoozed_until = datetime.fromisoformat(str(raw_snoozed_until))
         if snoozed_until.tzinfo is None or snoozed_until.utcoffset() is None:
             raise ValueError('trigger snooze must be timezone-aware')
-    return compiled, int(raw_budget), snoozed_until
+    return AuthoritativeTriggerComponents(
+        compiled=compiled,
+        wakeup_budget_per_day=int(raw_budget),
+        snoozed_until=snoozed_until,
+    )
 
 
 def is_authoritative_trigger_for_paid_work(item: MemoryItem, at: datetime) -> bool:
     """Use the exact snapshot compiler, snooze, and policy as the paid transaction gate."""
 
     try:
-        _compiled, _budget, snoozed_until = _authoritative_trigger_components(item, at)
+        components = _authoritative_trigger_components(item, at)
     except Exception:
         return False
-    return snoozed_until is None or at >= snoozed_until
+    return components.snoozed_until is None or at >= components.snoozed_until
 
 
 def _revision(
@@ -197,18 +211,18 @@ def read_authoritative_trigger_snapshot(
             is_open = item.status == MemoryItemStatus.active and item.valid_to is None and item.superseded_by is None
             if not is_open:
                 continue
-            compiled, budget, snoozed_until = _authoritative_trigger_components(item, authority_time)
-            action = compiled.condition.action
+            components = _authoritative_trigger_components(item, authority_time)
+            action = components.compiled.condition.action
             assert action is not None
             rows.append(
                 AuthoritativeTriggerRow(
                     memory_id=item.memory_id,
                     item_revision=item.item_revision,
                     updated_at=item.updated_at,
-                    trigger_condition=compiled.as_condition(),
+                    trigger_condition=components.compiled.as_condition(),
                     action=action,
-                    wakeup_budget_per_day=budget,
-                    snoozed_until=snoozed_until,
+                    wakeup_budget_per_day=components.wakeup_budget_per_day,
+                    snoozed_until=components.snoozed_until,
                 )
             )
     except Exception:
@@ -248,6 +262,7 @@ def read_authoritative_trigger_snapshot(
 
 
 __all__ = [
+    'AuthoritativeTriggerComponents',
     'AuthoritativeTriggerRow',
     'AuthoritativeTriggerSnapshot',
     'MAX_AUTHORITATIVE_TRIGGERS',

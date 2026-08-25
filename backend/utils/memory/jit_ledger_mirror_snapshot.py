@@ -96,6 +96,17 @@ class LedgerMirrorPage:
     failure_reason: str | None = None
 
 
+@dataclass(frozen=True)
+class LedgerMirrorCursor:
+    """Validated state carried between pages of a mirror cursor chain."""
+
+    epoch_id: str | None
+    last_memory_id: str | None
+    chain_revision: str
+    scanned_count: int
+    projected_count: int
+
+
 def _b64encode(raw: bytes) -> str:
     return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
 
@@ -136,9 +147,15 @@ def _decode_cursor(
     uid: str,
     secret: bytes,
     now_epoch_seconds: int | None = None,
-) -> tuple[str | None, str | None, str, int, int]:
+) -> LedgerMirrorCursor:
     if cursor is None:
-        return None, None, "", 0, 0
+        return LedgerMirrorCursor(
+            epoch_id=None,
+            last_memory_id=None,
+            chain_revision="",
+            scanned_count=0,
+            projected_count=0,
+        )
     if not cursor or len(cursor) > MAX_MIRROR_CURSOR_CHARS:
         raise ValueError("mirror cursor is invalid")
     parts = cursor.split(".")
@@ -178,7 +195,13 @@ def _decode_cursor(
         or expires_at < now
     ):
         raise ValueError("mirror cursor payload is invalid")
-    return epoch_id, last_memory_id, chain_revision, scanned_count, projected_count
+    return LedgerMirrorCursor(
+        epoch_id=epoch_id,
+        last_memory_id=last_memory_id,
+        chain_revision=chain_revision,
+        scanned_count=scanned_count,
+        projected_count=projected_count,
+    )
 
 
 def _read_fence(uid: str, *, db_client: Any) -> LedgerMirrorFence | None:
@@ -360,7 +383,7 @@ def read_authoritative_ledger_mirror_page(
         return _failure("invalid_page_size")
     try:
         secret = cursor_secret()
-        cursor_epoch, last_memory_id, prior_chain_revision, prior_scanned, prior_projected = _decode_cursor(
+        cursor_state = _decode_cursor(
             cursor,
             uid=uid,
             secret=secret,
@@ -370,13 +393,13 @@ def read_authoritative_ledger_mirror_page(
     fence = _read_fence(uid, db_client=firestore_client)
     if fence is None:
         return _failure("migration_not_authoritative")
-    if cursor_epoch is not None and cursor_epoch != fence.epoch_id:
+    if cursor_state.epoch_id is not None and cursor_state.epoch_id != fence.epoch_id:
         return _failure("epoch_changed", fence=fence)
 
     collection = firestore_client.collection(MemoryCollections(uid=uid).memory_items)
     query = collection.order_by("__name__", direction=firestore.Query.ASCENDING)
-    if last_memory_id is not None:
-        query = query.start_after({"__name__": collection.document(last_memory_id)})
+    if cursor_state.last_memory_id is not None:
+        query = query.start_after({"__name__": collection.document(cursor_state.last_memory_id)})
     try:
         snapshots = list(query.limit(page_size + 1).stream())
     except Exception:
@@ -407,15 +430,15 @@ def read_authoritative_ledger_mirror_page(
     rows.sort(key=lambda row: row.memory_id)
     aliases.sort(key=lambda alias: (alias.alias_memory_id, alias.canonical_memory_id, alias.reason))
     revision = _page_revision(fence, rows, aliases)
-    last_scanned_memory_id = snapshots[-1].id if snapshots else (last_memory_id or "")
+    last_scanned_memory_id = snapshots[-1].id if snapshots else (cursor_state.last_memory_id or "")
     chain_revision = _next_chain_revision(
-        prior_chain_revision=prior_chain_revision,
+        prior_chain_revision=cursor_state.chain_revision,
         page_revision=revision,
         last_scanned_memory_id=last_scanned_memory_id,
         scanned_page_count=len(snapshots),
     )
-    scanned_count = prior_scanned + len(snapshots)
-    projected_count = prior_projected + len(rows)
+    scanned_count = cursor_state.scanned_count + len(snapshots)
+    projected_count = cursor_state.projected_count + len(rows)
     next_cursor = None
     if has_more and snapshots:
         next_cursor = _encode_cursor(
@@ -443,6 +466,7 @@ def read_authoritative_ledger_mirror_page(
 __all__ = [
     "DEFAULT_MIRROR_PAGE_SIZE",
     "LedgerMirrorAlias",
+    "LedgerMirrorCursor",
     "LedgerMirrorFence",
     "LedgerMirrorPage",
     "LedgerMirrorRow",
