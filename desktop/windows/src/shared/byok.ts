@@ -113,6 +113,11 @@ export function isByokActive(keys: ByokKeys): boolean {
   return BYOK_LLM_PROVIDERS.some((provider) => Boolean(keys[provider]?.trim()))
 }
 
+/** True when a Deepgram key is present for managed-STT quota suppression. */
+export function hasTranscriptionByok(keys: ByokKeys): boolean {
+  return Boolean(keys.deepgram?.trim())
+}
+
 /**
  * The `OMI_BYOK_*` env set to inject into the pi-mono subprocess, or `{}` when
  * BYOK is not active. Capability-scoped values are trimmed to match the wire

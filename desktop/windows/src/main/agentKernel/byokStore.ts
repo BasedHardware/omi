@@ -60,19 +60,21 @@ export class ByokKeyStore {
     }
   }
 
-  getCodexKey(): string | null {
+  private migrateLegacyCodexKey(): void {
     const stored = this.readFile()
-    const enc = stored.codex ?? (stored.codexMigrationComplete ? undefined : stored.openai)
+    if (stored.codex || stored.codexMigrationComplete || !stored.openai) return
+    stored.codex = stored.openai
+    stored.codexMigrationComplete = true
+    this.writeFile(stored)
+  }
+
+  getCodexKey(): string | null {
+    this.migrateLegacyCodexKey()
+    const enc = this.readFile().codex
     if (!enc) return null
     try {
       this.requireEncryption()
-      const key = safeStorage.decryptString(Buffer.from(enc, 'base64'))
-      if (!stored.codex && stored.openai && !stored.codexMigrationComplete) {
-        stored.codex = stored.openai
-        stored.codexMigrationComplete = true
-        this.writeFile(stored)
-      }
-      return key
+      return safeStorage.decryptString(Buffer.from(enc, 'base64'))
     } catch {
       return null
     }
@@ -142,6 +144,7 @@ export class ByokKeyStore {
   /** Remove all stored keys (deletes the backing file). */
   clearAll(): void {
     try {
+      this.migrateLegacyCodexKey()
       const data = this.readFile()
       for (const provider of BYOK_PROVIDERS) delete data[provider]
       if (Object.keys(data).length === 0) rmSync(this.filePath, { force: true })

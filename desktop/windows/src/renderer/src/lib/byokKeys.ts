@@ -10,7 +10,7 @@
 // (matching the backend, which 403s a partial set from an enrolled user).
 // This cache is never persisted and never logged.
 
-import { isByokActive, withByokHeaders, type ByokKeys } from '../../../shared/byok'
+import { hasTranscriptionByok, isByokActive, withByokHeaders, type ByokKeys } from '../../../shared/byok'
 
 let cached: ByokKeys = {}
 
@@ -36,6 +36,10 @@ export function withByokHeadersIfActive<T extends Record<string, string>>(header
 /** True when the cached key set is complete (all four providers). */
 export function isByokActiveCached(): boolean {
   return isByokActive(cached)
+}
+
+export function hasTranscriptionByokCached(): boolean {
+  return hasTranscriptionByok(cached)
 }
 
 /**

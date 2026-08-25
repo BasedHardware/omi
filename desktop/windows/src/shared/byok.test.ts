@@ -6,6 +6,7 @@ import {
   withByokHeaders,
   byokEnvVars,
   isByokActive,
+  hasTranscriptionByok,
   type ByokKeys
 } from './byok'
 import { byokFingerprint } from './byokFingerprint'
@@ -81,6 +82,15 @@ describe('isByokActive', () => {
   it('covers every supported provider', () => {
     expect(BYOK_PROVIDERS).toEqual(['openrouter', 'openai', 'anthropic', 'gemini', 'deepgram'])
     expect(Object.keys(BYOK_HEADER_NAMES).sort()).toEqual([...BYOK_PROVIDERS].sort())
+  })
+})
+
+describe('hasTranscriptionByok', () => {
+  it('is true only when Deepgram is configured', () => {
+    expect(hasTranscriptionByok(fullKeys)).toBe(true)
+    expect(hasTranscriptionByok({ openai: 'sk-openai' })).toBe(false)
+    expect(hasTranscriptionByok({ deepgram: 'dg-key' })).toBe(true)
+    expect(hasTranscriptionByok({ deepgram: '   ' })).toBe(false)
   })
 })
 

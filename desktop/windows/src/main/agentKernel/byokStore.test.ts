@@ -86,6 +86,13 @@ describe('ByokKeyStore', () => {
     expect(store.getCodexKey()).toBe('sk-codex')
   })
 
+  it('migrates a legacy OpenAI Codex key before clearAll deletes the openai slot', () => {
+    store.setKey('openai', 'sk-legacy-codex')
+    store.clearAll()
+    expect(store.getAllKeys()).toEqual({})
+    expect(store.getCodexKey()).toBe('sk-legacy-codex')
+  })
+
   it('does not restore an OpenAI BYOK key after Codex is explicitly cleared', () => {
     store.setKey('openai', 'sk-openai')
     store.setCodexKey('sk-codex')
