@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/auth';
-import { getPayload, setPayload } from '@/lib/payload-cache';
+import { getPayload, setPayload, withFreshness } from '@/lib/payload-cache';
 import { POSTHOG_SERVED_MAX_ROWS, withRowLimit } from '@/lib/posthog';
 import {
   ALL_EVENT_NAMES,
@@ -119,12 +119,12 @@ export async function GET(request: NextRequest) {
   try {
     const cached = await getPayload<Awaited<ReturnType<typeof computeOnboarding>>>(key);
     if (cached) {
-      return NextResponse.json(cached.data);
+      return NextResponse.json(withFreshness(cached.data, cached.freshAt));
     }
 
     const payload = await computeOnboarding(days);
     await setPayload(key, payload);
-    return NextResponse.json(payload);
+    return NextResponse.json(withFreshness(payload, Date.now()));
   } catch (error) {
     if (error instanceof PostHogError) {
       return NextResponse.json({ error: `PostHog API error: ${error.status}` }, { status: 502 });

@@ -4,7 +4,7 @@ import { withRowLimit } from "@/lib/posthog";
 import { getOptionalStripe } from "@/lib/stripe";
 import { MRR_STATUSES, fetchOmiSubscriptions, monthlyAmount } from "@/lib/stripe-subscriptions";
 import { getAdminAuth, getDb } from "@/lib/firebase/admin";
-import { getPayload, setPayload } from "@/lib/payload-cache";
+import { getPayload, setPayload, withFreshness } from "@/lib/payload-cache";
 import { computeInfraCosts, type InfraCostsPayload } from "@/app/api/omi/stats/infra-costs/route";
 import type Stripe from "stripe";
 
@@ -816,13 +816,13 @@ export async function GET(request: NextRequest) {
     // if a precomputed payload exists at any age we serve it immediately.
     const cached = await getPayload<ProfitabilityPayload>(key);
     if (cached) {
-      return NextResponse.json(cached.data);
+      return NextResponse.json(withFreshness(cached.data, cached.freshAt));
     }
 
     // Cold start before the first precompute: compute inline (slow), cache, return.
     const payload = await computeProfitability({ days, desktopCost, mobileCost });
     await setPayload(key, payload);
-    return NextResponse.json(payload);
+    return NextResponse.json(withFreshness(payload, Date.now()));
   } catch (err: any) {
     console.error("Profitability stats error:", err);
     return NextResponse.json(

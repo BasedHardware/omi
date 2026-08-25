@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth";
 import { getDb } from "@/lib/firebase/admin";
-import { getPayload, setPayload } from "@/lib/payload-cache";
+import { getPayload, setPayload, withFreshness } from "@/lib/payload-cache";
 import { fetchGcpBilling, type GcpBillingSnapshot } from "@/lib/services/gcp-billing";
 import { fetchAnthropicDailyCosts, fetchOpenAiDailyCosts } from "@/lib/services/provider-costs";
 import { fetchGatewayLedgerDays, type GatewayLedgerDay } from "@/lib/services/gateway-ledger";
@@ -658,13 +658,13 @@ export async function GET(request: NextRequest) {
     // any age, serve it (this route is too heavy to recompute inline).
     const cached = await getPayload<InfraCostsPayload>(key);
     if (cached) {
-      return NextResponse.json(cached.data);
+      return NextResponse.json(withFreshness(cached.data, cached.freshAt));
     }
 
     // Cold start before the first precompute: compute inline (may be slow), cache, return.
     const payload = await computeInfraCosts({ days, overheadMonthly });
     await setPayload(key, payload);
-    return NextResponse.json(payload);
+    return NextResponse.json(withFreshness(payload, Date.now()));
   } catch (err: any) {
     console.error("Infra costs error:", err);
     return NextResponse.json(

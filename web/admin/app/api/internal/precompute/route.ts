@@ -51,6 +51,11 @@ import {
 } from "@/app/api/omi/stats/activation/route";
 import { setPayload } from "@/lib/payload-cache";
 
+// Health payload key for this cron. A future panel/alert reads it to tell
+// "the cron ran and everything succeeded" apart from "the cron has not run
+// since Tuesday" — neither of which the per-metric caches can express.
+export const PRECOMPUTE_STATUS_KEY = "precompute-status:v1";
+
 export const dynamic = "force-dynamic";
 export const maxDuration = 3600;
 
@@ -102,13 +107,24 @@ export async function POST(request: NextRequest) {
   const results: Record<string, string> = {};
   const ms: Record<string, number> = {};
 
+  const ok: string[] = [];
+  const failed: Record<string, string> = {};
+
+  // Per-metric isolation is deliberate: one dead upstream must not cost the
+  // other twelve payloads. But a swallowed error used to be indistinguishable
+  // from success in the logs and in the response, so a metric could serve a
+  // week-old payload with nothing anywhere saying why.
   const run = async (name: string, fn: () => Promise<void>) => {
     const t0 = Date.now();
     try {
       await fn();
       results[name] = "ok";
+      ok.push(name);
     } catch (err: any) {
-      results[name] = err?.message || "failed";
+      const message = err?.message || "failed";
+      results[name] = message;
+      failed[name] = message;
+      console.error(`[precompute] ${name} FAILED:`, message, err);
     }
     ms[name] = Date.now() - t0;
   };
@@ -197,5 +213,15 @@ export async function POST(request: NextRequest) {
     await computeKFactor(K_FACTOR_DAYS);
   });
 
-  return NextResponse.json({ ok: true, results, ms });
+  const failedNames = Object.keys(failed);
+  if (failedNames.length > 0) {
+    console.error(
+      `[precompute] run finished with ${failedNames.length} failed metric(s): ${failedNames.join(", ")}`,
+    );
+  }
+
+  const status = { ranAt: Date.now(), ok, failed };
+  await setPayload(PRECOMPUTE_STATUS_KEY, status);
+
+  return NextResponse.json({ ok, failed, results, ms, ranAt: status.ranAt });
 }
