@@ -76,7 +76,7 @@ FIRESTORE_DOCUMENTS_PER_OPERATION = Histogram(
 )
 
 FIRESTORE_DOCUMENT_READS = Counter(
-    'omi_firestore_document_reads_total',
+    'omi_firestore_document_reads_by_site_total',
     'Single-document Firestore reads by reviewed call site and whether the document existed',
     ['site', 'outcome'],
 )

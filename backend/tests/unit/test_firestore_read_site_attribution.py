@@ -1,4 +1,4 @@
-"""Firestore single-document read-site attribution (omi_firestore_document_reads_total).
+"""Firestore single-document read-site attribution (omi_firestore_document_reads_by_site_total).
 
 Regression coverage for the NOT_FOUND attribution metric: a `read_site` passed into
 `conversations_db.get_conversation` (and the batch helper `_get_conversations_by_id`)
