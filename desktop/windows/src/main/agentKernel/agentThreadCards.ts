@@ -57,6 +57,12 @@ export interface AgentCardStamp {
   producingChatId: string | null
   producingSurfaceKind: string
   pillId: string | null
+  /** The resolved coding-agent adapter id at spawn time (e.g. 'acp', 'openclaw',
+   *  'hermes', 'codex', 'pi-mono') — read back verbatim for the completion card
+   *  too, so both cards for a run agree on which adapter actually ran it. Null
+   *  when the spawn call recorded no adapter (should not happen in practice,
+   *  but the stamp read path degrades to the card's Bot-icon fallback). */
+  provider: string | null
   title: string
   objective: string
 }
@@ -105,6 +111,7 @@ export function readAgentCardStamp(metadata: unknown): AgentCardStamp | null {
     producingSurfaceKind:
       typeof s.producingSurfaceKind === 'string' ? s.producingSurfaceKind : 'main_chat',
     pillId: typeof s.pillId === 'string' ? s.pillId : null,
+    provider: typeof s.provider === 'string' && s.provider ? s.provider : null,
     title: typeof s.title === 'string' && s.title ? s.title : 'Background agent',
     objective: typeof s.objective === 'string' ? s.objective : ''
   }
@@ -250,6 +257,7 @@ export function materializeAgentSpawnCard(
     type: 'agentSpawn',
     id: randomUUID(),
     ...(stamp.pillId ? { pillId: stamp.pillId } : {}),
+    ...(stamp.provider ? { provider: stamp.provider } : {}),
     sessionId: input.sessionId,
     runId: input.runId,
     title: stamp.title,
@@ -279,6 +287,7 @@ export function materializeAgentCompletionCard(
     type: 'agentCompletion',
     id: randomUUID(),
     ...(stamp.pillId ? { pillId: stamp.pillId } : {}),
+    ...(stamp.provider ? { provider: stamp.provider } : {}),
     sessionId: run.sessionId,
     runId: run.runId,
     title: stamp.title,
