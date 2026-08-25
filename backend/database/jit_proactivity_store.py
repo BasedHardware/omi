@@ -12,6 +12,7 @@ from database._client import db as default_db_client
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.memory_apply_store import transactional
 from database.memory_collections import MemoryCollections
+from database.read_boundary import parse_payload_strict, parse_snapshot_strict
 from models.jit_proactivity import (
     JIT_AMBIGUOUS_NANO_TRIAGES_PER_DAY,
     JIT_FULL_TURNS_PER_CANDIDATE,
@@ -90,7 +91,7 @@ def _reserve_transaction(
         raise JITProactivityReservationError("JIT reservation blocked by account deletion")
 
     control_snapshot = db_client.document(collections.memory_apply_control_state).get(transaction=transaction)
-    control = MemoryControlState.model_validate(_snapshot_payload(control_snapshot))
+    control = parse_snapshot_strict(MemoryControlState, control_snapshot, payload_from_snapshot=_snapshot_payload)
     if control.uid != uid or control.account_generation != proposed.account_generation:
         raise JITProactivityReservationError("JIT reservation generation is stale")
 
@@ -102,7 +103,11 @@ def _reserve_transaction(
         parent_snapshot = db_client.document(f"{collections.jit_proactivity_events}/{proposed.parent_event_id}").get(
             transaction=transaction
         )
-        parent = JITProactivityEventReceipt.model_validate(_snapshot_payload(parent_snapshot))
+        parent = parse_snapshot_strict(
+            JITProactivityEventReceipt,
+            parent_snapshot,
+            payload_from_snapshot=_snapshot_payload,
+        )
         if (
             parent.uid != uid
             or parent.account_generation != proposed.account_generation
@@ -122,7 +127,7 @@ def _reserve_transaction(
         trigger_snapshot = db_client.document(f"{collections.memory_items}/{proposed.trigger_memory_id}").get(
             transaction=transaction
         )
-        trigger = MemoryItem.model_validate(_snapshot_payload(trigger_snapshot))
+        trigger = parse_snapshot_strict(MemoryItem, trigger_snapshot, payload_from_snapshot=_snapshot_payload)
         if (
             trigger.uid != uid
             or trigger.account_generation != proposed.account_generation
@@ -132,7 +137,11 @@ def _reserve_transaction(
             raise JITProactivityReservationError("JIT trigger authority is stale")
 
     if getattr(event_snapshot, "exists", False):
-        existing = JITProactivityEventReceipt.model_validate(_snapshot_payload(event_snapshot))
+        existing = parse_snapshot_strict(
+            JITProactivityEventReceipt,
+            event_snapshot,
+            payload_from_snapshot=_snapshot_payload,
+        )
         if existing.request_hash != proposed.request_hash:
             raise JITProactivityReservationError("JIT event id was reused with a different payload")
         return existing, False
@@ -305,12 +314,14 @@ def reserve_jit_proactivity_event(
     request_hash = hashlib.sha256(
         json.dumps(canonical_request, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
-    proposed = JITProactivityEventReceipt.model_validate(
+    proposed = parse_payload_strict(
+        JITProactivityEventReceipt,
         {
             **canonical_request,
             "created_at": created_at,
             "request_hash": request_hash,
-        }
+        },
+        document_path="<request>/jit_proactivity_event",
     )
     transaction = client.transaction()
     return _reserve_transaction(transaction, client, proposed)
