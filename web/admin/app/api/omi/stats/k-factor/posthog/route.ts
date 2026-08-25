@@ -51,22 +51,32 @@ function friendFilter(platform: PlatformScope): string {
   return `event = 'Onboarding How Did You Hear' AND properties.source = 'Friend' ${scopeFilterAnd(platform)}`;
 }
 
+export const REFERRAL_LEDGER_PAGE_SIZE = 1000;
+
 async function referralClaimTimes(): Promise<number[]> {
   // Firestore is the transactional record of granted referral trials
-  // (backend/database/referrals.py); claimed_at is epoch seconds.
-  const snapshot = await getDb()
+  // (backend/database/referrals.py); claimed_at is epoch seconds. Cursor
+  // pagination (document-ID order, no composite index needed) reads the WHOLE
+  // ledger — a bare unordered limit() silently dropped arbitrary claims once
+  // the ledger outgrew it.
+  const base = getDb()
     .collection("users")
-    .where("referral.program", "==", REFERRAL_PROGRAM)
-    .limit(5000)
-    .get();
+    .where("referral.program", "==", REFERRAL_PROGRAM);
   const times: number[] = [];
-  for (const doc of snapshot.docs) {
-    const claimedAt = doc.get("referral.claimed_at");
-    const seconds =
-      typeof claimedAt === "number" ? claimedAt : claimedAt?.seconds;
-    if (seconds) times.push(seconds * 1000);
+  let cursor: any = null;
+  for (;;) {
+    let query = base.limit(REFERRAL_LEDGER_PAGE_SIZE);
+    if (cursor) query = query.startAfter(cursor);
+    const snapshot = await query.get();
+    for (const doc of snapshot.docs) {
+      const claimedAt = doc.get("referral.claimed_at");
+      const seconds =
+        typeof claimedAt === "number" ? claimedAt : claimedAt?.seconds;
+      if (seconds) times.push(seconds * 1000);
+    }
+    if (snapshot.docs.length < REFERRAL_LEDGER_PAGE_SIZE) return times;
+    cursor = snapshot.docs[snapshot.docs.length - 1];
   }
-  return times;
 }
 
 function nycDateDaysAgo(daysAgo: number): string {

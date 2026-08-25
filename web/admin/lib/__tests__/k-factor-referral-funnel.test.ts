@@ -10,15 +10,23 @@ const referralDocs = [
   { get: (f: string) => (f === "referral.claimed_at" ? RECENT_CLAIM_MS / 1000 : null) },
   { get: (f: string) => (f === "referral.claimed_at" ? OLD_CLAIM_MS / 1000 : null) },
 ];
-const firestoreGet = vi.fn(async () => ({ docs: referralDocs }));
+// Pages served in order — pagination tests enqueue a full page plus a tail.
+let firestorePages: Array<Array<{ get: (f: string) => unknown }>> = [referralDocs];
+const firestoreGet = vi.fn(async () => ({
+  docs: firestorePages.shift() ?? [],
+}));
 vi.mock("@/lib/firebase/admin", () => ({
   getDb: () => ({
     collection: () => ({
       where: (field: string, op: string, value: string) => {
-        firestoreGet.mock.calls; // keep signature honest below via assertion
         expect(field).toBe("referral.program");
         expect(value).toBe("desktop_operator_month_v1");
-        return { limit: () => ({ get: firestoreGet }) };
+        const query = {
+          limit: () => query,
+          startAfter: () => query,
+          get: firestoreGet,
+        };
+        return query;
       },
     }),
   }),
@@ -49,6 +57,7 @@ afterEach(() => {
   vi.resetModules();
   posthogResults.mockReset();
   firestoreGet.mockClear();
+  firestorePages = [referralDocs];
   for (const key of ENV_KEYS) {
     if (originalEnv[key] == null) delete process.env[key];
     else process.env[key] = originalEnv[key];
@@ -169,6 +178,21 @@ describe("computeKFactor viral signals", () => {
     // Window k-factor = total viral events / total new users.
     expect(payload.summary.kFactor).toBe(payload.kFactor);
     expect(payload.kFactor).toBeGreaterThan(0);
+  });
+
+  it("reads the whole referral ledger past the first Firestore page", async () => {
+    configurePosthog();
+    posthogResults.mockResolvedValue([]);
+    const { REFERRAL_LEDGER_PAGE_SIZE } = await import(
+      "@/app/api/omi/stats/k-factor/posthog/route"
+    );
+    const claim = { get: (f: string) => (f === "referral.claimed_at" ? RECENT_CLAIM_MS / 1000 : null) };
+    // A full first page must NOT terminate the read: the claim on page two
+    // has to reach the summary.
+    firestorePages = [Array(REFERRAL_LEDGER_PAGE_SIZE).fill(claim), [claim]];
+    const payload: any = await compute("macos");
+    expect(firestoreGet).toHaveBeenCalledTimes(2);
+    expect(payload.summary.referral).toBe(REFERRAL_LEDGER_PAGE_SIZE + 1);
   });
 
   it("never double-counts the hours a rolling 24h window shares with yesterday", async () => {
