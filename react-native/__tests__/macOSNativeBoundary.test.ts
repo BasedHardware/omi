@@ -118,6 +118,8 @@ test('owns an in-app PKCE sign-in session and stores its cloud token locally', (
   expect(backend.indexOf('OmiOwnKeychainCloudToken')).toBeLessThan(
     backend.indexOf('environment[@"OMI_CLOUD_API_TOKEN"]'),
   );
+  expect(backend).not.toContain('OmiKeychainCloudToken');
+  expect(backend).not.toContain('com.omi.desktop.firebase-rest-session');
 });
 
 test('persists completed macOS onboarding in this app NSUserDefaults', () => {
