@@ -747,7 +747,14 @@ def _openai_usage_payload(usage: ProviderUsage) -> dict[str, Any]:
     }
 
 
-_VERTEX_DATA_URL_RE = re.compile(r'^data:(?P<mime>[\w.+-]+/[\w.+-]+);base64,(?P<data>.+)$', re.DOTALL)
+# RFC 2397 permits parameters between the media type and the base64 token
+# (`data:image/jpeg;charset=utf-8;base64,...`), and browser- or canvas-produced
+# data URLs do emit them. Rejecting those would be the mirror of the bug this
+# module just fixed: refusing an image we can in fact represent.
+_VERTEX_DATA_URL_RE = re.compile(
+    r'^data:(?P<mime>[\w.+-]+/[\w.+-]+)(?:;[\w.+-]+=[^;,]*)*;(?i:base64),(?P<data>.+)$',
+    re.DOTALL,
+)
 
 
 def _vertex_parts(content: Any) -> list[dict[str, Any]]:
@@ -764,7 +771,9 @@ def _vertex_parts(content: Any) -> list[dict[str, Any]]:
     handling never triggers.
     """
     if content is None:
-        return []
+        # See the empty-parts note at the end of this function: None is what an
+        # assistant tool-call turn carries, and Vertex rejects a Content with no parts.
+        return [{'text': ''}]
     if isinstance(content, str):
         return [{'text': content}]
     if not isinstance(content, list):
@@ -798,7 +807,12 @@ def _vertex_parts(content: Any) -> list[dict[str, Any]]:
             parts.append({'inlineData': {'mimeType': match.group('mime'), 'data': match.group('data')}})
             continue
         raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
-    return parts
+    # A message with no representable content still needs one part: Vertex rejects a
+    # Content with an empty parts array, and the previous implementation always
+    # produced [{'text': ''}] here (via _text_content(None) == ''). An assistant
+    # tool-call turn carries content=None, so this path is reachable the moment a
+    # multi-turn Gemini feature exists.
+    return parts or [{'text': ''}]
 
 
 def _system_text_parts(content: Any) -> list[dict[str, str]]:

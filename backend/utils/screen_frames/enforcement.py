@@ -20,14 +20,19 @@ a rolling meeting note and is flagged here for review.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
+
+from pydantic import ValidationError
 
 import database.screen_frames as screen_frames_db
 import utils.other.storage as storage
 from models.screen_frame import ConversationScreenFrame, ConversationScreenFrameSet, ScreenFrameGround
 from utils.screen_frames import store as screen_frame_store
+
+logger = logging.getLogger(__name__)
 
 BANNER_SUITABILITY_THRESHOLD = 0.35
 STRIP_MAX = 6
@@ -155,7 +160,22 @@ def build_frame_set_response(uid: str, conversation_id: str) -> ConversationScre
     banner: Optional[ConversationScreenFrame] = None
     strip: List[ConversationScreenFrame] = []
     for doc in frames:
-        api_frame = _to_api_frame(uid, conversation_id, doc)
+        try:
+            api_frame = _to_api_frame(uid, conversation_id, doc)
+        except ValidationError:
+            # One unrepresentable stored frame must cost that frame, not the note.
+            # ConversationScreenFrame still enforces the wire contract (caption
+            # length, label count, two gradient stops), and a doc that violates it
+            # — legacy data, a hand edit, a future write path that skips
+            # ScreenFrameJudgement — used to raise straight out of this loop and
+            # 500 the whole read. The user's other screenshots are fine; serve them.
+            logger.warning(
+                "screen_frame skipping unrepresentable stored frame uid=%s conversation_id=%s frame_id=%s",
+                uid,
+                conversation_id,
+                doc.get('id'),
+            )
+            continue
         if api_frame.role == 'banner':
             banner = api_frame
         else:

@@ -219,3 +219,33 @@ class TestAnAllRejectedPassIsStillRecorded:
         frame_set = enforcement_mod.build_frame_set_response(UID, CONVERSATION_ID)
 
         assert frame_set.adjudicated_at is None
+
+
+def test_one_unrepresentable_stored_frame_does_not_break_the_whole_read(monkeypatch):
+    """A stored doc that violates the wire contract costs that frame, not the note.
+
+    ConversationScreenFrame still enforces caption length, label count and the
+    two-stop gradient. Before this, a doc that violated any of them raised straight
+    out of build_frame_set_response and 500'd the entire screenshots read for the
+    conversation — so one bad record hid every good one.
+    """
+    from utils.screen_frames import enforcement as enf
+
+    good = {**enforcement_mod._frame_doc(_new_frame("ok", 0, 0.9)), "role": "banner", "rank": 0}
+    bad = {
+        **enforcement_mod._frame_doc(_new_frame("bad", 1, 0.2)),
+        "role": "strip",
+        "rank": 1,
+        "caption": "x" * 400,  # violates ConversationScreenFrame's 160-char contract
+    }
+
+    monkeypatch.setattr(enf.screen_frames_db, "get_conversation_screen_frames", lambda *_: [good, bad])
+    monkeypatch.setattr(enf.screen_frames_db, "get_conversation_screen_frames_revision", lambda *_: 3)
+    monkeypatch.setattr(enf.screen_frames_db, "get_conversation_screen_frames_adjudicated_at", lambda *_: None)
+    monkeypatch.setattr(enf.storage, "get_screen_frame_signed_url", lambda *_: "https://example/c")
+    monkeypatch.setattr(enf.storage, "get_screen_frame_thumbnail_signed_url", lambda *_: "https://example/t")
+
+    frame_set = enf.build_frame_set_response("uid", "cid")
+
+    assert frame_set.banner is not None and frame_set.banner.id == "ok"
+    assert [f.id for f in frame_set.strip] == []

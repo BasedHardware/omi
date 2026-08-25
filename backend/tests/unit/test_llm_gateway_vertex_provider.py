@@ -373,3 +373,32 @@ def test_vertex_request_still_handles_plain_string_and_system_text():
     assert payload["systemInstruction"]["parts"] == [{"text": "be terse"}]
     assert payload["contents"][0] == {"role": "user", "parts": [{"text": "hello"}]}
     assert payload["contents"][1] == {"role": "model", "parts": [{"text": "hi"}]}
+
+
+def test_vertex_request_accepts_a_data_url_with_rfc2397_parameters():
+    """`data:image/jpeg;charset=utf-8;base64,...` is a valid data URL and browsers
+    emit them. Rejecting it would be the mirror of the bug this module fixed:
+    refusing an image that can in fact be represented."""
+    payload = _vertex_request(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image_url", "image_url": {"url": f"data:image/png;charset=utf-8;base64,{_PIXEL}"}}
+                    ],
+                }
+            ]
+        }
+    )
+    assert payload["contents"][0]["parts"][0] == {"inlineData": {"mimeType": "image/png", "data": _PIXEL}}
+
+
+def test_vertex_request_never_emits_a_message_with_zero_parts():
+    """Vertex rejects a Content with an empty parts array, and the previous
+    text-only implementation always produced [{'text': ''}] here. An assistant
+    tool-call turn carries content=None, so this is reachable as soon as a
+    multi-turn Gemini feature exists."""
+    payload = _vertex_request({"messages": [{"role": "assistant", "content": None}, {"role": "user", "content": []}]})
+    assert payload["contents"][0] == {"role": "model", "parts": [{"text": ""}]}
+    assert payload["contents"][1] == {"role": "user", "parts": [{"text": ""}]}

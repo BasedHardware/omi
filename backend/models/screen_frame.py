@@ -13,12 +13,14 @@ never serialized into any response model — it does not leave the process.
 
 from __future__ import annotations
 
+import unicodedata
+
 from datetime import datetime
 from enum import Enum
 from typing import List, Literal, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ScreenFrameEgressPurpose(str, Enum):
@@ -168,6 +170,9 @@ class ScreenFrameAdjudicationResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+_JOINERS = "\u200d\u200c\ufe0f\ufe0e"
+
+
 class ScreenFrameJudgement(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -185,10 +190,37 @@ class ScreenFrameJudgement(BaseModel):
             "other",
         ]
     ] = None
-    caption: str = Field(max_length=160)
-    labels: List[str] = Field(max_length=8)
+    # Deliberately NOT max_length/max_items constrained, unlike the wire model above.
+    # Vertex treats a responseSchema's maxLength as advisory, so gemini-2.5-flash-lite
+    # overruns it in normal use (measured 2026-08-25: one caption in seven came back
+    # over 160 chars) even though the prompt states the limit too. A strict constraint
+    # here does not shorten the caption — it raises inside .with_structured_output(),
+    # which judge_frame() turns into judge_call_failed, and the frame is dropped. That
+    # trades a cosmetic overrun for silently losing a frame the judge approved, with no
+    # safety benefit: caption and labels are descriptive metadata and carry no part of
+    # the verdict. So normalise instead, and let the wire model keep the real contract.
+    caption: str
+    labels: List[str]
     source_badge: Optional[Literal["code", "browser", "document", "slides", "product"]] = None
     banner_suitability: float = Field(ge=0, le=1)
+
+    @field_validator("caption", mode="before")
+    @classmethod
+    def _truncate_caption(cls, value: object) -> object:
+        if not isinstance(value, str) or len(value) <= 160:
+            return value
+        # A plain [:160] can cut inside a grapheme cluster and leave a dangling
+        # zero-width joiner or combining mark, which every client then renders as
+        # a broken glyph. Back off to the last codepoint that can end a string.
+        cut = value[:160]
+        while cut and (unicodedata.combining(cut[-1]) or cut[-1] in _JOINERS):
+            cut = cut[:-1]
+        return cut
+
+    @field_validator("labels", mode="before")
+    @classmethod
+    def _cap_labels(cls, value: object) -> object:
+        return value[:8] if isinstance(value, list) else value
 
 
 # ---------------------------------------------------------------------------
