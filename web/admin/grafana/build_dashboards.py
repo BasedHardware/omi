@@ -401,8 +401,8 @@ def build_platform_board(base, scope: str) -> dict:
     # to every device a user has, so notification volume cannot be split by
     # platform either — those panels live on the All-platforms board only.
     drop_panels(dash, ACCOUNT_LEVEL_TITLES | {
-        "Users → 1M goal", "ARR", "Active subscriptions", "Trialing",
-        "Trials in pipeline", "Conversations", "MRR by product", "MRR over time",
+        "1M goal", "ARR", "Active subscriptions", "Trialing",
+        "Conversations", "MRR by product", "MRR over time",
         "New subscriptions / month", "Message ratings",
         "Infra cost by service — last 30 days",
     })
@@ -426,8 +426,8 @@ def build_platform_board(base, scope: str) -> dict:
     # the same person-deduped PostHog population as the all-time ticker, so
     # the cumulative chart ends exactly at the ticker value.
     viral_scoped = set_url_param(VIRAL_PATH, "platform", scope)
-    signups = panel_by_title(dash, "Signups — last 7 days")
-    signups["title"] = f"{label} signups — last 7 days"
+    signups = panel_by_title(dash, "Signups (7d)")
+    signups["title"] = f"{label} signups (7d)"
     set_compare(signups["targets"][0], "url",
                 path=viral_scoped, root="userGrowth", fields="users")
 
@@ -471,8 +471,12 @@ def build_platform_board(base, scope: str) -> dict:
     retarget_var(dash, "d_prev", fields=exact_field)
 
     if scope == "macos":
-        # Board context makes the (macOS) marker redundant.
-        panel_by_title(dash, "Activation rate (macOS)")["title"] = "Activation rate"
+        # The stat tile is already platform-neutral ("Activation"); board
+        # context makes the All board's "macOS only" marker redundant here.
+        panel_by_title(dash, "Activation")["description"] = (
+            "Firestore: % of signups with a conversation within 7 days — the aha "
+            "moment. Biggest controllable lever — first-5-minutes work."
+        )
         chart = panel_by_title(dash, "Activation (signup → activated, macOS)")
         chart["title"] = "Activation (signup → activated)" + (
             "  ·  " + chart["title"].split("  ·  ")[1] if "  ·  " in chart["title"] else "")
@@ -493,8 +497,12 @@ def build_platform_board(base, scope: str) -> dict:
         # days of a macOS signup); mobile activation uses PostHog telemetry
         # (first-seen → Memory Created within 7 days) via viral-metrics.
         viral_mobile = set_url_param(VIRAL_PATH, "platform", "mobile")
-        rate = panel_by_title(dash, "Activation rate (macOS)")
-        rate["title"] = "Activation rate"
+        rate = panel_by_title(dash, "Activation")
+        rate["description"] = (
+            "PostHog telemetry: % of first-seen mobile users with a Memory Created "
+            "within 7 days. Not the Firestore signup→conversation definition the "
+            "All and macOS boards use."
+        )
         set_stat_query(rate, viral_mobile, "summary", "activationRate", "Activation")
         chart = panel_by_title(dash, "Activation (signup → activated, macOS)")
         chart["title"] = "Activation (signup → activated)  ·  ${d_act}"

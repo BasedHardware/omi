@@ -191,7 +191,7 @@
           }
         }
       ],
-      "title": "Net WAU growth WoW",
+      "title": "WAU growth",
       "type": "stat"
     },
     {
@@ -314,7 +314,7 @@
           }
         }
       ],
-      "title": "Mobile signups \u2014 last 7 days",
+      "title": "Mobile signups (7d)",
       "type": "stat"
     },
     {
@@ -322,7 +322,7 @@
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
       },
-      "description": "% of signups reaching the aha moment on day 1. Biggest controllable lever \u2014 first-5-minutes work.",
+      "description": "PostHog telemetry: % of first-seen mobile users with a Memory Created within 7 days. Not the Firestore signup\u2192conversation definition the All and macOS boards use.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -397,7 +397,7 @@
           }
         }
       ],
-      "title": "Activation rate",
+      "title": "Activation",
       "type": "stat"
     },
     {
@@ -693,7 +693,8 @@
               "mode": "none"
             }
           },
-          "unit": "short"
+          "unit": "short",
+          "min": 0
         },
         "overrides": [
           {
@@ -907,7 +908,8 @@
           "mode": "single",
           "sort": "none"
         },
-        "xTickLabelRotation": 0
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 100
       },
       "targets": [
         {
@@ -1269,7 +1271,7 @@
       "gridPos": {
         "x": 20,
         "y": 14,
-        "w": 3,
+        "w": 4,
         "h": 4
       },
       "id": 19,
@@ -1344,7 +1346,7 @@
       "gridPos": {
         "x": 0,
         "y": 22,
-        "w": 3,
+        "w": 4,
         "h": 4
       },
       "id": 20,
@@ -1418,9 +1420,9 @@
         "overrides": []
       },
       "gridPos": {
-        "x": 3,
+        "x": 4,
         "y": 22,
-        "w": 3,
+        "w": 4,
         "h": 4
       },
       "id": 21,
@@ -1493,7 +1495,7 @@
         "overrides": []
       },
       "gridPos": {
-        "x": 6,
+        "x": 8,
         "y": 22,
         "w": 3,
         "h": 4
@@ -1568,7 +1570,7 @@
         "overrides": []
       },
       "gridPos": {
-        "x": 9,
+        "x": 11,
         "y": 22,
         "w": 3,
         "h": 4
@@ -1622,7 +1624,7 @@
       "type": "text",
       "title": "Crash-free rate (today)",
       "gridPos": {
-        "x": 12,
+        "x": 14,
         "y": 22,
         "w": 3,
         "h": 4
@@ -1659,7 +1661,7 @@
         "overrides": []
       },
       "gridPos": {
-        "x": 15,
+        "x": 17,
         "y": 22,
         "w": 3,
         "h": 4

@@ -345,9 +345,13 @@ class OmiTvDashboardContractTests(unittest.TestCase):
 
     def test_activation_panels_use_firestore_activation_selectors(self) -> None:
         panels = {panel["title"]: panel for panel in self.dashboard()["panels"]}
-        # The base (all-platform) board labels the Firestore-backed activation
-        # panels "(macOS)" because that route only covers macOS signups.
-        rate = panels["Activation rate (macOS)"]["targets"][0]
+        # The base (all-platform) board carries the macOS-only qualifier in the
+        # tile's description (the title is kept short enough to render on the
+        # TV wall) and in the series title, because that route only covers
+        # macOS signups.
+        rate_panel = panels["Activation"]
+        self.assertIn("macOS only", rate_panel["description"])
+        rate = rate_panel["targets"][0]
         self.assertEqual(rate["url"], "http://127.0.0.1:8899/api/omi/stats/activation?days=60")
         self.assertEqual([column["selector"] for column in rate["columns"]], ["rate"])
         self.assertNotIn("viral-metrics", rate["url"])
