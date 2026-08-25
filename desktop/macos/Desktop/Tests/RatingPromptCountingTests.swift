@@ -37,6 +37,7 @@ final class RatingPromptCountingTests: XCTestCase {
     AnalyticsManager.shared.chatMessageSent(
       messageLength: submit.question.count, source: "query_shell",
       countsAsQuestion: submit.countsAsQuestion)
+    ledger.recordAccepted(submit)
 
     // The turn fails; the user presses 'Try again' twice.
     for _ in 0..<2 {
@@ -57,7 +58,7 @@ final class RatingPromptCountingTests: XCTestCase {
   /// outcome — no plan, so nothing dispatches and nothing is emitted (the test
   /// mirrors the view: analytics fire only when a plan exists).
   func testReturnDuringActiveSendNeitherDispatchesNorCounts() async {
-    var ledger = QueryShellSendLedger()
+    let ledger = QueryShellSendLedger()
 
     if let plan = ledger.planSubmit("while the agent is busy", providerBusy: true) {
       AnalyticsManager.shared.chatMessageSent(
@@ -84,12 +85,56 @@ final class RatingPromptCountingTests: XCTestCase {
     XCTAssertEqual(RatingPromptManager.shared.questionCount, 1)
   }
 
-  func testQueryShellLedgerRejectsRetryBeforeAnySubmitAndEmptySubmits() {
+  /// A REAL ChatProvider rejection through the production sendMessage seam: a
+  /// fresh provider has no runtime owner, so sendMessage refuses before any
+  /// network work and never invokes onAccepted (the only place analytics,
+  /// counting, and retry state now commit — ChatProvider.swift invokes
+  /// onAccepted only after every rejection guard has passed).
+  func testRealProviderRejectionEmitsNothingAndPreservesLedger() async {
+    let provider = ChatProvider()
     var ledger = QueryShellSendLedger()
+    guard let plan = ledger.planSubmit("did I miss anything?", providerBusy: provider.isSending)
+    else {
+      return XCTFail("an idle provider must yield a plan")
+    }
+
+    var accepted = false
+    let result = await provider.sendMessage(
+      plan.question,
+      onAccepted: {
+        accepted = true
+        AnalyticsManager.shared.chatMessageSent(
+          messageLength: plan.question.count, source: "query_shell",
+          countsAsQuestion: plan.countsAsQuestion)
+        ledger.recordAccepted(plan)
+      })
+
+    XCTAssertNil(result)
+    XCTAssertFalse(accepted, "a refused send must never reach onAccepted")
+    await drainCounterHops()
+    XCTAssertEqual(RatingPromptManager.shared.questionCount, 0)
+    // The rejected question must not become what 'Try again' re-sends.
+    XCTAssertNil(ledger.planRetry())
+
+    // The acceptance path commits everything the rejection skipped.
+    ledger.recordAccepted(plan)
+    AnalyticsManager.shared.chatMessageSent(
+      messageLength: plan.question.count, source: "query_shell",
+      countsAsQuestion: plan.countsAsQuestion)
+    await drainCounterHops()
+    XCTAssertEqual(RatingPromptManager.shared.questionCount, 1)
+    XCTAssertEqual(ledger.planRetry()?.question, "did I miss anything?")
+    XCTAssertEqual(ledger.planRetry()?.countsAsQuestion, false)
+  }
+
+  func testQueryShellLedgerRejectsRetryBeforeAnySubmitAndEmptySubmits() {
+    let ledger = QueryShellSendLedger()
     XCTAssertNil(ledger.planRetry())
     XCTAssertNil(ledger.planSubmit(nil))
     XCTAssertNil(ledger.planSubmit(""))
     XCTAssertEqual(ledger.planSubmit("q")?.countsAsQuestion, true)
+    // Planning alone commits nothing; only acceptance does.
+    XCTAssertNil(ledger.planRetry())
   }
 
   func testRetriesAndBusySendsNeverCount() async {

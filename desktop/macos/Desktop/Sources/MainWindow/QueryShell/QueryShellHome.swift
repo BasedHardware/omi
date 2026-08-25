@@ -434,11 +434,27 @@ struct QueryShellHome: View {
   /// the same provider and never a second send path (INV-6). The ledger owns whether the emission
   /// counts toward the rating-prompt trigger (submits do, retries never re-count).
   private func send(_ plan: QueryShellSendLedger.Plan) {
-    AnalyticsManager.shared.chatMessageSent(
-      messageLength: plan.question.count, hasSelectedAppContext: false, source: "query_shell",
-      countsAsQuestion: plan.countsAsQuestion)
     chatProvider.dismissOnboardingOpener()
-    Task { await chatProvider.sendMessage(plan.question) }
+    Task {
+      // Analytics, question counting, and retry state all commit at the
+      // provider's own acceptance boundary — a send it rejects (busy race,
+      // signed-out) emits nothing and changes nothing.
+      var accepted = false
+      _ = await chatProvider.sendMessage(
+        plan.question,
+        onAccepted: {
+          accepted = true
+          AnalyticsManager.shared.chatMessageSent(
+            messageLength: plan.question.count, hasSelectedAppContext: false,
+            source: "query_shell", countsAsQuestion: plan.countsAsQuestion)
+          sendLedger.recordAccepted(plan)
+        })
+      if !accepted, chatProvider.draftText.isEmpty {
+        // The provider refused the send — give the typed question back
+        // instead of losing it to a cleared field.
+        chatProvider.draftText = plan.question
+      }
+    }
   }
 
   /// Re-sends the question that failed, not whatever the bar holds now — the send emptied it.
