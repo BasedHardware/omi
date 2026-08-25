@@ -137,13 +137,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
               final searchQuery = provider.previousQuery;
               final hoursSinceConversation = DateTime.now().difference(widget.conversation.createdAt).inHours;
-              final resultFuture = routeToPage(
-                context,
-                ConversationDetailPage(
-                  conversation: widget.conversation,
-                  isFromOnboarding: widget.isFromOnboarding,
-                ),
-              );
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (!mounted) return;
                 provider.onConversationTap(widget.conversation.id);
@@ -167,6 +160,21 @@ class _ConversationListItemState extends State<ConversationListItem> {
                 );
               });
 
+              final seek = searchMomentSeekFromSnippets(
+                snippets: widget.conversation.matchSnippets,
+                searchQuery: searchQuery,
+              );
+
+              final resultFuture = routeToPage(
+                context,
+                ConversationDetailPage(
+                  conversation: widget.conversation,
+                  isFromOnboarding: widget.isFromOnboarding,
+                  initialTabIndex: seek != null ? 0 : 1,
+                  initialSeekStart: seek?.start,
+                  initialSeekEnd: seek?.end,
+                ),
+              );
               var result = await resultFuture;
               if (context.mounted) {
                 // Don't upsert if the conversation was deleted while on the detail page
@@ -455,6 +463,32 @@ class _ConversationListItemState extends State<ConversationListItem> {
                                   ),
                               ],
                             ),
+                      if (_searchSnippetText() != null) ...[
+                        const SizedBox(height: 10),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Padding(
+                              padding: EdgeInsets.only(top: 2),
+                              child: Icon(Icons.graphic_eq, size: 14, color: Colors.white70),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _searchSnippetText()!,
+                                style: const TextStyle(
+                                  color: Color(0xFFC4C4CC),
+                                  fontSize: 13,
+                                  height: 1.35,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -465,6 +499,13 @@ class _ConversationListItemState extends State<ConversationListItem> {
         if (widget.conversation.isLocked) _buildLockedOverlay(),
       ],
     );
+  }
+
+  String? _searchSnippetText() {
+    if (widget.conversation.matchSnippets.isEmpty) return null;
+    final text = widget.conversation.matchSnippets.first.text.trim();
+    if (text.isEmpty) return null;
+    return text.replaceAll('\n', ' · ');
   }
 
   Widget _buildMergingOverlay() {
@@ -515,6 +556,17 @@ class _ConversationListItemState extends State<ConversationListItem> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(widget.conversation.structured.title.decodeString, style: Theme.of(context).textTheme.titleLarge),
+        if (_searchSnippetText() != null) ...[
+          const SizedBox(height: 10),
+          Text(
+            _searchSnippetText()!,
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade400, height: 1.35, fontStyle: FontStyle.italic),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ],
     );
   }
