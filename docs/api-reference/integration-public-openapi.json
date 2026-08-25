@@ -1007,6 +1007,17 @@
             ],
             "title": "Body"
           },
+          "canonical_memory_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Memory Id"
+          },
           "capture_confidence": {
             "anyOf": [
               {
@@ -1183,6 +1194,16 @@
               }
             ],
             "title": "Ledger Schema Version"
+          },
+          "ledger_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemoryItemStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "manually_added": {
             "default": false,
@@ -1410,6 +1431,16 @@
         ],
         "title": "MemoryItem",
         "type": "object"
+      },
+      "MemoryItemStatus": {
+        "enum": [
+          "active",
+          "superseded",
+          "hidden",
+          "tombstoned"
+        ],
+        "title": "MemoryItemStatus",
+        "type": "string"
       },
       "MemoryKind": {
         "description": "Semantic kind for the intent-backed knowledge ledger.\n\n``tier`` remains a storage-compatibility projection during the client\nmigration. It is not the lifecycle authority for ledger rows.",

@@ -12,13 +12,55 @@ from typing import Optional
 
 from fake_firestore import MockFirestore
 from fake_firestore import _transformations as fake_firestore_transformations
-from fake_firestore.document import FakeDocumentReference, NotFound, apply_transformations, get_by_path
+from fake_firestore.document import (
+    FakeDocumentReference,
+    FakeDocumentSnapshot,
+    NotFound,
+    apply_transformations,
+    get_by_path,
+)
 
 # Module-level singleton — set by conftest.py before backend imports.
 _mock_store: Optional[MockFirestore] = None
 _original_document_set = None
 _original_document_delete = None
+_original_snapshot_to_dict = None
 _delete_field_noop_patched = False
+
+
+class _DocumentIdAwareDict(dict):
+    """Expose Firestore's document-ID sentinel without persisting it."""
+
+    def __init__(self, data: dict, document_id: str):
+        super().__init__(data)
+        self._document_id = document_id
+
+    def __getitem__(self, key):
+        if key == "__name__":
+            return self._document_id
+        return super().__getitem__(key)
+
+    def get(self, key, default=None):
+        if key == "__name__":
+            return self._document_id
+        return super().get(key, default)
+
+
+def _patch_document_id_query_ordering():
+    """Match Firestore ordering by the reserved document-ID field."""
+    global _original_snapshot_to_dict
+    if _original_snapshot_to_dict is not None:
+        return
+
+    _original_snapshot_to_dict = FakeDocumentSnapshot.to_dict
+
+    def _to_dict(self):
+        data = _original_snapshot_to_dict(self)
+        if data is None:
+            return None
+        return _DocumentIdAwareDict(data, self.id)
+
+    FakeDocumentSnapshot.to_dict = _to_dict
 
 
 def _patch_document_merge_preserves_subcollections():
@@ -110,6 +152,7 @@ def setup_fake_firestore() -> MockFirestore:
     _patch_document_merge_preserves_subcollections()
     _patch_delete_field_missing_key_noop()
     _patch_document_delete_missing_doc_noop()
+    _patch_document_id_query_ordering()
     _mock_store = MockFirestore()
     return _mock_store
 
