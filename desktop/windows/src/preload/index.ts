@@ -423,6 +423,9 @@ const omi: OmiBridgeApi = {
   byokClearAll: () => ipcRenderer.invoke('byok:clearAll'),
   byokClearCodex: () => ipcRenderer.invoke('byok:clearCodex'),
   byokIsActive: () => ipcRenderer.invoke('byok:isActive'),
+  // Providers whose stored key matches the last successful enrollment — the
+  // validated-capability evidence (never raw keys) for quota/plan UI.
+  byokValidatedProviders: () => ipcRenderer.invoke('byok:validatedProviders'),
   // Live-validate the stored keys and reconcile backend BYOK activation. The
   // Firebase token is relayed from the renderer (its session owns it).
   byokEnroll: (token: string): Promise<ByokEnrollResult> =>

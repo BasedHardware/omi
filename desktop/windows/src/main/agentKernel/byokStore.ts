@@ -9,11 +9,25 @@
 import { app, safeStorage } from 'electron'
 import { existsSync, readFileSync, writeFileSync, rmSync } from 'fs'
 import { join } from 'path'
-import { BYOK_PROVIDERS, isByokActive, type ByokKeys, type ByokProvider } from '../../shared/byok'
+import {
+  BYOK_PROVIDERS,
+  isByokActive,
+  type ByokEnrolledFingerprints,
+  type ByokKeys,
+  type ByokProvider
+} from '../../shared/byok'
+import { byokFingerprint } from '../../shared/byokFingerprint'
 
 /** On-disk shape: provider → base64-encoded safeStorage ciphertext. */
 type StoredFile = Partial<Record<ByokProvider | 'codex', string>> & {
   codexMigrationComplete?: boolean
+  /**
+   * Fingerprints of the keys the backend currently enforces (the last successful
+   * enrollment), mirroring macOS `persistEnrolledFingerprints`. Hashes only —
+   * never raw key material. Capability claims (e.g. transcription BYOK) must
+   * match these, not mere key presence.
+   */
+  enrolledFingerprints?: ByokEnrolledFingerprints
 }
 
 /**
@@ -128,8 +142,12 @@ export class ByokKeyStore {
   /** Remove one provider's key. */
   clearKey(provider: ByokProvider): void {
     const data = this.readFile()
-    if (!(provider in data)) return
+    if (!(provider in data) && !(provider in (data.enrolledFingerprints ?? {}))) return
     delete data[provider]
+    if (data.enrolledFingerprints) {
+      delete data.enrolledFingerprints[provider]
+      if (Object.keys(data.enrolledFingerprints).length === 0) delete data.enrolledFingerprints
+    }
     this.writeFile(data)
   }
 
@@ -147,11 +165,51 @@ export class ByokKeyStore {
       this.migrateLegacyCodexKey()
       const data = this.readFile()
       for (const provider of BYOK_PROVIDERS) delete data[provider]
+      delete data.enrolledFingerprints
       if (Object.keys(data).length === 0) rmSync(this.filePath, { force: true })
       else this.writeFile(data)
     } catch {
       /* best-effort */
     }
+  }
+
+  /**
+   * Persist the fingerprint set the backend currently enforces. An empty map
+   * removes the stored evidence entirely (deactivated).
+   */
+  setEnrolledFingerprints(fingerprints: ByokEnrolledFingerprints): void {
+    const data = this.readFile()
+    if (Object.keys(fingerprints).length === 0) delete data.enrolledFingerprints
+    else data.enrolledFingerprints = { ...fingerprints }
+    this.writeFile(data)
+  }
+
+  getEnrolledFingerprints(): ByokEnrolledFingerprints {
+    return { ...(this.readFile().enrolledFingerprints ?? {}) }
+  }
+
+  clearEnrolledFingerprints(): void {
+    const data = this.readFile()
+    if (!data.enrolledFingerprints) return
+    delete data.enrolledFingerprints
+    if (Object.keys(data).length === 0) rmSync(this.filePath, { force: true })
+    else this.writeFile(data)
+  }
+
+  /**
+   * Providers whose CURRENT stored key hash matches the enrolled fingerprint —
+   * i.e. capabilities validated by the backend and not rotated since. A key
+   * edited after the last enrollment drops out until it re-enrolls.
+   */
+  validatedProviders(): ByokProvider[] {
+    const enrolled = this.readFile().enrolledFingerprints ?? {}
+    const out: ByokProvider[] = []
+    for (const provider of BYOK_PROVIDERS) {
+      const fp = enrolled[provider]
+      const key = this.getKey(provider)
+      if (fp && key && byokFingerprint(key) === fp) out.push(provider)
+    }
+    return out
   }
 
   /** True when a configured LLM provider has a stored key. */

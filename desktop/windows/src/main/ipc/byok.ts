@@ -59,6 +59,10 @@ export function registerByokHandlers(): void {
     getStore().clearCodexKey()
   })
   ipcMain.handle('byok:isActive', (): boolean => getStore().isActive())
+  // Providers whose stored key still matches the last successful enrollment —
+  // the validated-capability evidence quota suppression and plan UI must use
+  // (raw key presence is NOT proof: a rejected key stays stored until edited).
+  ipcMain.handle('byok:validatedProviders', (): ByokProvider[] => getStore().validatedProviders())
 
   // Validate the stored keys live and reconcile the backend BYOK activation.
   // The Firebase bearer token is relayed from the renderer (same pattern as the
@@ -69,6 +73,9 @@ export function registerByokHandlers(): void {
       apiBase: apiBase(),
       token
     })
+    // Mirror the server-known fingerprint set into the store. Absent on a failed
+    // POST (server state unknown) → prior evidence stands, matching the backend.
+    if (result.enrolledFingerprints) getStore().setEnrolledFingerprints(result.enrolledFingerprints)
     broadcastByokChanged()
     return result
   })
@@ -78,5 +85,7 @@ export function registerByokHandlers(): void {
   // while the session is still valid.
   ipcMain.handle('byok:deactivate', async (_e, token: string): Promise<void> => {
     await deactivateByok({ apiBase: apiBase(), token })
+    getStore().clearEnrolledFingerprints()
+    broadcastByokChanged()
   })
 }

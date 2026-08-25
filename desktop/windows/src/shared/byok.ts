@@ -74,12 +74,23 @@ export interface ByokKeyValidation {
 /** Per-provider validation results. */
 export type ByokValidationResults = Partial<Record<ByokProvider, ByokKeyValidation>>
 
+/** Provider → SHA-256 fingerprint, as accepted by the backend enrollment. */
+export type ByokEnrolledFingerprints = Partial<Record<ByokProvider, string>>
+
 /** Outcome of an enrollment attempt, returned to the renderer Settings UI. */
 export interface ByokEnrollResult {
   /** True only when at least one LLM key authenticated AND the backend accepted them. */
   active: boolean
   /** Per-provider live-validation results for configured keys. */
   results: ByokValidationResults
+  /**
+   * The fingerprint set the backend now enforces: present (possibly empty) whenever
+   * the server state is known — after a successful activate POST, or after the
+   * deactivate DELETE. Absent when the enroll POST itself failed (network/HTTP),
+   * because then the server may still hold the previous enrollment and local
+   * evidence must not be rewritten. Fingerprints only — never raw keys.
+   */
+  enrolledFingerprints?: ByokEnrolledFingerprints
   /**
    * Set only when the configured LLM keys validated but the backend enroll call itself
    * failed (network/HTTP) — distinct from a provider rejecting a key.
@@ -111,11 +122,6 @@ export function withByokHeaders(
  */
 export function isByokActive(keys: ByokKeys): boolean {
   return BYOK_LLM_PROVIDERS.some((provider) => Boolean(keys[provider]?.trim()))
-}
-
-/** True when a Deepgram key is present for managed-STT quota suppression. */
-export function hasTranscriptionByok(keys: ByokKeys): boolean {
-  return Boolean(keys.deepgram?.trim())
 }
 
 /**

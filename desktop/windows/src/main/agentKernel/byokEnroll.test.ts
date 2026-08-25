@@ -60,6 +60,13 @@ describe('enrollByok', () => {
     }
     // Fingerprints are the SHA-256 of the trimmed raw keys.
     expect(body.fingerprints.openai).toBe(byokFingerprint('sk-openai'))
+    // The result carries exactly the accepted fingerprint set as evidence.
+    expect(result.enrolledFingerprints).toEqual({
+      openai: byokFingerprint('sk-openai'),
+      anthropic: byokFingerprint('sk-ant'),
+      gemini: byokFingerprint('gm-key'),
+      deepgram: byokFingerprint('dg-key')
+    })
   })
 
   it('never sends X-BYOK-* headers on the enrollment call (only the bearer token)', async () => {
@@ -93,6 +100,7 @@ describe('enrollByok', () => {
     })
     expect(result.active).toBe(false)
     expect(result.results).toEqual({})
+    expect(result.enrolledFingerprints).toEqual({})
     expect(validatorCalled).toBe(false)
     expect(backend.calls).toHaveLength(1)
     expect(backend.calls[0].method).toBe('DELETE')
@@ -110,6 +118,10 @@ describe('enrollByok', () => {
     expect(result.active).toBe(true)
     expect(result.results.anthropic).toMatchObject({ ok: false, kind: 'rejected' })
     expect(result.results.openai?.ok).toBe(true)
+    // A rejected provider is omitted from the accepted fingerprint evidence —
+    // it must never read as a validated capability.
+    expect(result.enrolledFingerprints?.anthropic).toBeUndefined()
+    expect(result.enrolledFingerprints?.openai).toBe(byokFingerprint('sk-openai'))
     expect(backend.calls).toHaveLength(1)
     expect(backend.calls[0].method).toBe('POST')
     expect(JSON.parse(backend.calls[0].body as string).fingerprints.anthropic).toBeUndefined()
@@ -128,6 +140,9 @@ describe('enrollByok', () => {
     expect(result.backendError).toContain('502')
     // Keys still validated OK — the failure is the backend call, not the keys.
     expect(result.results.openai?.ok).toBe(true)
+    // Server state is unknown after a failed POST: no evidence is emitted, so
+    // callers keep their previous enrollment fingerprints.
+    expect(result.enrolledFingerprints).toBeUndefined()
     expect(backend.calls[0].method).toBe('POST')
   })
 

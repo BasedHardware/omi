@@ -18,6 +18,7 @@ vi.mock('electron', () => ({
 
 import { safeStorage } from 'electron'
 import { ByokKeyStore } from './byokStore'
+import { byokFingerprint } from '../../shared/byokFingerprint'
 
 afterAll(() => rmSync(dir, { recursive: true, force: true }))
 
@@ -134,6 +135,74 @@ describe('ByokKeyStore', () => {
     } finally {
       spy.mockRestore()
     }
+  })
+
+  describe('enrolled fingerprints + validatedProviders', () => {
+    it('persists enrollment evidence and reports only matching providers as validated', () => {
+      store.setKey('deepgram', 'dg-key')
+      store.setKey('openai', 'sk-openai')
+      // No evidence yet — presence alone is not a validated capability.
+      expect(store.validatedProviders()).toEqual([])
+
+      store.setEnrolledFingerprints({
+        deepgram: byokFingerprint('dg-key'),
+        openai: byokFingerprint('sk-openai')
+      })
+      expect(store.getEnrolledFingerprints()).toEqual({
+        deepgram: byokFingerprint('dg-key'),
+        openai: byokFingerprint('sk-openai')
+      })
+      expect(store.validatedProviders().sort()).toEqual(['deepgram', 'openai'])
+    })
+
+    it('drops a provider from validated once its key is rotated (until re-enrollment)', () => {
+      store.setKey('deepgram', 'dg-key')
+      store.setEnrolledFingerprints({ deepgram: byokFingerprint('dg-key') })
+      expect(store.validatedProviders()).toEqual(['deepgram'])
+
+      // Rejected-key scenario: the stored key never matched an accepted fingerprint.
+      store.setKey('openai', 'sk-bad')
+      expect(store.validatedProviders()).toEqual(['deepgram'])
+
+      store.setKey('deepgram', 'dg-rotated')
+      expect(store.validatedProviders()).toEqual([])
+    })
+
+    it('clearing one provider key drops its enrollment evidence too', () => {
+      store.setKey('deepgram', 'dg-key')
+      store.setKey('openai', 'sk-openai')
+      store.setEnrolledFingerprints({
+        deepgram: byokFingerprint('dg-key'),
+        openai: byokFingerprint('sk-openai')
+      })
+      store.clearKey('deepgram')
+      expect(store.getEnrolledFingerprints()).toEqual({ openai: byokFingerprint('sk-openai') })
+      expect(store.validatedProviders()).toEqual(['openai'])
+
+      store.setKey('deepgram', 'dg-key') // same key re-added: evidence is gone → must re-enroll
+      expect(store.validatedProviders()).toEqual(['openai'])
+    })
+
+    it('clearEnrolledFingerprints and clearAll wipe the evidence (Codex still preserved by clearAll)', () => {
+      store.setCodexKey('sk-codex')
+      store.setKey('deepgram', 'dg-key')
+      store.setEnrolledFingerprints({ deepgram: byokFingerprint('dg-key') })
+
+      const other = new ByokKeyStore(
+        join(dir, `byok-other-${Math.random().toString(36).slice(2)}.json`)
+      )
+      other.setKey('openai', 'sk-openai')
+      other.setEnrolledFingerprints({ openai: byokFingerprint('sk-openai') })
+      other.clearEnrolledFingerprints()
+      expect(other.getEnrolledFingerprints()).toEqual({})
+      expect(other.validatedProviders()).toEqual([])
+
+      store.clearAll()
+      expect(store.getEnrolledFingerprints()).toEqual({})
+      expect(store.validatedProviders()).toEqual([])
+      expect(store.getKey('deepgram')).toBeNull()
+      expect(store.getCodexKey()).toBe('sk-codex')
+    })
   })
 
   it('defaults the file path to userData when constructed with no args', () => {

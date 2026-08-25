@@ -99,14 +99,14 @@ export async function enrollByok(opts: {
 
   if (!isByokActive(keys)) {
     await deleteActivate(apiBase, token, backendFetch)
-    return { active: false, results: {} }
+    return { active: false, results: {}, enrolledFingerprints: {} }
   }
 
   const results = await validateAllByokKeys(keys, opts.validateFetch)
   const allOk = BYOK_LLM_PROVIDERS.some((p) => results[p]?.ok)
   if (!allOk) {
     await deleteActivate(apiBase, token, backendFetch)
-    return { active: false, results }
+    return { active: false, results, enrolledFingerprints: {} }
   }
 
   const fingerprints: Record<string, string> = {}
@@ -114,8 +114,12 @@ export async function enrollByok(opts: {
     if (keys[p]?.trim() && results[p]?.ok) fingerprints[p] = byokFingerprint(keys[p] as string)
   }
   const posted = await postActivate(apiBase, token, fingerprints, backendFetch)
-  if (!posted.ok) return { active: false, results, backendError: posted.error }
-  return { active: true, results }
+  if (!posted.ok) {
+    // The POST failed, so the backend may still hold the previous enrollment —
+    // omit `enrolledFingerprints` and let callers keep their prior evidence.
+    return { active: false, results, backendError: posted.error }
+  }
+  return { active: true, results, enrolledFingerprints: fingerprints }
 }
 
 /**
