@@ -15,7 +15,7 @@ from google.cloud.firestore import DELETE_FIELD
 from ._client import db
 from .cache import get_memory_cache
 from database.store import ensure_id_segment, get_document_store
-from dataclasses import dataclass
+from models.other import UnifiedPushEndpoint
 from datetime import datetime, timezone
 import logging
 from typing import Any, Dict, List, Optional, Tuple, Union, cast
@@ -28,18 +28,6 @@ logger = logging.getLogger(__name__)
 # Stored at users/{uid}/unifiedpush_endpoints/{device_key} through the neutral store port (so it runs
 # on Mongo/Firestore alike), mirroring the FCM-token subcollection shape one-for-one.
 # ---------------------------------------------------------------------------
-
-
-@dataclass
-class UnifiedPushEndpoint:
-    """A registered UnifiedPush delivery endpoint. ``url`` is the distributor POST target; ``p256dh``/
-    ``auth`` are the optional WebPush encryption keys (absent = plaintext POST)."""
-
-    url: str
-    device_key: str = ''
-    time_zone: Optional[str] = None
-    p256dh: Optional[str] = None
-    auth: Optional[str] = None
 
 
 _UNIFIEDPUSH_COLLECTION = 'unifiedpush_endpoints'

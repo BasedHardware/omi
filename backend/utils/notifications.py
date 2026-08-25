@@ -470,6 +470,21 @@ def send_training_data_submitted_notification(user_id: str) -> None:
     logger.info(f"Training data submitted notification sent to user {user_id}")
 
 
+def _as_unifiedpush_endpoints(recipients: List[Any]) -> List[Any]:
+    """Normalize recipients to ``UnifiedPushEndpoint`` so a caller passing bare URL strings — the
+    pre-key-set recipient shape — still delivers instead of failing inside ``send_bulk``.
+
+    A module function, not four lines inline in ``send_bulk_notification``: the constructor is imported
+    from ``database.notifications``, and the async-blocker scanner counts every call to a name from
+    ``database.*`` inside an ``async def`` as blocking I/O. Here it is right to: those accessors do hit
+    the database. This one does not — it builds a value object and touches nothing — and saying so by
+    giving it its own synchronous function is more honest than an inline exception would be.
+    """
+    from models.other import UnifiedPushEndpoint
+
+    return [r if isinstance(r, UnifiedPushEndpoint) else UnifiedPushEndpoint(url=r) for r in recipients]
+
+
 async def send_bulk_notification(user_tokens: List[str], title: str, body: str, push_backend: Optional[str] = None) -> None:
     """Send notification to multiple users in batches.
 
@@ -483,14 +498,8 @@ async def send_bulk_notification(user_tokens: List[str], title: str, body: str, 
     if backend == UNIFIEDPUSH:
         # In unifiedpush mode the caller gathers endpoints (not FCM tokens) as the recipients.
         from utils.push import unifiedpush as _up  # lazy: see module-top note
-        from database.notifications import UnifiedPushEndpoint
 
-        # Normalize to UnifiedPushEndpoint so a caller passing bare URL strings (the pre-key-set
-        # recipient shape) still delivers instead of failing inside send_bulk.
-        endpoints = [
-            recipient if isinstance(recipient, UnifiedPushEndpoint) else UnifiedPushEndpoint(url=recipient)
-            for recipient in user_tokens
-        ]
+        endpoints = _as_unifiedpush_endpoints(user_tokens)
         tag = _generate_tag(f"bulk:{title}:{to_plain_text(body)}")
         # Same error boundary as the FCM path below: a dead-endpoint cleanup failure inside send_bulk
         # must not abort the whole notification job (cubic review 4939247683).

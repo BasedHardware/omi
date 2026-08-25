@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable, Iterable, List, Mapping, Optional
 
@@ -11,6 +12,25 @@ class SaveFcmTokenRequest(BaseModel):
 
 class FcmTokenResponse(BaseModel):
     status: str
+
+
+@dataclass
+class UnifiedPushEndpoint:
+    """A registered UnifiedPush delivery endpoint. ``url`` is the distributor POST target; ``p256dh``/
+    ``auth`` are the optional WebPush encryption keys (absent = plaintext POST).
+
+    A value object, so it lives beside its request model rather than in ``database/notifications.py``
+    where it started. That mattered beyond tidiness: the async-blocker scanner counts a call to any name
+    imported from ``database.*`` inside an ``async def`` as blocking I/O, and it is right to — those
+    accessors do hit the database. Constructing this one touches nothing, and the only way to say so is
+    to keep it out of the module whose job is I/O.
+    """
+
+    url: str
+    device_key: str = ''
+    time_zone: Optional[str] = None
+    p256dh: Optional[str] = None
+    auth: Optional[str] = None
 
 
 class SaveUnifiedPushEndpointRequest(BaseModel):

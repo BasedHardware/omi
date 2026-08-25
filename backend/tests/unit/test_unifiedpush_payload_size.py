@@ -102,7 +102,7 @@ def test_hex_armor_doubles_the_body_and_the_test_says_by_how_much():
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric import ec
 
-    from database.notifications import UnifiedPushEndpoint
+    from models.other import UnifiedPushEndpoint
 
     private_key = ec.generate_private_key(ec.SECP256R1())
     raw_public = private_key.public_key().public_bytes(
@@ -121,7 +121,7 @@ def test_hex_armor_doubles_the_body_and_the_test_says_by_how_much():
 def test_an_endpoint_without_keys_pays_nothing():
     """The plaintext fallback (pre-encryption client) is the payload itself — the doubling is the price of
     encryption, not of the transport."""
-    from database.notifications import UnifiedPushEndpoint
+    from models.other import UnifiedPushEndpoint
 
     endpoint = UnifiedPushEndpoint(url='https://ntfy/u1', p256dh=None, auth=None)
     plaintext = b'{"data": {"ids": "abc"}}'

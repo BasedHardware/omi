@@ -19,7 +19,7 @@ os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 
 import pytest  # noqa: E402
 
-from database.notifications import UnifiedPushEndpoint  # noqa: E402
+from models.other import UnifiedPushEndpoint  # noqa: E402
 from testing.import_isolation import load_module_fresh, stub_modules  # noqa: E402
 from utils.push import unifiedpush as up  # noqa: E402
 from utils.push.base import PushMessage  # noqa: E402

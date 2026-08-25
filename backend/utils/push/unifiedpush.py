@@ -28,7 +28,7 @@ from urllib.parse import urlsplit
 import httpx
 
 import database.notifications as notification_db
-from database.notifications import UnifiedPushEndpoint
+from models.other import UnifiedPushEndpoint
 from utils.executors import db_executor, push_crypto_executor, run_blocking
 from utils.observability.fallback import record_fallback
 from utils.http_client import get_ntfy_client
