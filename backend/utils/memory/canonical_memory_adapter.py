@@ -1630,9 +1630,7 @@ def write_canonical_direct_user_knowledge_ledger_memory(
         raise ValueError("direct user ledger writes require an explicit correction, reopen, or revert append")
     client = db_client if db_client is not None else default_db_client
     evidence_items = (
-        evidence
-        if ledger_reopen_receipt is not None
-        else _reissued_external_evidence(uid, evidence, db_client=client)
+        evidence if ledger_reopen_receipt is not None else _reissued_external_evidence(uid, evidence, db_client=client)
     )
     return write_canonical_extraction_memory(
         uid,
