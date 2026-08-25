@@ -250,6 +250,26 @@ final class APIKeyService: ObservableObject {
   }
 
   /// Persist fingerprints that passed BYOKValidator and were sent to activateBYOK.
+  nonisolated static func clearPersistedBYOKKeys() {
+    let defaults = UserDefaults.standard
+    for provider in BYOKProvider.allCases {
+      defaults.removeObject(forKey: provider.storageKey)
+    }
+    defaults.removeObject(forKey: DefaultsKey.byokLLMProvider.rawValue)
+    persistEnrolledFingerprints([:])
+  }
+
+  nonisolated static func bindBYOKOwner(_ uid: String?) {
+    guard let uid, !uid.isEmpty else { return }
+    let last = UserDefaults.standard.string(forKey: DefaultsKey.byokOwnerUid.rawValue)
+    if last != uid {
+      if last != nil {
+        clearPersistedBYOKKeys()
+      }
+      UserDefaults.standard.set(uid, forKey: DefaultsKey.byokOwnerUid.rawValue)
+    }
+  }
+
   nonisolated static func persistEnrolledFingerprints(_ fingerprints: [String: String]) {
     if fingerprints.isEmpty {
       UserDefaults.standard.removeObject(forKey: DefaultsKey.byokEnrolledFingerprints.rawValue)
@@ -313,6 +333,7 @@ final class APIKeyService: ObservableObject {
   }
 
   func reconcileBYOKActivation() async {
+    Self.bindBYOKOwner(UserDefaults.standard.string(forKey: .authUserId))
     guard let selectedProvider = Self.selectedBYOKLLMProvider, Self.byokKey(selectedProvider) != nil else { return }
 
     let snapshot = Self.activeBYOKSnapshot.reduce(into: [BYOKProvider: String]()) { result, entry in
@@ -330,7 +351,11 @@ final class APIKeyService: ObservableObject {
         result[entry.key.rawValue] = entry.value.fingerprint
       }
     }
-    try? await APIClient.shared.activateBYOK(fingerprints: fingerprints)
-    Self.persistEnrolledFingerprints(fingerprints)
+    do {
+      try await APIClient.shared.activateBYOK(fingerprints: fingerprints)
+      Self.persistEnrolledFingerprints(fingerprints)
+    } catch {
+      // Leave local capability inactive when the backend never enrolled.
+    }
   }
 }

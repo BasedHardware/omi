@@ -224,7 +224,7 @@ extension SettingsContentView {
     guard !selectedBYOKLLMKey.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
       byokKeyStatuses = [:]
       byokActivationError = nil
-      if hasAnyBYOKKey {
+      if hasAnyBYOKKey || !APIKeyService.enrolledFingerprints().isEmpty {
         try? await APIClient.shared.deactivateBYOK()
         APIKeyService.persistEnrolledFingerprints([:])
         await FloatingBarUsageLimiter.shared.fetchPlan()
@@ -273,16 +273,24 @@ extension SettingsContentView {
             acc[entry.key.rawValue] = entry.value.fingerprint
           }
         }
-        try? await APIClient.shared.activateBYOK(fingerprints: fingerprints)
-        APIKeyService.persistEnrolledFingerprints(fingerprints)
-        await FloatingBarUsageLimiter.shared.fetchPlan()
-        await MainActor.run {
+        do {
+          try await APIClient.shared.activateBYOK(fingerprints: fingerprints)
+          APIKeyService.persistEnrolledFingerprints(fingerprints)
+          await FloatingBarUsageLimiter.shared.fetchPlan()
+          await MainActor.run {
           // Clear any sticky paywall flag from a prior `freemium_threshold_reached`
           // event — once the selected LLM BYOK key validates, the user is on the
           // free BYOK plan and shouldn't be locked out of capture/transcription.
           AppState.current?.isPaywalled = false
           byokKeyStatuses = results
           byokActivationError = nil
+          }
+        } catch {
+          await MainActor.run {
+            byokKeyStatuses = results
+            byokActivationError =
+              "Could not enroll keys with Omi. Free plan stays off until enrollment succeeds."
+          }
         }
       } else {
         let failed = results.filter {
