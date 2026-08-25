@@ -90,6 +90,7 @@ from routers import (
     conversation_finalization,
     public_shared_conversation_chat,
 )
+from routers.listen.registry import proactive_message_dispatcher
 
 from utils.other.timeout import TimeoutMiddleware
 from utils.observability import log_langsmith_status
@@ -309,6 +310,10 @@ async def startup_event():
         name='startup_meeting_receipt_reconcile',
     )
     start_background_task(_periodic_listen_finalization_reconcile(), name='periodic_listen_finalization_reconcile')
+    start_background_task(
+        proactive_message_dispatcher(),
+        name='proactive_message_dispatcher',
+    )
     # On the on-prem Mongo backend (ADR-0046), the store adapter has no auto-created indexes, so scoped
     # queries/counts would collection-scan at any real size (cubic PR 10887 #6). Provision the indexes
     # mirroring firestore.indexes.json at boot — idempotent (createIndex is a no-op once they exist) and

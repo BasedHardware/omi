@@ -18339,6 +18339,30 @@ abstract class AppLocalizations {
   /// **'Open store'**
   String get accountCutoverOpenStore;
 
+  /// Chat timeframe scope chip for today
+  ///
+  /// In en, this message translates to:
+  /// **'Today'**
+  String get chatScopeToday;
+
+  /// Chat timeframe scope chip for this week
+  ///
+  /// In en, this message translates to:
+  /// **'This week'**
+  String get chatScopeThisWeek;
+
+  /// Chat scope chip when asking about a specific conversation
+  ///
+  /// In en, this message translates to:
+  /// **'About: {title}'**
+  String chatScopeAbout(String title);
+
+  /// Tooltip for Ask button on conversation detail
+  ///
+  /// In en, this message translates to:
+  /// **'Ask about this'**
+  String get askAboutThisConversation;
+
   /// Toggle label controlling whether Custom STT raw audio is also sent to Omi
   ///
   /// In en, this message translates to:

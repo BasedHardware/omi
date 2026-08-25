@@ -9824,6 +9824,20 @@ class AppLocalizationsHi extends AppLocalizations {
   String get accountCutoverOpenStore => 'स्टोर खोलें';
 
   @override
+  String get chatScopeToday => 'आज';
+
+  @override
+  String get chatScopeThisWeek => 'इस सप्ताह';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'इसके बारे में: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'इसके बारे में पूछें';
+
+  @override
   String get sendRawAudioToOmi => 'Omi को कच्चा ऑडियो भेजें';
 
   @override

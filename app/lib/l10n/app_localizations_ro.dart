@@ -9892,6 +9892,20 @@ class AppLocalizationsRo extends AppLocalizations {
   String get accountCutoverOpenStore => 'Deschide magazinul';
 
   @override
+  String get chatScopeToday => 'Astăzi';
+
+  @override
+  String get chatScopeThisWeek => 'Săptămâna aceasta';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Despre: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Întreabă despre asta';
+
+  @override
   String get sendRawAudioToOmi => 'Trimite sunetul brut către Omi';
 
   @override

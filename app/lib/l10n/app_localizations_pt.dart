@@ -9853,6 +9853,20 @@ class AppLocalizationsPt extends AppLocalizations {
   String get accountCutoverOpenStore => 'Abrir loja';
 
   @override
+  String get chatScopeToday => 'Hoje';
+
+  @override
+  String get chatScopeThisWeek => 'Esta semana';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Sobre: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Perguntar sobre isto';
+
+  @override
   String get sendRawAudioToOmi => 'Enviar áudio em bruto para o Omi';
 
   @override

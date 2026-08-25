@@ -9893,6 +9893,20 @@ class AppLocalizationsTe extends AppLocalizations {
   String get accountCutoverOpenStore => 'स्टोर खोलें';
 
   @override
+  String get chatScopeToday => 'ఈ రోజు';
+
+  @override
+  String get chatScopeThisWeek => 'ఈ వారం';
+
+  @override
+  String chatScopeAbout(String title) {
+    return '$title గురించి';
+  }
+
+  @override
+  String get askAboutThisConversation => 'దీని గురించి అడగండి';
+
+  @override
   String get sendRawAudioToOmi => 'ముడి ఆడియోను Omiకి పంపండి';
 
   @override

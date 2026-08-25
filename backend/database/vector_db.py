@@ -1226,7 +1226,6 @@ def search_transcript_chunks(
     # Same one-sided / invalid-range rules as summary vector search (_created_at_filter).
     created_at = _created_at_filter(starts_at, ends_at)
     if (starts_at is not None or ends_at is not None) and created_at is None:
-        logger.warning('Skipping transcript chunk search with invalid date filter')
         return []
     if created_at is not None:
         filter_data['created_at'] = created_at

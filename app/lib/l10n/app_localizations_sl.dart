@@ -9875,6 +9875,20 @@ class AppLocalizationsSl extends AppLocalizations {
   String get accountCutoverOpenStore => 'Otevřít obchod';
 
   @override
+  String get chatScopeToday => 'Danes';
+
+  @override
+  String get chatScopeThisWeek => 'Ta teden';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'O: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Vprašaj o tem';
+
+  @override
   String get sendRawAudioToOmi => 'Pošiljaj neobdelan zvok v Omi';
 
   @override

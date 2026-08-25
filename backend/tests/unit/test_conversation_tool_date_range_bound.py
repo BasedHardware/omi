@@ -84,6 +84,23 @@ for _name, _attrs in {
     for _a in _attrs:
         setattr(_m, _a, MagicMock())
 
+
+def _apply_chat_scope_dates(scope, start_date, end_date):
+    """Pass-through stub: date-range bound tests do not exercise hard-scope intersection."""
+    return start_date, end_date, None
+
+
+def _chat_scope_from_config(configurable):
+    if not isinstance(configurable, dict):
+        return None
+    scope = configurable.get("chat_scope")
+    return scope if isinstance(scope, dict) and scope else None
+
+
+_chat_scope = _mod("utils.retrieval.chat_scope")
+_chat_scope.apply_chat_scope_dates = _apply_chat_scope_dates
+_chat_scope.chat_scope_from_config = _chat_scope_from_config
+
 ct = _load("utils.retrieval.tools.conversation_tools", "utils/retrieval/tools/conversation_tools.py")
 
 
@@ -92,7 +109,9 @@ class TestExactConversationReference:
         conversation_id = "e8c05000-52f0-4a95-951c-ccd715523429"
         ct.parse_exact_conversation_reference.return_value = conversation_id
         ct.conversation_matches_date_range.return_value = True
-        ct.keyword_search_conversation_ids.reset_mock()
+        # Rebind: sibling unit files may have already loaded conversation_tools with a real
+        # keyword_search_conversation_ids (not a MagicMock), so reset_mock is unsafe here.
+        ct.keyword_search_conversation_ids = MagicMock()
         ct.vector_db.query_vectors = MagicMock(return_value=[])
         ct.conversations_db.get_conversations_by_id = MagicMock(
             return_value=[{"id": conversation_id, "transcript_segments": [], "is_locked": False}]

@@ -9868,6 +9868,20 @@ class AppLocalizationsEs extends AppLocalizations {
   String get accountCutoverOpenStore => 'Abrir tienda';
 
   @override
+  String get chatScopeToday => 'Hoy';
+
+  @override
+  String get chatScopeThisWeek => 'Esta semana';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Sobre: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Preguntar sobre esto';
+
+  @override
   String get sendRawAudioToOmi => 'Enviar audio sin procesar a Omi';
 
   @override

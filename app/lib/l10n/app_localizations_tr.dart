@@ -9856,6 +9856,20 @@ class AppLocalizationsTr extends AppLocalizations {
   String get accountCutoverOpenStore => 'Mağazayı aç';
 
   @override
+  String get chatScopeToday => 'Bugün';
+
+  @override
+  String get chatScopeThisWeek => 'Bu hafta';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Hakkında: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Bunu sor';
+
+  @override
   String get sendRawAudioToOmi => 'Ham sesi Omi\'ye gönder';
 
   @override

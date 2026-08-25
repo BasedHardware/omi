@@ -9845,6 +9845,20 @@ class AppLocalizationsFa extends AppLocalizations {
   String get accountCutoverOpenStore => 'فتح المتجر';
 
   @override
+  String get chatScopeToday => 'امروز';
+
+  @override
+  String get chatScopeThisWeek => 'این هفته';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'درباره: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'درباره این بپرسید';
+
+  @override
   String get sendRawAudioToOmi => 'ارسال صدای خام به Omi';
 
   @override

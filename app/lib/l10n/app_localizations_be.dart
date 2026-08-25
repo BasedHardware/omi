@@ -9877,6 +9877,20 @@ class AppLocalizationsBe extends AppLocalizations {
   String get accountCutoverOpenStore => 'Открыть магазин';
 
   @override
+  String get chatScopeToday => 'Сёння';
+
+  @override
+  String get chatScopeThisWeek => 'Гэты тыдзень';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Пра: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Спытаць пра гэта';
+
+  @override
   String get sendRawAudioToOmi => 'Адпраўляць неапрацаванае аўдыя ў Omi';
 
   @override

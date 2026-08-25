@@ -9787,6 +9787,20 @@ class AppLocalizationsAr extends AppLocalizations {
   String get accountCutoverOpenStore => 'فتح المتجر';
 
   @override
+  String get chatScopeToday => 'اليوم';
+
+  @override
+  String get chatScopeThisWeek => 'هذا الأسبوع';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'عن: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'اسأل عن هذا';
+
+  @override
   String get sendRawAudioToOmi => 'إرسال الصوت الخام إلى Omi';
 
   @override
