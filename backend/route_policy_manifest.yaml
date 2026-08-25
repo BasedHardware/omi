@@ -65,9 +65,10 @@ routes:
       auth:
         mechanisms:
           - firebase_id_token
+          - admin_key_uid_prefix
         placement: dependency
         scopes: []
-      byok: not_applicable
+      byok: validated_when_headers_present
       rate_limit:
         policy_name: none
         key_subject: none
@@ -88,13 +89,14 @@ routes:
       auth:
         mechanisms:
           - firebase_id_token
+          - admin_key_uid_prefix
         placement: dependency
         scopes: []
-      byok: not_applicable
+      byok: validated_when_headers_present
       rate_limit:
         policy_name: tools:search
         key_subject: uid
-        enforcement: fail_closed
+        enforcement: fail_open
         placement: wrapper
       timeout_class: default_method
       surface: first_party_app
@@ -111,13 +113,14 @@ routes:
       auth:
         mechanisms:
           - firebase_id_token
+          - admin_key_uid_prefix
         placement: dependency
         scopes: []
-      byok: not_applicable
+      byok: validated_when_headers_present
       rate_limit:
         policy_name: memories:create
         key_subject: uid
-        enforcement: fail_closed
+        enforcement: fail_open
         placement: wrapper
       timeout_class: default_method
       surface: first_party_app
