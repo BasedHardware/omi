@@ -1216,8 +1216,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   builder: (context) => MediaViewerPage(
                                     items: app.thumbnailUrls
                                         .map((url) => MediaViewerItem(
-                                              imageProvider: CachedNetworkImageProvider(url),
-                                              shareUrl: url,
+                                              imageUrl: url,
                                             ))
                                         .toList(),
                                     initialIndex: index,

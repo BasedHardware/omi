@@ -3725,10 +3725,8 @@ final class DesktopAutomationActionRegistry {
       // see `ScreenFrameQuickLook.probeState()`. This is how the responder-chain claim, the
       // materialisation of signed URLs into files, and the panel actually opening are verified.
       if params["dismiss"] == "true" {
-        return await MainActor.run {
-          ScreenFrameQuickLook.shared.dismissForProbe()
-          return ["dismissed": "true"]
-        }
+        await ScreenFrameQuickLook.shared.dismissForProbe()
+        return ["dismissed": "true"]
       }
       // Two sources, because they materialise by completely different routes: a meeting frame is a
       // signed URL to download, a Rewind moment is usually a frame inside a video chunk to decode.
@@ -3777,9 +3775,16 @@ final class DesktopAutomationActionRegistry {
       }
       // `present` fetches the clicked frame before it shows anything, so the panel is not up the
       // instant this returns. Poll rather than sleep a guessed interval.
+      // Both conditions, not just visibility: an ordered-out panel can still report itself visible
+      // while its data source is gone, so polling on `panel_visible` alone returns the *previous*
+      // presentation's window and reads zero ready items off the new one.
       for _ in 0..<40 {
         let state = await MainActor.run { ScreenFrameQuickLook.shared.probeState() }
-        if state["panel_visible"] == "true" { break }
+        if state["panel_visible"] == "true", state["panel_controlled"] == "true",
+          state["ready_count"] != "0"
+        {
+          break
+        }
         try? await Task.sleep(nanoseconds: 100_000_000)
       }
       var result = await MainActor.run { ScreenFrameQuickLook.shared.probeState() }

@@ -584,17 +584,15 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => MediaViewerPage(
-          items: allPhotos.map((photo) {
-            final bytes = base64Decode(photo.base64);
-            return MediaViewerItem(
-              imageProvider: MemoryImage(bytes),
-              heroTag: photo.id,
-              shareBytes: bytes,
-              showCaptionStrip: true,
-              caption: photo.description,
-              discarded: photo.discarded,
-            );
-          }).toList(),
+          items: allPhotos
+              .map((photo) => MediaViewerItem(
+                    base64: photo.base64,
+                    heroTag: photo.id,
+                    showCaptionStrip: true,
+                    caption: photo.description,
+                    discarded: photo.discarded,
+                  ))
+              .toList(),
           initialIndex: index >= 0 ? index : 0,
         ),
       ),

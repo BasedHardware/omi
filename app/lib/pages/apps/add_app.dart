@@ -246,8 +246,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                                         builder: (context) => MediaViewerPage(
                                                           items: provider.thumbnailUrls
                                                               .map((url) => MediaViewerItem(
-                                                                    imageProvider: CachedNetworkImageProvider(url),
-                                                                    shareUrl: url,
+                                                                    imageUrl: url,
                                                                   ))
                                                               .toList(),
                                                           initialIndex: index,

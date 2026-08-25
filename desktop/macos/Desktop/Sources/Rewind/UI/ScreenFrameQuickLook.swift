@@ -129,16 +129,24 @@ enum QuickLookScratch {
     return "jpg"
   }
 
-  /// Write `data` where Quick Look can read it. The name is derived from the frame id, not from
-  /// its caption: the caption is user- and model-authored text that has no business becoming a
-  /// path component, and `previewItemTitle` puts it on screen anyway.
+  /// Write `data` where Quick Look can read it.
+  ///
+  /// The readable half of the name is derived from the frame id, never from its caption: a caption
+  /// is user- and model-authored text with no business becoming a path component, and
+  /// `previewItemTitle` puts it on screen anyway.
+  ///
+  /// **The uniqueness does not come from the id.** Sanitising it collapses distinct ids onto the
+  /// same string — `frame/a` and `frame?a` both become `frame-a`, and two long ids can agree for
+  /// their first 64 characters — so a name built from the id alone lets one frame's bytes
+  /// atomically overwrite another's, and both preview items then show whichever landed last. The
+  /// id is a label here; the UUID is the name.
   static func write(_ data: Data, id: String) throws -> URL {
     let folder = directory
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-    let safeID = id.map { $0.isLetter || $0.isNumber ? $0 : "-" }
-    let name = String(String(safeID).prefix(64))
+    let label = String(String(id.map { $0.isLetter || $0.isNumber ? $0 : "-" }).prefix(32))
+    let unique = UUID().uuidString
     let url = folder.appendingPathComponent(
-      "\(name.isEmpty ? "frame" : name).\(fileExtension(for: data))")
+      "\(label.isEmpty ? "frame" : label)-\(unique).\(fileExtension(for: data))")
     try data.write(to: url, options: .atomic)
     return url
   }
@@ -209,6 +217,13 @@ final class QuickLookItem: NSObject, QLPreviewItem, @unchecked Sendable {
         }
         data = downloaded
       }
+      // The panel may have closed while these bytes were in flight. Writing them now would put a
+      // file back into a directory that was just purged on the promise that nothing survives the
+      // panel, so the last thing before touching disk is to ask whether anyone still wants it.
+      if Task.isCancelled {
+        state.withLock { $0.loading = false }
+        return
+      }
       let written = try QuickLookScratch.write(data, id: frame.id)
       state.withLock {
         $0.fileURL = written
@@ -236,12 +251,27 @@ final class ScreenFrameQuickLook: NSObject {
   static let shared = ScreenFrameQuickLook()
 
   private var items: [QuickLookItem] = []
-  private var pendingIndex = 0
+  /// Which presentation the items belong to. Every `present` and every close bumps it, and the
+  /// task that a presentation started checks it before touching shared state — because a click,
+  /// a second click and a close are three things a person can do inside the time one signed URL
+  /// takes to download.
+  private var generation = 0
+  /// The work a presentation started, kept so closing can cancel it. Without this a download that
+  /// was in flight when the panel closed lands *after* the purge and puts the file back.
+  private var work: Task<Void, Never>?
 
   private override init() {
     super.init()
-    // Covers the case the close-handler cannot: a crash or force-quit with a panel open leaves
-    // frames on disk, and this is the next moment anything of ours runs.
+  }
+
+  /// Remove anything a previous run left behind. Called at launch, because the close handler
+  /// cannot run for a process that was force-quit or crashed with a panel open — and until it is
+  /// called those frames sit in the temp directory for the whole next session.
+  ///
+  /// A static entry point on purpose: `shared` is lazy, so putting this in the initialiser made
+  /// the launch-time promise depend on someone opening Quick Look first, which is precisely the
+  /// case it exists to cover.
+  nonisolated static func purgeStaleScratch() {
     QuickLookScratch.purge()
   }
 
@@ -252,20 +282,48 @@ final class ScreenFrameQuickLook: NSObject {
   /// Open `frames` at `id`. The clicked frame is fetched before the panel appears — opening onto a
   /// spinner would be the bespoke lightbox's failure repeated in a nicer window — and the rest are
   /// fetched behind it so that arrowing along is instant.
-  func present(_ frames: [QuickLookFrame], startingAt id: String) {
+  ///
+  /// `refreshing` is how an expired signed URL recovers. A persisted frame's pixels are good for
+  /// 60 minutes, so a note left open across lunch has nothing but dead links in it; the deleted
+  /// lightbox handled that by reporting back to the store, and this is that path kept rather than
+  /// dropped. It is called at most once, only when the *clicked* frame fails, and the retry uses
+  /// whatever the caller hands back.
+  func present(
+    _ frames: [QuickLookFrame],
+    startingAt id: String,
+    refreshing: (@MainActor () async -> [QuickLookFrame])? = nil
+  ) {
     guard !frames.isEmpty else { return }
     let start = frames.firstIndex { $0.id == id } ?? 0
-    items = frames.map { QuickLookItem(frame: $0) }
-    pendingIndex = start
+    work?.cancel()
+    generation += 1
+    let mine = generation
+    var mineItems = frames.map { QuickLookItem(frame: $0) }
+    items = mineItems
 
-    Task { [weak self] in
+    work = Task { [weak self] in
       guard let self else { return }
-      await self.items[start].materialize()
-      // The set can be replaced by a second click while the first fetch is in flight; opening the
-      // panel then would show the wrong frame.
-      guard self.items.indices.contains(start), self.items[start].frame.id == id else { return }
+      await mineItems[start].materialize()
+
+      if !mineItems[start].isReady, let refreshing, self.generation == mine {
+        let fresh = await refreshing()
+        guard self.generation == mine, !Task.isCancelled else { return }
+        if let index = fresh.firstIndex(where: { $0.id == id }) {
+          mineItems = fresh.map { QuickLookItem(frame: $0) }
+          self.items = mineItems
+          await mineItems[index].materialize()
+          guard self.generation == mine, !Task.isCancelled else { return }
+          self.show(at: index)
+          await self.materializeRest(mineItems, around: index, generation: mine)
+          return
+        }
+      }
+
+      // A second click, or a close, while the first fetch was in flight. Showing now would put the
+      // wrong frame on screen, or resurrect a panel the user just dismissed.
+      guard self.generation == mine, !Task.isCancelled else { return }
       self.show(at: start)
-      await self.materializeRest(around: start)
+      await self.materializeRest(mineItems, around: start, generation: mine)
     }
   }
 
@@ -277,20 +335,35 @@ final class ScreenFrameQuickLook: NSObject {
     panel.collectionBehavior.insert(.fullScreenAuxiliary)
     NSApp.activate(ignoringOtherApps: true)
     panel.makeKeyAndOrderFront(nil)
+    // **Ordering the panel front is not enough to get it back.** `QLPreviewPanel` searches the
+    // responder chain once and remembers the answer; after a close it has already asked and been
+    // told no — we cleared `items` on the way out, so `acceptsPreviewPanelControl` correctly
+    // returned false — and every later `makeKeyAndOrderFront` reuses that stale "nobody wants
+    // this". Measured: the first Quick Look of a session came up controlled, and the second and
+    // third came up with no data source and no picture at all. `updateController()` is the API
+    // that exists for exactly this, and it must run after `items` is populated so the re-ask gets
+    // a true answer.
+    panel.updateController()
     panel.reloadData()
     panel.currentPreviewItemIndex = index
+    log("QUICKLOOK: show index=\(index) gen=\(generation) items=\(items.count) controlled=\(panel.dataSource != nil)")
   }
 
   /// Fetch everything else, nearest-first, so the frames on either side of the one being read are
   /// the first to become steppable.
-  private func materializeRest(around index: Int) async {
-    let order = items.indices.sorted { abs($0 - index) < abs($1 - index) }
+  ///
+  /// Walks the array this presentation was given rather than the singleton's, so a close or a
+  /// second click part-way through cannot make it index a set that is no longer there.
+  private func materializeRest(
+    _ presented: [QuickLookItem], around index: Int, generation mine: Int
+  ) async {
+    let order = presented.indices.sorted { abs($0 - index) < abs($1 - index) }
     for i in order where i != index {
-      let item = items[i]
-      await item.materialize()
+      guard generation == mine, !Task.isCancelled else { return }
+      await presented[i].materialize()
       // Only nudge the panel when the item that just landed is the one being looked at — the user
       // can arrow onto a frame while its bytes are still coming.
-      if let panel = QLPreviewPanel.shared(), panel.isVisible,
+      if generation == mine, let panel = QLPreviewPanel.shared(), panel.isVisible,
         panel.currentPreviewItemIndex == i
       {
         panel.refreshCurrentPreviewItem()
@@ -323,19 +396,53 @@ final class ScreenFrameQuickLook: NSObject {
     ]
   }
 
-  /// Close the panel from code. Automation only — a person presses Escape or space.
-  func dismissForProbe() {
+  /// Close the panel from code and wait until AppKit has actually delivered the close.
+  ///
+  /// Automation only, and the waiting is the whole point. AppKit delivers `endPreviewPanelControl`
+  /// on its own schedule, and it carries no identity — so an end for a panel that was ordered out
+  /// is indistinguishable from an end for the one that is on screen now. A person cannot expose
+  /// that: their next click is dispatched on the same run loop *behind* the close AppKit already
+  /// queued. Two HTTP requests can, and did — one round in four came up with no data source
+  /// because the previous round's end landed on top of it. So a scripted close does not return
+  /// until the close it asked for has been observed.
+  func dismissForProbe() async {
     if QLPreviewPanel.sharedPreviewPanelExists() {
       QLPreviewPanel.shared()?.orderOut(nil)
     }
+    for _ in 0..<80 {
+      if !isPresenting { return }
+      try? await Task.sleep(nanoseconds: 25_000_000)
+    }
+    // AppKit never delivered it. Clear ourselves rather than leave a set — and its bytes — behind.
     didClose()
   }
 
   /// The panel went away. Drop the set and take the bytes off disk with it.
+  ///
+  /// **Purged twice, deliberately.** Cancelling is cooperative, so a download that has already
+  /// returned its bytes can still be between the cancellation check and the write when this runs;
+  /// a single purge here would be undone by that write and leave a server frame's pixels in the
+  /// temp directory after the panel that justified them is gone. The second purge runs once the
+  /// cancelled work has actually finished.
   fileprivate func didClose() {
+    // **A close for a presentation that is already over must do nothing.** AppKit delivers
+    // `endPreviewPanelControl` for an ordered-out panel on its own schedule, which can be after
+    // the next `present` has already installed a new set — and a stale close then bumped the
+    // generation out from under the new presentation's task, which quietly bailed before it could
+    // show anything. Measured: open, close, open again, and the second panel came up with no data
+    // source and no frame. Nothing to close means nothing to do.
+    guard !items.isEmpty || work != nil else { return }
+    generation += 1
+    let cancelled = work
+    work = nil
+    cancelled?.cancel()
     items = []
-    pendingIndex = 0
     QuickLookScratch.purge()
+    guard let cancelled else { return }
+    Task {
+      _ = await cancelled.value
+      QuickLookScratch.purge()
+    }
   }
 }
 
@@ -375,6 +482,7 @@ extension AppDelegate {
 
   @objc override func beginPreviewPanelControl(_ panel: QLPreviewPanel) {
     MainActor.assumeIsolated {
+      log("QUICKLOOK: beginPreviewPanelControl")
       panel.dataSource = ScreenFrameQuickLook.shared
       panel.delegate = ScreenFrameQuickLook.shared
     }
@@ -382,6 +490,7 @@ extension AppDelegate {
 
   @objc override func endPreviewPanelControl(_ panel: QLPreviewPanel) {
     MainActor.assumeIsolated {
+      log("QUICKLOOK: endPreviewPanelControl presenting=\(ScreenFrameQuickLook.shared.isPresenting)")
       panel.dataSource = nil
       panel.delegate = nil
       ScreenFrameQuickLook.shared.didClose()

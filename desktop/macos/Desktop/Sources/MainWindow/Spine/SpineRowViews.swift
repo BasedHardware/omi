@@ -430,7 +430,10 @@ struct SpineMomentsRow: View {
       ScrollView(.horizontal, showsIndicators: false) {
         HStack(spacing: 9) {
           ForEach(moments) { moment in
-            SpineMomentTile(moment: moment, onOpen: { onOpen(moment, moments) })
+            SpineMomentTile(
+              moment: moment,
+              onOpen: { onOpen(moment, moments) },
+              onShowAll: onShowAll)
           }
         }
         .padding(.vertical, 2)
@@ -482,6 +485,12 @@ struct SpineStripFade: View {
 struct SpineMomentTile: View {
   let moment: SpineMoment
   let onOpen: () -> Void
+  /// The rest of the day, on the Rewind page.
+  ///
+  /// On the tile as well as on the caption, because the caption only exists when the strip is
+  /// truncated — a row of eight or fewer moments has no caption, and without this it would have no
+  /// route to Rewind at all now that clicking a tile opens the frame instead of navigating.
+  let onShowAll: () -> Void
 
   @State private var image: NSImage?
   @State private var isHovering = false
@@ -529,8 +538,13 @@ struct SpineMomentTile: View {
     .buttonStyle(.plain)
     .onHover { isHovering = $0 }
     .help(moment.label)
+    .contextMenu {
+      Button("Quick Look", action: onOpen)
+      Divider()
+      Button("Show All in Rewind", action: onShowAll)
+    }
     .accessibilityLabel(Text("\(moment.label), \(moment.appName), \(SpineFormat.time(moment.timestamp))"))
-    .accessibilityHint(Text("Opens Rewind at this moment"))
+    .accessibilityHint(Text("Opens this moment in Quick Look"))
     .task(id: moment.id) {
       // Synchronous cache hit first, so a tile scrolling back into view never flashes an empty well.
       let screenshot = moment.screenshot

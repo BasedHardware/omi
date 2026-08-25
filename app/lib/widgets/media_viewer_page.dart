@@ -1,9 +1,9 @@
+import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
@@ -24,20 +24,20 @@ import 'package:omi/utils/share_sheet.dart';
 /// viewer, not ours. Mobile has no such panel, so this AppBar carries an explicit share button
 /// instead — the one capability the OS handed macOS that mobile has to be given by hand.
 class MediaViewerItem {
-  /// Image to render in the viewer.
-  final ImageProvider imageProvider;
+  /// Base64 photo payload, for conversation/glasses photos. Deliberately the *encoded* string
+  /// rather than an `ImageProvider`: building the provider eagerly means base64-decoding every
+  /// photo in the gallery and holding all of them before the first frame renders, which the
+  /// widget this replaced never did — `PhotoViewGallery.builder` only decoded pages it built.
+  /// Exactly one of [base64] / [imageUrl] must be set.
+  final String? base64;
+
+  /// Network image URL, for app-store thumbnails. Exactly one of [base64] / [imageUrl] must be
+  /// set.
+  final String? imageUrl;
 
   /// Hero tag for cross-page transitions. Null disables the Hero wrapper for this page, matching
   /// the single-image call sites, which never had one.
   final Object? heroTag;
-
-  /// In-memory bytes to share (base64 conversation photos). Exactly one of [shareBytes] /
-  /// [shareUrl] must be set.
-  final Uint8List? shareBytes;
-
-  /// Network URL to download and share (app thumbnails). Exactly one of [shareBytes] / [shareUrl]
-  /// must be set.
-  final String? shareUrl;
 
   /// Whether the caption/processing/discarded strip below the image applies to this item. Only
   /// the conversation-photo gallery sets this; the single-image viewers never showed it.
@@ -46,16 +46,15 @@ class MediaViewerItem {
   final bool discarded;
 
   const MediaViewerItem({
-    required this.imageProvider,
+    this.base64,
+    this.imageUrl,
     this.heroTag,
-    this.shareBytes,
-    this.shareUrl,
     this.showCaptionStrip = false,
     this.caption,
     this.discarded = false,
   }) : assert(
-          shareBytes != null || shareUrl != null,
-          'MediaViewerItem needs a share source',
+          (base64 == null) != (imageUrl == null),
+          'MediaViewerItem needs exactly one image source',
         );
 }
 
@@ -99,6 +98,20 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
   final GlobalKey _shareButtonKey = GlobalKey();
   bool _isSharing = false;
 
+  /// Providers are built the first time a page is actually built and kept after that, so paging
+  /// back and forth does not decode the same photo again while opening the route still decodes
+  /// nothing.
+  final Map<int, ImageProvider> _providers = {};
+
+  ImageProvider _providerFor(int index) {
+    return _providers.putIfAbsent(index, () {
+      final item = widget.items[index];
+      final encoded = item.base64;
+      if (encoded != null) return MemoryImage(base64Decode(encoded));
+      return CachedNetworkImageProvider(item.imageUrl!);
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -114,37 +127,50 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
 
   void _onPageChanged(int index) => setState(() => _currentIndex = index);
 
+  /// How long a thumbnail download may take before sharing gives up.
+  ///
+  /// `http.get` has no deadline of its own, so a server that accepts the connection and then says
+  /// nothing leaves the share button spinning for the rest of the session with no way out.
+  static const _downloadTimeout = Duration(seconds: 20);
+
+  /// The most a shared image may weigh. `http.get` buffers the whole body in memory before
+  /// anything is written, so an unbounded response is an unbounded allocation on a phone.
+  static const _maxDownloadBytes = 32 * 1024 * 1024;
+
   Future<void> _share() async {
     if (_isSharing) return;
     setState(() => _isSharing = true);
     final item = widget.items[_currentIndex];
+    File? scratch;
     try {
       final XFile file;
       final dir = await getTemporaryDirectory();
       final stamp = DateTime.now().millisecondsSinceEpoch;
-      if (item.shareBytes != null) {
+      final encoded = item.base64;
+      if (encoded != null) {
         // Camera/glasses photos come down as JPEG.
-        final path = '${dir.path}/omi_photo_$stamp.jpg';
-        await File(path).writeAsBytes(item.shareBytes!);
-        file = XFile(path, mimeType: 'image/jpeg');
+        scratch = File('${dir.path}/omi_photo_$stamp.jpg');
+        await scratch.writeAsBytes(base64Decode(encoded));
+        file = XFile(scratch.path, mimeType: 'image/jpeg');
       } else {
-        final url = item.shareUrl!;
-        final response = await http.get(Uri.parse(url));
+        final url = item.imageUrl!;
+        final response = await http.get(Uri.parse(url)).timeout(_downloadTimeout);
         if (response.statusCode != 200) {
-          throw Exception(
-            'Failed to download image: HTTP ${response.statusCode}',
-          );
+          throw Exception('Failed to download image: HTTP ${response.statusCode}');
         }
-        final ext = p.extension(Uri.parse(url).path);
-        final path = '${dir.path}/omi_image_$stamp${ext.isEmpty ? '.jpg' : ext}';
-        await File(path).writeAsBytes(response.bodyBytes);
-        file = XFile(path);
+        if (response.bodyBytes.length > _maxDownloadBytes) {
+          throw Exception('Image too large to share: ${response.bodyBytes.length} bytes');
+        }
+        // The server's own content type, not the URL's extension — a thumbnail served as PNG from
+        // a path with no suffix would otherwise be handed to the share sheet labelled as JPEG.
+        final mime = _imageMimeType(response.headers['content-type']) ?? 'image/jpeg';
+        final ext = mime.split('/').last;
+        scratch = File('${dir.path}/omi_image_$stamp.$ext');
+        await scratch.writeAsBytes(response.bodyBytes);
+        file = XFile(scratch.path, mimeType: mime);
       }
       await SharePlus.instance.share(
-        ShareParams(
-          files: [file],
-          sharePositionOrigin: shareSheetOrigin(_shareButtonKey),
-        ),
+        ShareParams(files: [file], sharePositionOrigin: shareSheetOrigin(_shareButtonKey)),
       );
     } catch (e) {
       Logger.debug('Failed to share media: $e');
@@ -154,8 +180,25 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
         );
       }
     } finally {
+      // The share sheet has copied what it needs by the time it returns, and every one of these is
+      // a full-resolution photo. Left behind they accumulate one per share for as long as the OS
+      // keeps the temp directory around.
+      try {
+        await scratch?.delete();
+      } catch (_) {
+        // A file the OS already reclaimed is the outcome we wanted anyway.
+      }
       if (mounted) setState(() => _isSharing = false);
     }
+  }
+
+  /// Narrow a `Content-Type` header to an image type we are willing to name, or null when the
+  /// server said something we should not repeat to the share sheet.
+  static String? _imageMimeType(String? header) {
+    if (header == null) return null;
+    final value = header.split(';').first.trim().toLowerCase();
+    const allowed = {'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic'};
+    return allowed.contains(value) ? value : null;
   }
 
   Widget? _buildCaptionStrip(MediaViewerItem item) {
@@ -224,7 +267,7 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
       builder: (context, index) {
         final item = widget.items[index];
         return PhotoViewGalleryPageOptions(
-          imageProvider: item.imageProvider,
+          imageProvider: _providerFor(index),
           minScale: PhotoViewComputedScale.contained,
           maxScale: PhotoViewComputedScale.covered * widget.maxScaleMultiplier,
           heroAttributes: item.heroTag != null ? PhotoViewHeroAttributes(tag: item.heroTag!) : null,

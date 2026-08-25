@@ -79,11 +79,9 @@ class PhotosGridComponent extends StatelessWidget {
 
 List<MediaViewerItem> _mediaItemsFor(List<ConversationPhoto> photos) {
   return photos.map((photo) {
-    final bytes = base64Decode(photo.base64);
     return MediaViewerItem(
-      imageProvider: MemoryImage(bytes),
+      base64: photo.base64,
       heroTag: photo.id,
-      shareBytes: bytes,
       showCaptionStrip: true,
       caption: photo.description,
       discarded: photo.discarded,

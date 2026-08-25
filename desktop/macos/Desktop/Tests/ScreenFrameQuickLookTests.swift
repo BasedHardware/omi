@@ -55,8 +55,41 @@ final class ScreenFrameQuickLookTests: XCTestCase {
   /// An id made entirely of characters that get stripped still has to produce a file.
   func testAnIdThatSanitisesToNothingStillYieldsAFile() throws {
     let url = try QuickLookScratch.write(Data([0x89, 0x50, 0x4E, 0x47]), id: "///")
-    XCTAssertEqual(url.lastPathComponent, "---.png")
+    XCTAssertTrue(url.lastPathComponent.hasPrefix("---"))
+    XCTAssertEqual(url.pathExtension, "png")
     XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+  }
+
+  /// **Sanitising collapses distinct ids onto the same string.** `frame/a` and `frame?a` both
+  /// become `frame-a`, and two long ids can agree for their first 32 characters — so a name built
+  /// from the id alone lets one frame's bytes overwrite another's, and both preview items then
+  /// point at whichever landed last. Quick Look would show the wrong screenshot, which for this
+  /// feature means showing a frame the reader did not ask to look at.
+  func testFramesWhoseIdsSanitiseAlikeStillGetSeparateFiles() throws {
+    let png = Data([0x89, 0x50, 0x4E, 0x47])
+    let a = try QuickLookScratch.write(png, id: "frame/a")
+    let b = try QuickLookScratch.write(png, id: "frame?a")
+    let long1 = try QuickLookScratch.write(png, id: String(repeating: "x", count: 80) + "-one")
+    let long2 = try QuickLookScratch.write(png, id: String(repeating: "x", count: 80) + "-two")
+
+    XCTAssertNotEqual(a, b)
+    XCTAssertNotEqual(long1, long2)
+    XCTAssertEqual(
+      Set([a, b, long1, long2].map(\.lastPathComponent)).count, 4,
+      "four writes must occupy four files, or one frame is showing another frame's pixels")
+  }
+
+  /// The launch-time promise. It lives on a static rather than in the singleton's initialiser
+  /// because `shared` is lazy: with the purge in `init`, a session where nobody opened Quick Look
+  /// never ran it, and the frames a force-quit left behind sat there for the whole session —
+  /// which is the exact case the launch purge exists to cover.
+  func testStaleScratchIsPurgeableWithoutOpeningAPanel() throws {
+    _ = try QuickLookScratch.write(Data([0xFF, 0xD8, 0xFF]), id: "left-behind")
+    XCTAssertTrue(FileManager.default.fileExists(atPath: QuickLookScratch.directory.path))
+
+    ScreenFrameQuickLook.purgeStaleScratch()
+
+    XCTAssertFalse(FileManager.default.fileExists(atPath: QuickLookScratch.directory.path))
   }
 
   // MARK: - Nothing outlives the panel

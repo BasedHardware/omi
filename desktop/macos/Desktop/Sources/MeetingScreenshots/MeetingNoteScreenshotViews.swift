@@ -142,13 +142,21 @@ struct MeetingNoteHeaderBanner: View {
         wash(width: proxy.size.width * Self.washFraction, height: proxy.size.height)
         // The veil, not an opacity on the layers beneath it: heaviest where the title starts and
         // lighter towards the trailing edge, so the headline keeps full contrast while the colour
-        // still carries past the buttons. Its floor is high enough that every one of those buttons
-        // stays a control on a ground rather than a control on a photograph.
+        // still carries past the buttons.
+        //
+        // **The floor is set by the worst case, not by the pretty one.** Approved frames are
+        // routinely near-black — most of them are dark-mode editors — and white at 0.38 over black
+        // resolves to about #616161, against which this shell's near-black `Ink.primary` measures
+        // roughly 3.4:1 and `Ink.secondary` about 3:1. Both miss 4.5:1, and the trailing edge is
+        // exactly where the thinnest veil and the action buttons coincide. At 0.58 the same black
+        // frame resolves to about #949494 and `Ink.primary` clears 5:1, so the whole band is
+        // legible over any frame the judge can approve rather than over the frames that happened
+        // to be on screen when it was designed.
         LinearGradient(
           colors: [
-            Color.white.opacity(0.66),
-            Color.white.opacity(0.46),
-            Color.white.opacity(0.38),
+            Color.white.opacity(0.74),
+            Color.white.opacity(0.64),
+            Color.white.opacity(0.58),
           ],
           startPoint: .leading,
           endPoint: .trailing)
@@ -231,7 +239,19 @@ struct MeetingNoteScreenshotStrip: View {
         onOpen: { frame in
           // The whole set, not the one tile: Quick Look's own left/right stepping walks what it
           // was handed, which is what replaced the stepper this view used to own.
-          ScreenFrameQuickLook.shared.present(store.quickLookFrames, startingAt: frame.id)
+          //
+          // `refreshing` is the expired-signed-URL path the deleted lightbox owned as
+          // `onContentUnavailable`. A frame's pixels are signed for 60 minutes, so a note left
+          // open across lunch has nothing but dead links in it, and without this a click on one
+          // would open Quick Look on "no preview" and stay that way however many times it was
+          // clicked, because nothing would ever ask the server for fresh URLs.
+          ScreenFrameQuickLook.shared.present(
+            store.quickLookFrames,
+            startingAt: frame.id,
+            refreshing: {
+              await store.refreshPersistedSet()
+              return store.quickLookFrames
+            })
         },
         onDelete: { frame in await store.deleteFrame(frameID: frame.id) })
     }
