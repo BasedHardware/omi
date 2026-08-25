@@ -27,8 +27,10 @@ final class RatingPromptKillSwitchTests: XCTestCase {
     // compile-checked symbol the manager's observer subscribes to.
     manager.remoteDisableCheck = { true }
     NotificationCenter.default.post(name: PostHogManager.featureFlagsDidLoad, object: nil)
-    for _ in 0..<50 where manager.isVisible {
-      try? await Task.sleep(nanoseconds: 20_000_000)
+    // The observer hops through a MainActor Task; bounded yields let it run
+    // without a wall-clock wait.
+    for _ in 0..<100 where manager.isVisible {
+      await Task.yield()
     }
     XCTAssertFalse(manager.isVisible)
   }
