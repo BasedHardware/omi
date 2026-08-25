@@ -46,7 +46,12 @@ if [ -n "$STAGED_DART_FILES" ]; then
     exit 1
   fi
   if command -v flutter >/dev/null 2>&1; then
-    LOCAL_FLUTTER=$(flutter --version 2>/dev/null | sed -n 's/^Flutter \([0-9][^ ]*\).*/\1/p' | head -1)
+    # Git exports linked-worktree metadata to hooks. Flutter resolves its own
+    # SDK version through Git, so those variables must not leak into the probe.
+    LOCAL_FLUTTER=$(
+      unset GIT_DIR GIT_WORK_TREE
+      flutter --version 2>/dev/null | sed -n 's/^Flutter \([0-9][^ ]*\).*/\1/p' | head -1
+    )
   else
     LOCAL_FLUTTER=""
   fi

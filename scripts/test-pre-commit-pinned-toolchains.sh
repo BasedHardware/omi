@@ -97,6 +97,9 @@ make_prettier_plugin() {
 make_flutter_stub() {
   cat >"$STUBS/flutter" <<STUB
 #!/bin/sh
+# Mimic Flutter's Git-based SDK-version resolution: a leaked hook GIT_DIR (as in
+# a linked worktree) makes the probe report nothing even for a valid install.
+if [ -n "\${GIT_DIR:-}" ]; then exit 0; fi
 echo "Flutter $1 • channel stable"
 STUB
   cat >"$STUBS/dart" <<'STUB'
@@ -177,6 +180,12 @@ test "$(cat "$REPO/app/lib/main.dart")" = "void main() {  }"
 # --- Dart: the pinned Flutter formats ---
 make_flutter_stub 9.9.9
 run_hook >/dev/null
+grep -q 'DART_FORMATTED' "$REPO/app/lib/main.dart"
+
+# --- Dart: a linked-worktree GIT_DIR must not leak into the flutter probe ---
+printf 'void main() {  }\n' >"$REPO/app/lib/main.dart"
+git -C "$REPO" add app/lib/main.dart
+run_hook GIT_DIR="$REPO/.git" >/dev/null
 grep -q 'DART_FORMATTED' "$REPO/app/lib/main.dart"
 
 # --- Both hatches leave staged files untouched and still commit ---
