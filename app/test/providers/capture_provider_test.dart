@@ -160,6 +160,21 @@ class _CountingConversationLocationCapture extends ConversationLocationCapture {
   }
 }
 
+class _HangingConversationLocationCapture extends ConversationLocationCapture {
+  int calls = 0;
+  final Completer<bool> _done = Completer<bool>();
+
+  @override
+  Future<bool> captureAndUpload() async {
+    calls++;
+    return _done.future;
+  }
+
+  void complete() {
+    if (!_done.isCompleted) _done.complete(true);
+  }
+}
+
 /// Minimal EnvFields stub so Env-backed code paths (e.g. native BLE stream
 /// config reading Env.apiBaseUrl) don't hit a LateInitializationError.
 class _TestEnvFields implements EnvFields {
@@ -249,6 +264,21 @@ void main() {
     await Future<void>.delayed(Duration.zero);
 
     expect(locationCapture.calls, 1);
+    provider.dispose();
+  });
+
+  test('streamDeviceRecording does not wait for location capture', () async {
+    final locationCapture = _HangingConversationLocationCapture();
+    final provider = CaptureProvider(
+      conversationLocationCapture: locationCapture,
+    );
+
+    await provider.streamDeviceRecording().timeout(
+          const Duration(seconds: 2),
+          onTimeout: () => fail('streamDeviceRecording blocked on location capture'),
+        );
+    expect(locationCapture.calls, 1);
+    locationCapture.complete();
     provider.dispose();
   });
 
