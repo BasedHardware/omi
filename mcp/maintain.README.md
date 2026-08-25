@@ -14,7 +14,7 @@
 - Tools are wrapping around `backend/routers/mcp.py` routes directly on main backend.
 
 **Releasing**
-Run `sh release.sh` this will upgrade the version in `__about__.py`, publish to pypi, build and deploy the `Dockerfile` as well.
+Run `sh release.sh` — it bumps the patch version in `__about__.py`, then builds and pushes the `Dockerfile` image to Docker Hub (needs `DOCKER_ACCESS_TOKEN`). It does **not** publish to pypi: the `uv sync` / `uv build` / `uv publish` lines in the script are commented out, so uncomment them (or run them by hand) when a pypi release is wanted.
 
 (Dockerfile is on omiai/mcp-server)
 
