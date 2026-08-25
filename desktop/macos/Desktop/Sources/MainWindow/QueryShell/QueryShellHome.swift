@@ -419,10 +419,14 @@ struct QueryShellHome: View {
   /// the mode change cannot drift away from the value that defines them.
   private func submit() {
     let submission = QueryShellSubmission.resolve(text: chatProvider.draftText)
+    // Plan before mutating anything: a busy provider rejects the send, so
+    // Return during an active turn must leave the typed draft intact and
+    // neither dispatch nor advance the rating-prompt count.
+    guard submission.mode != nil,
+      let plan = sendLedger.planSubmit(submission.question, providerBusy: chatProvider.isSending)
+    else { return }
     if chatProvider.draftText != submission.text { chatProvider.draftText = submission.text }
-    guard submission.mode != nil else { return }
     claimCaret()
-    guard let plan = sendLedger.planSubmit(submission.question) else { return }
     send(plan)
   }
 
