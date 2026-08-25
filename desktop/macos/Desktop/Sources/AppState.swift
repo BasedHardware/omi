@@ -278,6 +278,13 @@ struct FinishedRecordingEnvelope: Equatable, Sendable {
 @MainActor
 protocol DesktopAlertPresenting: AnyObject {
   func present(title: String, message: String, completion: (@MainActor () -> Void)?)
+  /// Stop draining the alert queue until Omi is the active app again.
+  ///
+  /// Completions that hand the foreground to another app (System Settings)
+  /// must call this *before* that hand-off. `NSWorkspace.open` can return
+  /// while Omi is still active, so inferring a pause from the current shell
+  /// window would drain the next alert and hide it behind Settings.
+  func pauseQueueUntilAppActive()
 }
 
 @MainActor
@@ -285,6 +292,8 @@ extension DesktopAlertPresenting {
   func present(title: String, message: String) {
     present(title: title, message: message, completion: nil)
   }
+
+  func pauseQueueUntilAppActive() {}
 }
 
 @MainActor

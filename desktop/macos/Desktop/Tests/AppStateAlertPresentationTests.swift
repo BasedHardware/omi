@@ -239,6 +239,48 @@ final class AppStateAlertPresentationTests: XCTestCase {
         .init(title: "Device Not Connected", message: "Connect your wearable device first.", window: window),
       ])
   }
+
+  func testAppKitPresenterHonorsAnExplicitQueuePauseFromCompletion() async {
+    // Production ordering: the permission completion requests the pause, then
+    // NSWorkspace.open returns while the shell is still presentable. The next
+    // alert must stay queued until didBecomeActive, not drain synchronously.
+    let windowSource = WindowSource()
+    let recorder = SheetPresentationRecorder(deferCompletions: true)
+    let presenter = AppKitSheetAlertPresenter(
+      shellWindowProvider: { windowSource.window },
+      appKitOperations: .init(beginSheetModal: recorder.present),
+      revealMainWindow: {})
+
+    let window = NSWindow()
+    windowSource.window = window
+    presenter.present(title: "Omi Needs Microphone Access", message: "Enable Omi under System Settings.") {
+      presenter.pauseQueueUntilAppActive()
+    }
+    presenter.present(title: "Device Not Connected", message: "Connect your wearable device first.")
+
+    await Task.yield()
+    await Task.yield()
+    XCTAssertEqual(recorder.presentations.count, 1, "only the permission alert presents first")
+
+    recorder.endSheet()
+    await Task.yield()
+    await Task.yield()
+
+    XCTAssertEqual(
+      recorder.presentations.count, 1,
+      "queued alert must not drain while the completion-requested pause is held")
+
+    NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: nil)
+    await Task.yield()
+    await Task.yield()
+
+    XCTAssertEqual(
+      recorder.presentations,
+      [
+        .init(title: "Omi Needs Microphone Access", message: "Enable Omi under System Settings.", window: window),
+        .init(title: "Device Not Connected", message: "Connect your wearable device first.", window: window),
+      ])
+  }
 }
 
 @MainActor

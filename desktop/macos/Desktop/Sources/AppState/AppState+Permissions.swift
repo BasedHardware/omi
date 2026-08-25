@@ -43,6 +43,7 @@ final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
   private var activeAlert: AlertRequest?
   private var isPresentingAlert = false
   private var isRevealingMainWindow = false
+  private var queuePausedUntilForeground = false
 
   init(
     shellWindowProvider: @escaping () -> NSWindow? = {
@@ -66,7 +67,7 @@ final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
     self.canHostSheet = canHostSheet
     NotificationCenter.default.addObserver(
       self,
-      selector: #selector(presentPendingAlertIfPossible),
+      selector: #selector(applicationDidBecomeActive),
       name: NSApplication.didBecomeActiveNotification,
       object: nil)
     NotificationCenter.default.addObserver(
@@ -92,8 +93,17 @@ final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
     presentPendingAlertIfPossible()
   }
 
+  func pauseQueueUntilAppActive() {
+    queuePausedUntilForeground = true
+  }
+
+  @objc private func applicationDidBecomeActive() {
+    queuePausedUntilForeground = false
+    presentPendingAlertIfPossible()
+  }
+
   @objc private func presentPendingAlertIfPossible() {
-    guard !isPresentingAlert, !isRevealingMainWindow, !pendingAlerts.isEmpty else { return }
+    guard !queuePausedUntilForeground, !isPresentingAlert, !isRevealingMainWindow, !pendingAlerts.isEmpty else { return }
     let pending = pendingAlerts[0]
     guard let window = shellWindowProvider() else {
       revealMainWindowIfNeeded()
@@ -121,10 +131,13 @@ final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
         pending.completion?()
         // A completion can change the foreground application (for example the
         // microphone-permission alert opens System Settings once dismissed).
-        // If Omi is no longer the active app, do not summon it back over the
-        // user's task just to drain the next queued alert; the active / key /
-        // sheet observers resume presentation when Omi is in front again.
-        guard let self, self.shellWindowProvider() != nil else { return }
+        // The completion must request the pause explicitly: NSWorkspace.open
+        // can return before macOS deactivates Omi, so a synchronous
+        // shellWindowProvider() check would still drain the next alert.
+        // didBecomeActive resumes the queue when the user comes back.
+        guard let self else { return }
+        if self.queuePausedUntilForeground { return }
+        guard self.shellWindowProvider() != nil else { return }
         self.presentPendingAlertIfPossible()
       }
     }
