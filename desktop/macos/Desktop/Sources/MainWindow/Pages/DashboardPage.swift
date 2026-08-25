@@ -652,12 +652,17 @@ struct DashboardPage: View {
       ChatDraftScope(draft: chatProvider.composerDraft) { draft in
         ChatInputView(
           onSend: { text in
-            AnalyticsManager.shared.chatMessageSent(
-              messageLength: text.count,
-              hasSelectedAppContext: selectedApp != nil,
-              source: "dashboard_chat"
-            )
-            Task { await chatProvider.sendMainDraft(text) }
+            Task {
+              await chatProvider.sendMainDraft(
+                text,
+                onAccepted: {
+                  AnalyticsManager.shared.chatMessageSent(
+                    messageLength: text.count,
+                    hasSelectedAppContext: selectedApp != nil,
+                    source: "dashboard_chat"
+                  )
+                })
+            }
           },
           onStop: {
             chatProvider.stopAgent(owner: .mainChat)
@@ -1393,27 +1398,32 @@ struct DashboardPage: View {
     if let onOpenPrimaryChat {
       onOpenPrimaryChat()
       guard !chatProvider.isSending else { return }
-      AnalyticsManager.shared.chatMessageSent(
-        messageLength: text.count,
-        hasSelectedAppContext: selectedApp != nil,
-        source: "home_ask_bar"
-      )
-      Task { await chatProvider.sendMainDraft(draft) }
+      Task {
+        await chatProvider.sendMainDraft(
+          draft,
+          onAccepted: {
+            AnalyticsManager.shared.chatMessageSent(
+              messageLength: text.count,
+              hasSelectedAppContext: selectedApp != nil,
+              source: "home_ask_bar"
+            )
+          })
+      }
       return
     }
     openHomeChat(focusInput: false)
-    AnalyticsManager.shared.chatMessageSent(
-      messageLength: text.count,
-      hasSelectedAppContext: selectedApp != nil,
-      source: "home_ask_bar",
-      // The busy early-return below drops this send — it must not count as
-      // an asked question for the rating-prompt trigger.
-      countsAsQuestion: !chatProvider.isSending
-    )
-    if chatProvider.isSending {
-      return
-    } else {
-      Task { await chatProvider.sendMainDraft(draft) }
+    if !chatProvider.isSending {
+      Task {
+        await chatProvider.sendMainDraft(
+          draft,
+          onAccepted: {
+            AnalyticsManager.shared.chatMessageSent(
+              messageLength: text.count,
+              hasSelectedAppContext: selectedApp != nil,
+              source: "home_ask_bar"
+            )
+          })
+      }
     }
   }
 
@@ -1421,21 +1431,31 @@ struct DashboardPage: View {
     if let onOpenPrimaryChat {
       onOpenPrimaryChat()
       guard !chatProvider.isSending else { return }
-      AnalyticsManager.shared.chatMessageSent(
-        messageLength: suggestion.count,
-        hasSelectedAppContext: selectedApp != nil,
-        source: "home_suggested_question"
-      )
-      Task { await chatProvider.sendMessage(suggestion) }
+      Task {
+        _ = await chatProvider.sendMessage(
+          suggestion,
+          onAccepted: {
+            AnalyticsManager.shared.chatMessageSent(
+              messageLength: suggestion.count,
+              hasSelectedAppContext: selectedApp != nil,
+              source: "home_suggested_question"
+            )
+          })
+      }
       return
     }
     openHomeChat(focusInput: false)
-    AnalyticsManager.shared.chatMessageSent(
-      messageLength: suggestion.count,
-      hasSelectedAppContext: selectedApp != nil,
-      source: "home_suggested_question"
-    )
-    Task { await chatProvider.sendMessage(suggestion) }
+    Task {
+      _ = await chatProvider.sendMessage(
+        suggestion,
+        onAccepted: {
+          AnalyticsManager.shared.chatMessageSent(
+            messageLength: suggestion.count,
+            hasSelectedAppContext: selectedApp != nil,
+            source: "home_suggested_question"
+          )
+        })
+    }
   }
 
   @ViewBuilder
