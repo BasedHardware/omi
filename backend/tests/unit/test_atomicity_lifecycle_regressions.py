@@ -14,7 +14,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from models.memory_apply import MemoryControlState
+from models.memory_apply import MemoryControlState, WriterMode
 from models.product_memory import MemoryItemStatus
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 from utils.memory.memory_system import (
@@ -106,6 +106,11 @@ def test_preference_tool_writes_retry_stable_agent_conclusion_to_ledger(preferen
     monkeypatch.setattr(module, "save_fact", save_fact)
     monkeypatch.setattr(module, "capture_memory_write", capture_memory_write)
     monkeypatch.setattr(module, "get_firestore_client", MagicMock(return_value=firestore_client))
+    monkeypatch.setattr(
+        module,
+        "ensure_canonical_apply_control_state",
+        lambda *_args, **_kwargs: types.SimpleNamespace(writer_mode=WriterMode.ledger),
+    )
     config = {
         "configurable": {
             "user_id": "user-1",
@@ -140,6 +145,112 @@ def test_preference_tool_writes_retry_stable_agent_conclusion_to_ledger(preferen
             }
         ],
     )
+
+
+def test_preference_tool_uses_strict_compatibility_writer_in_default_mode(preference_tools_module, monkeypatch):
+    """The default writer mode retains the released MemoryService contract."""
+    module = preference_tools_module
+    firestore_client = object()
+    capture_memory_write = MagicMock()
+    save_fact = MagicMock(side_effect=AssertionError("ledger writer must stay gated"))
+
+    class StrictMemory:
+        def __init__(self, payload):
+            self.payload = payload
+            self.id = "mem-compat"
+
+    class StrictMemoryDB:
+        @classmethod
+        def model_validate(cls, payload):
+            assert payload["category"] == "system"
+            assert payload["manually_added"] is False
+            assert payload["visibility"] == "private"
+            assert payload["tags"] == ["agent-learned"]
+            assert "ledger_schema_version" not in payload
+            return StrictMemory(payload)
+
+        @staticmethod
+        def calculate_score(memory):
+            assert memory.payload["content"] == "Prefers metric units"
+            return "00_999_0000000000"
+
+    class StrictMemoryService:
+        def __init__(self, *, db_client):
+            assert db_client is firestore_client
+
+        def create_external_memory(
+            self,
+            uid,
+            memory_db,
+            *,
+            memory_system,
+            consumer,
+            operation,
+            upsert_vector,
+            require_canonical_promotion,
+        ):
+            assert uid == "user-compat"
+            assert memory_db.payload["content"] == "Prefers metric units"
+            assert memory_system is module.MemorySystem.CANONICAL
+            assert consumer == "agent_preference"
+            assert operation == "save_user_preference"
+            assert upsert_vector is False
+            assert require_canonical_promotion is True
+            return types.SimpleNamespace(id="adapter-returned-id")
+
+    monkeypatch.setattr(module, "MemoryDB", StrictMemoryDB)
+    monkeypatch.setattr(module, "MemoryService", StrictMemoryService)
+    monkeypatch.setattr(module.uuid, "uuid4", lambda: "mem-compat")
+    monkeypatch.setattr(module, "save_fact", save_fact)
+    monkeypatch.setattr(module, "capture_memory_write", capture_memory_write)
+    monkeypatch.setattr(module, "get_firestore_client", MagicMock(return_value=firestore_client))
+    monkeypatch.setattr(
+        module,
+        "ensure_canonical_apply_control_state",
+        lambda *_args, **_kwargs: types.SimpleNamespace(writer_mode=WriterMode.compatibility),
+    )
+    config = {"configurable": {"user_id": "user-compat", "chat_session_id": "chat-compat"}}
+
+    result = module.save_user_preference_tool("Prefers metric units", config=config)
+
+    assert result == "Preference saved: Prefers metric units"
+    save_fact.assert_not_called()
+    capture_memory_write.assert_called_once()
+    capture = capture_memory_write.call_args.kwargs
+    assert capture["principal_id"] == "user-compat"
+    assert capture["source"] == "agent_preference_memory_create"
+    assert capture["session_id"] == "mem-compat"
+    captured_memory = capture["memories"][0]
+    assert captured_memory["id"] == "mem-compat"
+    assert captured_memory["content"] == "Prefers metric units"
+    assert captured_memory["category"] == "system"
+    assert captured_memory["tags"] == ["agent-learned"]
+    assert captured_memory["scoring"] == "00_999_0000000000"
+    assert "ledger_schema_version" not in captured_memory
+
+
+def test_preference_tool_fails_closed_during_writer_transition(preference_tools_module, monkeypatch):
+    """A transition fence may not silently choose either writer."""
+    module = preference_tools_module
+    save_fact = MagicMock()
+    compatibility_service = MagicMock()
+    monkeypatch.setattr(module, "save_fact", save_fact)
+    monkeypatch.setattr(module, "MemoryService", compatibility_service)
+    monkeypatch.setattr(module, "get_firestore_client", MagicMock(return_value=object()))
+    monkeypatch.setattr(
+        module,
+        "ensure_canonical_apply_control_state",
+        lambda *_args, **_kwargs: types.SimpleNamespace(writer_mode=WriterMode.transitioning_to_ledger),
+    )
+
+    result = module.save_user_preference_tool(
+        "Prefers metric units",
+        config={"configurable": {"user_id": "user-transition"}},
+    )
+
+    assert result == "Error saving preference"
+    save_fact.assert_not_called()
+    compatibility_service.assert_not_called()
 
 
 def test_preference_tool_does_not_write_without_user_authority(preference_tools_module, monkeypatch):
