@@ -10,7 +10,10 @@ import XCTest
 /// user prompt carries today's date from an injectable clock, and the static system
 /// prompts stay free of live timestamps so their cached prefixes remain byte-stable.
 final class ProactiveDateGroundingTests: XCTestCase {
-  private let tz = TimeZone(identifier: "America/New_York")!
+  // A fixed IANA zone cannot fail to resolve on a supported system; the fallbacks below
+  // exist only because SwiftLint bans force-unwrapping — if either ever engaged, the
+  // exact-string assertions in these tests fail loudly rather than pass vacuously.
+  private let tz = TimeZone(identifier: "America/New_York") ?? .current
 
   /// 2026-08-25 15:45 America/New_York (EDT, UTC-4).
   private func instant(hour: Int, minute: Int) -> Date {
@@ -22,10 +25,9 @@ final class ProactiveDateGroundingTests: XCTestCase {
     components.minute = minute
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = tz
-    return calendar.date(from: components)!
+    return calendar.date(from: components) ?? Date(timeIntervalSince1970: 0)
   }
 
-  // MARK: - Shipped prompt text
   @MainActor
   func testInsightDefaultPromptRetiresTheWrongYearExample() {
     let prompt = InsightAssistantSettings.defaultAnalysisPrompt
