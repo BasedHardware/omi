@@ -21,6 +21,7 @@
 #include <zephyr/sys/ring_buffer.h>
 
 #include "accel.h"
+#include "ble_perm.h"
 #include "button.h"
 #include "config.h"
 #include "features.h"
@@ -145,25 +146,25 @@ static struct bt_gatt_attr audio_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&audio_service_uuid),
     BT_GATT_CHARACTERISTIC(&audio_characteristic_data_uuid.uuid,
                            BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
-                           BT_GATT_PERM_READ,
+                           OMI_GATT_PERM_READ,
                            audio_data_read_characteristic,
                            NULL,
                            NULL),
-    BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+    BT_GATT_CCC(audio_ccc_config_changed_handler, OMI_GATT_PERM_CCC),
     BT_GATT_CHARACTERISTIC(&audio_characteristic_format_uuid.uuid,
                            BT_GATT_CHRC_READ,
-                           BT_GATT_PERM_READ,
+                           OMI_GATT_PERM_READ,
                            audio_codec_read_characteristic,
                            NULL,
                            NULL),
 #ifdef CONFIG_OMI_ENABLE_SPEAKER
     BT_GATT_CHARACTERISTIC(&audio_characteristic_speaker_uuid.uuid,
                            BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY,
-                           BT_GATT_PERM_WRITE,
+                           OMI_GATT_PERM_WRITE,
                            NULL,
                            audio_data_write_handler,
                            NULL),
-    BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE), //
+    BT_GATT_CCC(audio_ccc_config_changed_handler, OMI_GATT_PERM_CCC), //
 #endif
 
 };
@@ -184,23 +185,23 @@ static struct bt_gatt_attr settings_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&settings_service_uuid),
     BT_GATT_CHARACTERISTIC(&settings_dim_ratio_characteristic_uuid.uuid,
                            BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE,
-                           BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
+                           OMI_GATT_PERM_READ | OMI_GATT_PERM_WRITE,
                            settings_dim_ratio_read_handler,
                            settings_dim_ratio_write_handler,
                            NULL),
     BT_GATT_CHARACTERISTIC(&settings_mic_gain_characteristic_uuid.uuid,
                            BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE,
-                           BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
+                           OMI_GATT_PERM_READ | OMI_GATT_PERM_WRITE,
                            settings_mic_gain_read_handler,
                            settings_mic_gain_write_handler,
                            NULL),
     BT_GATT_CHARACTERISTIC(&settings_charging_status_characteristic_uuid.uuid,
                            BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
-                           BT_GATT_PERM_READ,
+                           OMI_GATT_PERM_READ,
                            settings_charging_status_read_handler,
                            NULL,
                            NULL),
-    BT_GATT_CCC(charging_status_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+    BT_GATT_CCC(charging_status_ccc_config_changed_handler, OMI_GATT_PERM_CCC),
 };
 
 static struct bt_gatt_service settings_service = BT_GATT_SERVICE(settings_service_attr);
@@ -278,13 +279,13 @@ static struct bt_gatt_attr time_sync_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&time_sync_service_uuid),
     BT_GATT_CHARACTERISTIC(&time_sync_write_characteristic_uuid.uuid,
                            BT_GATT_CHRC_WRITE,
-                           BT_GATT_PERM_WRITE,
+                           OMI_GATT_PERM_WRITE,
                            NULL,
                            time_sync_write_handler,
                            NULL),
     BT_GATT_CHARACTERISTIC(&time_sync_read_characteristic_uuid.uuid,
                            BT_GATT_CHRC_READ,
-                           BT_GATT_PERM_READ,
+                           OMI_GATT_PERM_READ,
                            time_sync_read_handler,
                            NULL,
                            NULL),
@@ -590,6 +591,46 @@ void broadcast_battery_level(struct k_work *work_item)
 // Connection Callbacks
 //
 
+/* Ask the central to raise the link to BT_SECURITY_L2 (LE Secure Connections,
+ * Just Works -- Omi is NoInputNoOutput so Level 3/4 is unreachable). The
+ * encrypted attribute permissions would also make the phone pair lazily on the
+ * first ATT insufficient-encryption error, but that leaks a failed read per
+ * characteristic and depends on central behaviour; requesting up front makes
+ * the promise in CONFIG_OMI_REQUIRE_BLE_ENCRYPTION explicit.
+ */
+static void request_link_encryption(struct bt_conn *conn)
+{
+#if defined(CONFIG_OMI_REQUIRE_BLE_ENCRYPTION)
+    int err = bt_conn_set_security(conn, BT_SECURITY_L2);
+    if (err == -EBUSY) {
+        /* SMP already running for this link; the result arrives via
+         * security_changed. */
+        return;
+    }
+    if (err) {
+        LOG_WRN("bt_conn_set_security(L2) failed (err %d); relying on the "
+                "central to pair on the first encrypted attribute access",
+                err);
+    }
+#else
+    ARG_UNUSED(conn);
+#endif
+}
+
+#if defined(CONFIG_OMI_REQUIRE_BLE_ENCRYPTION)
+static void _transport_security_changed(struct bt_conn *conn, bt_security_t level, enum bt_security_err sec_err)
+{
+    ARG_UNUSED(conn);
+
+    if (sec_err) {
+        LOG_WRN("BLE security procedure failed (level %d, err %d)", (int) level, (int) sec_err);
+        return;
+    }
+
+    LOG_INF("BLE link security level %d", (int) level);
+}
+#endif
+
 static void _transport_connected(struct bt_conn *conn, uint8_t err)
 {
     struct bt_conn_info info = {0};
@@ -626,6 +667,8 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
             supervision_timeout);
     LOG_INF("Initial MTU: %u", mtu);
     mtu_recheck_attempts = 0;
+
+    request_link_encryption(current_connection);
 
     // Request aggressive connection params for higher BLE sync throughput.
     update_conn_params(current_connection);
@@ -773,6 +816,9 @@ static struct bt_conn_cb _callback_references = {
     .le_param_updated = _le_param_updated,
     .le_phy_updated = _le_phy_updated,
     .le_data_len_updated = _le_data_length_updated,
+#if defined(CONFIG_OMI_REQUIRE_BLE_ENCRYPTION)
+    .security_changed = _transport_security_changed,
+#endif
 };
 
 // --- Update Request Functions ---
@@ -923,6 +969,7 @@ static void update_mtu(struct bt_conn *conn)
     LOG_ERR("bt_gatt_exchange_mtu() failed after retries (last err %d)", err);
 }
 
+#ifdef CONFIG_OMI_ENABLE_MFG_DIAGNOSTICS
 static void log_local_ble_addresses(void)
 {
     bt_addr_le_t addrs[CONFIG_BT_ID_MAX];
@@ -944,6 +991,7 @@ static void log_local_ble_addresses(void)
         printk("BLE_ADDR[%u]: %s\n", (unsigned int) i, addr);
     }
 }
+#endif
 
 static int ensure_local_ble_identity(void)
 {
@@ -1458,8 +1506,10 @@ int transport_start()
         LOG_WRN("Continuing without confirmed BLE identity (err %d)", err);
     }
 
+#ifdef CONFIG_OMI_ENABLE_MFG_DIAGNOSTICS
     // Production-line helper: emit local BLE addresses on UART for fixture parsing.
     log_local_ble_addresses();
+#endif
 
     if (IS_ENABLED(CONFIG_SHELL_BT_NUS)) {
         err = shell_bt_nus_init();
