@@ -758,4 +758,3 @@ def test_backfill_idempotent_skip_never_bypasses_normal_outbox(monkeypatch):
     assert row_result.vector_sync_failed is False
     assert row_result.keyword_sync_succeeded is True
     assert fake_index.upserts == []
-

@@ -31,4 +31,11 @@ link /opt/harness-node/node_modules /repo/node_modules
 export HOME=/opt/harness-home
 mkdir -p "$HOME"
 
-exec "$@"
+# NOT `exec`: exec replaces this shell, and a replaced shell never runs its EXIT trap — the links would
+# survive every run and the next tool to want a real `.venv` would fail on "File exists". Run the command
+# as a child, then clean up and hand its status back.
+"$@"
+status=$?
+cleanup
+trap - EXIT
+exit "$status"
