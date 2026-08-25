@@ -8,14 +8,18 @@ const h = vi.hoisted(() => ({
   invalidateConversationsCache: vi.fn(),
   clearPendingConversations: vi.fn(),
   clearUserScopedPreferences: vi.fn(),
-  clearMemoryCache: vi.fn()
+  clearMemoryCache: vi.fn(),
+  resetOnboarding: vi.fn()
 }))
 
 vi.mock('./pageCache', () => ({
   invalidateConversationsCache: h.invalidateConversationsCache,
   clearPendingConversations: h.clearPendingConversations
 }))
-vi.mock('./preferences', () => ({ clearUserScopedPreferences: h.clearUserScopedPreferences }))
+vi.mock('./preferences', () => ({
+  clearUserScopedPreferences: h.clearUserScopedPreferences,
+  resetOnboarding: h.resetOnboarding
+}))
 vi.mock('./localAgentMemoryCache', () => ({ clearMemoryCache: h.clearMemoryCache }))
 
 import { reconcileAccountForSignIn, teardownUserData } from './authTeardown'
@@ -38,6 +42,7 @@ beforeEach(() => {
   h.clearPendingConversations.mockClear()
   h.clearUserScopedPreferences.mockClear()
   h.clearMemoryCache.mockClear()
+  h.resetOnboarding.mockClear()
   ;(globalThis as { window: { omi: unknown } }).window.omi = {
     wipeUserData,
     byokClearAll,
@@ -120,6 +125,8 @@ describe('reconcileAccountForSignIn — account-switch guard', () => {
     // The prior account's BYOK keys + Gmail session are cleared before B hydrates.
     expect(byokClearAll).toHaveBeenCalledTimes(1)
     expect(gmailSessionDisconnect).toHaveBeenCalledTimes(1)
+    // Onboarding is reset so the incoming account sees the wizard (new user on this device).
+    expect(h.resetOnboarding).toHaveBeenCalledTimes(1)
     expect(localStorage.getItem(LAST_UID_KEY)).toBe('userB')
     // The uid pointer must survive teardown (it's machine-scoped, not in the
     // user-scoped key list) so the NEXT switch is still detected.
@@ -131,6 +138,7 @@ describe('reconcileAccountForSignIn — account-switch guard', () => {
     await reconcileAccountForSignIn('userA')
 
     expect(wipeUserData).not.toHaveBeenCalled()
+    expect(h.resetOnboarding).not.toHaveBeenCalled()
     expect(localStorage.getItem(LAST_UID_KEY)).toBe('userA')
   })
 
@@ -139,6 +147,7 @@ describe('reconcileAccountForSignIn — account-switch guard', () => {
     await reconcileAccountForSignIn('userA')
 
     expect(wipeUserData).not.toHaveBeenCalled()
+    expect(h.resetOnboarding).not.toHaveBeenCalled()
     expect(localStorage.getItem(LAST_UID_KEY)).toBe('userA')
   })
 

@@ -9,7 +9,7 @@
 // (authSession.forceReauth) and never wipes data.
 import { clearMemoryCache } from './localAgentMemoryCache'
 import { clearPendingConversations, invalidateConversationsCache } from './pageCache'
-import { clearUserScopedPreferences } from './preferences'
+import { clearUserScopedPreferences, resetOnboarding } from './preferences'
 import { CHAT_INFINITE_ID_KEY } from './chatStorageKeys'
 import { POST_HISTORY_KEY } from './sync/backfillStorageKey'
 import { resetByokKeys } from './byokKeys'
@@ -117,7 +117,10 @@ export async function reconcileAccountForSignIn(uid: string | null): Promise<voi
   } catch {
     /* privacy mode */
   }
-  if (stored && stored !== uid) await teardownUserData()
+  if (stored && stored !== uid) {
+    resetOnboarding()
+    await teardownUserData()
+  }
   try {
     localStorage.setItem(LAST_UID_KEY, uid)
   } catch {
