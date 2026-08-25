@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Fixed the Screen Recording permission dialog reappearing even though permission was already granted."
+  ]
+}

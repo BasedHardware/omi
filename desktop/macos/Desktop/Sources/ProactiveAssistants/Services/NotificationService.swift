@@ -54,6 +54,13 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   /// Title that identifies screen capture reset notifications
   static let screenCaptureResetTitle = "Screen Recording Needs Reset"
 
+  /// Title that identifies the consent-decline notice: macOS re-confirmed consent for
+  /// app-built capture filters and the capture loop went terminal instead of retrying
+  /// (see ScreenCaptureConsentPolicy). Distinct from the reset title on purpose — the
+  /// grant is intact, so the repair is "start capturing again", NOT the tccutil wipe
+  /// the reset flow performs.
+  static let screenCaptureConsentTitle = "Screen Recording Paused"
+
   /// UserDefaults key that records whether the screen capture reset notification
   /// has already been shown in the current broken-capture episode. Cleared by
   /// `AppState.checkScreenRecordingPermission()` as soon as capture recovers,
@@ -262,6 +269,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         switch Self.openAction(assistantId: assistantId, title: title) {
         case .resetScreenCapture:
           self.handleScreenCaptureResetAction(source: "notification_click")
+        case .resumeScreenCapture:
+          self.handleScreenCaptureResumeAction(source: "notification_click")
         case .openMainChat:
           // The same reveal-and-land-on-chat path the floating bar's
           // "Continue in Omi" affordance uses; the chat transcript there
@@ -316,6 +325,9 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     case none
     /// The screen-recording repair, which is an action rather than a page.
     case resetScreenCapture
+    /// Resume after a terminal consent decline: the grant is intact, so the repair is
+    /// simply restarting monitoring (one user-initiated capture attempt), never a reset.
+    case resumeScreenCapture
     /// The main-window chat surface, where the meeting-notes card (with its
     /// conversation link) was materialized.
     case openMainChat
@@ -328,6 +340,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   /// change with its own suppression-state migration.
   static func openAction(assistantId: String, title: String) -> OpenAction {
     if title == screenCaptureResetTitle { return .resetScreenCapture }
+    if title == screenCaptureConsentTitle { return .resumeScreenCapture }
     if assistantId == MeetingActionItemBannerPolicy.assistantID { return .openMainChat }
     return .none
   }
@@ -337,6 +350,22 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     log("Screen capture reset triggered from \(source)")
     AnalyticsManager.shared.screenCaptureResetClicked(source: source)
     ScreenCaptureService.resetScreenCapturePermissionAndRestart()
+  }
+
+  /// Handle the consent-decline resume: this is the single user-facing repair
+  /// affordance after a terminal "user declined TCCs" stop. It restarts monitoring —
+  /// one user-initiated capture attempt — which either just works (the user allowed
+  /// the OS dialog) or surfaces the consent dialog exactly once, at a moment the user
+  /// chose. Deliberately not the reset flow: the TCC grant is intact.
+  private func handleScreenCaptureResumeAction(source: String) {
+    log("Screen capture resume triggered from \(source)")
+    Task { @MainActor in
+      ProactiveAssistantsPlugin.shared.startMonitoring { success, error in
+        if !success, let error {
+          log("Screen capture resume from \(source) failed to start monitoring: \(error)")
+        }
+      }
+    }
   }
 
   /// Send a notification via the floating bar, and optionally as a native macOS system banner.
