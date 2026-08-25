@@ -21,7 +21,7 @@ const BOARD_UIDS: Record<string, string> = {
   mobile: "omi-tv-mobile",
 };
 
-function boardUrl(platform: string | null): string {
+export function boardUrl(platform: string | null): string {
   if (GRAFANA_URL) return GRAFANA_URL;
   const uid = BOARD_UIDS[platform ?? ""] ?? "omi-tv";
   return `/grafana/d/${uid}/?refresh=5m`;
