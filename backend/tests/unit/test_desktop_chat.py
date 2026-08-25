@@ -1793,36 +1793,45 @@ async def test_chat_completions_routes_oauth_provider_without_managed_gateway(mo
 
 
 @pytest.mark.asyncio
-async def test_chat_completions_rejects_oauth_web_search_without_claiming_recovery(monkeypatch):
+async def test_chat_completions_withholds_oauth_web_search_and_continues(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
+    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'get_byok_llm_provider', lambda: 'chatgpt')
     monkeypatch.setattr(desktop_chat, 'get_byok_oauth_credential', lambda: {'provider': 'chatgpt'})
-    fallback = Mock()
-    monkeypatch.setattr(desktop_chat, 'record_fallback', fallback)
-    monkeypatch.setattr(desktop_chat, 'get_llm', Mock())
+    fallbacks = []
+    monkeypatch.setattr(desktop_chat, 'record_fallback', lambda **kwargs: fallbacks.append(kwargs))
 
-    with pytest.raises(desktop_chat.HTTPException) as error:
-        await desktop_chat.chat_completions(
-            {
-                'model': 'omi-sonnet',
-                'messages': [{'role': 'user', 'content': 'find current news'}],
-                'omi_web_search': True,
-            },
-            uid='user-1',
-            x_app_platform=None,
-            x_omi_chat_contract_version=None,
-            x_omi_request_id=None,
-        )
+    class OAuthClient:
+        async def ainvoke(self, messages, **kwargs):
+            return SimpleNamespace(
+                id='oauth-msg',
+                content='from OAuth without search',
+                tool_calls=[],
+                usage_metadata={'input_tokens': 2, 'output_tokens': 3},
+            )
 
-    assert error.value.status_code == 400
-    fallback.assert_called_once_with(
-        component='desktop_chat',
-        from_mode='chatgpt_oauth',
-        to_mode='unsupported_web_search',
-        reason='capability_mismatch',
-        outcome='degraded',
+    monkeypatch.setattr(desktop_chat, 'get_llm', lambda *_args, **_kwargs: OAuthClient())
+
+    response = await desktop_chat.chat_completions(
+        {
+            'model': 'omi-sonnet',
+            'messages': [{'role': 'user', 'content': 'find current news'}],
+            'omi_web_search': True,
+        },
+        uid='user-1',
+        x_app_platform=None,
+        x_omi_chat_contract_version=None,
+        x_omi_request_id='oauth-search',
     )
-    desktop_chat.get_llm.assert_not_called()
+
+    assert response.status_code == 200
+    assert any(
+        item.get('from_mode') == 'chatgpt_oauth'
+        and item.get('to_mode') == 'model_knowledge'
+        and item.get('reason') == 'capability_mismatch'
+        for item in fallbacks
+    )
 
 
 @pytest.mark.asyncio
