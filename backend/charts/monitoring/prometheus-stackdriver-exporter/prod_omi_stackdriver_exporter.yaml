@@ -1,6 +1,12 @@
 stackdriver:
   projectIds:
     - "based-hardware"
+  # Cloud Monitoring answers descriptor lookups for this project with 503
+  # "Task is overloaded (cpu-protection)" and 10s timeouts. Give each request
+  # more room and let 503s retry instead of failing the whole scrape.
+  httpTimeout: 30s
+  maxRetries: 3
+  retryStatuses: 503
   metrics:
     prefixes:
       - 'loadbalancing.googleapis.com/https/backend_request_count'
@@ -12,10 +18,24 @@ stackdriver:
       - 'firestore.googleapis.com/document/read_count'
     filters:
       - 'loadbalancing.googleapis.com/https/backend_request_count:resource.labels.backend_target_name="custom-domains-api-omi-me-backend-listen-49a4-be"'
-    interval: '1m'
+    # Query window is [now-offset-interval, now-offset]. Measured Firestore
+    # ingestion lag is ~2.4 min, so the previous 1m/1m window ([now-2m, now-1m])
+    # was always empty for firestore.googleapis.com/document/read_count and the
+    # exporter emitted no series at all despite scraping cleanly. 3m/1m covers
+    # lag between 1 and 4 minutes.
+    interval: '3m'
     offset: '1m'
 
 serviceAccount:
   create: true
   annotations:
     iam.gke.io/gcp-service-account: "prod-omi-prom-stackdriver-gsa@based-hardware.iam.gserviceaccount.com"
+
+# Descriptor discovery, not sample collection, is what throttles here. At the 0s
+# default the exporter re-runs ListMetricDescriptors for every prefix on every
+# scrape -- ~2 calls/sec project-wide -- which is why adding the firestore prefix
+# returned no series at all: its descriptor lookup timed out every time. Metric
+# descriptors change approximately never, so an hour of caching removes the
+# throttling and the ListMetricDescriptors spend without making samples staler.
+extraArgs:
+  monitoring.descriptor-cache-ttl: 1h
