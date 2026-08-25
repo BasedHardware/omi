@@ -167,28 +167,22 @@ final class MeetingScreenshotsStore: ObservableObject {
     }
   }
 
-  // MARK: - Lightbox
+  // MARK: - Full size
 
   /// Every frame this note can show full-size, banner included, in reading order.
   private var expandable: [ConversationScreenFrame] {
     (banner.map { [$0] } ?? []) + frames
   }
 
-  /// The frame behind a tile, ready to hand to the shared lightbox.
-  func lightboxItem(for id: String) -> ScreenFrameLightboxItem? {
-    guard let frame = expandable.first(where: { $0.id == id }) else { return nil }
-    return ScreenFrameLightboxItem(frame: frame, conversationID: conversationID)
-  }
-
-  /// The next frame along, wrapping at both ends so arrow keys never dead-end.
-  func lightboxItem(steppingFrom id: String?, by step: Int) -> ScreenFrameLightboxItem? {
-    let all = expandable
-    guard !all.isEmpty else { return nil }
-    guard let id, let current = all.firstIndex(where: { $0.id == id }) else {
-      return lightboxItem(for: all[0].id)
-    }
-    let next = ((current + step) % all.count + all.count) % all.count
-    return lightboxItem(for: all[next].id)
+  /// The whole set, ready to hand to Quick Look.
+  ///
+  /// The *set* and not the one frame that was clicked, because Quick Look's own left/right
+  /// stepping walks whatever it was given — so handing it everything is what makes arrowing
+  /// through a meeting work without a stepper of ours in the middle of it. A frame whose
+  /// `content_url` does not parse drops out here rather than becoming a panel that opens onto
+  /// nothing.
+  var quickLookFrames: [QuickLookFrame] {
+    expandable.compactMap { QuickLookFrame(frame: $0) }
   }
 
   // MARK: - Refresh and delete

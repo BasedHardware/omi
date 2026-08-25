@@ -3711,6 +3711,62 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "screen_frame_quick_look_probe",
+      summary: "Open screenshots in Quick Look and read the panel back",
+      params: ["conversationId", "source", "dismiss"]
+    ) { params in
+      // Quick Look's panel is a system window, so no capture path in this app can photograph it —
+      // see `ScreenFrameQuickLook.probeState()`. This is how the responder-chain claim, the
+      // materialisation of signed URLs into files, and the panel actually opening are verified.
+      if params["dismiss"] == "true" {
+        return await MainActor.run {
+          ScreenFrameQuickLook.shared.dismissForProbe()
+          return ["dismissed": "true"]
+        }
+      }
+      // Two sources, because they materialise by completely different routes: a meeting frame is a
+      // signed URL to download, a Rewind moment is usually a frame inside a video chunk to decode.
+      // A probe that only exercised one would leave the other unproven.
+      let source = params["source"] ?? "conversation"
+      let frames: [QuickLookFrame]
+      let subject: String
+      if source == "rewind" {
+        let recent = try await RewindDatabase.shared.getRecentScreenshots(limit: 6)
+        frames = recent.map { QuickLookFrame(screenshot: $0) }
+        subject = "rewind"
+      } else {
+        let rawConversationId = params["conversationId"]?
+          .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let rawConversationId, !rawConversationId.isEmpty else {
+          return ["error": "missing conversationId"]
+        }
+        let set = try await APIClient.shared.getConversationScreenFrames(
+          conversationID: rawConversationId)
+        let ordered = (set.banner.map { [$0] } ?? []) + set.strip
+        frames = ordered.compactMap { QuickLookFrame(frame: $0) }
+        subject = rawConversationId
+      }
+      guard let first = frames.first else {
+        return ["error": "no_frames", "conversation_id": subject]
+      }
+      await MainActor.run {
+        ScreenFrameQuickLook.shared.present(frames, startingAt: first.id)
+      }
+      // `present` fetches the clicked frame before it shows anything, so the panel is not up the
+      // instant this returns. Poll rather than sleep a guessed interval.
+      for _ in 0..<40 {
+        let state = await MainActor.run { ScreenFrameQuickLook.shared.probeState() }
+        if state["panel_visible"] == "true" { break }
+        try? await Task.sleep(nanoseconds: 100_000_000)
+      }
+      var result = await MainActor.run { ScreenFrameQuickLook.shared.probeState() }
+      result["conversation_id"] = subject
+      result["source"] = source
+      result["requested_count"] = "\(frames.count)"
+      return result
+    }
+
+    register(
       name: "conversation_share_probe",
       summary: "Hermetic share affordance probe — fetches share link without clipboard",
       params: ["conversationId"]

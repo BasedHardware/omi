@@ -1,23 +1,36 @@
 //
-//  MeetingNoteScreenshotViews.swift — the banner and the strip, as the note draws them.
+//  MeetingNoteScreenshotViews.swift — the ground behind the title, and the strip.
 //
 //  **The banner is designed, not photographic, and that is a finding rather than a preference.**
 //  Across five real meetings not one captured frame worked as a full-bleed article header: the
 //  frames are Claude Code, Cursor, ChatGPT and GitHub, and a wide crop of a text-editing session
 //  is a smear of grey. So the banner is a composition the app renders — a muted ground derived
-//  from the chosen frame, the title as real text, and the frame itself as a small legible inset —
-//  and the screenshot is an ingredient in it rather than the surface of it.
+//  from the chosen frame — and the screenshot is an ingredient in it rather than the surface of it.
+//
+//  **It is now the note header's background rather than a slot of its own, and that is a
+//  correction.** As a slot it drew the conversation's title and date onto a gradient — a hundred
+//  points below the header, which was already drawing the same title and the same date. Two
+//  copies of one line, and 132pt of the pane spent on the second of them. Painting the ground
+//  behind the header instead removes the duplicate, returns the vertical space, and leaves the
+//  title where it always was: real, selectable, resizable chrome, never burned into pixels.
+//
+//  What that costs is honest to state. A header band is ~62pt tall, and the finding above says a
+//  screenshot only earns its place when it is *legible*. At this height it cannot be, so the frame
+//  bleeds in from the trailing edge as atmosphere and nothing more. The legible copy is the strip
+//  tile directly below, which now opens into Quick Look at full resolution — so nothing was lost
+//  that the reader could previously read.
 //
 //  Two consequences worth keeping through any refactor:
 //
-//  - **The title is never burned into pixels.** It stays selectable, resizable, themed text, which
-//    is also the only version that survives a narrow window.
+//  - **The store is owned above this file.** `ConversationDetailView` holds it, because the header
+//    is its sibling rather than its child and both halves have to read the same banner. Nothing
+//    here constructs one.
 //  - **No banner is a first-class state.** A meeting whose frames are all dense text gets the
 //    note's ordinary header and still gets its strip. Absence of a banner never suppresses the
 //    strip; they are independent.
 //
-//  Frames are server-persisted now (contract §9): both the banner inset and the strip's tiles
-//  draw from `content_url`/`thumbnail_url`, signed for 60 minutes, not from local Rewind pixels.
+//  Frames are server-persisted (contract §9): both the header ground and the strip's tiles draw
+//  from `content_url`/`thumbnail_url`, signed for 60 minutes, not from local Rewind pixels.
 //  Neither view retries a broken URL — an expired one reports back to the store, which re-fetches
 //  the whole set (`MeetingScreenshotsStore.refreshPersistedSet()`) rather than the caller guessing
 //  at a new URL of its own.
@@ -26,11 +39,15 @@
 import OmiTheme
 import SwiftUI
 
-/// Owns the feature state only after the gate has admitted this branch. `ConversationDetailView`
-/// renders its ordinary summary directly when the gate is off, so a build with the setting
-/// disabled constructs no screenshot store, child view, or task.
+/// The summary body, with the strip in its place among the note's other sections.
+///
+/// The store is passed in rather than created here: the note's header paints this conversation's
+/// banner as its ground, and the header is this view's *sibling* — so one owner above both is the
+/// only arrangement in which the two halves cannot disagree about which frame the banner is.
+/// `ConversationDetailView` still renders its ordinary summary directly when the gate is off, so a
+/// build with the setting disabled constructs no child view and starts no task.
 struct MeetingNoteScreenshotsLayout<BeforeScreenshots: View, AfterScreenshots: View>: View {
-  @StateObject private var store = MeetingScreenshotsStore()
+  @ObservedObject var store: MeetingScreenshotsStore
 
   let conversation: ServerConversation
   let date: Date
@@ -38,11 +55,13 @@ struct MeetingNoteScreenshotsLayout<BeforeScreenshots: View, AfterScreenshots: V
   let afterScreenshots: AfterScreenshots
 
   init(
+    store: MeetingScreenshotsStore,
     conversation: ServerConversation,
     date: Date,
     @ViewBuilder beforeScreenshots: () -> BeforeScreenshots,
     @ViewBuilder afterScreenshots: () -> AfterScreenshots
   ) {
+    self.store = store
     self.conversation = conversation
     self.date = date
     self.beforeScreenshots = beforeScreenshots()
@@ -50,43 +69,48 @@ struct MeetingNoteScreenshotsLayout<BeforeScreenshots: View, AfterScreenshots: V
   }
 
   var body: some View {
-    MeetingNoteScreenshotBannerSlot(store: store, conversation: conversation, date: date)
     beforeScreenshots
     MeetingNoteScreenshotStrip(store: store, conversation: conversation, date: date)
     afterScreenshots
   }
 }
 
-// MARK: - Banner
+// MARK: - The ground behind the note header
 
-struct MeetingNoteScreenshotBannerSlot: View {
-  @ObservedObject var store: MeetingScreenshotsStore
-  let conversation: ServerConversation
-  let date: Date
-
-  @ViewBuilder var body: some View {
-    if let banner = store.banner {
-      MeetingNoteBanner(
-        frame: banner,
-        title: conversation.structured.title.isEmpty ? "Untitled conversation" : conversation.structured.title,
-        date: date,
-        onContentUnavailable: { Task { await store.refreshPersistedSet() } })
-    }
-  }
-}
-
-struct MeetingNoteBanner: View {
+/// This conversation's banner, painted behind `ConversationDetailView`'s header.
+///
+/// Background only — it draws no text of its own. The title, the date, the emoji, the back chip
+/// and every action button are the header's own real chrome, unchanged and still in front. That is
+/// the whole point of the move: the banner used to draw its own copy of a title the header was
+/// already drawing.
+///
+/// **The shell is light-pinned** (`InkGlass.appearance` is `.aqua`, so `Ink.primary` is near-black
+/// in every window). A ground at the strength the old full banner used — where the title was white
+/// on a saturated gradient — would put near-black text on a dark field. So the ground is washed
+/// back and finished with a light veil, and the readability of the header is a property of this
+/// view rather than something the header has to opt into.
+struct MeetingNoteHeaderBanner: View {
   let frame: ConversationScreenFrame
-  let title: String
-  let date: Date
-  /// The inset failed to load — most likely an expired signed URL. Called at most once.
+  /// The image failed to load — most likely an expired signed URL. Called at most once.
   var onContentUnavailable: (() -> Void)?
 
   @State private var reportedUnavailable = false
 
-  /// Below this the banner stacks instead of sitting the inset beside the title. A note pane can be
-  /// dragged genuinely narrow, and a side-by-side layout there crops the title to a word and a half.
-  private static let stackBelowWidth: CGFloat = 420
+  /// How much of the trailing edge the frame occupies before it dissolves. Wide enough to colour
+  /// the band, narrow enough that it never reaches the title.
+  private static let washFraction: CGFloat = 0.55
+
+  /// How far the frame is thrown out of focus.
+  ///
+  /// The banner file's rule is that a screenshot is never blurred into a texture — and that rule is
+  /// about the *inset*, which had to stay legible because reading it was its whole job. Here the
+  /// opposite is true and stating it plainly is better than half-obeying a rule written for another
+  /// composition: a 62pt band cannot render a 5120pt capture legibly, so a sharp one is not a
+  /// picture the reader can use, it is noise competing with five action buttons sitting on top of
+  /// it. Measured on a real note: the trash button landed on the trash icon *inside* the
+  /// screenshot. Thrown this far out of focus the frame becomes a colour field that still differs
+  /// from meeting to meeting, and the legible copy is the strip tile a few points below.
+  private static let washBlur: CGFloat = 18
 
   /// The gradient's two stops. The server computes `ground` once, over the canonical bytes, at
   /// approval time (`ConversationScreenFrame.ground`) — both this client and web render from that
@@ -110,84 +134,71 @@ struct MeetingNoteBanner: View {
     }
   }
 
-  private var gradient: LinearGradient {
-    LinearGradient(colors: gradientColors, startPoint: .topLeading, endPoint: .bottomTrailing)
-  }
-
   var body: some View {
     GeometryReader { proxy in
-      let stacked = proxy.size.width < Self.stackBelowWidth
-      ZStack {
-        gradient
-        if stacked {
-          VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-            titleBlock
-            inset(width: min(proxy.size.width - OmiSpacing.lg * 2, 260))
-          }
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(OmiSpacing.lg)
-        } else {
-          HStack(alignment: .center, spacing: OmiSpacing.lg) {
-            titleBlock
-              .frame(maxWidth: .infinity, alignment: .leading)
-            // The spec's 25-35% of banner width, clamped so it neither shrinks to a stamp in a
-            // narrow pane nor grows into the full-bleed treatment the measurement ruled out.
-            inset(width: min(max(proxy.size.width * 0.30, 150), 260))
-          }
-          .padding(.horizontal, OmiSpacing.lg)
-        }
+      ZStack(alignment: .trailing) {
+        LinearGradient(colors: gradientColors, startPoint: .leading, endPoint: .trailing)
+          .opacity(0.28)
+        wash(width: proxy.size.width * Self.washFraction, height: proxy.size.height)
+        // The veil, not an opacity on the layers beneath it: heaviest where the title starts and
+        // lighter towards the trailing edge, so the headline keeps full contrast while the colour
+        // still carries past the buttons. Its floor is high enough that every one of those buttons
+        // stays a control on a ground rather than a control on a photograph.
+        LinearGradient(
+          colors: [
+            Color.white.opacity(0.66),
+            Color.white.opacity(0.46),
+            Color.white.opacity(0.38),
+          ],
+          startPoint: .leading,
+          endPoint: .trailing)
       }
-      .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+      .clipped()
     }
-    .frame(height: bannerHeight)
-    .frame(maxWidth: .infinity)
+    .allowsHitTesting(false)
+    .accessibilityHidden(true)
     .task(id: frame.id) { reportedUnavailable = false }
   }
 
-  /// Tall enough for a two-line title over the inset when stacked.
-  private var bannerHeight: CGFloat { 132 }
-
-  private var titleBlock: some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-      Text(title)
-        .scaledFont(size: OmiType.title, weight: .semibold)
-        .foregroundStyle(.white)
-        .lineLimit(2)
-        .multilineTextAlignment(.leading)
-        .shadow(color: .black.opacity(0.35), radius: 8, y: 1)
-      Text(date.formatted(date: .abbreviated, time: .shortened))
-        .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundStyle(.white.opacity(0.82))
-        .shadow(color: .black.opacity(0.3), radius: 6, y: 1)
-    }
-  }
-
-  /// The approved frame, never stretched, never blurred into a texture. At this size a screenshot
-  /// reads as "here is the thing we were looking at", which is the only job it can actually do.
+  /// The frame itself, thrown out of focus, entering from the trailing edge and dissolving before
+  /// it reaches the title.
+  ///
   /// Absent entirely — not a placeholder glyph — when the fetch has not landed or has failed: the
-  /// gradient and the title alone are a complete banner, so a slow or expired inset costs nothing.
+  /// ground alone is a complete background, so a slow or expired image costs the header nothing.
   ///
   /// Loaded declaratively via `AsyncImage` rather than a manual `URLSession` fetch into an
   /// `NSImage`: the gradient no longer needs the decoded pixels for anything (it reads
   /// `frame.ground` instead), so the only reason left to fetch this image at all is to display it,
   /// which SwiftUI already does — and doing it this way keeps a non-`Sendable` `NSImage`/`CGImage`
   /// from ever needing to cross an isolation boundary here.
-  @ViewBuilder private func inset(width: CGFloat) -> some View {
+  @ViewBuilder private func wash(width: CGFloat, height: CGFloat) -> some View {
     AsyncImage(url: URL(string: frame.thumbnailURL)) { phase in
       switch phase {
       case .success(let image):
         image
           .resizable()
           .aspectRatio(contentMode: .fill)
-          .frame(width: width, height: width * 10 / 16)
-          .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-          .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-              .strokeBorder(.white.opacity(0.28), lineWidth: 1)
+          // Blurred *before* the frame is applied, and oversized by the blur radius on every side:
+          // a blur reads the pixels outside its view, and a view clipped to the band first has
+          // nothing out there to read, so the edges would bleed to transparent and the wash would
+          // end in a pale halo instead of at the window.
+          .frame(
+            width: max(width + Self.washBlur * 2, 0),
+            height: max(height + Self.washBlur * 2, 0)
           )
-          .shadow(color: .black.opacity(0.28), radius: 10, y: 3)
-          .accessibilityLabel(
-            frame.caption.isEmpty ? "Screenshot from this meeting" : frame.caption)
+          .blur(radius: Self.washBlur)
+          .frame(width: max(width, 0), height: max(height, 0))
+          .clipped()
+          .mask(
+            LinearGradient(
+              stops: [
+                .init(color: .clear, location: 0),
+                .init(color: .black.opacity(0.85), location: 0.55),
+                .init(color: .black, location: 1),
+              ],
+              startPoint: .leading,
+              endPoint: .trailing)
+          )
       case .failure:
         Color.clear
           .onAppear { reportUnavailableOnce() }
@@ -213,27 +224,17 @@ struct MeetingNoteScreenshotStrip: View {
   let conversation: ServerConversation
   let date: Date
 
-  @State private var expandedFrame: ScreenFrameLightboxItem?
-
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
-      MeetingNoteScreenshotsSection(store: store) { frame in
-        expandedFrame = store.lightboxItem(for: frame.id)
-      }
+      MeetingNoteScreenshotsSection(
+        store: store,
+        onOpen: { frame in
+          // The whole set, not the one tile: Quick Look's own left/right stepping walks what it
+          // was handed, which is what replaced the stepper this view used to own.
+          ScreenFrameQuickLook.shared.present(store.quickLookFrames, startingAt: frame.id)
+        },
+        onDelete: { frame in await store.deleteFrame(frameID: frame.id) })
     }
-    .screenFrameLightbox(
-      item: $expandedFrame,
-      onStep: { step in
-        expandedFrame = store.lightboxItem(steppingFrom: expandedFrame?.id, by: step)
-      },
-      onDelete: { deletable in
-        await store.deleteFrame(frameID: deletable.frameID)
-        // The deleted frame (and any promoted banner) is only known after the refetch inside
-        // `deleteFrame` completes, so close the sheet rather than keep pointing at stale state.
-        expandedFrame = nil
-      },
-      onContentUnavailable: { Task { await store.refreshPersistedSet() } }
-    )
     .frame(maxWidth: .infinity, alignment: .leading)
     .task(id: conversation.id) {
       store.load(
@@ -247,6 +248,7 @@ struct MeetingNoteScreenshotStrip: View {
 struct MeetingNoteScreenshotsSection: View {
   @ObservedObject var store: MeetingScreenshotsStore
   let onOpen: (ConversationScreenFrame) -> Void
+  let onDelete: (ConversationScreenFrame) async -> Void
 
   var body: some View {
     switch store.phase {
@@ -285,7 +287,7 @@ struct MeetingNoteScreenshotsSection: View {
             .foregroundColor(Ink.secondary)
           Spacer()
         }
-        MeetingScreenshotStripRow(frames: store.frames, onOpen: onOpen)
+        MeetingScreenshotStripRow(frames: store.frames, onOpen: onOpen, onDelete: onDelete)
       }
     }
   }
@@ -305,12 +307,16 @@ struct MeetingNoteScreenshotsSection: View {
 struct MeetingScreenshotStripRow: View {
   let frames: [ConversationScreenFrame]
   let onOpen: (ConversationScreenFrame) -> Void
+  let onDelete: (ConversationScreenFrame) async -> Void
 
   var body: some View {
     ScrollView(.horizontal, showsIndicators: false) {
       HStack(spacing: 9) {
         ForEach(frames) { frame in
-          MeetingScreenshotTile(frame: frame, onOpen: { onOpen(frame) })
+          MeetingScreenshotTile(
+            frame: frame,
+            onOpen: { onOpen(frame) },
+            onDelete: { await onDelete(frame) })
         }
       }
       .padding(.vertical, 2)
@@ -329,8 +335,14 @@ struct MeetingScreenshotStripRow: View {
 struct MeetingScreenshotTile: View {
   let frame: ConversationScreenFrame
   let onOpen: () -> Void
+  /// Removes this frame from the note, server-side. Reached by right-click rather than by a button
+  /// inside the viewer: the viewer is Quick Look now, its chrome is Apple's, and a tile's context
+  /// menu is where the Finder puts exactly this command anyway.
+  let onDelete: () async -> Void
 
   @State private var isHovering = false
+  @State private var isConfirmingDelete = false
+  @State private var isDeleting = false
 
   private var shape: RoundedRectangle {
     RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -382,9 +394,27 @@ struct MeetingScreenshotTile: View {
     .buttonStyle(.plain)
     .onHover { isHovering = $0 }
     .help(frame.caption.isEmpty ? "Screenshot from this meeting" : frame.caption)
+    .contextMenu {
+      Button("Quick Look", action: onOpen)
+      Divider()
+      Button("Delete Screenshot…", role: .destructive) { isConfirmingDelete = true }
+        .disabled(isDeleting)
+    }
+    .alert("Delete Screenshot", isPresented: $isConfirmingDelete) {
+      Button("Cancel", role: .cancel) {}
+      Button("Delete", role: .destructive) {
+        isDeleting = true
+        Task {
+          await onDelete()
+          isDeleting = false
+        }
+      }
+    } message: {
+      Text("This removes the screenshot from this meeting's note. This cannot be undone.")
+    }
     .accessibilityLabel(
       Text(frame.caption.isEmpty ? "Screenshot from this meeting" : frame.caption)
     )
-    .accessibilityHint(Text("Opens this screenshot"))
+    .accessibilityHint(Text("Opens this screenshot in Quick Look"))
   }
 }

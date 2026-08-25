@@ -158,3 +158,56 @@ def test_prompt_tells_the_model_to_reject_when_it_was_sent_no_image():
     # The rule is worthless if it does not name the reject path the schema allows.
     tail = _PRIVACY_PROMPT.split("If no image is attached")[1]
     assert "unreadable" in tail and "reject" in tail
+
+
+def test_overlong_caption_is_truncated_rather_than_dropping_the_frame():
+    """Measured 2026-08-25 against real gemini-2.5-flash-lite via Vertex.
+
+    Vertex treats a responseSchema `maxLength` as advisory, so the model overruns
+    the 160-char caption limit in normal use even though the prompt states it.
+    When ScreenFrameJudgement enforced max_length, that raised inside
+    .with_structured_output(), judge_frame() mapped it to judge_call_failed, and a
+    frame the judge had actually approved was silently discarded. Caption and
+    labels are descriptive metadata with no part in the verdict, so normalising is
+    strictly better than losing the frame.
+    """
+    from models.screen_frame import ScreenFrameJudgement
+
+    judgement = ScreenFrameJudgement(
+        outcome="approved_clean",
+        caption="A screenshot of a dark-themed application interface. " * 8,
+        labels=[f"label-{i}" for i in range(20)],
+        banner_suitability=0.6,
+    )
+
+    assert len(judgement.caption) == 160
+    assert len(judgement.labels) == 8
+    assert judgement.outcome == "approved_clean"
+
+
+def test_the_wire_frame_still_enforces_the_caption_contract():
+    """The tolerance above is for the model's output only. The persisted/wire
+    shape keeps its documented cap, so a relaxed judgement can never widen it."""
+    import pytest as _pytest
+    from pydantic import ValidationError
+
+    from models.screen_frame import ConversationScreenFrame
+
+    with _pytest.raises(ValidationError):
+        ConversationScreenFrame.model_validate(
+            {
+                "id": "f1",
+                "role": "strip",
+                "rank": 0,
+                "captured_at": "2026-01-01T00:00:00Z",
+                "width": 10,
+                "height": 10,
+                "content_url": "https://example/c",
+                "thumbnail_url": "https://example/t",
+                "url_expires_at": "2026-01-01T00:00:00Z",
+                "caption": "y" * 400,
+                "labels": [],
+                "ground": {"stops": ["#000000", "#ffffff"], "is_neutral": True},
+                "banner_suitability": 0.5,
+            }
+        )
