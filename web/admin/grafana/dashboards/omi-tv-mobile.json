@@ -3546,7 +3546,7 @@
           ]
         }
       ],
-      "timeFrom": "8w",
+      "timeFrom": "5w",
       "title": "Viral loop \u2014 weekly",
       "type": "timeseries"
     }
