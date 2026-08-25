@@ -425,10 +425,7 @@ def purge_screen_data_tables() -> list[str]:
         try:
             connection = sqlite3.connect(runtime.db_path, check_same_thread=False)
             try:
-                names = [
-                    str(row[0])
-                    for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
-                ]
+                names = [str(row[0]) for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")]
                 for name in names:
                     if not is_screen_data_table(name):
                         continue
