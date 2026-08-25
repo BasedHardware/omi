@@ -50,6 +50,53 @@ void main() {
     expect(currentCalls, 0);
   });
 
+  test('homepage check-only path does not request permission when denied', () async {
+    var requests = 0;
+    var uploads = 0;
+    final capture = ConversationLocationCapture(
+      isLocationServiceEnabled: () async => true,
+      checkPermission: () async => LocationPermission.denied,
+      requestPermission: () async {
+        requests++;
+        return LocationPermission.whileInUse;
+      },
+      getCurrentPosition: () async => _position(latitude: 1, longitude: 2),
+      getLastKnownPosition: () async => null,
+      upload: (_) async {
+        uploads++;
+        return true;
+      },
+    );
+
+    expect(await capture.captureAndUpload(promptIfDenied: false), isFalse);
+    expect(requests, 0);
+    expect(uploads, 0);
+  });
+
+  test('homepage check-only path still uploads when permission is already granted', () async {
+    var requests = 0;
+    Geolocation? uploaded;
+    final capture = ConversationLocationCapture(
+      isLocationServiceEnabled: () async => true,
+      checkPermission: () async => LocationPermission.whileInUse,
+      requestPermission: () async {
+        requests++;
+        return LocationPermission.whileInUse;
+      },
+      getCurrentPosition: () async => _position(latitude: 35.6895, longitude: 139.6917),
+      getLastKnownPosition: () async => null,
+      upload: (geolocation) async {
+        uploaded = geolocation;
+        return true;
+      },
+    );
+
+    expect(await capture.captureAndUpload(promptIfDenied: false), isTrue);
+    expect(requests, 0);
+    expect(uploaded?.latitude, 35.6895);
+    expect(uploaded?.longitude, 139.6917);
+  });
+
   test('does not upload without location permission', () async {
     var uploads = 0;
     var requests = 0;
@@ -76,6 +123,29 @@ void main() {
     expect(uploads, 0);
     expect(requests, 0);
     expect(grants, 0);
+  });
+
+  test('deniedForever never prompts on the homepage check-only path', () async {
+    var requests = 0;
+    var uploads = 0;
+    final capture = ConversationLocationCapture(
+      isLocationServiceEnabled: () async => true,
+      checkPermission: () async => LocationPermission.deniedForever,
+      requestPermission: () async {
+        requests++;
+        return LocationPermission.deniedForever;
+      },
+      getCurrentPosition: () async => _position(latitude: 1, longitude: 2),
+      getLastKnownPosition: () async => null,
+      upload: (_) async {
+        uploads++;
+        return true;
+      },
+    );
+
+    expect(await capture.captureAndUpload(promptIfDenied: false), isFalse);
+    expect(requests, 0);
+    expect(uploads, 0);
   });
 
   test('requests while-in-use at record start when permission is denied', () async {

@@ -152,10 +152,12 @@ class _CountingSocketCaptureProvider extends CaptureProvider {
 
 class _CountingConversationLocationCapture extends ConversationLocationCapture {
   int calls = 0;
+  final List<bool> promptIfDeniedArgs = [];
 
   @override
-  Future<bool> captureAndUpload() async {
+  Future<bool> captureAndUpload({bool promptIfDenied = true}) async {
     calls++;
+    promptIfDeniedArgs.add(promptIfDenied);
     return true;
   }
 }
@@ -165,7 +167,7 @@ class _HangingConversationLocationCapture extends ConversationLocationCapture {
   final Completer<bool> _done = Completer<bool>();
 
   @override
-  Future<bool> captureAndUpload() async {
+  Future<bool> captureAndUpload({bool promptIfDenied = true}) async {
     calls++;
     return _done.future;
   }
@@ -279,6 +281,18 @@ void main() {
         );
     expect(locationCapture.calls, 1);
     locationCapture.complete();
+    provider.dispose();
+  });
+
+  test('homepage no-device streamDeviceRecording is check-only', () async {
+    final locationCapture = _CountingConversationLocationCapture();
+    final provider = CaptureProvider(
+      conversationLocationCapture: locationCapture,
+    );
+
+    await provider.streamDeviceRecording();
+    expect(locationCapture.calls, 1);
+    expect(locationCapture.promptIfDeniedArgs, [false]);
     provider.dispose();
   });
 

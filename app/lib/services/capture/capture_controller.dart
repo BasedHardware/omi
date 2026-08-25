@@ -1685,7 +1685,9 @@ class CaptureController extends ChangeNotifier
     // Product: recording is the tap; location is metadata. Do not block
     // device connect/start on the OS location dialog. Location still PATCHes
     // when the grant/fix lands; a short conversation can miss coords.
-    unawaited(_conversationLocationCapture.captureAndUpload());
+    // HomePage calls this with device == null on every entry — check-only so
+    // a fresh install cannot hit deniedForever before the user records.
+    unawaited(_conversationLocationCapture.captureAndUpload(promptIfDenied: device != null));
 
     await _resetStateVariables();
     await _resetState();
