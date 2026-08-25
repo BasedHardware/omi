@@ -25,8 +25,8 @@ from database.review_queue import purge_stale_review_conflicts_for_memories
 from database.vector_db import delete_memory_vector
 from models.memories import MemoryDB
 from models.knowledge_ledger_search import (
-    LedgerSearchSurface,
-    is_ledger_row_admissible,
+    LedgerSearchSurface as LedgerSearchSurface,
+    is_ledger_row_admissible as is_ledger_row_admissible,
     ledger_row_is_rejected,
 )
 from models.product_memory import (
