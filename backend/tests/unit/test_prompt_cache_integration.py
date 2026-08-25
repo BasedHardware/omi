@@ -22,6 +22,8 @@ from datetime import timedelta, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
@@ -195,6 +197,11 @@ tracker_mod.track_usage = MagicMock()
 gateway_mod = _stub_module("utils.llm.gateway_client")
 gateway_mod.invoke_chat_structured_gateway = MagicMock(return_value=None)
 gateway_mod.is_auto_lane_id = lambda value: isinstance(value, str) and value.startswith('omi:auto:')
+# agentic.py resolves the Perplexity tool's args_schema lazily, so utils.retrieval.tools.
+# perplexity_tools is imported under this harness and needs the gateway surface it names.
+gateway_mod.feature_auto_lane_id = lambda feature: f"omi:auto:{feature.replace('_', '-')}"
+gateway_mod.get_llm_gateway_base_url = MagicMock(return_value='https://llm-gateway.test')
+gateway_mod.llm_gateway_headers = MagicMock(return_value={})
 gateway_mod.record_chat_extraction_gateway_result = MagicMock()
 gateway_mod.raise_if_gateway_feature_mode_blocks_direct_model_surface = MagicMock()
 
@@ -211,6 +218,30 @@ langchain_runnables_mod = _stub_module("langchain_core.runnables")
 langchain_runnables_mod.RunnableConfig = dict
 langchain_callbacks_mod = _stub_module("langchain_core.callbacks")
 langchain_callbacks_mod.BaseCallbackHandler = type("BaseCallbackHandler", (), {})
+
+
+def _passthrough_tool(target=None, **_kwargs):
+    # Mirrors the langchain @tool decorator shape for module-import compatibility only:
+    # agentic.py now imports utils.retrieval.tools.web_tools directly, and web_tools.py
+    # decorates fetch_url_tool with @tool at import time. The agentic harness never
+    # invokes web tools, so the real wrapper is not needed here.
+    if callable(target):
+        return target
+    return lambda fn: fn
+
+
+_langchain_tools_was_stubbed = "langchain_core.tools" not in sys.modules
+langchain_tools_mod = _stub_module("langchain_core.tools")
+# Installed on the stub itself rather than through an autouse fixture. The fixture only ran
+# for tests in this file, so any other module that imports _get_agentic_module from here
+# (test_chat_agent_provider_retry.py) reached web_tools' import-time `from langchain_core.tools
+# import tool` against a bare stub and failed collection with ImportError.
+# Only patched when this file created the stub: when the real langchain_core.tools is already
+# imported, its own @tool works and overwriting it here would leak a passthrough decorator into
+# every production tool module imported afterwards in the same process.
+if _langchain_tools_was_stubbed:
+    langchain_tools_mod.tool = _passthrough_tool
+
 
 # --- LLMs/memory stubs ---
 llms_mod = _stub_module("utils.llms")
@@ -749,7 +780,7 @@ def test_convert_tools_produces_valid_anthropic_schemas():
     """
     agentic_mod = _get_agentic_module()
 
-    tool_schemas, tool_registry = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS)
+    tool_schemas, tool_registry = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS, include_server_web_search=True)
 
     # +1 for web_search server tool
     assert len(tool_schemas) == len(agentic_mod.CORE_TOOLS) + 1, "Should produce one schema per tool + web_search"
@@ -769,6 +800,14 @@ def test_convert_tools_produces_valid_anthropic_schemas():
         assert "defer_loading" not in schema, f"Core tool {schema['name']} should not have defer_loading"
 
 
+def test_convert_tools_does_not_enable_server_web_search_by_default():
+    agentic_mod = _get_agentic_module()
+
+    tool_schemas, _ = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS)
+
+    assert all(schema.get("name") != "web_search" for schema in tool_schemas)
+
+
 def test_convert_tools_defers_app_tools():
     """
     App tools should be marked with defer_loading=True and tool_search_tool
@@ -783,7 +822,9 @@ def test_convert_tools_defers_app_tools():
     mock_app_tool.args_schema = mock_schema
     mock_app_tool.description = "Mock app tool"
 
-    tool_schemas, tool_registry = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS, [mock_app_tool])
+    tool_schemas, tool_registry = agentic_mod._convert_tools(
+        agentic_mod.CORE_TOOLS, [mock_app_tool], include_server_web_search=True
+    )
 
     # Should have web_search + tool_search_tool + core tools + 1 app tool
     assert len(tool_schemas) == len(agentic_mod.CORE_TOOLS) + 3  # +1 web_search, +1 search tool, +1 app tool
@@ -808,7 +849,7 @@ def test_convert_tools_preserves_core_tool_order():
     """
     agentic_mod = _get_agentic_module()
 
-    tool_schemas, _ = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS)
+    tool_schemas, _ = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS, include_server_web_search=True)
 
     # Skip web_search server tool (first element) when checking core tool order
     schema_names = [s["name"] for s in tool_schemas[1:]]

@@ -194,6 +194,13 @@ def _reload_module(module_name):
 @pytest.fixture
 def loaded_route_modules(monkeypatch):
     _install_route_stubs(monkeypatch)
+    # Another test file (test_prompt_cache_integration) stubs
+    # utils.retrieval.tool_result_boundaries in sys.modules with a no-op
+    # preserve_chat_memory_tool_result_boundary. The routers re-imported below
+    # import that function by name, so restore the real module first or the
+    # fail-closed memory-output guard silently becomes a no-op under some
+    # collection orders.
+    monkeypatch.delitem(sys.modules, 'utils.retrieval.tool_result_boundaries', raising=False)
     agentic_mod = types.ModuleType('utils.retrieval.agentic')
     agentic_mod.agent_config_context = types.SimpleNamespace(set=MagicMock())
     agentic_mod.CORE_TOOLS = []
@@ -268,6 +275,42 @@ def test_tools_rest_memory_routes_fail_closed_for_unbounded_memory_like_text(loa
     assert response.sources == []
     assert 'SYSTEM:' not in response.result_text
     assert response.is_error is False
+
+
+def test_execute_tool_does_not_advertise_fetch_url(loaded_route_modules):
+    _tools_router, agent_tools, agentic, _memories_service = loaded_route_modules
+    captured = {}
+
+    async def _fetch_url_coroutine(*, url: str):
+        captured['url'] = url
+        return f'Content from {url}'
+
+    class _AsyncFetchUrlTool:
+        name = 'fetch_url_tool'
+        description = ''
+        args_schema = None
+        coroutine = staticmethod(_fetch_url_coroutine)
+
+        def invoke(self, params, config=None):
+            raise AssertionError('async fetch_url_tool must use coroutine')
+
+    original_tools = list(agentic.CORE_TOOLS)
+    try:
+        agentic.CORE_TOOLS[:] = [_AsyncFetchUrlTool()]
+        requested = 'https://example.com/article'
+
+        with pytest.raises(agent_tools.HTTPException) as error:
+            asyncio.run(
+                agent_tools.execute_tool(
+                    agent_tools.ExecuteToolRequest(tool_name='fetch_url_tool', params={'url': requested}),
+                    uid='uid-route',
+                )
+            )
+
+        assert error.value.status_code == 404
+        assert captured == {}
+    finally:
+        agentic.CORE_TOOLS[:] = original_tools
 
 
 def test_agent_execute_tool_route_has_response_model_and_preserves_bounded_memory_tool_output(loaded_route_modules):
