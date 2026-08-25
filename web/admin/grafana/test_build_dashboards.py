@@ -273,13 +273,59 @@ class ReleasePanelTests(unittest.TestCase):
             self.assertNotEqual(stat["targets"][0]["root_selector"], absent, uid)
 
 
-class ShareTileDescriptionTests(unittest.TestCase):
-    def test_share_tile_description_names_its_board_scope(self) -> None:
+class KFactorTests(unittest.TestCase):
+    """The K-factor surface: stat tile + daily graph + daily/weekly trackers,
+    platform-scoped per board, reading the rebuilt viral-signals payload."""
+
+    def test_kfactor_tile_reads_summary_and_names_its_board_scope(self) -> None:
         for uid, label in [("omi-tv", "all platforms"), ("omi-tv-macos", "macOS"),
                            ("omi-tv-mobile", "Mobile")]:
             panel = next(p for p in load(uid)["panels"]
-                         if build_dashboards.base_title(p).startswith("Share rate"))
+                         if build_dashboards.base_title(p).startswith("K-factor")
+                         and p.get("type") == "stat")
             self.assertIn(f"last 30d ({label})", panel["description"], uid)
+            target = panel["targets"][0]
+            self.assertEqual(target["root_selector"], "summary", uid)
+            self.assertEqual([c["selector"] for c in target["columns"]], ["kFactor"], uid)
+
+    def test_mobile_kfactor_tile_admits_shares_only(self) -> None:
+        panel = next(p for p in load("omi-tv-mobile")["panels"]
+                     if build_dashboards.base_title(p).startswith("K-factor")
+                     and p.get("type") == "stat")
+        self.assertIn("desktop-only", panel["description"])
+
+    def test_every_board_has_the_viral_tracker_panels(self) -> None:
+        for uid, scope in [("omi-tv", "all"), ("omi-tv-macos", "macos"),
+                           ("omi-tv-mobile", "mobile")]:
+            dash = load(uid)
+            for title, root in [("K-factor — daily", "daily"),
+                                ("Viral loop — daily", "daily"),
+                                ("Viral loop — weekly", "weekly")]:
+                panel = next(p for p in dash["panels"]
+                             if build_dashboards.base_title(p) == title)
+                target = panel["targets"][0]
+                self.assertEqual(target["root_selector"], root, f"{uid} {title}")
+                params = urllib.parse.parse_qs(
+                    urllib.parse.urlparse(target["url"]).query)
+                self.assertEqual(params["platform"], [scope], f"{uid} {title}")
+                # The date/week column is routed through the proxy's NYC
+                # rewrite, never parsed as a bare UTC-midnight day.
+                ts_cols = [c for c in target["columns"] if c["type"] == "timestamp"]
+                self.assertEqual(len(ts_cols), 1, f"{uid} {title}")
+                self.assertEqual(ts_cols[0]["timestampFormat"],
+                                 build_dashboards.RFC3339, f"{uid} {title}")
+                self.assertEqual(params["_tzdates"], [ts_cols[0]["selector"]],
+                                 f"{uid} {title}")
+
+    def test_viral_trackers_chart_all_three_signals(self) -> None:
+        for uid in ["omi-tv", "omi-tv-macos", "omi-tv-mobile"]:
+            for title in ["Viral loop — daily", "Viral loop — weekly"]:
+                panel = next(p for p in load(uid)["panels"]
+                             if build_dashboards.base_title(p) == title)
+                selectors = [c["selector"] for c in panel["targets"][0]["columns"]
+                             if c.get("type") != "timestamp"]
+                self.assertEqual(selectors, ["friend", "referral", "shares"],
+                                 f"{uid} {title}")
 
 
 class ExactRevenueTests(unittest.TestCase):

@@ -571,13 +571,13 @@
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
       },
-      "description": "Sharers \u00f7 new users, last 30d (all platforms). True K-factor needs referral attribution \u2014 not instrumented yet, so this proxies the share loop. 0% = no viral loop shipped.",
+      "description": "Viral events (friend signups + referral redemptions + summary shares) \u00f7 first-seen new users, last 30d (all platforms).",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "thresholds"
           },
-          "decimals": 1,
+          "decimals": 2,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -587,15 +587,15 @@
               },
               {
                 "color": "#f59e0b",
-                "value": 10
+                "value": 0.05
               },
               {
                 "color": "#22c55e",
-                "value": 30
+                "value": 0.15
               }
             ]
           },
-          "unit": "percent"
+          "unit": "none"
         },
         "overrides": []
       },
@@ -622,31 +622,31 @@
       },
       "targets": [
         {
-          "columns": [
-            {
-              "selector": "shareRatePct",
-              "text": "Sharers / new users",
-              "type": "number"
-            }
-          ],
+          "refId": "A",
           "datasource": {
             "type": "yesoreyeram-infinity-datasource",
             "uid": "omi-admin-api"
           },
-          "format": "table",
-          "parser": "backend",
-          "refId": "A",
-          "root_selector": "proxy",
-          "source": "url",
           "type": "json",
+          "source": "url",
+          "parser": "backend",
+          "format": "table",
           "url": "http://127.0.0.1:8899/api/omi/stats/k-factor/posthog?days=30&platform=all",
           "url_options": {
-            "data": "",
-            "method": "GET"
-          }
+            "method": "GET",
+            "data": ""
+          },
+          "root_selector": "summary",
+          "columns": [
+            {
+              "selector": "kFactor",
+              "text": "Viral events / new user",
+              "type": "number"
+            }
+          ]
         }
       ],
-      "title": "Share rate (K-factor proxy)",
+      "title": "K-factor  \u00b7  30d",
       "type": "stat"
     },
     {
@@ -5276,6 +5276,280 @@
       ],
       "title": "Infra cost by service \u2014 last 30 days",
       "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "description": "Main viral-loop trend: (friend signups + referral redemptions + summary shares) \u00f7 first-seen new users, per NYC day. Last bar = rolling last 24h.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#22c55e"
+          },
+          "custom": {
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "unit": "none",
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 990
+      },
+      "id": 992,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "parser": "backend",
+          "format": "timeseries",
+          "url": "http://127.0.0.1:8899/api/omi/stats/k-factor/posthog?days=30&_tzdates=date&platform=all",
+          "url_options": {
+            "method": "GET",
+            "data": ""
+          },
+          "root_selector": "daily",
+          "columns": [
+            {
+              "selector": "date",
+              "text": "time",
+              "type": "timestamp",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00"
+            },
+            {
+              "selector": "kFactor",
+              "text": "K-factor",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "timeFrom": "30d",
+      "title": "K-factor \u2014 daily",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "description": "The three viral signals, per NYC day. Last bar = rolling last 24h.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 65,
+            "gradientMode": "none",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            }
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 991
+      },
+      "id": 993,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "parser": "backend",
+          "format": "timeseries",
+          "url": "http://127.0.0.1:8899/api/omi/stats/k-factor/posthog?days=30&_tzdates=date&platform=all",
+          "url_options": {
+            "method": "GET",
+            "data": ""
+          },
+          "root_selector": "daily",
+          "columns": [
+            {
+              "selector": "date",
+              "text": "time",
+              "type": "timestamp",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00"
+            },
+            {
+              "selector": "friend",
+              "text": "Friend signups",
+              "type": "number"
+            },
+            {
+              "selector": "referral",
+              "text": "Referral redemptions",
+              "type": "number"
+            },
+            {
+              "selector": "shares",
+              "text": "Summary shares",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "timeFrom": "30d",
+      "title": "Viral loop \u2014 daily",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "description": "The three viral signals, per NYC Monday week. Last bucket = rolling trailing 7 days.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 65,
+            "gradientMode": "none",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            }
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 991
+      },
+      "id": 994,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "parser": "backend",
+          "format": "timeseries",
+          "url": "http://127.0.0.1:8899/api/omi/stats/k-factor/posthog?days=30&_tzdates=week&platform=all",
+          "url_options": {
+            "method": "GET",
+            "data": ""
+          },
+          "root_selector": "weekly",
+          "columns": [
+            {
+              "selector": "week",
+              "text": "time",
+              "type": "timestamp",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00"
+            },
+            {
+              "selector": "friend",
+              "text": "Friend signups",
+              "type": "number"
+            },
+            {
+              "selector": "referral",
+              "text": "Referral redemptions",
+              "type": "number"
+            },
+            {
+              "selector": "shares",
+              "text": "Summary shares",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "timeFrom": "5w",
+      "title": "Viral loop \u2014 weekly",
+      "type": "timeseries"
     },
     {
       "id": 991,

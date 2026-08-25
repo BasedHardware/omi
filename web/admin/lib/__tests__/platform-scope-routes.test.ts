@@ -21,6 +21,14 @@ vi.mock("@/lib/posthog", () => ({
     return [];
   }),
 }));
+// k-factor reads the Firestore referral ledger alongside PostHog.
+vi.mock("@/lib/firebase/admin", () => ({
+  getDb: () => ({
+    collection: () => ({
+      where: () => ({ limit: () => ({ get: async () => ({ docs: [] }) }) }),
+    }),
+  }),
+}));
 
 const MACOS_FILTER = "$os_name = 'macOS'";
 const MOBILE_FILTER = "$os_name IN ('iOS', 'Android', 'iPadOS')";
@@ -88,13 +96,22 @@ describe.each(ROUTES)("%s route", (_name, loadRoute, baseUrl) => {
 });
 
 describe("k-factor route", () => {
-  it("does not require a client OS for server-emitted referral funnel events", async () => {
+  it("scopes client viral signals to the board's OS but never the server-emitted events", async () => {
     const queries = await capture(
       () => import("@/app/api/omi/stats/k-factor/posthog/route"),
       "/api/omi/stats/k-factor/posthog?days=30&platform=macos",
     );
-    expect(queries).toHaveLength(3);
-    expectScoped(queries, "all");
+    // Client-side signals (friend answer, share actions, first-seen new
+    // users) carry the macOS scope…
+    const friend = queries.filter((q) => q.includes("Onboarding How Did You Hear"));
+    expect(friend.length).toBeGreaterThan(0);
+    for (const q of friend) expect(q).toContain(MACOS_FILTER);
+    expect(queries.some((q) => q.includes("min_ts") && q.includes(MACOS_FILTER))).toBe(true);
+    // …while the server-emitted referral funnel and share-email events have
+    // no client OS and must not be OS-filtered.
+    const funnel = queries.filter((q) => q.includes("desktop_operator_month_v1"));
+    expect(funnel).toHaveLength(3);
+    for (const q of funnel) expect(q).not.toContain("$os_name");
   });
 });
 

@@ -358,15 +358,20 @@ def latest_release_stat(panel_id: int, scope: str) -> dict:
     }
 
 
-def set_share_tile_description(dash, platform_label: str) -> None:
-    """The share-rate proxy is platform-scoped per board; keep its description
-    honest about which population the denominator counts."""
+def set_kfactor_tile_description(dash, platform_label: str, scope: str = "all") -> None:
+    """The K-factor tile is platform-scoped per board; keep its description
+    honest about which signals and which population each board counts."""
+    mobile_note = (
+        " Mobile counts summary shares only — the friend-source answer and the "
+        "referral program are desktop-only signals."
+        if scope == "mobile"
+        else ""
+    )
     for panel in dash.get("panels", []):
-        if base_title(panel).startswith("Share rate"):
+        if base_title(panel).startswith("K-factor") and panel.get("type") == "stat":
             panel["description"] = (
-                f"Sharers ÷ new users, last 30d ({platform_label}). True K-factor needs "
-                "referral attribution — not instrumented yet, so this proxies the "
-                "share loop. 0% = no viral loop shipped."
+                f"Viral events (friend signups + referral redemptions + summary shares) "
+                f"÷ first-seen new users, last 30d ({platform_label}).{mobile_note}"
             )
 
 
@@ -435,11 +440,11 @@ def build_platform_board(base, scope: str) -> dict:
     user_growth_series(cumulative, scope, "cumulative", "Total users")
     retarget_var(dash, "d_cum", path=viral_scoped, root="userGrowth", fields="users")
 
-    set_share_tile_description(dash, label)
+    set_kfactor_tile_description(dash, label, scope)
     drop_panels(dash, {RELEASES_CHART_TITLE})
-    share_idx = next(i for i, p in enumerate(dash["panels"])
-                     if base_title(p).startswith("Share rate"))
-    dash["panels"].insert(share_idx + 1, latest_release_stat(990, scope))
+    kfactor_idx = next(i for i, p in enumerate(dash["panels"])
+                       if base_title(p).startswith("K-factor") and p.get("type") == "stat")
+    dash["panels"].insert(kfactor_idx + 1, latest_release_stat(990, scope))
 
     series_label = "Desktop" if scope == "macos" else "Mobile"
     for title, new_title, series in [
@@ -515,7 +520,7 @@ def main() -> None:
     if not any(base_title(p) == RELEASES_CHART_TITLE for p in base["panels"]):
         base["panels"].append(releases_chart_panel(991))
     apply_tzdates(base)
-    set_share_tile_description(base, "all platforms")
+    set_kfactor_tile_description(base, "all platforms")
     apply_platform(base, "all")
     # The two Firestore-backed activation panels are macOS-scoped by
     # definition; their delta var compares macOS activation to stay coherent.

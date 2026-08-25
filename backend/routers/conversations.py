@@ -60,6 +60,7 @@ from utils.conversations.process_conversation import (
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations import share_email
 from utils.conversations.meeting_receipt import record_and_persist_finalized_meeting_receipt
+from utils.integration_telemetry import emit_posthog_event
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
 from utils.memory.retraction_scope import retraction_can_be_skipped
@@ -1483,6 +1484,13 @@ def send_conversation_share_email(
         # successful dispatch can trigger the visibility rollback (a delivered
         # email keeps a live link).
         share_email.send_summary_email(uid=uid, conversation=conversation, recipient_emails=to_dispatch)
+        # Viral-loop telemetry: summary shares feed the admin K-factor. Emitted
+        # only after the provider accepted, so the count is delivered shares.
+        emit_posthog_event(
+            uid,
+            'Conversation Summary Shared',
+            {'conversation_id': conversation_id, 'recipient_count': len(to_dispatch), 'channel': 'email'},
+        )
         try:
             conversations_db.confirm_share_email_recipients(uid, conversation_id, to_dispatch)
         except Exception:
