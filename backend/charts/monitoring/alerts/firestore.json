@@ -1,0 +1,198 @@
+[
+  {
+    "uid": "omi-firestore-notfound-dod-step",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Firestore Cost",
+    "title": "Firestore - NOT_FOUND read volume day-over-day step",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(stackdriver_firestore_instance_firestore_googleapis_com_document_read_count{type=\"NOT_FOUND\"}[1h])) > 1.5 * sum(rate(stackdriver_firestore_instance_firestore_googleapis_com_document_read_count{type=\"NOT_FOUND\"}[1h] offset 24h))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-08-25T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "2h",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Firestore document read_count (metric stackdriver_firestore_instance_firestore_googleapis_com_document_read_count, type=\"NOT_FOUND\") is running more than 1.5x its rate from the same hour yesterday, sustained for 2h.",
+      "threshold": "sum(rate(...[1h])) > 1.5x sum(rate(...[1h] offset 24h)), sustained 2h",
+      "user_impact": "No direct user impact; this is a cost signal, not an outage. NOT_FOUND reads are Firestore reads for documents that do not exist, so they are near-pure waste: the read is billed but returns nothing. The day-over-day comparison survives organic growth and diurnal swing, so a sustained step here is a regression.",
+      "scope": "Firestore document reads across the based-hardware production project, type=\"NOT_FOUND\" only.",
+      "verification": "Compare sum(rate(stackdriver_firestore_instance_firestore_googleapis_com_document_read_count{type=\"NOT_FOUND\"}[1h])) against the same query with `offset 24h` in the linked query; a ratio holding above 1.5x for the full 2h window is a step, not normal diurnal variation.",
+      "safe_next_action": "This alert flags read volume, not cause. The Cloud Monitoring series carries module=\"__unknown__\", so attribution needs either extending omi_firestore_read_operations_total call-site coverage or enabling a short window of Firestore DATA_READ audit logging to find the caller before making any code change."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-firestore-notfound-dod-step",
+      "component": "firestore",
+      "impact": "product"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-firestore-notfound-ceiling",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Firestore Cost",
+    "title": "Firestore - NOT_FOUND read volume above absolute ceiling",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(stackdriver_firestore_instance_firestore_googleapis_com_document_read_count{type=\"NOT_FOUND\"}[30m])) > 600",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-08-25T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "2h",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Firestore document read_count (metric stackdriver_firestore_instance_firestore_googleapis_com_document_read_count, type=\"NOT_FOUND\") has been sustained above 600 reads/sec for 2h -- above the ~361/sec healthy baseline measured before the 2026-08-23 cost incident, below the ~936/sec the leak reached.",
+      "threshold": "sum(rate(...[30m])) > 600/sec, sustained 2h",
+      "user_impact": "No direct user impact; this is a cost signal, not an outage. NOT_FOUND reads are Firestore reads for documents that do not exist, so they are near-pure waste: the read is billed but returns nothing. This is the backstop for a leak that is already running at a steady elevated rate, which the day-over-day step detector cannot see because both sides of its comparison are equally elevated.",
+      "scope": "Firestore document reads across the based-hardware production project, type=\"NOT_FOUND\" only.",
+      "verification": "Check sum(rate(stackdriver_firestore_instance_firestore_googleapis_com_document_read_count{type=\"NOT_FOUND\"}[30m])) in the linked query against the 600/sec threshold; healthy baseline is ~361/sec, the 2026-08-23 incident ran ~936/sec.",
+      "safe_next_action": "This alert flags read volume, not cause. The Cloud Monitoring series carries module=\"__unknown__\", so attribution needs either extending omi_firestore_read_operations_total call-site coverage or enabling a short window of Firestore DATA_READ audit logging to find the caller before making any code change."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-firestore-notfound-ceiling",
+      "component": "firestore",
+      "impact": "product"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  }
+]
