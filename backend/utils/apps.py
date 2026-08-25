@@ -81,7 +81,7 @@ from utils.executors import run_blocking, db_executor, llm_executor, resolver_ex
 from utils.http_client import (
     assert_public_http_url,
     safe_request_target,
-    get_web_fetch_client,
+    get_pinned_webhook_client,
     UnsafeWebhookURLError,
 )
 from utils.social import get_twitter_timeline
@@ -1557,7 +1557,7 @@ async def fetch_app_chat_tools_from_manifest(
             'User-Agent': 'Omi-App-Store/1.0',
             **pin_kwargs['headers'],
         }
-        response = await get_web_fetch_client().get(
+        response = await get_pinned_webhook_client().get(
             pinned_url,
             headers=headers,
             extensions=pin_kwargs['extensions'],

@@ -332,7 +332,7 @@ async def test_fetch_manifest_uses_pinned_target(monkeypatch):
         ]
     }
     mock_client = _async_web_fetch_client(mock_resp)
-    monkeypatch.setattr(apps_mod, 'get_web_fetch_client', lambda: mock_client)
+    monkeypatch.setattr(apps_mod, 'get_pinned_webhook_client', lambda: mock_client)
     monkeypatch.setattr(apps_mod, 'assert_public_http_url', MagicMock(return_value=PUBLIC_IP))
 
     result = await apps_mod.fetch_app_chat_tools_from_manifest('https://app.example.com/.well-known/omi-tools.json')
@@ -342,6 +342,27 @@ async def test_fetch_manifest_uses_pinned_target(monkeypatch):
     assert mock_client.get.call_args.kwargs['follow_redirects'] is False
     assert mock_client.get.call_args.kwargs['extensions']['sni_hostname'] == 'app.example.com'
     assert mock_client.get.call_args.kwargs['timeout'] == 10.0
+
+
+@pytest.mark.asyncio
+async def test_fetch_manifest_does_not_reuse_web_fetch_keepalive_pool(monkeypatch):
+    pinned, pin_kwargs = _pin('https://app.example.com/.well-known/omi-tools.json')
+    monkeypatch.setattr(apps_mod, 'safe_request_target', MagicMock(return_value=(pinned, pin_kwargs)))
+    monkeypatch.setattr(apps_mod, 'get_generic_cache', MagicMock(return_value=None))
+    monkeypatch.setattr(apps_mod, 'set_generic_cache', MagicMock())
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {'tools': []}
+    web_fetch = _async_web_fetch_client(MagicMock())
+    pinned_client = _async_web_fetch_client(mock_resp)
+    monkeypatch.setattr(apps_mod, 'get_web_fetch_client', lambda: web_fetch, raising=False)
+    monkeypatch.setattr(apps_mod, 'get_pinned_webhook_client', lambda: pinned_client)
+
+    result = await apps_mod.fetch_app_chat_tools_from_manifest('https://app.example.com/.well-known/omi-tools.json')
+    assert result is not None
+    pinned_client.get.assert_awaited_once()
+    web_fetch.get.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -364,7 +385,7 @@ async def test_fetch_manifest_resolves_dns_off_the_event_loop(monkeypatch):
     mock_resp = MagicMock()
     mock_resp.status_code = 200
     mock_resp.json.return_value = {'tools': []}
-    monkeypatch.setattr(apps_mod, 'get_web_fetch_client', lambda: _async_web_fetch_client(mock_resp))
+    monkeypatch.setattr(apps_mod, 'get_pinned_webhook_client', lambda: _async_web_fetch_client(mock_resp))
 
     result = await apps_mod.fetch_app_chat_tools_from_manifest('https://app.example.com/.well-known/omi-tools.json')
     assert result is not None
@@ -400,9 +421,7 @@ async def test_validate_tool_definition_keeps_path_relative_endpoint(monkeypatch
 async def test_validate_tool_definition_rejects_scheme_relative_endpoint(monkeypatch):
     """ "//evil.example/x" is not app-relative -- it resolves to another origin."""
     monkeypatch.setattr(apps_mod, 'assert_public_http_url', MagicMock(side_effect=UnsafeWebhookURLError('scheme')))
-    result = await apps_mod._validate_tool_definition(
-        {'name': 't', 'description': 'd', 'endpoint': '//evil.example/x'}
-    )
+    result = await apps_mod._validate_tool_definition({'name': 't', 'description': 'd', 'endpoint': '//evil.example/x'})
     assert result is None
 
 
