@@ -37,6 +37,16 @@ class _TestEnvFields implements EnvFields {
   bool? get useWebAuth => false;
   @override
   bool? get useAuthCustomToken => false;
+  @override
+  String? get authBackend => 'firebase';
+  @override
+  String? get oidcIssuer => null;
+  @override
+  String? get oidcClientId => null;
+  @override
+  String? get oidcRedirectScheme => null;
+  @override
+  String? get notificationsBackend => 'fcm';
 }
 
 /// Always-connected fake so a successful reconnect looks identical to a real

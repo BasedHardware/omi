@@ -160,7 +160,7 @@ def test_the_action_item_key_index_is_unique_and_scoped_to_live_rows():
     ON PURPOSE — the retire path marks `deleted: true, completed: false`, and the next create with that
     key is intended. Mongo cannot express "and not deleted" in a partialFilterExpression ($exists:false
     and $ne are not allowed), so the retire path clears the key and the filter demands a string."""
-    (collection, keys, partial) = _MODULE._UNIQUE_INDEXES[0]
+    collection, keys, partial = _MODULE._UNIQUE_INDEXES[0]
 
     assert collection == 'action_items'
     assert keys == [('_parent', 1), ('d.idempotency_key', 1)], 'scoped per user: _parent carries the uid'
@@ -185,7 +185,7 @@ def test_creating_a_unique_index_passes_unique_and_the_filter_through():
     ensured = _MODULE.create_unique_indexes(_Db())
 
     assert len(calls) == len(_MODULE._UNIQUE_INDEXES) and ensured
-    (_keys, kwargs) = calls[0]
+    _keys, kwargs = calls[0]
     assert kwargs['unique'] is True
     assert kwargs['partialFilterExpression'] == _MODULE._UNIQUE_INDEXES[0][2]
 

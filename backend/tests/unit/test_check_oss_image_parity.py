@@ -20,6 +20,7 @@ assert _SPEC is not None and _SPEC.loader is not None
 _MODULE = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_MODULE)
 
+
 def _ref(name: str, marker: str | None) -> str:
     """A stand-in image reference that still contains the marker the check looks for in the values."""
     return f'{marker}1.0' if marker else f'{name}:1.0'
@@ -29,9 +30,7 @@ def _ref(name: str, marker: str | None) -> str:
 PINS = '\n'.join(f'{var}={_ref(name, marker)}' for name, (var, marker) in _MODULE.COMPONENTS.items())
 
 COMPOSE = {
-    'compose.base.yaml': '\n'.join(
-        f'    image: ${{{var}:?pin missing}}' for _, (var, _) in _MODULE.COMPONENTS.items()
-    ),
+    'compose.base.yaml': '\n'.join(f'    image: ${{{var}:?pin missing}}' for _, (var, _) in _MODULE.COMPONENTS.items()),
 }
 
 

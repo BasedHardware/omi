@@ -24,9 +24,7 @@ def _load_main(monkeypatch, *, max_upload=1024, max_concurrency=2):
     monkeypatch.setenv("WHISPER_SKIP_MODEL_LOAD", "1")
     monkeypatch.setenv("WHISPER_MAX_UPLOAD_BYTES", str(max_upload))
     monkeypatch.setenv("WHISPER_MAX_CONCURRENCY", str(max_concurrency))
-    spec = importlib.util.spec_from_file_location(
-        "whisper_main_under_test", BACKEND_DIR / "whisper" / "main.py"
-    )
+    spec = importlib.util.spec_from_file_location("whisper_main_under_test", BACKEND_DIR / "whisper" / "main.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -174,8 +172,12 @@ def test_asgi_limit_rejects_oversize_content_length_before_app(monkeypatch):
         raise AssertionError("body must not reach the app / parser when Content-Length exceeds the limit")
 
     mw = main.LimitUploadSizeMiddleware(_unreachable, max_bytes=1024)
-    scope = {"type": "http", "method": "POST", "path": "/v1/audio/transcriptions",
-             "headers": [(b"content-length", b"2048")]}
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/v1/audio/transcriptions",
+        "headers": [(b"content-length", b"2048")],
+    }
     sent = []
 
     async def send(message):

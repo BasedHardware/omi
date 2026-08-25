@@ -48,9 +48,7 @@ def test_create_then_get_roundtrips_at_expected_path(store):
 def test_update_status_done_writes_result_and_clears_error(store):
     wrapped_module.create_wrapped('uid-1', 2025)
 
-    ok = wrapped_module.update_wrapped_status(
-        'uid-1', 2025, WrappedStatus.DONE, result={'top_word': 'omi'}
-    )
+    ok = wrapped_module.update_wrapped_status('uid-1', 2025, WrappedStatus.DONE, result={'top_word': 'omi'})
     assert ok is True
 
     stored = store.get('users/uid-1/wrapped/2025').to_dict()
@@ -63,9 +61,7 @@ def test_update_status_done_writes_result_and_clears_error(store):
 def test_update_status_error_records_message_and_nulls_result(store):
     wrapped_module.create_wrapped('uid-1', 2025)
 
-    ok = wrapped_module.update_wrapped_status(
-        'uid-1', 2025, WrappedStatus.ERROR, error='boom'
-    )
+    ok = wrapped_module.update_wrapped_status('uid-1', 2025, WrappedStatus.ERROR, error='boom')
     assert ok is True
 
     stored = store.get('users/uid-1/wrapped/2025').to_dict()

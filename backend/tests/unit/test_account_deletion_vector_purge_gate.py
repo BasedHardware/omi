@@ -119,7 +119,9 @@ def test_a_configured_store_is_actually_asked_to_delete(monkeypatch):
         'delete_transcript_chunk_vectors_batch',
         lambda uid, ids, raise_on_failure=False: called.append('chunks') or 1,
     )
-    monkeypatch.setattr(account_deletion, 'delete_memory_vectors_batch', lambda uid, ids: called.append('memories') or 1)
+    monkeypatch.setattr(
+        account_deletion, 'delete_memory_vectors_batch', lambda uid, ids: called.append('memories') or 1
+    )
     monkeypatch.setattr(
         account_deletion, 'delete_action_item_vectors_batch', lambda uid, ids: called.append('action_items')
     )

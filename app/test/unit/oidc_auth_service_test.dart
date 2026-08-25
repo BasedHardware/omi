@@ -33,8 +33,6 @@ class _OidcEnvFields implements EnvFields {
   String? get notificationsBackend => 'fcm';
 
   @override
-  String? get openAIAPIKey => null;
-  @override
   String? get posthogApiKey => null;
   @override
   String? get apiBaseUrl => 'https://api.omi.me/';

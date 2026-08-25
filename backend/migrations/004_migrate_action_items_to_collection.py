@@ -33,6 +33,7 @@ def _store():
     # The port's factory owns client selection via STORAGE_BACKEND; no manual init needed.
     return get_document_store()
 
+
 # Configuration
 BATCH_SIZE = 500  # Number of conversations to process per batch
 NUM_THREADS = 12  # Number of concurrent processing threads

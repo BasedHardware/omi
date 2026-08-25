@@ -28,7 +28,6 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-
 BASE = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
 
 

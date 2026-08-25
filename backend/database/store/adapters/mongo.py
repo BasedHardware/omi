@@ -435,6 +435,7 @@ class _MongoBatch:
 # ``store._db``: ``MongoDocumentStore`` hands it over from inside its own methods, where it is not a
 # private access at all.
 
+
 def _do_get(
     db,
     path: str,
@@ -753,10 +754,6 @@ class MongoDocumentStore:
 
     # --- internal ops (shared by the public surface and the transaction handle) ---
 
-
-
-
-
     # --- public port surface ---
     def get(
         self, path: str, *, fields: Optional[Sequence[str]] = None, timeout: Optional[float] = None
@@ -775,7 +772,6 @@ class MongoDocumentStore:
 
     def create(self, path: str, data: Dict[str, Any]) -> None:
         _do_create(self._db, path, data)
-
 
     def delete(self, path: str, *, if_updated_at: Any = None) -> None:
         _do_delete(self._db, path, if_updated_at=if_updated_at)
@@ -803,8 +799,6 @@ class MongoDocumentStore:
             fields=fields,
             start_after=start_after,
         )
-
-
 
     def count(self, collection: str, *, filters: Optional[Iterable[Filter]] = None) -> int:
         return self._db[_collection_name(collection)].count_documents(_build_filter(collection, filters))

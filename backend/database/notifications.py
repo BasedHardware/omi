@@ -378,9 +378,7 @@ def get_users_id_in_timezones(timezones: list[str]) -> List[Union[str, Tuple[str
     return _get_users_in_timezones(timezones, 'id')
 
 
-def get_users_for_daily_summary(
-    timezones: list[str], target_local_hour: int
-) -> List[Tuple[str, Dict[str, Any], Any]]:
+def get_users_for_daily_summary(timezones: list[str], target_local_hour: int) -> List[Tuple[str, Dict[str, Any], Any]]:
     """Eligible daily-summary users in the given timezones: ``(uid, user_data, time_zone)``.
 
     Queries users who (1) are in one of the timezones (where it is currently ``target_local_hour``),

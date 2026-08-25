@@ -93,9 +93,15 @@ def test_remove_bulk_endpoints_noop_on_empty(fake_store):
 def test_get_users_endpoints_in_timezones(fake_store):
     # save_endpoint carries time_zone (the REST model requires it) and writes it onto the endpoint doc,
     # so the fan-out is a SINGLE collection-group query on the endpoints' time_zone — no per-user N+1.
-    notification_db.save_endpoint('u1', {'endpoint': 'http://ntfy/1?up=1', 'device_key': 'a', 'time_zone': 'Europe/Rome'})
-    notification_db.save_endpoint('u2', {'endpoint': 'http://ntfy/2?up=1', 'device_key': 'b', 'time_zone': 'Europe/Rome'})
-    notification_db.save_endpoint('u3', {'endpoint': 'http://ntfy/3?up=1', 'device_key': 'c', 'time_zone': 'America/New_York'})
+    notification_db.save_endpoint(
+        'u1', {'endpoint': 'http://ntfy/1?up=1', 'device_key': 'a', 'time_zone': 'Europe/Rome'}
+    )
+    notification_db.save_endpoint(
+        'u2', {'endpoint': 'http://ntfy/2?up=1', 'device_key': 'b', 'time_zone': 'Europe/Rome'}
+    )
+    notification_db.save_endpoint(
+        'u3', {'endpoint': 'http://ntfy/3?up=1', 'device_key': 'c', 'time_zone': 'America/New_York'}
+    )
 
     got = notification_db.get_users_endpoints_in_timezones(['Europe/Rome'])
     assert sorted(_urls(got)) == ['http://ntfy/1?up=1', 'http://ntfy/2?up=1']  # NY user excluded

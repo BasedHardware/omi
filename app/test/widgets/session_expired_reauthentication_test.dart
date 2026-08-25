@@ -67,8 +67,6 @@ class _FakeEnv implements EnvFields {
   @override
   String? get apiBaseUrl => 'https://api.omi.me/';
 
-  @override
-  String? get openAIAPIKey => null;
 
   @override
   String? get posthogApiKey => null;

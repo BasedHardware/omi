@@ -72,6 +72,7 @@ def _leaf(name, **attrs):
 
 # --- 002 ------------------------------------------------------------------------------------------
 
+
 def _load_002():
     return _load(
         "002_populate_historical_usage.py",
@@ -88,6 +89,7 @@ def _load_002():
 def test_002_exits_nonzero_when_a_worker_fails(monkeypatch):
     mod, restore = _load_002()
     try:
+
         def _worker(uid):
             if uid == "bad":
                 raise RuntimeError("boom")
@@ -113,6 +115,7 @@ def test_002_exits_clean_when_all_workers_succeed(monkeypatch):
 
 
 # --- 006 ------------------------------------------------------------------------------------------
+
 
 class _Doc:
     def __init__(self, doc_id):

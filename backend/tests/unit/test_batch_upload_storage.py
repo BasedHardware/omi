@@ -633,7 +633,14 @@ class TestCopyAudioChunksForMergeBatchAware:
         store = self._prepare(
             merge,
             monkeypatch,
-            [{'timestamp': 1000.000, 'path': 'chunks/uid/conv-old/1000.000-1060.000.batch.bin', 'size': 960000, 'is_batch': True}],
+            [
+                {
+                    'timestamp': 1000.000,
+                    'path': 'chunks/uid/conv-old/1000.000-1060.000.batch.bin',
+                    'size': 960000,
+                    'is_batch': True,
+                }
+            ],
         )
 
         merge._copy_audio_chunks_for_merge('uid', [{'id': 'conv-old'}], 'conv-new')
@@ -660,7 +667,12 @@ class TestCopyAudioChunksForMergeBatchAware:
             monkeypatch,
             [
                 {'timestamp': 1000.000, 'path': 'chunks/uid/conv-old/1000.000.enc', 'size': 80000, 'is_batch': False},
-                {'timestamp': 1010.000, 'path': 'chunks/uid/conv-old/1010.000-1070.000.batch.enc', 'size': 960000, 'is_batch': True},
+                {
+                    'timestamp': 1010.000,
+                    'path': 'chunks/uid/conv-old/1010.000-1070.000.batch.enc',
+                    'size': 960000,
+                    'is_batch': True,
+                },
             ],
         )
 

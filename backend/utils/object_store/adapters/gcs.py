@@ -136,7 +136,9 @@ class GCSObjectStore:
         out: List[ObjectInfo] = []
         for blob in _storage_client().list_blobs(bucket, prefix=prefix):
             out.append(
-                ObjectInfo(key=blob.name, size=int(blob.size or 0), updated_at=blob.updated, metadata=dict(blob.metadata or {}))
+                ObjectInfo(
+                    key=blob.name, size=int(blob.size or 0), updated_at=blob.updated, metadata=dict(blob.metadata or {})
+                )
             )
         return out
 
@@ -184,8 +186,10 @@ class GCSObjectStore:
         # / emulator via STORAGE_EMULATOR_HOST) returns reachable URLs instead of hard-coding the
         # public Google host (cubic review PR 10887).
         base = (
-            os.getenv("GCS_PUBLIC_ENDPOINT") or os.getenv("STORAGE_EMULATOR_HOST") or "https://storage.googleapis.com"
-        ).strip().rstrip("/")
+            (os.getenv("GCS_PUBLIC_ENDPOINT") or os.getenv("STORAGE_EMULATOR_HOST") or "https://storage.googleapis.com")
+            .strip()
+            .rstrip("/")
+        )
         return f"{base}/{bucket}/{key}"
 
 

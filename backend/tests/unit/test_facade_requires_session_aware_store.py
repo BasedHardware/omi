@@ -156,6 +156,7 @@ def test_begin_takes_the_session_from_the_store_not_from_a_sniffed_attribute():
     A store that carries a ``_mongo_client`` AND declares its own opener must get the declared
     session. Under the old inference the sniffed client won and started its own transaction.
     """
+
     class _Sentinel(FakeDocumentStore):
         """A usable session (the fake's own six ops) whose IDENTITY is what the test follows."""
 

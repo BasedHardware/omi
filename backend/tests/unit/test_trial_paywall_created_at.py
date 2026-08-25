@@ -16,8 +16,14 @@ def test_firebase_get_user_profile_maps_creation_timestamp_to_created_at(monkeyp
     import utils.auth.adapters.firebase as fb
 
     rec = SimpleNamespace(
-        uid='u1', email='a@b.c', email_verified=True, phone_number=None, display_name='Ada',
-        photo_url=None, disabled=False, provider_data=[],
+        uid='u1',
+        email='a@b.c',
+        email_verified=True,
+        phone_number=None,
+        display_name='Ada',
+        photo_url=None,
+        disabled=False,
+        provider_data=[],
         user_metadata=SimpleNamespace(creation_timestamp=1700000000000),
     )
     monkeypatch.setattr(fb, '_auth', lambda: SimpleNamespace(get_user=lambda uid: rec))

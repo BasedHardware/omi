@@ -287,9 +287,7 @@ class TestDownloadFallbackPath:
 
     def _seed(self, ext, data):
         # download reads _object_store().get_bytes(bucket, path); an absent ext raises ObjectNotFound.
-        storage_mod._object_store().put(
-            storage_mod.private_cloud_sync_bucket, f'chunks/uid/conv/1000.000.{ext}', data
-        )
+        storage_mod._object_store().put(storage_mod.private_cloud_sync_bucket, f'chunks/uid/conv/1000.000.{ext}', data)
 
     @patch.object(storage_mod, 'encryption')
     def test_fallback_opus_corrupt_to_legacy_bin(self, mock_encryption):

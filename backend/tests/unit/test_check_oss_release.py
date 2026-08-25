@@ -23,7 +23,7 @@ RELEASE = 'OMI_OSS_RELEASE=0.2.0\n'
 GITIGNORE = '.env\n!omi.oss.release.env\n'
 COMPOSE = {
     'compose.base.yaml': '    image: omi-oss-backend:${OMI_OSS_RELEASE:?release not set}\n'
-                         '    image: ${OMI_OSS_MONGO_IMAGE:?pin missing}\n',
+    '    image: ${OMI_OSS_MONGO_IMAGE:?pin missing}\n',
 }
 
 

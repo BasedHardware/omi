@@ -14,7 +14,10 @@ import pytest
 
 SEED_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))),
-    "deploy", "onprem", "seed", "seed_meld_users.py",
+    "deploy",
+    "onprem",
+    "seed",
+    "seed_meld_users.py",
 )
 
 
@@ -48,7 +51,7 @@ def test_api_reacquires_token_on_401():
     status, res = mod._api("POST", "http://api/v1/x", token, data={"k": 1})
     assert (status, res) == (200, {"id": "c1"})
     assert calls["mints"] == 2  # re-minted exactly once on the 401
-    assert calls["api"] == 2    # original attempt + one retry
+    assert calls["api"] == 2  # original attempt + one retry
 
 
 def test_api_propagates_non_401_without_refresh():
@@ -68,4 +71,4 @@ def test_api_propagates_non_401_without_refresh():
     with pytest.raises(RuntimeError, match="-> 500"):
         mod._api("GET", "http://api/v1/x", token, expect=(200,))
     assert calls["mints"] == 1  # a 500 is not an auth problem: no re-mint
-    assert calls["api"] == 1    # and no retry
+    assert calls["api"] == 1  # and no retry

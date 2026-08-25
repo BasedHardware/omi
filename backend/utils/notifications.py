@@ -485,7 +485,9 @@ def _as_unifiedpush_endpoints(recipients: List[Any]) -> List[Any]:
     return [r if isinstance(r, UnifiedPushEndpoint) else UnifiedPushEndpoint(url=r) for r in recipients]
 
 
-async def send_bulk_notification(user_tokens: List[str], title: str, body: str, push_backend: Optional[str] = None) -> None:
+async def send_bulk_notification(
+    user_tokens: List[str], title: str, body: str, push_backend: Optional[str] = None
+) -> None:
     """Send notification to multiple users in batches.
 
     ``push_backend`` lets a caller that already resolved the backend (e.g. the daily-summary fan-out,

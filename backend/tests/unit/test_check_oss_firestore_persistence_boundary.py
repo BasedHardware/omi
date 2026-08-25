@@ -128,12 +128,12 @@ def test_collect_counts_excludes_boundary_and_allowlisted_dirs(tmp_path):
         (backend / rel).mkdir(parents=True)
     # A raw SDK client construction is the forbidden leak (ADR-0044); facade use around it is fine.
     leak = 'from google.cloud import firestore\ndb = firestore.Client()\nx = db.document("p").get()\n'
-    (backend / 'database' / 'users.py').write_text(leak)          # boundary: allowed
-    (backend / 'tests' / 'test_x.py').write_text(leak)            # tests: allowed
-    (backend / 'testing' / 'harness.py').write_text(leak)         # testing: allowed
-    (backend / 'scripts' / 'oneoff.py').write_text(leak)          # scripts: allowed
-    (backend / 'agent-proxy' / 'main.py').write_text(leak)        # separate service: allowed
-    (backend / 'routers' / 'leaky.py').write_text(leak)           # runtime router: FLAGGED
+    (backend / 'database' / 'users.py').write_text(leak)  # boundary: allowed
+    (backend / 'tests' / 'test_x.py').write_text(leak)  # tests: allowed
+    (backend / 'testing' / 'harness.py').write_text(leak)  # testing: allowed
+    (backend / 'scripts' / 'oneoff.py').write_text(leak)  # scripts: allowed
+    (backend / 'agent-proxy' / 'main.py').write_text(leak)  # separate service: allowed
+    (backend / 'routers' / 'leaky.py').write_text(leak)  # runtime router: FLAGGED
 
     counts = _MODULE.collect_counts(tmp_path, Path('backend'))
     assert counts == {'backend/routers/leaky.py': 1}

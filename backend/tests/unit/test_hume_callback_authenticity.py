@@ -253,9 +253,7 @@ def _drive_handler(monkeypatch, *, task_id, expected_task_id):
     monkeypatch.setattr(pc.conversations_db, 'get_conversation', lambda _uid, _cid: None)
 
     callback = HumeJobCallbackModel.from_dict('prosody', {'job_id': 'hume-job-1', 'status': 'COMPLETED'})
-    pc.process_user_expression_measurement_callback(
-        TaskActionProvider.HUME, 'hume-job-1', callback, expected_task_id
-    )
+    pc.process_user_expression_measurement_callback(TaskActionProvider.HUME, 'hume-job-1', callback, expected_task_id)
     return writes
 
 
@@ -292,7 +290,11 @@ def test_a_signing_failure_skips_the_measurement_instead_of_failing_the_conversa
     monkeypatch.setattr(pc.tasks_db, 'create', lambda *_a, **_kw: None)
     monkeypatch.setattr(pc.tasks_db, 'update', lambda *_a, **_kw: submitted.append('update'))
     monkeypatch.setattr(
-        pc, 'get_hume', lambda: type('C', (), {'request_user_expression_mersurement': lambda *a, **k: submitted.append('sent') or {}})()
+        pc,
+        'get_hume',
+        lambda: type(
+            'C', (), {'request_user_expression_mersurement': lambda *a, **k: submitted.append('sent') or {}}
+        )(),
     )
     import utils.other.hume_callback_token as token_module
 

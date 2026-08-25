@@ -112,7 +112,9 @@ class FakeObjectStore:
         out: List[ObjectInfo] = []
         for (b, k), obj in sorted(self._objs.items()):
             if b == bucket and k.startswith(prefix):
-                out.append(ObjectInfo(key=k, size=len(obj.data), updated_at=obj.updated_at, metadata=dict(obj.metadata)))
+                out.append(
+                    ObjectInfo(key=k, size=len(obj.data), updated_at=obj.updated_at, metadata=dict(obj.metadata))
+                )
         return out
 
     # --- mutations ---

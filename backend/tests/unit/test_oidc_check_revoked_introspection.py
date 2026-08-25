@@ -86,7 +86,9 @@ def test_introspect_inactive_flag(monkeypatch):
     monkeypatch.setenv("OIDC_ADMIN_CLIENT_ID", "omi-backend-admin")
     monkeypatch.setenv("OIDC_ADMIN_CLIENT_SECRET", "secret")
     monkeypatch.setattr(
-        httpx, "post", lambda url, data=None, timeout=None: SimpleNamespace(status_code=200, json=lambda: {"active": False})
+        httpx,
+        "post",
+        lambda url, data=None, timeout=None: SimpleNamespace(status_code=200, json=lambda: {"active": False}),
     )
     assert OIDCAuthProvider()._introspect_active("tok") is False
 
@@ -101,7 +103,9 @@ def test_introspect_non_boolean_active_is_fail_closed(monkeypatch):
         monkeypatch.setattr(
             httpx,
             "post",
-            lambda url, data=None, timeout=None, _v=bogus: SimpleNamespace(status_code=200, json=lambda: {"active": _v}),
+            lambda url, data=None, timeout=None, _v=bogus: SimpleNamespace(
+                status_code=200, json=lambda: {"active": _v}
+            ),
         )
         assert OIDCAuthProvider()._introspect_active("tok") is False, f"non-bool active {bogus!r} must be inactive"
 
@@ -113,7 +117,9 @@ def test_introspect_non_object_json_raises_autherror(monkeypatch):
     monkeypatch.setenv("OIDC_ADMIN_CLIENT_ID", "omi-backend-admin")
     monkeypatch.setenv("OIDC_ADMIN_CLIENT_SECRET", "secret")
     monkeypatch.setattr(
-        httpx, "post", lambda url, data=None, timeout=None: SimpleNamespace(status_code=200, json=lambda: ["not", "an", "object"])
+        httpx,
+        "post",
+        lambda url, data=None, timeout=None: SimpleNamespace(status_code=200, json=lambda: ["not", "an", "object"]),
     )
     with pytest.raises(errors.AuthError):
         OIDCAuthProvider()._introspect_active("tok")

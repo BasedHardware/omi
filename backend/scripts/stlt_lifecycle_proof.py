@@ -99,6 +99,7 @@ def _safe_error(exc: BaseException) -> str:
 def _configure_env(*, project: str) -> None:
     os.environ["GOOGLE_CLOUD_PROJECT"] = project
     os.environ["GOOGLE_CLOUD_PROJECT_ID"] = project
+
     # A Firestore client built from SERVICE_ACCOUNT_JSON uses the credential's own project_id, not
     # GOOGLE_CLOUD_PROJECT — so a mismatched credential would silently read/write a different project
     # than --project while the proof still reports --project as its target. Fail closed so an operator

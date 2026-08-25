@@ -152,7 +152,9 @@ class TestProfileContact:
     @patch('routers.mcp.users_db')
     def test_includes_name_email_phone_from_auth(self, mock_users, mock_auth, mock_phone):
         mock_users.get_ai_user_profile.return_value = {'profile_text': 'builds AI', 'data_sources_used': 3}
-        mock_auth.return_value.get_user_profile.return_value = _firebase_user('Nik Shevchenko', 'nik@example.com', '+15551234567')
+        mock_auth.return_value.get_user_profile.return_value = _firebase_user(
+            'Nik Shevchenko', 'nik@example.com', '+15551234567'
+        )
         result = rest.get_user_profile(uid=UID)
         assert result.name == 'Nik Shevchenko'
         assert result.email == 'nik@example.com'

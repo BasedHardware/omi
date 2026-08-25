@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import pytest
 
-
 # --- L9: the vector fake must interpret the neutral filter contract, not its own dialect ---------
 
 

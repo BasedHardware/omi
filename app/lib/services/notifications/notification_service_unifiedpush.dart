@@ -318,7 +318,8 @@ class _UnifiedPushNotificationService implements NotificationInterface {
 
   @override
   Future<String> getTimeZone() async {
-    return await FlutterTimezone.getLocalTimezone();
+    final timezone = await FlutterTimezone.getLocalTimezone();
+    return timezone.identifier;
   }
 
   @override

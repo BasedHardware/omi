@@ -17,6 +17,7 @@ widening the blind spot again.
 
 from __future__ import annotations
 
+import functools
 import re
 from pathlib import Path
 
@@ -36,13 +37,25 @@ GUARDS = (
 # script runtime-reachable. Mirrors the guards' own exclusions.
 NOT_RUNTIME = ('scripts/', 'tests/', 'testing/', 'agent-proxy/')
 
+# Build scratch, which is not source at all. The walk below said "computed from the source" and then
+# read every .py under backend/ — including `backend/.venv`, which the CI job's own earlier step
+# creates before this test runs. Scanning a virtualenv is both wrong (a dependency importing something
+# named `scripts.` is not our runtime) and expensive: it took each of this file's six tests past the
+# 1.00s fast-unit ceiling at ~7s of CPU apiece. Locally it stayed fast only because no venv was there.
+NOT_SOURCE = ('.venv', '.openapi-venv', 'node_modules', '__pycache__', '.pytest_cache', '_temp')
 
+
+@functools.lru_cache(maxsize=None)
 def _runtime_reachable() -> dict[str, set[str]]:
-    """{scripts/<module>.py: {importers}} computed from the source."""
+    """{scripts/<module>.py: {importers}} computed from the source.
+
+    Cached: the answer is a property of the tree, and every test in this file asks for it. Recomputing
+    the walk six times was the other half of the cost. Callers only read the result.
+    """
     reachable: dict[str, set[str]] = {}
     for path in BACKEND.rglob('*.py'):
         relative = path.relative_to(BACKEND).as_posix()
-        if relative.startswith(NOT_RUNTIME):
+        if relative.startswith(NOT_RUNTIME) or any(part in NOT_SOURCE for part in path.parts):
             continue
         text = path.read_text(encoding='utf-8', errors='replace')
         for module in re.findall(r'(?:from|import)\s+scripts\.([A-Za-z_][A-Za-z0-9_]*)', text):

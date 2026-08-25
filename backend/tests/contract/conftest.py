@@ -34,7 +34,6 @@ import pytest
 
 from tests.store_fakes import install_fake_db_client
 
-
 # ``db`` is a lazy proxy that resolves through the accessor on every call, so patching the accessor is
 # enough for it. ``get_firestore_client`` is NOT: several domain modules import the FUNCTION OBJECT at
 # module load, so patching ``_client.get_firestore_client`` never reaches them. On the mongo leg those

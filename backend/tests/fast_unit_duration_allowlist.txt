@@ -311,6 +311,11 @@ tests/unit/test_vector_dimension_crosscheck.py::test_agreement_is_silent
 tests/unit/test_vector_namespace_model.py::test_the_boot_check_reports_a_swapped_model
 # First test of a file that imports the subscription/paywall stack to read an account's created_at.
 tests/unit/test_trial_paywall_created_at.py::test_trial_expiry_reads_created_at_and_fires_for_old_accounts
+# Measured over the ceiling on CI's runner, not ours: their machine is slower per-CPU, so the set of
+# first-tests that clear 1.00s differs from what a local run shows. These three came from the CI log.
+tests/unit/test_selfhost_stage_contract.py::test_the_gateway_interlock_treats_selfhost_as_a_real_runtime
+tests/unit/test_selfhost_stage_contract.py::test_promotion_flex_fails_closed_on_selfhost
+tests/unit/test_vector_upsert_chunking.py::test_qdrant_needs_no_chunking_and_gets_none
 # First test of a file that imports the MCP router graph to read its discovery document.
 tests/unit/test_mcp_resource_identity.py::test_the_document_reports_the_configured_resource
 # First test of a file that imports the notification stack (FCM + UnifiedPush channels).

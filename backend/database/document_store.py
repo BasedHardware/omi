@@ -25,6 +25,7 @@ def _store() -> Any:
 
 # --- single-document ops --------------------------------------------------------------
 
+
 def get_document(path: str) -> StoredDocument:
     """Return the neutral document record at ``path`` (``.exists`` False when absent)."""
     return _store().get(path)
@@ -47,6 +48,7 @@ def delete_document(path: str) -> None:
 
 
 # --- collection reads -----------------------------------------------------------------
+
 
 def stream_collection(path: str) -> List[StoredDocument]:
     """Return every document record under the collection at ``path``."""
@@ -94,6 +96,7 @@ def get_many_documents(path: str, ids: Sequence[str]) -> List[StoredDocument]:
 
 
 # --- transactions ---------------------------------------------------------------------
+
 
 def run_transaction(fn: Callable[[Any], Any]) -> Any:
     """Run ``fn(tx)`` inside a port transaction.

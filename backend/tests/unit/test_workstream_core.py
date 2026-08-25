@@ -1222,7 +1222,9 @@ def test_noop_refocus_writes_goal_to_conflict_with_concurrent_unfocus(fake_db):
     key = ('users', 'u1', 'goals', 'g0')
     before = fake_db.rows[key]['updated_at']
 
-    result = goals_db.focus_goal('u1', 'g0', idempotency_key='refocus-g0', account_generation=3, firestore_client=fake_db)
+    result = goals_db.focus_goal(
+        'u1', 'g0', idempotency_key='refocus-g0', account_generation=3, firestore_client=fake_db
+    )
     assert fake_db.rows[key]['updated_at'] > before  # the no-op touched the goal doc -> conflict source
     assert result['updated_at'] == fake_db.rows[key]['updated_at']  # returned result reflects the touch
     assert result['status'] == 'focused'

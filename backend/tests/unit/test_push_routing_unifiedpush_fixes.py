@@ -21,7 +21,9 @@ def test_important_conversation_routes_without_fcm_token_precheck(monkeypatch):
 def test_byok_notification_delivers_via_lazy_import(monkeypatch):
     sent = []
     # The function imports send_user_notification lazily from utils.notifications at call time.
-    monkeypatch.setattr(notifications, "send_user_notification", lambda uid, title, body, data: sent.append((uid, data)) or 1)
+    monkeypatch.setattr(
+        notifications, "send_user_notification", lambda uid, title, body, data: sent.append((uid, data)) or 1
+    )
     monkeypatch.setattr(byok_errors, "try_acquire_byok_llm_error_notification_lock", lambda *a, **k: True)
     monkeypatch.setattr(byok_errors, "release_byok_llm_error_notification_lock", lambda *a, **k: None)
 

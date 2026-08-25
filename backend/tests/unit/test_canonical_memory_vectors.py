@@ -726,9 +726,7 @@ def test_backfill_idempotent_skip_never_bypasses_normal_outbox(monkeypatch):
     install_fake_db_client(monkeypatch, store=shared)
 
     def _apply_materializes_item(**_kwargs):
-        backfill_store_docs[f"users/{uid}/memory_items/{canonical_memory_id}"] = committed_item.model_dump(
-            mode="json"
-        )
+        backfill_store_docs[f"users/{uid}/memory_items/{canonical_memory_id}"] = committed_item.model_dump(mode="json")
         return apply_result
 
     with patch(

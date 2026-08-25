@@ -87,7 +87,9 @@ class FakeVectorStore:
     def delete_by_filter(self, namespace: str, filter: Dict[str, Any]) -> None:
         neutral_filters.validate(filter)
         doomed = [
-            key for key, vec in self._data.items() if key[0] == namespace and neutral_filters.matches(filter, vec.metadata)
+            key
+            for key, vec in self._data.items()
+            if key[0] == namespace and neutral_filters.matches(filter, vec.metadata)
         ]
         for key in doomed:
             del self._data[key]

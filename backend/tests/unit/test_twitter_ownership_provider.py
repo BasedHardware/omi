@@ -23,7 +23,9 @@ def _run(providers, persona_id=None):
     ) as up, patch.object(
         apps, 'add_twitter_to_persona', new=AsyncMock(return_value={'id': 'p-existing', 'username': 'e'})
     ) as add:
-        asyncio.run(apps.verify_twitter_ownership_tweet(username='user', handle='user', uid='u1', persona_id=persona_id))
+        asyncio.run(
+            apps.verify_twitter_ownership_tweet(username='user', handle='user', uid='u1', persona_id=persona_id)
+        )
         return up, add
 
 

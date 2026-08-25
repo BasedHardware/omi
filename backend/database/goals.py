@@ -580,7 +580,9 @@ def focus_goal(
         # on the Mongo-backed facade. Idempotent replays returned above never touch it.
         reservation_ref = _goal_focus_reservation_ref(uid, firestore_client=client)
         reservation_snapshot = reservation_ref.get(transaction=write_transaction)
-        reservation_version = (reservation_snapshot.to_dict() or {}).get('version', 0) if reservation_snapshot.exists else 0
+        reservation_version = (
+            (reservation_snapshot.to_dict() or {}).get('version', 0) if reservation_snapshot.exists else 0
+        )
         target_snapshot = target_ref.get(transaction=write_transaction)
         if not target_snapshot.exists:
             raise GoalNotFoundError(goal_id)
