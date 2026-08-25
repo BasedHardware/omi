@@ -29,13 +29,20 @@ import type {NativeHttpRequest, OmiBackend} from '../src/omiNative';
 import {omiAuth as browserOmiAuth} from '../src/omiNative.web';
 
 test('keeps first-run onboarding copy off the retired host', () => {
-  const appSource = readFileSync(resolve(__dirname, '../App.tsx'), 'utf8');
-  const onboardingStart = appSource.indexOf('First-run onboarding');
+  const onboardingSource = readFileSync(
+    resolve(__dirname, '../src/ui/Onboarding.tsx'),
+    'utf8',
+  );
+  const recoverySource = readFileSync(
+    resolve(__dirname, '../src/ui/Recovery.tsx'),
+    'utf8',
+  );
 
-  expect(onboardingStart).toBeGreaterThan(-1);
-  expect(
-    appSource.slice(onboardingStart, onboardingStart + 3000),
-  ).not.toContain('h.omi.me');
+  expect(onboardingSource).toContain('First-run onboarding');
+  expect(onboardingSource).not.toContain('h.omi.me');
+  expect(onboardingSource).not.toContain('8787');
+  expect(recoverySource).not.toContain('h.omi.me');
+  expect(recoverySource).not.toContain('8787');
 });
 
 test('treats onboarding as complete in the JavaScript-only adapter', async () => {
