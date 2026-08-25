@@ -1,11 +1,12 @@
 // Wlroots-family compositors known to ship without reliable XWayland support
-// (confirmed on niri — see AGENTS.md's Linux dev section: the XWayland ozone
-// path can fail to map the main window at all there, tray icon only). Sway
-// and Hyprland are the other two wlroots compositors this project's docs call
-// out (docs/linux-screen-recording.md) and share the same "XWayland is
-// optional, sometimes absent" shape, so they're treated the same pending
-// their own confirmed repro. Detected via each compositor's own session
-// marker env var — XDG_CURRENT_DESKTOP isn't set consistently across them.
+// (confirmed on niri — see docs/multi-worktree-dev.md's environment-overrides
+// and troubleshooting sections: the XWayland ozone path can fail to map the
+// main window at all there, tray icon only). Sway and Hyprland are the other
+// two wlroots compositors this project's docs call out (same doc) and share
+// the same "XWayland is optional, sometimes absent" shape, so they're
+// treated the same pending their own confirmed repro. Detected via each
+// compositor's own session marker env var — XDG_CURRENT_DESKTOP isn't set
+// consistently across them.
 const WAYLAND_NATIVE_COMPOSITORS: Record<string, string> = {
   niri: 'NIRI_SOCKET',
   sway: 'SWAYSOCK',
