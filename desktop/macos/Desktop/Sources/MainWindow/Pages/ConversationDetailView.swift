@@ -390,6 +390,11 @@ struct ConversationDetailView: View {
 
       Spacer()
 
+      // The meeting's chosen frame, sharp and with nothing written over it. It sets this row's
+      // height, so a note with a banner gets a slightly taller header and a note without one is
+      // exactly as it was.
+      headerBannerInset
+
       // View Transcript pill button
       viewTranscriptButton
 
@@ -426,8 +431,24 @@ struct ConversationDetailView: View {
   @ViewBuilder
   private var headerBanner: some View {
     if MeetingScreenshotsStore.isEnabled, let banner = screenshotsStore.banner {
-      MeetingNoteHeaderBanner(
+      MeetingNoteHeaderBanner(frame: banner)
+    }
+  }
+
+  @ViewBuilder
+  private var headerBannerInset: some View {
+    if MeetingScreenshotsStore.isEnabled, let banner = screenshotsStore.banner {
+      MeetingNoteHeaderInset(
         frame: banner,
+        onOpen: {
+          ScreenFrameQuickLook.shared.present(
+            screenshotsStore.quickLookFrames,
+            startingAt: banner.id,
+            refreshing: {
+              await screenshotsStore.refreshPersistedSet()
+              return screenshotsStore.quickLookFrames
+            })
+        },
         onContentUnavailable: { Task { await screenshotsStore.refreshPersistedSet() } })
     }
   }

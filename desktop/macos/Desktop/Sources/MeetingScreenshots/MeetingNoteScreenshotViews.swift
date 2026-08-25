@@ -75,42 +75,25 @@ struct MeetingNoteScreenshotsLayout<BeforeScreenshots: View, AfterScreenshots: V
   }
 }
 
-// MARK: - The ground behind the note header
+// MARK: - The ground behind the note header, and the frame on it
 
-/// This conversation's banner, painted behind `ConversationDetailView`'s header.
+/// This conversation's banner ground, painted behind `ConversationDetailView`'s header.
 ///
-/// Background only — it draws no text of its own. The title, the date, the emoji, the back chip
-/// and every action button are the header's own real chrome, unchanged and still in front. That is
-/// the whole point of the move: the banner used to draw its own copy of a title the header was
-/// already drawing.
+/// Background only — it draws no text and no picture. The title, date, emoji, back chip and every
+/// action button are the header's own real chrome, in front of it; the frame itself is
+/// `MeetingNoteHeaderInset`, a discrete element in the header's own layout.
 ///
-/// **The shell is light-pinned** (`InkGlass.appearance` is `.aqua`, so `Ink.primary` is near-black
-/// in every window). A ground at the strength the old full banner used — where the title was white
-/// on a saturated gradient — would put near-black text on a dark field. So the ground is washed
-/// back and finished with a light veil, and the readability of the header is a property of this
-/// view rather than something the header has to opt into.
+/// **Those are two views because one of them could not be both.** The first attempt put the frame
+/// *in* this ground, behind the chrome, and the two requirements it had to satisfy are mutually
+/// exclusive: the shell is light-pinned (`InkGlass.appearance` is `.aqua`, so `Ink.primary` is
+/// near-black in every window) and approved frames are routinely near-black too, because most of
+/// them are dark-mode editors — so the veil that keeps the title and the five action buttons
+/// legible over a black screenshot is, necessarily, a veil that erases the screenshot. Measured on
+/// a real note, at the strength the header needs it reads as a plain grey gradient and nothing
+/// else. A picture with chrome on top of it is not a picture. So the ground is a wash, and the
+/// frame gets a place of its own where nothing is written over it.
 struct MeetingNoteHeaderBanner: View {
   let frame: ConversationScreenFrame
-  /// The image failed to load — most likely an expired signed URL. Called at most once.
-  var onContentUnavailable: (() -> Void)?
-
-  @State private var reportedUnavailable = false
-
-  /// How much of the trailing edge the frame occupies before it dissolves. Wide enough to colour
-  /// the band, narrow enough that it never reaches the title.
-  private static let washFraction: CGFloat = 0.55
-
-  /// How far the frame is thrown out of focus.
-  ///
-  /// The banner file's rule is that a screenshot is never blurred into a texture — and that rule is
-  /// about the *inset*, which had to stay legible because reading it was its whole job. Here the
-  /// opposite is true and stating it plainly is better than half-obeying a rule written for another
-  /// composition: a 62pt band cannot render a 5120pt capture legibly, so a sharp one is not a
-  /// picture the reader can use, it is noise competing with five action buttons sitting on top of
-  /// it. Measured on a real note: the trash button landed on the trash icon *inside* the
-  /// screenshot. Thrown this far out of focus the frame becomes a colour field that still differs
-  /// from meeting to meeting, and the legible copy is the strip tile a few points below.
-  private static let washBlur: CGFloat = 18
 
   /// The gradient's two stops. The server computes `ground` once, over the canonical bytes, at
   /// approval time (`ConversationScreenFrame.ground`) — both this client and web render from that
@@ -135,87 +118,94 @@ struct MeetingNoteHeaderBanner: View {
   }
 
   var body: some View {
-    GeometryReader { proxy in
-      ZStack(alignment: .trailing) {
-        LinearGradient(colors: gradientColors, startPoint: .leading, endPoint: .trailing)
-          .opacity(0.28)
-        wash(width: proxy.size.width * Self.washFraction, height: proxy.size.height)
-        // The veil, not an opacity on the layers beneath it: heaviest where the title starts and
-        // lighter towards the trailing edge, so the headline keeps full contrast while the colour
-        // still carries past the buttons.
-        //
-        // **The floor is set by the worst case, not by the pretty one.** Approved frames are
-        // routinely near-black — most of them are dark-mode editors — and white at 0.38 over black
-        // resolves to about #616161, against which this shell's near-black `Ink.primary` measures
-        // roughly 3.4:1 and `Ink.secondary` about 3:1. Both miss 4.5:1, and the trailing edge is
-        // exactly where the thinnest veil and the action buttons coincide. At 0.58 the same black
-        // frame resolves to about #949494 and `Ink.primary` clears 5:1, so the whole band is
-        // legible over any frame the judge can approve rather than over the frames that happened
-        // to be on screen when it was designed.
-        LinearGradient(
-          colors: [
-            Color.white.opacity(0.74),
-            Color.white.opacity(0.64),
-            Color.white.opacity(0.58),
-          ],
-          startPoint: .leading,
-          endPoint: .trailing)
-      }
-      .clipped()
+    ZStack {
+      LinearGradient(colors: gradientColors, startPoint: .leading, endPoint: .trailing)
+        .opacity(0.30)
+      // The veil, and its floor is set by the worst case rather than the pretty one: white at 0.38
+      // over a black ground resolves to about #616161, against which near-black `Ink.primary`
+      // measures roughly 3.4:1 and `Ink.secondary` about 3:1 — both short of 4.5:1. At 0.58 the
+      // same ground resolves to about #949494 and `Ink.primary` clears 5:1.
+      LinearGradient(
+        colors: [
+          Color.white.opacity(0.72),
+          Color.white.opacity(0.62),
+          Color.white.opacity(0.58),
+        ],
+        startPoint: .leading,
+        endPoint: .trailing)
     }
     .allowsHitTesting(false)
     .accessibilityHidden(true)
-    .task(id: frame.id) { reportedUnavailable = false }
+  }
+}
+
+/// The chosen frame, in the note header, at a size where it is actually a picture.
+///
+/// Sharp, unveiled, and given room of its own between the title block and the action buttons —
+/// which is the whole difference between this and the wash it replaced. It sets the header band's
+/// height, so a note with a banner gets a slightly taller header and a note without one is exactly
+/// as it was.
+///
+/// Deliberately the same proportion and treatment as a strip tile below it: this is the same
+/// picture, and two different croppings of one frame on one screen reads as two frames.
+///
+/// Absent entirely — not a placeholder glyph — when the fetch has not landed or has failed. The
+/// ground alone is a complete header background, so a slow or expired image costs nothing but its
+/// own absence.
+///
+/// Loaded declaratively via `AsyncImage` rather than a manual `URLSession` fetch into an
+/// `NSImage`: the gradient does not need the decoded pixels for anything (it reads `frame.ground`
+/// instead), so the only reason left to fetch this image is to display it, which SwiftUI already
+/// does — and doing it this way keeps a non-`Sendable` `NSImage`/`CGImage` from ever needing to
+/// cross an isolation boundary here.
+struct MeetingNoteHeaderInset: View {
+  let frame: ConversationScreenFrame
+  /// Open this frame full size. Same gesture as a strip tile, because it is the same picture.
+  var onOpen: (() -> Void)?
+  /// The image failed to load — most likely an expired signed URL. Called at most once.
+  var onContentUnavailable: (() -> Void)?
+
+  @State private var reportedUnavailable = false
+  @State private var isHovering = false
+
+  static let height: CGFloat = 64
+  private static var width: CGFloat { height * 16 / 10 }
+
+  private var shape: RoundedRectangle {
+    RoundedRectangle(cornerRadius: 8, style: .continuous)
   }
 
-  /// The frame itself, thrown out of focus, entering from the trailing edge and dissolving before
-  /// it reaches the title.
-  ///
-  /// Absent entirely — not a placeholder glyph — when the fetch has not landed or has failed: the
-  /// ground alone is a complete background, so a slow or expired image costs the header nothing.
-  ///
-  /// Loaded declaratively via `AsyncImage` rather than a manual `URLSession` fetch into an
-  /// `NSImage`: the gradient no longer needs the decoded pixels for anything (it reads
-  /// `frame.ground` instead), so the only reason left to fetch this image at all is to display it,
-  /// which SwiftUI already does — and doing it this way keeps a non-`Sendable` `NSImage`/`CGImage`
-  /// from ever needing to cross an isolation boundary here.
-  @ViewBuilder private func wash(width: CGFloat, height: CGFloat) -> some View {
+  var body: some View {
     AsyncImage(url: URL(string: frame.thumbnailURL)) { phase in
       switch phase {
       case .success(let image):
-        image
-          .resizable()
-          .aspectRatio(contentMode: .fill)
-          // Blurred *before* the frame is applied, and oversized by the blur radius on every side:
-          // a blur reads the pixels outside its view, and a view clipped to the band first has
-          // nothing out there to read, so the edges would bleed to transparent and the wash would
-          // end in a pale halo instead of at the window.
-          .frame(
-            width: max(width + Self.washBlur * 2, 0),
-            height: max(height + Self.washBlur * 2, 0)
-          )
-          .blur(radius: Self.washBlur)
-          .frame(width: max(width, 0), height: max(height, 0))
-          .clipped()
-          .mask(
-            LinearGradient(
-              stops: [
-                .init(color: .clear, location: 0),
-                .init(color: .black.opacity(0.85), location: 0.55),
-                .init(color: .black, location: 1),
-              ],
-              startPoint: .leading,
-              endPoint: .trailing)
-          )
+        Button(action: { onOpen?() }) {
+          image
+            .resizable()
+            .aspectRatio(contentMode: .fill)
+            .frame(width: Self.width, height: Self.height)
+            .clipShape(shape)
+            .overlay(shape.strokeBorder(isHovering ? Ink.hairline : Ink.separator, lineWidth: 1))
+            .shadow(color: .black.opacity(0.14), radius: 6, y: 2)
+            .opacity(isHovering ? 0.86 : 1)
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .help(frame.caption.isEmpty ? "Screenshot from this meeting" : frame.caption)
+        .accessibilityLabel(
+          Text(frame.caption.isEmpty ? "Screenshot from this meeting" : frame.caption)
+        )
+        .accessibilityHint(Text("Opens this screenshot in Quick Look"))
       case .failure:
         Color.clear
+          .frame(width: Self.width, height: Self.height)
           .onAppear { reportUnavailableOnce() }
-      case .empty:
+      default:
         Color.clear
-      @unknown default:
-        Color.clear
+          .frame(width: Self.width, height: Self.height)
       }
     }
+    .task(id: frame.id) { reportedUnavailable = false }
   }
 
   private func reportUnavailableOnce() {
