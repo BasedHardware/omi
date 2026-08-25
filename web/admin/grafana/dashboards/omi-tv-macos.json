@@ -4075,6 +4075,141 @@
       "timeFrom": "5w",
       "title": "Viral loop \u2014 weekly",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "description": "In-app 1-5 star prompt shown after a user's 3rd question in Omi Desktop (no App Store listing exists for an external rating). Line = daily average, bars = number of ratings.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "unit": "short",
+          "min": 0,
+          "max": 5,
+          "decimals": 1
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Avg rating"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#f59e0b",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Ratings"
+            },
+            "properties": [
+              {
+                "id": "custom.drawStyle",
+                "value": "bars"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 55
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#3b82f6",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "max",
+                "value": null
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 88,
+        "w": 24,
+        "h": 7
+      },
+      "id": 995,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "parser": "backend",
+          "format": "timeseries",
+          "url": "http://127.0.0.1:8899/api/omi/stats/desktop-ratings?days=60&_tzdates=date",
+          "url_options": {
+            "method": "GET",
+            "data": ""
+          },
+          "root_selector": "daily",
+          "columns": [
+            {
+              "selector": "date",
+              "text": "time",
+              "type": "timestamp",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00"
+            },
+            {
+              "selector": "avgRating",
+              "text": "Avg rating",
+              "type": "number"
+            },
+            {
+              "selector": "count",
+              "text": "Ratings",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "timeFrom": "60d",
+      "title": "Omi Desktop rating \u2014 daily",
+      "type": "timeseries"
     }
   ],
   "refresh": "1h",

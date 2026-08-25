@@ -3549,6 +3549,23 @@
       "timeFrom": "5w",
       "title": "Viral loop \u2014 weekly",
       "type": "timeseries"
+    },
+    {
+      "id": 995,
+      "type": "text",
+      "title": "Omi Desktop rating \u2014 daily",
+      "gridPos": {
+        "x": 0,
+        "y": 88,
+        "w": 24,
+        "h": 7
+      },
+      "transparent": true,
+      "options": {
+        "mode": "markdown",
+        "content": "**Desktop-only surface \u2014 no mobile equivalent.**\n\nThis feature exists only in the macOS app; see the [macOS board](/grafana/d/omi-tv-macos/)."
+      },
+      "targets": []
     }
   ],
   "refresh": "1h",

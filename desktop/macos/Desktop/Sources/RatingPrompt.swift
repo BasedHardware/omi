@@ -1,0 +1,141 @@
+import OmiTheme
+import SwiftUI
+
+// MARK: - Policy
+
+/// Decides when the one-time "rate Omi Desktop" ask is due. Pure so the
+/// trigger contract stays unit-testable: the prompt appears once the user has
+/// asked their 3rd question, and never again after a submit or a dismiss.
+enum RatingPromptPolicy {
+  static let questionThreshold = 3
+
+  static func shouldShow(questionCount: Int, submittedRating: Int, dismissed: Bool) -> Bool {
+    questionCount >= questionThreshold && submittedRating == 0 && !dismissed
+  }
+}
+
+// MARK: - Manager
+
+/// Owns the rating-prompt lifecycle: counts asked questions (fed by the
+/// single `AnalyticsManager.chatMessageSent` funnel every chat surface goes
+/// through), decides visibility, and reports the submitted rating to PostHog
+/// so admin.omi.me can chart it daily.
+@MainActor
+final class RatingPromptManager: ObservableObject {
+  static let shared = RatingPromptManager()
+
+  @Published private(set) var isVisible = false
+
+  private let defaults = UserDefaults.standard
+
+  private init() {
+    refresh()
+  }
+
+  var questionCount: Int {
+    defaults.integer(forKey: DefaultsKey.ratingPromptQuestionCount.rawValue)
+  }
+
+  var submittedRating: Int {
+    defaults.integer(forKey: DefaultsKey.ratingPromptSubmittedRating.rawValue)
+  }
+
+  var isDismissed: Bool {
+    defaults.bool(forKey: DefaultsKey.ratingPromptDismissed.rawValue)
+  }
+
+  func recordQuestionAsked() {
+    defaults.set(questionCount + 1, forKey: DefaultsKey.ratingPromptQuestionCount.rawValue)
+    refresh()
+  }
+
+  func submit(rating: Int) {
+    let clamped = min(max(rating, 1), 5)
+    defaults.set(clamped, forKey: DefaultsKey.ratingPromptSubmittedRating.rawValue)
+    AnalyticsManager.shared.desktopRatingSubmitted(rating: clamped)
+    refresh()
+  }
+
+  func dismiss() {
+    defaults.set(true, forKey: DefaultsKey.ratingPromptDismissed.rawValue)
+    refresh()
+  }
+
+  /// Automation/testing hook: rewind the persisted state so the real trigger
+  /// path can be exercised repeatedly on a dev bundle.
+  func resetForTesting() {
+    defaults.removeObject(forKey: DefaultsKey.ratingPromptQuestionCount.rawValue)
+    defaults.removeObject(forKey: DefaultsKey.ratingPromptSubmittedRating.rawValue)
+    defaults.removeObject(forKey: DefaultsKey.ratingPromptDismissed.rawValue)
+    refresh()
+  }
+
+  private func refresh() {
+    isVisible = RatingPromptPolicy.shouldShow(
+      questionCount: questionCount,
+      submittedRating: submittedRating,
+      dismissed: isDismissed)
+  }
+}
+
+// MARK: - View
+
+/// Closable sticky bar pinned to the bottom of the main window asking
+/// "How would you rate Omi Desktop?" with 1–5 stars.
+struct RatingPromptBar: View {
+  @ObservedObject private var manager = RatingPromptManager.shared
+  @State private var hoveredStar = 0
+
+  var body: some View {
+    if manager.isVisible {
+      HStack(spacing: OmiSpacing.lg) {
+        Text("How would you rate Omi Desktop?")
+          .font(.system(size: 13, weight: .medium))
+          .foregroundColor(.primary)
+
+        HStack(spacing: OmiSpacing.xs) {
+          ForEach(1...5, id: \.self) { star in
+            Button {
+              manager.submit(rating: star)
+            } label: {
+              Image(systemName: star <= hoveredStar ? "star.fill" : "star")
+                .font(.system(size: 15))
+                .foregroundColor(star <= hoveredStar ? .yellow : .secondary)
+            }
+            .buttonStyle(.plain)
+            .onHover { inside in
+              if inside {
+                hoveredStar = star
+              } else if hoveredStar == star {
+                hoveredStar = star - 1
+              }
+            }
+            .accessibilityLabel("Rate \(star) star\(star == 1 ? "" : "s")")
+          }
+        }
+
+        Button {
+          manager.dismiss()
+        } label: {
+          Image(systemName: "xmark")
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundColor(.secondary)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Dismiss rating prompt")
+      }
+      .padding(.horizontal, OmiSpacing.xl)
+      .padding(.vertical, OmiSpacing.md)
+      .background(
+        RoundedRectangle(cornerRadius: 10)
+          .fill(.regularMaterial)
+          .overlay(
+            RoundedRectangle(cornerRadius: 10)
+              .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+          )
+      )
+      .padding(.bottom, OmiSpacing.lg)
+      .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+  }
+}

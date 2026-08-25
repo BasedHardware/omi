@@ -51,7 +51,7 @@ PLATFORM_ROUTES = ("viral-metrics", "dau-trends", "retention/posthog", "k-factor
 DESKTOP_ONLY_TITLES = {
     "Floating bar sessions per user", "Floating bar queries",
     "Floating bar notification CTR", "Crash-free rate (today)",
-    "Crash-free rate",
+    "Crash-free rate", "Omi Desktop rating — daily",
 }
 
 # Account-level metrics: computed over every Firestore user (or every device a

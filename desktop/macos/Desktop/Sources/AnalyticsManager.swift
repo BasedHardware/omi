@@ -697,6 +697,15 @@ class AnalyticsManager {
   func chatMessageSent(messageLength: Int, hasSelectedAppContext: Bool = false, source: String) {
     PostHogManager.shared.chatMessageSent(
       messageLength: messageLength, hasSelectedAppContext: hasSelectedAppContext, source: source)
+    // Every chat surface funnels through here, which makes it the one place
+    // that can count "questions asked" for the rating-prompt trigger.
+    Task { @MainActor in
+      RatingPromptManager.shared.recordQuestionAsked()
+    }
+  }
+
+  func desktopRatingSubmitted(rating: Int) {
+    PostHogManager.shared.desktopRatingSubmitted(rating: rating)
   }
 
   // MARK: - Search Events
