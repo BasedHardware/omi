@@ -16,6 +16,10 @@
 		A10401000000000000000001 /* OmiBackendModule.mm in Sources */ = {isa = PBXBuildFile; fileRef = A10401000000000000000002 /* OmiBackendModule.mm */; };
 		A10402000000000000000001 /* OmiDesktopCommandsModule.mm in Sources */ = {isa = PBXBuildFile; fileRef = A10402000000000000000002 /* OmiDesktopCommandsModule.mm */; };
 		A10403000000000000000001 /* OmiGlassPanelView.mm in Sources */ = {isa = PBXBuildFile; fileRef = A10403000000000000000002 /* OmiGlassPanelView.mm */; };
+		A10404000000000000000001 /* OmiSFSymbolView.mm in Sources */ = {isa = PBXBuildFile; fileRef = A10404000000000000000002 /* OmiSFSymbolView.mm */; };
+		A10405000000000000000001 /* OmiAuthModule.mm in Sources */ = {isa = PBXBuildFile; fileRef = A10405000000000000000002 /* OmiAuthModule.mm */; };
+		A10406000000000000000001 /* AuthenticationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10406000000000000000002 /* AuthenticationServices.framework */; };
+		A10407000000000000000001 /* LocalAuthentication.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10407000000000000000002 /* LocalAuthentication.framework */; };
 		DA2AA05EC605ADA710BAA8FE /* libPods-RnRuntime-macOS.a in Frameworks */ = {isa = PBXBuildFile; fileRef = F6C5F54BD846C1B394B83CD2 /* libPods-RnRuntime-macOS.a */; };
 /* End PBXBuildFile section */
 
@@ -38,6 +42,11 @@
 		A10402000000000000000003 /* OmiDesktopCommandsModule.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = OmiDesktopCommandsModule.h; sourceTree = "<group>"; };
 		A10403000000000000000002 /* OmiGlassPanelView.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OmiGlassPanelView.mm; sourceTree = "<group>"; };
 		A10403000000000000000003 /* OmiGlassPanelView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = OmiGlassPanelView.h; sourceTree = "<group>"; };
+		A10404000000000000000002 /* OmiSFSymbolView.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OmiSFSymbolView.mm; sourceTree = "<group>"; };
+		A10404000000000000000003 /* OmiSFSymbolView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = OmiSFSymbolView.h; sourceTree = "<group>"; };
+		A10405000000000000000002 /* OmiAuthModule.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OmiAuthModule.mm; sourceTree = "<group>"; };
+		A10406000000000000000002 /* AuthenticationServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AuthenticationServices.framework; path = System/Library/Frameworks/AuthenticationServices.framework; sourceTree = SDKROOT; };
+		A10407000000000000000002 /* LocalAuthentication.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = LocalAuthentication.framework; path = System/Library/Frameworks/LocalAuthentication.framework; sourceTree = SDKROOT; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F6C5F54BD846C1B394B83CD2 /* libPods-RnRuntime-macOS.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-RnRuntime-macOS.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -54,6 +63,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A10406000000000000000001 /* AuthenticationServices.framework in Frameworks */,
+				A10407000000000000000001 /* LocalAuthentication.framework in Frameworks */,
 				DA2AA05EC605ADA710BAA8FE /* libPods-RnRuntime-macOS.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -64,6 +75,8 @@
 		2D16E6871FA4F8E400B85C8A /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				A10406000000000000000002 /* AuthenticationServices.framework */,
+				A10407000000000000000002 /* LocalAuthentication.framework */,
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
 				F6C5F54BD846C1B394B83CD2 /* libPods-RnRuntime-macOS.a */,
 			);
@@ -96,6 +109,9 @@
 				A10402000000000000000002 /* OmiDesktopCommandsModule.mm */,
 				A10403000000000000000003 /* OmiGlassPanelView.h */,
 				A10403000000000000000002 /* OmiGlassPanelView.mm */,
+				A10404000000000000000003 /* OmiSFSymbolView.h */,
+				A10404000000000000000002 /* OmiSFSymbolView.mm */,
+				A10405000000000000000002 /* OmiAuthModule.mm */,
 			);
 			path = "RnRuntime-macOS";
 			sourceTree = "<group>";
@@ -331,6 +347,8 @@
 				A10401000000000000000001 /* OmiBackendModule.mm in Sources */,
 				A10402000000000000000001 /* OmiDesktopCommandsModule.mm in Sources */,
 				A10403000000000000000001 /* OmiGlassPanelView.mm in Sources */,
+				A10404000000000000000001 /* OmiSFSymbolView.mm in Sources */,
+				A10405000000000000000001 /* OmiAuthModule.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -52,6 +52,12 @@ const mockBackend = {
     }),
   ),
 };
+const mockAuth = {
+  hasCompletedOnboarding: jest.fn(async () => true),
+  hasCloudSession: jest.fn(async () => false),
+  markOnboardingComplete: jest.fn(async () => undefined),
+  signIn: jest.fn(async () => ({signedIn: true})),
+};
 
 jest.mock('react-native', () => {
   const ReactRuntime = require('react');
@@ -321,6 +327,12 @@ jest.mock('../src/omiNative', () => ({
       mockBackend.generationEvents(generationId, lastEventId),
     request: (request: MockRequest) => mockBackend.request(request),
   },
+  omiAuth: {
+    hasCompletedOnboarding: () => mockAuth.hasCompletedOnboarding(),
+    hasCloudSession: () => mockAuth.hasCloudSession(),
+    markOnboardingComplete: () => mockAuth.markOnboardingComplete(),
+    signIn: () => mockAuth.signIn(),
+  },
   isBluetoothScanAvailable: (state: string | undefined) =>
     state === 'poweredOn' || state === 'available' || state === 'selected',
   omiNative: {
@@ -418,6 +430,10 @@ beforeEach(() => {
   mockBackend.request.mockImplementation(async request =>
     mockBackendResponse(request),
   );
+  mockAuth.hasCloudSession.mockResolvedValue(false);
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.markOnboardingComplete.mockResolvedValue(undefined);
+  mockAuth.signIn.mockResolvedValue({signedIn: true});
   mockNative.getSnapshot.mockImplementation(() => new Promise(() => {}));
   mockNative.startScan.mockResolvedValue([]);
 });
@@ -1529,9 +1545,10 @@ test('explains local backend configuration failure with one retryable Home state
 
   const unavailable = JSON.stringify(renderer.toJSON());
   expect(unavailable).toContain(
-    'Trusted local Omi service configuration is missing.',
+    'Sign in to Omi cloud to load conversations and memories.',
   );
-  expect(unavailable).toContain('OMI_LOCAL_API_CLIENT_ID');
+  expect(unavailable).not.toContain('h.omi.me');
+  expect(unavailable).not.toContain('OMI_LOCAL_API_CLIENT_ID');
   expect(unavailable).not.toContain('Conversations are unavailable.');
   expect(unavailable).not.toContain('Memories are unavailable.');
 
@@ -1548,7 +1565,41 @@ test('explains local backend configuration failure with one retryable Home state
   });
 
   expect(JSON.stringify(renderer.toJSON())).not.toContain(
-    'Trusted local Omi service configuration is missing.',
+    'Sign in to Omi cloud to load conversations and memories.',
+  );
+});
+
+test('signs in from macOS Home recovery and retries cloud reads', async () => {
+  mockPlatformOS = 'macos';
+  mockBackend.request.mockRejectedValue(
+    Object.assign(new Error('Native HTTP configuration is unavailable'), {
+      code: 'OMI_HTTP_UNCONFIGURED',
+    }),
+  );
+
+  const renderer = await renderApp();
+  const before = JSON.stringify(renderer.toJSON());
+  expect(before).not.toContain('h.omi.me');
+  const signIn = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Sign in',
+  );
+
+  mockAuth.hasCloudSession.mockResolvedValue(false);
+  mockBackend.request.mockImplementation(async request =>
+    mockBackendResponse(request),
+  );
+  await ReactTestRenderer.act(async () => {
+    await signIn.props.onPress();
+  });
+
+  expect(mockAuth.signIn).toHaveBeenCalledTimes(1);
+  expect(mockAuth.markOnboardingComplete).toHaveBeenCalledTimes(1);
+  expect(mockBackend.request.mock.calls.length).toBeGreaterThan(3);
+  expect(
+    renderer.root.findAll(node => node.props.accessibilityLabel === 'Sign in'),
+  ).toHaveLength(0);
+  expect(JSON.stringify(renderer.toJSON())).not.toContain(
+    'Sign in to Omi cloud to load conversations and memories.',
   );
 });
 
@@ -1614,8 +1665,9 @@ test('shows actionable service-unavailable copy when the local backend transport
 
   const output = JSON.stringify(renderer.toJSON());
   expect(output).toContain(
-    'Trusted local Omi service at 127.0.0.1:8787 is unavailable. Start it, then retry.',
+    'Omi cloud at https://api.omi.me is unavailable. Check the connection, then retry.',
   );
+  expect(output).not.toContain('127.0.0.1:8787');
   expect(output).not.toContain('Native HTTP transport failed');
   expect(output).not.toContain('desktop-conversations-read failed');
 
@@ -1643,65 +1695,511 @@ test('uses a full, navigation-free pane on mobile', async () => {
   ).toBeDefined();
 });
 
+test('fills the macOS content area with first-run onboarding', async () => {
+  mockPlatformOS = 'macos';
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(false);
+  mockAuth.hasCloudSession.mockResolvedValue(false);
+
+  const renderer = await renderApp();
+  const onboarding = renderer.root.find(
+    node => node.props.accessibilityLabel === 'First-run onboarding',
+  );
+  const onboardingStyles = ([] as Array<Record<string, unknown>>)
+    .concat(onboarding.props.style)
+    .filter(style => style != null);
+  const rendered = JSON.stringify(renderer.toJSON());
+
+  expect(onboardingStyles).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({alignSelf: 'stretch', flex: 1}),
+    ]),
+  );
+  expect(rendered).toContain('Welcome');
+  expect(rendered).not.toContain('h.omi.me');
+  expect(
+    onboarding.find(node => node.props.accessibilityLabel === 'Sign in'),
+  ).toBeDefined();
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'Home desktop timeline surface' ||
+        node.props.accessibilityLabel === 'Home saved-data recovery',
+    ),
+  ).toHaveLength(0);
+  expect(JSON.stringify(onboarding.props.style)).not.toContain('maxWidth');
+  expect(rendered).not.toContain('maxWidth":440');
+  expect(
+    onboarding.findAll(node =>
+      [
+        'Brain',
+        'GanttChartSquare',
+        'House',
+        'ListChecks',
+        'PanelLeft',
+        'PanelLeftClose',
+        'Search',
+      ].includes(String(node.type)),
+    ),
+  ).toHaveLength(0);
+});
+
+test('skips first-run onboarding for a returning macOS user', async () => {
+  mockPlatformOS = 'macos';
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockResolvedValue(false);
+
+  const renderer = await renderApp();
+
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'First-run onboarding',
+    ),
+  ).toHaveLength(0);
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Desktop application chrome',
+    ),
+  ).toBeDefined();
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Home desktop timeline surface',
+    ),
+  ).toBeDefined();
+});
+
+test('skips onboarding and records completion when a cloud session exists', async () => {
+  mockPlatformOS = 'macos';
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(false);
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+
+  const renderer = await renderApp();
+
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'First-run onboarding',
+    ),
+  ).toHaveLength(0);
+  expect(mockAuth.markOnboardingComplete).toHaveBeenCalledTimes(1);
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Home desktop timeline surface',
+    ),
+  ).toBeDefined();
+});
+
+test('signs in from first-run onboarding, records completion, and shows Home', async () => {
+  mockPlatformOS = 'macos';
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(false);
+  mockAuth.hasCloudSession.mockResolvedValue(false);
+  const renderer = await renderApp();
+  const signIn = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Sign in',
+  );
+
+  await ReactTestRenderer.act(async () => {
+    await signIn.props.onPress();
+  });
+
+  expect(mockAuth.signIn).toHaveBeenCalledTimes(1);
+  expect(mockAuth.markOnboardingComplete).toHaveBeenCalledTimes(1);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'First-run onboarding',
+    ),
+  ).toHaveLength(0);
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Home desktop timeline surface',
+    ),
+  ).toBeDefined();
+});
+
 test('keeps macOS Home as search chrome followed by compact navigation and timeline', async () => {
   mockPlatformOS = 'macos';
   const renderer = await renderApp();
   const output = JSON.stringify(renderer.toJSON());
   const searchIndex = output.indexOf('Home search dock');
   const homeIndex = output.indexOf('Home navigation');
-  const overflowIndex = output.indexOf('More navigation');
   const timelineIndex = output.indexOf('Home chronological timeline');
 
   expect(searchIndex).toBeGreaterThan(-1);
   expect(homeIndex).toBeGreaterThan(searchIndex);
-  expect(overflowIndex).toBeGreaterThan(homeIndex);
-  expect(timelineIndex).toBeGreaterThan(overflowIndex);
+  expect(output).not.toContain('Home rewind context');
+  expect(output).not.toContain('Conversations and memories saved on this Mac.');
+  expect(timelineIndex).toBeGreaterThan(homeIndex);
   expect(output).not.toContain('Home query island');
   expect(output).not.toContain('Home results panel');
   expect(output).not.toContain('What matters now');
   expect(output).not.toContain('home-workspace-material');
+  expect(output).not.toContain('Workspace 2');
+  expect(output).not.toContain('More navigation');
+  const material = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Desktop workspace material',
+  );
+  expect(material.props.glassCornerRadius).toBe(0);
+  expect(material.props.style).toEqual(
+    expect.objectContaining({bottom: 0, left: 0, right: 0, top: 0}),
+  );
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'Desktop navigation material' ||
+        node.props.accessibilityLabel === 'Home desktop material',
+    ),
+  ).toHaveLength(0);
+  const chrome = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Desktop application chrome',
+  );
+  const chromeStyles = ([] as Array<Record<string, unknown>>)
+    .concat(chrome.props.style)
+    .filter(style => style != null);
+  const chromeStyle = Object.assign({}, ...chromeStyles);
+  expect(chromeStyle.height).toBeGreaterThanOrEqual(36);
+  expect(chromeStyle.height).toBeLessThanOrEqual(40);
+  expect(chromeStyle.borderRadius ?? 0).toBe(0);
+  expect(chromeStyle.marginHorizontal ?? 0).toBe(0);
+  expect(chromeStyle.marginTop).toBeGreaterThanOrEqual(28);
+  expect(
+    chromeStyle.paddingHorizontal ?? chromeStyle.paddingLeft,
+  ).toBeGreaterThanOrEqual(12);
+  expect(chromeStyle.paddingLeft ?? chromeStyle.paddingHorizontal).toBe(
+    chromeStyle.paddingRight ?? chromeStyle.paddingHorizontal,
+  );
+  expect(chromeStyle.paddingLeft).not.toBe(78);
+  const applicationSurface = renderer.root.find(
+    node => String(node.type) === 'SafeAreaView',
+  );
+  expect(applicationSurface.props.edges).toEqual(['left', 'right', 'bottom']);
+  expect(JSON.stringify(chrome.props.style)).not.toContain('borderTopWidth');
+  expect(JSON.stringify(chrome.props.style)).not.toContain(
+    'rgba(255, 255, 255',
+  );
+  const homeSurface = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Home desktop timeline surface',
+  );
+  expect(homeSurface.props.style).toEqual(
+    expect.objectContaining({
+      alignSelf: 'stretch',
+      backgroundColor: 'transparent',
+      borderRadius: 0,
+      flex: 1,
+    }),
+  );
+  expect(JSON.stringify(homeSurface.props.style)).not.toContain(
+    'borderTopWidth',
+  );
+  const homeNav = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Home navigation',
+  );
+  expect(homeNav.props.accessibilityRole).toBe('button');
+  expect(homeNav.props.accessibilityState).toEqual({expanded: false});
+  expect(
+    homeNav.findAll(
+      node => String(node.type) === 'Text' && node.props.children === 'Home',
+    ),
+  ).not.toHaveLength(0);
+  const homeIcon = homeNav.find(node => node.props.symbolName !== undefined);
+  expect(homeIcon.props.symbolColor).toBe('#f2f4f1');
+  const searchDock = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Home search dock',
+  );
+  const dockStyles = ([] as Array<Record<string, unknown>>)
+    .concat(searchDock.props.style)
+    .filter(style => style != null);
+  const desktopDockStyle = dockStyles.find(
+    style => style.paddingHorizontal !== undefined,
+  );
+  expect(desktopDockStyle).toEqual(
+    expect.objectContaining({
+      alignItems: 'center',
+      flex: 1,
+      flexGrow: 1,
+      maxWidth: '100%',
+      paddingHorizontal: expect.any(Number),
+    }),
+  );
+  expect(desktopDockStyle!.paddingHorizontal).toBeGreaterThanOrEqual(12);
+  expect(
+    dockStyles.some(
+      style =>
+        style.borderTopWidth != null ||
+        (style.borderWidth != null &&
+          style.borderWidth !== 0 &&
+          String(style.borderColor ?? '').includes('255, 255, 255')),
+    ),
+  ).toBe(false);
   const homeSearch = renderer.root.find(
     node => node.props.accessibilityLabel === 'Search Home',
   );
+  const searchStyles = ([] as Array<Record<string, unknown>>)
+    .concat(homeSearch.props.style)
+    .filter(style => style != null);
+  expect(searchStyles).not.toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({height: 24, paddingVertical: 0}),
+    ]),
+  );
   expect(homeSearch.props.placeholder).toBe('Search Omi');
+  expect(homeSearch.props.placeholderTextColor).toBe('#c8cbc6');
   expect(
     renderer.root.find(
       node => node.props.accessibilityLabel === 'Home navigation',
     ),
   ).toBeDefined();
+  const navigation = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Home navigation',
+  ).parent;
+  expect(navigation?.props.style).toEqual(
+    expect.objectContaining({flexShrink: 0}),
+  );
   expect(
     renderer.root.findAll(
       node => node.props.accessibilityLabel === 'Conversations navigation',
     ),
   ).toHaveLength(0);
+  const workspace = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Desktop workspace material',
+  );
+  expect(workspace.props.pointerEvents).toBe('none');
+  const homeSymbol = homeNav.find(node => node.props.symbolName !== undefined);
+  expect(homeSymbol.props.symbolName).toBe('house');
   expect(
-    renderer.root.find(
-      node => node.props.accessibilityLabel === 'More navigation',
-    ).props.accessibilityState,
-  ).toEqual({expanded: false});
+    chrome.findAll(node =>
+      [
+        'Brain',
+        'GanttChartSquare',
+        'House',
+        'ListChecks',
+        'PanelLeft',
+        'PanelLeftClose',
+        'Search',
+      ].includes(String(node.type)),
+    ),
+  ).toHaveLength(0);
 });
 
-test('opens secondary desktop destinations from the Home-adjacent overflow', async () => {
+test('renders one compact macOS Home recovery instead of a filled error card', async () => {
+  mockPlatformOS = 'macos';
+  mockBackend.request.mockRejectedValue(
+    Object.assign(new Error('Native HTTP transport failed'), {
+      code: 'OMI_HTTP_TRANSPORT',
+    }),
+  );
+
+  const renderer = await renderApp();
+  const recovery = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Home saved-data recovery',
+  );
+  const rendered = JSON.stringify(renderer.toJSON());
+  expect(rendered).toContain('Saved data unavailable');
+  expect(rendered).toContain(
+    'Omi cloud at https://api.omi.me is unavailable. Check the connection, then retry.',
+  );
+  expect(rendered).not.toContain('Native HTTP transport failed');
+  expect(rendered).not.toContain('Workspace 2');
+  expect(recovery.props.style).toEqual(
+    expect.objectContaining({maxWidth: 440}),
+  );
+  const recoveryCopy = recovery.findAll(
+    node =>
+      String(node.type) === 'Text' && typeof node.props.children === 'string',
+  );
+  expect(
+    recoveryCopy.some(
+      node =>
+        String(node.props.children).includes('https://api.omi.me') &&
+        node.props.style.color === '#dfe2dd',
+    ),
+  ).toBe(true);
+  expect(JSON.stringify(recovery.props.style)).not.toContain('shadowColor');
+  expect(recovery.props.style.backgroundColor).toBeUndefined();
+  expect(
+    recovery.findAll(
+      node =>
+        node.props.accessibilityLabel === 'Retry saved data' &&
+        typeof node.props.onPress === 'function',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Home rewind context',
+    ),
+  ).toHaveLength(0);
+});
+
+test('surfaces the typed memories failure when conversations fails untyped', async () => {
+  mockPlatformOS = 'macos';
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/chat-messages?limit=50') {
+      return {
+        id: request.id,
+        status: 200,
+        body: '{"messages":[],"page":{"olderCursor":null,"hasOlder":false}}',
+      };
+    }
+    if (request.path.startsWith('/v1/conversations')) {
+      return {id: request.id, status: 500, body: null};
+    }
+    return request.path.startsWith('/v1/memories')
+      ? {
+          id: request.id,
+          status: 503,
+          body: JSON.stringify({
+            error: {
+              code: 'projection_unavailable',
+              retryable: true,
+              action: 'retry',
+            },
+          }),
+        }
+      : {id: request.id, status: 503, body: null};
+  });
+
+  const renderer = await renderApp();
+  const rendered = JSON.stringify(renderer.toJSON());
+  expect(rendered).toContain(
+    'Saved conversations and memories are not available from this Omi service yet. Retry after its persisted projections are connected.',
+  );
+  expect(rendered).not.toContain('desktop-conversations-read failed (500)');
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Home saved-data recovery',
+    ),
+  ).toBeDefined();
+});
+
+test('shows a truthful loading timeline while a retry recovers from unavailable', async () => {
+  mockPlatformOS = 'macos';
+  const transportError = Object.assign(
+    new Error('Native HTTP transport failed'),
+    {code: 'OMI_HTTP_TRANSPORT'},
+  );
+  mockBackend.request.mockRejectedValue(transportError);
+  const renderer = await renderApp();
+  expect(JSON.stringify(renderer.toJSON())).toContain('Saved data unavailable');
+
+  let releaseReads: Array<() => void> = [];
+  mockBackend.request.mockImplementation(
+    async request =>
+      new Promise<MockResponse>(resolve => {
+        releaseReads.push(() => resolve(mockBackendResponse(request)));
+      }),
+  );
+  const retry = renderer.root.findAll(
+    node =>
+      node.props.accessibilityLabel === 'Retry saved data' &&
+      typeof node.props.onPress === 'function',
+  )[0];
+  await ReactTestRenderer.act(async () => {
+    retry.props.onPress();
+  });
+
+  const refreshing = JSON.stringify(renderer.toJSON());
+  expect(refreshing).toContain('Loading timeline…');
+  expect(refreshing).not.toContain('No saved conversations or memories yet.');
+  expect(refreshing).not.toContain('Saved data unavailable');
+
+  await ReactTestRenderer.act(async () => {
+    releaseReads.forEach(release => release());
+    await Promise.resolve();
+  });
+
+  const recovered = JSON.stringify(renderer.toJSON());
+  expect(recovered).toContain('QA bridge check');
+  expect(recovered).not.toContain('Loading timeline…');
+});
+
+test('opens secondary desktop destinations from the Home switcher', async () => {
   mockPlatformOS = 'macos';
   const renderer = await renderApp();
 
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Home navigation',
+    ).props.accessibilityState,
+  ).toEqual({expanded: false});
   await ReactTestRenderer.act(async () => {
     renderer.root
-      .find(node => node.props.accessibilityLabel === 'More navigation')
+      .find(node => node.props.accessibilityLabel === 'Home navigation')
       .props.onPress();
   });
   const menu = renderer.root.find(
-    node => node.props.accessibilityLabel === 'More navigation menu',
+    node => node.props.accessibilityLabel === 'Home destination switcher',
   );
   expect(menu).toBeDefined();
+  expect(menu.props.pointerEvents).toBe('auto');
+  expect(menu.props.style).toEqual(
+    expect.objectContaining({
+      borderWidth: 0,
+      width: 224,
+      zIndex: 41,
+      right: 16,
+    }),
+  );
+  const glass = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Desktop workspace material',
+  );
+  expect(glass.props.pointerEvents).toBe('none');
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Home navigation',
+    ).props.accessibilityState,
+  ).toEqual({expanded: true});
+  const destinationSymbols: Record<string, string> = {
+    Home: 'house',
+    Conversations: 'bubble.left.and.bubble.right',
+    Memories: 'brain',
+    Tasks: 'checklist',
+    Connectors: 'link',
+    Settings: 'gearshape',
+  };
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Conversations destination',
+    ).props.accessibilityRole,
+  ).toBe('menuitem');
+  for (const destination of [
+    'Home',
+    'Conversations',
+    'Memories',
+    'Tasks',
+    'Connectors',
+    'Settings',
+  ]) {
+    const button = renderer.root.find(
+      node => node.props.accessibilityLabel === `${destination} destination`,
+    );
+    expect(button.props.accessibilityRole).toBe('menuitem');
+    expect(typeof button.props.onPress).toBe('function');
+    expect(button.props.hitSlop).toEqual({
+      bottom: 6,
+      left: 8,
+      right: 8,
+      top: 6,
+    });
+    expect(button.props.pointerEvents).not.toBe('none');
+    expect(
+      button.find(node => node.props.symbolName !== undefined).props.symbolName,
+    ).toBe(destinationSymbols[destination]);
+  }
   await ReactTestRenderer.act(async () => {
     renderer.root
-      .find(node => node.props.accessibilityLabel === 'Tasks navigation')
+      .find(node => node.props.accessibilityLabel === 'Tasks destination')
       .props.onPress();
   });
   expect(
     renderer.root.find(node => node.props.accessibilityLabel === 'Tasks stage'),
   ).toBeDefined();
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Home destination switcher',
+    ),
+  ).toHaveLength(0);
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Home navigation',
+    ).props.accessibilityState,
+  ).toEqual({expanded: false});
 });
 
 test('keeps desktop hardware secondary while retaining native device actions', async () => {
@@ -1767,12 +2265,12 @@ test.each([800, 960, 1440])(
 
     await ReactTestRenderer.act(async () => {
       renderer.root
-        .find(node => node.props.accessibilityLabel === 'More navigation')
+        .find(node => node.props.accessibilityLabel === 'Home navigation')
         .props.onPress();
     });
     await ReactTestRenderer.act(async () => {
       renderer.root
-        .find(node => node.props.accessibilityLabel === 'Tasks navigation')
+        .find(node => node.props.accessibilityLabel === 'Tasks destination')
         .props.onPress();
     });
     const tasksTitle = renderer.root
@@ -1799,7 +2297,7 @@ test('keeps non-macOS mobile navigation-free and pane-focused', async () => {
   ).toHaveLength(0);
   expect(
     renderer.root.findAll(
-      node => node.props.accessibilityLabel === 'Desktop material panel',
+      node => node.props.accessibilityLabel === 'Desktop workspace material',
     ),
   ).toHaveLength(0);
   expect(

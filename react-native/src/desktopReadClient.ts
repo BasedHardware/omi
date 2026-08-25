@@ -98,6 +98,49 @@ export type DesktopReadProjection =
   | MemoryProjection
   | TaskProjection;
 
+export type TimelineGroup = {
+  label: string;
+  items: DesktopReadProjection[];
+};
+
+export function projectionTimestamp(
+  item: DesktopReadProjection,
+): number | null {
+  const timestamp =
+    item.kind === 'conversation'
+      ? Date.parse(item.startedAt ?? item.createdAt)
+      : item.kind === 'memory'
+      ? item.timestamp === null
+        ? null
+        : item.timestamp * 1000
+      : item.createdAt * 1000;
+  return timestamp === null || !Number.isFinite(timestamp) ? null : timestamp;
+}
+
+export function timelineGroups(
+  items: DesktopReadProjection[],
+  nowEpochMilliseconds: number,
+): TimelineGroup[] {
+  const groups = new Map<string, TimelineGroup>();
+  for (const item of items) {
+    const timestamp = projectionTimestamp(item);
+    const label =
+      timestamp === null
+        ? 'Date unavailable'
+        : conversationGroupLabel(
+            new Date(timestamp).toISOString(),
+            nowEpochMilliseconds,
+          );
+    const group = groups.get(label);
+    if (group === undefined) {
+      groups.set(label, {label, items: [item]});
+    } else {
+      group.items.push(item);
+    }
+  }
+  return [...groups.values()];
+}
+
 export type ReadPageState = {
   windowStatus: 'complete' | 'more' | 'incomplete' | 'unknown';
   complete: boolean;
@@ -126,12 +169,38 @@ export type DesktopReadOutcomes = {
   tasks: DomainReadOutcome<TaskProjection>;
 };
 
+export const desktopCloudBaseURL = 'https://api.omi.me';
 export const desktopBackendConfigurationCopy =
-  'Trusted local Omi service configuration is missing. Set OMI_LOCAL_API_CLIENT_ID and OMI_LOCAL_API_TOKEN, then retry.';
+  'Sign in to Omi cloud to load conversations and memories.';
+export const desktopBackendUnauthorizedCopy =
+  'Omi cloud needs a signed-in session.';
 export const desktopBackendServiceCopy =
-  'Trusted local Omi service at 127.0.0.1:8787 is unavailable. Start it, then retry.';
+  'Omi cloud at https://api.omi.me is unavailable. Check the connection, then retry.';
+export const desktopLocalBackendServiceCopy =
+  'The configured local Omi service is unavailable. Check its connection, then retry.';
 export const desktopProjectionUnavailableCopy =
   'Saved conversations and memories are not available from this Omi service yet. Retry after its persisted projections are connected.';
+const desktopRecoveryGenericCopy =
+  'Omi could not load saved conversations or memories. Your saved data has not been changed.';
+
+export function desktopRecoveryCopy(
+  conversations: DomainReadOutcome<ConversationProjection>,
+  memories: DomainReadOutcome<MemoryProjection>,
+): string {
+  for (const outcome of [conversations, memories]) {
+    if (
+      outcome.status === 'error' &&
+      (outcome.error === desktopBackendConfigurationCopy ||
+        outcome.error === desktopBackendUnauthorizedCopy ||
+        outcome.error === desktopBackendServiceCopy ||
+        outcome.error === desktopLocalBackendServiceCopy ||
+        outcome.error === desktopProjectionUnavailableCopy)
+    ) {
+      return outcome.error;
+    }
+  }
+  return desktopRecoveryGenericCopy;
+}
 
 class DesktopProjectionUnavailableError extends Error {}
 
@@ -151,6 +220,9 @@ export function desktopReadErrorCopy(error: unknown): string {
       error.message === 'Native HTTP configuration is unavailable')
   ) {
     return desktopBackendConfigurationCopy;
+  }
+  if (code === 'unauthorized' || code === 'OMI_HTTP_UNAUTHORIZED') {
+    return desktopBackendUnauthorizedCopy;
   }
   if (
     code === 'OMI_HTTP_TRANSPORT' ||
@@ -246,6 +318,15 @@ async function read(
 ): Promise<unknown> {
   const response = await backend.request({id, method: 'GET', path});
   if (response.status !== 200) {
+    if (response.status === 401) {
+      const unauthorized = new Error(
+        desktopBackendUnauthorizedCopy,
+      ) as Error & {
+        code: string;
+      };
+      unauthorized.code = 'unauthorized';
+      throw unauthorized;
+    }
     if (response.status === 503 && response.body !== null) {
       try {
         const body = object(JSON.parse(response.body), `${id} error`);

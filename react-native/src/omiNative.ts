@@ -3,6 +3,7 @@ import {NativeModules} from 'react-native';
 import type {
   BluetoothState,
   NativeSnapshot,
+  OmiAuth,
   OmiBackend,
   OmiNative,
 } from './omiNativeTypes';
@@ -16,6 +17,7 @@ export type {
   NativeHttpResponse,
   NativeSnapshot,
   OmiBackend,
+  OmiAuth,
   OmiNative,
 } from './omiNativeTypes';
 
@@ -39,6 +41,10 @@ export function resolveOmiBackend(nativeModule: OmiBackend | null | undefined) {
   return {adapter: nativeModule, installed: nativeModule != null};
 }
 
+export function resolveOmiAuth(nativeModule: OmiAuth | null | undefined) {
+  return {adapter: nativeModule, installed: nativeModule != null};
+}
+
 const selectedOmiNative = resolveOmiNative(
   NativeModules.OmiNative as OmiNative | undefined,
 );
@@ -52,3 +58,9 @@ const selectedOmiBackend = resolveOmiBackend(
 
 export const omiBackend = selectedOmiBackend.adapter;
 export const isNativeBackendInstalled = selectedOmiBackend.installed;
+
+const selectedOmiAuth = resolveOmiAuth(
+  NativeModules.OmiAuth as OmiAuth | undefined,
+);
+
+export const omiAuth = selectedOmiAuth.adapter;

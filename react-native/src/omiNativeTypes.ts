@@ -30,6 +30,13 @@ export type OmiBackend = {
   cancelGenerationEvents(generationId: string): Promise<void>;
 };
 
+export type OmiAuth = {
+  signIn(): Promise<{signedIn: boolean}>;
+  hasCloudSession(): Promise<boolean>;
+  hasCompletedOnboarding(): Promise<boolean>;
+  markOnboardingComplete(): Promise<void>;
+};
+
 export type Device = {
   id: string;
   name: string;
