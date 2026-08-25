@@ -1151,6 +1151,45 @@ describe('useChat — rehydrate preserves attachments', () => {
   })
 })
 
+describe('useChat — default thread backend hydration (B5 cross-device read parity)', () => {
+  // settle waits for at least one message to land in history.
+  const settleHistory = async (result: { current: { history: unknown[] } }): Promise<void> => {
+    for (let k = 0; k < 50 && !result.current.history.length; k++) await flush()
+  }
+
+  it('R4 — mount loader (infinite) populates history from the backend (cross-device turns visible)', async () => {
+    prefs.chatHistoryMode = 'infinite'
+    sessionMocks.getMessages.mockResolvedValueOnce([
+      { id: 'be-1', text: 'hello from mobile', sender: 'human', createdAt: '2026-01-01T00:00:00Z' },
+      { id: 'be-2', text: 'hi there', sender: 'ai', createdAt: '2026-01-01T00:00:01Z' }
+    ])
+    const { result } = renderHook(() => useChat())
+    await act(async () => {
+      await settleHistory(result)
+    })
+    expect(result.current.history).toHaveLength(2)
+    expect(result.current.history[0]).toMatchObject({ id: 'be-1', role: 'user', content: 'hello from mobile' })
+    expect(result.current.history[1]).toMatchObject({ id: 'be-2', role: 'assistant', content: 'hi there' })
+  })
+
+  it('R5 — mount loader (infinite) falls back to local SQLite when the backend call fails', async () => {
+    prefs.chatHistoryMode = 'infinite'
+    sessionMocks.getMessages.mockRejectedValueOnce(new Error('network'))
+    ;(window as unknown as { omi: { getLocalConversation: unknown } }).omi.getLocalConversation =
+      async () => ({
+        startedAt: 1,
+        messages: [{ id: 'loc-1', role: 'user' as const, content: 'offline message' }]
+      })
+    const { result } = renderHook(() => useChat())
+    await act(async () => {
+      await settleHistory(result)
+    })
+    expect(result.current.history).toHaveLength(1)
+    expect(result.current.history[0]).toMatchObject({ id: 'loc-1', role: 'user', content: 'offline message' })
+  })
+})
+
+
 describe('useChat — chat quota gate (Mac AgentBridge.quotaExceeded parity)', () => {
   it('blocks a send when the quota is exhausted — popup shown, no fetch, no history entry', async () => {
     gateMocks.check.mockResolvedValueOnce({ blocked: true, message: "You've reached your limit." })

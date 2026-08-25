@@ -81,6 +81,10 @@ export type ChatMsg = {
 
 const OMI_BASE = import.meta.env.VITE_OMI_API_BASE as string
 
+// Number of turns to fetch from the backend on the default-thread mount.
+// Matches Mac's single-page import size; pagination is deferred.
+const BACKEND_HISTORY_LIMIT = 100
+
 // Hard ceiling on a single streamed reply. Mirrors the macOS client's per-send
 // watchdog (ChatProvider.swift): if the SAME generation is still in flight after
 // this long, abort the fetch, unlatch the engine, and surface a timeout so a
@@ -337,49 +341,76 @@ export function useChat(): UseChat {
       })
   }
 
-  // In infinite mode the ongoing thread is loaded once on mount (and legacy
-  // id-less messages get backfilled ids so the merge can match them). This hook
-  // is the app's single chat engine now (the bar is a viewport over it via the
-  // main-process bridge — INV-CHAT-1), so there is one loader/writer.
+  // Load the default shared thread: backend first (cross-device source of truth —
+  // Mac/mobile turns are invisible in local SQLite), local SQLite fallback when not
+  // signed in or the network call fails. `isCurrent` is re-checked before every state
+  // write; `onSettled` fires once (.finally) so the caller can chain agent-card
+  // projection after history has settled.
+  const loadDefaultThreadHistory = (
+    chatId: string,
+    isCurrent: () => boolean,
+    onSettled: () => void
+  ): void => {
+    const run = async (): Promise<void> => {
+      if (auth.currentUser) {
+        try {
+          const msgs = await getSessionMessages({ limit: BACKEND_HISTORY_LIMIT })
+          if (!isCurrent()) return
+          if (msgs.length) {
+            setHistory(
+              msgs.map((m) => ({
+                id: m.id,
+                role: m.sender === 'ai' ? ('assistant' as const) : ('user' as const),
+                content: m.text,
+                ...(m.attachments?.length ? { attachments: m.attachments } : {})
+              }))
+            )
+            return
+          }
+        } catch {
+          // Backend unavailable; fall through to local SQLite.
+        }
+      }
+      // Offline / not signed in / backend returned empty — load local SQLite.
+      const c = await window.omi.getLocalConversation(chatId)
+      if (!isCurrent() || !c?.messages) return
+      startedAtRef.current = c.startedAt || Date.now()
+      setHistory(
+        c.messages.map((m) => ({
+          id: m.id ?? crypto.randomUUID(),
+          role: m.role,
+          content: m.content,
+          ...(m.attachments?.length ? { attachments: m.attachments } : {})
+        }))
+      )
+    }
+    void run()
+      .catch(() => {
+        /* no prior conversation */
+      })
+      .finally(onSettled)
+  }
+
+  // In infinite mode the ongoing thread is loaded once on mount — backend first
+  // (cross-device source of truth), local SQLite fallback (offline / auth not ready).
+  // This hook is the app's single chat engine now (the bar is a viewport over it via
+  // the main-process bridge — INV-CHAT-1), so there is one loader/writer.
   useEffect(() => {
     if (mode !== 'infinite' || !chatIdRef.current) return
     let cancelled = false
     // Capture the generation so a switchThread()/reset() that lands before this
-    // async default-thread read resolves cancels the write — otherwise a slow
-    // default load could overwrite a thread the user has since switched to (C5
-    // symmetry with the send/agent/kernel paths).
+    // async load resolves cancels the write (C5 symmetry with send/agent/kernel paths).
     const myGen = genRef.current
-    void window.omi
-      .getLocalConversation(chatIdRef.current)
-      .then((c) => {
-        // Skip if a send already started before this async load resolved —
-        // otherwise we'd overwrite the in-flight bubble (sendingRef is set
-        // synchronously at the top of send()).
-        if (cancelled || sendingRef.current || genRef.current !== myGen || !c?.messages) return
-        startedAtRef.current = c.startedAt || Date.now()
-        setHistory(
-          c.messages.map((m) => {
-            const evidence = parseChatEvidenceFromRecord(m)
-            return {
-              id: m.id ?? crypto.randomUUID(),
-              role: m.role,
-              content: m.content,
-              ...(m.attachments?.length ? { attachments: m.attachments } : {}),
-              ...(evidence ? { evidence } : {})
-            }
-          })
-        )
-      })
-      .catch(() => {
-        /* no prior conversation — start empty */
-      })
-      .finally(() => {
-        // Project this thread's shared-thread agent cards AFTER the history load has
-        // settled, so the load's setHistory can't clobber the merged cards.
+    loadDefaultThreadHistory(
+      chatIdRef.current,
+      () => !cancelled && !sendingRef.current && genRef.current === myGen,
+      () => {
+        // Project shared-thread agent cards AFTER history has settled.
         if (!cancelled && genRef.current === myGen && !sendingRef.current && chatIdRef.current) {
           loadAgentCards(chatIdRef.current, () => !cancelled && genRef.current === myGen)
         }
-      })
+      }
+    )
     return () => {
       cancelled = true
     }
@@ -1651,32 +1682,10 @@ export function useChat(): UseChat {
           /* leave the thread empty on a load failure */
         })
     } else {
-      // Default thread: the local conversation (as the mount loader reads it).
-      const localId = chatIdRef.current
-      void window.omi
-        .getLocalConversation(localId)
-        .then((c) => {
-          if (!isCurrent() || !c?.messages) return
-          startedAtRef.current = c.startedAt || Date.now()
-          setHistory(
-            c.messages.map((m) => {
-              const evidence = parseChatEvidenceFromRecord(m)
-              return {
-                id: m.id ?? crypto.randomUUID(),
-                role: m.role,
-                content: m.content,
-                ...(m.attachments?.length ? { attachments: m.attachments } : {}),
-                ...(evidence ? { evidence } : {})
-              }
-            })
-          )
-          // Project this thread's shared-thread agent cards after the load replaced
-          // history, so the load can't clobber them (B4, INV-CHAT-1).
-          loadAgentCards(chatIdRef.current ?? 'default', isCurrent)
-        })
-        .catch(() => {
-          /* no prior conversation — start empty */
-        })
+      // Default thread: backend first (cross-device parity), local SQLite fallback.
+      loadDefaultThreadHistory(chatIdRef.current ?? resolveDefaultChatId(), isCurrent, () => {
+        loadAgentCards(chatIdRef.current ?? 'default', isCurrent)
+      })
     }
   }
 
@@ -1741,32 +1750,11 @@ export function useChat(): UseChat {
           /* leave the thread empty on a load failure */
         })
     } else {
-      // Back to the plain default thread: the local conversation.
-      const localId = chatIdRef.current
-      void window.omi
-        .getLocalConversation(localId)
-        .then((c) => {
-          if (!isCurrent() || !c?.messages) return
-          startedAtRef.current = c.startedAt || Date.now()
-          setHistory(
-            c.messages.map((m) => {
-              const evidence = parseChatEvidenceFromRecord(m)
-              return {
-                id: m.id ?? crypto.randomUUID(),
-                role: m.role,
-                content: m.content,
-                ...(m.attachments?.length ? { attachments: m.attachments } : {}),
-                ...(evidence ? { evidence } : {})
-              }
-            })
-          )
-          // Project this thread's shared-thread agent cards after the load replaced
-          // history, so the load can't clobber them (B4, INV-CHAT-1).
-          loadAgentCards(chatIdRef.current ?? 'default', isCurrent)
-        })
-        .catch(() => {
-          /* no prior conversation — start empty */
-        })
+      // Back to the plain default thread: backend first (cross-device parity), local
+      // SQLite fallback.
+      loadDefaultThreadHistory(chatIdRef.current ?? resolveDefaultChatId(), isCurrent, () => {
+        loadAgentCards(chatIdRef.current ?? 'default', isCurrent)
+      })
     }
   }
 
