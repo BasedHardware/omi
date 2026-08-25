@@ -249,7 +249,11 @@ def _is_trial_expired_uncached(
         if not desktop_trial_paywall_eligible(plan, subscription):
             return False
         if users_db.is_byok_active(uid, firestore_client=firestore_client):
-            return False
+            if not required_byok_provider:
+                return False
+            fingerprints = users_db.get_byok_state(uid, firestore_client=firestore_client).get('fingerprints')
+            if isinstance(fingerprints, dict) and fingerprints.get(required_byok_provider):
+                return False
         user_record = _get_user(uid)
         creation_ms: int = cast(int, user_record.user_metadata.creation_timestamp)
         if not creation_ms:
@@ -1033,6 +1037,7 @@ def get_chat_quota_snapshot(
     *,
     firestore_client: Any | None = None,
     provision: bool = True,
+    required_llm_provider: str | None = None,
 ) -> Dict[str, Any]:
     """Cheap computation of `is_allowed / used / limit / unit / plan` — shared
     between the `/v1/users/me/usage-quota` endpoint and the enforcement helper.
@@ -1121,9 +1126,19 @@ def enforce_chat_quota(
     # Paywall test override — bypass BYOK + plan checks so the same 402
     # surfaces that a free user past 30 questions would hit. Desktop only;
     # mobile callers continue down the normal plan path.
-    if is_trial_paywalled(uid, platform, firestore_client=firestore_client, provision=provision):
+    if is_trial_paywalled(
+        uid,
+        platform,
+        firestore_client=firestore_client,
+        provision=provision,
+        required_byok_provider=required_llm_provider,
+    ):
         snapshot = get_chat_quota_snapshot(
-            uid, platform=platform, firestore_client=firestore_client, provision=provision
+            uid,
+            platform=platform,
+            firestore_client=firestore_client,
+            provision=provision,
+            required_llm_provider=required_llm_provider,
         )
         raise HTTPException(
             status_code=402,
@@ -1148,7 +1163,13 @@ def enforce_chat_quota(
     if users_db.is_byok_active(uid, firestore_client=firestore_client) and has_exempt_llm:
         return
 
-    snapshot = get_chat_quota_snapshot(uid, platform=platform, firestore_client=firestore_client, provision=provision)
+    snapshot = get_chat_quota_snapshot(
+        uid,
+        platform=platform,
+        firestore_client=firestore_client,
+        provision=provision,
+        required_llm_provider=required_llm_provider,
+    )
     if snapshot['allowed']:
         return
 

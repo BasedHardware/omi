@@ -844,6 +844,22 @@ class TestRequestHasLLMByokKey:
         assert subscription.request_has_llm_byok_key() is False
 
 
+    def test_quota_snapshot_accepts_required_llm_provider(self, monkeypatch):
+        from models.users import PlanType
+        from utils import subscription
+
+        monkeypatch.setattr(subscription, 'is_trial_paywalled', lambda *args, **kwargs: False)
+        monkeypatch.setattr(subscription.users_db, 'get_user_valid_subscription', lambda *args, **kwargs: None)
+        monkeypatch.setattr(
+            subscription.user_usage_db,
+            'get_monthly_chat_usage',
+            lambda *args, **kwargs: {'questions': 1, 'cost_usd': 0.0, 'reset_at': None},
+        )
+        snapshot = subscription.get_chat_quota_snapshot('uid', required_llm_provider='anthropic')
+        assert snapshot['plan'] == PlanType.basic
+        assert snapshot['unit'] == 'questions'
+
+
 class TestBYOKMiddlewareValidation:
     @staticmethod
     def _request(headers, path='/v1/test'):

@@ -102,6 +102,9 @@ async def omni_relay(websocket: WebSocket):
     set_validated_byok_keys(validated_byok, uid)
 
     provider = websocket.query_params.get("provider", "gemini")
+    if provider not in {"gemini", "openai"}:
+        await websocket.close(code=1011, reason=f"unsupported provider: {provider}"[:120])
+        return
 
     # Same desktop gate as /v4/listen: Operator/Architect + BYOK pass; un-entitled
     # desktop users past their trial are paywalled.

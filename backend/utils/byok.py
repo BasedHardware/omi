@@ -213,7 +213,13 @@ class BYOKMiddleware(BaseHTTPMiddleware):
                         else:
                             set_validated_byok_keys(validated_keys, uid)
                     except Exception:
-                        pass
+                        # Transient verify/Firestore failures must not leave raw
+                        # headers in context; ContextVar mutations in worker
+                        # threads are discarded, so later route auth cannot
+                        # sanitize this request.
+                        set_byok_keys({})
+                        set_byok_uid(None)
+                        logger.warning('BYOK middleware validation failed; clearing unvalidated keys')
             return await call_next(request)
         finally:
             _byok_ctx.reset(token)

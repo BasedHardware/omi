@@ -264,9 +264,9 @@ final class APIKeyService: ObservableObject {
     guard let uid, !uid.isEmpty else { return }
     let last = UserDefaults.standard.string(forKey: DefaultsKey.byokOwnerUid.rawValue)
     if last != uid {
-      if last != nil {
-        clearPersistedBYOKKeys()
-      }
+      // Unowned pre-upgrade keys (last == nil) are unsafe to inherit: the next
+      // signed-in account would otherwise enroll someone else's credentials.
+      clearPersistedBYOKKeys()
       UserDefaults.standard.set(uid, forKey: DefaultsKey.byokOwnerUid.rawValue)
     }
   }
@@ -333,16 +333,35 @@ final class APIKeyService: ObservableObject {
     return snapshot
   }
 
+  private static let reconcileLock = NSLock()
+  private static var reconcileGeneration: UInt64 = 0
+
+  private static func nextReconciliationGeneration() -> UInt64 {
+    reconcileLock.lock()
+    defer { reconcileLock.unlock() }
+    reconcileGeneration += 1
+    return reconcileGeneration
+  }
+
+  private static func isCurrentReconciliation(_ generation: UInt64) -> Bool {
+    reconcileLock.lock()
+    defer { reconcileLock.unlock() }
+    return reconcileGeneration == generation
+  }
+
   func reconcileBYOKActivation() async {
     Self.bindBYOKOwner(UserDefaults.standard.string(forKey: .authUserId))
     guard let selectedProvider = Self.selectedBYOKLLMProvider, Self.byokKey(selectedProvider) != nil else { return }
+    let generation = Self.nextReconciliationGeneration()
 
     let snapshot = Self.activeBYOKSnapshot.reduce(into: [BYOKProvider: String]()) { result, entry in
       result[entry.key] = entry.value.key
     }
     let statuses = await BYOKValidator.validateAll(snapshot)
+    guard Self.isCurrentReconciliation(generation) else { return }
     guard statuses[selectedProvider] == .ok else {
       try? await APIClient.shared.deactivateBYOK()
+      guard Self.isCurrentReconciliation(generation) else { return }
       Self.persistEnrolledFingerprints([:])
       return
     }
@@ -356,6 +375,7 @@ final class APIKeyService: ObservableObject {
     }
     do {
       try await APIClient.shared.activateBYOK(fingerprints: fingerprints)
+      guard Self.isCurrentReconciliation(generation) else { return }
       Self.persistEnrolledFingerprints(fingerprints)
     } catch {
       // Leave local capability inactive when the backend never enrolled.
