@@ -27,7 +27,7 @@ if str(BACKEND_DIR) not in sys.path:
 from google.cloud import firestore  # noqa: E402
 
 from database.memory_collections import MemoryCollections  # noqa: E402
-from models.memory_apply import MemoryControlState  # noqa: E402
+from models.memory_apply import MemoryControlState, WriterMode  # noqa: E402
 from utils.memory.daily_memory_sweep import (  # noqa: E402
     DailySweepCandidate,
     DailySweepInput,
@@ -76,7 +76,7 @@ def _packet(uid: str, control: MemoryControlState) -> DailySweepInput:
                 source_id="conversation-1",
                 source_type="conversation",
                 source_refs=("conversation:conversation-1",),
-                slot="release_role",
+                slot="occupation",
             ),
         ),
     )
@@ -91,6 +91,7 @@ def _seed(
         head_commit_id="daily-sweep-head",
         account_generation=11,
         source_generation=source_generation,
+        writer_mode=WriterMode.ledger,
         updated_at=now,
     )
     db_client.document(collections.memory_apply_control_state).set(control.model_dump(mode="json"))

@@ -28,10 +28,14 @@ from fastapi import HTTPException
 
 from database.memory_apply_store import tombstone_memory_items_firestore
 from database.memory_collections import MemoryCollections
+from database.legal_holds import destructive_operation_gate
 from models.memory_apply import MemoryControlState, WriterMode
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryKind, MemorySubjectScope
 from utils.memory.knowledge_ledger import LedgerProvenance, LedgerWrite, close_fact, save_ledger_write
-from utils.memory.knowledge_ledger_migration import rollback_ledger_writer_to_compatibility
+from utils.memory.knowledge_ledger_migration import (
+    publish_ledger_migration_cutover,
+    rollback_ledger_writer_to_compatibility,
+)
 from utils.memory import memory_service as memory_service_module
 from utils.memory.memory_service import MemoryService
 from models.product_memory import LedgerWriteReason
@@ -367,14 +371,16 @@ def main() -> int:
             observed_control = MemoryControlState.model_validate(
                 _required_doc(db_client, collections.memory_apply_control_state)
             )
-            tombstone_memory_items_firestore(
-                uid=uid,
-                reason="knowledge_ledger_revert_privacy_race",
-                observed_control=observed_control,
-                expected_items=[selected_before_delete],
-                preserved_evidence_ids=[],
-                db_client=db_client,
-            )
+            with destructive_operation_gate(uid, firestore_client=db_client) as deletion_gate_token:
+                tombstone_memory_items_firestore(
+                    uid=uid,
+                    reason="knowledge_ledger_revert_privacy_race",
+                    observed_control=observed_control,
+                    expected_items=[selected_before_delete],
+                    preserved_evidence_ids=[],
+                    deletion_gate_token=deletion_gate_token,
+                    db_client=db_client,
+                )
             race_state["after_privacy"] = _authority_snapshot(db_client, collections)
             return original_amend_fact(*args, **kwargs)
 
@@ -418,6 +424,15 @@ def main() -> int:
         ]:
             raise AssertionError("blocked privacy-raced revert invalidated prompt caches without a commit")
 
+        publish_ledger_migration_cutover(
+            uid,
+            db_client=db_client,
+            publication_authorizer=lambda: True,
+            migrated_long_term_count=0,
+            adjudicated_short_term_count=0,
+            completed_at=NOW,
+        )
+
         standalone_source_id = save_ledger_write(
             uid,
             LedgerWrite(
@@ -430,7 +445,7 @@ def main() -> int:
                     action_id="ledger-correction-emulator-standalone-seed",
                 ),
                 write_reason=LedgerWriteReason.direct_user_statement,
-                slot="winter_base",
+                slot="home_city",
                 curation_weight=5,
                 visibility="private",
             ),
@@ -522,7 +537,7 @@ def main() -> int:
                     action_id="ledger-correction-emulator-standalone-concurrent-seed",
                 ),
                 write_reason=LedgerWriteReason.direct_user_statement,
-                slot="spring_base",
+                slot="home_city",
                 curation_weight=5,
                 visibility="private",
             ),
@@ -583,7 +598,7 @@ def main() -> int:
                     action_id="ledger-correction-emulator-standalone-privacy-seed",
                 ),
                 write_reason=LedgerWriteReason.direct_user_statement,
-                slot="summer_base",
+                slot="home_city",
                 curation_weight=5,
                 visibility="private",
             ),
