@@ -48,11 +48,10 @@ show_usage() {
     echo "Environments:"
     echo "  seeed_xiao_esp32s3      Standard ESP32-S3 build (default)"
     echo "  seeed_xiao_esp32s3_slow Slower upload for reliability"
-    echo "  uf2_release             Optimized release build"
     echo ""
     echo "Examples:"
     echo "  $0                      # Build default environment and create UF2"
-    echo "  $0 -e uf2_release       # Build optimized release version"
+    echo "  $0 -e seeed_xiao_esp32s3_slow  # Build with slower upload speed"
     echo "  $0 -c                   # Convert existing binary to UF2"
     echo "  $0 -b firmware.bin      # Convert specific binary file"
 }

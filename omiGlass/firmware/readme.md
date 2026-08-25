@@ -11,11 +11,11 @@ The UF2 (USB Flashing Format) method is the simplest way to flash your ESP32-S3 
 #### 1. Build UF2 File
 From the `firmware` directory, run the build script:
 ```bash
-# Build optimized release version (recommended)
-./scripts/build_uf2.sh -e uf2_release
-
-# Or build standard version
+# Build the default environment
 ./scripts/build_uf2.sh
+
+# Or build with the slower, more reliable upload settings
+./scripts/build_uf2.sh -e seeed_xiao_esp32s3_slow
 ```
 
 #### 2. Flash to Device
@@ -40,7 +40,6 @@ From the `firmware` directory, run the build script:
 |---|---|---|
 | `seeed_xiao_esp32s3` | Standard build | Development |
 | `seeed_xiao_esp32s3_slow` | Slower upload | For connection issues |
-| `uf2_release` | Optimized release | Production/Best battery |
 
 ### 📁 Generated Files
 

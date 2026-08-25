@@ -60,7 +60,7 @@ The firmware has several configuration files for different board variants:
 2. `prj_xiao_ble_sense_devkitv1.conf` - For the DevKit V1
 3. `prj_xiao_ble_sense_devkitv1-spisd.conf` - For the DevKit V1 with SPI SD card
 
-The build also uses the corresponding overlay file from `app/overlay/`.
+The build also uses the corresponding overlay file from `devkit/overlay/`.
 
 ## Build Parameters
 
@@ -93,7 +93,7 @@ cd v2.7.0
 west update -o=--depth=1 -n
 west blobs fetch hal_nordic
 west zephyr-export
-west build -b xiao_ble/nrf52840/sense --pristine always ../app -- \
+west build -b xiao_ble/nrf52840/sense --pristine always ../devkit -- \
     -DNCS_TOOLCHAIN_VERSION="NONE" \
     -DCONF_FILE="prj_xiao_ble_sense_devkitv2-adafruit.conf" \
     -DDTC_OVERLAY_FILE="/omi/firmware/devkit/overlay/xiao_ble_sense_devkitv2-adafruit.overlay" \

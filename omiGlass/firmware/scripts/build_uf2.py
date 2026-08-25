@@ -5,7 +5,7 @@ Standalone script to build firmware and generate UF2 files
 
 Usage:
     python3 build_uf2.py                    # Build default environment
-    python3 build_uf2.py --env release      # Build release environment
+    python3 build_uf2.py --env seeed_xiao_esp32s3_slow  # Build slow-upload environment
     python3 build_uf2.py --convert-only     # Convert existing binary to UF2
 """
 
@@ -141,7 +141,7 @@ def find_binary_file(environment="seeed_xiao_esp32s3"):
 def main():
     parser = argparse.ArgumentParser(description='OMI Glass UF2 Builder')
     parser.add_argument('--env', default='seeed_xiao_esp32s3', 
-                       choices=['seeed_xiao_esp32s3', 'seeed_xiao_esp32s3_slow', 'uf2_release'],
+                       choices=['seeed_xiao_esp32s3', 'seeed_xiao_esp32s3_slow'],
                        help='PlatformIO environment to build')
     parser.add_argument('--convert-only', action='store_true',
                        help='Only convert existing binary to UF2 (skip build)')
