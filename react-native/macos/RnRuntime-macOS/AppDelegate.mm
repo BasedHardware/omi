@@ -67,13 +67,13 @@ static const CGFloat OmiTrafficLightSpacing = 6.0;
   window.styleMask = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable |
       NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable;
   window.titlebarAppearsTransparent = NO;
-  window.titleVisibility = NSWindowTitleHidden;
-  window.title = @"";
+  window.titleVisibility = NSWindowTitleVisible;
+  window.title = @"omi";
   window.toolbarStyle = NSWindowToolbarStyleAutomatic;
   window.titlebarSeparatorStyle = NSTitlebarSeparatorStyleAutomatic;
-  // Stock titled window: traffic lights live in the native titlebar. RN chrome
-  // is a separate row in the content view. Keep background-drag without an RN
-  // gesture layer.
+  // Stock titled window: traffic lights and the "omi" title live in the
+  // native titlebar. RN chrome is a separate row in the content view after
+  // onboarding. Keep background-drag without an RN gesture layer.
   window.movableByWindowBackground = YES;
   window.level = NSNormalWindowLevel;
   window.hidesOnDeactivate = NO;

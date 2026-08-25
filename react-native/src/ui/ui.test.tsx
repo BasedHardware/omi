@@ -17,6 +17,29 @@ jest.mock('react-native', () => {
         return mockPlatformOS;
       },
     },
+    Animated: {
+      View: component('Animated.View'),
+      Value: class {
+        constructor(value: number) {
+          this.value = value;
+        }
+        interpolate() {
+          return 0;
+        }
+        setValue(value: number) {
+          this.value = value;
+        }
+        value = 0;
+      },
+      parallel: () => ({start: () => undefined}),
+      spring: () => ({start: () => undefined}),
+      timing: () => ({start: () => undefined}),
+    },
+    Easing: {
+      bezier: () => undefined,
+      cubic: {},
+      out: (value: unknown) => value,
+    },
     Pressable: component('Pressable'),
     StyleSheet: {create: <T,>(styles: T) => styles},
     Text: component('Text'),
@@ -35,6 +58,8 @@ import {Field} from './Field';
 import {Icon} from './Icon';
 import {FocusPressable} from './Pressable';
 import {tokens} from './tokens';
+import {Onboarding} from './Onboarding';
+import {omiDotColor} from './OmiAvatar';
 
 function render(element: React.ReactElement) {
   let renderer!: ReactTestRenderer.ReactTestRenderer;
@@ -134,5 +159,28 @@ describe('UI primitives', () => {
     expect(JSON.stringify(renderer.toJSON())).toContain('Continue');
     expect(JSON.stringify(renderer.toJSON())).toContain('Email');
     expect(JSON.stringify(renderer.toJSON())).toContain('Enter a valid email');
+  });
+});
+
+describe('Onboarding chrome', () => {
+  test('first-run onboarding is Welcome and Sign in only', () => {
+    const renderer = render(
+      <Onboarding onSignIn={() => undefined} signingIn={false} />,
+    );
+    const output = JSON.stringify(renderer.toJSON());
+
+    expect(output).toContain('Welcome to Omi');
+    expect(output).toContain('Sign in');
+    expect(output).not.toContain('Search Omi');
+    expect(output).not.toContain('Home search dock');
+    expect(output).not.toContain('Home navigation');
+    expect(output).not.toContain('Desktop application chrome');
+  });
+});
+
+describe('extracted modules', () => {
+  test('omiDotColor stays in the avatar module', () => {
+    expect(omiDotColor('omi', 0)).toBe(omiDotColor('omi', 0));
+    expect(omiDotColor('omi', 0)).not.toBe(omiDotColor('other', 0));
   });
 });
