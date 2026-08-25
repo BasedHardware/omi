@@ -629,6 +629,16 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     await getDeviceInfo();
     SharedPreferencesUtil().deviceName = device.name;
 
+    // getDeviceInfo() may have reclassified the discovery object — an Omi-typed
+    // Glass unit becomes DeviceType.openglass once hasImageStream is read. Push
+    // the capability-normalized paired device so consumers of the recording
+    // device (e.g. the Omi button-actions gate) see the same identity as
+    // pairedDevice instead of the raw advertising-time object.
+    final normalizedPairedDevice = pairedDevice ?? normalizedDevice;
+    if (captureProvider != null) {
+      captureProvider?.updateRecordingDevice(normalizedPairedDevice);
+    }
+
     // Wals — pass the firmware resolved by getDeviceInfo() above so background
     // discovery routes ring-buffer devices correctly; `device` here is the raw
     // connect object whose firmwareRevision is often still 'Unknown'.

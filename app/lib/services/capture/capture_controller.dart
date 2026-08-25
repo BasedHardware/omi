@@ -845,14 +845,13 @@ class CaptureController extends ChangeNotifier
   bool get _omiButtonActionsDisabled =>
       _isOmiButtonActionsDevice(_recordingDevice) && !SharedPreferencesUtil().omiButtonActionsEnabled;
 
-  /// Whether this device is an Omi (not an OmiGlass) that honors the Omi button
-  /// actions preference. Some OmiGlass units advertise with ``DeviceType.omi``
-  /// during discovery, so the gate uses the normalized name-based identity the
-  /// connection layer uses, rather than the raw discovery type.
+  /// Whether this device honors the Omi button actions preference. Identity is
+  /// capability-normalized: BtDevice.getDeviceInfo() reclassifies image-stream
+  /// hardware as DeviceType.openglass, and DeviceProvider pushes that normalized
+  /// paired device into updateRecordingDevice after connect — so the device type
+  /// alone is authoritative here and advertising names are never inspected.
   bool _isOmiButtonActionsDevice(BtDevice? device) {
-    if (device == null || device.type != DeviceType.omi) return false;
-    final name = device.name.toLowerCase();
-    return !(name.contains('openglass') || name.contains('omiglass') || name.contains('glass'));
+    return device?.type == DeviceType.omi;
   }
 
   Future<void> _processVoiceCommandBytes(
@@ -909,7 +908,11 @@ class CaptureController extends ChangeNotifier
     _voiceCommandTimeoutTimer = null;
     _voiceCommandSession = null;
     _voiceSessionStartedByLegacyLongPress = false; // Reset flag
-    final allowWhenDisabled = _voiceCommandStartedDuringOnboarding;
+    // The started-during-onboarding exemption only holds while the tutorial is
+    // still active: if onboarding exited (dispose/skip/complete), the session
+    // should have been cancelled — never submit audio captured after leaving.
+    final allowWhenDisabled =
+        _voiceCommandStartedDuringOnboarding && deviceOnboardingProvider?.isOnboardingActive == true;
     _voiceCommandStartedDuringOnboarding = false;
     var data = List<List<int>>.from(_commandBytes);
     _commandBytes = [];
@@ -928,6 +931,16 @@ class CaptureController extends ChangeNotifier
 
   @visibleForTesting
   bool get hasVoiceCommandSessionForTesting => _voiceCommandSession != null;
+
+  @visibleForTesting
+  void addVoiceCommandBytesForTesting(List<int> payload) {
+    _commandBytes.add(payload);
+  }
+
+  @visibleForTesting
+  void endVoiceCommandSessionForTesting(String deviceId) {
+    _endVoiceCommandSession(deviceId);
+  }
 
   Future streamButton(String deviceId) async {
     Logger.debug('streamButton in capture_provider');
@@ -1084,7 +1097,12 @@ class CaptureController extends ChangeNotifier
         bool voiceCommandSupported = _recordingDevice != null
             ? (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass)
             : false;
-        if (_voiceCommandSession != null && voiceCommandSupported) {
+        // Once Omi button actions are disabled, stop collecting command audio so
+        // a session missed by cancelActiveVoiceSession cannot keep buffering
+        // frames that would be submitted later. Interactive onboarding still
+        // receives command audio (its step-1 session runs while disabled).
+        final collectCommandAudio = !_omiButtonActionsDisabled || deviceOnboardingProvider?.isOnboardingActive == true;
+        if (_voiceCommandSession != null && voiceCommandSupported && collectCommandAudio) {
           final payload = _activeSource?.getSocketPayload(snapshot) ?? snapshot.sublist(3);
           _commandBytes.add(payload);
         }

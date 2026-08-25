@@ -60,6 +60,12 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
     if (_started && !_completed) {
       AnalyticsManager().deviceOnboardingAbandoned(_onboardingProvider.currentStep);
     }
+    // Cancel any tutorial-started voice-command session (single press on step 1)
+    // before detaching. Skip/complete both pop, so every exit funnels through
+    // here; without this the controller session and its 15s timer outlive the
+    // tutorial and the started-during-onboarding exemption could submit audio
+    // captured after the user left.
+    _captureProvider?.cancelActiveVoiceSession();
     _captureProvider?.restoreBatchModeAfterOnboarding();
     _captureProvider?.deviceOnboardingProvider = null;
     _onboardingProvider.dispose();

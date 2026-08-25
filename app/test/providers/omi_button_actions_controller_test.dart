@@ -73,7 +73,12 @@ void main() {
   test('capability-normalized OpenGlass identity bypasses the Omi-only gate', () async {
     final actions = _RecordingCaptureExternalActions();
     final provider = CaptureProvider(externalActions: actions, audioCodecLoader: (_) async => BleAudioCodec.opus);
-    provider.updateRecordingDevice(_device(DeviceType.openglass));
+    // Glass units can advertise as DeviceType.omi under a name without any
+    // "glass" hint. DeviceProvider normalizes them after getDeviceInfo() reads
+    // hasImageStream and pushes the paired device, so the recording device the
+    // gate sees must be the OpenGlass-typed one.
+    final discovery = _device(DeviceType.omi);
+    provider.updateRecordingDevice(discovery.copyWith(type: DeviceType.openglass));
     SharedPreferencesUtil().omiButtonActionsEnabled = false;
 
     await provider.processVoiceCommandBytesForTesting('test-id', [
@@ -121,5 +126,65 @@ void main() {
 
     expect(actions.sendCount, 0);
     provider.dispose();
+  });
+
+  test('exiting onboarding cancels the tutorial voice session and timeout cannot submit', () async {
+    final actions = _RecordingCaptureExternalActions();
+    final provider = CaptureProvider(
+      externalActions: actions,
+      audioCodecLoader: (_) async => BleAudioCodec.opus,
+      speakerHaptic: (_, __) async => true,
+    );
+    final onboarding = DeviceOnboardingProvider()..startOnboarding();
+    onboarding.advanceStep(); // Step 1: single press
+    provider.deviceOnboardingProvider = onboarding;
+    provider.updateRecordingDevice(_device(DeviceType.omi));
+    SharedPreferencesUtil().omiButtonActionsEnabled = false;
+
+    provider.handleButtonEventForTesting('test-id', 1);
+    expect(provider.hasVoiceCommandSessionForTesting, isTrue);
+
+    // Wrapper teardown (dispose/skip/complete all funnel through it): cancel,
+    // then detach the onboarding provider.
+    provider.cancelActiveVoiceSession();
+    provider.deviceOnboardingProvider = null;
+    expect(provider.hasVoiceCommandSessionForTesting, isFalse);
+
+    // Even if the 15s timer had already fired, ending must not submit.
+    provider.endVoiceCommandSessionForTesting('test-id');
+    await Future<void>.delayed(Duration.zero);
+
+    expect(actions.sendCount, 0);
+    provider.dispose();
+    onboarding.dispose();
+  });
+
+  test('stale onboarding exemption cannot submit after onboarding exits', () async {
+    final actions = _RecordingCaptureExternalActions();
+    final provider = CaptureProvider(
+      externalActions: actions,
+      audioCodecLoader: (_) async => BleAudioCodec.opus,
+      speakerHaptic: (_, __) async => true,
+    );
+    final onboarding = DeviceOnboardingProvider()..startOnboarding();
+    onboarding.advanceStep();
+    provider.deviceOnboardingProvider = onboarding;
+    provider.updateRecordingDevice(_device(DeviceType.omi));
+    SharedPreferencesUtil().omiButtonActionsEnabled = false;
+
+    // Session started during onboarding (step-1 fall-through), with audio buffered.
+    provider.handleButtonEventForTesting('test-id', 1);
+    provider.addVoiceCommandBytesForTesting(<int>[1, 2, 3]);
+
+    // Worst case: teardown missed the cancel — onboarding exits with the
+    // session still live. The started-during-onboarding exemption must not
+    // apply anymore.
+    provider.deviceOnboardingProvider = null;
+    provider.endVoiceCommandSessionForTesting('test-id');
+    await Future<void>.delayed(Duration.zero);
+
+    expect(actions.sendCount, 0);
+    provider.dispose();
+    onboarding.dispose();
   });
 }
