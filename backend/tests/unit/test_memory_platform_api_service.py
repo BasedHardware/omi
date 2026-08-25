@@ -45,7 +45,35 @@ def _authorization():
         fallback_reason=None,
         reason='enabled',
     )
-    return SimpleNamespace(policy=policy, global_gate=gate, observability={'surface': 'platform_search'})
+    return SimpleNamespace(
+        policy=policy,
+        global_gate=gate,
+        observability={
+            'consumer': 'omi_chat',
+            'enabled': True,
+            'reason': 'enabled',
+            'read_decision': 'USE_MEMORY',
+            'mode': 'capabilities',
+            'memory_reads_enabled': True,
+            'legacy_reads_authoritative': False,
+            'default_memory_grant': True,
+            'archive_default_visible': False,
+            'archive_capability': False,
+            'fallback_reason': None,
+            'capabilities': {
+                'legacy_only': False,
+                'shadow_artifacts_enabled': False,
+                'memory_writes_enabled': True,
+                'memory_reads_enabled': True,
+                'legacy_reads_authoritative': False,
+            },
+            'surface': 'platform_search',
+            'archive_capability_required': False,
+            'archive_capability_granted': False,
+            'explicit_archive_request': False,
+            'app_context': {'app_id': None, 'key_id': None, 'scopes': []},
+        },
+    )
 
 
 def test_platform_search_is_bounded_and_uses_canonical_product_reader(monkeypatch):
@@ -88,6 +116,70 @@ def test_platform_search_rejects_out_of_bounds_query(monkeypatch):
         memory_platform.search_memory_platform(query='x' * 501, limit=1, offset=0, uid='user-1')
 
     assert error.value.status_code == 400
+
+
+def test_platform_search_route_serializes_the_reader_projection(monkeypatch):
+    """Regression: the route must serialize the reader's projection rows.
+
+    The shared reader emits projection dictionaries (memory_layer, tier,
+    lifecycle_status, date, agent_use, ...), not raw MemoryItem documents.
+    Declaring MemoryItem on the route made FastAPI's response validation turn
+    every non-empty search into a 500; handler-level tests bypassed it because
+    they never pass through FastAPI serialization. This drives the actual
+    route through the response model with a non-empty page.
+    """
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    projection_row = {
+        'memory_id': 'mem-1',
+        'memory_layer': 'product_memory',
+        'tier': 'long_term',
+        'content': 'Launch is Tuesday.',
+        'lifecycle_status': 'active',
+        'processing_state': 'processed',
+        'confidence': None,
+        'visibility': 'private',
+        'visibility_source': 'memory_item.visibility',
+        'source': None,
+        'date': '2026-08-25T00:00:00+00:00',
+        'evidence': [],
+        'agent_use': 'default_access_memory',
+        'access_reason': 'default_visible',
+        'superseded_by': None,
+    }
+
+    def fake_search(**kwargs):
+        return {
+            'uid': kwargs['uid'],
+            'query': kwargs['query'],
+            'items': [projection_row],
+            'total_count': 1,
+            'returned_count': 1,
+            'limit': kwargs['limit'],
+            'offset': kwargs['offset'],
+        }
+
+    monkeypatch.setattr(
+        memory_platform, '_require_product_authorization', lambda uid, *, firestore_client: _authorization()
+    )
+    monkeypatch.setattr(memory_platform, 'fetch_default_product_memory_search', fake_search)
+
+    app = FastAPI()
+    app.include_router(memory_platform.router)
+    search_route = next(
+        route for route in memory_platform.router.routes if getattr(route, 'path', None) == '/v1/memory/platform/search'
+    )
+    rate_limited_dependency = search_route.dependant.dependencies[0].call
+    app.dependency_overrides[rate_limited_dependency] = lambda: 'user-1'
+
+    response = TestClient(app).get('/v1/memory/platform/search', params={'query': 'launch'})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body['returned_count'] == 1
+    assert body['items'][0]['memory_id'] == 'mem-1'
+    assert body['items'][0]['agent_use'] == 'default_access_memory'
 
 
 def test_platform_search_fails_closed_when_memory_system_is_not_canonical(monkeypatch):
