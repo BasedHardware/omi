@@ -194,5 +194,103 @@
       "receiver": "Omi - Services Alerting (Telegram)"
     },
     "record": null
+  },
+  {
+    "uid": "omi-firestore-metric-absent",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Firestore Cost",
+    "title": "Firestore - read-volume metric stopped being collected",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "absent(stackdriver_firestore_instance_firestore_googleapis_com_document_read_count{type=\"NOT_FOUND\"})",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-08-25T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "The Firestore read-volume series (stackdriver_firestore_instance_firestore_googleapis_com_document_read_count, type=\"NOT_FOUND\") has been absent from Prometheus for 30m, so both Firestore cost alerts are blind.",
+      "threshold": "absent(...) for 30m",
+      "user_impact": "No direct user impact. This is a watchdog for the cost alerts themselves. Both Firestore cost rules are written as `expr > threshold`, which returns an empty vector when not firing; with noDataState=OK, a metric that stops arriving is indistinguishable from a healthy one. This rule is what makes that difference visible.",
+      "scope": "The stackdriver-exporter series for firestore.googleapis.com/document/read_count in prod Prometheus.",
+      "verification": "Query stackdriver_firestore_instance_firestore_googleapis_com_document_read_count in the linked datasource. Expect 3 series (type=LOOKUP|NOT_FOUND|QUERY). Zero series means the exporter is not publishing.",
+      "safe_next_action": "This has a known cause with a known fix. Check the exporter pod for scrape errors: at monitoring.descriptor-cache-ttl=0s the exporter re-runs ListMetricDescriptors every scrape and Cloud Monitoring answers with 503 cpu-protection, which drops all series. Also check that stackdriver.metrics.interval still exceeds the ~2.4min Firestore ingestion lag -- a window shorter than the lag is always empty and yields no series at all. Both settings live in backend/charts/monitoring/prometheus-stackdriver-exporter/prod_omi_stackdriver_exporter.yaml and are applied manually per that chart README; no workflow deploys them."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-firestore-metric-absent",
+      "component": "firestore",
+      "impact": "infrastructure"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
   }
 ]
