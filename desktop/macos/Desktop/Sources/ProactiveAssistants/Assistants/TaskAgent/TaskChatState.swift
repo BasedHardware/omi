@@ -527,7 +527,9 @@ class TaskChatState: ObservableObject {
 
   // MARK: - Send Message
 
-  func sendMessage(_ text: String, taskContext: String? = nil) async {
+  func sendMessage(
+    _ text: String, taskContext: String? = nil, onAccepted: (@MainActor () -> Void)? = nil
+  ) async {
     guard let lease = captureOwnerLease() else { return }
     let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmedText.isEmpty else { return }
@@ -536,6 +538,8 @@ class TaskChatState: ObservableObject {
       return
     }
 
+    // Every rejection guard has passed — the send is really happening.
+    onAccepted?()
     isSending = true
     errorMessage = nil
 

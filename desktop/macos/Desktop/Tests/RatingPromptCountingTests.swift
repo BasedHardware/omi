@@ -127,6 +127,26 @@ final class RatingPromptCountingTests: XCTestCase {
     XCTAssertEqual(ledger.planRetry()?.countsAsQuestion, false)
   }
 
+  /// Non-QueryShell surfaces (home ask bar, dashboard chat, onboarding
+  /// opener) all send through sendMainDraft, which forwards onAccepted to the
+  /// same sendMessage guard chain — a REAL rejection must emit nothing there
+  /// either.
+  func testRealSendMainDraftRejectionEmitsNothing() async {
+    let provider = ChatProvider()
+    var accepted = false
+    let result = await provider.sendMainDraft(
+      "ask bar question",
+      onAccepted: {
+        accepted = true
+        AnalyticsManager.shared.chatMessageSent(
+          messageLength: 16, source: "home_ask_bar")
+      })
+    XCTAssertNil(result)
+    XCTAssertFalse(accepted)
+    await drainCounterHops()
+    XCTAssertEqual(RatingPromptManager.shared.questionCount, 0)
+  }
+
   func testQueryShellLedgerRejectsRetryBeforeAnySubmitAndEmptySubmits() {
     let ledger = QueryShellSendLedger()
     XCTAssertNil(ledger.planRetry())

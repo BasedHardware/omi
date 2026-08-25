@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Every chat surface now records a question only once the assistant actually accepts the send."
+  ]
+}
