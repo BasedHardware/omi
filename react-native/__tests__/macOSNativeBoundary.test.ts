@@ -39,6 +39,11 @@ test('uses standard visible macOS traffic lights with native window dragging', (
   expect(source).toContain('positionOmiTrafficLights');
   expect(source).toContain('OmiTrafficLightLeading');
   expect(source).toMatch(/OmiTrafficLightLeading\s*=\s*1[234]\.0/);
+  expect(source).not.toContain('FullSizeContentView');
+  expect(source).toContain('titlebarAppearsTransparent = NO');
+  expect(source).not.toContain('titlebarAppearsTransparent = YES');
+  expect(source).toContain('NSTitlebarSeparatorStyleAutomatic');
+  expect(source).not.toContain('NSTitlebarSeparatorStyleNone');
   expect(source).not.toContain('NSTitlebarAccessoryViewController');
   expect(source).not.toContain('installOmiTitlebarAccessory');
   expect(source).not.toContain('omiTitlebarAccessory');

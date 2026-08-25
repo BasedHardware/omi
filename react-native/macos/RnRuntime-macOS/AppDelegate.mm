@@ -56,24 +56,24 @@ static const CGFloat OmiTrafficLightSpacing = 6.0;
     return;
   }
 
-  // Inherit the system appearance. A hard-coded Aqua appearance makes the
-  // transparent titlebar and material disagree with Dark Mode.
+  // Inherit the system appearance so the stock titlebar and glass content
+  // follow Light/Dark Mode. Content starts below a compact native titlebar.
   window.appearance = nil;
   window.opaque = NO;
   window.backgroundColor = NSColor.clearColor;
   RCTUIView *rootView = (RCTUIView *)window.contentViewController.view;
   rootView.backgroundColor = NSColor.clearColor;
   window.hasShadow = NO;
-  window.styleMask |= NSWindowStyleMaskFullSizeContentView | NSWindowStyleMaskClosable |
-      NSWindowStyleMaskMiniaturizable;
-  window.titlebarAppearsTransparent = YES;
+  window.styleMask = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable |
+      NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable;
+  window.titlebarAppearsTransparent = NO;
   window.titleVisibility = NSWindowTitleHidden;
   window.title = @"";
   window.toolbarStyle = NSWindowToolbarStyleAutomatic;
-  window.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
-  // The app uses a transparent full-size titlebar, so the uncovered window ground is the drag
-  // region. Controls continue to receive their normal input; this restores ordinary macOS window
-  // movement without creating a React Native gesture layer.
+  window.titlebarSeparatorStyle = NSTitlebarSeparatorStyleAutomatic;
+  // Stock titled window: traffic lights live in the native titlebar. RN chrome
+  // is a separate row in the content view. Keep background-drag without an RN
+  // gesture layer.
   window.movableByWindowBackground = YES;
   window.level = NSNormalWindowLevel;
   window.hidesOnDeactivate = NO;

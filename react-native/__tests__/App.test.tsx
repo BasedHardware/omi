@@ -1898,7 +1898,7 @@ test('keeps macOS Home as search chrome followed by compact navigation and timel
   expect(chromeStyle.height).toBeLessThanOrEqual(40);
   expect(chromeStyle.borderRadius ?? 0).toBe(0);
   expect(chromeStyle.marginHorizontal ?? 0).toBe(0);
-  expect(chromeStyle.marginTop).toBeGreaterThanOrEqual(28);
+  expect(chromeStyle.marginTop ?? 0).toBe(0);
   expect(
     chromeStyle.paddingHorizontal ?? chromeStyle.paddingLeft,
   ).toBeGreaterThanOrEqual(12);
@@ -1909,7 +1909,12 @@ test('keeps macOS Home as search chrome followed by compact navigation and timel
   const applicationSurface = renderer.root.find(
     node => String(node.type) === 'SafeAreaView',
   );
-  expect(applicationSurface.props.edges).toEqual(['left', 'right', 'bottom']);
+  const applicationEdges = applicationSurface.props.edges as
+    | string[]
+    | undefined;
+  expect(
+    applicationEdges === undefined || applicationEdges.includes('top'),
+  ).toBe(true);
   expect(JSON.stringify(chrome.props.style)).not.toContain('borderTopWidth');
   expect(JSON.stringify(chrome.props.style)).not.toContain(
     'rgba(255, 255, 255',
