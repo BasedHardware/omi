@@ -436,7 +436,7 @@ public final class OmiBackend: @unchecked Sendable {
     private let isAirgapped: @Sendable () -> Bool
     /// The one function in this target that opens a socket.
     ///
-    /// Injectable for the same reason `ScreenActivityUploader` takes a `transport` on the app side:
+    /// Injectable for the same reason the retired screen-activity uploader took a `transport` on the app side:
     /// it is the difference between a test that *infers* no request was issued from the error it got
     /// back, and one that fails on contact. Without it, a green airgap test and a test that quietly
     /// reached `api.omi.me` and came back `.unauthorized` are told apart only by reading the error

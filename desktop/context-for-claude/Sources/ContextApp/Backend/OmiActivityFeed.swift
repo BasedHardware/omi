@@ -94,7 +94,7 @@ import Foundation
 struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing {
 
     // Everything that reaches off this file, as replaceable closures with the production wiring as
-    // their defaults — the pattern `ScreenActivityUploader` established. It is what lets the airgap
+    // their defaults — the pattern the retired screen-sync client established. It is what lets the airgap
     // guard be *proved* rather than asserted: a fetcher that fails the test if it is ever called is
     // the only way to show that a suppressed read sends nothing.
 

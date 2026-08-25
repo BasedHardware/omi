@@ -156,7 +156,7 @@ final class OmiAuth: ObservableObject {
     /// three requests to two hosts — `api.omi.me` twice and Google's identity toolkit once — and it
     /// ships an authorization code for the user's account to both. Permitting "just sign-in" would
     /// hand the network the one credential that matters while claiming the app is airgapped, and it
-    /// would buy the user nothing: every account feature behind that session (screen sync,
+    /// would buy the user nothing: every account feature behind that session (conversation upload,
     /// conversation upload, cloud transcription, MCP key provisioning) is suppressed too, so the
     /// result would be a live session that can do nothing. Meanwhile everything this app is actually
     /// for — capture, OCR, local transcription, local search, the local MCP tools — works signed out.

@@ -839,7 +839,7 @@ final class SettingsTests: XCTestCase {
             "and where that goes, which is the part a user cannot infer: \(subtitle)")
 
         // The clauses that *are* enforced stay named, or the row understates instead. Each maps to a
-        // `NetworkEgress.Client` case: conversationUpload/screenActivitySync, listenSocket, the
+        // `NetworkEgress.Client` case: conversationUpload, listenSocket, the
         // engine's favicon gate, and signIn.
         for promise in ["uploads", "cloud transcription", "favicon", "signing in", "queued"] {
             XCTAssertTrue(

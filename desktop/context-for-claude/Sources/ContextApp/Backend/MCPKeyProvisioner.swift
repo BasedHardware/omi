@@ -247,7 +247,7 @@ final class MCPKeyProvisioner {
     /// Exact-name matching is what makes this safe: the name carries this Mac's device fingerprint,
     /// so it can never match `omi-memory`'s key or anything a person typed. `OmiAPI` has no DELETE
     /// verb and this is its only caller, so the request is built here from the same header set —
-    /// the pattern `ScreenActivityUploader` already uses for the endpoint it owns.
+    /// the pattern the conversation uploader already uses for the endpoint it owns.
     @discardableResult
     static func retire(
         _ keyId: String,

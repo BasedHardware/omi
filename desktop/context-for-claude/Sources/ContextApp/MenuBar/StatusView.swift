@@ -493,7 +493,7 @@ struct StatusView: View {
     /// Opens the browser. The task lives on `OmiAuth` and not on this view: the popover is
     /// `.transient`, so macOS closes it — and destroys this view — the instant the browser takes
     /// focus, which is a few milliseconds into the round trip. Everything downstream of an account
-    /// (`ConversationUploader`, `ListenSocket`, `ScreenActivityUploader`, `MCPKeyProvisioner`)
+    /// (`ConversationUploader`, `ListenSocket`, `MCPKeyProvisioner`)
     /// already subscribes to `OmiAuth.$isSignedIn`, so nothing here has to restart them.
     private func begin(_ provider: OmiAuthProvider) {
         offeringProviders = false

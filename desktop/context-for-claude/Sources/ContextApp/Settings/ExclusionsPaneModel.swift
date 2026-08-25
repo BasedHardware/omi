@@ -1,7 +1,7 @@
 import AppKit
 import ContextCore
 import Foundation
-// Same precedent as `Backend/ScreenActivityUploader.swift`: the two discovery queries below are
+// Same precedent as the other backend clients: the two discovery queries below are
 // aggregates the pane needs and `RewindQueries` does not have, so they are written here against the
 // store's own `read` seam rather than by materialising a week of frames.
 import GRDB
