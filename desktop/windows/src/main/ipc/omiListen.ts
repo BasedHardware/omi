@@ -298,6 +298,17 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
   }
   const mode: ListenMode = args.mode ?? 'conversation'
 
+  // Exclusive conversation slot. Two /v4/listen sockets for one uid coalesce
+  // through a racy server-side pointer, so a lane that is not the primary
+  // microphone (today: the wearable) asks to be refused rather than to race.
+  // The check and the session insert below both run in this synchronous block,
+  // so two overlapping starts cannot both pass it.
+  if (args.requireExclusiveConversation === true && mode === 'conversation') {
+    if (hasActiveConversationSession(args.sessionId)) {
+      throw new Error('A conversation session is already open for this user')
+    }
+  }
+
   // Push-to-talk is a single-at-a-time gesture. When a new PTT hold opens its
   // connection, close any prior PTT session for the same window — a rapid series of
   // holds otherwise leaves several connections handshaking to the same endpoint at
@@ -529,11 +540,27 @@ export function killSessionsForOwner(ownerId: number): void {
 
 /** Authorization seam for captureBridge: an audio command may only control the
  * listen session opened by that same renderer. */
+/**
+ * Whether any live session is running the 'conversation' pipeline. Two /v4/listen
+ * sockets for one uid coalesce through a racy server-side pointer (verified
+ * splitting/bleeding on prod), so a second continuous lane — the wearable's —
+ * must know the slot is taken. Sessions whose socket already closed do not
+ * count: they hold no server-side conversation.
+ */
+export function hasActiveConversationSession(excludeSessionId?: string): boolean {
+  for (const [id, session] of sessions) {
+    if (id === excludeSessionId) continue
+    if (session.mode === 'conversation' && !session.closed) return true
+  }
+  return false
+}
+
 export function isListenSessionOwnedBy(sessionId: string, ownerId: number): boolean {
   return sessionOwners.get(sessionId) === ownerId
 }
 
 export function registerOmiListenHandlers(canStartSession: (ownerId: number) => boolean): void {
+  ipcMain.handle('omi-listen:conversation-active', () => hasActiveConversationSession())
   // Expose the byte counters to the E2E harnesses (VAD-playback / soak) so a
   // Playwright electronApp.evaluate can read them from the main process. Gated on
   // OMI_E2E — inert in production.

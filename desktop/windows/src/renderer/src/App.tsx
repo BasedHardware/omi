@@ -284,15 +284,24 @@ function App(): React.JSX.Element {
 
   useEffect(() => {
     if (IS_SECONDARY_WINDOW) return
-    const send = (): void =>
-      window.omi?.captureCommand?.({ type: 'auth-changed', uid: auth.currentUser?.uid ?? null })
+    const send = (): void => {
+      const uid = auth.currentUser?.uid ?? null
+      window.omi?.captureCommand?.({ type: 'auth-changed', uid })
+      // The device window opens its own listen socket with its own token, so
+      // it needs the same transition or it keeps streaming as the old account.
+      window.omi?.deviceCommand?.({ type: 'auth-changed', uid })
+    }
     const unsubAuth = onAuthStateChanged(auth, send)
     const unsubRestart = window.omi?.onCaptureEvent?.((ev) => {
       if (ev.type === 'capture-window-restarted') send()
     })
+    const unsubDeviceRestart = window.omi?.onDeviceEvent?.((ev) => {
+      if (ev.type === 'device-window-restarted') send()
+    })
     return () => {
       unsubAuth()
       unsubRestart?.()
+      unsubDeviceRestart?.()
     }
   }, [])
 

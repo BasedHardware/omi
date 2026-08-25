@@ -127,7 +127,12 @@ export type ChatMessage = {
  * See lib/sync/outbox.ts for the transition rules and dedupe strategy.
  */
 export type ConversationSyncState =
-  'local_only' | 'pending' | 'posting' | 'done' | 'failed' | 'unconfirmed'
+  | 'local_only'
+  | 'pending'
+  | 'posting'
+  | 'done'
+  | 'failed'
+  | 'unconfirmed'
 
 /** One transcript segment in the `/v1/conversations/from-segments` request shape
  * (snake_case matches the wire verbatim). `start`/`end` are WALL-CLOCK
@@ -226,6 +231,10 @@ export type ListenStartArgs = {
    *  of stranding a half-recorded one. Regenerated per conversation (after each
    *  finalize/silence boundary); re-used across reconnects within one conversation. */
   clientConversationId?: string
+  /** Conversation mode only: refuse this start when another conversation socket
+   *  is already open for this user, instead of racing it. Set by secondary
+   *  lanes (the wearable) so the primary microphone always keeps the slot. */
+  requireExclusiveConversation?: boolean
 }
 
 export type ListenMessage =
@@ -738,6 +747,9 @@ export type OmiBridgeApi = {
   listenFinalize: (sessionId: string) => void
   /** Subscribe to status/segment/event messages from every listen session. */
   onListenMessage: (cb: (msg: ListenMessage) => void) => () => void
+  /** True when a conversation-mode listen socket is already open for this user.
+   *  Only one is safe per uid, so the wearable lane checks before opening. */
+  listenConversationActive: () => Promise<boolean>
   // --- Capture window bridge (Phase 2) ---
   /** Send a capture command. From a UI window it's forwarded to the hidden
    *  capture window; the capture window itself services them. Fire-and-forget. */
@@ -754,6 +766,23 @@ export type OmiBridgeApi = {
   /** Subscribe to events from the capture window (audio errors, live-store ops,
    *  PTT chunks/levels). Returns an unsubscribe fn. */
   onCaptureEvent: (cb: (e: CaptureEvent) => void) => () => void
+  // --- Device window bridge (wearables) ---
+  /** Send a device command. From a UI window main forwards it to the hidden
+   *  device window; pairing and lifecycle commands are main-window only. */
+  deviceCommand: (cmd: DeviceCommand) => void
+  /** Device window: receive commands forwarded by main. Returns unsubscribe. */
+  onDeviceCommand: (cb: (cmd: DeviceCommand) => void) => () => void
+  /** Device window → main: emit an event. Main accepts it ONLY from the device
+   *  window (spoof guard) and fans it out to the UI windows. */
+  deviceEmit: (event: DeviceEvent) => void
+  /** Subscribe to device events (state, battery, pairing candidates). */
+  onDeviceEvent: (cb: (e: DeviceEvent) => void) => () => void
+  /** Read the persisted device settings (paired device, auto-reconnect). */
+  deviceGetSettings: () => Promise<DeviceSettings>
+  /** Patch the persisted device settings; returns the sanitized result. */
+  deviceSetSettings: (patch: Partial<DeviceSettings>) => Promise<DeviceSettings>
+  /** Answer an open Bluetooth chooser with the user's pick (null cancels). */
+  deviceSelect: (deviceId: string | null) => Promise<void>
   /** True when OMI_ALLOW_VIRTUAL_MIC=1 — lets test harnesses feed a VB-Cable as
    *  the mic. When false, capture steers away from virtual/loopback default
    *  inputs (see lib/audio acquireMicStream). */
@@ -1709,7 +1738,13 @@ export type MemoryExportResult = {
 }
 
 export type IndexedFileType =
-  'document' | 'code' | 'image' | 'media' | 'archive' | 'application' | 'other'
+  | 'document'
+  | 'code'
+  | 'image'
+  | 'media'
+  | 'archive'
+  | 'application'
+  | 'other'
 
 export type IndexedFileRecord = {
   path: string
@@ -1803,7 +1838,14 @@ export type RebuildResult = {
 // the macOS-parity local graph synthesized from indexed_files + memories and
 // consumed by the chat pre-step. Never conflate the two mechanisms.
 export type LocalKGNodeType =
-  'project' | 'app' | 'technology' | 'person' | 'org' | 'interest' | 'file_group' | 'card' // background-synthesized natural-language overview served to the chat floor
+  | 'project'
+  | 'app'
+  | 'technology'
+  | 'person'
+  | 'org'
+  | 'interest'
+  | 'file_group'
+  | 'card' // background-synthesized natural-language overview served to the chat floor
 
 export type LocalKGNode = {
   id: string // `${slug(label)}:${nodeType}` — stable across re-synthesis
@@ -2704,3 +2746,91 @@ export interface VoiceTurnOutboxEntry {
   lastError: string | null
   updatedAtMs: number
 }
+
+// --- Wearable device (BLE) ---------------------------------------------------
+
+/** Supported wearable families. Mirrors the renderer's DeviceType union; kept
+ *  as a shared literal so main can persist a paired device without importing
+ *  renderer code. */
+export type WearableDeviceType =
+  | 'omi'
+  | 'openglass'
+  | 'frame'
+  | 'appleWatch'
+  | 'plaud'
+  | 'bee'
+  | 'fieldy'
+  | 'friendPendant'
+  | 'limitless'
+
+/** The identity main persists and shows in the tray, tabs, and toasts. */
+export type WearableDeviceInfo = {
+  id: string
+  name: string
+  type: WearableDeviceType
+}
+
+/** A candidate offered by Chromium's Bluetooth chooser during pairing. */
+export type WearableDeviceCandidate = {
+  deviceId: string
+  deviceName: string
+}
+
+export type WearableConnectionState =
+  | 'idle'
+  | 'scanning'
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'error'
+
+/** Persisted device settings (main owns them: reconnect must work with no UI
+ *  window open, so none of this lives in localStorage). */
+export type DeviceSettings = {
+  pairedDevice: WearableDeviceInfo | null
+  /** Reconnect to the paired device automatically after a drop. */
+  autoReconnect: boolean
+  /** Stream device audio into a transcription session. */
+  deviceListenEnabled: boolean
+}
+
+/** UI window (or main) → device window. */
+export type DeviceCommand =
+  // Begin pairing: the device window opens the Bluetooth chooser, which main
+  // answers with the user's pick from the candidate list.
+  | { type: 'device-pair' }
+  | { type: 'device-pair-cancel' }
+  /** The user picked a candidate from the chooser list (or null to cancel). */
+  | { type: 'device-pair-select'; deviceId: string | null }
+  | { type: 'device-connect'; deviceId: string }
+  | { type: 'device-disconnect' }
+  /** Re-publish current device state; a UI opened after the fact needs it. */
+  | { type: 'device-request-state' }
+  | { type: 'device-forget' }
+  /** Push updated settings into the device window (auto-reconnect, listening). */
+  | { type: 'device-settings'; settings: DeviceSettings }
+  /** Sign-in changed: the window rebuilds its lane with the new identity.
+   *  Carries the uid so an account SWITCH (both sides signed in) is detected. */
+  | { type: 'auth-changed'; uid: string | null }
+
+/** Device window → main (fanned out to UI windows). */
+export type DeviceEvent =
+  | { type: 'device-state'; state: WearableConnectionState; device: WearableDeviceInfo | null }
+  /** Chooser candidates, streamed while pairing is open. */
+  | { type: 'device-candidates'; candidates: WearableDeviceCandidate[] }
+  | { type: 'device-paired'; device: WearableDeviceInfo }
+  | { type: 'device-forgotten' }
+  | { type: 'device-battery'; level: number; isCharging?: boolean }
+  /** Audio codec negotiated for the current session. */
+  | { type: 'device-codec'; codec: string }
+  /** Decoded audio is arriving but quality is degraded (repeated decode misses). */
+  | { type: 'device-audio-degraded'; degraded: boolean }
+  | { type: 'device-listen-state'; state: string }
+  | { type: 'device-error'; message: string }
+  /** The device host mounted and can service commands. Main holds commands
+   *  issued before this (a window created on demand for pairing is still
+   *  loading when the first command arrives) and flushes them on it. */
+  | { type: 'device-ready' }
+  /** Main-originated: the device window was recreated, so standing commands
+   *  must be re-issued. */
+  | { type: 'device-window-restarted' }
