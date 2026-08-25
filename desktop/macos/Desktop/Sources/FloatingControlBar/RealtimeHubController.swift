@@ -997,6 +997,21 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return false }
 
+    // The warm session tears itself down after an idle period, so a wake word arriving in a
+    // quiet stretch finds nothing to talk to. Giving up there sent the command to the chat
+    // path instead — observed live as the third of three commands answering in a text box
+    // while the first two spoke. Warm it and wait briefly before minting a turn, so a turn
+    // is never created that cannot be used.
+    if session == nil { ensureWarm() }
+    let warmDeadline = Date().addingTimeInterval(5)
+    while session == nil, Date() < warmDeadline {
+      try? await Task.sleep(nanoseconds: 100_000_000)
+    }
+    guard session != nil else {
+      log("RealtimeHub: no realtime session available for the wake word")
+      return false
+    }
+
     let turnID = RealtimeAutomationTurnHarness.begin(on: VoiceTurnCoordinator.shared)
     // Without a route the reducer has nothing to commit against: `commitTurn` is refused as
     // a stale physical commit and the buffered text never reaches the provider. Observed
