@@ -30,7 +30,7 @@ from utils.byok import (
     set_byok_uid,
 )
 from utils.llm.oauth import LLMOAuthError, get_credential as get_llm_oauth_credential
-from utils.executors import critical_executor, db_executor, run_blocking
+from utils.executors import critical_executor, db_executor, oauth_executor, run_blocking
 from utils.llm.clients import anthropic_client, get_direct_anthropic_client, get_llm
 from utils.llm.desktop_llm_stub import (
     llm_stub_enabled,
@@ -683,7 +683,7 @@ async def _install_oauth_credential(uid: str, provider: str) -> None:
         set_byok_uid(uid)
         return
     try:
-        credential = await run_blocking(critical_executor, get_llm_oauth_credential, uid, provider)
+        credential = await run_blocking(oauth_executor, get_llm_oauth_credential, uid, provider)
     except LLMOAuthError as error:
         raise HTTPException(
             status_code=503, detail='LLM OAuth credential is temporarily unavailable'
@@ -791,7 +791,7 @@ async def _stream_oauth(
     stream_id = f'chatcmpl-{uuid4()}'
     created = int(time.time())
     messages = _oauth_messages(body)
-    client: Any = get_llm('chat_agent', streaming=True)
+    client: Any = await run_blocking(oauth_executor, get_llm, 'chat_agent', streaming=True)
     tools = _oauth_tools(body)
     if tools:
         client = client.bind_tools(tools, tool_choice=body.get('tool_choice', 'auto'))
@@ -1332,6 +1332,7 @@ async def _stream(
     stream_usage: dict[str, int] = {}
     message_delta_reason: object = None
     usage_recorded = False
+    usage_token = set_usage_context(uid, 'chat_agent')
     try:
         stream_client = client or anthropic_client
         async with stream_client.messages.stream(**payload) as stream:
@@ -1857,14 +1858,12 @@ async def _chat_completions_unobserved(
             gateway_mode = False
         if oauth_provider is not None:
             if _web_search_requested(body):
-                record_fallback(
-                    component='desktop_chat',
+                _record_web_search_withheld(
+                    body,
+                    authorization='unavailable',
+                    web_search_supported=False,
                     from_mode=f'{oauth_provider}_oauth',
-                    to_mode='unsupported_web_search',
-                    reason='capability_mismatch',
-                    outcome='degraded',
                 )
-                raise HTTPException(status_code=400, detail='OAuth providers do not support Omi web search')
             record_fallback(
                 component='desktop_chat',
                 from_mode='managed_chat',
@@ -1944,7 +1943,7 @@ async def _chat_completions_unobserved(
     if oauth_provider is not None:
         usage_token = set_usage_context(uid, 'chat_agent')
         try:
-            client: Any = get_llm('chat_agent')
+            client: Any = await run_blocking(oauth_executor, get_llm, 'chat_agent')
             tools = _oauth_tools(body)
             if tools:
                 client = client.bind_tools(tools, tool_choice=body.get('tool_choice', 'auto'))

@@ -226,7 +226,7 @@ def request_has_llm_byok_key() -> bool:
     provider = get_byok_llm_provider()
     if provider in {'chatgpt', 'grok'}:
         if get_byok_oauth_credential() is not None:
-            return True
+            return has_byok_keys()
         uid = get_byok_uid()
         if not uid:
             return False

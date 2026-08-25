@@ -35,7 +35,7 @@ from utils.byok import (
 )
 from utils.client_device import resolve_client_device_from_headers
 from utils.journey_metrics_contract import resolve_client_kind_from_headers
-from utils.executors import db_executor, run_blocking, start_background_task, storage_executor
+from utils.executors import db_executor, oauth_executor, run_blocking, start_background_task, storage_executor
 from utils.fair_use import (
     FAIR_USE_CHECK_INTERVAL_SECONDS,
     FAIR_USE_ENABLED,
@@ -297,12 +297,17 @@ class ListenSessionRuntime:
         if oauth_provider in {'chatgpt', 'grok'}:
             try:
                 credential = await run_blocking(
-                    db_executor, get_llm_oauth_credential, self.request.uid, oauth_provider
+                    oauth_executor, get_llm_oauth_credential, self.request.uid, oauth_provider
                 )
             except LLMOAuthError:
-                credential = None
-            if credential is not None:
-                set_byok_oauth_credential(credential)
+                # Expired/revoked ChatGPT/Grok must not fall through to managed
+                # finalization / summaries.
+                await self.request.websocket.close(code=1008, reason='oauth_credential_unavailable')
+                return False
+            if credential is None:
+                await self.request.websocket.close(code=1008, reason='oauth_credential_unavailable')
+                return False
+            set_byok_oauth_credential(credential)
         if await run_blocking(db_executor, is_trial_paywalled, self.request.uid, self.request.source):
             await self.request.websocket.send_json(
                 FreemiumThresholdReachedEvent(remaining_seconds=0, action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT).to_json()
