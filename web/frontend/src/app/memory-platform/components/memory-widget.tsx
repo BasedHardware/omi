@@ -53,15 +53,29 @@ export default function MemoryWidget({ demo = false }: MemoryWidgetProps) {
   // Typed, credential-free UI events only. A sandboxed frame has an opaque
   // origin, so the target is '*'; the receiver is responsible for validating
   // event.origin and event.source before acting on the message.
+  //
+  // Both emissions are deferred one macrotask: React runs a child's mount
+  // effects before its parent's, so a parent rendered alongside this widget
+  // (the /embed live preview) attaches its message listener only after this
+  // component's effects ran — a synchronous post would be unobservable to it.
+  // Framed hosts are unaffected: they subscribe before or as the frame loads.
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    window.parent.postMessage({ type: WIDGET_READY_EVENT }, '*');
+    const timer = setTimeout(
+      () => window.parent.postMessage({ type: WIDGET_READY_EVENT }, '*'),
+      0,
+    );
+    return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const height = rootRef.current?.scrollHeight ?? 0;
-    window.parent.postMessage({ type: WIDGET_RESIZE_EVENT, height }, '*');
+    const timer = setTimeout(
+      () => window.parent.postMessage({ type: WIDGET_RESIZE_EVENT, height }, '*'),
+      0,
+    );
+    return () => clearTimeout(timer);
   }, [items, error, loading]);
 
   const visible = useMemo(() => {
