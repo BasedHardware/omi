@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-output-silence-misclassified-as-runtime-death",
+  "violated_contract": "A long-running request can remain healthy while its provider emits no user-visible content. The absence of text, thinking, or tool events proves only output silence; it does not prove that the query-owning runtime or its transport is dead. A watchdog that treats those states as equivalent terminates legitimate quiet work at its fixed boundary and can erase the turn before the first partial response exists.",
+  "canonical_prevention": "Let the authoritative active-query registration own a bounded, correlated, content-free activity lease. Refresh bridge liveness only from that typed lease or genuine runtime events, cancel the lease on every terminal or revoked path, and preserve a negative control proving that a frozen runtime stops renewing the lease and still reaches the existing watchdog.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/agent/src/runtime/jsonl-transport.ts",
+    "desktop/macos/agent/tests/jsonl-transport.test.ts",
+    "desktop/macos/Desktop/Tests/StallDetectorTests.swift"
+  ],
+  "evidence_prs": [11458],
+  "scope_hints": [
+    "desktop/macos/agent/**",
+    "desktop/macos/Desktop/Sources/Chat/**",
+    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift"
+  ],
+  "status": "open"
+}
