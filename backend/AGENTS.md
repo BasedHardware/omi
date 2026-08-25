@@ -119,12 +119,10 @@ backend-sync (main.py, Cloud Run)
   ├── ──────► Cloud Tasks queue `account-deletion` ──► POST /v1/users/account-deletion-wipes/run (OIDC, same service)
   └── ──────► Cloud Tasks queue `conversation-finalization` ──► POST /v1/conversation-finalization-jobs/run (OIDC, same service)
 
-notifications-job (modal/job.py)  [cron]
-memory-maintenance-job (modal/memory_maintenance_job.py)  [cron]
-frame-request-retention-job (modal/frame_request_retention_job.py) [cron]
+Cron jobs: notifications (`modal/job.py`), memory maintenance (`modal/memory_maintenance_job.py`), and frame retention (`modal/frame_request_retention_job.py`).
 ```
 
-Helm charts: `backend/charts/{backend-listen,backend-secrets,deepgram-self-hosted,diarizer,llm-gateway,monitoring,nllb-translation,parakeet,pusher,vad}/`.
+Helm charts: `backend/charts/`.
 
 STT provider/surface policy and model order live in `config/stt_provider_policy.py`; deployment validates it.
 
