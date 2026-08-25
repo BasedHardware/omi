@@ -2133,9 +2133,9 @@ final class DesktopAutomationActionRegistry {
       guard AppBuild.isNonProduction else {
         return ["error": "suspend_agent_stream is disabled on production bundles"]
       }
-      // Default just past the 180s send watchdog so CHAT-02 can assert the
+      // Default just past the 60s send watchdog so CHAT-02 can assert the
       // "Response took too long" error + recoverable retry; capped at 300s.
-      let durationMs = intParam(params["durationMs"], default: 190_000)
+      let durationMs = intParam(params["durationMs"], default: 70_000)
       return await AgentRuntimeProcess.shared.debugSuspendStream(durationMs: durationMs)
     }
 

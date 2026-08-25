@@ -597,6 +597,21 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertEqual(message?.payload["terminalStatus"] as? String, "succeeded")
   }
 
+  func testTurnActivityParsingPreservesRequestCorrelationWithoutContent() throws {
+    let message = try XCTUnwrap(
+      AgentRuntimeProcess.RuntimeMessage.parse(
+        #"{"type":"turn_activity","phase":"running","protocolVersion":2,"requestId":"quiet-1","clientId":"client-1","sessionId":"omi-1","runId":"run-1","attemptId":"attempt-1"}"#
+      ))
+
+    XCTAssertEqual(message.kind, .turnActivity)
+    XCTAssertEqual(
+      message.requestKey,
+      AgentRuntimeProcess.RuntimeMessage.RequestKey(clientId: "client-1", requestId: "quiet-1")
+    )
+    XCTAssertEqual(message.payload["phase"] as? String, "running")
+    XCTAssertNil(message.payload["text"])
+  }
+
   func testCancelAckRoutesByRequestId() {
     let message = AgentRuntimeProcess.RuntimeMessage.parse(
       #"{"type":"cancel_ack","protocolVersion":2,"requestId":"cancel-me","clientId":"client-1","accepted":true,"dispatchAttempted":true,"adapterAcknowledged":false}"#
