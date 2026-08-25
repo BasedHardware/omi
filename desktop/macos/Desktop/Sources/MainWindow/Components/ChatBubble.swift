@@ -328,7 +328,9 @@ struct ChatBubble: View {
                 .foregroundColor(Ink.accent)
             }
             .buttonStyle(.plain)
-          } else if shouldTruncate {
+          } else if shouldTruncate, message.sender != .ai {
+            // A truncated AI row already renders its "Show more" inline next
+            // to the ellipsis; a second control here would duplicate it.
             showMoreButton
           }
         }
