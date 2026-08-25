@@ -10639,7 +10639,7 @@
       "instatus_component": "observability",
       "alert_identity": "omi-firestore-notfound-dod-step",
       "component": "firestore",
-      "impact": "product"
+      "impact": "infrastructure"
     },
     "isPaused": false,
     "notification_settings": {
@@ -10737,7 +10737,7 @@
       "instatus_component": "observability",
       "alert_identity": "omi-firestore-notfound-ceiling",
       "component": "firestore",
-      "impact": "product"
+      "impact": "infrastructure"
     },
     "isPaused": false,
     "notification_settings": {
