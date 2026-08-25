@@ -813,6 +813,14 @@ HOURLY_USAGE_PLAN_ATTRIBUTION_QUERY = FirestoreQuerySpec(
     ),
 )
 
+FINALIZATION_OLDEST_NONTERMINAL_QUERY = FirestoreQuerySpec(
+    identifier='conversation_finalization_jobs_oldest_nonterminal',
+    collection_group='conversation_finalization_jobs',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('status', '==', 'status'),),
+    index_fields=(_asc('status'), _asc('created_at'), _asc('__name__')),
+)
+
 QUERY_SPECS = (
     ACTION_ITEMS_COMPLETION_ID_SCAN_QUERY,
     ACTION_ITEMS_COMPLETED_DUE_RANGE_QUERY,
@@ -852,6 +860,7 @@ QUERY_SPECS = (
     HOURLY_USAGE_PLAN_ATTRIBUTION_QUERY,
     MESSAGES_BY_APP_ORDERED_QUERY,
     CONVERSATIONS_ACTIVE_ORDERED_QUERY,
+    FINALIZATION_OLDEST_NONTERMINAL_QUERY,
 )
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)

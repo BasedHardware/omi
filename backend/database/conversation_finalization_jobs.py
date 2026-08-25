@@ -18,7 +18,10 @@ from google.cloud.firestore_v1 import FieldFilter
 from database import conversations as conversations_db
 from database._client import document_id_from_seed, get_firestore_client
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
-from database.firestore_index_registry import MEETING_RECEIPTS_DUE_QUERY
+from database.firestore_index_registry import (
+    FINALIZATION_OLDEST_NONTERMINAL_QUERY,
+    MEETING_RECEIPTS_DUE_QUERY,
+)
 
 CONVERSATIONS_COLLECTION = 'conversations'
 FINALIZATION_JOBS_COLLECTION = 'conversation_finalization_jobs'
@@ -1670,7 +1673,7 @@ def reacquire_deferred_processing(uid: str, conversation_id: str, *, firestore_c
 
 
 def get_finalization_job_summary(*, firestore_client: Any = None) -> dict[str, float | int]:
-    """Read one generation's fixed shard fan-in plus a bounded overdue-age sample.
+    """Read one generation's fixed shard fan-in plus the oldest unfinished job.
 
     This deliberately never aggregates ``conversation_finalization_jobs``. A
     backend-listen replica performs exactly ``FINALIZATION_PROJECTION_SHARD_COUNT``
@@ -1710,13 +1713,29 @@ def get_finalization_job_summary(*, firestore_client: Any = None) -> dict[str, f
             if isinstance(value, (int, float)):
                 totals[name] += int(value)
 
+    # The age of the oldest unfinished job is asked of ``status`` directly, one
+    # ordered single-document read per nonterminal status.  The previous
+    # implementation paged ``reconcile_after_at <= now`` instead, which made the
+    # gauge structurally unable to see the population it exists to report:
+    # ``reconcile_after_at`` is deleted outright on the BYOK resume and BYOK
+    # retry paths, so every BYOK job was invisible to it and the gauge read 0
+    # while hundreds of jobs sat unfinished for weeks.  Ordering by
+    # ``created_at`` also makes this the actual oldest row rather than the
+    # oldest of an arbitrary page.  Cost stays bounded and independent of
+    # terminal history: one indexed read per nonterminal status.
     oldest_age_seconds = 0.0
-    # The bounded due page prevents historical terminal rows from making the
-    # periodic metric collection an ever-growing Firestore scan.
-    for snapshot in jobs_collection.where('reconcile_after_at', '<=', now).limit(100).stream():
-        created_at = (snapshot.to_dict() or {}).get('created_at')
-        if isinstance(created_at, datetime):
-            oldest_age_seconds = max(oldest_age_seconds, max(0.0, (now - created_at).total_seconds()))
+    for status in sorted(NONTERMINAL_JOB_STATUSES):
+        oldest_query = (
+            FINALIZATION_OLDEST_NONTERMINAL_QUERY.build(
+                jobs_collection, {'status': status}, field_filter_factory=FieldFilter
+            )
+            .order_by('created_at')
+            .limit(1)
+        )
+        for snapshot in oldest_query.stream():
+            created_at = (snapshot.to_dict() or {}).get('created_at')
+            if isinstance(created_at, datetime):
+                oldest_age_seconds = max(oldest_age_seconds, max(0.0, (now - created_at).total_seconds()))
     return {
         'accepted': totals['accepted'],
         'success': totals['success'],
