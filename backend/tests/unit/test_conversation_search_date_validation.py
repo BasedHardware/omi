@@ -60,6 +60,7 @@ _stubs = [
     # routers.conversations resolves the client population for its journey
     # metric; utils is an _AutoMockModule package here, so the real submodule
     # is not importable and the name has to be stubbed like the rest.
+    'utils.integration_telemetry',
     'utils.journey_metrics_contract',
     # routers.conversations emits Conversation Summary Shared telemetry on
     # delivered share emails; same _AutoMockModule reasoning as above.
