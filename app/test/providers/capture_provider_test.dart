@@ -152,11 +152,28 @@ class _CountingSocketCaptureProvider extends CaptureProvider {
 
 class _CountingConversationLocationCapture extends ConversationLocationCapture {
   int calls = 0;
+  final List<bool> promptIfDeniedArgs = [];
 
   @override
-  Future<bool> captureAndUpload() async {
+  Future<bool> captureAndUpload({bool promptIfDenied = true}) async {
     calls++;
+    promptIfDeniedArgs.add(promptIfDenied);
     return true;
+  }
+}
+
+class _HangingConversationLocationCapture extends ConversationLocationCapture {
+  int calls = 0;
+  final Completer<bool> _done = Completer<bool>();
+
+  @override
+  Future<bool> captureAndUpload({bool promptIfDenied = true}) async {
+    calls++;
+    return _done.future;
+  }
+
+  void complete() {
+    if (!_done.isCompleted) _done.complete(true);
   }
 }
 
@@ -259,6 +276,33 @@ void main() {
     await Future<void>.delayed(Duration.zero);
 
     expect(locationCapture.calls, 1);
+    provider.dispose();
+  });
+
+  test('streamDeviceRecording does not wait for location capture', () async {
+    final locationCapture = _HangingConversationLocationCapture();
+    final provider = CaptureProvider(
+      conversationLocationCapture: locationCapture,
+    );
+
+    await provider.streamDeviceRecording().timeout(
+          const Duration(seconds: 2),
+          onTimeout: () => fail('streamDeviceRecording blocked on location capture'),
+        );
+    expect(locationCapture.calls, 1);
+    locationCapture.complete();
+    provider.dispose();
+  });
+
+  test('homepage no-device streamDeviceRecording is check-only', () async {
+    final locationCapture = _CountingConversationLocationCapture();
+    final provider = CaptureProvider(
+      conversationLocationCapture: locationCapture,
+    );
+
+    await provider.streamDeviceRecording();
+    expect(locationCapture.calls, 1);
+    expect(locationCapture.promptIfDeniedArgs, [false]);
     provider.dispose();
   });
 

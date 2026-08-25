@@ -61,11 +61,6 @@ class _LocalBlob:
         self.name = name
         self._path = bucket._root / name
 
-    # `*_args, **_kwargs` on all three: the real google.cloud.storage.Blob accepts `content_type` (and
-    # more), and a caller that passes it — as our object-store adapter does — gets a TypeError from a
-    # fake that does not. The sibling this file says it copies, testing/sync_cloud_tasks_stack/storage.py,
-    # already tolerates them; this copy dropped that. LOCAL WORKAROUND for upstream issue #12186 — once
-    # that is merged this file goes back to being byte-identical to theirs, and this comment with it.
     def upload_from_filename(self, filename: str, *_args: Any, **_kwargs: Any) -> None:
         import shutil
 

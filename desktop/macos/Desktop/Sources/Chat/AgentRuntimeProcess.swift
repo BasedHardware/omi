@@ -312,40 +312,6 @@ actor AgentRuntimeProcess {
       let requestId: String
     }
 
-    enum Kind: Equatable {
-      case initMessage
-      case textDelta
-      case thinkingDelta
-      case toolUse
-      case authorizedToolExecution
-      case toolActivity
-      case toolResultDisplay
-      case result
-      case error
-      case authRequired
-      case authSuccess
-      case cancelAck
-      case controlToolResult
-      case journalOperationResult
-      case journalTurnChanged
-      case journalBackendSync
-      case journalBackendDelete
-      case journalBackendReconcile
-      case chatFirstDeferralDelivery
-      case defaultExecutionProfileConfigured
-      case surfaceSessionResolved
-      case sessionExecutionProfileMigrated
-      case contextSourceUpdated
-      case contextSnapshot
-      case legacyMainChatSessionsImported
-      case externalSurfaceRunBeginResult
-      case externalSurfaceToolResult
-      case externalSurfaceRunCompleteResult
-      case chatFirstHarnessExecutorResult
-      case ownerRuntimeRevoked
-      case unknown(String)
-    }
-
     let kind: Kind
     let requestId: String?
     let clientId: String?
@@ -381,6 +347,7 @@ actor AgentRuntimeProcess {
       case "tool_use": return .toolUse
       case "authorized_tool_execution": return .authorizedToolExecution
       case "tool_activity": return .toolActivity
+      case "turn_activity": return .turnActivity
       case "tool_result_display": return .toolResultDisplay
       case "result": return .result
       case "error": return .error
@@ -454,6 +421,7 @@ actor AgentRuntimeProcess {
     let originatingUserText: String?
     let onTextDelta: AgentBridge.TextDeltaHandler
     let onToolActivity: AgentBridge.ToolActivityHandler
+    let onTurnActivity: AgentBridge.TurnActivityHandler
     let onThinkingDelta: AgentBridge.ThinkingDeltaHandler
     let onToolResultDisplay: AgentBridge.ToolResultDisplayHandler
     let onAuthRequired: AgentBridge.AuthRequiredHandler
@@ -2294,7 +2262,7 @@ actor AgentRuntimeProcess {
   /// process. With the process paused it emits no further events, so an in-flight
   /// chat send stalls exactly like a hung ACP subprocess — driving the
   /// StallDetector to `.stalled` (20s) and, if held long enough, ChatProvider's
-  /// 180s send watchdog (CHAT-02). A safety auto-resume fires after `durationMs`
+  /// 60s send watchdog (CHAT-02). A safety auto-resume fires after `durationMs`
   /// (hard-capped) so the process can never stay frozen if `debugResumeStream`
   /// is never called. Non-production bundles only.
   func debugSuspendStream(durationMs: Int) -> [String: String] {
@@ -2383,6 +2351,7 @@ actor AgentRuntimeProcess {
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
     onTextDelta: @escaping AgentBridge.TextDeltaHandler,
     onToolActivity: @escaping AgentBridge.ToolActivityHandler,
+    onTurnActivity: @escaping AgentBridge.TurnActivityHandler,
     onThinkingDelta: @escaping AgentBridge.ThinkingDeltaHandler,
     onToolResultDisplay: @escaping AgentBridge.ToolResultDisplayHandler,
     onAuthRequired: @escaping AgentBridge.AuthRequiredHandler,
@@ -2400,6 +2369,7 @@ actor AgentRuntimeProcess {
         originatingUserText: prompt.trimmingCharacters(in: .whitespacesAndNewlines),
         onTextDelta: onTextDelta,
         onToolActivity: onToolActivity,
+        onTurnActivity: onTurnActivity,
         onThinkingDelta: onThinkingDelta,
         onToolResultDisplay: onToolResultDisplay,
         onAuthRequired: onAuthRequired,
@@ -3244,6 +3214,9 @@ actor AgentRuntimeProcess {
         message.payload["toolUseId"] as? String,
         message.payload["input"] as? [String: Any]
       )
+
+    case .turnActivity:
+      routedRequest(for: message)?.onTurnActivity()
 
     case .toolResultDisplay:
       routedRequest(for: message)?.onToolResultDisplay(

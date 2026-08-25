@@ -135,7 +135,15 @@ export const getIdToken = async (): Promise<string | null> => {
  * Subscribe to auth state changes
  */
 export const onAuthStateChange = (callback: (user: User | null) => void) => {
-  if (!app) return () => {};
+  // No Firebase app means no session can exist, and that is an answer the
+  // subscriber is owed. Returning a bare unsubscribe emits nothing, so
+  // `AuthProvider` never leaves `loading`, `ProtectedRoute` renders its
+  // spinner forever, and the local preview build (`apiKey=preview`) boots to a
+  // blank page instead of the login screen it ships a message for.
+  if (!app) {
+    queueMicrotask(() => callback(null));
+    return () => {};
+  }
   return onAuthStateChanged(auth, callback);
 };
 

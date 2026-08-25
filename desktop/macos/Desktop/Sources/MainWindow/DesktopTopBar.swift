@@ -57,7 +57,7 @@ struct DesktopTopBar: View {
     memoriesViewModel.memories.filter { $0.createdAt > sinceDate }.count
   }
   private var newTasks: Int {
-    tasksStore.tasks.filter { $0.createdAt > sinceDate && $0.deleted != true }.count
+    tasksStore.tasks.filter { $0.createdAt > sinceDate && !$0.isRetired }.count
   }
 
   private var badges: TopNavigationDestinationBadges {
