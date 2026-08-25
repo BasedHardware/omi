@@ -15,11 +15,15 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 import pathlib
 import firebase_admin.auth
+from database.referrals import claim_referral_trial
 from database.redis_db import set_auth_session, get_auth_session, set_auth_code, get_auth_code, delete_auth_code
-from utils.executors import critical_executor, run_blocking
+from utils.executors import critical_executor, db_executor, run_blocking
 from utils.http_client import get_auth_client
 from utils.log_sanitizer import sanitize
 from utils.metrics import AUTH_FLOW_DURATION_SECONDS, AUTH_FLOW_EVENTS
+from utils.observability.fallback import record_fallback
+from utils.integration_telemetry import emit_posthog_event
+from utils.referrals import REFERRAL_COOKIE_NAME, REFERRAL_PROGRAM, ReferralCodeError, referrer_uid_from_code
 import logging
 
 logger = logging.getLogger(__name__)
@@ -203,8 +207,20 @@ def _auth_code_data_from_session(oauth_credentials: str, redirect_uri: str, sess
             'provider': session_data.get('provider'),
             'auth_flow_id': session_data.get('auth_flow_id'),
             'created_at': session_data.get('created_at'),
+            'referral_code': session_data.get('referral_code'),
         }
     )
+
+
+def _valid_referral_code_from_request(request: Request) -> Optional[str]:
+    code = request.cookies.get(REFERRAL_COOKIE_NAME)
+    if not code:
+        return None
+    try:
+        referrer_uid_from_code(code)
+    except ReferralCodeError:
+        return None
+    return code
 
 
 def _auth_flow_id_from_state(state: Optional[str]) -> str:
@@ -357,6 +373,7 @@ async def auth_authorize(
         'code_challenge_method': normalized_code_challenge_method,
         'auth_flow_id': auth_flow_id,
         'created_at': time.time(),
+        'referral_code': _valid_referral_code_from_request(request),
     }
 
     # Store in Redis with 5-minute expiration
@@ -618,6 +635,7 @@ async def auth_token(
         code_data = json.loads(raw_code_data)
 
         # Support both new format (with redirect_uri binding) and legacy format
+        referral_code: Optional[str] = None
         if 'credentials' in code_data:
             # New format: auth code bound to redirect_uri — fail closed if redirect_uri missing
             stored_redirect_uri = code_data.get('redirect_uri')
@@ -677,6 +695,7 @@ async def auth_token(
                 duration_seconds=(time.time() - created_at) if isinstance(created_at, (int, float)) else None,
             )
             oauth_credentials_json = code_data['credentials']
+            referral_code = code_data.get('referral_code')
             oauth_credentials = (
                 json.loads(oauth_credentials_json)
                 if isinstance(oauth_credentials_json, str)
@@ -710,7 +729,13 @@ async def auth_token(
                     auth_flow_id=auth_flow_id,
                     redirect_scheme=redirect_scheme,
                 )
-                custom_token = await _generate_custom_token(provider, id_token, access_token, display_name=full_name)
+                custom_token = await _generate_custom_token(
+                    provider,
+                    id_token,
+                    access_token,
+                    display_name=full_name,
+                    referral_code=referral_code,
+                )
                 response["custom_token"] = custom_token
                 _log_auth_event(
                     provider=provider,
@@ -1027,7 +1052,11 @@ async def _exchange_apple_code_for_oauth_credentials(code: str, session_data: Di
 
 
 async def _generate_custom_token(
-    provider: str, id_token: str, access_token: Optional[str] = None, display_name: Optional[str] = None
+    provider: str,
+    id_token: str,
+    access_token: Optional[str] = None,
+    display_name: Optional[str] = None,
+    referral_code: Optional[str] = None,
 ) -> str:
     """
     Generate Firebase custom token by signing in with OAuth credentials
@@ -1077,6 +1106,32 @@ async def _generate_custom_token(
             raise Exception("No Firebase UID returned from sign-in")
 
         logger.info(f"Firebase sign-in successful for {provider}, UID: {firebase_uid}")
+
+        if referral_code and result.get('isNewUser') is True:
+            try:
+                referrer_uid = referrer_uid_from_code(referral_code)
+                claimed, reason = await run_blocking(
+                    db_executor,
+                    claim_referral_trial,
+                    firebase_uid,
+                    referrer_uid,
+                    is_new_user=True,
+                )
+                emit_posthog_event(
+                    firebase_uid,
+                    'Referral Claimed',
+                    {'program': REFERRAL_PROGRAM, 'claimed': claimed, 'reason': reason},
+                )
+            except Exception as error:
+                logger.error("Referral entitlement grant failed (non-fatal): %s", sanitize(str(error)))
+                record_fallback(
+                    component='other',
+                    from_mode='referral_entitlement',
+                    to_mode='authenticated_without_referral_entitlement',
+                    reason='other',
+                    outcome='degraded',
+                    log=logger,
+                )
 
         # Apple's id_token has no name and Firebase can't auto-populate it (unlike
         # Google), so persist the first-auth name onto the Firebase user. Only set

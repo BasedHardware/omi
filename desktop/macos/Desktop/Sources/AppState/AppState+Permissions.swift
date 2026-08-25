@@ -825,11 +825,7 @@ extension AppState {
 
   /// Open Accessibility preferences in System Settings
   func openAccessibilityPreferences() {
-    if let url = URL(
-      string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
-    {
-      NSWorkspace.shared.open(url)
-    }
+    PermissionDragGuidance.openAccessibilitySettings()
   }
 
   /// Reset accessibility permission (requires terminal command)

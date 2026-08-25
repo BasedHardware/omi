@@ -32,6 +32,7 @@
       "policy_class": "direct_command",
       "owner_paths": [
         "desktop/macos/Desktop/Sources/Stores/TasksStore.swift",
+        "desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift",
         "desktop/macos/Desktop/Sources/APIClient.swift",
         "desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstTasksPage.swift",
         "desktop/macos/Desktop/Sources/MainWindow/Dashboard/WhatMattersNowSection.swift",
@@ -47,6 +48,7 @@
       "test_adapter": "direct_command_contract",
       "writer_anchors": [
         {"path": "desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstTasksPage.swift", "symbol": "client.createTask", "discover": true},
+        {"path": "desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift", "symbol": "client.createTask", "discover": true},
         {"path": "desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstTasksPage.swift", "symbol": "client.updateTask", "discover": true},
         {"path": "backend/routers/desktop_core.py", "symbol": "action_items_db.create_action_item", "discover": true}
       ]
@@ -97,8 +99,6 @@
       "owner_paths": ["backend/utils/conversations/process_conversation.py", "backend/utils/conversations/merge_conversations.py", "backend/routers/conversations.py"],
       "test_adapter": "transcript_capture_v2",
       "writer_anchors": [
-        {"path": "backend/utils/conversations/process_conversation.py", "symbol": "action_items_db.create_action_items_batch", "discover": true},
-        {"path": "backend/utils/conversations/process_conversation.py", "symbol": "action_items_db.delete_action_items_for_conversation", "discover": true},
         {"path": "backend/utils/conversations/merge_conversations.py", "symbol": "action_items_db.delete_action_items_for_conversation", "discover": true},
         {"path": "backend/routers/conversations.py", "symbol": "action_items_db.delete_action_item", "discover": true},
         {"path": "backend/routers/conversations.py", "symbol": "action_items_db.delete_action_items_for_conversation", "discover": true},
@@ -123,7 +123,7 @@
     {
       "id": "recurrence",
       "policy_class": "direct_command",
-      "owner_paths": ["desktop/macos/Desktop/Sources/Services/RecurringTaskScheduler.swift"],
+      "owner_paths": ["desktop/macos/Desktop/Sources/Stores/TasksStore.swift"],
       "test_adapter": "direct_command_contract",
       "writer_anchors": []
     },

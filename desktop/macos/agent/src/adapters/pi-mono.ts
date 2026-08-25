@@ -166,12 +166,12 @@ function requiredControlOperationKey(toolName: string, input: Record<string, unk
 // Map desktop model IDs (claude-*) to omi provider model IDs.
 // Covers short aliases and dated versions used by ChatProvider/ChatLab.
 const MODEL_MAP: Record<string, string> = {
-  "claude-opus-4-6": "omi-opus",
+  "claude-opus-4-6": "omi-sonnet",
   "claude-sonnet-4-6": "omi-sonnet",
   "claude-sonnet-4": "omi-sonnet",
-  "claude-opus-4": "omi-opus",
+  "claude-opus-4": "omi-sonnet",
   "claude-sonnet-4-20250514": "omi-sonnet",
-  "claude-opus-4-20250514": "omi-opus",
+  "claude-opus-4-20250514": "omi-sonnet",
 };
 
 function mapModel(model: string): string {
@@ -1413,7 +1413,7 @@ export class PiMonoAdapter implements HarnessAdapter {
       text = publicWebTurn.bufferedText || text;
       // A terminal public-web turn proves the gateway completed the required
       // provider interaction. Do not make this depend on local Pi tool events:
-      // Anthropic's server-side web_search intentionally never exposes one.
+      // managed Perplexity search runs server-side and never exposes one.
       text = stripFalsePublicWebAvailabilityDisclaimers(text);
       this.emitPublicWebText(publicWebTurn, true);
       this.finishPublicWebProgress(publicWebTurn, "completed");

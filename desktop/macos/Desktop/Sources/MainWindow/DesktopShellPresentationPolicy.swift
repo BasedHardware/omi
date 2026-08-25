@@ -15,6 +15,32 @@ enum DesktopShellPresentationPolicy {
   }
 }
 
+enum HomeDesignPresentation: Equatable {
+  case queryShell
+  case redesignedHub
+  case oldestLegacy
+
+  static func resolve(
+    useLegacyHomeDesign: Bool,
+    useOldestHomeDesign: Bool,
+    forceModernPresentation: Bool
+  ) -> Self {
+    guard !forceModernPresentation, useLegacyHomeDesign else { return .queryShell }
+    return useOldestHomeDesign ? .oldestLegacy : .redesignedHub
+  }
+
+  static func queryShellOwnsItsPanels(
+    useLegacyHomeDesign: Bool,
+    forceModernPresentation: Bool
+  ) -> Bool {
+    resolve(
+      useLegacyHomeDesign: useLegacyHomeDesign,
+      useOldestHomeDesign: false,
+      forceModernPresentation: forceModernPresentation
+    ) == .queryShell
+  }
+}
+
 @MainActor
 enum FloatingPrimaryTextInputRouting {
   private(set) static var routesToMainApp = false

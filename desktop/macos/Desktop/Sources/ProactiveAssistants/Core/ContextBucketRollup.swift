@@ -332,6 +332,13 @@ enum ContextProactivityPromptBuilder {
       Then write the facts list. A fact is an event or an obligation: a commitment someone
       made, a request, a deadline, a blocker, a failure, a decision, or a status that
       changed.
+      A question the user is writing — in an email draft, a chat message, a document — is
+      always a fact, with high notify_worthiness: record who it is addressed to and the
+      question itself verbatim, phrased as "The user is asking <recipient>: <question>".
+      Good: The user is asking alex@example.com: When is the next release shipping?
+      Bad: A message is being composed to alex@example.com asking about the release date.
+      Report the question currently on screen even when an earlier fact recorded a similar
+      or identical question — a re-asked question is a new fact, never a duplicate.
       Never write a fact saying that an app, window, tab, page, sidebar, panel, or button
       is open, visible, active, or shows something. Put that in the summary instead.
       Most screens yield zero to three facts. An empty facts list is a correct answer.
@@ -409,6 +416,19 @@ enum ContextProactivityPromptBuilder {
     CONTEXT section appended, and when that section is already present below, any further
     lookup_query is ignored. Refs from that section (conversation:…, memory:…) may be cited in
     bucket_entry_refs only when the section supplies them.
+    A question the user is writing is not "already visible" content: the question is on screen,
+    its answer is not. When the RETRIEVED CONTEXT section supplies that answer, deliver it as
+    insight or suggest — put the answer itself (the link, name, date, or value) in the message
+    exactly as the retrieved text spells it, and cite the refs that contain it. Stay silent as
+    usual when the retrieved items do not actually answer the question. A question the user is
+    writing NOW is a fresh request, not repetition, and this exception OUTRANKS the
+    recently-delivered prohibition above: when the current context contains the user's own
+    unanswered question, answer it — even if an identical answer appears in the
+    recently-delivered list. The prohibition exists to stop unprompted nagging; refusing to
+    answer a direct question is not restraint, it is failure. An answer is only deliverable
+    with citations: when no RETRIEVED CONTEXT section is present below, do not answer from
+    memory of prior deliveries — set lookup_query and let the re-evaluation deliver with
+    retrieved refs cited. An uncited answer is discarded by a validation gate after you.
     """
 
   /// Same rules as before, restructured as an ordered decision procedure: the
@@ -484,13 +504,33 @@ enum ContextProactivityPromptBuilder {
       \(ScreenDerivedContent.untrustedPreamble)
       Decide whether interrupting the user right now adds concrete value. Silence is the
       default and the most common correct answer.
+      A notification earns its interruption only by doing one of two things: answering a
+      question the user is writing or about to ask, or changing what they do next. A recap
+      of what they just did, or a status they can only nod at and move on from, is neither
+      — however new or accurate it is.
       Check the reasons for silence first, in this order:
       - No validated fact supports a specific, timely action: silence.
+      - The point reports the outcome of something the user themselves just did — a cleanup
+        they ran, a file they saved, space they freed, a change they made: silence. They
+        were there. A recap of their own action carries no obligation and no next step.
+      - The point only says that a value Omi previously recorded now reads differently — a
+        person's role, a setting, a count — and nothing is owed as a result: silence. That
+        is bookkeeping on Omi's own records. This never silences an obligation: a
+        commitment, deadline, blocker, unresolved task, or failure still speaks, on screen
+        or not.
+      - The point's only next step is to keep doing what the user is visibly already doing —
+        continue the investigation, look further into the thing this window is already about:
+        silence. That is a description of their current step, not a next one, and nothing is
+        owed to anyone. A real next step names something they are not already doing, something
+        they owe someone, or an open task from the list below that this fact now unblocks.
       - The point is already visible on the user's screen: silence. Speak only when you add
-        something the user cannot currently see: a commitment, a deadline, a conflict, or a
-        connection to other work.
+        something the user cannot currently see: a commitment, a deadline, a conflict, a
+        connection to other work — or the answer to a question the user is writing. The
+        question is on screen; its answer is not.
       - The point repeats anything in the recently-delivered list, even reworded: silence.
-        That list is a prohibition, not background.
+        That list is a prohibition, not background. One exception: a question the user is
+        writing or asking right now is always answered, even when the answer repeats a
+        recent delivery — a direct question is a fresh request, never nagging.
       - The point announces that meeting notes, a transcript, or a call summary are ready:
         silence. The conversation-finalization lane owns that claim and attaches the exact
         conversation link.
@@ -506,12 +546,14 @@ enum ContextProactivityPromptBuilder {
       - A commitment made by another person is never a task candidate, however explicit or
         well-dated it is. If it genuinely bears on the user's tracked work it may at most
         be insight.
-      - A material change, status update, recommendation, or useful follow-up without an
-        explicit commitment, promise, or request is insight or suggest. Never infer an
+      - A change, recommendation, or follow-up without an explicit commitment, promise, or
+        request is insight or suggest when it changes what the user does next — say what to
+        do. A status the user can only note and move on from is silence. Never infer an
         owner or a due date. Never create a task candidate from actionability alone.
       - A commitment is required only for task_candidate. Insight, suggest, and resurface
-        never require one: new, useful, grounded information the user has not seen is
-        enough. Do not stay silent just because nobody made a commitment.
+        never require one: information the user has not seen that answers their question or
+        changes their next step is enough. Do not stay silent just because nobody made a
+        commitment — and do not speak merely because a fact is new to them.
       Then say what it is about:
       - Name the specific thing in both the title and the message. The user reads them away
         from the screen that produced them.
@@ -761,8 +803,14 @@ extension ContextBucketStore {
           let duplicate =
             try Bool.fetchOne(
               db,
-              sql: "SELECT EXISTS(SELECT 1 FROM bucket_facts WHERE bucketID = ? AND statement = ?)",
-              arguments: [bucketID, statement]) ?? false
+              sql: """
+                SELECT EXISTS(
+                  SELECT 1 FROM bucket_facts
+                  WHERE bucketID = ? AND statement = ?
+                    AND (expiresAt IS NULL OR expiresAt > ?)
+                )
+                """,
+              arguments: [bucketID, statement, Date()]) ?? false
           let validity = BucketFactValidator.validity(
             evidenceText: evidenceText,
             evidenceRefs: evidenceRefs,
@@ -779,13 +827,22 @@ extension ContextBucketStore {
             break
           }
           maximumWorthiness = max(maximumWorthiness, worthiness)
+          // A user-authored question expires shortly after its compose moment:
+          // without this, any later departure evaluation of the bucket can
+          // force retrieval for a question no longer on screen and answer the
+          // wrong ask. Re-asks re-validate through the expiry-aware duplicate
+          // check above.
+          let questionExpiry: Date? =
+            applyWritePolicy && validity == .validated
+              && ContextFactWritePolicy.isUserAuthoredQuestion(statement)
+            ? now.addingTimeInterval(ContextFactWritePolicy.userQuestionFactTTLSeconds) : nil
           try db.execute(
             sql: """
               INSERT INTO bucket_facts
                 (id, bucketID, entryID, appName, statement, identifiersJson, evidenceText,
                  evidenceRefsJson, validityState, dispositionState, confidence,
-                 notifyWorthiness, workstreamTag, createdAt, updatedAt)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'none', ?, ?, ?, ?, ?)
+                 notifyWorthiness, workstreamTag, expiresAt, createdAt, updatedAt)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'none', ?, ?, ?, ?, ?, ?)
               """,
             arguments: [
               UUID().uuidString.lowercased(), bucketID, entryID, appName, statement,
@@ -793,7 +850,7 @@ extension ContextBucketStore {
               evidenceText,
               String(data: try evidenceEncoder.encode(evidenceRefs), encoding: .utf8) ?? "[]",
               validity.rawValue, min(max(fact.confidence, 0), 1), worthiness,
-              nil as String?, now, now,
+              nil as String?, questionExpiry, now, now,
             ])
           if validity == .validated {
             existingFactIdentities.append(

@@ -45,8 +45,15 @@ class ChatPage extends StatefulWidget {
   final bool isPivotBottom;
   final String? autoMessage;
   final bool autoStartVoice;
+  final ChatPageContext? initialChatContext;
 
-  const ChatPage({super.key, this.isPivotBottom = false, this.autoMessage, this.autoStartVoice = false});
+  const ChatPage({
+    super.key,
+    this.isPivotBottom = false,
+    this.autoMessage,
+    this.autoStartVoice = false,
+    this.initialChatContext,
+  });
 
   @override
   State<ChatPage> createState() => ChatPageState();
@@ -78,6 +85,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   String? _pendingDeleteAppId;
   String? _selectedContext;
   bool _quotaSheetShown = false;
+  String? _timeframePreset; // 'today' | 'week' | null
+  ChatPageContext? _chatScope;
 
   @override
   bool get wantKeepAlive => true;
@@ -110,7 +119,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       }
       // Fetch enabled chat apps
       provider.fetchChatApps();
-      // Chat quota is checked via 402 error when sending messages
+      if (widget.initialChatContext != null) {
+        setState(() => _chatScope = widget.initialChatContext);
+      }
       // Sync Apple Health data if connected (ensures fresh data for health queries)
       _syncAppleHealthIfConnected();
       // Auto-start voice recording if requested (e.g., from home chat bar mic button)
@@ -458,6 +469,48 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                               } else {
                                 return const SizedBox.shrink();
                               }
+                            },
+                          ),
+                          // Scope chips (#4515) — conversation and/or Today / This week
+                          Builder(
+                            builder: (context) {
+                              final scope = _chatScope;
+                              final hasConversation = scope?.type == 'conversation' && (scope?.id?.isNotEmpty ?? false);
+                              final l10n = context.l10n;
+                              return Padding(
+                                padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                                child: SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: Row(
+                                    children: [
+                                      if (hasConversation) ...[
+                                        _scopeChip(
+                                          label: l10n.chatScopeAbout(scope!.title ?? l10n.conversationTab),
+                                          selected: true,
+                                          onTap: () {
+                                            setState(() {
+                                              _timeframePreset = null;
+                                              _chatScope = null;
+                                            });
+                                          },
+                                        ),
+                                        const SizedBox(width: 8),
+                                      ],
+                                      _scopeChip(
+                                        label: l10n.chatScopeToday,
+                                        selected: _timeframePreset == 'today',
+                                        onTap: () => _toggleTimeframe('today'),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      _scopeChip(
+                                        label: l10n.chatScopeThisWeek,
+                                        selected: _timeframePreset == 'week',
+                                        onTap: () => _toggleTimeframe('week'),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
                             },
                           ),
                           // Send bar
@@ -941,12 +994,78 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
     _resumeFollowingAndScroll(delayMs: 300, animated: true);
 
-    await provider.sendMessageStreamToServer(text);
+    await provider.sendMessageStreamToServer(text, context: _chatScope);
 
     // Plans sheet is shown reactively via _onMessageProviderChanged listener
 
     provider.clearSelectedFiles();
     provider.setSendingMessage(false);
+  }
+
+  Widget _scopeChip({required String label, required bool selected, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF35343B) : const Color(0xFF1F1F25),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: selected ? const Color(0xFFC4C4CC) : const Color(0xFF35343B)),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? Colors.white : const Color(0xFFC4C4CC),
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _toggleTimeframe(String preset) {
+    if (_timeframePreset == preset) {
+      setState(() {
+        _timeframePreset = null;
+        final existing = _chatScope;
+        if (existing != null && existing.type == 'conversation') {
+          _chatScope = existing.copyWith(clearDates: true);
+        } else {
+          _chatScope = null;
+        }
+      });
+      return;
+    }
+
+    final now = DateTime.now();
+    final end = DateTime(now.year, now.month, now.day + 1).subtract(const Duration(microseconds: 1));
+    late DateTime start;
+    if (preset == 'today') {
+      start = DateTime(now.year, now.month, now.day);
+    } else {
+      final mondayOffset = now.weekday == DateTime.sunday ? -6 : 1 - now.weekday;
+      final monday = now.add(Duration(days: mondayOffset));
+      start = DateTime(monday.year, monday.month, monday.day);
+    }
+
+    final existing = _chatScope;
+    final l10n = context.l10n;
+    final next = (existing != null && existing.type == 'conversation')
+        ? existing.copyWith(
+            startDate: start.toUtc().toIso8601String(),
+            endDate: end.toUtc().toIso8601String(),
+          )
+        : ChatPageContext(
+            type: 'recap',
+            title: preset == 'today' ? l10n.chatScopeToday : l10n.chatScopeThisWeek,
+            startDate: start.toUtc().toIso8601String(),
+            endDate: end.toUtc().toIso8601String(),
+          );
+    setState(() {
+      _timeframePreset = preset;
+      _chatScope = next;
+    });
   }
 
   void _showPlansSheetOnQuotaExceeded() {

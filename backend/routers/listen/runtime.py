@@ -26,6 +26,7 @@ from utils.apps import is_audio_bytes_app_enabled
 from utils.async_tasks import WebSocketTaskSupervisor, drain_tasks, wait_for_event
 from utils.byok import extract_byok_from_websocket, get_byok_keys, set_byok_keys
 from utils.client_device import resolve_client_device_from_headers
+from utils.journey_metrics_contract import resolve_client_kind_from_headers
 from utils.executors import db_executor, run_blocking, start_background_task, storage_executor
 from utils.fair_use import (
     FAIR_USE_CHECK_INTERVAL_SECONDS,
@@ -45,6 +46,7 @@ from utils.listen_session_bootstrap import finalize_listen_connect_context, load
 from utils.metrics import BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.onboarding import OnboardingHandler
+from utils.observability.journeys import ClientJourneyAttempt
 from utils.observability.transcription import LiveSTTAttempt
 from utils.pusher import PusherCircuitBreakerOpen
 from utils.product_telemetry import emit_product_event
@@ -72,6 +74,8 @@ from .conversations import LiveConversationController
 from .persistence import ListenPersistence
 from .parity_capture import ListenParityCapture
 from .receiver import ListenReceiver
+from .registry import register as register_listen_session
+from .registry import unregister as unregister_listen_session
 from .speakers import SpeakerMatcher
 from .transcripts import TranscriptProcessor
 from utils.listen_audio import build_channel_config
@@ -111,6 +115,7 @@ class ListenSessionRuntime:
         self.client_device_context = request.client_device_context or resolve_client_device_from_headers(
             request.websocket.headers
         )
+        self.client_kind = resolve_client_kind_from_headers(request.websocket.headers)
         self.use_custom_stt = request.custom_stt_mode.value == 'enabled'
         self.pusher_enabled = PUSHER_ENABLED
         self.is_multi_channel = request.channels >= 2
@@ -224,6 +229,11 @@ class ListenSessionRuntime:
                 model=self.stt_model,
                 language=self.stt_language,
             )
+        if getattr(self.state, 'client_live_transcription_attempt', None) is None:
+            self.state.client_live_transcription_attempt = ClientJourneyAttempt(
+                'live_transcription',
+                getattr(self, 'client_kind', 'unknown'),
+            )
 
     def capture_client_audio(self, audio: bytes) -> None:
         try:
@@ -247,6 +257,9 @@ class ListenSessionRuntime:
         """Record the first nonempty transcript successfully delivered to the client."""
         if self.state.live_transcription_attempt is not None:
             self.state.live_transcription_attempt.finish('success', phase='transcript_delivery')
+        client_attempt = getattr(self.state, 'client_live_transcription_attempt', None)
+        if client_attempt is not None:
+            client_attempt.succeed()
 
     def _finish_live_transcription(self) -> None:
         """Terminalize an accepted attempt that never delivered a transcript."""
@@ -259,6 +272,12 @@ class ListenSessionRuntime:
             else 'cancelled'
         )
         attempt.finish(outcome, phase='teardown')
+        client_attempt = getattr(self.state, 'client_live_transcription_attempt', None)
+        if client_attempt is not None and not client_attempt.finished:
+            if outcome == 'failure':
+                client_attempt.fail('provider_error')
+            else:
+                client_attempt.cancel()
 
     async def _admit(self) -> bool:
         if not self.request.uid:
@@ -565,6 +584,7 @@ class ListenSessionRuntime:
                 max_audio_buffer_size=self.limits.max_audio_buffer_size,
                 max_pending_requests=self.limits.max_pending_requests,
                 max_pending_speaker_sample_requests=self.limits.max_pending_speaker_sample_requests,
+                client_kind=self.client_kind,
             ),
             ListenPusherSessionDeps(
                 get_current_conversation_id=lambda: self.state.current_conversation_id,
@@ -627,6 +647,7 @@ class ListenSessionRuntime:
     async def run(self) -> None:
         if not await self._admit() or not await self._bootstrap():
             return
+        register_listen_session(self)
         try:
             self.receiver.initialize_decoders()
         except Exception as error:
@@ -713,6 +734,7 @@ class ListenSessionRuntime:
                     logger.warning('Listen parity capture teardown failed type=%s', type(error).__name__)
 
     async def _teardown_components(self) -> None:
+        unregister_listen_session(self)
         self.state.shutdown_event.set()
         self.task_supervisor.end_session()
         owner_persistence_blocked = self.request.owner_persistence_blocked.is_set()

@@ -107,8 +107,8 @@ class _BasicNotificationService implements NotificationInterface {
 
   @override
   Future<String> getTimeZone() async {
-    final String currentTimeZone = await FlutterTimezone.getLocalTimezone();
-    return currentTimeZone;
+    final timezone = await FlutterTimezone.getLocalTimezone();
+    return timezone.identifier;
   }
 
   @override

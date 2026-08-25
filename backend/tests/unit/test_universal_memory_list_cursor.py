@@ -104,6 +104,7 @@ def _install_streams(service, service_mod, *, canonical, historical, statuses=No
         include_pending_processing=False,
         include_archive=False,
         now=None,
+        budget=None,
     ):
         del db_client, device_scope_request, include_pending_processing, include_archive, now
         assert limit <= 500
@@ -178,12 +179,12 @@ def _install_streams(service, service_mod, *, canonical, historical, statuses=No
         return slots, exhausted
 
     updated_mock = MagicMock(
-        side_effect=lambda _uid, *, limit, start_after=None, device_scope_request=None: _keyset_page(
+        side_effect=lambda _uid, *, limit, start_after=None, device_scope_request=None, budget=None: _keyset_page(
             updated_rows, limit=limit, start_after=start_after, order_attr="updated_at"
         )
     )
     created_mock = MagicMock(
-        side_effect=lambda _uid, *, limit, start_after=None, device_scope_request=None: _keyset_page(
+        side_effect=lambda _uid, *, limit, start_after=None, device_scope_request=None, budget=None: _keyset_page(
             created_rows, limit=limit, start_after=start_after, order_attr="created_at"
         )
     )
@@ -507,7 +508,9 @@ def test_historical_status_suppression_batched_once_per_chunk(service_mod):
     statuses = {f"h-{index}": MemoryItemStatus.tombstoned for index in range(10)}
     _install_streams(service, service_mod, canonical=[], historical=historical, statuses=statuses)
     status_mock = MagicMock(
-        side_effect=lambda _uid, ids: {memory_id: statuses[memory_id] for memory_id in ids if memory_id in statuses}
+        side_effect=lambda _uid, ids, budget=None: {
+            memory_id: statuses[memory_id] for memory_id in ids if memory_id in statuses
+        }
     )
     service.canonical_statuses = status_mock
 
@@ -523,7 +526,7 @@ def test_front_insert_and_delete_do_not_omit_under_keyset_continuation(service_m
     rows = [_dated_historical(service_mod, f"h-{index}", day=50 - index) for index in range(6)]
     mutable = {"rows": list(rows)}
 
-    def updated_page(_uid, *, limit, start_after=None, device_scope_request=None):
+    def updated_page(_uid, *, limit, start_after=None, device_scope_request=None, budget=None):
         del device_scope_request
         ordered = sorted(mutable["rows"], key=lambda record: (-record.memory.updated_at.timestamp(), record.memory.id))
         start = 0

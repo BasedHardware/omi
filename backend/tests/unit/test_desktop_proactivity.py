@@ -10,6 +10,7 @@ from fastapi import Response
 
 from llm_gateway.gateway.config_loader import load_gateway_config
 from routers import desktop_proactivity
+from utils.observability import journeys
 from utils.subscription import (
     DESKTOP_ACCESS_TIER_ARCHITECT,
     DESKTOP_ACCESS_TIER_FREE,
@@ -993,3 +994,94 @@ def test_proactive_gateway_request_marks_desktop_platform(monkeypatch):
 
     assert captured["platform"] == "desktop"
     assert captured["feature"] == f"desktop_{completion.operation.value}"
+
+
+def _capture_proactivity_journeys(monkeypatch):
+    terminal = []
+    monkeypatch.setattr(journeys, 'record_client_journey_accepted', lambda *_: None)
+    monkeypatch.setattr(
+        journeys,
+        'record_client_journey_terminal',
+        lambda journey, client_kind, outcome, _elapsed, *, issue_class=None: terminal.append(
+            (journey, client_kind, outcome, issue_class)
+        ),
+    )
+    return terminal
+
+
+@pytest.mark.asyncio
+async def test_desktop_proactivity_journey_records_validated_result_success(monkeypatch):
+    terminal = _capture_proactivity_journeys(monkeypatch)
+    monkeypatch.setattr(desktop_proactivity, 'llm_stub_enabled', lambda: True)
+
+    result = await desktop_proactivity.proactive_completion(
+        request(),
+        Response(),
+        uid='user-1',
+        x_app_platform='windows',
+    )
+
+    assert result.response['choices'][0]['message']['content'] == '{"summary":""}'
+    assert terminal == [('desktop_proactivity', 'desktop_windows', 'success', None)]
+
+
+@pytest.mark.asyncio
+async def test_desktop_proactivity_journey_records_quota_cap_as_degraded(monkeypatch):
+    terminal = _capture_proactivity_journeys(monkeypatch)
+    monkeypatch.setattr(desktop_proactivity, 'llm_stub_enabled', lambda: False)
+
+    async def capped(*_):
+        raise desktop_proactivity.HTTPException(status_code=429, detail='Proactive request limit exceeded')
+
+    monkeypatch.setattr(desktop_proactivity, '_consume_quota', capped)
+    with pytest.raises(desktop_proactivity.HTTPException) as error:
+        await desktop_proactivity.proactive_completion(
+            request(),
+            Response(),
+            uid='user-1',
+            x_app_platform='macos',
+        )
+
+    assert error.value.status_code == 429
+    assert terminal == [('desktop_proactivity', 'desktop_macos', 'degraded', 'quota_capped')]
+
+
+@pytest.mark.asyncio
+async def test_desktop_proactivity_journey_rejects_post_200_invalid_structured_output(monkeypatch):
+    terminal = _capture_proactivity_journeys(monkeypatch)
+
+    class GatewayClient:
+        async def post(self, url, *, headers, json):
+            return httpx.Response(
+                200,
+                request=httpx.Request('POST', url),
+                json={
+                    'model': 'gpt-5.6-luna',
+                    'choices': [{'finish_reason': 'stop', 'message': {'content': '{"summary":3}'}}],
+                },
+            )
+
+    async def allow(*_):
+        return None
+
+    async def release(*_):
+        return None
+
+    monkeypatch.setattr(desktop_proactivity, 'llm_stub_enabled', lambda: False)
+    monkeypatch.setenv('OMI_LLM_GATEWAY_URL', 'http://gateway')
+    monkeypatch.setattr(desktop_proactivity, '_consume_quota', allow)
+    monkeypatch.setattr(desktop_proactivity, '_release_quota', release)
+    monkeypatch.setattr(desktop_proactivity, 'get_llm_gateway_client', lambda: GatewayClient())
+    monkeypatch.setattr(desktop_proactivity, 'get_llm_gateway_semaphore', lambda: _ImmediateSemaphore())
+    monkeypatch.setattr(desktop_proactivity, 'llm_gateway_headers', lambda **_: {})
+
+    with pytest.raises(desktop_proactivity.HTTPException) as invalid:
+        await desktop_proactivity.proactive_completion(
+            request(),
+            Response(),
+            uid='user-1',
+            user_agent='CFNetwork/1498.700.2 Darwin/23.6.0',
+        )
+
+    assert invalid.value.status_code == desktop_proactivity._INVALID_STRUCTURED_OUTPUT_STATUS
+    assert terminal == [('desktop_proactivity', 'desktop_macos', 'failure', 'invalid_response')]

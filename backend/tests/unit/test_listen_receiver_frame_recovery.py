@@ -100,7 +100,11 @@ async def test_receiver_drops_malformed_codec_frame_and_continues_to_custom_tran
 
     await receiver.receive_data()
 
-    assert received_segments == [{'id': 'recovered', 'text': 'Recovered transcript', 'stt_provider': 'test-provider'}]
+    assert len(received_segments) == 1
+    assert received_segments[0]['id'] == 'recovered'
+    assert received_segments[0]['text'] == 'Recovered transcript'
+    assert received_segments[0]['stt_provider'] == 'test-provider'
+    assert received_segments[0]['speaker_id_scope'].endswith(':0')
     assert live_transcription_starts == [True]
     assert host.state.close_code == 1000
 

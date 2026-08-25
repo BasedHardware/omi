@@ -43,9 +43,22 @@ which a live client would have consumed it:
 Drop rate is ``dropped / (dropped + delivered)``. Intents still in flight are
 excluded from the denominator: their outcome is not yet decided.
 
+Windowing
+---------
+By default this reads every intent ever written -- unlike the weekly
+scheduled check (``run_scheduled_check`` in the health module this wraps),
+which windows itself to the last ``HEALTH_CHECK_WINDOW_DAYS`` so a single
+drop cannot latch its verdict unhealthy forever and so its read cost does not
+grow with the collection's all-time size. This script has neither problem: it
+is operator-invoked, not a permanent signal, and "what is our all-time drop
+rate" is exactly the question it exists to answer. Pass ``--window-days`` to
+scope a run to a recent period instead, e.g. to reproduce what the scheduled
+check just alarmed on.
+
 Usage:
     python scripts/chat_first_materialization_drop_rate.py --uid <uid>
     python scripts/chat_first_materialization_drop_rate.py --limit 5000
+    python scripts/chat_first_materialization_drop_rate.py --window-days 14
     python scripts/chat_first_materialization_drop_rate.py --json
 """
 
@@ -53,7 +66,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List
 
@@ -79,6 +92,14 @@ def main(argv: List[str] | None = None) -> int:
         default=DEFAULT_STALE_AFTER_HOURS,
         help=f'Age past which an unacknowledged intent counts as dropped (default {DEFAULT_STALE_AFTER_HOURS}).',
     )
+    parser.add_argument(
+        '--window-days',
+        type=int,
+        help=(
+            'Only read intents created in the last N days (default: unwindowed, all-time). '
+            'Pass the same value the scheduled check uses (HEALTH_CHECK_WINDOW_DAYS) to reproduce its scan.'
+        ),
+    )
     parser.add_argument('--json', action='store_true', help='Emit the report as JSON.')
     parser.add_argument(
         '--fail-over-rate',
@@ -87,7 +108,9 @@ def main(argv: List[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    report = collect(args.uid, args.limit, args.stale_after_hours, datetime.now(timezone.utc))
+    now = datetime.now(timezone.utc)
+    min_created_at = now - timedelta(days=args.window_days) if args.window_days is not None else None
+    report = collect(args.uid, args.limit, args.stale_after_hours, now, min_created_at)
     print(json_report(report) if args.json else render(report))
 
     rate = report['drop_rate']

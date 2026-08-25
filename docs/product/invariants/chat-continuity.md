@@ -113,7 +113,7 @@ rollback window; this is migration input, not a second store.
   chronology after user/assistant reconciliation revisions arrive out of order
 - `desktop/macos/agent/tests/runtime-stdio-contract.test.ts` — the real JSONL
   child process accepts Swift journal messages and preserves idempotency
-- `desktop/macos/Desktop/Tests/CrossSurfaceContractSmokeTests.swift` plus
+- `desktop/macos/Desktop/Tests/VoiceTurnDomainTests/CrossSurfaceContractSmokeTests.swift` plus
   `desktop/macos/agent/tests/cross-surface-contract-smoke.test.ts` — compact
   typed-chat/PTT identity, replay, permission, provider, and lifecycle contract
 - `desktop/macos/agent/tests/convergence-authority-ratchet.test.ts` — no Swift

@@ -260,14 +260,7 @@ interface KFactorData {
   available: boolean;
   kFactor: number | null;
   reason: string;
-  proxy?: {
-    newUsers: number;
-    sharers: number;
-    shareEvents: number;
-    shareRatePct: number;
-    sharesPerSharer: number;
-    sharesPerNewUser: number;
-  };
+  funnel?: { issued: number; captured: number; granted: number };
 }
 
 interface MacosVersionBreakdown {
@@ -1821,14 +1814,13 @@ export default function AnalyticsPage() {
   const netWauChange = calculatePeriodChange(netWauNow, netWauPrev, "vs previous complete week");
 
   const growthGoalItems = useMemo<ChartItem[]>(() => {
-    const kFactorValue = kFactorData?.available && kFactorData.kFactor != null
-      ? kFactorData.kFactor.toFixed(2)
+    const referralGrants = kFactorData?.funnel?.granted;
+    const kFactorValue = kFactorData?.available && referralGrants != null
+      ? referralGrants.toLocaleString()
       : "Not tracked";
-    const kFactorSubtitle = kFactorData?.available && kFactorData.kFactor != null
-      ? "Target ≥0.60"
-      : kFactorData?.proxy
-        ? `${kFactorData.proxy.sharesPerNewUser.toFixed(2)} shares/user · conversion missing`
-        : "Referral conversion is not instrumented yet";
+    const kFactorSubtitle = kFactorData?.funnel
+      ? `${kFactorData.funnel.issued} issued / ${kFactorData.funnel.captured} captured / ${kFactorData.funnel.granted} granted`
+      : kFactorData?.reason ?? "Referral funnel is unavailable";
 
     return [
       {
@@ -1957,7 +1949,7 @@ export default function AnalyticsPage() {
       },
       {
         id: "kpi-k-factor",
-        title: "K-Factor",
+        title: "Referral grants",
         variant: "kpi",
         icon: <Share2 className="h-3.5 w-3.5" />,
         initialLayout: { cols: 3, rows: 1 },

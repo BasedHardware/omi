@@ -2,6 +2,214 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.216",
+      "date": "2026-08-25",
+      "changes": [
+        "Fixed longer Assistant replies being cancelled when the agent was still working through a quiet step.",
+        "Fixed cancelled and superseded tasks appearing as active across desktop task views"
+      ]
+    },
+    {
+      "version": "0.12.215",
+      "date": "2026-08-25",
+      "changes": [
+        "Delivered cloud-generated proactive messages directly to macOS desktop over the active listen stream"
+      ]
+    },
+    {
+      "version": "0.12.214",
+      "date": "2026-08-24",
+      "changes": [
+        "Fixed the app hanging indefinitely on \"Preparing your data...\" during startup"
+      ]
+    },
+    {
+      "version": "0.12.213",
+      "date": "2026-08-23",
+      "changes": [
+        "Fixed local-profile saves and Accessibility setup, and clarified the one-month referral reward",
+        "Onboarding music now stops after 10 seconds instead of looping for as long as the app is open"
+      ]
+    },
+    {
+      "version": "0.12.212",
+      "date": "2026-08-23",
+      "changes": [
+        "Kept signed desktop releases moving when debug-symbol publishing is temporarily unavailable"
+      ]
+    },
+    {
+      "version": "0.12.211",
+      "date": "2026-08-23",
+      "changes": [
+        "Tasks Omi writes down now arrive as suggestions you add with one click instead of appearing in your list on their own, unaccepted suggestions expire after two days, meeting summaries show action items right under the summary with Add to Tasks, selecting tasks keeps them grouped by category, and running an agent on a task has been removed",
+        "Added a Disconnect action for ChatGPT and Claude cloud connections so Omi shows them as disconnected after authorization is revoked"
+      ]
+    },
+    {
+      "version": "0.12.210",
+      "date": "2026-08-23",
+      "changes": [
+        "Integration suggestions now recognize Gmail on a work or school Google account, and no longer appear when you are reading an article that merely mentions ChatGPT, Claude, or Gemini"
+      ]
+    },
+    {
+      "version": "0.12.209",
+      "date": "2026-08-23",
+      "changes": [
+        "Fixed the old Home design becoming transparent when enabled"
+      ]
+    },
+    {
+      "version": "0.12.208",
+      "date": "2026-08-22",
+      "changes": [
+        "Renamed the Activity tab to Brain"
+      ]
+    },
+    {
+      "version": "0.12.207",
+      "date": "2026-08-22",
+      "changes": [
+        "Activity's row is now labelled View, carries only the pages it opens, and every page it opens — Conversations, Memories and Brain Map — has a back control to return to it."
+      ]
+    },
+    {
+      "version": "0.12.206",
+      "date": "2026-08-22",
+      "changes": [
+        "Fixed the app quitting during onboarding when you granted microphone or screen recording permission",
+        "Fixed screen-history search returning nothing for multi-word titles and titles containing version numbers",
+        "Activity now opens from its own pill and stays put, its rows open the exact conversation or memory you clicked, its chips reach Conversations, Memories, Brain Map, Tasks and Rewind directly, and conversation summaries show the full written notes again instead of a one-line stub.",
+        "Fixed meetings-only listening missing Google Meet calls, where a joined tab is titled with just the meeting code"
+      ]
+    },
+    {
+      "version": "0.12.205",
+      "date": "2026-08-22",
+      "changes": [
+        "Proactive insights no longer recap what you just did, tell you to keep doing what you're already doing, or report a record change you can't act on — a notification now has to answer your question or change your next step"
+      ]
+    },
+    {
+      "version": "0.12.204",
+      "date": "2026-08-22",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.203",
+      "date": "2026-08-22",
+      "changes": [
+        "The meeting notes card now has a Share button that opens an address field — prefilled with the detected participant, but yours to change — plus a link button to copy, and Omi tells you it is taking notes when it detects a meeting"
+      ]
+    },
+    {
+      "version": "0.12.202",
+      "date": "2026-08-22",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.201",
+      "date": "2026-08-22",
+      "changes": [
+        "Fixed released builds accepting local CLI test triggers, which let any process on your Mac deliver a fake Omi notification and save it to your chat"
+      ]
+    },
+    {
+      "version": "0.12.200",
+      "date": "2026-08-21",
+      "changes": [
+        "Added an optional referral link as the final onboarding step and kept onboarding completion scoped to each signed-in account"
+      ]
+    },
+    {
+      "version": "0.12.199",
+      "date": "2026-08-21",
+      "changes": [
+        "Proactive insight cards in Chat no longer repeat their headline when the message already says the same thing",
+        "Refined the Refer button with a clean outlined treatment"
+      ]
+    },
+    {
+      "version": "0.12.198",
+      "date": "2026-08-21",
+      "changes": [
+        "Moved Refer beside the microphone and gave it a clearer neutral treatment"
+      ]
+    },
+    {
+      "version": "0.12.197",
+      "date": "2026-08-21",
+      "changes": [
+        "Fixed the app quitting the moment you finished onboarding, which sent you back through onboarding on the next launch"
+      ]
+    },
+    {
+      "version": "0.12.196",
+      "date": "2026-08-21",
+      "changes": [
+        "Proactive insights can now answer a question you are writing — when your history holds the answer (a link, a name, a date), Omi delivers it instead of staying silent",
+        "Proactive insights now react to what you type: a question written mid-visit is evaluated within seconds instead of waiting for an app switch, and answers found in your memories are delivered on beta"
+      ]
+    },
+    {
+      "version": "0.12.195",
+      "date": "2026-08-21",
+      "changes": [
+        "After a call, the meeting notes notification now stays up until you act on it and can email the summary directly to the person you met with (detected from your calendar), with a new Meeting Summary Notifications toggle in Settings"
+      ]
+    },
+    {
+      "version": "0.12.194",
+      "date": "2026-08-21",
+      "changes": [
+        "You can now keep or reject memories directly from the macOS Memories page"
+      ]
+    },
+    {
+      "version": "0.12.193",
+      "date": "2026-08-21",
+      "changes": [
+        "Chat tells you when a failure is ours. When Omi's AI service did not respond, the transcript used to say \"Omi couldn't answer this one. Try sending it again\" — which reads as though your message was the problem, so people retried into a failure that could not succeed. It now says the AI service didn't respond and that it is on our side, not your message"
+      ]
+    },
+    {
+      "version": "0.12.192",
+      "date": "2026-08-20",
+      "changes": [
+        "Integration Suggestions is now the fifth notification type — a row beside Focus, Task, Insight, and Memory in Settings, with its own Integration chat badge",
+        "Notification chat rows no longer repeat their content twice when the message already restates the headline",
+        "Added Refer a Friend links that give eligible new Desktop users one free month of Operator"
+      ]
+    },
+    {
+      "version": "0.12.191",
+      "date": "2026-08-20",
+      "changes": [
+        "Kept macOS release retries to at most one candidate per hour even while the previous build is still running",
+        "Rewind now shows the latest screenshot within seconds of capture instead of trailing 1–2 minutes, and the player follows new captures live while parked on the newest frame"
+      ]
+    },
+    {
+      "version": "0.12.190",
+      "date": "2026-08-20",
+      "changes": [
+        "Fixed Omi quitting by itself during first-run permission setup",
+        "Fixed the Save button turning blank in the Add Memory dialog as soon as you typed",
+        "Automatically deletes leftover agent tool-output files older than a week so they stop filling the Mac",
+        "Made each hourly macOS update start its Codemagic release build without waiting for GitHub's macOS queue",
+        "Fixed the screenshot embedding backfill failing to find the entries it needed to re-index",
+        "Notifications now come in exactly four types — Focus, Task, Insight, Memory — each controlled by its own toggle in Settings (the toggle formerly called Live Suggestions is now Focus Notifications)",
+        "Fixed macOS updates getting stuck before release when new changes kept landing during the hourly release train",
+        "Fixed the conversation processing banner overlapping source and duration details",
+        "Fixed longer push-to-talk questions losing the screenshot Omi answers from, so it can still see your screen"
+      ]
+    },
+    {
       "version": "0.12.189",
       "date": "2026-08-20",
       "changes": [

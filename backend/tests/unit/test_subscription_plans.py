@@ -169,35 +169,35 @@ def test_can_pay_basic_stale_defers_plan_change_until_cancellation_ends(monkeypa
     assert "reactivate" in reason
 
 
-def test_legacy_price_matches_current_price_with_same_plan_and_interval(monkeypatch, subscription_module):
+def test_retained_price_matches_current_price_with_same_plan_and_interval(monkeypatch, subscription_module):
     sub = subscription_module
-    legacy_price_id = next(iter(sub.LEGACY_PRICE_MAP))
+    retained_price_id = "price_1RtJPm1F8wnoWYvwhVJ38kLb"
     monkeypatch.setenv("STRIPE_UNLIMITED_MONTHLY_PRICE_ID", "price_unlimited_monthly")
     monkeypatch.setenv("STRIPE_UNLIMITED_ANNUAL_PRICE_ID", "price_unlimited_annual")
 
-    legacy_price = MagicMock()
-    legacy_price.recurring.interval = "month"
-    monkeypatch.setattr(sub.stripe.Price, "retrieve", MagicMock(return_value=legacy_price))
+    retrieve = MagicMock(side_effect=AssertionError("retained catalog prices must not require a Stripe read"))
+    monkeypatch.setattr(sub.stripe.Price, "retrieve", retrieve)
 
-    assert sub.price_ids_match_plan_and_interval(legacy_price_id, "price_unlimited_monthly")
-    assert not sub.price_ids_match_plan_and_interval(legacy_price_id, "price_unlimited_annual")
+    assert sub.price_ids_match_plan_and_interval(retained_price_id, "price_unlimited_monthly")
+    assert not sub.price_ids_match_plan_and_interval(retained_price_id, "price_unlimited_annual")
+    retrieve.assert_not_called()
 
 
 def test_price_interval_lookup_handles_price_without_recurring(monkeypatch, subscription_module):
     sub = subscription_module
-    legacy_price_id = next(iter(sub.LEGACY_PRICE_MAP))
+    configured_alias_price_id = "price_configured_neo_alias"
     monkeypatch.setenv("STRIPE_UNLIMITED_MONTHLY_PRICE_ID", "price_unlimited_monthly")
     monkeypatch.setenv("STRIPE_UNLIMITED_ANNUAL_PRICE_ID", "price_unlimited_annual")
+    monkeypatch.setenv("STRIPE_NEO_MONTHLY_PRICE_ID", configured_alias_price_id)
 
-    # A legacy price whose Stripe object carries no recurring block (retrieved
-    # only after the known plan definitions fail to match) must not crash the
-    # interval lookup — it simply cannot be matched.
+    # A configured migration alias without a catalog-ledger interval whose
+    # Stripe object carries no recurring block must not crash the lookup.
     price_without_recurring = MagicMock()
     del price_without_recurring.recurring
     monkeypatch.setattr(sub.stripe.Price, "retrieve", MagicMock(return_value=price_without_recurring))
 
-    assert not sub.price_ids_match_plan_and_interval(legacy_price_id, "price_unlimited_monthly")
-    assert not sub.price_ids_match_plan_and_interval(legacy_price_id, "price_unlimited_annual")
+    assert not sub.price_ids_match_plan_and_interval(configured_alias_price_id, "price_unlimited_monthly")
+    assert not sub.price_ids_match_plan_and_interval(configured_alias_price_id, "price_unlimited_annual")
 
 
 def test_reconcile_basic_subscription_without_stored_stripe_id(monkeypatch, subscription_module):
@@ -246,6 +246,28 @@ def test_bounded_transcription_plan_reads_monthly_usage_and_enforces_cap(monkeyp
 
     assert subscription_module.has_transcription_credits('uid') is False
     monthly_usage.assert_called_once_with('uid')
+
+
+def test_zero_transcription_allowance_is_exhausted_not_unlimited(monkeypatch, subscription_module):
+    _stub_remaining_deps(monkeypatch, subscription_module, PlanType.basic, used_seconds=0)
+    monkeypatch.setattr(subscription_module, 'get_plan_limits', lambda plan: SimpleNamespace(transcription_seconds=0))
+
+    assert subscription_module.has_transcription_credits('uid') is False
+    assert subscription_module.get_remaining_transcription_seconds('uid') == 0
+
+
+def test_malformed_transcription_allowance_fails_loudly(monkeypatch, subscription_module):
+    original_allocation_limit = subscription_module.allocation_limit
+
+    def malformed_allocation_limit(plan, allocation):
+        if allocation == 'transcription':
+            raise KeyError('basic.transcription limit is missing')
+        return original_allocation_limit(plan, allocation)
+
+    monkeypatch.setattr(subscription_module, 'allocation_limit', malformed_allocation_limit)
+
+    with pytest.raises(KeyError, match='limit is missing'):
+        subscription_module.get_plan_limits(PlanType.basic)
 
 
 def _stub_remaining_deps(monkeypatch, subscription_module, plan, used_seconds):
@@ -344,3 +366,17 @@ def test_plus_and_unlimited_v2_features_state_transcription_limits(subscription_
     assert any("Unlimited transcription" in f for f in unlim_mobile), unlim_mobile
     # Must not leak the Free-tier "Unlimited listening time" fallback.
     assert not any("listening" in f for f in plus_mobile), plus_mobile
+
+
+def test_basic_feature_defaults_project_from_plan_limits(monkeypatch, subscription_module):
+    monkeypatch.setattr(
+        subscription_module,
+        'get_plan_limits',
+        lambda plan: SimpleNamespace(transcription_seconds=600, words_transcribed=7, insights_gained=9),
+    )
+
+    features = subscription_module.get_plan_features(PlanType.basic)
+
+    assert '10 minutes of listening per month' in features
+    assert '7 words transcribed per month' in features
+    assert '9 insights per month' in features

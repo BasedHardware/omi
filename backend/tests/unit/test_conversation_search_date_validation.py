@@ -35,6 +35,8 @@ class _AutoMockModule(ModuleType):
         return mock
 
 
+from testing.import_isolation import package_submodule_stubs
+
 _stubs = [
     'ulid',
     'pinecone',
@@ -54,17 +56,17 @@ _stubs = [
     'google.cloud.firestore',
     'google.cloud.firestore_v1',
     'utils.request_validation',
+    # routers.conversations resolves the client population for its journey
+    # metric; utils is an _AutoMockModule package here, so the real submodule
+    # is not importable and the name has to be stubbed like the rest.
+    'utils.journey_metrics_contract',
     'utils.other.endpoints',
+    'utils.other.list_budget',
     'utils.other.storage',
-    'utils.conversations.factory',
-    'utils.conversations.analytics',
-    'utils.conversations.render',
-    'utils.conversations.process_conversation',
-    'utils.conversations.meeting_receipt',
-    'utils.conversations.search',
-    'utils.conversations.calendar_linking',
-    'utils.conversations.calendar_utils',
-    'utils.conversations.location',
+    # Names only: this file's _AutoMockModule/_register_module wrap them. Parents
+    # (including utils.conversations) are created by _register_module, so the
+    # package itself is omitted here. See package_submodule_stubs.
+    *sorted(package_submodule_stubs('utils.conversations', include_package=False)),
     'utils.executors',
     'utils.product_telemetry',
     'utils.llm.conversation_processing',
@@ -136,6 +138,10 @@ for _mod_name in _stubs:
     _register_module(_mod_name, _AutoMockModule(_mod_name))
 
 sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
+
+# A MagicMock client kind would make every downstream assertion unreadable, so the
+# resolver returns a real bounded value and the finalization test asserts it arrives.
+sys.modules['utils.journey_metrics_contract'].resolve_client_kind = lambda *_a, **_k: 'mobile_ios'
 
 # utils.other.endpoints exposes the auth dependencies used in route signatures; FastAPI needs
 # real callables to build the dependants, so provide small stand-ins.
@@ -224,6 +230,15 @@ finally:
 conv.parse_exact_conversation_reference = MagicMock(return_value=None)
 conv.clamp_conversation_search_pagination = MagicMock(return_value=(1, 10))
 conv.conversation_matches_date_range = MagicMock(return_value=True)
+# Transcript helpers are stubbed at import time; keep search behavior deterministic for this suite.
+conv.search_transcript_conversation_ids = MagicMock(return_value=[])
+conv.merge_typesense_page_with_transcript_hits = lambda typesense_ids, transcript_ids, page=1, per_page=10: [
+    str(x) for x in typesense_ids if str(x).strip()
+][:per_page]
+conv.attach_match_snippets_to_conversations = lambda conversations, _query: [
+    dict(c) if isinstance(c, dict) else c for c in conversations
+]
+conv.redact_conversations_for_list = MagicMock()
 
 
 def _client():
@@ -448,6 +463,109 @@ def test_search_without_speaker_keeps_every_hydrated_conversation():
     assert [item['id'] for item in resp.json()['items']] == ['conv-1', 'conv-2']
 
 
+def test_search_drops_locked_conversations_before_snippets_can_leak():
+    """Locked rows are filtered after hydration so match_snippets never leave the API."""
+    from utils.conversations.mcp_transcript_search import attach_match_snippets_to_conversations as real_attach
+
+    def _redact(convs):
+        for c in convs:
+            if c.get('is_locked'):
+                c['match_snippets'] = []
+                c['transcript_segments'] = []
+        return convs
+
+    hydrated = [
+        {
+            **_conversation_dict('locked', [_segment()]),
+            'is_locked': True,
+            'transcript_segments': [
+                {'id': 's1', 'text': 'ACME contract secret', 'start': 1.0, 'end': 2.0, 'is_user': False}
+            ],
+        },
+        {
+            **_conversation_dict('open', [_segment()]),
+            'is_locked': False,
+            'transcript_segments': [
+                {'id': 's2', 'text': 'ACME contract public', 'start': 3.0, 'end': 4.0, 'is_user': False}
+            ],
+        },
+    ]
+    with (
+        patch.object(conv, 'attach_match_snippets_to_conversations', real_attach),
+        patch.object(conv, 'redact_conversations_for_list', _redact),
+        patch.object(
+            conv,
+            'search_conversations',
+            return_value={
+                'items': [{'id': 'locked'}, {'id': 'open'}],
+                'total_pages': 1,
+                'current_page': 1,
+                'per_page': 10,
+            },
+        ),
+        patch.object(conv.conversations_db, 'get_conversations_by_id_without_photos', return_value=hydrated),
+        patch.object(conv, 'search_transcript_conversation_ids', return_value=[]),
+    ):
+        client = _client()
+        resp = client.post('/v1/conversations/search', json={'query': 'ACME contract'})
+
+    assert resp.status_code == 200
+    items = resp.json()['items']
+    assert [item['id'] for item in items] == ['open']
+    assert items[0]['match_snippets']
+    assert 'ACME contract' in items[0]['match_snippets'][0]['text']
+    assert items[0]['match_snippets'][0]['start'] == 3.0
+
+
+def test_search_merges_transcript_only_hit_and_attaches_seek_snippet():
+    """Spoken-word ID missing from Typesense still appears with timed match_snippets."""
+    from utils.conversations.mcp_transcript_search import (
+        attach_match_snippets_to_conversations as real_attach,
+        merge_typesense_page_with_transcript_hits as real_merge,
+    )
+
+    def _redact(convs):
+        return convs
+
+    hydrated = [
+        {
+            **_conversation_dict('spoken-only', []),
+            'is_locked': False,
+            'structured': {'title': 'Standup', 'overview': 'Team sync'},
+            'transcript_segments': [
+                {
+                    'id': 's1',
+                    'text': 'Ship the ACME contract by Friday',
+                    'start': 42.0,
+                    'end': 46.5,
+                    'is_user': False,
+                },
+            ],
+        }
+    ]
+    with (
+        patch.object(conv, 'attach_match_snippets_to_conversations', real_attach),
+        patch.object(conv, 'merge_typesense_page_with_transcript_hits', real_merge),
+        patch.object(conv, 'redact_conversations_for_list', _redact),
+        patch.object(
+            conv,
+            'search_conversations',
+            return_value={'items': [], 'total_pages': 1, 'current_page': 1, 'per_page': 10},
+        ),
+        patch.object(conv, 'search_transcript_conversation_ids', return_value=['spoken-only']),
+        patch.object(conv.conversations_db, 'get_conversations_by_id_without_photos', return_value=hydrated),
+    ):
+        client = _client()
+        resp = client.post('/v1/conversations/search', json={'query': 'ACME contract'})
+
+    assert resp.status_code == 200
+    items = resp.json()['items']
+    assert [item['id'] for item in items] == ['spoken-only']
+    snippet = items[0]['match_snippets'][0]
+    assert snippet['start'] == 42.0
+    assert snippet['end'] == 46.5
+
+
 def _process_result(result, *, persisted: bool):
     def process(*_args, persistence_observer=None, **_kwargs):
         assert persistence_observer is not None
@@ -487,6 +605,7 @@ def test_finalize_conversation_persists_durable_work_and_returns_without_process
         force_process=True,
         extra_updates=None,
         require_cloud_tasks=True,
+        client_kind='mobile_ios',
     )
     remove_pointer.assert_called_once_with('test-uid')
     process.assert_not_called()

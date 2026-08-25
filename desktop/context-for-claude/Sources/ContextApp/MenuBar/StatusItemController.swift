@@ -126,7 +126,7 @@ final class StatusItemController: NSObject {
         } else {
             // Only on the opening half. Counting the close too would double every visit and make
             // "how many people open the menu bar item" read as twice the truth.
-            ContextAnalytics.record(.surfaceOpened(.menuBar))
+            ContextAnalytics.record(.surfaceOpened(.menuBar, via: .statusItem))
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             // An `.accessory` app's popover opens behind the active app's windows otherwise.
             NSApp.activate(ignoringOtherApps: true)

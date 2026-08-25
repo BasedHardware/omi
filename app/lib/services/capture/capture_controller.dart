@@ -7,7 +7,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'package:collection/collection.dart';
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -29,6 +28,7 @@ import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_metrics_tracker.dart';
 import 'package:omi/services/capture/conversation_source_for_device.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
+import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/services/capture/freemium_threshold_tracker.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/services.dart';
@@ -70,7 +70,9 @@ class CaptureController extends ChangeNotifier
   static const int _maxInProgressConversationRefreshAttempts = 30;
   static const Duration _inProgressConversationRefreshInterval = Duration(seconds: 2);
 
-  final ConversationLocationCapture _conversationLocationCapture = ConversationLocationCapture();
+  final ConversationLocationCapture _conversationLocationCapture;
+  final Future<void> Function()? _inProgressConversationLoader;
+  final Future<BleAudioCodec> Function(String deviceId)? _audioCodecLoader;
 
   CaptureExternalActions externalActions;
   DeviceOnboardingProvider? deviceOnboardingProvider;
@@ -118,6 +120,27 @@ class CaptureController extends ChangeNotifier
   MessageServiceStatusEvent? _terminalTranscriptionFailure;
   MessageServiceStatusEvent? get terminalTranscriptionFailure => _terminalTranscriptionFailure;
 
+  // When custom STT is configured, its polling socket keeps
+  // buffering audio locally and retrying instead of tearing the transcription
+  // socket down on every failure (see PurePollingSocket). Surface that local
+  // state here so the recording UI can show "offline, buffering" instead of
+  // silently showing "Listening" while nothing is actually being transcribed.
+  PurePollingSocket? get _activeCustomSttPollingSocket {
+    final socket = _socket?.socket;
+    if (socket is CompositeTranscriptionSocket) {
+      final primary = socket.primarySocket;
+      return primary is PurePollingSocket ? primary : null;
+    }
+    return socket is PurePollingSocket ? socket : null;
+  }
+
+  /// How long the custom STT endpoint has been unreachable, or null if it is
+  /// not in use or is currently healthy.
+  Duration? get customSttBufferingDuration {
+    final since = _activeCustomSttPollingSocket?.bufferingSince;
+    return since == null ? null : DateTime.now().difference(since);
+  }
+
   // Phone mic WAL: buffer for splitting variable-sized PCM chunks into fixed-size frames
   bool _phoneMicWalActive = false;
 
@@ -134,6 +157,8 @@ class CaptureController extends ChangeNotifier
 
   double get bleReceiveRateKbps => _metrics.bleReceiveRateKbps;
   double get wsSendRateKbps => _metrics.wsSendRateKbps;
+  int get lifetimeBleBytesReceived => _metrics.lifetimeBleBytesReceived;
+  int get lifetimeWsSocketBytesSent => _metrics.lifetimeWsSocketBytesSent;
 
   /// Call this in initState of a widget that needs BLE/WS metrics
   void addMetricsListener() {
@@ -145,6 +170,10 @@ class CaptureController extends ChangeNotifier
     _metrics.removeMetricsListener();
   }
 
+  void setMetricsAppActive(bool active) {
+    _metrics.setAppActive(active);
+  }
+
   /// Check if any segment has a personId not in local cache.
   /// Uses Set difference for O(N+M) complexity instead of O(N*M).
   bool _hasMissingPerson(List<TranscriptSegment> segments) {
@@ -153,8 +182,16 @@ class CaptureController extends ChangeNotifier
     return segmentPersonIds.difference(cachedIds).isNotEmpty;
   }
 
-  CaptureController({CaptureExternalActions? externalActions})
-      : externalActions = externalActions ?? const NoopCaptureExternalActions() {
+  CaptureController({
+    CaptureExternalActions? externalActions,
+    ConversationLocationCapture? conversationLocationCapture,
+    Future<void> Function()? inProgressConversationLoader,
+    Future<BleAudioCodec> Function(String deviceId)? audioCodecLoader,
+  })  : externalActions = externalActions ?? const NoopCaptureExternalActions(),
+        _conversationLocationCapture = conversationLocationCapture ??
+            ConversationLocationCapture(onNewlyGranted: _startAndroidLocationForegroundTask),
+        _inProgressConversationLoader = inProgressConversationLoader,
+        _audioCodecLoader = audioCodecLoader {
     // Restore a persisted device mute so it survives an app kill/restart. When
     // the device reconnects, streamDeviceRecording() reads _isPaused as
     // `wasPaused` and re-applies the mute instead of silently resuming.
@@ -163,6 +200,12 @@ class CaptureController extends ChangeNotifier
       onConnectionStateChanged(isConnected);
     });
     BleBridge.instance.addBatchRecordingFinalizedListener(_onOfflineRecordingFinalized);
+  }
+
+  static Future<void> _startAndroidLocationForegroundTask() async {
+    if (!Platform.isAndroid) return;
+    await ForegroundUtil.initializeForegroundService();
+    await ForegroundUtil.startForegroundTask();
   }
 
   // True while the audio session is interrupted (phone call, Siri, alarm).
@@ -845,9 +888,8 @@ class CaptureController extends ChangeNotifier
       onButtonReceived: (List<int> value) {
         final snapshot = List<int>.from(value);
         if (snapshot.isEmpty || snapshot.length < 4) return;
-        var buttonState = ByteData.view(
-          Uint8List.fromList(snapshot.sublist(0, 4).reversed.toList()).buffer,
-        ).getUint32(0);
+        var buttonState =
+            ByteData.view(Uint8List.fromList(snapshot.sublist(0, 4).reversed.toList()).buffer).getUint32(0);
         Logger.debug("device button $buttonState");
 
         // Intercept for interactive device onboarding
@@ -1052,6 +1094,7 @@ class CaptureController extends ChangeNotifier
   }
 
   Future<BleAudioCodec> _getAudioCodec(String deviceId) async {
+    if (_audioCodecLoader != null) return _audioCodecLoader!(deviceId);
     var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection == null) {
       return BleAudioCodec.pcm8;
@@ -1435,11 +1478,6 @@ class CaptureController extends ChangeNotifier
   }
 
   streamRecording() async {
-    // The backend snapshots its cached location when finalizing a conversation.
-    // Complete this bounded update before any live or batch capture path can
-    // create/finalize that conversation.
-    await _conversationLocationCapture.captureAndUpload();
-
     // Mode is fixed for the whole session at start. On iOS and Android the phone
     // mic can capture Transcribe Later (batch) audio: explicitly when the user
     // enabled it, or automatically as an offline fallback when there is no
@@ -1451,6 +1489,12 @@ class CaptureController extends ChangeNotifier
     );
     if (mode != PhoneMicSessionMode.live) {
       await _startPhoneMicBatch(auto: mode == PhoneMicSessionMode.batchAuto);
+      if (_phoneMicBatchActive) {
+        // Product: recording is the tap; location is metadata. Do not hold
+        // record-start for the OS location dialog. Location PATCHes when the
+        // grant/fix lands.
+        unawaited(_conversationLocationCapture.captureAndUpload());
+      }
       return;
     }
 
@@ -1502,6 +1546,11 @@ class CaptureController extends ChangeNotifier
             onStalled: _onMicStalled,
             onInterruption: _onMicInterruption,
           );
+      // Product: recording is the tap; location is metadata. Do not hold
+      // RecordingState.initialising for the OS location dialog, and do not
+      // prompt location before the microphone. Location still PATCHes when
+      // the grant/fix lands.
+      unawaited(_conversationLocationCapture.captureAndUpload());
     } catch (e, st) {
       // Typed native failures (permission_denied, engine_start_failed, ...) or
       // mic contention — fail visibly instead of recording silence.
@@ -1633,9 +1682,12 @@ class CaptureController extends ChangeNotifier
 
     bool wasPaused = _isPaused;
 
-    // Ensure even very short device recordings have a location in Redis before
-    // the backend is able to finalize their conversation.
-    await _conversationLocationCapture.captureAndUpload();
+    // Product: recording is the tap; location is metadata. Do not block
+    // device connect/start on the OS location dialog. Location still PATCHes
+    // when the grant/fix lands; a short conversation can miss coords.
+    // HomePage calls this with device == null on every entry — check-only so
+    // a fresh install cannot hit deniedForever before the user records.
+    unawaited(_conversationLocationCapture.captureAndUpload(promptIfDenied: device != null));
 
     await _resetStateVariables();
     await _resetState();
@@ -1651,6 +1703,8 @@ class CaptureController extends ChangeNotifier
       _updateRecordingDevice(null);
     }
     updateRecordingState(RecordingState.stop);
+    _keepAliveTimer?.cancel();
+    _keepAliveTimer = null;
     await _socket?.stop(reason: 'stop stream device recording');
   }
 
@@ -1688,10 +1742,28 @@ class CaptureController extends ChangeNotifier
     _startKeepAliveServices();
   }
 
+  bool get _shouldReconnectTranscriptionSocket {
+    final activeDeviceCapture = _recordingDevice != null && recordingState == RecordingState.deviceRecord && !_isPaused;
+    final activePhoneOrSystemCapture = recordingState == RecordingState.record ||
+        recordingState == RecordingState.interrupted ||
+        recordingState == RecordingState.systemAudioRecord;
+    return activeDeviceCapture || activePhoneOrSystemCapture;
+  }
+
+  @visibleForTesting
+  bool get keepAliveScheduledForTesting => _keepAliveTimer?.isActive ?? false;
+
   void _startKeepAliveServices() {
     _keepAliveTimer?.cancel();
+    _keepAliveTimer = null;
+    if (!_shouldReconnectTranscriptionSocket) return;
     _keepAliveTimer = Timer.periodic(const Duration(seconds: 15), (t) async {
       Logger.debug("[Provider] keep alive");
+      if (!_shouldReconnectTranscriptionSocket) {
+        t.cancel();
+        _keepAliveTimer = null;
+        return;
+      }
       // rate 1/15s
       if (_keepAliveLastExecutedAt != null &&
           DateTime.now().subtract(const Duration(seconds: 15)).isBefore(_keepAliveLastExecutedAt!)) {
@@ -1702,30 +1774,42 @@ class CaptureController extends ChangeNotifier
       _keepAliveLastExecutedAt = DateTime.now();
       if (!recordingDeviceServiceReady || _socket?.state == SocketServiceState.connected) {
         t.cancel();
+        _keepAliveTimer = null;
         return;
       }
 
       if (!AuthService.instance.isSignedIn()) {
         Logger.debug("[Provider] keep alive - user not signed in, cancelling reconnect");
         t.cancel();
+        _keepAliveTimer = null;
         return;
       }
 
-      if (_recordingDevice != null) {
-        BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
-        await _initiateWebsocket(audioCodec: codec, source: _getConversationSourceFromDevice());
-        return;
-      }
-      if (recordingState == RecordingState.record || recordingState == RecordingState.interrupted) {
-        await _initiateWebsocket(
-          audioCodec: BleAudioCodec.pcm16,
-          sampleRate: 16000,
-          source: ConversationSource.phone.name,
-        );
-        return;
-      }
+      await _reconnectActiveCapture();
     });
   }
+
+  Future<void> _reconnectActiveCapture() async {
+    final device = _recordingDevice;
+    if (device != null && recordingState == RecordingState.deviceRecord && !_isPaused) {
+      final codec = await _getAudioCodec(device.id);
+      if (!_shouldReconnectTranscriptionSocket || _recordingDevice?.id != device.id) return;
+      await _initiateWebsocket(audioCodec: codec, source: _getConversationSourceFromDevice());
+      return;
+    }
+    if (recordingState == RecordingState.record ||
+        recordingState == RecordingState.interrupted ||
+        recordingState == RecordingState.systemAudioRecord) {
+      await _initiateWebsocket(
+        audioCodec: BleAudioCodec.pcm16,
+        sampleRate: 16000,
+        source: ConversationSource.phone.name,
+      );
+    }
+  }
+
+  @visibleForTesting
+  Future<void> reconnectActiveCaptureForTesting() => _reconnectActiveCapture();
 
   @override
   void onError(Object err) {
@@ -1763,6 +1847,12 @@ class CaptureController extends ChangeNotifier
 
   void _startInProgressConversationRefresh() {
     if (!_canRefreshInProgressConversation || segments.isNotEmpty || photos.isNotEmpty) return;
+    // The socket calls this on every connect. If a cycle is already running, leave it
+    // alone: restarting it resets the attempt counter, so a connection that reconnects
+    // more often than the give-up window keeps this polling
+    // GET /v1/conversations?...&statuses=in_progress forever instead of ever
+    // reaching the cap.
+    if (_inProgressConversationRefreshTimer?.isActive ?? false) return;
 
     _stopInProgressConversationRefresh();
     _inProgressConversationRefreshAttempts = 0;
@@ -1770,6 +1860,15 @@ class CaptureController extends ChangeNotifier
       _refreshInProgressConversationTick();
     });
   }
+
+  @visibleForTesting
+  void startInProgressConversationRefreshForTesting() => _startInProgressConversationRefresh();
+
+  @visibleForTesting
+  bool get inProgressConversationRefreshActiveForTesting => _inProgressConversationRefreshTimer?.isActive ?? false;
+
+  @visibleForTesting
+  int get inProgressConversationRefreshAttemptsForTesting => _inProgressConversationRefreshAttempts;
 
   void _stopInProgressConversationRefresh() {
     _inProgressConversationRefreshTimer?.cancel();
@@ -1793,7 +1892,11 @@ class CaptureController extends ChangeNotifier
     try {
       await _drainNativeBleTranscriptMessages();
       if (segments.isEmpty && photos.isEmpty) {
-        await _loadInProgressConversation();
+        if (_inProgressConversationLoader != null) {
+          await _inProgressConversationLoader!();
+        } else {
+          await _loadInProgressConversation();
+        }
       }
     } finally {
       _isRefreshingInProgressConversation = false;
@@ -2229,9 +2332,16 @@ class CaptureController extends ChangeNotifier
 
     if (segments.isEmpty && !_isLoadingInProgressConversation) {
       _isLoadingInProgressConversation = true;
-      FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
+      // Product: recording is the tap; location is metadata. Refresh at the
+      // first transcript without relying on the long-lived foreground-task
+      // isolate. Fail-open: do not delay segment processing.
+      unawaited(_conversationLocationCapture.captureAndUpload());
       try {
-        await _loadInProgressConversation();
+        if (_inProgressConversationLoader != null) {
+          await _inProgressConversationLoader!();
+        } else {
+          await _loadInProgressConversation();
+        }
       } finally {
         _isLoadingInProgressConversation = false;
       }
@@ -2308,6 +2418,8 @@ class CaptureController extends ChangeNotifier
     // Persist so the mute survives an app kill/restart, not just a reconnect.
     SharedPreferencesUtil().deviceMuted = true;
     updateRecordingState(RecordingState.pause);
+    _keepAliveTimer?.cancel();
+    _keepAliveTimer = null;
     notifyListeners();
   }
 

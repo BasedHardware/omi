@@ -3220,8 +3220,21 @@
     "accountCutoverMigrationInProgressMessage": "Váš účet se migrací. Produktové funkce jsou pozastaveny až do dokončení migrace.",
     "accountCutoverMigrationRollbackMessage": "Váš účet je po vrácení migrace v režimu údržby. Novější data mohou být izolována.",
     "accountCutoverOpenStore": "Otevřít obchod",
+    "chatScopeToday": "Dnes",
+    "chatScopeThisWeek": "Tento týždeň",
+    "chatScopeAbout": "O: {title}",
+    "askAboutThisConversation": "Opýtať sa na to",
     "sendRawAudioToOmi": "Odosielať nespracovaný zvuk do Omi",
     "sendRawAudioToOmiDescription": "Vypnutím zabránite odosielaniu nespracovaného zvuku do Omi. Prepisy a údaje potrebné pre cloudové funkcie sa môžu naďalej odosielať do Omi.",
     "findDevice": "Nájsť",
-    "diagnosticsShareFailed": "Diagnostiku sa nepodarilo zdieľať. Skús to znova."
+    "diagnosticsShareFailed": "Diagnostiku sa nepodarilo zdieľať. Skús to znova.",
+    "appDisabledTitle": "Táto aplikácia je vypnutá a nedá sa nainštalovať.",
+    "appDisabledWebhookFailures": "Jej endpoint zlyhával 72 hodín v kuse, preto bolo doručovanie zastavené.",
+    "appDisabledGeneric": "Vypla ju Omi.",
+    "appDisabledOwnerHint": "Najskôr oprav endpoint — pri opätovnom zapnutí sa znovu overí každá nastavená URL.",
+    "appReEnable": "Znovu zapnúť",
+    "appReEnableFailedTitle": "Nepodarilo sa znovu zapnúť",
+    "appReEnableFailedBody": "Túto aplikáciu sa nepodarilo znovu zapnúť. Skús to znova.",
+    "appDisabledOn": "Vypnuté {date}.",
+    "appDisabledLastError": "Posledná chyba: {error}."
 }

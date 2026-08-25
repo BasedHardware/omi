@@ -265,6 +265,20 @@ jobs:
           BREAK_GLASS_REASON: ${{ github.event.inputs.break_glass_reason }}
         run: |
           set -euo pipefail
+          # A missing release-gate-failure label made gh issue create fail hard,
+          # so the audit issue was never filed (see #10301 / #10389). Ensure the
+          # label exists first — idempotent, so a concurrent run cannot race it.
+          # Only tolerate the explicit "already exists" case; fail loudly on
+          # any other label-creation error (permissions, rate limits, etc.).
+          label_output="$(gh label create release-gate-failure \
+              --repo "$REPO" \
+              --description "Release Eligibility gate was bypassed (break-glass audit trail)" \
+              --color "b60205" 2>&1)" || {
+            if ! grep -qi 'already exists' <<< "$label_output"; then
+              echo "::error::Failed to ensure release-gate-failure label: $label_output" >&2
+              exit 1
+            fi
+          }
           gh issue create --repo "$REPO" \
             --title "Release Eligibility bypassed for ${DEPLOY_SHA:0:10} (${DEPLOY_ENVIRONMENT})" \
             --label release-gate-failure \

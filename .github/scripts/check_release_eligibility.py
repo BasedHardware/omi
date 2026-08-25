@@ -7,11 +7,11 @@ import re
 import sys
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = Path(".github/workflows/release-eligibility.yml")
 ACTION_PATH = Path(".github/actions/release-eligibility/action.yml")
 UV_SETUP_ACTION = "astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84"
+BUN_SETUP_ACTION = "oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6"
 
 
 def require_fragment(errors: list[str], text: str, fragment: str, message: str) -> None:
@@ -72,9 +72,7 @@ def validate_required_step(errors: list[str], text: str, name: str, indent: int,
     return step
 
 
-def validate_required_uses_step(
-    errors: list[str], text: str, name: str, indent: int, label: str, action: str
-) -> str:
+def validate_required_uses_step(errors: list[str], text: str, name: str, indent: int, label: str, action: str) -> str:
     """Require an action step to remain unconditional and pinned."""
 
     step = named_step_block(text, name, indent)
@@ -111,7 +109,9 @@ def validate_workflow(text: str) -> list[str]:
     )
     if trigger_keys != ["push", "workflow_dispatch"]:
         errors.append("release eligibility must declare the automatic push trigger and workflow_dispatch")
-    require_fragment(errors, text, "name: Release Eligibility", "release eligibility workflow is missing its unique check name")
+    require_fragment(
+        errors, text, "name: Release Eligibility", "release eligibility workflow is missing its unique check name"
+    )
     require_fragment(
         errors,
         text,
@@ -227,21 +227,44 @@ def validate_action(text: str) -> list[str]:
         "uv setup",
         UV_SETUP_ACTION,
     )
+    bun_step = validate_required_uses_step(
+        errors,
+        text,
+        "Set up Bun for canonical checks",
+        4,
+        "Bun setup",
+        BUN_SETUP_ACTION,
+    )
     uv_marker = "    - name: Set up uv for canonical checks"
+    bun_marker = "    - name: Set up Bun for canonical checks"
     preflight_marker = "    - name: Run canonical deterministic CI preflight"
     if uv_marker in text and preflight_marker in text and text.index(uv_marker) > text.index(preflight_marker):
         errors.append("release eligibility must set up uv before the canonical preflight")
+    if bun_marker in text and preflight_marker in text and text.index(bun_marker) > text.index(preflight_marker):
+        errors.append("release eligibility must set up Bun before the canonical preflight")
     for fragment, message in (
         ("RELEASE_CHECKOUT_SHA=\"$(git rev-parse --verify HEAD)\"", "release eligibility must resolve checkout SHA"),
-        (".github/scripts/verify_release_eligibility.py", "release eligibility must validate immutable release identity"),
+        (
+            ".github/scripts/verify_release_eligibility.py",
+            "release eligibility must validate immutable release identity",
+        ),
         ("--ref \"$RELEASE_REF\"", "release identity validator must receive the triggering ref"),
         ("--sha \"$RELEASE_SHA\"", "release identity validator must receive the immutable release SHA"),
         ("--before \"$RELEASE_BEFORE\"", "release identity validator must receive the deterministic-check base SHA"),
         ("--after \"$RELEASE_AFTER\"", "release identity validator must receive the push event SHA"),
         ("--checkout-sha \"$RELEASE_CHECKOUT_SHA\"", "release identity validator must receive the checkout SHA"),
-        ("git cat-file -e \"${RELEASE_BEFORE}^{commit}\"", "release eligibility must verify the base identity is a commit"),
-        ("git cat-file -e \"${RELEASE_SHA}^{commit}\"", "release eligibility must verify the release identity is a commit"),
-        ("git merge-base --is-ancestor \"$RELEASE_BEFORE\" \"$RELEASE_SHA\"", "release eligibility must require the base SHA to be an ancestor"),
+        (
+            "git cat-file -e \"${RELEASE_BEFORE}^{commit}\"",
+            "release eligibility must verify the base identity is a commit",
+        ),
+        (
+            "git cat-file -e \"${RELEASE_SHA}^{commit}\"",
+            "release eligibility must verify the release identity is a commit",
+        ),
+        (
+            "git merge-base --is-ancestor \"$RELEASE_BEFORE\" \"$RELEASE_SHA\"",
+            "release eligibility must require the base SHA to be an ancestor",
+        ),
         (".github/scripts/run_checks.py", "release eligibility must call the canonical deterministic check runner"),
         ("--lane ci", "release eligibility must use the CI check lane"),
         ("--base \"$RELEASE_BEFORE\"", "release eligibility must use the event base SHA"),
@@ -250,15 +273,24 @@ def validate_action(text: str) -> list[str]:
     ):
         require_fragment(errors, text, fragment, message)
     for step, fragment, message in (
-        (identity_step, ".github/scripts/verify_release_eligibility.py", "identity validation step must run the immutable identity verifier"),
+        (
+            identity_step,
+            ".github/scripts/verify_release_eligibility.py",
+            "identity validation step must run the immutable identity verifier",
+        ),
         (identity_step, "git merge-base --is-ancestor", "identity validation step must enforce main ancestry"),
         (uv_step, "enable-cache: true", "release eligibility uv setup must enable the deterministic dependency cache"),
+        (bun_step, f"uses: {BUN_SETUP_ACTION}", "release eligibility Bun setup must use the pinned setup action"),
         (
             uv_step,
             "cache-dependency-glob: backend/openapi-requirements.txt",
             "release eligibility uv setup must key the OpenAPI dependency cache",
         ),
-        (preflight_step, ".github/scripts/run_checks.py", "canonical preflight step must run the deterministic check runner"),
+        (
+            preflight_step,
+            ".github/scripts/run_checks.py",
+            "canonical preflight step must run the deterministic check runner",
+        ),
     ):
         require_fragment(errors, step, fragment, message)
     return errors

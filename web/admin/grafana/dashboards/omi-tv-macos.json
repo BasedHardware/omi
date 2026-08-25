@@ -184,7 +184,7 @@
           "root_selector": "",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fviral-metrics%3Fdays%3D60%26platform%3Dmacos&root=growthAccounting&fields=active&agg=last&window=1&drop=1",
+          "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fviral-metrics%3Fdays%3D60%26platform%3Dmacos&root=growthAccounting&fields=active&agg=last&window=1",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -567,6 +567,107 @@
       "type": "stat"
     },
     {
+      "id": 990,
+      "type": "stat",
+      "title": "Latest macOS release",
+      "description": "GitHub releases tagged -macos",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 4,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#22c55e",
+                "value": null
+              },
+              {
+                "color": "#f59e0b",
+                "value": 2
+              },
+              {
+                "color": "#ef4444",
+                "value": 3
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "days ago"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "d"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/"
+        },
+        "orientation": "horizontal",
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "text": {
+          "valueSize": 16,
+          "titleSize": 11
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "parser": "backend",
+          "format": "table",
+          "url": "http://127.0.0.1:8899/api/omi/stats/releases?days=30",
+          "url_options": {
+            "method": "GET",
+            "data": ""
+          },
+          "root_selector": "latest.macos",
+          "columns": [
+            {
+              "selector": "display",
+              "text": "release",
+              "type": "string"
+            },
+            {
+              "selector": "daysSince",
+              "text": "days ago",
+              "type": "number"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
@@ -613,7 +714,7 @@
         ]
       },
       "gridPos": {
-        "x": 0,
+        "x": 4,
         "y": 6,
         "w": 8,
         "h": 8
@@ -712,7 +813,7 @@
         ]
       },
       "gridPos": {
-        "x": 8,
+        "x": 12,
         "y": 6,
         "w": 8,
         "h": 8
@@ -787,8 +888,8 @@
         "overrides": []
       },
       "gridPos": {
-        "x": 16,
-        "y": 6,
+        "x": 0,
+        "y": 14,
         "w": 8,
         "h": 8
       },
@@ -868,7 +969,7 @@
         "overrides": []
       },
       "gridPos": {
-        "x": 0,
+        "x": 8,
         "y": 14,
         "w": 3,
         "h": 4
@@ -942,7 +1043,7 @@
         "overrides": []
       },
       "gridPos": {
-        "x": 3,
+        "x": 11,
         "y": 14,
         "w": 3,
         "h": 4
@@ -1016,7 +1117,7 @@
         "overrides": []
       },
       "gridPos": {
-        "x": 6,
+        "x": 14,
         "y": 14,
         "w": 3,
         "h": 4
@@ -1090,7 +1191,7 @@
         "overrides": []
       },
       "gridPos": {
-        "x": 9,
+        "x": 17,
         "y": 14,
         "w": 3,
         "h": 4
@@ -1166,7 +1267,7 @@
         "overrides": []
       },
       "gridPos": {
-        "x": 12,
+        "x": 20,
         "y": 14,
         "w": 3,
         "h": 4
@@ -1241,8 +1342,8 @@
         "overrides": []
       },
       "gridPos": {
-        "x": 15,
-        "y": 14,
+        "x": 0,
+        "y": 22,
         "w": 3,
         "h": 4
       },
@@ -1317,8 +1418,8 @@
         "overrides": []
       },
       "gridPos": {
-        "x": 18,
-        "y": 14,
+        "x": 3,
+        "y": 22,
         "w": 3,
         "h": 4
       },
@@ -1392,8 +1493,8 @@
         "overrides": []
       },
       "gridPos": {
-        "x": 21,
-        "y": 14,
+        "x": 6,
+        "y": 22,
         "w": 3,
         "h": 4
       },
@@ -1467,8 +1568,8 @@
         "overrides": []
       },
       "gridPos": {
-        "x": 0,
-        "y": 18,
+        "x": 9,
+        "y": 22,
         "w": 3,
         "h": 4
       },
@@ -1542,8 +1643,8 @@
         "overrides": []
       },
       "gridPos": {
-        "x": 3,
-        "y": 18,
+        "x": 12,
+        "y": 22,
         "w": 3,
         "h": 4
       },
@@ -1622,8 +1723,8 @@
         "overrides": []
       },
       "gridPos": {
-        "x": 6,
-        "y": 18,
+        "x": 15,
+        "y": 22,
         "w": 3,
         "h": 4
       },
@@ -1717,8 +1818,8 @@
         ]
       },
       "gridPos": {
-        "x": 9,
-        "y": 18,
+        "x": 0,
+        "y": 26,
         "w": 8,
         "h": 8
       },
@@ -1816,7 +1917,7 @@
         ]
       },
       "gridPos": {
-        "x": 0,
+        "x": 8,
         "y": 26,
         "w": 8,
         "h": 8
@@ -1961,7 +2062,7 @@
         ]
       },
       "gridPos": {
-        "x": 8,
+        "x": 16,
         "y": 26,
         "w": 8,
         "h": 8
@@ -2132,8 +2233,8 @@
         ]
       },
       "gridPos": {
-        "x": 16,
-        "y": 26,
+        "x": 0,
+        "y": 34,
         "w": 8,
         "h": 8
       },
@@ -2298,7 +2399,7 @@
         ]
       },
       "gridPos": {
-        "x": 0,
+        "x": 8,
         "y": 34,
         "w": 8,
         "h": 8
@@ -2383,7 +2484,7 @@
         "overrides": []
       },
       "gridPos": {
-        "x": 8,
+        "x": 16,
         "y": 34,
         "w": 8,
         "h": 8
@@ -2526,8 +2627,8 @@
         ]
       },
       "gridPos": {
-        "x": 16,
-        "y": 34,
+        "x": 0,
+        "y": 42,
         "w": 8,
         "h": 8
       },
@@ -2645,7 +2746,7 @@
         ]
       },
       "gridPos": {
-        "x": 0,
+        "x": 8,
         "y": 42,
         "w": 8,
         "h": 8
@@ -2806,7 +2907,7 @@
         ]
       },
       "gridPos": {
-        "x": 8,
+        "x": 16,
         "y": 42,
         "w": 8,
         "h": 8
@@ -2916,8 +3017,8 @@
         ]
       },
       "gridPos": {
-        "x": 16,
-        "y": 42,
+        "x": 0,
+        "y": 50,
         "w": 8,
         "h": 8
       },
@@ -2984,7 +3085,7 @@
         "overrides": []
       },
       "gridPos": {
-        "x": 0,
+        "x": 8,
         "y": 50,
         "w": 8,
         "h": 8
@@ -3065,7 +3166,7 @@
         "overrides": []
       },
       "gridPos": {
-        "x": 8,
+        "x": 16,
         "y": 50,
         "w": 8,
         "h": 8
@@ -3192,8 +3293,8 @@
         ]
       },
       "gridPos": {
-        "x": 16,
-        "y": 50,
+        "x": 0,
+        "y": 58,
         "w": 8,
         "h": 8
       },
@@ -3306,7 +3407,7 @@
         ]
       },
       "gridPos": {
-        "x": 0,
+        "x": 8,
         "y": 58,
         "w": 8,
         "h": 8
@@ -3420,7 +3521,7 @@
         ]
       },
       "gridPos": {
-        "x": 8,
+        "x": 16,
         "y": 58,
         "w": 8,
         "h": 8
@@ -3534,8 +3635,8 @@
         ]
       },
       "gridPos": {
-        "x": 16,
-        "y": 58,
+        "x": 0,
+        "y": 66,
         "w": 8,
         "h": 8
       },
@@ -3648,7 +3749,7 @@
         ]
       },
       "gridPos": {
-        "x": 0,
+        "x": 8,
         "y": 66,
         "w": 8,
         "h": 8
@@ -3734,7 +3835,7 @@
             "root_selector": "",
             "source": "url",
             "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fviral-metrics%3Fdays%3D60%26platform%3Dmacos&root=growthAccounting&fields=active&agg=last&window=1&label=WoW&drop=1",
+            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fviral-metrics%3Fdays%3D60%26platform%3Dmacos&root=growthAccounting&fields=active&agg=last&window=1&label=WoW",
             "url_options": {
               "data": "",
               "method": "GET"

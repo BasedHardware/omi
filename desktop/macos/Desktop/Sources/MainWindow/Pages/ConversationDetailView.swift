@@ -50,6 +50,11 @@ struct ConversationDetailView: View {
   @ObservedObject private var automation = ConversationDetailAutomationState.shared
 
   @StateObject private var appProvider = AppProvider()
+  /// Descriptions the reader has explicitly added to their task list from this
+  /// summary, and those currently in flight. Action items on a summary are not
+  /// tasks (I1); this is the record of the reader's own "Add to Tasks" gesture.
+  @State private var addedActionItemIDs: Set<String> = []
+  @State private var addingActionItemIDs: Set<String> = []
   @State private var showAppSelector = false
   @State private var isReprocessing = false
   @State private var selectedAppForReprocess: OmiApp?
@@ -600,6 +605,25 @@ struct ConversationDetailView: View {
       overviewSection
     }
 
+    // The backend's headed summary blocks. `overview` is only a compatibility paragraph now, so
+    // without these the pane shows a fraction of what was actually written.
+    //
+    // Shown only when Omi's own summary is the one on screen. `sections` belongs to the first-party
+    // structured summary, and a promoted app result already *replaces* that summary — rendering
+    // both stacks a second, unattributed Omi summary under the app's, which is also the one thing
+    // the Flutter client deliberately does not do.
+    if selection.appId == nil {
+      ConversationSummarySections(sections: displayConversation.structured.sections)
+        .padding(.horizontal, OmiSpacing.lg)
+    }
+
+    // Action items sit directly under the summary: they are the part of a
+    // meeting a reader acts on. Nothing here is a task until the reader says
+    // so (I1) — each row carries its own "Add to Tasks".
+    if !displayConversation.structured.actionItems.isEmpty {
+      actionItemsSection
+    }
+
     // Metadata chips
     metadataSection
 
@@ -610,11 +634,6 @@ struct ConversationDetailView: View {
 
     // Suggested apps section
     suggestedAppsSection
-
-    // Action items section
-    if !displayConversation.structured.actionItems.isEmpty {
-      actionItemsSection
-    }
   }
 
   // MARK: - Transcript Drawer
@@ -1133,6 +1152,8 @@ struct ConversationDetailView: View {
 
             Spacer(minLength: OmiSpacing.sm)
 
+            addToTasksButton(for: item)
+
             Button {
               ConversationDetailAutomationState.shared.requestOpen(
                 conversationId: displayConversation.id,
@@ -1161,6 +1182,46 @@ struct ConversationDetailView: View {
               .stroke(Ink.rowFillHover.opacity(0.3), lineWidth: 1)
           )
         }
+      }
+    }
+  }
+
+  /// Explicit, per-item promotion of a summary action item into the task list.
+  /// This gesture is the only way an extracted item becomes a task.
+  @ViewBuilder
+  private func addToTasksButton(for item: ActionItem) -> some View {
+    let isAdded = addedActionItemIDs.contains(item.id)
+    let isAdding = addingActionItemIDs.contains(item.id)
+
+    Button {
+      addActionItemToTasks(item)
+    } label: {
+      HStack(spacing: OmiSpacing.xxs) {
+        Image(systemName: isAdded ? "checkmark" : "plus")
+        Text(isAdded ? "Added" : "Add to Tasks")
+      }
+      .scaledFont(size: OmiType.caption)
+      .foregroundColor(isAdded ? Ink.listeningGreen : Ink.secondary)
+    }
+    .buttonStyle(.plain)
+    .disabled(isAdded || isAdding)
+    .opacity(isAdding ? 0.5 : 1)
+    .accessibilityIdentifier("action-item-add-to-tasks")
+    .help(isAdded ? "Already in your tasks" : "Add this to your tasks")
+  }
+
+  private func addActionItemToTasks(_ item: ActionItem) {
+    guard !addedActionItemIDs.contains(item.id), !addingActionItemIDs.contains(item.id) else { return }
+    addingActionItemIDs.insert(item.id)
+    Task { @MainActor in
+      let created = await TasksStore.shared.createTask(
+        description: item.description,
+        dueAt: nil,
+        priority: nil
+      )
+      addingActionItemIDs.remove(item.id)
+      if created != nil {
+        addedActionItemIDs.insert(item.id)
       }
     }
   }
@@ -1348,4 +1409,5 @@ struct SuggestedAppCard: View {
     .disabled(isLoading)
     .onHover { isHovering = $0 }
   }
+
 }

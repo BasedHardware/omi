@@ -2,6 +2,13 @@ import Foundation
 import VoiceTurnDomain
 
 enum OnboardingFlow {
+  enum CompletionOwnerReconciliation: Equatable {
+    case unchanged
+    case backfilled
+    case resetForDifferentOwner
+  }
+
+  static let completionOwnerKey = "onboardingCompletedOwnerId"
   static let steps = [
     "Name",
     "Language",
@@ -57,6 +64,30 @@ enum OnboardingFlow {
     if target <= furthestStep { return true }
     let frontier = max(0, furthestStep)
     return !(frontier..<target).contains { unskippableSteps.contains($0) }
+  }
+
+  @discardableResult
+  static func reconcileCompletionOwner(
+    currentOwnerID: String?, defaults: UserDefaults = .standard
+  ) -> CompletionOwnerReconciliation {
+    guard let currentOwnerID, !currentOwnerID.isEmpty,
+      defaults.bool(forKey: DefaultsKey.hasCompletedOnboarding.rawValue)
+    else { return .unchanged }
+
+    guard let completedOwnerID = defaults.string(forKey: completionOwnerKey) else {
+      defaults.set(currentOwnerID, forKey: completionOwnerKey)
+      return .backfilled
+    }
+    guard completedOwnerID != currentOwnerID else { return .unchanged }
+
+    clearPersistedState(in: defaults)
+    defaults.removeObject(forKey: DefaultsKey.hasCompletedOnboarding.rawValue)
+    return .resetForDifferentOwner
+  }
+
+  static func markCompleted(for ownerID: String?, defaults: UserDefaults = .standard) {
+    guard let ownerID, !ownerID.isEmpty else { return }
+    defaults.set(ownerID, forKey: completionOwnerKey)
   }
 
   /// What a bare arrow key does at `step`. Left/up go back one step; right/down
@@ -244,6 +275,7 @@ enum OnboardingFlow {
     "onboardingRole",
     "onboardingGoalDraft",
     "onboardingJustCompleted",
+    completionOwnerKey,
     "hasSeenRewindIntro",
     "hasTriggeredNotification",
     "hasTriggeredAutomation",

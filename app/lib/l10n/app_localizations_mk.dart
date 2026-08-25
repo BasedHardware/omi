@@ -9894,6 +9894,20 @@ class AppLocalizationsMk extends AppLocalizations {
   String get accountCutoverOpenStore => 'Otevřít obchod';
 
   @override
+  String get chatScopeToday => 'Денес';
+
+  @override
+  String get chatScopeThisWeek => 'Оваа недела';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'За: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Прашај за ова';
+
+  @override
   String get sendRawAudioToOmi => 'Испраќај необработено аудио до Omi';
 
   @override
@@ -9905,4 +9919,37 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get diagnosticsShareFailed => 'Дијагностиката не можеше да се сподели. Обидете се повторно.';
+
+  @override
+  String get appDisabledTitle => 'Оваа апликација е оневозможена и не може да се инсталира.';
+
+  @override
+  String get appDisabledWebhookFailures =>
+      'Нејзината крајна точка не работеше 72 часа по ред, па испораките беа запрени.';
+
+  @override
+  String get appDisabledGeneric => 'Ја оневозможи Omi.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Прво поправете ја крајната точка — повторното овозможување повторно ја проверува секоја конфигурирана URL адреса.';
+
+  @override
+  String get appReEnable => 'Овозможи повторно';
+
+  @override
+  String get appReEnableFailedTitle => 'Повторното овозможување не успеа';
+
+  @override
+  String get appReEnableFailedBody => 'Оваа апликација не можеше повторно да се овозможи. Обидете се повторно.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Оневозможена на $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Последна грешка: $error.';
+  }
 }

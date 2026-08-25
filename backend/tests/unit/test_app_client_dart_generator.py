@@ -65,7 +65,9 @@ def test_conversation_wire_dart_is_generated_from_app_client_openapi():
     assert GENERATED_DART_PATH.read_text() == generated
     for schema_name in generate_dart_models.SCHEMA_GROUPS['conversation']['schemas']:
         assert f'class Generated{schema_name}' in generated
-    assert 'items: _required(_readFieldValue<List<GeneratedConversation>>' in generated
+    assert 'items: _required(_readFieldValue<List<GeneratedConversationSearchItem>>' in generated
+    assert 'class GeneratedConversationSearchItem' in generated
+    assert 'class GeneratedTranscriptMatchSnippet' in generated
     assert 'class GeneratedSyncJobStartResponse' in generated
     assert 'class GeneratedSyncJobStatusResponse' in generated
     assert 'result: _readFieldValue<GeneratedSyncLocalFilesResultResponse>' in generated

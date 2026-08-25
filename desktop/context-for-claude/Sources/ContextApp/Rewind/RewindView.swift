@@ -73,6 +73,7 @@ struct RewindView: View {
     /// index that does not exist.
     private var searchPill: some View {
         Button {
+            ContextAnalytics.record(.controlUsed(.searchAllPill))
             onSearch("")
         } label: {
             HStack(spacing: 6) {
@@ -288,6 +289,10 @@ struct RewindView: View {
     private func dayStepButton(forward: Bool) -> some View {
         let enabled = forward ? model.hasNextDay : model.hasPreviousDay
         return Button {
+            // One control, not two. Which direction somebody stepped is not a product question;
+            // whether anybody reaches past the loaded day at all is, and a case per direction would
+            // split that count in half for nothing.
+            ContextAnalytics.record(.controlUsed(.rewindDayStep))
             model.goToAdjacentDay(forward: forward)
         } label: {
             Image(systemName: forward ? "chevron.right.2" : "chevron.left.2")
@@ -418,7 +423,10 @@ struct RewindView: View {
             // literally. It stays pressable — pressing it is what runs the pass.
             enabled: model.liveTextIsAvailable,
             isOn: model.showsLiveText
-        ) { model.toggleLiveText() }
+        ) {
+            ContextAnalytics.record(.controlUsed(.rewindLiveText))
+            model.toggleLiveText()
+        }
     }
 
     private func circleButton(

@@ -209,3 +209,30 @@ describe('pullFreshSession coalescing', () => {
     expect(refresher).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('requestFreshSession', () => {
+  it('returns the pulled session without requiring a cached shared session', async () => {
+    const s = await freshSession()
+    const token = freshU1(3)
+    s.setTokenRefresher(async () => sess(token))
+    const pulled = await s.requestFreshSession()
+    expect(pulled?.token).toBe(token)
+  })
+
+  it('returns null when no refresher is wired', async () => {
+    const s = await freshSession()
+    expect(await s.requestFreshSession()).toBeNull()
+  })
+})
+
+describe('tokenLooksExpired', () => {
+  it('is false for a token valid past the skew window', async () => {
+    const s = await freshSession()
+    expect(s.tokenLooksExpired(freshU1())).toBe(false)
+  })
+
+  it('is true for an already-expired token', async () => {
+    const s = await freshSession()
+    expect(s.tokenLooksExpired(staleU1())).toBe(true)
+  })
+})

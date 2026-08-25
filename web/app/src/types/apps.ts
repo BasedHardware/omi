@@ -72,6 +72,10 @@ export interface App {
   is_popular?: boolean;
   created_at?: string;
   source_code_url?: string;
+  disabled?: boolean;
+  disabled_reason?: string;
+  disabled_at?: string;
+  disabled_error?: string;
 }
 
 export interface AppCategory {

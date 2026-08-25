@@ -23,30 +23,86 @@ final class PageGlassLaneTests: XCTestCase {
 
   // MARK: - Which destinations already have glass
 
-  /// Home and Rewind build their own panels. Wrapping them again does not stack two materials — a
+  /// QueryShell Home and Rewind build their own panels when the router says they do. Wrapping them
+  /// again does not stack two materials — a
   /// nested `.behindWindow` surface takes a *second* copy of the desktop and doubles the scrim — so a
   /// double-wrapped page reads visibly muddier than the pages around it.
   func testHomeAndRewindKeepTheirOwnPanelsAndEveryOtherDestinationIsGivenOne() {
-    XCTAssertTrue(
-      PageGlassLanePolicy.ownsItsPanels(selectedIndex: SidebarNavItem.dashboard.rawValue))
-    XCTAssertTrue(PageGlassLanePolicy.ownsItsPanels(selectedIndex: SidebarNavItem.rewind.rawValue))
+    for homeOwnsItsPanels in [false, true] {
+      XCTAssertEqual(
+        PageGlassLanePolicy.ownsItsPanels(
+          selectedIndex: SidebarNavItem.dashboard.rawValue,
+          homeOwnsItsPanels: homeOwnsItsPanels),
+        homeOwnsItsPanels)
+      XCTAssertTrue(
+        PageGlassLanePolicy.ownsItsPanels(
+          selectedIndex: SidebarNavItem.rewind.rawValue,
+          homeOwnsItsPanels: homeOwnsItsPanels))
 
-    for item in SidebarNavItem.allCases where item != .dashboard && item != .rewind {
-      XCTAssertFalse(
-        PageGlassLanePolicy.ownsItsPanels(selectedIndex: item.rawValue),
-        "\(item.title) has no glass of its own and must be given the lane's")
+      for item in SidebarNavItem.allCases where item != .dashboard && item != .rewind {
+        XCTAssertFalse(
+          PageGlassLanePolicy.ownsItsPanels(
+            selectedIndex: item.rawValue,
+            homeOwnsItsPanels: homeOwnsItsPanels),
+          "\(item.title) has no glass of its own and must be given the lane's")
+      }
     }
+  }
+
+  /// **The hub is one rail index wearing four pages, and only one of them brings its own glass.**
+  ///
+  /// Activity is Home's column — a search bar and a results panel, each already an `inkGlassPanel`.
+  /// Wrapping the hub wholesale nested both inside a third panel, which does not stack two materials
+  /// but takes a second copy of the desktop and doubles the scrim, so Activity read visibly muddier
+  /// than Chat and its two panels lost their separation. The hub's list pages paint no ground of
+  /// their own and must keep the lane.
+  func testOnlyTheActivityHubPageBringsItsOwnPanels() {
+    let hubIndex = SidebarNavItem.conversations.rawValue
+    XCTAssertTrue(
+      PageGlassLanePolicy.ownsItsPanels(
+        selectedIndex: hubIndex,
+        memoryDestinationRawValue: MemoryHubDestination.activity.rawValue,
+        homeOwnsItsPanels: true),
+      "Activity builds Home's own two panels and must not be wrapped in a third")
+
+    for destination in MemoryHubDestination.allCases where destination != .activity {
+      XCTAssertFalse(
+        PageGlassLanePolicy.ownsItsPanels(
+          selectedIndex: hubIndex,
+          memoryDestinationRawValue: destination.rawValue,
+          homeOwnsItsPanels: true),
+        "\(destination.title) paints no ground of its own and must be given the lane's")
+    }
+
+    for destination in MemoryHubDestination.allCases {
+      XCTAssertFalse(
+        PageGlassLanePolicy.ownsItsPanels(
+          selectedIndex: SidebarNavItem.memories.rawValue,
+          memoryDestinationRawValue: destination.rawValue,
+          homeOwnsItsPanels: true),
+        "the standalone Memories page must keep the lane whatever the hub last showed")
+    }
+
+    XCTAssertFalse(
+      PageGlassLanePolicy.ownsItsPanels(
+        selectedIndex: SidebarNavItem.conversations.rawValue,
+        homeOwnsItsPanels: true))
   }
 
   /// The router sends every unrecognised index to Home through its `default:` branch. An index the
   /// nav enum does not carry must therefore resolve to Home here too, or those routes wrap Home's
   /// two panels inside a third one.
   func testAnUnrecognisedIndexFollowsTheRouterBackToHome() {
-    for unknown in [2, 11, 13, -1, Int.max] {
-      XCTAssertNil(SidebarNavItem(rawValue: unknown), "fixture \(unknown) must not be a real route")
-      XCTAssertTrue(
-        PageGlassLanePolicy.ownsItsPanels(selectedIndex: unknown),
-        "an unknown index renders Home, which already owns its panels")
+    for homeOwnsItsPanels in [false, true] {
+      for unknown in [2, 11, 13, -1, Int.max] {
+        XCTAssertNil(SidebarNavItem(rawValue: unknown), "fixture \(unknown) must not be a real route")
+        XCTAssertEqual(
+          PageGlassLanePolicy.ownsItsPanels(
+            selectedIndex: unknown,
+            homeOwnsItsPanels: homeOwnsItsPanels),
+          homeOwnsItsPanels,
+          "an unknown index renders Home, which must use the router's Home surface decision")
+      }
     }
   }
 
@@ -83,29 +139,36 @@ final class PageGlassLaneTests: XCTestCase {
 
   /// The claim worth holding is geometric, so it is asserted against a real mounted view rather
   /// than against the constants twice: a destination without its own glass is placed in the lane,
-  /// centred, and inset from both ends by the gap.
-  func testAWrappedDestinationIsPlacedInTheLaneWithTheGapAboveAndBelowIt() {
+  /// centred, and inset from both ends by the gap. The legacy Home branch is the same geometry with
+  /// the route's Home surface answer flipped.
+  func testAWrappedDestinationIsPlacedInTheLaneWithTheGapAboveAndBelowIt() throws {
     let size = CGSize(width: 1_400, height: 800)
-    let recorder = PageGlassLaneFrameRecorder()
-    let host = NSHostingView(
-      rootView: PageGlassLane(selectedIndex: SidebarNavItem.tasks.rawValue) {
-        PageGlassLaneProbe(recorder: recorder) { Color.clear }
-      }
-      .frame(width: size.width, height: size.height)
-    )
-    host.frame = NSRect(origin: .zero, size: size)
-    host.layoutSubtreeIfNeeded()
+    for (index, homeOwnsItsPanels) in [
+      (SidebarNavItem.tasks.rawValue, true),
+      (SidebarNavItem.dashboard.rawValue, false),
+    ] {
+      let recorder = PageGlassLaneFrameRecorder()
+      let host = NSHostingView(
+        rootView: PageGlassLane(
+          selectedIndex: index,
+          homeOwnsItsPanels: homeOwnsItsPanels
+        ) {
+          PageGlassLaneProbe(recorder: recorder) { Color.clear }
+        }
+        .frame(width: size.width, height: size.height)
+      )
+      host.frame = NSRect(origin: .zero, size: size)
+      host.layoutSubtreeIfNeeded()
 
-    guard let placed = recorder.frame else {
-      return XCTFail("expected the wrapped destination to be placed")
+      let placed = try XCTUnwrap(recorder.frame)
+      let lane = PageGlassLaneLayout.laneWidth(for: size.width)
+      XCTAssertEqual(placed.width, lane, accuracy: 0.5)
+      XCTAssertEqual(
+        placed.height,
+        size.height - PageGlassLaneLayout.topGap - PageGlassLaneLayout.bottomGap,
+        accuracy: 0.5,
+        "one tall panel: the page fills the window and scrolls inside itself")
     }
-    let lane = PageGlassLaneLayout.laneWidth(for: size.width)
-    XCTAssertEqual(placed.width, lane, accuracy: 0.5)
-    XCTAssertEqual(
-      placed.height,
-      size.height - PageGlassLaneLayout.topGap - PageGlassLaneLayout.bottomGap,
-      accuracy: 0.5,
-      "one tall panel: the page fills the window and scrolls inside itself")
   }
 
   /// The lane fills the window horizontally. Vertical air between the top bar and the page remains
@@ -121,7 +184,10 @@ final class PageGlassLaneTests: XCTestCase {
     for size in sizes {
       let recorder = PageGlassLaneFrameRecorder()
       let host = NSHostingView(
-        rootView: PageGlassLane(selectedIndex: SidebarNavItem.tasks.rawValue) {
+        rootView: PageGlassLane(
+          selectedIndex: SidebarNavItem.tasks.rawValue,
+          homeOwnsItsPanels: true
+        ) {
           PageGlassLaneProbe(recorder: recorder) { Color.clear }
         }
         .frame(width: size.width, height: size.height)
@@ -152,7 +218,10 @@ final class PageGlassLaneTests: XCTestCase {
     let size = CGSize(width: 1_400, height: 800)
     let recorder = PageGlassLaneFrameRecorder()
     let host = NSHostingView(
-      rootView: PageGlassLane(selectedIndex: SidebarNavItem.dashboard.rawValue) {
+      rootView: PageGlassLane(
+        selectedIndex: SidebarNavItem.dashboard.rawValue,
+        homeOwnsItsPanels: true
+      ) {
         PageGlassLaneProbe(recorder: recorder) { Color.clear }
       }
       .frame(width: size.width, height: size.height)
@@ -248,12 +317,18 @@ final class ShellModalScrimTests: XCTestCase {
   /// Read out of a real environment through a real layout pass, from inside `PageGlassLane`'s own
   /// content closure, which is exactly where every modal in the app is mounted.
   func testTheSurfaceTellsTheDimWhichSurfaceItIs() {
-    for item in SidebarNavItem.allCases {
-      let expected: ShellModalScrimBounds =
-        PageGlassLanePolicy.ownsItsPanels(selectedIndex: item.rawValue) ? .contentArea : .ownSurface
-      XCTAssertEqual(
-        Self.boundsPublished(toDestination: item.rawValue), expected,
-        "\(item.title) hands its modals the wrong surface")
+    for homeOwnsItsPanels in [false, true] {
+      for item in SidebarNavItem.allCases {
+        let expected: ShellModalScrimBounds =
+          PageGlassLanePolicy.ownsItsPanels(
+            selectedIndex: item.rawValue,
+            homeOwnsItsPanels: homeOwnsItsPanels) ? .contentArea : .ownSurface
+        XCTAssertEqual(
+          Self.boundsPublished(
+            toDestination: item.rawValue,
+            homeOwnsItsPanels: homeOwnsItsPanels), expected,
+          "\(item.title) hands its modals the wrong surface")
+      }
     }
   }
 
@@ -372,10 +447,16 @@ final class ShellModalScrimTests: XCTestCase {
 
   /// Mounts a probe exactly where a page's modals are mounted and reads back the surface it was told
   /// it is on.
-  private static func boundsPublished(toDestination index: Int) -> ShellModalScrimBounds? {
+  private static func boundsPublished(
+    toDestination index: Int,
+    homeOwnsItsPanels: Bool
+  ) -> ShellModalScrimBounds? {
     let recorder = ShellModalScrimBoundsRecorder()
     let host = NSHostingView(
-      rootView: PageGlassLane(selectedIndex: index) {
+      rootView: PageGlassLane(
+        selectedIndex: index,
+        homeOwnsItsPanels: homeOwnsItsPanels
+      ) {
         ShellModalScrimBoundsProbe(recorder: recorder)
       }
       .frame(width: 1_400, height: 800))

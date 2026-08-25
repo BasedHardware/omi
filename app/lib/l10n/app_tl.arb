@@ -10781,8 +10781,21 @@
     "accountCutoverMigrationInProgressMessage": "Akun Anda sedang dimigrasi. Fitur produk dijeda hingga migrasi selesai.",
     "accountCutoverMigrationRollbackMessage": "Akun Anda dalam pemeliharaan setelah rollback migrasi. Beberapa data yang lebih baru mungkin terisolasi.",
     "accountCutoverOpenStore": "Buka toko",
+    "chatScopeToday": "Ngayon",
+    "chatScopeThisWeek": "Ngayong linggo",
+    "chatScopeAbout": "Tungkol sa: {title}",
+    "askAboutThisConversation": "Itanong tungkol dito",
     "sendRawAudioToOmi": "Ipadala ang raw na audio sa Omi",
     "sendRawAudioToOmiDescription": "I-off para hindi maipadala ang raw na audio sa Omi. Maaari pa ring ipadala sa Omi ang mga transcript at data na kailangan ng mga cloud feature.",
     "findDevice": "Hanapin",
-    "diagnosticsShareFailed": "Hindi maibahagi ang diagnostics. Pakisubukan ulit."
+    "diagnosticsShareFailed": "Hindi maibahagi ang diagnostics. Pakisubukan ulit.",
+    "appDisabledTitle": "Naka-disable ang app na ito at hindi ito mai-install.",
+    "appDisabledWebhookFailures": "Nabigo ang endpoint nito nang 72 oras na sunod-sunod, kaya itinigil ang mga paghahatid.",
+    "appDisabledGeneric": "I-nadisable ito ng Omi.",
+    "appDisabledOwnerHint": "Ayusin muna ang endpoint — sinusuri muli ng pag-enable ang bawat naka-configure na URL.",
+    "appReEnable": "I-enable muli",
+    "appReEnableFailedTitle": "Hindi ma-enable muli",
+    "appReEnableFailedBody": "Hindi ma-enable muli ang app na ito. Pakisubukan ulit.",
+    "appDisabledOn": "Na-disable noong {date}.",
+    "appDisabledLastError": "Huling error: {error}."
 }

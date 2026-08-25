@@ -209,7 +209,44 @@ Future<List<String>> getEnabledAppsServer() async {
   }
 }
 
-Future<bool> enableAppServer(String appId) async {
+/// Re-enable an app the backend auto-disabled after webhook failures.
+///
+/// The re-enable branch reads an unset-exclusive payload, so `disabled` has to
+/// be sent explicitly or the request is a silent no-op. The endpoint re-checks
+/// every configured URL and rejects with the specific reason, which is the
+/// whole point of the call — it names the URL to fix — so it is returned
+/// rather than collapsed into a bool.
+Future<(bool, String)> reEnableAppServer(String appId) async {
+  try {
+    var response = await makeMultipartApiCall(
+      url: '${Env.apiBaseUrl}v1/apps/$appId',
+      files: [],
+      fileFieldName: 'file',
+      fields: {
+        'app_data': jsonEncode({'id': appId, 'disabled': false})
+      },
+      method: 'PATCH',
+    );
+    if (response.statusCode == 200) {
+      return (true, '');
+    }
+    Logger.debug('Failed to re-enable app. Status code: ${response.statusCode}');
+    if (response.body.isNotEmpty) {
+      final error = misc_wire.GeneratedErrorResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+      return (false, error.detail is String ? error.detail as String : '');
+    }
+    return (false, '');
+  } catch (e, stackTrace) {
+    Logger.debug('An error occurred reEnableAppServer: $e');
+    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    return (false, '');
+  }
+}
+
+/// Returns whether the install succeeded, plus the backend's reason when it did
+/// not. The reason was previously dropped, so a disabled app was indistinguishable
+/// from an incomplete setup and the caller sent the user to setup instructions.
+Future<(bool, String)> enableAppServer(String appId) async {
   try {
     var response = await makeApiCall(
       url: '${Env.apiBaseUrl}v1/apps/enable?app_id=$appId',
@@ -217,14 +254,26 @@ Future<bool> enableAppServer(String appId) async {
       method: 'POST',
       body: '',
     );
-    if (response == null || response.statusCode != 200) return false;
+    if (response == null) return (false, '');
+    if (response.statusCode != 200) {
+      String detail = '';
+      if (response.body.isNotEmpty) {
+        try {
+          final error = misc_wire.GeneratedErrorResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+          if (error.detail is String) detail = error.detail as String;
+        } catch (_) {
+          // A non-JSON body (proxy/gateway error) carries no usable reason.
+        }
+      }
+      return (false, detail);
+    }
     Logger.debug('enableAppServer: $appId ${response.body}');
     final data = wire.GeneratedAppMutationResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    return data.status == 'ok';
+    return (data.status == 'ok', '');
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
-    return false;
+    return (false, '');
   }
 }
 

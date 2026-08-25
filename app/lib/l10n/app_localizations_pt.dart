@@ -9850,6 +9850,20 @@ class AppLocalizationsPt extends AppLocalizations {
   String get accountCutoverOpenStore => 'Abrir loja';
 
   @override
+  String get chatScopeToday => 'Hoje';
+
+  @override
+  String get chatScopeThisWeek => 'Esta semana';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Sobre: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Perguntar sobre isto';
+
+  @override
   String get sendRawAudioToOmi => 'Enviar áudio em bruto para o Omi';
 
   @override
@@ -9861,4 +9875,37 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get diagnosticsShareFailed => 'Não foi possível partilhar o diagnóstico. Tente novamente.';
+
+  @override
+  String get appDisabledTitle => 'Esta app está desativada e não pode ser instalada.';
+
+  @override
+  String get appDisabledWebhookFailures =>
+      'O endpoint falhou durante 72 horas seguidas, por isso os envios foram interrompidos.';
+
+  @override
+  String get appDisabledGeneric => 'Foi desativada pela Omi.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Corrija primeiro o endpoint: ao reativar, cada URL configurado é verificado novamente.';
+
+  @override
+  String get appReEnable => 'Reativar';
+
+  @override
+  String get appReEnableFailedTitle => 'Não foi possível reativar';
+
+  @override
+  String get appReEnableFailedBody => 'Não foi possível reativar esta app. Tente novamente.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Desativada em $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Último erro: $error.';
+  }
 }

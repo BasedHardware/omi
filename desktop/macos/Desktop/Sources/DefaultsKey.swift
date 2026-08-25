@@ -42,6 +42,9 @@ enum DefaultsKey: String {
   case multiChatEnabled = "multiChatEnabled"
   /// Opt-in: proactive notifications are also spoken out loud on delivery.
   case speakNotificationsAloud = "speakNotificationsAloud"
+  /// Opt-out (defaults to on): the post-meeting summary share notification —
+  /// the persistent notch card offering "Copy link" / "Send to <participant>".
+  case meetingSummaryNotificationsEnabled = "meetingSummaryNotificationsEnabled"
   /// Opt-out: when you open an app Omi integrates with but have not connected,
   /// Omi offers the connection once. Defaults to on; the per-integration
   /// budgets in `IntegrationNudgePolicy` are what keep that from being noise.
@@ -73,6 +76,7 @@ enum DefaultsKey: String {
   case floatingBarCachedPlan = "floatingBar_cachedPlan"
   case floatingBarCachedDesktopGrandfatherUntil = "floatingBar_cachedDesktopGrandfatherUntil"
   case desktopIsPaywalled = "desktop_isPaywalled"
+  case askOmiBarEnabled = "askOmiBarEnabled"
   case rewindDisableContentCache = "rewindDisableContentCache"
   // Task-order migration keys are typed so TasksPage and its tests share the
   // migration contract instead of repeating raw UserDefaults literals.

@@ -5,6 +5,11 @@ stackdriver:
     prefixes:
       - 'loadbalancing.googleapis.com/https/backend_request_count'
       - 'loadbalancing.googleapis.com/https/internal/backend_latencies'
+      # firestore.googleapis.com/document/read_count: 3 series (type=LOOKUP|NOT_FOUND|QUERY),
+      # resource type firestore_instance, DELTA/INT64, single page (no pagination). Marginal
+      # cost is ~1,440 extra ListTimeSeries calls/day (~$0.43/month) against ~$728/month of
+      # Firestore read-volume waste it makes visible -- do not remove as "extra scraping cost".
+      - 'firestore.googleapis.com/document/read_count'
     # The filters to refine the metrics query by using Filter objects that Google provides.
     # Filter objects: project, group.id, resource.type, resource.labels.[KEY], metric.type, metric.labels.[KEY]
     # https://cloud.google.com/monitoring/api/v3/filters

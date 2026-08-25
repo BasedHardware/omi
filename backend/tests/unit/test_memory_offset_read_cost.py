@@ -164,7 +164,8 @@ def test_status_lookups_are_not_repeated_across_expansion_rounds(service_mod, mo
     seen = []
     original = service.canonical_statuses
 
-    def tracking_statuses(_uid, memory_ids):
+    def tracking_statuses(_uid, memory_ids, *, budget=None):
+        del budget
         seen.extend(memory_ids)
         return original(_uid, memory_ids)
 

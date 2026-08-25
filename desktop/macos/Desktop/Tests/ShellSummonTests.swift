@@ -116,7 +116,7 @@ final class ShellSummonTests: XCTestCase {
   /// clear the floor every destination lays out to, or the shell arrives already clipping content.
   func testTheDefaultPanelIsSmallerThanAWindowButStillFitsTheDestinations() {
     XCTAssertEqual(
-      ShellSummonPlacement.defaultSize.width, DesktopWindowLayoutPolicy.maximumContentWidth,
+      ShellSummonPlacement.defaultSize.width, ChatComposerLayout.contentLaneMaxWidth,
       "a summoned panel is the hugged glass, not a sheet that stretches with the display")
     XCTAssertLessThan(
       ShellSummonPlacement.defaultSize.width, 1200,
@@ -132,7 +132,7 @@ final class ShellSummonTests: XCTestCase {
   func testARememberedFrameComesBackUntouched() {
     let placed = NSRect(
       x: 1700, y: 100,
-      width: DesktopWindowLayoutPolicy.maximumContentWidth, height: 820)
+      width: ChatComposerLayout.contentLaneMaxWidth, height: 820)
 
     let frame = ShellSummonPlacement.frame(remembered: placed, visibleFrame: studio)
 
@@ -146,7 +146,7 @@ final class ShellSummonTests: XCTestCase {
 
     let frame = ShellSummonPlacement.frame(remembered: placed, visibleFrame: studio)
 
-    XCTAssertEqual(frame.width, DesktopWindowLayoutPolicy.maximumContentWidth)
+    XCTAssertEqual(frame.width, ChatComposerLayout.contentLaneMaxWidth)
     XCTAssertEqual(frame.height, 820)
     XCTAssertEqual(frame.origin, placed.origin)
   }
@@ -165,7 +165,7 @@ final class ShellSummonTests: XCTestCase {
       shrunk.contains(frame),
       "a restored frame outside the display is a shell whose query field cannot be reached")
     XCTAssertEqual(
-      frame.width, DesktopWindowLayoutPolicy.maximumContentWidth,
+      frame.width, ChatComposerLayout.contentLaneMaxWidth,
       "the remembered 1200 pt width is the invisible border; hug it even though 1440 would fit")
     XCTAssertEqual(frame.height, 820)
   }
@@ -178,7 +178,7 @@ final class ShellSummonTests: XCTestCase {
     let frame = ShellSummonPlacement.frame(remembered: placed, visibleFrame: laptop)
 
     XCTAssertTrue(laptop.contains(frame))
-    XCTAssertEqual(frame.width, DesktopWindowLayoutPolicy.maximumContentWidth)
+    XCTAssertEqual(frame.width, ChatComposerLayout.contentLaneMaxWidth)
     XCTAssertEqual(frame.height, laptop.height)
   }
 
@@ -397,5 +397,37 @@ final class ShellSummonTests: XCTestCase {
     XCTAssertTrue(WindowEscapeKeyMonitor.shared.dispatchEscape(in: window))
 
     XCTAssertTrue(shellDismissed)
+  }
+
+  /// A fresh install could not finish onboarding: granting the microphone quit the app.
+  ///
+  /// `requestMicrophonePermission` calls `suspendForPermissionPrompt`, which orders the only
+  /// window out so macOS can present the dialog. AppKit reports that as the last window closing,
+  /// and the handler returned `!hasCompletedOnboarding` — true during onboarding — so the process
+  /// ended before the prompt could be answered and before the completion handler restored the
+  /// shell. No crash report, because nothing crashed.
+  func testPermissionPromptDoesNotEndOnboarding() {
+    XCTAssertFalse(
+      ShellSummon.shouldTerminateAfterLastWindowClosed(
+        hasCompletedOnboarding: false, isSuspendedForPermissionPrompt: true),
+      "quitting here ends onboarding at the moment the user is granting the permission it asked for")
+  }
+
+  /// The behaviour the guard must not weaken: before onboarding completes there is no menu-bar
+  /// residency to fall back on, so a window the user actually closed still means quit.
+  func testClosingTheLastOnboardingWindowStillQuits() {
+    XCTAssertTrue(
+      ShellSummon.shouldTerminateAfterLastWindowClosed(
+        hasCompletedOnboarding: false, isSuspendedForPermissionPrompt: false))
+  }
+
+  /// After onboarding the app is a menu-bar resident, so losing the last window is never a quit —
+  /// with or without a prompt in flight.
+  func testOnboardedAppSurvivesLosingItsLastWindow() {
+    for suspended in [true, false] {
+      XCTAssertFalse(
+        ShellSummon.shouldTerminateAfterLastWindowClosed(
+          hasCompletedOnboarding: true, isSuspendedForPermissionPrompt: suspended))
+    }
   }
 }

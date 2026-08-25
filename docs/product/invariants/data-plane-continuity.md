@@ -1,6 +1,6 @@
 # INV-DATA-1: Production-family customer data-plane continuity
 
-**Status:** proposed
+**Status:** locked
 
 This revision is proposed as of 2026-08-01. It must remain unchanged for seven
 days, with its routing and qualification guards, before a follow-up can lock it.
@@ -103,8 +103,9 @@ reuse a production-family identity.
 - `desktop/macos/Desktop/Sources/AppBuild.swift`
 - `desktop/macos/Desktop/Sources/DesktopBackendEnvironment.swift`
 - `desktop/macos/Desktop/Sources/GoogleService-Info*.plist`
-- `backend/charts/**` (retired: no GKE desktop-backend chart may return)
-- `.github/workflows/**` (retired: no GKE desktop-backend deployment authority may return)
+- `backend/charts/desktop-backend/**` (retired: this chart may not return)
+- `.github/workflows/gcp_*.yml` (retired: no GKE desktop-backend deployment authority may return)
+- `.github/workflows/desktop_backend_*.yml`
 - `.github/scripts/check-mobile-production-routing.py`
 - `.github/scripts/test_check_mobile_production_routing.py`
 - `docs/runbooks/desktop-backend-cloud-run-ownership.md`

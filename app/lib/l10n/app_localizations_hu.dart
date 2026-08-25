@@ -9882,6 +9882,20 @@ class AppLocalizationsHu extends AppLocalizations {
   String get accountCutoverOpenStore => 'Áruház megnyitása';
 
   @override
+  String get chatScopeToday => 'Ma';
+
+  @override
+  String get chatScopeThisWeek => 'Ezen a héten';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Erről: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Kérdezz erről';
+
+  @override
   String get sendRawAudioToOmi => 'Nyers hang küldése az Ominak';
 
   @override
@@ -9893,4 +9907,37 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get diagnosticsShareFailed => 'A diagnosztika megosztása nem sikerült. Próbáld újra.';
+
+  @override
+  String get appDisabledTitle => 'Ez az alkalmazás le van tiltva, és nem telepíthető.';
+
+  @override
+  String get appDisabledWebhookFailures =>
+      'A végpontja 72 órán át folyamatosan hibázott, ezért a kézbesítések leálltak.';
+
+  @override
+  String get appDisabledGeneric => 'Az Omi tiltotta le.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Először javítsd ki a végpontot — az újraengedélyezés minden beállított URL-t újra ellenőriz.';
+
+  @override
+  String get appReEnable => 'Újraengedélyezés';
+
+  @override
+  String get appReEnableFailedTitle => 'Az újraengedélyezés nem sikerült';
+
+  @override
+  String get appReEnableFailedBody => 'Ezt az alkalmazást nem sikerült újraengedélyezni. Próbáld újra.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Letiltva ekkor: $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Utolsó hiba: $error.';
+  }
 }

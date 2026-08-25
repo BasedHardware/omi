@@ -63,7 +63,6 @@ const ROUTES: [string, () => Promise<any>, string][] = [
   ["dau-trends", () => import("@/app/api/omi/stats/dau-trends/route"), "/api/omi/stats/dau-trends?days=30"],
   ["viral-metrics", () => import("@/app/api/omi/stats/viral-metrics/route"), "/api/omi/stats/viral-metrics?days=30"],
   ["retention", () => import("@/app/api/omi/stats/retention/posthog/route"), "/api/omi/stats/retention/posthog?days=14&intervals=10"],
-  ["k-factor", () => import("@/app/api/omi/stats/k-factor/posthog/route"), "/api/omi/stats/k-factor/posthog?days=30"],
 ];
 
 describe.each(ROUTES)("%s route", (_name, loadRoute, baseUrl) => {
@@ -88,6 +87,17 @@ describe.each(ROUTES)("%s route", (_name, loadRoute, baseUrl) => {
   });
 });
 
+describe("k-factor route", () => {
+  it("does not require a client OS for server-emitted referral funnel events", async () => {
+    const queries = await capture(
+      () => import("@/app/api/omi/stats/k-factor/posthog/route"),
+      "/api/omi/stats/k-factor/posthog?days=30&platform=macos",
+    );
+    expect(queries).toHaveLength(3);
+    expectScoped(queries, "all");
+  });
+});
+
 describe("dau-trends response cache", () => {
   it("never serves one platform's cached data to another", async () => {
     captured.length = 0;
@@ -99,5 +109,28 @@ describe("dau-trends response cache", () => {
     // A days-only cache key would return the macOS payload without querying.
     expect(captured.length).toBeGreaterThan(afterMacos);
     expect(captured[captured.length - 1]).toContain(MOBILE_FILTER);
+  });
+});
+
+describe("releases route", () => {
+  it("buckets the iOS release timeline by New York calendar day", async () => {
+    // GitHub + iTunes calls are irrelevant here; the assertion is that the
+    // PostHog rollout-crossing query follows the boards' NYC-day contract
+    // (UTC toDate would push evening releases onto the next day).
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => [] }) as any),
+    );
+    try {
+      const queries = await capture(
+        () => import("@/app/api/omi/stats/releases/route"),
+        "/api/omi/stats/releases?days=30",
+      );
+      const ios = queries.find((q) => q.includes("$app_version"));
+      expect(ios).toBeTruthy();
+      expect(ios).toContain("toTimeZone(timestamp, 'America/New_York')");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

@@ -1879,12 +1879,9 @@ workflows:
         GCS_DESKTOP_UPDATES_BUCKET: "gs://omi_macos_updates"
         DMGBUILD_VERSION: "1.6.7"
       xcode: 16.4
-    triggering:
-      events:
-        - tag
-      tag_patterns:
-        - pattern: "v*-macos"
-          include: true
+    # API-dispatched by desktop_auto_release.yml after its exact tag is pushed.
+    # Keeping this workflow manual prevents a webhook/API race from creating
+    # duplicate builds for one immutable candidate.
     working_directory: desktop/macos
     cache:
       cache_paths:
@@ -2753,9 +2750,10 @@ workflows:
           fi
           set -euo pipefail
 
-          # Symbolication is a release requirement, not best-effort publishing.
-          # Upload the UUID-verified dSYM before creating the immutable candidate.
-          scripts/publish-desktop-debug-symbols.sh upload \
+          # Keep symbol publication repairable: a Sentry credential outage must not
+          # strand an otherwise signed and smoke-tested candidate. The exact,
+          # UUID-verified dSYM is retained as a GitHub release artifact below.
+          scripts/publish-desktop-debug-symbols.sh upload-best-effort \
             --binary "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" \
             --dsym "$DSYM_PATH"
 

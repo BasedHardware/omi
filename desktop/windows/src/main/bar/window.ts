@@ -57,7 +57,8 @@ import {
   nextInteractivity,
   barWatchPlan,
   barGestureSeesOpen,
-  clickEdge
+  clickEdge,
+  corroboratedCursorInFootprint
 } from './watchdog'
 import { makeKeySampler, makePrimaryMouseButtonSampler } from './keyState'
 import { installBarContextMenu } from './barContextMenu'
@@ -627,7 +628,10 @@ function peekTick(): void {
     peekOutsideSince = null
     return
   }
-  const cursorInFootprint = isCursorInPeekFootprint(cursor, dl)
+  const cursorInFootprint = corroboratedCursorInFootprint(
+    isCursorInPeekFootprint(cursor, dl),
+    barInteractive
+  )
   if (cursorInFootprint) peekHasBeenHovered = true
   const { outsideSince, retract } = evaluatePeekWatchdog({
     suspended: peekWatchSuspended,

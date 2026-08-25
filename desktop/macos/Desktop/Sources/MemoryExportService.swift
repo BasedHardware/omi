@@ -741,17 +741,25 @@ actor MemoryExportService {
   private static let mcpKeyOwnerDefaultsKey = "memoryExportMCPApiKeyOwnerUserId"
   private static let mcpKeyCreatedAtDefaultsKey = "memoryExportMCPApiKeyCreatedAt"
 
-  private let defaults = UserDefaults.standard
+  private let defaults: UserDefaults
+  private let apiClient: APIClient
   private let notionVersion = "2026-03-11"
   private let notionBaseURL = URL(string: "https://api.notion.com/v1")!
   private var mcpKeyWarmTask: (ownerUserId: String, id: UUID, task: Task<String, Error>)?
 
+  init(apiClient: APIClient = .shared, defaults: UserDefaults = .standard) {
+    self.apiClient = apiClient
+    self.defaults = defaults
+  }
+
   private struct OAuthGrant: Decodable {
+    let id: String?
     let clientID: String
     let status: String?
     let revokedAt: String?
 
     enum CodingKeys: String, CodingKey {
+      case id
       case clientID = "client_id"
       case status
       case revokedAt = "revoked_at"
@@ -865,7 +873,7 @@ actor MemoryExportService {
     guard !clientIDs.isEmpty else { return status(for: destination) }
     var observation = "authoritative_grant_check"
     do {
-      let response: OAuthGrantsResponse = try await APIClient.shared.get(
+      let response: OAuthGrantsResponse = try await apiClient.get(
         "v1/mcp/oauth/grants", customBaseURL: MemoryExportDestination.mcpOAuthBaseURL, includeBYOK: false)
       let isAuthorized = response.grants.contains { clientIDs.contains($0.clientID) && $0.isActive }
 
@@ -892,6 +900,42 @@ actor MemoryExportService {
       for: destination,
       localMCPConnections: localConnections,
       cloudGrantObservation: observation == "authoritative_grant_check" ? nil : observation)
+  }
+
+  /// Revokes every active OAuth grant for a cloud connector, then clears the
+  /// local cached projection. The local state is only cleared after the server
+  /// confirms each revoke so a transient failure cannot falsely report a
+  /// disconnect.
+  func disconnectCloudOAuthConnection(for destination: MemoryExportDestination) async throws
+    -> MemoryExportStatus
+  {
+    let clientIDs = destination.cloudOAuthGrantClientIDs
+    guard !clientIDs.isEmpty else { return status(for: destination) }
+
+    let response: OAuthGrantsResponse = try await apiClient.get(
+      "v1/mcp/oauth/grants", customBaseURL: MemoryExportDestination.mcpOAuthBaseURL, includeBYOK: false)
+    let activeGrants = response.grants.filter { clientIDs.contains($0.clientID) && $0.isActive }
+
+    for grant in activeGrants {
+      guard let grantID = grant.id, !grantID.isEmpty else {
+        throw MemoryExportError.requestFailed("Omi could not identify the (destination.title) authorization.")
+      }
+      let escapedGrantID = grantID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? grantID
+      try await apiClient.delete(
+        "v1/mcp/oauth/grants/\(escapedGrantID)",
+        customBaseURL: MemoryExportDestination.mcpOAuthBaseURL,
+        includeBYOK: false)
+    }
+
+    defaults.removeObject(forKey: destination.connectedAtKey)
+    defaults.removeObject(forKey: destination.detailKey)
+    let localConnections = MemoryExportConnectionDetector.scanLocalMCPConnections(
+      for: destination,
+      matchingKey: storedMCPKey())
+    return status(
+      for: destination,
+      localMCPConnections: localConnections,
+      cloudGrantObservation: "authoritative_grant_check")
   }
 
   func notionConfiguration() -> (token: String, parentPageID: String) {
@@ -1361,6 +1405,12 @@ actor MemoryExportService {
     var seenCursors = Set<String>()
     while true {
       let page = try await fetch(boundedPageSize, cursor)
+      // A truncated page is explicitly incomplete and carries no resumable
+      // cursor; an export cannot claim completeness from it.
+      if page.truncated {
+        throw MemoryExportError.requestFailed(
+          "Memory export stopped because the server returned a truncated list.")
+      }
       result.append(contentsOf: page.memories)
       guard let nextCursor = page.nextCursor, !nextCursor.isEmpty else {
         return result

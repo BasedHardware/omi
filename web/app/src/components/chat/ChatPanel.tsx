@@ -11,6 +11,7 @@ import { uploadChatFiles, getChatApps } from '@/lib/api';
 import type { App } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { MixpanelManager } from '@/lib/analytics/mixpanel';
+import { shouldSubmitComposerKey } from '@/lib/chatComposerKey';
 import { ChatMarkdown } from './ChatMarkdown';
 
 interface FilePreviewItem {
@@ -47,8 +48,15 @@ function getQuickPrompts(contextType: string | undefined): string[] {
 }
 
 export function ChatPanel() {
-  const { isOpen, closeChat, currentContext, selectedAppId, chat, clearAppContext } =
-    useChatContext();
+  const {
+    isOpen,
+    closeChat,
+    currentContext,
+    setContext,
+    selectedAppId,
+    chat,
+    clearAppContext,
+  } = useChatContext();
   const {
     messages,
     isLoading,
@@ -105,6 +113,88 @@ export function ChatPanel() {
   }, [isOpen]);
 
   const quickPrompts = getQuickPrompts(currentContext?.type);
+
+  const activeTimeframePreset = (() => {
+    if (!currentContext?.start_date || !currentContext?.end_date) return null;
+    const start = new Date(currentContext.start_date);
+    const end = new Date(currentContext.end_date);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+    const now = new Date();
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(now);
+    todayEnd.setHours(23, 59, 59, 999);
+    const sameDay =
+      Math.abs(start.getTime() - todayStart.getTime()) < 60_000 &&
+      Math.abs(end.getTime() - todayEnd.getTime()) < 60_000;
+    if (sameDay) return 'today' as const;
+    const day = now.getDay();
+    const mondayOffset = day === 0 ? -6 : 1 - day;
+    const weekStart = new Date(now);
+    weekStart.setDate(weekStart.getDate() + mondayOffset);
+    weekStart.setHours(0, 0, 0, 0);
+    const weekMatch =
+      Math.abs(start.getTime() - weekStart.getTime()) < 60_000 &&
+      Math.abs(end.getTime() - todayEnd.getTime()) < 60_000;
+    return weekMatch ? ('week' as const) : null;
+  })();
+
+  const applyTimeframePreset = (preset: 'today' | 'week' | null) => {
+    if (!preset) {
+      if (!currentContext) return;
+      const { start_date: _s, end_date: _e, ...rest } = currentContext;
+      // Keep conversation/task/memory context; drop only the date window.
+      if (
+        rest.type === 'recap' &&
+        !rest.id &&
+        (rest.title === 'Today' || rest.title === 'This week')
+      ) {
+        setContext(null);
+      } else {
+        setContext({ ...rest });
+      }
+      return;
+    }
+
+    const now = new Date();
+    const end = new Date(now);
+    end.setHours(23, 59, 59, 999);
+    const start = new Date(now);
+    if (preset === 'today') {
+      start.setHours(0, 0, 0, 0);
+    } else {
+      // Monday-start week in local time
+      const day = start.getDay();
+      const mondayOffset = day === 0 ? -6 : 1 - day;
+      start.setDate(start.getDate() + mondayOffset);
+      start.setHours(0, 0, 0, 0);
+    }
+
+    const base =
+      currentContext && currentContext.type !== 'general'
+        ? currentContext
+        : { type: 'recap' as const, title: preset === 'today' ? 'Today' : 'This week' };
+
+    const preserveTitle =
+      currentContext &&
+      (currentContext.type === 'conversation' ||
+        currentContext.type === 'task' ||
+        currentContext.type === 'memory') &&
+      currentContext.title;
+
+    setContext({
+      ...base,
+      title: preserveTitle
+        ? currentContext!.title
+        : base.type === 'recap'
+          ? preset === 'today'
+            ? 'Today'
+            : 'This week'
+          : base.title,
+      start_date: start.toISOString(),
+      end_date: end.toISOString(),
+    });
+  };
 
   // Handle file selection
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -201,7 +291,7 @@ export function ChatPanel() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (shouldSubmitComposerKey(e)) {
       e.preventDefault();
       handleSend();
     }
@@ -274,6 +364,7 @@ export function ChatPanel() {
                     {currentContext?.title && !selectedAppId && (
                       <p className="text-xs text-text-tertiary truncate max-w-[250px]">
                         Context: {currentContext.title}
+                        {currentContext.start_date ? ' · timed' : ''}
                       </p>
                     )}
                   </div>
@@ -298,6 +389,53 @@ export function ChatPanel() {
                   </button>
                 </div>
               </div>
+
+              {!selectedAppId && (
+                <div className="flex items-center gap-2 px-4 py-2 border-b border-bg-tertiary">
+                  <span className="text-xs text-text-quaternary">Scope</span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      applyTimeframePreset(
+                        activeTimeframePreset === 'today' ? null : 'today',
+                      )
+                    }
+                    className={cn(
+                      'text-xs px-2.5 py-1 rounded-full border transition-colors',
+                      activeTimeframePreset === 'today'
+                        ? 'border-text-secondary bg-bg-tertiary text-text-primary'
+                        : 'border-bg-tertiary text-text-tertiary hover:text-text-secondary',
+                    )}
+                  >
+                    Today
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      applyTimeframePreset(
+                        activeTimeframePreset === 'week' ? null : 'week',
+                      )
+                    }
+                    className={cn(
+                      'text-xs px-2.5 py-1 rounded-full border transition-colors',
+                      activeTimeframePreset === 'week'
+                        ? 'border-text-secondary bg-bg-tertiary text-text-primary'
+                        : 'border-bg-tertiary text-text-tertiary hover:text-text-secondary',
+                    )}
+                  >
+                    This week
+                  </button>
+                  {currentContext?.start_date && (
+                    <button
+                      type="button"
+                      onClick={() => applyTimeframePreset(null)}
+                      className="text-xs text-text-quaternary hover:text-text-secondary ml-auto"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              )}
 
               {/* Error banner */}
               {error && (

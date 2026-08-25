@@ -17,8 +17,8 @@ def _reuse_parsed_repo_manifest(monkeypatch):
 
 
 def _job_env_block(out: str, job_prefix: str) -> str:
-    start = out.index(f'{job_prefix}_env_vars<<')
-    end = out.index(f'{job_prefix}_secrets<<')
+    start = out.index(f'\n{job_prefix}_env_vars<<') + 1
+    end = out.index(f'\n{job_prefix}_secrets<<', start) + 1
     return out[start:end]
 
 
@@ -70,6 +70,47 @@ def test_render_env_vars_escapes_deploy_cloudrun_separators(value, expected):
     rendered = _MODULE['_render_env_vars']({'VALUE': {'value': value}})
 
     assert rendered == f'VALUE={expected}'
+
+
+def test_state_output_preserves_yaml_boolean_like_strings(tmp_path, capsys, monkeypatch):
+    env_config = {
+        'cloud_run': {
+            'network': {'flags': {'--vpc-egress': 'private-ranges-only'}},
+            'services': {
+                'backend': {
+                    'env': {
+                        'FEATURE_OFF': {'value': 'off'},
+                        'FEATURE_ON': {'value': 'on'},
+                        'FEATURE_YES': {'value': 'yes'},
+                        'FEATURE_NO': {'value': 'no'},
+                    },
+                    'secrets': {},
+                }
+            },
+        }
+    }
+    state_path = tmp_path / 'runtime-env-state.json'
+    monkeypatch.setitem(_MODULE['main'].__globals__, '_load_yaml', lambda _path: {'environments': {'dev': env_config}})
+    monkeypatch.setattr(
+        'sys.argv',
+        ['render_backend_runtime_env.py', '--env', 'dev', '--state-output', str(state_path)],
+    )
+
+    assert _MODULE['main']() == 0
+
+    state = json.loads(state_path.read_text(encoding='utf-8'))
+    rendered_env = {entry['name']: entry['value'] for entry in state['services']['backend']['env']}
+
+    assert rendered_env == {
+        'FEATURE_OFF': 'off',
+        'FEATURE_ON': 'on',
+        'FEATURE_YES': 'yes',
+        'FEATURE_NO': 'no',
+    }
+    assert all(isinstance(value, str) for value in rendered_env.values())
+    output = capsys.readouterr().out
+    assert 'FEATURE_OFF=off' in output
+    assert 'FEATURE_ON=on' in output
 
 
 def test_network_flags_still_required(monkeypatch):
@@ -383,5 +424,111 @@ def test_desktop_backend_compose_pins_vertex_pt(env, project):
     assert 'USE_VERTEX_AI=true' in rendered, VERTEX_PT_CONTRACT
     assert f'GOOGLE_CLOUD_PROJECT={project}' in rendered, VERTEX_PT_CONTRACT
     assert 'GCP_LOCATION=us-central1' in rendered, VERTEX_PT_CONTRACT
+    assert 'PROMETHEUS_SIDECAR_PORT=9090' in rendered
+    assert _MODULE['_render_secrets'](desktop['secrets']) == 'METRICS_SECRET=METRICS_SECRET:latest'
     docs = Path(__file__).resolve().parents[2] / 'docs' / 'vertex-pt-flash.md'
     assert VERTEX_PT_CONTRACT.split(',')[0] in docs.read_text(encoding='utf-8')
+
+
+def test_state_output_carries_cloud_run_jobs(tmp_path, monkeypatch):
+    env_config = {
+        'cloud_run': {
+            'network': {'flags': {'--vpc-egress': 'private-ranges-only'}},
+            'services': {'backend': {'env': {'OMI_ENV_STAGE': {'value': 'dev'}}, 'secrets': {}}},
+            'jobs': {
+                'notifications-job': {
+                    'flags': {'--task-timeout': '3600s'},
+                    'env': {'OMI_ENV_STAGE': {'value': 'dev'}},
+                    'secrets': {'OPENAI_API_KEY': {'secret': 'OPENAI_API_KEY', 'version': 'latest'}},
+                }
+            },
+        }
+    }
+    state_path = tmp_path / 'runtime-env-state.json'
+    monkeypatch.setitem(_MODULE['main'].__globals__, '_load_yaml', lambda _path: {'environments': {'dev': env_config}})
+    monkeypatch.setattr(
+        'sys.argv',
+        ['render_backend_runtime_env.py', '--env', 'dev', '--state-output', str(state_path)],
+    )
+
+    assert _MODULE['main']() == 0
+
+    state = json.loads(state_path.read_text(encoding='utf-8'))
+
+    assert state['jobs'] == {
+        'notifications-job': {
+            'env': [
+                {'name': 'OMI_ENV_STAGE', 'value': 'dev'},
+                {
+                    'name': 'OPENAI_API_KEY',
+                    'valueFrom': {'secretKeyRef': {'name': 'OPENAI_API_KEY', 'key': 'latest'}},
+                },
+            ],
+            'flags': {'--task-timeout': '3600s'},
+        }
+    }
+
+
+@pytest.mark.parametrize('env', ['dev', 'prod'])
+def test_state_output_covers_every_declared_job(env, monkeypatch):
+    monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-vpc-1')
+    monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-subnet-1')
+    env_config = _MANIFEST['environments'][env]
+    cloud_run = env_config['cloud_run']
+
+    # Services need the deploy workflow's environment; the job contract does not.
+    state = _MODULE['_render_cloud_run_state']({'cloud_run': {**cloud_run, 'services': {}}})
+
+    assert set(state['jobs']) == set(cloud_run['jobs'])
+
+
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_DESKTOP_WORKFLOWS = {
+    'dev': _REPO_ROOT / '.github/workflows/desktop_backend_auto_dev.yml',
+    'prod': _REPO_ROOT / '.github/workflows/desktop_backend_prod.yml',
+}
+
+
+@pytest.mark.parametrize('env_name', ('dev', 'prod'))
+def test_desktop_state_output_is_shaped_for_the_sidecar_guard(env_name, tmp_path):
+    """attach_cloud_run_gmp_sidecar.py reads state['services'][service]['env']."""
+    out = tmp_path / 'state.json'
+    env_config = _MODULE['_as_config_dict'](_MANIFEST['environments'][env_name])
+    state = _MODULE['_render_desktop_backend_state'](env_config)
+    out.write_text(json.dumps(state), encoding='utf-8')
+
+    entries = state['services']['desktop-backend']['env']
+    assert entries, 'an empty expectation would make the sidecar guard a no-op'
+    for entry in entries:
+        assert isinstance(entry['name'], str) and isinstance(entry['value'], str)
+
+    # Round-trip through the consumer so the two stay compatible by construction.
+    attach = runpy.run_path(
+        str(_REPO_ROOT / 'backend/scripts/attach_cloud_run_gmp_sidecar.py'),
+        run_name='attach_cloud_run_gmp_sidecar',
+    )
+    expected = attach['_expected_literal_env'](out, service_name='desktop-backend')
+    assert expected == {entry['name']: entry['value'] for entry in entries}
+
+
+@pytest.mark.parametrize('env_name', ('dev', 'prod'))
+def test_desktop_manifest_env_matches_what_the_workflow_deploys(env_name):
+    """The guard is only meaningful while both sources agree.
+
+    desktop-backend still sets most of its env inline in its deploy workflow, so
+    the manifest owns a subset. If a manifest value drifts from the deployed one,
+    the sidecar attach fails the deploy rather than the value silently differing —
+    catch that here instead, at review time.
+    """
+    env_config = _MODULE['_as_config_dict'](_MANIFEST['environments'][env_name])
+    state = _MODULE['_render_desktop_backend_state'](env_config)
+    workflow = _DESKTOP_WORKFLOWS[env_name].read_text(encoding='utf-8')
+
+    literal_project = {'dev': 'based-hardware-dev', 'prod': 'based-hardware'}[env_name]
+    for entry in state['services']['desktop-backend']['env']:
+        name, value = entry['name'], entry['value']
+        if value == literal_project:
+            # Supplied to the workflow as ${{ vars.GCP_PROJECT_ID }}.
+            assert f'{name}=${{{{ vars.GCP_PROJECT_ID }}}}' in workflow, name
+            continue
+        assert f'{name}={value}' in workflow, f'{env_name}: {name}={value} is not what the workflow deploys'

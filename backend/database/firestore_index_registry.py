@@ -234,6 +234,12 @@ INDEX_ONLY_REQUIREMENTS = (
         (_asc('completed'), _asc('due_at'), _asc('__name__')),
     ),
     FirestoreIndexRequirement(
+        'action_items_completed_created',
+        'action_items',
+        'COLLECTION',
+        (_asc('completed'), _asc('created_at'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
         'action_items_conversation_due',
         'action_items',
         'COLLECTION',
@@ -325,6 +331,25 @@ CANONICAL_CONSOLIDATION_QUERY = FirestoreQuerySpec(
     ),
 )
 
+RECENT_REJECTED_MEMORY_FEEDBACK_QUERY = FirestoreQuerySpec(
+    identifier='memory_items_recent_rejected_feedback',
+    collection_group='memory_items',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('status', 'in', 'statuses'),
+        FirestoreQueryFilter('source_state', '==', 'source_state'),
+        FirestoreQueryFilter('promotion.user_review', '==', 'user_review'),
+        FirestoreQueryFilter('updated_at', '>=', 'updated_at'),
+    ),
+    index_fields=(
+        _asc('status'),
+        _asc('source_state'),
+        _asc('promotion.user_review'),
+        _desc('updated_at'),
+        _asc('__name__'),
+    ),
+)
+
 POLICY_EXPIRED_SHORT_TERM_QUERY = FirestoreQuerySpec(
     identifier='memory_items_policy_expired_short_term_by_capture',
     collection_group='memory_items',
@@ -341,6 +366,26 @@ POLICY_EXPIRED_SHORT_TERM_QUERY = FirestoreQuerySpec(
         _asc('status'),
         _asc('processing_state'),
         _asc('source_state'),
+        _asc('captured_at'),
+        _asc('memory_id'),
+        _asc('__name__'),
+    ),
+)
+
+EXPIRY_URGENT_SHORT_TERM_BY_CAPTURE_QUERY = FirestoreQuerySpec(
+    identifier='memory_items_expiry_urgent_short_term_by_capture',
+    collection_group='memory_items',
+    query_scope='COLLECTION_GROUP',
+    filters=(
+        FirestoreQueryFilter('tier', '==', 'tier'),
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('processing_state', 'in', 'processing_states'),
+        FirestoreQueryFilter('captured_at', '<=', 'captured_at'),
+    ),
+    index_fields=(
+        _asc('tier'),
+        _asc('status'),
+        _asc('processing_state'),
         _asc('captured_at'),
         _asc('memory_id'),
         _asc('__name__'),
@@ -484,6 +529,26 @@ EXPIRED_SHORT_TERM_LIFECYCLE_QUERY = FirestoreQuerySpec(
     ),
 )
 
+EXPIRY_URGENT_SHORT_TERM_BY_STORED_EXPIRY_QUERY = FirestoreQuerySpec(
+    identifier='memory_items_expiry_urgent_short_term_by_stored_expiry',
+    collection_group='memory_items',
+    query_scope='COLLECTION_GROUP',
+    filters=(
+        FirestoreQueryFilter('tier', '==', 'tier'),
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('processing_state', 'in', 'processing_states'),
+        FirestoreQueryFilter('expires_at', '<=', 'expires_at'),
+    ),
+    index_fields=(
+        _asc('tier'),
+        _asc('status'),
+        _asc('processing_state'),
+        _asc('expires_at'),
+        _asc('memory_id'),
+        _asc('__name__'),
+    ),
+)
+
 DUE_MEMORY_OUTBOX_QUERY = FirestoreQuerySpec(
     identifier='memory_outbox_due_by_availability',
     collection_group='memory_outbox',
@@ -594,6 +659,64 @@ STALE_IN_PROGRESS_CONVERSATIONS_QUERY = FirestoreQuerySpec(
     ),
 )
 
+CONVERSATIONS_ACTIVE_ORDERED_QUERY = FirestoreQuerySpec(
+    identifier='conversations_discarded_created',
+    collection_group='conversations',
+    query_scope='COLLECTION',
+    # `get_conversations`/`get_conversations_without_photos` called with their
+    # defaults (`include_discarded=False`, no `statuses`/`categories`/`folder_id`/
+    # `starred` filter) build exactly this shape — it's the default `GET
+    # /v1/conversations` list call, i.e. the app's main screen. Production has
+    # this index only because it was created by hand at some point; a fresh
+    # self-host deploy 400s with FailedPrecondition the first time anyone loads
+    # their conversation list.
+    filters=(FirestoreQueryFilter('discarded', '==', 'discarded'),),
+    index_fields=(_asc('discarded'), _desc('created_at'), _desc('__name__')),
+)
+
+ACTION_ITEMS_COMPLETION_ID_SCAN_QUERY = FirestoreQuerySpec(
+    identifier='action_items_completion_id_scan',
+    collection_group='action_items',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('completed', '==', 'completed'),),
+    index_fields=(_asc('completed'), _asc('__name__')),
+)
+
+ACTION_ITEMS_COMPLETED_DUE_RANGE_QUERY = FirestoreQuerySpec(
+    identifier='action_items_completed_due_range',
+    collection_group='action_items',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('due_at', '>=', 'start'),
+        FirestoreQueryFilter('due_at', '<', 'end'),
+        FirestoreQueryFilter('completed', '==', 'completed'),
+    ),
+    index_fields=(_asc('completed'), _asc('due_at'), _asc('__name__')),
+)
+
+ACTION_ITEMS_CREATED_RANGE_QUERY = FirestoreQuerySpec(
+    identifier='action_items_created_range',
+    collection_group='action_items',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('created_at', '>=', 'start'),
+        FirestoreQueryFilter('created_at', '<', 'end'),
+    ),
+    index_fields=(_asc('created_at'), _asc('__name__')),
+)
+
+ACTION_ITEMS_COMPLETED_CREATED_RANGE_QUERY = FirestoreQuerySpec(
+    identifier='action_items_completed_created_range',
+    collection_group='action_items',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('created_at', '>=', 'start'),
+        FirestoreQueryFilter('created_at', '<', 'end'),
+        FirestoreQueryFilter('completed', '==', 'completed'),
+    ),
+    index_fields=(_asc('completed'), _asc('created_at'), _asc('__name__')),
+)
+
 CHAT_FIRST_DEFERRALS_DUE_QUERY = FirestoreQuerySpec(
     identifier='chat_first_deferrals_due',
     collection_group='chat_first_deferrals',
@@ -645,6 +768,19 @@ CURRENT_CHAT_SESSION_ORDERED_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('plugin_id'), _desc('created_at'), _desc('__name__')),
 )
 
+# get_app_messages and get_messages' app-scoped branch (no chat_session_id) both
+# filter messages by plugin_id and order by created_at descending. Neither built
+# this through the registry, so no composite index was ever declared for it and
+# a self-host without prod's historically hand-created index 400s with
+# FailedPrecondition on GET /v1/messages (chat.py:get_messages).
+MESSAGES_BY_APP_ORDERED_QUERY = FirestoreQuerySpec(
+    identifier='messages_by_app_created_at',
+    collection_group='messages',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('plugin_id', '==', 'app_id'),),
+    index_fields=(_asc('plugin_id'), _desc('created_at'), _desc('__name__')),
+)
+
 MEETING_RECEIPTS_DUE_QUERY = FirestoreQuerySpec(
     identifier='conversation_finalization_jobs_meeting_receipts_due',
     collection_group='conversation_finalization_jobs',
@@ -662,7 +798,26 @@ MEETING_RECEIPTS_DUE_QUERY = FirestoreQuerySpec(
     ),
 )
 
+HOURLY_USAGE_PLAN_ATTRIBUTION_QUERY = FirestoreQuerySpec(
+    identifier='hourly_usage_plan_attribution_month',
+    collection_group='hourly_usage',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('year', '==', 'year'),
+        FirestoreQueryFilter('month', '==', 'month'),
+    ),
+    index_fields=(
+        _asc('year'),
+        _asc('month'),
+        _asc('__name__'),
+    ),
+)
+
 QUERY_SPECS = (
+    ACTION_ITEMS_COMPLETION_ID_SCAN_QUERY,
+    ACTION_ITEMS_COMPLETED_DUE_RANGE_QUERY,
+    ACTION_ITEMS_CREATED_RANGE_QUERY,
+    ACTION_ITEMS_COMPLETED_CREATED_RANGE_QUERY,
     CANDIDATES_COMPATIBILITY_QUERY,
     DUE_MEMORY_OUTBOX_QUERY,
     EXPIRED_MEMORY_OUTBOX_LEASE_QUERY,
@@ -673,7 +828,9 @@ QUERY_SPECS = (
     REVIEW_QUEUE_BY_STATUS_ID_QUERY,
     REQUIRED_MEMORY_PROCESSING_QUERY,
     CANONICAL_CONSOLIDATION_QUERY,
+    RECENT_REJECTED_MEMORY_FEEDBACK_QUERY,
     POLICY_EXPIRED_SHORT_TERM_QUERY,
+    EXPIRY_URGENT_SHORT_TERM_BY_CAPTURE_QUERY,
     CANONICAL_GRAPH_READ_QUERY,
     CANONICAL_MEMORY_ATLAS_READ_QUERY,
     UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
@@ -683,6 +840,7 @@ QUERY_SPECS = (
     SUPERSEDED_MEMORY_BY_CANONICAL_TARGET_QUERY,
     SUPERSEDED_MEMORY_BY_LEGACY_TARGET_QUERY,
     EXPIRED_SHORT_TERM_LIFECYCLE_QUERY,
+    EXPIRY_URGENT_SHORT_TERM_BY_STORED_EXPIRY_QUERY,
     ACTIVE_ATTENTION_OVERRIDE_QUERY,
     LEGACY_CONVERSATION_RECOVERY_QUERY,
     STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
@@ -691,6 +849,9 @@ QUERY_SPECS = (
     CURRENT_CHAT_SESSION_QUERY,
     CURRENT_CHAT_SESSION_ORDERED_QUERY,
     MEETING_RECEIPTS_DUE_QUERY,
+    HOURLY_USAGE_PLAN_ATTRIBUTION_QUERY,
+    MESSAGES_BY_APP_ORDERED_QUERY,
+    CONVERSATIONS_ACTIVE_ORDERED_QUERY,
 )
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)
@@ -742,17 +903,26 @@ INDEX_REQUIREMENTS = (
 
 
 # Firestore auto-indexes every field of every document in both directions unless a field is
-# explicitly exempted. For large text fields that no query ever filters or orders on, that index
-# is pure storage cost: measured on `screen_activity`, single-field index bytes were roughly three
-# times the document bytes, and the `ocrText` index alone was the majority of the collection.
-# `ocrText` is only ever read back and rendered; semantic search runs on Pinecone vectors, not on
-# Firestore. Exempting a field only removes single-field indexes — composite indexes declared
-# above are unaffected, so a field named in a composite index can still appear here.
+# explicitly exempted. For text fields that no query ever filters or orders on, that index is pure
+# storage cost: measured on prod `screen_activity` (964,964 documents, mean 1,052 B), the four
+# originally declared fields carried roughly 2.75x the document bytes in index entries, matching
+# the earlier "about three times" estimate.
+#
+# Only the two text fields are exempted, and the split is deliberate. `ocrText` (mean 899 B, capped
+# at 1,000 characters on write) is ~71% of that index cost and `windowTitle` ~10%; both are only
+# ever read back and rendered, since semantic search runs on Pinecone vectors rather than Firestore.
+# `deviceName` (11 B) and `clientDeviceId` (14 B) are together ~19% of an already small number --
+# under ten cents a month at current volume -- and are the one plausible future filter here:
+# utils/memory/device_scope_filter.py already scopes by device in Python, and pushing that down to
+# a Firestore filter would fail with FAILED_PRECONDITION against a disabled index. Re-enabling has
+# no scripted path (the reconcile workflow is disable-only) and forces a full collection-group
+# backfill, so they stay indexed.
+#
+# Exempting a field only removes single-field indexes — composite indexes declared above are
+# unaffected, so a field named in a composite index can still appear here.
 FIELD_INDEXING_EXEMPTIONS: tuple[tuple[str, str], ...] = (
     ('screen_activity', 'ocrText'),
     ('screen_activity', 'windowTitle'),
-    ('screen_activity', 'deviceName'),
-    ('screen_activity', 'clientDeviceId'),
 )
 
 

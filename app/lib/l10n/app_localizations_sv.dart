@@ -9846,6 +9846,20 @@ class AppLocalizationsSv extends AppLocalizations {
   String get accountCutoverOpenStore => 'Öppna butik';
 
   @override
+  String get chatScopeToday => 'Idag';
+
+  @override
+  String get chatScopeThisWeek => 'Den här veckan';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Om: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Fråga om detta';
+
+  @override
   String get sendRawAudioToOmi => 'Skicka rått ljud till Omi';
 
   @override
@@ -9857,4 +9871,36 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get diagnosticsShareFailed => 'Diagnostiken kunde inte delas. Försök igen.';
+
+  @override
+  String get appDisabledTitle => 'Den här appen är inaktiverad och kan inte installeras.';
+
+  @override
+  String get appDisabledWebhookFailures => 'Dess endpoint misslyckades 72 timmar i rad, så leveranserna stoppades.';
+
+  @override
+  String get appDisabledGeneric => 'Den inaktiverades av Omi.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Åtgärda endpointen först — vid återaktivering kontrolleras varje konfigurerad URL på nytt.';
+
+  @override
+  String get appReEnable => 'Återaktivera';
+
+  @override
+  String get appReEnableFailedTitle => 'Kunde inte återaktivera';
+
+  @override
+  String get appReEnableFailedBody => 'Den här appen kunde inte återaktiveras. Försök igen.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Inaktiverad den $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Senaste fel: $error.';
+  }
 }

@@ -67,6 +67,11 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # Action items — lightweight Firestore writes from MCP clients (no LLM), but
     # an agent can loop, so cap creation per hour. Complete/update/delete operate
     # on existing tasks and ride the shared mcp:sse / per-request auth limits.
+    # First-party GET /v1/action-items. Old Windows main-process listing
+    # stormed this route (~120 qps fleet) with no platform/version header.
+    # 12/min/uid covers Mac/Flutter hydrate plus a few pagination pages and
+    # stops a tight loop. Enforced in Depends() before Firestore.
+    "action_items:list": (12, 60),
     "action_items:write": (120, 3600),
     # Memories — single LLM call each
     "memories:create": (60, 3600),
@@ -129,6 +134,10 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "dev:conversation_transcript_read": (25, 3600),
     "dev:goals_read": (120, 3600),
     "dev:conversations": (25, 3600),
+    # Ask (/v1/dev/user/ask): one qa_rag LLM call per request over the caller's
+    # conversations — billable like a conversation create, so it carries its own
+    # low per-key cap instead of riding the cheap dev:conversations_read list limit.
+    "dev:ask": (25, 3600),
     "dev:memories": (120, 3600),
     "dev:memories_batch": (15, 3600),
     "dev:action_items_write": (120, 3600),

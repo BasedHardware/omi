@@ -522,3 +522,32 @@ def test_subscription_endpoint_falls_back_to_basic_when_no_valid_subscription():
         )
 
     assert response.subscription.plan == users_router.PlanType.basic
+
+
+def test_usage_quota_endpoint_reads_customer_firestore_like_desktop_enforcement():
+    # GET /v1/users/me/usage-quota (routers/users.py:1386) is the desktop app's own
+    # quota display and called get_chat_quota_snapshot() with no firestore_client,
+    # which defaults to the compute-local project. enforce_desktop_chat_quota() --
+    # the function that actually gates POST /v2/chat/completions -- always forces
+    # get_customer_firestore_client(). On a named dev/desktop bundle those are two
+    # different Firestore projects, so this endpoint could report `allowed: true`
+    # for the same uid that the chat endpoint 402s (#11199).
+    sentinel_customer_client = object()
+    snapshot_mock = MagicMock(
+        return_value={
+            'plan': users_router.PlanType.basic,
+            'used': 1.0,
+            'limit': 30.0,
+            'unit': 'questions',
+            'allowed': True,
+            'reset_at': None,
+        }
+    )
+    with patch.object(users_router.users_db, 'is_byok_active', MagicMock(return_value=False)), patch.object(
+        users_router, 'get_customer_firestore_client', MagicMock(return_value=sentinel_customer_client)
+    ), patch.object(users_router, 'get_chat_quota_snapshot', snapshot_mock):
+        users_router.get_user_chat_usage_quota(uid='uid1', x_app_platform='desktop')
+
+    snapshot_mock.assert_called_once_with(
+        'uid1', platform='desktop', firestore_client=sentinel_customer_client, provision=False
+    )

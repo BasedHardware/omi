@@ -16,7 +16,6 @@ from scripts.runtime_env_durable_dispatch_contracts import (  # noqa: E402
 from scripts.runtime_env_parakeet_contract import validate_parakeet_admission_contract  # noqa: E402
 from scripts.runtime_env_memory_contract import validate_retired_memory_manifest  # noqa: E402
 from scripts.runtime_env_validation.cloud_run import (
-    _build_rendered_cloud_run_state,
     _fetch_live_cloud_run_state,
     _validate_cloud_run,
 )
@@ -640,7 +639,6 @@ def validate_runtime_env(
     manifest_path: Path = DEFAULT_MANIFEST,
     cloud_run_state_path: Path | None = None,
     check_live_cloud_run: bool = False,
-    check_rendered_cloud_run: bool = False,
     check_workflows: bool = False,
     workflow_root: Path | None = None,
     strict_provisional: bool = False,
@@ -674,8 +672,6 @@ def validate_runtime_env(
     cloud_run_state = None
     if cloud_run_state_path is not None:
         cloud_run_state = _load_json(cloud_run_state_path)
-    elif check_rendered_cloud_run:
-        cloud_run_state = _build_rendered_cloud_run_state(env_config)
     elif check_live_cloud_run:
         cloud_run_state = _fetch_live_cloud_run_state(env_config)
 

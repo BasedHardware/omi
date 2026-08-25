@@ -17,6 +17,7 @@ from database import (
     action_items as action_items_db,
 )
 from database.redis_db import set_credits_invalidation_signal
+from config.plan_catalog import plan_uses_overage
 from utils.fair_use import clear_fair_use_on_upgrade
 from utils.notifications import send_notification, send_subscription_paid_personalized_notification
 from models.users import PlanType, Subscription, SubscriptionStatus, PlanLimits
@@ -36,6 +37,7 @@ from utils.subscription import (
     price_ids_match_plan_and_interval,
 )
 from utils.observability.fallback import record_fallback
+from utils.observability.subscription_events import record_subscription_event
 from database.users import (
     get_stripe_connect_account_id,
     set_stripe_connect_account_id,
@@ -57,7 +59,6 @@ from utils.overage import (
     PROVIDER_REFERENCE_RATES,
     build_explainer_text,
     get_user_overage,
-    is_overage_plan,
 )
 from utils.executors import db_executor, stripe_executor, run_blocking
 from utils.log_sanitizer import sanitize
@@ -230,7 +231,28 @@ def _build_subscription_from_stripe_object(stripe_sub: dict) -> Subscription | N
 
     try:
         plan = get_plan_type_from_price_id(price_id)
-    except ValueError:
+    except ValueError as e:
+        # A price Stripe is actively billing that we cannot resolve. Before the
+        # catalog, a retained/configured disagreement could not arise here: the
+        # env mapping simply won. It can now raise, and this early return means
+        # the subscriber's stored row silently stops tracking Stripe. That is
+        # the Apr 17-20 failure shape, so it must be observable rather than a
+        # bare log line. See docs/agents/plan-source-of-truth.md.
+        record_fallback(
+            component='other',
+            from_mode='stripe_price_resolution',
+            to_mode='skip_subscription_write',
+            # Must be a member of ALLOWED_REASONS, or bucket_reason() relabels it
+            # 'other' and the reason dimension is lost. The price is absent from both
+            # the catalog ledger and the env binding: a configuration gap.
+            reason='config_incomplete',
+            outcome='degraded',
+            log=logger,
+        )
+        logger.error(
+            f"Unresolvable Stripe price {sanitize(str(price_id))} on an active subscription; "
+            f"local row will not be updated: {sanitize(str(e))}"
+        )
         return None
 
     return Subscription(
@@ -544,7 +566,7 @@ def get_overage_info_endpoint(uid: str = Depends(auth.get_current_user_uid_no_by
     return OverageInfoResponse(
         plan=subscription_utils.get_plan_display_name(plan),
         plan_type=plan.value,
-        is_overage_plan=is_overage_plan(plan),
+        is_overage_plan=plan_uses_overage(plan),
         included_questions=snapshot['included_questions'],
         included_cost_usd=snapshot.get('included_cost_usd'),
         used_questions=snapshot['used_questions'],
@@ -563,11 +585,10 @@ def get_overage_info_endpoint(uid: str = Depends(auth.get_current_user_uid_no_by
 def _validate_price_id(price_id: str) -> None:
     """Reject a blank/whitespace-only or non-purchasable price_id before any Stripe call.
 
-    A valid checkout or upgrade target must be a currently-purchasable plan price. Legacy prices
-    (LEGACY_PRICE_MAP) are intentionally rejected here: they exist for existing subscribers'
-    renewals and webhook/subscription reconciliation, not as new purchase targets, so a caller
-    cannot select a hidden or deprecated price by posting its id directly. This is the boundary
-    check for the checkout and upgrade endpoints.
+    A valid checkout or upgrade target must be a currently-purchasable plan price. Retained catalog
+    prices are intentionally rejected here: they exist for existing subscribers' renewals and
+    reconciliation, not as new purchase targets, so a caller cannot select a hidden or deprecated
+    price by posting its ID directly. This is the checkout and upgrade boundary check.
     """
     if not price_id or not price_id.strip():
         raise HTTPException(status_code=400, detail="price_id is required")
@@ -1016,6 +1037,11 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
         'customer.subscription.created',
     ]:
         subscription_obj = event['data']['object']
+        record_subscription_event(
+            stripe_event_type=event['type'],
+            subscription_obj=subscription_obj,
+            previous_attributes=event.get('data', {}).get('previous_attributes'),
+        )
         uid = subscription_obj.get('metadata', {}).get('uid')
 
         if not uid:

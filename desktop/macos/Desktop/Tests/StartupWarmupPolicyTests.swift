@@ -97,14 +97,6 @@ final class StartupWarmupPolicyTests: XCTestCase {
       StartupWarmupPolicy.deferredWarmupDelay
     )
   }
-
-  func testRecurringTaskSchedulerWaitsUntilAfterDeferredWarmupStarts() {
-    XCTAssertGreaterThan(
-      StartupWarmupPolicy.recurringTaskSchedulerInitialDelay,
-      StartupWarmupPolicy.deferredWarmupDelay
-    )
-  }
-
   func testDashboardNetworkRefreshWaitsUntilAfterDeferredWarmupStarts() {
     XCTAssertGreaterThan(
       StartupWarmupPolicy.dashboardNetworkRefreshDelay,
@@ -477,6 +469,50 @@ final class StartupWarmupPolicyTests: XCTestCase {
         "AppProvider reset must include \(requiredReset)"
       )
     }
+  }
+
+  /// Ratchet for the "Preparing your data…" indefinite-hang fix (a wedged
+  /// `RewindDatabase.initialize()` — stalled disk, actor deadlock — left the
+  /// loading screen up forever with no crash and no CPU). Both database-init
+  /// call sites must go through the single timeout-bounded helper.
+  func testViewModelContainerBoundsDatabaseInitWithATimeout() throws {
+    let source = try viewModelContainerSource()
+
+    XCTAssertTrue(
+      source.contains("private func initializeDatabaseWithTimeout() async -> Bool"),
+      "Database init must be routed through a single timeout-bounded helper")
+    XCTAssertTrue(
+      source.contains("awaitWithTimeout(StartupWarmupPolicy.databaseInitTimeout"),
+      "Database init must race against StartupWarmupPolicy.databaseInitTimeout, not await RewindDatabase.initialize() unboundedly"
+    )
+
+    guard let helperRange = source.range(of: "private func initializeDatabaseWithTimeout() async -> Bool") else {
+      return XCTFail("initializeDatabaseWithTimeout() not found")
+    }
+    let helperBody = String(source[helperRange.lowerBound...])
+    XCTAssertFalse(
+      helperBody.contains("withThrowingTaskGroup") || helperBody.contains("withTaskGroup"),
+      """
+      A withTaskGroup-based timeout awaits the wedged child task at scope exit and would hang \
+      the timeout itself — see AwaitWithTimeoutTests.
+      """)
+  }
+
+  func testLoadAllDataAndRetryBothRouteThroughTheDatabaseTimeoutHelper() throws {
+    let source = try viewModelContainerSource()
+    XCTAssertGreaterThanOrEqual(
+      source.components(separatedBy: "await initializeDatabaseWithTimeout()").count - 1,
+      2,
+      "Both the initial load path and retryDatabaseInit() must use the timeout-bounded helper")
+  }
+
+  private func viewModelContainerSource() throws -> String {
+    let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+    let sourceURL =
+      testsURL
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/ViewModelContainer.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 
   func testAuthSignInFetchesFloatingBarPlanImmediately() throws {

@@ -21,6 +21,8 @@ from langchain_core.callbacks import BaseCallbackHandler
 agent_config_context: contextvars.ContextVar[dict] = contextvars.ContextVar('agent_config', default=None)
 
 from models.app import App
+from utils.journey_metrics_contract import ClientKind
+from utils.observability.journeys import ClientJourneyAttempt
 from models.chat import Message, ChatSession, PageContext
 from utils.retrieval.tools import (
     get_conversations_tool,
@@ -52,6 +54,7 @@ from utils.retrieval.tools import (
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
+from utils.retrieval.chat_scope import build_chat_scope
 from utils.retrieval.safety import (
     AgentSafetyGuard,
     SafetyGuardError,
@@ -447,13 +450,43 @@ def _convert_anthropic_tools_to_openai(tool_schemas: list[dict]) -> list[dict]:
     return openai_tools
 
 
+_MEMORY_RETRIEVAL_TOOLS = frozenset({'get_memories_tool', 'search_memories_tool'})
+
+
+def _finish_memory_retrieval(attempt: ClientJourneyAttempt, result: str) -> None:
+    normalized = result.strip().lower()
+    if not normalized or normalized.startswith('no memories found'):
+        attempt.degrade('empty_answer')
+    elif normalized.startswith('error'):
+        attempt.fail('dependency_unavailable')
+    else:
+        attempt.succeed()
+
+
 @_traceable(name="chat.tool_execution", run_type="tool")
 async def _execute_tool(tool_name: str, tool_input: dict, registry: dict, configurable: dict) -> str:
     """Execute a LangChain tool by name, injecting RunnableConfig."""
     tool_obj = registry[tool_name]
     config = RunnableConfig(configurable=configurable)
-    result = await tool_obj.ainvoke(tool_input, config=config)
+    client_kind = configurable.get('client_kind')
+    attempt = (
+        ClientJourneyAttempt('memory_retrieval', client_kind)
+        if tool_name in _MEMORY_RETRIEVAL_TOOLS and client_kind is not None
+        else None
+    )
+    try:
+        result = await tool_obj.ainvoke(tool_input, config=config)
+    except asyncio.CancelledError:
+        if attempt is not None:
+            attempt.cancel()
+        raise
+    except Exception:
+        if attempt is not None:
+            attempt.fail('dependency_unavailable')
+        raise
     result = preserve_chat_memory_tool_result_boundary(tool_name, str(result))
+    if attempt is not None:
+        _finish_memory_retrieval(attempt, result)
     return result
 
 
@@ -1183,6 +1216,7 @@ async def execute_agentic_chat_stream(
     chat_session: Optional[ChatSession] = None,
     context: Optional[PageContext] = None,
     platform: Optional[str] = None,
+    client_kind: Optional[ClientKind] = None,
     current_datetime_block: Optional[str] = None,
     tz: Optional[str] = None,
     setup_deadline_at: Optional[float] = None,
@@ -1359,6 +1393,8 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
     # Generate run_id for LangSmith tracing
     langsmith_run_id = str(uuid.uuid4())
 
+    chat_scope = build_chat_scope(context)
+
     # Config for tools to access via RunnableConfig
     configurable = {
         "user_id": uid,
@@ -1366,7 +1402,9 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
         "conversations_collected": conversations_collected,
         "safety_guard": safety_guard,
         "chat_session_id": chat_session.id if chat_session else None,
+        "client_kind": client_kind,
         "tools": core_tools + app_tools,
+        "chat_scope": chat_scope,
     }
 
     # Store config in context variable for tools that use agent_config_context

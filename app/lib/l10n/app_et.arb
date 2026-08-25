@@ -3215,8 +3215,21 @@
     "accountCutoverMigrationInProgressMessage": "Tiliäsi siirretään. Tuoteominaisuudet on keskeytetty, kunnes siirto valmistuu.",
     "accountCutoverMigrationRollbackMessage": "Tilisi on huollossa siirron peruutuksen jälkeen. Uudempaa dataa voi olla eristettynä.",
     "accountCutoverOpenStore": "Avaa kauppa",
+    "chatScopeToday": "Täna",
+    "chatScopeThisWeek": "Sel nädalal",
+    "chatScopeAbout": "Teave: {title}",
+    "askAboutThisConversation": "Küsi selle kohta",
     "sendRawAudioToOmi": "Saada töötlemata heli Omisse",
     "sendRawAudioToOmiDescription": "Lülita välja, et töötlemata heli Omisse ei saadetaks. Transkriptsioone ja pilvefunktsioonide jaoks vajalikke andmeid võidakse endiselt Omisse saata.",
     "findDevice": "Leia",
-    "diagnosticsShareFailed": "Diagnostikat ei õnnestunud jagada. Proovi uuesti."
+    "diagnosticsShareFailed": "Diagnostikat ei õnnestunud jagada. Proovi uuesti.",
+    "appDisabledTitle": "See rakendus on välja lülitatud ja seda ei saa paigaldada.",
+    "appDisabledWebhookFailures": "Selle lõpp-punkt ebaõnnestus 72 tundi järjest, seega saatmine peatati.",
+    "appDisabledGeneric": "Omi lülitas selle välja.",
+    "appDisabledOwnerHint": "Paranda kõigepealt lõpp-punkt — uuesti sisselülitamisel kontrollitakse iga seadistatud URL uuesti.",
+    "appReEnable": "Lülita uuesti sisse",
+    "appReEnableFailedTitle": "Uuesti sisselülitamine ebaõnnestus",
+    "appReEnableFailedBody": "Seda rakendust ei õnnestunud uuesti sisse lülitada. Proovi uuesti.",
+    "appDisabledOn": "Välja lülitatud {date}.",
+    "appDisabledLastError": "Viimane viga: {error}."
 }

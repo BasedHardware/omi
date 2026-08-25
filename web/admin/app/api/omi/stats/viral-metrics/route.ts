@@ -81,6 +81,10 @@ export async function GET(request: NextRequest) {
       mauResult,
       allTimeResult,
       userGrowthResult,
+      rolling24hDauResult,
+      rolling24hNewResult,
+      rolling7dNewResult,
+      rollingRetentionResult,
     ] = await Promise.all([
       // 1. New users per week — first-seen on this platform, the same
       // person-deduped population as the daily userGrowth series.
@@ -266,6 +270,60 @@ export async function GET(request: NextRequest) {
         GROUP BY first_day
         ORDER BY first_day
       `),
+
+      // 11. Rolling last-24h DAU — the trailing daily bucket must not look
+      // like a crash just because the day started.
+      hogql(apiKey, projectId, host, `
+        SELECT count(DISTINCT distinct_id)
+        FROM events
+        WHERE timestamp >= now() - interval 24 hour
+          ${os}
+      `),
+
+      // 12. Rolling last-24h new users (first-seen).
+      hogql(apiKey, projectId, host, `
+        SELECT count(*)
+        FROM (
+          SELECT COALESCE(person_id, distinct_id) as actor, min(timestamp) as min_ts
+          FROM events
+          WHERE 1 = 1
+            ${os}
+          GROUP BY actor
+        )
+        WHERE min_ts >= now() - interval 24 hour
+      `),
+
+      // 13. Rolling last-7d new users (first-seen) for the trailing weekly bucket.
+      hogql(apiKey, projectId, host, `
+        SELECT count(*)
+        FROM (
+          SELECT COALESCE(person_id, distinct_id) as actor, min(timestamp) as min_ts
+          FROM events
+          WHERE 1 = 1
+            ${os}
+          GROUP BY actor
+        )
+        WHERE min_ts >= now() - interval 7 day
+      `),
+
+      // 14. Rolling 7d retention pair: retained (active both in the last 7d
+      // and the 7d before) and prior-window active, for the trailing
+      // growth-accounting bucket.
+      hogql(apiKey, projectId, host, `
+        SELECT
+          countIf(cur = 1 AND prev = 1) as retained,
+          countIf(prev = 1) as prev_active
+        FROM (
+          SELECT
+            distinct_id,
+            maxIf(1, timestamp >= now() - interval 7 day) as cur,
+            maxIf(1, timestamp < now() - interval 7 day) as prev
+          FROM events
+          WHERE timestamp >= now() - interval 14 day
+            ${os}
+          GROUP BY distinct_id
+        )
+      `),
     ]);
 
     // ── Process Growth Accounting ──
@@ -304,12 +362,37 @@ export async function GET(request: NextRequest) {
       };
     });
 
+    // Trailing weekly bucket = the rolling last 7 days (the partial
+    // calendar week always under-reported until Sunday).
+    if (growthAccounting.length > 0) {
+      const rollingWau = Number((wauResult as any[])[0]?.[0] ?? 0);
+      const rolling7dNew = Number((rolling7dNewResult as any[])[0]?.[0] ?? 0);
+      const rollingPair = (rollingRetentionResult as any[])[0] ?? [0, 0];
+      const retained7 = Number(rollingPair[0] ?? 0);
+      const prevActive7 = Number(rollingPair[1] ?? 0);
+      const lastGA = growthAccounting[growthAccounting.length - 1];
+      lastGA.active = rollingWau;
+      lastGA.newUsers = rolling7dNew;
+      lastGA.retained = retained7;
+      lastGA.resurrected = Math.max(0, rollingWau - rolling7dNew - retained7);
+      lastGA.churned = -Math.max(0, prevActive7 - retained7);
+    }
+
     // ── Process DAU for Stickiness ──
     const dailyDau: { date: string; dau: number }[] = [];
     for (const [day, dau] of dailyDauResults as any[]) {
       dailyDau.push({ date: day, dau });
     }
     dailyDau.sort((a, b) => a.date.localeCompare(b.date));
+
+    // Trailing daily bucket = the last 24 hours, not since-midnight.
+    const rolling24hDau = Number((rolling24hDauResult as any[])[0]?.[0] ?? 0);
+    const todayUtc = new Date().toISOString().slice(0, 10);
+    if (dailyDau.length > 0 && dailyDau[dailyDau.length - 1].date === todayUtc) {
+      dailyDau[dailyDau.length - 1].dau = rolling24hDau;
+    } else {
+      dailyDau.push({ date: todayUtc, dau: rolling24hDau });
+    }
 
     // Weekly stickiness: avg DAU / WAU for each week
     const wau = (wauResult as any[])[0]?.[0] ?? 0;
@@ -322,6 +405,14 @@ export async function GET(request: NextRequest) {
     for (const [day, users] of userGrowthResult as any[]) {
       cumulative += users;
       userGrowth.push({ date: day, users, cumulative });
+    }
+    // Trailing bucket shows first-seen users of the last 24 hours; the
+    // cumulative line stays calendar-exact (ends at allTimeUsers).
+    const rolling24hNew = Number((rolling24hNewResult as any[])[0]?.[0] ?? 0);
+    if (userGrowth.length > 0 && userGrowth[userGrowth.length - 1].date === todayUtc) {
+      userGrowth[userGrowth.length - 1].users = rolling24hNew;
+    } else if (userGrowth.length > 0) {
+      userGrowth.push({ date: todayUtc, users: rolling24hNew, cumulative });
     }
     const recentDau = dailyDau.slice(-7);
     const avgDau = recentDau.length > 0
@@ -354,6 +445,18 @@ export async function GET(request: NextRequest) {
         wau: weekWau,
         dauWau: weekWau > 0 ? Math.round((weekAvgDau / weekWau) * 1000) / 10 : 0,
       });
+    }
+
+    // Trailing stickiness point uses the rolling windows too.
+    if (stickinessTrend.length > 0) {
+      const lastStick = stickinessTrend[stickinessTrend.length - 1];
+      const recent = dailyDau.slice(-7);
+      const rollingAvgDau = recent.length > 0
+        ? Math.round(recent.reduce((s2, d) => s2 + d.dau, 0) / recent.length)
+        : 0;
+      lastStick.avgDau = rollingAvgDau;
+      lastStick.wau = wau;
+      lastStick.dauWau = wau > 0 ? Math.round((rollingAvgDau / wau) * 1000) / 10 : 0;
     }
 
     // ── Process Power User Curve ──
