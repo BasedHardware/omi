@@ -102,10 +102,16 @@ def remove_bulk_endpoints(urls: List[str]) -> None:
             store.delete(doc.path)
 
 
-def get_users_endpoints_in_timezones(time_zones: List[str]) -> List[UnifiedPushEndpoint]:
-    """UnifiedPush endpoints of every user whose ``time_zone`` is in ``time_zones`` (daily-summary
-    fan-out parity with the FCM token path)."""
-    if not time_zones:
+def get_users_endpoints_in_timezones(timezones: List[str]) -> List[UnifiedPushEndpoint]:
+    """UnifiedPush endpoints of every user whose ``time_zone`` is in ``timezones`` (daily-summary
+    fan-out parity with the FCM token path).
+
+    The parameter is named after upstream's ``get_users_token_in_timezones``, the FCM sibling this one
+    stands beside: ``_get_users_in_timezone`` picks between the two by backend and calls whichever it
+    got, so two different names for the same argument made the pair unassignable to a single callable
+    type — and the only reason it worked at all was that the call happened to be positional.
+    """
+    if not timezones:
         return []
     store = get_document_store()
     endpoints: List[UnifiedPushEndpoint] = []
@@ -116,7 +122,7 @@ def get_users_endpoints_in_timezones(time_zones: List[str]) -> List[UnifiedPushE
     # the matched endpoints, bounded by matches (an index on the group's d.time_zone — provisioned by
     # reconcile_mongo_indexes — keeps it off a collection scan). A Firestore 'in' rejects >30 values, so
     # chunk. Per-chunk isolation: one failing timezone chunk must not abort the morning fan-out.
-    unique = list(dict.fromkeys(time_zones))
+    unique = list(dict.fromkeys(timezones))
     for i in range(0, len(unique), 30):
         try:
             for doc in store.query_group(_UNIFIEDPUSH_COLLECTION, filters=[('time_zone', 'in', unique[i : i + 30])]):
@@ -423,16 +429,16 @@ def get_users_for_daily_summary(
     return users
 
 
-def get_unifiedpush_endpoints_by_uid(time_zones: List[str]) -> Dict[str, List[UnifiedPushEndpoint]]:
-    """UnifiedPush endpoints keyed by uid for every user whose ``time_zone`` is in ``time_zones``. ONE
+def get_unifiedpush_endpoints_by_uid(timezones: List[str]) -> Dict[str, List[UnifiedPushEndpoint]]:
+    """UnifiedPush endpoints keyed by uid for every user whose ``time_zone`` is in ``timezones``. ONE
     collection-group query per 30-chunk (not a per-user ``get_all_endpoints`` = N+1). ``save_endpoint``
     stamps the endpoint's ``time_zone`` with the user's, so the group filter returns exactly the matched
     users' endpoints. Neutral read — the service decides WHEN to use it (cubic PR 10887 #427)."""
     by_uid: Dict[str, List[UnifiedPushEndpoint]] = {}
-    if not time_zones:
+    if not timezones:
         return by_uid
     store = get_document_store()
-    unique = list(dict.fromkeys(time_zones))
+    unique = list(dict.fromkeys(timezones))
     for i in range(0, len(unique), 30):
         try:
             for doc in store.query_group(_UNIFIEDPUSH_COLLECTION, filters=[('time_zone', 'in', unique[i : i + 30])]):

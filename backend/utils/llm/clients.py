@@ -247,7 +247,14 @@ def _embeddings_base_url() -> str:
     return os.getenv(EMBEDDINGS_BASE_URL_ENV_VAR, '').strip().rstrip('/')
 
 
-def _embeddings_model() -> str:
+def embeddings_model() -> str:
+    """Which embeddings model is configured (ADR-0035).
+
+    Public, unlike its ``_embeddings_*`` siblings, because it is a question other modules legitimately
+    ask: the vector adapter records it against a collection it creates, and the factory crosses it
+    against the collections that already exist (ADR-0086). It was named with an underscore anyway, so
+    those callers were reaching into another module's privates to ask something perfectly ordinary.
+    """
     return os.getenv(EMBEDDINGS_MODEL_ENV_VAR, '').strip() or _DEFAULT_EMBEDDINGS_MODEL
 
 
@@ -772,7 +779,7 @@ llm_mini = _LazyClientProxy(_create_legacy_llm_mini)
 # Embeddings, parser, utilities
 # ---------------------------------------------------------------------------
 embeddings = _OpenAIEmbeddingsProxy(
-    model_factory=_embeddings_model,
+    model_factory=embeddings_model,
     default=None,
     ctor_kwargs_factory=_embeddings_ctor_kwargs,
 )

@@ -89,14 +89,7 @@ def _existing_collection_dimensions() -> Dict[str, int]:
     """
     from utils.vector.adapters import qdrant as qdrant_adapter
 
-    client = qdrant_adapter._get_client()
-    dimensions: Dict[str, int] = {}
-    for collection in client.get_collections().collections:
-        params = client.get_collection(collection.name).config.params.vectors
-        size = getattr(params, 'size', None)
-        if isinstance(size, int):
-            dimensions[collection.name] = size
-    return dimensions
+    return qdrant_adapter.collection_dimensions()
 
 
 def validate_vector_dimension(env: Optional[Mapping[str, str]] = None) -> None:
@@ -173,10 +166,10 @@ def _validate_namespace_models(collections: List[str]) -> None:
     louder, more urgent fault, and reporting both at once would bury it. Same house style — name the
     consequence, never raise. Unknown is not mismatched: a collection with no record is adopted.
     """
-    from utils.llm.clients import _embeddings_model
+    from utils.llm.clients import embeddings_model
     from utils.vector.namespace_state import compare_namespace_model
 
-    model = _embeddings_model()
+    model = embeddings_model()
     problems = [
         problem
         for problem in (

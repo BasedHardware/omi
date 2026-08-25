@@ -41,7 +41,7 @@ _DOCS = {
 def live_store():
     # Rebuild the embeddings proxy from the test env (constructed at import with defaults).
     clients.embeddings = clients._OpenAIEmbeddingsProxy(
-        model_factory=clients._embeddings_model,
+        model_factory=clients.embeddings_model,
         default=None,
         ctor_kwargs_factory=clients._embeddings_ctor_kwargs,
     )

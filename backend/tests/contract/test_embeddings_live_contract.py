@@ -39,7 +39,7 @@ def live_embeddings():
     import time, before the test env is applied)."""
     previous = clients.embeddings
     clients.embeddings = clients._OpenAIEmbeddingsProxy(
-        model_factory=clients._embeddings_model,
+        model_factory=clients.embeddings_model,
         default=None,
         ctor_kwargs_factory=clients._embeddings_ctor_kwargs,
     )

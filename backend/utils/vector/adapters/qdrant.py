@@ -64,6 +64,24 @@ def _get_client() -> Any:
     return _client
 
 
+def collection_dimensions() -> Dict[str, int]:
+    """``{collection: dim}`` for the collections that exist on the server right now.
+
+    Lives here, beside the client it needs, because it is entirely Qdrant: ``get_collections()`` and
+    ``config.params.vectors`` are this SDK's shapes. ``utils/vector/factory`` used to walk them itself,
+    which meant pulling ``_get_client()`` out of this module — a caller reaching past the port for the
+    vendor client is the one thing the vector abstraction exists to prevent (ADR-0033).
+    """
+    client = _get_client()
+    dimensions: Dict[str, int] = {}
+    for collection in client.get_collections().collections:
+        params = client.get_collection(collection.name).config.params.vectors
+        size = getattr(params, 'size', None)
+        if isinstance(size, int):
+            dimensions[collection.name] = size
+    return dimensions
+
+
 def _collection(namespace: str) -> str:
     return f"{_cfg_prefix()}{namespace}"
 
@@ -91,10 +109,10 @@ def _record_creating_model(collection: str) -> None:
     """Remember which embeddings model this collection was created for. Never raises: a bookkeeping
     failure must not break the write that triggered the creation."""
     try:
-        from utils.llm.clients import _embeddings_model
+        from utils.llm.clients import embeddings_model
         from utils.vector.namespace_state import record_namespace_state
 
-        record_namespace_state(collection, model=_embeddings_model(), dim=_cfg_dim())
+        record_namespace_state(collection, model=embeddings_model(), dim=_cfg_dim())
     except Exception:  # pragma: no cover - defensive, see docstring
         pass
 
@@ -140,12 +158,16 @@ def _to_qdrant_filter(flt: Optional[Dict[str, Any]]):
             for sub in value:
                 must.append(_to_qdrant_filter(sub))
         elif key == "$or":
-            branches = [_to_qdrant_filter(sub) for sub in value]
-            if any(b is None for b in branches):
-                # An empty sub-filter translates to None, and `should=[None]` is not "match anything"
-                # to Qdrant — it is a malformed query. Reject it here, where the cause is still
-                # visible, instead of letting the client fail on a shape it cannot name.
-                raise neutral_filters.UnsupportedFilterError("$or contains an empty sub-filter")
+            # Built by narrowing rather than checked afterwards: an empty sub-filter translates to
+            # None, and `should=[None]` is not "match anything" to Qdrant — it is a malformed query.
+            # Reject it here, where the cause is still visible, instead of letting the client fail on
+            # a shape it cannot name.
+            branches = []
+            for sub in value:
+                branch = _to_qdrant_filter(sub)
+                if branch is None:
+                    raise neutral_filters.UnsupportedFilterError("$or contains an empty sub-filter")
+                branches.append(branch)
             must.append(models.Filter(should=branches))
         else:
             add_field(key, value)
@@ -255,11 +277,17 @@ class QdrantVectorStore:
                 with_payload=[_ID_PAYLOAD_KEY],
                 with_vectors=False,
             )
-            page = [
-                (p.payload or {}).get(_ID_PAYLOAD_KEY)
-                for p in points
-                if str((p.payload or {}).get(_ID_PAYLOAD_KEY, "")).startswith(prefix)
-            ]
+            # Read once, and test the value that is actually yielded. The predicate used to stringify
+            # a MISSING key into "" while the value beside it was taken raw, so the two disagreed: with
+            # an empty prefix — or a non-string ``__id`` — a point carrying no id passed the test and
+            # entered a ``List[str]`` as None, to be handed to ``delete_by_ids`` later. Not reachable
+            # from today's two callers (both pass ``f"{uid}-{conversation_id}-c"``), which is why this
+            # is a latent hole and not an outage; it is one empty-prefix caller from being live.
+            page: List[str] = []
+            for point in points:
+                stored = (point.payload or {}).get(_ID_PAYLOAD_KEY)
+                if isinstance(stored, str) and stored.startswith(prefix):
+                    page.append(stored)
             if page:
                 yield page
             if offset is None:

@@ -1608,11 +1608,16 @@ def resolve_chat_thumbnail(stored: str) -> str:
     return _signed_url(_required_bucket(chat_files_bucket, 'BUCKET_CHAT_FILES'), stored, USER_AUDIO_URL_MINUTES)
 
 
-def resolve_chat_file_thumbnails(files: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def resolve_chat_file_thumbnails(files: List[Any]) -> List[Any]:
     """Resolve ``thumbnail`` on each stored chat-file record, in place, and return the list.
 
     One place, called where the records leave the database, so every consumer that builds a ``FileChat``
     downstream gets a fetchable URL without knowing any of this.
+
+    ``List[Any]`` deliberately, not ``List[Dict[str, Any]]``: these records come straight out of a
+    stored document, so their shape is whatever was written, not what the annotation wishes. The
+    stricter type made the ``isinstance`` below provably dead — and dropping a guard because a type
+    hint promised something the database never did is how one malformed row turns a chat read into a 500.
     """
     for record in files:
         if isinstance(record, dict) and record.get('thumbnail'):

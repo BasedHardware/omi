@@ -19,7 +19,7 @@ def test_default_is_cloud_openai(monkeypatch):
     ):
         monkeypatch.delenv(var, raising=False)
     assert clients._embeddings_base_url() == ''
-    assert clients._embeddings_model() == 'text-embedding-3-large'
+    assert clients.embeddings_model() == 'text-embedding-3-large'
     # No base URL → no extra kwargs → unchanged cloud behaviour.
     assert clients._embeddings_ctor_kwargs() == {}
 
@@ -30,7 +30,7 @@ def test_local_endpoint_pins_all_constructions(monkeypatch):
     monkeypatch.setenv(clients.EMBEDDINGS_MODEL_ENV_VAR, 'nomic-embed-text')
 
     assert clients._embeddings_base_url() == 'http://ollama:11434/v1'  # trailing slash stripped
-    assert clients._embeddings_model() == 'nomic-embed-text'
+    assert clients.embeddings_model() == 'nomic-embed-text'
 
     kwargs = clients._embeddings_ctor_kwargs()
     assert kwargs['base_url'] == 'http://ollama:11434/v1'
@@ -60,7 +60,7 @@ def test_local_endpoint_with_byok_openai_does_not_duplicate_api_key(monkeypatch)
     monkeypatch.setattr(clients, 'get_byok_key', lambda provider: 'sk-user-byok' if provider == 'openai' else None)
 
     proxy = clients._OpenAIEmbeddingsProxy(
-        model_factory=clients._embeddings_model,
+        model_factory=clients.embeddings_model,
         default=None,
         ctor_kwargs_factory=clients._embeddings_ctor_kwargs,
     )
@@ -79,7 +79,7 @@ def test_model_and_ctor_kwargs_resolve_at_call_time_not_at_construction(monkeypa
     the env AFTER, and first access must reflect the post-construction env (lazy, memoized).
     """
     proxy = clients._OpenAIEmbeddingsProxy(
-        model_factory=clients._embeddings_model,
+        model_factory=clients.embeddings_model,
         default=None,
         ctor_kwargs_factory=clients._embeddings_ctor_kwargs,
     )
