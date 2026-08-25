@@ -111,7 +111,16 @@ _STRIPPED_ENV_PREFIXES = (
     "SERVICE_ACCOUNT",
     "FIREBASE_ADMIN",
 )
-_LOCAL_BACKEND_SECRET_KEYS = {"ENCRYPTION_SECRET", "ADMIN_KEY", "TYPESENSE_API_KEY", "FIREBASE_API_KEY"}
+_LOCAL_BACKEND_SECRET_KEYS = {
+    "ENCRYPTION_SECRET",
+    "ADMIN_KEY",
+    "TYPESENSE_API_KEY",
+    "FIREBASE_API_KEY",
+    # Harness-local HMAC key for internal screen-frame approval tokens. Matches
+    # _PROVIDER_SECRET_RE on "SECRET" but is not a provider credential, so offline
+    # mode must pass it through rather than refuse it.
+    "SCREEN_FRAME_SIGNING_SECRET",
+}
 _OFFLINE_PROVIDER_PLACEHOLDERS = {
     "OPENAI_API_KEY": "sk-omi-local-harness-offline-not-real",
     "DEEPGRAM_API_KEY": "omi-local-harness-offline-deepgram-not-real",
