@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Run the local-only, no-provider-spend JIT processing dogfood proof.
+"""Run the local-only JIT processing dogfood proof.
 
 The driver is intentionally a composition layer over the production contracts
-and their existing Firestore-emulator proofs.  It never talks to a shared
-Firestore project, PostHog, GCP, or a non-loopback API.  Every result is emitted
-as one JSON document so Gate G evidence can be archived without interpreting
-human-oriented subprocess output.
+and their existing Firestore-emulator proofs.  Its requests stay on managed
+loopback endpoints and a demo Firestore project; it does not mutate shared data
+or control planes and does not claim a provider-spend guarantee.  Every result
+is emitted as one JSON document so Gate G evidence can be archived without
+interpreting human-oriented subprocess output.
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ import argparse
 import json
 import os
 import re
+import stat
 import subprocess
 import sys
 import time
@@ -31,12 +33,14 @@ REPO_ROOT = BACKEND_DIR.parent
 DEFAULT_OWNER_ID = "jit-qa-orchestrated-dogfood-owner"
 DESKTOP_ROUNDTRIP_MARKER = "[[MARKER:jit-orchestrated-dogfood]]"
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
-SENSITIVE_ENV_PREFIXES = (
-    "POSTHOG_",
-    "GOOGLE_APPLICATION_CREDENTIALS",
-    "SERVICE_ACCOUNT_JSON",
-    "FIREBASE_AUTH_CREDENTIALS",
-)
+RUNTIME_ENV_KEYS = ("LANG", "LC_ALL", "LC_CTYPE", "PATH", "TZ")
+FIXED_API_URL = "http://127.0.0.1:18080"
+FIXED_DESKTOP_API_URL = "http://127.0.0.1:18081"
+FIXED_CONTROL_PLANE_URL = "http://127.0.0.1:18085"
+FIXED_FIRESTORE_HOST = "127.0.0.1:18082"
+FIXED_FIRESTORE_PROJECT = "demo-omi-jit-qa"
+FIXED_AUTOMATION_PORT = 47942
+MANAGED_STATE_ROOT = REPO_ROOT / ".dev" / "jit-qa-local-dev-gcp"
 
 
 class SafetyError(RuntimeError):
@@ -70,28 +74,48 @@ def _loopback_url(value: str, *, label: str) -> str:
     return value.rstrip("/")
 
 
+def _fixed_service_url(value: str, *, label: str, expected: str) -> str:
+    normalized = _loopback_url(value, label=label)
+    if normalized != expected:
+        raise SafetyError(f"{label} must be the managed endpoint {expected}")
+    return normalized
+
+
 def _emulator_authority(env: dict[str, str]) -> tuple[str, str]:
     host = (env.get("FIRESTORE_EMULATOR_HOST") or "").strip()
     if not host:
         raise SafetyError("FIRESTORE_EMULATOR_HOST is required")
-    parsed = urlparse(f"http://{host}")
-    if parsed.hostname not in LOOPBACK_HOSTS or parsed.port is None:
-        raise SafetyError("Firestore emulator must be an explicit loopback host and port")
+    if host != FIXED_FIRESTORE_HOST:
+        raise SafetyError(f"Firestore emulator must be the managed endpoint {FIXED_FIRESTORE_HOST}")
     project = (env.get("GOOGLE_CLOUD_PROJECT") or env.get("GCLOUD_PROJECT") or "").strip()
-    if not project.startswith("demo-"):
-        raise SafetyError("Firestore project must use the demo- prefix")
+    if project != FIXED_FIRESTORE_PROJECT:
+        raise SafetyError(f"Firestore project must be {FIXED_FIRESTORE_PROJECT}")
     return host, project
 
 
 def _subprocess_env(source: dict[str, str]) -> dict[str, str]:
-    env = {
-        key: value
-        for key, value in source.items()
-        if not any(key == prefix or key.startswith(prefix) for prefix in SENSITIVE_ENV_PREFIXES)
-    }
-    _, project = _emulator_authority(env)
+    _, project = _emulator_authority(source)
+    runtime_home = _managed_state_root() / "dogfood-home"
+    if runtime_home.is_symlink():
+        raise SafetyError("dogfood HOME must not be a symlink")
+    runtime_home.mkdir(parents=True, exist_ok=True)
+    os.chmod(runtime_home, 0o700)
+    env = {key: source[key] for key in RUNTIME_ENV_KEYS if source.get(key)}
+    env["PATH"] = source.get("PATH") or os.defpath
+    for directory in (
+        runtime_home / ".cache",
+        runtime_home / ".config",
+        runtime_home / ".local" / "share",
+    ):
+        directory.mkdir(parents=True, exist_ok=True)
+        os.chmod(directory, 0o700)
     env.update(
         {
+            "HOME": str(runtime_home),
+            "XDG_CACHE_HOME": str(runtime_home / ".cache"),
+            "XDG_CONFIG_HOME": str(runtime_home / ".config"),
+            "XDG_DATA_HOME": str(runtime_home / ".local" / "share"),
+            "FIRESTORE_EMULATOR_HOST": source["FIRESTORE_EMULATOR_HOST"],
             "GOOGLE_CLOUD_PROJECT": project,
             "GCLOUD_PROJECT": project,
             "FIREBASE_PROJECT_ID": project,
@@ -101,7 +125,7 @@ def _subprocess_env(source: dict[str, str]) -> dict[str, str]:
             # writes are confined to a demo-* emulator project, so explicitly
             # select the real read/write contract for the proof.
             "MEMORY_MODE": "read",
-            "ENCRYPTION_SECRET": "omi_jit_orchestrated_dogfood_key_32_bytes",
+            "ENCRYPTION_SECRET": "omi_jit_orchestrated_dogfood_key_32_bytes",  # pragma: allowlist secret
             "GOOGLE_AUTH_DISABLE_GCE_CHECK": "true",
             "GCE_METADATA_HOST": "127.0.0.1:9",
             "NO_PROXY": "127.0.0.1,localhost,::1",
@@ -109,6 +133,13 @@ def _subprocess_env(source: dict[str, str]) -> dict[str, str]:
         }
     )
     return env
+
+
+def _managed_state_root() -> Path:
+    declared = MANAGED_STATE_ROOT.absolute()
+    if declared.is_symlink() or declared.resolve() != declared:
+        raise SafetyError("managed JIT QA state root must not contain symlink components")
+    return declared
 
 
 def _scenario_manifest(python: str) -> tuple[Scenario, ...]:
@@ -142,7 +173,12 @@ def _scenario_manifest(python: str) -> tuple[Scenario, ...]:
             "planned-and-ambient-arbitration",
             "emulator-only",
             (python, "scripts/jit_proactivity_reservation_emulator_test.py"),
-            ("planned_reservation", "ambient_reservation", "full_turn_arbitration", "daily_budget"),
+            (
+                "planned_reservation",
+                "ambient_reservation",
+                "full_turn_arbitration",
+                "daily_budget",
+            ),
         ),
         Scenario(
             "keyframe-retention-and-request-failures",
@@ -156,7 +192,11 @@ def _scenario_manifest(python: str) -> tuple[Scenario, ...]:
                 "tests/unit/test_frame_request_policy.py",
                 "tests/unit/test_frame_requests.py",
             ),
-            ("permanent_conversation_keyframe", "temporary_frame_retention", "requested_frame_failure_states"),
+            (
+                "permanent_conversation_keyframe",
+                "temporary_frame_retention",
+                "requested_frame_failure_states",
+            ),
         ),
         Scenario(
             "writer-cutover-rollback-rollforward",
@@ -164,7 +204,12 @@ def _scenario_manifest(python: str) -> tuple[Scenario, ...]:
             # This older proof intentionally has no sys.path bootstrap; module
             # execution preserves backend/ as the import root.
             (python, "-m", "scripts.knowledge_ledger_writer_transition_emulator_test"),
-            ("writer_cutover", "writer_rollback", "writer_rollforward", "row_preservation"),
+            (
+                "writer_cutover",
+                "writer_rollback",
+                "writer_rollforward",
+                "row_preservation",
+            ),
         ),
     )
 
@@ -223,8 +268,14 @@ def _run_scenario(scenario: Scenario, *, env: dict[str, str], timeout_seconds: i
             ("knowledge-ledger-correction-emulator-",),
         ),
         "daily-sweep": (env["GOOGLE_CLOUD_PROJECT"], ("daily-memory-sweep-",)),
-        "planned-and-ambient-arbitration": (env["GOOGLE_CLOUD_PROJECT"], ("jit-proactivity-emulator-",)),
-        "writer-cutover-rollback-rollforward": ("demo-memory", ("writer-transition-emulator-user",)),
+        "planned-and-ambient-arbitration": (
+            env["GOOGLE_CLOUD_PROJECT"],
+            ("jit-proactivity-emulator-",),
+        ),
+        "writer-cutover-rollback-rollforward": (
+            "demo-memory",
+            ("writer-transition-emulator-user",),
+        ),
     }
     cleanup = cleanup_by_scenario.get(scenario.name)
     precleaned = 0
@@ -324,17 +375,22 @@ def _health_scenario(api_urls: Iterable[str]) -> ScenarioResult:
 
 
 def _omi_ctl(port: int, *arguments: str, timeout_seconds: int = 20) -> dict[str, Any]:
-    env = dict(os.environ)
+    env = {key: os.environ[key] for key in RUNTIME_ENV_KEYS if os.environ.get(key)}
+    env["PATH"] = os.environ.get("PATH") or os.defpath
+    env["HOME"] = str(_managed_state_root() / "dogfood-home")
     env["OMI_AUTOMATION_PORT"] = str(port)
-    completed = subprocess.run(
-        (str(REPO_ROOT / "desktop/macos/scripts/omi-ctl"), *arguments),
-        cwd=REPO_ROOT,
-        env=env,
-        text=True,
-        capture_output=True,
-        timeout=timeout_seconds,
-        check=False,
-    )
+    try:
+        completed = subprocess.run(
+            (str(REPO_ROOT / "desktop/macos/scripts/omi-ctl"), *arguments),
+            cwd=REPO_ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            timeout=timeout_seconds,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"omi-ctl {' '.join(arguments[:2])} timed out") from exc
     if completed.returncode != 0:
         raise RuntimeError(f"omi-ctl {' '.join(arguments[:2])} failed")
     try:
@@ -352,6 +408,7 @@ def _desktop_owner_roundtrip(
     """Create, observe, and clean one synthetic row through the signed-in QA app."""
 
     started = time.monotonic()
+    create_attempted = False
     created = False
     created_id: str | None = None
     cleanup = "not_needed"
@@ -373,6 +430,7 @@ def _desktop_owner_roundtrip(
         # the bridge and are never returned in evidence.
         _omi_ctl(port, "action", "delete_test_memory", f"marker={DESKTOP_ROUNDTRIP_MARKER}")
         try:
+            create_attempted = True
             create = _omi_ctl(
                 port,
                 "action",
@@ -413,19 +471,29 @@ def _desktop_owner_roundtrip(
         status = "FAIL"
         result_detail = str(exc)
     finally:
-        if created:
-            try:
-                deleted = _omi_ctl(port, "action", "delete_test_memory", f"id={created_id}")
-                deleted_id = deleted.get("result", {}).get("detail", {}).get("deleted")
-                if not isinstance(deleted_id, str) or not deleted_id:
-                    raise RuntimeError("desktop bridge did not confirm deletion")
-                cleanup = "product_delete_confirmed"
-            except RuntimeError:
+        product_delete_confirmed = False
+        if create_attempted:
+            if created and created_id is not None:
                 try:
-                    removed, remaining = _purge_emulator_marker_documents(firestore_project, DESKTOP_ROUNDTRIP_MARKER)
-                    cleanup = "emulator_content_purge_confirmed" if removed >= 1 and remaining == 0 else "failed"
-                except (RuntimeError, SafetyError):
+                    deleted = _omi_ctl(port, "action", "delete_test_memory", f"id={created_id}")
+                    deleted_id = deleted.get("result", {}).get("detail", {}).get("deleted")
+                    if not isinstance(deleted_id, str) or not deleted_id:
+                        raise RuntimeError("desktop bridge did not confirm deletion")
+                    product_delete_confirmed = True
+                except RuntimeError:
+                    pass
+            try:
+                removed, remaining = _purge_emulator_marker_documents(firestore_project, DESKTOP_ROUNDTRIP_MARKER)
+                if remaining:
                     cleanup = "failed"
+                elif product_delete_confirmed:
+                    cleanup = "product_delete_confirmed"
+                elif created:
+                    cleanup = "emulator_content_purge_confirmed"
+                else:
+                    cleanup = "no_marker_after_failed_create" if removed == 0 else "emulator_content_purge_confirmed"
+            except (RuntimeError, SafetyError):
+                cleanup = "failed"
             try:
                 _omi_ctl(port, "action", "refresh_all_data")
             except RuntimeError:
@@ -437,18 +505,38 @@ def _desktop_owner_roundtrip(
         name="desktop-owner-memory-roundtrip",
         mode="integrated",
         status=status,
-        contracts=["actual_qa_owner", "canonical_create", "app_visible_api_page", "synthetic_cleanup"],
+        contracts=[
+            "actual_qa_owner",
+            "canonical_create",
+            "app_visible_api_page",
+            "synthetic_cleanup",
+        ],
         duration_ms=round((time.monotonic() - started) * 1000),
         detail=f"{result_detail}; cleanup={cleanup}; precleaned={precleaned}",
     )
 
 
 def _private_token(path: Path, *, expected_name: str) -> str:
-    resolved = path.expanduser().resolve()
-    if resolved.name != expected_name or not resolved.parent.name.startswith("jit-qa-local-dev-gcp"):
+    candidate = path.expanduser()
+    if not candidate.is_absolute():
+        candidate = Path.cwd() / candidate
+    if candidate.is_symlink():
+        raise SafetyError(f"{expected_name} must not be a symlink")
+    try:
+        resolved = candidate.resolve(strict=True)
+    except OSError as exc:
+        raise SafetyError(f"{expected_name} is unavailable") from exc
+    expected_root = _managed_state_root()
+    expected_path = expected_root / expected_name
+    if resolved != expected_path:
         raise SafetyError(f"{expected_name} must remain in a managed JIT QA state root")
+    current = expected_root
+    for part in Path(expected_name).parts:
+        current = current / part
+        if current.is_symlink():
+            raise SafetyError(f"{expected_name} must not contain symlink components")
     details = resolved.lstat()
-    if resolved.is_symlink() or not resolved.is_file() or details.st_nlink != 1 or details.st_mode & 0o077:
+    if not stat.S_ISREG(details.st_mode) or details.st_nlink != 1 or details.st_mode & 0o077:
         raise SafetyError(f"{expected_name} must be one private regular file")
     token = resolved.read_text().strip()
     if len(token) < 32:
@@ -472,7 +560,12 @@ def _control_plane_scenario(
             name="rollout-and-kill-control-plane",
             mode="integrated",
             status="FAIL",
-            contracts=["fail_closed_unknown", "rollout_enabled", "kill_switch_enabled", "rollforward_restored"],
+            contracts=[
+                "fail_closed_unknown",
+                "rollout_enabled",
+                "kill_switch_enabled",
+                "rollforward_restored",
+            ],
             duration_ms=0,
             detail="--control-plane-url is required for Gate G",
         )
@@ -511,7 +604,10 @@ def _control_plane_scenario(
                 f"{control_plane_url}/control/flags",
                 method="POST",
                 headers=control_headers,
-                body={"rollout": initial["rollout"], "kill_switch": initial["kill_switch"]},
+                body={
+                    "rollout": initial["rollout"],
+                    "kill_switch": initial["kill_switch"],
+                },
             )
         missing = [name for name, passed in observations.items() if not passed]
         if missing:
@@ -525,7 +621,12 @@ def _control_plane_scenario(
         name="rollout-and-kill-control-plane",
         mode="integrated",
         status=status,
-        contracts=["fail_closed_unknown", "rollout_enabled", "kill_switch_enabled", "rollforward_restored"],
+        contracts=[
+            "fail_closed_unknown",
+            "rollout_enabled",
+            "kill_switch_enabled",
+            "rollforward_restored",
+        ],
         duration_ms=round((time.monotonic() - started) * 1000),
         detail=detail,
     )
@@ -533,16 +634,21 @@ def _control_plane_scenario(
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--api-url", default=os.environ.get("OMI_JIT_QA_API_URL", "http://127.0.0.1:18080"))
+    parser.add_argument("--api-url", default=os.environ.get("OMI_JIT_QA_API_URL", FIXED_API_URL))
     parser.add_argument(
-        "--desktop-api-url", default=os.environ.get("OMI_JIT_QA_DESKTOP_API_URL", "http://127.0.0.1:18081")
+        "--desktop-api-url",
+        default=os.environ.get("OMI_JIT_QA_DESKTOP_API_URL", FIXED_DESKTOP_API_URL),
     )
     parser.add_argument("--control-plane-url", default=os.environ.get("OMI_JIT_QA_CONTROL_PLANE_URL"))
-    state_root = REPO_ROOT / ".dev/jit-qa-local-dev-gcp"
+    state_root = MANAGED_STATE_ROOT
     parser.add_argument("--control-token-file", type=Path, default=state_root / "posthog-control.secret")
     parser.add_argument("--admin-key-file", type=Path, default=state_root / "admin.secret")
     parser.add_argument("--owner-id", default=DEFAULT_OWNER_ID)
-    parser.add_argument("--automation-port", type=int, default=int(os.environ.get("OMI_AUTOMATION_PORT", "47942")))
+    parser.add_argument(
+        "--automation-port",
+        type=int,
+        default=int(os.environ.get("OMI_AUTOMATION_PORT", str(FIXED_AUTOMATION_PORT))),
+    )
     parser.add_argument("--timeout-seconds", type=int, default=300)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--only", action="append", default=[], metavar="SCENARIO")
@@ -554,17 +660,27 @@ def main(argv: list[str] | None = None) -> int:
     started_at = time.time()
     try:
         _, project = _emulator_authority(dict(os.environ))
-        api_url = _loopback_url(args.api_url, label="--api-url")
-        desktop_api_url = _loopback_url(args.desktop_api_url, label="--desktop-api-url")
-        control_plane_url = (
-            _loopback_url(args.control_plane_url, label="--control-plane-url") if args.control_plane_url else None
+        api_url = _fixed_service_url(args.api_url, label="--api-url", expected=FIXED_API_URL)
+        desktop_api_url = _fixed_service_url(
+            args.desktop_api_url,
+            label="--desktop-api-url",
+            expected=FIXED_DESKTOP_API_URL,
         )
-        if not args.owner_id or "/" in args.owner_id or len(args.owner_id) > 128:
-            raise SafetyError("--owner-id must be one bounded Firestore document id")
+        control_plane_url = (
+            _fixed_service_url(
+                args.control_plane_url,
+                label="--control-plane-url",
+                expected=FIXED_CONTROL_PLANE_URL,
+            )
+            if args.control_plane_url
+            else None
+        )
+        if args.owner_id != DEFAULT_OWNER_ID:
+            raise SafetyError(f"--owner-id must remain the fixed synthetic owner {DEFAULT_OWNER_ID}")
         if args.timeout_seconds < 1 or args.timeout_seconds > 1800:
             raise SafetyError("--timeout-seconds must be between 1 and 1800")
-        if not 1024 <= args.automation_port <= 65535:
-            raise SafetyError("--automation-port must be between 1024 and 65535")
+        if args.automation_port != FIXED_AUTOMATION_PORT:
+            raise SafetyError(f"--automation-port must remain the managed port {FIXED_AUTOMATION_PORT}")
         env = _subprocess_env(dict(os.environ))
     except SafetyError as exc:
         evidence = {
@@ -583,7 +699,11 @@ def main(argv: list[str] | None = None) -> int:
     manifest = _scenario_manifest(sys.executable)
     unknown = selected.difference(
         {scenario.name for scenario in manifest}
-        | {"loopback-api-health", "desktop-owner-memory-roundtrip", "rollout-and-kill-control-plane"}
+        | {
+            "loopback-api-health",
+            "desktop-owner-memory-roundtrip",
+            "rollout-and-kill-control-plane",
+        }
     )
     if unknown:
         raise SystemExit(f"unknown --only scenario(s): {', '.join(sorted(unknown))}")
@@ -624,7 +744,9 @@ def main(argv: list[str] | None = None) -> int:
         },
         "owner_id": args.owner_id,
         "firestore_project": project,
-        "provider_spend": "disabled",
+        "driver_model_invocation": "not_exercised",
+        "provider_spend_guarantee": "not_claimed",
+        "dev_vertex_gateway_configured": True,
         "shared_service_mutation": False,
         "duration_ms": round((time.time() - started_at) * 1000),
         "results": [asdict(result) for result in results],

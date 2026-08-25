@@ -116,7 +116,10 @@ def test_contract_only_check_does_not_require_installed_service_runtimes(
     monkeypatch.setattr(
         jit_stack,
         "_validate_contract",
-        lambda _root: {"auth_project": "based-hardware", "gcp_project": "based-hardware-dev"},
+        lambda _root: {
+            "auth_project": "based-hardware",
+            "gcp_project": "based-hardware-dev",
+        },
     )
     monkeypatch.setattr(
         jit_stack,
@@ -186,12 +189,16 @@ def test_posthog_fixture_exercises_real_sdk_and_authenticated_switch(
         request = urllib.request.Request(
             f"{host}/control/flags",
             data=json.dumps({"rollout": "enabled", "kill_switch": "disabled"}).encode(),
-            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            },
             method="POST",
         )
         with urllib.request.urlopen(request, timeout=2) as response:
             assert response.status == 200
-        assert client.get_feature_variants("local-qa-user") == {
+        assert client.get_feature_variants("local-qa-user") == {jit_posthog.FLAG_KILL_SWITCH: False}
+        assert client.get_feature_variants(jit_posthog.CONTROLLED_DISTINCT_ID_PREFIX + "0") == {
             jit_posthog.FLAG_ROLLOUT: True,
             jit_posthog.FLAG_KILL_SWITCH: False,
         }

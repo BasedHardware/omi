@@ -34,6 +34,7 @@ MAX_BODY_BYTES = 64 * 1024
 SCHEMA_VERSION = 1
 FLAG_ROLLOUT = "jit-processing-v1"
 FLAG_KILL_SWITCH = "jit-processing-kill-switch-v1"
+CONTROLLED_DISTINCT_ID_PREFIX = "jit-qa-orchestrated-dogfood-owner-"
 _STATES = frozenset({"unknown", "disabled", "enabled"})
 
 
@@ -129,7 +130,12 @@ def _write_state(path: Path, state: dict[str, Any]) -> None:
             temporary.unlink()
 
 
-def _flag_payload(state: dict[str, Any]) -> dict[str, bool]:
+def _flag_payload(state: dict[str, Any], distinct_id: str) -> dict[str, bool]:
+    # Control-plane mutations apply only to the driver's synthetic identities.
+    # Every other local client, including the signed-in QA app, remains
+    # fail-closed for rollout even while a dogfood phase is active.
+    if not distinct_id.startswith(CONTROLLED_DISTINCT_ID_PREFIX):
+        return {FLAG_KILL_SWITCH: False}
     payload: dict[str, bool] = {}
     if state["rollout"] != "unknown":
         payload[FLAG_ROLLOUT] = state["rollout"] == "enabled"
@@ -152,11 +158,11 @@ class _FixtureState:
         with self.lock:
             return dict(self.value)
 
-    def decide(self) -> dict[str, bool]:
+    def decide(self, distinct_id: str) -> dict[str, bool]:
         with self.lock:
             self.value["decide_requests"] = int(self.value.get("decide_requests", 0)) + 1
             _write_state(self.path, self.value)
-            return _flag_payload(self.value)
+            return _flag_payload(self.value, distinct_id)
 
     def update(self, rollout: str | None, kill_switch: str | None) -> dict[str, Any]:
         with self.lock:
@@ -270,7 +276,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._send(
                 200,
                 {
-                    "featureFlags": self.server.fixture.decide(),
+                    "featureFlags": self.server.fixture.decide(body["distinct_id"].strip()),
                     "featureFlagPayloads": {},
                 },
             )
@@ -301,7 +307,13 @@ class _Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
     allow_reuse_address = False
 
-    def __init__(self, fixture: _FixtureState, *, host: str = CONTROL_HOST, port: int = CONTROL_PORT) -> None:
+    def __init__(
+        self,
+        fixture: _FixtureState,
+        *,
+        host: str = CONTROL_HOST,
+        port: int = CONTROL_PORT,
+    ) -> None:
         if host != CONTROL_HOST:
             raise ControlError("PostHog fixture may bind only to loopback")
         super().__init__((host, port), _Handler)
@@ -334,6 +346,7 @@ def main(argv: list[str] | None = None) -> int:
 __all__ = [
     "CONTROL_HOST",
     "CONTROL_PORT",
+    "CONTROLLED_DISTINCT_ID_PREFIX",
     "DUMMY_PROJECT_KEY",
     "FLAG_KILL_SWITCH",
     "FLAG_ROLLOUT",
