@@ -40,4 +40,4 @@ bash scripts/install-git-hooks.sh
 echo ""
 echo "Next: add your four API keys to backend/.env.local-dev, then run:"
 echo "  make dev-up        # start the harness for mobile/iOS testing"
-echo "  make dev-desktop   # start the harness and the desktop app"
+echo "  make dev-desktop DESKTOP_APP_NAME=omi-memory   # start the harness and the desktop app"

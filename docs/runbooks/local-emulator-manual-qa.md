@@ -5,12 +5,12 @@
 ```bash
 cp backend/.env.local-dev.template backend/.env.local-dev  # once
 # set OPENAI_API_KEY, DEEPGRAM_API_KEY, GEMINI_API_KEY, ANTHROPIC_API_KEY
-make dev-desktop
+make dev-desktop DESKTOP_APP_NAME=omi-memory
 ```
 
-`make dev-desktop` starts emulators + backends, auto-seeds `happy_path`, and launches **Omi Dev** signed in as `alice`. Override user: `make desktop-run-local DESKTOP_USER=bob`.
+`DESKTOP_APP_NAME` is required: the local profile refuses the default **Omi Dev** bundle (`com.omi.desktop-dev`) and exits 2, so pass a named `omi-` bundle. `make dev-desktop DESKTOP_APP_NAME=omi-memory` starts emulators + backends, auto-seeds `happy_path`, and launches `omi-memory.app` signed in as `alice`. Override user: `make desktop-run-local DESKTOP_APP_NAME=omi-memory DESKTOP_USER=bob`.
 
-Offline (no API keys): `PROVIDER_MODE=offline make dev-desktop`
+Offline (no API keys): `PROVIDER_MODE=offline make dev-desktop DESKTOP_APP_NAME=omi-memory`
 
 ### Harness-injected defaults (do not put in `.env.local-dev`)
 
@@ -59,7 +59,7 @@ This workflow is for local product-use/manual QA only. It emits `LOCAL_EMULATOR_
 ```bash
 make dev-up
 make seed-memory-scenario SCENARIO=happy_path   # optional; dev-up auto-seeds on first run
-make desktop-run-local DESKTOP_USER=alice
+make desktop-run-local DESKTOP_APP_NAME=omi-memory DESKTOP_USER=alice
 make dev-status
 make dev-summary
 ```
@@ -80,7 +80,7 @@ PROVIDER_MODE=offline make dev-status
 ```bash
 make seed-memory-scenario SCENARIO=kill_switch
 make dev-status
-make desktop-run-local DESKTOP_USER=alice
+make desktop-run-local DESKTOP_APP_NAME=omi-memory DESKTOP_USER=alice
 ```
 
 Other scenario names: `make list-memory-scenarios`
