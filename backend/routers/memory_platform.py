@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from database._client import db
-from models.memories import Memory, MemoryCategory, MemoryDB
+from models.memories import Memory, MemoryDB
 from models.memory_product import ProductMemorySearchResponse
 from models.memory_platform import MemoryPlatformCapability, MemoryPlatformIngestResponse
 from utils.client_device import resolve_client_device_from_request
@@ -143,11 +143,16 @@ def ingest_memory_platform(
             detail={'reason': decision.reason, 'memory_system': decision.memory_system.value},
         )
 
+    # Explicit platform submissions are user-authored facts no matter which
+    # content category the caller picked; provenance is not inferred from the
+    # category (unlike /v3/memories, where auto-extracted traffic also lands).
+    # Without this the unknown-subject promotion check keeps these memories
+    # short-term forever instead of letting consolidation make them durable.
     memory_db = MemoryDB.from_memory(
         memory,
         uid,
         None,
-        memory.category == MemoryCategory.manual,
+        True,
         source_type='memory_platform',
         source_signal='memory_platform',
         extractor_id='memory_platform_ingest',

@@ -127,6 +127,38 @@ def test_platform_ingest_preserves_capture_device_provenance(monkeypatch):
     assert [evidence.client_device_id for evidence in memory_db.evidence] == ['macos_abcd1234']
 
 
+def test_platform_ingest_marks_explicit_submission_user_asserted(monkeypatch):
+    captured = {}
+
+    monkeypatch.setattr(
+        memory_platform,
+        'canonical_write_decision',
+        lambda uid, db_client: SimpleNamespace(memory_system=MemorySystem.CANONICAL, enabled=True, reason='enabled'),
+    )
+
+    class FakeMemoryService:
+        def __init__(self, db_client):
+            pass
+
+        def create_external_memory(self, uid, memory_db, **kwargs):
+            captured['memory_db'] = memory_db
+            return SimpleNamespace(id=memory_db.id)
+
+    monkeypatch.setattr(memory_platform, 'MemoryService', FakeMemoryService)
+
+    # Category is omitted, so it defaults to `interesting` — the caller still
+    # explicitly submitted this memory and it must be treated as user asserted,
+    # otherwise canonical consolidation's unknown_source_subject_promotion
+    # check keeps it short-term forever.
+    memory_platform.ingest_memory_platform(
+        _request(),
+        Memory(content='The user prefers email over calls.'),
+        uid='user-1',
+    )
+
+    assert captured['memory_db'].manually_added is True
+
+
 @pytest.mark.parametrize('blank_content', ['', '   ', '\n\t '])
 def test_platform_ingest_rejects_blank_content_as_client_input(monkeypatch, blank_content):
     def unreachable(*args, **kwargs):
