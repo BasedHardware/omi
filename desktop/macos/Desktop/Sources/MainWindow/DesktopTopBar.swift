@@ -109,6 +109,11 @@ struct DesktopTopBar: View {
     .sheet(isPresented: $showingReferral) {
       ReferralSheetView()
     }
+    .onReceive(NotificationCenter.default.publisher(for: .openReferralSheet)) { _ in
+      // The rating prompt's refer-a-friend proposal opens the same sheet as
+      // the top bar's own Refer control.
+      showingReferral = true
+    }
   }
 
   /// The complete primary navigation remains available when the full row of pills will not fit beside

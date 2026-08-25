@@ -685,6 +685,15 @@ extension PostHogManager {
       ])
   }
 
+  func desktopRatingSubmitted(rating: Int) {
+    track(
+      "Desktop Rating Submitted",
+      properties: [
+        "rating": rating,
+        "trigger": "third_question",
+      ])
+  }
+
   // MARK: - Rewind Events (Desktop-specific)
 
   func rewindSearchPerformed(queryLength: Int) {

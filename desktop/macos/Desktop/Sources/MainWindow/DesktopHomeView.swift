@@ -1149,6 +1149,10 @@ struct DesktopHomeView: View {
         // Goal completion celebration overlay
         GoalCelebrationView()
       }
+      .overlay(alignment: .bottom) {
+        // One-time rating ask, due after the user's 3rd question.
+        RatingPromptBar()
+      }
       .overlay {
         if !usesChatFirstShell && showTryAskingPopup {
           let suggestions = PostOnboardingPromptSuggestions.suggestions()
