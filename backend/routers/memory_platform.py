@@ -3,7 +3,8 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from database._client import db, document_id_from_seed
+import database._client as db_client_module
+from database._client import document_id_from_seed
 from models.memories import Memory, MemoryDB
 from models.memory_product import ProductMemorySearchResponse
 from models.memory_platform import MemoryPlatformCapability, MemoryPlatformIngestResponse
@@ -76,7 +77,7 @@ def _global_read_gate_observability(gate) -> dict:
     }
 
 
-def _require_product_authorization(uid: str):
+def _require_product_authorization(uid: str, *, firestore_client):
     # Pin the memory system before any direct `memory_items` read. The rollout
     # reader below consults persisted memory_control/state only, which can
     # still enable omi_chat reads after a rollback removes this account from
@@ -90,7 +91,7 @@ def _require_product_authorization(uid: str):
         )
     decision = authorize_memory_product_memory_route(
         ProductAuthorizationContext(uid=uid, consumer='omi_chat', surface='platform_search'),
-        db_client=db,
+        db_client=firestore_client,
     )
     if not decision.allowed:
         raise HTTPException(status_code=decision.status_code, detail=decision.observability)
@@ -118,7 +119,8 @@ def search_memory_platform(
     uid: str = Depends(_rate_limited_uid('tools:search')),
 ):
     _validate_search_bounds(query, limit, offset)
-    authz = _require_product_authorization(uid)
+    firestore_client = db_client_module.get_firestore_client()
+    authz = _require_product_authorization(uid, firestore_client=firestore_client)
     policy = authz.policy
     if policy is None or authz.global_gate is None:
         raise HTTPException(status_code=503, detail='Service temporarily unavailable')
@@ -126,7 +128,7 @@ def search_memory_platform(
         response = fetch_default_product_memory_search(
             uid=uid,
             query=query,
-            db_client=db,
+            db_client=firestore_client,
             policy=policy,
             now=_current_time(),
             limit=limit,
@@ -205,7 +207,9 @@ async def ingest_memory_platform(
         logger.info('memory_import.per_file_item_dropped endpoint=/v1/memory/platform/ingest uid=%s', uid)
         return MemoryPlatformIngestResponse(memory_id=document_id_from_seed(memory.content), status='dropped')
 
-    decision = await run_blocking(db_executor, canonical_write_decision, uid, db_client=db)
+    firestore_client = db_client_module.get_firestore_client()
+
+    decision = await run_blocking(db_executor, canonical_write_decision, uid, db_client=firestore_client)
     if decision.memory_system != MemorySystem.CANONICAL or not decision.enabled:
         raise HTTPException(
             status_code=503,
@@ -230,7 +234,7 @@ async def ingest_memory_platform(
     try:
         created = await run_blocking(
             db_executor,
-            MemoryService(db_client=db).create_external_memory,
+            MemoryService(db_client=firestore_client).create_external_memory,
             uid,
             memory_db,
             memory_system=MemorySystem.CANONICAL,

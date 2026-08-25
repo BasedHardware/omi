@@ -26,6 +26,12 @@ class _JsonRequest:
         return self._payload
 
 
+@pytest.fixture(autouse=True)
+def _hermetic_firestore_client(monkeypatch):
+    """Resolve Firestore through the supported getter without building a real client."""
+    monkeypatch.setattr(memory_platform.db_client_module, 'get_firestore_client', lambda: object())
+
+
 def _authorization():
     policy = SimpleNamespace(
         consumer=SimpleNamespace(value='omi_chat'),
@@ -44,8 +50,12 @@ def _authorization():
 
 def test_platform_search_is_bounded_and_uses_canonical_product_reader(monkeypatch):
     calls = []
+    firestore_client = object()
 
-    monkeypatch.setattr(memory_platform, '_require_product_authorization', lambda uid: _authorization())
+    monkeypatch.setattr(memory_platform.db_client_module, 'get_firestore_client', lambda: firestore_client)
+    monkeypatch.setattr(
+        memory_platform, '_require_product_authorization', lambda uid, *, firestore_client: _authorization()
+    )
 
     def fake_search(**kwargs):
         calls.append(kwargs)
@@ -66,7 +76,7 @@ def test_platform_search_is_bounded_and_uses_canonical_product_reader(monkeypatc
     assert len(calls) == 1
     assert calls[0]['uid'] == 'user-1'
     assert calls[0]['query'] == 'launch'
-    assert calls[0]['db_client'] is memory_platform.db
+    assert calls[0]['db_client'] is firestore_client
     assert calls[0]['limit'] == 3
     assert calls[0]['offset'] == 4
     assert result['uid'] == 'user-1'
