@@ -681,6 +681,12 @@ final class DesktopAutomationActionRegistry {
     let run: Handler
   }
 
+  /// A 1x1 PNG, for the hermetic half of `screen_frame_quick_look_probe`. Literal bytes rather
+  /// than a rendered image so the probe has no dependency on capture history, a backend, or AppKit
+  /// drawing — the thing it is verifying is the panel, not the picture.
+  static let onePixelPNGBase64 =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+
   private var entries: [String: Entry] = [:]
   private var didRegisterBuiltins = false
   /// Non-prod harness latch so race probes stay busy without relying on LLM latency.
@@ -3730,7 +3736,24 @@ final class DesktopAutomationActionRegistry {
       let source = params["source"] ?? "conversation"
       let frames: [QuickLookFrame]
       let subject: String
-      if source == "rewind" {
+      if source == "synthetic" {
+        // The hermetic case. It needs neither a signed URL nor a Rewind chunk, so it can run on a
+        // fresh bundle with no capture history and no backend — which is what makes it usable as
+        // an e2e step. `URLSession` serves `file://` for a data task, so this reaches the panel
+        // through exactly the same materialise-then-present path a real frame does.
+        let seed = FileManager.default.temporaryDirectory
+          .appendingPathComponent("omi-quick-look-probe.png")
+        guard let png = Data(base64Encoded: Self.onePixelPNGBase64) else {
+          return ["error": "probe_seed_undecodable"]
+        }
+        do {
+          try png.write(to: seed, options: .atomic)
+        } catch {
+          return ["error": "probe_seed_unwritable: \(error.localizedDescription)"]
+        }
+        frames = [QuickLookFrame(id: "probe", source: .remote(seed), title: "Quick Look probe")]
+        subject = "synthetic"
+      } else if source == "rewind" {
         let recent = try await RewindDatabase.shared.getRecentScreenshots(limit: 6)
         frames = recent.map { QuickLookFrame(screenshot: $0) }
         subject = "rewind"
