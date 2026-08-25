@@ -673,7 +673,7 @@ extension RealtimeHubController {
     let automationSelection = RealtimeAutomationTranscriptOverridePolicy.select(
       providerText: text,
       providerIsFinal: isFinal,
-      forcedText: testProviderTranscriptOverride)
+      forcedText: testProviderTranscriptOverride ?? wakeWordInputTranscript)
     if automationSelection.usedOverride {
       turnTranscript = automationSelection.text
       providerTranscriptFinalized = automationSelection.isFinal
@@ -775,6 +775,11 @@ extension RealtimeHubController {
     source: RealtimeHubSession
   ) {
     guard acceptsTurnEvent(identity, source: source), let identity else { return }
+    // The session speaks this text itself, so the microphone hears it and ambient capture
+    // returns it as the user. Recording it here is what lets `VoicePlaybackEchoPolicy`
+    // recognise the model's own answer coming back — the service that normally owns that
+    // history never sees realtime audio, because the hub plays it natively.
+    FloatingBarVoicePlaybackService.shared.recordExternallySpokenText(text)
     guard
       RealtimeProviderOutputPresentationPolicy.decide(
         screenGroundingState: screenGroundingState,

@@ -157,6 +157,14 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// forced from outside. Everything downstream (mismatch check, local-transcript
   /// fallback, persistence) runs the real path. Cleared after one use.
   var testProviderTranscriptOverride: String?
+  /// The user text for a wake-word turn, which is known exactly rather than heard.
+  ///
+  /// The wake word hands the session already-transcribed words and only enough silence to
+  /// open the input window, so the provider has no user speech to transcribe. Left to its
+  /// own input transcription it journals whatever it made of the room — live, a Spanish
+  /// sentence nobody said appeared as the user's message on two turns. What was actually
+  /// asked is not in doubt, so it is supplied rather than recognised.
+  var wakeWordInputTranscript: String?
   /// Harness-visible outcome of the most recent externally authorized tool.
   /// An empty error means the kernel accepted and executed the proposal.
   var lastExternalToolName = ""
@@ -432,6 +440,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     turnEarlyVerdictCode = nil
     lastTurnDiagnostics.removeAll()
     testProviderTranscriptOverride = nil
+    wakeWordInputTranscript = nil
     acceptedSpawnJournalReceiptByContinuityKey.removeAll()
     prefetchedVoiceContext = ""
     prefetchedVoiceContextSessionID = ""
@@ -1015,6 +1024,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       try? await Task.sleep(nanoseconds: 100_000_000)
     }
 
+    // Supply the user side before committing: the journal and the chat bubble read the
+    // provider's input transcription, and this turn gives it nothing real to transcribe.
+    wakeWordInputTranscript = trimmed
     guard await session?.sendSpokenCommand(trimmed) == true else {
       log("RealtimeHub: wake word command could not be queued for the session")
       _ = cancelTurn(turnID: turnID)

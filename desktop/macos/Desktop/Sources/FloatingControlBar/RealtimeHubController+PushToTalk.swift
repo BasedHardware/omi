@@ -75,6 +75,7 @@ extension RealtimeHubController {
     turnEarlyVerdictCode = nil
     fullLIDTask = nil
     testProviderTranscriptOverride = nil  // never leak a test override into a real turn
+    wakeWordInputTranscript = nil  // nor a wake word's text into a spoken one
     clearRealtimeToolTracking()
     lastTurnAt = Date()
     if bargeIn {
