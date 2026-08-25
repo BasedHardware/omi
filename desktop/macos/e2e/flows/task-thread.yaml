@@ -11,6 +11,9 @@ covers:
   # the workstream, mounts the thread, and sends into it. The first/second/
   # resumed projections above are its behaviour.
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatCoordinator.swift
+  # The sends above reach the kernel through TaskChatRuntime.query, which grounds
+  # each user turn in the current time (SCA-358 datetime injector).
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatRuntime.swift
 preconditions:
   - named_non_production_bundle_ui_lane
   - task_thread_scenario_13_fixture_available
