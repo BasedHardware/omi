@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "The rating prompt now counts each question exactly once (retries and busy sends no longer advance it)."
+  ]
+}
