@@ -275,6 +275,8 @@ final class APIKeyService: ObservableObject {
       defaults.removeObject(forKey: provider.storageKey)
     }
     defaults.removeObject(forKey: DefaultsKey.byokLLMProvider.rawValue)
+    defaults.removeObject(forKey: DefaultsKey.chatGPTLLMOAuthConnected.rawValue)
+    defaults.removeObject(forKey: DefaultsKey.grokLLMOAuthConnected.rawValue)
     persistEnrolledFingerprints([:])
   }
 
@@ -282,7 +284,7 @@ final class APIKeyService: ObservableObject {
     guard let uid, !uid.isEmpty else { return }
     let last = UserDefaults.standard.string(forKey: DefaultsKey.byokOwnerUid.rawValue)
     if last != uid {
-      // Unowned pre-upgrade keys (last == nil) are unsafe to inherit: the next
+      // Unowned pre-upgrade keys/flags (last == nil) are unsafe to inherit: the next
       // signed-in account would otherwise enroll someone else's credentials.
       clearPersistedBYOKKeys()
       UserDefaults.standard.set(uid, forKey: DefaultsKey.byokOwnerUid.rawValue)
