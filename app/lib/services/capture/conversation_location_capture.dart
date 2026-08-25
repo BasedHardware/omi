@@ -75,7 +75,11 @@ class ConversationLocationCapture {
     return !age.isNegative && age <= lastKnownMaxAge;
   }
 
-  Future<bool> captureAndUpload() async {
+  /// [promptIfDenied] is true on record/device start so a skipped onboarding
+  /// page still gets a while-in-use prompt. HomePage's no-device check-only
+  /// path passes false so plain home-page entry cannot walk the user into
+  /// deniedForever. deniedForever is never re-prompted either way.
+  Future<bool> captureAndUpload({bool promptIfDenied = true}) async {
     var timedOut = false;
     try {
       if (!await _isLocationServiceEnabled()) {
@@ -86,6 +90,10 @@ class ConversationLocationCapture {
       var permission = await _checkPermission();
       var newlyGranted = false;
       if (permission == LocationPermission.denied) {
+        if (!promptIfDenied) {
+          Logger.log('Location permission not granted, skipping conversation location');
+          return false;
+        }
         // Prompt at record start so a skipped onboarding page still gets a fix
         // when the activity is visible. deniedForever is not re-prompted.
         permission = await _requestPermission();
