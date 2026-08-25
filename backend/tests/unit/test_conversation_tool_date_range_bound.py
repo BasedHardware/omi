@@ -87,6 +87,7 @@ for _name, _attrs in {
     for _a in _attrs:
         setattr(_m, _a, MagicMock())
 
+
 def _apply_chat_scope_dates(scope, start_date, end_date):
     """Pass-through stub: date-range bound tests do not exercise hard-scope intersection."""
     return start_date, end_date, None
