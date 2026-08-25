@@ -688,7 +688,7 @@ final class TaskChatCoordinator: ObservableObject {
 
       DesktopAutomationActionRegistry.shared.register(
         name: "task_thread_send_message",
-        summary: "Send a message into the active task thread; returns once the turn is accepted",
+        summary: "Send a message into the active task thread; returns once the turn is admitted",
         params: ["query"]
       ) { [weak self] params in
         guard let self, let state = self.activeTaskState else {
@@ -698,20 +698,18 @@ final class TaskChatCoordinator: ObservableObject {
         guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
           return ["error": "empty query"]
         }
-        guard !state.isSending else {
-          return ["accepted": "false", "error": "task thread is busy"]
-        }
         let messagesBefore = state.messages.count
-        let sendGenerationBefore = state.localSendToken.generation
-        Task { await state.sendMessage(query) }
-        await Task.yield()
-        let deadline = Date().addingTimeInterval(10)
-        while Date() < deadline, state.localSendToken.generation == sendGenerationBefore {
-          guard state.isSending else { break }
-          try? await Task.sleep(nanoseconds: 25_000_000)
-        }
-        guard state.localSendToken.generation > sendGenerationBefore else {
-          return ["accepted": "false", "error": "task thread admission failed"]
+        // Admission is the action's contract: `sendAdmittedInBackground`
+        // returns only after the canonical exchange is accepted (or with a
+        // concrete rejection), so this can never report success for a turn
+        // the state refused.
+        let admitted = await state.sendAdmittedInBackground(query)
+        guard admitted else {
+          return [
+            "accepted": "false",
+            "is_sending": state.isSending ? "true" : "false",
+            "error": state.isSending ? "task thread is busy" : "task thread rejected the send",
+          ]
         }
         return [
           "accepted": "true",
@@ -766,7 +764,10 @@ final class TaskChatCoordinator: ObservableObject {
         let timeoutMs = max(1_000, Int(params["timeoutMs"] ?? "") ?? 120_000)
         let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1_000)
         while Date() < deadline {
-          if !state.messages.contains(where: { $0.isStreaming }) {
+          // `isStreaming` clears before terminalization and the send lock only
+          // releases after journal cleanup, so idle requires both — otherwise
+          // a follow-up send can hit the busy guard right after "idle".
+          if !state.messages.contains(where: { $0.isStreaming }), !state.isSending {
             let lastAssistant = state.messages.last(where: { $0.sender == .ai })
             return [
               "idle": "true",

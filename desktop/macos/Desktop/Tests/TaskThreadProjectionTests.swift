@@ -674,6 +674,124 @@ import XCTest
       XCTAssertEqual(assistant?.isStreaming, false)
     }
 
+    /// The automation action's admission contract: `sendAdmittedInBackground`
+    /// returns success only after both canonical rows are accepted and the send
+    /// lock is held — never from an unawaited launch.
+    func testSendAdmittedInBackgroundReportsSuccessOnlyAfterCanonicalAcceptance() async {
+      let owner = TaskChatOwnerBox("owner-a")
+      let state = TaskChatState(
+        taskId: "task-admit",
+        workstreamId: "workstream-admit-\(UUID().uuidString)",
+        workspacePath: "/tmp",
+        ownerIDProvider: { owner.value },
+        recordJournalExchangeOperation: { workstreamId, _, _, writes in
+          AgentRuntimeProcess.JournalOperationResult(
+            operation: "record_exchange",
+            conversationId: "conversation-admit",
+            turn: nil,
+            turns: try writes.map { try Self.acceptedTurn(for: $0, workstreamId: workstreamId) },
+            clearedCount: 0,
+            highWaterTurnSeq: 2,
+            conversationGeneration: 1,
+            generationBaseTurnSeq: 0
+          )
+        },
+        updateJournalMessageOperation: { _, _, _, _, _ in
+          throw BridgeError.agentError("journal write stubbed")
+        },
+        queryOperation: { _, _, _, _, _, _, _, _, _, _, _, _, _ in
+          AgentBridge.QueryResult(
+            text: "admitted answer",
+            costUsd: 0,
+            omiSessionId: "session",
+            runId: "run-1",
+            attemptId: "attempt-1",
+            adapterSessionId: nil,
+            terminalStatus: "succeeded",
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0
+          )
+        },
+        terminalizeJournalMessageOperation: { workstreamId, _, _, message, _, _, disposition in
+          XCTAssertEqual(disposition, .accept)
+          return try Self.acceptedTurn(
+            for: message.journalWrite(origin: "workstream", status: .completed),
+            workstreamId: workstreamId)
+        }
+      )
+
+      let generationBefore = state.localSendToken.generation
+      let admitted = await state.sendAdmittedInBackground("Admit me")
+
+      XCTAssertTrue(admitted)
+      XCTAssertEqual(state.messages.count, 2, "Both canonical rows must be projected at admission")
+      XCTAssertGreaterThan(state.localSendToken.generation, generationBefore)
+    }
+
+    func testSendAdmittedInBackgroundRejectsWhileBusy() async {
+      let owner = TaskChatOwnerBox("owner-a")
+      let state = TaskChatState(
+        taskId: "task-busy",
+        workstreamId: "workstream-busy-\(UUID().uuidString)",
+        workspacePath: "/tmp",
+        ownerIDProvider: { owner.value }
+      )
+      state.isSending = true
+
+      let admitted = await state.sendAdmittedInBackground("While busy")
+
+      XCTAssertFalse(admitted)
+      XCTAssertTrue(state.messages.isEmpty)
+    }
+
+    func testSendAdmittedInBackgroundReportsFalseWhenExchangeRejected() async {
+      let owner = TaskChatOwnerBox("owner-a")
+      let state = TaskChatState(
+        taskId: "task-reject",
+        workstreamId: "workstream-reject-\(UUID().uuidString)",
+        workspacePath: "/tmp",
+        ownerIDProvider: { owner.value },
+        recordJournalExchangeOperation: { _, _, _, _ in
+          throw BridgeError.agentError("exchange rejected")
+        }
+      )
+
+      let admitted = await state.sendAdmittedInBackground("Rejected send")
+
+      XCTAssertFalse(admitted)
+      XCTAssertFalse(state.isSending)
+      XCTAssertEqual(state.errorMessage, "Could not save this message. Try again.")
+    }
+
+    /// A journal snapshot written before the latest reveal tick lags the local
+    /// row; replaying it verbatim truncated characters already consumed from
+    /// the stream. Streaming replay stays monotonic while terminal rows still
+    /// carry kernel authority.
+    func testStreamingReplayKeepsTheNewerLocalPrefix() {
+      let visible = ChatMessage(id: "assistant-1", text: "Hello world", sender: .ai, isStreaming: true)
+      var staleSnapshot = ChatMessage(id: "assistant-1", text: "Hello", sender: .ai, isStreaming: true)
+      staleSnapshot.journalStatus = .streaming
+
+      let merged = TaskChatState.mergingStreamingProjection(staleSnapshot, over: visible)
+      XCTAssertEqual(merged.text, "Hello world", "A stale streaming snapshot must not truncate the newer local prefix")
+
+      var rewritten = ChatMessage(id: "assistant-1", text: "Rewritten", sender: .ai, isStreaming: true)
+      rewritten.journalStatus = .streaming
+      XCTAssertEqual(
+        TaskChatState.mergingStreamingProjection(rewritten, over: visible).text,
+        "Rewritten",
+        "A divergent streaming rewrite is not a prefix — the kernel value wins")
+
+      var settled = ChatMessage(id: "assistant-1", text: "Hello", sender: .ai, isStreaming: false)
+      settled.journalStatus = .completed
+      XCTAssertEqual(
+        TaskChatState.mergingStreamingProjection(settled, over: visible).text,
+        "Hello",
+        "A terminal row settles the turn regardless of local prefix length")
+    }
+
     private static func acceptedTurn(
       for write: KernelJournalTurnWrite,
       workstreamId: String

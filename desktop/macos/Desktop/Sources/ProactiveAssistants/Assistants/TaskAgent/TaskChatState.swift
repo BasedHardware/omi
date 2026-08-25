@@ -500,7 +500,7 @@ class TaskChatState: ObservableObject {
       return
     }
     if let index = messages.firstIndex(where: { $0.id == projected.id }) {
-      messages[index] = projected
+      messages[index] = Self.mergingStreamingProjection(projected, over: messages[index])
     } else {
       messages.append(projected)
     }
@@ -508,6 +508,26 @@ class TaskChatState: ObservableObject {
       if $0.createdAt == $1.createdAt { return $0.id < $1.id }
       return $0.createdAt < $1.createdAt
     }
+  }
+
+  /// Streaming replay is monotonic: a journal snapshot written before the
+  /// latest reveal tick lags the local row, and its text is then a prefix of
+  /// what is already visible. Replaying it verbatim truncates characters that
+  /// were consumed from the stream and can never be replayed, so the newer
+  /// local content wins while the turn is still streaming. Terminal rows (and
+  /// divergent rewrites that are not a prefix) always take the kernel value.
+  static func mergingStreamingProjection(_ projected: ChatMessage, over existing: ChatMessage) -> ChatMessage {
+    guard
+      projected.journalStatus == .streaming,
+      projected.isStreaming,
+      projected.text.isEmpty || existing.text.hasPrefix(projected.text)
+    else { return projected }
+    var merged = existing
+    merged.journalStatus = projected.journalStatus
+    if merged.rating == nil { merged.rating = projected.rating }
+    if merged.metadata == nil { merged.metadata = projected.metadata }
+    if merged.resources.isEmpty { merged.resources = projected.resources }
+    return merged
   }
 
   private func applyAcceptedExchange(
@@ -574,15 +594,18 @@ class TaskChatState: ObservableObject {
     var terminalTurn: KernelJournalTurn?
     let terminalized = await journalWriteCoordinator.retryTerminalization {
       guard self.isCurrent(lease) else { return false }
+      // The injected seam is the same controllable boundary on the primary and
+      // recovery paths, so a stopped-turn test proves the Stop disposition no
+      // matter which path terminalizes first.
       guard
-        let turn = try? await TaskChatRuntime.terminalizeJournalMessage(
-          workstreamId: self.workstreamId,
-          ownerID: lease.ownerID,
-          authorizationSnapshot: lease.authorizationSnapshot,
-          message: message,
-          producingRunId: producingRunId,
-          producingAttemptId: producingAttemptId,
-          disposition: disposition
+        let turn = try? await self.terminalizeJournalMessageOperation(
+          self.workstreamId,
+          lease.ownerID,
+          lease.authorizationSnapshot,
+          message,
+          producingRunId,
+          producingAttemptId,
+          disposition
         )
       else { return false }
       terminalTurn = turn
@@ -676,12 +699,31 @@ class TaskChatState: ObservableObject {
   // MARK: - Send Message
 
   func sendMessage(_ text: String, taskContext: String? = nil) async {
-    guard let lease = captureOwnerLease() else { return }
+    await beginSend(text, taskContext: taskContext, detachAfterAdmission: false)
+  }
+
+  /// Admits a send through the same guards and canonical journal exchange as
+  /// `sendMessage`, then runs the admitted turn to completion in a detached
+  /// task. Returns only after the turn is observably admitted (both canonical
+  /// rows accepted and the send lock held) or after a concrete rejection —
+  /// never an unverified "accepted".
+  @discardableResult
+  func sendAdmittedInBackground(_ text: String, taskContext: String? = nil) async -> Bool {
+    await beginSend(text, taskContext: taskContext, detachAfterAdmission: true)
+  }
+
+  @discardableResult
+  private func beginSend(
+    _ text: String,
+    taskContext: String?,
+    detachAfterAdmission: Bool
+  ) async -> Bool {
+    guard let lease = captureOwnerLease() else { return false }
     let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmedText.isEmpty else { return }
+    guard !trimmedText.isEmpty else { return false }
     guard !isSending else {
       log("TaskChatState[\(workstreamId)]: sendMessage called while already sending, ignoring")
-      return
+      return false
     }
 
     isSending = true
@@ -728,7 +770,7 @@ class TaskChatState: ObservableObject {
         lease.authorizationSnapshot,
         writes
       )
-      guard isCurrent(lease) else { return }
+      guard isCurrent(lease) else { return false }
       guard receipt.operation == "record_exchange",
         receipt.turns.count == 2,
         Set(receipt.turns.map(\.turnId)) == Set(writes.map(\.turnId))
@@ -741,14 +783,44 @@ class TaskChatState: ObservableObject {
         errorMessage = "Could not save this message. Try again."
         isSending = false
       }
-      return
+      return false
     }
-    guard isCurrent(lease) else { return }
+    guard isCurrent(lease) else { return false }
     // Signal local send only after both canonical rows are accepted.
     localSendToken = LocalSendToken(generation: localSendToken.generation + 1)
     if draftText == text { draftText = "" }
     activeAssistantMessageId = aiMessageId
     producingRunProjection.begin(assistantMessageID: aiMessageId)
+
+    if detachAfterAdmission {
+      Task { @MainActor [weak self] in
+        await self?.runAdmittedTurn(
+          trimmedText,
+          taskContext: taskContext,
+          lease: lease,
+          userMessageId: userMessage.id,
+          aiMessageId: aiMessageId
+        )
+      }
+      return true
+    }
+    await runAdmittedTurn(
+      trimmedText,
+      taskContext: taskContext,
+      lease: lease,
+      userMessageId: userMessage.id,
+      aiMessageId: aiMessageId
+    )
+    return true
+  }
+
+  private func runAdmittedTurn(
+    _ prompt: String,
+    taskContext: String?,
+    lease: TaskChatOwnerLease,
+    userMessageId: String,
+    aiMessageId: String
+  ) async {
     let callbackQueue = ChatTurnCallbackQueue(
       generation: 0,
       lifecycle: ChatTurnLifecycle(),
@@ -792,7 +864,7 @@ class TaskChatState: ObservableObject {
       }
 
       let queryResult = try await queryOperation(
-        trimmedText,
+        prompt,
         workstreamId,
         aiMessageId,
         workspacePath,
@@ -854,7 +926,7 @@ class TaskChatState: ObservableObject {
 
       while streamingBuffer.hasPendingSegments {
         try await yieldToStopAuthority()
-        flushStreamingBuffer(revealAll: false)
+        flushStreamingBuffer(revealAll: false, callerOwnsRevealClock: true)
         if streamingBuffer.hasPendingSegments {
           try? await Task.sleep(nanoseconds: 100_000_000)
           try await yieldToStopAuthority()
@@ -917,7 +989,7 @@ class TaskChatState: ObservableObject {
               : "Agent failed")
         errorMessage = failureText
       } else {
-        await onQueryCompleted?(queryResult, userMessage.id)
+        await onQueryCompleted?(queryResult, userMessageId)
         guard isCurrent(lease) else { return }
       }
     } catch {
@@ -1100,14 +1172,19 @@ class TaskChatState: ObservableObject {
     }
   }
 
-  private func flushStreamingBuffer(revealAll: Bool = true) {
+  private func flushStreamingBuffer(revealAll: Bool = true, callerOwnsRevealClock: Bool = false) {
     guard hasCurrentOwner else { return }
     if revealAll {
       streamingBuffer.flush(messages: &messages)
     } else {
-      streamingBuffer.flushMetered(messages: &messages) { [weak self] in
-        self?.flushStreamingBuffer(revealAll: false)
-      }
+      streamingBuffer.flushMetered(
+        messages: &messages,
+        scheduleFlush: callerOwnsRevealClock
+          ? {}
+          : { [weak self] in
+            self?.flushStreamingBuffer(revealAll: false)
+          }
+      )
     }
     if let activeAssistantMessageId {
       scheduleJournalUpdate(messageId: activeAssistantMessageId, status: .streaming)
