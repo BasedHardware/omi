@@ -25,7 +25,7 @@ import sys
 sys.exit(0)
 PY
 printf 'jobs:\n  flutter:\n    steps:\n      - uses: subosito/flutter-action@v2\n        with:\n          flutter-version: 9.9.9\n' >"$REPO/.github/workflows/repo-checks.yml"
-printf '{\n  "devDependencies": {\n    "eslint-plugin-prettier": "^4.2.1",\n    "prettier": "^2.8.8"\n  }\n}\n' >"$REPO/web/frontend/package.json"
+printf '{\n  "devDependencies": {\n    "eslint-plugin-prettier": "^4.2.1",\n    "prettier": "^2.8.8",\n    "prettier-plugin-tailwindcss": "^0.3.0"\n  }\n}\n' >"$REPO/web/frontend/package.json"
 cat >"$REPO/web/frontend/package-lock.json" <<LOCK
 {
   "name": "fixture",
@@ -126,7 +126,7 @@ expect_refusal() {
     cat "$out" >&2
     exit 1
   fi
-  if ! grep -q "mismatch\|refusing" "$out"; then
+  if ! grep -q "mismatch\|refus\|unresolved" "$out"; then
     echo "FAIL: $label — refusal message is not actionable" >&2
     cat "$out" >&2
     exit 1
@@ -163,6 +163,32 @@ git -C "$REPO" add web/frontend/src/a.ts
 make_prettier_stub "$REPO/web/frontend" 2.8.8
 make_prettier_plugin "$REPO/web/frontend" 0.2.0
 expect_refusal "prettier plugin version mismatch"
+test "$(cat "$REPO/web/frontend/src/a.ts")" = "const a = {b:1}"
+git -C "$REPO" reset -q --hard
+
+# --- Prettier: a declared plugin missing from the lockfile must refuse, not skip ---
+printf 'const a = {b:1}\n' >"$REPO/web/frontend/src/a.ts"
+git -C "$REPO" add web/frontend/src/a.ts
+cat >"$REPO/web/frontend/package-lock.json" <<LOCK
+{
+  "name": "fixture",
+  "version": "0.0.0",
+  "lockfileVersion": 3,
+  "packages": {
+    "": {
+      "name": "fixture",
+      "version": "0.0.0"
+    },
+    "node_modules/prettier": {
+      "version": "2.8.8"
+    }
+  }
+}
+LOCK
+git -C "$REPO" add web/frontend/package-lock.json
+make_prettier_stub "$REPO/web/frontend" 2.8.8
+make_prettier_plugin "$REPO/web/frontend" 0.2.0
+expect_refusal "declared prettier plugin unresolved in lockfile"
 test "$(cat "$REPO/web/frontend/src/a.ts")" = "const a = {b:1}"
 git -C "$REPO" reset -q --hard
 
