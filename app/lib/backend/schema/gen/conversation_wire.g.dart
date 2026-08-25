@@ -821,6 +821,7 @@ class GeneratedConversationSearchItem {
   final bool privateCloudSyncEnabled;
   final String? processingConversationId;
   final String? processingMemoryId;
+  final bool screenshotSharingEnabled;
   final String? source;
   final bool starred;
   final DateTime? startedAt;
@@ -864,6 +865,7 @@ class GeneratedConversationSearchItem {
     this.privateCloudSyncEnabled = false,
     this.processingConversationId,
     this.processingMemoryId,
+    this.screenshotSharingEnabled = true,
     this.source = "omi",
     this.starred = false,
     required this.startedAt,
@@ -909,6 +911,7 @@ class GeneratedConversationSearchItem {
       privateCloudSyncEnabled: _required(_readFieldValue<bool>(_readField(json, const ["private_cloud_sync_enabled"]), "private_cloud_sync_enabled", _readBool, requiredField: false, nullable: false, defaultValue: false), "private_cloud_sync_enabled"),
       processingConversationId: _readFieldValue<String>(_readField(json, const ["processing_conversation_id"]), "processing_conversation_id", _readString, requiredField: false, nullable: true),
       processingMemoryId: _readFieldValue<String>(_readField(json, const ["processing_memory_id"]), "processing_memory_id", _readString, requiredField: false, nullable: true),
+      screenshotSharingEnabled: _required(_readFieldValue<bool>(_readField(json, const ["screenshot_sharing_enabled"]), "screenshot_sharing_enabled", _readBool, requiredField: false, nullable: false, defaultValue: true), "screenshot_sharing_enabled"),
       source: _readFieldValue<String>(_readField(json, const ["source"]), "source", _readString, requiredField: false, nullable: true, defaultValue: "omi"),
       starred: _required(_readFieldValue<bool>(_readField(json, const ["starred"]), "starred", _readBool, requiredField: false, nullable: false, defaultValue: false), "starred"),
       startedAt: _readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime, requiredField: true, nullable: true),
@@ -955,6 +958,7 @@ class GeneratedConversationSearchItem {
       'private_cloud_sync_enabled': privateCloudSyncEnabled,
       'processing_conversation_id': processingConversationId,
       'processing_memory_id': processingMemoryId,
+      'screenshot_sharing_enabled': screenshotSharingEnabled,
       'source': source,
       'starred': starred,
       'started_at': startedAt?.toUtc().toIso8601String(),
