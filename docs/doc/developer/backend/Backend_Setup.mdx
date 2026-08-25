@@ -346,17 +346,19 @@ OAuth is required for user authentication. You need to configure both Google and
   <Accordion title="Pusher Service (for webhooks)" icon="bell">
     Skip this if you don't need webhook functionality.
 
-    ```bash
-    cd pusher
-    cp .env.template .env
-    ```
+    The pusher imports the same `database`/`utils` modules as the main backend
+    (`database.redis_db` reads `REDIS_DB_HOST` at import time), and
+    `uvicorn --env-file` loads exactly one file, so run it against `backend/.env`
+    rather than `pusher/.env`, which only carries `SERVICE_ACCOUNT_JSON`.
 
-    Edit the `.env` file and set `SERVICE_ACCOUNT_JSON` to your Google credentials string.
+    Firebase initializes from the `GOOGLE_APPLICATION_CREDENTIALS` file you created
+    in step 1. To use an inline service account instead, add a
+    `SERVICE_ACCOUNT_JSON=<credentials JSON>` line to `backend/.env`.
 
-    Start the service:
+    Start the service from `backend/` (port 8080 matches the deployed pusher image
+    and leaves 8000 free for the main backend):
     ```bash
-    cd ..
-    uvicorn pusher.main:app --reload --env-file .env --port 8000
+    uvicorn pusher.main:app --reload --env-file .env --port 8080
     ```
 
     Optionally expose via Ngrok for external access.
@@ -483,7 +485,6 @@ Complete reference for all `.env` variables:
     | `OPENAI_API_KEY` | OpenAI API key for AI models |
     | `MODULATE_API_KEY` | Modulate API key for transcription fallback |
     | `HOSTED_PARAKEET_API_URL` | Parakeet endpoint for transcription |
-    | `HUGGINGFACE_TOKEN` | Hugging Face token for voice detection models |
     | `REDIS_DB_HOST` | Redis host address |
     | `REDIS_DB_PORT` | Redis port number |
     | `REDIS_DB_PASSWORD` | Redis password (blank if none) |
@@ -525,6 +526,7 @@ Complete reference for all `.env` variables:
     | `TYPESENSE_HOST` | Typesense server URL |
     | `TYPESENSE_API_KEY` | Typesense API key |
     | `NO_SOCKET_TIMEOUT` | Set `True` to disable socket timeout |
+    | `HUGGINGFACE_TOKEN` | Hugging Face token for the pyannote models. Read only by the self-hosted `backend/diarizer`, `backend/parakeet` and `backend/modal` services, never by the API backend — which is why it is absent from `.env.template` and present in `.env.dev.template`. |
   </Tab>
 </Tabs>
 
