@@ -513,7 +513,12 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     final suggestedApp = _cachedSuggestedApps.firstWhereOrNull((app) => app.id == appId);
     if (suggestedApp != null) return suggestedApp;
 
-    return null;
+    // The two caches above only fill after the summary sheet fetches. The durable
+    // app catalog (appProvider.apps) is loaded at startup, so a real app_id must
+    // resolve here instead of rendering "Unknown App" until the sheet is opened
+    // (SCA-359).
+    final providerApp = appProvider?.apps.firstWhereOrNull((app) => app.id == appId);
+    return providerApp;
   }
 
   /// Enables an app and updates the cached enabled apps list
