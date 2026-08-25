@@ -47,7 +47,7 @@ final class RatingPromptManager: ObservableObject {
     // PostHog delivers a flag payload (initial preload can finish AFTER this
     // singleton initializes, and reloads deliver mid-session flips).
     flagObserver = NotificationCenter.default.addObserver(
-      forName: Notification.Name("PostHogDidReceiveFeatureFlags"),
+      forName: PostHogManager.featureFlagsDidLoad,
       object: nil, queue: nil
     ) { _ in
       Task { @MainActor in RatingPromptManager.shared.flagsDidUpdate() }

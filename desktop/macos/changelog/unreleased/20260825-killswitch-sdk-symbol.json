@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Hardened the rating-prompt kill switch wiring against analytics SDK updates."
+  ]
+}
