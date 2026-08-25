@@ -1,5 +1,0 @@
-{
-  "changes": [
-    "Hardened rating-prompt question accounting behind an executable submit/retry ledger."
-  ]
-}
