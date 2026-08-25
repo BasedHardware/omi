@@ -25,7 +25,7 @@ export async function computeDesktopRatings(days: number) {
     `
       SELECT
         toDate(toTimeZone(timestamp, 'America/New_York')) AS day,
-        round(avg(toFloat64OrZero(toString(properties.rating))), 2) AS avg_rating,
+        round(avg(toFloatOrZero(toString(properties.rating))), 2) AS avg_rating,
         count() AS ratings
       FROM events
       WHERE event = 'Desktop Rating Submitted'

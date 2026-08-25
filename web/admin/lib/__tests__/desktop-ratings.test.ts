@@ -38,6 +38,11 @@ describe("computeDesktopRatings", () => {
       "toTimeZone(timestamp, 'America/New_York')",
     );
     expect(posthogResults.mock.calls[0][3]).toContain("Desktop Rating Submitted");
+    // HogQL rejects ClickHouse's toFloat64OrZero with a validation_error
+    // ("Unsupported function call ... Perhaps you meant 'toFloatOrZero'") —
+    // observed live on prod PostHog 2026-08-25.
+    expect(posthogResults.mock.calls[0][3]).toContain("toFloatOrZero(");
+    expect(posthogResults.mock.calls[0][3]).not.toContain("toFloat64OrZero");
     expect(payload.daily).toEqual([
       { date: "2026-08-24", avgRating: 5, count: 1 },
       { date: "2026-08-25", avgRating: 3, count: 3 },
