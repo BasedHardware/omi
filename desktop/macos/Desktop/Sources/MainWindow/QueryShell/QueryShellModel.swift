@@ -272,8 +272,11 @@ struct QueryShellSendLedger: Equatable, Sendable {
   private(set) var lastAskedQuestion = ""
 
   /// A resolved submission — the one place a NEW question enters the send path.
-  mutating func planSubmit(_ question: String?) -> Plan? {
-    guard let question, !question.isEmpty else { return nil }
+  /// A busy provider yields no plan at all: Return during an active send would
+  /// be rejected by ChatProvider anyway, so it must neither dispatch nor count
+  /// (nor overwrite the question 'Try again' would re-send).
+  mutating func planSubmit(_ question: String?, providerBusy: Bool = false) -> Plan? {
+    guard !providerBusy, let question, !question.isEmpty else { return nil }
     lastAskedQuestion = question
     return Plan(question: question, countsAsQuestion: true)
   }
