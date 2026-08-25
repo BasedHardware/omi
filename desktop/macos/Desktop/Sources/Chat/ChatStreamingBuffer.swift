@@ -1,6 +1,11 @@
 import Foundation
 
 final class ChatStreamingBuffer {
+  /// Test seam replacing the default `DispatchQueue.main.asyncAfter` reveal
+  /// tick so flushes can be advanced synchronously instead of racing a
+  /// wall-clock deadline on loaded CI runners.
+  typealias FlushScheduler = (@escaping () -> Void) -> Void
+
   private enum PendingSegment {
     case text(messageId: String, text: String)
     case thinking(messageId: String, text: String)
@@ -24,13 +29,15 @@ final class ChatStreamingBuffer {
   private var pendingSegments: [PendingSegment] = []
   private var flushWorkItem: DispatchWorkItem?
   private let flushInterval: TimeInterval
+  private let flushScheduler: FlushScheduler?
   private var lastRevealTime: TimeInterval?
 
   var hasPendingSegments: Bool { !pendingSegments.isEmpty }
   var hasScheduledFlush: Bool { flushWorkItem != nil }
 
-  init(flushInterval: TimeInterval) {
+  init(flushInterval: TimeInterval, scheduler: FlushScheduler? = nil) {
     self.flushInterval = flushInterval
+    self.flushScheduler = scheduler
   }
 
   func appendText(messageId: String, text: String, scheduleFlush: @escaping () -> Void) {
@@ -339,7 +346,16 @@ final class ChatStreamingBuffer {
     guard flushWorkItem == nil else { return }
     let workItem = DispatchWorkItem(block: scheduleFlush)
     flushWorkItem = workItem
-    DispatchQueue.main.asyncAfter(deadline: .now() + flushInterval, execute: workItem)
+    if let flushScheduler {
+      // Injected clocks keep the same cancellation contract: a fired callback
+      // whose work item was cancelled by a manual flush must not run.
+      flushScheduler { [weak workItem] in
+        guard let workItem, !workItem.isCancelled else { return }
+        workItem.perform()
+      }
+    } else {
+      DispatchQueue.main.asyncAfter(deadline: .now() + flushInterval, execute: workItem)
+    }
   }
 }
 

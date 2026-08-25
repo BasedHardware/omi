@@ -329,8 +329,9 @@ final class ToolCallStatusTests: XCTestCase {
   func testStreamingBufferSchedulesToolResultFlush() {
     let messageId = "assistant-1"
     var messages = [ChatMessage(id: messageId, text: "", sender: .ai, isStreaming: true)]
-    let buffer = ChatStreamingBuffer(flushInterval: 0.01)
-    let scheduled = expectation(description: "tool result flush should be scheduled")
+    var scheduledFlushes: [() -> Void] = []
+    let buffer = ChatStreamingBuffer(flushInterval: 0.01) { scheduledFlushes.append($0) }
+    var flushRan = false
 
     buffer.applyToolResult(
       messageId: messageId,
@@ -338,10 +339,13 @@ final class ToolCallStatusTests: XCTestCase {
       name: "Bash",
       output: "done",
       messages: &messages,
-      scheduleFlush: { scheduled.fulfill() }
+      scheduleFlush: { flushRan = true }
     )
 
-    wait(for: [scheduled], timeout: 0.1)
+    XCTAssertTrue(buffer.hasScheduledFlush)
+    XCTAssertEqual(scheduledFlushes.count, 1, "Exactly one reveal tick is scheduled per window")
+    scheduledFlushes.forEach { $0() }
+    XCTAssertTrue(flushRan)
     buffer.cancelPendingFlush()
   }
 
@@ -401,19 +405,20 @@ final class ToolCallStatusTests: XCTestCase {
   func testManualFlushCancelsScheduledFlush() {
     let messageId = "assistant-1"
     var messages = [ChatMessage(id: messageId, text: "", sender: .ai, isStreaming: true)]
-    let buffer = ChatStreamingBuffer(flushInterval: 0.01)
-    let staleFlush = expectation(description: "scheduled flush should be cancelled by manual flush")
-    staleFlush.isInverted = true
+    var scheduledFlushes: [() -> Void] = []
+    let buffer = ChatStreamingBuffer(flushInterval: 0.01) { scheduledFlushes.append($0) }
+    var flushRan = false
 
     buffer.appendText(
       messageId: messageId, text: "Before tool.",
       scheduleFlush: {
-        staleFlush.fulfill()
+        flushRan = true
       })
     buffer.flush(messages: &messages)
 
-    wait(for: [staleFlush], timeout: 0.05)
     XCTAssertEqual(messages[0].text, "Before tool.")
+    scheduledFlushes.forEach { $0() }
+    XCTAssertFalse(flushRan, "A flush cancelled by a manual reveal must never fire later")
   }
 
   func testMeteredFlushRevealsBacklogOverMultipleTicks() {
