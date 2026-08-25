@@ -50,7 +50,7 @@ class MemoryPlatformIngestResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     memory_id: str
-    status: Literal["created"] = "created"
+    status: Literal["created", "dropped"] = "created"
 
 
 MemoryPlatformContract = MemoryPlatformCapability

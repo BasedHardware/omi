@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -10,6 +11,19 @@ from utils.memory.memory_system import MemorySystem
 
 def _request(headers=None):
     return SimpleNamespace(headers=headers or {})
+
+
+class _JsonRequest:
+    """Request double whose `json()` returns a canned raw payload."""
+
+    def __init__(self, payload):
+        self.headers = {}
+        self._payload = payload
+
+    async def json(self):
+        if isinstance(self._payload, Exception):
+            raise self._payload
+        return self._payload
 
 
 def _authorization():
@@ -86,10 +100,12 @@ def test_platform_ingest_uses_canonical_memory_service(monkeypatch):
 
     monkeypatch.setattr(memory_platform, 'MemoryService', FakeMemoryService)
 
-    result = memory_platform.ingest_memory_platform(
-        _request(),
-        Memory(content='The backend is authoritative.', category=MemoryCategory.manual),
-        uid='user-1',
+    result = asyncio.run(
+        memory_platform.ingest_memory_platform(
+            _request(),
+            Memory(content='The backend is authoritative.', category=MemoryCategory.manual),
+            uid='user-1',
+        )
     )
 
     assert result.memory_id == 'memory-1'
@@ -117,10 +133,12 @@ def test_platform_ingest_preserves_capture_device_provenance(monkeypatch):
 
     monkeypatch.setattr(memory_platform, 'MemoryService', FakeMemoryService)
 
-    memory_platform.ingest_memory_platform(
-        _request({'x-app-platform': 'macos', 'x-device-id-hash': 'abcd1234'}),
-        Memory(content='Captured on this laptop.'),
-        uid='user-1',
+    asyncio.run(
+        memory_platform.ingest_memory_platform(
+            _request({'x-app-platform': 'macos', 'x-device-id-hash': 'abcd1234'}),
+            Memory(content='Captured on this laptop.'),
+            uid='user-1',
+        )
     )
 
     memory_db = captured['memory_db']
@@ -150,13 +168,86 @@ def test_platform_ingest_marks_explicit_submission_user_asserted(monkeypatch):
     # explicitly submitted this memory and it must be treated as user asserted,
     # otherwise canonical consolidation's unknown_source_subject_promotion
     # check keeps it short-term forever.
-    memory_platform.ingest_memory_platform(
-        _request(),
-        Memory(content='The user prefers email over calls.'),
-        uid='user-1',
+    asyncio.run(
+        memory_platform.ingest_memory_platform(
+            _request(),
+            Memory(content='The user prefers email over calls.'),
+            uid='user-1',
+        )
     )
 
     assert captured['memory_db'].manually_added is True
+
+
+def test_platform_ingest_blocks_import_marked_payload_in_enforce_mode(monkeypatch):
+    monkeypatch.setenv('MEMORY_IMPORT_WRITE_BLOCK_MODE', 'enforce')
+
+    def unreachable(*args, **kwargs):
+        raise AssertionError('import-marked ingest must not reach the canonical write decision')
+
+    monkeypatch.setattr(memory_platform, 'canonical_write_decision', unreachable)
+
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(
+            memory_platform.ingest_memory_platform(
+                _JsonRequest({'content': 'Copied from Apple Notes.', 'source_type': 'apple_notes'}),
+                Memory(content='Copied from Apple Notes.'),
+                uid='user-1',
+            )
+        )
+
+    assert error.value.status_code == 409
+    assert error.value.detail['error'] == 'import_must_use_evidence_ingress'
+
+
+def test_platform_ingest_logs_but_persists_import_marked_payload_in_log_mode(monkeypatch):
+    monkeypatch.setenv('MEMORY_IMPORT_WRITE_BLOCK_MODE', 'log')
+
+    monkeypatch.setattr(
+        memory_platform,
+        'canonical_write_decision',
+        lambda uid, db_client: SimpleNamespace(memory_system=MemorySystem.CANONICAL, enabled=True, reason='enabled'),
+    )
+
+    class FakeMemoryService:
+        def __init__(self, db_client):
+            pass
+
+        def create_external_memory(self, uid, memory_db, **kwargs):
+            return SimpleNamespace(id=memory_db.id)
+
+    monkeypatch.setattr(memory_platform, 'MemoryService', FakeMemoryService)
+
+    result = asyncio.run(
+        memory_platform.ingest_memory_platform(
+            _JsonRequest({'content': 'Copied from Apple Notes.', 'source_type': 'apple_notes'}),
+            Memory(content='Copied from Apple Notes.'),
+            uid='user-1',
+        )
+    )
+
+    assert result.status == 'created'
+
+
+def test_platform_ingest_drops_per_file_local_import_items_without_persisting(monkeypatch):
+    monkeypatch.setenv('MEMORY_IMPORT_WRITE_BLOCK_MODE', 'log')
+
+    def unreachable(*args, **kwargs):
+        raise AssertionError('per-file import items must not be persisted')
+
+    monkeypatch.setattr(memory_platform, 'canonical_write_decision', unreachable)
+    monkeypatch.setattr(memory_platform, 'MemoryService', unreachable)
+
+    result = asyncio.run(
+        memory_platform.ingest_memory_platform(
+            _JsonRequest({'content': 'resume.pdf fact', 'tags': ['local_files', 'onboarding', 'projects']}),
+            Memory(content='resume.pdf fact'),
+            uid='user-1',
+        )
+    )
+
+    assert result.status == 'dropped'
+    assert result.memory_id == memory_platform.document_id_from_seed('resume.pdf fact')
 
 
 @pytest.mark.parametrize('blank_content', ['', '   ', '\n\t '])
@@ -167,7 +258,7 @@ def test_platform_ingest_rejects_blank_content_as_client_input(monkeypatch, blan
     monkeypatch.setattr(memory_platform, 'canonical_write_decision', unreachable)
 
     with pytest.raises(HTTPException) as error:
-        memory_platform.ingest_memory_platform(_request(), Memory(content=blank_content), uid='user-1')
+        asyncio.run(memory_platform.ingest_memory_platform(_request(), Memory(content=blank_content), uid='user-1'))
 
     assert error.value.status_code == 400
 
@@ -180,6 +271,6 @@ def test_platform_ingest_fails_closed_when_canonical_write_is_unavailable(monkey
     )
 
     with pytest.raises(HTTPException) as error:
-        memory_platform.ingest_memory_platform(_request(), Memory(content='not written'), uid='user-1')
+        asyncio.run(memory_platform.ingest_memory_platform(_request(), Memory(content='not written'), uid='user-1'))
 
     assert error.value.status_code == 503

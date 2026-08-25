@@ -1,15 +1,22 @@
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from database._client import db
+from database._client import db, document_id_from_seed
 from models.memories import Memory, MemoryDB
 from models.memory_product import ProductMemorySearchResponse
 from models.memory_platform import MemoryPlatformCapability, MemoryPlatformIngestResponse
 from utils.client_device import resolve_client_device_from_request
+from utils.executors import db_executor, run_blocking
 from utils.memory.canonical_activation import canonical_write_decision
+from utils.memory.import_write_guard import (
+    import_write_block_mode,
+    import_write_violation_for_guard,
+    is_per_file_local_import_tags,
+)
 from utils.memory.memory_service import MemoryService
-from utils.memory.memory_system import MemorySystem
+from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.memory.product_authorization import (
     ProductAuthorizationContext,
     authorize_memory_product_memory_route,
@@ -25,6 +32,7 @@ from utils.memory.platform import build_memory_platform_capability
 router = APIRouter()
 MAX_PLATFORM_SEARCH_QUERY_LENGTH = 500
 MAX_PLATFORM_SEARCH_OFFSET = 100_000
+logger = logging.getLogger(__name__)
 
 
 def _rate_limited_uid(policy_name: str):
@@ -123,12 +131,49 @@ def search_memory_platform(
     return response
 
 
+async def _guard_import_memory_write(request: Request, *, endpoint: str, uid: str) -> None:
+    """Shared import-write boundary, mirroring the /v3/memories guard.
+
+    Import-marked payloads (import source types/tags/metadata) must enter
+    through the evidence ingress (`/v3/memory-imports/batch`), not this
+    platform surface. Per-file local-file items are exempt here exactly as on
+    /v3/memories — this route acknowledges-and-drops them below.
+    """
+    mode = import_write_block_mode()
+    if mode == 'off':
+        return
+    try:
+        raw: object = await request.json()
+    except Exception:
+        return
+    if not isinstance(raw, dict):
+        return
+    violation = import_write_violation_for_guard(raw)
+    if not violation:
+        return
+    logger.warning(
+        'memory_import.direct_memory_write_blocked endpoint=%s uid=%s mode=%s violation=%s',
+        endpoint,
+        uid,
+        mode,
+        violation,
+    )
+    if mode == 'enforce':
+        raise HTTPException(
+            status_code=409,
+            detail={
+                'error': 'import_must_use_evidence_ingress',
+                'use_endpoint': '/v3/memory-imports/batch',
+            },
+        )
+
+
 @router.post(
     '/v1/memory/platform/ingest',
     tags=['v1', 'memory'],
     response_model=MemoryPlatformIngestResponse,
 )
-def ingest_memory_platform(
+async def ingest_memory_platform(
     request: Request,
     memory: Memory,
     uid: str = Depends(_rate_limited_uid('memories:create')),
@@ -136,7 +181,20 @@ def ingest_memory_platform(
     if not memory.content.strip():
         raise HTTPException(status_code=400, detail='content must not be blank')
 
-    decision = canonical_write_decision(uid, db_client=db)
+    await _guard_import_memory_write(request, endpoint='/v1/memory/platform/ingest', uid=uid)
+
+    # Per-file local-file import items are dropped unconditionally on
+    # /v3/memories; they carry no durable signal and must not be reintroduced
+    # through this platform surface either. Acknowledge without persisting.
+    try:
+        raw_payload: object = await request.json()
+    except Exception:
+        raw_payload = None
+    if isinstance(raw_payload, dict) and is_per_file_local_import_tags(raw_payload.get('tags')):
+        logger.info('memory_import.per_file_item_dropped endpoint=/v1/memory/platform/ingest uid=%s', uid)
+        return MemoryPlatformIngestResponse(memory_id=document_id_from_seed(memory.content), status='dropped')
+
+    decision = await run_blocking(db_executor, canonical_write_decision, uid, db_client=db)
     if decision.memory_system != MemorySystem.CANONICAL or not decision.enabled:
         raise HTTPException(
             status_code=503,
@@ -159,7 +217,9 @@ def ingest_memory_platform(
         client_device_id=resolve_client_device_from_request(request).client_device_id,
     )
     try:
-        created = MemoryService(db_client=db).create_external_memory(
+        created = await run_blocking(
+            db_executor,
+            MemoryService(db_client=db).create_external_memory,
             uid,
             memory_db,
             memory_system=MemorySystem.CANONICAL,
