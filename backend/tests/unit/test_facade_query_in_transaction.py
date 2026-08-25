@@ -36,26 +36,47 @@ class _SessionRecordingStore(FakeDocumentStore):
         self.query_sessions: List[Any] = []
         self.get_sessions: List[Any] = []
 
-    def _begin_session(self) -> Any:
+    def begin_session(self) -> "_FakeSession":
         # A stand-in handle with the Mongo session lifecycle the facade drives. Returning a real object
         # (instead of the fake's `None`) is what makes "was the session threaded through?" observable.
-        return _FakeSession()
-
-    def _query(self, collection: str, *, session: Any = None, **kw: Any) -> List[StoredDocument]:
-        self.query_sessions.append(session)
-        return self.query(collection, **kw)
-
-    def _get(self, path: str, *, fields: Optional[Sequence[str]] = None, session: Any = None) -> StoredDocument:
-        self.get_sessions.append(session)
-        return super()._get(path, fields=fields, session=session)
+        return _FakeSession(self)
 
 
 class _FakeSession:
-    """Only the lifecycle the facade's `_FacadeTransaction` calls."""
+    """The lifecycle the facade's `_FacadeTransaction` drives, plus the ops it runs on the handle.
 
-    def __init__(self) -> None:
+    The recording used to live on the STORE, in private `_query`/`_get` aliases that took a `session=`
+    the facade threaded in. Now the session carries the operations, so the handle is where "which
+    session was this read given?" is observable — and it is observable by identity, which is stricter
+    than the old assertion on a passed-through argument.
+    """
+
+    def __init__(self, store: _SessionRecordingStore) -> None:
+        self._store = store
         self.committed = False
 
+    # --- the ops the facade runs inside the session (ports.StoreSession) ---
+    def query(self, collection: str, **kw: Any) -> List[StoredDocument]:
+        self._store.query_sessions.append(self)
+        return self._store.query(collection, **kw)
+
+    def get(self, path: str, *, fields: Optional[Sequence[str]] = None) -> StoredDocument:
+        self._store.get_sessions.append(self)
+        return self._store.get(path, fields=fields)
+
+    def set(self, path: str, data: Dict[str, Any], *, merge: bool = False) -> None:
+        self._store.set(path, data, merge=merge)
+
+    def update(self, path: str, data: Dict[str, Any], *, if_updated_at: Any = None) -> None:
+        self._store.update(path, data, if_updated_at=if_updated_at)
+
+    def create(self, path: str, data: Dict[str, Any]) -> None:
+        self._store.create(path, data)
+
+    def delete(self, path: str, *, if_updated_at: Any = None) -> None:
+        self._store.delete(path, if_updated_at=if_updated_at)
+
+    # --- lifecycle ---
     def commit_transaction(self) -> None:
         self.committed = True
 

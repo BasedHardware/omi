@@ -189,19 +189,23 @@ def test_a_poisoned_transaction_stops_talking_to_the_dead_session(rig):
     """
     from google.cloud.firestore import transactional
 
-    store = rig['store']
+    import database.store.adapters.mongo as mongo_adapter
+
     writes: list[str] = []
     attempts: list[int] = []
-    real_set = store._set
+    # The write op is a module function shared by the store's public surface and the session handle, so
+    # this is the one place every write passes through — it used to be a private METHOD on the store,
+    # and the counter hung off that instead.
+    real_set = mongo_adapter._do_set
 
-    def counting_set(path, data, **kwargs):
+    def counting_set(db, path, data, **kwargs):
         # Only writes issued INSIDE the transaction: the competitor goes through the same store without a
         # session, and counting it would make the number describe the test instead of the mechanism.
         if kwargs.get('session') is not None:
             writes.append(path)
-        return real_set(path, data, **kwargs)
+        return real_set(db, path, data, **kwargs)
 
-    store._set = counting_set
+    mongo_adapter._do_set = counting_set
     try:
 
         @transactional
@@ -215,7 +219,7 @@ def test_a_poisoned_transaction_stops_talking_to_the_dead_session(rig):
 
         body(rig['client'].transaction(), rig['client'].document(rig['path']))
     finally:
-        store._set = real_set
+        mongo_adapter._do_set = real_set
 
     # First attempt: one write reaches the session, conflicts, and the remaining four are inert.
     # Second attempt: all five land. Without the short-circuit the first attempt would issue five.

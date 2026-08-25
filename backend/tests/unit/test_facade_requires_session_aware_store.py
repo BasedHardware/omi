@@ -15,12 +15,17 @@ half is the failure this suite exists to prevent.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, Dict
 
 import pytest
 
 from database.store.firestore_facade import NeutralFirestoreClient
-from database.store.ports import FACADE_SESSION_OPS, missing_facade_session_ops
+from database.store.ports import (
+    FACADE_SESSION_OPS,
+    STORE_SESSION_OPS,
+    missing_facade_session_ops,
+    missing_store_session_ops,
+)
 from database.store.records import StoredDocument
 from tests.store_fakes import FakeDocumentStore
 
@@ -69,30 +74,60 @@ def test_the_real_firestore_adapter_is_refused_too():
 
 
 def test_forgetting_only_the_session_opener_is_still_refused():
-    """The silent half on its own: session ops present, no way to declare how a session is opened.
+    """The silent half at the store level: everything a store can do, and no way to open a session.
 
     Before this gate that store would have been accepted and run every transaction session-less.
+    ``begin_session`` is now the ONLY thing the store owes the facade, so a store missing it is a
+    store that never declared whether its transactions are atomic.
     """
 
-    class _SessionOpsButNoOpener(_DocumentedPortOnly):
-        def _get(self, path: str, *, fields: Optional[Sequence[str]] = None, session: Any = None) -> StoredDocument:
+    store = _DocumentedPortOnly()  # the documented port in full, no opener
+    assert missing_facade_session_ops(store) == ("begin_session",)
+    with pytest.raises(TypeError, match="begin_session"):
+        NeutralFirestoreClient(store)
+
+
+def test_a_session_that_cannot_be_used_is_refused_loudly():
+    """The silent half at the SESSION level — the one moving the ops onto the handle created.
+
+    A store can now satisfy ``FacadeSessionStore`` (it has ``begin_session``) and still hand back a
+    handle that cannot read or write. Left unchecked that is an ``AttributeError`` from whichever op
+    the transactional body reached first, three frames from the reason — the same shape as the
+    original L31 defect. It is refused at ``_begin``, naming every missing op.
+    """
+
+    class _HalfBuiltSession:
+        """Can read, cannot write: exactly the shape that would survive a partial implementation."""
+
+        def get(self, path: str, *, fields: Any = None) -> StoredDocument:
             return StoredDocument.missing(path)
 
-        def _set(self, path: str, data: Dict[str, Any], *, merge: bool = False, session: Any = None) -> None: ...
-        def _update(
-            self, path: str, data: Dict[str, Any], *, if_updated_at: Any = None, session: Any = None
-        ) -> None: ...
-        def _create(self, path: str, data: Dict[str, Any], *, session: Any = None) -> None: ...
-        def _delete(self, path: str, *, if_updated_at: Any = None, session: Any = None) -> None: ...
+        def query(self, collection: str, **kw: Any) -> list:
+            return []
 
-        # Added when the facade started routing collection reads through the session too (BACKLOG L24):
-        # this store still expresses "every session op present, no way to OPEN a session".
-        def _query(self, collection: str, *, session: Any = None, **kw: Any) -> list: ...
+    class _OpensAnUnusableSession(FakeDocumentStore):
+        def begin_session(self) -> Any:
+            return _HalfBuiltSession()
 
-    store = _SessionOpsButNoOpener()
-    assert missing_facade_session_ops(store) == ("_begin_session",)
-    with pytest.raises(TypeError, match="_begin_session"):
-        NeutralFirestoreClient(store)
+    store = _OpensAnUnusableSession()
+    assert missing_store_session_ops(_HalfBuiltSession()) == ("set", "update", "create", "delete")
+    # The store itself passes: the gap is one level down, which is why it needs its own check.
+    assert missing_facade_session_ops(store) == ()
+
+    transaction = NeutralFirestoreClient(store).transaction()
+    with pytest.raises(TypeError) as excinfo:
+        transaction._begin()
+    message = str(excinfo.value)
+    assert "_HalfBuiltSession" in message
+    for op in ("set", "update", "create", "delete"):
+        assert op in message, f"{op} missing from the error message"
+    assert "StoreSession" in message
+
+
+def test_a_usable_session_names_every_op_the_facade_runs():
+    """``STORE_SESSION_OPS`` is the list the error message is built from; keep it honest."""
+    assert missing_store_session_ops(FakeDocumentStore()) == ()
+    assert set(STORE_SESSION_OPS) == {"get", "set", "update", "create", "delete", "query"}
 
 
 # --- the legacy principals: everything already behind the facade must keep working ---------------
@@ -121,7 +156,10 @@ def test_begin_takes_the_session_from_the_store_not_from_a_sniffed_attribute():
     A store that carries a ``_mongo_client`` AND declares its own opener must get the declared
     session. Under the old inference the sniffed client won and started its own transaction.
     """
-    sentinel = object()
+    class _Sentinel(FakeDocumentStore):
+        """A usable session (the fake's own six ops) whose IDENTITY is what the test follows."""
+
+    sentinel = _Sentinel()
 
     class _DeclaresItsOwnSession(FakeDocumentStore):
         def __init__(self) -> None:
@@ -130,7 +168,7 @@ def test_begin_takes_the_session_from_the_store_not_from_a_sniffed_attribute():
             # A decoy: the attribute the old code inferred from. Touching it would blow up.
             self._mongo_client = _ExplodingClient()
 
-        def _begin_session(self) -> Any:
+        def begin_session(self) -> Any:
             self.opened += 1
             return sentinel
 

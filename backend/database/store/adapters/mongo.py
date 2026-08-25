@@ -222,8 +222,13 @@ class _MongoBatch:
     without rolling back; callers (staged-task recovery, chat clear) re-read and retry on the error.
     """
 
-    def __init__(self, store: "MongoDocumentStore"):
-        self._store = store
+    def __init__(self, db: Any, client: Any):
+        # The database and the client, handed over by ``MongoDocumentStore.batch()`` from inside the
+        # store's own method. Holding the STORE instead meant reaching back through ``store._db`` and
+        # ``store._mongo_client`` — a sibling class reading another's privates for two attributes it
+        # could simply be given.
+        self._db = db
+        self._client = client
         self._ops: List[tuple] = []
 
     def _append(self, collection_name: str, op: Any, run: Callable[[Any], None], *, checked: bool = False) -> None:
@@ -357,7 +362,7 @@ class _MongoBatch:
 
     def _apply(self, by_collection: Dict[str, list], session: Any = None) -> None:
         for collection_name, ops in by_collection.items():
-            coll = self._store._db[collection_name]
+            coll = self._db[collection_name]
             if any(checked for _, _, checked in ops):
                 # Sequential in queued order so precondition/update ops are individually checkable.
                 for _, run, _ in ops:
@@ -401,7 +406,7 @@ class _MongoBatch:
             return
 
         try:
-            with self._store._mongo_client.start_session() as session:
+            with self._client.start_session() as session:
                 session.with_transaction(lambda active: self._apply(by_collection, active))
         except OperationFailure as exc:
             if not _is_transactions_unsupported(exc):
@@ -418,30 +423,304 @@ class _MongoBatch:
         self._ops = []
 
 
+# --- the operations, as module functions ---------------------------------------------------------
+# One implementation per op, shared by the public port surface (``MongoDocumentStore.get`` and friends,
+# which pass no session) and by the session handle (``_MongoTransaction``, which passes one). They live
+# at module scope rather than as private METHODS because both callers are peers here: as methods they
+# were reached as ``self._store._get(...)`` from a sibling class, which is a private access pyright is
+# right to flag — and, before this, they were also published as a PROTOCOL in ports.py, so a leading
+# underscore had become part of an interface other people implement.
+#
+# ``db`` is the pymongo Database. Passing it in is what keeps the callers from reaching into
+# ``store._db``: ``MongoDocumentStore`` hands it over from inside its own methods, where it is not a
+# private access at all.
+
+def _do_get(
+    db,
+    path: str,
+    *,
+    fields: Optional[Sequence[str]] = None,
+    session: Any = None,
+    timeout: Optional[float] = None,
+) -> StoredDocument:
+    collection_name, _, _ = _doc_meta(path)
+    # fields=[] means ids-only; an empty dict projection would make pymongo return ALL fields, so fall
+    # back to {"_id": 1} (cubic 10887 facade:258). fields=None = no projection (full doc).
+    projection = ({"d." + field: 1 for field in fields} or {"_id": 1}) if fields is not None else None
+    # ``timeout`` (seconds) -> Mongo ``maxTimeMS`` so a slow server-side read aborts at the
+    # deadline instead of holding the worker until the (much larger) socket timeout.
+    kw: Dict[str, Any] = {} if timeout is None else {"max_time_ms": int(timeout * 1000)}
+    doc = db[collection_name].find_one({"_id": path}, projection, session=session, **kw)
+    if not doc:
+        return StoredDocument.missing(path)
+    return _to_record(doc, path)
+
+
+def _do_bump_updated_at(collection: Any, path: str, now: datetime, session: Any) -> None:
+    # Strictly-increasing per-doc revision for an operator-based write, which cannot express $max in
+    # update-operator syntax. A second pipeline update reads the just-written value and bumps it to
+    # max(now, prev+1ms) so repeatable merge/update writes never collide on _updated_at (cubic 10887
+    # mongo.py:161). Runs in the same session, so inside a transaction it is atomic with the write.
+    collection.update_one({"_id": path}, [{"$set": {"_updated_at": _monotonic_updated_at(now)}}], session=session)
+
+
+def _do_set(db, path: str, data: Dict[str, Any], *, merge: bool = False, session: Any = None) -> None:
+    collection_name, parent, key = _doc_meta(path)
+    collection = db[collection_name]
+    now = _now()
+    if merge:
+        # Operator-based merge (dotted $set / $inc / array ops) cannot compute a monotonic _updated_at
+        # in one update, so stamp it via a second pipeline bump (below) rather than a colliding raw now.
+        update: Dict[str, Any] = _build_merge_update_ops(data)  # deep-merge nested maps (cubic mongo.py:389)
+        update.setdefault("$setOnInsert", {}).update({"_parent": parent, "_key": key, "_created_at": now})
+        with _as_already_exists(path):
+            collection.update_one({"_id": path}, update, upsert=True, session=session)
+        _do_bump_updated_at(collection, path, now, session)
+        return
+    # merge=False -> full payload replace via a pipeline update: ``$set`` the whole ``d`` field
+    # (non-merge semantics), a monotonic ``_updated_at`` (strictly increasing per doc), and keep an
+    # immutable ``_created_at`` with ``$ifNull`` (pipeline updates have no ``$setOnInsert``) (cubic
+    # PR 10887 #1 + mongo.py:161). Any transforms (rare on a non-merge set) apply right after.
+    plain = {k: v for k, v in data.items() if not _is_sentinel(v)}
+    with _as_already_exists(path):
+        collection.update_one(
+            {"_id": path},
+            [
+                {
+                    "$set": {
+                        # $literal so ``d`` REPLACES (a pipeline $set of a bare object deep-MERGES into
+                        # the existing d — non-merge semantics need a literal replacement); it also keeps
+                        # any $-prefixed payload keys literal instead of evaluating them as field paths.
+                        "d": {"$literal": plain},
+                        "_parent": parent,
+                        "_key": key,
+                        "_updated_at": _monotonic_updated_at(now),
+                        "_created_at": {"$ifNull": ["$_created_at", now]},
+                    }
+                }
+            ],
+            upsert=True,
+            session=session,
+        )
+    transforms = {k: v for k, v in data.items() if _is_sentinel(v)}
+    if transforms:
+        collection.update_one({"_id": path}, _build_update_ops(transforms), session=session)
+
+
+def _do_update(db, path: str, data: Dict[str, Any], *, if_updated_at: Any = None, session: Any = None) -> None:
+    collection_name, _, _ = _doc_meta(path)
+    collection = db[collection_name]
+    now = _now()
+    update = _build_update_ops(data)
+    # ``update`` requires an existing document (the Firestore reference adapter raises NotFound
+    # otherwise). Mongo's update_one silently no-ops on no match, so translate matched_count==0
+    # into the neutral NotFound to preserve parity across backends.
+    if if_updated_at is not None:
+        # Optimistic-concurrency precondition (neutral LastUpdateOption): only apply if the stored
+        # revision still matches. ``_rev_stamp`` writes a strictly-greater revision in the SAME atomic
+        # update, so this path is already monotonic (the new value > the matched token) — no bump needed.
+        # A no-match means the precondition cannot hold — whether the revision moved (stale) OR the
+        # document is missing — and Firestore raises FailedPrecondition for a last-update-time precondition
+        # on a MISSING doc too (verified against the emulator), superseding ADR-0045's existence-probe.
+        update.setdefault("$set", {})["_updated_at"] = _rev_stamp(if_updated_at)
+        result = collection.update_one({"_id": path, "_updated_at": if_updated_at}, update, session=session)
+        if result.matched_count == 0:
+            raise PreconditionFailed(path)
+        return
+    # Non-OCC update: the operator write can't compute a monotonic _updated_at inline, so apply the field
+    # ops (when any), then bump _updated_at to max(now, prev+1ms) via a pipeline (cubic 10887 mongo.py:161).
+    # The bump also enforces existence: on a missing doc both the ops and the bump no-op -> NotFound.
+    if update:
+        collection.update_one({"_id": path}, update, session=session)
+    result = collection.update_one(
+        {"_id": path}, [{"$set": {"_updated_at": _monotonic_updated_at(now)}}], session=session
+    )
+    if result.matched_count == 0:
+        raise NotFound(path)
+
+
+def _do_delete(db, path: str, *, if_updated_at: Any = None, session: Any = None) -> None:
+    collection_name, _, _ = _doc_meta(path)
+    if if_updated_at is not None:
+        # Precondition delete: remove only the revision the caller read. A no-match means the row
+        # changed or is already gone — either way the caller's read-modify-delete lost the race,
+        # so surface PreconditionFailed (parity with a Firestore delete carrying LastUpdateOption).
+        result = db[collection_name].delete_one({"_id": path, "_updated_at": if_updated_at}, session=session)
+        if result.deleted_count == 0:
+            raise PreconditionFailed(path)
+        return
+    db[collection_name].delete_one({"_id": path}, session=session)
+
+
+def _do_create(db, path: str, data: Dict[str, Any], *, session: Any = None) -> None:
+    collection_name, parent, key = _doc_meta(path)
+    plain = {k: v for k, v in data.items() if not _is_sentinel(v)}
+    now = _now()
+    document = {"_id": path, "_parent": parent, "_key": key, "_updated_at": now, "_created_at": now, "d": plain}
+    try:
+        db[collection_name].insert_one(document, session=session)
+    except DuplicateKeyError as exc:
+        raise AlreadyExists(path) from exc
+    transforms = {k: v for k, v in data.items() if _is_sentinel(v)}
+    if transforms:
+        db[collection_name].update_one({"_id": path}, _build_update_ops(transforms), session=session)
+
+
+def _do_query(
+    db,
+    collection: str,
+    *,
+    filters: Optional[Iterable[Filter]] = None,
+    order_by: Optional[str] = None,
+    direction: str = "asc",
+    limit: Optional[int] = None,
+    offset: Optional[int] = None,
+    fields: Optional[Sequence[str]] = None,
+    start_after: Optional[Dict[str, Any]] = None,
+    session: Any = None,
+) -> List[StoredDocument]:
+    """``query`` with an explicit session — the facade's read path inside a transaction (L24).
+
+    The session-aware twin of every other op here (``_get``/``_set``/…): the public ``query`` is the
+    domain surface and passes ``session=None``. Before this existed, ``find(..., session=None)`` was
+    hardcoded, so a query the caller had explicitly bound to a transaction ran outside it.
+    """
+    mongo_filter = _build_filter(collection, filters)
+    # order_by is a single field name (str) or a list of (field, direction) tuples.
+    specs = [(order_by, direction)] if isinstance(order_by, str) else list(order_by or [])
+    # Firestore's order_by returns ONLY documents that have every ordered field; a doc missing one is
+    # excluded. Mongo's sort instead includes it (a missing field sorts as null/first). Add an
+    # existence predicate per ordered payload field so both backends return the same rows (cubic
+    # PR 10887, mongo.py:455). ``__name__`` maps to ``_id`` which always exists. An $and keeps this
+    # from colliding with any existing predicate/keyset on the same field.
+    exists_clauses = [{"d." + f: {"$exists": True}} for f, _ in specs if f != "__name__"]
+    if exists_clauses:
+        mongo_filter = {"$and": [mongo_filter, *exists_clauses]}
+    if start_after is not None:
+        cursor_id = f"{collection}/{start_after['id']}"
+        # Composite keyset (cubic PR 10887 #4/#5/#10/#11): ``values`` aligns with the REAL (payload)
+        # order fields; a trailing ``__name__`` (Firestore's document-name token) or no order is the
+        # ``_id`` tiebreak — in Mongo the document name lives in ``_id`` (the full path), never a
+        # payload field. Backward-compat with the single-field ``{"value": v}`` shape.
+        values = start_after.get("values")
+        if values is None:
+            values = [start_after["value"]] if "value" in start_after else []
+        real = [(f, d) for f, d in specs if f != "__name__"]
+        name_dir = next((d for f, d in specs if f == "__name__"), (real[-1][1] if real else "asc"))
+        # Strictly-after, lexicographically: OR of (all prior fields equal AND this field strictly
+        # after), ending with the _id tiebreak.
+        ors: List[Dict[str, Any]] = []
+        prefix: List[Dict[str, Any]] = []
+        for i, (f, d) in enumerate(real):
+            op = "$gt" if d == "asc" else "$lt"
+            v = values[i] if i < len(values) else None
+            step = {"d." + f: {op: v}}
+            ors.append({"$and": prefix + [step]} if prefix else step)
+            prefix = prefix + [{"d." + f: v}]
+        id_op = "$gt" if name_dir == "asc" else "$lt"
+        id_step = {"_id": {id_op: cursor_id}}
+        ors.append({"$and": prefix + [id_step]} if prefix else id_step)
+        keyset = ors[0] if len(ors) == 1 else {"$or": ors}
+        mongo_filter = {"$and": [mongo_filter, keyset]}
+    # fields=[] means ids-only; an empty dict projection would make pymongo return ALL fields, so fall
+    # back to {"_id": 1} (cubic 10887 facade:258). fields=None = no projection (full doc).
+    projection = ({"d." + field: 1 for field in fields} or {"_id": 1}) if fields is not None else None
+    cursor = db[_collection_name(collection)].find(mongo_filter, projection, session=session)
+    if specs:
+        # Map ``__name__`` order to _id (the document name); other fields sort by their payload key.
+        # Append an _id tiebreak only when _id is not already an order key (mirrors Firestore's
+        # implicit __name__ ordering) so tie order is stable across pages.
+        sort_spec = [
+            ("_id" if f == "__name__" else "d." + f, ASCENDING if d == "asc" else DESCENDING) for f, d in specs
+        ]
+        if not any(f == "__name__" for f, _ in specs):
+            sort_spec.append(("_id", ASCENDING if specs[-1][1] == "asc" else DESCENDING))
+        cursor = cursor.sort(sort_spec)
+    elif start_after is not None:
+        # No order field but a keyset cursor: order by _id so the document-name pagination is stable.
+        cursor = cursor.sort([("_id", ASCENDING)])
+    if offset is not None:
+        cursor = cursor.skip(offset)
+    if limit is not None:
+        cursor = cursor.limit(limit)
+    return [_to_record(doc, doc["_id"]) for doc in cursor]
+
+
+def _build_filter(collection: str, filters: Optional[Iterable[Filter]]) -> Dict[str, Any]:
+    mongo_filter: Dict[str, Any] = {"_parent": collection}
+    for field, op, value in filters or ():
+        if field == "__name__":
+            # Document-name filter: compare the full-path _id, not a payload field (cubic PR 10887 #3
+            # — a d.__name__ predicate matched nothing, undercounting e.g. monthly chat usage). For
+            # in/not-in the value is a LIST of ids -> a list of full-path _ids ($in/$nin need an array;
+            # f"{collection}/{list}" stringified the whole list and Mongo rejected it — cubic firestore.py:276 sibling).
+            if op in ("in", "not-in"):
+                mongo_filter.setdefault("_id", {})[_OP[op]] = [f"{collection}/{v}" for v in value]
+            else:
+                mongo_filter.setdefault("_id", {})[_OP[op]] = f"{collection}/{value}"
+        elif op == "array_contains":
+            # Mongo matches an array field against a scalar by membership: {field: value}
+            # selects docs whose array field contains value (mirrors Firestore array_contains).
+            mongo_filter["d." + field] = value
+        else:
+            clause = mongo_filter.setdefault("d." + field, {})
+            clause[_OP[op]] = value
+            if op in ("!=", "not-in") or (op == "==" and value is None):
+                # Firestore != / not-in / IS_NULL (== None) never match a document where the field
+                # is ABSENT — only one that HAS the field. Mongo's $ne/$nin/$eq-null would otherwise
+                # MATCH a missing field, over-returning rows. Require the field to exist so the row
+                # set matches Firestore (cubic PR 10887; extended to == None so a null-equality query
+                # mirrors Firestore's IS_NULL — present-and-null, not null-or-absent).
+                clause["$exists"] = True
+    return mongo_filter
+
+
 class _MongoTransaction:
     """Neutral transaction handle bound to a replica-set session."""
 
-    def __init__(self, store: "MongoDocumentStore", session: Any):
-        self._store = store
+    def __init__(self, db: Any, session: Any):
+        self._db = db
         self._session = session
 
-    def get(self, path: str) -> StoredDocument:
-        return self._store._get(path, session=self._session)
+    def get(self, path: str, *, fields: Optional[Sequence[str]] = None) -> StoredDocument:
+        return _do_get(self._db, path, fields=fields, session=self._session)
 
     def set(self, path: str, data: Dict[str, Any], *, merge: bool = False) -> None:
-        self._store._set(path, data, merge=merge, session=self._session)
+        _do_set(self._db, path, data, merge=merge, session=self._session)
 
     def update(self, path: str, data: Dict[str, Any], *, if_updated_at: Any = None) -> None:
-        self._store._update(path, data, if_updated_at=if_updated_at, session=self._session)
+        _do_update(self._db, path, data, if_updated_at=if_updated_at, session=self._session)
 
     def create(self, path: str, data: Dict[str, Any]) -> None:
-        self._store._create(path, data, session=self._session)
+        _do_create(self._db, path, data, session=self._session)
 
     def delete(self, path: str, *, if_updated_at: Any = None) -> None:
-        self._store._delete(path, if_updated_at=if_updated_at, session=self._session)
+        _do_delete(self._db, path, if_updated_at=if_updated_at, session=self._session)
 
     def query(self, collection: str, **kw: Any) -> List[StoredDocument]:
-        return self._store._query(collection, session=self._session, **kw)
+        return _do_query(self._db, collection, session=self._session, **kw)
+
+
+class _MongoSession(_MongoTransaction):
+    """``_MongoTransaction`` plus the transaction LIFECYCLE, for the ADR-0044 facade only.
+
+    ``run_transaction`` hands the domain a plain ``_MongoTransaction`` on purpose: there
+    ``with_transaction`` owns commit and rollback, and a callback that committed by itself would
+    break the driver's retry. The facade impersonates Firestore, where upstream's code drives the
+    lifecycle explicitly (``transaction._commit()``), so the facade — and nothing else — gets these.
+
+    Still Mongo's names, deliberately: making the lifecycle neutral is the open half of BACKLOG L31,
+    and it wants a third adapter to design against.
+    """
+
+    def commit_transaction(self) -> None:
+        self._session.commit_transaction()
+
+    def abort_transaction(self) -> None:
+        self._session.abort_transaction()
+
+    def end_session(self) -> None:
+        self._session.end_session()
 
 
 class MongoDocumentStore:
@@ -473,152 +752,33 @@ class MongoDocumentStore:
         self._mongo_client.close()
 
     # --- internal ops (shared by the public surface and the transaction handle) ---
-    def _get(
-        self,
-        path: str,
-        *,
-        fields: Optional[Sequence[str]] = None,
-        session: Any = None,
-        timeout: Optional[float] = None,
-    ) -> StoredDocument:
-        collection_name, _, _ = _doc_meta(path)
-        # fields=[] means ids-only; an empty dict projection would make pymongo return ALL fields, so fall
-        # back to {"_id": 1} (cubic 10887 facade:258). fields=None = no projection (full doc).
-        projection = ({"d." + field: 1 for field in fields} or {"_id": 1}) if fields is not None else None
-        # ``timeout`` (seconds) -> Mongo ``maxTimeMS`` so a slow server-side read aborts at the
-        # deadline instead of holding the worker until the (much larger) socket timeout.
-        kw: Dict[str, Any] = {} if timeout is None else {"max_time_ms": int(timeout * 1000)}
-        doc = self._db[collection_name].find_one({"_id": path}, projection, session=session, **kw)
-        if not doc:
-            return StoredDocument.missing(path)
-        return _to_record(doc, path)
 
-    def _bump_updated_at(self, collection: Any, path: str, now: datetime, session: Any) -> None:
-        # Strictly-increasing per-doc revision for an operator-based write, which cannot express $max in
-        # update-operator syntax. A second pipeline update reads the just-written value and bumps it to
-        # max(now, prev+1ms) so repeatable merge/update writes never collide on _updated_at (cubic 10887
-        # mongo.py:161). Runs in the same session, so inside a transaction it is atomic with the write.
-        collection.update_one({"_id": path}, [{"$set": {"_updated_at": _monotonic_updated_at(now)}}], session=session)
 
-    def _set(self, path: str, data: Dict[str, Any], *, merge: bool = False, session: Any = None) -> None:
-        collection_name, parent, key = _doc_meta(path)
-        collection = self._db[collection_name]
-        now = _now()
-        if merge:
-            # Operator-based merge (dotted $set / $inc / array ops) cannot compute a monotonic _updated_at
-            # in one update, so stamp it via a second pipeline bump (below) rather than a colliding raw now.
-            update: Dict[str, Any] = _build_merge_update_ops(data)  # deep-merge nested maps (cubic mongo.py:389)
-            update.setdefault("$setOnInsert", {}).update({"_parent": parent, "_key": key, "_created_at": now})
-            with _as_already_exists(path):
-                collection.update_one({"_id": path}, update, upsert=True, session=session)
-            self._bump_updated_at(collection, path, now, session)
-            return
-        # merge=False -> full payload replace via a pipeline update: ``$set`` the whole ``d`` field
-        # (non-merge semantics), a monotonic ``_updated_at`` (strictly increasing per doc), and keep an
-        # immutable ``_created_at`` with ``$ifNull`` (pipeline updates have no ``$setOnInsert``) (cubic
-        # PR 10887 #1 + mongo.py:161). Any transforms (rare on a non-merge set) apply right after.
-        plain = {k: v for k, v in data.items() if not _is_sentinel(v)}
-        with _as_already_exists(path):
-            collection.update_one(
-                {"_id": path},
-                [
-                    {
-                        "$set": {
-                            # $literal so ``d`` REPLACES (a pipeline $set of a bare object deep-MERGES into
-                            # the existing d — non-merge semantics need a literal replacement); it also keeps
-                            # any $-prefixed payload keys literal instead of evaluating them as field paths.
-                            "d": {"$literal": plain},
-                            "_parent": parent,
-                            "_key": key,
-                            "_updated_at": _monotonic_updated_at(now),
-                            "_created_at": {"$ifNull": ["$_created_at", now]},
-                        }
-                    }
-                ],
-                upsert=True,
-                session=session,
-            )
-        transforms = {k: v for k, v in data.items() if _is_sentinel(v)}
-        if transforms:
-            collection.update_one({"_id": path}, _build_update_ops(transforms), session=session)
 
-    def _update(self, path: str, data: Dict[str, Any], *, if_updated_at: Any = None, session: Any = None) -> None:
-        collection_name, _, _ = _doc_meta(path)
-        collection = self._db[collection_name]
-        now = _now()
-        update = _build_update_ops(data)
-        # ``update`` requires an existing document (the Firestore reference adapter raises NotFound
-        # otherwise). Mongo's update_one silently no-ops on no match, so translate matched_count==0
-        # into the neutral NotFound to preserve parity across backends.
-        if if_updated_at is not None:
-            # Optimistic-concurrency precondition (neutral LastUpdateOption): only apply if the stored
-            # revision still matches. ``_rev_stamp`` writes a strictly-greater revision in the SAME atomic
-            # update, so this path is already monotonic (the new value > the matched token) — no bump needed.
-            # A no-match means the precondition cannot hold — whether the revision moved (stale) OR the
-            # document is missing — and Firestore raises FailedPrecondition for a last-update-time precondition
-            # on a MISSING doc too (verified against the emulator), superseding ADR-0045's existence-probe.
-            update.setdefault("$set", {})["_updated_at"] = _rev_stamp(if_updated_at)
-            result = collection.update_one({"_id": path, "_updated_at": if_updated_at}, update, session=session)
-            if result.matched_count == 0:
-                raise PreconditionFailed(path)
-            return
-        # Non-OCC update: the operator write can't compute a monotonic _updated_at inline, so apply the field
-        # ops (when any), then bump _updated_at to max(now, prev+1ms) via a pipeline (cubic 10887 mongo.py:161).
-        # The bump also enforces existence: on a missing doc both the ops and the bump no-op -> NotFound.
-        if update:
-            collection.update_one({"_id": path}, update, session=session)
-        result = collection.update_one(
-            {"_id": path}, [{"$set": {"_updated_at": _monotonic_updated_at(now)}}], session=session
-        )
-        if result.matched_count == 0:
-            raise NotFound(path)
 
-    def _delete(self, path: str, *, if_updated_at: Any = None, session: Any = None) -> None:
-        collection_name, _, _ = _doc_meta(path)
-        if if_updated_at is not None:
-            # Precondition delete: remove only the revision the caller read. A no-match means the row
-            # changed or is already gone — either way the caller's read-modify-delete lost the race,
-            # so surface PreconditionFailed (parity with a Firestore delete carrying LastUpdateOption).
-            result = self._db[collection_name].delete_one({"_id": path, "_updated_at": if_updated_at}, session=session)
-            if result.deleted_count == 0:
-                raise PreconditionFailed(path)
-            return
-        self._db[collection_name].delete_one({"_id": path}, session=session)
 
     # --- public port surface ---
     def get(
         self, path: str, *, fields: Optional[Sequence[str]] = None, timeout: Optional[float] = None
     ) -> StoredDocument:
-        return self._get(path, fields=fields, timeout=timeout)
+        return _do_get(self._db, path, fields=fields, timeout=timeout)
 
     def exists(self, path: str) -> bool:
         collection_name, _, _ = _doc_meta(path)
         return self._db[collection_name].count_documents({"_id": path}, limit=1) > 0
 
     def set(self, path: str, data: Dict[str, Any], *, merge: bool = False) -> None:
-        self._set(path, data, merge=merge)
+        _do_set(self._db, path, data, merge=merge)
 
     def update(self, path: str, data: Dict[str, Any], *, if_updated_at: Any = None) -> None:
-        self._update(path, data, if_updated_at=if_updated_at)
+        _do_update(self._db, path, data, if_updated_at=if_updated_at)
 
     def create(self, path: str, data: Dict[str, Any]) -> None:
-        self._create(path, data)
+        _do_create(self._db, path, data)
 
-    def _create(self, path: str, data: Dict[str, Any], *, session: Any = None) -> None:
-        collection_name, parent, key = _doc_meta(path)
-        plain = {k: v for k, v in data.items() if not _is_sentinel(v)}
-        now = _now()
-        document = {"_id": path, "_parent": parent, "_key": key, "_updated_at": now, "_created_at": now, "d": plain}
-        try:
-            self._db[collection_name].insert_one(document, session=session)
-        except DuplicateKeyError as exc:
-            raise AlreadyExists(path) from exc
-        transforms = {k: v for k, v in data.items() if _is_sentinel(v)}
-        if transforms:
-            self._db[collection_name].update_one({"_id": path}, _build_update_ops(transforms), session=session)
 
     def delete(self, path: str, *, if_updated_at: Any = None) -> None:
-        self._delete(path, if_updated_at=if_updated_at)
+        _do_delete(self._db, path, if_updated_at=if_updated_at)
 
     def query(
         self,
@@ -632,7 +792,8 @@ class MongoDocumentStore:
         fields: Optional[Sequence[str]] = None,
         start_after: Optional[Dict[str, Any]] = None,
     ) -> List[StoredDocument]:
-        return self._query(
+        return _do_query(
+            self._db,
             collection,
             filters=filters,
             order_by=order_by,
@@ -643,116 +804,10 @@ class MongoDocumentStore:
             start_after=start_after,
         )
 
-    def _query(
-        self,
-        collection: str,
-        *,
-        filters: Optional[Iterable[Filter]] = None,
-        order_by: Optional[str] = None,
-        direction: str = "asc",
-        limit: Optional[int] = None,
-        offset: Optional[int] = None,
-        fields: Optional[Sequence[str]] = None,
-        start_after: Optional[Dict[str, Any]] = None,
-        session: Any = None,
-    ) -> List[StoredDocument]:
-        """``query`` with an explicit session — the facade's read path inside a transaction (L24).
 
-        The session-aware twin of every other op here (``_get``/``_set``/…): the public ``query`` is the
-        domain surface and passes ``session=None``. Before this existed, ``find(..., session=None)`` was
-        hardcoded, so a query the caller had explicitly bound to a transaction ran outside it.
-        """
-        mongo_filter = self._filter(collection, filters)
-        # order_by is a single field name (str) or a list of (field, direction) tuples.
-        specs = [(order_by, direction)] if isinstance(order_by, str) else list(order_by or [])
-        # Firestore's order_by returns ONLY documents that have every ordered field; a doc missing one is
-        # excluded. Mongo's sort instead includes it (a missing field sorts as null/first). Add an
-        # existence predicate per ordered payload field so both backends return the same rows (cubic
-        # PR 10887, mongo.py:455). ``__name__`` maps to ``_id`` which always exists. An $and keeps this
-        # from colliding with any existing predicate/keyset on the same field.
-        exists_clauses = [{"d." + f: {"$exists": True}} for f, _ in specs if f != "__name__"]
-        if exists_clauses:
-            mongo_filter = {"$and": [mongo_filter, *exists_clauses]}
-        if start_after is not None:
-            cursor_id = f"{collection}/{start_after['id']}"
-            # Composite keyset (cubic PR 10887 #4/#5/#10/#11): ``values`` aligns with the REAL (payload)
-            # order fields; a trailing ``__name__`` (Firestore's document-name token) or no order is the
-            # ``_id`` tiebreak — in Mongo the document name lives in ``_id`` (the full path), never a
-            # payload field. Backward-compat with the single-field ``{"value": v}`` shape.
-            values = start_after.get("values")
-            if values is None:
-                values = [start_after["value"]] if "value" in start_after else []
-            real = [(f, d) for f, d in specs if f != "__name__"]
-            name_dir = next((d for f, d in specs if f == "__name__"), (real[-1][1] if real else "asc"))
-            # Strictly-after, lexicographically: OR of (all prior fields equal AND this field strictly
-            # after), ending with the _id tiebreak.
-            ors: List[Dict[str, Any]] = []
-            prefix: List[Dict[str, Any]] = []
-            for i, (f, d) in enumerate(real):
-                op = "$gt" if d == "asc" else "$lt"
-                v = values[i] if i < len(values) else None
-                step = {"d." + f: {op: v}}
-                ors.append({"$and": prefix + [step]} if prefix else step)
-                prefix = prefix + [{"d." + f: v}]
-            id_op = "$gt" if name_dir == "asc" else "$lt"
-            id_step = {"_id": {id_op: cursor_id}}
-            ors.append({"$and": prefix + [id_step]} if prefix else id_step)
-            keyset = ors[0] if len(ors) == 1 else {"$or": ors}
-            mongo_filter = {"$and": [mongo_filter, keyset]}
-        # fields=[] means ids-only; an empty dict projection would make pymongo return ALL fields, so fall
-        # back to {"_id": 1} (cubic 10887 facade:258). fields=None = no projection (full doc).
-        projection = ({"d." + field: 1 for field in fields} or {"_id": 1}) if fields is not None else None
-        cursor = self._db[_collection_name(collection)].find(mongo_filter, projection, session=session)
-        if specs:
-            # Map ``__name__`` order to _id (the document name); other fields sort by their payload key.
-            # Append an _id tiebreak only when _id is not already an order key (mirrors Firestore's
-            # implicit __name__ ordering) so tie order is stable across pages.
-            sort_spec = [
-                ("_id" if f == "__name__" else "d." + f, ASCENDING if d == "asc" else DESCENDING) for f, d in specs
-            ]
-            if not any(f == "__name__" for f, _ in specs):
-                sort_spec.append(("_id", ASCENDING if specs[-1][1] == "asc" else DESCENDING))
-            cursor = cursor.sort(sort_spec)
-        elif start_after is not None:
-            # No order field but a keyset cursor: order by _id so the document-name pagination is stable.
-            cursor = cursor.sort([("_id", ASCENDING)])
-        if offset is not None:
-            cursor = cursor.skip(offset)
-        if limit is not None:
-            cursor = cursor.limit(limit)
-        return [_to_record(doc, doc["_id"]) for doc in cursor]
-
-    @staticmethod
-    def _filter(collection: str, filters: Optional[Iterable[Filter]]) -> Dict[str, Any]:
-        mongo_filter: Dict[str, Any] = {"_parent": collection}
-        for field, op, value in filters or ():
-            if field == "__name__":
-                # Document-name filter: compare the full-path _id, not a payload field (cubic PR 10887 #3
-                # — a d.__name__ predicate matched nothing, undercounting e.g. monthly chat usage). For
-                # in/not-in the value is a LIST of ids -> a list of full-path _ids ($in/$nin need an array;
-                # f"{collection}/{list}" stringified the whole list and Mongo rejected it — cubic firestore.py:276 sibling).
-                if op in ("in", "not-in"):
-                    mongo_filter.setdefault("_id", {})[_OP[op]] = [f"{collection}/{v}" for v in value]
-                else:
-                    mongo_filter.setdefault("_id", {})[_OP[op]] = f"{collection}/{value}"
-            elif op == "array_contains":
-                # Mongo matches an array field against a scalar by membership: {field: value}
-                # selects docs whose array field contains value (mirrors Firestore array_contains).
-                mongo_filter["d." + field] = value
-            else:
-                clause = mongo_filter.setdefault("d." + field, {})
-                clause[_OP[op]] = value
-                if op in ("!=", "not-in") or (op == "==" and value is None):
-                    # Firestore != / not-in / IS_NULL (== None) never match a document where the field
-                    # is ABSENT — only one that HAS the field. Mongo's $ne/$nin/$eq-null would otherwise
-                    # MATCH a missing field, over-returning rows. Require the field to exist so the row
-                    # set matches Firestore (cubic PR 10887; extended to == None so a null-equality query
-                    # mirrors Firestore's IS_NULL — present-and-null, not null-or-absent).
-                    clause["$exists"] = True
-        return mongo_filter
 
     def count(self, collection: str, *, filters: Optional[Iterable[Filter]] = None) -> int:
-        return self._db[_collection_name(collection)].count_documents(self._filter(collection, filters))
+        return self._db[_collection_name(collection)].count_documents(_build_filter(collection, filters))
 
     def query_group(
         self,
@@ -884,22 +939,26 @@ class MongoDocumentStore:
         deadline), so ``attempts`` is accepted for port symmetry but delegated to the driver.
         """
         with self._mongo_client.start_session() as session:
-            return session.with_transaction(lambda s: fn(_MongoTransaction(self, s)))
+            return session.with_transaction(lambda s: fn(_MongoTransaction(self._db, s)))
 
     def batch(self) -> _MongoBatch:
-        return _MongoBatch(self)
+        return _MongoBatch(self._db, self._mongo_client)
 
     # --- facade session support (ports.FacadeSessionStore) ---
-    def _begin_session(self) -> Any:
+    def begin_session(self) -> _MongoSession:
         """Open a replica-set session with an active transaction, for the ADR-0044 facade.
 
         The facade used to reach for ``store._mongo_client`` and start the session itself; the
         requirement now lives in ``ports.FacadeSessionStore`` and the store owns its own session,
         so a store that cannot offer one says so by returning ``None`` instead of being guessed at.
+
+        Returns the same handle shape ``run_transaction`` gives the domain — one way to read and
+        write inside a session, not two. It used to return the raw pymongo session, which forced the
+        facade to thread ``session=`` back into a parallel set of store methods.
         """
         session = self._mongo_client.start_session()
         session.start_transaction()
-        return session
+        return _MongoSession(self._db, session)
 
 
 __all__ = ["MongoDocumentStore"]

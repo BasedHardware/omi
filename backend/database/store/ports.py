@@ -159,49 +159,56 @@ class DocumentStore(Protocol):
 
 
 @runtime_checkable
-class FacadeSessionStore(Protocol):
-    """The extra surface a store MUST implement to sit behind the ADR-0044 facade.
+class StoreSession(Protocol):
+    """One open session, and the operations the facade runs inside it.
 
-    ``NeutralFirestoreClient`` is not a domain caller: it impersonates a Firestore ``Client`` so
-    upstream code that threads ``db_client`` runs unchanged. Upstream's ``@transactional`` bodies
-    interleave reads and writes on one handle, so the facade needs to run each op **inside a specific
-    session** — something the domain-facing ``DocumentStore`` above deliberately does not express
-    (``run_transaction`` takes a callback and owns the session itself).
+    Upstream's ``@transactional`` bodies interleave reads and writes on one handle, so the facade
+    needs each op to run **inside a specific session** — something the domain-facing ``DocumentStore``
+    deliberately does not express (``run_transaction`` takes a callback and owns the session itself).
 
-    This protocol is that requirement, written down. It used to be an unwritten convention: the facade
-    reached for ``store._get(..., session=...)`` and friends, which exist on ``MongoDocumentStore`` and
-    the in-memory test fake and nowhere else. An adapter author implementing the documented port in
-    full got ``AttributeError`` deep inside a transaction — and, worse, a ``_begin`` that silently fell
-    back to no session at all, so every transaction in the product would have run **without
-    atomicity, without an error**. Fixing the loud half while shipping the silent half was the real
-    hazard (BACKLOG L31).
+    This used to be stated as extra methods ON THE STORE — ``store._get(path, session=...)`` and
+    friends — which said how the facade drives a store rather than what a store can do, threaded a
+    ``session=`` argument through every call that could be forgotten, and made a leading underscore
+    part of a published interface. The capability is "a store can open a session, and a session can
+    read and write", and that is what these two protocols now say.
 
-    The names keep their leading underscore on purpose: they are a facade-internal extension, not part
-    of the neutral surface domain modules are allowed to call. ``session`` is opaque to the facade's
-    callers but not yet neutral — ``_FacadeTransaction`` drives it with the **Mongo session protocol**
-    (``commit_transaction`` / ``abort_transaction`` / ``end_session``). Making that neutral too is the
-    open half of L31, to be done together with a third adapter and not before.
+    Not neutral yet: the session's LIFECYCLE (``commit_transaction`` / ``abort_transaction`` /
+    ``end_session``) is still driven by ``_FacadeTransaction`` with the Mongo session protocol. That
+    half of BACKLOG L31 stays open on purpose — it wants a third adapter to design against, and we
+    have two.
     """
 
-    ...
+    def get(self, path: str, *, fields: Optional[Sequence[str]] = None) -> StoredDocument: ...
+    def set(self, path: str, data: Dict[str, Any], *, merge: bool = False) -> None: ...
+    def update(self, path: str, data: Dict[str, Any], *, if_updated_at: Optional[datetime] = None) -> None: ...
+    def create(self, path: str, data: Dict[str, Any]) -> None: ...
+    def delete(self, path: str, *, if_updated_at: Optional[datetime] = None) -> None: ...
 
-    # Same semantics as the DocumentStore ops of the same name, executed inside ``session``.
-    def _get(self, path: str, *, fields: Optional[Sequence[str]] = None, session: Any = None) -> StoredDocument: ...
-    def _set(self, path: str, data: Dict[str, Any], *, merge: bool = False, session: Any = None) -> None: ...
-    def _update(
-        self, path: str, data: Dict[str, Any], *, if_updated_at: Optional[datetime] = None, session: Any = None
-    ) -> None: ...
-    def _create(self, path: str, data: Dict[str, Any], *, session: Any = None) -> None: ...
-    def _delete(self, path: str, *, if_updated_at: Optional[datetime] = None, session: Any = None) -> None: ...
-
-    def _query(self, collection: str, *, session: Any = None, **kwargs: Any) -> List[StoredDocument]:
-        """``query`` inside ``session``. Upstream's transactional bodies read COLLECTIONS, not just
-        documents (``query.stream(transaction=tx)``), and the facade used to accept that transaction and
-        drop it — so on Mongo the de-dup read in ``database/action_items.py`` ran outside the session
-        (BACKLOG L24)."""
+    def query(self, collection: str, **kwargs: Any) -> List[StoredDocument]:
+        """``query`` inside the session. Upstream's transactional bodies read COLLECTIONS, not just
+        documents (``query.stream(transaction=tx)``), and the facade used to accept that transaction
+        and drop it — so on Mongo the de-dup read in ``database/action_items.py`` ran outside the
+        session (BACKLOG L24)."""
         ...
 
-    def _begin_session(self) -> Any:
+
+STORE_SESSION_OPS = ("get", "set", "update", "create", "delete", "query")
+
+
+@runtime_checkable
+class FacadeSessionStore(Protocol):
+    """The one thing a store MUST add to sit behind the ADR-0044 facade: it can open a session.
+
+    ``NeutralFirestoreClient`` is not a domain caller: it impersonates a Firestore ``Client`` so
+    upstream code that threads ``db_client`` runs unchanged.
+
+    This requirement used to be an unwritten convention, and getting it half-right was the hazard: an
+    adapter author implementing the documented port in full got ``AttributeError`` deep inside a
+    transaction and, worse, a ``_begin`` that silently fell back to no session at all — so every
+    transaction in the product would have run **without atomicity, without an error** (BACKLOG L31).
+    """
+
+    def begin_session(self) -> Optional[StoreSession]:
         """Open a session with an active transaction, or return ``None`` to declare session-less.
 
         ``None`` is a **declaration**, not an absence: "this store applies writes directly and offers
@@ -209,11 +216,17 @@ class FacadeSessionStore(Protocol):
         logic and the live contract suite owns atomicity. A real adapter must return a session; if it
         cannot, it must say so here rather than let the facade infer it from a missing attribute.
         """
+        ...
 
 
 # Every name the facade needs beyond DocumentStore, in one place so the error message can list what
 # is missing instead of surfacing whichever attribute happened to be touched first.
-FACADE_SESSION_OPS = ("_get", "_set", "_update", "_create", "_delete", "_query", "_begin_session")
+FACADE_SESSION_OPS = ("begin_session",)
+
+
+def missing_store_session_ops(session: Any) -> tuple[str, ...]:
+    """The STORE_SESSION_OPS ``session`` does not implement (empty tuple = usable by the facade)."""
+    return tuple(name for name in STORE_SESSION_OPS if not callable(getattr(session, name, None)))
 
 
 def missing_facade_session_ops(store: Any) -> tuple[str, ...]:
@@ -229,4 +242,7 @@ __all__ = [
     "Transaction",
     "WriteBatch",
     "missing_facade_session_ops",
+    "missing_store_session_ops",
+    "StoreSession",
+    "STORE_SESSION_OPS",
 ]

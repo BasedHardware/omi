@@ -217,38 +217,20 @@ class FakeDocumentStore:
         self._updated.pop(path, None)
         self._created.pop(path, None)
 
-    # Session-aware private aliases so the neutral db_client facade's transaction (which threads
-    # ``session=`` to the store) can run over this fake session-less — hermetic, no real atomicity.
-    def _get(self, path: str, *, fields: Optional[Sequence[str]] = None, session: Any = None) -> StoredDocument:
-        return self.get(path, fields=fields)
-
-    def _set(self, path: str, data: Dict[str, Any], *, merge: bool = False, session: Any = None) -> None:
-        self.set(path, data, merge=merge)
-
-    def _update(self, path: str, data: Dict[str, Any], *, if_updated_at: Any = None, session: Any = None) -> None:
-        self.update(path, data, if_updated_at=if_updated_at)
-
-    def _create(self, path: str, data: Dict[str, Any], *, session: Any = None) -> None:
-        self.create(path, data)
-
-    def _begin_session(self) -> Any:
+    def begin_session(self) -> None:
         """Declare session-less on purpose (ports.FacadeSessionStore).
 
         Writes apply directly, with no atomicity: a hermetic unit test asserts domain logic, and the
         live dual-backend contract suite owns atomicity. Declaring it beats the facade inferring it
         from a missing ``_mongo_client``, which is how a real adapter could have lost atomicity in
         silence (BACKLOG L31).
+
+        This used to be seven methods: ``_begin_session`` plus a session-swallowing private alias for
+        each op (``_get``, ``_set``, …), because the facade threaded ``session=`` into the store. Now
+        the facade asks the SESSION, and a session-less store just says so — the fake's own public ops
+        are the six ``ports.StoreSession`` wants.
         """
         return None
-
-    def _delete(self, path: str, *, if_updated_at: Any = None, session: Any = None) -> None:
-        self.delete(path, if_updated_at=if_updated_at)
-
-    def _query(self, collection: str, *, session: Any = None, **kw: Any) -> List[StoredDocument]:
-        # Session-less like the rest: this fake has no transaction isolation to offer, and saying so is
-        # the point (ports.FacadeSessionStore). What it DOES give the facade is a query that runs at all
-        # when a transaction is threaded through it — the shape upstream's transactional bodies use.
-        return self.query(collection, **kw)
 
     def query(
         self,

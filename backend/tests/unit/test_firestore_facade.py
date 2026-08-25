@@ -284,7 +284,7 @@ def test_last_update_option_precondition_enforced_on_reference_update():
 def test_document_get_with_projection_field_paths_does_not_crash():
     # Regression (cubic PR 10887 A1): DocumentReference.get(field_paths) takes the projection as the
     # FIRST positional arg. Upstream calls `.get(['subscription'])` etc.; the facade used to bind that
-    # list to `transaction` and dereference `_read` on it, crashing every projection read on Mongo.
+    # list to `transaction` and dereference `read` on it, crashing every projection read on Mongo.
     c = _client()
     ref = c.document("users/u1")
     ref.set({"subscription": {"plan": "pro"}, "language": "it", "secret": "x"})
@@ -394,7 +394,10 @@ def _conflicting_client():
     """A client whose first in-transaction write hits a Mongo write conflict."""
 
     class _ConflictStore(FakeDocumentStore):
-        def _set(self, path, data, *, merge=False, session=None):
+        # The public op, not a private `_set(session=...)` alias: the fake declares itself session-less
+        # (begin_session() -> None), so the facade runs its writes straight on the store. That used to
+        # be a separate, session-swallowing method — one seam now instead of two.
+        def set(self, path, data, *, merge=False):
             exc = Exception("WriteConflict")
             exc.has_error_label = lambda label: label == "TransientTransactionError"
             raise exc
@@ -467,8 +470,8 @@ def test_get_all_binds_positional_transaction():
     c.document("users/u1/goals/g1").set({"v": 1})
     txn = c.transaction()
     reads: list = []
-    orig_read = txn._read
-    txn._read = lambda path, **kw: (reads.append(path), orig_read(path, **kw))[1]
+    orig_read = txn.read
+    txn.read = lambda path, **kw: (reads.append(path), orig_read(path, **kw))[1]
     snaps = list(c.get_all([c.document("users/u1/goals/g1")], None, txn))  # positional field_paths + transaction
     assert [s.to_dict() for s in snaps] == [{"v": 1}]
     assert reads == ["users/u1/goals/g1"]  # the read went THROUGH the transaction, not the batched get_many
@@ -500,7 +503,7 @@ def test_name_filter_normalizes_membership_list_of_refs():
 
 def test_get_all_in_transaction_reads_through_session():
     # With a transaction, get_all must read through the transaction (read-your-writes), NOT the
-    # session-unaware get_many. Prove each ref is routed through transaction._read.
+    # session-unaware get_many. Prove each ref is routed through transaction.read.
 
     store = FakeDocumentStore()
     store.set("users/u1/goals/x", {"v": 9})
@@ -510,7 +513,7 @@ def test_get_all_in_transaction_reads_through_session():
         def __init__(self):
             self.reads = []
 
-        def _read(self, path, **_kw):
+        def read(self, path, **_kw):
             self.reads.append(path)
             return store.get(path)
 

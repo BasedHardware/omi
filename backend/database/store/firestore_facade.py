@@ -27,7 +27,7 @@ from database.store import sentinels as _neutral
 from database.store.errors import AlreadyExists as _StoreAlreadyExists
 from database.store.errors import NotFound as _StoreNotFound
 from database.store.errors import PreconditionFailed as _StorePreconditionFailed
-from database.store.ports import missing_facade_session_ops
+from database.store.ports import missing_facade_session_ops, missing_store_session_ops
 from database.store.records import StoredDocument
 
 # Google sentinels/types are only needed to RECOGNISE values upstream passes in; importing them here
@@ -403,7 +403,7 @@ class _DocRef:
         # timeout, so it is not threaded there.
         fields = list(field_paths) if field_paths else None
         if transaction is not None:
-            return _Snapshot(self, transaction._read(self.path, fields=fields))
+            return _Snapshot(self, transaction.read(self.path, fields=fields))
         return _Snapshot(self, self._client.store.get(self.path, fields=fields, timeout=timeout))
 
     def set(self, data: Dict[str, Any], merge: bool = False, *, retry: Any = None, timeout: Any = None) -> None:
@@ -564,7 +564,7 @@ class _Query:
             # inside `@firestore.transactional` bodies — the idempotency-key de-dup in
             # database/action_items.py, the relationship detach in goals.py, the photo probe in
             # conversation_finalization_jobs.py — and every one of those reads ran outside the session.
-            return self._client.store._query(self._collection, session=transaction._session, **kwargs)
+            return transaction.run_query(self._collection, **kwargs)
         return self._client.store.query(self._collection, **kwargs)
 
     def count(self) -> "_AggregationQuery":
@@ -679,12 +679,46 @@ class _FacadeTransaction:
         # transaction in the product WITHOUT ATOMICITY AND WITHOUT AN ERROR: the loud half
         # (AttributeError from _read) invited a fix, and the silent half shipped behind it. Asking the
         # store makes "no session" a declaration instead of a guess (BACKLOG L31).
-        self._session = self._client.store._begin_session()
+        self._session = self._client.store.begin_session()
+        if self._session is not None:
+            # Moving the ops onto the session opened a NEW way to fail in silence, and it is closed
+            # here rather than left for a body to trip over: a store that returns a half-built handle
+            # would raise AttributeError from whichever op the body happened to reach first, three
+            # frames deep, with the same "loud half invites a fix" shape L31 already cost us once.
+            missing = missing_store_session_ops(self._session)
+            if missing:
+                raise TypeError(
+                    f"{type(self._client.store).__name__}.begin_session() returned a "
+                    f"{type(self._session).__name__}, which does not implement {', '.join(missing)}. "
+                    "The facade runs every read and write of an upstream @transactional body on this "
+                    "handle; see database/store/ports.py:StoreSession. Return None to declare the store "
+                    "session-less on purpose (no atomicity) — never a session that cannot be used."
+                )
         self._id = id(self)
         # Clear the held conflict: google's decorator REUSES this object across attempts, so a replay
         # that started still poisoned would run inert and re-raise the same conflict until the attempt
         # budget ran out. Measured that way first -- the body ran twice and still failed.
         self._poisoned = None
+
+    @property
+    def _ops(self) -> Any:
+        """Where reads and writes go: the open session, or the store itself when it declared
+        session-less by returning ``None`` from ``begin_session()``.
+
+        The two carry the SAME six operations by design — ``ports.StoreSession`` mirrors the
+        domain-facing ``DocumentStore`` — so "no session" costs one fallback here instead of a branch
+        at every call site, and a session-less store simply loses atomicity, which is precisely what
+        returning ``None`` declares.
+        """
+        return self._session if self._session is not None else self._client.store
+
+    def run_query(self, collection: str, **kwargs: Any) -> List[StoredDocument]:
+        """A collection read INSIDE this transaction, for ``_Query.stream(transaction=...)``.
+
+        A method rather than the query reaching in for the handle: the transaction owns where its reads
+        go, and ``_Query`` only needs to say that this read belongs to it.
+        """
+        return self._ops.query(collection, **kwargs)
 
     def _commit(self) -> Any:
         if self._poisoned is not None:
@@ -760,41 +794,39 @@ class _FacadeTransaction:
             self._poisoned = exc
 
     # --- read/write within the transaction (upstream calls these with a _DocRef) ---
-    def _read(self, path: str, *, fields: Any = None) -> StoredDocument:
+    def read(self, path: str, *, fields: Any = None) -> StoredDocument:
         if self._poisoned is not None:
             # The Mongo session is already aborted; asking it anything raises. Report "absent" so the
             # body can finish and reach the commit, where the conflict is re-raised for the retry.
             return StoredDocument(id=path.rsplit("/", 1)[-1], path=path, exists=False, data=None)
-        return self._client.store._get(path, fields=fields, session=self._session)
+        return self._ops.get(path, fields=fields)
 
     def get(self, ref: _DocRef, **_: Any) -> _Snapshot:
-        return _Snapshot(ref, self._read(ref.path))
+        return _Snapshot(ref, self.read(ref.path))
 
     def set(self, ref: _DocRef, data: Dict[str, Any], merge: bool = False) -> None:
         if self._poisoned is not None:
             return
         with self._holding_conflicts():
-            self._client.store._set(ref.path, _neutral_data(data), merge=merge, session=self._session)
+            self._ops.set(ref.path, _neutral_data(data), merge=merge)
 
     def update(self, ref: _DocRef, data: Dict[str, Any], option: Any = None) -> None:
         if self._poisoned is not None:
             return
         with self._holding_conflicts():
-            self._client.store._update(
-                ref.path, _neutral_data(data), if_updated_at=_precondition_time(option), session=self._session
-            )
+            self._ops.update(ref.path, _neutral_data(data), if_updated_at=_precondition_time(option))
 
     def create(self, ref: _DocRef, data: Dict[str, Any]) -> None:
         if self._poisoned is not None:
             return
         with self._holding_conflicts():
-            self._client.store._create(ref.path, _neutral_data(data), session=self._session)
+            self._ops.create(ref.path, _neutral_data(data))
 
     def delete(self, ref: _DocRef, option: Any = None) -> None:
         if self._poisoned is not None:
             return
         with self._holding_conflicts():
-            self._client.store._delete(ref.path, if_updated_at=_precondition_time(option), session=self._session)
+            self._ops.delete(ref.path, if_updated_at=_precondition_time(option))
 
     @contextlib.contextmanager
     def _holding_conflicts(self):
@@ -812,7 +844,7 @@ class _FacadeBatch:
     """Firestore ``WriteBatch`` shape over the neutral store batch (ref -> path)."""
 
     def __init__(self, client: "NeutralFirestoreClient") -> None:
-        self._batch = client._store.batch()
+        self._batch = client.store.batch()
 
     def set(self, ref: _DocRef, data: Dict[str, Any], merge: bool = False, option: Any = None) -> None:
         # No caller passes a precondition to batch.set; Firestore's set carries none either. Accept and
@@ -856,7 +888,7 @@ class NeutralFirestoreClient:
                 f"{type(store).__name__} cannot back NeutralFirestoreClient: it does not implement "
                 f"{', '.join(missing)}. The facade runs upstream's @transactional bodies inside one "
                 "session, which the domain-facing DocumentStore port does not express; see "
-                "database/store/ports.py:FacadeSessionStore. Return None from _begin_session() to "
+                "database/store/ports.py:FacadeSessionStore. Return None from begin_session() to "
                 "declare a store session-less on purpose (no atomicity) — never leave it unimplemented, "
                 "or transactions apply without atomicity and without an error."
             )
@@ -911,7 +943,7 @@ class NeutralFirestoreClient:
             # neutral get_many is not session-aware, so route each ref through the transaction like the
             # single-doc reads do (real Firestore get_all also honors the transaction).
             for ref in refs:
-                yield _Snapshot(ref, transaction._read(ref.path))
+                yield _Snapshot(ref, transaction.read(ref.path))
             return
         # Non-transactional: batch by collection via store.get_many (one $in per collection on Mongo)
         # instead of N point reads (many hot callers: conversations/chat/memories/review_queue/…), then
