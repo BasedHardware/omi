@@ -8,34 +8,61 @@ import 'package:omi/utils/logger.dart';
 
 typedef LocationServiceEnabled = Future<bool> Function();
 typedef LocationPermissionReader = Future<LocationPermission> Function();
+typedef LocationPermissionRequester = Future<LocationPermission> Function();
 typedef CurrentPositionReader = Future<Position> Function();
 typedef LastPositionReader = Future<Position?> Function();
 typedef GeolocationUploader = Future<bool> Function(Geolocation geolocation);
 
 /// Captures the location that belongs to a recording before the backend can
 /// finalize its conversation.
+///
+/// Foreground recording only needs while-in-use / ACCESS_FINE_LOCATION (or
+/// coarse). Android does **not** need ACCESS_BACKGROUND_LOCATION for this
+/// path: capture runs on the UI isolate while the activity is visible, and
+/// the optional periodic refresh runs inside FOREGROUND_SERVICE_LOCATION.
+/// ACCESS_BACKGROUND_LOCATION is intentionally not requested (Play Store
+/// prominent-disclosure). iOS "Always" is requested separately for BGTask
+/// windows and is not required for an in-app recorder start.
 class ConversationLocationCapture {
   ConversationLocationCapture({
     LocationServiceEnabled? isLocationServiceEnabled,
     LocationPermissionReader? checkPermission,
+    LocationPermissionRequester? requestPermission,
     CurrentPositionReader? getCurrentPosition,
     LastPositionReader? getLastKnownPosition,
     GeolocationUploader? upload,
-    this.currentPositionTimeout = const Duration(seconds: 1),
+    this.currentPositionTimeout = const Duration(seconds: 2),
     this.totalTimeout = const Duration(seconds: 3),
   })  : _isLocationServiceEnabled = isLocationServiceEnabled ?? Geolocator.isLocationServiceEnabled,
         _checkPermission = checkPermission ?? Geolocator.checkPermission,
-        _getCurrentPosition = getCurrentPosition ?? Geolocator.getCurrentPosition,
-        _getLastKnownPosition = getLastKnownPosition ?? Geolocator.getLastKnownPosition,
+        _requestPermission = requestPermission ?? Geolocator.requestPermission,
+        _getCurrentPosition = getCurrentPosition ?? _defaultCurrentPosition,
+        _getLastKnownPosition = getLastKnownPosition ?? _defaultLastKnownPosition,
         _upload = upload ?? ((geolocation) => updateUserGeolocation(geolocation: geolocation));
 
   final LocationServiceEnabled _isLocationServiceEnabled;
   final LocationPermissionReader _checkPermission;
+  final LocationPermissionRequester _requestPermission;
   final CurrentPositionReader _getCurrentPosition;
   final LastPositionReader _getLastKnownPosition;
   final GeolocationUploader _upload;
   final Duration currentPositionTimeout;
   final Duration totalTimeout;
+
+  /// Medium accuracy maps to Android PRIORITY_BALANCED_POWER_ACCURACY so a
+  /// while-in-use / approximate grant can still return a fix. Default "best"
+  /// is HIGH_ACCURACY GPS and routinely exceeds the recording-start budget
+  /// on Android, after which last-known is also often null.
+  static Future<Position> _defaultCurrentPosition() {
+    return Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium),
+    );
+  }
+
+  static Future<Position?> _defaultLastKnownPosition() async {
+    return await Geolocator.getLastKnownPosition() ??
+        await Geolocator.getLastKnownPosition(forceAndroidLocationManager: true);
+  }
 
   Future<bool> captureAndUpload() async {
     try {
@@ -55,7 +82,12 @@ class ConversationLocationCapture {
       return false;
     }
 
-    final permission = await _checkPermission();
+    var permission = await _checkPermission();
+    if (permission == LocationPermission.denied) {
+      // Prompt at record start so a skipped onboarding page still gets a fix
+      // when the activity is visible. deniedForever is not re-prompted.
+      permission = await _requestPermission();
+    }
     if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
       Logger.log('Location permission not granted, skipping conversation location');
       return false;
@@ -63,11 +95,18 @@ class ConversationLocationCapture {
 
     Position? position;
     try {
-      position = await _getCurrentPosition().timeout(currentPositionTimeout);
-    } on TimeoutException {
-      // A recent OS fix is preferable to losing the conversation location when
-      // a fresh GPS fix is slow indoors.
       position = await _getLastKnownPosition();
+    } catch (e) {
+      Logger.log('Last-known conversation location failed: $e');
+    }
+
+    if (position == null) {
+      try {
+        position = await _getCurrentPosition().timeout(currentPositionTimeout);
+      } catch (e) {
+        Logger.log('Fresh conversation location fix failed: $e');
+        return false;
+      }
     }
     if (position == null) return false;
 

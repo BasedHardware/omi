@@ -21,10 +21,31 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
   }
 
   Future _locationInBackground() async {
+    // Periodic refresh from FOREGROUND_SERVICE_LOCATION. while-in-use is
+    // enough; do not request ACCESS_BACKGROUND_LOCATION (Play Store
+    // prominent-disclosure). This isolate has no Activity, so it never prompts.
     if (await Geolocator.isLocationServiceEnabled()) {
       final permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
-        var locationData = await Geolocator.getCurrentPosition();
+        Position? locationData;
+        try {
+          locationData = await Geolocator.getLastKnownPosition() ??
+              await Geolocator.getLastKnownPosition(forceAndroidLocationManager: true);
+        } catch (_) {}
+        try {
+          locationData ??= await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium),
+          ).timeout(const Duration(seconds: 8));
+        } catch (e) {
+          Object loc = {'error': 'Location fix failed: $e'};
+          FlutterForegroundTask.sendDataToMain(loc);
+          return;
+        }
+        if (locationData == null) {
+          Object loc = {'error': 'Location fix unavailable'};
+          FlutterForegroundTask.sendDataToMain(loc);
+          return;
+        }
         if (_locationUpdatedAt == null ||
             _locationUpdatedAt!.isBefore(DateTime.now().subtract(const Duration(minutes: 5)))) {
           Object loc = {
