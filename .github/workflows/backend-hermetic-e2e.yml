@@ -32,11 +32,14 @@ jobs:
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          # Resolve the PR base live against the checkout (matching
+          # detect-changes) rather than the event-payload base.sha, which can be
+          # stale for a queued run (FC-stale-event-payload-diff-base, #10785).
+          PR_BASE_REF: origin/${{ github.base_ref }}
           MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
         run: |
           case "$EVENT_NAME" in
-            pull_request) base_sha="$PR_BASE_SHA" ;;
+            pull_request) base_sha="$PR_BASE_REF" ;;
             merge_group) base_sha="$MERGE_GROUP_BASE_SHA" ;;
             workflow_dispatch)
               echo "applies=true" >> "$GITHUB_OUTPUT"
