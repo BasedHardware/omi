@@ -95,6 +95,7 @@ const QUESTION_PREFIX =
 function normalizeRewindQuery(input: string): string {
   return input
     .replace(TIME_WORDS, ' ')
+    .replace(/^[\s?'’.,:;!\u2013\u2014-]+/, '')
     .replace(QUESTION_PREFIX, '')
     .replace(/[?'’.,:;!]/g, ' ')
     .replace(/\s+/g, ' ')

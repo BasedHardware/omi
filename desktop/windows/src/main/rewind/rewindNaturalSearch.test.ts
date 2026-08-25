@@ -35,6 +35,11 @@ describe('parseRewindNaturalSearch', () => {
     expect(parseRewindNaturalSearch('What was I doing yesterday?', NOW).query).toBe('')
   })
 
+  it('strips leading delimiters before matching question framing', () => {
+    expect(parseRewindNaturalSearch('Yesterday, what was I doing?', NOW).query).toBe('')
+    expect(parseRewindNaturalSearch('Yesterday — what happened?', NOW).query).toBe('')
+  })
+
   it('treats working activity questions as time-only searches', () => {
     expect(parseRewindNaturalSearch('What was I working on yesterday?', NOW).query).toBe('')
   })
