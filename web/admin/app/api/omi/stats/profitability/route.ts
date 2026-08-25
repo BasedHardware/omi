@@ -47,6 +47,16 @@ interface DailyPoint {
   total: number;
 }
 
+// A rate that only exists when it was measured. In billing mode a day with no
+// active users on a platform has no honest cost-per-user, so the field is null
+// rather than the April-era per-user assumption.
+interface NullableDailyPoint {
+  date: string;
+  desktop: number | null;
+  mobile: number | null;
+  total: number | null;
+}
+
 export interface ProfitabilityPayload {
   days: number;
   users: DailyPoint[];
@@ -54,7 +64,7 @@ export interface ProfitabilityPayload {
   activeUsers: DailyPoint[];
   revenue: DailyPoint[];
   cost: DailyPoint[];
-  costPerUser: DailyPoint[];
+  costPerUser: NullableDailyPoint[];
   conversion: DailyPoint[];
   summary: {
     mrr: number;
@@ -67,8 +77,8 @@ export interface ProfitabilityPayload {
     totalUsersMobile: number;
     totalUsersUnknown: number;
     totalCostUsd: number;
-    avgCostPerUserDesktop: number;
-    avgCostPerUserMobile: number;
+    avgCostPerUserDesktop: number | null;
+    avgCostPerUserMobile: number | null;
     assumptions: {
       desktopCostPerUser: number;
       mobileCostPerUser: number;
@@ -93,10 +103,10 @@ function cacheKey(days: number, desktopCost: number, mobileCost: number): string
   return `profitability:v1:${days}:${desktopCost}:${mobileCost}`;
 }
 
-// Fallback per-user infra cost when real billing data can't be pulled from
-// the infra-costs endpoint. Calibrated against the team's Apr projection
-// ($57K/mo ÷ 30 days ÷ ~10K DAU) so numbers are realistic even before the
-// collection-group scan finishes.
+// Legacy-path fallback per-user infra cost, used ONLY when infra costs come
+// back as `estimated` (no billing data). Calibrated against the team's Apr
+// projection ($57K/mo ÷ 30 days ÷ ~10K DAU). In billing mode nothing is filled
+// from these: an unmeasurable cost-per-user is reported as null.
 const DEFAULT_DESKTOP_COST = 0.2;
 const DEFAULT_MOBILE_COST = 0.2;
 
@@ -356,7 +366,10 @@ function mergeUserPlatforms(
       if (tokenDates?.desktop && tokenDates?.mobile) {
         info.platform = tokenDates.desktop < tokenDates.mobile ? "desktop" : "mobile";
       } else {
-        info.platform = "mobile"; // tie-break: mobile is the more common primary
+        // ASSUMPTION (unverified): a dual-platform user with no token dates to
+        // order is counted as mobile, because mobile is the more common
+        // primary. Every such user is attributed wholly to mobile.
+        info.platform = "mobile";
       }
     } else if (info.hasDesktop) {
       info.platform = "desktop";
@@ -603,6 +616,10 @@ export async function computeProfitability(opts: { days: number; desktopCost: nu
     // attributed to whichever platform has the larger share of known revenue
     // so the stacked chart still ends at the live MRR total.
     const subs = stripeRes?.activeSubs ?? [];
+    // ASSUMPTION (unverified): unknown-platform MRR is smeared across the two
+    // platforms in proportion to known MRR, and 50/50 when no MRR is
+    // attributable at all. `mrrUnknown` in the summary reports the real size of
+    // what is being smeared; the exact series below never include it.
     const knownMrrTotal = mrrByPlatform.desktop + mrrByPlatform.mobile;
     const desktopShare = knownMrrTotal > 0 ? mrrByPlatform.desktop / knownMrrTotal : 0.5;
     const mobileShare = knownMrrTotal > 0 ? mrrByPlatform.mobile / knownMrrTotal : 0.5;
@@ -672,38 +689,44 @@ export async function computeProfitability(opts: { days: number; desktopCost: nu
     });
 
     // Cost PER USER = total platform cost / platform active users for that
-    // day. Falls back to the configured assumption when active users is 0 or
-    // real cost is unavailable.
-    const costPerUser: DailyPoint[] = costDateKeys.map((date, idx) => {
+    // day. With 0 active users there is no rate to report: in billing mode the
+    // cell is null (a gap in the chart), because filling it with the per-user
+    // assumption would print an invented number next to measured ones. The
+    // legacy estimated path keeps the old fallback — the whole series there is
+    // already labeled costSource:"estimated".
+    const rate = (numerator: number, denominator: number, assumed: number): number | null => {
+      if (denominator > 0) return round2(numerator / denominator);
+      return billingMode ? null : round2(assumed);
+    };
+    const costPerUser: NullableDailyPoint[] = costDateKeys.map((date, idx) => {
       const active = activeUsers[costIdx.get(date)!];
       const costRow = cost[idx];
-      const desktopRate =
-        active.desktop > 0
-          ? round2(costRow.desktop / active.desktop)
-          : round2(desktopCost);
-      const mobileRate =
-        active.mobile > 0
-          ? round2(costRow.mobile / active.mobile)
-          : round2(mobileCost);
-      const blendedTotal =
-        active.total > 0
-          ? round2(costRow.total / active.total)
-          : round2((desktopCost + mobileCost) / 2);
-      return { date, desktop: desktopRate, mobile: mobileRate, total: blendedTotal };
+      return {
+        date,
+        desktop: rate(costRow.desktop, active.desktop, desktopCost),
+        mobile: rate(costRow.mobile, active.mobile, mobileCost),
+        total: rate(costRow.total, active.total, (desktopCost + mobileCost) / 2),
+      };
     });
 
     const totalCostUsd = cost.reduce((s, c) => s + c.total, 0);
     // Average over the same (possibly D-2-trimmed) days as the cost series so
-    // numerator and denominator cover identical windows.
-    const costActive = costDateKeys.map((d) => activeUsers[costIdx.get(d)!]);
-    const desktopActiveSum = costActive.reduce((s, a) => s + a.desktop, 0);
-    const mobileActiveSum = costActive.reduce((s, a) => s + a.mobile, 0);
-    const desktopCostSum = cost.reduce((s, c) => s + c.desktop, 0);
-    const mobileCostSum = cost.reduce((s, c) => s + c.mobile, 0);
-    const avgCostPerUserDesktop =
-      desktopActiveSum > 0 ? round2(desktopCostSum / desktopActiveSum) : round2(desktopCost);
-    const avgCostPerUserMobile =
-      mobileActiveSum > 0 ? round2(mobileCostSum / mobileActiveSum) : round2(mobileCost);
+    // numerator and denominator cover identical windows, and only over the days
+    // that produced a real rate — a null day contributes neither its cost nor
+    // its (zero) actives, instead of being averaged in as $0.
+    const avgRate = (platform: "desktop" | "mobile", assumed: number): number | null => {
+      let costSum = 0;
+      let activeSum = 0;
+      costDateKeys.forEach((date, idx) => {
+        if (costPerUser[idx][platform] === null) return;
+        costSum += cost[idx][platform];
+        activeSum += activeUsers[costIdx.get(date)!][platform];
+      });
+      if (activeSum > 0) return round2(costSum / activeSum);
+      return billingMode ? null : round2(assumed);
+    };
+    const avgCostPerUserDesktop = avgRate("desktop", desktopCost);
+    const avgCostPerUserMobile = avgRate("mobile", mobileCost);
 
     const newPaidByDayByPlatform = stripeRes?.newPaidByDayByPlatform ?? { desktop: {}, mobile: {}, unknown: {} };
     const conversion: DailyPoint[] = dateKeys.map((date, idx) => {
@@ -752,6 +775,8 @@ export async function computeProfitability(opts: { days: number; desktopCost: nu
         avgCostPerUserDesktop,
         avgCostPerUserMobile,
         assumptions: {
+          // Only in play on the legacy estimated path; in billing mode these
+          // are inert and costSource is "real".
           desktopCostPerUser: desktopCost,
           mobileCostPerUser: mobileCost,
           overheadMonthlyUsd: infraCosts?.overheadMonthlyUsd,

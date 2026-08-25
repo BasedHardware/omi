@@ -155,6 +155,38 @@ describe("fetchGatewayLedgerDays", () => {
     expect(queries.every((q) => q.date === "2026-08-02")).toBe(true);
   });
 
+  it("classifies the gateway features that used to fall into unknown", async () => {
+    const { FEATURE_CLASS } = await load();
+
+    // Desktop-only surfaces.
+    expect(FEATURE_CLASS.workstream_association).toBe("desktop");
+    expect(FEATURE_CLASS.chat_structured).toBe("desktop");
+    // Coarse usage-context names that override the model_config feature on the
+    // wire (backend/utils/llm/gateway_client.py `_gateway_usage_headers`).
+    expect(FEATURE_CLASS.chat).toBe("sharedChat");
+    expect(FEATURE_CLASS.persona).toBe("sharedChat");
+    expect(FEATURE_CLASS.conversation_processing).toBe("sharedExtraction");
+    expect(FEATURE_CLASS.conv_apps).toBe("sharedExtraction");
+    expect(FEATURE_CLASS.realtime_integrations).toBe("sharedExtraction");
+    expect(FEATURE_CLASS.subscription_notification).toBe("sharedExtraction");
+    // Gateway-side fallback labels and shadow runs.
+    expect(FEATURE_CLASS.image_generation).toBe("sharedExtraction");
+    expect(FEATURE_CLASS.public_shared_conversation_chat).toBe("sharedChat");
+    expect(FEATURE_CLASS["conversation_structure.extract.shadow"]).toBe("sharedExtraction");
+    expect(FEATURE_CLASS["conversation_action_items.extract.shadow"]).toBe("sharedExtraction");
+  });
+
+  it("aggregates every classified feature, including the newly added ones", async () => {
+    const { fetchGatewayLedgerDays, FEATURE_CLASS } = await load();
+
+    await fetchGatewayLedgerDays([DAY]);
+
+    const queried = new Set(queries.map((q) => q.feature).filter(Boolean));
+    for (const feature of Object.keys(FEATURE_CLASS)) {
+      expect(queried.has(feature)).toBe(true);
+    }
+  });
+
   it("returns null only when every day fails", async () => {
     failEverything = true;
     const { fetchGatewayLedgerDays } = await load();

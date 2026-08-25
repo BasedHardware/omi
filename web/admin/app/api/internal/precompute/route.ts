@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   computeProfitability,
+  parseProfitabilityParams,
   profitabilityCacheKey,
 } from "@/app/api/omi/stats/profitability/route";
 import {
@@ -62,7 +63,8 @@ export const maxDuration = 3600;
 //
 // Params MUST match the dashboard's default/initial query so the GET handlers
 // hit the cache. From app/(protected)/dashboard/page.tsx:
-//   profitability: days=30&desktop_cost=1.2&mobile_cost=0.3
+//   profitability: days=30 (no desktop_cost/mobile_cost — the honest default
+//     path: cost comes from billing, not from a per-user assumption)
 //   infra-costs:   days=30 (overhead_monthly omitted → default 57447)
 //   daily-new-users: days=all
 //   macos-versions: (no params)
@@ -75,8 +77,6 @@ export const maxDuration = 3600;
 // Sequential on purpose: PostHog is aggressively rate-limited, so we must NOT
 // fire these concurrently.
 const PROFIT_DAYS = 30;
-const PROFIT_DESKTOP_COST = 1.2;
-const PROFIT_MOBILE_COST = 0.3;
 const INFRA_DAYS = 30;
 const DAILY_NEW_USERS_DAYS = "all";
 const NOTIFICATIONS_DAYS = 30;
@@ -113,17 +113,15 @@ export async function POST(request: NextRequest) {
     ms[name] = Date.now() - t0;
   };
 
-  // Profitability
+  // Profitability. Params go through the GET handler's own parser with only
+  // `days` set, so the key written here is byte-identical to the key a request
+  // carrying no cost params looks up.
   await run("profitability", async () => {
-    const payload = await computeProfitability({
-      days: PROFIT_DAYS,
-      desktopCost: PROFIT_DESKTOP_COST,
-      mobileCost: PROFIT_MOBILE_COST,
-    });
-    await setPayload(
-      profitabilityCacheKey(PROFIT_DAYS, PROFIT_DESKTOP_COST, PROFIT_MOBILE_COST),
-      payload,
+    const { days, desktopCost, mobileCost } = parseProfitabilityParams(
+      new URLSearchParams({ days: String(PROFIT_DAYS) }),
     );
+    const payload = await computeProfitability({ days, desktopCost, mobileCost });
+    await setPayload(profitabilityCacheKey(days, desktopCost, mobileCost), payload);
   });
 
   // Infra costs

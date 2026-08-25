@@ -35,10 +35,26 @@ export type FeatureClass = "desktop" | "mobile" | "sharedExtraction" | "sharedCh
 // spend only the desktop app can produce; `sharedExtraction` / `sharedChat` are
 // features both platforms drive, and get split by the usage-weighted shares
 // downstream. Features absent from this map fall into `unknown`.
+//
+// The keys are the values of the `X-Omi-LLM-Feature` header the backend sends
+// to the gateway. Most come from `backend/utils/llm/model_config.py`, but a
+// live usage context wins over the model_config feature
+// (`_gateway_usage_headers` in backend/utils/llm/gateway_client.py), so the
+// coarse `Features.*` names from `utils/llm/usage_tracker.py` reach the ledger
+// too and are mapped here as well.
 export const FEATURE_CLASS: Record<string, FeatureClass> = {
   // Desktop-only.
   desktop_proactive_extraction: "desktop",
   desktop_proactive_reasoning: "desktop",
+  // Structured lane of the desktop chat router — the automation planner and
+  // the local-agent loop (routers/desktop_chat.py `_gateway_feature_for_lane`).
+  // No mobile surface selects that lane.
+  chat_structured: "desktop",
+  // Workstream adjudication runs inside conversation processing on any
+  // platform, but only fires when the user already has open workstreams, and
+  // workstreams are created only by the desktop "Work on this with Omi"
+  // surface (no mobile UI exists for them), so the spend is desktop users'.
+  workstream_association: "desktop",
 
   // Chat-shaped, shared across platforms.
   chat_agent: "sharedChat",
@@ -48,6 +64,15 @@ export const FEATURE_CLASS: Record<string, FeatureClass> = {
   persona_chat: "sharedChat",
   persona_chat_premium: "sharedChat",
   fair_use: "sharedChat",
+  // `Features.CHAT` usage context (routers/chat.py, chat_sessions.py,
+  // utils/llm/chat.py, utils/retrieval/graph.py) — overrides the finer
+  // chat_responses / chat_graph labels on the wire.
+  chat: "sharedChat",
+  // `Features.PERSONA` usage context wraps persona chat streaming as well as
+  // persona prompt generation; chat is the dominant spend, so it is classed
+  // with the other persona chat features.
+  persona: "sharedChat",
+  public_shared_conversation_chat: "sharedChat",
 
   // Extraction-shaped, shared across platforms.
   conv_action_items: "sharedExtraction",
@@ -86,6 +111,19 @@ export const FEATURE_CLASS: Record<string, FeatureClass> = {
   translation: "sharedExtraction",
   wrapped_analysis: "sharedExtraction",
   web_search: "sharedExtraction",
+  // `Features.*` usage-context names that override the model_config feature.
+  conversation_processing: "sharedExtraction",
+  conv_apps: "sharedExtraction",
+  realtime_integrations: "sharedExtraction",
+  subscription_notification: "sharedExtraction",
+  // Gateway-side fallback label for /v1/images/generations when the caller
+  // sent no feature header; the only product surface reaching that endpoint is
+  // the app/persona image generator, which is not desktop-specific.
+  image_generation: "sharedExtraction",
+  // Shadow comparison runs duplicate the conversation extraction calls and
+  // cost real money (utils/llm/conversation_processing.py).
+  "conversation_structure.extract.shadow": "sharedExtraction",
+  "conversation_action_items.extract.shadow": "sharedExtraction",
 };
 
 export interface GatewayLedgerDay {
