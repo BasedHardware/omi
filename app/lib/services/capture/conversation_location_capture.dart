@@ -66,6 +66,22 @@ class ConversationLocationCapture {
 
   Future<bool> captureAndUpload() async {
     try {
+      if (!await _isLocationServiceEnabled()) {
+        Logger.log('Location service is not enabled, skipping conversation location');
+        return false;
+      }
+
+      var permission = await _checkPermission();
+      if (permission == LocationPermission.denied) {
+        // Prompt at record start so a skipped onboarding page still gets a fix
+        // when the activity is visible. deniedForever is not re-prompted.
+        permission = await _requestPermission();
+      }
+      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+        Logger.log('Location permission not granted, skipping conversation location');
+        return false;
+      }
+
       return await _captureAndUpload().timeout(totalTimeout);
     } on TimeoutException {
       Logger.log('Conversation location capture timed out; recording will continue');
@@ -77,22 +93,6 @@ class ConversationLocationCapture {
   }
 
   Future<bool> _captureAndUpload() async {
-    if (!await _isLocationServiceEnabled()) {
-      Logger.log('Location service is not enabled, skipping conversation location');
-      return false;
-    }
-
-    var permission = await _checkPermission();
-    if (permission == LocationPermission.denied) {
-      // Prompt at record start so a skipped onboarding page still gets a fix
-      // when the activity is visible. deniedForever is not re-prompted.
-      permission = await _requestPermission();
-    }
-    if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
-      Logger.log('Location permission not granted, skipping conversation location');
-      return false;
-    }
-
     Position? position;
     try {
       position = await _getLastKnownPosition();

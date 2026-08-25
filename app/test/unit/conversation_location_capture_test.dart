@@ -97,6 +97,32 @@ void main() {
     expect(uploaded?.longitude, -122.4194);
   });
 
+  test('does not time out while the user answers the location permission prompt', () async {
+    var requests = 0;
+    Geolocation? uploaded;
+    final capture = ConversationLocationCapture(
+      isLocationServiceEnabled: () async => true,
+      checkPermission: () async => LocationPermission.denied,
+      requestPermission: () async {
+        requests++;
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+        return LocationPermission.whileInUse;
+      },
+      getCurrentPosition: () async => _position(latitude: 40.7128, longitude: -74.0060),
+      getLastKnownPosition: () async => null,
+      upload: (geolocation) async {
+        uploaded = geolocation;
+        return true;
+      },
+      totalTimeout: const Duration(milliseconds: 10),
+    );
+
+    expect(await capture.captureAndUpload(), isTrue);
+    expect(requests, 1);
+    expect(uploaded?.latitude, 40.7128);
+    expect(uploaded?.longitude, -74.0060);
+  });
+
   test('uses last-known when a fresh fix throws', () async {
     Geolocation? uploaded;
     final capture = ConversationLocationCapture(
