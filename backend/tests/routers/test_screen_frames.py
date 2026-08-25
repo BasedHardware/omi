@@ -71,6 +71,14 @@ def _request(**overrides) -> ScreenFrameAdjudicationRequest:
 
 @pytest.fixture(autouse=True)
 def _stub_admission_dependencies(monkeypatch):
+    # Egress is default-off in production and the gate sits above everything else in
+    # the handler, so without this every test here would assert against a 409 from
+    # the gate rather than the behaviour it means to pin. TestEgressDisabled below
+    # is where the off state is covered.
+    monkeypatch.setenv("SCREEN_FRAME_EGRESS_ENABLED", "true")
+    monkeypatch.setenv("BUCKET_SCREEN_FRAMES", "test-screen-frames")
+    monkeypatch.setenv("SCREEN_FRAME_SIGNING_SECRET", "test-secret")
+
     fake_conversations_db = MagicMock()
     fake_conversations_db.get_conversation.return_value = _conversation()
     fake_conversations_db.is_soft_deleted.return_value = False
@@ -86,6 +94,55 @@ def _stub_admission_dependencies(monkeypatch):
     monkeypatch.setattr(screen_frames_mod, "redis_db", fake_redis_db)
 
     return fake_conversations_db, fake_users_db, fake_redis_db
+
+
+class TestEgressDisabled:
+    """The gate that makes merging this safe before the bucket exists.
+
+    The judge is the first step that sends screen bytes to Gemini and it runs two
+    stages before any bucket or signer check, so these assert on what did NOT
+    happen: no judging, and no adjudication stamp.
+    """
+
+    def test_returns_409_when_flag_not_set(self, _stub_admission_dependencies, monkeypatch):
+        monkeypatch.delenv("SCREEN_FRAME_EGRESS_ENABLED", raising=False)
+
+        with pytest.raises(HTTPException) as exc_info:
+            screen_frames_mod.adjudicate_screen_frames(_request(), uid=UID)
+
+        assert exc_info.value.status_code == 409
+        assert exc_info.value.detail["code"] == "screen_frame_egress_unavailable"
+
+    def test_returns_409_when_flag_set_but_bucket_missing(self, _stub_admission_dependencies, monkeypatch):
+        monkeypatch.delenv("BUCKET_SCREEN_FRAMES", raising=False)
+
+        with pytest.raises(HTTPException) as exc_info:
+            screen_frames_mod.adjudicate_screen_frames(_request(), uid=UID)
+
+        assert exc_info.value.status_code == 409
+
+    def test_returns_409_when_no_signer_is_configured(self, _stub_admission_dependencies, monkeypatch):
+        monkeypatch.delenv("SCREEN_FRAME_SIGNING_SECRET", raising=False)
+        monkeypatch.delenv("SCREEN_FRAME_KMS_KEY", raising=False)
+
+        with pytest.raises(HTTPException) as exc_info:
+            screen_frames_mod.adjudicate_screen_frames(_request(), uid=UID)
+
+        assert exc_info.value.status_code == 409
+
+    def test_nothing_is_judged_and_nothing_is_stamped_when_disabled(self, _stub_admission_dependencies, monkeypatch):
+        fake_conversations_db, _fake_users_db, _fake_redis_db = _stub_admission_dependencies
+        monkeypatch.delenv("SCREEN_FRAME_EGRESS_ENABLED", raising=False)
+        judged = MagicMock()
+        monkeypatch.setattr(screen_frames_mod, "adjudicate_candidate", judged)
+
+        with pytest.raises(HTTPException):
+            screen_frames_mod.adjudicate_screen_frames(_request(), uid=UID)
+
+        judged.assert_not_called()
+        # A stamp here would tell the client this conversation was already decided,
+        # and it would never retry once the feature is switched on.
+        fake_conversations_db.mark_conversation_screen_frames_adjudicated.assert_not_called()
 
 
 class TestDigestMismatch:

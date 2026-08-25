@@ -40,6 +40,9 @@ def test_child_env_for_real_mode() -> None:
     assert child["BUCKET_MEMORIES_RECORDINGS"] == "memories-recordings"
     assert child["BUCKET_SCREEN_FRAMES"] == "screen-frames"
     assert child["SCREEN_FRAME_SIGNING_SECRET"] == config.LOCAL_SCREEN_FRAME_SIGNING_SECRET
+    # Without this the harness backend refuses every adjudication with 409, which is
+    # correct for production and useless for the machine meant to exercise the feature.
+    assert child["SCREEN_FRAME_EGRESS_ENABLED"] == "true"
 
 
 def test_offline_mode_still_supplies_the_screen_frame_signing_secret() -> None:

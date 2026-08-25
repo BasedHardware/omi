@@ -33,6 +33,7 @@ from models.screen_frame import (
 )
 from utils.other import endpoints as auth
 from utils.screen_frames import enforcement, store as screen_frame_store
+from utils.screen_frames.availability import screen_frame_egress_enabled
 from utils.screen_frames.pipeline import (
     ScreenFrameDigestMismatch,
     adjudicate_candidate,
@@ -157,6 +158,16 @@ def adjudicate_screen_frames(
     request: ScreenFrameAdjudicationRequest,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "screenshots:adjudicate")),
 ):
+    # Before anything else, and specifically before the judge: the judge is the
+    # first step that sends screen bytes to Gemini, and it runs two stages ahead
+    # of any bucket or signer check. 409 rather than 200-with-empty-set on
+    # purpose — this must not stamp `screen_frames_adjudicated_at`, or a
+    # conversation adjudicated while the feature was off would never be retried
+    # once it is switched on. The client treats any 4xx as "render nothing, try
+    # again next open", which is exactly right here.
+    if not screen_frame_egress_enabled():
+        raise HTTPException(status_code=409, detail={"code": "screen_frame_egress_unavailable"})
+
     policy = get_purpose_policy(request.purpose)
     if policy is None:
         raise HTTPException(status_code=400, detail={"code": "unknown_purpose"})

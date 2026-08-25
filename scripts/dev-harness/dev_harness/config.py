@@ -359,6 +359,9 @@ def _harness_service_extra(cfg: HarnessConfig) -> dict[str, str]:
         "OMI_LLM_GATEWAY_URL": cfg.llm_gateway_url,
         "OMI_LLM_GATEWAY_SERVICE_TOKEN": cfg.llm_gateway_service_token,
         "OMI_LLM_GATEWAY_FEATURE_MODE": gateway_feature_mode,
+        # Production ships default-off and turns this on deliberately; the harness is
+        # the one place the feature must be on, since running it is the whole point.
+        "SCREEN_FRAME_EGRESS_ENABLED": "true",
         "SCREEN_FRAME_SIGNING_SECRET": LOCAL_SCREEN_FRAME_SIGNING_SECRET,
         **LOCAL_STORAGE_BUCKET_ENV,
     }
