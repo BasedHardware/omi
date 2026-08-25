@@ -564,8 +564,8 @@ int? _parseRetryAfterSeconds(http.Response response) {
 /// Everything else remains a generic backend-capacity limit.
 SyncRateLimitKind syncRateLimitKindForResponse(http.Response response) =>
     response.headers['x-omi-rate-limit-reason']?.trim().toLowerCase() == 'fair_use'
-        ? SyncRateLimitKind.fairUse
-        : SyncRateLimitKind.backendCapacity;
+    ? SyncRateLimitKind.fairUse
+    : SyncRateLimitKind.backendCapacity;
 
 /// Upload-only: POST files and return as soon as the server acknowledges
 /// (HTTP 202 with a job_id, or the 200 fast-path with a finished result).
@@ -717,7 +717,9 @@ Future<(List<ServerConversation>, int, int)> searchConversationsServer(
   if (response == null) return (<ServerConversation>[], 0, 0);
   if (response.statusCode == 200) {
     final data = wire.GeneratedSearchConversationsResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    final convos = data.items.map((conversation) => ServerConversation.fromGenerated(conversation)).toList();
+    // Search items are ConversationSearchItem (includes match_snippets); parse via JSON so
+    // ServerConversation keeps seek-to-moment evidence without widening GeneratedConversation.
+    final convos = data.items.map((conversation) => ServerConversation.fromJson(conversation.toJson())).toList();
     return (convos, data.currentPage, data.totalPages);
   }
   return (<ServerConversation>[], 0, 0);

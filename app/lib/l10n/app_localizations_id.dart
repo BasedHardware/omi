@@ -9852,6 +9852,20 @@ class AppLocalizationsId extends AppLocalizations {
   String get accountCutoverOpenStore => 'Buka toko';
 
   @override
+  String get chatScopeToday => 'Hari ini';
+
+  @override
+  String get chatScopeThisWeek => 'Minggu ini';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Tentang: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Tanyakan tentang ini';
+
+  @override
   String get sendRawAudioToOmi => 'Kirim audio mentah ke Omi';
 
   @override

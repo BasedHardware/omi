@@ -38,6 +38,7 @@ import 'package:omi/firebase_options_prod.dart' as prod;
 import 'package:omi/flavors.dart';
 import 'package:omi/startup_auth.dart';
 import 'package:omi/startup_failure_app.dart';
+import 'package:omi/startup_firebase.dart';
 import 'package:omi/startup_routing.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
@@ -87,10 +88,34 @@ import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/notification_channel_strings.dart';
 
+/// Firebase parameters for the current flavor, resolved identically in every engine.
+FirebaseOptions _firebaseOptionsForFlavor() => Env.profile == AppEnvironmentProfile.localDev
+    ? local.DefaultFirebaseOptions.currentPlatform
+    : prod.DefaultFirebaseOptions.currentPlatform;
+
+/// The single Firebase entry point for every Flutter engine in the app.
+///
+/// See [ensureFirebaseApp] for why `Firebase.apps.isEmpty` was never a valid
+/// guard and why `[core/duplicate-app]` must not kill startup.
+Future<FirebaseApp> _ensureFirebaseApp() {
+  final options = _firebaseOptionsForFlavor();
+  return ensureFirebaseApp<FirebaseApp>(
+    existingApp: () => Firebase.apps.isEmpty ? null : Firebase.app(),
+    configuredProjectId: options.projectId,
+    initializeApp: () => Firebase.initializeApp(options: options),
+    projectIdOf: (app) => app.options.projectId,
+    validateProject: (projectId) => Env.validateFirebaseProject(projectId: projectId),
+  );
+}
+
 /// Background message handler for FCM data messages
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp();
+  // Same path as _init(). This runs in a SEPARATE Flutter engine and used to call
+  // Firebase.initializeApp() with no arguments, so it could bring [DEFAULT] up
+  // from the platform resources with parameters that differ from the ones the UI
+  // engine uses. Now both engines resolve the parameters the same way.
+  await _ensureFirebaseApp();
   await NotificationChannelStrings.loadAppLocale();
 
   await AwesomeNotifications().initialize(null, [
@@ -142,18 +167,7 @@ Future _init() async {
   LimitlessDeviceConnection.realtimeSuppressionPolicy = () => SharedPreferencesUtil().batchModeEnabled;
 
   // Firebase
-  if (Firebase.apps.isEmpty) {
-    final profile = Env.profile;
-    final options = profile == AppEnvironmentProfile.localDev
-        ? local.DefaultFirebaseOptions.currentPlatform
-        : prod.DefaultFirebaseOptions.currentPlatform;
-    Env.validateFirebaseProject(projectId: options.projectId);
-    await Firebase.initializeApp(options: options);
-  } else {
-    // Firebase may already be initialized by native SDK (macOS)
-    debugPrint('Firebase already initialized.');
-    Env.validateFirebaseProject(projectId: Firebase.app().options.projectId);
-  }
+  await _ensureFirebaseApp();
 
   if (Env.profile.usesFirebaseAuthEmulator) {
     await FirebaseAuth.instance.useAuthEmulator(Env.firebaseAuthEmulatorHost, Env.firebaseAuthEmulatorPort);
@@ -336,8 +350,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           update: (BuildContext context, value, MessageProvider? previous) =>
               (previous?..updateAppProvider(value)) ?? MessageProvider(),
         ),
-        ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
-            CaptureProvider>(
+        ChangeNotifierProxyProvider4<
+          ConversationProvider,
+          MessageProvider,
+          PeopleProvider,
+          UsageProvider,
+          CaptureProvider
+        >(
           create: (context) => CaptureProvider(),
           update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) {
             final externalActions = ProviderCaptureExternalActions(

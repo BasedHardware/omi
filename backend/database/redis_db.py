@@ -517,6 +517,41 @@ def get_proactive_noti_sent_at_ttl(uid: str, app_id: str) -> int:
     return r.ttl(f'{uid}:{app_id}:proactive_noti_sent_at')
 
 
+PROACTIVE_MESSAGE_CHANNEL = 'proactive_message:listen'
+
+
+@try_catch_decorator
+def publish_proactive_message(
+    uid: str, app_id: str, title: str, message: str, conversation_id: Optional[str] = None
+) -> None:
+    payload = {
+        'uid': uid,
+        'app_id': app_id,
+        'title': title,
+        'message': message,
+        'conversation_id': conversation_id,
+    }
+    r.publish(PROACTIVE_MESSAGE_CHANNEL, json.dumps(payload))
+
+
+_async_redis_client: Optional[Any] = None
+
+
+async def get_async_redis_client() -> Any:
+    global _async_redis_client
+    if _async_redis_client is None:
+        import redis.asyncio as _asyncio_redis
+
+        _async_redis_client = _asyncio_redis.Redis(
+            host=cast(str, _redis_host),
+            port=int(_redis_port_env) if _redis_port_env is not None else 6379,
+            username='default',
+            password=os.getenv('REDIS_DB_PASSWORD'),
+            decode_responses=True,
+        )
+    return _async_redis_client
+
+
 @try_catch_decorator
 def incr_daily_notification_count(uid: str) -> int:
     """Atomically increment the daily proactive-notification count for a user (mentor + third-party apps). Returns new count."""

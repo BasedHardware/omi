@@ -22,7 +22,8 @@ from utils.http_client import get_auth_client
 from utils.log_sanitizer import sanitize
 from utils.metrics import AUTH_FLOW_DURATION_SECONDS, AUTH_FLOW_EVENTS
 from utils.observability.fallback import record_fallback
-from utils.referrals import REFERRAL_COOKIE_NAME, ReferralCodeError, referrer_uid_from_code
+from utils.integration_telemetry import emit_posthog_event
+from utils.referrals import REFERRAL_COOKIE_NAME, REFERRAL_PROGRAM, ReferralCodeError, referrer_uid_from_code
 import logging
 
 logger = logging.getLogger(__name__)
@@ -1109,12 +1110,17 @@ async def _generate_custom_token(
         if referral_code and result.get('isNewUser') is True:
             try:
                 referrer_uid = referrer_uid_from_code(referral_code)
-                await run_blocking(
+                claimed, reason = await run_blocking(
                     db_executor,
                     claim_referral_trial,
                     firebase_uid,
                     referrer_uid,
                     is_new_user=True,
+                )
+                emit_posthog_event(
+                    firebase_uid,
+                    'Referral Claimed',
+                    {'program': REFERRAL_PROGRAM, 'claimed': claimed, 'reason': reason},
                 )
             except Exception as error:
                 logger.error("Referral entitlement grant failed (non-fatal): %s", sanitize(str(error)))

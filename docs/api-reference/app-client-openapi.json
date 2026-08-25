@@ -7048,11 +7048,6 @@
             ],
             "title": "Processing Memory Id"
           },
-          "screenshot_sharing_enabled": {
-            "default": true,
-            "title": "Screenshot Sharing Enabled",
-            "type": "boolean"
-          },
           "source": {
             "anyOf": [
               {
@@ -7656,117 +7651,129 @@
         "title": "ConversationRecordingResponse",
         "type": "object"
       },
-      "ConversationScreenFrame": {
+      "ConversationSearchItem": {
+        "description": "Search hit: base conversation fields plus optional transcript match evidence.",
         "properties": {
-          "caption": {
-            "maxLength": 160,
-            "title": "Caption",
-            "type": "string"
-          },
-          "captured_at": {
-            "format": "date-time",
-            "title": "Captured At",
-            "type": "string"
-          },
-          "content_url": {
-            "title": "Content Url",
-            "type": "string"
-          },
-          "focal_region": {
+          "app_id": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/NormalizedRect"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "ground": {
-            "$ref": "#/components/schemas/ScreenFrameGround"
-          },
-          "height": {
-            "title": "Height",
-            "type": "integer"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "labels": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 8,
-            "title": "Labels",
-            "type": "array"
-          },
-          "rank": {
-            "maximum": 6.0,
-            "minimum": 0.0,
-            "title": "Rank",
-            "type": "integer"
-          },
-          "role": {
-            "enum": [
-              "banner",
-              "strip"
-            ],
-            "title": "Role",
-            "type": "string"
-          },
-          "source_badge": {
-            "anyOf": [
-              {
-                "enum": [
-                  "code",
-                  "browser",
-                  "document",
-                  "slides",
-                  "product"
-                ],
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Source Badge"
+            "title": "App Id"
           },
-          "thumbnail_url": {
-            "title": "Thumbnail Url",
-            "type": "string"
+          "apps_results": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AppResult"
+            },
+            "title": "Apps Results",
+            "type": "array"
           },
-          "url_expires_at": {
+          "audio_files": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AudioFile"
+            },
+            "title": "Audio Files",
+            "type": "array"
+          },
+          "calendar_event": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CalendarEventLink"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Twilio call SID for phone call conversations",
+            "title": "Call Id"
+          },
+          "client_device_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Device Id"
+          },
+          "client_platform": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Platform"
+          },
+          "conversation_audio": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationAudio"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
             "format": "date-time",
-            "title": "Url Expires At",
+            "title": "Created At",
             "type": "string"
           },
-          "width": {
-            "title": "Width",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "id",
-          "captured_at",
-          "role",
-          "rank",
-          "caption",
-          "labels",
-          "width",
-          "height",
-          "content_url",
-          "thumbnail_url",
-          "url_expires_at",
-          "ground"
-        ],
-        "title": "ConversationScreenFrame",
-        "type": "object"
-      },
-      "ConversationScreenFrameSet": {
-        "properties": {
-          "adjudicated_at": {
+          "data_protection_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Protection Level"
+          },
+          "deferred": {
+            "default": false,
+            "title": "Deferred",
+            "type": "boolean"
+          },
+          "discarded": {
+            "default": false,
+            "title": "Discarded",
+            "type": "boolean"
+          },
+          "external_data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Data"
+          },
+          "finished_at": {
             "anyOf": [
               {
                 "format": "date-time",
@@ -7776,35 +7783,244 @@
                 "type": "null"
               }
             ],
-            "title": "Adjudicated At"
+            "title": "Finished At"
           },
-          "banner": {
+          "folder_id": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ConversationScreenFrame"
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "ID of the folder this conversation belongs to",
+            "title": "Folder Id"
+          },
+          "geolocation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Geolocation"
               },
               {
                 "type": "null"
               }
             ]
           },
-          "revision": {
-            "title": "Revision",
-            "type": "integer"
+          "id": {
+            "title": "Id",
+            "type": "string"
           },
-          "strip": {
+          "imported": {
+            "default": false,
+            "title": "Imported",
+            "type": "boolean"
+          },
+          "is_locked": {
+            "default": false,
+            "title": "Is Locked",
+            "type": "boolean"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "match_snippets": {
+            "default": [],
             "items": {
-              "$ref": "#/components/schemas/ConversationScreenFrame"
+              "$ref": "#/components/schemas/TranscriptMatchSnippet"
             },
-            "maxItems": 6,
-            "title": "Strip",
+            "title": "Match Snippets",
             "type": "array"
+          },
+          "meeting_dedup_speech_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Dedup Speech S"
+          },
+          "meeting_duration_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Duration S"
+          },
+          "meeting_treatment_eligible": {
+            "default": false,
+            "title": "Meeting Treatment Eligible",
+            "type": "boolean"
+          },
+          "meeting_treatment_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Treatment Reason"
+          },
+          "photos": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ConversationPhoto"
+            },
+            "title": "Photos",
+            "type": "array"
+          },
+          "plugins_results": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PluginResult"
+            },
+            "title": "Plugins Results",
+            "type": "array"
+          },
+          "private_cloud_sync_enabled": {
+            "default": false,
+            "title": "Private Cloud Sync Enabled",
+            "type": "boolean"
+          },
+          "processing_conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processing Conversation Id"
+          },
+          "processing_memory_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processing Memory Id"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationSource"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "omi"
+          },
+          "starred": {
+            "default": false,
+            "title": "Starred",
+            "type": "boolean"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationStatus"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "completed"
+          },
+          "structured": {
+            "$ref": "#/components/schemas/Structured"
+          },
+          "suggested_summarization_apps": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Suggested Summarization Apps",
+            "type": "array"
+          },
+          "transcript_segments": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TranscriptSegment"
+            },
+            "title": "Transcript Segments",
+            "type": "array"
+          },
+          "transcript_segments_compressed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": false,
+            "title": "Transcript Segments Compressed"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "uses_custom_stt": {
+            "default": false,
+            "title": "Uses Custom Stt",
+            "type": "boolean"
+          },
+          "visibility": {
+            "$ref": "#/components/schemas/ConversationVisibility",
+            "default": "private"
           }
         },
         "required": [
-          "revision"
+          "id",
+          "created_at",
+          "started_at",
+          "finished_at",
+          "structured"
         ],
-        "title": "ConversationScreenFrameSet",
+        "title": "ConversationSearchItem",
         "type": "object"
       },
       "ConversationSource": {
@@ -12134,7 +12350,7 @@
           "match_snippets": {
             "default": [],
             "items": {
-              "$ref": "#/components/schemas/TranscriptMatchSnippet"
+              "$ref": "#/components/schemas/routers__mcp__TranscriptMatchSnippet"
             },
             "title": "Match Snippets",
             "type": "array"
@@ -16107,35 +16323,6 @@
         "title": "NormalizedContextSnapshot",
         "type": "object"
       },
-      "NormalizedRect": {
-        "additionalProperties": false,
-        "properties": {
-          "height": {
-            "title": "Height",
-            "type": "number"
-          },
-          "width": {
-            "title": "Width",
-            "type": "number"
-          },
-          "x": {
-            "title": "X",
-            "type": "number"
-          },
-          "y": {
-            "title": "Y",
-            "type": "number"
-          }
-        },
-        "required": [
-          "x",
-          "y",
-          "width",
-          "height"
-        ],
-        "title": "NormalizedRect",
-        "type": "object"
-      },
       "NotificationSettingsResponse": {
         "properties": {
           "enabled": {
@@ -16606,8 +16793,19 @@
         "type": "object"
       },
       "PageContext": {
-        "description": "Page context for chat - indicates what the user is currently viewing.",
+        "description": "Page context for chat - indicates what the user is currently viewing.\n\nWhen ``type`` is ``conversation`` with an ``id``, and/or ``start_date`` /\n``end_date`` are set, retrieval tools hard-scope to that conversation and/or\ntimeframe (#4515). Dates must include a timezone offset\n(YYYY-MM-DDTHH:MM:SS+HH:MM).",
         "properties": {
+          "end_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          },
           "id": {
             "anyOf": [
               {
@@ -16618,6 +16816,17 @@
               }
             ],
             "title": "Id"
+          },
+          "start_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
           },
           "title": {
             "anyOf": [
@@ -18743,221 +18952,6 @@
         "title": "ScreenActivitySyncRequest",
         "type": "object"
       },
-      "ScreenFrameAdjudicationRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "attempt_id": {
-            "format": "uuid",
-            "title": "Attempt Id",
-            "type": "string"
-          },
-          "candidates": {
-            "items": {
-              "$ref": "#/components/schemas/ScreenFrameCandidateIn"
-            },
-            "maxItems": 8,
-            "minItems": 1,
-            "title": "Candidates",
-            "type": "array"
-          },
-          "purpose": {
-            "const": "meeting_note_v1",
-            "title": "Purpose",
-            "type": "string"
-          },
-          "schema_version": {
-            "const": 1,
-            "title": "Schema Version",
-            "type": "integer"
-          },
-          "subject": {
-            "$ref": "#/components/schemas/ScreenFrameSubjectIn"
-          }
-        },
-        "required": [
-          "schema_version",
-          "attempt_id",
-          "purpose",
-          "subject",
-          "candidates"
-        ],
-        "title": "ScreenFrameAdjudicationRequest",
-        "type": "object"
-      },
-      "ScreenFrameAdjudicationResponse": {
-        "properties": {
-          "attempt_id": {
-            "format": "uuid",
-            "title": "Attempt Id",
-            "type": "string"
-          },
-          "frame_set": {
-            "$ref": "#/components/schemas/ConversationScreenFrameSet"
-          },
-          "outcome": {
-            "enum": [
-              "committed",
-              "no_approved_frames"
-            ],
-            "title": "Outcome",
-            "type": "string"
-          }
-        },
-        "required": [
-          "attempt_id",
-          "outcome",
-          "frame_set"
-        ],
-        "title": "ScreenFrameAdjudicationResponse",
-        "type": "object"
-      },
-      "ScreenFrameCandidateIn": {
-        "additionalProperties": false,
-        "properties": {
-          "bytes_base64": {
-            "title": "Bytes Base64",
-            "type": "string"
-          },
-          "captured_at": {
-            "format": "date-time",
-            "title": "Captured At",
-            "type": "string"
-          },
-          "client_frame_id": {
-            "maxLength": 128,
-            "minLength": 1,
-            "title": "Client Frame Id",
-            "type": "string"
-          },
-          "declared_height": {
-            "maximum": 10000.0,
-            "minimum": 1.0,
-            "title": "Declared Height",
-            "type": "integer"
-          },
-          "declared_width": {
-            "maximum": 10000.0,
-            "minimum": 1.0,
-            "title": "Declared Width",
-            "type": "integer"
-          },
-          "mime_type": {
-            "enum": [
-              "image/jpeg",
-              "image/png"
-            ],
-            "title": "Mime Type",
-            "type": "string"
-          },
-          "sha256_base64": {
-            "maxLength": 44,
-            "minLength": 44,
-            "title": "Sha256 Base64",
-            "type": "string"
-          }
-        },
-        "required": [
-          "client_frame_id",
-          "captured_at",
-          "mime_type",
-          "declared_width",
-          "declared_height",
-          "sha256_base64",
-          "bytes_base64"
-        ],
-        "title": "ScreenFrameCandidateIn",
-        "type": "object"
-      },
-      "ScreenFrameGround": {
-        "additionalProperties": false,
-        "description": "Gradient stops derived from the canonical bytes at approval time.\n\nBoth clients render the banner from these; neither samples pixels. A\nsigned cross-origin URL cannot be read back from a canvas (no guaranteed\nCORS headers), and two independent extractions (Swift on macOS, JS on\nweb) would drift from each other anyway. Extracted once, server-side,\nfrom the canonical JPEG — see utils/screen_frames/palette.py, a port of\ndesktop/macos/Desktop/Sources/MeetingScreenshots/MeetingBannerPalette.swift.",
-        "properties": {
-          "is_neutral": {
-            "title": "Is Neutral",
-            "type": "boolean"
-          },
-          "stops": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 2,
-            "minItems": 2,
-            "title": "Stops",
-            "type": "array"
-          }
-        },
-        "required": [
-          "stops",
-          "is_neutral"
-        ],
-        "title": "ScreenFrameGround",
-        "type": "object"
-      },
-      "ScreenFrameSettings": {
-        "additionalProperties": false,
-        "description": "The account-level setting gating screen-frame egress admission\n(contract §6, setting_key=\"meeting_note_screenshots_enabled\"). Shared and\nauthoritative across every device — desktop, web, a reinstall — because\nit protects the user from themselves (accidentally leaving the feature\non), not third parties from the user; the privacy judge is what protects\npeople appearing in frames. It does not need to be tamper-proof, only\nconsistent, so it is a plain user-profile field, not a signed claim.",
-        "properties": {
-          "meeting_note_screenshots_enabled": {
-            "title": "Meeting Note Screenshots Enabled",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "meeting_note_screenshots_enabled"
-        ],
-        "title": "ScreenFrameSettings",
-        "type": "object"
-      },
-      "ScreenFrameSettingsUpdateRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "meeting_note_screenshots_enabled": {
-            "title": "Meeting Note Screenshots Enabled",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "meeting_note_screenshots_enabled"
-        ],
-        "title": "ScreenFrameSettingsUpdateRequest",
-        "type": "object"
-      },
-      "ScreenFrameSharingUpdateRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "enabled": {
-            "title": "Enabled",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "enabled"
-        ],
-        "title": "ScreenFrameSharingUpdateRequest",
-        "type": "object"
-      },
-      "ScreenFrameSubjectIn": {
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "maxLength": 256,
-            "minLength": 1,
-            "title": "Id",
-            "type": "string"
-          },
-          "kind": {
-            "const": "conversation",
-            "title": "Kind",
-            "type": "string"
-          }
-        },
-        "required": [
-          "kind",
-          "id"
-        ],
-        "title": "ScreenFrameSubjectIn",
-        "type": "object"
-      },
       "SearchConversationsResponse": {
         "properties": {
           "current_page": {
@@ -18966,7 +18960,7 @@
           },
           "items": {
             "items": {
-              "$ref": "#/components/schemas/Conversation"
+              "$ref": "#/components/schemas/ConversationSearchItem"
             },
             "title": "Items",
             "type": "array"
@@ -19912,11 +19906,6 @@
             ],
             "title": "Processing Memory Id"
           },
-          "screenshot_sharing_enabled": {
-            "default": true,
-            "title": "Screenshot Sharing Enabled",
-            "type": "boolean"
-          },
           "source": {
             "anyOf": [
               {
@@ -20209,7 +20198,7 @@
           "match_snippets": {
             "default": [],
             "items": {
-              "$ref": "#/components/schemas/TranscriptMatchSnippet"
+              "$ref": "#/components/schemas/routers__mcp__TranscriptMatchSnippet"
             },
             "title": "Match Snippets",
             "type": "array"
@@ -22877,7 +22866,7 @@
         "type": "object"
       },
       "TranscriptMatchSnippet": {
-        "description": "Grep-style transcript evidence for MCP search hits (#6621).",
+        "description": "Grep-style transcript hit returned on conversation search for seek-to-moment UX.",
         "properties": {
           "end": {
             "anyOf": [
@@ -25642,6 +25631,86 @@
           "id"
         ],
         "title": "ScreenActivityRow",
+        "type": "object"
+      },
+      "routers__mcp__TranscriptMatchSnippet": {
+        "description": "Grep-style transcript evidence for MCP search hits (#6621).",
+        "properties": {
+          "end": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End"
+          },
+          "end_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Ms"
+          },
+          "segment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Segment Id"
+          },
+          "speaker_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Id"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start"
+          },
+          "start_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Ms"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "TranscriptMatchSnippet",
         "type": "object"
       },
       "routers__memories__BatchMemoriesRequest": {
@@ -36483,379 +36552,6 @@
         ]
       }
     },
-    "/v1/conversations/{conversation_id}/screenshot-sharing": {
-      "patch": {
-        "operationId": "update_conversation_screenshot_sharing_v1_conversations__conversation_id__screenshot_sharing_patch",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "conversation_id",
-            "required": true,
-            "schema": {
-              "title": "Conversation Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "title": "Authorization",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Platform",
-            "required": false,
-            "schema": {
-              "title": "X-App-Platform",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-Device-Id-Hash",
-            "required": false,
-            "schema": {
-              "title": "X-Device-Id-Hash",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Version",
-            "required": false,
-            "schema": {
-              "title": "X-App-Version",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ScreenFrameSharingUpdateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConversationScreenFrameSet"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error401"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error404"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "firebaseBearer": []
-          }
-        ],
-        "summary": "Update Conversation Screenshot Sharing",
-        "tags": [
-          "screen_frames"
-        ]
-      }
-    },
-    "/v1/conversations/{conversation_id}/screenshots": {
-      "delete": {
-        "operationId": "delete_all_conversation_screenshots_v1_conversations__conversation_id__screenshots_delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "conversation_id",
-            "required": true,
-            "schema": {
-              "title": "Conversation Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "title": "Authorization",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Platform",
-            "required": false,
-            "schema": {
-              "title": "X-App-Platform",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-Device-Id-Hash",
-            "required": false,
-            "schema": {
-              "title": "X-Device-Id-Hash",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Version",
-            "required": false,
-            "schema": {
-              "title": "X-App-Version",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConversationScreenFrameSet"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error401"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error404"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "firebaseBearer": []
-          }
-        ],
-        "summary": "Delete All Conversation Screenshots",
-        "tags": [
-          "screen_frames"
-        ]
-      },
-      "get": {
-        "operationId": "get_conversation_screenshots_v1_conversations__conversation_id__screenshots_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "conversation_id",
-            "required": true,
-            "schema": {
-              "title": "Conversation Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "title": "Authorization",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Platform",
-            "required": false,
-            "schema": {
-              "title": "X-App-Platform",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-Device-Id-Hash",
-            "required": false,
-            "schema": {
-              "title": "X-Device-Id-Hash",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Version",
-            "required": false,
-            "schema": {
-              "title": "X-App-Version",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConversationScreenFrameSet"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error401"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error404"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "firebaseBearer": []
-          }
-        ],
-        "summary": "Get Conversation Screenshots",
-        "tags": [
-          "screen_frames"
-        ]
-      }
-    },
-    "/v1/conversations/{conversation_id}/screenshots/{frame_id}": {
-      "delete": {
-        "operationId": "delete_conversation_screenshot_v1_conversations__conversation_id__screenshots__frame_id__delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "conversation_id",
-            "required": true,
-            "schema": {
-              "title": "Conversation Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "frame_id",
-            "required": true,
-            "schema": {
-              "title": "Frame Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "title": "Authorization",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Platform",
-            "required": false,
-            "schema": {
-              "title": "X-App-Platform",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-Device-Id-Hash",
-            "required": false,
-            "schema": {
-              "title": "X-Device-Id-Hash",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Version",
-            "required": false,
-            "schema": {
-              "title": "X-App-Version",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConversationScreenFrameSet"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error401"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error404"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "firebaseBearer": []
-          }
-        ],
-        "summary": "Delete Conversation Screenshot",
-        "tags": [
-          "screen_frames"
-        ]
-      }
-    },
     "/v1/conversations/{conversation_id}/segments/assign-bulk": {
       "patch": {
         "operationId": "assign_segments_bulk_v1_conversations__conversation_id__segments_assign_bulk_patch",
@@ -37418,60 +37114,6 @@
         "summary": "Get Shared Conversation By Id",
         "tags": [
           "conversations"
-        ]
-      }
-    },
-    "/v1/conversations/{conversation_id}/shared/screenshots": {
-      "get": {
-        "description": "Public, unauthenticated. Returns an empty set unless the conversation\nis currently shareable AND screenshot_sharing_enabled is true — never a\n404, so this route cannot be used to probe whether a conversation_id\nexists (contract §1/§9, and matches the existing\nGET /v1/conversations/{id}/shared 404-avoidance pattern for public\nconversation lookups... except this one specifically must not leak\nexistence via status code, so it always returns 200).",
-        "operationId": "get_shared_conversation_screenshots_v1_conversations__conversation_id__shared_screenshots_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "conversation_id",
-            "required": true,
-            "schema": {
-              "title": "Conversation Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConversationScreenFrameSet"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error401"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error404"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "firebaseBearer": []
-          }
-        ],
-        "summary": "Get Shared Conversation Screenshots",
-        "tags": [
-          "screen_frames"
         ]
       }
     },
@@ -47844,256 +47486,6 @@
           }
         ],
         "summary": "Sync Screen Activity"
-      }
-    },
-    "/v1/screen-frame-egress/adjudications": {
-      "post": {
-        "operationId": "adjudicate_screen_frames_v1_screen_frame_egress_adjudications_post",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "title": "Authorization",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Platform",
-            "required": false,
-            "schema": {
-              "title": "X-App-Platform",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-Device-Id-Hash",
-            "required": false,
-            "schema": {
-              "title": "X-Device-Id-Hash",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Version",
-            "required": false,
-            "schema": {
-              "title": "X-App-Version",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ScreenFrameAdjudicationRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ScreenFrameAdjudicationResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error401"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "firebaseBearer": []
-          }
-        ],
-        "summary": "Adjudicate Screen Frames",
-        "tags": [
-          "screen_frames"
-        ]
-      }
-    },
-    "/v1/screen-frame-egress/settings": {
-      "get": {
-        "description": "Account-level, shared across every device (desktop, web, a\nreinstall) — this is the setting the adjudication route's admission\ncheck reads (contract §6). It protects the user from themselves, not\nthird parties from the user (the privacy judge does that), so it lives\nas a plain user-profile field rather than a signed claim.",
-        "operationId": "get_screen_frame_settings_v1_screen_frame_egress_settings_get",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "title": "Authorization",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Platform",
-            "required": false,
-            "schema": {
-              "title": "X-App-Platform",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-Device-Id-Hash",
-            "required": false,
-            "schema": {
-              "title": "X-Device-Id-Hash",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Version",
-            "required": false,
-            "schema": {
-              "title": "X-App-Version",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ScreenFrameSettings"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error401"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "firebaseBearer": []
-          }
-        ],
-        "summary": "Get Screen Frame Settings",
-        "tags": [
-          "screen_frames"
-        ]
-      },
-      "patch": {
-        "operationId": "update_screen_frame_settings_v1_screen_frame_egress_settings_patch",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "title": "Authorization",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Platform",
-            "required": false,
-            "schema": {
-              "title": "X-App-Platform",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-Device-Id-Hash",
-            "required": false,
-            "schema": {
-              "title": "X-Device-Id-Hash",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Version",
-            "required": false,
-            "schema": {
-              "title": "X-App-Version",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ScreenFrameSettingsUpdateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ScreenFrameSettings"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error401"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "firebaseBearer": []
-          }
-        ],
-        "summary": "Update Screen Frame Settings",
-        "tags": [
-          "screen_frames"
-        ]
       }
     },
     "/v1/stripe/connect-accounts": {

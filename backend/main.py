@@ -91,6 +91,7 @@ from routers import (
     public_shared_conversation_chat,
     screen_frames,
 )
+from routers.listen.registry import proactive_message_dispatcher
 
 from utils.other.timeout import TimeoutMiddleware
 from utils.observability import log_langsmith_status
@@ -294,6 +295,10 @@ async def startup_event():
         name='startup_meeting_receipt_reconcile',
     )
     start_background_task(_periodic_listen_finalization_reconcile(), name='periodic_listen_finalization_reconcile')
+    start_background_task(
+        proactive_message_dispatcher(),
+        name='proactive_message_dispatcher',
+    )
 
 
 def _drain_pending_deletion_wipes():

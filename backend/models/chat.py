@@ -3,7 +3,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Callable, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
 # App display names are resolved by an injected callable, never by importing the database
 # layer here: models/ must stay import-pure so a Pydantic module cannot drag the Firestore
@@ -246,11 +246,46 @@ class ResponseMessage(Message):
 
 
 class PageContext(BaseModel):
-    """Page context for chat - indicates what the user is currently viewing."""
+    """Page context for chat - indicates what the user is currently viewing.
+
+    When ``type`` is ``conversation`` with an ``id``, and/or ``start_date`` /
+    ``end_date`` are set, retrieval tools hard-scope to that conversation and/or
+    timeframe (#4515). Dates must include a timezone offset
+    (YYYY-MM-DDTHH:MM:SS+HH:MM).
+    """
 
     type: Literal["conversation", "task", "memory", "recap"]
     id: Optional[str] = None
     title: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+
+    @staticmethod
+    def _require_aware_iso(value: str, field_name: str) -> Optional[str]:
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            parsed = datetime.fromisoformat(stripped.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError(
+                f"{field_name} must be ISO-8601 with timezone " f"(YYYY-MM-DDTHH:MM:SS+HH:MM), got {value!r}"
+            ) from exc
+        if parsed.tzinfo is None:
+            raise ValueError(
+                f"{field_name} must include a timezone offset " f"(YYYY-MM-DDTHH:MM:SS+HH:MM), got {value!r}"
+            )
+        return stripped
+
+    @field_validator("start_date", "end_date", mode="before")
+    @classmethod
+    def _validate_scope_dates(cls, value: Any, info: ValidationInfo) -> Optional[str]:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError(f"{info.field_name or 'date'} must be an ISO-8601 string with timezone offset")
+        field_name = info.field_name if isinstance(info.field_name, str) else "date"
+        return cls._require_aware_iso(value, field_name)
 
 
 class SendMessageRequest(BaseModel):

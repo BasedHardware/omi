@@ -16,11 +16,13 @@ import 'package:shimmer/shimmer.dart';
 import 'package:tuple/tuple.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api/messages.dart' show ChatPageContext;
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
+import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -58,12 +60,18 @@ class ConversationDetailPage extends StatefulWidget {
   final bool openShareToContactsOnLoad;
   final int initialTabIndex;
 
+  /// When set (e.g. from search match snippet), open transcript and play this moment.
+  final double? initialSeekStart;
+  final double? initialSeekEnd;
+
   const ConversationDetailPage({
     super.key,
     this.isFromOnboarding = false,
     required this.conversation,
     this.openShareToContactsOnLoad = false,
     this.initialTabIndex = 1, // Default to summary tab
+    this.initialSeekStart,
+    this.initialSeekEnd,
   });
 
   @override
@@ -85,6 +93,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   bool _isTogglingStarred = false;
   bool _isDownloadingAudio = false;
   bool _providerInitialized = false;
+  bool _didInitialSeek = false;
 
   // Search functionality
   bool _isSearching = false;
@@ -163,6 +172,11 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     super.initState();
 
     _controller = TabController(length: 3, vsync: this, initialIndex: widget.initialTabIndex);
+    selectedTab = switch (widget.initialTabIndex) {
+      0 => ConversationTab.transcript,
+      2 => ConversationTab.actionItems,
+      _ => ConversationTab.summary,
+    };
     _controller!.addListener(() {
       setState(() {
         String? tabName;
@@ -283,6 +297,26 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     }
   }
 
+  Future<void> _maybePlayInitialSeek() async {
+    if (_didInitialSeek || !mounted) return;
+    final start = widget.initialSeekStart;
+    if (start == null || _seekToSegmentCallback == null) return;
+    _didInitialSeek = true;
+    final end = widget.initialSeekEnd ?? start;
+    if (selectedTab != ConversationTab.transcript) {
+      setState(() {
+        selectedTab = ConversationTab.transcript;
+      });
+      _controller?.animateTo(0);
+    }
+    try {
+      await _seekToSegmentCallback!(start, end);
+      if (mounted) HapticFeedback.lightImpact();
+    } catch (_) {
+      // Audio may be unavailable offline; search still opened the transcript tab.
+    }
+  }
+
   /// Navigate to adjacent conversation with slide animation.
   /// [direction]: 1 for older (swipe left), -1 for newer (swipe right)
   void _navigateToAdjacentConversation(int direction) {
@@ -344,8 +378,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         final conversation = provider.conversation;
         final summaryContent =
             conversation.appResults.isNotEmpty && conversation.appResults[0].content.trim().isNotEmpty
-                ? conversation.appResults[0].content.trim()
-                : conversation.structured.toString();
+            ? conversation.appResults[0].content.trim()
+            : conversation.structured.toString();
         _copyContent(context, summaryContent);
         break;
       case 'download_audio':
@@ -736,6 +770,34 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        // Ask about this conversation (#4515)
+                        Container(
+                          width: 36,
+                          height: 36,
+                          margin: const EdgeInsets.only(right: 8),
+                          decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
+                          child: IconButton(
+                            padding: EdgeInsets.zero,
+                            tooltip: context.l10n.askAboutThisConversation,
+                            onPressed: () {
+                              HapticFeedback.mediumImpact();
+                              final convo = provider.conversation;
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => ChatPage(
+                                    isPivotBottom: false,
+                                    initialChatContext: ChatPageContext(
+                                      type: 'conversation',
+                                      id: convo.id,
+                                      title: convo.structured.title,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                            icon: const FaIcon(FontAwesomeIcons.solidComments, size: 14.0, color: Colors.white),
+                          ),
+                        ),
                         // Star button (first) - toggle starred status
                         Container(
                           width: 36,
@@ -767,8 +829,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                         provider.conversation.starred = newStarredState;
                                         // Update in conversation provider
                                         context.read<ConversationProvider>().updateConversationInSortedList(
-                                              provider.conversation,
-                                            );
+                                          provider.conversation,
+                                        );
                                         // Track star/unstar action
                                         PlatformManager.instance.analytics.conversationStarToggled(
                                           conversation: provider.conversation,
@@ -1107,13 +1169,15 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                   child: Consumer<ConversationDetailProvider>(
                     builder: (context, provider, child) {
                       final conversation = provider.conversation;
-                      final hasActionItems =
-                          conversation.structured.actionItems.where((item) => !item.deleted).isNotEmpty;
+                      final hasActionItems = conversation.structured.actionItems
+                          .where((item) => !item.deleted)
+                          .isNotEmpty;
                       return ConversationBottomBar(
                         mode: ConversationBottomBarMode.detail,
                         selectedTab: selectedTab,
                         conversation: conversation,
-                        hasSegments: conversation.transcriptSegments.isNotEmpty ||
+                        hasSegments:
+                            conversation.transcriptSegments.isNotEmpty ||
                             conversation.photos.isNotEmpty ||
                             conversation.externalIntegration != null,
                         hasActionItems: hasActionItems,
@@ -1123,6 +1187,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                               setState(() {
                                 _seekToSegmentCallback = seekFunction;
                               });
+                              _maybePlayInitialSeek();
                             }
                           });
                         },
@@ -1738,29 +1803,29 @@ class _CalendarEventPickerSheetState extends State<CalendarEventPickerSheet> {
             child: _isLoading
                 ? _buildShimmerList()
                 : _events.isEmpty
-                    ? const Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(40),
-                          child: Text(
-                            'No calendar events found around this time.',
-                            style: TextStyle(color: Colors.grey, fontSize: 15),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      )
-                    : ListView.separated(
-                        shrinkWrap: true,
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        itemCount: _events.length,
-                        separatorBuilder: (_, __) =>
-                            const Divider(color: Color(0xFF2A2A2E), height: 1, indent: 16, endIndent: 16),
-                        itemBuilder: (context, index) {
-                          final event = _events[index];
-                          final isLinkingThis = _linkingEventId == event.eventId;
-                          final isSuggested = event.eventId == _suggestedEventId;
-                          return _buildEventTile(event, isSuggested, isLinkingThis);
-                        },
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(40),
+                      child: Text(
+                        'No calendar events found around this time.',
+                        style: TextStyle(color: Colors.grey, fontSize: 15),
+                        textAlign: TextAlign.center,
                       ),
+                    ),
+                  )
+                : ListView.separated(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    itemCount: _events.length,
+                    separatorBuilder: (_, __) =>
+                        const Divider(color: Color(0xFF2A2A2E), height: 1, indent: 16, endIndent: 16),
+                    itemBuilder: (context, index) {
+                      final event = _events[index];
+                      final isLinkingThis = _linkingEventId == event.eventId;
+                      final isSuggested = event.eventId == _suggestedEventId;
+                      return _buildEventTile(event, isSuggested, isLinkingThis);
+                    },
+                  ),
           ),
           SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
         ],
@@ -1853,9 +1918,11 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                 }
                 final segments = provider.conversation.transcriptSegments;
                 final segment = segments[segmentIndex];
-                final person =
-                    segment.personId != null ? SharedPreferencesUtil().getPersonById(segment.personId!) : null;
-                final speakerName = person?.name ??
+                final person = segment.personId != null
+                    ? SharedPreferencesUtil().getPersonById(segment.personId!)
+                    : null;
+                final speakerName =
+                    person?.name ??
                     context.l10n.speakerWithId('${TranscriptSegment.getDisplaySpeakerId(segment.speakerId, segments)}');
                 PlatformManager.instance.analytics.editSegmentTextStarted();
                 bool saved = false;
@@ -1914,8 +1981,9 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                               );
                               if (segmentIndex == -1) continue;
                               provider.conversation.transcriptSegments[segmentIndex].isUser = finalPersonId == 'user';
-                              provider.conversation.transcriptSegments[segmentIndex].personId =
-                                  finalPersonId == 'user' ? null : finalPersonId;
+                              provider.conversation.transcriptSegments[segmentIndex].personId = finalPersonId == 'user'
+                                  ? null
+                                  : finalPersonId;
                             }
                             await assignBulkConversationTranscriptSegments(
                               provider.conversation.id,

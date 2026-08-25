@@ -278,7 +278,7 @@ final class AgentRuntimeStatusStore: ObservableObject {
 
   func ingest(message: AgentRuntimeProcess.RuntimeMessage, surface: AgentSurfaceReference) {
     switch message.kind {
-    case .textDelta, .thinkingDelta:
+    case .textDelta, .thinkingDelta, .turnActivity:
       update(surface: surface, status: .running, statusText: nil, terminal: false, payload: message.payload)
     case .toolActivity:
       let name = message.payload["name"] as? String

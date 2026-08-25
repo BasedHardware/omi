@@ -17,15 +17,16 @@ typedef ConversationListFetcher = Future<({List<ServerConversation> items, bool 
 typedef ConversationPageFetcher = Future<({List<ServerConversation> items, bool ok, bool truncated})> Function();
 typedef ConversationLifecycleFetcher = Future<({ServerConversation? item, bool ok})> Function(String id);
 typedef DailySummariesChecker = Future<bool> Function();
-typedef ConversationSearchFetcher = Future<(List<ServerConversation>, int, int)> Function(
-  String query, {
-  int? page,
-  int? limit,
-  required bool includeDiscarded,
-  DateTime? startDate,
-  DateTime? endDate,
-  String? speakerId,
-});
+typedef ConversationSearchFetcher =
+    Future<(List<ServerConversation>, int, int)> Function(
+      String query, {
+      int? page,
+      int? limit,
+      required bool includeDiscarded,
+      DateTime? startDate,
+      DateTime? endDate,
+      String? speakerId,
+    });
 typedef ConversationDetailsFetcher = Future<ServerConversation?> Function(String conversationId);
 
 /// Day-bucket key for a conversation timestamp, in the viewer's **local** timezone.
@@ -38,6 +39,17 @@ typedef ConversationDetailsFetcher = Future<ServerConversation?> Function(String
 DateTime conversationLocalDayKey(DateTime timestamp) {
   final local = timestamp.toLocal();
   return DateTime(local.year, local.month, local.day);
+}
+
+/// Search results keep server rank: day buckets appear in first-hit order,
+/// and items inside a day stay in ranked order (no recency re-sort).
+Map<DateTime, List<ServerConversation>> groupSearchResultsPreservingRank(Iterable<ServerConversation> source) {
+  final grouped = <DateTime, List<ServerConversation>>{};
+  for (final conversation in source) {
+    final date = conversationLocalDayKey(conversation.startedAt ?? conversation.createdAt);
+    grouped.putIfAbsent(date, () => []).add(conversation);
+  }
+  return grouped;
 }
 
 class ConversationProvider extends ChangeNotifier {
@@ -141,11 +153,11 @@ class ConversationProvider extends ChangeNotifier {
     DailySummariesChecker? dailySummariesChecker,
     ConversationSearchFetcher? conversationSearchFetcher,
     bool Function()? isSignedIn,
-  })  : _conversationListFetcher = conversationListFetcher,
-        _conversationLifecycleFetcher = conversationLifecycleFetcher ?? getConversationByIdResult,
-        _dailySummariesChecker = dailySummariesChecker,
-        _conversationSearchFetcher = conversationSearchFetcher ?? searchConversationsServer,
-        _isSignedIn = isSignedIn ?? AuthService.instance.isSignedIn {
+  }) : _conversationListFetcher = conversationListFetcher,
+       _conversationLifecycleFetcher = conversationLifecycleFetcher ?? getConversationByIdResult,
+       _dailySummariesChecker = dailySummariesChecker,
+       _conversationSearchFetcher = conversationSearchFetcher ?? searchConversationsServer,
+       _isSignedIn = isSignedIn ?? AuthService.instance.isSignedIn {
     _setupMergeListener();
     _loadSettings();
   }
@@ -242,7 +254,8 @@ class ConversationProvider extends ChangeNotifier {
       speakerId: selectedSpeakerId,
     );
     if (generation != _sessionGeneration || !_isSignedIn()) return;
-    convos.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
+    // Search results are ranked by the server, including transcript-match relevance.
+    // Re-sorting by recency would bury older spoken-moment matches.
     searchedConversations = convos;
     currentSearchPage = current;
     totalSearchPages = total;
@@ -279,7 +292,6 @@ class ConversationProvider extends ChangeNotifier {
     );
     if (generation != _sessionGeneration || !_isSignedIn()) return;
     searchedConversations.addAll(newConvos);
-    searchedConversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     totalSearchPages = total;
     currentSearchPage = current;
     groupSearchConvosByDate();
@@ -426,8 +438,9 @@ class ConversationProvider extends ChangeNotifier {
   Future<bool> checkHasDailySummaries() async {
     if (!_isSignedIn()) return false;
     final generation = _sessionGeneration;
-    final hasSummaries = await (_dailySummariesChecker?.call() ??
-        getDailySummaries(limit: 1, offset: 0).then((items) => items.isNotEmpty));
+    final hasSummaries =
+        await (_dailySummariesChecker?.call() ??
+            getDailySummaries(limit: 1, offset: 0).then((items) => items.isNotEmpty));
     if (generation != _sessionGeneration || !_isSignedIn()) return false;
     hasDailySummaries = hasSummaries;
     notifyListeners();
@@ -876,7 +889,7 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void _groupSearchConvosByDateWithoutNotify() {
-    groupedConversations = _buildGroupedByDate(_filterOutConvos(searchedConversations));
+    groupedConversations = groupSearchResultsPreservingRank(_filterOutConvos(searchedConversations));
   }
 
   void _groupConversationsByDateWithoutNotify() {
@@ -959,9 +972,9 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   Map<String, ServerConversation> _realProcessingConversationsById() => {
-        for (final conversation in processingConversations)
-          if (conversation.id != '0') conversation.id: conversation,
-      };
+    for (final conversation in processingConversations)
+      if (conversation.id != '0') conversation.id: conversation,
+  };
 
   Future<Map<String, ({ServerConversation? item, bool ok})>> _loadProcessingLifecycleResults(
     List<ServerConversation> pageItems,
@@ -1003,8 +1016,9 @@ class ConversationProvider extends ChangeNotifier {
       }
     }
 
-    final workerCount =
-        ids.length < _processingLifecycleMaxConcurrency ? ids.length : _processingLifecycleMaxConcurrency;
+    final workerCount = ids.length < _processingLifecycleMaxConcurrency
+        ? ids.length
+        : _processingLifecycleMaxConcurrency;
     final workers = List<Future<void>>.generate(workerCount, (_) => worker());
     try {
       await Future.wait(workers).timeout(_processingLifecycleDeadline);
@@ -1413,8 +1427,8 @@ class ConversationProvider extends ChangeNotifier {
     final originalConvoIndex = conversations.indexWhere((c) => c.id == convoId);
     if (originalConvoIndex != -1) {
       final itemIndex = conversations[originalConvoIndex].structured.actionItems.indexWhere(
-            (item) => item.description == actionItemDescription,
-          );
+        (item) => item.description == actionItemDescription,
+      );
       if (itemIndex != -1) {
         conversations[originalConvoIndex].structured.actionItems[itemIndex].completed = newState;
         conversationFoundAndUpdated = true;
@@ -1427,8 +1441,8 @@ class ConversationProvider extends ChangeNotifier {
       final groupIndex = groupedConversations[dateKey]!.indexWhere((c) => c.id == convoId);
       if (groupIndex != -1) {
         final itemIndex = groupedConversations[dateKey]![groupIndex].structured.actionItems.indexWhere(
-              (item) => item.description == actionItemDescription,
-            );
+          (item) => item.description == actionItemDescription,
+        );
         if (itemIndex != -1) {
           groupedConversations[dateKey]![groupIndex].structured.actionItems[itemIndex].completed = newState;
         }

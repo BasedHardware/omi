@@ -63,7 +63,6 @@ const ROUTES: [string, () => Promise<any>, string][] = [
   ["dau-trends", () => import("@/app/api/omi/stats/dau-trends/route"), "/api/omi/stats/dau-trends?days=30"],
   ["viral-metrics", () => import("@/app/api/omi/stats/viral-metrics/route"), "/api/omi/stats/viral-metrics?days=30"],
   ["retention", () => import("@/app/api/omi/stats/retention/posthog/route"), "/api/omi/stats/retention/posthog?days=14&intervals=10"],
-  ["k-factor", () => import("@/app/api/omi/stats/k-factor/posthog/route"), "/api/omi/stats/k-factor/posthog?days=30"],
 ];
 
 describe.each(ROUTES)("%s route", (_name, loadRoute, baseUrl) => {
@@ -85,6 +84,17 @@ describe.each(ROUTES)("%s route", (_name, loadRoute, baseUrl) => {
     // macOS semantics when unparameterized. The boards always pass platform=.
     const queries = await capture(loadRoute, baseUrl);
     expectScoped(queries, _name === "retention" ? "all" : "macos");
+  });
+});
+
+describe("k-factor route", () => {
+  it("does not require a client OS for server-emitted referral funnel events", async () => {
+    const queries = await capture(
+      () => import("@/app/api/omi/stats/k-factor/posthog/route"),
+      "/api/omi/stats/k-factor/posthog?days=30&platform=macos",
+    );
+    expect(queries).toHaveLength(3);
+    expectScoped(queries, "all");
   });
 });
 
