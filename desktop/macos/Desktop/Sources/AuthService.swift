@@ -1888,6 +1888,8 @@ class AuthService {
     UserDefaults.standard.removeObject(forKey: .authRefreshToken)
     UserDefaults.standard.removeObject(forKey: .authTokenExpiry)
     UserDefaults.standard.removeObject(forKey: .authTokenUserId)
+    UserDefaults.standard.removeObject(forKey: .chatGPTLLMOAuthConnected)
+    UserDefaults.standard.removeObject(forKey: .grokLLMOAuthConnected)
   }
 
   /// AUTH-03 test seam (**non-prod only**): force the stored idToken's expiry into the

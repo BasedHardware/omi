@@ -124,7 +124,7 @@ class LiveConversationController:
             lifecycle_service.request_finalization,
             self.host.request.uid,
             conversation_id,
-            has_byok_keys=bool(get_byok_keys()) or get_byok_llm_provider() in {'chatgpt', 'grok'},
+            has_byok_keys=bool(get_byok_keys()),
             client_kind=self.host.client_kind,
         )
         route = finalization['route']

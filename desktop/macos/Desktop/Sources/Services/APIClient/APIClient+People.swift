@@ -160,13 +160,16 @@ extension APIClient {
     let _: Response = try await post(
       "v1/users/me/llm-oauth/\(provider.rawValue)",
       body: Request(code: code, codeVerifier: codeVerifier, redirectURI: redirectURI),
+      customBaseURL: DesktopBackendEnvironment.authBaseURL(),
       includeBYOK: false,
       authorizationSnapshot: authorizationSnapshot,
       allowsAuthRetry: false
     )
   }
 
-  func llmOAuthStatus() async throws -> (connected: Set<LLMOAuthProvider>, selected: LLMOAuthProvider?) {
+  func llmOAuthStatus(
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> (connected: Set<LLMOAuthProvider>, selected: LLMOAuthProvider?) {
     struct Response: Decodable {
       let connected: [String]
       let selectedProvider: String?
@@ -176,7 +179,12 @@ extension APIClient {
         case selectedProvider = "selected_provider"
       }
     }
-    let response: Response = try await get("v1/users/me/llm-oauth", includeBYOK: false)
+    let response: Response = try await get(
+      "v1/users/me/llm-oauth",
+      customBaseURL: DesktopBackendEnvironment.authBaseURL(),
+      includeBYOK: false,
+      authorizationSnapshot: authorizationSnapshot
+    )
     return (
       Set(response.connected.compactMap(LLMOAuthProvider.init(rawValue:))),
       response.selectedProvider.flatMap(LLMOAuthProvider.init(rawValue:))
@@ -202,7 +210,11 @@ extension APIClient {
     struct Response: Decodable {
       let configurations: [String: Configuration]
     }
-    let response: Response = try await get("v1/users/me/llm-oauth", includeBYOK: false)
+    let response: Response = try await get(
+      "v1/users/me/llm-oauth",
+      customBaseURL: DesktopBackendEnvironment.authBaseURL(),
+      includeBYOK: false
+    )
     guard let configuration = response.configurations[provider.rawValue] else {
       throw APIError.invalidResponse
     }
@@ -215,8 +227,22 @@ extension APIClient {
     )
   }
 
-  func disconnectLLMOAuth(_ provider: LLMOAuthProvider) async throws {
-    try await delete("v1/users/me/llm-oauth/\(provider.rawValue)", includeBYOK: false)
+  func disconnectLLMOAuth(
+    _ provider: LLMOAuthProvider,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws {
+    var authPolicy = try resolvedRequestAuthPolicy(
+      expectedOwnerId: nil,
+      authorizationSnapshot: authorizationSnapshot
+    )
+    authPolicy.allowsAuthRetry = false
+    try await delete(
+      "v1/users/me/llm-oauth/\(provider.rawValue)",
+      customBaseURL: DesktopBackendEnvironment.authBaseURL(),
+      includeBYOK: false,
+      authPolicy: authPolicy,
+      authorizationSnapshot: authorizationSnapshot
+    )
   }
 
   /// Fetches all people for the current user

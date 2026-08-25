@@ -24,10 +24,14 @@ from models.users import PlanType
 from utils.analytics import billable_transcription_seconds, record_usage
 from utils.apps import is_audio_bytes_app_enabled
 from utils.async_tasks import WebSocketTaskSupervisor, drain_tasks, wait_for_event
+from utils.llm.oauth import LLMOAuthError, get_credential as get_llm_oauth_credential
 from utils.byok import (
     extract_byok_llm_provider_from_websocket,
     get_byok_keys,
+    get_byok_llm_provider,
     set_byok_llm_provider,
+    set_byok_oauth_credential,
+    set_byok_uid,
 )
 from utils.client_device import resolve_client_device_from_headers
 from utils.journey_metrics_contract import resolve_client_kind_from_headers
@@ -288,6 +292,17 @@ class ListenSessionRuntime:
             await self.request.websocket.close(code=1008, reason='Bad uid')
             return False
         set_byok_llm_provider(extract_byok_llm_provider_from_websocket(self.request.websocket))
+        set_byok_uid(self.request.uid)
+        oauth_provider = get_byok_llm_provider()
+        if oauth_provider in {'chatgpt', 'grok'}:
+            try:
+                credential = await run_blocking(
+                    db_executor, get_llm_oauth_credential, self.request.uid, oauth_provider
+                )
+            except LLMOAuthError:
+                credential = None
+            if credential is not None:
+                set_byok_oauth_credential(credential)
         if await run_blocking(db_executor, is_trial_paywalled, self.request.uid, self.request.source):
             await self.request.websocket.send_json(
                 FreemiumThresholdReachedEvent(remaining_seconds=0, action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT).to_json()

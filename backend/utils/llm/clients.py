@@ -614,6 +614,7 @@ def get_llm(
                     log=logger,
                 )
                 break
+    oauth_credential = get_byok_oauth_credential()
     if not byok_key:
         uid = get_byok_uid()
         oauth_provider = get_byok_llm_provider()

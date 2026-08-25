@@ -344,19 +344,6 @@ def validate_byok_request(uid: str) -> None:
     if error:
         logger.warning('BYOK validation failed uid=%s: %s', uid, error)
         raise HTTPException(status_code=403, detail=error)
-    provider = get_byok_llm_provider()
-    if provider in {'chatgpt', 'grok'}:
-        try:
-            from utils.llm.oauth import get_credential as get_llm_oauth_credential
-
-            credential = get_llm_oauth_credential(uid, provider)
-        except Exception as error:
-            raise HTTPException(status_code=503, detail='LLM OAuth credential is temporarily unavailable') from error
-        if credential is None:
-            raise HTTPException(
-                status_code=403, detail='LLM OAuth credential is unavailable; reconnect the provider in Settings'
-            )
-        set_byok_oauth_credential(credential)
     _byok_validated_ctx.set(True)
     set_byok_uid(uid)
 

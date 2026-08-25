@@ -222,7 +222,7 @@ _TRIAL_PAYWALL_CACHE_TTL_SECONDS = 300
 def request_has_llm_byok_key() -> bool:
     """Validated request has an enrolled LLM BYOK key (not Deepgram-only)."""
     if get_byok_llm_provider() in {'chatgpt', 'grok'}:
-        return has_byok_keys()
+        return True
     return has_validated_byok_keys() and any(
         get_byok_keys().get(provider) for provider in ('openrouter', 'openai', 'anthropic', 'gemini')
     )

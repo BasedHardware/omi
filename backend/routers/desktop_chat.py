@@ -22,7 +22,14 @@ from database import llm_usage as llm_usage_db
 from database import redis_db
 from database import users as users_db
 from utils.http_client import get_llm_gateway_semaphore
-from utils.byok import get_byok_key, get_byok_llm_provider, get_byok_oauth_credential
+from utils.byok import (
+    get_byok_key,
+    get_byok_llm_provider,
+    get_byok_oauth_credential,
+    set_byok_oauth_credential,
+    set_byok_uid,
+)
+from utils.llm.oauth import LLMOAuthError, get_credential as get_llm_oauth_credential
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.llm.clients import anthropic_client, get_direct_anthropic_client, get_llm
 from utils.llm.desktop_llm_stub import (
@@ -667,7 +674,26 @@ def _gateway_body(body: Mapping[str, object], lane_id: str = CHAT_AGENT_AUTO_LAN
 
 def _oauth_provider() -> str | None:
     provider = get_byok_llm_provider()
-    return provider if provider in {'chatgpt', 'grok'} and get_byok_oauth_credential() is not None else None
+    return provider if provider in {'chatgpt', 'grok'} else None
+
+
+async def _install_oauth_credential(uid: str, provider: str) -> None:
+    credential = get_byok_oauth_credential()
+    if credential is not None:
+        set_byok_uid(uid)
+        return
+    try:
+        credential = await run_blocking(critical_executor, get_llm_oauth_credential, uid, provider)
+    except LLMOAuthError as error:
+        raise HTTPException(
+            status_code=503, detail='LLM OAuth credential is temporarily unavailable'
+        ) from error
+    if credential is None:
+        raise HTTPException(
+            status_code=403, detail='LLM OAuth credential is unavailable; reconnect the provider in Settings'
+        )
+    set_byok_oauth_credential(credential)
+    set_byok_uid(uid)
 
 
 def _oauth_messages(body: Mapping[str, object]) -> list[object]:
@@ -782,6 +808,7 @@ async def _stream_oauth(
     tool_indexes: dict[str, int] = {}
     next_tool_index = 0
     await on_upstream_accepted()
+    usage_token = set_usage_context(uid, 'chat_agent')
     try:
         async for chunk in client.astream(messages, max_tokens=_oauth_max_tokens(body)):
             content = _text(getattr(chunk, 'content', ''))
@@ -800,19 +827,27 @@ async def _stream_oauth(
                     continue
                 raw_call_id = call.get('id')
                 name = call.get('name')
-                if not isinstance(raw_call_id, str) and not isinstance(name, str):
-                    continue
-                call_id = raw_call_id if isinstance(raw_call_id, str) else name
-                if not isinstance(call_id, str):
-                    continue
-                index = tool_indexes.get(call_id)
+                raw_index = call.get('index')
                 arguments = call.get('args')
                 if not isinstance(arguments, str):
                     arguments = ''
+                call_id = raw_call_id if isinstance(raw_call_id, str) else None
+                if call_id is None and isinstance(name, str):
+                    call_id = name
+                if call_id is None and isinstance(raw_index, int) and not isinstance(raw_index, bool):
+                    reverse = {idx: cid for cid, idx in tool_indexes.items()}
+                    call_id = reverse.get(raw_index) or f'index:{raw_index}'
+                if not isinstance(call_id, str):
+                    continue
+                index = tool_indexes.get(call_id)
                 if index is None:
-                    index = next_tool_index
+                    index = (
+                        raw_index
+                        if isinstance(raw_index, int) and not isinstance(raw_index, bool)
+                        else next_tool_index
+                    )
                     tool_indexes[call_id] = index
-                    next_tool_index += 1
+                    next_tool_index = max(next_tool_index, index + 1)
                     delta: dict[str, object] = {
                         'index': index,
                         'function': {'arguments': arguments},
@@ -856,6 +891,8 @@ async def _stream_oauth(
             )
     except Exception:
         yield _sse({'error': {'message': 'Upstream provider error', 'type': 'server_error', 'code': 502}})
+    finally:
+        reset_usage_context(usage_token)
     yield 'data: [DONE]\n\n'
 
 
@@ -1472,6 +1509,8 @@ async def _stream(
         raise
     except Exception:
         yield _sse({'error': {'message': 'Upstream provider error', 'type': 'server_error', 'code': 502}})
+    finally:
+        reset_usage_context(usage_token)
     yield 'data: [DONE]\n\n'
 
 
@@ -1800,6 +1839,8 @@ async def _chat_completions_unobserved(
     payload: dict[str, object] = {}
     try:
         oauth_provider = _oauth_provider()
+        if oauth_provider is not None:
+            await _install_oauth_credential(uid, oauth_provider)
         gateway_mode = (
             should_route_chat_agent_through_gateway()
             and _uses_managed_chat_agent(body)
@@ -1900,6 +1941,7 @@ async def _chat_completions_unobserved(
             },
         )
     if oauth_provider is not None:
+        usage_token = set_usage_context(uid, 'chat_agent')
         try:
             client: Any = get_llm('chat_agent')
             tools = _oauth_tools(body)
@@ -1908,6 +1950,8 @@ async def _chat_completions_unobserved(
             message = await client.ainvoke(_oauth_messages(body), max_tokens=_oauth_max_tokens(body))
         except Exception as exc:
             raise HTTPException(status_code=502, detail='Upstream provider error') from exc
+        finally:
+            reset_usage_context(usage_token)
         return JSONResponse(
             {
                 'id': f'chatcmpl-{getattr(message, "id", uuid4())}',

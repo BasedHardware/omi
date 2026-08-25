@@ -77,6 +77,8 @@ def _account_id(access_token: str) -> str | None:
         value = json.loads(base64.urlsafe_b64decode(payload))
     except (ValueError, json.JSONDecodeError):
         return None
+    if not isinstance(value, dict):
+        return None
     auth_claim = value.get('https://api.openai.com/auth')
     if isinstance(auth_claim, dict) and isinstance(auth_claim.get('chatgpt_account_id'), str):
         return auth_claim['chatgpt_account_id']
