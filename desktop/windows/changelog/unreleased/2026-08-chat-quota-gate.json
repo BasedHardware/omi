@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "The main chat window now blocks a send before it fires when your quota is exhausted, matching the bar's behavior — you see the upgrade prompt immediately instead of after the server replies."
+  ]
+}

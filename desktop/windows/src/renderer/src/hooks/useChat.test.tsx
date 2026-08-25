@@ -70,6 +70,25 @@ vi.mock('../lib/desktopChatMessages', () => ({
   saveDesktopMessage: (r: unknown) => saveDesktopMessageSpy(r)
 }))
 
+// Chat quota gate — default allow (blocked: false) so existing tests are unaffected.
+const gateMocks = vi.hoisted(() => ({
+  check: vi.fn<() => Promise<{ blocked: false } | { blocked: true; message: string }>>().mockResolvedValue({
+    blocked: false
+  }),
+  recordQuery: vi.fn(),
+  sync: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+  checkSync: vi.fn().mockReturnValue({ blocked: false }),
+  applyQuota: vi.fn(),
+  isLimitReached: vi.fn().mockReturnValue(false)
+}))
+vi.mock('../lib/chatQuotaGate', () => ({ createChatQuotaGate: () => gateMocks }))
+const showUsageLimitSpy = vi.hoisted(() => vi.fn())
+vi.mock('../lib/usageLimit', () => ({
+  showUsageLimit: showUsageLimitSpy,
+  dismissUsageLimit: vi.fn(),
+  onUsageLimit: vi.fn(() => () => {})
+}))
+
 import {
   useChat,
   CHAT_STREAM_TIMEOUT_MS,
@@ -1107,5 +1126,34 @@ describe('useChat — rehydrate preserves attachments', () => {
     expect(userAttachmentsOf(result.current.history)).toEqual([
       { id: 'srv-y', name: 'y.pdf', mimeType: 'application/pdf' }
     ])
+  })
+})
+
+describe('useChat — chat quota gate (Mac AgentBridge.quotaExceeded parity)', () => {
+  it('blocks a send when the quota is exhausted — popup shown, no fetch, no history entry', async () => {
+    gateMocks.check.mockResolvedValueOnce({ blocked: true, message: "You've reached your limit." })
+    const { result } = renderHook(() => useChat())
+    await act(async () => {
+      await result.current.send('hello')
+    })
+    expect(showUsageLimitSpy).toHaveBeenCalledWith('chat')
+    expect(global.fetch).not.toHaveBeenCalled()
+    expect(result.current.history).toHaveLength(0)
+    expect(result.current.sending).toBe(false)
+  })
+
+  it('lets an in-quota send through and records the query optimistically', async () => {
+    const { result } = renderHook(() => useChat())
+    void act(async () => {
+      await result.current.send('hello')
+    })
+    await waitForStream(0)
+    streams[0].close()
+    await act(async () => {
+      await flush()
+    })
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(gateMocks.recordQuery).toHaveBeenCalledTimes(1)
+    expect(showUsageLimitSpy).not.toHaveBeenCalled()
   })
 })
