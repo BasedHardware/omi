@@ -4,7 +4,6 @@ The local kernel owns its journal. This route validates capability and
 canonical references only; it never creates, updates, or syncs a chat row.
 """
 
-import inspect
 from typing import Annotated, Any
 
 from datetime import datetime, timezone
@@ -16,13 +15,11 @@ from pydantic import ValidationError
 import database.action_items as action_items_db
 import database._client as db_client_module
 import database.chat_first_intents as chat_first_intents_db
-import database.conversation_finalization_jobs as finalization_jobs_db
 import database.conversations as conversations_db
 import database.goals as goals_db
 import database.task_intelligence_control as task_control_db
 from models.chat_first import (
     CaptureLinkSpec,
-    ConversationLinkSpec,
     ChatFirstBlockSpec,
     ChatFirstBlockValidationReceipt,
     ChatFirstBlockValidationRequest,
@@ -30,8 +27,6 @@ from models.chat_first import (
     DeferralCreateRequest,
     DeferralReceipt,
     GoalLinkSpec,
-    LegacyMaterializePromptsResponse,
-    LegacyProactiveIntent,
     MaterializePromptsRequest,
     MaterializePromptsResponse,
     MemoryLinkSpec,
@@ -179,16 +174,6 @@ def _entity_available(uid: str, block: ChatFirstBlockSpec) -> bool:
             and not capture.get('discarded', False)
             and not capture.get('is_locked', False)
         )
-    if isinstance(block, ConversationLinkSpec):
-        conversation = conversations_db.get_conversation(uid, block.conversation_id)
-        return bool(
-            conversation
-            and conversation.get('source') == 'desktop'
-            and (conversation.get('external_data') or {}).get('conversation_role') == 'meeting'
-            and not conversation.get('discarded', False)
-            and not conversation.get('is_locked', False)
-            and conversation.get('status') == 'completed'
-        )
     if isinstance(block, MemoryLinkSpec):
         try:
             return bool(fetch_memory_dict(uid, block.memory_id, db_client=getattr(db_client_module, 'db', None)))
@@ -261,32 +246,6 @@ def validate_chat_first_blocks(
 
 @router.post(
     '/v1/chat/materialize-prompts',
-    response_model=LegacyMaterializePromptsResponse,
-    tags=['chat-first'],
-    operation_id='materialize_prompts_v1_chat_materialize_prompts_post',
-)
-def materialize_prompts_v1(
-    request: MaterializePromptsRequest,
-    uid: str = Depends(auth.get_current_user_uid),
-) -> LegacyMaterializePromptsResponse:
-    """Preserve the released block union; new receipt types remain pending for v2 clients."""
-
-    # Keep the narrow unit-test seam backwards-compatible with older callers
-    # that monkeypatch this helper with its original two-argument signature.
-    if 'exclude_block_types' in inspect.signature(_materialize_prompts).parameters:
-        response = _materialize_prompts(request, uid, exclude_block_types={'conversationLink'})
-    else:
-        response = _materialize_prompts(request, uid)
-    compatible = [
-        LegacyProactiveIntent.model_validate(intent.model_dump())
-        for intent in response.intents
-        if all(block.type != 'conversationLink' for block in intent.blocks)
-    ]
-    return LegacyMaterializePromptsResponse(intents=compatible)
-
-
-@router.post(
-    '/v2/chat/materialize-prompts',
     response_model=MaterializePromptsResponse,
     tags=['chat-first'],
 )
@@ -294,21 +253,7 @@ def materialize_prompts(
     request: MaterializePromptsRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ) -> MaterializePromptsResponse:
-    return _materialize_prompts(request, uid)
-
-
-def _materialize_prompts(
-    request: MaterializePromptsRequest,
-    uid: str,
-    *,
-    exclude_block_types: set[str] | frozenset[str] | None = None,
-) -> MaterializePromptsResponse:
-    """Fetch ready intents and accept kernel receipts; never writes a Chat row.
-
-    Materialization acknowledgements retire an intent account-wide after one
-    client consumes it. Canonical server-side Chat-row creation is separate
-    follow-up work; until then the consuming client's kernel sync is the writer.
-    """
+    """Fetch ready intents and accept kernel receipts; never writes a Chat row."""
 
     _require_materialization_capability(
         uid,
@@ -323,24 +268,13 @@ def _materialize_prompts(
     now = datetime.now(timezone.utc)
     for receipt in request.receipts:
         try:
-            delivered_intent = chat_first_intents_db.acknowledge_materialization(
+            chat_first_intents_db.acknowledge_materialization(
                 uid,
                 intent_id=receipt.intent_id,
                 receipt_id=receipt.receipt_id,
                 account_generation=request.control_generation,
                 now=now,
             )
-            for block in delivered_intent.blocks:
-                if isinstance(block, ConversationLinkSpec):
-                    try:
-                        finalization_jobs_db.mark_meeting_receipt_materialized(
-                            uid,
-                            block.conversation_id,
-                            delivered_intent.intent_id,
-                            materialized_at=now,
-                        )
-                    except Exception:
-                        logger.exception('meeting receipt materialization projection failed')
         except chat_first_intents_db.ChatFirstIntentGenerationMismatch as exc:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='account generation mismatch') from exc
         except (
@@ -387,7 +321,6 @@ def _materialize_prompts(
         intents = chat_first_intents_db.fetch_ready_intents(
             uid,
             account_generation=request.control_generation,
-            exclude_block_types=exclude_block_types,
         )
     except chat_first_intents_db.ChatFirstIntentGenerationMismatch as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='account generation mismatch') from exc

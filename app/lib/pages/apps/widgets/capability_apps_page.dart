@@ -200,8 +200,7 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
                 HapticFeedback.mediumImpact();
                 await _loadCapabilityApps();
               },
-              // The arc is drawn on backgroundColor, so it must not also be white.
-              color: Colors.black,
+              color: Colors.deepPurpleAccent,
               backgroundColor: Colors.white,
               child: _totalCount == 0
                   ? Center(

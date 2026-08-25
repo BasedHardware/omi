@@ -1,14 +1,8 @@
-import json
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Dict, List, Literal, Optional, Union
+from typing import Any, List, Literal, Optional, Union
 
-from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
-
-# App display names are resolved by an injected callable, never by importing the database
-# layer here: models/ must stay import-pure so a Pydantic module cannot drag the Firestore
-# client into every import graph that touches a chat message.
-AppNameResolver = Callable[[str], Optional[str]]
+from pydantic import BaseModel, model_validator
 
 
 class MessageSender(str, Enum):
@@ -95,13 +89,6 @@ class Message(BaseModel):
     # message response remains readable by older clients while a new client can
     # reconcile the canonical turn identity and structured payload exactly.
     metadata: Optional[str] = None
-    content_blocks: List[dict[str, Any]] = Field(
-        default_factory=list,
-        description=(
-            'Structured chat content blocks. New rows store these directly; '
-            'legacy rows are projected from metadata.content_blocks.'
-        ),
-    )
     client_message_id: Optional[str] = None
     message_source: Optional[str] = None
     journal_revision: Optional[int] = None
@@ -118,16 +105,6 @@ class Message(BaseModel):
                 data['plugin_id'] = app_id_val
             elif plugin_id_val is not None:
                 data['app_id'] = plugin_id_val
-
-            if 'content_blocks' not in data:
-                metadata = data.get('metadata')
-                if isinstance(metadata, str):
-                    try:
-                        legacy_blocks = json.loads(metadata).get('content_blocks')
-                    except (AttributeError, TypeError, ValueError):
-                        legacy_blocks = None
-                    if isinstance(legacy_blocks, list):
-                        data['content_blocks'] = legacy_blocks
         return data
 
     @classmethod
@@ -145,45 +122,28 @@ class Message(BaseModel):
         return parsed
 
     @staticmethod
-    def _resolve_sender_name(
-        message: 'Message',
-        *,
-        use_plugin_name_if_available: bool,
-        app_name_by_id: Dict[str, Optional[str]],
-        app_name_resolver: Optional[AppNameResolver],
-    ) -> str:
-        if message.sender == 'human':
-            return 'User'
-        if use_plugin_name_if_available and app_name_resolver and message.app_id and message.app_id.strip():
-            app_id = message.app_id.strip()
-            if app_id not in app_name_by_id:
-                name = app_name_resolver(app_id)
-                app_name_by_id[app_id] = name.strip() if isinstance(name, str) and name.strip() else None
-            resolved_name = app_name_by_id[app_id]
-            if resolved_name:
-                return resolved_name
-        return message.sender.upper()
-
-    @staticmethod
     def get_messages_as_string(
         messages: List['Message'],
         use_user_name_if_available: bool = False,
         use_plugin_name_if_available: bool = False,
         include_file_info: bool = False,
-        app_name_resolver: Optional[AppNameResolver] = None,
     ) -> str:
         sorted_messages = sorted(messages, key=lambda m: m.created_at)
-        app_name_by_id: Dict[str, Optional[str]] = {}
+
+        def get_sender_name(message: Message) -> str:
+            if message.sender == 'human':
+                return 'User'
+            # elif use_plugin_name_if_available and message.app_id is not None:
+            #     plugin = next((p for p in plugins if p.id == message.app_id), None)
+            #     if plugin:
+            #         return plugin.name RESTORE ME
+            return message.sender.upper()  # TODO: use app id
 
         formatted_messages = []
         for message in sorted_messages:
-            sender_name = Message._resolve_sender_name(
-                message,
-                use_plugin_name_if_available=use_plugin_name_if_available,
-                app_name_by_id=app_name_by_id,
-                app_name_resolver=app_name_resolver,
+            msg_text = (
+                f"({message.created_at.strftime('%d %b %Y at %H:%M UTC')}) {get_sender_name(message)}: {message.text}"
             )
-            msg_text = f"({message.created_at.strftime('%d %b %Y at %H:%M UTC')}) {sender_name}: {message.text}"
 
             # Add file info if requested and files exist
             if include_file_info and message.files_id and len(message.files_id) > 0:
@@ -200,10 +160,17 @@ class Message(BaseModel):
         use_user_name_if_available: bool = False,
         use_plugin_name_if_available: bool = False,
         include_file_info: bool = False,
-        app_name_resolver: Optional[AppNameResolver] = None,
     ) -> str:
         sorted_messages = sorted(messages, key=lambda m: m.created_at)
-        app_name_by_id: Dict[str, Optional[str]] = {}
+
+        def get_sender_name(message: Message) -> str:
+            if message.sender == 'human':
+                return 'User'
+            # elif use_plugin_name_if_available and message.app_id is not None:
+            #     plugin = next((p for p in plugins if p.id == message.app_id), None)
+            #     if plugin:
+            #         return plugin.name RESTORE ME
+            return message.sender.upper()  # TODO: use app id
 
         formatted_messages = []
         for message in sorted_messages:
@@ -228,7 +195,7 @@ class Message(BaseModel):
 
             msg = f"""<message>
 <created_at>{message.created_at.strftime('%d %b %Y at %H:%M UTC')}</created_at>
-<sender>{Message._resolve_sender_name(message, use_plugin_name_if_available=use_plugin_name_if_available, app_name_by_id=app_name_by_id, app_name_resolver=app_name_resolver)}</sender>
+<sender>{get_sender_name(message)}</sender>
 <content>{message.text}</content>
 {file_section}
 </message>"""
@@ -246,70 +213,17 @@ class ResponseMessage(Message):
 
 
 class PageContext(BaseModel):
-    """Page context for chat - indicates what the user is currently viewing.
-
-    When ``type`` is ``conversation`` with an ``id``, and/or ``start_date`` /
-    ``end_date`` are set, retrieval tools hard-scope to that conversation and/or
-    timeframe (#4515). Dates must include a timezone offset
-    (YYYY-MM-DDTHH:MM:SS+HH:MM).
-    """
+    """Page context for chat - indicates what the user is currently viewing."""
 
     type: Literal["conversation", "task", "memory", "recap"]
     id: Optional[str] = None
     title: Optional[str] = None
-    start_date: Optional[str] = None
-    end_date: Optional[str] = None
-
-    @staticmethod
-    def _require_aware_iso(value: str, field_name: str) -> Optional[str]:
-        stripped = value.strip()
-        if not stripped:
-            return None
-        try:
-            parsed = datetime.fromisoformat(stripped.replace("Z", "+00:00"))
-        except ValueError as exc:
-            raise ValueError(
-                f"{field_name} must be ISO-8601 with timezone " f"(YYYY-MM-DDTHH:MM:SS+HH:MM), got {value!r}"
-            ) from exc
-        if parsed.tzinfo is None:
-            raise ValueError(
-                f"{field_name} must include a timezone offset " f"(YYYY-MM-DDTHH:MM:SS+HH:MM), got {value!r}"
-            )
-        return stripped
-
-    @field_validator("start_date", "end_date", mode="before")
-    @classmethod
-    def _validate_scope_dates(cls, value: Any, info: ValidationInfo) -> Optional[str]:
-        if value is None:
-            return None
-        if not isinstance(value, str):
-            raise ValueError(f"{info.field_name or 'date'} must be an ISO-8601 string with timezone offset")
-        field_name = info.field_name if isinstance(info.field_name, str) else "date"
-        return cls._require_aware_iso(value, field_name)
 
 
 class SendMessageRequest(BaseModel):
     text: str
     file_ids: Optional[List[str]] = []
     context: Optional[PageContext] = None
-
-
-class GenerateReplyTurn(BaseModel):
-    """A prior turn supplied by the caller purely as generation context."""
-
-    text: str = Field(..., min_length=1, max_length=100000)
-    sender: MessageSender
-
-
-class GenerateReplyRequest(BaseModel):
-    text: str = Field(..., min_length=1, max_length=100000)
-    history: List[GenerateReplyTurn] = Field(default_factory=list, max_length=50)
-    app_id: Optional[str] = Field(None, max_length=200)
-
-
-class GenerateReplyResponse(BaseModel):
-    text: str
-    app_id: Optional[str] = None
 
 
 class RateMessageRequest(BaseModel):

@@ -1,0 +1,13 @@
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: {{ .Values.service.backendConfig }}
+spec:
+  # Long timeout required for persistent WebSocket connections (agent tasks can run for minutes)
+  timeoutSec: 3600
+  healthCheck:
+    checkIntervalSec: 10
+    timeoutSec: 5
+    port: {{ .Values.service.port }}
+    type: HTTP
+    requestPath: /health

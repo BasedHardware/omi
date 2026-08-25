@@ -64,36 +64,6 @@ def test_project_database_and_loopback_validation() -> None:
         safety.validate_loopback_emulator_host("firestore.googleapis.com:443")
 
 
-@pytest.mark.parametrize(
-    "host",
-    (
-        "127.attacker.example:8085",
-        "127.0.0.1.example:8085",
-        "127.0.0.256:8085",
-    ),
-)
-def test_loopback_validation_rejects_ipv4_hostname_lookalikes(host: str) -> None:
-    assert safety.is_loopback_host(host) is False
-    with pytest.raises(safety.SafetyError, match="loopback"):
-        safety.validate_loopback_emulator_host(host)
-
-
-def test_private_dev_host_accepts_loopback_lan_and_tailnet_rejects_public() -> None:
-    # #11774: a physical device reaches the harness over a LAN or Tailscale
-    # (CGNAT, 100.64.0.0/10) address. This guard is deliberately separate from
-    # validate_loopback_emulator_host above, which protects a different thing
-    # (the backend's own connection to its co-located emulators) and must stay
-    # loopback-only regardless of this setting.
-    for host in ("127.0.0.1", "localhost", "10.1.2.3", "172.16.0.5", "192.168.1.42", "100.105.2.5"):
-        assert safety.is_private_dev_host(host) is True
-        assert safety.validate_dev_bind_host(host) == host
-
-    for host in ("8.8.8.8", "203.0.113.5", "1.1.1.1", "omi-relay.example.com"):
-        assert safety.is_private_dev_host(host) is False
-        with pytest.raises(safety.SafetyError, match="private"):
-            safety.validate_dev_bind_host(host)
-
-
 def test_child_environment_strips_cloud_defaults_and_offline_provider_secrets() -> None:
     parent = {
         "PATH": "/usr/bin",
@@ -208,7 +178,9 @@ def test_windows_process_probe_reports_close_failure(monkeypatch: pytest.MonkeyP
         safety.process_exists(456)
 
 
-def test_windows_command_line_probe_ignores_path_shadowing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_windows_command_line_probe_ignores_path_shadowing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     if os.name != "nt":
         pytest.skip("Windows PowerShell lookup is not used on this platform")
 

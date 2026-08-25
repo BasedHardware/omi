@@ -25,9 +25,7 @@ import { getAppSettings, setAppSettings } from '../../appSettings'
 import { fetchGoalContext, hasSufficientContext, type GoalContextData } from './context'
 import { GOAL_SYSTEM_PROMPT, GOAL_SUGGESTION_SCHEMA, fillPrompt } from './prompt'
 
-// Flash-Lite: text-only, schema-bounded, nobody waiting — no business on the Vertex
-// Flash PT reservation. Mirrors Mac's ModelQoS.Gemini.lightweight goals pin.
-export const MODEL = 'gemini-2.5-flash-lite'
+const MODEL = 'gemini-2.5-flash'
 const REQUEST_TIMEOUT_MS = 30_000
 /** 3 attempts total. Mac's backoff, exactly: 2s then 8s. */
 const RETRY_DELAYS_MS = [2_000, 8_000]

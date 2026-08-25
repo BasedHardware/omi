@@ -2,7 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'child_process'
 import { resolveAudioHelperPath } from './resolveHelperPath'
 import { encodeRequest, FrameDecoder } from '../ocr/helperProtocol'
 import { OP_MUTE, OP_RESTORE, OP_HELLO, PROTOCOL_VERSION } from './protocol'
-import { recordFallback } from '../observability/fallback'
+import { captureMessage } from '../sentry'
 import { recordVoiceFlight } from '../voice/flightRecorder'
 
 // Track-2-owned bridge to win-audio-helper.exe — mutes the default output device
@@ -72,16 +72,7 @@ class SystemAudioMuteBridge {
       clearTimeout(pending.timer)
       pending.resolve(json)
     })
-    child.stdout.on('data', (chunk: Buffer) => {
-      try {
-        decoder.push(chunk)
-      } catch (e) {
-        // Desynced or oversized frame (the shared decoder now fails fast on
-        // both) — drop this helper and restart clean, like the OCR supervisor.
-        console.error('[win-audio-helper] protocol error:', (e as Error).message)
-        if (this.child === child) this.recycle()
-      }
-    })
+    child.stdout.on('data', (chunk: Buffer) => decoder.push(chunk))
     child.stderr.on('data', (c: Buffer) => console.log('[win-audio-helper]', c.toString().trim()))
     // Both handlers ignore a child we've already torn down (recycle() nulls
     // `this.child` first), so a recycle + its trailing 'exit' can't double-count.
@@ -101,15 +92,14 @@ class SystemAudioMuteBridge {
           )
           // Durable signal: a field user's "PTT doesn't mute my music" otherwise
           // records nothing. Inside the !unavailable guard, so it fires at most once.
-          // PTT still works without muting, so this is a fail-open degrade and belongs
-          // in the shared fallback emitter rather than Sentry (hard errors only).
-          recordFallback({
-            component: 'other',
-            from: 'system_audio_mute',
-            to: 'none',
-            reason: 'config_incomplete',
-            outcome: 'degraded',
-            cause: 'helper_binary_missing'
+          // TODO(#10240 track3): route through a Windows main-process recordFallback emitter
+          // as outcome:'degraded' once one exists (see warnDegraded note in
+          // src/main/assistants/aiUserProfile/orchestrate.ts:46-52). Until then
+          // captureMessage is the correct call (Sentry for developer-facing degrades).
+          captureMessage('win-audio-helper binary not found — PTT system-audio mute disabled', {
+            area: 'ptt-audio-mute',
+            level: 'warning',
+            extra: { reason: 'enoent' }
           })
         }
         this.unavailable = true
@@ -144,17 +134,19 @@ class SystemAudioMuteBridge {
         )
         if (!this.unavailable) {
           // Durable signal for a stale helper build in the field. Guarded so it
-          // fires at most once (before we latch unavailable below). PTT still works
-          // without muting, so this is a fail-open degrade for the shared fallback
-          // emitter rather than Sentry (hard errors only).
-          recordFallback({
-            component: 'other',
-            from: 'system_audio_mute',
-            to: 'none',
-            reason: 'capability_mismatch',
-            outcome: 'degraded',
-            helper: protocolVersion,
-            expected: PROTOCOL_VERSION
+          // fires at most once (before we latch unavailable below).
+          // TODO(#10240 track3): route through a Windows main-process recordFallback emitter
+          // as outcome:'degraded' once one exists (see warnDegraded note in
+          // src/main/assistants/aiUserProfile/orchestrate.ts:46-52). Until then
+          // captureMessage is the correct call (Sentry for developer-facing degrades).
+          captureMessage('win-audio-helper protocol mismatch — PTT system-audio mute disabled', {
+            area: 'ptt-audio-mute',
+            level: 'warning',
+            extra: {
+              reason: 'protocol_mismatch',
+              helper: protocolVersion,
+              expected: PROTOCOL_VERSION
+            }
           })
         }
         this.unavailable = true

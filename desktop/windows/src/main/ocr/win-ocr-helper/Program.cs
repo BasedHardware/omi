@@ -20,9 +20,6 @@ internal static class Program
 {
     private const byte OpOcr = 1;
     private const byte OpWindow = 2;
-    // A frame length beyond this means the stdin stream has desynced; (int)len
-    // would go negative or demand a multi-GB allocation, so reject it.
-    private const int MaxFrameBytes = 64 * 1024 * 1024;
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
@@ -45,11 +42,6 @@ internal static class Program
             if (header is null) return 0; // EOF — parent closed the pipe.
             var len = BitConverter.ToUInt32(header, 0);
             if (len == 0) continue;
-            if (len > MaxFrameBytes)
-            {
-                Console.Error.WriteLine($"[win-ocr-helper] frame too large: {len} bytes — exiting to resync.");
-                return 1;
-            }
             var body = await ReadExactly(stdin, (int)len);
             if (body is null) return 0;
 
@@ -114,7 +106,7 @@ internal static class Program
         try
         {
             using var stream = new InMemoryRandomAccessStream();
-            using var writer = new DataWriter(stream);
+            var writer = new DataWriter(stream);
             writer.WriteBytes(jpeg);
             await writer.StoreAsync();
             writer.DetachStream();
@@ -129,17 +121,8 @@ internal static class Program
 
         var width = bitmap.PixelWidth;
         var height = bitmap.PixelHeight;
-        // Dispose the bitmap even if recognition throws (the exception is caught at
-        // the Main loop), otherwise its native memory leaks on every failed call.
-        OcrResult result;
-        try
-        {
-            result = await engine.RecognizeAsync(bitmap);
-        }
-        finally
-        {
-            bitmap.Dispose();
-        }
+        var result = await engine.RecognizeAsync(bitmap);
+        bitmap.Dispose();
 
         var lines = result.Lines.Select(line =>
         {
@@ -194,7 +177,7 @@ internal static class Program
         var app = "";
         try
         {
-            using var proc = Process.GetProcessById((int)pid);
+            var proc = Process.GetProcessById((int)pid);
             processName = proc.ProcessName;
             app = string.IsNullOrWhiteSpace(proc.MainModule?.ModuleName)
                 ? processName

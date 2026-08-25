@@ -323,7 +323,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get searchApps => 'Поиск приложений...';
 
   @override
-  String get myApps => 'Создано мной';
+  String get myApps => 'Мои приложения';
 
   @override
   String get installedApps => 'Установленные приложения';
@@ -9877,63 +9877,4 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Открыть магазин';
-
-  @override
-  String get chatScopeToday => 'Сегодня';
-
-  @override
-  String get chatScopeThisWeek => 'На этой неделе';
-
-  @override
-  String chatScopeAbout(String title) {
-    return 'О: $title';
-  }
-
-  @override
-  String get askAboutThisConversation => 'Спросить об этом';
-
-  @override
-  String get sendRawAudioToOmi => 'Отправлять необработанный звук в Omi';
-
-  @override
-  String get sendRawAudioToOmiDescription =>
-      'Отключите, чтобы необработанный звук не отправлялся в Omi. Расшифровки и данные, необходимые облачным функциям, всё ещё могут отправляться в Omi.';
-
-  @override
-  String get findDevice => 'Найти';
-
-  @override
-  String get diagnosticsShareFailed => 'Не удалось поделиться диагностикой. Попробуйте ещё раз.';
-
-  @override
-  String get appDisabledTitle => 'Это приложение отключено, и его нельзя установить.';
-
-  @override
-  String get appDisabledWebhookFailures => 'Его endpoint не отвечал 72 часа подряд, поэтому отправка была остановлена.';
-
-  @override
-  String get appDisabledGeneric => 'Его отключила Omi.';
-
-  @override
-  String get appDisabledOwnerHint =>
-      'Сначала исправьте endpoint — при повторном включении каждый настроенный URL проверяется заново.';
-
-  @override
-  String get appReEnable => 'Включить снова';
-
-  @override
-  String get appReEnableFailedTitle => 'Не удалось включить снова';
-
-  @override
-  String get appReEnableFailedBody => 'Это приложение не удалось включить снова. Попробуйте ещё раз.';
-
-  @override
-  String appDisabledOn(String date) {
-    return 'Отключено $date.';
-  }
-
-  @override
-  String appDisabledLastError(String error) {
-    return 'Последняя ошибка: $error.';
-  }
 }

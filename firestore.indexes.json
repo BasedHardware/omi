@@ -217,6 +217,24 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "account_generation",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created_at",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "candidates",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "status",
           "order": "ASCENDING"
         },
@@ -244,24 +262,6 @@
         },
         {
           "fieldPath": "due_at",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "action_items",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "completed",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "created_at",
           "order": "ASCENDING"
         },
         {
@@ -325,24 +325,6 @@
         {
           "fieldPath": "__name__",
           "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "candidates",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "account_generation",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "created_at",
-          "order": "DESCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "DESCENDING"
         }
       ]
     },
@@ -427,20 +409,6 @@
       ]
     },
     {
-      "collectionGroup": "memory_review_queue",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "status",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "memory_items",
       "queryScope": "COLLECTION",
       "fields": [
@@ -517,62 +485,6 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "status",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "source_state",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "promotion.user_review",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "updated_at",
-          "order": "DESCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "memory_items",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        {
-          "fieldPath": "tier",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "status",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "processing_state",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "captured_at",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "memory_id",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "memory_items",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
           "fieldPath": "account_generation",
           "order": "ASCENDING"
         },
@@ -599,78 +511,6 @@
         {
           "fieldPath": "__name__",
           "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "memory_items",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "account_generation",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "tier",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "status",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "processing_state",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "updated_at",
-          "order": "DESCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "memory_items",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "updated_at",
-          "order": "DESCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "memories",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "updated_at",
-          "order": "DESCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "memories",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "created_at",
-          "order": "DESCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
         }
       ]
     },
@@ -713,36 +553,6 @@
     {
       "collectionGroup": "memory_items",
       "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "tier",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "status",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "processing_state",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "expires_at",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "memory_id",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "memory_items",
-      "queryScope": "COLLECTION_GROUP",
       "fields": [
         {
           "fieldPath": "tier",
@@ -835,114 +645,7 @@
           "order": "ASCENDING"
         }
       ]
-    },
-    {
-      "collectionGroup": "chat_sessions",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "plugin_id",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "created_at",
-          "order": "DESCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "conversation_finalization_jobs",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "meeting_treatment_eligible",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "meeting_receipt_intent_id",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "meeting_receipt_reconcile_after_at",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "hourly_usage",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "year",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "month",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "messages",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "plugin_id",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "created_at",
-          "order": "DESCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "conversations",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "discarded",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "created_at",
-          "order": "DESCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "DESCENDING"
-        }
-      ]
     }
   ],
-  "fieldOverrides": [
-    {
-      "collectionGroup": "screen_activity",
-      "fieldPath": "ocrText",
-      "ttl": false,
-      "indexes": []
-    },
-    {
-      "collectionGroup": "screen_activity",
-      "fieldPath": "windowTitle",
-      "ttl": false,
-      "indexes": []
-    }
-  ]
+  "fieldOverrides": []
 }

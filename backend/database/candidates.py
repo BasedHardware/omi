@@ -10,14 +10,13 @@ from uuid import uuid4
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+from config.canonical_memory_cohort import is_canonical_memory_user
 import database.action_items as action_items_db
 from database._client import db
-from database.firestore_index_registry import CANDIDATES_COMPATIBILITY_QUERY
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict, parse_snapshots
-from models.action_item import EvidenceRef, TaskChangePayload, TaskCreatePayload, TaskOwner, TaskPriority, TaskStatus
+from models.action_item import EvidenceRef, TaskChangePayload, TaskCreatePayload, TaskOwner, TaskStatus
 from models.candidate import (
     CandidateAction,
-    CandidateCompatibilityMetadata,
     CandidateCreate,
     CandidateRecord,
     CandidateResolutionReceipt,
@@ -37,34 +36,7 @@ TASK_INTELLIGENCE_CONTROL_DOCUMENT = 'state'
 PENDING_CANDIDATE_SEMANTIC_VERSION = 'task-create.v1'
 WORKSTREAM_CANDIDATE_SEMANTIC_VERSION = 'workstream-create.v1'
 MAX_CANDIDATE_EVIDENCE_REFS = 20
-# A suggestion the user does not act on expires and is gone. This is a real
-# stored deadline, not a display filter: every read treats a lapsed pending
-# Candidate as expired.
-#
-# Storage is not reclaimed yet. A Firestore TTL policy on `expires_at` would do
-# it, but `firebase_index_manifest` can only express `ttl: false` indexing
-# exemptions, so a TTL policy cannot be declared through the generated manifest
-# today — and enabling auto-deletion on a live collection group is not a change
-# to smuggle in through a generated file. Expired Candidates therefore remain
-# stored but unreadable until that is addressed separately.
-SUGGESTION_TTL = timedelta(days=2)
-TASK_PRIORITY_RANK = {
-    TaskPriority.low: 0,
-    TaskPriority.medium: 1,
-    TaskPriority.high: 2,
-}
-
-
-def _max_optional_confidence(*values: Optional[float]) -> Optional[float]:
-    return max((value for value in values if value is not None), default=None)
-
-
-def _strongest_task_priority(*values: Optional[TaskPriority]) -> Optional[TaskPriority]:
-    return max(
-        (value for value in values if value is not None),
-        key=TASK_PRIORITY_RANK.__getitem__,
-        default=None,
-    )
+PENDING_CANDIDATE_REUSE_WINDOW = timedelta(days=14)
 
 
 class CandidateStoreError(RuntimeError):
@@ -164,6 +136,8 @@ def _task_control_ref(uid: str):
 
 
 def _validate_write_control(snapshot: Any, *, uid: str, account_generation: int) -> None:
+    if not is_canonical_memory_user(uid):
+        raise CandidateConflictError('canonical task intelligence is not enabled')
     control = TaskWorkflowControl()
     if snapshot.exists:
         control = parse_snapshot_strict(TaskWorkflowControl, snapshot)
@@ -312,35 +286,12 @@ def _merge_candidate_annotations(existing: CandidateRecord, proposal: CandidateC
         evidence.append(evidence_ref)
         if len(evidence) == MAX_CANDIDATE_EVIDENCE_REFS:
             break
-    compatibility = existing.compatibility
-    if proposal.compatibility is not None:
-        current = compatibility or CandidateCompatibilityMetadata()
-        compatibility = current.model_copy(
-            update={
-                field: value
-                for field in ('metadata', 'category', 'relevance_score')
-                if (value := getattr(proposal.compatibility, field)) is not None
-            }
-        )
-    task_change = existing.task_change
-    proposal_task_change = proposal.task_change
-    if isinstance(task_change, TaskCreatePayload) and isinstance(proposal_task_change, TaskCreatePayload):
-        task_change = task_change.model_copy(
-            update={
-                'due_confidence': _max_optional_confidence(
-                    task_change.due_confidence, proposal_task_change.due_confidence
-                ),
-                'priority': _strongest_task_priority(task_change.priority, proposal_task_change.priority),
-            }
-        )
     payload = existing.model_dump(mode='python')
     payload.update(
         {
             'capture_confidence': max(existing.capture_confidence, proposal.capture_confidence),
             'ownership_confidence': max(existing.ownership_confidence, proposal.ownership_confidence),
             'evidence_refs': evidence,
-            'compatibility': compatibility,
-            'task_change': task_change,
         }
     )
     return CandidateRecord.model_validate(payload)
@@ -417,76 +368,6 @@ def _stored_confidence(value: Any) -> float:
     return 0.0
 
 
-def _stored_optional_confidence(value: Any) -> Optional[float]:
-    if isinstance(value, (int, float)) and not isinstance(value, bool):
-        return float(value)
-    return None
-
-
-def _stored_task_priority(value: Any) -> Optional[TaskPriority]:
-    try:
-        return TaskPriority(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _as_utc(value: Any) -> Optional[datetime]:
-    if not isinstance(value, datetime):
-        return None
-    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
-
-
-def _suggestion_window_has_closed(
-    *,
-    status: str,
-    created_at: Optional[datetime],
-    expires_at: Optional[datetime],
-    now: datetime,
-) -> bool:
-    if status != CandidateStatus.pending.value:
-        return False
-    # Candidates written before suggestions had a deadline carry no `expires_at`.
-    # Derive one from creation so the pre-existing backlog ages out too, with no
-    # backfill.
-    deadline = expires_at or (created_at + SUGGESTION_TTL if created_at is not None else None)
-    if deadline is None:
-        return False
-    return deadline <= now
-
-
-def candidate_has_lapsed(candidate: CandidateRecord, *, now: datetime) -> bool:
-    """Whether a pending Candidate's suggestion window has closed.
-
-    Storage reclamation is asynchronous, so a lapsed Candidate can still be
-    readable. Every read path must ask this rather than trusting `status`.
-    """
-
-    return _suggestion_window_has_closed(
-        status=candidate.status.value,
-        created_at=candidate.created_at,
-        expires_at=candidate.expires_at,
-        now=now,
-    )
-
-
-def stored_candidate_has_lapsed(candidate: dict[str, Any], *, now: datetime) -> bool:
-    """`candidate_has_lapsed` for a stored document that was never parsed into a record.
-
-    The recommendation reader loads canonical state as raw documents, so it cannot
-    ask the record-shaped question. It must still ask the same one: a deadline that
-    only one reader enforces is a deadline the other readers repeal.
-    """
-
-    stored_status = candidate.get('status')
-    status = getattr(stored_status, 'value', stored_status)
-    return _suggestion_window_has_closed(
-        status=str(status) if status else CandidateStatus.pending.value,
-        created_at=_as_utc(candidate.get('created_at')),
-        expires_at=_as_utc(candidate.get('expires_at')),
-        now=now,
-    )
-
-
 def create_candidate(
     uid: str,
     proposal: CandidateCreate,
@@ -512,7 +393,6 @@ def create_candidate(
         account_generation=account_generation,
         idempotency_key=key_hash,
         created_at=now_value,
-        expires_at=now_value + SUGGESTION_TTL,
     )
     ref = _candidate_ref(uid, candidate_id)
     alias_ref = _candidate_idempotency_alias_ref(uid, key_hash)
@@ -599,10 +479,7 @@ def create_candidate(
             claimed_candidate is not None
             and claimed_candidate.status == CandidateStatus.pending
             and claimed_candidate.created_at.tzinfo is not None
-            # Reuse is bounded by the suggestion's own life, not by a separate
-            # window: a lapsed pending Candidate is unreadable, so merging a new
-            # capture into it would store a proposal the user can never see.
-            and not candidate_has_lapsed(claimed_candidate, now=now_value)
+            and claimed_candidate.created_at >= now_value - PENDING_CANDIDATE_REUSE_WINDOW
         )
         if (
             claimed_candidate is not None
@@ -621,32 +498,9 @@ def create_candidate(
                         evidence_ref.model_dump(mode='python', exclude_none=True)
                         for evidence_ref in merged.evidence_refs
                     ],
-                    'compatibility': (
-                        merged.compatibility.model_dump(mode='python', exclude_none=True)
-                        if merged.compatibility is not None
-                        else None
-                    ),
-                    'task_change': (
-                        merged.task_change.model_dump(mode='python', exclude_none=True)
-                        if merged.task_change is not None
-                        else None
-                    ),
                 },
             )
             if reusable_active_accept and claimed_task_ref is not None and claimed_task is not None:
-                task_annotation_patch: dict[str, Any] = {}
-                if isinstance(merged.task_change, TaskCreatePayload):
-                    due_confidence = _max_optional_confidence(
-                        _stored_optional_confidence(claimed_task.get('due_confidence')),
-                        merged.task_change.due_confidence,
-                    )
-                    if due_confidence is not None:
-                        task_annotation_patch['due_confidence'] = due_confidence
-                    priority = _strongest_task_priority(
-                        _stored_task_priority(claimed_task.get('priority')), merged.task_change.priority
-                    )
-                    if priority is not None:
-                        task_annotation_patch['priority'] = priority.value
                 write_transaction.update(
                     claimed_task_ref,
                     {
@@ -658,7 +512,6 @@ def create_candidate(
                         ),
                         'provenance': _merge_task_provenance(claimed_task, merged.evidence_refs),
                         'updated_at': now_value,
-                        **task_annotation_patch,
                     },
                 )
             write_transaction.set(alias_ref, alias_payload)
@@ -697,50 +550,6 @@ def get_candidate(uid: str, candidate_id: str) -> Optional[CandidateRecord]:
     return parse_snapshot_or_none(CandidateRecord, snapshot)
 
 
-def update_candidate_compatibility_score(
-    uid: str,
-    candidate_id: str,
-    *,
-    relevance_score: int,
-    account_generation: int,
-) -> CandidateRecord:
-    """Update the released staged-task score on the canonical Candidate envelope."""
-    if not 0 <= relevance_score <= 1000:
-        raise ValueError('relevance_score must be between 0 and 1000')
-    candidate_ref = _candidate_ref(uid, candidate_id)
-    transaction = db.transaction()
-
-    @firestore.transactional
-    def apply(write_transaction):
-        control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
-        _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
-        snapshot = candidate_ref.get(transaction=write_transaction)
-        if not snapshot.exists:
-            raise CandidateNotFoundError(candidate_id)
-        candidate = parse_snapshot_strict(CandidateRecord, snapshot)
-        if candidate.account_generation != account_generation:
-            raise CandidateGenerationMismatchError(candidate_id)
-        is_staged_compatibility_candidate = (
-            candidate.subject_kind == CandidateSubjectKind.task
-            and candidate.proposed_action == CandidateAction.create
-            and (
-                candidate.source_surface == 'legacy_staged'
-                or any(
-                    evidence.kind.value == 'external' and evidence.id.startswith('legacy-staged-')
-                    for evidence in candidate.evidence_refs
-                )
-            )
-        )
-        if candidate.status != CandidateStatus.pending or not is_staged_compatibility_candidate:
-            raise CandidateConflictError('Candidate is not an active staged-task compatibility proposal')
-        existing = candidate.compatibility or CandidateCompatibilityMetadata()
-        compatibility = existing.model_copy(update={'relevance_score': relevance_score})
-        write_transaction.update(candidate_ref, {'compatibility': compatibility.model_dump(mode='python')})
-        return candidate.model_copy(update={'compatibility': compatibility})
-
-    return apply(transaction)
-
-
 def list_candidates(
     uid: str,
     *,
@@ -759,39 +568,6 @@ def list_candidates(
         query = query.offset(offset)
     query = query.limit(limit)
     return parse_snapshots(CandidateRecord, query.stream())
-
-
-def list_candidates_compatibility_page(
-    uid: str,
-    *,
-    account_generation: int,
-    limit: int = 500,
-    cursor: Any | None = None,
-) -> tuple[list[CandidateRecord], int, Any | None]:
-    """Return valid records, raw page size, and a snapshot cursor.
-
-    ``parse_snapshots`` deliberately skips malformed rows. Compatibility
-    callers need the unparsed count as their pagination authority so one bad
-    document cannot make a non-final page look exhausted and hide later data.
-    The cursor is the last raw snapshot for the same reason. Using it with
-    ``start_after`` keeps exhaustive compatibility scans linear in billed
-    document reads; Firestore offsets re-read every skipped prefix.
-    """
-
-    collection = db.collection('users').document(uid).collection(CANDIDATES_COLLECTION)
-    query = CANDIDATES_COMPATIBILITY_QUERY.build(
-        collection,
-        {'account_generation': account_generation},
-        field_filter_factory=FieldFilter,
-    ).order_by(
-        'created_at',
-        direction=firestore.Query.DESCENDING,
-    )
-    if cursor is not None:
-        query = query.start_after(cursor)
-    snapshots = list(query.limit(limit).stream())
-    next_cursor = snapshots[-1] if snapshots else None
-    return parse_snapshots(CandidateRecord, snapshots), len(snapshots), next_cursor
 
 
 def _task_create_storage(candidate: CandidateRecord, *, task_id: str, now: datetime) -> dict[str, Any]:
@@ -948,7 +724,6 @@ def resolve_task_candidate(
             'resolution_reason': 'accepted',
             'result_task_id': task_id,
             'resolved_at': resolved_at,
-            'expires_at': None,
         }
         write_transaction.update(candidate_ref, candidate_patch)
         if candidate.proposed_action == CandidateAction.create:
@@ -1010,6 +785,8 @@ def claim_candidate_integration_dispatch(
                     'updated_at': claim_time,
                 },
             )
+            return None
+        if not is_canonical_memory_user(uid):
             return None
         if payload.get('status') in {'completed', 'suppressed'}:
             return None
@@ -1139,12 +916,7 @@ def resolve_candidate_without_mutation(
             raise CandidateConflictError('Candidate resolution is already claimed')
         write_transaction.update(
             candidate_ref,
-            {
-                'status': status.value,
-                'resolution_reason': reason or status.value,
-                'resolved_at': resolved_at,
-                'expires_at': None,
-            },
+            {'status': status.value, 'resolution_reason': reason or status.value, 'resolved_at': resolved_at},
         )
         return CandidateResolutionReceipt(
             candidate_id=candidate_id,
@@ -1210,7 +982,6 @@ def reconcile_migrated_candidate(
             'status': status.value,
             'resolution_reason': reason or f'legacy_{status.value}',
             'resolved_at': resolution_time,
-            'expires_at': None,
         }
         if result_task_id:
             patch['result_task_id'] = result_task_id
@@ -1398,13 +1169,10 @@ __all__ = [
     'complete_candidate_integration_dispatch',
     'create_candidate',
     'get_candidate',
-    'update_candidate_compatibility_score',
     'list_candidate_integration_dispatches',
     'list_candidates',
     'pending_candidate_semantic_identity',
     'reconcile_migrated_candidate',
-    'candidate_has_lapsed',
-    'stored_candidate_has_lapsed',
     'resolve_candidate_without_mutation',
     'resolve_task_candidate',
     'task_id_for_candidate',

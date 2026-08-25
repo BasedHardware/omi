@@ -15,24 +15,19 @@ from routers import (
     desktop_core,
     desktop_deprecated,
     desktop_proxy,
-    metrics,
-    desktop_proactivity,
     desktop_realtime,
     desktop_screen_crisp,
     desktop_tts_updates,
 )
 from utils.env_loader import firebase_admin_options, load_backend_env
 from utils.http_client import close_all_clients
-from utils.metrics import start_metrics_sidecar_server, stop_metrics_sidecar_server
 
 
 def _initialize_firebase_admin() -> None:
     """Initialize token verification without selecting the Google data project.
 
-    Development serves production Firebase identities. Compute (GCE / ``agentVm``)
-    stays on Cloud Run ADC / ``GOOGLE_CLOUD_PROJECT``. Customer entitlements
-    (plan, usage, quota) use the mounted Auth SA file's ``project_id`` via
-    ``get_customer_firestore_client()`` and must not retarget ADC.
+    Development serves production Firebase identities but runs its Cloud Run
+    workload (Firestore and Agent VM control) in the development GCP project.
     ``firebase_admin_options`` therefore pins only Firebase Admin's token
     audience; ADC continues to use ``GOOGLE_CLOUD_PROJECT`` independently.
     """
@@ -57,59 +52,28 @@ def _initialize_firebase_admin() -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    load_backend_env()
     prepare_google_credentials()
     _initialize_firebase_admin()
-    start_metrics_sidecar_server()
     try:
         yield
     finally:
         await close_all_clients()
-        stop_metrics_sidecar_server()
 
 
-def _cors_allowed_origins_from_env() -> list[str]:
-    origins = [origin.strip() for origin in os.getenv('CORS_ALLOWED_ORIGINS', '').split(',') if origin.strip()]
-    if '*' in origins:
-        raise RuntimeError('CORS_ALLOWED_ORIGINS must not contain "*" — list explicit origins instead')
-    return origins
-
-
-def _build_app() -> FastAPI:
-    app = FastAPI(lifespan=lifespan)
-    # Explicit, default-deny CORS: desktop backend traffic is Bearer-token
-    # authenticated, so no cross-origin browser caller needs to be allowed by
-    # default. CORS_ALLOWED_ORIGINS lets an operator opt a specific web frontend
-    # in (comma-separated exact origins — never "*", and never combined with
-    # allow_credentials, which would leak authenticated responses).
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=_cors_allowed_origins_from_env(),
-        allow_credentials=False,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-    app.include_router(desktop_core.router)
-    app.include_router(auth.router)
-    app.include_router(desktop_agent_vm.router)
-    app.include_router(desktop_chat.router)
-    app.include_router(desktop_proxy.router)
-    app.include_router(desktop_proactivity.router)
-    app.include_router(desktop_realtime.router)
-    app.include_router(desktop_screen_crisp.router)
-    app.include_router(desktop_tts_updates.router)
-    app.include_router(desktop_deprecated.router)
-    app.include_router(metrics.router)
-    return app
-
-
-def create_app() -> FastAPI:
-    load_backend_env()
-    return _build_app()
-
-
-# Load staged backend env before constructing the app so CORS origins are
-# populated before CORSMiddleware is installed. This keeps the module-level `app`
-# entrypoint (used by desktop/macos/run.sh, the dev harness, and docs) consistent
-# with the factory entrypoint used by Cloud Run/Docker.
-load_backend_env()
-app = _build_app()
+app = FastAPI(lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.include_router(desktop_core.router)
+app.include_router(auth.router)
+app.include_router(desktop_agent_vm.router)
+app.include_router(desktop_chat.router)
+app.include_router(desktop_proxy.router)
+app.include_router(desktop_realtime.router)
+app.include_router(desktop_screen_crisp.router)
+app.include_router(desktop_tts_updates.router)
+app.include_router(desktop_deprecated.router)

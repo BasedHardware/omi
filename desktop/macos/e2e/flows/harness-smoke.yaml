@@ -5,7 +5,6 @@ description: Cursor-free smoke flow for the Omi desktop experience harness.
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
-  - desktop/macos/Desktop/Sources/DesktopAutomationBridge+Notifications.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopAutomationWindowPresentation.swift
   - desktop/macos/Desktop/Sources/BrowserAutomationTarget.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+Environment.swift
@@ -29,7 +28,6 @@ covers:
   - desktop/macos/Desktop/Sources/StartupWarmupCoordinator.swift
   - desktop/macos/Desktop/Sources/Startup/StartupWarmupPolicy.swift
   - desktop/macos/Desktop/Sources/OmiApp.swift
-  - desktop/macos/Desktop/Sources/Chat/AgentArtifactRetention.swift
   - desktop/macos/Desktop/Sources/OmiSupport/DesktopDevRuntimeManifest.swift
   - desktop/macos/Desktop/Sources/OmiSupport/DesktopLocalProfile.swift
   - desktop/macos/Desktop/Sources/ViewModelContainer.swift

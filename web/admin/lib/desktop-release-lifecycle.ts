@@ -1,9 +1,13 @@
 export type DesktopReleaseChannel = "candidate" | "beta" | "stable" | null;
 export type DesktopReleaseLifecycle =
-  | "build_candidate"
-  | "beta_live"
-  | "stable_candidate"
-  | "stable";
+  "build_candidate" | "qualified_beta" | "stable_candidate" | "stable";
+
+export interface DesktopQualification {
+  qualified: boolean;
+  qualifiedAt: string | null;
+  evidence: string | null;
+  source: "canonical" | "legacy";
+}
 
 export interface DesktopStableCandidate {
   complete: boolean;
@@ -13,7 +17,7 @@ export interface DesktopStableCandidate {
 
 const LIFECYCLE_LABELS: Record<DesktopReleaseLifecycle, string> = {
   build_candidate: "Build candidate",
-  beta_live: "Beta",
+  qualified_beta: "Qualified beta",
   stable_candidate: "Stable candidate",
   stable: "Stable",
 };
@@ -29,9 +33,28 @@ function isTrueMetadata(value: string | undefined): boolean {
   return normalized === "true" || normalized === "1" || normalized === "yes";
 }
 
+export function desktopQualificationFromMetadata(
+  metadata: Record<string, string>,
+): DesktopQualification {
+  if (Object.prototype.hasOwnProperty.call(metadata, "qualifiedBeta")) {
+    return {
+      qualified: isTrueMetadata(metadata.qualifiedBeta),
+      qualifiedAt: metadata.qualifiedBetaAt?.trim() || null,
+      evidence: metadata.qualifiedBetaEvidence?.trim() || null,
+      source: "canonical",
+    };
+  }
+  return {
+    qualified: isTrueMetadata(metadata.blessed),
+    qualifiedAt: metadata.blessedAt?.trim() || null,
+    evidence: metadata.blessedEvidence?.trim() || null,
+    source: "legacy",
+  };
+}
+
 export function desktopStableCandidateFromMetadata(
   metadata: Record<string, string>,
-  expected: { releaseTag: string },
+  expected: { releaseTag: string; qualificationEvidence: string | null },
 ): DesktopStableCandidate {
   const required = [
     metadata.stableCandidateTag,
@@ -39,12 +62,16 @@ export function desktopStableCandidateFromMetadata(
     metadata.stableCandidateAt,
     metadata.stableCandidateBy,
     metadata.stableCandidateRationale,
+    metadata.stableCandidateQualificationEvidence,
     metadata.stableCandidateSoakReview,
     metadata.stableCandidateTelemetryReview,
     metadata.stableCandidateReleaseNotesReview,
   ];
   const referencesCurrentRelease =
-    metadata.stableCandidateTag?.trim() === expected.releaseTag;
+    metadata.stableCandidateTag?.trim() === expected.releaseTag &&
+    Boolean(expected.qualificationEvidence) &&
+    metadata.stableCandidateQualificationEvidence?.trim() ===
+      expected.qualificationEvidence;
   return {
     complete:
       isTrueMetadata(metadata.stableCandidate) &&
@@ -57,32 +84,12 @@ export function desktopStableCandidateFromMetadata(
 
 export function desktopReleaseLifecycle(
   channel: DesktopReleaseChannel,
-  betaLive: boolean,
+  qualification: DesktopQualification,
   stableCandidate: DesktopStableCandidate,
 ): DesktopReleaseLifecycle {
   if (channel === "stable") return "stable";
-  if (betaLive && stableCandidate.complete) return "stable_candidate";
-  if (betaLive) return "beta_live";
+  if (qualification.qualified && stableCandidate.complete)
+    return "stable_candidate";
+  if (qualification.qualified) return "qualified_beta";
   return "build_candidate";
-}
-
-export function tagBuildNumber(tag: string): number | null {
-  const match = tag.match(/\+(\d+)-macos$/);
-  if (!match) return null;
-  return Number.parseInt(match[1], 10);
-}
-
-export function newestSparkleVersion(appcast: string): number | null {
-  const versions: number[] = [];
-  // `exec` loops rather than `for...of matchAll()`: this package targets es5,
-  // where iterating an IterableIterator is a compile error (TS2802).
-  const patterns = [/<sparkle:version>(\d+)<\/sparkle:version>/g, /sparkle:version="(\d+)"/g];
-  for (const pattern of patterns) {
-    let match = pattern.exec(appcast);
-    while (match !== null) {
-      versions.push(Number.parseInt(match[1], 10));
-      match = pattern.exec(appcast);
-    }
-  }
-  return versions.length ? Math.max(...versions) : null;
 }

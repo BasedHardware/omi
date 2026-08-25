@@ -19,7 +19,6 @@ from database.redis_db import (
     get_enabled_apps,
 )
 from database.webhook_health import (
-    ACTION_REDIRECT_NOT_FOLLOWED,
     record_app_webhook_failure,
     record_app_webhook_success,
     is_app_webhook_disabled,
@@ -48,15 +47,7 @@ def _notify_app_owner(app_id: str, title: str, body: str):
 
 
 def _handle_app_webhook_disable(app_id: str, action: int, error: str):
-    if action == ACTION_REDIRECT_NOT_FOLLOWED:
-        logger.warning(f'App {app_id} webhook redirected and was not delivered: {error}')
-        _notify_app_owner(
-            app_id,
-            'Webhook Endpoint Redirects',
-            f'Your app endpoint returned a redirect ({error[:40]}), so the request was not delivered. '
-            'Update the endpoint to its final destination.',
-        )
-    elif action == 1:
+    if action == 1:
         logger.warning(f'App {app_id} webhook failing for 24h+ (day 1 warning): {error}')
         _notify_app_owner(
             app_id,
@@ -231,18 +222,6 @@ def create_app_tool(
                     cb.record_success()
                     await run_blocking(db_executor, record_app_webhook_success, app_id, ENDPOINT_MCP_TOOL)
                 return result
-            except httpx.HTTPStatusError as e:
-                status_code = e.response.status_code
-                action = await run_blocking(
-                    db_executor,
-                    record_app_webhook_failure,
-                    app_id,
-                    status_code,
-                    f'HTTP {status_code}',
-                    ENDPOINT_MCP_TOOL,
-                )
-                await run_blocking(db_executor, _handle_app_webhook_disable, app_id, action, f'HTTP {status_code}')
-                return f'Error calling MCP tool {app_tool.name}: HTTP {status_code}'
             except Exception as e:
                 cb.record_failure()
                 action = await run_blocking(

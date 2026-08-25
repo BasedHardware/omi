@@ -3,7 +3,6 @@
 import { useEffect } from 'react';
 import { MemoriesPage } from '@/components/memories/MemoriesPage';
 import { MixpanelManager } from '@/lib/analytics/mixpanel';
-import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 
 export default function MemoriesRoute() {
   useEffect(() => {
@@ -12,5 +11,3 @@ export default function MemoriesRoute() {
 
   return <MemoriesPage />;
 }
-
-registerMoonshineRoute('/memories', MemoriesRoute, 'authenticated');

@@ -322,7 +322,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get searchApps => 'ایپلیکیشنز تلاش کریں...';
 
   @override
-  String get myApps => 'میری بنائی ہوئی';
+  String get myApps => 'میری ایپلیکیشنز';
 
   @override
   String get installedApps => 'انسٹال شدہ ایپلیکیشنز';
@@ -9852,63 +9852,4 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'فتح المتجر';
-
-  @override
-  String get chatScopeToday => 'آج';
-
-  @override
-  String get chatScopeThisWeek => 'اس ہفتے';
-
-  @override
-  String chatScopeAbout(String title) {
-    return '$title کے بارے میں';
-  }
-
-  @override
-  String get askAboutThisConversation => 'اس کے بارے میں پوچھیں';
-
-  @override
-  String get sendRawAudioToOmi => 'خام آڈیو Omi کو بھیجیں';
-
-  @override
-  String get sendRawAudioToOmiDescription =>
-      'خام آڈیو کو Omi بھیجے جانے سے روکنے کے لیے اسے بند کریں۔ ٹرانسکرپٹس اور کلاؤڈ فیچرز کے لیے درکار ڈیٹا اب بھی Omi کو بھیجا جا سکتا ہے۔';
-
-  @override
-  String get findDevice => 'تلاش کریں';
-
-  @override
-  String get diagnosticsShareFailed => 'تشخیصی معلومات شیئر نہیں کی جا سکیں۔ براہ کرم دوبارہ کوشش کریں۔';
-
-  @override
-  String get appDisabledTitle => 'یہ ایپ غیر فعال ہے اور اسے انسٹال نہیں کیا جا سکتا۔';
-
-  @override
-  String get appDisabledWebhookFailures => 'اس کا اینڈ پوائنٹ مسلسل 72 گھنٹے ناکام رہا، اس لیے ترسیل روک دی گئی۔';
-
-  @override
-  String get appDisabledGeneric => 'اسے Omi نے غیر فعال کیا تھا۔';
-
-  @override
-  String get appDisabledOwnerHint =>
-      'پہلے اینڈ پوائنٹ درست کریں — دوبارہ فعال کرنے پر ہر ترتیب شدہ URL دوبارہ جانچا جاتا ہے۔';
-
-  @override
-  String get appReEnable => 'دوبارہ فعال کریں';
-
-  @override
-  String get appReEnableFailedTitle => 'دوبارہ فعال نہیں ہو سکا';
-
-  @override
-  String get appReEnableFailedBody => 'اس ایپ کو دوبارہ فعال نہیں کیا جا سکا۔ براہ کرم دوبارہ کوشش کریں۔';
-
-  @override
-  String appDisabledOn(String date) {
-    return '$date کو غیر فعال کیا گیا۔';
-  }
-
-  @override
-  String appDisabledLastError(String error) {
-    return 'آخری خرابی: $error';
-  }
 }

@@ -8,8 +8,6 @@ from typing import Callable, Literal, Protocol
 import database.chat_first_intents as intent_db
 from models.chat_first import (
     CaptureLinkSpec,
-    ConversationLinkSpec,
-    ConversationLinkActionItemSpec,
     ChatFirstBlockSpec,
     ChatFirstSubject,
     ColdStartSequence,
@@ -197,10 +195,6 @@ def wake_after_commit(
             selection is None
             or not selection.blocks
             or not any(block.type == 'questionCard' for block in selection.blocks)
-            # Meeting receipts are server-finalized capture facts. Agent/tool
-            # output must not be able to mint a conversationLink for an
-            # ambient or otherwise unrelated conversation.
-            or any(block.type == 'conversationLink' for block in selection.blocks)
         ):
             _meter('judgment_declined', 'agent_judgment')
             return ProactiveWakeResult(outcome='declined')
@@ -278,37 +272,6 @@ def run_goal_changed_wake(uid: str, *, goal_id: str, mutation_key: object) -> Pr
     )
 
 
-def recommended_meeting_action_items(structured: object) -> list[ConversationLinkActionItemSpec]:
-    """Project the user's open meeting commitments into the durable Chat receipt."""
-
-    action_items = (
-        structured.get('action_items', []) if isinstance(structured, dict) else getattr(structured, 'action_items', [])
-    )
-    recommendations: list[ConversationLinkActionItemSpec] = []
-    for item in action_items or []:
-        if isinstance(item, dict):
-            value = item
-        elif hasattr(item, '__dict__'):
-            value = vars(item)
-        else:
-            continue
-        if value.get('capture_owner') != 'user' or value.get('completed', False) or value.get('deleted', False):
-            continue
-        description = str(value.get('description') or '').strip()
-        if not description:
-            continue
-        task_id = value.get('target_task_id')
-        recommendations.append(
-            ConversationLinkActionItemSpec(
-                description=description[:300],
-                task_id=task_id if isinstance(task_id, str) and task_id else None,
-            )
-        )
-        if len(recommendations) == 8:
-            break
-    return recommendations
-
-
 def persist_capture_arrival_intent(
     uid: str,
     *,
@@ -317,8 +280,6 @@ def persist_capture_arrival_intent(
     expected_generation: int | None = None,
     now: datetime | None = None,
     eligibility_resolver: Callable[[str], ChatFirstEligibility] = resolve_chat_first_eligibility,
-    is_desktop_meeting: bool = False,
-    recommended_action_items: list[ConversationLinkActionItemSpec] | None = None,
 ) -> ProactiveIntent | None:
     """Persist the deterministic capture receipt without calling an LLM.
 
@@ -337,25 +298,13 @@ def persist_capture_arrival_intent(
         assert eligibility.account_generation is not None
         bounded_summary = summary.strip()[:200]
         if not bounded_summary:
-            if not is_desktop_meeting:
-                return None
-            bounded_summary = 'Your meeting notes are ready.'
-        block: ChatFirstBlockSpec
-        if is_desktop_meeting:
-            block = ConversationLinkSpec(
-                type='conversationLink',
-                conversation_id=conversation_id,
-                summary=bounded_summary,
-                recommended_action_items=recommended_action_items or [],
-            )
-        else:
-            block = CaptureLinkSpec(type='captureLink', conversation_id=conversation_id, summary=bounded_summary)
+            return None
         intent, created = intent_db.create_intent(
             uid,
             source='capture_arrival',
             continuity_key=f'capture:{conversation_id}',
             subject=ChatFirstSubject(kind='capture', id=conversation_id),
-            blocks=[block],
+            blocks=[CaptureLinkSpec(type='captureLink', conversation_id=conversation_id, summary=bounded_summary)],
             account_generation=eligibility.account_generation,
             now=resolved_now,
         )

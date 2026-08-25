@@ -134,7 +134,7 @@ class _LanguageSelectorWidgetState extends State<LanguageSelectorWidget> {
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.white),
+                borderSide: const BorderSide(color: Colors.deepPurple),
               ),
             ),
           ),
@@ -154,9 +154,9 @@ class _LanguageSelectorWidgetState extends State<LanguageSelectorWidget> {
 
                       return ListTile(
                         title: Text(language.key, style: const TextStyle(color: Colors.white)),
-                        trailing: isSelected ? const Icon(Icons.check_circle, color: Colors.white) : null,
+                        trailing: isSelected ? const Icon(Icons.check_circle, color: Colors.deepPurple) : null,
                         selected: isSelected,
-                        selectedTileColor: Colors.white.withValues(alpha: 0.12),
+                        selectedTileColor: Colors.deepPurple.withValues(alpha: 0.2),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         onTap: () {
                           setState(() {
@@ -197,9 +197,8 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
           selectedLanguage = savedLanguage;
           // Find the language name for the saved language code
           try {
-            selectedLanguageName = homeProvider.availableLanguages.entries
-                .firstWhere((entry) => entry.value == savedLanguage)
-                .key;
+            selectedLanguageName =
+                homeProvider.availableLanguages.entries.firstWhere((entry) => entry.value == savedLanguage).key;
           } catch (e) {
             // If language not found in the map, just use the code
             selectedLanguageName = savedLanguage;

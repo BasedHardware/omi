@@ -19,14 +19,15 @@ except Exception as e:
     _opus_import_error: Optional[Exception] = e
 else:
     _opus_import_error = None
-from google.cloud.exceptions import NotFound, NotFound as BlobNotFound
+from google.cloud import storage
+from google.oauth2 import service_account
+from google.cloud.exceptions import NotFound as BlobNotFound
+from google.cloud.exceptions import NotFound
 
 from database.redis_db import cache_signed_url, get_cached_signed_url
 from utils import encryption
 from utils.cloud_tasks import enqueue_audio_merge_job, is_audio_merge_dispatch_enabled
-from utils.observability.fallback import record_fallback
 from utils.other.deferred_delete import DeferredDeleter
-from utils.other.local_storage import create_storage_client, local_public_url
 from database import users as users_db
 import logging
 
@@ -65,7 +66,15 @@ def _get_storage_client() -> Any:
     if storage_client is None:
         with _storage_client_lock:
             if storage_client is None:
-                storage_client = create_storage_client()
+                if os.environ.get('SERVICE_ACCOUNT_JSON'):
+                    service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
+                    credentials = service_account.Credentials.from_service_account_info(service_account_info)  # type: ignore[reportUnknownMemberType]  # google.oauth2 partial stubs
+                    storage_client = storage.Client(credentials=credentials)
+                else:
+                    _gcs_project = (
+                        os.environ.get('GOOGLE_CLOUD_PROJECT') or os.environ.get('FIREBASE_PROJECT_ID') or ''
+                    ).strip()
+                    storage_client = storage.Client(project=_gcs_project) if _gcs_project else storage.Client()
     return storage_client
 
 
@@ -116,7 +125,7 @@ def upload_profile_audio(file_path: str, uid: str) -> str:
     path = f'{uid}/speech_profile.wav'
     blob = bucket.blob(path)
     blob.upload_from_filename(file_path)
-    return blob.public_url
+    return f'https://storage.googleapis.com/{speech_profiles_bucket}/{path}'
 
 
 def get_user_has_speech_profile(uid: str) -> bool:
@@ -283,7 +292,7 @@ def upload_postprocessing_audio(file_path: str) -> str:
     bucket = _get_storage_client().bucket(postprocessing_audio_bucket)
     blob = bucket.blob(file_path)
     blob.upload_from_filename(file_path)
-    return blob.public_url
+    return f'https://storage.googleapis.com/{postprocessing_audio_bucket}/{file_path}'
 
 
 def delete_postprocessing_audio(file_path: str) -> None:
@@ -299,9 +308,9 @@ def delete_postprocessing_audio(file_path: str) -> None:
 
 def upload_sdcard_audio(file_path: str) -> str:
     bucket = _get_storage_client().bucket(postprocessing_audio_bucket)
-    blob = bucket.blob(f'sdcard/{file_path}')
+    blob = bucket.blob(file_path)
     blob.upload_from_filename(file_path)
-    return blob.public_url
+    return f'https://storage.googleapis.com/{postprocessing_audio_bucket}/sdcard/{file_path}'
 
 
 def download_postprocessing_audio(file_path: str, destination_file_path: str) -> None:
@@ -320,7 +329,7 @@ def upload_conversation_recording(file_path: str, uid: str, conversation_id: str
     path = f'{uid}/{conversation_id}.wav'
     blob = bucket.blob(path)
     blob.upload_from_filename(file_path)
-    return blob.public_url
+    return f'https://storage.googleapis.com/{memories_recordings_bucket}/{path}'
 
 
 def get_conversation_recording_if_exists(uid: str, memory_id: str) -> Optional[str]:
@@ -361,7 +370,7 @@ def get_syncing_file_temporal_url(file_path: str):
     bucket = _get_storage_client().bucket(syncing_local_bucket)
     blob = bucket.blob(file_path)
     blob.upload_from_filename(file_path)
-    return blob.public_url
+    return f'https://storage.googleapis.com/{syncing_local_bucket}/{file_path}'
 
 
 def get_syncing_file_temporal_signed_url(file_path: str):
@@ -762,36 +771,6 @@ def delete_conversation_audio_files(uid: str, conversation_id: str) -> None:
         blob.delete()
 
 
-# PCM16 mono: one sample is 2 bytes. A chunk whose byte count is not a multiple
-# of this is truncated mid-sample.
-_PCM16_FRAME_BYTES = 2
-
-
-def _align_pcm16_frames(pcm_data: bytes, source: str) -> bytes:
-    """Drop a trailing partial PCM16 sample so decoded chunks stay frame-aligned.
-
-    A chunk stored truncated mid-sample (interrupted upload) makes every later
-    chunk in the merge byte-misaligned and leaves the merged buffer an odd byte
-    count, which pydub rejects with a deterministic ValueError. The audio-merge
-    Cloud Task retried that unretryable error to exhaustion and then marked
-    playback permanently unavailable, losing the artifact for the conversation.
-    Trimming the partial sample costs 1/32000s and keeps the merge buildable.
-    """
-    remainder = len(pcm_data) % _PCM16_FRAME_BYTES
-    if not remainder:
-        return pcm_data
-    record_fallback(
-        component='audio_merge',
-        from_mode='pcm16_frames',
-        to_mode='pcm16_frames_truncated',
-        reason='malformed_doc',
-        outcome='recovered',
-        log=logger,
-    )
-    logger.warning(f'audio chunk not PCM16 frame-aligned, trimming {remainder} trailing byte(s): {source}')
-    return pcm_data[:-remainder]
-
-
 def download_audio_chunks_and_merge(
     uid: str,
     conversation_id: str,
@@ -874,7 +853,7 @@ def download_audio_chunks_and_merge(
             else:
                 pcm_data = raw_data
 
-            return _align_pcm16_frames(pcm_data, path)
+            return pcm_data
         except Exception as e:
             logger.warning(f"Failed to decode/decrypt {path}: {e}")
             return None
@@ -909,7 +888,7 @@ def download_audio_chunks_and_merge(
                 else:
                     pcm_data = raw_data
 
-                return (timestamp, _align_pcm16_frames(pcm_data, chunk_path))
+                return (timestamp, pcm_data)
             except Exception as e:
                 logger.warning(
                     f"Failed to decode/decrypt {ext} chunk at {formatted_timestamp}: {e}, trying next format"
@@ -1522,7 +1501,7 @@ def upload_app_logo(file_path: str, app_id: str):
     blob = bucket.blob(path)
     blob.cache_control = 'public, no-cache'
     blob.upload_from_filename(file_path)
-    return blob.public_url
+    return f'https://storage.googleapis.com/{omi_apps_bucket}/{path}'
 
 
 def delete_app_logo(img_url: str):
@@ -1545,15 +1524,13 @@ def upload_app_thumbnail(file_path: str, thumbnail_id: str) -> str:
     blob = bucket.blob(path)
     blob.cache_control = 'public, no-cache'
     blob.upload_from_filename(file_path)
-    return blob.public_url
+    public_url = f'https://storage.googleapis.com/{app_thumbnails_bucket}/{path}'
+    return public_url
 
 
 def get_app_thumbnail_url(thumbnail_id: str) -> str:
     path = f'{thumbnail_id}.jpg'
-    return (
-        local_public_url(app_thumbnails_bucket, path)
-        or f'https://storage.googleapis.com/{app_thumbnails_bucket}/{path}'
-    )
+    return f'https://storage.googleapis.com/{app_thumbnails_bucket}/{path}'
 
 
 # **********************************
@@ -1581,7 +1558,7 @@ def upload_multi_chat_files(files_name: List[str], uid: str) -> Dict[str, str]:
                 blob.make_public()
             except Exception as e:
                 logger.warning(f"Could not make blob public (may need bucket-level IAM): {e}")
-            dictFiles[name] = blob.public_url
+            dictFiles[name] = f'https://storage.googleapis.com/{chat_files_bucket}/{uid}/{name}'
         except Exception as e:
             logger.error("Failed to upload {} due to exception: {}".format(name, e))
     return dictFiles

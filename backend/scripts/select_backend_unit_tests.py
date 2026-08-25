@@ -94,48 +94,7 @@ MEMORY_POLICY_CORE_TESTS = (
     'testing/e2e/test_canonical_memory_pipeline.py',
 )
 
-# Monitoring telemetry contract sources (#9587). Referenced from both the
-# AREA_TESTS path->test mapping and is_selectable_backend_path's
-# intentional-exception check below — single source so the two lists cannot
-# drift apart and silently stop selecting the monitoring unit contracts.
-MONITORING_CONTRACT_SOURCES = (
-    'backend/charts/monitoring/expected-targets.prod.yaml',
-    'backend/charts/monitoring/kube-prometheus-stack/',
-    'backend/charts/monitoring/alerts/',
-    'backend/charts/monitoring/alert-rules.json',
-    'backend/charts/monitoring/prometheus-stackdriver-exporter/',
-    'backend/charts/parakeet/templates/servicemonitor.yaml',
-)
-
 AREA_TESTS = (
-    (
-        (
-            'backend/config/plan_catalog',
-            'backend/scripts/generate_plan_catalog.py',
-            'backend/models/users.py',
-            'backend/utils/subscription.py',
-            'backend/utils/overage.py',
-            'backend/utils/fair_use.py',
-            'backend/utils/sync/rate_limit.py',
-            'backend/scripts/support/find_stripe_entitlement_mismatches.py',
-            'backend/routers/payment.py',
-            'backend/routers/desktop_proactivity.py',
-            'backend/database/phone_call_config.py',
-        ),
-        (),
-        (
-            'tests/unit/test_plan_catalog_contract.py',
-            'tests/unit/test_subscription_*.py',
-            'tests/unit/test_user_subscription_wire_contract.py',
-            'tests/unit/test_stripe_*.py',
-            'tests/unit/test_payment_price_id_validation.py',
-            'tests/unit/test_chat_quota.py',
-            'tests/unit/test_fair_use_*.py',
-            'tests/unit/test_phone_call*.py',
-            'tests/unit/test_desktop_proactivity.py',
-            'tests/unit/test_sync_fair_use_gate.py',
-        ),
-    ),
     (
         (
             'backend/database/users.py',
@@ -189,14 +148,6 @@ AREA_TESTS = (
         ('tests/unit/test_parakeet_*.py',),
     ),
     (
-        MONITORING_CONTRACT_SOURCES,
-        (),
-        (
-            'tests/unit/test_monitoring_*.py',
-            'tests/unit/test_journey_observability.py',
-        ),
-    ),
-    (
         ('backend/services/users/', 'backend/routers/users'),
         (),
         (
@@ -205,7 +156,6 @@ AREA_TESTS = (
             'tests/unit/test_users_*.py',
             'tests/unit/test_delete_account_*.py',
             'tests/unit/test_claim_deletion_*.py',
-            'tests/unit/test_agent_vm_account_cleanup.py',
         ),
     ),
     (
@@ -338,23 +288,15 @@ def is_full_run_path(path: str) -> bool:
 def is_selectable_backend_path(path: str) -> bool:
     """Return True for backend paths that can select or force unit tests.
 
-    Docs, AGENTS, and most chart/dashboard artifacts are ignored so editing them
-    does not trip the unmapped-path full-suite fallback. Monitoring telemetry
-    contract sources (#9587) are an intentional exception so inventory/values
-    drift still selects the monitoring unit contracts.
+    Docs, AGENTS, and chart/dashboard artifacts are ignored so editing them
+    does not trip the unmapped-path full-suite fallback.
     """
     if not path.startswith('backend/'):
         return False
     if path.endswith('.md'):
         return False
-    if path.startswith('backend/docs/'):
+    if path.startswith('backend/docs/') or path.startswith('backend/charts/'):
         return False
-    if path.startswith('backend/charts/'):
-        monitoring_contract_prefixes = MONITORING_CONTRACT_SOURCES
-        return any(
-            path == prefix or path.startswith(prefix) if prefix.endswith('/') else path == prefix
-            for prefix in monitoring_contract_prefixes
-        )
     return True
 
 

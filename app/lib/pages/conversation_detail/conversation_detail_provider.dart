@@ -405,20 +405,14 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     notifyListeners();
   }
 
-  /// Returns the first app result that actually carries content, which is the
-  /// summary of the conversation. An app result with empty content is not a
-  /// summary: returning it suppressed the structured sections (they only render
-  /// when `appId == null`) while `AppResultDetailWidget` fell into its
-  /// "no summary" placeholder, so a conversation with a full sections summary
-  /// rendered as having none. Mirrors desktop's `ConversationSummarySelection`.
+  /// Returns the first app result from the conversation if available
+  /// This is typically the summary of the conversation
   AppResponse? getSummarizedApp() {
-    final appResult = conversation.appResults.firstWhereOrNull((r) => r.content.trim().isNotEmpty);
-    if (appResult != null) {
-      return appResult;
+    if (conversation.appResults.isNotEmpty) {
+      return conversation.appResults[0];
     }
-    // If no app result carries content but we have a structured overview or
-    // sections, create a fake AppResponse
-    if (conversation.structured.overview.isNotEmpty || conversation.structured.sections.isNotEmpty) {
+    // If no appResults but we have structured overview, create a fake AppResponse
+    if (conversation.structured.overview.isNotEmpty) {
       return AppResponse(conversation.structured.overview, appId: null);
     }
     return null;
@@ -521,7 +515,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   Future<bool> enableApp(App app) async {
     try {
       // Make the server call to enable the app
-      final (success, _) = await enableAppServer(app.id);
+      final success = await enableAppServer(app.id);
       if (_isDisposed) return false;
 
       if (success) {

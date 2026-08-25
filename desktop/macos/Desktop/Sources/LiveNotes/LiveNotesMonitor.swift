@@ -73,7 +73,7 @@ class LiveNotesMonitor: ObservableObject {
 
   private convenience init() {
     self.init(
-      noteGeneratorFactory: { try GeminiClient(model: ModelQoS.Gemini.lightweight, workload: .extraction) },
+      noteGeneratorFactory: { try GeminiClient() },
       noteStorage: NoteStorage.shared,
       subscribeToTranscript: true
     )

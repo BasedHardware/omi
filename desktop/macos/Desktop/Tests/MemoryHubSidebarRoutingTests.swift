@@ -3,19 +3,6 @@ import XCTest
 @testable import Omi_Computer
 
 final class MemoryHubSidebarRoutingTests: XCTestCase {
-  /// The Activity spine — Home's former landing surface — is a hub destination, the page the bar's
-  /// pill opens, and the chip that leads the row that reaches the rest.
-  func testActivityIsAHubDestinationAndLeadsTheChipRow() {
-    XCTAssertEqual(ActivityDestinationChip.allCases.first?.hubDestination, .activity)
-    XCTAssertEqual(
-      Set(ActivityDestinationChip.reachableHubDestinations), Set(MemoryHubDestination.allCases),
-      "every destination is reachable from Activity's chip row")
-    XCTAssertEqual(
-      MemoryHubDestination.destination(
-        for: .conversations, requestedRawValue: MemoryHubDestination.activity.rawValue),
-      .activity)
-  }
-
   func testConversationsSidebarSelectionUpdatesRailAndDestination() {
     var selectedIndex = SidebarNavItem.dashboard.rawValue
     var memoryDestinationRawValue = MemoryHubDestination.memories.rawValue

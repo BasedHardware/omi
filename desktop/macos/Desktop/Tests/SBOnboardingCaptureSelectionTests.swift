@@ -7,12 +7,14 @@ final class SBOnboardingCaptureSelectionTests: XCTestCase {
   func testDefaultCaptureSelectionRecordsOnlyDuringMeetings() {
     let selection = SBOnboardingModel.defaultCaptureSelection
 
-    XCTAssertEqual(selection.audioRecordingMode, .onlyMeetings)
+    XCTAssertEqual(selection.systemAudioCaptureMode, .onlyDuringMeetings)
+    XCTAssertFalse(selection.startsListeningImmediately)
   }
 
-  func testAlwaysSelectionMapsToAlwaysOn() {
-    let selection = SBOnboardingModel.CaptureSelection.always
+  func testContinuousCaptureSelectionStartsListeningImmediately() {
+    let selection = SBOnboardingModel.CaptureSelection.continuous
 
-    XCTAssertEqual(selection.audioRecordingMode, .always)
+    XCTAssertEqual(selection.systemAudioCaptureMode, .always)
+    XCTAssertTrue(selection.startsListeningImmediately)
   }
 }

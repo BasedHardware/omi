@@ -195,9 +195,8 @@ class GlobalShortcutManager: @unchecked Sendable {
     }
   }
 
-  @discardableResult
-  func registerAskOmi() -> HotKeyRegistrationOutcome? {
-    guard !isRegistrationSuspended else { return nil }
+  func registerAskOmi() {
+    guard !isRegistrationSuspended else { return }
     // Unregister previous Ask Omi hotkey if any
     if let ref = hotKeyRefs.removeValue(forKey: .askOmi) {
       _ = unregisterHotKey(ref)
@@ -210,11 +209,11 @@ class GlobalShortcutManager: @unchecked Sendable {
     }
     guard askOmiEnabled else {
       logger("GlobalShortcutManager: Ask Omi shortcut is disabled")
-      return nil
+      return
     }
     guard askOmiShortcut.supportsGlobalHotKey, let keyCode = askOmiShortcut.keyCode else {
       logger("GlobalShortcutManager: Ask Omi shortcut is not a registerable hotkey")
-      return .otherFailure
+      return
     }
     // Onboarding now offers ⌃⌘O — the chord `registerSummonHotkey` already holds unconditionally,
     // routed to the same `openOmiFromShortcut`. Registering it twice cannot add behaviour, and the
@@ -222,7 +221,7 @@ class GlobalShortcutManager: @unchecked Sendable {
     // hotkey-registration incident for a chord that is working perfectly.
     guard !isSummonChord else {
       logger("GlobalShortcutManager: Ask Omi shortcut is the summon hotkey; already registered")
-      return .registered
+      return
     }
     let outcome = registerHotKey(keyCode: Int(keyCode), modifiers: askOmiShortcut.carbonModifiers, id: .askOmi)
     // Gate the success log on the registration outcome. Previously this logged
@@ -231,26 +230,6 @@ class GlobalShortcutManager: @unchecked Sendable {
     if outcome == .registered {
       logger("GlobalShortcutManager: Registered Ask Omi shortcut: \(askOmiShortcut.displayLabel)")
     }
-    return outcome
-  }
-
-  /// Probe the selected Ask Omi chord while onboarding's local event monitor is armed. The monitor
-  /// intentionally suspends Carbon registration so it can observe the test press; this narrow probe
-  /// temporarily re-enables registration and then removes the probe before the stage advances. A
-  /// conflict therefore keeps onboarding active instead of claiming a shortcut that will not work
-  /// after the user finishes setup.
-  func validateAskOmiShortcutForOnboarding() -> HotKeyRegistrationOutcome {
-    let wasSuspended = isRegistrationSuspended
-    if wasSuspended {
-      isRegistrationSuspended = false
-      unregisterShortcuts()
-    }
-    let outcome = registerAskOmi() ?? .otherFailure
-    if wasSuspended {
-      unregisterShortcuts()
-      isRegistrationSuspended = true
-    }
-    return outcome
   }
 
   /// Outcome of a Carbon `RegisterEventHotKey` attempt, classified for telemetry.

@@ -33,11 +33,6 @@
           "path": "backend/utils/memory_ingestion/pipeline.py",
           "function": "_compile_mutations",
           "reason": "Existing mutation compilation contract; covered by memory ingestion contract tests until migrated."
-        },
-        {
-          "path": "backend/utils/memory/memory_service.py",
-          "function": "read_scan_page",
-          "reason": "Retired offset-scan stub (raises RuntimeError); retained only so accidental callers fail loudly. Annotated return type kept for the legacy call surface."
         }
       ]
     }
@@ -127,22 +122,25 @@
       "risk": "high",
       "sources": [
         "backend/utils/memory/legacy_backfill.py",
-        "backend/utils/memory/legacy_backfill_support.py",
+        "backend/utils/memory/legacy_backfill_bulk_support.py",
         "backend/utils/memory/legacy_backfill_inventory.py",
-        "backend/scripts/backfill_legacy_memories.py"
+        "backend/utils/memory/bulk_legacy_backfill.py",
+        "backend/utils/memory/canonical_legacy_backfill.py",
+        "backend/scripts/backfill_legacy_memories.py",
+        "backend/scripts/bulk_backfill_legacy_memories.py"
       ],
       "tests": [
         "tests/unit/test_ws_c_backfill.py",
-        "tests/unit/test_backfill_legacy_memories_cli.py"
+        "tests/unit/test_bulk_legacy_backfill.py",
+        "tests/unit/test_bulk_backfill_legacy_memories_cli.py",
+        "tests/unit/test_canonical_legacy_backfill.py"
       ],
-      "checks": [
-        "no_large_tuple_results"
-      ],
+      "checks": ["no_large_tuple_results"],
       "invariants": [
         "completed checkpoints recognize required-processing and quarantined pending-admission destinations without derived side effects",
         "partial checkpoints resume idempotently",
-        "repair runs are explicitly UID-scoped, resumable, and dry-run by default",
-        "inventory and structured summaries never return raw memory content",
+        "bulk runs stop at user, row, token, pause, and wall-clock governors without enabling reads",
+        "bulk inventory and structured summaries never return raw memory content",
         "legacy/domain timestamps are preserved while rows await required processing",
         "unreviewed bulk legacy rows remain hidden pending-admission candidates",
         "legacy rows never reach long-term, vector, keyword, or KG without processing admission"
@@ -151,16 +149,13 @@
     {
       "id": "canonical_memory_fanout",
       "risk": "high",
-      "sources": [
-        "backend/utils/memory/canonical_memory_adapter.py"
-      ],
+      "sources": ["backend/utils/memory/canonical_memory_adapter.py"],
       "tests": [
+        "tests/unit/test_ws_i_write_convergence.py",
         "tests/unit/test_ws_j_delete_privacy.py",
         "tests/unit/test_canonical_kg_promotion.py"
       ],
-      "checks": [
-        "no_large_tuple_results"
-      ],
+      "checks": ["no_large_tuple_results"],
       "invariants": [
         "domain writes use injected stores",
         "derived keyword/vector/KG fanout is either durable or explicitly recoverable"
@@ -185,9 +180,7 @@
         "tests/unit/test_ws_m_atom_keyword_index.py",
         "tests/unit/test_ws_n_graph_traversal.py"
       ],
-      "checks": [
-        "no_large_tuple_results"
-      ],
+      "checks": ["no_large_tuple_results"],
       "invariants": [
         "explicit submissions remain pending short-term until a content-bound processing receipt exists",
         "pending text is visible only to the first-party memory list and never to agent, developer, MCP, search, vector, or KG reads",
@@ -263,9 +256,7 @@
         "backend/scripts/sync_ledger_fence_cutover.py",
         ".github/workflows/sync_ledger_fence_cutover.yml"
       ],
-      "tests": [
-        "tests/unit/test_sync_ledger_fence_cutover.py"
-      ],
+      "tests": ["tests/unit/test_sync_ledger_fence_cutover.py"],
       "checks": [],
       "invariants": [
         "standby admission traffic reaches every sync surface before Cloud Tasks queues are paused",
@@ -285,9 +276,7 @@
         "tests/unit/test_vector_repair_outbox_worker.py",
         "tests/unit/test_vector_repair_outbox_infra.py"
       ],
-      "checks": [
-        "no_large_tuple_results"
-      ],
+      "checks": ["no_large_tuple_results"],
       "invariants": [
         "leased work is recoverable after worker death",
         "completed and dead-lettered work is never reclaimed"
@@ -326,15 +315,9 @@
     {
       "id": "projection_repair",
       "risk": "high",
-      "sources": [
-        "backend/database/projection_repair.py"
-      ],
-      "tests": [
-        "tests/unit/test_memory_ledger.py"
-      ],
-      "checks": [
-        "no_large_tuple_results"
-      ],
+      "sources": ["backend/database/projection_repair.py"],
+      "tests": ["tests/unit/test_memory_ledger.py"],
+      "checks": ["no_large_tuple_results"],
       "invariants": [
         "repair enqueue is idempotent",
         "repair processing uses injected stores and has retry/dead-letter accounting"
@@ -362,9 +345,7 @@
         "tests/unit/test_canonical_short_term_maintenance_cron.py",
         "tests/unit/test_memory_outbox_worker.py"
       ],
-      "checks": [
-        "no_large_tuple_results"
-      ],
+      "checks": ["no_large_tuple_results"],
       "invariants": [
         "every eligible short-term item receives exactly one terminal L2 route",
         "long-term admission and its graph assertion commit atomically against one exact short-term revision",
@@ -375,14 +356,8 @@
     {
       "id": "webhook_delivery_health",
       "risk": "high",
-      "sources": [
-        "backend/utils/webhooks.py",
-        "backend/database/webhook_health.py"
-      ],
-      "tests": [
-        "tests/unit/test_async_webhooks.py",
-        "tests/unit/test_webhook_auto_disable.py"
-      ],
+      "sources": ["backend/utils/webhooks.py", "backend/database/webhook_health.py"],
+      "tests": ["tests/unit/test_async_webhooks.py", "tests/unit/test_webhook_auto_disable.py"],
       "checks": [],
       "invariants": [
         "delivery failures are counted durably",
@@ -392,17 +367,9 @@
     {
       "id": "memory_ingestion_export_runner",
       "risk": "high",
-      "sources": [
-        "backend/utils/memory_ingestion/export_runner.py",
-        "backend/utils/memory_ingestion/pipeline.py"
-      ],
-      "tests": [
-        "tests/unit/test_memory_ingestion_pipeline.py",
-        "tests/unit/test_production_like_memory_model.py"
-      ],
-      "checks": [
-        "no_large_tuple_results"
-      ],
+      "sources": ["backend/utils/memory_ingestion/export_runner.py", "backend/utils/memory_ingestion/pipeline.py"],
+      "tests": ["tests/unit/test_memory_ingestion_pipeline.py", "tests/unit/test_production_like_memory_model.py"],
+      "checks": ["no_large_tuple_results"],
       "invariants": [
         "resume config mismatches fail closed",
         "failed shards remain visible in run summaries"
@@ -438,14 +405,10 @@
         "backend/utils/memory/**",
         "backend/utils/memory_ingestion/**"
       ],
-      "tests": [
-        "testing/e2e/test_canonical_memory_pipeline.py"
-      ],
-      "checks": [
-        "no_large_tuple_results"
-      ],
+      "tests": ["testing/e2e/test_canonical_memory_pipeline.py"],
+      "checks": ["no_large_tuple_results"],
       "invariants": [
-        "capture\u2192consolidate\u2192promote\u2192read with archive excluded from default reads",
+        "capture→consolidate→promote→read with archive excluded from default reads",
         "canonical fail-closed without legacy bleed"
       ]
     },
@@ -460,7 +423,6 @@
         "backend/utils/conversations/finalization_decision.py",
         "backend/utils/conversations/lifecycle.py",
         "backend/utils/conversations/finalizer.py",
-        "backend/utils/conversations/meeting_receipt.py",
         "backend/routers/transcribe.py",
         "backend/routers/conversation_finalization.py",
         "backend/routers/pusher.py",
@@ -479,18 +441,13 @@
         "tests/unit/test_finalization_decision.py",
         "tests/unit/test_check_conversation_lifecycle_writes.py",
         "tests/unit/test_conversation_finalization_jobs.py",
-        "tests/unit/test_developer_from_segments_idempotency.py",
         "tests/unit/test_recording_sessions.py",
-        "tests/unit/test_listen_finalization_cloud_tasks.py",
-        "tests/services/test_conversation_finalization.py"
+        "tests/unit/test_listen_finalization_cloud_tasks.py"
       ],
-      "checks": [
-        "conversation-lifecycle-write-guard"
-      ],
+      "checks": ["conversation-lifecycle-write-guard"],
       "invariants": [
         "only one finalizer claim succeeds for an in-progress conversation",
         "finalization outbox reconnects reuse one durable job and lease fences stale workers before any fanout",
-        "meeting treatment has one durable job-backed verdict and missing Chat intents are reconciled idempotently",
         "only utils.conversations.lifecycle may invoke lifecycle persistence primitives",
         "a recording session binds exactly one user-scoped conversation and emits only monotonic lifecycle envelopes",
         "merge rejects sources that are still processing",
@@ -658,6 +615,7 @@
       "sources": [
         "backend/charts/backend-listen/**",
         "backend/charts/pusher/**",
+        "backend/charts/agent-proxy/**",
         "backend/charts/llm-gateway/**",
         "backend/charts/diarizer/**",
         "backend/charts/parakeet/**",
@@ -665,32 +623,12 @@
         "backend/charts/vad/**",
         "backend/scripts/validate_rendered_deployment_contract.py"
       ],
-      "tests": [
-        "tests/unit/test_rendered_deployment_contract.py"
-      ],
+      "tests": ["tests/unit/test_rendered_deployment_contract.py"],
       "checks": [],
       "invariants": [
         "every first-party GKE workload renders an explicit immutable image identity",
         "rendered Deployments keep their environment-specific service account, secret references, port, and health probes",
         "chart defaults cannot fall back to an application-version or latest image tag"
-      ]
-    },
-    {
-      "id": "cloud_run_metrics_egress_deploy",
-      "risk": "high",
-      "sources": [
-        ".github/workflows/gcp_cloud_run_metrics_egress.yml",
-        "backend/charts/monitoring/prometheus-stackdriver-exporter/*_omi_cloud_run_metrics_exporter.yaml",
-        "backend/charts/monitoring/kube-prometheus-stack/*_omi_monitoring_values.yaml"
-      ],
-      "tests": [
-        "tests/unit/test_cloud_run_metrics_egress_workflow.py"
-      ],
-      "checks": [],
-      "invariants": [
-        "reviewed Cloud Run application exporter values are automatically installed in development after merge",
-        "production metrics egress deploys only through an explicit protected-environment dispatch from main",
-        "the isolated exporter and its Prometheus scrape configuration use pinned charts and atomic Helm upgrades"
       ]
     },
     {

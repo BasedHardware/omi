@@ -45,10 +45,6 @@ PUSHER_RECONNECT_MAX_DELAY = 60.0
 PENDING_REQUEST_TIMEOUT = 120
 MAX_RETRIES_PER_REQUEST = 3
 PENDING_REQUEST_RECOVERY_COOLDOWN = 300
-# Wire contract with utils.pusher_finalization: a claim rejected because a live
-# lease is already finalizing this job reports the non-terminal `job_leased`
-# error. That is healthy in-flight work, not a failed attempt.
-FINALIZATION_IN_FLIGHT_ERROR = 'job_leased'
 
 
 @dataclass
@@ -63,7 +59,6 @@ class ListenPusherSessionConfig:
     max_audio_buffer_size: int
     max_pending_requests: int
     max_pending_speaker_sample_requests: int
-    client_kind: str = 'unknown'
 
 
 @dataclass
@@ -323,15 +318,6 @@ class ListenPusherSession:
                             logger.error(
                                 f"Conversation processing failed terminally: {conversation_id} {self.uid} {self.session_id}"
                             )
-                        elif result.get("error") == FINALIZATION_IN_FLIGHT_ERROR:
-                            # Another dispatch of this same job holds a live lease
-                            # and is finalizing right now. Re-requesting it can only
-                            # be rejected again, so leave the pending entry on its
-                            # normal timeout instead of spending the session's whole
-                            # retry burst against healthy work.
-                            logger.info(
-                                f"Conversation finalization already in flight: {conversation_id} {self.uid} {self.session_id}"
-                            )
                         else:
                             pending = self.pending_conversation_requests.get(conversation_id)
                             if pending is not None:
@@ -518,11 +504,7 @@ class ListenPusherSession:
         try:
             pusher_sample_rate = TARGET_SAMPLE_RATE if self.config.is_multi_channel else self.config.sample_rate
             self.pusher_ws = await self.deps.connect_to_pusher(
-                self.uid,
-                pusher_sample_rate,
-                retries=5,
-                is_active=self.deps.is_active,
-                client_kind=self.config.client_kind,
+                self.uid, pusher_sample_rate, retries=5, is_active=self.deps.is_active
             )
             if self.pusher_ws is None:
                 return

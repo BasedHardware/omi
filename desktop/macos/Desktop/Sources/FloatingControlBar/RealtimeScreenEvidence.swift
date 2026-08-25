@@ -118,40 +118,13 @@ struct RealtimeScreenEvidenceAttachment {
 enum RealtimeScreenEvidenceFreshnessPolicy {
   static let maximumAge: TimeInterval = 5
 
-  /// The instant the budget starts counting from.
-  ///
-  /// The image is frozen at PTT-down, but the model cannot ask for it until the user stops
-  /// speaking — so measuring from capture spent the whole budget on the user's own sentence and
-  /// made screen grounding fail for any question longer than `maximumAge`. A held PTT key is not
-  /// screen drift: Omi's overlay is up and the user is talking, not switching applications.
-  /// The budget therefore covers provider latency after the utterance ends, which is the interval
-  /// during which the screen can actually change behind the frozen pixels.
-  static func referenceInstant(
-    _ descriptor: RealtimeScreenEvidenceDescriptor,
-    speechEndedAt: Date?
-  ) -> Date {
-    guard let speechEndedAt, speechEndedAt > descriptor.capturedAt else { return descriptor.capturedAt }
-    return speechEndedAt
-  }
-
-  static func isFresh(
-    _ descriptor: RealtimeScreenEvidenceDescriptor,
-    now: Date,
-    speechEndedAt: Date? = nil
-  ) -> Bool {
-    let age = now.timeIntervalSince(referenceInstant(descriptor, speechEndedAt: speechEndedAt))
+  static func isFresh(_ descriptor: RealtimeScreenEvidenceDescriptor, now: Date) -> Bool {
+    let age = now.timeIntervalSince(descriptor.capturedAt)
     return age >= 0 && age < maximumAge
   }
 
-  static func remainingLifetime(
-    _ descriptor: RealtimeScreenEvidenceDescriptor,
-    now: Date,
-    speechEndedAt: Date? = nil
-  ) -> TimeInterval {
-    max(
-      0,
-      referenceInstant(descriptor, speechEndedAt: speechEndedAt)
-        .addingTimeInterval(maximumAge).timeIntervalSince(now))
+  static func remainingLifetime(_ descriptor: RealtimeScreenEvidenceDescriptor, now: Date) -> TimeInterval {
+    max(0, descriptor.capturedAt.addingTimeInterval(maximumAge).timeIntervalSince(now))
   }
 }
 
@@ -412,7 +385,6 @@ enum RealtimeScreenGroundingPolicy {
     currentTurnEpoch: Int,
     enqueuedTurnEpoch: Int,
     callID: String,
-    speechEndedAt: Date? = nil,
     now: Date = Date()
   ) -> RealtimeScreenTransportEnqueueDecision {
     guard enqueuedTurnEpoch == currentTurnEpoch,
@@ -425,10 +397,7 @@ enum RealtimeScreenGroundingPolicy {
         currentTurnEpoch: currentTurnEpoch,
         callID: callID)
     else { return .notAdmitted }
-    guard
-      RealtimeScreenEvidenceFreshnessPolicy.isFresh(
-        attachment.descriptor, now: now, speechEndedAt: speechEndedAt)
-    else {
+    guard RealtimeScreenEvidenceFreshnessPolicy.isFresh(attachment.descriptor, now: now) else {
       return .evidenceExpired(attachment.descriptor)
     }
     return .accepted(RealtimeScreenObservationReceipt(request: request, descriptor: attachment.descriptor))

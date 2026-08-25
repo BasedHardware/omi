@@ -41,21 +41,6 @@ class WorkstreamProposal(BaseModel):
     anchor_task: TaskCreatePayload
 
 
-class CandidateCompatibilityMetadata(BaseModel):
-    """Released-client annotations retained outside the canonical task payload.
-
-    Staged-task clients historically supplied these fields for presentation and
-    ordering. They are carried on the Candidate envelope so the compatibility
-    projection remains lossless without weakening the strict task contract.
-    """
-
-    model_config = ConfigDict(extra='forbid')
-
-    metadata: Optional[str] = None
-    category: Optional[str] = None
-    relevance_score: Optional[int] = Field(default=None, ge=0, le=1000)
-
-
 class CandidateEnvelope(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
@@ -65,7 +50,6 @@ class CandidateEnvelope(BaseModel):
     workstream_id: Optional[StableId] = None
     evidence_refs: list[EvidenceRef] = Field(min_length=1)
     source_surface: str = Field(min_length=1, max_length=64)
-    compatibility: Optional[CandidateCompatibilityMetadata] = None
 
 
 class TaskCreateCandidate(CandidateEnvelope):
@@ -189,10 +173,6 @@ class CandidateCreate(RootModel[CandidateCreateUnion]):
     def source_surface(self) -> str:
         return self.root.source_surface
 
-    @property
-    def compatibility(self) -> Optional[CandidateCompatibilityMetadata]:
-        return self.root.compatibility
-
 
 class CandidateRecord(BaseModel):
     model_config = ConfigDict(extra='forbid')
@@ -208,7 +188,6 @@ class CandidateRecord(BaseModel):
     workstream_id: Optional[StableId] = None
     evidence_refs: list[EvidenceRef] = Field(min_length=1)
     source_surface: str = Field(min_length=1, max_length=64)
-    compatibility: Optional[CandidateCompatibilityMetadata] = None
     candidate_id: StableId
     status: CandidateStatus = CandidateStatus.pending
     account_generation: int = Field(ge=0)
@@ -218,10 +197,6 @@ class CandidateRecord(BaseModel):
     result_workstream_id: Optional[StableId] = None
     created_at: datetime
     resolved_at: Optional[datetime] = None
-    # A pending suggestion the user never acts on dies on its own. Cleared on
-    # resolution: an accepted/rejected Candidate is the audit link to its task
-    # and must outlive the suggestion window.
-    expires_at: Optional[datetime] = None
 
     @classmethod
     def __get_pydantic_json_schema__(cls, core_schema: Any, handler: GetJsonSchemaHandler) -> JsonSchemaValue:
@@ -290,7 +265,6 @@ class CandidateRecord(BaseModel):
             'result_workstream_id',
             'created_at',
             'resolved_at',
-            'expires_at',
         }
         proposal = CandidateCreate.model_validate(
             {key: item for key, item in value.items() if key not in record_fields and item is not None}
@@ -328,7 +302,6 @@ class CandidateRecord(BaseModel):
             'result_workstream_id',
             'created_at',
             'resolved_at',
-            'expires_at',
         }
         return CandidateCreate.model_validate(
             {
@@ -390,7 +363,6 @@ class CandidateMigrationRequest(BaseModel):
 
 __all__ = [
     'CandidateAction',
-    'CandidateCompatibilityMetadata',
     'CandidateCreate',
     'CandidateListResponse',
     'CandidateMigrationReport',

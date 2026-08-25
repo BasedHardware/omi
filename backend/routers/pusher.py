@@ -47,13 +47,11 @@ from utils.webhooks import (
 )
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.other.storage import maybe_invalidate_conversation_playback, upload_audio_chunks_batch
-from utils.journey_metrics_contract import ClientKind, bounded_client_kind
 from utils.metrics import (
     PUSHER_ACTIVE_WS_CONNECTIONS,
     PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS,
 )
 from utils.readiness import ReadinessGate
-from utils.observability.fallback import record_fallback
 from utils.observability.journeys import JourneyAttempt
 from utils.speaker_identification import extract_speaker_samples
 import logging
@@ -94,9 +92,7 @@ WS_RECEIVE_TIMEOUT = 300.0  # seconds
 BG_DRAIN_TIMEOUT = 30.0  # seconds
 
 
-async def _dispatch_transcript_item(
-    uid: str, segments: List[Dict[str, Any]], memory_id: Optional[str], client_kind: ClientKind = 'unknown'
-) -> None:
+async def _dispatch_transcript_item(uid: str, segments: List[Dict[str, Any]], memory_id: Optional[str]) -> None:
     async def run(sink: str, call: Awaitable[Any]) -> None:
         try:
             await call
@@ -104,8 +100,8 @@ async def _dispatch_transcript_item(
             logger.error('Error processing transcript %s type=%s uid=%s', sink, type(e).__name__, uid)
 
     await asyncio.gather(
-        run('integrations', trigger_realtime_integrations(uid, segments, memory_id, client_kind=client_kind)),
-        run('webhook', realtime_transcript_webhook(uid, segments, client_kind=client_kind)),
+        run('integrations', trigger_realtime_integrations(uid, segments, memory_id)),
+        run('webhook', realtime_transcript_webhook(uid, segments)),
     )
 
 
@@ -113,10 +109,8 @@ async def _websocket_util_trigger(
     websocket: WebSocket,
     uid: str,
     sample_rate: int = 8000,
-    client_kind: str = 'unknown',
 ) -> None:
     logger.info(f'_websocket_util_trigger {uid}')
-    resolved_client_kind = bounded_client_kind(client_kind)
 
     try:
         await websocket.accept()
@@ -191,16 +185,8 @@ async def _websocket_util_trigger(
         # Pending batches keyed by conversation_id
         pending: Dict[str, Dict[str, Any]] = {}
 
-        # Conversations deleted underneath us (e.g. discarded as empty at rollover).
-        # Their chunks can never be referenced, played or cleaned up again, so we
-        # stop uploading rather than leaving more orphans in the bucket (#11742).
-        deleted_conversations: set[str] = set()
-
         def _add_to_batch(chunk_info: PrivateCloudChunk) -> None:
             conv_id = chunk_info['conversation_id']
-            if conv_id in deleted_conversations:
-                audio_budget.release(len(chunk_info['data']))
-                return
             if conv_id not in pending:
                 bound_private_pending(pending, audio_budget)
                 pending[conv_id] = {
@@ -240,41 +226,29 @@ async def _websocket_util_trigger(
                     )
                     if audio_files:
                         files_payload = [af.model_dump() for af in audio_files]
-                        applied = await run_blocking(
+                        await run_blocking(
                             storage_executor,
                             conversations_db.update_conversation,
                             uid,
                             conv_id,
                             {'audio_files': files_payload},
                         )
-                        if applied:
-                            # Rebuild the conversation playback artifact if a stamped one
-                            # went stale. No stamp (the live-conversation common case) → no-op.
-                            if is_audio_merge_dispatch_enabled():
-                                stamp = await run_blocking(
-                                    storage_executor, conversations_db.get_conversation_audio_stamp, uid, conv_id
-                                )
-                                if stamp:
-                                    await run_blocking(
-                                        storage_executor,
-                                        maybe_invalidate_conversation_playback,
-                                        uid,
-                                        conv_id,
-                                        {'conversation_audio': stamp},
-                                        files_payload,
-                                        'pusher_flush',
-                                    )
-                        else:
-                            deleted_conversations.add(conv_id)
-                            logger.info(f"Conversation gone, stopped private cloud sync {uid} {conv_id}")
-                            record_fallback(
-                                component='pusher',
-                                from_mode='private_cloud_sync',
-                                to_mode='drop',
-                                reason='policy',
-                                outcome='exhausted',
-                                log=logger,
+                        # Rebuild the conversation playback artifact if a stamped one
+                        # went stale. No stamp (the live-conversation common case) → no-op.
+                        if is_audio_merge_dispatch_enabled():
+                            stamp = await run_blocking(
+                                storage_executor, conversations_db.get_conversation_audio_stamp, uid, conv_id
                             )
+                            if stamp:
+                                await run_blocking(
+                                    storage_executor,
+                                    maybe_invalidate_conversation_playback,
+                                    uid,
+                                    conv_id,
+                                    {'conversation_audio': stamp},
+                                    files_payload,
+                                    'pusher_flush',
+                                )
                 except Exception as e:
                     logger.error(f"Error updating audio files: {e} {uid} {conv_id}")
                 audio_budget.release(len(chunk_data))
@@ -384,7 +358,7 @@ async def _websocket_util_trigger(
             transcript_queue.clear()
 
             for item in batch:
-                await _dispatch_transcript_item(uid, item['segments'], item['memory_id'], resolved_client_kind)
+                await _dispatch_transcript_item(uid, item['segments'], item['memory_id'])
 
     async def process_audio_bytes_queue() -> None:
         """Event-driven consumer for audio bytes triggers (app integrations + webhooks)."""
@@ -548,7 +522,6 @@ async def _websocket_util_trigger(
                                 byok_keys,
                                 finalization_job_id if isinstance(finalization_job_id, str) else None,
                                 dispatch_generation if isinstance(dispatch_generation, int) else None,
-                                resolved_client_kind,
                             ),
                             name=f'pusher_finalization:{uid}:{conversation_id}',
                         )
@@ -776,6 +749,5 @@ async def websocket_endpoint_trigger(
     websocket: WebSocket,
     uid: str,
     sample_rate: int = 8000,
-    client_kind: str = 'unknown',
 ) -> None:
-    await _websocket_util_trigger(websocket, uid, sample_rate, client_kind)
+    await _websocket_util_trigger(websocket, uid, sample_rate)

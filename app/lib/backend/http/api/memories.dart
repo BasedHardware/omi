@@ -32,14 +32,12 @@ Future<bool> updateMemoryVisibilityServer(String memoryId, String visibility) as
   return response.statusCode == 200;
 }
 
-/// Result of [getMemories], carrying whether server-side device_scope was supported
-/// and whether the response was a partial page due to request-budget exhaustion.
+/// Result of [getMemories], carrying whether server-side device_scope was supported.
 class GetMemoriesResult {
   final List<Memory> memories;
   final bool deviceScopeSupported;
-  final bool truncated;
 
-  const GetMemoriesResult(this.memories, this.deviceScopeSupported, {this.truncated = false});
+  const GetMemoriesResult(this.memories, this.deviceScopeSupported);
 }
 
 List<Memory> _decodeMemoriesResponse(String body) {
@@ -59,11 +57,7 @@ Future<GetMemoriesResult> getMemoriesResult({int limit = 100, int offset = 0, bo
   }
   if (response.statusCode == 200) {
     try {
-      return GetMemoriesResult(
-        _decodeMemoriesResponse(response.body),
-        true,
-        truncated: isOmiListTruncated(response),
-      );
+      return GetMemoriesResult(_decodeMemoriesResponse(response.body), true);
     } catch (e) {
       Logger.error('Failed to decode memories 200 response: $e');
       return const GetMemoriesResult([], true);

@@ -10,40 +10,11 @@ cd "$SCRIPT_DIR"
 # Discovery, not a hardcoded list — a hardcoded list already orphaned one test
 # (test-prepare-desktop-bundle-native-deps.sh ran nowhere). Every tests/test-*.sh
 # runs, mirroring swift-test-suites.sh's auto-discovery of Swift suites.
-#
-# A few discovered scripts need something this loop cannot supply — a running
-# app's automation token, an installed named bundle path. Each declares that in
-# its own header with `# discovery-skip: <reason>`, so it opts out where it lives
-# and this runner derives the set. #11747: the CI step in
-# .github/workflows/desktop-swift-ci.yml hand-listed those two scripts and this
-# runner listed nothing, so `set -e` aborted here and the Python and Swift
-# sections below never ran. scripts/check-launcher-test-skips.py holds both loops
-# to the marked set.
-#
-# The section aggregates rather than aborting: a failure here is recorded and
-# the run continues, so one red launcher script no longer costs the whole Python
-# and Swift stages. #11747 fixed the membership that made that reachable without
-# a real failure, but any genuinely failing script reproduced the same blackout
-# — an operator saw one error and no signal at all from the suites below. The
-# aggregate is reported and exits non-zero at the very end, mirroring
-# backend/test.sh's per-file collection.
-failed_launcher_checks=()
 for t in tests/test-*.sh; do
   echo "== $t"
-  skip_reason="$(sed -n '1,10s/^# discovery-skip: *//p' "$t" | head -1)"
-  if [[ -n "$skip_reason" ]]; then
-    echo "  skip: $skip_reason"
-    continue
-  fi
-  if ! bash "$t"; then
-    echo "  FAIL: $t"
-    failed_launcher_checks+=("$t")
-  fi
+  bash "$t"
 done
-if ! python3 scripts/check-e2e-flow-coverage.py --strict; then
-  echo "  FAIL: scripts/check-e2e-flow-coverage.py --strict"
-  failed_launcher_checks+=("scripts/check-e2e-flow-coverage.py --strict")
-fi
+python3 scripts/check-e2e-flow-coverage.py --strict
 echo ""
 
 echo "=== Python Desktop Backend Tests ==="
@@ -60,7 +31,8 @@ fi
   tests/unit/test_desktop_proxy.py \
   tests/unit/test_desktop_realtime.py \
   tests/unit/test_desktop_screen_crisp.py \
-  tests/unit/test_desktop_tts_updates.py
+  tests/unit/test_desktop_tts_updates.py \
+  tests/unit/test_agent_vm_protocol.py
 echo ""
 
 echo "=== Swift App Tests (parallel per-suite process isolation) ==="
@@ -81,11 +53,5 @@ cd "$SCRIPT_DIR"
 # known-red tests require an explicit issue, reason, and skip-count change.
 "$SCRIPT_DIR/scripts/swift-test-suites.sh"
 echo ""
-
-if (( ${#failed_launcher_checks[@]} > 0 )); then
-  echo "FAIL: desktop launcher script checks failed:" >&2
-  printf '  %s\n' "${failed_launcher_checks[@]}" >&2
-  exit 1
-fi
 
 echo "All desktop tests passed."

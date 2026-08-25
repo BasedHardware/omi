@@ -17,21 +17,12 @@ final class UpdateFailureDiagnosticsTests: XCTestCase {
     )
   }
 
-  func testManualDownloadURLIgnoresLegacyChannelDefault() {
-    // The sidecar design pins the channel to bundle identity; the old
-    // update_channel default must no longer steer a stable install to beta.
+  func testManualDownloadURLPreservesBetaChannel() {
     UserDefaults.standard.set("beta", forKey: "update_channel")
 
     XCTAssertEqual(
       AppBuild.manualDownloadURL.absoluteString,
-      "https://api.omi.me/v2/desktop/download/latest?channel=stable"
-    )
-  }
-
-  func testOmiBetaInstallURLRequestsBetaIdentity() {
-    XCTAssertEqual(
-      AppBuild.omiBetaInstallURL.absoluteString,
-      "https://api.omi.me/v2/desktop/download/latest?channel=beta&identity=beta"
+      "https://api.omi.me/v2/desktop/download/latest?channel=beta"
     )
   }
 
@@ -166,14 +157,17 @@ final class UpdateFailureDiagnosticsTests: XCTestCase {
     XCTAssertEqual(properties["update_failure_reason"] as? String, "network")
     XCTAssertEqual(properties["nsurl_error_code"] as? Int, NSURLErrorTimedOut)
     XCTAssertEqual(properties["failing_url_host"] as? String, "api.omi.me")
-    XCTAssertNil(properties["failing_url_path"])
+    XCTAssertEqual(properties["failing_url_path"] as? String, "/v2/desktop/appcast.xml")
     XCTAssertEqual(properties["source_app_version"] as? String, "0.12.0")
     XCTAssertEqual(properties["source_app_build"] as? String, "12000")
     XCTAssertEqual(properties["appcast_url_host"] as? String, "api.omi.me")
-    XCTAssertEqual(properties["error"] as? String, "network")
-    XCTAssertNil(properties["update_failure_message"])
-    XCTAssertNil(properties["error_chain_domains"])
-    XCTAssertNil(properties["error_chain_codes"])
+    // Regression: Update Check Failed must carry a non-empty error message so the
+    // daily report's error_or_message column is populated (was blank on 0.12.0).
+    XCTAssertEqual(
+      properties["error"] as? String, "An error occurred in retrieving update information.")
+    XCTAssertEqual(
+      properties["update_failure_message"] as? String,
+      "An error occurred in retrieving update information.")
   }
 
   func testAnalyticsPropertiesOmitRawPath() {
@@ -198,7 +192,7 @@ final class UpdateFailureDiagnosticsTests: XCTestCase {
     XCTAssertNil(properties["bundle_path"])
   }
 
-  func testAnalyticsPropertiesFallbackErrorUsesClosedReason() {
+  func testAnalyticsPropertiesFallbackMessageIsNonEmpty() {
     let diagnostics = UpdateFailureDiagnostics(
       reason: .unknown,
       message: "",
@@ -220,9 +214,9 @@ final class UpdateFailureDiagnosticsTests: XCTestCase {
     )
 
     let properties = diagnostics.analyticsProperties
-    XCTAssertEqual(properties["error"] as? String, "unknown")
+    XCTAssertEqual(properties["error"] as? String, "SUSparkleErrorDomain 2001")
     XCTAssertEqual(properties["phase"] as? String, "unknown")
-    XCTAssertNil(properties["update_failure_message"])
+    XCTAssertEqual(properties["update_failure_message"] as? String, "SUSparkleErrorDomain 2001")
     XCTAssertEqual(properties["update_failure_phase"] as? String, "unknown")
   }
 }

@@ -323,7 +323,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get searchApps => 'Шукати додатки...';
 
   @override
-  String get myApps => 'Створено мною';
+  String get myApps => 'Мої додатки';
 
   @override
   String get installedApps => 'Встановлені додатки';
@@ -9862,63 +9862,4 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Відкрити магазин';
-
-  @override
-  String get chatScopeToday => 'Сьогодні';
-
-  @override
-  String get chatScopeThisWeek => 'Цього тижня';
-
-  @override
-  String chatScopeAbout(String title) {
-    return 'Про: $title';
-  }
-
-  @override
-  String get askAboutThisConversation => 'Запитати про це';
-
-  @override
-  String get sendRawAudioToOmi => 'Надсилати необроблений звук до Omi';
-
-  @override
-  String get sendRawAudioToOmiDescription =>
-      'Вимкніть, щоб необроблений звук не надсилався до Omi. Транскрипти й дані, потрібні хмарним функціям, усе ще можуть надсилатися до Omi.';
-
-  @override
-  String get findDevice => 'Знайти';
-
-  @override
-  String get diagnosticsShareFailed => 'Не вдалося поділитися діагностикою. Спробуйте ще раз.';
-
-  @override
-  String get appDisabledTitle => 'Цей застосунок вимкнено, і його не можна встановити.';
-
-  @override
-  String get appDisabledWebhookFailures => 'Його endpoint не працював 72 години поспіль, тому доставку зупинено.';
-
-  @override
-  String get appDisabledGeneric => 'Його вимкнула Omi.';
-
-  @override
-  String get appDisabledOwnerHint =>
-      'Спершу виправте endpoint — повторне ввімкнення перевіряє кожну налаштовану URL-адресу.';
-
-  @override
-  String get appReEnable => 'Увімкнути знову';
-
-  @override
-  String get appReEnableFailedTitle => 'Не вдалося ввімкнути знову';
-
-  @override
-  String get appReEnableFailedBody => 'Не вдалося повторно ввімкнути цей застосунок. Спробуйте ще раз.';
-
-  @override
-  String appDisabledOn(String date) {
-    return 'Вимкнено $date.';
-  }
-
-  @override
-  String appDisabledLastError(String error) {
-    return 'Остання помилка: $error.';
-  }
 }

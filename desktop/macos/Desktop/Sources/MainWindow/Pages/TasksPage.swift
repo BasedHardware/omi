@@ -191,8 +191,8 @@ enum TaskFilterTag: String, CaseIterable, Identifiable, Hashable {
     switch self {
     case .todo: return !task.completed
     case .done: return task.completed
-    case .removedByAI: return task.isRetired && task.deletedBy != "user"
-    case .removedByMe: return task.isRetired && task.deletedBy == "user"
+    case .removedByAI: return task.deleted == true && task.deletedBy != "user"
+    case .removedByMe: return task.deleted == true && task.deletedBy == "user"
     case .last7Days:
       let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date())!
       if let dueAt = task.dueAt {
@@ -340,9 +340,6 @@ struct DynamicFilterTag: Identifiable, Hashable {
 @MainActor
 class TasksViewModel: ObservableObject {
   typealias SortOrderUpdate = (id: String, sortOrder: Int, indentLevel: Int)
-  typealias SelectionSnapshotLoader = (_ completed: Bool) async throws -> [String]
-  typealias SearchLoader = (_ query: String, _ includeDeleted: Bool) async throws -> [TaskActionItem]
-  typealias BulkDeleteOperation = (_ ids: [String]) async -> TasksStore.BulkDeleteOutcome
 
   struct SortOrderSyncOperations: Sendable {
     let updateStorage:
@@ -380,17 +377,12 @@ class TasksViewModel: ObservableObject {
   }
 
   // Use shared TasksStore as single source of truth
-  let store = TasksStore.shared
+  private let store = TasksStore.shared
   private let ownerIDProvider: @MainActor () -> String?
   private let sortOrderSyncOperations: SortOrderSyncOperations
-  let selectionSnapshotLoader: SelectionSnapshotLoader
-  let searchLoader: SearchLoader
-  let bulkDeleteOperation: BulkDeleteOperation
-  let bulkDeleteConfirmation: (Int) -> Bool
   private let orderingDefaults: UserDefaults
   private var activeOwnerID: String?
   private var ownerGeneration: UInt64 = 0
-  var selectionOwnerGeneration: UInt64 = 0
   private var suppressOrderingPersistence = false
 
   /// Set by TasksPage so delete operations can purge in-memory chat states.
@@ -400,42 +392,20 @@ class TasksViewModel: ObservableObject {
   @Published var searchText = "" {
     didSet {
       if oldValue != searchText {
-        searchRequestGeneration &+= 1
-        let requestGeneration = searchRequestGeneration
-        let query = normalizedSearchQuery
-        let includeDeleted = selectedTags.contains(.removedByAI) || selectedTags.contains(.removedByMe)
-        let oldQuery = oldValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        let oldScope: SelectionScope =
-          oldQuery.isEmpty ? .taskBucket(completed: showCompleted) : .search(oldQuery)
-        if oldScope != currentSelectionScope {
-          clearMultiSelectionForScopeChange()
-        }
-        completedSearchRequestGeneration = nil
         displayLimit = 100
         keyboardSelectedTaskId = nil
         isInlineCreating = false
-        Task {
-          await performSearch(
-            query: query,
-            includeDeleted: includeDeleted,
-            generation: requestGeneration
-          )
-        }
+        Task { await performSearch() }
       }
     }
   }
   @Published private(set) var isSearching = false
   @Published private(set) var searchResults: [TaskActionItem] = []
-  var searchRequestGeneration: UInt64 = 0
-  var completedSearchRequestGeneration: UInt64?
 
   // UI-specific state
   @Published var showCompleted = false {
     didSet {
       if oldValue != showCompleted {
-        if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-          clearMultiSelectionForScopeChange()
-        }
         // Load appropriate tasks from server when switching tabs
         Task {
           if showCompleted {
@@ -505,10 +475,6 @@ class TasksViewModel: ObservableObject {
   @Published var isInlineCreating = false
   @Published var inlineCreateAfterTaskId: String?
   @Published var editingTaskId: String?
-  /// Task whose detail panel is open. Owned here rather than in the page so the
-  /// panel re-reads the live task after an edit, and so the automation bridge can
-  /// open it the same way a row click does.
-  @Published var detailPanelTaskID: String?
   var hoveredTaskId: String?
   @Published var animateToggleTaskId: String?
   @Published var isAnyTaskEditing = false
@@ -537,17 +503,7 @@ class TasksViewModel: ObservableObject {
   var undoToastDismissTask: Task<Void, Never>?
 
   // Multi-select state
-  @Published var multiSelection = TaskMultiSelectionState()
-  @Published var isSelectingAllTasks = false
-  @Published var bulkTaskErrorMessage: String?
-  /// Invalidates async selection/delete completions when the user changes
-  /// owner, scope, mode, or selected IDs while an operation is suspended.
-  var selectionOperationGeneration: UInt64 = 0
-  var bulkDeleteInFlight = false
-  var selectionAllOperationToken: UInt64 = 0
-  var activeSelectionAllOperationToken: UInt64?
-  var bulkDeleteOperationToken: UInt64 = 0
-  var activeBulkDeleteOperationToken: UInt64?
+  @Published private(set) var multiSelection = TaskMultiSelectionState()
 
   var isMultiSelectMode: Bool { multiSelection.isActive }
   var selectedTaskIds: Set<String> { multiSelection.selectedIDs }
@@ -558,31 +514,8 @@ class TasksViewModel: ObservableObject {
     return displayTasks.map(\.id)
   }
 
-  /// Selection snapshots remain authoritative despite paginated presentation rows.
-  var authoritativeSelectionTaskIDs = Set<String>()
-  var selectedAllScope: SelectionScope?
-  var selectedAllScopeTaskIDs = Set<String>()
-
-  enum SelectionScope: Equatable {
-    case search(String)
-    case taskBucket(completed: Bool)
-  }
-
-  var currentSelectionScope: SelectionScope {
-    let query = normalizedSearchQuery
-    if !query.isEmpty {
-      return .search(query)
-    }
-    return .taskBucket(completed: showCompleted)
-  }
-
-  var normalizedSearchQuery: String {
-    searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-  }
-
-  var allAvailableTaskIDs: Set<String> {
+  private var allAvailableTaskIDs: Set<String> {
     Set(store.incompleteTasks.map(\.id) + store.completedTasks.map(\.id))
-      .union(authoritativeSelectionTaskIDs)
   }
 
   // MARK: - Drag-and-Drop Reordering (like Flutter)
@@ -684,7 +617,7 @@ class TasksViewModel: ObservableObject {
   private(set) var hasMoreFilteredResults = false
 
   /// Full filtered results before display cap (kept for pagination)
-  var allFilteredDisplayTasks: [TaskActionItem] = []
+  private var allFilteredDisplayTasks: [TaskActionItem] = []
 
   /// Current display limit for filtered/search results
   private var displayLimit = 100
@@ -715,32 +648,10 @@ class TasksViewModel: ObservableObject {
       RuntimeOwnerIdentity.currentOwnerId()
     },
     sortOrderSyncOperations: SortOrderSyncOperations = .live,
-    selectionSnapshotLoader: SelectionSnapshotLoader? = nil,
-    searchLoader: SearchLoader? = nil,
-    bulkDeleteOperation: BulkDeleteOperation? = nil,
-    bulkDeleteConfirmation: ((Int) -> Bool)? = nil,
     orderingDefaults: UserDefaults = .standard
   ) {
     self.ownerIDProvider = ownerIDProvider
     self.sortOrderSyncOperations = sortOrderSyncOperations
-    self.selectionSnapshotLoader =
-      selectionSnapshotLoader ?? { completed in
-        try await TasksStore.shared.selectionSnapshotIDs(completed: completed)
-      }
-    self.searchLoader =
-      searchLoader ?? { query, includeDeleted in
-        try await ActionItemStorage.shared.searchLocalActionItems(
-          query: query,
-          limit: 10000,
-          completed: nil,
-          includeDeleted: includeDeleted
-        )
-      }
-    self.bulkDeleteOperation =
-      bulkDeleteOperation ?? { ids in
-        await TasksStore.shared.deleteMultipleTasks(ids: ids)
-      }
-    self.bulkDeleteConfirmation = bulkDeleteConfirmation ?? Self.confirmBulkDelete
     self.orderingDefaults = orderingDefaults
     activeOwnerID = Self.normalizedOwnerID(ownerIDProvider())
     if let activeOwnerID {
@@ -818,7 +729,6 @@ class TasksViewModel: ObservableObject {
 
   private func resetOwnerOrderingProjection(scheduleOwnerActivation: Bool = true) {
     ownerGeneration &+= 1
-    selectionOwnerGeneration &+= 1
     sortOrderMutationGeneration &+= 1
     sortOrderSyncTask?.cancel()
     sortOrderSyncTask = nil
@@ -841,16 +751,6 @@ class TasksViewModel: ObservableObject {
     pendingRebalanceCategoriesForRetry = []
     pendingIndentTaskVersionsForRetry = [:]
     sortOrderSyncFailure = nil
-    multiSelection.exit()
-    authoritativeSelectionTaskIDs.removeAll()
-    selectedAllScope = nil
-    selectedAllScopeTaskIDs.removeAll()
-    isSelectingAllTasks = false
-    bulkTaskErrorMessage = nil
-    invalidateSelectionOperation()
-    searchRequestGeneration &+= 1
-    searchResults.removeAll()
-    isSearching = false
     suppressDatabaseRequery = false
     suppressRequeryGeneration &+= 1
     removeUnscopedLegacyOrderingDefaults()
@@ -957,7 +857,7 @@ class TasksViewModel: ObservableObject {
   /// persistence path separately loads every local row before rebasing it.
   private func getActiveScopeOrderedTasks(for category: TaskCategory) -> [TaskActionItem] {
     var scope: [TaskActionItem] = []
-    if !normalizedSearchQuery.isEmpty {
+    if !searchText.isEmpty {
       scope.append(contentsOf: searchResults)
     } else if !filteredFromDatabase.isEmpty {
       scope.append(contentsOf: filteredFromDatabase)
@@ -1128,7 +1028,7 @@ class TasksViewModel: ObservableObject {
     allLocalTasks: [TaskActionItem]
   ) -> [TaskActionItem] {
     var scope: [TaskActionItem] = []
-    if !normalizedSearchQuery.isEmpty {
+    if !searchText.isEmpty {
       scope.append(contentsOf: searchResults)
     } else if !filteredFromDatabase.isEmpty {
       scope.append(contentsOf: filteredFromDatabase)
@@ -1570,25 +1470,8 @@ class TasksViewModel: ObservableObject {
 
   /// Find a task by ID across all store arrays
   func findTask(_ id: String) -> TaskActionItem? {
-    store.incompleteTasks.first(where: { $0.matchesTaskIdentifier(id) })
-      ?? store.completedTasks.first(where: { $0.matchesTaskIdentifier(id) })
-  }
-
-  /// Accept a Suggested candidate, then mark the created task complete.
-  /// Reloads once more if the first fetch races the accept receipt.
-  func completeNewlyCreatedTask(id: String) async {
-    await loadTasks()
-    if await completeLoadedTask(id: id) { return }
-    await loadTasks()
-    _ = await completeLoadedTask(id: id)
-  }
-
-  private func completeLoadedTask(id: String) async -> Bool {
-    guard let task = findTask(id) else { return false }
-    if !task.completed {
-      await toggleTask(task)
-    }
-    return true
+    store.incompleteTasks.first(where: { $0.id == id })
+      ?? store.completedTasks.first(where: { $0.id == id })
   }
 
   /// Move keyboard selection up or down
@@ -1628,8 +1511,8 @@ class TasksViewModel: ObservableObject {
 
     if isMultiSelectMode {
       if modifiers == .command && keyCode == 0 {
-        Task { @MainActor [weak self] in
-          await self?.selectAllTasks()
+        mutateMultiSelection { state in
+          _ = state.handleKeyboard(.selectAll, visibleIDs: visibleTaskIDsForSelection)
         }
         return true
       }
@@ -1746,7 +1629,7 @@ class TasksViewModel: ObservableObject {
     // Skip when chat panel is open — the input may briefly lose focus after
     // sending a message and we don't want Enter to accidentally trigger here.
     if !chatOpen && keyCode == 36 && modifiers.isEmpty && keyboardSelectedTaskId != nil {
-      if !normalizedSearchQuery.isEmpty { return false }
+      if !searchText.isEmpty { return false }
 
       let now = Date()
       if let last = lastEnterPressTime, now.timeIntervalSince(last) < 0.4 {
@@ -2382,17 +2265,12 @@ class TasksViewModel: ObservableObject {
     recomputeDisplayCaches()
   }
 
-  /// Search SQLite while fencing results to the captured request generation.
-  private func performSearch(
-    query: String,
-    includeDeleted: Bool,
-    generation: UInt64
-  ) async {
-    guard generation == searchRequestGeneration, normalizedSearchQuery == query else { return }
+  /// Perform search against SQLite database
+  private func performSearch() async {
+    let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
 
     if query.isEmpty {
       searchResults = []
-      isSearching = false
       recomputeDisplayCaches()
       return
     }
@@ -2400,18 +2278,20 @@ class TasksViewModel: ObservableObject {
     isSearching = true
 
     do {
-      let results = try await searchLoader(query, includeDeleted)
-      guard generation == searchRequestGeneration, normalizedSearchQuery == query else { return }
+      // Search across all tasks in SQLite
+      let results = try await ActionItemStorage.shared.searchLocalActionItems(
+        query: query,
+        limit: 10000,
+        completed: nil,  // Search all
+        includeDeleted: selectedTags.contains(.removedByAI) || selectedTags.contains(.removedByMe)
+      )
       searchResults = results
-      completedSearchRequestGeneration = generation
       log("TasksViewModel: Search found \(results.count) tasks for '\(query)'")
     } catch {
-      guard generation == searchRequestGeneration, normalizedSearchQuery == query else { return }
       logError("TasksViewModel: Search failed", error: error)
       searchResults = []
     }
 
-    guard generation == searchRequestGeneration, normalizedSearchQuery == query else { return }
     isSearching = false
     recomputeDisplayCaches()
   }
@@ -2419,16 +2299,17 @@ class TasksViewModel: ObservableObject {
   /// Whether we're currently in search mode (the only filtered mode left —
   /// the status toggle is a view switch, not a filter, matching mobile)
   var isInFilteredMode: Bool {
-    !normalizedSearchQuery.isEmpty
+    !searchText.isEmpty
   }
 
   /// Recompute display-related caches when filters or sort change
-  func recomputeDisplayCaches() {
+  private func recomputeDisplayCaches() {
     log("RENDER: recomputeDisplayCaches called")
     // Determine the source of tasks based on current state
     let sourceTasks: [TaskActionItem]
 
-    if !normalizedSearchQuery.isEmpty {
+    if !searchText.isEmpty {
+      // Searching: use search results from SQLite
       sourceTasks = searchResults
     } else if !filteredFromDatabase.isEmpty {
       // Non-status filters applied: use SQLite filtered results
@@ -2444,7 +2325,7 @@ class TasksViewModel: ObservableObject {
     let hasDateFilters = selectedTags.contains(where: { $0.group == .date })
     let filterContext = TaskFilterTag.FilterContext()
     var filteredTasks: [TaskActionItem]
-    if !normalizedSearchQuery.isEmpty {
+    if !searchText.isEmpty {
       filteredTasks = applyNonStatusTagFilters(sourceTasks, context: filterContext)
     } else if hasSQLiteFilters || hasDateFilters {
       // SQLite already filtered by category/source/priority/date when filteredFromDatabase is populated.
@@ -2486,7 +2367,7 @@ class TasksViewModel: ObservableObject {
       // Mobile-parity gate (Flutter _categorizeItems): the categorized list
       // shows only the active view's tasks — To Do shows incomplete, Done
       // shows completed. Search bypasses the gate like mobile's flat search.
-      if normalizedSearchQuery.isEmpty && task.completed != showCompleted {
+      if searchText.isEmpty && task.completed != showCompleted {
         continue
       }
       let category = categoryFor(
@@ -2523,7 +2404,7 @@ class TasksViewModel: ObservableObject {
       // Mobile-parity gate (Flutter _categorizeItems): the categorized list
       // shows only the active view's tasks — To Do shows incomplete, Done
       // shows completed. Search bypasses the gate like mobile's flat search.
-      if normalizedSearchQuery.isEmpty && task.completed != showCompleted {
+      if searchText.isEmpty && task.completed != showCompleted {
         continue
       }
       let category = categoryFor(
@@ -2545,10 +2426,10 @@ class TasksViewModel: ObservableObject {
     guard !statusTags.isEmpty else { return tasks }
 
     return tasks.filter { task in
-      if statusTags.contains(.removedByAI) && task.isRetired && task.deletedBy != "user" { return true }
-      if statusTags.contains(.removedByMe) && task.isRetired && task.deletedBy == "user" { return true }
+      if statusTags.contains(.removedByAI) && task.deleted == true && task.deletedBy != "user" { return true }
+      if statusTags.contains(.removedByMe) && task.deleted == true && task.deletedBy == "user" { return true }
       if statusTags.contains(.done) && task.completed { return true }
-      if statusTags.contains(.todo) && !task.completed && !task.isRetired { return true }
+      if statusTags.contains(.todo) && !task.completed && task.deleted != true { return true }
       return false
     }
   }
@@ -2769,7 +2650,7 @@ class TasksViewModel: ObservableObject {
   // MARK: - Surgical Display Updates
 
   /// Remove a single task from displayTasks without full recompute
-  func removeFromDisplay(_ taskId: String) {
+  private func removeFromDisplay(_ taskId: String) {
     displayTasks.removeAll { $0.id == taskId }
     for category in TaskCategory.allCases {
       categorizedTasks[category]?.removeAll { $0.id == taskId }
@@ -2786,6 +2667,84 @@ class TasksViewModel: ObservableObject {
         categorizedTasks[category]?[index] = updated
       }
     }
+  }
+
+  // MARK: - Multi-Select
+
+  func mutateMultiSelection(_ mutation: (inout TaskMultiSelectionState) -> Void) {
+    var next = multiSelection
+    mutation(&next)
+    multiSelection = next
+  }
+
+  private func reconcileMultiSelection() {
+    guard multiSelection.isActive else { return }
+    let visibleIDs = visibleTaskIDsForSelection
+    mutateMultiSelection { state in
+      state.reconcile(visibleIDs: visibleIDs, availableTaskIDs: allAvailableTaskIDs)
+    }
+  }
+
+  func toggleMultiSelectMode() {
+    mutateMultiSelection { state in
+      if state.isActive {
+        state.exit()
+      } else {
+        state.enter()
+        state.reconcile(visibleIDs: visibleTaskIDsForSelection)
+      }
+    }
+  }
+
+  func toggleTaskSelection(
+    _ task: TaskActionItem,
+    modifiers: TaskMultiSelectionModifiers = .command
+  ) {
+    mutateMultiSelection { state in
+      _ = state.click(task.id, modifiers: modifiers, visibleIDs: visibleTaskIDsForSelection)
+    }
+  }
+
+  func toggleSelectAllVisibleTasks() {
+    mutateMultiSelection { state in
+      state.toggleSelectAll(visibleIDs: visibleTaskIDsForSelection)
+    }
+  }
+
+  var allVisibleTasksSelected: Bool {
+    let visibleIDs = visibleTaskIDsForSelection
+    return !visibleIDs.isEmpty && visibleIDs.allSatisfy { multiSelection.selectedIDs.contains($0) }
+  }
+
+  func deleteSelectedTasks() async {
+    let orderedIDs = multiSelection.selectedIDs(in: visibleTaskIDsForSelection)
+    guard !orderedIDs.isEmpty else { return }
+    guard Self.confirmBulkDelete(count: orderedIDs.count) else { return }
+
+    for id in orderedIDs {
+      removeFromDisplay(id)
+      chatCoordinator?.purgeState(for: id)
+    }
+    // One batch delete compacts relevance scores highest-first after all rows
+    // are removed; per-task delete would compact against stale score ordering.
+    await store.deleteMultipleTasks(ids: orderedIDs)
+
+    mutateMultiSelection { state in
+      state.removeSelectedIDs(Set(orderedIDs))
+      if state.selectionCount == 0 {
+        state.exit()
+      }
+    }
+  }
+
+  private static func confirmBulkDelete(count: Int) -> Bool {
+    let alert = NSAlert()
+    alert.messageText = "Delete \(count) tasks?"
+    alert.informativeText = "This cannot be undone."
+    alert.alertStyle = .warning
+    alert.addButton(withTitle: "Delete")
+    alert.addButton(withTitle: "Cancel")
+    return alert.runModal() == .alertFirstButtonReturn
   }
 
   func createTask(description: String, dueAt: Date?, priority: String?, tags: [String]? = nil) async {
@@ -2831,21 +2790,6 @@ class TasksViewModel: ObservableObject {
         "synced": stableId.hasPrefix("local_") ? "false" : "true",
         "description": created.description,
       ]
-    }
-
-    registry.register(
-      name: "open_task_details",
-      summary: "Open a task's detail panel by id — the same panel a row click opens. Omit the id to close it.",
-      params: ["id"]
-    ) { [weak self] params in
-      guard let self else { return ["error": "tasks view model deallocated"] }
-      guard let id = params["id"], !id.isEmpty else {
-        self.detailPanelTaskID = nil
-        return ["open": "false"]
-      }
-      guard let task = self.findTask(id) else { return ["error": "task not found: \(id)"] }
-      self.detailPanelTaskID = task.id
-      return ["open": "true", "id": task.id, "priority": task.priority ?? ""]
     }
 
     registry.register(
@@ -3225,7 +3169,7 @@ class TasksViewModel: ObservableObject {
         priority: task.priority,
         metadata: task.metadata,
         category: task.category,
-        deleted: task.isRetired,
+        deleted: task.deleted,
         deletedBy: task.deletedBy,
         deletedAt: task.deletedAt,
         deletedReason: task.deletedReason,
@@ -3310,45 +3254,24 @@ class TasksViewModel: ObservableObject {
     let cal = Calendar.current
     let startOfToday = cal.startOfDay(for: Date())
     switch category {
-    case .today: return Self.todayDueAt()
+    case .today: return cal.date(bySettingHour: 23, minute: 59, second: 0, of: Date())
     case .tomorrow: return cal.date(byAdding: .day, value: 1, to: startOfToday)
     case .later: return cal.date(byAdding: .day, value: 7, to: startOfToday)
     case .noDeadline: return nil
     }
   }
 
-  /// Due date assigned by the composer's "Today" button: end of the current day.
-  static func todayDueAt(now: Date = Date(), calendar: Calendar = .current) -> Date? {
-    calendar.date(bySettingHour: 23, minute: 59, second: 0, of: now)
-  }
-
   /// Create an inline task below the specified task
-  func createInlineTask(description: String, afterTaskId: String?, forceToday: Bool = false) async {
+  func createInlineTask(description: String, afterTaskId: String?) async {
     let context = contextForInlineCreate()
     let created = await store.createTask(
       description: description,
-      dueAt: forceToday ? Self.todayDueAt() : context.dueAt,
+      dueAt: context.dueAt,
       priority: nil,
       tags: context.tags.isEmpty ? nil : context.tags
     )
 
     if let created = created {
-      if forceToday {
-        // "Today" button: the task belongs to the Today section regardless of
-        // where the composer was opened. Position after the anchor task when it
-        // is already in Today, otherwise surface at the top of Today.
-        if let afterId = afterTaskId,
-          let afterIndex = getOrderedTasks(for: .today).firstIndex(where: { $0.id == afterId })
-        {
-          moveTask(created, toIndex: afterIndex + 1, inCategory: .today)
-        } else {
-          moveTask(created, toIndex: 0, inCategory: .today)
-        }
-        keyboardSelectedTaskId = created.id
-        isInlineCreating = false
-        inlineCreateAfterTaskId = nil
-        return
-      }
       if let afterId = afterTaskId {
         // Position the new task after afterTaskId in category order
         for category in TaskCategory.allCases {
@@ -3381,7 +3304,7 @@ class TasksViewModel: ObservableObject {
 
 struct TasksPage: View {
   @ObservedObject var viewModel: TasksViewModel
-  @ObservedObject private var suggestedStore = SuggestedTasksStore.shared
+  @StateObject private var suggestedStore = SuggestedTasksStore()
   var chatProvider: ChatProvider?
 
   // Chat panel state
@@ -3393,9 +3316,7 @@ struct TasksPage: View {
   /// highlight the correct item without observing the full coordinator.
   @State private var activeChatTaskId: String? = nil
   @State private var showChatPanel = false
-  private var taskDetailTask: TaskActionItem? {
-    viewModel.detailPanelTaskID.flatMap { viewModel.findTask($0) }
-  }
+  @State private var taskDetailTask: TaskActionItem?
   @AppStorage("tasksChatPanelWidth") private var chatPanelWidth: Double = 400
   /// The window width before the chat panel was opened, so we can restore it exactly.
   /// Persisted so we can restore on app relaunch if the user quit with chat open.
@@ -3403,10 +3324,6 @@ struct TasksPage: View {
   /// Board (Notion-style status columns) vs the classic grouped list. Board is
   /// the default hero view; the list stays for fast keyboard-driven triage.
   @AppStorage("tasksViewIsBoard") private var tasksViewIsBoard = true
-
-  /// Suggested Candidates stay collapsed until the user opens them.
-  @AppStorage(DefaultsKey.tasksSuggestionsSectionExpanded.rawValue)
-  private var suggestionsSectionExpanded = false
 
   // Keyboard navigation state
   @State private var inlineCreateText = ""
@@ -3494,6 +3411,11 @@ struct TasksPage: View {
             viewModel.editingTaskId = taskDetailTask.id
             closeTaskDetailPanel()
           },
+          onInvestigate: taskDetailTask.completed
+            ? nil
+            : {
+              investigateTask(taskDetailTask)
+            },
           onOpenChat: chatProvider != nil && TaskAgentSettings.shared.isChatEnabled
             ? {
               closeTaskDetailPanel()
@@ -3510,12 +3432,7 @@ struct TasksPage: View {
           onDelete: {
             closeTaskDetailPanel()
             Task { await viewModel.deleteTaskWithUndo(taskDetailTask) }
-          },
-          onPriorityChange: taskDetailTask.completed
-            ? nil
-            : { newPriority in
-              Task { await viewModel.updateTaskDetails(taskDetailTask, priority: newPriority) }
-            }
+          }
         )
         .frame(width: 360)
         .transition(.move(edge: .trailing).combined(with: .opacity))
@@ -3523,23 +3440,6 @@ struct TasksPage: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .glassContent()
-    .alert(
-      "Task action failed",
-      isPresented: Binding(
-        get: { viewModel.bulkTaskErrorMessage != nil },
-        set: { isPresented in
-          if !isPresented {
-            viewModel.bulkTaskErrorMessage = nil
-          }
-        }
-      )
-    ) {
-      Button("OK", role: .cancel) {
-        viewModel.bulkTaskErrorMessage = nil
-      }
-    } message: {
-      Text(viewModel.bulkTaskErrorMessage ?? "Please try again.")
-    }
     .onEscapeKey(priority: .content) { handleEscapeKey() }
     // Modal creation sheet removed — Cmd+N now creates inline at top
     .onAppear {
@@ -3584,11 +3484,13 @@ struct TasksPage: View {
     }
     .onReceive(viewModel.$displayTasks) { tasks in
       chatCoordinator.ingestTaskMappings(tasks)
+      guard let taskDetailTask else { return }
+      self.taskDetailTask = tasks.first(where: { $0.id == taskDetailTask.id })
     }
     .onReceive(chatCoordinator.$isPanelOpen.removeDuplicates()) { isOpen in
       guard isOpen != showChatPanel else { return }
       if isOpen {
-        viewModel.detailPanelTaskID = nil
+        taskDetailTask = nil
         adjustWindowWidth(expand: true)
         OmiMotion.withGated(.easeInOut(duration: 0.25)) {
           showChatPanel = true
@@ -3605,12 +3507,19 @@ struct TasksPage: View {
   }
 
   /// Start a background AI investigation for a task (no panel opens)
+  private func investigateTask(_ task: TaskActionItem) {
+    log("TaskChat: investigateTask called for task \(task.id)")
+    Task {
+      await chatCoordinator.investigateInBackground(for: task)
+    }
+  }
+
   /// Open chat for a task
   private func openChatForTask(_ task: TaskActionItem) {
     log(
-      "TaskChat: openChatForTask called for task \(task.id) (retired=\(task.isRetired), completed=\(task.completed))"
+      "TaskChat: openChatForTask called for task \(task.id) (deleted=\(task.deleted ?? false), completed=\(task.completed))"
     )
-    viewModel.detailPanelTaskID = nil
+    taskDetailTask = nil
     if !showChatPanel {
       // First open: expand window and reveal the panel together
       adjustWindowWidth(expand: true)
@@ -3635,7 +3544,7 @@ struct TasksPage: View {
   }
 
   private func closeTaskDetailPanel() {
-    viewModel.detailPanelTaskID = nil
+    taskDetailTask = nil
   }
 
   private func openTaskDetailPanel(for task: TaskActionItem) {
@@ -3644,7 +3553,7 @@ struct TasksPage: View {
       closeChatPanel()
       showChatPanel = false
     }
-    viewModel.detailPanelTaskID = task.id
+    taskDetailTask = task
   }
 
   private func handleEscapeKey() -> Bool {
@@ -3832,7 +3741,7 @@ struct TasksPage: View {
     inlineCreateFocused = false
   }
 
-  private func commitInlineCreate(forToday: Bool = false) {
+  private func commitInlineCreate() {
     let text = inlineCreateText.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !text.isEmpty else {
       cancelInlineCreate()
@@ -3842,7 +3751,7 @@ struct TasksPage: View {
     inlineCreateText = ""
     inlineCreateFocused = false
     Task {
-      await viewModel.createInlineTask(description: text, afterTaskId: afterId, forceToday: forToday)
+      await viewModel.createInlineTask(description: text, afterTaskId: afterId)
     }
   }
 
@@ -3870,7 +3779,7 @@ struct TasksPage: View {
           .textFieldStyle(.plain)
           .foregroundColor(Ink.primary)
 
-        if !viewModel.normalizedSearchQuery.isEmpty {
+        if !viewModel.searchText.isEmpty {
           Button {
             viewModel.searchText = ""
           } label: {
@@ -3973,7 +3882,6 @@ struct TasksPage: View {
       }
       .padding(.horizontal, OmiSpacing.xs)
       .padding(.bottom, OmiSpacing.xxs)
-      .accessibilityIdentifier("task-board-header-\(category.rawValue)")
 
       if tasks.isEmpty {
         RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
@@ -4062,38 +3970,24 @@ struct TasksPage: View {
   private var multiSelectControls: some View {
     HStack(spacing: OmiSpacing.md) {
       Button {
-        Task {
-          await viewModel.toggleSelectAllTasks()
-        }
+        viewModel.toggleSelectAllVisibleTasks()
       } label: {
         HStack(spacing: OmiSpacing.xs) {
-          if viewModel.isSelectingAllTasks {
-            ProgressView()
-              .controlSize(.small)
-          } else {
-            Image(
-              systemName: viewModel.allTasksInSelectionScopeSelected
-                ? "checkmark.circle.fill" : "circle"
-            )
-            .scaledFont(size: OmiType.body)
-          }
-          Text(
-            viewModel.isSelectingAllTasks
-              ? "Selecting…"
-              : (viewModel.allTasksInSelectionScopeSelected ? "Deselect All" : "Select All")
+          Image(
+            systemName: viewModel.allVisibleTasksSelected
+              ? "checkmark.circle.fill" : "circle"
           )
-          .scaledFont(size: OmiType.body, weight: .medium)
+          .scaledFont(size: OmiType.body)
+          Text(viewModel.allVisibleTasksSelected ? "Deselect All" : "Select All")
+            .scaledFont(size: OmiType.body, weight: .medium)
         }
         .foregroundColor(Ink.secondary)
       }
       .buttonStyle(.plain)
-      .disabled(viewModel.isSelectingAllTasks)
-      .accessibilityIdentifier("tasks-select-all")
 
       Text("\(viewModel.multiSelection.selectionCount) selected")
         .scaledFont(size: OmiType.body)
         .foregroundColor(Ink.secondary)
-        .accessibilityIdentifier("tasks-selected-count")
     }
   }
 
@@ -4272,7 +4166,7 @@ struct TasksPage: View {
   private var emptyView: some View {
     // Search with no hits gets its own messaging (mobile parity);
     // otherwise the list is genuinely empty for the current view.
-    let isSearchEmpty = !viewModel.normalizedSearchQuery.isEmpty
+    let isSearchEmpty = !viewModel.searchText.isEmpty
     return VStack(spacing: OmiSpacing.lg) {
       Image(systemName: isSearchEmpty ? "magnifyingglass" : "tray.fill")
         .scaledFont(size: 48)
@@ -4299,34 +4193,23 @@ struct TasksPage: View {
   private var tasksListView: some View {
     ScrollViewReader { proxy in
       ScrollView {
-        LazyVStack(alignment: .leading, spacing: OmiSpacing.lg) {
-          // Show tasks grouped by due-date category (Today, Tomorrow, Later, No Deadline).
-          // Multi-select keeps this grouping: selecting tasks must not reshuffle the
-          // list out from under the user. Only the row's selection control changes.
-          if !viewModel.showCompleted {
-            if !viewModel.isMultiSelectMode {
-              SuggestedTasksSection(
-                store: suggestedStore,
-                isExpanded: $suggestionsSectionExpanded,
-                onCanonicalChange: {
-                  await viewModel.loadTasks()
-                },
-                onCompleteCreatedTask: { taskID in
-                  await viewModel.completeNewlyCreatedTask(id: taskID)
-                }
-              )
-            }
+        LazyVStack(spacing: OmiSpacing.lg) {
+          // Show tasks grouped by due-date category (Today, Tomorrow, Later, No Deadline)
+          if !viewModel.showCompleted && !viewModel.isMultiSelectMode {
+            SuggestedTasksSection(
+              store: suggestedStore,
+              onCanonicalChange: {
+                await viewModel.loadTasks()
+              }
+            )
 
             // Inline creation at top (Cmd+N)
-            if !viewModel.isMultiSelectMode && viewModel.isInlineCreating
-              && viewModel.inlineCreateAfterTaskId == nil
-            {
+            if viewModel.isInlineCreating && viewModel.inlineCreateAfterTaskId == nil {
               InlineTaskCreationRow(
                 text: $inlineCreateText,
                 isFocused: $inlineCreateFocused,
                 onCommit: { _ in commitInlineCreate() },
-                onCancel: { cancelInlineCreate() },
-                onCommitToday: { _ in commitInlineCreate(forToday: true) }
+                onCancel: { cancelInlineCreate() }
               )
               .id("inline-create-top")
             }
@@ -4362,6 +4245,7 @@ struct TasksPage: View {
                   onClearTodayDeadlines: { await viewModel.clearTodayDeadlinesForIncompleteTasks() },
                   onOpenChat: (chatProvider != nil && TaskAgentSettings.shared.isChatEnabled)
                     ? { task in openChatForTask(task) } : nil,
+                  onInvestigate: { task in investigateTask(task) },
                   onSelect: { task in selectTask(task) },
                   onOpenDetails: { task in openTaskDetailPanel(for: task) },
                   onHover: { viewModel.hoveredTaskId = $0 },
@@ -4409,8 +4293,7 @@ struct TasksPage: View {
                   inlineCreateText: $inlineCreateText,
                   inlineCreateFocused: $inlineCreateFocused,
                   onInlineCommit: { commitInlineCreate() },
-                  onInlineCancel: { cancelInlineCreate() },
-                  onInlineCommitToday: { commitInlineCreate(forToday: true) }
+                  onInlineCancel: { cancelInlineCreate() }
                 )
               }
             }
@@ -4421,13 +4304,12 @@ struct TasksPage: View {
                 text: $inlineCreateText,
                 isFocused: $inlineCreateFocused,
                 onCommit: { _ in commitInlineCreate() },
-                onCancel: { cancelInlineCreate() },
-                onCommitToday: { _ in commitInlineCreate(forToday: true) }
+                onCancel: { cancelInlineCreate() }
               )
               .id("inline-create-top-flat")
             }
 
-            // Flat list for the completed view and other flat sort options.
+            // Flat list for other sort options, completed view, or multi-select mode
             ForEach(viewModel.displayTasks) { task in
               VStack(spacing: 0) {
                 TaskRow(
@@ -4450,6 +4332,7 @@ struct TasksPage: View {
                   onDecrementIndent: { viewModel.decrementIndent(for: $0) },
                   onOpenChat: (chatProvider != nil && TaskAgentSettings.shared.isChatEnabled)
                     ? { task in openChatForTask(task) } : nil,
+                  onInvestigate: { task in investigateTask(task) },
                   onSelect: { task in selectTask(task) },
                   onOpenDetails: { task in openTaskDetailPanel(for: task) },
                   onHover: { viewModel.hoveredTaskId = $0 },
@@ -4561,16 +4444,7 @@ struct TasksPage: View {
         selectTask(task)
         proxy.scrollTo(taskID, anchor: .center)
       case .candidate(let candidateID):
-        // Candidate cards only exist while Suggested is expanded. Expand first,
-        // then scroll on the next main-queue turn so the target id is mounted.
-        if SuggestedTasksPresentationPolicy.shouldExpandBeforeScrollingToCandidate(
-          isExpanded: suggestionsSectionExpanded
-        ) {
-          suggestionsSectionExpanded = true
-        }
-        DispatchQueue.main.async {
-          proxy.scrollTo("suggested-\(candidateID)", anchor: .center)
-        }
+        proxy.scrollTo("suggested-\(candidateID)", anchor: .center)
       }
     }
   }
@@ -4622,10 +4496,6 @@ private struct TaskChatSidePanelView: View {
 struct TaskCategorySection: View {
   let category: TaskCategory
   let orderedTasks: [TaskActionItem]
-  /// Collapsed sections render only their header row.
-  var isCollapsed: Bool = false
-  /// Present only on collapsible sections; makes the header a disclosure toggle.
-  var onToggleCollapse: (() -> Void)?
   var isMultiSelectMode: Bool = false
 
   // Callbacks for row data and actions (passed through to TaskRow)
@@ -4643,6 +4513,7 @@ struct TaskCategorySection: View {
   var onMoveTaskBeforeTarget: ((TaskActionItem, String, TaskCategory) -> Void)?
   var onClearTodayDeadlines: (() async -> Void)?
   var onOpenChat: ((TaskActionItem) -> Void)?
+  var onInvestigate: ((TaskActionItem) -> Void)?
   var onSelect: ((TaskActionItem) -> Void)?
   var onOpenDetails: ((TaskActionItem) -> Void)?
   var onHover: ((String?) -> Void)?
@@ -4680,7 +4551,6 @@ struct TaskCategorySection: View {
   @FocusState.Binding var inlineCreateFocused: Bool
   var onInlineCommit: (() -> Void)?
   var onInlineCancel: (() -> Void)?
-  var onInlineCommitToday: (() -> Void)?
 
   @State private var isTopDropTargeted = false
 
@@ -4700,22 +4570,6 @@ struct TaskCategorySection: View {
           .scaledFont(size: OmiType.subheading, weight: .semibold)
           .foregroundColor(Ink.primary)
 
-        Text("\(orderedTasks.count)")
-          .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(Ink.secondary)
-          .padding(.horizontal, OmiSpacing.sm)
-          .padding(.vertical, OmiSpacing.hairline)
-          .background(
-            Capsule()
-              .fill(Ink.secondary.opacity(0.1))
-          )
-
-        if onToggleCollapse != nil {
-          Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
-            .scaledFont(size: OmiType.caption, weight: .semibold)
-            .foregroundColor(Ink.secondary)
-        }
-
         Spacer()
 
         if category == .today {
@@ -4730,25 +4584,23 @@ struct TaskCategorySection: View {
           .buttonStyle(.plain)
           .contentShape(Rectangle())
           .help("Clean today's tasks")
+        } else {
+          Text("\(orderedTasks.count)")
+            .scaledFont(size: OmiType.caption, weight: .medium)
+            .foregroundColor(Ink.secondary)
+            .padding(.horizontal, OmiSpacing.sm)
+            .padding(.vertical, OmiSpacing.hairline)
+            .background(
+              Capsule()
+                .fill(Ink.secondary.opacity(0.1))
+            )
         }
 
       }
       .padding(.horizontal, OmiSpacing.xxs)
-      .contentShape(Rectangle())
-      .onTapGesture {
-        onToggleCollapse?()
-      }
-      .accessibilityElement(children: .combine)
-      .accessibilityAddTraits(onToggleCollapse != nil ? .isButton : [])
-      .accessibilityAction {
-        onToggleCollapse?()
-      }
-      .accessibilityIdentifier(
-        onToggleCollapse != nil ? "task-section-toggle-\(category.rawValue)" : "task-section-\(category.rawValue)"
-      )
 
       // Drop zone at top of category (for dropping at position 0)
-      if !isMultiSelectMode && !isCollapsed {
+      if !isMultiSelectMode {
         Color.clear
           .frame(height: isTopDropTargeted ? 4 : 2)
           .overlay {
@@ -4785,45 +4637,42 @@ struct TaskCategorySection: View {
           }
       }
 
-      // Tasks in category with drag-and-drop reordering.
-      // Rendered in multi-select too, so selection keeps the category grouping;
-      // TaskDragDropModifier below is disabled while selecting.
-      if !isCollapsed {
+      // Tasks in category with drag-and-drop reordering
+      if !isMultiSelectMode {
         LazyVStack(spacing: OmiSpacing.sm) {
           ForEach(visibleTasks) { task in
             VStack(spacing: 0) {
-              HStack(spacing: OmiSpacing.sm) {
-                TaskRow(
-                  task: task,
-                  category: category,
-                  indentLevel: indentLevelFor?(task.id) ?? 0,
-                  isMultiSelectMode: isMultiSelectMode,
-                  isSelected: isSelectedFor?(task.id) ?? false,
-                  isKeyboardSelected: isKeyboardSelectedFor?(task.id) ?? false,
-                  onToggle: onToggle,
-                  onDelete: onDelete,
-                  onToggleSelection: onToggleSelection,
-                  onUpdateDetails: onUpdateDetails,
-                  onUpdateTags: onUpdateTags,
-                  onIncrementIndent: onIncrementIndent,
-                  onDecrementIndent: onDecrementIndent,
-                  onOpenChat: onOpenChat,
-                  onSelect: onSelect,
-                  onOpenDetails: onOpenDetails,
-                  onHover: onHover,
-                  isTaskDetailPanelActive: isTaskDetailPanelActive,
-                  onDragStarted: onDragStarted,
-                  onDragEnded: onDragEnded,
-                  isBeingDragged: draggedTaskId == task.id,
-                  isChatActive: isChatActive,
-                  activeChatTaskId: activeChatTaskId,
-                  chatCoordinator: chatCoordinator,
-                  editingTaskId: editingTaskId,
-                  onEditingChanged: onEditingChanged,
-                  onStartEditing: onStartEditing,
-                  animateToggleTaskId: animateToggleTaskId
-                )
-              }
+              TaskRow(
+                task: task,
+                category: category,
+                indentLevel: indentLevelFor?(task.id) ?? 0,
+                isMultiSelectMode: isMultiSelectMode,
+                isSelected: isSelectedFor?(task.id) ?? false,
+                isKeyboardSelected: isKeyboardSelectedFor?(task.id) ?? false,
+                onToggle: onToggle,
+                onDelete: onDelete,
+                onToggleSelection: onToggleSelection,
+                onUpdateDetails: onUpdateDetails,
+                onUpdateTags: onUpdateTags,
+                onIncrementIndent: onIncrementIndent,
+                onDecrementIndent: onDecrementIndent,
+                onOpenChat: onOpenChat,
+                onInvestigate: onInvestigate,
+                onSelect: onSelect,
+                onOpenDetails: onOpenDetails,
+                onHover: onHover,
+                isTaskDetailPanelActive: isTaskDetailPanelActive,
+                onDragStarted: onDragStarted,
+                onDragEnded: onDragEnded,
+                isBeingDragged: draggedTaskId == task.id,
+                isChatActive: isChatActive,
+                activeChatTaskId: activeChatTaskId,
+                chatCoordinator: chatCoordinator,
+                editingTaskId: editingTaskId,
+                onEditingChanged: onEditingChanged,
+                onStartEditing: onStartEditing,
+                animateToggleTaskId: animateToggleTaskId
+              )
               .id(task.id)
               .modifier(
                 TaskDragDropModifier(
@@ -4841,13 +4690,12 @@ struct TaskCategorySection: View {
                 ))
 
               // Inline creation row after this task
-              if !isMultiSelectMode && isInlineCreating && inlineCreateAfterTaskId == task.id {
+              if isInlineCreating && inlineCreateAfterTaskId == task.id {
                 InlineTaskCreationRow(
                   text: $inlineCreateText,
                   isFocused: $inlineCreateFocused,
                   onCommit: { _ in onInlineCommit?() },
-                  onCancel: { onInlineCancel?() },
-                  onCommitToday: { _ in onInlineCommitToday?() }
+                  onCancel: { onInlineCancel?() }
                 )
                 .padding(.top, OmiSpacing.xxs)
               }
@@ -5177,12 +5025,6 @@ private struct TaskBoardCard: View {
   }()
 }
 
-/// Shared leading chrome for categorized task rows and Suggested rows so
-/// checkboxes line up. Categorized rows fill this with the drag handle.
-enum TaskRowChrome {
-  static let leadingHandleWidth: CGFloat = 16
-}
-
 struct TaskRow: View {
   let task: TaskActionItem
   var category: TaskCategory? = nil  // Optional for flat list views
@@ -5202,6 +5044,7 @@ struct TaskRow: View {
   var onIncrementIndent: ((String) -> Void)?
   var onDecrementIndent: ((String) -> Void)?
   var onOpenChat: ((TaskActionItem) -> Void)?
+  var onInvestigate: ((TaskActionItem) -> Void)?
   var onSelect: ((TaskActionItem) -> Void)?
   var onOpenDetails: ((TaskActionItem) -> Void)?
   var onHover: ((String?) -> Void)?
@@ -5250,6 +5093,7 @@ struct TaskRow: View {
   @State private var showRepeatPicker = false
   @State private var editRecurrenceRule: String = ""
   @State private var showTagPicker = false
+  @State private var showPriorityPicker = false
 
   // Swipe gesture state
   @State private var swipeOffset: CGFloat = 0
@@ -5282,7 +5126,7 @@ struct TaskRow: View {
         Image(systemName: "line.3.horizontal")
           .scaledFont(size: OmiType.micro)
           .foregroundColor(isHovering ? Ink.secondary : .clear)
-          .frame(width: TaskRowChrome.leadingHandleWidth, height: 24)
+          .frame(width: 16, height: 24)
           .contentShape(Rectangle())
           .onDrag {
             log("DRAG: onDrag started for task \(task.id) — \(task.description.prefix(40))")
@@ -5497,7 +5341,7 @@ struct TaskRow: View {
 
   /// Whether this task is soft-deleted
   private var isDeletedTask: Bool {
-    task.isRetired
+    task.deleted == true
   }
 
   private var taskRowContent: some View {
@@ -5744,12 +5588,35 @@ struct TaskRow: View {
       // Hover actions overlaid on trailing edge (no layout shift)
       if TaskDetailPanelPresentationPolicy.showsHoverActions(
         isRowHovering: isHovering,
+        isPriorityPickerPresented: showPriorityPicker,
         isMultiSelectMode: isMultiSelectMode,
         isDeletedTask: isDeletedTask,
         isTextFieldFocused: isTextFieldFocused,
         isDetailPanelPresented: isTaskDetailPanelActive
       ) {
         HStack(spacing: OmiSpacing.xxs) {
+          // Execute is an explicit work intent and stays in the same
+          // durable task-backed thread as chat/investigate.
+          if !task.completed {
+            Button {
+              onInvestigate?(task)
+            } label: {
+              HStack(spacing: OmiSpacing.hairline) {
+                Image(systemName: "sparkles")
+                  .font(.system(size: 9, weight: .bold))
+                Text("Execute")
+                  .scaledFont(size: OmiType.micro, weight: .semibold)
+              }
+              .foregroundColor(Ink.surface)
+              .padding(.horizontal, OmiSpacing.sm)
+              .padding(.vertical, OmiSpacing.xxs)
+              .background(Ink.primary)
+              .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .help("Spawn an agent to do this")
+          }
+
           // Add date button (shown on hover when no due date)
           if task.dueAt == nil && !task.completed {
             Button {
@@ -5763,6 +5630,19 @@ struct TaskRow: View {
             }
             .buttonStyle(.plain)
             .help("Add due date")
+          }
+
+          // Priority button
+          if !task.completed {
+            PriorityBadgeInteractive(
+              priority: task.priority,
+              isCompleted: task.completed,
+              isHovering: isHovering,
+              showPriorityPicker: $showPriorityPicker,
+              onPriorityChange: { newPriority in
+                Task { await onUpdateDetails?(task, nil, nil, newPriority, nil) }
+              }
+            )
           }
 
           // Outdent button (decrease indent)
@@ -6128,6 +6008,99 @@ struct DueDateBadgeInteractive: View {
     .buttonStyle(.plain)
     .onHover { hovering in
       isHovering = hovering
+    }
+  }
+}
+
+struct PriorityBadgeInteractive: View {
+  let priority: String?
+  let isCompleted: Bool
+  let isHovering: Bool  // Row hover state
+  @Binding var showPriorityPicker: Bool
+  let onPriorityChange: (String) -> Void
+
+  @State private var badgeHovering = false
+
+  private var badgeColor: Color {
+    switch priority {
+    case "high": return Ink.primary
+    case "medium": return Ink.secondary
+    case "low": return Ink.secondary
+    default: return Ink.secondary
+    }
+  }
+
+  private var label: String {
+    priority?.capitalized ?? "Priority"
+  }
+
+  var body: some View {
+    // Show if task has a priority, or show "add priority" on hover/popover
+    if priority != nil || ((isHovering || showPriorityPicker) && !isCompleted) {
+      Button {
+        showPriorityPicker = true
+      } label: {
+        HStack(spacing: OmiSpacing.hairline) {
+          if priority != nil {
+            Image(systemName: priority == "high" ? "flag.fill" : "flag")
+              .scaledFont(size: 8)
+          } else {
+            Image(systemName: "plus")
+              .scaledFont(size: 8)
+          }
+          Text(label)
+            .scaledFont(size: OmiType.micro, weight: .medium)
+          if badgeHovering && priority != nil {
+            Image(systemName: "pencil")
+              .scaledFont(size: 7)
+          }
+        }
+        .foregroundColor(
+          badgeHovering ? badgeColor : (priority != nil ? Ink.primary : Ink.secondary))
+      }
+      .buttonStyle(.plain)
+      .onHover { hovering in
+        badgeHovering = hovering
+      }
+      .popover(isPresented: $showPriorityPicker) {
+        VStack(spacing: OmiSpacing.xxs) {
+          ForEach(["high", "medium", "low"], id: \.self) { value in
+            let color: Color =
+              value == "high"
+              ? Ink.errorRed : value == "medium" ? PageGlass.warning : Ink.secondary
+            let isSelected = priority == value
+
+            Button {
+              showPriorityPicker = false
+              onPriorityChange(value)
+            } label: {
+              HStack {
+                Image(systemName: value == "high" ? "flag.fill" : "flag")
+                  .scaledFont(size: OmiType.caption)
+                  .foregroundColor(color)
+                  .frame(width: 20)
+                Text(value.capitalized)
+                  .scaledFont(size: OmiType.body)
+                  .foregroundColor(Ink.primary)
+                Spacer()
+                if isSelected {
+                  Image(systemName: "checkmark")
+                    .scaledFont(size: OmiType.caption, weight: .medium)
+                    .foregroundColor(color)
+                }
+              }
+              .padding(.horizontal, OmiSpacing.md)
+              .padding(.vertical, OmiSpacing.sm)
+              .background(isSelected ? color.opacity(0.1) : Color.clear)
+              .cornerRadius(OmiChrome.badgeRadius)
+              .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+          }
+        }
+        .padding(OmiSpacing.sm)
+        .frame(width: 180)
+      }
     }
   }
 }
@@ -6544,11 +6517,6 @@ struct InlineTaskCreationRow: View {
   @FocusState.Binding var isFocused: Bool
   let onCommit: (String) -> Void
   let onCancel: () -> Void
-  var onCommitToday: ((String) -> Void)? = nil
-
-  private var isTextEmpty: Bool {
-    text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-  }
 
   var body: some View {
     HStack(alignment: .center, spacing: OmiSpacing.md) {
@@ -6572,27 +6540,6 @@ struct InlineTaskCreationRow: View {
         }
 
       Spacer()
-
-      if let onCommitToday {
-        Button {
-          onCommitToday(text)
-        } label: {
-          HStack(spacing: OmiSpacing.xs) {
-            Image(systemName: "sun.max")
-              .scaledFont(size: OmiType.caption)
-            Text("Today")
-              .scaledFont(size: OmiType.caption, weight: .medium)
-          }
-          .foregroundColor(Ink.primary)
-          .padding(.horizontal, OmiSpacing.sm)
-          .padding(.vertical, OmiSpacing.xxs)
-          .background(Capsule().fill(Ink.rowFillHover))
-        }
-        .buttonStyle(.plain)
-        .disabled(isTextEmpty)
-        .opacity(isTextEmpty ? 0.4 : 1)
-        .help("Create task due today")
-      }
     }
     .padding(.trailing, OmiSpacing.md)
     .padding(.vertical, OmiSpacing.xs)

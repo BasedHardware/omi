@@ -245,4 +245,10 @@ class DeviceUtils {
 
     return getDeviceImagePath(deviceType: deviceType, modelNumber: modelNumber, deviceName: deviceName);
   }
+
+  /// Legacy method - kept for backwards compatibility
+  @Deprecated('Use getDeviceImagePath with deviceType parameter')
+  static String getDeviceImagePathByModel(String? deviceModel) {
+    return getDeviceImagePath(deviceName: deviceModel);
+  }
 }

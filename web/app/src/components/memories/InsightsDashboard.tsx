@@ -2,7 +2,13 @@
 
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Sparkles, TrendingUp, TrendingDown, Search, Tag } from 'lucide-react';
+import {
+  Sparkles,
+  TrendingUp,
+  TrendingDown,
+  Search,
+  Tag,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   type LifeBalanceData,
@@ -16,23 +22,15 @@ interface InsightsDashboardProps {
   onTagSelect?: (tags: string[]) => void;
 }
 
-const MONTH_NAMES = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-];
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 export function InsightsDashboard({ insights, onTagSelect }: InsightsDashboardProps) {
-  const { summary, activityCalendar, allTags, computing } = insights;
+  const {
+    summary,
+    activityCalendar,
+    allTags,
+    computing,
+  } = insights;
 
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -112,7 +110,7 @@ export function InsightsDashboard({ insights, onTagSelect }: InsightsDashboardPr
         >
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <Tag className="w-4 h-4 text-white" />
+              <Tag className="w-4 h-4 text-purple-primary" />
               <h2 className="text-sm font-medium text-text-tertiary">ALL TAGS</h2>
               <span className="text-xs text-text-quaternary">({allTags.length})</span>
             </div>
@@ -127,8 +125,8 @@ export function InsightsDashboard({ insights, onTagSelect }: InsightsDashboardPr
                   'pl-9 pr-4 py-1.5 rounded-lg w-48',
                   'bg-bg-tertiary border border-bg-quaternary',
                   'text-sm text-text-primary',
-                  'focus:outline-none focus:ring-2 focus:ring-white/50',
-                  'placeholder:text-text-quaternary',
+                  'focus:outline-none focus:ring-2 focus:ring-purple-primary/50',
+                  'placeholder:text-text-quaternary'
                 )}
               />
             </div>
@@ -141,11 +139,11 @@ export function InsightsDashboard({ insights, onTagSelect }: InsightsDashboardPr
                 className={cn(
                   'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
                   'bg-bg-tertiary border border-bg-quaternary',
-                  'hover:border-white/50 hover:bg-white/10',
-                  'transition-all text-sm group',
+                  'hover:border-purple-primary/50 hover:bg-purple-primary/10',
+                  'transition-all text-sm group'
                 )}
               >
-                <span className="text-text-primary group-hover:text-white transition-colors">
+                <span className="text-text-primary group-hover:text-purple-primary transition-colors">
                   {t.tag}
                 </span>
                 <span className="text-text-quaternary text-xs">({t.count})</span>
@@ -158,9 +156,7 @@ export function InsightsDashboard({ insights, onTagSelect }: InsightsDashboardPr
             )}
           </div>
           {filteredTags.length === 0 && searchQuery && (
-            <p className="text-center text-text-quaternary py-4">
-              No tags match &quot;{searchQuery}&quot;
-            </p>
+            <p className="text-center text-text-quaternary py-4">No tags match &quot;{searchQuery}&quot;</p>
           )}
         </motion.div>
       </div>
@@ -171,13 +167,7 @@ export function InsightsDashboard({ insights, onTagSelect }: InsightsDashboardPr
 // ==================== EXPORTED SIDEBAR COMPONENTS ====================
 
 // Life Balance Radar Chart (SVG) - Compact version for sidebar
-export function LifeBalanceChart({
-  data,
-  compact = false,
-}: {
-  data: LifeBalanceData[];
-  compact?: boolean;
-}) {
+export function LifeBalanceChart({ data, compact = false }: { data: LifeBalanceData[]; compact?: boolean }) {
   if (data.length === 0) return null;
 
   const size = compact ? 160 : 200;
@@ -198,8 +188,7 @@ export function LifeBalanceChart({
   });
 
   // Create polygon path
-  const polygonPath =
-    points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ') + ' Z';
+  const polygonPath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ') + ' Z';
 
   // Background grid circles
   const gridCircles = [0.25, 0.5, 0.75, 1].map((scale) => maxRadius * scale);
@@ -228,12 +217,8 @@ export function LifeBalanceChart({
             key={i}
             x1={center}
             y1={center}
-            x2={
-              center + maxRadius * Math.cos((i / data.length) * 2 * Math.PI - Math.PI / 2)
-            }
-            y2={
-              center + maxRadius * Math.sin((i / data.length) * 2 * Math.PI - Math.PI / 2)
-            }
+            x2={center + maxRadius * Math.cos((i / data.length) * 2 * Math.PI - Math.PI / 2)}
+            y2={center + maxRadius * Math.sin((i / data.length) * 2 * Math.PI - Math.PI / 2)}
             stroke="currentColor"
             strokeWidth="1"
             className="text-bg-quaternary"
@@ -259,15 +244,7 @@ export function LifeBalanceChart({
 
         {/* Data points */}
         {points.map((p, i) => (
-          <circle
-            key={i}
-            cx={p.x}
-            cy={p.y}
-            r={compact ? 3 : 4}
-            fill={p.color}
-            stroke="#0F0F0F"
-            strokeWidth="2"
-          />
+          <circle key={i} cx={p.x} cy={p.y} r={compact ? 3 : 4} fill={p.color} stroke="#0F0F0F" strokeWidth="2" />
         ))}
 
         {/* Labels */}
@@ -312,7 +289,7 @@ export function TrendingTagRow({
       <span
         className={cn(
           'text-xs font-medium',
-          isRising ? 'text-emerald-400' : 'text-rose-400',
+          isRising ? 'text-emerald-400' : 'text-rose-400'
         )}
       >
         {changeText}
@@ -406,10 +383,10 @@ function ActivityHeatmap({ data }: { data: ActivityDay[] }) {
   const getColor = (count: number) => {
     if (count === 0) return 'bg-bg-tertiary';
     const intensity = count / maxCount;
-    if (intensity < 0.25) return 'bg-white/20';
-    if (intensity < 0.5) return 'bg-white/40';
-    if (intensity < 0.75) return 'bg-white/60';
-    return 'bg-white';
+    if (intensity < 0.25) return 'bg-purple-primary/20';
+    if (intensity < 0.5) return 'bg-purple-primary/40';
+    if (intensity < 0.75) return 'bg-purple-primary/60';
+    return 'bg-purple-primary';
   };
 
   // Month labels
@@ -431,12 +408,7 @@ function ActivityHeatmap({ data }: { data: ActivityDay[] }) {
           <div
             key={idx}
             className="text-xs text-text-quaternary"
-            style={{
-              marginLeft:
-                idx === 0
-                  ? 0
-                  : `${(label.weekIdx - monthLabels[idx - 1].weekIdx) * 12 - 20}px`,
-            }}
+            style={{ marginLeft: idx === 0 ? 0 : `${(label.weekIdx - monthLabels[idx - 1].weekIdx) * 12 - 20}px` }}
           >
             {label.month}
           </div>
@@ -463,10 +435,7 @@ function ActivityHeatmap({ data }: { data: ActivityDay[] }) {
               return (
                 <div
                   key={dayOfWeek}
-                  className={cn(
-                    'w-[10px] h-[10px] rounded-sm',
-                    day ? getColor(day.count) : 'bg-transparent',
-                  )}
+                  className={cn('w-[10px] h-[10px] rounded-sm', day ? getColor(day.count) : 'bg-transparent')}
                   title={day ? `${day.date}: ${day.count} memories` : undefined}
                 />
               );
@@ -480,10 +449,10 @@ function ActivityHeatmap({ data }: { data: ActivityDay[] }) {
         <span>Less</span>
         <div className="flex gap-0.5">
           <div className="w-[10px] h-[10px] rounded-sm bg-bg-tertiary" />
-          <div className="w-[10px] h-[10px] rounded-sm bg-white/20" />
-          <div className="w-[10px] h-[10px] rounded-sm bg-white/40" />
-          <div className="w-[10px] h-[10px] rounded-sm bg-white/60" />
-          <div className="w-[10px] h-[10px] rounded-sm bg-white" />
+          <div className="w-[10px] h-[10px] rounded-sm bg-purple-primary/20" />
+          <div className="w-[10px] h-[10px] rounded-sm bg-purple-primary/40" />
+          <div className="w-[10px] h-[10px] rounded-sm bg-purple-primary/60" />
+          <div className="w-[10px] h-[10px] rounded-sm bg-purple-primary" />
         </div>
         <span>More</span>
       </div>

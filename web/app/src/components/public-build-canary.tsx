@@ -1,5 +1,8 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import { auth } from '@/lib/firebase';
+
 const inputs = [
   process.env.NEXT_PUBLIC_API_BASE_URL,
   process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -13,9 +16,16 @@ const inputs = [
 ];
 
 export function PublicBuildCanary() {
-  const status = inputs.every((value) => typeof value === 'string' && value.trim())
-    ? 'ready'
-    : 'missing';
+  const [status, setStatus] = useState('pending');
+
+  useEffect(() => {
+    setStatus(
+      inputs.every((value) => typeof value === 'string' && value.trim()) &&
+        auth.app.options.apiKey
+        ? 'ready'
+        : 'missing',
+    );
+  }, []);
 
   return (
     <span aria-hidden="true" data-omi-public-build-canary={`app:${status}`} hidden />

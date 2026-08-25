@@ -45,7 +45,7 @@ from models.product_memory import (
     MemoryLayer,
     ProcessingState,
 )
-from utils.memory.memory_system import ensure_canonical_apply_control_state
+from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.memory.required_promotion import (
     REQUIRED_PROCESSING_STATUS_FAILED_RETRYABLE,
     REQUIRED_PROCESSING_STATUS_PENDING,
@@ -54,7 +54,6 @@ from utils.memory.required_promotion import (
     REQUIRED_PROCESSOR_VERSION,
     REQUIRED_PROMOTION_STATUS_PENDING,
 )
-from utils.memory.promotion_flex import PromotionFlexDeferred
 
 logger = logging.getLogger(__name__)
 
@@ -191,7 +190,13 @@ def _snapshot_payload(snapshot: Any) -> Dict[str, Any]:
 
 
 def _read_control_state(uid: str, *, db_client: Any) -> MemoryControlState:
-    return ensure_canonical_apply_control_state(uid, db_client=db_client)
+    ref = db_client.document(MemoryCollections(uid=uid).memory_apply_control_state)
+    snapshot = ref.get()
+    if getattr(snapshot, "exists", False):
+        return MemoryControlState(**_snapshot_payload(snapshot))
+    control = MemoryControlState(uid=uid, head_commit_id="head0", account_generation=1, source_generation=1)
+    ref.set(control.model_dump(mode="json"))
+    return control
 
 
 def _coerce_utc(value: datetime) -> datetime:
@@ -229,7 +234,6 @@ def _claim_retry_state_transaction(
     expected_item: MemoryItem,
     lease_owner: str,
     now: datetime,
-    lease_seconds: int,
 ) -> RequiredProcessingClaim:
     item_ref = db_client.document(f"{MemoryCollections(uid=uid).memory_items}/{expected_item.memory_id}")
     item_payload = _snapshot_payload(item_ref.get(transaction=transaction))
@@ -238,7 +242,7 @@ def _claim_retry_state_transaction(
     item = MemoryItem(**item_payload)
     if item.item_revision != expected_item.item_revision or item.content_hash != expected_item.content_hash:
         return RequiredProcessingClaim(state=None, item=item, claimed=False, reason="newer_revision_pending")
-    if not is_pending_required_processing(item):
+    if not _is_pending_required_processing(item):
         return RequiredProcessingClaim(
             state=None,
             item=item,
@@ -308,7 +312,7 @@ def _claim_retry_state_transaction(
         last_error_code=prior.last_error_code if prior is not None else "attempt_claimed",
         last_attempt_at=now,
         lease_owner=lease_owner,
-        lease_expires_at=now + timedelta(seconds=lease_seconds),
+        lease_expires_at=now + timedelta(seconds=REQUIRED_PROCESSING_ATTEMPT_LEASE_SECONDS),
     )
     transaction.set(state_ref, claimed.model_dump(mode="python"))
     return RequiredProcessingClaim(state=claimed, item=item, claimed=True, reason="claimed")
@@ -321,56 +325,8 @@ def _claim_retry_state(
     lease_owner: str,
     now: datetime,
     db_client: Any,
-    lease_seconds: int = REQUIRED_PROCESSING_ATTEMPT_LEASE_SECONDS,
 ) -> RequiredProcessingClaim:
-    return _claim_retry_state_transaction(
-        db_client.transaction(), db_client, uid, item, lease_owner, now, max(1, lease_seconds)
-    )
-
-
-@transactional
-def _release_deferred_retry_state_transaction(
-    transaction: Any,
-    db_client: Any,
-    uid: str,
-    item: MemoryItem,
-    *,
-    lease_owner: str,
-    now: datetime,
-) -> None:
-    """Release a Flex-capacity deferral without spending the quality retry budget."""
-    state_ref = db_client.document(_retry_state_document_path(uid, item))
-    payload = _snapshot_payload(state_ref.get(transaction=transaction))
-    if not payload:
-        return
-    prior = RequiredProcessingRetryState.model_validate(payload)
-    if prior.lease_owner != lease_owner:
-        raise ValueError("required-processing retry lease ownership changed")
-    released = prior.model_copy(
-        update={
-            "attempt_count": max(0, prior.attempt_count - 1),
-            "status": "retryable",
-            "last_error_code": "flex_deferred",
-            "last_attempt_at": now,
-            "next_attempt_at": now,
-            "lease_owner": None,
-            "lease_expires_at": None,
-        }
-    )
-    transaction.set(state_ref, released.model_dump(mode="python"))
-
-
-def _release_deferred_retry_state(
-    uid: str,
-    item: MemoryItem,
-    *,
-    lease_owner: str,
-    now: datetime,
-    db_client: Any,
-) -> None:
-    _release_deferred_retry_state_transaction(
-        db_client.transaction(), db_client, uid, item, lease_owner=lease_owner, now=now
-    )
+    return _claim_retry_state_transaction(db_client.transaction(), db_client, uid, item, lease_owner, now)
 
 
 @transactional
@@ -456,7 +412,7 @@ def _delete_retry_state(
     _delete_retry_state_transaction(db_client.transaction(), db_client, uid, item, lease_owner)
 
 
-def is_pending_required_processing(item: MemoryItem) -> bool:
+def _is_pending_required_processing(item: MemoryItem) -> bool:
     promotion = item.promotion or {}
     return (
         item.tier == MemoryLayer.short_term
@@ -505,7 +461,7 @@ def list_pending_required_processing_items(
         if not payload:
             continue
         item = MemoryItem(**payload)
-        if is_pending_required_processing(item):
+        if _is_pending_required_processing(item):
             pending.append(item)
     pending.sort(key=lambda item: (item.captured_at, item.memory_id))
     return pending[:requested_limit]
@@ -922,16 +878,16 @@ def process_required_memory_item(
     db_client: Any = None,
     processor: Optional[RequiredMemoryProcessor] = None,
     now: Optional[datetime] = None,
-    attempt_lease_seconds: int = REQUIRED_PROCESSING_ATTEMPT_LEASE_SECONDS,
-    result_guard: Optional[Callable[[], None]] = None,
 ) -> RequiredMemoryProcessingResult:
     client = db_client if db_client is not None else default_db_client
+    if resolve_memory_system(uid, db_client=client) != MemorySystem.CANONICAL:
+        return RequiredMemoryProcessingResult(memory_id=memory_id, skipped_reason="not_canonical_cohort")
     snapshot = client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").get()
     payload = _snapshot_payload(snapshot)
     if not payload:
         return RequiredMemoryProcessingResult(memory_id=memory_id, skipped_reason="memory_not_found")
     item = MemoryItem(**payload)
-    if not is_pending_required_processing(item):
+    if not _is_pending_required_processing(item):
         return RequiredMemoryProcessingResult(memory_id=memory_id, skipped_reason="not_pending_required_processing")
     if processor is None:
         return RequiredMemoryProcessingResult(memory_id=memory_id, skipped_reason="processor_not_configured")
@@ -945,7 +901,6 @@ def process_required_memory_item(
             lease_owner=lease_owner,
             now=current_time,
             db_client=client,
-            lease_seconds=attempt_lease_seconds,
         )
     except Exception as exc:
         return RequiredMemoryProcessingResult(
@@ -969,35 +924,12 @@ def process_required_memory_item(
 
     try:
         processed = processor(item)
-        if result_guard is not None:
-            result_guard()
         status = _apply_processed_result(
             item,
             processed,
             attempt_count=state.attempt_count,
             db_client=client,
             now=current_time,
-        )
-    except PromotionFlexDeferred:
-        try:
-            _release_deferred_retry_state(
-                uid,
-                item,
-                lease_owner=lease_owner,
-                now=current_time,
-                db_client=client,
-            )
-        except Exception as exc:
-            return RequiredMemoryProcessingResult(
-                memory_id=memory_id,
-                attempted=True,
-                error_code=f"flex_release_{type(exc).__name__}",
-            )
-        return RequiredMemoryProcessingResult(
-            memory_id=memory_id,
-            attempted=True,
-            retryable=True,
-            error_code="flex_deferred",
         )
     except Exception as exc:
         race_result = _completed_or_replaced_result(item, db_client=client)
@@ -1044,35 +976,6 @@ def process_required_memory_item(
     return RequiredMemoryProcessingResult(memory_id=memory_id, processed=True, attempted=True)
 
 
-def commit_required_processing(
-    item: MemoryItem,
-    processed: ProcessedRequiredMemory,
-    *,
-    db_client: Any,
-    now: datetime,
-    attempt_count: int = 1,
-) -> MemoryItem:
-    """Persist L2 normalization without a second LLM call.
-
-    Consolidation uses this so an explicit submission is receipted and routed
-    from one planner decision. Conversation Short-term rows are already
-    processed and never enter this path.
-    """
-    status = _apply_processed_result(
-        item,
-        processed,
-        attempt_count=attempt_count,
-        db_client=db_client,
-        now=now,
-    )
-    if status not in {ApplyStatus.committed, ApplyStatus.idempotent_skip}:
-        raise ValueError(f"required processing apply failed: {status}")
-    current = _read_current_item(item, db_client=db_client)
-    if current is None:
-        raise ValueError("required processing apply lost the item")
-    return current
-
-
 def run_required_memory_processing(
     uid: str,
     *,
@@ -1080,13 +983,9 @@ def run_required_memory_processing(
     processor: Optional[RequiredMemoryProcessor] = None,
     now: Optional[datetime] = None,
     limit: int = 25,
-    attempt_lease_seconds: int = REQUIRED_PROCESSING_ATTEMPT_LEASE_SECONDS,
-    result_guard: Optional[Callable[[], None]] = None,
 ) -> RequiredMemoryProcessingReport:
     client = db_client if db_client is not None else default_db_client
     report = RequiredMemoryProcessingReport(uid=uid)
-    if limit <= 0:
-        return report
     attempt_limit = max(1, min(limit, MAX_REQUIRED_PROCESSING_ITEMS_PER_PASS))
     items = list_pending_required_processing_items(
         uid,
@@ -1102,8 +1001,6 @@ def run_required_memory_processing(
             db_client=client,
             processor=processor,
             now=now,
-            attempt_lease_seconds=attempt_lease_seconds,
-            result_guard=result_guard,
         )
         if result.attempted:
             report.attempted_count += 1
@@ -1125,9 +1022,7 @@ __all__ = [
     "RequiredProcessingSubjectContradiction",
     "RequiredMemoryProcessingReport",
     "RequiredMemoryProcessingResult",
-    "commit_required_processing",
     "invoke_required_memory_processor",
-    "is_pending_required_processing",
     "list_pending_required_processing_items",
     "process_required_memory_item",
     "run_required_memory_processing",

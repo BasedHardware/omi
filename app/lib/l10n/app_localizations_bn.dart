@@ -321,7 +321,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get searchApps => 'অ্যাপস খুঁজুন...';
 
   @override
-  String get myApps => 'আমার তৈরি';
+  String get myApps => 'আমার অ্যাপস';
 
   @override
   String get installedApps => 'ইনস্টল করা অ্যাপস';
@@ -9845,63 +9845,4 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'स्टोर खोलें';
-
-  @override
-  String get chatScopeToday => 'আজ';
-
-  @override
-  String get chatScopeThisWeek => 'এই সপ্তাহ';
-
-  @override
-  String chatScopeAbout(String title) {
-    return '$title সম্পর্কে';
-  }
-
-  @override
-  String get askAboutThisConversation => 'এটি সম্পর্কে জিজ্ঞাসা করুন';
-
-  @override
-  String get sendRawAudioToOmi => 'Omi-তে কাঁচা অডিও পাঠান';
-
-  @override
-  String get sendRawAudioToOmiDescription =>
-      'Omi-তে কাঁচা অডিও পাঠানো বন্ধ করতে এটি বন্ধ করুন। ট্রান্সক্রিপ্ট ও ক্লাউড ফিচারের প্রয়োজনীয় ডেটা এখনও Omi-তে পাঠানো হতে পারে।';
-
-  @override
-  String get findDevice => 'খুঁজুন';
-
-  @override
-  String get diagnosticsShareFailed => 'ডায়াগনস্টিকস শেয়ার করা যায়নি। আবার চেষ্টা করুন।';
-
-  @override
-  String get appDisabledTitle => 'এই অ্যাপটি নিষ্ক্রিয় এবং ইনস্টল করা যাবে না।';
-
-  @override
-  String get appDisabledWebhookFailures => 'এর এন্ডপয়েন্ট টানা ৭২ ঘণ্টা ব্যর্থ হয়েছে, তাই ডেলিভারি বন্ধ করা হয়েছে।';
-
-  @override
-  String get appDisabledGeneric => 'এটি Omi নিষ্ক্রিয় করেছে।';
-
-  @override
-  String get appDisabledOwnerHint =>
-      'প্রথমে এন্ডপয়েন্ট ঠিক করুন — পুনরায় সক্রিয় করলে কনফিগার করা প্রতিটি URL আবার যাচাই করা হয়।';
-
-  @override
-  String get appReEnable => 'পুনরায় সক্রিয় করুন';
-
-  @override
-  String get appReEnableFailedTitle => 'পুনরায় সক্রিয় করা যায়নি';
-
-  @override
-  String get appReEnableFailedBody => 'এই অ্যাপটি পুনরায় সক্রিয় করা যায়নি। আবার চেষ্টা করুন।';
-
-  @override
-  String appDisabledOn(String date) {
-    return '$date তারিখে নিষ্ক্রিয় করা হয়েছে।';
-  }
-
-  @override
-  String appDisabledLastError(String error) {
-    return 'শেষ ত্রুটি: $error';
-  }
 }

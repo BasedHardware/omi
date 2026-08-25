@@ -49,8 +49,8 @@ export function AudioModeSelector({
           className={cn(
             'w-full p-4 rounded-xl border-2 text-left transition-all',
             selectedMode === 'mic-only'
-              ? 'border-text-primary bg-bg-tertiary'
-              : 'border-bg-tertiary hover:border-bg-quaternary hover:bg-bg-tertiary/50',
+              ? 'border-purple-primary bg-purple-primary/10'
+              : 'border-bg-tertiary hover:border-bg-quaternary hover:bg-bg-tertiary/50'
           )}
         >
           <div className="flex items-start gap-4">
@@ -58,8 +58,8 @@ export function AudioModeSelector({
               className={cn(
                 'p-2.5 rounded-xl',
                 selectedMode === 'mic-only'
-                  ? 'bg-text-primary text-bg-primary'
-                  : 'bg-bg-tertiary text-text-secondary',
+                  ? 'bg-purple-primary text-white'
+                  : 'bg-bg-tertiary text-text-secondary'
               )}
             >
               <Volume2 className="w-5 h-5" />
@@ -68,14 +68,13 @@ export function AudioModeSelector({
               <div className="flex items-center gap-2">
                 <span className="font-medium text-text-primary">Microphone Only</span>
                 {selectedMode === 'mic-only' && (
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-bg-quaternary text-text-secondary">
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-purple-primary/20 text-purple-primary">
                     Selected
                   </span>
                 )}
               </div>
               <p className="text-sm text-text-tertiary mt-1">
-                Best for speaker setups. Mic picks up your voice and any audio from
-                speakers.
+                Best for speaker setups. Mic picks up your voice and any audio from speakers.
               </p>
             </div>
           </div>
@@ -89,8 +88,8 @@ export function AudioModeSelector({
             'w-full p-4 rounded-xl border-2 text-left transition-all',
             !systemAudioSupported && 'opacity-50 cursor-not-allowed',
             selectedMode === 'mic-and-system'
-              ? 'border-text-primary bg-bg-tertiary'
-              : 'border-bg-tertiary hover:border-bg-quaternary hover:bg-bg-tertiary/50',
+              ? 'border-purple-primary bg-purple-primary/10'
+              : 'border-bg-tertiary hover:border-bg-quaternary hover:bg-bg-tertiary/50'
           )}
         >
           <div className="flex items-start gap-4">
@@ -98,8 +97,8 @@ export function AudioModeSelector({
               className={cn(
                 'p-2.5 rounded-xl',
                 selectedMode === 'mic-and-system'
-                  ? 'bg-text-primary text-bg-primary'
-                  : 'bg-bg-tertiary text-text-secondary',
+                  ? 'bg-purple-primary text-white'
+                  : 'bg-bg-tertiary text-text-secondary'
               )}
             >
               <Headphones className="w-5 h-5" />
@@ -108,7 +107,7 @@ export function AudioModeSelector({
               <div className="flex items-center gap-2">
                 <span className="font-medium text-text-primary">Mic + System Audio</span>
                 {selectedMode === 'mic-and-system' && (
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-bg-quaternary text-text-secondary">
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-purple-primary/20 text-purple-primary">
                     Selected
                   </span>
                 )}
@@ -130,11 +129,7 @@ export function AudioModeSelector({
         className="w-full flex items-center justify-center gap-2 text-sm text-text-tertiary hover:text-text-secondary transition-colors mb-4"
       >
         <span>When to use each option</span>
-        {showDetails ? (
-          <ChevronUp className="w-4 h-4" />
-        ) : (
-          <ChevronDown className="w-4 h-4" />
-        )}
+        {showDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
       </button>
 
       <AnimatePresence>
@@ -153,13 +148,9 @@ export function AudioModeSelector({
                     <span>Using Speakers</span>
                   </div>
                   <p className="text-text-tertiary pl-6">
-                    Your microphone will pick up both your voice AND sound from your
-                    speakers. In a video call, both sides of the conversation will be
-                    captured.
-                    <strong className="text-text-secondary">
-                      {' '}
-                      Use &quot;Mic Only&quot;.
-                    </strong>
+                    Your microphone will pick up both your voice AND sound from your speakers.
+                    In a video call, both sides of the conversation will be captured.
+                    <strong className="text-text-secondary"> Use &quot;Mic Only&quot;.</strong>
                   </p>
                 </div>
 
@@ -169,20 +160,16 @@ export function AudioModeSelector({
                     <span>Using Headphones</span>
                   </div>
                   <p className="text-text-tertiary pl-6">
-                    Headphones send audio directly to your ears, so your mic only captures
-                    your voice. To capture the other person in a call, you need system
-                    audio.
-                    <strong className="text-text-secondary">
-                      {' '}
-                      Use &quot;Mic + System&quot;.
-                    </strong>
+                    Headphones send audio directly to your ears, so your mic only captures your voice.
+                    To capture the other person in a call, you need system audio.
+                    <strong className="text-text-secondary"> Use &quot;Mic + System&quot;.</strong>
                   </p>
                 </div>
 
                 <div className="pt-2 border-t border-bg-quaternary">
                   <p className="text-text-quaternary text-xs">
-                    System audio requires sharing a browser tab or window. You&apos;ll be
-                    prompted to select what to share when recording starts.
+                    System audio requires sharing a browser tab or window. You&apos;ll be prompted to select
+                    what to share when recording starts.
                   </p>
                 </div>
               </div>
@@ -196,8 +183,8 @@ export function AudioModeSelector({
         onClick={onStartRecording}
         className={cn(
           'w-full py-3 px-4 rounded-xl font-medium transition-all',
-          'bg-text-primary hover:bg-text-secondary text-bg-primary',
-          'flex items-center justify-center gap-2',
+          'bg-purple-primary hover:bg-purple-secondary text-white',
+          'flex items-center justify-center gap-2'
         )}
       >
         <Mic className="w-5 h-5" />

@@ -39,7 +39,6 @@ class ListenRequest:
     vad_gate_override: Optional[str] = None
     call_id: Optional[str] = None
     client_conversation_id: Optional[str] = None
-    conversation_role: str = 'ambient'
     client_device_context: Optional[ClientDeviceContext] = None
     owner_persistence_blocked: asyncio.Event = field(default_factory=asyncio.Event)
 
@@ -56,7 +55,6 @@ class ListenSessionState:
     speaker_map_dirty: bool = False
     first_audio_byte_timestamp: Optional[float] = None
     live_transcription_attempt: Any = None
-    client_live_transcription_attempt: Any = None
     live_transcription_failed: bool = False
     last_usage_record_timestamp: Optional[float] = None
     words_transcribed_since_last_record: int = 0
@@ -73,10 +71,6 @@ class ListenSessionState:
     dg_usage_ms_pending: int = 0
     last_audio_received_time: Optional[float] = None
     last_activity_time: Optional[float] = None
-    # Client-provided close provenance. This is set before a normal WebSocket
-    # close so finalization can distinguish an internal rotation from a
-    # terminal meeting end without trusting socket timing.
-    finalization_reason: Optional[str] = None
 
 
 @dataclass(frozen=True)

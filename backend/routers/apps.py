@@ -63,6 +63,7 @@ from database.apps import (
 from database.webhook_health import clear_app_webhook_health
 from database.auth import get_user_from_uid
 from database.redis_db import (
+    delete_generic_cache,
     get_generic_cache,
     set_generic_cache,
     get_specific_user_review,
@@ -72,6 +73,7 @@ from database.redis_db import (
     disable_app,
     is_app_enabled,
     delete_app_cache_by_id,
+    is_username_taken,
     save_username,
     get_enabled_apps,
     get_conversation_summary_app_ids,
@@ -118,9 +120,8 @@ from utils.apps import (
 from database.memories import migrate_memories
 
 from utils.llm.persona import generate_persona_intro_message
-from utils.llm.app_generator import generate_description, generate_description_and_emoji
+from utils.llm.app_generator import generate_description
 from utils.llm.app_generation_prompts import app_generation_prompts_from_llm_payload, app_generation_prompts_response
-from utils.subscription import enforce_chat_quota
 from utils.llm.usage_tracker import track_usage, Features
 from utils.notifications import send_notification, send_app_review_reply_notification, send_new_app_review_notification
 from utils.other import endpoints as auth
@@ -145,6 +146,7 @@ from utils.social import (
     upsert_persona_from_twitter_profile,
     add_twitter_to_persona,
 )
+import logging
 
 logger = logging.getLogger(__name__)
 
@@ -858,7 +860,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
                         status_code=422,
                         detail=f'Unsupported action type. Supported types: {", ".join([action_type.value for action_type in ActionType])}',
                     )
-    os.makedirs('_temp/apps', exist_ok=True)
+    os.makedirs(f'_temp/apps', exist_ok=True)
     file_path = f"_temp/apps/{file.filename}"
     with open(file_path, 'wb') as f:
         f.write(file.file.read())
@@ -915,7 +917,7 @@ async def create_persona(
         data['connected_accounts'] = ['omi']
     data['persona_prompt'] = await generate_persona_prompt(uid, data)
     data['description'] = await run_blocking(llm_executor, generate_persona_desc, uid, data['name'])
-    os.makedirs('_temp/apps', exist_ok=True)
+    os.makedirs(f'_temp/apps', exist_ok=True)
     file_path = f"_temp/apps/{file.filename}"
     contents = await file.read()
     await run_blocking(storage_executor, _write_file, file_path, contents)
@@ -956,28 +958,15 @@ async def update_persona(
             and persona['image'].startswith('https://storage.googleapis.com/')
         ):
             await run_blocking(storage_executor, delete_app_logo, persona['image'])
-        os.makedirs('_temp/apps', exist_ok=True)
+        os.makedirs(f'_temp/apps', exist_ok=True)
         file_path = f"_temp/apps/{file.filename}"
         contents = await file.read()
         await run_blocking(storage_executor, _write_file, file_path, contents)
         img_url = await run_blocking(storage_executor, upload_app_logo, file_path, persona_id)
         data['image'] = img_url
 
-    # Partial update: released clients PATCH the whole persona, but a client that
-    # sends only the fields it changed must not have the rest silently rewritten.
-    # `username` claims the handle, and `name` drives an LLM description rewrite —
-    # both are destructive to do on a field the caller never mentioned.
-    if 'username' in data and data['username'] and data['username'] != persona.get('username'):
-        await run_blocking(db_executor, save_username, data['username'], uid)
-
-    if 'name' in data and data['name'] and data['name'] != persona.get('name'):
-        # The name changed, so the generated description no longer matches it,
-        # unless the caller supplied its own.
-        if 'description' not in data:
-            data['description'] = await run_blocking(llm_executor, generate_persona_desc, uid, data['name'])
-
-    # AppUpdate needs the identity fields even when the caller omitted them.
-    data['id'] = persona_id
+    await run_blocking(db_executor, save_username, data['username'], uid)
+    data['description'] = await run_blocking(llm_executor, generate_persona_desc, uid, data['name'])
     data['updated_at'] = datetime.now(timezone.utc)
 
     # Update 'omi' connected_accounts
@@ -994,8 +983,7 @@ async def update_persona(
     if persona['approved'] and (persona['private'] is None or persona['private'] is False):
         await run_blocking(db_executor, invalidate_approved_apps_cache)
     await run_blocking(db_executor, delete_app_cache_by_id, persona_id)
-    username = data.get('username', persona.get('username'))
-    return {'status': 'ok', 'app_id': persona_id, 'username': username}
+    return {'status': 'ok', 'app_id': persona_id, 'username': data['username']}
 
 
 @router.get('/v1/personas', tags=['v1'], response_model=App)
@@ -1085,7 +1073,7 @@ def update_app(
     if file:
         if 'image' in app and len(app['image']) > 0 and app['image'].startswith('https://storage.googleapis.com/'):
             delete_app_logo(app['image'])
-        os.makedirs('_temp/apps', exist_ok=True)
+        os.makedirs(f'_temp/apps', exist_ok=True)
         file_path = f"_temp/apps/{file.filename}"
         with open(file_path, 'wb') as f:
             f.write(file.file.read())
@@ -1484,13 +1472,7 @@ def get_payment_plans(uid: str = Depends(auth.get_current_user_uid)):
 
 
 @router.post('/v1/app/generate-description', tags=['v1'], response_model=AppDescriptionGenerationResponse)
-def generate_description_endpoint(
-    data: GenerateDescriptionRequest,
-    uid: str = Depends(auth.get_current_user_uid),
-    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
-):
-    # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
-    enforce_chat_quota(uid, platform=x_app_platform)
+def generate_description_endpoint(data: GenerateDescriptionRequest, uid: str = Depends(auth.get_current_user_uid)):
     if data.name == '':
         raise HTTPException(status_code=422, detail='App Name is required')
     if data.description == '':
@@ -1504,16 +1486,14 @@ def generate_description_endpoint(
 
 @router.post('/v1/app/generate-description-emoji', tags=['v1'], response_model=AppDescriptionEmojiGenerationResponse)
 def generate_description_and_emoji_endpoint(
-    data: GenerateDescriptionEmojiRequest,
-    uid: str = Depends(auth.get_current_user_uid),
-    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+    data: GenerateDescriptionEmojiRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
     """
     Generate an app description and representative emoji.
     Used by the quick template creator feature.
     """
-    # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
-    enforce_chat_quota(uid, platform=x_app_platform)
+    from utils.llm.app_generator import generate_description_and_emoji
+
     if not data.name:
         raise HTTPException(status_code=422, detail='App Name is required')
     if not data.prompt:
@@ -1586,7 +1566,7 @@ async def generate_app_endpoint(data: GenerateAppRequest, uid: str = Depends(aut
     Generate an app configuration from a natural language prompt.
     This is an experimental feature that uses AI to create app configurations.
     """
-    from utils.llm.app_generator import generate_app_from_prompt
+    from utils.llm.app_generator import generate_app_from_prompt, generate_app_icon
 
     prompt = data.prompt.strip()
     if not prompt:
@@ -2145,24 +2125,6 @@ def _setup_completed_from_response(res: httpx.Response) -> bool:
     return isinstance(payload, dict) and bool(payload.get('is_setup_completed', False))
 
 
-def _disabled_app_install_detail(app: App, uid: str) -> str:
-    """Explain a blocked install truthfully.
-
-    The previous copy claimed a live connectivity problem and that the developer
-    had been notified. Neither is checked here: `disabled` is a stored flag set
-    up to months earlier, and the notification went out then. Owners chased
-    their own healthy servers looking for a request that is never sent.
-    """
-    when = f' on {app.disabled_at[:10]}' if app.disabled_at else ''
-    if app.uid == uid:
-        cause = f' Last error: {app.disabled_error}.' if app.disabled_error else ''
-        return (
-            f'This app was automatically disabled{when} after its webhook endpoint failed for 72 hours.'
-            f'{cause} Fix the endpoint, then press Re-enable on the app page.'
-        )
-    return f'This app was disabled{when} because its endpoint stopped responding. Its developer has to re-enable it.'
-
-
 @router.post('/v1/apps/enable', response_model=AppMutationResponse)
 async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     app = await run_blocking(db_executor, get_available_app_by_id, app_id, uid)
@@ -2170,7 +2132,10 @@ async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_u
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
     if app.disabled:
-        raise HTTPException(status_code=400, detail=_disabled_app_install_detail(app, uid))
+        raise HTTPException(
+            status_code=400,
+            detail='This app is currently unavailable due to connectivity issues. The developer has been notified.',
+        )
     if app.private is not None:
         if app.private and app.uid != uid and not await run_blocking(db_executor, is_tester, uid):
             raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
@@ -2182,7 +2147,7 @@ async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_u
             raise HTTPException(status_code=400, detail='App setup is not completed')
 
     # Check payment status
-    if app.is_paid and not await run_blocking(db_executor, get_is_user_paid_app, app.id, uid):
+    if app.is_paid and await run_blocking(db_executor, get_is_user_paid_app, app.id, uid) == False:
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
 
     await run_blocking(db_executor, enable_app, uid, app_id)

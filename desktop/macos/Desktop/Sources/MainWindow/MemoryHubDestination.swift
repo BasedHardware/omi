@@ -4,16 +4,17 @@ import CoreGraphics
 enum MemoryHubDestination: Int, CaseIterable, Identifiable {
   static let storageKey = "memoryHubDestination"
 
-  /// `allCases` is storage identity, not reading order: the raw values are persisted, so this list
-  /// starts at `memories` — where the stored default lands — rather than where the user's row
-  /// starts. The order the four pages are *presented* in belongs to the control that presents them,
-  /// `ActivityDestinationChip`.
+  /// The order the hub's own switcher reads in: the thing you captured, what Omi kept from it, then
+  /// the map over all of it. Declared here rather than inside the switcher view so it stays a plain
+  /// value a test can read without hopping to the main actor.
+  ///
+  /// `allCases` is *not* this order — its raw values are storage identity and start at `memories`,
+  /// which is where the persisted default lands, not where the row should start.
+  static let switcherOrder: [MemoryHubDestination] = [.conversations, .memories, .brainMap]
+
   case memories
   case conversations
   case brainMap
-  /// The chronological spine that used to be Home's landing surface — everything captured, in the
-  /// order it happened. Home now lands in the chat; the timeline lives here.
-  case activity
 
   enum Presentation: Equatable {
     case standaloneConversations
@@ -27,7 +28,6 @@ enum MemoryHubDestination: Int, CaseIterable, Identifiable {
     case .memories: return "Memories"
     case .conversations: return "Conversations"
     case .brainMap: return "Brain Map"
-    case .activity: return "Brain"
     }
   }
 
@@ -36,7 +36,6 @@ enum MemoryHubDestination: Int, CaseIterable, Identifiable {
     case .memories: return "brain.head.profile"
     case .conversations: return "text.bubble"
     case .brainMap: return "point.3.connected.trianglepath.dotted"
-    case .activity: return "clock.arrow.circlepath"
     }
   }
 
@@ -97,20 +96,5 @@ enum MemoryHubLayoutPolicy {
     if memoryDetailOpen { return true }
     guard let conversationID else { return false }
     return transcriptDrawerOpen && conversationID == presentedConversationID
-  }
-}
-
-/// How a hub selection is applied, per shell.
-///
-/// The chat-first shell keeps a typed route beside the persisted hub destination, so selecting a hub
-/// view has to move both or the shell renders one view while claiming to be on another — which is the
-/// state that made Brain Map unreachable from its Conversations route.
-enum MemoryHubSelectionPolicy {
-  /// The chat-first route that must be selected for a hub destination.
-  ///
-  /// `Conversations` has its own route (it carries capture-archive focus); the other two are the
-  /// Memory route, which is where `MemoryHubPage` lives.
-  static func chatFirstRoute(for destination: MemoryHubDestination) -> ChatFirstRoute {
-    destination == .conversations ? .conversations : .memories
   }
 }

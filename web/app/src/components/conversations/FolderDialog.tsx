@@ -64,7 +64,9 @@ export function FolderDialog({
     <Dialog.Root open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <Dialog.Portal>
         {/* Backdrop */}
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+        <Dialog.Overlay
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
+        />
 
         {/* Dialog Container - Centered with flexbox */}
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 text-center">
@@ -74,7 +76,7 @@ export function FolderDialog({
               'bg-bg-secondary border border-bg-tertiary shadow-[0_16px_64px_rgba(0,0,0,0.5)]',
               'max-h-[85vh] overflow-y-auto',
               'duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]',
-              'outline-none focus:outline-none', // Remove default browser focus ring
+              'outline-none focus:outline-none' // Remove default browser focus ring
             )}
           >
             <Dialog.Title className="sr-only">
@@ -89,20 +91,17 @@ export function FolderDialog({
                 'absolute top-4 right-4 p-2 rounded-lg',
                 'text-text-quaternary hover:text-text-primary',
                 'hover:bg-bg-tertiary transition-colors',
-                'disabled:opacity-50 disabled:cursor-not-allowed',
+                'disabled:opacity-50 disabled:cursor-not-allowed'
               )}
             >
               <X className="w-4 h-4" />
             </button>
 
             {/* Icon */}
-            <div
-              className={cn(
-                'w-12 h-12 rounded-xl mb-4',
-                'flex items-center justify-center',
-              )}
-              style={{ backgroundColor: `${color}20` }}
-            >
+            <div className={cn(
+              'w-12 h-12 rounded-xl mb-4',
+              'flex items-center justify-center'
+            )} style={{ backgroundColor: `${color}20` }}>
               {isEditing ? (
                 <Pencil className="w-6 h-6" style={{ color }} />
               ) : (
@@ -134,8 +133,8 @@ export function FolderDialog({
                       'flex-1 px-3 py-2 rounded-lg',
                       'bg-bg-tertiary border border-bg-quaternary',
                       'text-text-primary placeholder:text-text-quaternary',
-                      'focus:outline-none focus:ring-2 focus:ring-white/25',
-                      'disabled:opacity-50',
+                      'focus:outline-none focus:ring-2 focus:ring-purple-primary/50',
+                      'disabled:opacity-50'
                     )}
                     autoFocus
                   />
@@ -145,8 +144,7 @@ export function FolderDialog({
               {/* Description input */}
               <div className="mb-4">
                 <label className="block text-sm font-medium text-text-secondary mb-2">
-                  Description{' '}
-                  <span className="text-text-quaternary font-normal">(optional)</span>
+                  Description <span className="text-text-quaternary font-normal">(optional)</span>
                 </label>
                 <textarea
                   value={description}
@@ -160,8 +158,8 @@ export function FolderDialog({
                     'bg-bg-tertiary border border-bg-quaternary',
                     'text-text-primary placeholder:text-text-quaternary',
                     'text-sm',
-                    'focus:outline-none focus:ring-2 focus:ring-white/25',
-                    'disabled:opacity-50',
+                    'focus:outline-none focus:ring-2 focus:ring-purple-primary/50',
+                    'disabled:opacity-50'
                   )}
                 />
                 <p className="mt-1 text-xs text-text-quaternary">
@@ -186,9 +184,9 @@ export function FolderDialog({
                         'flex items-center justify-center',
                         'transition-all duration-150',
                         emoji === e
-                          ? 'bg-white/[0.14] ring-2 ring-white/25'
+                          ? 'bg-purple-primary/20 ring-2 ring-purple-primary'
                           : 'bg-bg-tertiary hover:bg-bg-quaternary',
-                        'disabled:opacity-50 disabled:cursor-not-allowed',
+                        'disabled:opacity-50 disabled:cursor-not-allowed'
                       )}
                     >
                       {e}
@@ -215,14 +213,12 @@ export function FolderDialog({
                         color === c.value
                           ? 'ring-2 ring-offset-2 ring-offset-bg-secondary'
                           : 'hover:scale-110',
-                        'disabled:opacity-50 disabled:cursor-not-allowed',
+                        'disabled:opacity-50 disabled:cursor-not-allowed'
                       )}
-                      style={
-                        {
-                          backgroundColor: c.value,
-                          '--tw-ring-color': c.value,
-                        } as React.CSSProperties
-                      }
+                      style={{
+                        backgroundColor: c.value,
+                        '--tw-ring-color': c.value,
+                      } as React.CSSProperties}
                       title={c.label}
                     />
                   ))}
@@ -240,7 +236,7 @@ export function FolderDialog({
                     'text-sm font-medium text-text-secondary',
                     'bg-bg-tertiary hover:bg-bg-quaternary',
                     'transition-colors duration-150',
-                    'disabled:opacity-50 disabled:cursor-not-allowed',
+                    'disabled:opacity-50 disabled:cursor-not-allowed'
                   )}
                 >
                   Cancel
@@ -253,11 +249,13 @@ export function FolderDialog({
                     'px-4 py-2.5 rounded-xl',
                     'text-sm font-medium text-white',
                     'transition-colors duration-150',
-                    'disabled:opacity-50 disabled:cursor-not-allowed',
+                    'disabled:opacity-50 disabled:cursor-not-allowed'
                   )}
                   style={{ backgroundColor: isValid ? color : undefined }}
                 >
-                  {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  {isLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : null}
                   <span>{isEditing ? 'Save Changes' : 'Create Folder'}</span>
                 </button>
               </div>
@@ -291,7 +289,9 @@ export function DeleteFolderDialog({
     <Dialog.Root open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <Dialog.Portal>
         {/* Backdrop */}
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+        <Dialog.Overlay
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
+        />
 
         {/* Dialog Container */}
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 text-center">
@@ -301,18 +301,18 @@ export function DeleteFolderDialog({
               'bg-bg-secondary border border-bg-tertiary shadow-[0_16px_64px_rgba(0,0,0,0.5)]',
               'max-h-[85vh] overflow-y-auto',
               'duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]',
-              'outline-none focus:outline-none',
+              'outline-none focus:outline-none'
             )}
           >
-            <Dialog.Title className="sr-only">Delete Folder Confirmation</Dialog.Title>
+            <Dialog.Title className="sr-only">
+              Delete Folder Confirmation
+            </Dialog.Title>
 
             {/* Icon */}
-            <div
-              className={cn(
-                'w-12 h-12 rounded-xl mb-4',
-                'bg-error/20 flex items-center justify-center',
-              )}
-            >
+            <div className={cn(
+              'w-12 h-12 rounded-xl mb-4',
+              'bg-error/20 flex items-center justify-center'
+            )}>
               <span className="text-2xl">{folder.emoji || '📁'}</span>
             </div>
 
@@ -323,8 +323,8 @@ export function DeleteFolderDialog({
 
             {/* Description */}
             <p className="text-sm text-text-secondary mb-6">
-              Conversations in this folder will be moved back to &quot;All&quot;. This
-              action cannot be undone.
+              Conversations in this folder will be moved back to &quot;All&quot;.
+              This action cannot be undone.
             </p>
 
             {/* Actions */}
@@ -337,7 +337,7 @@ export function DeleteFolderDialog({
                   'text-sm font-medium text-text-secondary',
                   'bg-bg-tertiary hover:bg-bg-quaternary',
                   'transition-colors duration-150',
-                  'disabled:opacity-50 disabled:cursor-not-allowed',
+                  'disabled:opacity-50 disabled:cursor-not-allowed'
                 )}
               >
                 Cancel
@@ -351,10 +351,12 @@ export function DeleteFolderDialog({
                   'text-sm font-medium text-white',
                   'bg-error hover:bg-error/90',
                   'transition-colors duration-150',
-                  'disabled:opacity-50 disabled:cursor-not-allowed',
+                  'disabled:opacity-50 disabled:cursor-not-allowed'
                 )}
               >
-                {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                {isLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : null}
                 <span>Delete Folder</span>
               </button>
             </div>

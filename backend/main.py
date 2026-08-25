@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 import firebase_admin
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
-from starlette.staticfiles import StaticFiles
 
 from database.google_credentials import prepare_google_credentials
 
@@ -72,17 +71,14 @@ from routers import (
     focus_sessions,
     advice,
     chat_sessions,
-    chat_generation,
     desktop_agent_vm,
     desktop_chat,
     desktop_core,
     desktop_proxy,
     desktop_realtime,
     desktop_screen_crisp,
-    referrals,
     desktop_tts_updates,
     scores,
-    stt,
     tts,
     memory_admin,
     memory_product,
@@ -90,13 +86,11 @@ from routers import (
     conversation_finalization,
     public_shared_conversation_chat,
 )
-from routers.listen.registry import proactive_message_dispatcher
 
 from utils.other.timeout import TimeoutMiddleware
 from utils.observability import log_langsmith_status
 from utils.subscription import validate_stripe_price_ids
 from utils.http_client import close_all_clients
-from utils.metrics import start_metrics_sidecar_server, stop_metrics_sidecar_server
 from utils.executors import (
     drain_background_tasks,
     log_executor_health,
@@ -106,10 +100,8 @@ from utils.executors import (
 from utils.executors import start_background_task
 from utils.cloud_tasks import validate_account_deletion_dispatch_configuration
 from services.conversation_finalization import reconcile_listen_finalization_jobs
-from services.conversation_finalization import reconcile_meeting_receipts
 from services.conversation_finalization import reconcile_stale_processing_conversations
 from services.users.account_deletion import reconcile_pending_deletion_wipes
-from utils.other.local_storage import local_storage_root_from_env
 
 # Log LangSmith tracing status at startup
 log_langsmith_status()
@@ -134,11 +126,6 @@ else:
     firebase_admin.initialize_app(options=_firebase_admin_options)  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
 
 app = FastAPI()
-
-_local_storage_root = local_storage_root_from_env()
-if _local_storage_root is not None:
-    _local_storage_root.mkdir(parents=True, exist_ok=True)
-    app.mount('/_local/storage', StaticFiles(directory=_local_storage_root), name='local-storage')
 
 # Explicit, default-deny CORS: this API is Bearer-token authenticated (mobile/
 # desktop apps, not ambient browser cookies), so no cross-origin browser
@@ -181,7 +168,6 @@ app.include_router(notifications.router)
 app.include_router(integration.router)
 app.include_router(agents.router)
 app.include_router(users.router)
-app.include_router(referrals.router)
 app.include_router(conversation_finalization.router)
 app.include_router(trends.router)
 
@@ -221,9 +207,7 @@ app.include_router(staged_tasks.router)
 app.include_router(focus_sessions.router)
 app.include_router(advice.router)
 app.include_router(chat_sessions.router)
-app.include_router(chat_generation.router)
 app.include_router(scores.router)
-app.include_router(stt.router)
 app.include_router(tts.router)
 app.include_router(memory_admin.router)
 app.include_router(memory_product.router)
@@ -253,10 +237,6 @@ paths_timeout = {
     "/v2/audio-merge-jobs/run": os.environ.get('HTTP_AUDIO_MERGE_RUN_TIMEOUT', 600),
     "/v1/users/account-deletion-wipes/run": os.environ.get('HTTP_ACCOUNT_DELETION_WIPE_RUN_TIMEOUT', 1500),
     "/v1/conversation-finalization-jobs/run": os.environ.get('HTTP_LISTEN_FINALIZATION_RUN_TIMEOUT', 1500),
-    # STT proxy: 30s slot wait + 300s parakeet client budget (get_stt_proxy_client)
-    # + headroom for auth and the multipart spool read; the default POST timeout
-    # would cut long files off mid-transcription.
-    "/v1/stt/transcribe": os.environ.get('HTTP_STT_TRANSCRIBE_TIMEOUT', 350),
 }
 
 app.add_middleware(TimeoutMiddleware, methods_timeout=methods_timeout, paths_timeout=paths_timeout)
@@ -268,7 +248,6 @@ app.add_middleware(BYOKMiddleware)
 
 @app.on_event("startup")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def startup_event():
-    start_metrics_sidecar_server()
     validate_account_deletion_dispatch_configuration()
     asyncio.create_task(log_executor_health())
     # Drain account-deletion wipes orphaned by a previous deploy/restart. Offloaded
@@ -288,15 +267,7 @@ async def startup_event():
         run_blocking(db_executor, _drain_stale_processing_conversations),
         name='startup_stale_processing_reconcile',
     )
-    start_background_task(
-        run_blocking(db_executor, _drain_meeting_receipts),
-        name='startup_meeting_receipt_reconcile',
-    )
     start_background_task(_periodic_listen_finalization_reconcile(), name='periodic_listen_finalization_reconcile')
-    start_background_task(
-        proactive_message_dispatcher(),
-        name='proactive_message_dispatcher',
-    )
 
 
 def _drain_pending_deletion_wipes():
@@ -345,16 +316,6 @@ def _drain_stale_processing_conversations():
         logger.error(f"Startup stale-processing reconciliation failed: {e}")
 
 
-def _drain_meeting_receipts():
-    """Best-effort repair of missing meeting receipt intents and historical receipts."""
-    try:
-        result = reconcile_meeting_receipts()
-        if result.get('repaired') or result.get('backfilled'):
-            logger.info(f"Startup meeting-receipt reconciliation: {result}")
-    except Exception as e:
-        logger.error(f"Startup meeting-receipt reconciliation failed: {e}")
-
-
 def _listen_finalization_reconcile_interval_seconds() -> int:
     """Periodic reconcile cadence; overridable for hermetic behavioral tests."""
     try:
@@ -382,19 +343,12 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int | None =
                 logger.info(f"Periodic stale-processing reconciliation: {stale_result}")
         except Exception as e:
             logger.error(f"Periodic stale-processing reconciliation failed: {e}")
-        try:
-            receipt_result = await run_blocking(db_executor, reconcile_meeting_receipts)
-            if receipt_result.get('repaired') or receipt_result.get('backfilled'):
-                logger.info(f"Periodic meeting-receipt reconciliation: {receipt_result}")
-        except Exception as e:
-            logger.error(f"Periodic meeting-receipt reconciliation failed: {e}")
 
 
 @app.on_event("shutdown")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def shutdown_event():
     await drain_background_tasks(timeout=10.0)
     await close_all_clients()
-    stop_metrics_sidecar_server()
 
 
 paths = ['_temp', '_samples', '_segments', '_speech_profiles']

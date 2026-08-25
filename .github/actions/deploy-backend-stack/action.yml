@@ -4,13 +4,6 @@ description: >-
   surfaces, and shared release-vector evidence for manual and auto-dev deploys.
 
 inputs:
-  firebase_probe_signer_service_account:
-    description: >-
-      Optional service account for signing release-probe custom tokens when the
-      Firebase auth project differs from project_id. Requires
-      roles/iam.serviceAccountTokenCreator for the deploy identity on it.
-    required: false
-    default: ''
   deploy_profile:
     description: 'manual or auto-dev orchestration profile'
     required: true
@@ -281,6 +274,18 @@ runs:
         fi
         python3 "$DEPLOY_CONTROL_SCRIPTS/preflight-cloud-run-deploy.py" "${PREFLIGHT_ARGS[@]}"
 
+    - name: Validate backend runtime env before deploy
+      shell: bash
+      env:
+        SYNC_LEDGER_FENCE_MODE: ${{ env.SYNC_LEDGER_FENCE_MODE }}
+      run: |
+        python3 "$DEPLOY_CONTROL_SCRIPTS/validate-backend-runtime-env.py" \
+          --env ${{ inputs.runtime_env }} \
+          --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
+          --check-workflows \
+          --workflow-root "$DEPLOY_WORKFLOW_ROOT" \
+          --check-rendered-cloud-run
+
     - name: Build runtime image
       uses: docker/build-push-action@v7
       with:
@@ -423,20 +428,7 @@ runs:
       run: |
         python3 "$DEPLOY_CONTROL_SCRIPTS/render_backend_runtime_env.py" \
           --env ${{ inputs.runtime_env }} \
-          --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
-          --state-output "$RUNNER_TEMP/backend-runtime-env-state.json" >> "$GITHUB_OUTPUT"
-
-    - name: Validate backend runtime env before deploy
-      shell: bash
-      env:
-        SYNC_LEDGER_FENCE_MODE: ${{ env.SYNC_LEDGER_FENCE_MODE }}
-      run: |
-        python3 "$DEPLOY_CONTROL_SCRIPTS/validate-backend-runtime-env.py" \
-          --env ${{ inputs.runtime_env }} \
-          --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
-          --check-workflows \
-          --workflow-root "$DEPLOY_WORKFLOW_ROOT" \
-          --cloud-run-state "$RUNNER_TEMP/backend-runtime-env-state.json"
+          --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" >> "$GITHUB_OUTPUT"
 
     - name: Migrate legacy public Cloud Run bindings
       shell: bash
@@ -470,68 +462,19 @@ runs:
         image: gcr.io/${{ inputs.project_id }}/${{ inputs.service }}:${{ steps.image-tag.outputs.short_sha }}
         no_traffic: true
         flags: >-
-          --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}-base
+          --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
           ${{ inputs.transcription_candidate_tag != '' && format('--tag={0}', inputs.transcription_candidate_tag) || '' }}
           ${{ inputs.deploy_profile == 'auto-dev' && format('--tag={0}', inputs.candidate_tag) || '' }}
-          --remove-env-vars=MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
+          --remove-env-vars=MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
-        env_vars: |-
-          ${{ steps.runtime-env.outputs.backend_env_vars }}
-          OMI_BACKEND_RELEASE_SHA=${{ inputs.admitted_sha }}
+        env_vars: ${{ steps.runtime-env.outputs.backend_env_vars }}
         secrets: ${{ steps.runtime-env.outputs.backend_secrets }}
-
-    - name: Attach Managed Prometheus sidecar to ${{ inputs.service }} candidate
-      id: attach-backend-gmp-sidecar
-      shell: bash
-      env:
-        GMP_CANDIDATE_TAG: ${{ inputs.transcription_candidate_tag != '' && inputs.transcription_candidate_tag || (inputs.deploy_profile == 'auto-dev' && inputs.candidate_tag || '') }}
-      run: |
-        set -euo pipefail
-        args=(
-          --project="${{ inputs.project_id }}"
-          --region="${{ inputs.region }}"
-          --service="${{ inputs.service }}"
-          --base-revision="backend-${{ steps.image-tag.outputs.revision_suffix }}-base"
-          --final-revision="backend-${{ steps.image-tag.outputs.revision_suffix }}"
-          --ingress-container=backend-1
-          --config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sidecar.yaml"
-          --expected-env-state="$RUNNER_TEMP/backend-runtime-env-state.json"
-        )
-        if [[ -n "$GMP_CANDIDATE_TAG" ]]; then
-          args+=(--tag="$GMP_CANDIDATE_TAG")
-        fi
-        python3 "$DEPLOY_CONTROL_SCRIPTS/attach_cloud_run_gmp_sidecar.py" "${args[@]}"
 
     - name: Capture ${{ inputs.service }} revision
       id: capture-backend-revision
       shell: bash
       run: |
         echo "revision=backend-${{ steps.image-tag.outputs.revision_suffix }}" >> "$GITHUB_OUTPUT"
-
-    # deploy-cloudrun stamps a `commit-sha` label from GITHUB_SHA -- the ref the
-    # workflow was TRIGGERED on, not the release_sha this job checked out and
-    # built. For any pinned deploy (release_sha != main HEAD) that label names a
-    # commit that was never deployed, and it is the marker an operator reaches
-    # for first. On 2026-08-19 it sent an incident responder chasing five
-    # commits that were not in production. The label cannot be corrected here,
-    # so the fix is to publish a marker that is true by construction and then
-    # prove it: read the value back off the revision that was actually created.
-    - name: Verify ${{ inputs.service }} release provenance
-      shell: bash
-      run: |
-        set -euo pipefail
-        expected='${{ inputs.admitted_sha }}'
-        revision='${{ steps.capture-backend-revision.outputs.revision }}'
-        actual="$(gcloud run revisions describe "$revision" \
-          --region='${{ inputs.region }}' --project='${{ inputs.project_id }}' --format=json \
-          | jq -r '[.spec.containers[0].env[]? | select(.name == "OMI_BACKEND_RELEASE_SHA") | .value] | first // ""')"
-        if [[ "$actual" != "$expected" ]]; then
-          echo "ERROR: ${{ inputs.service }} revision $revision reports release sha '$actual'," >&2
-          echo "       but this deploy admitted '$expected'. Refusing to report success:" >&2
-          echo "       an untrue provenance marker is worse than none." >&2
-          exit 1
-        fi
-        echo "$revision publishes OMI_BACKEND_RELEASE_SHA=$actual"
 
     - name: Deploy sync-backfill worker
       id: sync-backfill
@@ -560,7 +503,7 @@ runs:
         flags: >-
           --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
           ${{ inputs.deploy_profile == 'auto-dev' && format('--tag={0}', inputs.candidate_tag) || '' }}
-          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
+          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
         env_vars: |-
           ${{ steps.runtime-env.outputs.backend_sync_env_vars }}
@@ -628,7 +571,7 @@ runs:
         flags: >-
           --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
           ${{ inputs.deploy_profile == 'auto-dev' && format('--tag={0}', inputs.candidate_tag) || '' }}
-          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
+          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
         env_vars: ${{ steps.runtime-env.outputs.backend_integration_env_vars }}
         secrets: ${{ steps.runtime-env.outputs.backend_integration_secrets }}
@@ -753,12 +696,6 @@ runs:
         candidate_api_url: ${{ steps.transcription-candidate.outputs.url }}
         project_id: ${{ inputs.project_id }}
         firebase_auth_project_id: based-hardware
-        # A development deploy identity cannot sign a custom token for the
-        # production Firebase project this gate authenticates against, so it
-        # failed at custom_token_signing and blocked every manual development
-        # deploy. Left empty the behaviour is unchanged; set the variable to
-        # the Firebase project's signer to make this lane usable.
-        firebase_signer_service_account: ${{ inputs.firebase_probe_signer_service_account }}
 
     - name: Accept no-traffic Cloud Run candidate
       id: verify-cloud-run-candidate

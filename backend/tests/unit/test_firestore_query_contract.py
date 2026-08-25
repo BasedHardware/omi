@@ -8,23 +8,16 @@ import pytest
 from google.cloud.firestore_v1 import FieldFilter
 
 import database.action_items as action_items_db
-import database.chat as chat_db
-import database.conversations as conversations_db
 import database.task_recommendations as task_recommendations_db
 import routers.task_recommendations as task_recommendations_router
 from database.firestore_index_registry import (
     ACTIVE_ATTENTION_OVERRIDE_QUERY,
     CANONICAL_CONSOLIDATION_QUERY,
-    CANONICAL_MEMORY_ATLAS_READ_QUERY,
     CONVERSATION_SOURCE_MEMORY_QUERY,
-    CONVERSATIONS_ACTIVE_ORDERED_QUERY,
     DUE_MEMORY_OUTBOX_QUERY,
     EXPIRED_SHORT_TERM_LIFECYCLE_QUERY,
     EXPIRED_MEMORY_OUTBOX_LEASE_QUERY,
     INDEX_ONLY_REQUIREMENTS,
-    MESSAGES_BY_APP_ORDERED_QUERY,
-    POLICY_EXPIRED_SHORT_TERM_QUERY,
-    RECENT_REJECTED_MEMORY_FEEDBACK_QUERY,
     REVIEW_QUEUE_BY_CONFLICT_QUERY,
     REVIEW_QUEUE_BY_FACT_QUERY,
     REVIEW_QUEUE_BY_STATUS_QUERY,
@@ -34,13 +27,9 @@ from database.firestore_index_registry import (
     SUPERSEDED_MEMORY_BY_CANONICAL_TARGET_QUERY,
     SUPERSEDED_MEMORY_BY_LEGACY_TARGET_QUERY,
     STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
-    UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
-    UNIVERSAL_HISTORICAL_CREATED_LIST_SCAN_QUERY,
-    UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY,
     firebase_index_manifest,
 )
 from scripts import firestore_query_coverage, generate_firestore_indexes
-from utils.memory import canonical_graph as canonical_graph_service
 
 
 class _RecordingQuery:
@@ -161,21 +150,6 @@ def test_registered_attention_override_query_builds_the_real_filter_chain():
             ],
         ),
         (
-            RECENT_REJECTED_MEMORY_FEEDBACK_QUERY,
-            {
-                "statuses": ["active", "hidden"],
-                "source_state": "active",
-                "user_review": False,
-                "updated_at": datetime(2026, 8, 1, tzinfo=timezone.utc),
-            },
-            [
-                ("status", "in", ["active", "hidden"]),
-                ("source_state", "==", "active"),
-                ("promotion.user_review", "==", False),
-                ("updated_at", ">=", datetime(2026, 8, 1, tzinfo=timezone.utc)),
-            ],
-        ),
-        (
             CONVERSATION_SOURCE_MEMORY_QUERY,
             {"source_id": "conversation-a"},
             [("source_ids", "array_contains", "conversation-a")],
@@ -215,23 +189,6 @@ def test_registered_attention_override_query_builds_the_real_filter_chain():
                 ("status", "==", "active"),
                 ("processing_state", "==", "processed"),
                 ("expires_at", "<=", "2026-07-28T12:00:00+00:00"),
-            ],
-        ),
-        (
-            POLICY_EXPIRED_SHORT_TERM_QUERY,
-            {
-                "tier": "short_term",
-                "status": "active",
-                "processing_state": "processed",
-                "source_state": "active",
-                "captured_at": "2026-07-26T12:00:00+00:00",
-            },
-            [
-                ("tier", "==", "short_term"),
-                ("status", "==", "active"),
-                ("processing_state", "==", "processed"),
-                ("source_state", "==", "active"),
-                ("captured_at", "<=", "2026-07-26T12:00:00+00:00"),
             ],
         ),
         (
@@ -355,59 +312,6 @@ def test_generated_firestore_manifest_matches_the_checked_in_contract():
         STALE_IN_PROGRESS_CONVERSATIONS_QUERY.index_requirement.to_manifest() == expected_conversations_status_finished
     )
     assert firebase_index_manifest()['indexes'].count(expected_conversations_status_finished) == 1
-    assert CANONICAL_MEMORY_ATLAS_READ_QUERY.index_requirement.to_manifest() in firebase_index_manifest()['indexes']
-    assert CANONICAL_MEMORY_ATLAS_READ_QUERY.identifier == 'memory_items_canonical_atlas_read'
-    assert CANONICAL_MEMORY_ATLAS_READ_QUERY.index_requirement.signature == (
-        'memory_items',
-        'COLLECTION',
-        (
-            ('account_generation', 'ASCENDING'),
-            ('tier', 'ASCENDING'),
-            ('status', 'ASCENDING'),
-            ('processing_state', 'ASCENDING'),
-            ('updated_at', 'DESCENDING'),
-            ('__name__', 'DESCENDING'),
-        ),
-    )
-
-
-def _equality_plus_order_signature(collection_group, filters, orders):
-    """Composite Firestore requires for equality filters plus explicit orderings."""
-    fields = [(field_path, 'ASCENDING') for field_path, operator in filters if operator == '==']
-    fields.extend(orders)
-    if not fields or fields[-1][0] != '__name__':
-        fields.append(('__name__', orders[-1][1] if orders else 'ASCENDING'))
-    return (collection_group, 'COLLECTION', tuple(fields))
-
-
-def test_canonical_atlas_read_serving_query_requires_declared_composite():
-    """The live atlas list query must keep its apply-spec composite.
-
-    firestore_readiness failed on based-hardware-dev (run 31666135748) with
-    COLLECTION/memory_items (account_generation ASC, tier ASC, status ASC,
-    processing_state ASC, updated_at DESC, __name__ DESC)=MISSING. That tuple is
-    memory_items_canonical_atlas_read; dropping it from the apply spec while the
-    serving builder still uses it must fail here.
-    """
-    recorded = _StreamRecordingQuery(recorder=[])
-    client = SimpleNamespace(collection=lambda path: recorded)
-    revision = canonical_graph_service._CanonicalGraphRevision(
-        account_generation=3,
-        commit_sequence=1,
-        head_commit_id='head-atlas',
-    )
-
-    built = canonical_graph_service._build_canonical_graph_items_query(
-        client,
-        'atlas-index-user',
-        revision,
-        cursor_boundary=None,
-    )
-
-    assert built is not recorded
-    signature = _equality_plus_order_signature('memory_items', built._filters, built._orders)
-    assert signature == CANONICAL_MEMORY_ATLAS_READ_QUERY.index_requirement.signature
-    assert signature in _declared_index_signatures()
 
 
 @pytest.mark.slow
@@ -428,12 +332,8 @@ def test_query_inventory_registers_the_migrated_query_shapes():
         SUPERSEDED_MEMORY_BY_CANONICAL_TARGET_QUERY,
         SUPERSEDED_MEMORY_BY_LEGACY_TARGET_QUERY,
         EXPIRED_SHORT_TERM_LIFECYCLE_QUERY,
-        POLICY_EXPIRED_SHORT_TERM_QUERY,
         ACTIVE_ATTENTION_OVERRIDE_QUERY,
         STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
-        UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
-        UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY,
-        UNIVERSAL_HISTORICAL_CREATED_LIST_SCAN_QUERY,
     ):
         matching = [query for query in report['queries'] if query['registered_spec'] == spec.identifier]
         assert len(matching) == 1
@@ -522,38 +422,35 @@ class _StreamRecordingQuery:
     def order_by(self, field_path, direction):
         return _StreamRecordingQuery(self._recorder, self._filters, (*self._orders, (field_path, direction)))
 
-    def select(self, _fields):
-        return self
-
-    def offset(self, _n):
-        return self
-
-    def limit(self, _n):
-        return self
-
     def stream(self):
         self._recorder.append((self._filters, self._orders))
         return []
 
 
 class _StreamRecordingUserRef:
-    def __init__(self, recorder, collection_name='action_items'):
+    def __init__(self, recorder):
         self._recorder = recorder
-        self._collection_name = collection_name
 
     def collection(self, name):
-        assert name == self._collection_name
+        assert name == 'action_items'
         return _StreamRecordingQuery(self._recorder)
 
 
 class _StreamRecordingFirestore:
-    def __init__(self, recorder, collection_name='action_items'):
+    def __init__(self, recorder):
         self._recorder = recorder
-        self._collection_name = collection_name
 
     def collection(self, name):
         assert name == 'users'
-        return SimpleNamespace(document=lambda _uid: _StreamRecordingUserRef(self._recorder, self._collection_name))
+        return SimpleNamespace(document=lambda _uid: _StreamRecordingUserRef(self._recorder))
+
+
+def _required_index_signature(collection_group, filters, orders):
+    """The composite index Firestore requires for one equality-plus-ordering chain."""
+    fields = [(field_path, 'ASCENDING') for field_path, operator in filters if operator == '==']
+    fields.extend(orders)
+    fields.append(('__name__', orders[-1][1]))
+    return (collection_group, 'COLLECTION', tuple(fields))
 
 
 def _declared_index_signatures():
@@ -589,76 +486,7 @@ def test_due_date_filtered_action_item_reads_have_a_declared_composite_index(mon
     assert compound, 'due-date filtered reads no longer build an equality + ordering chain'
     declared = _declared_index_signatures()
     for filters, orders in compound:
-        assert _equality_plus_order_signature('action_items', filters, orders) in declared
-
-
-@pytest.mark.parametrize(
-    ('symbol', 'call'),
-    [
-        ('get_app_messages', lambda: chat_db.get_app_messages('index-contract-user', 'some-app', limit=20)),
-        (
-            'get_messages',
-            lambda: chat_db.get_messages('index-contract-user', app_id='some-app', limit=20),
-        ),
-    ],
-)
-def test_app_scoped_message_reads_have_a_declared_composite_index(monkeypatch, symbol, call):
-    """plugin_id-filtered, created_at-descending message reads need a declared composite.
-
-    Regression for a self-host FailedPrecondition 400 on GET /v1/messages: prod has this
-    index only because it was created by hand at some point, but firestore_index_registry.py
-    never declared it, so a fresh self-host deploy 400s on this exact query.
-    """
-    recorder = []
-    monkeypatch.setattr(chat_db, 'db', _StreamRecordingFirestore(recorder, collection_name='messages'))
-
-    call()
-
-    compound = [(filters, orders) for filters, orders in recorder if orders and any(op == '==' for _, op in filters)]
-    assert compound, f'{symbol} no longer builds a plugin_id equality + created_at ordering chain'
-    declared = _declared_index_signatures()
-    for filters, orders in compound:
-        assert _equality_plus_order_signature('messages', filters, orders) in declared
-
-
-def test_messages_by_app_ordered_query_is_registered_for_the_messages_collection():
-    assert MESSAGES_BY_APP_ORDERED_QUERY.collection_group == 'messages'
-    assert MESSAGES_BY_APP_ORDERED_QUERY.index_requirement.to_manifest() in firebase_index_manifest()['indexes']
-
-
-@pytest.mark.parametrize(
-    ('symbol', 'call'),
-    [
-        ('get_conversations', lambda: conversations_db.get_conversations('index-contract-user', limit=20)),
-        (
-            'get_conversations_without_photos',
-            lambda: conversations_db.get_conversations_without_photos('index-contract-user', limit=20),
-        ),
-    ],
-)
-def test_default_conversation_list_reads_have_a_declared_composite_index(monkeypatch, symbol, call):
-    """The bare `discarded == False` + `created_at` descending list read needs a declared composite.
-
-    Regression for a self-host FailedPrecondition 400 on GET /v1/conversations: this is the
-    app's default conversation list call (no status/category/folder/starred filter), prod has
-    the index only because it was created by hand at some point, but firestore_index_registry.py
-    never declared it, so a fresh self-host deploy 400s the first time anyone loads their list.
-    """
-    recorder = []
-    monkeypatch.setattr(conversations_db, 'db', _StreamRecordingFirestore(recorder, collection_name='conversations'))
-
-    call()
-
-    compound = [(filters, orders) for filters, orders in recorder if orders and any(op == '==' for _, op in filters)]
-    assert compound, f'{symbol} no longer builds a discarded equality + created_at ordering chain'
-    declared = _declared_index_signatures()
-    for filters, orders in compound:
-        assert _equality_plus_order_signature('conversations', filters, orders) in declared
-
-
-def test_conversations_active_ordered_query_is_registered_for_the_conversations_collection():
-    assert CONVERSATIONS_ACTIVE_ORDERED_QUERY.collection_group == 'conversations'
-    assert CONVERSATIONS_ACTIVE_ORDERED_QUERY.index_requirement.to_manifest() in firebase_index_manifest()['indexes']
+        assert _required_index_signature('action_items', filters, orders) in declared
 
 
 def test_query_source_paths_are_posix_canonical_on_every_host_platform():

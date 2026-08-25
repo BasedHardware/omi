@@ -5,9 +5,7 @@ import 'dart:typed_data';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
-// hide PermissionStatus: flutter_contacts has its own PermissionStatus enum, and this
-// file never spells out permission_handler's version by name (only inferred via `var`).
-import 'package:permission_handler/permission_handler.dart' hide PermissionStatus;
+import 'package:permission_handler/permission_handler.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
@@ -235,14 +233,11 @@ class PhoneCallProvider extends ChangeNotifier {
     if (generation != _sessionGeneration) return false;
 
     // Get Twilio token
-    var tokenResult = await api.getPhoneCallToken();
+    var token = await api.getPhoneCallToken();
     if (generation != _sessionGeneration) return false;
-    var token = tokenResult.token;
     if (token == null) {
       _callState = PhoneCallState.idle;
-      // The backend refuses for several different reasons (no verified number, quota
-      // exhausted, plan without calling). Reporting its own reason beats guessing one.
-      _error = tokenResult.error ?? 'Failed to get call token. Please try again.';
+      _error = 'Failed to get call token. Verify your phone number first.';
       notifyListeners();
       return false;
     }
@@ -440,7 +435,7 @@ class PhoneCallProvider extends ChangeNotifier {
       if (generation != _sessionGeneration || !_sessionEnabled) return;
       if (_callState != PhoneCallState.active && _callState != PhoneCallState.ringing) return;
       Logger.info('PhoneCallProvider: refreshing call token');
-      var token = (await api.getPhoneCallToken()).token;
+      var token = await api.getPhoneCallToken();
       if (generation != _sessionGeneration || !_sessionEnabled) return;
       if (token != null) {
         await _nativeService.initialize(token.accessToken);
@@ -616,10 +611,10 @@ class PhoneCallProvider extends ChangeNotifier {
 
   Future<String?> _resolveContactName(String phoneNumber) async {
     try {
-      final status = await FlutterContacts.permissions.request(PermissionType.read);
-      if (status != PermissionStatus.granted && status != PermissionStatus.limited) return null;
+      bool hasPermission = await FlutterContacts.requestPermission(readonly: true);
+      if (!hasPermission) return null;
 
-      var contacts = await FlutterContacts.getAll(properties: {ContactProperty.phone});
+      var contacts = await FlutterContacts.getContacts(withProperties: true, withPhoto: false);
       var cleaned = _cleanPhoneNumber(phoneNumber);
 
       for (var contact in contacts) {

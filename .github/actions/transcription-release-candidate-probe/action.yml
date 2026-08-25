@@ -11,14 +11,6 @@ inputs:
   firebase_auth_project_id:
     description: Firebase project whose ID-token audience the candidate verifies.
     required: true
-  firebase_signer_service_account:
-    description: >-
-      Service account to sign the probe's custom token as. Required when the
-      Firebase auth project differs from project_id, because Identity Toolkit
-      only accepts a signer authorized for that Firebase project. The caller's
-      deploy identity needs roles/iam.serviceAccountTokenCreator on it.
-    required: false
-    default: ''
   evidence_path:
     description: Optional absolute path for the redacted probe report.
     required: false
@@ -34,21 +26,15 @@ runs:
         EVIDENCE_PATH: ${{ inputs.evidence_path }}
         PROBE_SECRET_PROJECT: ${{ inputs.project_id }}
         FIREBASE_AUTH_PROJECT_ID: ${{ inputs.firebase_auth_project_id }}
-        FIREBASE_SIGNER_SERVICE_ACCOUNT: ${{ inputs.firebase_signer_service_account }}
       run: |
         set -euo pipefail
         DEPLOY_CONTROL_SCRIPT_DIR="${DEPLOY_CONTROL_SCRIPTS:-backend/scripts}"
         token_file="$(mktemp "$RUNNER_TEMP/omi-transcription-probe.XXXXXX")"
         trap 'rm -f "$token_file"' EXIT
-        token_args=(
-          --secret-project "$PROBE_SECRET_PROJECT"
-          --firebase-project "$FIREBASE_AUTH_PROJECT_ID"
+        python3 "$DEPLOY_CONTROL_SCRIPT_DIR/firebase_release_probe_token.py" \
+          --secret-project "$PROBE_SECRET_PROJECT" \
+          --firebase-project "$FIREBASE_AUTH_PROJECT_ID" \
           --token-output "$token_file"
-        )
-        if [[ -n "$FIREBASE_SIGNER_SERVICE_ACCOUNT" ]]; then
-          token_args+=(--signer-service-account "$FIREBASE_SIGNER_SERVICE_ACCOUNT")
-        fi
-        python3 "$DEPLOY_CONTROL_SCRIPT_DIR/firebase_release_probe_token.py" "${token_args[@]}"
         probe_args=(
           --candidate-api-url "$CANDIDATE_API_URL"
           --bearer-token-file "$token_file"

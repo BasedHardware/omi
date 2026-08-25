@@ -119,6 +119,7 @@ def retrieve_rag_conversation_context(uid: str, memory: Conversation) -> Tuple[s
     user_name = get_user_name(uid, use_default=False) or ''
 
     if memories_id_to_topics:
+        # TODO: restore sorting here
         context_data: Dict[str, str] = {}
         futures = [
             db_executor.submit(
@@ -128,8 +129,7 @@ def retrieve_rag_conversation_context(uid: str, memory: Conversation) -> Tuple[s
         ]
         for f in futures:
             f.result()
-        ordered_chunks = [context_data[m.id] for m in memories if m.id in context_data]
-        context_str = '\n'.join(ordered_chunks).strip()
+        context_str = '\n'.join(context_data.values()).strip()
     else:
         context_str = conversations_to_string(memories, people=people, user_name=user_name)
 

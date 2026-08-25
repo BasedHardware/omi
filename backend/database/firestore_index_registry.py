@@ -181,6 +181,12 @@ INDEX_ONLY_REQUIREMENTS = (
         (_asc('appName'), _asc('timestamp'), _asc('__name__')),
     ),
     FirestoreIndexRequirement(
+        'candidates_generation_created',
+        'candidates',
+        'COLLECTION',
+        (_asc('account_generation'), _desc('created_at'), _desc('__name__')),
+    ),
+    FirestoreIndexRequirement(
         'candidates_status_generation_created',
         'candidates',
         'COLLECTION',
@@ -191,12 +197,6 @@ INDEX_ONLY_REQUIREMENTS = (
         'action_items',
         'COLLECTION',
         (_asc('completed'), _asc('due_at'), _asc('__name__')),
-    ),
-    FirestoreIndexRequirement(
-        'action_items_completed_created',
-        'action_items',
-        'COLLECTION',
-        (_asc('completed'), _asc('created_at'), _asc('__name__')),
     ),
     FirestoreIndexRequirement(
         'action_items_conversation_due',
@@ -228,14 +228,6 @@ ACTIVE_ATTENTION_OVERRIDE_QUERY = FirestoreQuerySpec(
         FirestoreQueryFilter('expires_at', '>', 'now'),
     ),
     index_fields=(_asc('account_generation'), _asc('expires_at'), _asc('__name__')),
-)
-
-CANDIDATES_COMPATIBILITY_QUERY = FirestoreQuerySpec(
-    identifier='candidates_generation_created',
-    collection_group='candidates',
-    query_scope='COLLECTION',
-    filters=(FirestoreQueryFilter('account_generation', '==', 'account_generation'),),
-    index_fields=(_asc('account_generation'), _desc('created_at'), _desc('__name__')),
 )
 
 LEGACY_CONVERSATION_RECOVERY_QUERY = FirestoreQuerySpec(
@@ -290,67 +282,6 @@ CANONICAL_CONSOLIDATION_QUERY = FirestoreQuerySpec(
     ),
 )
 
-RECENT_REJECTED_MEMORY_FEEDBACK_QUERY = FirestoreQuerySpec(
-    identifier='memory_items_recent_rejected_feedback',
-    collection_group='memory_items',
-    query_scope='COLLECTION',
-    filters=(
-        FirestoreQueryFilter('status', 'in', 'statuses'),
-        FirestoreQueryFilter('source_state', '==', 'source_state'),
-        FirestoreQueryFilter('promotion.user_review', '==', 'user_review'),
-        FirestoreQueryFilter('updated_at', '>=', 'updated_at'),
-    ),
-    index_fields=(
-        _asc('status'),
-        _asc('source_state'),
-        _asc('promotion.user_review'),
-        _desc('updated_at'),
-        _asc('__name__'),
-    ),
-)
-
-POLICY_EXPIRED_SHORT_TERM_QUERY = FirestoreQuerySpec(
-    identifier='memory_items_policy_expired_short_term_by_capture',
-    collection_group='memory_items',
-    query_scope='COLLECTION',
-    filters=(
-        FirestoreQueryFilter('tier', '==', 'tier'),
-        FirestoreQueryFilter('status', '==', 'status'),
-        FirestoreQueryFilter('processing_state', '==', 'processing_state'),
-        FirestoreQueryFilter('source_state', '==', 'source_state'),
-        FirestoreQueryFilter('captured_at', '<=', 'captured_at'),
-    ),
-    index_fields=(
-        _asc('tier'),
-        _asc('status'),
-        _asc('processing_state'),
-        _asc('source_state'),
-        _asc('captured_at'),
-        _asc('memory_id'),
-        _asc('__name__'),
-    ),
-)
-
-EXPIRY_URGENT_SHORT_TERM_BY_CAPTURE_QUERY = FirestoreQuerySpec(
-    identifier='memory_items_expiry_urgent_short_term_by_capture',
-    collection_group='memory_items',
-    query_scope='COLLECTION_GROUP',
-    filters=(
-        FirestoreQueryFilter('tier', '==', 'tier'),
-        FirestoreQueryFilter('status', '==', 'status'),
-        FirestoreQueryFilter('processing_state', 'in', 'processing_states'),
-        FirestoreQueryFilter('captured_at', '<=', 'captured_at'),
-    ),
-    index_fields=(
-        _asc('tier'),
-        _asc('status'),
-        _asc('processing_state'),
-        _asc('captured_at'),
-        _asc('memory_id'),
-        _asc('__name__'),
-    ),
-)
-
 CANONICAL_GRAPH_READ_QUERY = FirestoreQuerySpec(
     identifier='memory_items_canonical_graph_read',
     collection_group='memory_items',
@@ -391,40 +322,6 @@ CANONICAL_MEMORY_ATLAS_READ_QUERY = FirestoreQuerySpec(
         _desc('updated_at'),
         _desc('__name__'),
     ),
-)
-
-# Collection-scoped newest-first scan for universal mixed list cursor paging.
-# Equality filters are intentionally empty: access/device/pending/archive are
-# applied after each bounded raw page so filtered rows still advance the keyset.
-# Firestore auto single-field indexes only cover field+__name__ in the *same*
-# direction (DESC+DESC / ASC+ASC). updated_at DESC + __name__ ASC is a real
-# composite and must be declared (#11684).
-UNIVERSAL_CANONICAL_LIST_SCAN_QUERY = FirestoreQuerySpec(
-    identifier='memory_items_universal_list_scan',
-    collection_group='memory_items',
-    query_scope='COLLECTION',
-    filters=(),
-    index_fields=(_desc('updated_at'), _asc('__name__')),
-)
-
-# Historical dual-stream keysets for effective updated_at-or-created_at order.
-# Docs with updated_at ride the updated stream; created stream skips those
-# duplicates in Python so each document is emitted once. Opposite-direction
-# __name__ tie-breaks need composite indexes (same class as #11684).
-UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY = FirestoreQuerySpec(
-    identifier='memories_universal_list_scan_updated_at',
-    collection_group='memories',
-    query_scope='COLLECTION',
-    filters=(),
-    index_fields=(_desc('updated_at'), _asc('__name__')),
-)
-
-UNIVERSAL_HISTORICAL_CREATED_LIST_SCAN_QUERY = FirestoreQuerySpec(
-    identifier='memories_universal_list_scan_created_at',
-    collection_group='memories',
-    query_scope='COLLECTION',
-    filters=(),
-    index_fields=(_desc('created_at'), _asc('__name__')),
 )
 
 CONVERSATION_SOURCE_MEMORY_QUERY = FirestoreQuerySpec(
@@ -476,26 +373,6 @@ EXPIRED_SHORT_TERM_LIFECYCLE_QUERY = FirestoreQuerySpec(
         FirestoreQueryFilter('tier', '==', 'tier'),
         FirestoreQueryFilter('status', '==', 'status'),
         FirestoreQueryFilter('processing_state', '==', 'processing_state'),
-        FirestoreQueryFilter('expires_at', '<=', 'expires_at'),
-    ),
-    index_fields=(
-        _asc('tier'),
-        _asc('status'),
-        _asc('processing_state'),
-        _asc('expires_at'),
-        _asc('memory_id'),
-        _asc('__name__'),
-    ),
-)
-
-EXPIRY_URGENT_SHORT_TERM_BY_STORED_EXPIRY_QUERY = FirestoreQuerySpec(
-    identifier='memory_items_expiry_urgent_short_term_by_stored_expiry',
-    collection_group='memory_items',
-    query_scope='COLLECTION_GROUP',
-    filters=(
-        FirestoreQueryFilter('tier', '==', 'tier'),
-        FirestoreQueryFilter('status', '==', 'status'),
-        FirestoreQueryFilter('processing_state', 'in', 'processing_states'),
         FirestoreQueryFilter('expires_at', '<=', 'expires_at'),
     ),
     index_fields=(
@@ -618,64 +495,6 @@ STALE_IN_PROGRESS_CONVERSATIONS_QUERY = FirestoreQuerySpec(
     ),
 )
 
-CONVERSATIONS_ACTIVE_ORDERED_QUERY = FirestoreQuerySpec(
-    identifier='conversations_discarded_created',
-    collection_group='conversations',
-    query_scope='COLLECTION',
-    # `get_conversations`/`get_conversations_without_photos` called with their
-    # defaults (`include_discarded=False`, no `statuses`/`categories`/`folder_id`/
-    # `starred` filter) build exactly this shape — it's the default `GET
-    # /v1/conversations` list call, i.e. the app's main screen. Production has
-    # this index only because it was created by hand at some point; a fresh
-    # self-host deploy 400s with FailedPrecondition the first time anyone loads
-    # their conversation list.
-    filters=(FirestoreQueryFilter('discarded', '==', 'discarded'),),
-    index_fields=(_asc('discarded'), _desc('created_at'), _desc('__name__')),
-)
-
-ACTION_ITEMS_COMPLETION_ID_SCAN_QUERY = FirestoreQuerySpec(
-    identifier='action_items_completion_id_scan',
-    collection_group='action_items',
-    query_scope='COLLECTION',
-    filters=(FirestoreQueryFilter('completed', '==', 'completed'),),
-    index_fields=(_asc('completed'), _asc('__name__')),
-)
-
-ACTION_ITEMS_COMPLETED_DUE_RANGE_QUERY = FirestoreQuerySpec(
-    identifier='action_items_completed_due_range',
-    collection_group='action_items',
-    query_scope='COLLECTION',
-    filters=(
-        FirestoreQueryFilter('due_at', '>=', 'start'),
-        FirestoreQueryFilter('due_at', '<', 'end'),
-        FirestoreQueryFilter('completed', '==', 'completed'),
-    ),
-    index_fields=(_asc('completed'), _asc('due_at'), _asc('__name__')),
-)
-
-ACTION_ITEMS_CREATED_RANGE_QUERY = FirestoreQuerySpec(
-    identifier='action_items_created_range',
-    collection_group='action_items',
-    query_scope='COLLECTION',
-    filters=(
-        FirestoreQueryFilter('created_at', '>=', 'start'),
-        FirestoreQueryFilter('created_at', '<', 'end'),
-    ),
-    index_fields=(_asc('created_at'), _asc('__name__')),
-)
-
-ACTION_ITEMS_COMPLETED_CREATED_RANGE_QUERY = FirestoreQuerySpec(
-    identifier='action_items_completed_created_range',
-    collection_group='action_items',
-    query_scope='COLLECTION',
-    filters=(
-        FirestoreQueryFilter('created_at', '>=', 'start'),
-        FirestoreQueryFilter('created_at', '<', 'end'),
-        FirestoreQueryFilter('completed', '==', 'completed'),
-    ),
-    index_fields=(_asc('completed'), _asc('created_at'), _asc('__name__')),
-)
-
 CHAT_FIRST_DEFERRALS_DUE_QUERY = FirestoreQuerySpec(
     identifier='chat_first_deferrals_due',
     collection_group='chat_first_deferrals',
@@ -707,77 +526,7 @@ CHAT_FIRST_DEFERRALS_SUBJECT_QUERY = FirestoreQuerySpec(
     ),
 )
 
-CURRENT_CHAT_SESSION_QUERY = FirestoreQuerySpec(
-    identifier='chat_sessions_current_by_app',
-    collection_group='chat_sessions',
-    query_scope='COLLECTION',
-    filters=(FirestoreQueryFilter('plugin_id', '==', 'app_id'),),
-    # No `created_at` ordering: Firestore omits documents that lack the ordered
-    # field, and a chat session with no timestamp is representable, so ordering
-    # in the query would hide a user's existing sessions. The caller reads this
-    # filter and picks the newest itself.
-    index_fields=(_asc('plugin_id'), _asc('__name__')),
-)
-
-CURRENT_CHAT_SESSION_ORDERED_QUERY = FirestoreQuerySpec(
-    identifier='chat_sessions_current_by_app_created_at',
-    collection_group='chat_sessions',
-    query_scope='COLLECTION',
-    filters=(FirestoreQueryFilter('plugin_id', '==', 'app_id'),),
-    index_fields=(_asc('plugin_id'), _desc('created_at'), _desc('__name__')),
-)
-
-# get_app_messages and get_messages' app-scoped branch (no chat_session_id) both
-# filter messages by plugin_id and order by created_at descending. Neither built
-# this through the registry, so no composite index was ever declared for it and
-# a self-host without prod's historically hand-created index 400s with
-# FailedPrecondition on GET /v1/messages (chat.py:get_messages).
-MESSAGES_BY_APP_ORDERED_QUERY = FirestoreQuerySpec(
-    identifier='messages_by_app_created_at',
-    collection_group='messages',
-    query_scope='COLLECTION',
-    filters=(FirestoreQueryFilter('plugin_id', '==', 'app_id'),),
-    index_fields=(_asc('plugin_id'), _desc('created_at'), _desc('__name__')),
-)
-
-MEETING_RECEIPTS_DUE_QUERY = FirestoreQuerySpec(
-    identifier='conversation_finalization_jobs_meeting_receipts_due',
-    collection_group='conversation_finalization_jobs',
-    query_scope='COLLECTION',
-    filters=(
-        FirestoreQueryFilter('meeting_treatment_eligible', '==', 'meeting_treatment_eligible'),
-        FirestoreQueryFilter('meeting_receipt_intent_id', '==', 'meeting_receipt_intent_id'),
-        FirestoreQueryFilter('meeting_receipt_reconcile_after_at', '<=', 'meeting_receipt_reconcile_after_at'),
-    ),
-    index_fields=(
-        _asc('meeting_treatment_eligible'),
-        _asc('meeting_receipt_intent_id'),
-        _asc('meeting_receipt_reconcile_after_at'),
-        _asc('__name__'),
-    ),
-)
-
-HOURLY_USAGE_PLAN_ATTRIBUTION_QUERY = FirestoreQuerySpec(
-    identifier='hourly_usage_plan_attribution_month',
-    collection_group='hourly_usage',
-    query_scope='COLLECTION',
-    filters=(
-        FirestoreQueryFilter('year', '==', 'year'),
-        FirestoreQueryFilter('month', '==', 'month'),
-    ),
-    index_fields=(
-        _asc('year'),
-        _asc('month'),
-        _asc('__name__'),
-    ),
-)
-
 QUERY_SPECS = (
-    ACTION_ITEMS_COMPLETION_ID_SCAN_QUERY,
-    ACTION_ITEMS_COMPLETED_DUE_RANGE_QUERY,
-    ACTION_ITEMS_CREATED_RANGE_QUERY,
-    ACTION_ITEMS_COMPLETED_CREATED_RANGE_QUERY,
-    CANDIDATES_COMPATIBILITY_QUERY,
     DUE_MEMORY_OUTBOX_QUERY,
     EXPIRED_MEMORY_OUTBOX_LEASE_QUERY,
     REVIEW_QUEUE_BY_FACT_QUERY,
@@ -787,101 +536,32 @@ QUERY_SPECS = (
     REVIEW_QUEUE_BY_STATUS_ID_QUERY,
     REQUIRED_MEMORY_PROCESSING_QUERY,
     CANONICAL_CONSOLIDATION_QUERY,
-    RECENT_REJECTED_MEMORY_FEEDBACK_QUERY,
-    POLICY_EXPIRED_SHORT_TERM_QUERY,
-    EXPIRY_URGENT_SHORT_TERM_BY_CAPTURE_QUERY,
     CANONICAL_GRAPH_READ_QUERY,
-    CANONICAL_MEMORY_ATLAS_READ_QUERY,
-    UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
-    UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY,
-    UNIVERSAL_HISTORICAL_CREATED_LIST_SCAN_QUERY,
     CONVERSATION_SOURCE_MEMORY_QUERY,
     SUPERSEDED_MEMORY_BY_CANONICAL_TARGET_QUERY,
     SUPERSEDED_MEMORY_BY_LEGACY_TARGET_QUERY,
     EXPIRED_SHORT_TERM_LIFECYCLE_QUERY,
-    EXPIRY_URGENT_SHORT_TERM_BY_STORED_EXPIRY_QUERY,
     ACTIVE_ATTENTION_OVERRIDE_QUERY,
     LEGACY_CONVERSATION_RECOVERY_QUERY,
     STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
     CHAT_FIRST_DEFERRALS_DUE_QUERY,
     CHAT_FIRST_DEFERRALS_SUBJECT_QUERY,
-    CURRENT_CHAT_SESSION_QUERY,
-    CURRENT_CHAT_SESSION_ORDERED_QUERY,
-    MEETING_RECEIPTS_DUE_QUERY,
-    HOURLY_USAGE_PLAN_ATTRIBUTION_QUERY,
-    MESSAGES_BY_APP_ORDERED_QUERY,
-    CONVERSATIONS_ACTIVE_ORDERED_QUERY,
 )
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)
 
-
-def _index_fields_need_composite_manifest(index_fields: tuple[FirestoreIndexField, ...]) -> bool:
-    """Return True when Firestore will not serve this order from automatic indexes.
-
-    Automatic single-field indexes cover ``field ASC, __name__ ASC`` and
-    ``field DESC, __name__ DESC`` only. A lone ordered field with an opposite
-    ``__name__`` direction is a composite Firestore must be given explicitly
-    (#11684). Multi-field orders always need the composite manifest.
-    Array-contains (+ ``__name__``) stays out of the composite manifest — the
-    existing unified-memory index contract keeps those automatic.
-    """
-
-    non_name = [field for field in index_fields if field.field_path != '__name__']
-    name_fields = [field for field in index_fields if field.field_path == '__name__']
-    if len(non_name) > 1:
-        return True
-    if len(non_name) != 1 or len(name_fields) != 1:
-        return False
-    ordered = non_name[0]
-    name = name_fields[0]
-    if ordered.order is None or name.order is None:
-        return False
-    return ordered.order != name.order
-
-
-def _query_spec_index_requirements() -> tuple[FirestoreIndexRequirement, ...]:
-    """One composite index per signature, even when two serving queries share it."""
-    seen = set(_INDEX_ONLY_REQUIREMENT_SIGNATURES)
-    requirements: list[FirestoreIndexRequirement] = []
-    for spec in QUERY_SPECS:
-        if not _index_fields_need_composite_manifest(spec.index_fields):
-            continue
-        signature = spec.index_requirement.signature
-        if signature in seen:
-            continue
-        seen.add(signature)
-        requirements.append(spec.index_requirement)
-    return tuple(requirements)
-
-
 INDEX_REQUIREMENTS = (
     *INDEX_ONLY_REQUIREMENTS,
-    *_query_spec_index_requirements(),
-)
-
-
-# Firestore auto-indexes every field of every document in both directions unless a field is
-# explicitly exempted. For text fields that no query ever filters or orders on, that index is pure
-# storage cost: measured on prod `screen_activity` (964,964 documents, mean 1,052 B), the four
-# originally declared fields carried roughly 2.75x the document bytes in index entries, matching
-# the earlier "about three times" estimate.
-#
-# Only the two text fields are exempted, and the split is deliberate. `ocrText` (mean 899 B, capped
-# at 1,000 characters on write) is ~71% of that index cost and `windowTitle` ~10%; both are only
-# ever read back and rendered, since semantic search runs on Pinecone vectors rather than Firestore.
-# `deviceName` (11 B) and `clientDeviceId` (14 B) are together ~19% of an already small number --
-# under ten cents a month at current volume -- and are the one plausible future filter here:
-# utils/memory/device_scope_filter.py already scopes by device in Python, and pushing that down to
-# a Firestore filter would fail with FAILED_PRECONDITION against a disabled index. Re-enabling has
-# no scripted path (the reconcile workflow is disable-only) and forces a full collection-group
-# backfill, so they stay indexed.
-#
-# Exempting a field only removes single-field indexes — composite indexes declared above are
-# unaffected, so a field named in a composite index can still appear here.
-FIELD_INDEXING_EXEMPTIONS: tuple[tuple[str, str], ...] = (
-    ('screen_activity', 'ocrText'),
-    ('screen_activity', 'windowTitle'),
+    *(
+        spec.index_requirement
+        for spec in QUERY_SPECS
+        # Firestore manages one-field indexes (including document-ID ordering)
+        # itself and rejects them in the composite-index manifest.
+        if len([field for field in spec.index_fields if field.field_path != '__name__']) > 1
+        # Explicit requirements own legacy manifests while their callers migrate
+        # to query specs. Avoid declaring the same composite index twice.
+        and spec.index_requirement.signature not in _INDEX_ONLY_REQUIREMENT_SIGNATURES
+    ),
 )
 
 
@@ -895,13 +575,4 @@ def firebase_index_manifest() -> dict[str, list[dict[str, Any]]]:
             raise ValueError(f'duplicate Firestore index requirement: {requirement.identifier}')
         signatures.add(requirement.signature)
         indexes.append(requirement.to_manifest())
-    field_overrides = [
-        {
-            'collectionGroup': collection_group,
-            'fieldPath': field_path,
-            'ttl': False,
-            'indexes': [],
-        }
-        for collection_group, field_path in FIELD_INDEXING_EXEMPTIONS
-    ]
-    return {'indexes': indexes, 'fieldOverrides': field_overrides}
+    return {'indexes': indexes, 'fieldOverrides': []}

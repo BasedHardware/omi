@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 
 WORKFLOWS = (
+    Path(".github/workflows/gcp_backend_agent_proxy.yml"),
     Path(".github/workflows/gcp_backend_listen_helm.yml"),
     Path(".github/workflows/gcp_backend_pusher.yml"),
     Path(".github/workflows/gcp_llm_gateway.yml"),
@@ -107,7 +108,7 @@ def validate_gateway_break_glass_hatch(text: str) -> list[str]:
             "gateway break-glass use must be recorded by a dedicated job",
         ),
         (
-            "--label release-gate-failure",
+            "release-gate-failure",
             "gateway break-glass tracking issue must carry the release-gate-failure label",
         ),
     ):

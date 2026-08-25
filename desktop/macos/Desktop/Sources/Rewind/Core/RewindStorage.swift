@@ -161,55 +161,6 @@ actor RewindStorage {
     return relativePath
   }
 
-  // MARK: - Live Frames
-
-  /// Frames in the active (unfinalized) video chunk cannot be decoded yet, so ingest also writes
-  /// each JPEG here and the timeline falls back to it until the chunk finalizes. Lives in its own
-  /// subdirectory so pruning can never touch legacy per-frame history under the day directories.
-  private static let liveFramesDirectoryName = "live"
-  /// Comfortably above the 60s chunk duration plus finalization time.
-  private static let liveFrameMaxAge: TimeInterval = 10 * 60
-  private var lastLiveFramePruneAt: Date = .distantPast
-
-  /// Save a JPEG for a frame whose video chunk has not finalized yet; returns the relative path.
-  func saveLiveScreenshot(jpegData: Data, timestamp: Date) async throws -> String {
-    guard let screenshotsDirectory = screenshotsDirectory else {
-      throw RewindError.storageError("Storage not initialized")
-    }
-    let liveDirectory = screenshotsDirectory.appendingPathComponent(
-      Self.liveFramesDirectoryName, isDirectory: true)
-    try fileManager.createDirectory(at: liveDirectory, withIntermediateDirectories: true)
-
-    let filename = "frame_\(Int64(timestamp.timeIntervalSince1970 * 1000)).jpg"
-    let relativePath = "\(Self.liveFramesDirectoryName)/\(filename)"
-    try jpegData.write(to: screenshotsDirectory.appendingPathComponent(relativePath))
-
-    pruneLiveScreenshotsIfDue()
-    return relativePath
-  }
-
-  /// Delete live JPEGs old enough that their chunk has long since finalized (video storage wins
-  /// once available, so these files are only read while the frame's chunk is active or corrupted).
-  private func pruneLiveScreenshotsIfDue(now: Date = Date()) {
-    guard now.timeIntervalSince(lastLiveFramePruneAt) >= 60 else { return }
-    lastLiveFramePruneAt = now
-    guard let screenshotsDirectory = screenshotsDirectory else { return }
-    let liveDirectory = screenshotsDirectory.appendingPathComponent(
-      Self.liveFramesDirectoryName, isDirectory: true)
-    guard
-      let files = try? fileManager.contentsOfDirectory(
-        at: liveDirectory, includingPropertiesForKeys: [.contentModificationDateKey])
-    else { return }
-    for file in files {
-      let modified =
-        (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
-        ?? .distantPast
-      if now.timeIntervalSince(modified) > Self.liveFrameMaxAge {
-        try? fileManager.removeItem(at: file)
-      }
-    }
-  }
-
   // MARK: - Load Screenshot
 
   /// Load image data from a relative path
@@ -596,14 +547,8 @@ actor RewindStorage {
       let videoPath = screenshot.videoChunkPath,
       let frameOffset = screenshot.frameOffset
     {
-      do {
-        let frame = try await videoFrame(videoPath: videoPath, frameOffset: frameOffset)
-        return NSImage(cgImage: frame.cgImage, size: frame.pixelSize)
-      } catch {
-        // Frame's chunk is still active (or unreadable) — fall back to the live JPEG if we have one.
-        guard let imagePath = screenshot.imagePath, !imagePath.isEmpty else { throw error }
-        return try await loadScreenshotImage(relativePath: imagePath)
-      }
+      let frame = try await videoFrame(videoPath: videoPath, frameOffset: frameOffset)
+      return NSImage(cgImage: frame.cgImage, size: frame.pixelSize)
     }
 
     let data = try await loadScreenshotData(for: screenshot)
@@ -649,21 +594,15 @@ actor RewindStorage {
       let videoPath = screenshot.videoChunkPath,
       let offset = screenshot.frameOffset
     {
-      do {
-        // Load frame and convert to JPEG data
-        let image = try await loadVideoFrame(videoPath: videoPath, frameOffset: offset)
-        guard let tiffData = image.tiffRepresentation,
-          let bitmap = NSBitmapImageRep(data: tiffData),
-          let jpegData = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 1.0])
-        else {
-          throw RewindError.invalidImage
-        }
-        return jpegData
-      } catch {
-        // Frame's chunk is still active (or unreadable) — fall back to the live JPEG if we have one.
-        guard let imagePath = screenshot.imagePath, !imagePath.isEmpty else { throw error }
-        return try await loadScreenshot(relativePath: imagePath)
+      // Load frame and convert to JPEG data
+      let image = try await loadVideoFrame(videoPath: videoPath, frameOffset: offset)
+      guard let tiffData = image.tiffRepresentation,
+        let bitmap = NSBitmapImageRep(data: tiffData),
+        let jpegData = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 1.0])
+      else {
+        throw RewindError.invalidImage
       }
+      return jpegData
     } else if let imagePath = screenshot.imagePath, !imagePath.isEmpty {
       return try await loadScreenshot(relativePath: imagePath)
     } else {

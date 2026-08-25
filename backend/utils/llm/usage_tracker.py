@@ -217,6 +217,5 @@ class Features:
     CONVERSATION_DISCARD = "conv_discard"
     CONVERSATION_STRUCTURE = "conv_structure"
     CONVERSATION_ACTION_ITEMS = "conv_action_items"
-    WAKE_WORD_ADJUDICATION = "wake_word_adjudication"
     CONVERSATION_FOLDER = "conv_folder"
     CONVERSATION_APPS = "conv_apps"

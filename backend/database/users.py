@@ -25,20 +25,16 @@ from models.users import (
     LocationContextConsent,
     LocationContextConsentStatus,
     Subscription,
+    PlanLimits,
     PlanType,
     SubscriptionStatus,
 )
 from models.other import Person
+from utils.subscription import get_default_basic_subscription
 import logging
 
 logger = logging.getLogger(__name__)
 DELETION_WIPE_RUNNING_STALE_AFTER = timedelta(hours=6)
-# A wipe that fails for a persistent reason (a missing queue, a dependency that is down) is
-# re-selected by every reconciler tick on every pod. Without a delay that is one claim
-# transaction per pod per tick, forever, against a record that cannot make progress. The
-# delay backs off per attempt and stops there: it never gives up on an accepted deletion.
-DELETION_WIPE_RETRY_BASE_DELAY = timedelta(minutes=5)
-DELETION_WIPE_RETRY_MAX_DELAY = timedelta(hours=1)
 _DELETION_WIPE_TERMINAL_STATUSES = frozenset({'completed', 'cancelled'})
 _DELETION_WIPE_LEGACY_ACTIONABLE_STATUSES = frozenset({'pending', 'retrying', 'running', 'failed'})
 LOCATION_CONTEXT_CONSENT_TTL = timedelta(days=30)
@@ -259,15 +255,15 @@ def set_user_cancellation_feedback(uid: str, reason: str, reason_details: Option
 BYOK_HEARTBEAT_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days
 
 
-def get_byok_state(uid: str, *, firestore_client: Any | None = None) -> dict:
-    user_ref = (firestore_client or db).collection('users').document(uid)
+def get_byok_state(uid: str) -> dict:
+    user_ref = db.collection('users').document(uid)
     data = user_ref.get().to_dict() or {}
     return data.get('byok', {})
 
 
-def is_byok_active(uid: str, *, firestore_client: Any | None = None) -> bool:
+def is_byok_active(uid: str) -> bool:
     """True if user has a live BYOK activation (heartbeat within TTL)."""
-    state = get_byok_state(uid, firestore_client=firestore_client)
+    state = get_byok_state(uid)
     if not state.get('active'):
         return False
     last_seen = state.get('last_seen_at')
@@ -444,11 +440,7 @@ def mark_user_deletion_wipe_completed(uid: str) -> bool:
 def mark_user_deletion_wipe_failed(uid: str):
     """Mark the background data wipe as failed so a reconciliation worker can retry."""
     db.collection('account_deletions').document(uid).set(
-        {
-            'wipe_status': 'failed',
-            'wipe_failed_at': datetime.now(timezone.utc),
-            'wipe_attempts': firestore.Increment(1),
-        },
+        {'wipe_status': 'failed', 'wipe_failed_at': datetime.now(timezone.utc)},
         merge=True,
     )
 
@@ -614,20 +606,6 @@ def cancel_user_deletion_wipe(uid: str):
     )
 
 
-def deletion_wipe_retry_delay(attempts: int) -> timedelta:
-    """How long a ``failed`` wipe waits before it is selected again.
-
-    Doubles per recorded attempt and saturates at ``DELETION_WIPE_RETRY_MAX_DELAY``. The first
-    failure still retries on the next tick, so a transient error costs nothing.
-    """
-    if attempts <= 1:
-        return timedelta(0)
-    # Clamp the exponent before applying it: ``timedelta * 2 ** large`` overflows, and any
-    # exponent past the cap is the same answer anyway.
-    doublings = min(attempts - 2, 20)
-    return min(DELETION_WIPE_RETRY_BASE_DELAY * (2**doublings), DELETION_WIPE_RETRY_MAX_DELAY)
-
-
 def get_pending_deletion_wipes(
     limit: int = 100,
     stale_after: timedelta = timedelta(minutes=10),
@@ -635,7 +613,7 @@ def get_pending_deletion_wipes(
 ) -> list[dict]:
     """Return account_deletions documents whose wipe needs retry.
 
-    Queries ``failed`` records whose per-attempt backoff has elapsed, stale ``pending`` records
+    Queries ``failed`` records (always actionable), stale ``pending`` records
     (queued more than ``stale_after`` ago), stale ``deleting_auth`` records
     (intent written but never transitioned to ``pending`` — usually a crash
     after ``auth.delete_account()`` succeeded), stale ``running`` records (worker
@@ -656,22 +634,8 @@ def get_pending_deletion_wipes(
     running_cutoff = datetime.now(timezone.utc) - running_stale_after
     budget = limit
 
-    # Over-fetch *all* failed docs and back-off-filter in Python, for the same reason the
-    # ``pending`` branch below does: a tight ``.limit(budget)`` could return a page made
-    # entirely of records still inside their backoff window and starve one that is ready.
-    now = datetime.now(timezone.utc)
-    result: list[dict] = []
-    failed_docs = db.collection('account_deletions').where('wipe_status', '==', 'failed').stream()
-    for doc in failed_docs:
-        if len(result) >= limit:
-            break
-        data = doc.to_dict()
-        failed_at = data.get('wipe_failed_at')
-        # A record with no ``wipe_failed_at`` predates the backoff and stays immediately
-        # actionable: a missing timestamp must never be a reason to stop retrying a wipe.
-        if failed_at and failed_at + deletion_wipe_retry_delay(data.get('wipe_attempts') or 1) > now:
-            continue
-        result.append(data | {'uid': doc.id})
+    failed_docs = db.collection('account_deletions').where('wipe_status', '==', 'failed').limit(budget).stream()
+    result = [doc.to_dict() | {'uid': doc.id} for doc in failed_docs]
 
     if len(result) < limit:
         # Over-fetch *all* pending docs and age-filter in Python. A tight
@@ -1558,9 +1522,9 @@ def set_user_onboarding_state(uid: str, onboarding_data: dict) -> None:
     user_ref.set({'onboarding': onboarding_data}, merge=True)
 
 
-def get_user_subscription(uid: str, *, firestore_client: Any | None = None) -> Subscription:
+def get_user_subscription(uid: str) -> Subscription:
     """Gets the user's subscription, creating a default free one if it doesn't exist."""
-    user_ref = (firestore_client or db).collection('users').document(uid)
+    user_ref = db.collection('users').document(uid)
     user_doc = user_ref.get(['subscription'])
     if user_doc.exists:
         user_data = user_doc.to_dict()
@@ -1584,11 +1548,6 @@ def get_user_subscription(uid: str, *, firestore_client: Any | None = None) -> S
             return subscription
 
     # If subscription doesn't exist for the user, create and return a default free plan.
-    # Imported here, not at module scope: utils.subscription imports this module, so a
-    # module-level import makes utils.subscription unimportable on its own (see
-    # get_user_valid_subscription, which defers the same import for the same reason).
-    from utils.subscription import get_default_basic_subscription
-
     default_subscription = get_default_basic_subscription()
     # Strip dynamic fields before storing
     sub_to_store = default_subscription.model_dump()
@@ -1598,9 +1557,9 @@ def get_user_subscription(uid: str, *, firestore_client: Any | None = None) -> S
     return default_subscription
 
 
-def get_existing_user_subscription(uid: str, *, firestore_client: Any | None = None) -> Optional[Subscription]:
+def get_existing_user_subscription(uid: str) -> Optional[Subscription]:
     """Gets the user's stored subscription without creating a default record."""
-    user_ref = (firestore_client or db).collection('users').document(uid)
+    user_ref = db.collection('users').document(uid)
     user_doc = user_ref.get(['subscription'])
     if not user_doc.exists:
         return None
@@ -1702,9 +1661,7 @@ def set_user_training_data_opt_in(uid: str, status: str):
     )
 
 
-def get_user_valid_subscription(
-    uid: str, *, firestore_client: Any | None = None, provision: bool = True
-) -> Optional[Subscription]:
+def get_user_valid_subscription(uid: str) -> Optional[Subscription]:
     """
     Gets the user's subscription if it is currently valid for use.
 
@@ -1715,22 +1672,8 @@ def get_user_valid_subscription(
       they paid for, even after cancelling.
 
     Returns the Subscription object if valid, otherwise None.
-
-    ``provision=False`` never merge-writes a default Free plan. Desktop-backend
-    quota must use that mode against the customer Firestore so a miss cannot
-    stamp ``plan: basic`` onto a paying user.
     """
-    # Imported here, not at module scope: utils.subscription imports this module, and a
-    # module-level import back into it forms a cycle that makes utils.subscription raise
-    # ImportError whenever it is the first of the pair to be imported.
-    from utils.subscription import get_default_basic_subscription
-
-    if provision:
-        subscription = get_user_subscription(uid, firestore_client=firestore_client)
-    else:
-        subscription = get_existing_user_subscription(uid, firestore_client=firestore_client)
-        if subscription is None:
-            subscription = get_default_basic_subscription()
+    subscription = get_user_subscription(uid)
 
     # Basic (free) plans are only valid if their status is active.
     if subscription.plan == PlanType.basic:

@@ -322,7 +322,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get searchApps => 'Ieškoti programų...';
 
   @override
-  String get myApps => 'Sukurta manęs';
+  String get myApps => 'Mano programėlės';
 
   @override
   String get installedApps => 'Įdiegtos programėlės';
@@ -9859,64 +9859,4 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Otwórz sklep';
-
-  @override
-  String get chatScopeToday => 'Šiandien';
-
-  @override
-  String get chatScopeThisWeek => 'Šią savaitę';
-
-  @override
-  String chatScopeAbout(String title) {
-    return 'Apie: $title';
-  }
-
-  @override
-  String get askAboutThisConversation => 'Paklausti apie tai';
-
-  @override
-  String get sendRawAudioToOmi => 'Siųsti neapdorotą garsą į Omi';
-
-  @override
-  String get sendRawAudioToOmiDescription =>
-      'Išjunkite, kad neapdorotas garsas nebūtų siunčiamas į Omi. Transkripcijos ir debesies funkcijoms reikalingi duomenys vis tiek gali būti siunčiami į Omi.';
-
-  @override
-  String get findDevice => 'Rasti';
-
-  @override
-  String get diagnosticsShareFailed => 'Nepavyko bendrinti diagnostikos. Bandykite dar kartą.';
-
-  @override
-  String get appDisabledTitle => 'Ši programėlė išjungta ir jos įdiegti negalima.';
-
-  @override
-  String get appDisabledWebhookFailures =>
-      'Jos galinis taškas nepavyko 72 valandas iš eilės, todėl pristatymai buvo sustabdyti.';
-
-  @override
-  String get appDisabledGeneric => 'Ją išjungė „Omi“.';
-
-  @override
-  String get appDisabledOwnerHint =>
-      'Pirmiausia pataisykite galinį tašką — įjungiant iš naujo kiekvienas sukonfigūruotas URL tikrinamas dar kartą.';
-
-  @override
-  String get appReEnable => 'Įjungti iš naujo';
-
-  @override
-  String get appReEnableFailedTitle => 'Nepavyko įjungti iš naujo';
-
-  @override
-  String get appReEnableFailedBody => 'Šios programėlės nepavyko įjungti iš naujo. Bandykite dar kartą.';
-
-  @override
-  String appDisabledOn(String date) {
-    return 'Išjungta $date.';
-  }
-
-  @override
-  String appDisabledLastError(String error) {
-    return 'Paskutinė klaida: $error.';
-  }
 }

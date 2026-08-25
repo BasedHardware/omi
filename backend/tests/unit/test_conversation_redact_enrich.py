@@ -89,7 +89,6 @@ class TestRedactForList:
 
     def test_locked_strips_details_keeps_title(self):
         conv = _make_conv_dict(is_locked=True)
-        conv['match_snippets'] = [{'text': 'ACME contract', 'start': 1.0, 'end': 2.0}]
         result = redact_conversation_for_list(conv)
         assert result['structured']['title'] == "Test Title"
         assert result['structured']['overview'] == "Test overview"
@@ -99,13 +98,6 @@ class TestRedactForList:
         assert result['plugins_results'] == []
         assert result['suggested_summarization_apps'] == []
         assert result['transcript_segments'] == []
-        assert result['match_snippets'] == []
-
-    def test_unlocked_keeps_match_snippets(self):
-        conv = _make_conv_dict(is_locked=False)
-        conv['match_snippets'] = [{'text': 'ACME contract', 'start': 1.0, 'end': 2.0}]
-        result = redact_conversation_for_list(conv)
-        assert result['match_snippets'] == [{'text': 'ACME contract', 'start': 1.0, 'end': 2.0}]
 
     def test_locked_no_structured_key(self):
         conv = {"id": "x", "is_locked": True}
@@ -161,7 +153,6 @@ class TestRedactForIntegration:
 
     def test_locked_strips_everything(self):
         conv = _make_conv_dict(is_locked=True)
-        conv['match_snippets'] = [{'text': 'ACME contract', 'start': 1.0, 'end': 2.0}]
         result = redact_conversation_for_integration(conv)
         assert result['structured']['title'] == ''
         assert result['structured']['overview'] == ''
@@ -171,7 +162,6 @@ class TestRedactForIntegration:
         assert result['plugins_results'] == []
         assert result['suggested_summarization_apps'] == []
         assert result['transcript_segments'] == []
-        assert result['match_snippets'] == []
 
     def test_locked_non_dict_structured_coerced(self):
         """Integration redaction also handles non-dict structured (e.g. Pydantic)."""

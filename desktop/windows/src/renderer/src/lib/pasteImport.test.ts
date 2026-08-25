@@ -4,8 +4,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // Mock only the network boundary (apiClient); the real extractMemories / heuristic
 // dedup / batched-import logic runs, so this exercises the shipped orchestration
 // rather than a re-declared copy of it.
-const { omiPost } = vi.hoisted(() => ({ omiPost: vi.fn() }))
+const { desktopPost, omiPost } = vi.hoisted(() => ({ desktopPost: vi.fn(), omiPost: vi.fn() }))
 vi.mock('./apiClient', () => ({
+  desktopApi: { post: desktopPost },
   omiApi: { post: omiPost }
 }))
 
@@ -15,11 +16,12 @@ import {
   MAX_HEURISTIC_IMPORT_ITEMS
 } from './pasteImport'
 
-function extractReply(obj: unknown): { data: unknown } {
-  return { data: obj }
+function aiReply(obj: unknown): { data: unknown } {
+  return { data: { choices: [{ message: { content: JSON.stringify(obj) } }] } }
 }
 
 beforeEach(() => {
+  desktopPost.mockReset()
   omiPost.mockReset()
   ;(window as unknown as { omi: Record<string, unknown> }).omi = {
     memoryImportParse: vi.fn()
@@ -28,18 +30,13 @@ beforeEach(() => {
 
 describe('extractPasteMemories — AI path', () => {
   it('returns the synthesized memories + profile with via=ai', async () => {
-    omiPost.mockResolvedValue(
-      extractReply({ memories: ['Likes tea', 'Lives in NY'], profile: 'A summary.' })
+    desktopPost.mockResolvedValue(
+      aiReply({ memories: ['Likes tea', 'Lives in NY'], profile: 'A summary.' })
     )
     const r = await extractPasteMemories('log', 'chatgpt', [])
     expect(r.via).toBe('ai')
     expect(r.memories).toEqual(['Likes tea', 'Lives in NY'])
     expect(r.profile).toBe('A summary.')
-    expect(omiPost).toHaveBeenCalledWith(
-      '/v1/memories/extract',
-      expect.objectContaining({ text_source: 'chatgpt' }),
-      expect.objectContaining({ timeout: 60_000 })
-    )
     // The heuristic parser must NOT have been consulted on the AI happy path.
     expect(
       (window as unknown as { omi: { memoryImportParse: ReturnType<typeof vi.fn> } }).omi
@@ -48,7 +45,7 @@ describe('extractPasteMemories — AI path', () => {
   })
 
   it('drops memories already present (exact-match dedup)', async () => {
-    omiPost.mockResolvedValue(extractReply({ memories: ['Likes tea', 'Likes Tea!'], profile: '' }))
+    desktopPost.mockResolvedValue(aiReply({ memories: ['Likes tea', 'Likes Tea!'], profile: '' }))
     const r = await extractPasteMemories('log', 'claude', ['likes tea'])
     expect(r.memories).toEqual([]) // both normalize to an existing memory
   })
@@ -56,7 +53,7 @@ describe('extractPasteMemories — AI path', () => {
 
 describe('extractPasteMemories — heuristic fallback', () => {
   it('falls back to the line split when the AI call throws, deduping existing', async () => {
-    omiPost.mockRejectedValue(new Error('gateway down'))
+    desktopPost.mockRejectedValue(new Error('gateway down'))
     ;(
       window as unknown as { omi: { memoryImportParse: ReturnType<typeof vi.fn> } }
     ).omi.memoryImportParse.mockResolvedValue(['Fact one', 'Fact two', 'Fact one'])
@@ -70,7 +67,7 @@ describe('extractPasteMemories — heuristic fallback', () => {
   })
 
   it('caps the heuristic list at MAX_HEURISTIC_IMPORT_ITEMS and reports the pre-cap total', async () => {
-    omiPost.mockRejectedValue(new Error('boom'))
+    desktopPost.mockRejectedValue(new Error('boom'))
     const many = Array.from({ length: MAX_HEURISTIC_IMPORT_ITEMS + 25 }, (_, i) => `fact ${i}`)
     ;(
       window as unknown as { omi: { memoryImportParse: ReturnType<typeof vi.fn> } }

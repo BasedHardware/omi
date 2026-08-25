@@ -125,52 +125,6 @@ enum DesktopUpdateStatusPresentation {
   }
 }
 
-/// Compact spinner for update chrome. macOS `ProgressView()` defaults to a
-/// linear bar (~100pt+), which left a blank gap beside "Downloading…" in the
-/// top-bar chip; pin circular style and a caption-sized frame.
-struct DesktopUpdateStatusProgressIndicator: View {
-  var diameter: CGFloat = 16
-
-  var body: some View {
-    ProgressView()
-      .progressViewStyle(.circular)
-      .controlSize(.small)
-      .tint(Ink.surface)
-      .frame(width: diameter, height: diameter)
-  }
-}
-
-/// Production label for `DesktopUpdateStatusChip`, extracted so layout tests
-/// can measure the hugging width without Sparkle session state.
-struct DesktopUpdateStatusChipLabel: View {
-  let kind: DesktopUpdateStatusPresentation.Kind
-  var glowAnimating: Bool = false
-
-  var body: some View {
-    HStack(spacing: OmiSpacing.xs) {
-      if kind.showsProgress {
-        DesktopUpdateStatusProgressIndicator()
-      } else {
-        Image(systemName: "arrow.down.circle.fill")
-          .scaledFont(size: OmiType.caption, weight: .semibold)
-          .foregroundColor(Ink.surface)
-      }
-
-      Text(kind.compactTitle)
-        .scaledFont(size: OmiType.caption, weight: .semibold)
-        .foregroundColor(Ink.surface)
-        .lineLimit(1)
-    }
-    .padding(.horizontal, OmiSpacing.sm)
-    .frame(height: 30)
-    .background(
-      RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-        .fill(Ink.primary)
-    )
-    .shadow(color: Ink.primary.opacity(glowAnimating ? 0.55 : 0.25), radius: 6)
-  }
-}
-
 /// Compact chip shown in `DesktopTopBar` so chat-first shell users see Sparkle
 /// progress (the legacy sidebar widget is unreachable when `usesChatFirstShell`).
 struct DesktopUpdateStatusChip: View {
@@ -195,7 +149,29 @@ struct DesktopUpdateStatusChip: View {
           updaterViewModel.checkForUpdates()
         }
       }) {
-        DesktopUpdateStatusChipLabel(kind: kind, glowAnimating: glowAnimating)
+        HStack(spacing: OmiSpacing.xs) {
+          if kind.showsProgress {
+            ProgressView()
+              .controlSize(.small)
+              .tint(Ink.surface)
+          } else {
+            Image(systemName: "arrow.down.circle.fill")
+              .scaledFont(size: OmiType.caption, weight: .semibold)
+              .foregroundColor(Ink.surface)
+          }
+
+          Text(kind.compactTitle)
+            .scaledFont(size: OmiType.caption, weight: .semibold)
+            .foregroundColor(Ink.surface)
+            .lineLimit(1)
+        }
+        .padding(.horizontal, OmiSpacing.sm)
+        .frame(height: 30)
+        .background(
+          RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
+            .fill(Ink.primary)
+        )
+        .shadow(color: Ink.primary.opacity(glowAnimating ? 0.55 : 0.25), radius: 6)
       }
       .buttonStyle(.plain)
       .help(kind.accessibilityLabel)
@@ -238,7 +214,10 @@ struct DesktopUpdateStatusBanner: View {
       }) {
         HStack(spacing: OmiSpacing.md) {
           if kind.showsProgress {
-            DesktopUpdateStatusProgressIndicator(diameter: iconWidth)
+            ProgressView()
+              .controlSize(.small)
+              .tint(Ink.surface)
+              .frame(width: iconWidth)
           } else {
             Image(systemName: "arrow.down.circle.fill")
               .scaledFont(size: OmiType.subheading)

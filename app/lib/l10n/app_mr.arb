@@ -418,7 +418,7 @@
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
-    "myApps": "माझे बनवलेले",
+    "myApps": "माझी अ‍ॅप्स",
     "@myApps": {
         "description": "Filter button for user's own apps"
     },
@@ -10780,22 +10780,5 @@
     "accountCutoverMigrationInProgressTitle": "माइग्रेशन जारी है",
     "accountCutoverMigrationInProgressMessage": "आपका खाता माइग्रेट हो रहा है। माइग्रेशन पूरा होने तक उत्पाद सुविधाएँ रुकी रहेंगी।",
     "accountCutoverMigrationRollbackMessage": "माइग्रेशन रोलबैक के बाद आपका खाता रखरखाव में है। कुछ नए डेटा अलग रह सकते हैं।",
-    "accountCutoverOpenStore": "स्टोर खोलें",
-    "chatScopeToday": "आज",
-    "chatScopeThisWeek": "या आठवड्यात",
-    "chatScopeAbout": "{title} विषयी",
-    "askAboutThisConversation": "याबद्दल विचारा",
-    "sendRawAudioToOmi": "Omi ला कच्चा ऑडिओ पाठवा",
-    "sendRawAudioToOmiDescription": "Omi ला कच्चा ऑडिओ पाठवणे थांबवण्यासाठी हे बंद करा. प्रतिलेख आणि क्लाउड वैशिष्ट्यांसाठी आवश्यक डेटा अजूनही Omi ला पाठवला जाऊ शकतो.",
-    "findDevice": "शोधा",
-    "diagnosticsShareFailed": "डायग्नोस्टिक्स शेअर करता आले नाही. कृपया पुन्हा प्रयत्न करा.",
-    "appDisabledTitle": "हे अ‍ॅप अक्षम आहे आणि ते स्थापित करता येणार नाही.",
-    "appDisabledWebhookFailures": "त्याचा एंडपॉइंट सलग ७२ तास अयशस्वी झाला, त्यामुळे वितरण थांबवण्यात आले.",
-    "appDisabledGeneric": "ते Omi ने अक्षम केले होते.",
-    "appDisabledOwnerHint": "आधी एंडपॉइंट दुरुस्त करा — पुन्हा सक्षम करताना प्रत्येक कॉन्फिगर केलेला URL पुन्हा तपासला जातो.",
-    "appReEnable": "पुन्हा सक्षम करा",
-    "appReEnableFailedTitle": "पुन्हा सक्षम करता आले नाही",
-    "appReEnableFailedBody": "हे अ‍ॅप पुन्हा सक्षम करता आले नाही. कृपया पुन्हा प्रयत्न करा.",
-    "appDisabledOn": "{date} रोजी अक्षम केले.",
-    "appDisabledLastError": "शेवटची त्रुटी: {error}"
+    "accountCutoverOpenStore": "स्टोर खोलें"
 }

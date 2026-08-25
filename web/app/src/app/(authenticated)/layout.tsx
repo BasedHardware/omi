@@ -1,12 +1,18 @@
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { MainLayout } from '@/components/layout/MainLayout';
-import { StartupModals } from '@/components/ui/StartupModals';
+import { BetaWelcomeModal } from '@/components/ui/BetaWelcomeModal';
+import { WhatsNewModal } from '@/components/ui/WhatsNewModal';
 
-export default function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
+export default function AuthenticatedLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <ProtectedRoute>
       <MainLayout hideHeader>{children}</MainLayout>
-      <StartupModals />
+      <BetaWelcomeModal />
+      <WhatsNewModal />
     </ProtectedRoute>
   );
 }

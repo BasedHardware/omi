@@ -9,6 +9,10 @@ final class ProdEnv implements EnvFields {
   ProdEnv();
 
   @override
+  @EnviedField(varName: 'OPENAI_API_KEY', obfuscate: true)
+  final String? openAIAPIKey = _ProdEnv.openAIAPIKey;
+
+  @override
   @EnviedField(varName: 'POSTHOG_API_KEY', obfuscate: true)
   final String? posthogApiKey = _ProdEnv.posthogApiKey;
 

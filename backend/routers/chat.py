@@ -15,7 +15,6 @@ from fastapi import (
     Depends,
     Header,
     HTTPException,
-    Query,
     Request,
     UploadFile,
     File,
@@ -28,7 +27,7 @@ from multipart.multipart import shutil
 from pydantic import BaseModel
 
 import database.chat as chat_db
-from utils.chat_session_target import resolve_chat_target
+import database.conversations as conversations_db
 import database.llm_usage as llm_usage_db
 from database.apps import record_app_usage
 from models.app import App, UsageHistoryType
@@ -49,6 +48,7 @@ from utils.chat import (
     acquire_chat_session,
     emit_stream_error_fallback,
     initial_message_util,
+    process_voice_message_segment,
     process_voice_message_segment_stream,
     resolve_voice_message_language,
     transcribe_voice_message_segment,
@@ -69,7 +69,7 @@ from utils.rate_limit_config import get_effective_limit, RATE_LIMIT_SHADOW
 from utils.subscription import enforce_chat_quota, is_trial_paywalled
 from utils import share_links
 from utils.other import endpoints as auth, storage
-from utils.other.chat_file import FileChatTool, UnsupportedChatFileError
+from utils.other.chat_file import FileChatTool
 from utils.multipart import (
     CHAT_FILE_MAX_PART_SIZE,
     MultipartMaxPartSizeRoute,
@@ -77,14 +77,13 @@ from utils.multipart import (
     max_part_size,
     parse_multipart_form,
 )
-from utils.retrieval.graph import execute_chat_stream
+from utils.retrieval.graph import execute_graph_chat, execute_chat_stream, execute_persona_chat_stream
 from utils.llm.usage_tracker import set_usage_context, reset_usage_context, Features
 from utils.users import get_user_display_name
 from utils.log_sanitizer import sanitize_pii
 from utils.observability import submit_langsmith_feedback
 from utils.observability.fallback import record_fallback
-from utils.journey_metrics_contract import resolve_client_kind, resolve_client_kind_from_headers
-from utils.observability.journeys import ClientJourneyAttempt, JourneyAttempt
+from utils.observability.journeys import JourneyAttempt
 from utils.voice_duration_limiter import (
     compute_pcm_duration_ms,
     read_wav_duration_ms,
@@ -192,25 +191,6 @@ def _parse_context_keywords(raw: Optional[str]) -> List[str]:
     return keywords
 
 
-def _mobile_chat_stream_succeeded(frame: str) -> bool:
-    """A mobile answer succeeds only at a terminal frame with renderable text."""
-
-    if not frame.startswith('done: '):
-        return False
-    try:
-        payload = json.loads(base64.b64decode(frame.removeprefix('done: ').strip()).decode('utf-8'))
-    except (ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
-        return False
-    answer = payload.get('text') if isinstance(payload, dict) else None
-    return isinstance(answer, str) and bool(answer.strip())
-
-
-def _mobile_chat_stream_failed(frame: str) -> bool:
-    """Typed in-band errors are failures even when a fallback done frame follows."""
-
-    return frame.lstrip().startswith('error: ')
-
-
 def filter_messages(messages, app_id):
     logger.info(f'filter_messages {len(messages)} {app_id}')
     collected = []
@@ -223,19 +203,9 @@ def filter_messages(messages, app_id):
 
 
 def _build_quota_exceeded_reply(
-    uid: str,
-    data: SendMessageRequest,
-    compat_app_id: Optional[str],
-    detail: dict,
-    chat_session: Optional[ChatSession] = None,
+    uid: str, data: SendMessageRequest, compat_app_id: Optional[str], detail: dict
 ) -> ResponseMessage:
     """Persist the user's question + a canned AI reply and return it.
-
-    Both messages join `chat_session` when the request named one. Without it the
-    turn is stored unthreaded: the client shows it optimistically against the
-    session the user is looking at, and then it disappears on the next history
-    load, because that read is scoped to the session and these rows belong to no
-    session at all.
 
     Mobile clients render the reply as a normal AI message, so users on
     older builds without structured 402 handling at least see *why* nothing
@@ -251,11 +221,8 @@ def _build_quota_exceeded_reply(
         sender='human',
         type='text',
         app_id=compat_app_id,
-        chat_session_id=chat_session.id if chat_session else None,
     )
     chat_db.add_message(uid, user_msg.model_dump())
-    if chat_session:
-        chat_db.add_message_to_chat_session(uid, chat_session.id, user_msg.id)
 
     plan = detail.get('plan') or 'Free'
     unit = detail.get('unit')
@@ -287,33 +254,12 @@ def _build_quota_exceeded_reply(
         sender='ai',
         type='text',
         app_id=compat_app_id,
-        chat_session_id=chat_session.id if chat_session else None,
     )
     chat_db.add_message(uid, ai_msg.model_dump())
-    if chat_session:
-        chat_db.add_message_to_chat_session(uid, chat_session.id, ai_msg.id)
     return ResponseMessage(**ai_msg.model_dump(), ask_for_nps=False)
 
 
-def _build_quota_accounting_unavailable_reply(compat_app_id: Optional[str]) -> ResponseMessage:
-    """SSE-visible retry copy when Free-plan counter persistence fails.
-
-    Returned as an in-memory ``done:`` frame only — do not persist a human or AI
-    message here. Persisting before accounting succeeds would orphan user text on
-    retries (fresh message ids / idempotency keys under the same outage).
-    """
-    ai_msg = Message(
-        id=str(uuid.uuid4()),
-        text=("Usage accounting is temporarily unavailable. Please retry in a moment — " "your message was not saved."),
-        created_at=datetime.now(timezone.utc),
-        sender='ai',
-        type='text',
-        app_id=compat_app_id,
-    )
-    return ResponseMessage(**ai_msg.model_dump(), ask_for_nps=False)
-
-
-def _record_chat_quota_question(
+def _record_chat_quota_question_safe(
     uid: str,
     *,
     idempotency_key: str,
@@ -321,32 +267,9 @@ def _record_chat_quota_question(
     message_id: Optional[str] = None,
     chat_session_id: Optional[str] = None,
     platform: Optional[str] = None,
-) -> None:
-    """Persist the free-plan question counter. Callers that are about to invoke a
-    billable provider must treat failures as request failures (fail-closed)."""
-    llm_usage_db.record_chat_quota_question(
-        uid,
-        idempotency_key=idempotency_key,
-        source=source,
-        message_id=message_id,
-        chat_session_id=chat_session_id,
-        platform=platform,
-    )
-
-
-def _record_chat_quota_question_best_effort(
-    uid: str,
-    *,
-    idempotency_key: str,
-    source: str,
-    message_id: Optional[str] = None,
-    chat_session_id: Optional[str] = None,
-    platform: Optional[str] = None,
-) -> None:
-    """Best-effort counter write for paths where the billable work already happened
-    (e.g. voice stream after a visible ``message:`` frame)."""
+):
     try:
-        _record_chat_quota_question(
+        llm_usage_db.record_chat_quota_question(
             uid,
             idempotency_key=idempotency_key,
             source=source,
@@ -361,17 +284,18 @@ def _record_chat_quota_question_best_effort(
 @router.post('/v2/messages', tags=['chat'], response_model=ResponseMessage)
 def send_message(
     data: SendMessageRequest,
-    request: Request,
     plugin_id: Optional[str] = None,
     app_id: Optional[str] = None,
-    chat_session_id: Optional[str] = None,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:send_message")),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ):
-    # Catalog hard-cap exhaustion is returned as a canned AI reply instead of a
-    # raw 402 (which older mobile clients render as a generic server error).
-    # Catalog overage plans return normally. Desktop pre-checks via
-    # /v1/users/me/usage-quota and never reaches this path when over.
+    # Hard cap: Free by question count, Architect by cost_usd. Operator enters
+    # overage mode silently. If exceeded, instead of raising 402 (which mobile
+    # clients render as a generic "having issues with the server" error), save
+    # a canned AI reply and emit it as an SSE `done:` chunk — matching the
+    # streaming contract this endpoint already uses — so mobile parses it like
+    # any other reply. Desktop pre-checks via /v1/users/me/usage-quota and
+    # never reaches here when over.
     try:
         enforce_chat_quota(uid, platform=x_app_platform)
     except HTTPException as exc:
@@ -382,17 +306,7 @@ def send_message(
         _compat_id = app_id or plugin_id
         if _compat_id in ['null', '']:
             _compat_id = None
-        # Resolved here rather than at the happy path's `_resolve_chat_session`
-        # below: quota enforcement returns before that line is ever reached, and
-        # the canned reply still belongs in the session the request named.
-        _quota_target = resolve_chat_target(uid, _compat_id, chat_session_id)
-        response_msg = _build_quota_exceeded_reply(
-            uid,
-            data,
-            _quota_target.app_id,
-            exc.detail,
-            ChatSession(**_quota_target.session) if _quota_target.session else None,
-        )
+        response_msg = _build_quota_exceeded_reply(uid, data, _compat_id, exc.detail)
 
         def _quota_exceeded_stream():
             encoded = base64.b64encode(bytes(response_msg.model_dump_json(), 'utf-8')).decode('utf-8')
@@ -406,10 +320,9 @@ def send_message(
     if compat_app_id in ['null', '']:
         compat_app_id = None
 
-    # get chat session — a named session also decides which app this turn runs as
-    target = resolve_chat_target(uid, compat_app_id, chat_session_id)
-    compat_app_id = target.app_id
-    chat_session = ChatSession(**target.session) if target.session else None
+    # get chat session
+    chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
+    chat_session = ChatSession(**chat_session) if chat_session else None
 
     message = Message(
         id=str(uuid.uuid4()),
@@ -437,33 +350,17 @@ def send_message(
 
     if chat_session:
         message.chat_session_id = chat_session.id
-
-    # Fail-closed before persisting the human turn or starting billable work:
-    # a Firestore outage must not leave Free-plan turns uncounted, orphan
-    # messages on retry, or return a bare HTTP 503 that mobile SSE silently drops.
-    try:
-        _record_chat_quota_question(
-            uid,
-            idempotency_key=f'v2_messages:{message.id}',
-            source='v2_messages',
-            message_id=message.id,
-            chat_session_id=message.chat_session_id,
-            platform=x_app_platform,
-        )
-    except Exception:
-        logger.exception('Failed to record chat quota question source=v2_messages uid=%s', uid)
-        response_msg = _build_quota_accounting_unavailable_reply(compat_app_id)
-
-        def _quota_accounting_unavailable_stream():
-            encoded = base64.b64encode(bytes(response_msg.model_dump_json(), 'utf-8')).decode('utf-8')
-            yield f"done: {encoded}\n\n"
-
-        return StreamingResponse(_quota_accounting_unavailable_stream(), media_type="text/event-stream")
-
-    if chat_session:
         chat_db.add_message_to_chat_session(uid, chat_session.id, message.id)
 
     chat_db.add_message(uid, message.model_dump())
+    _record_chat_quota_question_safe(
+        uid,
+        idempotency_key=f'v2_messages:{message.id}',
+        source='v2_messages',
+        message_id=message.id,
+        chat_session_id=message.chat_session_id,
+        platform=x_app_platform,
+    )
 
     # Check for goal progress (background) — rate-limited to one call per user per 5 min
     if try_acquire_goal_extraction_lock(uid):
@@ -524,15 +421,9 @@ def send_message(
 
         chat_db.add_message(uid, ai_message.model_dump())
         ai_message.memories = [MessageConversation(**m) for m in (memories if len(memories) < 5 else memories[:5])]
-        usage_app_id = app_id_from_app or compat_app_id
-        if usage_app_id:
+        if app_id:
             try:
-                record_app_usage(
-                    uid,
-                    usage_app_id,
-                    UsageHistoryType.chat_message_sent,
-                    message_id=ai_message.id,
-                )
+                record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
             except Exception as analytics_exc:
                 # Message is already durable; analytics must not change the client-visible id.
                 logger.error(
@@ -545,10 +436,6 @@ def send_message(
         return ai_message, ask_for_nps
 
     journey_attempt = JourneyAttempt('chat_response')
-    mobile_journey_attempt = ClientJourneyAttempt(
-        'mobile_chat',
-        resolve_client_kind_from_headers(request.headers),
-    )
 
     async def generate_stream():
         callback_data = {}
@@ -622,7 +509,6 @@ def send_message(
                 chat_session=chat_session,
                 context=data.context,
                 platform=x_app_platform,
-                client_kind=mobile_journey_attempt.client_kind,
             ):
                 if chunk:
                     if chunk.startswith('error: '):
@@ -675,14 +561,7 @@ def send_message(
             if not journey_attempt.finished:
                 journey_attempt.finish('failure' if stream_exhausted else 'cancelled')
 
-    observed_stream = mobile_journey_attempt.observe_stream(
-        generate_stream(),
-        success_when=_mobile_chat_stream_succeeded,
-        failure_when=_mobile_chat_stream_failed,
-        failure_class='provider_error',
-        missing_success_class='empty_answer',
-    )
-    return StreamingResponse(observed_stream, media_type="text/event-stream")
+    return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
 
 @router.post('/v2/messages/{message_id}/report', tags=['chat'], response_model=MessageReportResponse)
@@ -701,23 +580,15 @@ def report_message(message_id: str, uid: str = Depends(auth.get_current_user_uid
 
 @router.delete('/v2/messages', tags=['chat'], response_model=Message)
 def clear_chat_messages(
-    app_id: Optional[str] = None,
-    plugin_id: Optional[str] = None,
-    chat_session_id: Optional[str] = None,
-    uid: str = Depends(auth.get_current_user_uid),
+    app_id: Optional[str] = None, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
-    explicit = bool(chat_session_id)
     compat_app_id = app_id or plugin_id
     if compat_app_id in ['null', '']:
         compat_app_id = None
 
-    # get the targeted chat session. Its own app id scopes the delete: the
-    # message rows carry the session's `plugin_id`, so filtering by the query
-    # string's app instead deletes the session record and orphans its messages.
-    target = resolve_chat_target(uid, compat_app_id, chat_session_id)
-    compat_app_id = target.app_id
-    chat_session = target.session
-    chat_session_id = target.session_id
+    # get current chat session
+    chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
+    chat_session_id = chat_session['id'] if chat_session else None
 
     err = chat_db.clear_chat(uid, app_id=compat_app_id, chat_session_id=chat_session_id)
     if err:
@@ -733,9 +604,10 @@ def clear_chat_messages(
             pass
 
     # clear session
-    if chat_session_id is not None and not explicit:
+    if chat_session_id is not None:
         chat_db.delete_chat_session(uid, chat_session_id)
-    return initial_message_util(uid, compat_app_id, chat_session_id=chat_session_id if explicit else None)
+
+    return initial_message_util(uid, compat_app_id)
 
 
 @router.post('/v2/initial-message', tags=['chat'], response_model=Message)
@@ -750,28 +622,17 @@ def create_initial_message(
 
 @router.get('/v2/messages', response_model=List[Message], tags=['chat'])
 def get_messages(
-    plugin_id: Optional[str] = None,
-    app_id: Optional[str] = None,
-    chat_session_id: Optional[str] = None,
-    limit: int = Query(100, ge=1, le=1000),
-    offset: int = Query(0, ge=0),
-    uid: str = Depends(auth.get_current_user_uid),
+    plugin_id: Optional[str] = None, app_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
     compat_app_id = app_id or plugin_id
     if compat_app_id in ['null', '']:
         compat_app_id = None
 
-    target = resolve_chat_target(uid, compat_app_id, chat_session_id)
-    compat_app_id = target.app_id
-    chat_session_id = target.session_id
+    chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
+    chat_session_id = chat_session['id'] if chat_session else None
 
     messages = chat_db.get_messages(
-        uid,
-        limit=limit,
-        offset=offset,
-        include_conversations=True,
-        app_id=compat_app_id,
-        chat_session_id=chat_session_id,
+        uid, limit=100, include_conversations=True, app_id=compat_app_id, chat_session_id=chat_session_id
     )
     logger.info(f'get_messages {len(messages)} {compat_app_id}')
 
@@ -783,9 +644,7 @@ def get_messages(
             logger.info(f"  - Message {m.get('id')}: rating={m.get('rating')}")
 
     if not messages:
-        # The greeting belongs to the session that was read, not to whatever
-        # session `acquire_chat_session` would pick for the app.
-        return [] if offset > 0 else [initial_message_util(uid, compat_app_id, chat_session_id=chat_session_id)]
+        return [initial_message_util(uid, compat_app_id)]
     return messages
 
 
@@ -887,7 +746,7 @@ def create_voice_message_stream(
                         message_data = json.loads(base64.b64decode(payload).decode('utf-8'))
                         await run_blocking(
                             db_executor,
-                            _record_chat_quota_question_best_effort,
+                            _record_chat_quota_question_safe,
                             uid,
                             idempotency_key=f"v2_voice_messages:{message_data.get('id') or first_wav}",
                             source='v2_voice_messages',
@@ -1324,23 +1183,13 @@ async def transcribe_voice_message_stream(
     # A terminal provider failure after either audio handoff or finalization.
     stt_send_failed = False
     stt_drained = False
-    finalization_requested = False
-    client_disconnected = False
     usage_recorded = False
     # 30ms flush threshold for the live-STT transport (16-bit PCM = 2 bytes per sample per channel).
     bytes_per_second = sample_rate * channels * 2
     stt_buffer_flush_size = int(bytes_per_second * 0.03)
 
-    journey_attempt = ClientJourneyAttempt(
-        'realtime_voice',
-        resolve_client_kind(
-            x_app_platform=x_app_platform,
-            user_agent=websocket.headers.get('user-agent'),
-        ),
-    )
     stt_service, stt_language, stt_model = get_stt_service_for_language(language, surface=STTServingSurface.PTT)
     if stt_service is None or stt_language is None or stt_model is None:
-        journey_attempt.fail('dependency_unavailable')
         await websocket.close(code=1011, reason='Transcription service unavailable')
         return
     context_keywords = _parse_context_keywords(keywords)
@@ -1373,22 +1222,17 @@ async def transcribe_voice_message_stream(
 
     async def segment_sender():
         """Forward segments from the thread-safe queue to the WebSocket."""
-        nonlocal client_disconnected, websocket_active
+        nonlocal websocket_active
         while websocket_active:
             try:
                 segments = await asyncio.wait_for(segment_queue.get(), timeout=0.5)
                 if segments is _SENTINEL:
                     break
                 await websocket.send_json(segments)
-                if isinstance(segments, list) and any(
-                    isinstance(segment, dict) and str(segment.get('text') or '').strip() for segment in segments
-                ):
-                    journey_attempt.succeed()
             except asyncio.TimeoutError:
                 continue
             except Exception as e:
                 logger.warning(f'transcribe-stream: segment_sender error uid={uid}: {e}')
-                client_disconnected = True
                 websocket_active = False
                 break
 
@@ -1399,7 +1243,6 @@ async def transcribe_voice_message_stream(
             return
         stt_send_failed = True
         websocket_active = False
-        journey_attempt.fail('provider_error')
         logger.error('event=ptt_transcription_stream outcome=provider_terminal_failure')
         try:
             await websocket.close(code=1011, reason='Transcription service unavailable')
@@ -1468,7 +1311,6 @@ async def transcribe_voice_message_stream(
             raise RuntimeError(f'Unsupported serving STT provider {stt_service!r}')
 
         if dg_socket is None:
-            journey_attempt.fail('dependency_unavailable')
             logger.error(
                 'transcribe-stream: failed to connect to STT provider uid=%s provider=%s', uid, stt_service.value
             )
@@ -1498,11 +1340,9 @@ async def transcribe_voice_message_stream(
                 await websocket.close(code=1008, reason=f'Idle timeout: no audio for {_WS_IDLE_TIMEOUT_S}s')
                 break
             except WebSocketDisconnect:
-                client_disconnected = True
                 break
 
             if message.get("type") == "websocket.disconnect":
-                client_disconnected = True
                 break
 
             # Handle text "finalize" message: flush remaining audio and await the provider's
@@ -1510,7 +1350,6 @@ async def transcribe_voice_message_stream(
             # Note: text frames do NOT reset the audio-idle timer.
             text_data = message.get("text")
             if text_data and text_data.strip() == "finalize":
-                finalization_requested = True
                 if dg_socket and not stt_send_failed:
                     if len(stt_audio_buffer) > 0:
                         if not await send_stt_audio_or_close(bytes(stt_audio_buffer)):
@@ -1562,7 +1401,7 @@ async def transcribe_voice_message_stream(
                 accepted_audio_bytes += len(chunk)
 
     except WebSocketDisconnect:
-        client_disconnected = True
+        pass
     except Exception as e:
         logger.error(f'transcribe-stream: error uid={uid}: {e}')
         await close_stt_failure()
@@ -1601,16 +1440,6 @@ async def transcribe_voice_message_stream(
                 except asyncio.CancelledError:
                     pass
 
-        if not journey_attempt.finished:
-            if client_disconnected:
-                journey_attempt.cancel()
-            elif stt_send_failed:
-                journey_attempt.fail('provider_error')
-            elif finalization_requested:
-                journey_attempt.fail('empty_answer')
-            else:
-                journey_attempt.cancel()
-
         del stt_audio_buffer
         parity_capture.persist()
 
@@ -1631,10 +1460,7 @@ def upload_file_chat(
             with temp_file.open("wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
 
-            try:
-                result = FileChatTool.upload(temp_file)
-            except UnsupportedChatFileError as error:
-                raise HTTPException(status_code=400, detail=str(error))
+            result = FileChatTool.upload(temp_file)
 
             thumb_name = result.get("thumbnail_name", "")
             if thumb_name != "":
@@ -1678,14 +1504,9 @@ def upload_file_chat(
 # CLEANUP: Remove after new app goes to prod ----------------------------------------------------------
 
 
-@router.post(
-    '/v1/files',
-    response_model=List[FileChat],
-    tags=['chat'],
-    operation_id='upload_file_chat_v1_files_post',
-)
+@router.post('/v1/files', response_model=List[FileChat], tags=['chat'])
 @max_part_size(CHAT_FILE_MAX_PART_SIZE)
-def upload_file_chat_v1(
+def upload_file_chat(
     files: List[UploadFile] = File(...),
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "file:upload")),
 ):
@@ -1699,10 +1520,7 @@ def upload_file_chat_v1(
             with temp_file.open("wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
 
-            try:
-                result = FileChatTool.upload(temp_file)
-            except UnsupportedChatFileError as error:
-                raise HTTPException(status_code=400, detail=str(error))
+            result = FileChatTool.upload(temp_file)
 
             thumb_name = result.get("thumbnail_name", "")
             if thumb_name != "":
@@ -1742,13 +1560,8 @@ def upload_file_chat_v1(
     return response
 
 
-@router.post(
-    '/v1/messages/{message_id}/report',
-    tags=['chat'],
-    response_model=dict,
-    operation_id='report_message_v1_messages__message_id__report_post',
-)
-def report_message_v1(message_id: str, uid: str = Depends(auth.get_current_user_uid)):
+@router.post('/v1/messages/{message_id}/report', tags=['chat'], response_model=dict)
+def report_message(message_id: str, uid: str = Depends(auth.get_current_user_uid)):
     result = chat_db.get_message(uid, message_id)
     if result is None:
         raise HTTPException(status_code=404, detail='Message not found')
@@ -1761,13 +1574,8 @@ def report_message_v1(message_id: str, uid: str = Depends(auth.get_current_user_
     return {'message': 'Message reported'}
 
 
-@router.delete(
-    '/v1/messages',
-    tags=['chat'],
-    response_model=Message,
-    operation_id='clear_chat_messages_v1_messages_delete',
-)
-def clear_chat_messages_v1(
+@router.delete('/v1/messages', tags=['chat'], response_model=Message)
+def clear_chat_messages(
     plugin_id: Optional[str] = None, app_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
     compat_app_id = app_id or plugin_id
@@ -1798,13 +1606,8 @@ def clear_chat_messages_v1(
     return initial_message_util(uid, compat_app_id)
 
 
-@router.post(
-    '/v1/initial-message',
-    tags=['chat'],
-    response_model=Message,
-    operation_id='create_initial_message_v1_initial_message_post',
-)
-def create_initial_message_v1(
+@router.post('/v1/initial-message', tags=['chat'], response_model=Message)
+def create_initial_message(
     plugin_id: Optional[str] = None,
     app_id: Optional[str] = None,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:initial")),

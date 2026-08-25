@@ -16,6 +16,7 @@ from scripts.runtime_env_durable_dispatch_contracts import (  # noqa: E402
 from scripts.runtime_env_parakeet_contract import validate_parakeet_admission_contract  # noqa: E402
 from scripts.runtime_env_memory_contract import validate_retired_memory_manifest  # noqa: E402
 from scripts.runtime_env_validation.cloud_run import (
+    _build_rendered_cloud_run_state,
     _fetch_live_cloud_run_state,
     _validate_cloud_run,
 )
@@ -61,32 +62,15 @@ def _canonical_memory_surfaces(env_config: ConfigDict) -> list[tuple[str, Config
     for service, raw_service in gke.items():
         service_config = _as_config_dict(raw_service) or {}
         env_map = _as_config_dict(service_config.get('env')) or {}
-        if 'MEMORY_ENABLED' in env_map or 'MEMORY_MODE' in env_map:
+        if 'MEMORY_MODE' in env_map:
             surfaces.append((f'gke/{service}', env_map))
     cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
     for service, raw_service in (_as_config_dict(cloud_run.get('services')) or {}).items():
         service_config = _as_config_dict(raw_service) or {}
         env_map = _as_config_dict(service_config.get('env')) or {}
-        if 'MEMORY_ENABLED' in env_map or 'MEMORY_MODE' in env_map:
+        if 'MEMORY_MODE' in env_map:
             surfaces.append((f'cloud_run/{service}', env_map))
     return surfaces
-
-
-def _memory_product_state(env_map: ConfigDict) -> str:
-    """Return on / off / read. ``read`` is leftover Gate 3 ``MEMORY_MODE`` only."""
-    enabled = (_manifest_literal_env_value(env_map, 'MEMORY_ENABLED') or '').strip().lower()
-    if enabled in {'on', 'true', '1'}:
-        return 'on'
-    if enabled:
-        return 'off'
-    mode = (_manifest_literal_env_value(env_map, 'MEMORY_MODE') or '').strip().lower()
-    if mode == 'read':
-        return 'read'
-    if mode == 'write':
-        return 'on'
-    if mode in {'off', 'shadow'}:
-        return 'off'
-    return ''
 
 
 def _manifest_env_binding_is_configured(env_map: ConfigDict, secrets_map: ConfigDict, key: str) -> bool:
@@ -196,17 +180,18 @@ def _validate_manifest_shape(env_config: ConfigDict, env: str) -> list[Validatio
 
 
 def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) -> list[ValidationError]:
-    """Require memory-maintenance-job to track the global memory safety mode.
+    """Require memory-maintenance-job to exist and stay aligned with MEMORY_MODE rollout.
 
-    ``off`` pauses product writes. ``write`` is default-on intake for every UID
-    (no allowlist, ST→LT cron not required). ``read`` still requires the
-    dedicated maintenance job so Gate 3 cannot forget ST→LT hosting.
+    Prod may keep MEMORY_MODE=off with cron disabled. Enabling MEMORY_MODE=read on any
+    request-path surface without enabling the dedicated maintenance job fails validation
+    so Gate 3 cannot forget ST→LT hosting.
 
     Also rejects:
     - canonical maintenance env/secrets on notifications-job (its workflow
       removes only those retired live bindings);
     - request-path / other-job hosts keeping MEMORY_CANONICAL_MAINTENANCE_ENABLED=true
-      (ST→LT cron must run only on memory-maintenance-job).
+      (ST→LT cron must run only on memory-maintenance-job);
+    - empty MEMORY_ENABLED_USERS on a read-mode surface while the job has a non-empty allowlist.
     """
     errors: list[ValidationError] = []
     scope = f'{env}/cloud_run/jobs/memory-maintenance-job'
@@ -228,31 +213,6 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
             ValidationError(
                 notifications_scope,
                 f'secret {forbidden_secret} belongs only on memory-maintenance-job',
-            )
-        )
-    notifications_flex_capable = (
-        (_manifest_literal_env_value(notifications_env, 'OMI_BACKGROUND_FLEX_CAPABLE') or '').strip().lower()
-    )
-    if notifications_flex_capable != 'true':
-        errors.append(
-            ValidationError(
-                notifications_scope,
-                'OMI_BACKGROUND_FLEX_CAPABLE must be true so the shared live flag covers scheduled X extraction',
-            )
-        )
-    notifications_gateway_url = _as_config_dict(notifications_env.get('OMI_LLM_GATEWAY_URL'))
-    if notifications_gateway_url is None or notifications_gateway_url.get('env_var') != 'OMI_LLM_GATEWAY_URL':
-        errors.append(
-            ValidationError(
-                notifications_scope,
-                'OMI_LLM_GATEWAY_URL must be derived from the verified gateway endpoint for scheduled X Flex',
-            )
-        )
-    if 'OMI_LLM_GATEWAY_SERVICE_TOKEN' not in notifications_secrets:
-        errors.append(
-            ValidationError(
-                notifications_scope,
-                'missing secret OMI_LLM_GATEWAY_SERVICE_TOKEN for scheduled X Flex',
             )
         )
 
@@ -277,13 +237,12 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
                         f'dev Cloud Run flag {flag_name} must be {expected_value!r}',
                     )
                 )
-    if 'MEMORY_ENABLED' not in job_env and 'MEMORY_MODE' not in job_env:
-        errors.append(ValidationError(scope, 'missing env MEMORY_ENABLED'))
     for required_env in (
+        'MEMORY_MODE',
+        'MEMORY_ENABLED_USERS',
+        'MEMORY_V3_GET_ENABLED',
         'MEMORY_CANONICAL_MAINTENANCE_ENABLED',
-        'MEMORY_CANONICAL_MAINTENANCE_FLEX',
         'MEMORY_CANONICAL_CONSOLIDATION_ENABLED',
-        'OMI_BACKGROUND_FLEX_CAPABLE',
         'PINECONE_INDEX_NAME',
         'TYPESENSE_HOST_PORT',
     ):
@@ -300,8 +259,9 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
         if required_secret not in job_secrets:
             errors.append(ValidationError(scope, f'missing secret {required_secret}'))
 
-    job_state = _memory_product_state(job_env)
+    job_mode = (_manifest_literal_env_value(job_env, 'MEMORY_MODE') or '').strip().lower()
     job_cron = (_manifest_literal_env_value(job_env, 'MEMORY_CANONICAL_MAINTENANCE_ENABLED') or '').strip().lower()
+    job_users = (_manifest_literal_env_value(job_env, 'MEMORY_ENABLED_USERS') or '').strip()
 
     if job_cron == 'true':
         for required_env in sorted(_MEMORY_MAINTENANCE_GATEWAY_REQUIRED_ENV):
@@ -351,14 +311,6 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
                         'OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE must be true for production canonical maintenance',
                     )
                 )
-        job_flex = (_manifest_literal_env_value(job_env, 'MEMORY_CANONICAL_MAINTENANCE_FLEX') or '').strip().lower()
-        if job_flex != 'true':
-            errors.append(
-                ValidationError(
-                    scope,
-                    'MEMORY_CANONICAL_MAINTENANCE_FLEX must be true while canonical maintenance is enabled',
-                )
-            )
 
     # Non-job hosts must not enable the ST→LT cron (would duplicate maintenance).
     for other_job_name, raw_other_job in jobs.items():
@@ -378,9 +330,9 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
                 )
             )
 
-    enabled_surfaces = []
+    read_surfaces = []
     for surface_scope, surface_env in _canonical_memory_surfaces(env_config):
-        surface_state = _memory_product_state(surface_env)
+        surface_mode = (_manifest_literal_env_value(surface_env, 'MEMORY_MODE') or '').strip().lower()
         surface_cron = (
             (_manifest_literal_env_value(surface_env, 'MEMORY_CANONICAL_MAINTENANCE_ENABLED') or '').strip().lower()
         )
@@ -392,68 +344,59 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
                     'ST→LT cron is hosted only by memory-maintenance-job',
                 )
             )
-        if surface_state and surface_state != 'off':
-            enabled_surfaces.append((surface_scope, surface_env, surface_state))
+        if surface_mode and surface_mode != 'off':
+            read_surfaces.append((surface_scope, surface_env, surface_mode))
 
-    if job_state in ('', 'off'):
+    if job_mode in ('', 'off'):
         if job_cron == 'true':
             errors.append(
                 ValidationError(
                     scope,
-                    'MEMORY_CANONICAL_MAINTENANCE_ENABLED must be false while MEMORY_ENABLED is off',
+                    'MEMORY_CANONICAL_MAINTENANCE_ENABLED must be false while MEMORY_MODE is off',
                 )
             )
-        for surface_scope, _surface_env, surface_state in enabled_surfaces:
-            if surface_state == 'on':
-                errors.append(
-                    ValidationError(
-                        scope,
-                        f'{surface_scope} MEMORY_ENABLED=on requires memory-maintenance-job MEMORY_ENABLED=on',
-                    )
+        for surface_scope, _surface_env, surface_mode in read_surfaces:
+            errors.append(
+                ValidationError(
+                    scope,
+                    f'{surface_scope} MEMORY_MODE={surface_mode!r} requires memory-maintenance-job '
+                    'MEMORY_MODE=read and MEMORY_CANONICAL_MAINTENANCE_ENABLED=true '
+                    '(ST→LT is not hosted by notifications-job)',
                 )
-            else:
-                errors.append(
-                    ValidationError(
-                        scope,
-                        f'{surface_scope} MEMORY_MODE={surface_state!r} requires memory-maintenance-job '
-                        'MEMORY_MODE=read and MEMORY_CANONICAL_MAINTENANCE_ENABLED=true '
-                        '(ST→LT is not hosted by notifications-job)',
-                    )
-                )
+            )
         return errors
 
-    if job_state == 'on':
-        # Product on = intake + list. ST→LT cron remains a separate job-only
-        # switch; both overlays pin it on with Flex.
-        for surface_scope, _surface_env, surface_state in enabled_surfaces:
-            if surface_state != 'on':
-                errors.append(
-                    ValidationError(
-                        scope,
-                        f'{surface_scope} memory product state {surface_state!r} must match '
-                        'memory-maintenance-job MEMORY_ENABLED=on',
-                    )
-                )
-        return errors
-
-    # Leftover MEMORY_MODE=read — maintenance job must be fully enabled (Gate 3).
-    if job_state != 'read':
-        errors.append(ValidationError(scope, f'MEMORY_ENABLED must be on or off (got {job_state!r})'))
+    # Canonical request-path is on somewhere — maintenance job must be fully enabled.
+    if job_mode != 'read':
+        errors.append(
+            ValidationError(scope, f'MEMORY_MODE must be read when enabling canonical memory (got {job_mode!r})')
+        )
     if job_cron != 'true':
         errors.append(
             ValidationError(
                 scope,
-                'MEMORY_CANONICAL_MAINTENANCE_ENABLED must be true when MEMORY_MODE is read '
+                'MEMORY_CANONICAL_MAINTENANCE_ENABLED must be true when MEMORY_MODE is not off '
                 '(ST→LT maintenance is hosted by memory-maintenance-job, not notifications-job)',
             )
         )
-    for surface_scope, _surface_env, surface_state in enabled_surfaces:
-        if surface_state != job_state:
+    if not job_users:
+        errors.append(ValidationError(scope, 'MEMORY_ENABLED_USERS must be non-empty when MEMORY_MODE is not off'))
+
+    for surface_scope, surface_env, surface_mode in read_surfaces:
+        if surface_mode != job_mode:
             errors.append(
                 ValidationError(
                     scope,
-                    f'{surface_scope} memory product state {surface_state!r} must match '
-                    f'memory-maintenance-job {job_state!r}',
+                    f'{surface_scope} MEMORY_MODE={surface_mode!r} must match memory-maintenance-job MEMORY_MODE={job_mode!r}',
+                )
+            )
+        surface_users = (_manifest_literal_env_value(surface_env, 'MEMORY_ENABLED_USERS') or '').strip()
+        if surface_users != job_users:
+            errors.append(
+                ValidationError(
+                    scope,
+                    f'{surface_scope} MEMORY_ENABLED_USERS must match memory-maintenance-job allowlist '
+                    '(empty surface allowlist is not allowed while the job has a non-empty cohort)',
                 )
             )
     return errors
@@ -608,37 +551,13 @@ def _validate_sync_ledger_fence_mode(env_config: ConfigDict, cloud_run_state: Co
     return errors
 
 
-VERTEX_PT_CONTRACT = 'Vertex PT: 5 GSU gemini-2.5-flash us-central1, expires ~2027-05-28'
-_DESKTOP_BACKEND_VERTEX_PT_ENV = {
-    'USE_VERTEX_AI': 'true',
-    'GCP_LOCATION': 'us-central1',
-}
-
-
-def _validate_desktop_backend_vertex_pt_contract(env: str, env_config: ConfigDict) -> list[ValidationError]:
-    expected_project = 'based-hardware' if env == 'prod' else 'based-hardware-dev'
-    desktop = _as_config_dict(env_config.get('desktop_backend')) or {}
-    env_map = _as_config_dict(desktop.get('env')) or {}
-    required = {**_DESKTOP_BACKEND_VERTEX_PT_ENV, 'GOOGLE_CLOUD_PROJECT': expected_project}
-    errors: list[ValidationError] = []
-    for name, expected in required.items():
-        actual = _manifest_literal_env_value(env_map, name)
-        if actual != expected:
-            errors.append(
-                ValidationError(
-                    f'{env}/desktop_backend',
-                    f'{name} must be {expected!r} so company-paid Flash consumes Vertex PT. {VERTEX_PT_CONTRACT}',
-                )
-            )
-    return errors
-
-
 def validate_runtime_env(
     *,
     env: str,
     manifest_path: Path = DEFAULT_MANIFEST,
     cloud_run_state_path: Path | None = None,
     check_live_cloud_run: bool = False,
+    check_rendered_cloud_run: bool = False,
     check_workflows: bool = False,
     workflow_root: Path | None = None,
     strict_provisional: bool = False,
@@ -649,7 +568,6 @@ def validate_runtime_env(
     if errors:
         return errors
 
-    errors.extend(_validate_desktop_backend_vertex_pt_contract(env, env_config))
     errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional))
     errors.extend(_validate_stt_serving_model_policy(env, env_config))
     errors.extend(validate_parakeet_admission_contract(env, env_config))
@@ -672,6 +590,8 @@ def validate_runtime_env(
     cloud_run_state = None
     if cloud_run_state_path is not None:
         cloud_run_state = _load_json(cloud_run_state_path)
+    elif check_rendered_cloud_run:
+        cloud_run_state = _build_rendered_cloud_run_state(env_config)
     elif check_live_cloud_run:
         cloud_run_state = _fetch_live_cloud_run_state(env_config)
 

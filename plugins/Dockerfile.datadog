@@ -10,8 +10,6 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
 FROM python:3.11-slim
 
-RUN apt-get update && apt-get -y dist-upgrade && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /app
 ENV PATH="/opt/venv/bin:$PATH"
 

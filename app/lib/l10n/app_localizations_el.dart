@@ -325,7 +325,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get searchApps => 'Αναζήτηση εφαρμογών...';
 
   @override
-  String get myApps => 'Δημιουργήθηκε από εμένα';
+  String get myApps => 'Οι εφαρμογές μου';
 
   @override
   String get installedApps => 'Εγκατεστημένες εφαρμογές';
@@ -9909,64 +9909,4 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Άνοιγμα καταστήματος';
-
-  @override
-  String get chatScopeToday => 'Σήμερα';
-
-  @override
-  String get chatScopeThisWeek => 'Αυτή την εβδομάδα';
-
-  @override
-  String chatScopeAbout(String title) {
-    return 'Σχετικά με: $title';
-  }
-
-  @override
-  String get askAboutThisConversation => 'Ρώτησε γι\' αυτό';
-
-  @override
-  String get sendRawAudioToOmi => 'Αποστολή ακατέργαστου ήχου στο Omi';
-
-  @override
-  String get sendRawAudioToOmiDescription =>
-      'Απενεργοποιήστε το για να μην αποστέλλεται ακατέργαστος ήχος στο Omi. Οι απομαγνητοφωνήσεις και τα δεδομένα που απαιτούν οι λειτουργίες cloud ενδέχεται να συνεχίσουν να αποστέλλονται στο Omi.';
-
-  @override
-  String get findDevice => 'Εύρεση';
-
-  @override
-  String get diagnosticsShareFailed => 'Δεν ήταν δυνατή η κοινοποίηση των διαγνωστικών. Δοκιμάστε ξανά.';
-
-  @override
-  String get appDisabledTitle => 'Αυτή η εφαρμογή είναι απενεργοποιημένη και δεν μπορεί να εγκατασταθεί.';
-
-  @override
-  String get appDisabledWebhookFailures =>
-      'Το endpoint της απέτυχε επί 72 ώρες συνεχώς, οπότε οι αποστολές σταμάτησαν.';
-
-  @override
-  String get appDisabledGeneric => 'Απενεργοποιήθηκε από την Omi.';
-
-  @override
-  String get appDisabledOwnerHint =>
-      'Διορθώστε πρώτα το endpoint — η επανενεργοποίηση ελέγχει ξανά κάθε ρυθμισμένο URL.';
-
-  @override
-  String get appReEnable => 'Επανενεργοποίηση';
-
-  @override
-  String get appReEnableFailedTitle => 'Η επανενεργοποίηση απέτυχε';
-
-  @override
-  String get appReEnableFailedBody => 'Δεν ήταν δυνατή η επανενεργοποίηση αυτής της εφαρμογής. Δοκιμάστε ξανά.';
-
-  @override
-  String appDisabledOn(String date) {
-    return 'Απενεργοποιήθηκε στις $date.';
-  }
-
-  @override
-  String appDisabledLastError(String error) {
-    return 'Τελευταίο σφάλμα: $error.';
-  }
 }

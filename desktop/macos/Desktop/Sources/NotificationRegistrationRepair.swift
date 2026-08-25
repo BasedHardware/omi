@@ -31,7 +31,7 @@ enum NotificationRegistrationRepair {
 
   /// Whether the non-user-initiated startup path may attempt a launch-services
   /// notification repair. Users stuck in the launch-disabled + notDetermined state
-  /// would otherwise re-run LaunchServices repair on
+  /// would otherwise re-run lsregister + killall usernoted/NotificationCenter on
   /// every launch/wake; gate that attempt to once per installed app version.
   static func shouldAttemptStartupRepair(
     defaults: UserDefaults = .standard,
@@ -119,9 +119,14 @@ enum NotificationRegistrationRepair {
       }
       success = runProcess(lsregister, arguments: ["-f", appPath]) && success
 
+      let restartedUsernoted = runProcess("/usr/bin/killall", arguments: ["usernoted"])
+      let restartedNotificationCenter = runProcess(
+        "/usr/bin/killall", arguments: ["NotificationCenter"])
       log(
-        "Notification registration repair finished: lsregisterSuccess=\(success)"
+        "Notification registration repair finished: lsregisterSuccess=\(success), usernotedRestarted=\(restartedUsernoted), notificationCenterRestarted=\(restartedNotificationCenter)"
       )
+
+      Thread.sleep(forTimeInterval: 1.5)
 
       let capturedSuccess = success
       DispatchQueue.main.async {
@@ -147,9 +152,7 @@ enum NotificationRegistrationRepair {
     let callbacks = pendingCompletions
     pendingCompletions.removeAll()
     isRepairing = false
-    for callback in callbacks {
-      callback(success)
-    }
+    callbacks.forEach { $0(success) }
   }
 
   private static func retryAuthorizationAfterRepair(completion: (@Sendable (Bool) -> Void)?) {

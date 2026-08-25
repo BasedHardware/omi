@@ -3,7 +3,6 @@ import CryptoKit
 import Foundation
 import Network
 import OmiSupport
-import OmiTheme
 import VoiceTurnDomain
 
 enum DesktopAutomationLaunchOptions {
@@ -153,9 +152,9 @@ struct DesktopAutomationSnapshot: Codable, Sendable {
   var homeMode: String?
   /// `loading`, `legacy`, or `chat_first`; never a local rollout preference.
   var shellVariant: String?
-  /// Stable typed route for the Chat-first shell. Nil for the legacy shell.
+  /// Stable typed route for the cohort shell. Nil for the legacy shell.
   var chatFirstRoute: String?
-  /// Set only by the mounted Chat-first destination after it has appeared. This
+  /// Set only by the mounted cohort destination after it has appeared. This
   /// keeps a successful navigation response equivalent to the target being
   /// visible, rather than merely accepted by the root reducer.
   var visibleChatFirstRoute: String?
@@ -736,7 +735,9 @@ final class DesktopAutomationActionRegistry {
       run: handler)
   }
 
-  func unregister(_ name: String) { entries[name] = nil }
+  func unregister(_ name: String) {
+    entries[name] = nil
+  }
 
   func descriptors() -> [DesktopAutomationActionDescriptor] {
     entries.values.map(\.descriptor).sorted { $0.name < $1.name }
@@ -934,7 +935,8 @@ final class DesktopAutomationActionRegistry {
       summary: "Configure the non-production contextual task interruption gate",
       params: [
         "enabled", "shipped_cohorts_enabled", "daily_limit", "minimum_spacing_seconds",
-        "notifications_enabled", "frequency", "task_notifications_enabled",
+        "quiet_start_minute", "quiet_end_minute", "notifications_enabled", "frequency",
+        "task_notifications_enabled",
       ]
     ) { params in
       var configuration = ProactiveTaskInterruptionSettings.load()
@@ -945,6 +947,12 @@ final class DesktopAutomationActionRegistry {
       configuration.minimumSpacing = TimeInterval(
         max(
           0, intParam(params["minimum_spacing_seconds"], default: Int(configuration.minimumSpacing))))
+      configuration.quietHoursStartMinute = min(
+        max(
+          0, intParam(params["quiet_start_minute"], default: configuration.quietHoursStartMinute)), 1439)
+      configuration.quietHoursEndMinute = min(
+        max(
+          0, intParam(params["quiet_end_minute"], default: configuration.quietHoursEndMinute)), 1439)
       ProactiveTaskInterruptionSettings.save(configuration)
       if params["notifications_enabled"] != nil {
         UserDefaults.standard.set(
@@ -1002,25 +1010,6 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
-      name: "probe_suggestion_nudge",
-      summary: "Run the real suggestion grounding/evaluation/delivery path on the latest frame",
-      params: ["app", "window_title"],
-      safety: "network_or_model",
-      sideEffects: [
-        "may call model/backend services",
-        "may deliver a user-visible suggestion when notification controls allow",
-      ]
-    ) { params in
-      let app = params["app"].flatMap { $0.isEmpty ? nil : $0 }
-      let title = params["window_title"].flatMap { $0.isEmpty ? nil : $0 }
-      return await ProactiveAssistantsPlugin.shared.probeSuggestionNudge(
-        appOverride: app,
-        windowTitleOverride: title
-      )
-    }
-
-    registerContextBucketDirectorProbe()
-    register(
       name: "set_contextual_task_focus",
       summary: "Set deterministic focus suppression for contextual task interruptions",
       params: ["suppressed"]
@@ -1066,7 +1055,7 @@ final class DesktopAutomationActionRegistry {
       else {
         throw DesktopAutomationActionError.invalidParams("context event could not be normalized")
       }
-      let matched = await ContextSubjectBindingService.shared.resolve(event)
+      let matched = TaskContextSubjectMatcher.shared.resolve(event)
       let referenceHash = matched.referenceHash
       await TaskContextualResurfacingService.shared.observe(matched)
       let shouldFlush = boolParam(params["flush"], default: true)
@@ -1243,7 +1232,9 @@ final class DesktopAutomationActionRegistry {
       params: ["enabled"]
     ) { params in
       let enabled = boolParam(params["enabled"], default: true)
-      AssistantSettings.shared.audioRecordingMode = enabled ? .onlyMeetings : .off
+      AssistantSettings.shared.transcriptionEnabled = enabled
+      NotificationCenter.default.post(
+        name: .toggleTranscriptionRequested, object: nil, userInfo: ["enabled": enabled])
       return ["enabled": enabled ? "true" : "false"]
     }
 
@@ -1262,8 +1253,6 @@ final class DesktopAutomationActionRegistry {
       case "inject_multi":
         return await appState.automationInjectCaptureTestTranscriptMulti(
           segmentsJSON: params["segments"] ?? params["text"] ?? "")
-      case "meeting_start", "meeting_end":
-        return ["conversation_role": appState.automationObserveMeetingBoundary(active: phase == "meeting_start")]
       case "stop":
         return await appState.automationStopCaptureTestSession()
       case "lifecycle":
@@ -1275,7 +1264,7 @@ final class DesktopAutomationActionRegistry {
         _ = await appState.automationInjectCaptureTestTranscript(text: marker)
         return await appState.automationStopCaptureTestSession()
       default:
-        return ["error": "phase must be start, inject, inject_multi, meeting_start, meeting_end, stop, or lifecycle"]
+        return ["error": "phase must be start, inject, inject_multi, stop, or lifecycle"]
       }
     }
 
@@ -1676,187 +1665,6 @@ final class DesktopAutomationActionRegistry {
       return ["shown": "true"]
     }
 
-    // Drives the real post-meeting completion signal so the entire production
-    // chain runs (banner service → conversation + recipients fetch → persistent
-    // share card). Same NotificationCenter signal the finalization service posts.
-    register(
-      name: "trigger_meeting_completion",
-      summary:
-        "Post the real meeting-completion signal for a conversation id (presents the meeting summary share card). Non-prod only.",
-      params: ["conversation_id"]
-    ) { params in
-      guard AppBuild.isNonProduction else {
-        return ["error": "trigger_meeting_completion is disabled on production bundles"]
-      }
-      guard let conversationID = params["conversation_id"], !conversationID.isEmpty else {
-        throw DesktopAutomationActionError.invalidParams("conversation_id is required")
-      }
-      NotificationCenter.default.post(
-        name: .desktopMeetingConversationDidComplete,
-        object: MeetingCompletionNotification(conversationIDs: [conversationID]))
-      return ["posted": conversationID]
-    }
-
-    // Reads whatever notch card is on screen, so a flow can assert the card a
-    // person actually sees rather than trusting that a trigger fired.
-    register(
-      name: "notification_state",
-      summary: "Read the notch notification currently on screen (title, message, persistence).",
-      params: []
-    ) { _ in
-      guard let bar = FloatingControlBarManager.shared.barState,
-        let notification = bar.currentNotification
-      else {
-        return ["present": "false"]
-      }
-      return [
-        "present": "true",
-        "title": notification.title,
-        "message": notification.message,
-        "persistent": notification.isPersistent ? "true" : "false",
-      ]
-    }
-
-    // Presents the same "Omi is taking notes" notice the meeting boundary
-    // posts once a detected meeting has rotated into its recording session.
-    register(
-      name: "trigger_meeting_started_notice",
-      summary:
-        "Present the meeting-started note-taking notice (the card shown when a meeting is detected). Non-prod only.",
-      params: []
-    ) { _ in
-      guard AppBuild.isNonProduction else {
-        return ["error": "trigger_meeting_started_notice is disabled on production bundles"]
-      }
-      MeetingNoteTakingNotice.present()
-      return ["presented": "true"]
-    }
-
-    // Cursor-free driver for the meeting summary share card: `state` reads the
-    // presented card, `copy`/`send` run the same MeetingSummaryShareActions the
-    // card's buttons call, `close` is the user dismissal path.
-    register(
-      name: "meeting_summary_share",
-      summary:
-        "Inspect or drive the presented meeting summary share card (action=state|copy|send|close). Non-prod only.",
-      params: ["action"]
-    ) { params in
-      guard AppBuild.isNonProduction else {
-        return ["error": "meeting_summary_share is disabled on production bundles"]
-      }
-      let mgr = FloatingControlBarManager.shared
-      guard let bar = mgr.barState else { return ["error": "no bar state"] }
-      guard let notification = bar.currentNotification,
-        case .meetingSummaryShare(let conversationID, let recipients)? = notification.action
-      else {
-        return ["present": "false"]
-      }
-      switch (params["action"] ?? "state").lowercased() {
-      case "state":
-        return [
-          "present": "true",
-          "assistant_id": notification.assistantId,
-          "title": notification.title,
-          "message": notification.message,
-          "persistent": notification.isPersistent ? "true" : "false",
-          "conversation_id": conversationID,
-          "recipients": recipients.map(\.email).joined(separator: ","),
-        ]
-      case "copy":
-        let feedback = await MeetingSummaryShareActions.copyLink(conversationID: conversationID)
-        return ["copied": feedback == .copied ? "true" : "false"]
-      case "send":
-        // `email` mirrors what the owner types into the Share field; with no
-        // address supplied the detected suggestion is used, which is exactly
-        // what the field prefills with.
-        // Drive the card's own Send handler so its phase (sending → sent /
-        // failed) is exercised, not just the network call underneath it.
-        let typed = params["email"]?.trimmingCharacters(in: .whitespaces) ?? ""
-        let address = typed.isEmpty ? (recipients.first?.email ?? "") : typed
-        guard !address.isEmpty else {
-          return ["error": "no recipient: pass email=<address>"]
-        }
-        NotificationCenter.default.post(
-          name: .meetingSummaryShareSubmit, object: address)
-        return ["submitted": address]
-      case "share":
-        NotificationCenter.default.post(name: .meetingSummaryShareBeginAddressing, object: nil)
-        return ["addressing": "true"]
-      case "close":
-        mgr.dismissCurrentNotification()
-        return ["closed": "true"]
-      default:
-        throw DesktopAutomationActionError.invalidParams(
-          "action must be state, share, copy, send, or close")
-      }
-    }
-
-    // Cursor-free click diagnosis: report which window (any app's) is topmost at a screen point,
-    // and — when it is one of ours — the exact view AppKit hit-tests there. Exists because "I
-    // click X and nothing happens" is otherwise undiagnosable without synthesizing real clicks.
-    register(
-      name: "debug_hit_probe",
-      summary: "Report topmost window + hit-tested view at screen point (top-left coords)",
-      params: ["x", "y"]
-    ) { params in
-      guard let x = Double(params["x"] ?? ""), let y = Double(params["y"] ?? "") else {
-        return ["error": "need x and y (screen top-left coords)"]
-      }
-      guard let primary = NSScreen.screens.first else { return ["error": "no screens"] }
-      let cocoaPoint = NSPoint(x: x, y: primary.frame.maxY - y)
-      var result: [String: String] = [
-        "screen_point_cg": "(\(Int(x)), \(Int(y)))",
-        "screen_point_cocoa": NSStringFromPoint(cocoaPoint),
-        "screens": NSScreen.screens.map { NSStringFromRect($0.frame) }.joined(separator: " | "),
-      ]
-      // Our own windows containing the point, front-to-back. Reliable where the window-server
-      // query is not; foreign overlap is diagnosed from outside via CGWindowList.
-      let containing = NSApp.windows
-        .filter { $0.isVisible && $0.frame.contains(cocoaPoint) }
-        .sorted { $0.orderedIndex < $1.orderedIndex }
-      result["own_windows_at_point"] =
-        containing.isEmpty
-        ? "none"
-        : containing.map { window in
-          var extras = ""
-          let local = NSPoint(
-            x: cocoaPoint.x - window.frame.minX, y: cocoaPoint.y - window.frame.minY)
-          if let bar = window as? FloatingControlBarWindow {
-            extras =
-              " acceptsHit=\(bar.automationAcceptsMouseHit(inContentPoint: local)) ignores=\(window.ignoresMouseEvents)"
-          } else {
-            // Shell click-through verdict (ShellClickThrough.swift): whether this point owns the
-            // pointer, per the same policy the ignoresMouseEvents sync runs.
-            let accepts = ShellClickThroughPolicy.acceptsMouseHit(
-              localPoint: local,
-              windowSize: window.frame.size,
-              isResizable: window.styleMask.contains(.resizable),
-              contentContains: { InkGlassHitRegions.shared.containsPoint($0, in: window) })
-            extras =
-              " shellAccepts=\(accepts) glassSurfaces=\(InkGlassHitRegions.shared.surfaceCount(in: window))"
-              + " ignores=\(window.ignoresMouseEvents)"
-          }
-          return
-            "\(String(describing: type(of: window)))(\"\(window.title)\" level=\(window.level.rawValue) key=\(window.isKeyWindow) idx=\(window.orderedIndex)\(extras))"
-        }.joined(separator: " ; ")
-      if let window = containing.first {
-        let inWindow = window.convertPoint(fromScreen: cocoaPoint)
-        result["point_in_window"] = NSStringFromPoint(inWindow)
-        if let root = window.contentView?.superview ?? window.contentView {
-          let inRoot = root.convert(inWindow, from: nil)
-          let hit = root.hitTest(inRoot)
-          var chain: [String] = []
-          var view = hit
-          while let v = view, chain.count < 8 {
-            chain.append(String(describing: type(of: v)))
-            view = v.superview
-          }
-          result["hit_view_chain"] = chain.isEmpty ? "nil (click falls through)" : chain.joined(separator: " < ")
-        }
-      }
-      return result
-    }
-
     register(
       name: "reset_main_chat",
       summary: "Clear main-window chat messages and start a fresh session (harness flow isolation)",
@@ -2133,9 +1941,9 @@ final class DesktopAutomationActionRegistry {
       guard AppBuild.isNonProduction else {
         return ["error": "suspend_agent_stream is disabled on production bundles"]
       }
-      // Default just past the 60s send watchdog so CHAT-02 can assert the
+      // Default just past the 180s send watchdog so CHAT-02 can assert the
       // "Response took too long" error + recoverable retry; capped at 300s.
-      let durationMs = intParam(params["durationMs"], default: 70_000)
+      let durationMs = intParam(params["durationMs"], default: 190_000)
       return await AgentRuntimeProcess.shared.debugSuspendStream(durationMs: durationMs)
     }
 
@@ -2518,31 +2326,6 @@ final class DesktopAutomationActionRegistry {
     ) { _ in
       CloudConnectorGuidanceOverlay.shared.dismiss()
       return ["dismissed": "true", "visible": "false"]
-    }
-
-    register(
-      name: "integration_nudge_evaluate",
-      summary:
-        "Read-only: which integration a given frontmost app/window maps to, and whether a nudge would fire",
-      params: ["bundle_id", "window_title"],
-      category: "read",
-      safety: "read_only"
-    ) { params in
-      await IntegrationNudgeAutomation.evaluate(
-        bundleID: params["bundle_id"],
-        windowTitle: params["window_title"]
-      )
-    }
-
-    register(
-      name: "integration_nudge_present",
-      summary: "Present the integration-connect card for one catalog entry (QA of the real card path)",
-      params: ["telemetry_id"],
-      category: "write",
-      surfaces: ["floating_bar"],
-      safety: "presents_ui"
-    ) { params in
-      await MainActor.run { IntegrationNudgeAutomation.present(telemetryID: params["telemetry_id"] ?? "") }
     }
 
     register(
@@ -3201,10 +2984,6 @@ final class DesktopAutomationActionRegistry {
       ]
     }
 
-    register(name: "permissions_snapshot", summary: "Every permission row the Permissions page shows") {
-      _ in await PermissionsSnapshot.capture()
-    }
-
     register(
       name: "create_test_folder",
       summary: "Create a hermetic conversation folder via the real API",
@@ -3561,7 +3340,42 @@ final class DesktopAutomationActionRegistry {
       ]
     }
 
-    registerNotificationActions()
+    register(
+      name: "settings_notifications_snapshot",
+      summary: "Return notification settings and local permission state"
+    ) { _ in
+      async let settingsTask = APIClient.shared.getNotificationSettings()
+      let settings = try await settingsTask
+      let appState = await MainActor.run { AppState.current }
+      let hasPermission = appState?.hasNotificationPermission ?? false
+      let bannersDisabled = appState?.isNotificationBannerDisabled ?? false
+      return [
+        "enabled": settings.enabled ? "true" : "false",
+        "frequency": "\(settings.frequency)",
+        "frequency_label": settings.frequencyDescription,
+        "has_permission": hasPermission ? "true" : "false",
+        "banners_disabled": bannersDisabled ? "true" : "false",
+      ]
+    }
+
+    register(
+      name: "set_notification_settings",
+      summary: "Update notification settings via the real API",
+      params: ["enabled", "frequency"]
+    ) { params in
+      let enabled = params["enabled"].map { boolParam($0, default: true) }
+      let frequency = params["frequency"].flatMap { Int($0) }
+      let response = try await APIClient.shared.updateNotificationSettings(
+        enabled: enabled,
+        frequency: frequency
+      )
+      return [
+        "saved": "true",
+        "enabled": response.enabled ? "true" : "false",
+        "frequency": "\(response.frequency)",
+      ]
+    }
+
     register(
       name: "rewind_settings_snapshot",
       summary: "Return Rewind settings retention and excluded-app counts"
@@ -3628,8 +3442,7 @@ final class DesktopAutomationActionRegistry {
         "insight_enabled": insight.isEnabled ? "true" : "false",
         "memory_enabled": memory.isEnabled ? "true" : "false",
         "screen_analysis_enabled": assistant.screenAnalysisEnabled ? "true" : "false",
-        "transcription_enabled": assistant.audioRecordingMode != .off ? "true" : "false",
-        "audio_recording_mode": assistant.audioRecordingMode.rawValue,
+        "transcription_enabled": assistant.transcriptionEnabled ? "true" : "false",
         "multi_chat_enabled": UserDefaults.standard.bool(forKey: .multiChatEnabled) ? "true" : "false",
       ]
     }
@@ -3908,7 +3721,7 @@ final class DesktopAutomationActionRegistry {
 }
 
 /// Coerce a string param ("true"/"1"/"yes") into a Bool, falling back when absent.
-func boolParam(_ raw: String?, default fallback: Bool) -> Bool {
+private func boolParam(_ raw: String?, default fallback: Bool) -> Bool {
   guard let raw = raw?.trimmingCharacters(in: .whitespaces).lowercased(), !raw.isEmpty else {
     return fallback
   }

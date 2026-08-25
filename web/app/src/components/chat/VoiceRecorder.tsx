@@ -151,18 +151,15 @@ export function InlineVoiceRecorder({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Clear error after 3 seconds.
-  // Must stay above the isSupported early return: isSupported is computed from
-  // `navigator`, which is undefined during SSR and defined on the client, so a
-  // hook below the return would change the hook count between renders.
+  if (!isSupported) return null;
+
+  // Clear error after 3 seconds
   useEffect(() => {
     if (error) {
       const timer = setTimeout(() => setError(null), 3000);
       return () => clearTimeout(timer);
     }
   }, [error]);
-
-  if (!isSupported) return null;
 
   return (
     <div className="flex items-center gap-2">
@@ -199,7 +196,7 @@ export function InlineVoiceRecorder({
           'p-2 rounded-lg flex-shrink-0',
           'transition-all duration-200',
           state === 'idle' &&
-            'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary',
+            'text-text-tertiary hover:text-purple-primary hover:bg-bg-tertiary',
           state === 'recording' && 'text-white bg-error hover:bg-error/80 animate-pulse',
           state === 'transcribing' && 'text-text-quaternary cursor-not-allowed',
           'disabled:opacity-50 disabled:cursor-not-allowed',

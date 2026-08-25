@@ -91,7 +91,7 @@ struct TaskLocalContextEvent: Equatable, Sendable {
     subject: TaskContextSubject? = nil,
     occurredAt: Date = Date()
   ) -> TaskLocalContextEvent? {
-    let normalizedTitle = ContextDetection.normalizeWindowTitle(windowTitle, appName: appName) ?? "untitled"
+    let normalizedTitle = ContextDetection.normalizeWindowTitle(windowTitle) ?? "untitled"
     return normalized(
       kind: .appWindow,
       rawReference: "\(appName)\n\(normalizedTitle)",
@@ -327,6 +327,8 @@ struct ProactiveTaskInterruptionConfiguration: Codable, Equatable {
     shippedCohortsEnabled: false,
     dailyLimit: 2,
     minimumSpacing: 90 * 60,
+    quietHoursStartMinute: 22 * 60,
+    quietHoursEndMinute: 8 * 60,
     allowedPreparationKinds: []
   )
 
@@ -335,6 +337,8 @@ struct ProactiveTaskInterruptionConfiguration: Codable, Equatable {
   var shippedCohortsEnabled: Bool
   var dailyLimit: Int
   var minimumSpacing: TimeInterval
+  var quietHoursStartMinute: Int
+  var quietHoursEndMinute: Int
   var allowedPreparationKinds: Set<String>
 
   init(
@@ -342,6 +346,8 @@ struct ProactiveTaskInterruptionConfiguration: Codable, Equatable {
     shippedCohortsEnabled: Bool,
     dailyLimit: Int,
     minimumSpacing: TimeInterval,
+    quietHoursStartMinute: Int,
+    quietHoursEndMinute: Int,
     allowedPreparationKinds: Set<String>
   ) {
     self.schemaVersion = Self.schemaVersion
@@ -349,6 +355,8 @@ struct ProactiveTaskInterruptionConfiguration: Codable, Equatable {
     self.shippedCohortsEnabled = shippedCohortsEnabled
     self.dailyLimit = max(0, dailyLimit)
     self.minimumSpacing = max(0, minimumSpacing)
+    self.quietHoursStartMinute = min(max(0, quietHoursStartMinute), 1439)
+    self.quietHoursEndMinute = min(max(0, quietHoursEndMinute), 1439)
     self.allowedPreparationKinds = allowedPreparationKinds
   }
 
@@ -376,6 +384,8 @@ enum ProactiveTaskInterruptionSettings {
       shippedCohortsEnabled: config.shippedCohortsEnabled,
       dailyLimit: config.dailyLimit,
       minimumSpacing: config.minimumSpacing,
+      quietHoursStartMinute: config.quietHoursStartMinute,
+      quietHoursEndMinute: config.quietHoursEndMinute,
       allowedPreparationKinds: config.allowedPreparationKinds
     )
   }
@@ -410,6 +420,7 @@ struct TaskInterruptionEnvironment {
   let ambientFrequencyEligible: Bool
   let taskNotificationsEnabled: Bool
   let focusSuppressed: Bool
+  let snoozed: Bool
   let now: Date
   let calendar: Calendar
 }
@@ -423,36 +434,13 @@ enum TaskInterruptionGateReason: String, Codable, Equatable {
   case taskDisabled = "task_disabled"
   case focusSuppressed = "focus_suppressed"
   case snoozed
+  case quietHours = "quiet_hours"
   case expired
   case canWait = "can_wait"
   case duplicate
   case dailyBudget = "daily_budget"
   case minimumSpacing = "minimum_spacing"
   case staleOwner = "stale_owner"
-  /// Decodes the retired time-gate trace without restoring time-based delivery behavior.
-  /// New writes use this namespaced value instead of the removed `quiet_hours` wire value.
-  case legacyQuietHours = "legacy_quiet_hours"
-
-  init(from decoder: Decoder) throws {
-    let container = try decoder.singleValueContainer()
-    let rawValue = try container.decode(String.self)
-    if rawValue == "quiet_hours" {
-      self = .legacyQuietHours
-      return
-    }
-    guard let reason = Self(rawValue: rawValue) else {
-      throw DecodingError.dataCorruptedError(
-        in: container,
-        debugDescription: "Unknown task interruption gate reason: \(rawValue)"
-      )
-    }
-    self = reason
-  }
-
-  func encode(to encoder: Encoder) throws {
-    var container = encoder.singleValueContainer()
-    try container.encode(rawValue)
-  }
 }
 
 struct TaskInterruptionGateTrace: Codable, Equatable {
@@ -502,13 +490,13 @@ final class TaskInterruptionLedgerDefaults: TaskInterruptionLedgerPersisting {
     fixedOwnerID = ownerID
   }
 
-  private var key: ScopedDefaultsKey {
+  private var key: String {
     let dynamicOwner =
       defaults === UserDefaults.standard
       ? RuntimeOwnerIdentity.currentOwnerId()
       : defaults.string(forKey: .authUserId)
     let owner = fixedOwnerID ?? dynamicOwner ?? "signed-out"
-    return .taskInterruptionLedger(ownerID: owner)
+    return "proactiveTaskInterruptionLedger.v1.\(owner)"
   }
 
   func load() -> TaskInterruptionLedger {
@@ -553,6 +541,10 @@ final class ProactiveTaskInterruptionGate {
       reason = .taskDisabled
     } else if environment.focusSuppressed {
       reason = .focusSuppressed
+    } else if environment.snoozed {
+      reason = .snoozed
+    } else if Self.isQuietHours(configuration: configuration, environment: environment) {
+      reason = .quietHours
     } else if candidate.expiresAt <= environment.now {
       reason = .expired
     } else if candidate.canWait {
@@ -581,6 +573,18 @@ final class ProactiveTaskInterruptionGate {
     return trace
   }
 
+  private static func isQuietHours(
+    configuration: ProactiveTaskInterruptionConfiguration,
+    environment: TaskInterruptionEnvironment
+  ) -> Bool {
+    let components = environment.calendar.dateComponents([.hour, .minute], from: environment.now)
+    let minute = (components.hour ?? 0) * 60 + (components.minute ?? 0)
+    let start = configuration.quietHoursStartMinute
+    let end = configuration.quietHoursEndMinute
+    if start == end { return false }
+    if start < end { return minute >= start && minute < end }
+    return minute >= start || minute < end
+  }
 }
 
 struct ProactiveTaskArtifactProposal {
@@ -826,7 +830,6 @@ actor TaskContextualResurfacingService {
   private let debounceInterval: TimeInterval
   private let deviceID: () -> String
   private let ownerID: @Sendable () -> String?
-  private let contextBucketsEnabled: @Sendable () async -> Bool
   private let interruptionSender:
     @MainActor @Sendable (
       _ candidate: TaskInterruptionCandidate,
@@ -850,9 +853,6 @@ actor TaskContextualResurfacingService {
     debounceInterval: TimeInterval = 2,
     deviceIDProvider: @escaping () -> String = { ClientDeviceService.shared.clientDeviceId },
     ownerIDProvider: @escaping @Sendable () -> String? = { RuntimeOwnerIdentity.currentOwnerId() },
-    contextBucketsEnabled: @escaping @Sendable () async -> Bool = {
-      await MainActor.run { ContextBucketsFeature.isEnabled }
-    },
     interruptionSender:
       @escaping @MainActor @Sendable (
         TaskInterruptionCandidate,
@@ -868,7 +868,6 @@ actor TaskContextualResurfacingService {
     self.debounceInterval = debounceInterval
     self.deviceID = deviceIDProvider
     self.ownerID = ownerIDProvider
-    self.contextBucketsEnabled = contextBucketsEnabled
     self.interruptionSender = interruptionSender
   }
 
@@ -888,13 +887,7 @@ actor TaskContextualResurfacingService {
     )
   }
 
-  func observe(_ event: TaskLocalContextEvent) async {
-    if await contextBucketsEnabled() {
-      // ContextProactivityEngine owns flag-on resurfacing and the delivery ledger.
-      // Cancel any legacy debounce that was already scheduled before the flag flipped.
-      resetOwnerState()
-      return
-    }
+  func observe(_ event: TaskLocalContextEvent) {
     ensureOwnerChangeObserver()
     guard let lease = captureOwnerLease() else {
       resetOwnerState()
@@ -925,11 +918,6 @@ actor TaskContextualResurfacingService {
   private func flush(lease: OwnerLease) async {
     debounceTask?.cancel()
     debounceTask = nil
-    if await contextBucketsEnabled() {
-      // Flag flipped on while the debounce was sleeping — abandon legacy flush.
-      resetOwnerState()
-      return
-    }
     guard isCurrent(lease), activeLease == lease else {
       resetOwnerState()
       return

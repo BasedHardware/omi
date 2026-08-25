@@ -30,41 +30,19 @@ enum GeneratedToolCapabilities {
 
   static let capabilities: [Capability] = [
     Capability(
-      toolName: "get_work_context",
-      title: "Get Work Context",
-      latency: .fastLocal,
-      surfaces: Set([.desktopChat]),
-      summary: "Identify the documents, URLs, and files the user was recently working in.",
-      bullets: [
-      "Call this before semantic_search or execute_sql for \"where was that doc\", \"what was I doing in X\", and other recent-work questions.",
-      "Returns visits[].handles and briefs[].handles — the durable address of each source. Open or read that source; do not describe a screenshot of it.",
-      "Screenshot timeline and screenshot_id are fallback evidence: pass include_screen=true only when no handle answers the question.",
-      "For the live screen use capture_screen; this tool is history, not current visual evidence.",
-      "Call get_work_context first for recent work/activity history and document, URL, page, or file location; do not start with semantic_search or execute_sql. It is not for direct current-screen questions.",
-      "Read visits[].handles and briefs[].handles first: they name the actual document, URL, or file. Open or read that source rather than describing a screenshot of it.",
-      "Make one call with the defaults before any broader screen discovery. screen_now and timeline are empty by default and are fallback evidence only.",
-      "Pass include_screen=true solely when the handles cannot answer the question or the question is visual; it costs a video-frame decode.",
-      "Its screen_now and timeline fields are historical unless this turn separately attached a live image.",
-      "For current visual detail, use capture_screen when approval is available rather than answering from this tool."
-    ]
-    ),
-    Capability(
       toolName: "execute_sql",
       title: "Execute SQL",
       latency: .fastLocal,
       surfaces: Set([.desktopChat]),
-      summary: "Run exact structured or quantitative queries on the local omi.db database.",
+      summary: "Run SQL on the local omi.db database for structured local data.",
       bullets: [
       "Supports SELECT, INSERT, UPDATE, DELETE.",
-      "Use for counts, date ranges, aggregates, and narrow structured inspection. get_work_context owns recent-work and document/page/file location questions.",
-      "The durable work index is context_visits(handlesJson) joined to context_buckets; use it instead of screenshots for work aggregates or diagnostics.",
-      "Raw screenshots.ocrText columns are refused. Use a bounded substr(ocrText, 1, 200) preview only for explicit low-level OCR inspection.",
+      "Use for personal facts, app usage stats, time queries, task lookups, conversations, memories, aggregations, and anything structured.",
       "Supports FTS5 MATCH queries for keyword search; see the schema footer for FTS tables and patterns.",
       "SELECT queries auto-limit to 200 rows. UPDATE/DELETE require WHERE. DROP/ALTER/CREATE are blocked.",
-      "Prefer semantic_search for fuzzy screen-content questions after get_work_context cannot identify the source, and backend task tools for creating/updating tasks.",
+      "Prefer semantic_search for fuzzy screen-history questions and backend task tools for creating/updating tasks.",
       "Use execute_sql for quantitative queries (counts, sums, date ranges, aggregations).",
-      "For recent work/activity or document/page/file location, call get_work_context before execute_sql and do not select raw screenshots.ocrText.",
-      "Use context_visits(handlesJson) joined to context_buckets for work aggregates; use semantic_search only for fuzzy screen content after get_work_context cannot answer."
+      "Use semantic_search instead for fuzzy or conceptual queries about screen content."
     ]
     ),
     Capability(
@@ -74,11 +52,10 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat]),
       summary: "Vector similarity search on the user's screen history.",
       bullets: [
-      "Use for fuzzy/conceptual questions about screen content after get_work_context cannot identify the document, URL, or file.",
+      "Use for fuzzy/conceptual questions about what the user saw, read, or worked on where exact SQL keywords will not work.",
       "Examples: \"reading about machine learning\", \"working on design mockups\".",
       "Parameters: query (required), days (default 7), app_filter (optional).",
-      "For recent work or document/page/file location, call get_work_context before semantic_search.",
-      "Use semantic_search instead of execute_sql only for fuzzy or conceptual screen-content questions that handles cannot answer."
+      "Prefer semantic_search over execute_sql when the user asks about something they 'saw' or worked on."
     ]
     ),
     Capability(
@@ -397,15 +374,16 @@ enum GeneratedToolCapabilities {
     Capability(
       toolName: "save_knowledge_graph",
       title: "Save Knowledge Graph",
-      latency: .fastNetwork,
+      latency: .fastLocal,
       surfaces: Set([.desktopChat]),
       summary: "Save a knowledge graph of entities and relationships extracted from the user's data.",
       bullets: [
-      "Prefer discovery_text (raw notes/findings). Backend extract via knowledge_graph SSOT builds nodes/edges; nodes/edges remain accepted for compatibility.",
+      "Parameters: nodes (array of {id, label, node_type, aliases}), edges (array of {source_id, target_id, label}).",
       "node_type must be one of: person, organization, place, thing, concept.",
       "Use when exploring the user's files during onboarding to build their knowledge graph.",
       "Deduplication is handled automatically; provide all entities you find.",
-      "Use when exploring the user's files during onboarding or knowledge-graph building."
+      "Use when exploring the user's files during onboarding or knowledge-graph building.",
+      "Deduplication is handled automatically; include all meaningful entities and relationships you found."
     ]
     ),
     Capability(
@@ -455,16 +433,14 @@ enum GeneratedToolCapabilities {
       title: "Create Memory",
       latency: .fastNetwork,
       surfaces: Set([.desktopChat]),
-      summary: "Save one explicitly requested fact or preference to short-term memory.",
+      summary: "Save one user-provided fact or preference to short-term memory.",
       bullets: [
-      "Use only when the user explicitly and affirmatively asks you to remember or save something.",
-      "Pass a clean standalone fact: strip the command and lightly clean pronouns. Do not invent names, dates, or facts the user did not ask to persist, and do not infer from the rest of the chat.",
-      "Do not call for a mere statement of fact, a question, or a negative request such as 'do not remember this'.",
+      "Use only when the user explicitly and affirmatively asks you to remember or save the supplied content.",
+      "Do not infer memories from conversation context, and do not call for a negative request such as 'do not remember this'.",
       "This writes short-term memory through the authorized desktop backend path; it does not promote, edit, or delete long-term memory.",
-      "When the current user message explicitly and affirmatively asks Omi to remember or save something, call this tool with a clean standalone fact.",
-      "Strip the command (for example, 'Please remember that I prefer tea' → 'I prefer tea'). Light rewrite and pronoun cleanup are OK; do not invent names, dates, or facts the user did not ask to persist.",
-      "Do not infer from the rest of the chat, and do not call for a mere statement of fact, a question, or a negative request such as 'do not remember this'.",
-      "Confirm the save in one line. Never tell the user about validators or internal save rules.",
+      "The current user message must explicitly and affirmatively ask Omi to remember or save the supplied content.",
+      "Pass only the content to remember; do not add inferred facts, categories, tags, or metadata.",
+      "Do not call when the user merely states a fact, asks a question, asks for a suggestion, or says not to remember/save something.",
       "This is a one-way non-idempotent write. Do not retry automatically after an unknown outcome; tell the user the save status is uncertain.",
       "The backend stores this as a short-term memory candidate. Do not claim it was promoted to long-term memory."
     ]
@@ -678,6 +654,21 @@ enum GeneratedToolCapabilities {
       summary: "Fetch a local Rewind screenshot image by screenshot_id.",
       bullets: [
       "Local API only."
+    ]
+    ),
+    Capability(
+      toolName: "get_work_context",
+      title: "Get Work Context",
+      latency: .fastLocal,
+      surfaces: Set([.desktopChat]),
+      summary: "Get the user's current screen plus a compressed timeline of recent on-screen activity.",
+      bullets: [
+      "Call this first for \"what is on my screen\", \"do you see my screen\", and current-work questions.",
+      "Returns availability, a screenshot_id for follow-up, OCR preview, and recent timeline without raw image bytes.",
+      "If raw pixels are needed after this, request get_screenshot/capture_screen approval.",
+      "Use this for recent work/activity history, not for direct current-screen questions.",
+      "Its screen_now and timeline fields are historical unless this turn separately attached a live image.",
+      "For current visual detail, use capture_screen when approval is available rather than answering from this tool."
     ]
     )
   ]

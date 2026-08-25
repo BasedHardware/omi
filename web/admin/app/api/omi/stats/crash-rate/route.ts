@@ -51,19 +51,11 @@ export async function GET(request: NextRequest) {
       ORDER BY day
     `;
 
-    const rollingHogql = `
-      SELECT
-        countIf(event = 'App Crash Detected') as crashes,
-        count(DISTINCT distinct_id) as users
-      FROM events
-      WHERE properties.$os_name = 'macOS'
-        AND timestamp >= now() - interval 24 hour
-    `;
-
-    const [results, rollingResults] = (await Promise.all([
-      posthogResults(host, projectId, apiKey, hogql),
-      posthogResults(host, projectId, apiKey, rollingHogql),
-    ])) as [[string, number, number][], [number, number][]];
+    const results = (await posthogResults(host, projectId, apiKey, hogql)) as [
+      string,
+      number,
+      number,
+    ][];
 
     const crashMap: Record<string, number> = {};
     const dauMap: Record<string, number> = {};
@@ -73,15 +65,6 @@ export async function GET(request: NextRequest) {
     }
 
     const data = buildDateSeries(days, crashMap, dauMap);
-    // Trailing bucket = last 24 hours so today's crash-free rate is not a
-    // low-sample morning artifact.
-    const [rollCrashes, rollUsers] = rollingResults?.[0] ?? [0, 0];
-    if (data.length > 0 && Number(rollUsers) > 0) {
-      const last = data[data.length - 1];
-      last.crashes = Number(rollCrashes);
-      last.users = Number(rollUsers);
-      last.crashFreeRate = Math.round((1 - Number(rollCrashes) / Number(rollUsers)) * 1000) / 10;
-    }
     cache = { data, days, timestamp: Date.now() };
     return NextResponse.json({ data, days });
   } catch (error: any) {

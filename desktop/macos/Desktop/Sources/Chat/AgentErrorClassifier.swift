@@ -23,7 +23,6 @@ enum AgentErrorCode: String, CaseIterable, Sendable {
   case credentialLeakSuspected = "credential_leak_suspected"
   case planLimitReached = "plan_limit_reached"
   case agentModeUnavailable = "agent_mode_unavailable"
-  case upstreamProviderFailed = "upstream_provider_failed"
   case userInterrupted = "user_interrupted"
   case unknown
 }
@@ -42,18 +41,6 @@ enum AgentErrorClassifier {
   static let runtimeInstallIncompleteMessage =
     "Omi's local AI runtime is not installed correctly, so chat can't start. "
     + "Reinstall or update Omi to repair it."
-
-  /// Worker recycle rewrites `userMessage` to "send again" while leaving the
-  /// provider's 402 on `technicalMessage`. Classify both or the billing rule
-  /// never fires and the transcript falls through to the unclassified marker.
-  static func classify(_ failure: AgentRuntimeFailure) -> ClassifiedAgentError {
-    classify(
-      [failure.technicalMessage, failure.userMessage]
-        .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
-        .filter { !$0.isEmpty }
-        .joined(separator: "\n")
-    )
-  }
 
   // ponytail: ordered substring rules over the observed error corpus; a rule
   // table beats ML until the corpus outgrows it. First match wins.
@@ -112,27 +99,6 @@ enum AgentErrorClassifier {
         retryable: false)
     }
 
-    // Omi's own desktop chat backend reports every upstream failure as the
-    // fixed string "Upstream provider error" with code 502, delivered as an SSE
-    // error frame inside an HTTP 200 body. The corpus had no rule for it, so it
-    // fell through to `unknown` and the transcript showed the generic "Omi
-    // couldn't answer this one" — which is what users saw for ~19 hours during
-    // the 2026-08-20 gateway-parameter outage, with nothing on screen
-    // indicating the failure was ours rather than their message.
-    //
-    // Retryable: the backend emits this for transient gateway conditions
-    // (circuit open, transport failure, upstream timeout) as well as hard
-    // rejections, and it does not distinguish them on the wire. Resending is
-    // worth one attempt.
-    if lower.contains("upstream provider error") {
-      return ClassifiedAgentError(
-        code: .upstreamProviderFailed,
-        userMessage:
-          "Omi's AI service didn't respond. This is on our side, not your message. "
-          + "Try again in a moment.",
-        retryable: true)
-    }
-
     // The Omi-account proxy answers an exhausted billing lane with a bare 402
     // and no body, so the raw transport string ("HTTP 402 status code (no
     // body)") fell through to `unknown` and was shown verbatim — and, worse,
@@ -142,9 +108,7 @@ enum AgentErrorClassifier {
     // that happens to contain those digits cannot claim this rule.
     if lower.contains("payment required")
       || lower.range(of: #"\bhttp[\s/]*402\b"#, options: .regularExpression) != nil
-      || lower.range(
-        of: #"\b(?:402\s+status|status(?:\s+code)?\s*[:=]?\s*402)\b"#,
-        options: .regularExpression) != nil
+      || lower.range(of: #"\b402\s+status\b"#, options: .regularExpression) != nil
     {
       return ClassifiedAgentError(
         code: .providerBillingExhausted,

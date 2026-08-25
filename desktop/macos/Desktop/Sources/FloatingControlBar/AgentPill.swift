@@ -2112,8 +2112,7 @@ final class AgentPillsManager: ObservableObject {
         if !trimmed.isEmpty {
           return String(trimmed.prefix(110))
         }
-      case .thinking, .discoveryCard, .questionCard, .taskCard, .goalLink, .captureLink,
-        .conversationLink, .memoryLink, .citation:
+      case .thinking, .discoveryCard, .questionCard, .taskCard, .goalLink, .captureLink, .memoryLink:
         continue
       }
     }
@@ -2327,11 +2326,9 @@ final class AgentPillsManager: ObservableObject {
       {"title":"<3-5 word imperative title in Title Case, no trailing punctuation>","ack":"<one short spoken acknowledgement, max 7 words, friendly tone, e.g. 'Got it, building Mario now.'>"}
       """
 
-    // OpenAI-compatible body. Background-agent title/ack generation is a
-    // single-shot structured completion, so it uses the managed structured
-    // lane instead of a specialist Anthropic model.
+    // OpenAI-compatible body. The backend translates to Anthropic upstream.
     let body: [String: Any] = [
-      "model": "omi-structured",
+      "model": "claude-haiku-4-5-20251001",
       "max_tokens": 120,
       "messages": [["role": "user", "content": prompt]],
       "stream": false,

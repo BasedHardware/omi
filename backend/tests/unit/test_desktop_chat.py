@@ -6,25 +6,10 @@ import httpx
 import pytest
 
 from routers import desktop_chat
-from utils.observability import journeys
-
-
-def _authorized_request(body, *, web_search_allowed: bool = True):
-    """Translate a body as an authorized principal, so these cases keep asserting
-    the non-authorization conditions that gate server-side web search."""
-    status = 'authorized' if web_search_allowed else 'denied'
-    return desktop_chat._request(body, web_search_authorization=status)
-
-
-def _fail_direct_anthropic(message: str):
-    def _raise(**_kwargs):
-        raise AssertionError(message)
-
-    return _raise
 
 
 def test_request_translates_openai_tool_history_and_alias():
-    public_model, payload = _authorized_request(
+    public_model, payload = desktop_chat._request(
         {
             'model': 'omi-sonnet',
             'max_completion_tokens': 20_000,
@@ -55,7 +40,7 @@ def test_request_translates_openai_tool_history_and_alias():
 
 
 def test_request_injects_web_search_for_desktop_opt_in():
-    _, payload = _authorized_request(
+    _, payload = desktop_chat._request(
         {
             'model': 'omi-sonnet',
             'messages': [{'role': 'user', 'content': 'What is the weather in New York today?'}],
@@ -72,7 +57,7 @@ def test_request_injects_web_search_for_desktop_opt_in():
 
 
 def test_request_keeps_private_turns_off_public_web_search():
-    _, payload = _authorized_request(
+    _, payload = desktop_chat._request(
         {
             'model': 'omi-sonnet',
             'messages': [{'role': 'user', 'content': 'From my conversations, what did I say about the trip?'}],
@@ -81,7 +66,7 @@ def test_request_keeps_private_turns_off_public_web_search():
     )
     assert 'tools' not in payload
 
-    _, payload = _authorized_request(
+    _, payload = desktop_chat._request(
         {
             'model': 'omi-sonnet',
             'messages': [
@@ -99,7 +84,7 @@ def test_request_keeps_private_turns_off_public_web_search():
     )
     assert 'tools' not in payload
 
-    _, payload = _authorized_request(
+    _, payload = desktop_chat._request(
         {
             'model': 'omi-sonnet',
             'messages': [
@@ -117,7 +102,7 @@ def test_request_keeps_private_turns_off_public_web_search():
     )
     assert 'tools' not in payload
 
-    _, payload = _authorized_request(
+    _, payload = desktop_chat._request(
         {
             'model': 'omi-sonnet',
             'messages': [
@@ -131,7 +116,7 @@ def test_request_keeps_private_turns_off_public_web_search():
     )
     assert 'tools' not in payload
 
-    _, payload = _authorized_request(
+    _, payload = desktop_chat._request(
         {
             'model': 'omi-sonnet',
             'messages': [{'role': 'user', 'content': "Don't use web search; answer from memory."}],
@@ -155,7 +140,7 @@ def test_request_keeps_private_turns_off_public_web_search():
     ],
 )
 def test_request_recognizes_common_public_web_opt_outs(content):
-    _, payload = _authorized_request(
+    _, payload = desktop_chat._request(
         {
             'model': 'omi-sonnet',
             'messages': [{'role': 'user', 'content': content}],
@@ -174,7 +159,7 @@ def test_request_recognizes_common_public_web_opt_outs(content):
     ],
 )
 def test_request_does_not_invert_double_negated_web_requirement(content):
-    _, payload = _authorized_request(
+    _, payload = desktop_chat._request(
         {
             'model': 'omi-sonnet',
             'messages': [{'role': 'user', 'content': content}],
@@ -185,7 +170,7 @@ def test_request_does_not_invert_double_negated_web_requirement(content):
 
 
 def test_request_scopes_without_searching_to_public_web_objects():
-    _, payload = _authorized_request(
+    _, payload = desktop_chat._request(
         {
             'model': 'omi-sonnet',
             'messages': [
@@ -201,7 +186,7 @@ def test_request_scopes_without_searching_to_public_web_objects():
 
 
 def test_request_allows_retry_after_reported_missing_search_results():
-    _, payload = _authorized_request(
+    _, payload = desktop_chat._request(
         {
             'model': 'omi-sonnet',
             'messages': [{'role': 'user', 'content': 'I got no web search results; search the web again.'}],
@@ -212,7 +197,7 @@ def test_request_allows_retry_after_reported_missing_search_results():
 
 
 def test_request_classifies_only_trusted_query_before_tool_context():
-    _, private_payload = _authorized_request(
+    _, private_payload = desktop_chat._request(
         {
             'model': 'omi-sonnet',
             'messages': [
@@ -229,10 +214,7 @@ def test_request_classifies_only_trusted_query_before_tool_context():
     )
     assert 'tools' not in private_payload
 
-    # A public-looking trusted query no longer earns server-side web search once
-    # tool output is inlined behind the untrusted marker: that inlined text is the
-    # private context the Anthropic-side query could carry out (issue #11412).
-    _, public_payload = _authorized_request(
+    _, public_payload = desktop_chat._request(
         {
             'model': 'omi-sonnet',
             'messages': [
@@ -247,26 +229,17 @@ def test_request_classifies_only_trusted_query_before_tool_context():
             'omi_web_search': True,
         }
     )
-    assert 'tools' not in public_payload
-
-    _, clean_payload = _authorized_request(
-        {
-            'model': 'omi-sonnet',
-            'messages': [{'role': 'user', 'content': 'Search the web for current news.'}],
-            'omi_web_search': True,
-        }
-    )
-    assert clean_payload['tools'] == [desktop_chat._WEB_SEARCH_TOOL]
+    assert public_payload['tools'] == [desktop_chat._WEB_SEARCH_TOOL]
 
 
-def test_request_keeps_client_tools_without_web_search_and_skips_haiku_or_none():
+def test_request_adds_web_search_alongside_client_tools_but_not_for_haiku_or_none():
     client_tools = [{'type': 'function', 'function': {'name': 'weather', 'parameters': {'type': 'object'}}}]
-    _, payload = _authorized_request(
+    _, payload = desktop_chat._request(
         {'model': 'omi-sonnet', 'messages': [{'role': 'user', 'content': 'Plan my day'}], 'tools': client_tools}
     )
-    assert [tool['name'] for tool in payload['tools']] == ['weather']
+    assert [tool['name'] for tool in payload['tools']] == ['web_search', 'weather']
 
-    _, payload = _authorized_request(
+    _, payload = desktop_chat._request(
         {
             'model': 'omi-sonnet',
             'messages': [{'role': 'user', 'content': 'Use the weather tool'}],
@@ -277,7 +250,7 @@ def test_request_keeps_client_tools_without_web_search_and_skips_haiku_or_none()
     assert [tool['name'] for tool in payload['tools']] == ['weather']
     assert payload['tool_choice'] == {'type': 'any'}
 
-    _, payload = _authorized_request(
+    _, payload = desktop_chat._request(
         {
             'model': 'omi-sonnet',
             'messages': [{'role': 'user', 'content': 'Use the weather tool'}],
@@ -288,7 +261,7 @@ def test_request_keeps_client_tools_without_web_search_and_skips_haiku_or_none()
     assert [tool['name'] for tool in payload['tools']] == ['weather']
     assert payload['tool_choice'] == {'type': 'tool', 'name': 'weather'}
 
-    _, payload = _authorized_request(
+    _, payload = desktop_chat._request(
         {
             'model': 'claude-haiku-4-5',
             'messages': [{'role': 'user', 'content': 'Search the web for this'}],
@@ -297,7 +270,7 @@ def test_request_keeps_client_tools_without_web_search_and_skips_haiku_or_none()
     )
     assert 'tools' not in payload
 
-    _, payload = _authorized_request(
+    _, payload = desktop_chat._request(
         {
             'model': 'omi-sonnet',
             'messages': [{'role': 'user', 'content': 'Use no tools'}],
@@ -310,7 +283,7 @@ def test_request_keeps_client_tools_without_web_search_and_skips_haiku_or_none()
 
 
 def test_request_does_not_inject_server_search_on_client_tool_continuation():
-    _, payload = _authorized_request(
+    _, payload = desktop_chat._request(
         {
             'model': 'omi-sonnet',
             'messages': [
@@ -335,7 +308,7 @@ def test_request_does_not_inject_server_search_on_client_tool_continuation():
 
 
 def test_request_binds_public_web_privacy_policy_to_anthropic_system():
-    _, payload = _authorized_request(
+    _, payload = desktop_chat._request(
         {
             'model': 'omi-sonnet',
             'messages': [
@@ -349,7 +322,7 @@ def test_request_binds_public_web_privacy_policy_to_anthropic_system():
 
 
 def test_request_recognizes_pi_public_web_routing_policy():
-    _, payload = _authorized_request(
+    _, payload = desktop_chat._request(
         {
             'model': 'omi-sonnet',
             'messages': [
@@ -366,7 +339,7 @@ def test_request_recognizes_pi_public_web_routing_policy():
 def test_request_reports_web_search_capability_fallback(monkeypatch):
     fallbacks = []
     monkeypatch.setattr(desktop_chat, 'record_fallback', lambda **fields: fallbacks.append(fields))
-    _authorized_request(
+    desktop_chat._request(
         {
             'model': 'claude-haiku-4-5',
             'messages': [{'role': 'user', 'content': 'What happened today?'}],
@@ -384,7 +357,7 @@ def test_request_reports_web_search_capability_fallback(monkeypatch):
     ]
 
     fallbacks.clear()
-    _authorized_request(
+    desktop_chat._request(
         {
             'model': 'claude-haiku-4-5',
             'messages': [{'role': 'user', 'content': 'From my conversations, what did I say?'}],
@@ -417,30 +390,14 @@ async def test_record_usage_charges_web_search_requests(monkeypatch):
 @pytest.mark.asyncio
 async def test_record_usage_skips_byok_requests(monkeypatch):
     calls = []
-    exclusions = []
 
     async def run_blocking(_, function, *args):
         calls.append((function, args))
-        function(*args)
 
     monkeypatch.setattr(desktop_chat, 'run_blocking', run_blocking)
     monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: 'anthropic-key')
-    # The exclusion call site passes firestore_client=get_customer_firestore_client(),
-    # which is evaluated before the stubbed recorder runs and builds a real client --
-    # resolving GCP credentials and reaching the metadata server under the hermetic
-    # network guard. Production must keep using the customer client (record_llm_cost_exclusion
-    # falls back to the default `db`, not the customer client, when passed None), so stub
-    # the factory here rather than dropping the argument.
-    monkeypatch.setattr(desktop_chat, 'get_customer_firestore_client', lambda: object())
-    monkeypatch.setattr(
-        desktop_chat.llm_usage_db,
-        'record_llm_cost_exclusion',
-        lambda *args, **kwargs: exclusions.append((args, kwargs)),
-    )
     await desktop_chat._record_usage('user', {'input_tokens': 3, 'web_search_requests': 1})
-    assert len(calls) == 1
-    assert exclusions[0][0] == ('user',)
-    assert exclusions[0][1]['cost_exclusion'] == 'byok_provider_cost'
+    assert calls == []
 
 
 def test_response_preserves_openai_tool_and_cache_usage():
@@ -873,93 +830,85 @@ async def test_stream_schedules_terminal_usage_when_cancelled_after_message_delt
 
 
 @pytest.mark.asyncio
-async def test_chat_completions_routes_public_web_search_to_managed_perplexity_lane(monkeypatch):
+async def test_chat_completions_routes_public_web_search_to_direct_anthropic(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
     monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: None)
     monkeypatch.setattr(desktop_chat, '_record_usage', lambda *_args, **_kwargs: _done())
-    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_base_url', lambda: 'http://gateway.test')
+
+    class Messages:
+        async def create(self, **payload):
+            assert payload['tools'] == [desktop_chat._WEB_SEARCH_TOOL]
+            return SimpleNamespace(
+                id='msg_web',
+                content=[SimpleNamespace(type='text', text='grounded')],
+                stop_reason='end_turn',
+                usage=SimpleNamespace(
+                    input_tokens=1, cache_creation_input_tokens=0, cache_read_input_tokens=0, output_tokens=1
+                ),
+            )
+
     monkeypatch.setattr(
         desktop_chat,
         'get_direct_anthropic_client',
-        _fail_direct_anthropic('public web search must not construct a direct Anthropic client'),
+        lambda **_: SimpleNamespace(messages=Messages()),
     )
 
     class GatewayClient:
-        def __init__(self):
-            self.calls = []
+        async def post(self, *args, **kwargs):
+            raise AssertionError('public web search must use direct Anthropic')
 
-        async def post(self, url, *, headers, json):
-            self.calls.append({'url': url, 'headers': headers, 'json': json})
-            return httpx.Response(
-                200,
-                json={
-                    'id': 'chat-web',
-                    'choices': [{'message': {'content': 'grounded from https://example.com'}}],
-                    'usage': {'prompt_tokens': 3, 'completion_tokens': 2, 'total_tokens': 5},
-                },
-                request=httpx.Request('POST', url),
-            )
-
-    client = GatewayClient()
-    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: client)
+    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: GatewayClient())
     response = await desktop_chat.chat_completions(
         {
             'model': 'omi-sonnet',
             'messages': [{'role': 'user', 'content': 'Search the web for current news.'}],
             'omi_web_search': True,
-            'tools': [{'type': 'function', 'function': {'name': 'weather', 'parameters': {'type': 'object'}}}],
         },
         uid='user-1',
         x_app_platform=None,
         x_omi_chat_contract_version=None,
         x_omi_request_id=None,
     )
-    assert b'grounded from https://example.com' in response.body
-    assert client.calls[0]['json']['model'] == 'omi:auto:web-search'
-    assert 'tools' not in client.calls[0]['json']
-    assert 'tool_choice' not in client.calls[0]['json']
-    assert client.calls[0]['headers'].get('X-Omi-LLM-Feature') == 'web_search'
-    assert desktop_chat._PUBLIC_WEB_ROUTING_INSTRUCTION in client.calls[0]['json']['messages'][0]['content']
+    assert b'grounded' in response.body
 
 
 @pytest.mark.asyncio
-async def test_chat_completions_routes_pi_public_web_policy_to_managed_perplexity_lane(monkeypatch):
+async def test_chat_completions_routes_pi_public_web_policy_to_direct_anthropic(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
     monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: None)
     monkeypatch.setattr(desktop_chat, '_record_usage', lambda *_args, **_kwargs: _done())
-    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_base_url', lambda: 'http://gateway.test')
+
+    class Messages:
+        async def create(self, **payload):
+            assert payload['tools'] == [desktop_chat._WEB_SEARCH_TOOL]
+            return SimpleNamespace(
+                id='msg_policy_web',
+                content=[SimpleNamespace(type='text', text='grounded')],
+                stop_reason='end_turn',
+                usage=SimpleNamespace(
+                    input_tokens=1, cache_creation_input_tokens=0, cache_read_input_tokens=0, output_tokens=1
+                ),
+            )
+
     monkeypatch.setattr(
         desktop_chat,
         'get_direct_anthropic_client',
-        _fail_direct_anthropic('Pi public web policy must not construct a direct Anthropic client'),
+        lambda **_: SimpleNamespace(messages=Messages()),
     )
 
     class GatewayClient:
-        def __init__(self):
-            self.calls = []
+        async def post(self, *args, **kwargs):
+            raise AssertionError('Pi public web policy must use direct Anthropic')
 
-        async def post(self, url, *, headers, json):
-            self.calls.append(json)
-            return httpx.Response(
-                200,
-                json={
-                    'id': 'chat-policy-web',
-                    'choices': [{'message': {'content': 'grounded'}}],
-                    'usage': {'prompt_tokens': 3, 'completion_tokens': 2, 'total_tokens': 5},
-                },
-                request=httpx.Request('POST', url),
-            )
-
-    client = GatewayClient()
-    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: client)
+    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: GatewayClient())
     response = await desktop_chat.chat_completions(
         {
             'model': 'omi-sonnet',
@@ -976,78 +925,12 @@ async def test_chat_completions_routes_pi_public_web_policy_to_managed_perplexit
         x_omi_request_id=None,
     )
     assert b'grounded' in response.body
-    assert client.calls[0]['model'] == 'omi:auto:web-search'
-    assert client.calls[0]['messages'][0]['content'].startswith(desktop_chat._PUBLIC_WEB_ROUTING_INSTRUCTION)
-
-
-@pytest.mark.asyncio
-async def test_chat_completions_streams_public_web_search_through_managed_perplexity_lane(monkeypatch):
-    monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
-    monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
-    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
-    monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: None)
-    monkeypatch.setattr(desktop_chat, '_record_usage', lambda *_args, **_kwargs: _done())
-    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_base_url', lambda: 'http://gateway.test')
-    monkeypatch.setattr(
-        desktop_chat,
-        'get_direct_anthropic_client',
-        _fail_direct_anthropic('streaming public web search must not construct a direct Anthropic client'),
-    )
-
-    class StreamResponse:
-        status_code = 200
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *_):
-            return None
-
-        async def aiter_bytes(self):
-            yield b'data: {"id":"chatcmpl-1","choices":[{"delta":{"content":"grounded"},"finish_reason":"stop"}]}\n\n'
-            yield (
-                b'data: {"id":"chatcmpl-1","choices":[],'
-                b'"usage":{"prompt_tokens":3,"completion_tokens":2,"total_tokens":5}}\n\n'
-            )
-            yield b'data: [DONE]\n\n'
-
-    class GatewayClient:
-        def __init__(self):
-            self.calls = []
-
-        def stream(self, method, url, **kwargs):
-            self.calls.append({'method': method, 'url': url, **kwargs})
-            return StreamResponse()
-
-        async def post(self, *args, **kwargs):
-            raise AssertionError('streaming public web search must use stream()')
-
-    client = GatewayClient()
-    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: client)
-    response = await desktop_chat.chat_completions(
-        {
-            'model': 'omi-sonnet',
-            'messages': [{'role': 'user', 'content': 'Search the web for current news.'}],
-            'omi_web_search': True,
-            'stream': True,
-        },
-        uid='user-1',
-        x_app_platform=None,
-        x_omi_chat_contract_version=None,
-        x_omi_request_id=None,
-    )
-    body = await _drain(response)
-    assert 'grounded' in body
-    assert client.calls[0]['json']['model'] == 'omi:auto:web-search'
-    assert 'tools' not in client.calls[0]['json']
 
 
 @pytest.mark.asyncio
 async def test_chat_completions_records_usage_when_pause_turn_limit_is_exhausted(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: False)
@@ -1087,7 +970,7 @@ async def test_chat_completions_records_usage_when_pause_turn_limit_is_exhausted
 @pytest.mark.asyncio
 async def test_chat_completions_gateway_mode_uses_luna_auto_lane(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
@@ -1145,7 +1028,7 @@ async def test_chat_completions_gateway_mode_uses_luna_auto_lane(monkeypatch):
 @pytest.mark.asyncio
 async def test_gateway_rejection_does_not_record_quota_question(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
     monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _provider: None)
@@ -1183,7 +1066,7 @@ async def test_gateway_rejection_does_not_record_quota_question(monkeypatch):
 
 def _wire_direct_lane(monkeypatch, quota_calls):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: False)
     monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _provider: None)
@@ -1201,10 +1084,7 @@ def _wire_direct_lane(monkeypatch, quota_calls):
 
 
 async def _drain(response):
-    # The direct Anthropic path yields str chunks; the managed gateway path
-    # proxies raw bytes via httpx aiter_bytes. Accept both.
-    chunks = [chunk async for chunk in response.body_iterator]
-    return ''.join(c.decode() if isinstance(c, (bytes, bytearray)) else c for c in chunks)
+    return ''.join([chunk async for chunk in response.body_iterator])
 
 
 @pytest.mark.asyncio
@@ -1307,7 +1187,7 @@ async def test_direct_json_upstream_error_does_not_record_quota_question(monkeyp
 @pytest.mark.asyncio
 async def test_chat_completions_rejects_unknown_explicit_model_before_gateway(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
@@ -1329,7 +1209,7 @@ async def test_chat_completions_rejects_unknown_explicit_model_before_gateway(mo
 @pytest.mark.asyncio
 async def test_chat_completions_rejects_explicit_null_model_before_gateway(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
@@ -1400,62 +1280,11 @@ def test_gateway_body_rejects_unsupported_image_url_instead_of_dropping_it():
 
 def test_specialist_haiku_requests_bypass_managed_chat_agent():
     assert not desktop_chat._uses_managed_chat_agent({'model': 'claude-haiku-4-5-20251001'})
-    assert desktop_chat._uses_managed_chat_agent({'model': 'omi-opus'})
-    assert desktop_chat._uses_managed_chat_agent({'model': 'claude-opus-4-6'})
+    assert not desktop_chat._uses_managed_chat_agent({'model': 'omi-opus'})
+    assert not desktop_chat._uses_managed_chat_agent({'model': 'claude-opus-4-6'})
     assert desktop_chat._uses_managed_chat_agent({'model': 'claude-sonnet-4-6'})
-    assert desktop_chat._uses_managed_chat_agent({'model': 'omi:auto:chat-agent'})
-    assert desktop_chat._uses_managed_chat_agent({'model': 'omi-luna'})
-    assert desktop_chat._uses_managed_chat_agent({'model': ''})
     assert desktop_chat._uses_managed_chat_agent({})
     assert not desktop_chat._uses_managed_chat_agent({'model': 'client-model'})
-
-
-def test_structured_aliases_route_to_the_structured_lane_not_chat():
-    for alias in ('omi-structured', 'OMI-Structured', 'omi:auto:chat-structured'):
-        assert desktop_chat._uses_managed_chat_agent({'model': alias})
-        assert desktop_chat._managed_lane_id({'model': alias}) == 'omi:auto:chat-structured'
-
-    # Conversational and omitted models keep the chat-agent lane.
-    for alias in ('omi-luna', 'omi-auto', 'claude-sonnet-4-6', 'omi-opus', ''):
-        assert desktop_chat._managed_lane_id({'model': alias}) == 'omi:auto:chat-agent'
-    assert desktop_chat._managed_lane_id({}) == 'omi:auto:chat-agent'
-
-
-def test_structured_lane_traffic_is_attributed_to_its_own_feature():
-    """Structured-lane calls must not land in the ledger as chat-agent traffic."""
-    assert desktop_chat._gateway_feature_for_lane('omi:auto:chat-structured') == 'chat_structured'
-    assert desktop_chat._gateway_feature_for_lane('omi:auto:chat-agent') == 'chat_agent'
-    assert desktop_chat._gateway_feature_for_lane('omi:auto:web-search') == 'web_search'
-    assert desktop_chat._gateway_request_headers(
-        'req-1', 'omi:auto:chat-structured'
-    ) != desktop_chat._gateway_request_headers('req-1', 'omi:auto:chat-agent')
-    assert desktop_chat._gateway_request_headers(
-        'req-1', 'omi:auto:web-search'
-    ) != desktop_chat._gateway_request_headers('req-1', 'omi:auto:chat-agent')
-
-
-def test_gateway_body_stamps_the_selected_lane():
-    request = {'model': 'omi-structured', 'messages': [{'role': 'user', 'content': 'plan this'}]}
-    lane = desktop_chat._managed_lane_id(request)
-    assert desktop_chat._gateway_body(request, lane)['model'] == 'omi:auto:chat-structured'
-    # Default stays the chat lane for callers that do not pass one.
-    assert desktop_chat._gateway_body(request)['model'] == 'omi:auto:chat-agent'
-
-
-def test_gateway_body_strips_tools_on_the_web_search_lane():
-    request = {
-        'model': 'omi-sonnet',
-        'messages': [{'role': 'system', 'content': 'be concise'}, {'role': 'user', 'content': 'news?'}],
-        'tools': [{'type': 'function', 'function': {'name': 'weather', 'parameters': {'type': 'object'}}}],
-        'tool_choice': 'auto',
-        'omi_web_search': True,
-    }
-    body = desktop_chat._gateway_body(request, desktop_chat.WEB_SEARCH_AUTO_LANE_ID)
-    assert body['model'] == 'omi:auto:web-search'
-    assert 'tools' not in body
-    assert 'tool_choice' not in body
-    assert 'omi_web_search' not in body
-    assert desktop_chat._PUBLIC_WEB_ROUTING_INSTRUCTION in body['messages'][0]['content']
 
 
 def test_gateway_body_normalizes_openai_tool_history_content():
@@ -1575,7 +1404,7 @@ async def test_stream_gateway_records_usage_from_sse(monkeypatch):
 @pytest.mark.asyncio
 async def test_chat_completions_gateway_mode_disabled_for_byok(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
@@ -1636,9 +1465,18 @@ async def test_chat_completions_gateway_mode_disabled_for_byok(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_chat_completions_specialist_haiku_bypasses_managed_gateway(monkeypatch):
+@pytest.mark.parametrize(
+    ('requested_model', 'translated_model'),
+    [
+        ('claude-haiku-4-5-20251001', 'claude-haiku-4-5'),
+        ('omi-opus', 'claude-opus-4-6'),
+    ],
+)
+async def test_chat_completions_specialist_models_bypass_managed_gateway(
+    monkeypatch, requested_model, translated_model
+):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
@@ -1647,7 +1485,7 @@ async def test_chat_completions_specialist_haiku_bypasses_managed_gateway(monkey
 
     class Messages:
         async def create(self, **payload):
-            assert payload['model'] == 'claude-haiku-4-5'
+            assert payload['model'] == translated_model
             return SimpleNamespace(
                 id='msg_haiku',
                 content=[SimpleNamespace(type='text', text='specialist')],
@@ -1671,7 +1509,7 @@ async def test_chat_completions_specialist_haiku_bypasses_managed_gateway(monkey
 
     response = await desktop_chat.chat_completions(
         {
-            'model': 'claude-haiku-4-5-20251001',
+            'model': requested_model,
             'messages': [{'role': 'user', 'content': 'extract this'}],
             'max_tokens': 16,
         },
@@ -1682,55 +1520,6 @@ async def test_chat_completions_specialist_haiku_bypasses_managed_gateway(monkey
     )
 
     assert b'"content":"specialist"' in response.body
-
-
-@pytest.mark.asyncio
-async def test_chat_completions_routes_legacy_opus_alias_through_managed_gateway(monkeypatch):
-    monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
-    monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
-    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
-    monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: None)
-    monkeypatch.setattr(desktop_chat, '_record_usage', lambda *_args, **_kwargs: _done())
-    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_base_url', lambda: 'http://gateway.test')
-    monkeypatch.setattr(
-        desktop_chat,
-        'get_direct_anthropic_client',
-        _fail_direct_anthropic('legacy opus aliases must not construct a direct Anthropic client'),
-    )
-
-    class GatewayClient:
-        def __init__(self):
-            self.calls = []
-
-        async def post(self, url, *, headers, json):
-            self.calls.append(json)
-            return httpx.Response(
-                200,
-                json={
-                    'id': 'chat-opus',
-                    'choices': [{'message': {'content': 'managed'}}],
-                    'usage': {'prompt_tokens': 3, 'completion_tokens': 2, 'total_tokens': 5},
-                },
-                request=httpx.Request('POST', url),
-            )
-
-    client = GatewayClient()
-    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: client)
-    response = await desktop_chat.chat_completions(
-        {
-            'model': 'omi-opus',
-            'messages': [{'role': 'user', 'content': 'hello'}],
-            'max_tokens': 16,
-        },
-        uid='user-1',
-        x_app_platform=None,
-        x_omi_chat_contract_version=None,
-        x_omi_request_id=None,
-    )
-    assert b'managed' in response.body
-    assert client.calls[0]['model'] == 'omi:auto:chat-agent'
 
 
 @pytest.mark.asyncio
@@ -1787,669 +1576,3 @@ async def test_server_metering_rejects_exhausted_user(monkeypatch):
         await desktop_chat._meter_server_request('user')
     assert error.value.status_code == 429
     assert error.value.headers == {'Retry-After': '37'}
-
-
-def test_request_does_not_let_client_tools_alone_enable_server_side_web_search():
-    client_tools = [{'type': 'function', 'function': {'name': 'search_memories', 'parameters': {'type': 'object'}}}]
-    _, payload = _authorized_request(
-        {
-            'model': 'omi-sonnet',
-            'messages': [{'role': 'user', 'content': 'What is the weather in New York today?'}],
-            'tools': client_tools,
-        }
-    )
-    assert [tool['name'] for tool in payload['tools']] == ['search_memories']
-    assert desktop_chat._PUBLIC_WEB_ROUTING_INSTRUCTION not in str(payload.get('system', ''))
-
-
-def test_request_withholds_web_search_from_an_unauthorized_principal(monkeypatch):
-    fallbacks = []
-    monkeypatch.setattr(desktop_chat, 'record_fallback', lambda **fields: fallbacks.append(fields))
-    _, payload = _authorized_request(
-        {
-            'model': 'omi-sonnet',
-            'messages': [{'role': 'user', 'content': 'What is the weather in New York today?'}],
-            'omi_web_search': True,
-        },
-        web_search_allowed=False,
-    )
-    assert 'tools' not in payload
-    assert [fallback['reason'] for fallback in fallbacks] == ['not_authorized']
-
-
-def test_request_withholds_web_search_when_private_tool_output_is_in_context(monkeypatch):
-    fallbacks = []
-    monkeypatch.setattr(desktop_chat, 'record_fallback', lambda **fields: fallbacks.append(fields))
-    _, payload = _authorized_request(
-        {
-            'model': 'omi-sonnet',
-            'messages': [
-                {'role': 'user', 'content': 'What did I say about the acquisition?'},
-                {
-                    'role': 'assistant',
-                    'tool_calls': [
-                        {
-                            'id': 'call_1',
-                            'type': 'function',
-                            'function': {'name': 'search_memories', 'arguments': '{}'},
-                        }
-                    ],
-                },
-                {'role': 'tool', 'tool_call_id': 'call_1', 'content': 'secret: board deck passphrase'},
-                {'role': 'assistant', 'content': 'You discussed the acquisition.'},
-                {'role': 'user', 'content': 'Now search the web for the latest news.'},
-            ],
-            'omi_web_search': True,
-        }
-    )
-    assert 'tools' not in payload
-    assert [fallback['reason'] for fallback in fallbacks] == ['private_tool_output_in_context']
-
-
-def test_request_allows_web_search_when_only_public_safe_tool_output_is_in_context():
-    _, payload = _authorized_request(
-        {
-            'model': 'omi-sonnet',
-            'messages': [
-                {'role': 'user', 'content': 'Add a task'},
-                {
-                    'role': 'assistant',
-                    'tool_calls': [
-                        {
-                            'id': 'call_1',
-                            'type': 'function',
-                            'function': {'name': 'create_action_item', 'arguments': '{}'},
-                        }
-                    ],
-                },
-                {'role': 'tool', 'tool_call_id': 'call_1', 'content': 'created'},
-                {'role': 'user', 'content': 'Now search the web for the latest news.'},
-            ],
-            'omi_web_search': True,
-        }
-    )
-    assert [tool['name'] for tool in payload['tools']] == ['web_search']
-
-
-def test_request_withholds_web_search_when_tool_output_is_inlined_in_the_user_turn():
-    _, payload = _authorized_request(
-        {
-            'model': 'omi-sonnet',
-            'messages': [
-                {
-                    'role': 'user',
-                    'content': (
-                        'Search the web for current news.'
-                        f'{desktop_chat._UNTRUSTED_TOOL_CONTEXT_DELIMITER}'
-                        'screen: recovery code 998811'
-                    ),
-                }
-            ],
-            'omi_web_search': True,
-        }
-    )
-    assert 'tools' not in payload
-
-
-def test_request_treats_unrecognized_tool_output_as_private():
-    _, payload = _authorized_request(
-        {
-            'model': 'omi-sonnet',
-            'messages': [
-                {'role': 'user', 'content': 'Check my mail'},
-                {
-                    'role': 'assistant',
-                    'tool_calls': [
-                        {
-                            'id': 'call_1',
-                            'type': 'function',
-                            'function': {'name': 'some_future_connector', 'arguments': '{}'},
-                        }
-                    ],
-                },
-                {'role': 'tool', 'tool_call_id': 'call_1', 'content': 'inbox contents'},
-                {'role': 'user', 'content': 'Now search the web.'},
-            ],
-            'omi_web_search': True,
-        }
-    )
-    assert 'tools' not in payload
-
-
-@pytest.mark.asyncio
-async def test_chat_completions_keeps_private_tool_output_out_of_managed_web_search(monkeypatch):
-    monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
-    monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
-    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
-    monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: None)
-    monkeypatch.setattr(desktop_chat, '_record_usage', lambda *_args, **_kwargs: _done())
-    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_base_url', lambda: 'http://gateway.test')
-    monkeypatch.setattr(
-        desktop_chat,
-        'get_direct_anthropic_client',
-        _fail_direct_anthropic('tainted web-search turns must stay on the managed gateway'),
-    )
-
-    class GatewayClient:
-        def __init__(self):
-            self.calls = []
-
-        async def post(self, url, *, headers, json):
-            self.calls.append(json)
-            return httpx.Response(
-                200,
-                json={
-                    'id': 'chat-private',
-                    'choices': [{'message': {'content': 'answered'}}],
-                    'usage': {'prompt_tokens': 3, 'completion_tokens': 2, 'total_tokens': 5},
-                },
-                request=httpx.Request('POST', url),
-            )
-
-    client = GatewayClient()
-    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: client)
-    response = await desktop_chat.chat_completions(
-        {
-            'model': 'omi-sonnet',
-            'messages': [
-                {'role': 'user', 'content': 'What did I read on screen?'},
-                {
-                    'role': 'assistant',
-                    'tool_calls': [
-                        {
-                            'id': 'call_1',
-                            'type': 'function',
-                            'function': {'name': 'search_screen_history', 'arguments': '{}'},
-                        }
-                    ],
-                },
-                {'role': 'tool', 'tool_call_id': 'call_1', 'content': 'recovery code 998811'},
-                {'role': 'user', 'content': 'Search the web for current news.'},
-            ],
-            'omi_web_search': True,
-        },
-        uid='user-1',
-        x_app_platform=None,
-        x_omi_chat_contract_version=None,
-        x_omi_request_id=None,
-    )
-    assert b'answered' in response.body
-    assert client.calls[0]['model'] == 'omi:auto:chat-agent'
-
-
-@pytest.mark.asyncio
-async def test_chat_completions_withholds_managed_web_search_when_unauthorized(monkeypatch):
-    monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
-    monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
-    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
-    monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: None)
-    monkeypatch.setattr(desktop_chat, '_record_usage', lambda *_args, **_kwargs: _done())
-    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_base_url', lambda: 'http://gateway.test')
-    monkeypatch.setattr(
-        desktop_chat,
-        'get_direct_anthropic_client',
-        _fail_direct_anthropic('unauthorized web-search turns must not construct a direct Anthropic client'),
-    )
-
-    async def denied(*_args, **_kwargs):
-        return 'denied'
-
-    monkeypatch.setattr(desktop_chat, '_web_search_authorized', denied)
-    fallbacks = []
-    monkeypatch.setattr(desktop_chat, 'record_fallback', lambda **fields: fallbacks.append(fields))
-
-    class GatewayClient:
-        def __init__(self):
-            self.calls = []
-
-        async def post(self, url, *, headers, json):
-            self.calls.append(json)
-            return httpx.Response(
-                200,
-                json={
-                    'id': 'chat-denied',
-                    'choices': [{'message': {'content': 'answered'}}],
-                    'usage': {'prompt_tokens': 3, 'completion_tokens': 2, 'total_tokens': 5},
-                },
-                request=httpx.Request('POST', url),
-            )
-
-    client = GatewayClient()
-    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: client)
-    response = await desktop_chat.chat_completions(
-        {
-            'model': 'omi-sonnet',
-            'messages': [{'role': 'user', 'content': 'Search the web for current news.'}],
-            'omi_web_search': True,
-        },
-        uid='user-1',
-        x_app_platform=None,
-        x_omi_chat_contract_version=None,
-        x_omi_request_id=None,
-    )
-    assert b'answered' in response.body
-    assert client.calls[0]['model'] == 'omi:auto:chat-agent'
-    assert [fallback['reason'] for fallback in fallbacks] == ['not_authorized']
-
-
-@pytest.mark.asyncio
-async def test_web_search_authorized_allows_a_principal_that_predates_the_gate(monkeypatch):
-    # Legacy principal: no user doc, therefore no stored web_search decision.
-    monkeypatch.setattr(desktop_chat.users_db, 'get_assistant_settings', lambda uid: {})
-    assert await desktop_chat._web_search_authorized('legacy-user') == 'authorized'
-
-    monkeypatch.setattr(desktop_chat.users_db, 'get_assistant_settings', lambda uid: {'focus': {'enabled': True}})
-    assert await desktop_chat._web_search_authorized('legacy-user') == 'authorized'
-
-
-@pytest.mark.asyncio
-async def test_web_search_authorized_denies_only_a_stored_decision(monkeypatch):
-    monkeypatch.setattr(desktop_chat.users_db, 'get_assistant_settings', lambda uid: {'web_search': {'enabled': False}})
-    assert await desktop_chat._web_search_authorized('opted-out') == 'denied'
-
-    monkeypatch.setattr(desktop_chat.users_db, 'get_assistant_settings', lambda uid: {'web_search': {'enabled': True}})
-    assert await desktop_chat._web_search_authorized('opted-in') == 'authorized'
-
-
-@pytest.mark.asyncio
-async def test_web_search_authorized_fails_closed_when_the_lookup_breaks(monkeypatch):
-    fallbacks = []
-    monkeypatch.setattr(desktop_chat, 'record_fallback', lambda **fields: fallbacks.append(fields))
-
-    def _boom(uid):
-        raise RuntimeError('firestore down')
-
-    monkeypatch.setattr(desktop_chat.users_db, 'get_assistant_settings', _boom)
-    assert await desktop_chat._web_search_authorized('user') == 'unavailable'
-    assert [fallback['reason'] for fallback in fallbacks] == ['authorization_unavailable']
-
-
-@pytest.mark.asyncio
-async def test_authorization_lookup_failure_is_not_reported_as_an_explicit_denial(monkeypatch):
-    """A Firestore/settings outage must not also emit ``not_authorized`` for the
-    same request: lookup failures and per-user denials are mutually exclusive
-    reasons so metrics can distinguish infra failure from explicit opt-out."""
-    fallbacks = []
-    monkeypatch.setattr(desktop_chat, 'record_fallback', lambda **fields: fallbacks.append(fields))
-
-    def _boom(uid):
-        raise RuntimeError('firestore down')
-
-    monkeypatch.setattr(desktop_chat.users_db, 'get_assistant_settings', _boom)
-    _, payload = desktop_chat._request(
-        {
-            'model': 'omi-sonnet',
-            'messages': [{'role': 'user', 'content': 'What is the weather in New York today?'}],
-            'omi_web_search': True,
-        },
-        web_search_authorization=await desktop_chat._web_search_authorized('user'),
-    )
-    assert 'tools' not in payload
-    assert [fallback['reason'] for fallback in fallbacks] == ['authorization_unavailable']
-
-
-def _count_cache_control(value):
-    """Count cache_control keys in a payload. Nested markers would split or
-    duplicate the automatic breakpoint and silently miss the shared prefix."""
-    count = 0
-    if isinstance(value, dict):
-        for key, nested in value.items():
-            if key == 'cache_control':
-                count += 1
-            count += _count_cache_control(nested)
-    elif isinstance(value, list):
-        for item in value:
-            count += _count_cache_control(item)
-    return count
-
-
-def _stable_prefix(payload):
-    """Byte-stable tools+system prefix. User turns sit after the automatic
-    breakpoint's shared prefix and must not appear here."""
-    return json.dumps(
-        {'system': payload.get('system'), 'tools': payload.get('tools')},
-        sort_keys=True,
-        separators=(',', ':'),
-    )
-
-
-_STABLE_DESKTOP_SYSTEM = (
-    'You are Omi, a desktop assistant.\n'
-    '<sql_schema>\nCREATE TABLE memories (id TEXT, content TEXT);\n</sql_schema>\n'
-    '<memories>\n1. User prefers vim.\n2. User is in Ho Chi Minh City.\n</memories>'
-)
-_STABLE_DESKTOP_TOOLS = [
-    {'type': 'function', 'function': {'name': 'search_memories', 'parameters': {'type': 'object'}}},
-    {'type': 'function', 'function': {'name': 'execute_sql', 'parameters': {'type': 'object'}}},
-]
-
-
-def test_request_attaches_one_top_level_cache_control_breakpoint():
-    """Anthropic's direct API caches only at an explicit breakpoint. One
-    top-level automatic marker covers tools + system + the growing transcript;
-    a nested copy would consume a second slot and is not this change."""
-    _, payload = _authorized_request(
-        {
-            'model': 'omi-sonnet',
-            'messages': [
-                {'role': 'system', 'content': _STABLE_DESKTOP_SYSTEM},
-                {'role': 'user', 'content': 'hello'},
-            ],
-            'tools': _STABLE_DESKTOP_TOOLS,
-        }
-    )
-    assert payload['cache_control'] == desktop_chat._PROMPT_CACHE_CONTROL
-    assert payload['cache_control'] == {'type': 'ephemeral', 'ttl': '1h'}
-    assert _count_cache_control(payload) == 1
-    assert 'cache_control' not in json.dumps(payload.get('system'))
-    assert 'cache_control' not in json.dumps(payload.get('tools'))
-    assert 'cache_control' not in json.dumps(payload.get('messages'))
-
-
-def test_request_cache_prefix_is_byte_stable_across_volatile_user_turns():
-    """Cache hits require the tools+system prefix to be byte-identical across
-    turns from the same client. Timestamps and the current user turn live in
-    messages, after that prefix, so they cannot silently invalidate it."""
-    tools = _STABLE_DESKTOP_TOOLS
-    system = _STABLE_DESKTOP_SYSTEM
-    _, first = _authorized_request(
-        {
-            'model': 'omi-sonnet',
-            'messages': [
-                {'role': 'system', 'content': system},
-                {'role': 'user', 'content': 'Current time: 2024-01-19 14:23:45.123456\nWhat did I work on?'},
-            ],
-            'tools': tools,
-        }
-    )
-    _, second = _authorized_request(
-        {
-            'model': 'omi-sonnet',
-            'messages': [
-                {'role': 'system', 'content': system},
-                {'role': 'user', 'content': 'Current time: 2024-01-19 14:23:45.123456\nWhat did I work on?'},
-                {'role': 'assistant', 'content': 'You were on the desktop chat route.'},
-                {'role': 'user', 'content': 'Current time: 2024-06-01 09:00:00.654321\nSummarize that.'},
-            ],
-            'tools': tools,
-        }
-    )
-    assert _stable_prefix(first) == _stable_prefix(second)
-    assert first['system'] == second['system'] == system
-    assert first['tools'] == second['tools']
-    assert first['cache_control'] == second['cache_control'] == desktop_chat._PROMPT_CACHE_CONTROL
-    assert _count_cache_control(first) == _count_cache_control(second) == 1
-    assert first['messages'] != second['messages']
-    assert '2024-01-19 14:23:45.123456' not in _stable_prefix(first)
-    assert '2024-06-01 09:00:00.654321' not in _stable_prefix(second)
-
-
-def test_request_web_search_injection_keeps_a_constant_cached_prefix():
-    """Server-side web search appends a constant routing instruction and tool.
-    Two successive public-web turns from the same client must still share a
-    byte-identical prefix; only the user turn may change."""
-    _, first = _authorized_request(
-        {
-            'model': 'omi-sonnet',
-            'messages': [
-                {'role': 'system', 'content': _STABLE_DESKTOP_SYSTEM},
-                {'role': 'user', 'content': 'Search the web for the weather in New York. asked at 2024-01-19 14:23:45'},
-            ],
-            'tools': _STABLE_DESKTOP_TOOLS,
-            'omi_web_search': True,
-        }
-    )
-    _, second = _authorized_request(
-        {
-            'model': 'omi-sonnet',
-            'messages': [
-                {'role': 'system', 'content': _STABLE_DESKTOP_SYSTEM},
-                {'role': 'user', 'content': 'Search the web for the weather in London. asked at 2024-06-01 09:00:00'},
-            ],
-            'tools': _STABLE_DESKTOP_TOOLS,
-            'omi_web_search': True,
-        }
-    )
-    assert _stable_prefix(first) == _stable_prefix(second)
-    assert first['cache_control'] == second['cache_control'] == desktop_chat._PROMPT_CACHE_CONTROL
-    assert _count_cache_control(first) == 1
-    assert first['system'] == _STABLE_DESKTOP_SYSTEM + '\n\n' + desktop_chat._PUBLIC_WEB_ROUTING_INSTRUCTION
-    assert [tool['name'] for tool in first['tools']] == ['web_search', 'search_memories', 'execute_sql']
-    assert '2024-01-19' not in _stable_prefix(first)
-    assert '2024-06-01' not in _stable_prefix(second)
-
-
-def test_gateway_forwardable_params_stay_within_the_gateway_allowlist():
-    """The router must never forward a key the gateway will reject.
-
-    The gateway validates the forwarded body against a strict allowlist and
-    fails the whole request with HTTP 400 on the first unknown top-level key.
-    Forwarding the client body verbatim therefore took managed desktop chat
-    down for ~19 hours. Pin the router's projection against the gateway's own
-    constants so the two cannot drift apart again.
-    """
-    from llm_gateway.gateway.validator import (
-        CONTROL_PARAMS,
-        FORWARDED_CHAT_COMPLETION_PARAMS,
-        GATEWAY_LOCAL_PARAMS,
-    )
-
-    accepted = CONTROL_PARAMS | GATEWAY_LOCAL_PARAMS | FORWARDED_CHAT_COMPLETION_PARAMS
-    unsupported = desktop_chat._GATEWAY_FORWARDABLE_PARAMS - accepted
-
-    assert not unsupported, f'router forwards keys the gateway rejects: {sorted(unsupported)}'
-
-
-def test_gateway_body_drops_client_params_the_gateway_would_reject():
-    """A real pi-mono turn must survive gateway validation.
-
-    The OpenAI JS SDK the local agent runs sets `store` on every request, and
-    `reasoning_effort` whenever a thinking level is configured. Neither is in
-    the gateway allowlist, and forwarding either one 400s the turn before a
-    lane is resolved.
-    """
-    body = {
-        'model': 'omi-sonnet',
-        'messages': [{'role': 'user', 'content': 'hello'}],
-        'store': False,
-        'reasoning_effort': 'low',
-        'parallel_tool_calls': True,
-        'temperature': 0.5,
-        'stream': True,
-        'omi_web_search': True,
-    }
-
-    result = desktop_chat._gateway_body(body)
-
-    assert 'store' not in result
-    assert 'reasoning_effort' not in result
-    assert 'parallel_tool_calls' not in result
-    assert 'omi_web_search' not in result
-    # Supported params still reach the gateway.
-    assert result['temperature'] == 0.5
-    assert result['stream'] is True
-    assert result['model'] == desktop_chat.CHAT_AGENT_AUTO_LANE_ID
-    assert result['messages'][0]['role'] == 'user'
-
-
-def _capture_client_journeys(monkeypatch):
-    accepted = []
-    terminal = []
-    monkeypatch.setattr(
-        journeys,
-        'record_client_journey_accepted',
-        lambda journey, client_kind: accepted.append((journey, client_kind)),
-    )
-    monkeypatch.setattr(
-        journeys,
-        'record_client_journey_terminal',
-        lambda journey, client_kind, outcome, _elapsed, *, issue_class=None: terminal.append(
-            (journey, client_kind, outcome, issue_class)
-        ),
-    )
-    return accepted, terminal
-
-
-@pytest.mark.asyncio
-async def test_desktop_chat_journey_requires_content_and_done_for_stream_success(monkeypatch):
-    accepted, terminal = _capture_client_journeys(monkeypatch)
-    quota_calls = []
-    _wire_direct_lane(monkeypatch, quota_calls)
-
-    class Stream:
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *_):
-            return None
-
-        async def get_final_message(self):
-            return SimpleNamespace(
-                content=[SimpleNamespace(type='text', text='hi')], stop_reason='end_turn', usage=None
-            )
-
-        def __aiter__(self):
-            async def events():
-                yield SimpleNamespace(type='content_block_delta', delta=SimpleNamespace(type='text_delta', text='hi'))
-
-            return events()
-
-    monkeypatch.setattr(
-        desktop_chat,
-        'get_direct_anthropic_client',
-        lambda **_: SimpleNamespace(messages=SimpleNamespace(stream=lambda **_kwargs: Stream())),
-    )
-
-    response = await desktop_chat.chat_completions(
-        {'model': 'omi-sonnet', 'stream': True, 'messages': [{'role': 'user', 'content': 'hello'}]},
-        uid='user-1',
-        x_app_platform='windows',
-        x_omi_chat_contract_version=None,
-        x_omi_request_id='request-1',
-    )
-    assert 'hi' in await _drain(response)
-    assert accepted == [('desktop_chat', 'desktop_windows')]
-    assert terminal == [('desktop_chat', 'desktop_windows', 'success', None)]
-
-
-@pytest.mark.asyncio
-async def test_desktop_chat_journey_catches_in_band_502_before_later_done(monkeypatch):
-    _accepted, terminal = _capture_client_journeys(monkeypatch)
-    quota_calls = []
-    _wire_direct_lane(monkeypatch, quota_calls)
-
-    class Stream:
-        async def __aenter__(self):
-            raise RuntimeError('upstream rejected the request')
-
-        async def __aexit__(self, *_):
-            return None
-
-    monkeypatch.setattr(
-        desktop_chat,
-        'get_direct_anthropic_client',
-        lambda **_: SimpleNamespace(messages=SimpleNamespace(stream=lambda **_kwargs: Stream())),
-    )
-
-    response = await desktop_chat.chat_completions(
-        {'model': 'omi-sonnet', 'stream': True, 'messages': [{'role': 'user', 'content': 'hello'}]},
-        uid='user-1',
-        x_app_platform='macos',
-        x_omi_chat_contract_version=None,
-        x_omi_request_id='request-1',
-    )
-    body = await _drain(response)
-    assert 'Upstream provider error' in body
-    assert 'data: [DONE]' in body
-    assert terminal == [('desktop_chat', 'desktop_macos', 'failure', 'provider_error')]
-
-
-@pytest.mark.asyncio
-async def test_desktop_chat_journey_records_direct_anthropic_json_success_and_failure(monkeypatch):
-    _accepted, terminal = _capture_client_journeys(monkeypatch)
-    quota_calls = []
-    _wire_direct_lane(monkeypatch, quota_calls)
-    monkeypatch.setattr(desktop_chat, 'get_direct_anthropic_client', lambda **_: object())
-
-    async def answer(*_args, **_kwargs):
-        message = SimpleNamespace(
-            id='message-1',
-            content=[SimpleNamespace(type='text', text='answer')],
-            stop_reason='end_turn',
-            usage=None,
-        )
-        return message, None, None
-
-    monkeypatch.setattr(desktop_chat, '_create_with_pause_turn_continuations', answer)
-    response = await desktop_chat.chat_completions(
-        {'model': 'omi-sonnet', 'messages': [{'role': 'user', 'content': 'hello'}]},
-        uid='user-1',
-        x_app_platform='linux',
-        x_omi_chat_contract_version=None,
-        x_omi_request_id='request-2',
-    )
-    assert response.status_code == 200
-    assert terminal[-1] == ('desktop_chat', 'desktop_linux', 'success', None)
-
-    async def fail(*_args, **_kwargs):
-        raise RuntimeError('provider failed')
-
-    monkeypatch.setattr(desktop_chat, '_create_with_pause_turn_continuations', fail)
-    with pytest.raises(desktop_chat.HTTPException):
-        await desktop_chat.chat_completions(
-            {'model': 'omi-sonnet', 'messages': [{'role': 'user', 'content': 'hello'}]},
-            uid='user-1',
-            x_app_platform='linux',
-            x_omi_chat_contract_version=None,
-            x_omi_request_id='request-3',
-        )
-    assert terminal[-1] == ('desktop_chat', 'desktop_linux', 'failure', 'provider_error')
-
-
-@pytest.mark.asyncio
-async def test_desktop_chat_metric_failure_does_not_break_stream(monkeypatch):
-    quota_calls = []
-    _wire_direct_lane(monkeypatch, quota_calls)
-    monkeypatch.setattr(
-        journeys.OMI_CLIENT_JOURNEY_TERMINAL_TOTAL,
-        'labels',
-        lambda **_: (_ for _ in ()).throw(RuntimeError('metrics unavailable')),
-    )
-
-    class Stream:
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *_):
-            return None
-
-        async def get_final_message(self):
-            return SimpleNamespace(
-                content=[SimpleNamespace(type='text', text='still delivered')], stop_reason='end_turn', usage=None
-            )
-
-        def __aiter__(self):
-            async def events():
-                yield SimpleNamespace(
-                    type='content_block_delta', delta=SimpleNamespace(type='text_delta', text='still delivered')
-                )
-
-            return events()
-
-    monkeypatch.setattr(
-        desktop_chat,
-        'get_direct_anthropic_client',
-        lambda **_: SimpleNamespace(messages=SimpleNamespace(stream=lambda **_kwargs: Stream())),
-    )
-    response = await desktop_chat.chat_completions(
-        {'model': 'omi-sonnet', 'stream': True, 'messages': [{'role': 'user', 'content': 'hello'}]},
-        uid='user-1',
-        x_app_platform='windows',
-        x_omi_chat_contract_version=None,
-        x_omi_request_id='request-4',
-    )
-    assert 'still delivered' in await _drain(response)

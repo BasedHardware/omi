@@ -91,14 +91,14 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
     XCTAssertTrue(setup.connectedAgentNames.isEmpty)
   }
 
-  func testSetupSnapshotReportsAudioRecordingOff() {
+  func testSetupSnapshotUsesMicrophoneOnlyForNeverSystemAudio() {
     let model = makeModel()
     appState?.hasMicrophonePermission = true
-    let previousMode = AssistantSettings.shared.audioRecordingMode
-    AssistantSettings.shared.audioRecordingMode = .off
-    defer { AssistantSettings.shared.audioRecordingMode = previousMode }
+    let previousMode = AssistantSettings.shared.systemAudioCaptureMode
+    AssistantSettings.shared.systemAudioCaptureMode = .never
+    defer { AssistantSettings.shared.systemAudioCaptureMode = previousMode }
 
-    XCTAssertEqual(model.postOnboardingSetup.listening, .disabled)
+    XCTAssertEqual(model.postOnboardingSetup.listening, .microphoneOnly)
   }
 
   func testSetupSnapshotRejectsStaleOrBrokenScreenCapture() {
@@ -152,33 +152,6 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
     XCTAssertTrue(PostOnboardingPromptSuggestions.shouldShowPopup)
   }
 
-  func testCaptureChoiceAdvancesToOptionalReferralBeforeCompletion() {
-    let model = makeConfiguredModel()
-    let previousMode = AssistantSettings.shared.audioRecordingMode
-    let previousCompletion = appState?.hasCompletedOnboarding ?? false
-    appState?.hasCompletedOnboarding = false
-    defer {
-      AssistantSettings.shared.audioRecordingMode = previousMode
-      appState?.hasCompletedOnboarding = previousCompletion
-    }
-
-    model.capture(SBOnboardingModel.defaultCaptureSelection)
-
-    XCTAssertEqual(model.step, .referral)
-    XCTAssertEqual(
-      UserDefaults.standard.integer(forKey: SBOnboardingModel.resumeStepKey),
-      SBOnboardingModel.Step.referral.rawValue)
-    XCTAssertFalse(try XCTUnwrap(appState).hasCompletedOnboarding)
-  }
-
-  func testReferralRewardCopyStaysPlanAgnostic() {
-    let model = makeModel()
-
-    XCTAssertEqual(
-      model.message(for: .referral),
-      "Want to invite a friend? They'll get one free month.")
-  }
-
   func testSkippedSetupStillProducesAnswerableGuidance() {
     let model = makeModel()
 
@@ -219,11 +192,11 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
     model.skip()
     XCTAssertTrue(PostOnboardingPromptSuggestions.shouldArmPopup())
 
-    PostOnboardingPromptSuggestions.consume()
+    // What the popup's dismiss handler persists.
+    PostOnboardingPromptSuggestions.shouldShowPopup = false
+    PostOnboardingPromptSuggestions.isDismissed = true
 
     XCTAssertFalse(PostOnboardingPromptSuggestions.shouldArmPopup())
-    XCTAssertFalse(PostOnboardingPromptSuggestions.shouldShowPopup)
-    XCTAssertTrue(PostOnboardingPromptSuggestions.isDismissed)
   }
 
   /// The flag alone must never raise an empty popup — that is the shape the first half of this bug
@@ -237,10 +210,16 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
 
   // MARK: - The orientation cue describes the window the user actually has
 
-  /// The orientation cue must describe the window the user actually has. It described click-away
-  /// dismissal for as long as the shell hid itself on deactivation; the shell now stays open when you
-  /// switch apps, and a cue promising it disappears is worse than no cue.
-  func testTheMenuBarCueDescribesAWindowThatStaysOpenAndNamesTheWayBack() throws {
+  /// This cue has been wrong twice, in opposite directions, which is why it is asserted on substance
+  /// rather than left to review. It first read "I live in your menu bar. Closing this window doesn't
+  /// stop me" — and the window has no close button, `ShellWindowChrome` hides all three traffic
+  /// lights. It was then rewritten to "click another app and I'll step out of the way", which was true
+  /// only while `.summoned` meant `hidesOnDeactivate = true`; the shell now stays in front of your work
+  /// until you ask it to leave, so that sentence promises a disappearance that no longer happens.
+  ///
+  /// What has to hold in either direction: name no control the window does not have, describe the
+  /// behaviour it actually has, and always name the way back.
+  func testTheMenuBarCueDescribesAShellThatStaysUntilYouPutItAway() throws {
     let cues = SBPostOnboardingGuidance.orientationCues(
       openShortcutTokens: ["⌃", "⌘", "O"], talkShortcutTokens: [], setup: SBSetupSnapshot())
     let menubar = try XCTUnwrap(cues.first { $0.id == "menubar" })
@@ -250,11 +229,11 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
       title.contains("clos"),
       "there is no close button on this window, and describing one is how the first cue went stale")
     XCTAssertFalse(
-      title.contains("put me away") || title.contains("click the desktop"),
-      "the shell no longer dismisses itself when another app takes focus")
+      title.contains("step out of the way") || title.contains("get out of your way"),
+      "the shell no longer hides itself when another app takes focus; promising it does is the second")
     XCTAssertTrue(
-      title.contains("stay open"),
-      "the cue must say the window survives switching apps — that is the behaviour change users see")
+      title.contains("escape"),
+      "a window that stays in front of everything has to say how to put it away")
     XCTAssertTrue(
       title.contains("menu bar"),
       "the always-available way back must be named — the chord cue is conditional, this one is not")

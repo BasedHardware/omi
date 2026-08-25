@@ -32,20 +32,6 @@ struct ConnectDestinationSheet: View {
     }
   }
 
-  /// The member whose catalog copy describes the *tool* the group is named
-  /// after, when the group really is one tool with two connection mechanisms.
-  ///
-  /// Claude and Claude Code are that; ChatGPT and Codex are two different
-  /// products sharing a sheet, so there is no shared pitch to show — rendering
-  /// ChatGPT's three outcomes under a "ChatGPT / Codex" heading would describe
-  /// the wrong tool to anyone picking Codex.
-  private var groupAnchor: MemoryExportDestination? {
-    switch destination {
-    case .claude, .claudeCode: return .claude
-    default: return nil
-    }
-  }
-
   private var groupBrand: ConnectorBrand {
     switch destination {
     case .claude, .claudeCode: return .claude
@@ -81,18 +67,7 @@ struct ConnectDestinationSheet: View {
         .padding(OmiSpacing.xxl)
 
         ScrollView {
-          VStack(alignment: .leading, spacing: OmiSpacing.md) {
-            // The grouped sheet shows two ways to connect one tool, so the case
-            // for connecting it at all belongs above both, not repeated inside
-            // each card. Anchored on the cloud member, whose pitch describes
-            // the tool rather than the CLI.
-            if let groupAnchor,
-              let entry = IntegrationNudgeCatalog.exportEntry(destinationID: groupAnchor.rawValue)
-            {
-              IntegrationValueSection(entry: entry)
-                .padding(.bottom, OmiSpacing.xs)
-            }
-
+          VStack(spacing: OmiSpacing.md) {
             ForEach(members, id: \.self) { d in
               ConnectOptionCard(destination: d, statuses: $statuses)
             }
@@ -121,7 +96,6 @@ private struct ConnectOptionCard: View {
   @State private var mcpKey: String?
   @State private var showManual = false
   @State private var permissionRefreshID = 0
-  @State private var isDisconnecting = false
 
   private let permissionRefreshTimer = Timer.publish(every: 1.0, on: .main, in: .common)
     .autoconnect()
@@ -303,34 +277,23 @@ private struct ConnectOptionCard: View {
   }
 
   private func setupCompleteBlock(_ completion: MCPSetupCompletionSummary) -> some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-      HStack(alignment: .top, spacing: OmiSpacing.sm) {
-        Image(systemName: "checkmark.seal.fill")
-          .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundColor(Ink.listeningGreen)
-          .padding(.top, 1)
-        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-          Text(completion.title)
-            .scaledFont(size: OmiType.body, weight: .semibold)
-            .foregroundColor(Ink.primary)
-          if destination == .claudeCode {
-            ClaudeCodeRestartSubtitle()
-          } else {
-            Text(completion.subtitle)
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(Ink.secondary)
-              .fixedSize(horizontal: false, vertical: true)
-          }
+    HStack(alignment: .top, spacing: OmiSpacing.sm) {
+      Image(systemName: "checkmark.seal.fill")
+        .scaledFont(size: OmiType.subheading, weight: .semibold)
+        .foregroundColor(Ink.listeningGreen)
+        .padding(.top, 1)
+      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+        Text(completion.title)
+          .scaledFont(size: OmiType.body, weight: .semibold)
+          .foregroundColor(Ink.primary)
+        if destination == .claudeCode {
+          ClaudeCodeRestartSubtitle()
+        } else {
+          Text(completion.subtitle)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
+            .fixedSize(horizontal: false, vertical: true)
         }
-      }
-      if destination.cloudOAuthClientID != nil {
-        Button(isDisconnecting ? "Disconnecting…" : "Disconnect") {
-          disconnectCloudConnection()
-        }
-        .buttonStyle(.plain)
-        .foregroundColor(Ink.secondary)
-        .scaledFont(size: OmiType.caption, weight: .medium)
-        .disabled(isDisconnecting)
       }
     }
     .padding(OmiSpacing.sm)
@@ -342,22 +305,6 @@ private struct ConnectOptionCard: View {
           RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
             .stroke(Ink.listeningGreen.opacity(0.22), lineWidth: 1))
     )
-  }
-
-  private func disconnectCloudConnection() {
-    guard !isDisconnecting else { return }
-    isDisconnecting = true
-    resultMessage = nil
-    Task { @MainActor in
-      do {
-        statuses[destination] = try await MemoryExportService.shared
-          .disconnectCloudOAuthConnection(for: destination)
-        resultMessage = .success("Disconnected from \(destination.title).")
-      } catch {
-        resultMessage = .failure("Couldn't disconnect \(destination.title). Try again.")
-      }
-      isDisconnecting = false
-    }
   }
 
   private func setupFailureMessage(for error: Error) -> String {

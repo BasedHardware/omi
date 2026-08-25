@@ -3,17 +3,20 @@
 from datetime import datetime, timezone
 
 from fakes.firestore import read_action_items, read_conversation, seed_conversation
+from models.memories import Memory
 from models.structured import ActionItem, Structured
 from models.transcript_segment import TranscriptSegment
-from utils.llm.memories import CanonicalL1MemoryCandidate
+
+
+class UnexpectedLLMCall(BaseException):
+    pass
 
 
 def _patch_process_conversation_boundaries(monkeypatch):
     import utils.conversations.process_conversation as process_module
+    import utils.llm.knowledge_graph as kg_module
 
-    # Universal canonical intake is deployment-fenced; this hermetic lifecycle
-    # test explicitly opts its local process into the enabled read/write mode.
-    monkeypatch.setenv("MEMORY_MODE", "read")
+    kg_calls = []
 
     def run_selected_postprocess(_executor, fn, *args, **kwargs):
         if fn.__name__ in {"_extract_memories", "_save_action_items"}:
@@ -24,6 +27,10 @@ def _patch_process_conversation_boundaries(monkeypatch):
                 return None
 
         return DoneFuture()
+
+    def record_kg_extract(*args, **kwargs):
+        kg_calls.append((args, kwargs))
+        return {"nodes": [], "edges": []}
 
     monkeypatch.setattr(process_module, "is_trial_paywalled", lambda *args, **kwargs: False)
     monkeypatch.setattr(process_module, "should_defer_desktop_processing", lambda uid: False)
@@ -37,10 +44,16 @@ def _patch_process_conversation_boundaries(monkeypatch):
     monkeypatch.setattr(process_module, "track_usage", lambda *args, **kwargs: _NoopContext())
     monkeypatch.setattr(process_module, "should_discard_conversation", lambda *args, **kwargs: False)
     monkeypatch.setattr(process_module, "find_similar_action_items", lambda *args, **kwargs: [])
+    monkeypatch.setattr(process_module, "find_similar_memories", lambda *args, **kwargs: [])
     monkeypatch.setattr(process_module, "upsert_vector2", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "update_vector_metadata", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "upsert_transcript_chunk_vectors", lambda *args, **kwargs: None)
+    monkeypatch.setattr(process_module, "upsert_memory_vector", lambda *args, **kwargs: None)
+    monkeypatch.setattr(process_module, "delete_memory_vector", lambda *args, **kwargs: None)
+    monkeypatch.setattr(process_module, "upsert_action_item_vectors_batch", lambda *args, **kwargs: None)
+    monkeypatch.setattr(process_module, "delete_action_item_vectors_batch", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "send_action_item_data_message", lambda *args, **kwargs: None)
+    monkeypatch.setattr(process_module, "auto_sync_action_items_batch", _async_noop)
     monkeypatch.setattr(process_module, "conversation_created_webhook", _async_noop)
     monkeypatch.setattr(process_module, "get_overlapping_calendar_event", _async_none)
     monkeypatch.setattr(process_module, "write_conversation_link_to_calendar_event", _async_noop)
@@ -48,6 +61,15 @@ def _patch_process_conversation_boundaries(monkeypatch):
     monkeypatch.setattr(process_module, "_trigger_apps", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "_update_goal_progress", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "submit_with_context", run_selected_postprocess)
+    monkeypatch.setattr(kg_module, "extract_knowledge_from_memory", record_kg_extract)
+    # process_conversation imported extract_knowledge_from_memory directly,
+    # so patch it on the process_module namespace too
+    monkeypatch.setattr(process_module, "extract_knowledge_from_memory", record_kg_extract)
+    monkeypatch.setattr(
+        kg_module,
+        "get_llm",
+        lambda *args, **kwargs: (_ for _ in ()).throw(UnexpectedLLMCall("unexpected KG LLM call")),
+    )
     monkeypatch.setattr(
         process_module,
         "get_transcript_structure",
@@ -75,18 +97,19 @@ def _patch_process_conversation_boundaries(monkeypatch):
             ActionItem(description="Ship deterministic conversation lifecycle coverage", completed=False)
         ],
     )
-
-    def extract_canonical_candidates(_uid, _source_id, segments, **_kwargs):
-        return [
-            CanonicalL1MemoryCandidate(
+    monkeypatch.setattr(
+        process_module,
+        "new_memories_extractor",
+        lambda *args, **kwargs: [
+            Memory(
                 content="David wants conversation lifecycle tests to fail hard.",
-                about="user",
-                evidence_quotes=[segments[0].text],
+                category="system",
+                visibility="public",
+                tags=["e2e", "conversation"],
             )
-        ]
-
-    monkeypatch.setattr(process_module, "extract_canonical_l1_memory_candidates", extract_canonical_candidates)
-    return []
+        ],
+    )
+    return kg_calls
 
 
 class _NoopContext:
@@ -143,18 +166,16 @@ def test_conversation_create_process_finalize_lifecycle(client, auth_headers, mo
     assert body["structured"]["title"] == "Hermetic Conversation Lifecycle"
     assert body["transcript_segments"][0]["text"] == "We should ship deterministic conversation lifecycle coverage."
 
-    # INVARIANT I1: extraction proposes only. The summary still lists the item,
-    # but the user's action_items collection must stay empty — a task appears
-    # there only through an explicit user gesture.
-    assert read_action_items("123") == []
+    action_items = read_action_items("123")
+    assert [item["description"] for item in action_items] == ["Ship deterministic conversation lifecycle coverage"]
     memories_response = client.get("/v3/memories", headers=auth_headers)
     assert memories_response.status_code == 200, memories_response.text
     memories = memories_response.json()
     assert [memory["content"] for memory in memories] == ["David wants conversation lifecycle tests to fail hard."]
     assert read_conversation("123", processed.id)["status"] == "completed"
-    # Universal canonical intake persists the memory for later KG maintenance;
-    # conversation finalization no longer performs a direct model extraction.
-    assert kg_calls == []
+    assert kg_calls == [
+        (("123", "David wants conversation lifecycle tests to fail hard.", memories[0]["id"], "David"), {})
+    ]
 
 
 def test_reprocess_route_persists_deterministic_processing_result(client, auth_headers, monkeypatch):
@@ -213,7 +234,9 @@ def test_reprocess_route_persists_deterministic_processing_result(client, auth_h
     memories_response = client.get("/v3/memories", headers=auth_headers)
     assert memories_response.status_code == 200, memories_response.text
     memories = memories_response.json()
-    assert kg_calls == []
+    assert kg_calls == [
+        (("123", "David wants conversation lifecycle tests to fail hard.", memories[0]["id"], "David"), {})
+    ]
 
 
 def test_seed_and_read_conversation(client, auth_headers, conversation_fixture):

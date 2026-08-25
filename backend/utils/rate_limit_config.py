@@ -51,8 +51,6 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "voice:transcribe_stream": (60, 3600),
     "voice:message": (60, 3600),
     "file:upload": (40, 3600),
-    # STT proxy — parakeet GPU batch transcription behind the Omi auth guard
-    "stt:transcribe": (60, 3600),
     # Agent/MCP — bursty tool calls
     "agent:execute_tool": (120, 3600),
     # Platform tools — backend RAG endpoints
@@ -67,11 +65,6 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # Action items — lightweight Firestore writes from MCP clients (no LLM), but
     # an agent can loop, so cap creation per hour. Complete/update/delete operate
     # on existing tasks and ride the shared mcp:sse / per-request auth limits.
-    # First-party GET /v1/action-items. Old Windows main-process listing
-    # stormed this route (~120 qps fleet) with no platform/version header.
-    # 12/min/uid covers Mac/Flutter hydrate plus a few pagination pages and
-    # stops a tight loop. Enforced in Depends() before Firestore.
-    "action_items:list": (12, 60),
     "action_items:write": (120, 3600),
     # Memories — single LLM call each
     "memories:create": (60, 3600),
@@ -100,16 +93,6 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "conversations:search": (60, 3600),
     # Expensive background ops
     "knowledge_graph:rebuild": (2, 3600),
-    # Return-only SSOT extract for desktop onboarding / local graph writers
-    "knowledge_graph:extract": (30, 3600),
-    # Return-only SSOT memory-log extract (onboarding ChatGPT/Claude paste import)
-    "memories:extract": (30, 3600),
-    # Return-only SSOT calendar/gmail/notes synthesis for desktop connector imports
-    "connectors:synthesize": (30, 3600),
-    # Return-only SSOT provisional conversation topic (emoji + short title)
-    "conversations:topic": (60, 3600),
-    # Return-only SSOT AI user profile synthesis (once-daily desktop cadence)
-    "users:ai_profile_synthesize": (8, 86400),
     # Canonical graph reads — paginated Firestore + assertion hydration
     "knowledge_graph:canonical": (120, 3600),
     "wrapped:generate": (2, 86400),
@@ -123,21 +106,11 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # MCP API-key contexts are keyed by app/key identity when available.
     "dev:memories_read": (120, 3600),
     "dev:action_items_read": (120, 3600),
-    # Conversation reads are limited in two tiers. Every conversation read consumes
-    # the shared "reads_total" ceiling plus its per-route budget, so splitting list
-    # and detail into separately tunable policies cannot raise the aggregate number
-    # of conversation reads one key can make. Transcript reads consume a third,
-    # stricter bucket on top of the other two.
-    "dev:conversation_reads_total": (60, 3600),
     "dev:conversations_read": (60, 3600),
     "dev:conversation_detail_read": (60, 3600),
     "dev:conversation_transcript_read": (25, 3600),
     "dev:goals_read": (120, 3600),
     "dev:conversations": (25, 3600),
-    # Ask (/v1/dev/user/ask): one qa_rag LLM call per request over the caller's
-    # conversations — billable like a conversation create, so it carries its own
-    # low per-key cap instead of riding the cheap dev:conversations_read list limit.
-    "dev:ask": (25, 3600),
     "dev:memories": (120, 3600),
     "dev:memories_batch": (15, 3600),
     "dev:action_items_write": (120, 3600),

@@ -458,10 +458,8 @@ actor RewindDatabase {
     // Create directory if needed (withIntermediateDirectories creates parents too)
     try FileManager.default.createDirectory(at: omiDir, withIntermediateDirectories: true)
 
-    // Migrate data from legacy path if this is first launch with per-user paths.
-    // Remember an anonymous-directory source so context-bucket migration can
-    // fall back to the signed-out legacy defaults key after an early init.
-    let migratedLegacyOwnerID = migrateFromLegacyPathIfNeeded(to: omiDir)
+    // Migrate data from legacy path if this is first launch with per-user paths
+    migrateFromLegacyPathIfNeeded(to: omiDir)
 
     let dbPath = omiDir.appendingPathComponent("omi.db").path
     let flagPath = omiDir.appendingPathComponent(".omi_running").path
@@ -580,7 +578,7 @@ actor RewindDatabase {
     openedForUserId = expectedUserId
     consecutiveQueryIOErrors = 0
 
-    try migrate(activeQueue, legacyOwnerFallback: migratedLegacyOwnerID)
+    try migrate(activeQueue)
 
     // After unclean shutdown, do a cheap schema sanity check (not a full DB scan).
     // PRAGMA quick_check scans the ENTIRE database regardless of the (N) argument
@@ -637,14 +635,12 @@ actor RewindDatabase {
     }
   }
 
-  private func migrateFromLegacyPathIfNeeded(to userDir: URL) -> String? {
+  private func migrateFromLegacyPathIfNeeded(to userDir: URL) {
     // The legacy `Omi` root is shared historical state. A named bundle that
     // now has an identity-derived profile must never claim it: the first
     // bundle to launch would otherwise move data belonging to Omi/Omi Dev
     // or another old named bundle into its isolated root.
-    guard Self.shouldMigrateLegacyStorage(isolatedStorage: DesktopLocalProfile.usesIsolatedStorage) else {
-      return nil
-    }
+    guard Self.shouldMigrateLegacyStorage(isolatedStorage: DesktopLocalProfile.usesIsolatedStorage) else { return }
     let fileManager = FileManager.default
     let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
     let omiDir = appSupport.appendingPathComponent("Omi", isDirectory: true)
@@ -670,15 +666,14 @@ actor RewindDatabase {
       let hasContent = ["omi.db", "Screenshots", "Videos", "backups"].contains {
         fileManager.fileExists(atPath: anonymousDir.appendingPathComponent($0).path)
       }
-      guard hasContent else { return nil }
+      guard hasContent else { return }
       sourceDir = anonymousDir
     } else {
-      return nil  // Nothing to migrate
+      return  // Nothing to migrate
     }
 
     // Don't migrate to ourselves
-    guard sourceDir.path != userDir.path else { return nil }
-    let migratedLegacyOwnerID = sourceDir.path == anonymousDir.path ? "signed-out" : nil
+    guard sourceDir.path != userDir.path else { return }
 
     log("RewindDatabase: Migrating data from \(sourceDir.path) to \(userDir.path)")
 
@@ -706,12 +701,8 @@ actor RewindDatabase {
     // NOT proceed to delete it — abort the whole migration and leave source +
     // dest intact. initialize() retries migration on the next launch, once the
     // transient cause (locked DB, momentary IO error) has likely cleared.
-    guard checkpointWALBeforeMigration(in: userDir, label: "dest", fileManager: fileManager) else {
-      return nil
-    }
-    guard checkpointWALBeforeMigration(in: sourceDir, label: "source", fileManager: fileManager) else {
-      return nil
-    }
+    guard checkpointWALBeforeMigration(in: userDir, label: "dest", fileManager: fileManager) else { return }
+    guard checkpointWALBeforeMigration(in: sourceDir, label: "source", fileManager: fileManager) else { return }
 
     // Delete WAL/SHM and running flag at source AND destination — do NOT migrate them.
     // Stale WAL/SHM at the destination (from a prior partial migration or crash) would
@@ -776,7 +767,6 @@ actor RewindDatabase {
     }
 
     log("RewindDatabase: Legacy migration complete")
-    return migratedLegacyOwnerID
   }
 
   static func shouldMigrateLegacyStorage(isolatedStorage: Bool) -> Bool {
@@ -1145,7 +1135,7 @@ actor RewindDatabase {
 
   // MARK: - Migrations
 
-  private func migrate(_ queue: DatabasePool, legacyOwnerFallback: String? = nil) throws {
+  private func migrate(_ queue: DatabasePool) throws {
     var migrator = DatabaseMigrator()
 
     // Migration 1: Create screenshots table
@@ -1524,12 +1514,6 @@ actor RewindDatabase {
         on: "transcription_sessions",
         columns: ["clientConversationId"]
       )
-    }
-
-    migrator.registerMigration("addTranscriptionConversationRole") { db in
-      try db.alter(table: "transcription_sessions") { t in
-        t.add(column: "conversationRole", .text).notNull().defaults(to: "ambient")
-      }
     }
 
     // Migration 11: Create live_notes table for AI-generated notes during recording
@@ -2568,40 +2552,9 @@ actor RewindDatabase {
       }
     }
 
-    let contextBucketOwnerID = openedForUserId ?? targetUserId()
-    ContextBucketSchema.registerMigration(
-      on: &migrator,
-      defaults: .standard,
-      ownerID: contextBucketOwnerID,
-      fallbackOwnerID: legacyOwnerFallback)
-
     RewindAbandonedVideoChunkQuarantine.registerMigration(on: &migrator)
 
-    // Keep new migrations after every previously registered component migration. Existing rows
-    // deliberately start pending so a dark-launched lossless sweep can recover history later.
-    migrator.registerMigration("addScreenActivitySyncState") { db in
-      try Self.installScreenActivitySyncStateSchema(db)
-    }
-
     try migrator.migrate(queue)
-    try ContextBucketSchema.removeMigratedLegacyDefaults(
-      afterMigrating: queue,
-      defaults: .standard,
-      ownerID: contextBucketOwnerID)
-  }
-
-  /// Kept as one callable migration boundary so a populated legacy table can be exercised in a
-  /// focused test without reproducing the entire historical migration ledger.
-  static func installScreenActivitySyncStateSchema(_ db: Database) throws {
-    try db.alter(table: "screenshots") { t in
-      t.add(column: "screenActivitySyncState", .integer).notNull().defaults(to: 0)
-    }
-    try db.execute(
-      sql: """
-        CREATE INDEX idx_screenshots_screen_activity_sync
-        ON screenshots(screenActivitySyncState, id)
-        WHERE screenActivitySyncState IN (0, 1)
-        """)
   }
 
   // MARK: - OCR Precision Reduction Migration
@@ -2798,7 +2751,7 @@ actor RewindDatabase {
         // unrelated screenshot.
         record.id = nil
         if record.imagePath == nil { record.imagePath = "" }
-        _ = try record.inserted(db)
+        try record.insert(db)
       }
 
       return screenshots.count
@@ -3152,13 +3105,8 @@ actor RewindDatabase {
     let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return "" }
 
-    // Split on anything that is not alphanumeric, not just whitespace. FTS5 gives punctuation
-    // its own meaning, so a bare `2.1.220*` built from a Cursor version title is
-    // `fts5: syntax error near "."` and fails the whole search. Callers that sanitize first
-    // (the suggestion grounding path) never saw this; the Rewind search UI passes raw titles
-    // and did. Splitting here makes the expansion safe for both rather than relying on every
-    // caller to clean up first.
-    let words = trimmed.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
+    // Split query into words
+    let words = trimmed.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
 
     let expandedWords = words.compactMap { word -> String? in
       var parts: [String] = [word]
@@ -3190,13 +3138,7 @@ actor RewindDatabase {
       }
     }
 
-    // Joined with an explicit AND, not a space. FTS5 only accepts implicit AND between bare
-    // terms: the moment one word expands into a parenthesised `(a* OR b*)` group, a
-    // space-joined query fails whole with `fts5: syntax error near "("` — so a two-word title
-    // where either word splits on camelCase or a number boundary returned nothing at all.
-    // Observed 45 times across 13 sessions, silently emptying screen-history grounding and
-    // the Rewind search UI alike. AND is what the space already meant.
-    return expandedWords.joined(separator: " AND ")
+    return expandedWords.joined(separator: " ")
   }
 
   /// Split camelCase string into parts

@@ -14,8 +14,6 @@ import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/logger.dart';
-import 'package:omi/utils/share_sheet.dart';
 
 class DeviceDiagnostics extends StatefulWidget {
   final String deviceId;
@@ -36,7 +34,6 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
   BleDeviceDiagnostics? _diagnostics;
   bool _isLoading = true;
   final _bleHostApi = BleHostApi();
-  final GlobalKey _shareButtonKey = GlobalKey();
 
   @override
   void initState() {
@@ -119,34 +116,21 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
           .toList(),
     };
 
-    // Every step here can fail — temp dir, file write, and the share sheet
-    // itself. Unhandled, the whole handler is silent and the button looks dead.
-    try {
-      final json = const JsonEncoder.withIndent('  ').convert(data);
-      final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/omi_diagnostics_${DateTime.now().millisecondsSinceEpoch}.json');
-      await file.writeAsString(json);
-      await SharePlus.instance.share(
-        ShareParams(
-          files: [XFile(file.path)],
-          title: 'Omi Device Diagnostics',
-          subject: 'Omi Device Diagnostics',
-          sharePositionOrigin: shareSheetOrigin(_shareButtonKey),
-        ),
-      );
-      PlatformManager.instance.analytics.track(
-        'Diagnostics Exported',
-        properties: {
-          'disconnect_count': (_diagnostics?.disconnectHistory ?? []).length,
-          'reconnection_count': _diagnostics?.reconnectionCount ?? 0,
-          'rssi_samples': _rssiPoints.length,
-        },
-      );
-    } catch (e) {
-      Logger.debug('Failed to export diagnostics: $e');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.diagnosticsShareFailed)));
-    }
+    final json = const JsonEncoder.withIndent('  ').convert(data);
+    final dir = await getTemporaryDirectory();
+    final file = File('${dir.path}/omi_diagnostics_${DateTime.now().millisecondsSinceEpoch}.json');
+    await file.writeAsString(json);
+    await SharePlus.instance.share(
+      ShareParams(files: [XFile(file.path)], title: 'Omi Device Diagnostics', subject: 'Omi Device Diagnostics'),
+    );
+    PlatformManager.instance.analytics.track(
+      'Diagnostics Exported',
+      properties: {
+        'disconnect_count': (_diagnostics?.disconnectHistory ?? []).length,
+        'reconnection_count': _diagnostics?.reconnectionCount ?? 0,
+        'rssi_samples': _rssiPoints.length,
+      },
+    );
   }
 
   void _onRssiUpdate(int rssi) {
@@ -200,7 +184,6 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
         ),
         actions: [
           IconButton(
-            key: _shareButtonKey,
             icon: const Icon(Icons.ios_share, color: Colors.white, size: 22),
             onPressed: _exportDiagnostics,
           ),

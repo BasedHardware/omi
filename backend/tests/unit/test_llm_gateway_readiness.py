@@ -30,7 +30,6 @@ def test_ready_validates_gateway_config(monkeypatch):
     assert response.json()['route_artifact_count'] >= len(get_all_configured_features()) + 2
     assert response.json()['managed_messages_provider'] == 'none'
     assert response.json()['managed_chat_provider'] == 'openai'
-    assert response.json()['managed_web_search_provider'] == 'perplexity'
 
 
 def test_ready_does_not_require_anthropic_key_after_chat_agent_migration(monkeypatch):
@@ -52,23 +51,6 @@ def test_ready_fails_closed_when_managed_openai_key_is_missing(monkeypatch):
 
     assert response.status_code == 503
     assert response.json()['detail'] == 'llm gateway managed chat provider is not configured'
-
-
-def test_ready_fails_closed_when_the_managed_web_search_key_is_missing(monkeypatch):
-    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
-    monkeypatch.delenv('PERPLEXITY_API_KEY', raising=False)
-
-    response = TestClient(app).get('/ready', headers=auth_headers())
-
-    assert response.status_code == 503
-    assert response.json()['detail'] == 'llm gateway managed web search provider is not configured'
-
-
-def test_managed_web_search_tracks_the_active_web_search_lane():
-    config = health.get_gateway_config()
-
-    assert health._managed_perplexity_chat_enabled(config) is True
-    assert config.route_artifacts[config.lanes['omi:auto:web-search'].active_route].primary.provider == 'perplexity'
 
 
 def test_ready_fails_closed_when_an_explicit_anthropic_lane_is_present(monkeypatch):

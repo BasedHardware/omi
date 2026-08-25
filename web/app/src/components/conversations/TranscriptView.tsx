@@ -72,14 +72,14 @@ function getSpeakerName(
 
 // Speaker avatar colors matching mobile app
 const SPEAKER_COLORS = [
-  'bg-white/[0.14] text-text-primary', // user
+  'bg-purple-primary/30 text-purple-primary', // user
   'bg-amber-700/30 text-amber-300',
   'bg-blue-900/30 text-blue-300',
   'bg-emerald-800/30 text-emerald-300',
   'bg-rose-900/30 text-rose-300',
   'bg-cyan-700/30 text-cyan-300',
   'bg-lime-800/30 text-lime-300',
-  'bg-white/[0.14] text-text-secondary',
+  'bg-purple-800/30 text-purple-300',
   'bg-orange-800/30 text-orange-300',
 ];
 
@@ -289,9 +289,11 @@ export function TranscriptView({
             ref={isActive ? activeGroupRef : undefined}
             className={cn(
               'group/segment rounded-xl p-4 transition-all duration-200',
-              isUser ? 'bg-white/[0.08] border border-white/25' : 'bg-bg-tertiary',
+              isUser
+                ? 'bg-purple-primary/10 border border-purple-primary/20'
+                : 'bg-bg-tertiary',
               // Active segment highlighting during audio playback
-              isActive && 'ring-2 ring-white/25 bg-white/[0.08]',
+              isActive && 'ring-2 ring-purple-primary/50 bg-purple-primary/5',
             )}
           >
             {/* Speaker header */}
@@ -315,7 +317,7 @@ export function TranscriptView({
                       'flex items-center gap-1.5 text-sm font-medium',
                       'hover:underline underline-offset-2',
                       isUser
-                        ? 'text-text-primary'
+                        ? 'text-purple-primary'
                         : isTagged
                           ? 'text-text-secondary'
                           : 'text-text-tertiary',
@@ -329,7 +331,7 @@ export function TranscriptView({
                   <span
                     className={cn(
                       'text-sm font-medium',
-                      isUser ? 'text-text-primary' : 'text-text-secondary',
+                      isUser ? 'text-purple-primary' : 'text-text-secondary',
                     )}
                   >
                     {speakerName}
@@ -344,7 +346,7 @@ export function TranscriptView({
                     onClick={() => onSeekTo(firstSegment.start)}
                     className={cn(
                       'flex items-center gap-1.5 text-xs',
-                      'text-text-quaternary hover:text-text-primary transition-colors',
+                      'text-text-quaternary hover:text-purple-primary transition-colors',
                       'group',
                     )}
                     title="Click to play from here"

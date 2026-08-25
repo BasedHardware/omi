@@ -64,10 +64,7 @@ struct AddMemorySheet: View {
             .padding(.horizontal, OmiSpacing.xl)
             .padding(.vertical, OmiSpacing.sm)
             .background(
-              // Ink.surface is this label's own colour, so filling with it painted white on
-              // white and the button read as blank the moment the field had text. The edit
-              // sheet's identical button already fills with Ink.primary.
-              viewModel.newMemoryText.isEmpty ? Ink.rowFillHover : Ink.primary
+              viewModel.newMemoryText.isEmpty ? Ink.rowFillHover : Ink.surface
             )
             .cornerRadius(OmiChrome.elementRadius)
             .overlay(

@@ -64,10 +64,6 @@ make dev-status
 make dev-summary
 ```
 
-The harness supplies instance-scoped filesystem storage for every backend `BUCKET_*` binding. Speech profiles,
-conversation audio, and file uploads stay under `.local/dev-harness/<instance>/services/storage` and do not require
-or use Google Cloud credentials.
-
 Use offline providers for provider-independent debugging:
 
 ```bash

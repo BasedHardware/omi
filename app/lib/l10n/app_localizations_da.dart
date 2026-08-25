@@ -323,7 +323,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get searchApps => 'Søg apps...';
 
   @override
-  String get myApps => 'Oprettet af mig';
+  String get myApps => 'Mine apps';
 
   @override
   String get installedApps => 'Installerede apps';
@@ -9825,62 +9825,4 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Åbn butik';
-
-  @override
-  String get chatScopeToday => 'I dag';
-
-  @override
-  String get chatScopeThisWeek => 'Denne uge';
-
-  @override
-  String chatScopeAbout(String title) {
-    return 'Om: $title';
-  }
-
-  @override
-  String get askAboutThisConversation => 'Spørg om dette';
-
-  @override
-  String get sendRawAudioToOmi => 'Send rå lyd til Omi';
-
-  @override
-  String get sendRawAudioToOmiDescription =>
-      'Slå fra for at forhindre, at rå lyd sendes til Omi. Transskriptioner og data, som cloudfunktioner kræver, kan stadig blive sendt til Omi.';
-
-  @override
-  String get findDevice => 'Find';
-
-  @override
-  String get diagnosticsShareFailed => 'Diagnostikken kunne ikke deles. Prøv igen.';
-
-  @override
-  String get appDisabledTitle => 'Denne app er deaktiveret og kan ikke installeres.';
-
-  @override
-  String get appDisabledWebhookFailures => 'Dens endpoint fejlede 72 timer i træk, så leveringerne blev stoppet.';
-
-  @override
-  String get appDisabledGeneric => 'Den blev deaktiveret af Omi.';
-
-  @override
-  String get appDisabledOwnerHint => 'Ret endpointet først — genaktivering tjekker hver konfigureret URL igen.';
-
-  @override
-  String get appReEnable => 'Genaktivér';
-
-  @override
-  String get appReEnableFailedTitle => 'Kunne ikke genaktivere';
-
-  @override
-  String get appReEnableFailedBody => 'Denne app kunne ikke genaktiveres. Prøv igen.';
-
-  @override
-  String appDisabledOn(String date) {
-    return 'Deaktiveret den $date.';
-  }
-
-  @override
-  String appDisabledLastError(String error) {
-    return 'Seneste fejl: $error.';
-  }
 }

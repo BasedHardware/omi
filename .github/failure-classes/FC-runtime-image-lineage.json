@@ -11,6 +11,5 @@
     ".github/workflows/desktop_backend_*.yml",
     ".github/scripts/verify_desktop_backend_image_lineage.py"
   ],
-  "status": "dormant",
-  "dormant_since": "2026-08-10T09:37:50.107774Z"
+  "status": "open"
 }

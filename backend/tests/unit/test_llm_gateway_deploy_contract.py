@@ -117,7 +117,7 @@ def test_llm_gateway_anthropic_secret_and_authenticated_readiness_probe_contract
             'key': 'ANTHROPIC_API_KEY',
         }
         assert 'ANTHROPIC_API_KEY' in _secret_keys(secrets)
-        for provider_secret in ('OPENROUTER_API_KEY', 'PERPLEXITY_API_KEY'):
+        for provider_secret in ('OPENROUTER_API_KEY',):
             assert env[provider_secret]['valueFrom']['secretKeyRef'] == {
                 'name': f'{environment}-omi-backend-secrets',
                 'key': provider_secret,
@@ -132,6 +132,7 @@ def test_llm_gateway_anthropic_secret_and_authenticated_readiness_probe_contract
         assert env['LLM_GATEWAY_ACCOUNTING_WRITE_TIMEOUT_SECONDS']['value'] == '1'
         assert env['LLM_GATEWAY_ACCOUNTING_MAX_PENDING_TRACES']['value'] == '1000'
         assert 'OMI_LLM_GATEWAY_SERVICE_TOKEN' in _secret_keys(secrets)
+        assert 'PERPLEXITY_API_KEY' not in env
         probe_command = gateway['readinessProbe']['exec']['command'][-1]
         assert '/ready' in probe_command
         assert '${OMI_LLM_GATEWAY_SERVICE_TOKEN}' in probe_command
@@ -140,13 +141,6 @@ def test_llm_gateway_anthropic_secret_and_authenticated_readiness_probe_contract
     deployment = (BACKEND_ROOT / 'charts/llm-gateway/templates/deployment.yaml').read_text(encoding='utf-8')
     assert 'name: OMI_LLM_GATEWAY_BUILD_IDENTITY' in deployment
     assert 'value: {{ required "image.tag is required" .Values.image.tag | quote }}' in deployment
-
-
-def test_gateway_ingress_timeout_can_carry_the_flex_route_deadline():
-    backend_config = (BACKEND_ROOT / 'charts/llm-gateway/templates/backendconfig.yaml').read_text(encoding='utf-8')
-
-    assert '  timeoutSec: 960\n' in backend_config
-    assert '    timeoutSec: 5\n' in backend_config
 
 
 def test_prod_gateway_wiring_promotes_cloud_run_only_after_verified_endpoint_injection():

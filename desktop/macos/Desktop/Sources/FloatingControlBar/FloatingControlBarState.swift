@@ -172,67 +172,10 @@ struct FloatingBarNotificationContext: Equatable {
   let currentActivity: String?
   let reasoning: String?
   let detail: String?
-  /// Durable lookup key into `proactive_deliveries`. Unlike the legacy card
-  /// context, this survives the old 60-second follow-up window.
-  let provenanceRef: String?
-
-  init(
-    sourceTitle: String,
-    assistantId: String,
-    sourceApp: String? = nil,
-    windowTitle: String? = nil,
-    contextSummary: String? = nil,
-    currentActivity: String? = nil,
-    reasoning: String? = nil,
-    detail: String? = nil,
-    provenanceRef: String? = nil
-  ) {
-    self.sourceTitle = sourceTitle
-    self.assistantId = assistantId
-    self.sourceApp = sourceApp
-    self.windowTitle = windowTitle
-    self.contextSummary = contextSummary
-    self.currentActivity = currentActivity
-    self.reasoning = reasoning
-    self.detail = detail
-    self.provenanceRef = provenanceRef
-  }
-}
-
-/// Pure decision for how a persistent card interacts with the notification
-/// queue: a newcomer displaces it (the persistent card returns right after)
-/// rather than queueing behind a card that has no timeout — otherwise one
-/// un-acted persistent card would starve every later proactive notification.
-enum FloatingBarNotificationQueuePolicy {
-  static func shouldDisplacePersistentCard(
-    currentIsPersistent: Bool,
-    showingAIConversation: Bool
-  ) -> Bool {
-    currentIsPersistent && !showingAIConversation
-  }
-
-  /// A displaced persistent card rejoins at the TAIL: every notification that
-  /// queued while it was visible presents first, and the card — which never
-  /// times out — returns once the queue drains, so it can neither be lost nor
-  /// starve anything behind it.
-  static func requeueIndex(queueCount: Int) -> Int {
-    queueCount
-  }
 }
 
 enum FloatingBarNotificationAction: Equatable {
   case openWhatMattersNow(recommendationID: String)
-  /// Offer to connect an integration the user has open but has not set up.
-  /// Carries the catalog's telemetry id (`import:email`, `export:notion`, …),
-  /// which is unique across both halves of the catalog — the bare connector id
-  /// is not, because ChatGPT and Claude exist on both sides. `triggerID` names
-  /// what was recognized, so a conversion can be attributed to the native-app
-  /// or browser-site trigger that produced the card rather than merged.
-  case connectIntegration(telemetryID: String, triggerID: String)
-  /// Post-meeting summary share card: carries what the card's buttons need —
-  /// the conversation to share and the calendar-detected recipients a
-  /// one-click "Send to …" email would go to (empty = no send button).
-  case meetingSummaryShare(conversationID: String, recipients: [ConversationShareRecipient])
 }
 
 /// A custom in-app notification rendered directly below the floating bar.
@@ -244,46 +187,32 @@ struct FloatingBarNotification: Identifiable, Equatable {
   let title: String
   let message: String
   let assistantId: String
-  let kind: ProactiveNotificationKind
   let context: FloatingBarNotificationContext?
   let action: FloatingBarNotificationAction?
   /// Optional opaque proactive-suggestion join keys. No card content or screen
   /// provenance enters notification analytics through this field.
   let suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity?
-  /// Optional opaque Advice delivery key. It is consumed only at the actual
-  /// floating-bar presentation boundary and carries no advice or screen content.
-  let insightDeliveryID: UUID?
   /// Screenshot JPEG data from the moment the notification was generated (not shown in UI)
   let screenshotData: Data?
-  /// A persistent card never times out: it stays presented until the user
-  /// acts on it or dismisses it. Reserved for cards whose whole point is an
-  /// explicit decision (e.g. the meeting summary share card).
-  let isPersistent: Bool
 
   init(
     ownerID: String,
     title: String,
     message: String,
     assistantId: String,
-    kind: ProactiveNotificationKind? = nil,
     context: FloatingBarNotificationContext? = nil,
     action: FloatingBarNotificationAction? = nil,
     suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
-    insightDeliveryID: UUID? = nil,
-    screenshotData: Data? = nil,
-    isPersistent: Bool = false
+    screenshotData: Data? = nil
   ) {
     self.ownerID = ownerID
     self.title = title
     self.message = message
     self.assistantId = assistantId
-    self.kind = kind ?? ProactiveNotificationKind.from(assistantId: assistantId)
     self.context = context
     self.action = action
     self.suggestionTelemetryIdentity = suggestionTelemetryIdentity
-    self.insightDeliveryID = insightDeliveryID
     self.screenshotData = screenshotData
-    self.isPersistent = isPersistent
   }
 
   static func == (lhs: FloatingBarNotification, rhs: FloatingBarNotification) -> Bool {
@@ -887,9 +816,7 @@ extension ChatContentBlock {
     case .taskCard(let id, _): return "t:\(id)"
     case .goalLink(let id, _, _): return "g:\(id)"
     case .captureLink(let id, _, _, _): return "c:\(id)"
-    case .conversationLink(let id, _, _, _): return "v:\(id)"
     case .memoryLink(let id, _, _): return "m:\(id)"
-    case .citation(let id, let reference): return "r:\(id):\(reference.ordinal)"
     case .agentSpawn(let id, let pillId, _, _, _, _, _): return "s:\(id):\(pillId?.uuidString ?? "")"
     case .agentCompletion(let id, let pillId, _, _, _, _, _, _): return "a:\(id):\(pillId?.uuidString ?? "")"
     }

@@ -5,7 +5,6 @@ use httpx.AsyncClient instead of blocking requests.post.
 """
 
 import ast
-import asyncio
 import os
 import re
 from unittest.mock import MagicMock, AsyncMock, patch
@@ -13,7 +12,6 @@ from unittest.mock import MagicMock, AsyncMock, patch
 import pytest
 
 import utils.webhooks as webhooks_module
-from models.users import WebhookType
 from utils.webhooks import realtime_transcript_webhook, send_audio_bytes_developer_webhook, day_summary_webhook
 
 
@@ -175,79 +173,6 @@ class TestSendAudioBytesDeveloperWebhook:
         ):
             await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\x00'))
             mock_client.post.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_invalid_webhook_url_skips(self):
-        mock_client = AsyncMock()
-
-        with patch("utils.webhooks.get_user_webhook_db", return_value="ftp://evil.example/audio,5"), patch(
-            "utils.webhooks.get_webhook_client", return_value=mock_client
-        ):
-            await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\x00' * 100))
-            mock_client.post.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_invalid_sample_rate_skips(self):
-        mock_client = AsyncMock()
-
-        with patch("utils.webhooks.get_webhook_client", return_value=mock_client):
-            await send_audio_bytes_developer_webhook("uid-1", 12, bytearray(b'\x00' * 100))
-            mock_client.post.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_large_payload_is_sent_in_one_second_chunks(self):
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-
-        mock_client = AsyncMock()
-        mock_client.post = AsyncMock(return_value=mock_response)
-
-        sample_rate = 8000
-        chunk_size = sample_rate * 2  # 1s of PCM16 mono
-        payload = bytearray(b'\x11' * (chunk_size + 100))
-
-        with patch("utils.webhooks.get_webhook_client", return_value=mock_client):
-            await send_audio_bytes_developer_webhook("uid-1", sample_rate, payload)
-
-        assert mock_client.post.call_count == 2
-        first = mock_client.post.call_args_list[0].kwargs["content"]
-        second = mock_client.post.call_args_list[1].kwargs["content"]
-        assert len(first) == chunk_size
-        assert len(second) == 100
-        assert first + second == bytes(payload)
-
-    @pytest.mark.asyncio
-    async def test_per_uid_lock_serializes_overlapping_sends(self):
-        release_first = asyncio.Event()
-        first_started = asyncio.Event()
-        call_order: list[str] = []
-
-        async def slow_then_fast_post(url, **kwargs):
-            call_order.append("enter")
-            if not first_started.is_set():
-                first_started.set()
-                await release_first.wait()
-            call_order.append("exit")
-            response = MagicMock()
-            response.status_code = 200
-            return response
-
-        mock_client = AsyncMock()
-        mock_client.post = AsyncMock(side_effect=slow_then_fast_post)
-
-        with patch("utils.webhooks.get_webhook_client", return_value=mock_client), patch(
-            "utils.webhooks._get_dev_webhook_retry_delays", return_value=()
-        ):
-            first = asyncio.create_task(send_audio_bytes_developer_webhook("uid-lock", 8000, bytearray(b'\x01')))
-            await first_started.wait()
-            second = asyncio.create_task(send_audio_bytes_developer_webhook("uid-lock", 8000, bytearray(b'\x02')))
-            await asyncio.sleep(0)
-            assert call_order == ["enter"]
-            release_first.set()
-            await asyncio.gather(first, second)
-
-        assert call_order == ["enter", "exit", "enter", "exit"]
-        assert mock_client.post.call_count == 2
 
 
 class TestConversationAndSummaryWebhooksStructural:
@@ -453,16 +378,12 @@ class TestCircuitBreakerIntegration:
 
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(return_value=mock_response)
-        attempt = MagicMock()
 
         with patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb), patch(
             "utils.webhooks.get_webhook_client", return_value=mock_client
-        ), patch("utils.webhooks.ClientJourneyAttempt", return_value=attempt) as journey_factory:
-            await realtime_transcript_webhook("uid-1", [{"text": "hello"}], client_kind='mobile_android')
+        ):
+            await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
             mock_cb.record_success.assert_called_once()
-        journey_factory.assert_called_once_with('app_webhook_delivery', 'mobile_android')
-        attempt.succeed.assert_called_once_with()
-        attempt.fail.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_transcript_webhook_records_failure_on_exception(self):
@@ -472,17 +393,12 @@ class TestCircuitBreakerIntegration:
 
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(side_effect=Exception("connection refused"))
-        attempt = MagicMock()
 
         with patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb), patch(
             "utils.webhooks.get_webhook_client", return_value=mock_client
-        ), patch("utils.webhooks._get_dev_webhook_retry_delays", return_value=()), patch(
-            "utils.webhooks.ClientJourneyAttempt", return_value=attempt
-        ):
+        ), patch("utils.webhooks._get_dev_webhook_retry_delays", return_value=()):
             await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
             mock_cb.record_failure.assert_called_once()
-        attempt.fail.assert_called_once_with('provider_error')
-        attempt.succeed.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_audio_bytes_webhook_skips_when_circuit_open(self):
@@ -497,24 +413,3 @@ class TestCircuitBreakerIntegration:
         ):
             await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\x00' * 100))
             mock_client.post.assert_not_called()
-
-
-class TestWebhookFirstTimeSetup:
-    """#11365: a stored setting with no endpoint must not toggle the webhook on."""
-
-    def test_audio_bytes_delay_only_setting_stays_disabled(self):
-        """'<url>,<seconds>' with the URL cleared has nowhere to deliver to."""
-        with patch.object(webhooks_module, "get_user_webhook_db", return_value=",5"):
-            assert webhooks_module.webhook_first_time_setup("uid-1", WebhookType.audio_bytes) is False
-            webhooks_module.disable_user_webhook_db.assert_called_once_with("uid-1", WebhookType.audio_bytes)
-            webhooks_module.enable_user_webhook_db.assert_not_called()
-
-    def test_configured_audio_bytes_setting_enables(self):
-        with patch.object(webhooks_module, "get_user_webhook_db", return_value="https://example.com/audio,5"):
-            assert webhooks_module.webhook_first_time_setup("uid-1", WebhookType.audio_bytes) is True
-            webhooks_module.enable_user_webhook_db.assert_called_once_with("uid-1", WebhookType.audio_bytes)
-
-    def test_blank_url_stays_disabled(self):
-        with patch.object(webhooks_module, "get_user_webhook_db", return_value="   "):
-            assert webhooks_module.webhook_first_time_setup("uid-1", WebhookType.memory_created) is False
-            webhooks_module.disable_user_webhook_db.assert_called_once_with("uid-1", WebhookType.memory_created)

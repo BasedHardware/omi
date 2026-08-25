@@ -46,7 +46,6 @@ fastapi_stub.Depends = _identity
 fastapi_stub.HTTPException = _HTTPException
 fastapi_stub.Query = _identity
 fastapi_stub.Request = type("Request", (), {})
-fastapi_stub.Response = type("Response", (), {})
 auth_stub = types.ModuleType("utils.other.endpoints")
 auth_stub.get_current_user_uid = lambda: "u1"
 
@@ -61,9 +60,7 @@ from tests.unit.memory_import_isolation import (  # noqa: E402
 _ROUTER_STUB_NAMES = (
     "fastapi",
     "database._client",
-    "database.memories",
     "database.vector_db",
-    "utils.memory.memory_service",
     "utils.other.endpoints",
     "routers.memory_product",
 )
@@ -251,7 +248,7 @@ def _global_read_gate_path():
     return memory_product.GLOBAL_READ_GATE_PATH
 
 
-def test_product_search_endpoint_keeps_expired_unadjudicated_short_term_and_excludes_archive(monkeypatch):
+def test_product_search_endpoint_uses_default_policy_and_excludes_stale_short_term_and_archive(monkeypatch):
     now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     stale_short_term = _memory_item(
@@ -285,15 +282,11 @@ def test_product_search_endpoint_keeps_expired_unadjudicated_short_term_and_excl
 
     assert db_client.document_paths == [_global_read_gate_path(), 'users/u1/memory_control/state']
     assert db_client.collection_paths == ['users/u1/memory_items']
-    assert [item['memory_id'] for item in response['items']] == [
-        'fresh-short-term',
-        'long-term',
-        'stale-short-term',
-    ]
+    assert [item['memory_id'] for item in response['items']] == ['fresh-short-term', 'long-term']
     assert response['uid'] == 'u1'
     assert response['query'] == 'coffee'
-    assert response['total_count'] == 3
-    assert response['returned_count'] == 3
+    assert response['total_count'] == 2
+    assert response['returned_count'] == 2
     assert response['limit'] == 25
     assert response['offset'] == 0
     assert response['policy']['consumer'] == 'omi_chat'
@@ -366,36 +359,36 @@ def test_product_routes_reject_missing_global_gate_before_per_user_rollout_vecto
     memory_product.fetch_archive_product_memory_search.assert_not_called()
 
 
-def test_product_search_endpoint_rejects_explicit_opt_out_and_malformed_control_before_memory_items(monkeypatch):
+def test_product_search_endpoint_rejects_disabled_missing_malformed_and_no_grant_before_memory_items(monkeypatch):
     cases = [
+        ({}, 'missing_rollout_state'),
         (
             {
                 'users/u1/memory_control/state': {
                     'schema_version': 1,
                     'uid': 'u1',
-                    'grants': {'omi_chat': {'default_memory': False}},
+                    'mode': 'off',
+                    'grants': {'omi_chat': {'default_memory': True}},
+                }
+            },
+            'memory_reads_disabled',
+        ),
+        (
+            {'users/u1/memory_control/state': {'schema_version': 1, 'uid': 'u1', 'mode': 'read', 'stage_gates': 'bad'}},
+            'malformed_rollout_state',
+        ),
+        (
+            {
+                'users/u1/memory_control/state': {
+                    'schema_version': 1,
+                    'uid': 'u1',
+                    'mode': 'read',
+                    'fallback_projection_ready': True,
+                    'stage_gates': {'shadow': 'passed', 'write': 'passed', 'read': 'passed'},
+                    'grants': {'omi_chat': {}},
                 }
             },
             'missing_chat_default_memory_grant',
-        ),
-        (
-            {
-                'users/u1/memory_control/state': {
-                    'schema_version': 1,
-                    'uid': 'u1',
-                    'grants': {'omi_chat': {'default_memory': 'yes'}},
-                }
-            },
-            'malformed_memory_control_state',
-        ),
-        (
-            {
-                'users/u1/memory_control/state': {
-                    'schema_version': 1,
-                    'uid': 'other-user',
-                }
-            },
-            'uid_mismatch',
         ),
     ]
     monkeypatch.setattr(memory_product, "fetch_default_product_memory_search", MagicMock())
@@ -416,29 +409,6 @@ def test_product_search_endpoint_rejects_explicit_opt_out_and_malformed_control_
         assert db_client.collection_paths == []
 
     memory_product.fetch_default_product_memory_search.assert_not_called()
-
-
-def test_product_search_endpoint_uses_universal_defaults_without_control_backfill(monkeypatch):
-    db_client = _FirestoreFake({_global_read_gate_path(): _global_read_gate_doc()})
-    search = MagicMock(
-        return_value={
-            'uid': 'u1',
-            'query': 'coffee',
-            'items': [],
-            'total_count': 0,
-            'returned_count': 0,
-            'limit': 25,
-            'offset': 0,
-        }
-    )
-    monkeypatch.setattr(memory_product, 'db', db_client)
-    monkeypatch.setattr(memory_product, 'fetch_default_product_memory_search', search)
-
-    response = memory_product.search_product_memory(query='coffee', limit=25, offset=0, uid='u1')
-
-    assert response['rollout']['read_decision'] == 'USE_MEMORY'
-    assert response['policy']['app_has_default_memory_grant'] is True
-    search.assert_called_once()
 
 
 def test_product_search_endpoint_rejects_invalid_pagination(monkeypatch):
@@ -473,7 +443,7 @@ def test_archive_search_endpoint_rejects_missing_malformed_disabled_and_no_serve
     monkeypatch,
 ):
     cases = [
-        ({}, 'missing_chat_archive_capability'),
+        ({}, 'missing_rollout_state'),
         (
             {
                 'users/u1/memory_control/state': {
@@ -498,27 +468,31 @@ def test_archive_search_endpoint_rejects_missing_malformed_disabled_and_no_serve
                     'grants': {'omi_chat': {'default_memory': True, 'archive': 'yes'}},
                 }
             },
-            'malformed_memory_control_state',
+            'malformed_archive_capability',
         ),
         (
             {
                 'users/u1/memory_control/state': {
                     'schema_version': 1,
                     'uid': 'u1',
-                    'grants': {'omi_chat': {'default_memory': False, 'archive': True}},
+                    'mode': 'off',
+                    'grants': {'omi_chat': {'default_memory': True, 'archive': True}},
+                }
+            },
+            'memory_reads_disabled',
+        ),
+        (
+            {
+                'users/u1/memory_control/state': {
+                    'schema_version': 1,
+                    'uid': 'u1',
+                    'mode': 'read',
+                    'fallback_projection_ready': True,
+                    'stage_gates': {'shadow': 'passed', 'write': 'passed', 'read': 'passed'},
+                    'grants': {'omi_chat': {'archive': True}},
                 }
             },
             'missing_chat_default_memory_grant',
-        ),
-        (
-            {
-                'users/u1/memory_control/state': {
-                    'schema_version': 1,
-                    'uid': 'u1',
-                    'grants': {'omi_chat': {'default_memory': 'yes', 'archive': True}},
-                }
-            },
-            'malformed_memory_control_state',
         ),
     ]
     monkeypatch.setattr(memory_product, "fetch_archive_product_memory_search", MagicMock())
@@ -580,7 +554,7 @@ def test_archive_search_endpoint_requires_explicit_intent_and_server_capability_
     assert response['archive_default_visible'] is False
 
 
-def test_vector_search_endpoint_requires_vector_projection_commit_before_vector_or_memory_item_reads(monkeypatch):
+def test_vector_search_endpoint_requires_persisted_rollout_before_vector_or_memory_item_reads(monkeypatch):
     db_client = _FirestoreFake({_global_read_gate_path(): _global_read_gate_doc()})
     vector_query = MagicMock()
     monkeypatch.setattr(memory_product, "db", db_client)
@@ -589,16 +563,16 @@ def test_vector_search_endpoint_requires_vector_projection_commit_before_vector_
         memory_product.search_vector_memory(query='coffee', limit=10, uid='u1', vector_query=vector_query)
     except _HTTPException as exc:
         assert exc.status_code == 403
-        assert exc.detail['fallback_reason'] == 'missing_vector_projection_commit_id'
+        assert exc.detail['fallback_reason'] == 'missing_rollout_state'
     else:
-        raise AssertionError('expected missing vector projection commit to fail closed')
+        raise AssertionError('expected disabled persisted rollout to fail closed')
 
     assert db_client.document_paths == [_global_read_gate_path(), 'users/u1/memory_control/state']
     assert db_client.collection_paths == []
     vector_query.assert_not_called()
 
 
-def test_vector_search_endpoint_keeps_expired_unadjudicated_short_term_and_excludes_archive(monkeypatch):
+def test_vector_search_endpoint_uses_persisted_default_policy_and_excludes_stale_short_term_and_archive(monkeypatch):
     from models.memory_search_gateway import SearchMode, SearchVectorHit
 
     now = datetime.now(timezone.utc).replace(microsecond=0)
@@ -664,17 +638,9 @@ def test_vector_search_endpoint_keeps_expired_unadjudicated_short_term_and_exclu
     ]
     assert db_client.collection_paths == []
     assert vector_calls == [{'uid': 'u1', 'query': 'coffee', 'mode': SearchMode.default, 'limit': 30}]
-    assert [item['memory_id'] for item in response['items']] == [
-        'stale-short-term',
-        'long-term',
-        'fresh-short-term',
-    ]
-    assert response['scores_by_memory_id'] == {
-        'stale-short-term': 0.99,
-        'long-term': 0.9,
-        'fresh-short-term': 0.8,
-    }
-    assert response['decisions']['stale-short-term'] == 'allowed'
+    assert [item['memory_id'] for item in response['items']] == ['long-term', 'fresh-short-term']
+    assert response['scores_by_memory_id'] == {'long-term': 0.9, 'fresh-short-term': 0.8}
+    assert response['decisions']['stale-short-term'] == 'access_denied'
     assert response['decisions']['archive'] == 'access_denied'
     assert response['policy']['consumer'] == 'omi_chat'
     assert response['policy']['archive_capability'] is False

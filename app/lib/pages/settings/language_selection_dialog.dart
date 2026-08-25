@@ -32,7 +32,9 @@ class LanguageSelectionDialog {
 
     // Preset the selected language if the user has one
     String? selectedLanguage = homeProvider.userPrimaryLanguage.isNotEmpty ? homeProvider.userPrimaryLanguage : null;
-    String? selectedLanguageName = selectedLanguage != null ? homeProvider.getLanguageName(selectedLanguage) : null;
+    String? selectedLanguageName = selectedLanguage != null
+        ? homeProvider.availableLanguages.entries.firstWhere((element) => element.value == selectedLanguage).key
+        : null;
     String searchQuery = '';
     List<MapEntry<String, String>> filteredLanguages = List.from(languages);
     final ScrollController scrollController = ScrollController();
@@ -128,7 +130,7 @@ class LanguageSelectionDialog {
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: Colors.white),
+                          borderSide: const BorderSide(color: Colors.deepPurple),
                         ),
                       ),
                     ),
@@ -147,9 +149,10 @@ class LanguageSelectionDialog {
 
                                 return ListTile(
                                   title: Text(language.key, style: const TextStyle(color: Colors.white)),
-                                  trailing: isSelected ? const Icon(Icons.check_circle, color: Colors.white) : null,
+                                  trailing:
+                                      isSelected ? const Icon(Icons.check_circle, color: Colors.deepPurple) : null,
                                   selected: isSelected,
-                                  selectedTileColor: Colors.white.withValues(alpha: 0.12),
+                                  selectedTileColor: Colors.deepPurple.withValues(alpha: 0.2),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                   onTap: () {
                                     setState(() {
@@ -219,10 +222,9 @@ class LanguageSelectionDialog {
                           }
                         },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    disabledBackgroundColor: Colors.white.withValues(alpha: 0.3),
-                    foregroundColor: Colors.black,
-                    disabledForegroundColor: Colors.black.withValues(alpha: 0.4),
+                    backgroundColor: Colors.deepPurple,
+                    disabledBackgroundColor: Colors.deepPurple.withValues(alpha: 0.3),
+                    foregroundColor: Colors.white,
                   ),
                   child: Text(context.l10n.confirm),
                 ),

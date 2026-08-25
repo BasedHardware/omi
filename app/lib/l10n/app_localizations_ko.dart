@@ -320,7 +320,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get searchApps => '앱 검색...';
 
   @override
-  String get myApps => '내가 만듦';
+  String get myApps => '내 앱';
 
   @override
   String get installedApps => '설치된 앱';
@@ -9675,62 +9675,4 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => '스토어 열기';
-
-  @override
-  String get chatScopeToday => '오늘';
-
-  @override
-  String get chatScopeThisWeek => '이번 주';
-
-  @override
-  String chatScopeAbout(String title) {
-    return '$title에 대해';
-  }
-
-  @override
-  String get askAboutThisConversation => '이에 대해 질문';
-
-  @override
-  String get sendRawAudioToOmi => '원본 오디오를 Omi로 보내기';
-
-  @override
-  String get sendRawAudioToOmiDescription =>
-      '끄면 원본 오디오가 Omi로 전송되지 않습니다. 텍스트 변환 결과와 클라우드 기능에 필요한 데이터는 계속 Omi로 전송될 수 있습니다.';
-
-  @override
-  String get findDevice => '찾기';
-
-  @override
-  String get diagnosticsShareFailed => '진단 정보를 공유하지 못했습니다. 다시 시도해 주세요.';
-
-  @override
-  String get appDisabledTitle => '이 앱은 비활성화되어 설치할 수 없습니다.';
-
-  @override
-  String get appDisabledWebhookFailures => '엔드포인트가 72시간 연속으로 실패하여 전송이 중단되었습니다.';
-
-  @override
-  String get appDisabledGeneric => 'Omi에 의해 비활성화되었습니다.';
-
-  @override
-  String get appDisabledOwnerHint => '먼저 엔드포인트를 수정하세요. 다시 활성화하면 설정된 모든 URL을 다시 확인합니다.';
-
-  @override
-  String get appReEnable => '다시 활성화';
-
-  @override
-  String get appReEnableFailedTitle => '다시 활성화할 수 없음';
-
-  @override
-  String get appReEnableFailedBody => '이 앱을 다시 활성화하지 못했습니다. 다시 시도해 주세요.';
-
-  @override
-  String appDisabledOn(String date) {
-    return '$date에 비활성화되었습니다.';
-  }
-
-  @override
-  String appDisabledLastError(String error) {
-    return '마지막 오류: $error';
-  }
 }

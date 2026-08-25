@@ -36,9 +36,6 @@ import 'package:omi/env/prod_env.dart';
 import 'package:omi/firebase_options_local.dart' as local;
 import 'package:omi/firebase_options_prod.dart' as prod;
 import 'package:omi/flavors.dart';
-import 'package:omi/startup_auth.dart';
-import 'package:omi/startup_failure_app.dart';
-import 'package:omi/startup_firebase.dart';
 import 'package:omi/startup_routing.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
@@ -88,34 +85,10 @@ import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/notification_channel_strings.dart';
 
-/// Firebase parameters for the current flavor, resolved identically in every engine.
-FirebaseOptions _firebaseOptionsForFlavor() => Env.profile == AppEnvironmentProfile.localDev
-    ? local.DefaultFirebaseOptions.currentPlatform
-    : prod.DefaultFirebaseOptions.currentPlatform;
-
-/// The single Firebase entry point for every Flutter engine in the app.
-///
-/// See [ensureFirebaseApp] for why `Firebase.apps.isEmpty` was never a valid
-/// guard and why `[core/duplicate-app]` must not kill startup.
-Future<FirebaseApp> _ensureFirebaseApp() {
-  final options = _firebaseOptionsForFlavor();
-  return ensureFirebaseApp<FirebaseApp>(
-    existingApp: () => Firebase.apps.isEmpty ? null : Firebase.app(),
-    configuredProjectId: options.projectId,
-    initializeApp: () => Firebase.initializeApp(options: options),
-    projectIdOf: (app) => app.options.projectId,
-    validateProject: (projectId) => Env.validateFirebaseProject(projectId: projectId),
-  );
-}
-
 /// Background message handler for FCM data messages
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // Same path as _init(). This runs in a SEPARATE Flutter engine and used to call
-  // Firebase.initializeApp() with no arguments, so it could bring [DEFAULT] up
-  // from the platform resources with parameters that differ from the ones the UI
-  // engine uses. Now both engines resolve the parameters the same way.
-  await _ensureFirebaseApp();
+  await Firebase.initializeApp();
   await NotificationChannelStrings.loadAppLocale();
 
   await AwesomeNotifications().initialize(null, [
@@ -167,10 +140,24 @@ Future _init() async {
   LimitlessDeviceConnection.realtimeSuppressionPolicy = () => SharedPreferencesUtil().batchModeEnabled;
 
   // Firebase
-  await _ensureFirebaseApp();
+  if (Firebase.apps.isEmpty) {
+    final profile = Env.profile;
+    final options = profile == AppEnvironmentProfile.localDev
+        ? local.DefaultFirebaseOptions.currentPlatform
+        : prod.DefaultFirebaseOptions.currentPlatform;
+    Env.validateFirebaseProject(projectId: options.projectId);
+    await Firebase.initializeApp(options: options);
+  } else {
+    // Firebase may already be initialized by native SDK (macOS)
+    debugPrint('Firebase already initialized.');
+    Env.validateFirebaseProject(projectId: Firebase.app().options.projectId);
+  }
 
   if (Env.profile.usesFirebaseAuthEmulator) {
-    await FirebaseAuth.instance.useAuthEmulator(Env.firebaseAuthEmulatorHost, Env.firebaseAuthEmulatorPort);
+    await FirebaseAuth.instance.useAuthEmulator(
+      Env.firebaseAuthEmulatorHost,
+      Env.firebaseAuthEmulatorPort,
+    );
   }
 
   await PlatformManager.initializeServices();
@@ -190,7 +177,7 @@ Future _init() async {
     Env.isTestFlight = await EnvironmentDetector.isTestFlight();
   }
 
-  bool isAuth = await resolveStartupAuth(() => AuthService.instance.getIdToken());
+  bool isAuth = (await AuthService.instance.getIdToken()) != null;
   if (isAuth) {
     PlatformManager.instance.analytics.identify();
     // Restore onboarding state from server if not already set locally
@@ -236,38 +223,16 @@ Future _init() async {
 }
 
 void main() {
-  runZonedGuarded(
-    () async {
-      // Ensure
-      if (kDebugMode) {
-        MarionetteBinding.ensureInitialized();
-      } else {
-        WidgetsFlutterBinding.ensureInitialized();
-      }
-      try {
-        await _init();
-      } catch (error, stack) {
-        // Startup failed before the first frame. Without this the launch
-        // storyboard stays on screen forever: runApp() is never reached, and the
-        // zone handler below only calls debugPrint, which goes nowhere in
-        // profile/release builds. A misconfigured OMI_API_BASE_URL cost about a
-        // day of investigation for exactly this reason — the app looked hung
-        // when it had in fact thrown a precise, actionable StateError.
-        if (Firebase.apps.isNotEmpty) {
-          FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-        }
-        runApp(StartupFailureApp(error: error, stack: stack));
-        return;
-      }
-      runApp(const MyApp());
-    },
-    (error, stack) {
-      debugPrint('Uncaught error: $error\n$stack');
-      if (Firebase.apps.isNotEmpty) {
-        FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-      }
-    },
-  );
+  runZonedGuarded(() async {
+    // Ensure
+    if (kDebugMode) {
+      MarionetteBinding.ensureInitialized();
+    } else {
+      WidgetsFlutterBinding.ensureInitialized();
+    }
+    await _init();
+    runApp(const MyApp());
+  }, (error, stack) => FirebaseCrashlytics.instance.recordError(error, stack, fatal: true));
 }
 
 class MyApp extends StatefulWidget {

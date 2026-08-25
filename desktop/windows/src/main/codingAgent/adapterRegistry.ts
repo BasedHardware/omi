@@ -11,12 +11,7 @@ import { HermesRuntimeAdapter } from './hermes'
 import { CodexRuntimeAdapter } from './codex'
 import { getCodexApiKey } from './codexAuth'
 import { PiMonoAdapter, PiMonoRuntimeAdapter } from './piMono'
-import {
-  getPiMonoByokEnv,
-  getPiMonoSession,
-  piMonoManagedApiBaseUrl,
-  resolvePiMonoSpawnCredentials
-} from './piMonoSession'
+import { getPiMonoByokEnv, getPiMonoSession, piMonoManagedApiBaseUrl } from './piMonoSession'
 import {
   adapterCapabilitiesFor,
   type AdapterCapabilities,
@@ -99,7 +94,6 @@ export const ADAPTER_PROFILES: Record<ProductionAdapterId, AdapterProfile> = {
           omiApiBaseUrl: piMonoManagedApiBaseUrl(session),
           authToken: session.token,
           byokEnv: getPiMonoByokEnv(),
-          resolveSpawnCredentials: resolvePiMonoSpawnCredentials,
           onRestart: (reason) => log(`[pi-mono] restart: ${reason}`)
         })
       )

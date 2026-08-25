@@ -34,11 +34,9 @@ import type {
   EventCallback,
   WarmupSessionConfig,
 } from "./interface.js";
-import { StaleAdapterBindingError } from "../runtime/kernel-types.js";
 
 type PiMonoConfig = HarnessConfig & {
   onRestart?: (reason: string) => void;
-  onDisposed?: () => void;
 };
 
 // Pi-mono RPC command/event types
@@ -166,12 +164,12 @@ function requiredControlOperationKey(toolName: string, input: Record<string, unk
 // Map desktop model IDs (claude-*) to omi provider model IDs.
 // Covers short aliases and dated versions used by ChatProvider/ChatLab.
 const MODEL_MAP: Record<string, string> = {
-  "claude-opus-4-6": "omi-sonnet",
+  "claude-opus-4-6": "omi-opus",
   "claude-sonnet-4-6": "omi-sonnet",
   "claude-sonnet-4": "omi-sonnet",
-  "claude-opus-4": "omi-sonnet",
+  "claude-opus-4": "omi-opus",
   "claude-sonnet-4-20250514": "omi-sonnet",
-  "claude-opus-4-20250514": "omi-sonnet",
+  "claude-opus-4-20250514": "omi-opus",
 };
 
 function mapModel(model: string): string {
@@ -684,14 +682,6 @@ export class PiMonoAdapter implements HarnessAdapter {
     rmSync(this.contextFilePath, { force: true });
   }
 
-  async dispose(): Promise<void> {
-    try {
-      await this.stop();
-    } finally {
-      this.config.onDisposed?.();
-    }
-  }
-
   async createSession(opts: SessionOpts): Promise<string> {
     const mapped = opts.model ? mapModel(opts.model) : undefined;
     await this.setExecutionRole(opts.executionRole ?? "coordinator");
@@ -776,7 +766,7 @@ export class PiMonoAdapter implements HarnessAdapter {
     relayContext?: PiMonoRelayContext
   ): Promise<PromptResult> {
     if (!this.sessions.has(sessionId)) {
-      throw new StaleAdapterBindingError(`pi-mono session is no longer active: ${sessionId}`);
+      throw new Error(`pi-mono session is no longer active: ${sessionId}`);
     }
     // Serialization invariant: pi-mono RPC only handles one prompt at a time.
     // Do not supersede an in-flight prompt: pi-mono turn_end events do not carry
@@ -1413,7 +1403,7 @@ export class PiMonoAdapter implements HarnessAdapter {
       text = publicWebTurn.bufferedText || text;
       // A terminal public-web turn proves the gateway completed the required
       // provider interaction. Do not make this depend on local Pi tool events:
-      // managed Perplexity search runs server-side and never exposes one.
+      // Anthropic's server-side web_search intentionally never exposes one.
       text = stripFalsePublicWebAvailabilityDisclaimers(text);
       this.emitPublicWebText(publicWebTurn, true);
       this.finishPublicWebProgress(publicWebTurn, "completed");
@@ -1533,7 +1523,7 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
   }
 
   stop(): Promise<void> {
-    return this.harness.dispose();
+    return this.harness.stop();
   }
 
   async openBinding(input: OpenBindingInput): Promise<OpenedBinding> {
@@ -1556,7 +1546,7 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
     // RuntimeAdapter instance is alive the opaque session id is still usable as
     // process-local state. Startup reconciliation marks these bindings stale.
     if (!this.harness.hasSession(input.adapterNativeSessionId)) {
-      throw new StaleAdapterBindingError(`pi-mono binding is stale: ${input.adapterNativeSessionId}`);
+      throw new Error(`pi-mono binding is stale: ${input.adapterNativeSessionId}`);
     }
     return this.binding(input, input.adapterNativeSessionId);
   }

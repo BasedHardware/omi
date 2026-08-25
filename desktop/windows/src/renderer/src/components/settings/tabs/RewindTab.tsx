@@ -13,7 +13,6 @@ import {
   ScanText
 } from 'lucide-react'
 import { runScreenSynthesisOnce } from '../../../lib/screenSynthesis'
-import { runRetentionSweep } from '../../../lib/retentionSweep'
 import { BUILT_IN_EXCLUDED_APPS } from '../../../../../shared/rewindExclusions'
 import { SettingRow } from '../SettingRow'
 import { Toggle } from '../Toggle'
@@ -57,11 +56,6 @@ export function RewindTab(): React.JSX.Element {
   const changeRetention = (mode: 'off' | 'dry-run' | 'live'): void => {
     setRetention(mode)
     setPreferences({ retentionMode: mode })
-    // Preview is a one-shot the user just asked for, so run it here — the 30-minute
-    // background timer only runs 'live' passes now. Pressing Preview is what makes
-    // the "logs what it would delete" subtitle true, instead of it happening 48x a
-    // day whether or not anyone is looking.
-    if (mode === 'dry-run') void runRetentionSweep('manual')
   }
 
   useEffect(() => {

@@ -72,18 +72,8 @@ def conv():
     canonical_activation_stub = ModuleType("utils.memory.canonical_activation")
     canonical_activation_stub.canonical_write_enabled = MagicMock(return_value=False)
 
-    retraction_scope_stub = ModuleType("utils.memory.retraction_scope")
-    retraction_scope_stub.retraction_can_be_skipped = MagicMock(return_value=False)
-
-    # The router imports the typed conflict raised by exhausted cascade-retract
-    # CAS retries (#11726); expose it as a real RuntimeError subclass so the
-    # except-clause in delete_conversation binds to something concrete.
-    canonical_adapter_stub = ModuleType("utils.memory.canonical_memory_adapter")
-
-    class _ConversationReplacementConflictError(RuntimeError):
-        pass
-
-    setattr(canonical_adapter_stub, "ConversationReplacementConflictError", _ConversationReplacementConflictError)
+    surface_routing_stub = ModuleType("utils.memory.surface_routing")
+    surface_routing_stub.pin_memory_system = MagicMock()
 
     # utils.request_validation — route param annotations; plain int keeps the direct-call path simple.
     request_validation_stub = ModuleType("utils.request_validation")
@@ -119,7 +109,6 @@ def conv():
         "utils.conversations.render": AutoMockModule("utils.conversations.render"),
         "utils.conversations.process_conversation": AutoMockModule("utils.conversations.process_conversation"),
         "utils.conversations.search": AutoMockModule("utils.conversations.search"),
-        "utils.conversations.mcp_transcript_search": AutoMockModule("utils.conversations.mcp_transcript_search"),
         "utils.conversations.calendar_linking": AutoMockModule("utils.conversations.calendar_linking"),
         "utils.conversations.calendar_utils": AutoMockModule("utils.conversations.calendar_utils"),
         "utils.conversations.location": AutoMockModule("utils.conversations.location"),
@@ -135,8 +124,7 @@ def conv():
         "utils.memory.memory_service": memory_service_stub,
         "utils.memory.memory_system": memory_system_stub,
         "utils.memory.canonical_activation": canonical_activation_stub,
-        "utils.memory.retraction_scope": retraction_scope_stub,
-        "utils.memory.canonical_memory_adapter": canonical_adapter_stub,
+        "utils.memory.surface_routing": surface_routing_stub,
         # utils.request_validation
         "utils.request_validation": request_validation_stub,
     }

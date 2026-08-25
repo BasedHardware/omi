@@ -3,7 +3,6 @@
 import { useEffect } from 'react';
 import { TaskHub } from '@/components/tasks/TaskHub';
 import { MixpanelManager } from '@/lib/analytics/mixpanel';
-import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 
 export default function TasksPage() {
   useEffect(() => {
@@ -12,5 +11,3 @@ export default function TasksPage() {
 
   return <TaskHub />;
 }
-
-registerMoonshineRoute('/tasks', TasksPage, 'authenticated');

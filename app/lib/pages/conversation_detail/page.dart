@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -11,18 +9,15 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:omi/utils/share_sheet.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:tuple/tuple.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
-import 'package:omi/backend/http/api/messages.dart' show ChatPageContext;
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
-import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -60,18 +55,12 @@ class ConversationDetailPage extends StatefulWidget {
   final bool openShareToContactsOnLoad;
   final int initialTabIndex;
 
-  /// When set (e.g. from search match snippet), open transcript and play this moment.
-  final double? initialSeekStart;
-  final double? initialSeekEnd;
-
   const ConversationDetailPage({
     super.key,
     this.isFromOnboarding = false,
     required this.conversation,
     this.openShareToContactsOnLoad = false,
     this.initialTabIndex = 1, // Default to summary tab
-    this.initialSeekStart,
-    this.initialSeekEnd,
   });
 
   @override
@@ -93,7 +82,6 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   bool _isTogglingStarred = false;
   bool _isDownloadingAudio = false;
   bool _providerInitialized = false;
-  bool _didInitialSeek = false;
 
   // Search functionality
   bool _isSearching = false;
@@ -172,11 +160,6 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     super.initState();
 
     _controller = TabController(length: 3, vsync: this, initialIndex: widget.initialTabIndex);
-    selectedTab = switch (widget.initialTabIndex) {
-      0 => ConversationTab.transcript,
-      2 => ConversationTab.actionItems,
-      _ => ConversationTab.summary,
-    };
     _controller!.addListener(() {
       setState(() {
         String? tabName;
@@ -216,6 +199,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       provider.setCachedConversation(widget.conversation);
       _providerInitialized = true;
 
+      conversationProvider.groupConversationsByDate();
+
       // Find the proper date and index for this conversation in the grouped conversations
       final result = conversationProvider.getConversationDateAndIndex(widget.conversation);
       if (result != null) {
@@ -228,22 +213,12 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
       await provider.initConversation();
       if (provider.conversation.appResults.isEmpty) {
-        final conversationId = provider.conversation.id;
-        if (conversationProvider.getConversationDateAndIndexById(conversationId) != null) {
-          // The initial list payload is enough to render the detail page. Fill
-          // in omitted app results after the first usable frame instead of
-          // holding the destination's startup sequence on this request. The
-          // provider re-locates the conversation by ID after the await because
-          // refreshes can reorder or replace the grouped list meanwhile.
-          unawaited(
-            conversationProvider.updateSearchedConvoDetails(conversationId).then((_) {
-              if (!mounted || provider.conversationOrNull?.id != conversationId) return;
-              provider.updateConversation(conversationId, provider.selectedDate);
-            }),
-          );
-        } else {
-          provider.updateConversation(provider.conversation.id, provider.selectedDate);
+        final date = provider.selectedDate;
+        final idx = conversationProvider.getConversationIndexById(provider.conversation.id, date);
+        if (idx != -1) {
+          await conversationProvider.updateSearchedConvoDetails(provider.conversation.id, date, idx);
         }
+        provider.updateConversation(provider.conversation.id, provider.selectedDate);
       }
 
       // Check if this is the first conversation and show app review prompt
@@ -294,26 +269,6 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         return context.l10n.conversationTab;
       case ConversationTab.actionItems:
         return context.l10n.actionItemsTab;
-    }
-  }
-
-  Future<void> _maybePlayInitialSeek() async {
-    if (_didInitialSeek || !mounted) return;
-    final start = widget.initialSeekStart;
-    if (start == null || _seekToSegmentCallback == null) return;
-    _didInitialSeek = true;
-    final end = widget.initialSeekEnd ?? start;
-    if (selectedTab != ConversationTab.transcript) {
-      setState(() {
-        selectedTab = ConversationTab.transcript;
-      });
-      _controller?.animateTo(0);
-    }
-    try {
-      await _seekToSegmentCallback!(start, end);
-      if (mounted) HapticFeedback.lightImpact();
-    } catch (_) {
-      // Audio may be unavailable offline; search still opened the transcript tab.
     }
   }
 
@@ -510,6 +465,16 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     HapticFeedback.lightImpact();
   }
 
+  // iOS requires a non-zero sharePositionOrigin (popover anchor); Share.shareXFiles
+  // throws a PlatformException without it.
+  Rect _shareSheetOrigin() {
+    final box = _shareButtonKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box != null && box.hasSize && box.size.width > 0 && box.size.height > 0) {
+      return box.localToGlobal(Offset.zero) & box.size;
+    }
+    return const Rect.fromLTWH(0, 0, 100, 100);
+  }
+
   Future<void> _downloadAudio(BuildContext context, ConversationDetailProvider provider) async {
     if (!mounted) return;
 
@@ -583,9 +548,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         }
 
         final mimeType = file.path.endsWith('.mp3') ? 'audio/mpeg' : 'audio/wav';
-        await Share.shareXFiles([
-          XFile(file.path, mimeType: mimeType),
-        ], sharePositionOrigin: shareSheetOrigin(_shareButtonKey));
+        await Share.shareXFiles([XFile(file.path, mimeType: mimeType)], sharePositionOrigin: _shareSheetOrigin());
 
         // Track successful completion
         final durationSeconds = DateTime.now().difference(startTime).inSeconds;
@@ -770,37 +733,6 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // Ask about this conversation (#4515)
-                        Container(
-                          width: 36,
-                          height: 36,
-                          margin: const EdgeInsets.only(right: 8),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.withValues(alpha: 0.3),
-                            shape: BoxShape.circle,
-                          ),
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            tooltip: context.l10n.askAboutThisConversation,
-                            onPressed: () {
-                              HapticFeedback.mediumImpact();
-                              final convo = provider.conversation;
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => ChatPage(
-                                    isPivotBottom: false,
-                                    initialChatContext: ChatPageContext(
-                                      type: 'conversation',
-                                      id: convo.id,
-                                      title: convo.structured.title,
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                            icon: const FaIcon(FontAwesomeIcons.solidComments, size: 14.0, color: Colors.white),
-                          ),
-                        ),
                         // Star button (first) - toggle starred status
                         Container(
                           width: 36,
@@ -909,7 +841,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       );
                                       shareConversationLink(
                                         provider.conversation,
-                                        sharePositionOrigin: shareSheetOrigin(_shareButtonKey),
+                                        sharePositionOrigin: _shareSheetOrigin(),
                                       );
                                       // Small delay to let share sheet appear, then clear loading
                                       await Future.delayed(const Duration(milliseconds: 150));
@@ -1188,7 +1120,6 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                               setState(() {
                                 _seekToSegmentCallback = seekFunction;
                               });
-                              _maybePlayInitialSeek();
                             }
                           });
                         },
@@ -1504,12 +1435,13 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
         builder: (context, data, child) {
           return Stack(
             children: [
-              CustomScrollView(
+              ListView(
+                shrinkWrap: true,
                 keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
-                slivers: [
-                  const SliverToBoxAdapter(child: GetSummaryWidgets()),
+                children: [
+                  const GetSummaryWidgets(),
                   data.item1
-                      ? const SliverToBoxAdapter(child: ReprocessDiscardedWidget())
+                      ? const ReprocessDiscardedWidget()
                       : GetAppsWidgets(
                           searchQuery: widget.searchQuery,
                           currentResultIndex: widget.currentResultIndex,
@@ -1528,8 +1460,8 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                             context.read<ConversationDetailProvider>().saveEditingSummary(appId, newContent);
                           },
                         ),
-                  const SliverToBoxAdapter(child: GetGeolocationWidgets()),
-                  const SliverToBoxAdapter(child: SizedBox(height: 150)),
+                  const GetGeolocationWidgets(),
+                  const SizedBox(height: 150),
                 ],
               ),
             ],

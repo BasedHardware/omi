@@ -58,7 +58,6 @@ extension RealtimeHubController {
     }
     // PTT-down capture is inert. A normal turn must never wait for a provider input
     // transcript; only a reducer-admitted screenshot request may seal provider output.
-    screenEvidenceSpeechEndedAt = nil
     screenGroundingState = .inactive
     screenFailurePresented = false
   }
@@ -136,8 +135,7 @@ extension RealtimeHubController {
       activeResponseID: voiceResponseID,
       currentTurnEpoch: realtimeToolTurnEpoch,
       enqueuedTurnEpoch: turnEpoch,
-      callID: callID,
-      speechEndedAt: screenEvidenceSpeechEndedAt)
+      callID: callID)
     switch receiptDecision {
     case .accepted(let receipt):
       screenGroundingState = .awaitingReport(receipt)

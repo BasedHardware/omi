@@ -2,13 +2,6 @@ import Foundation
 import VoiceTurnDomain
 
 enum OnboardingFlow {
-  enum CompletionOwnerReconciliation: Equatable {
-    case unchanged
-    case backfilled
-    case resetForDifferentOwner
-  }
-
-  static let completionOwnerKey = "onboardingCompletedOwnerId"
   static let steps = [
     "Name",
     "Language",
@@ -64,30 +57,6 @@ enum OnboardingFlow {
     if target <= furthestStep { return true }
     let frontier = max(0, furthestStep)
     return !(frontier..<target).contains { unskippableSteps.contains($0) }
-  }
-
-  @discardableResult
-  static func reconcileCompletionOwner(
-    currentOwnerID: String?, defaults: UserDefaults = .standard
-  ) -> CompletionOwnerReconciliation {
-    guard let currentOwnerID, !currentOwnerID.isEmpty,
-      defaults.bool(forKey: DefaultsKey.hasCompletedOnboarding.rawValue)
-    else { return .unchanged }
-
-    guard let completedOwnerID = defaults.string(forKey: completionOwnerKey) else {
-      defaults.set(currentOwnerID, forKey: completionOwnerKey)
-      return .backfilled
-    }
-    guard completedOwnerID != currentOwnerID else { return .unchanged }
-
-    clearPersistedState(in: defaults)
-    defaults.removeObject(forKey: DefaultsKey.hasCompletedOnboarding.rawValue)
-    return .resetForDifferentOwner
-  }
-
-  static func markCompleted(for ownerID: String?, defaults: UserDefaults = .standard) {
-    guard let ownerID, !ownerID.isEmpty else { return }
-    defaults.set(ownerID, forKey: completionOwnerKey)
   }
 
   /// What a bare arrow key does at `step`. Left/up go back one step; right/down
@@ -265,17 +234,14 @@ enum OnboardingFlow {
     "onboardingStep",
     "onboardingFurthestStep",
     "onboardingHowDidYouHearSource",
-    // Second Brain onboarding keys: the resume step (SBOnboardingModel.resumeStepKey),
-    // the shortcut-completion flag (SBOnboardingModel.shortcutsCompletedKey), and the
-    // picked role (DefaultsKey.onboardingRole). All are account-scoped — without them
-    // here a mid-onboarding sign-out leaks the prior user's resume point, shortcut-
-    // completion status, and role to the next account on the same Mac.
+    // Second Brain onboarding keys: the resume step (SBOnboardingModel.resumeStepKey)
+    // and the picked role (DefaultsKey.onboardingRole). Both are account-scoped —
+    // without them here a mid-onboarding sign-out leaks the prior user's resume
+    // point + role to the next account on the same Mac.
     "sbOnboardingResumeStep",
-    "sbOnboardingShortcutsCompleted",
     "onboardingRole",
     "onboardingGoalDraft",
     "onboardingJustCompleted",
-    completionOwnerKey,
     "hasSeenRewindIntro",
     "hasTriggeredNotification",
     "hasTriggeredAutomation",

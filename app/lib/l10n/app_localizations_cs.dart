@@ -323,7 +323,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get searchApps => 'Hledat aplikace...';
 
   @override
-  String get myApps => 'Vytvořeno mnou';
+  String get myApps => 'Moje aplikace';
 
   @override
   String get installedApps => 'Nainstalované aplikace';
@@ -9841,63 +9841,4 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Otevřít obchod';
-
-  @override
-  String get chatScopeToday => 'Dnes';
-
-  @override
-  String get chatScopeThisWeek => 'Tento týden';
-
-  @override
-  String chatScopeAbout(String title) {
-    return 'O: $title';
-  }
-
-  @override
-  String get askAboutThisConversation => 'Zeptat se na toto';
-
-  @override
-  String get sendRawAudioToOmi => 'Odesílat nezpracovaný zvuk do Omi';
-
-  @override
-  String get sendRawAudioToOmiDescription =>
-      'Vypnutím zabráníte odesílání nezpracovaného zvuku do Omi. Přepisy a data potřebná pro cloudové funkce se mohou do Omi nadále odesílat.';
-
-  @override
-  String get findDevice => 'Najít';
-
-  @override
-  String get diagnosticsShareFailed => 'Diagnostiku se nepodařilo sdílet. Zkus to znovu.';
-
-  @override
-  String get appDisabledTitle => 'Tato aplikace je vypnutá a nelze ji nainstalovat.';
-
-  @override
-  String get appDisabledWebhookFailures => 'Její endpoint selhával 72 hodin v kuse, proto bylo doručování zastaveno.';
-
-  @override
-  String get appDisabledGeneric => 'Vypnula ji Omi.';
-
-  @override
-  String get appDisabledOwnerHint =>
-      'Nejprve oprav endpoint — při opětovném zapnutí se znovu ověří každá nastavená URL.';
-
-  @override
-  String get appReEnable => 'Znovu zapnout';
-
-  @override
-  String get appReEnableFailedTitle => 'Nepodařilo se znovu zapnout';
-
-  @override
-  String get appReEnableFailedBody => 'Tuto aplikaci se nepodařilo znovu zapnout. Zkus to znovu.';
-
-  @override
-  String appDisabledOn(String date) {
-    return 'Vypnuto $date.';
-  }
-
-  @override
-  String appDisabledLastError(String error) {
-    return 'Poslední chyba: $error.';
-  }
 }

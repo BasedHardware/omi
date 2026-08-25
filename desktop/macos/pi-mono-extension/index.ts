@@ -851,6 +851,15 @@ export default function omiProvider(pi: ExtensionAPI): void {
         // Cost set to 0 client-side — tracked server-side by the backend
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       },
+      {
+        id: "omi-opus",
+        name: "Omi Opus",
+        reasoning: true,
+        input: ["text", "image"],
+        contextWindow: 200_000,
+        maxTokens: 16_384,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      },
     ],
   });
 

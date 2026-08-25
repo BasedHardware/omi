@@ -323,7 +323,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get searchApps => 'అనువర్తనాలను శోధించండి...';
 
   @override
-  String get myApps => 'నా సృష్టి';
+  String get myApps => 'నా అనువర్తనాలు';
 
   @override
   String get installedApps => 'ఇన్‌స్టాల్ చేసిన అనువర్తనాలు';
@@ -9888,64 +9888,4 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'स्टोर खोलें';
-
-  @override
-  String get chatScopeToday => 'ఈ రోజు';
-
-  @override
-  String get chatScopeThisWeek => 'ఈ వారం';
-
-  @override
-  String chatScopeAbout(String title) {
-    return '$title గురించి';
-  }
-
-  @override
-  String get askAboutThisConversation => 'దీని గురించి అడగండి';
-
-  @override
-  String get sendRawAudioToOmi => 'ముడి ఆడియోను Omiకి పంపండి';
-
-  @override
-  String get sendRawAudioToOmiDescription =>
-      'ముడి ఆడియో Omiకి పంపబడకుండా ఉండటానికి దీన్ని ఆఫ్ చేయండి. ట్రాన్స్‌క్రిప్ట్‌లు మరియు క్లౌడ్ ఫీచర్లకు అవసరమైన డేటా ఇప్పటికీ Omiకి పంపబడవచ్చు.';
-
-  @override
-  String get findDevice => 'కనుగొనండి';
-
-  @override
-  String get diagnosticsShareFailed => 'డయాగ్నొస్టిక్స్‌ను షేర్ చేయలేకపోయాము. దయచేసి మళ్లీ ప్రయత్నించండి.';
-
-  @override
-  String get appDisabledTitle => 'ఈ యాప్ నిలిపివేయబడింది, ఇన్‌స్టాల్ చేయలేరు.';
-
-  @override
-  String get appDisabledWebhookFailures =>
-      'దీని ఎండ్‌పాయింట్ వరుసగా 72 గంటలు విఫలమైంది, అందుకే డెలివరీలు ఆపివేయబడ్డాయి.';
-
-  @override
-  String get appDisabledGeneric => 'దీన్ని Omi నిలిపివేసింది.';
-
-  @override
-  String get appDisabledOwnerHint =>
-      'ముందుగా ఎండ్‌పాయింట్‌ను సరిచేయండి — తిరిగి ప్రారంభించినప్పుడు కాన్ఫిగర్ చేసిన ప్రతి URL మళ్లీ తనిఖీ చేయబడుతుంది.';
-
-  @override
-  String get appReEnable => 'తిరిగి ప్రారంభించు';
-
-  @override
-  String get appReEnableFailedTitle => 'తిరిగి ప్రారంభించలేకపోయాము';
-
-  @override
-  String get appReEnableFailedBody => 'ఈ యాప్‌ను తిరిగి ప్రారంభించలేకపోయాము. దయచేసి మళ్లీ ప్రయత్నించండి.';
-
-  @override
-  String appDisabledOn(String date) {
-    return '$date న నిలిపివేయబడింది.';
-  }
-
-  @override
-  String appDisabledLastError(String error) {
-    return 'చివరి లోపం: $error';
-  }
 }

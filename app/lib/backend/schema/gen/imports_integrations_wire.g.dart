@@ -4,7 +4,6 @@
 
 class GeneratedImportJobResponse {
   final int? conversationsCreated;
-  final int? conversationsSkipped;
   final String? createdAt;
   final String? error;
   final String jobId;
@@ -14,7 +13,6 @@ class GeneratedImportJobResponse {
 
   const GeneratedImportJobResponse({
     this.conversationsCreated,
-    this.conversationsSkipped,
     this.createdAt,
     this.error,
     required this.jobId,
@@ -26,7 +24,6 @@ class GeneratedImportJobResponse {
   factory GeneratedImportJobResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedImportJobResponse(
       conversationsCreated: _readFieldValue<int>(_readField(json, const ["conversations_created"]), "conversations_created", _readInt, requiredField: false, nullable: true),
-      conversationsSkipped: _readFieldValue<int>(_readField(json, const ["conversations_skipped"]), "conversations_skipped", _readInt, requiredField: false, nullable: true),
       createdAt: _readFieldValue<String>(_readField(json, const ["created_at"]), "created_at", _readString, requiredField: false, nullable: true),
       error: _readFieldValue<String>(_readField(json, const ["error"]), "error", _readString, requiredField: false, nullable: true),
       jobId: _required(_readFieldValue<String>(_readField(json, const ["job_id"]), "job_id", _readString, requiredField: true, nullable: false), "job_id"),
@@ -39,7 +36,6 @@ class GeneratedImportJobResponse {
   Map<String, dynamic> toJson() {
     return {
       'conversations_created': conversationsCreated,
-      'conversations_skipped': conversationsSkipped,
       'created_at': createdAt,
       'error': error,
       'job_id': jobId,

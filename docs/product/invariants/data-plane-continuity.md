@@ -1,6 +1,6 @@
 # INV-DATA-1: Production-family customer data-plane continuity
 
-**Status:** locked
+**Status:** proposed
 
 This revision is proposed as of 2026-08-01. It must remain unchanged for seven
 days, with its routing and qualification guards, before a follow-up can lock it.
@@ -19,12 +19,6 @@ serving endpoints, while its OAuth authority remains production (`api.omi.me`).
 This is the sole allowed serving-plane split: it must not select another Firebase
 project, account universe, or arbitrary endpoint.
 
-The debug-only `local_prod` mobile profile is a developer-workflow exception,
-not a serving-plane split: an explicit `OMI_APP_PROFILE=local_prod` dart-define
-pairs production Firebase identity with a developer-chosen backend endpoint for
-local development. Release builds reject the profile at startup, so no shipped
-artifact can select it.
-
 A release channel controls *eligibility, rollout exposure, diagnostics, and
 feature availability*. It MUST NOT select a different account or customer-data
 universe. TestFlight detection, an Android dart define, an update-channel
@@ -36,6 +30,7 @@ The routing authority matrix is:
 | Surface | Production-family authority |
 | --- | --- |
 | Flutter API | `https://api.omi.me/` |
+| Flutter agent WebSocket | `wss://agent.omi.me/v1/agent/ws` |
 | macOS Stable Python / desktop API | `https://api.omi.me/` / `https://desktop-backend-hhibjajaja-uc.a.run.app/` |
 | macOS Beta Python / desktop API | `https://api.omiapi.com/` / `https://desktop-backend-dt5lrfkkoa-uc.a.run.app/` |
 | macOS Beta OAuth API | `https://api.omi.me/` |
@@ -47,8 +42,7 @@ The routing authority matrix is:
 - Route Stable, mobile, or any other production-family artifact to development,
   staging, a beta API, or any arbitrary endpoint through a build define, CI
   variable, runtime preference, update channel, process environment, or bundled
-  `.env` value. Beta's two fixed development serving authorities and the
-  debug-only `local_prod` developer profile are the sole exceptions.
+  `.env` value. Beta's two fixed development serving authorities are the sole exception.
 - Route Beta OAuth, Firebase Auth, Firebase API-key binding, or Firestore to a
   development project or endpoint. Beta must ignore `OMI_AUTH_API_URL`.
 - Treat `OMI_BETA_RELEASE_RING`, `STAGING_API_URL`, `api-beta.omi.me`, or an
@@ -73,7 +67,7 @@ reuse a production-family identity.
 ## Guard tests
 
 - `app/test/unit/env_test.dart` — production startup rejects non-canonical API
-  routing; `local_prod` is rejected in release builds.
+  and agent routing.
 - `desktop/macos/Desktop/Tests/APIClientRoutingTests.swift` — Stable remains
   production-routed; Beta resolves only its fixed development serving endpoints
   and production auth despite contaminated values.
@@ -103,9 +97,8 @@ reuse a production-family identity.
 - `desktop/macos/Desktop/Sources/AppBuild.swift`
 - `desktop/macos/Desktop/Sources/DesktopBackendEnvironment.swift`
 - `desktop/macos/Desktop/Sources/GoogleService-Info*.plist`
-- `backend/charts/desktop-backend/**` (retired: this chart may not return)
-- `.github/workflows/gcp_*.yml` (retired: no GKE desktop-backend deployment authority may return)
-- `.github/workflows/desktop_backend_*.yml`
+- `backend/charts/**` (retired: no GKE desktop-backend chart may return)
+- `.github/workflows/**` (retired: no GKE desktop-backend deployment authority may return)
 - `.github/scripts/check-mobile-production-routing.py`
 - `.github/scripts/test_check_mobile_production_routing.py`
 - `docs/runbooks/desktop-backend-cloud-run-ownership.md`

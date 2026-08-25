@@ -8,21 +8,15 @@ Omi for Windows — an Electron + React + TypeScript port of the Omi desktop app
 
 ## Run from source
 
-Requires Node 22.19+ (CI pins Node 22, matching `package.json`'s `engines.node`
-range; Node 24+ breaks the jsdom test suites — see `scripts/check-node-version.mjs`).
-With [nvm](https://github.com/nvm-sh/nvm) installed, `nvm use` in this directory
-picks up the pinned version from `.nvmrc` automatically.
-
 ```bash
 # 1. Install dependencies
-nvm use   # or: nvm install (first time)
-pnpm install --frozen-lockfile
+npm install
 
 # 2. Create your local env file (required — the app won't start without it)
 cp .env.example .env
 
 # 3. Start the app
-pnpm run dev
+npm run dev
 ```
 
 `.env` is gitignored. `.env.example` ships with Omi's **public** Firebase + PostHog
@@ -81,13 +75,13 @@ indexed folder. Adapter code lives in `src/main/codingAgent/`.
 
 ```bash
 # Windows
-pnpm run build:win
+npm run build:win
 
 # macOS
-pnpm run build:mac
+npm run build:mac
 
 # Linux
-pnpm run build:linux
+npm run build:linux
 ```
 
 Vite inlines the `.env` values at build time, so a packaged installer needs no `.env` —

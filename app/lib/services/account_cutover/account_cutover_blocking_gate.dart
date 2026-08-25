@@ -4,7 +4,6 @@
 /// LIFECYCLE: permanent
 library;
 
-import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -14,7 +13,7 @@ import 'package:omi/services/account_cutover/account_cutover_gate.dart';
 import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-class AccountCutoverBlockingGate extends StatefulWidget {
+class AccountCutoverBlockingGate extends StatelessWidget {
   const AccountCutoverBlockingGate({
     super.key,
     this.productBuilder,
@@ -31,67 +30,21 @@ class AccountCutoverBlockingGate extends StatefulWidget {
   static final Uri _playStoreUrl = Uri.parse('https://play.google.com/store/apps/details?id=com.friend.ios');
 
   @override
-  State<AccountCutoverBlockingGate> createState() => _AccountCutoverBlockingGateState();
-}
-
-class _AccountCutoverBlockingGateState extends State<AccountCutoverBlockingGate> {
-  // While a fence is on screen, nothing else in the app re-fetches the cutover
-  // control (product traffic is blocked), so without this timer the fence
-  // could only ever clear on an app lifecycle event. Poll so a fence caused by
-  // a transient control-plane outage lifts on its own — and a real migration
-  // fence lifts as soon as the migration completes.
-  Timer? _fenceRefreshTimer;
-  bool _refreshInFlight = false;
-
-  static const _fenceRefreshInterval = Duration(seconds: 30);
-
-  void _syncFenceRefreshTimer(bool fenceVisible) {
-    if (fenceVisible && _fenceRefreshTimer == null) {
-      _fenceRefreshTimer = Timer.periodic(_fenceRefreshInterval, (_) async {
-        if (_refreshInFlight) return;
-        _refreshInFlight = true;
-        try {
-          await AccountCutoverRuntime.instance.refresh();
-        } finally {
-          _refreshInFlight = false;
-        }
-      });
-    } else if (!fenceVisible && _fenceRefreshTimer != null) {
-      _fenceRefreshTimer!.cancel();
-      _fenceRefreshTimer = null;
-    }
-  }
-
-  @override
-  void dispose() {
-    _fenceRefreshTimer?.cancel();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: AccountCutoverRuntime.instance,
       builder: (context, _) {
         final runtime = AccountCutoverRuntime.instance;
         final decision = runtime.decision;
-        final fenceVisible = decision != AccountCutoverGateDecision.allowProductTraffic;
-        _syncFenceRefreshTimer(fenceVisible);
-        if (!fenceVisible) {
-          return widget.productBuilder?.call(context) ?? widget.child!;
+        if (decision == AccountCutoverGateDecision.allowProductTraffic) {
+          return productBuilder?.call(context) ?? child!;
         }
 
         return AccountCutoverBlockingView(
           decision: decision,
           strandedNewData: runtime.control.strandedNewData,
-          appStoreUrl: AccountCutoverBlockingGate._appStoreUrl,
-          playStoreUrl: AccountCutoverBlockingGate._playStoreUrl,
-          // A fence this client synthesized after the server had allowed the
-          // owner (unreachable control plane, a blown refresh) keeps a manual
-          // way back to that last authoritative projection. A fence the server
-          // itself decided — or one with no server allow to return to — does
-          // not.
-          onSkipUnresolvedFence: runtime.canSkipUnresolvedFence ? runtime.skipUnresolvedFence : null,
+          appStoreUrl: _appStoreUrl,
+          playStoreUrl: _playStoreUrl,
         );
       },
     );
@@ -105,18 +58,12 @@ class AccountCutoverBlockingView extends StatelessWidget {
     required this.strandedNewData,
     required this.appStoreUrl,
     required this.playStoreUrl,
-    this.onSkipUnresolvedFence,
   });
 
   final AccountCutoverGateDecision decision;
   final bool strandedNewData;
   final Uri appStoreUrl;
   final Uri playStoreUrl;
-
-  /// Non-null only while this client synthesized the fence and the server had
-  /// authoritatively allowed the owner. Pressing it returns to that last
-  /// authoritative projection for this session.
-  final VoidCallback? onSkipUnresolvedFence;
 
   @override
   Widget build(BuildContext context) {
@@ -173,12 +120,6 @@ class AccountCutoverBlockingView extends StatelessWidget {
                           await launchUrl(url, mode: LaunchMode.externalApplication);
                         },
                         child: Text(l10n.accountCutoverOpenStore),
-                      ),
-                    ] else if (onSkipUnresolvedFence != null) ...[
-                      const SizedBox(height: 20),
-                      TextButton(
-                        onPressed: onSkipUnresolvedFence,
-                        child: Text(l10n.skip, style: const TextStyle(color: Colors.white70)),
                       ),
                     ],
                   ],

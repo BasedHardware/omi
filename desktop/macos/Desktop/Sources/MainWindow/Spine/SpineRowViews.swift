@@ -64,10 +64,6 @@ enum SpineMetrics {
   /// separate memories, but they all came out of one conversation.
   static let memoryGap: CGFloat = OmiSpacing.md
 
-  /// How far a memory line's hover wash bleeds past its text, so the affordance reads as a row
-  /// rather than as a highlight sitting inside one.
-  static let memoryHoverInset: CGFloat = OmiSpacing.sm
-
   /// Where the clock sits inside a row, measured from the top of that row's content, so the timestamp
   /// lands on the first line of whatever the row turned out to be.
   ///
@@ -97,7 +93,6 @@ struct SpineRowView: View {
   /// state their own time instead.
   let showsIndent: Bool
   let onOpenConversation: (ServerConversation) -> Void
-  let onOpenMemory: (SpineMemory) -> Void
   let onToggleTask: (TaskActionItem) -> Void
   let onToggleStar: (ServerConversation) -> Void
   let onOpenMoment: (SpineMoment) -> Void
@@ -171,8 +166,7 @@ struct SpineRowView: View {
     case .memories(let memories):
       SpineMemoriesRow(
         memories: memories,
-        showsTimestamps: !row.isAttached && !showsIndent,
-        onOpen: onOpenMemory
+        showsTimestamps: !row.isAttached && !showsIndent
       )
     case .tasks(let tasks):
       SpineTasksRow(
@@ -267,15 +261,13 @@ struct SpineMemoriesRow: View {
   let memories: [SpineMemory]
   /// Set when the row is soloed and there is no conversation above it to own the minute.
   let showsTimestamps: Bool
-  let onOpen: (SpineMemory) -> Void
 
   var body: some View {
     VStack(alignment: .leading, spacing: SpineMetrics.memoryGap) {
       ForEach(memories) { memory in
         SpineMemoryLine(
           memory: memory,
-          showsTimestamp: showsTimestamps && memories.count > 1,
-          onOpen: { onOpen(memory) }
+          showsTimestamp: showsTimestamps && memories.count > 1
         )
       }
     }
@@ -291,8 +283,6 @@ struct SpineMemoriesRow: View {
 private struct SpineMemoryLine: View {
   let memory: SpineMemory
   let showsTimestamp: Bool
-  let onOpen: () -> Void
-  @State private var isHovered = false
 
   private var copy: SpineMemoryCopy { SpineFormat.memoryCopy(memory.text) }
 
@@ -329,21 +319,6 @@ private struct SpineMemoryLine: View {
     }
     // Two runs of one sentence: read as one utterance, not as a label and then a fragment.
     .accessibilityElement(children: .combine)
-    // **A memory line used to be inert.** Every other row kind in the spine — conversation, task,
-    // moment, brain map — carried an action; `.memories` shipped with none, so the one row that
-    // names what Omi learned was the one row you could not open. The hit region is the whole line
-    // rather than the sentence, so the dash and the timestamp are not dead pixels beside it.
-    .contentShape(Rectangle())
-    .onTapGesture(perform: onOpen)
-    .onHover { isHovered = $0 }
-    .background(
-      RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
-        .fill(isHovered ? Ink.rowFillHover : .clear)
-        .padding(.horizontal, -SpineMetrics.memoryHoverInset)
-    )
-    .accessibilityAddTraits(.isButton)
-    .accessibilityHint("Opens this memory")
-    .accessibilityIdentifier("spine-memory-\(memory.id)")
   }
 }
 

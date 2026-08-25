@@ -63,11 +63,7 @@ final class RewindSurfaceLayoutTests: XCTestCase {
     XCTAssertEqual(RewindSurfaceLayout.panelGap, QueryShellLayout.panelGap)
     XCTAssertEqual(RewindSurfaceLayout.panelCornerRadius, InkGlass.cornerRadius)
     XCTAssertEqual(RewindSurfaceLayout.topGap, PageGlassLaneLayout.topGap)
-    // Delegated, not mirrored. The two gaps were the same number until the shell was flushed to its
-    // glass and `PageGlassLaneLayout.bottomGap` became 0 so the resize handle sits on the visible
-    // panel; restating "bottom equals top" here would make Rewind hold its own opinion again, which
-    // is the one thing this section forbids.
-    XCTAssertEqual(RewindSurfaceLayout.bottomGap, PageGlassLaneLayout.bottomGap)
+    XCTAssertEqual(RewindSurfaceLayout.bottomGap, RewindSurfaceLayout.topGap)
   }
 
   // MARK: - What the mounted panels actually do

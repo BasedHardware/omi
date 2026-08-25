@@ -14,17 +14,14 @@ import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/pages/conversation_detail/maps_util.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:omi/utils/daily_summary_journey.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_service.dart';
-import 'package:omi/utils/share_links.dart';
 
 class DailySummaryDetailPage extends StatefulWidget {
   final String summaryId;
   final DailySummary? summary; // Can pass directly if already loaded
-  final TileProvider? tileProvider;
 
-  const DailySummaryDetailPage({super.key, required this.summaryId, this.summary, this.tileProvider});
+  const DailySummaryDetailPage({super.key, required this.summaryId, this.summary});
 
   @override
   State<DailySummaryDetailPage> createState() => _DailySummaryDetailPageState();
@@ -110,7 +107,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
         return;
       }
       PlatformManager.instance.analytics.dailySummaryShared(summaryId: widget.summaryId, date: summary.date);
-      final url = recapShareUrl(widget.summaryId);
+      final url = 'https://h.omi.me/recaps/${widget.summaryId}';
       await SharePlus.instance.share(ShareParams(uri: Uri.parse(url), subject: summary.headline));
     } finally {
       if (mounted) setState(() => _isSharing = false);
@@ -513,6 +510,23 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     );
   }
 
+  // Get short name from full address (first part before comma)
+  String _getShortLocationName(String? address) {
+    if (address == null || address.isEmpty) return context.l10n.unknown;
+    final parts = address.split(',');
+    return parts.first.trim();
+  }
+
+  // Parse time string to minutes for comparison (e.g., "14:42" -> 882)
+  int _parseTimeToMinutes(String? timeStr) {
+    if (timeStr == null || timeStr.isEmpty) return 0;
+    final parts = timeStr.split(':');
+    if (parts.length != 2) return 0;
+    final hours = int.tryParse(parts[0]) ?? 0;
+    final minutes = int.tryParse(parts[1]) ?? 0;
+    return hours * 60 + minutes;
+  }
+
   // Format time from "17:00" to "5PM" format
   String _formatTimeTo12Hour(String? timeStr) {
     if (timeStr == null || timeStr.isEmpty) return '';
@@ -529,8 +543,42 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     }
   }
 
+  // Merge adjacent same locations and return timeline data (chronologically sorted)
+  List<_TimelineLocation> _buildTimelineLocations(List<LocationPin> locations) {
+    if (locations.isEmpty) return [];
+
+    // Sort locations by time chronologically (earliest first)
+    final sortedLocations = List<LocationPin>.from(locations);
+    sortedLocations.sort((a, b) => _parseTimeToMinutes(a.time).compareTo(_parseTimeToMinutes(b.time)));
+
+    final timeline = <_TimelineLocation>[];
+    _TimelineLocation? current;
+
+    for (final loc in sortedLocations) {
+      final shortName = _getShortLocationName(loc.address);
+
+      if (current == null || current.shortName != shortName) {
+        // New location (different from previous)
+        current = _TimelineLocation(
+          shortName: shortName,
+          latitude: loc.latitude,
+          longitude: loc.longitude,
+          startTime: loc.time,
+          endTime: loc.time,
+        );
+        timeline.add(current);
+      } else {
+        // Same location as previous, extend the end time
+        current.endTime = loc.time;
+      }
+    }
+
+    return timeline;
+  }
+
   Widget _buildLocationsMap(DailySummary summary) {
-    final timelineLocations = buildTimelineLocations(summary.locations, unknownLabel: context.l10n.unknown);
+    // Build timeline with merged adjacent locations
+    final timelineLocations = _buildTimelineLocations(summary.locations);
 
     // Get all coordinates as LatLng
     final points = summary.locations.map((l) => LatLng(l.latitude, l.longitude)).toList();
@@ -592,7 +640,6 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
                       subdomains: const ['a', 'b', 'c', 'd'],
                       userAgentPackageName: 'me.omi.app',
                       retinaMode: true,
-                      tileProvider: widget.tileProvider,
                     ),
                     MarkerLayer(markers: markers),
                   ],
@@ -606,8 +653,10 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
         ...timelineLocations.asMap().entries.map((entry) {
           final index = entry.key;
           final location = entry.value;
+          final isFirst = index == 0;
+          final isLast = index == timelineLocations.length - 1;
 
-          return _buildTimelineItem(location, index);
+          return _buildTimelineItem(location, isFirst, isLast);
         }),
       ],
     );
@@ -820,7 +869,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     );
   }
 
-  Widget _buildTimelineItem(TimelineLocation location, int index) {
+  Widget _buildTimelineItem(_TimelineLocation location, bool isFirst, bool isLast) {
     final startFormatted = _formatTimeTo12Hour(location.startTime);
     final endFormatted = _formatTimeTo12Hour(location.endTime);
     final timeText = startFormatted.isNotEmpty
@@ -829,54 +878,90 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
             : startFormatted)
         : '';
 
-    final semanticsLabel = timeText.isEmpty ? location.shortName : '${location.shortName}, $timeText';
-
-    return Semantics(
-      container: true,
-      button: true,
-      excludeSemantics: true,
-      label: semanticsLabel,
+    return GestureDetector(
       onTap: () => MapsUtil.launchMap(location.latitude, location.longitude),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => MapsUtil.launchMap(location.latitude, location.longitude),
-        child: Container(
-          key: ValueKey('daily_summary_location_row_$index'),
-          margin: const EdgeInsets.only(bottom: 6),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-          decoration: BoxDecoration(color: const Color(0xFF1A1A1F), borderRadius: BorderRadius.circular(16)),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      location.shortName,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        height: 1.3,
-                      ),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Timeline line and dot
+            SizedBox(
+              width: 40,
+              child: Column(
+                children: [
+                  // Top line (hidden for first item)
+                  Container(
+                    width: 2,
+                    height: 12,
+                    color: isFirst ? Colors.transparent : Colors.deepPurple.withValues(alpha: 0.4),
+                  ),
+                  // Dot
+                  Container(
+                    width: 14,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      color: Colors.deepPurple,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: const Color(0xFF0A0A0A), width: 2),
+                      boxShadow: [
+                        BoxShadow(color: Colors.deepPurple.withValues(alpha: 0.4), blurRadius: 6, spreadRadius: 1),
+                      ],
                     ),
-                    if (timeText.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Row(
+                  ),
+                  // Bottom line (hidden for last item)
+                  Expanded(
+                    child: Container(
+                      width: 2,
+                      color: isLast ? Colors.transparent : Colors.deepPurple.withValues(alpha: 0.4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Content
+            Expanded(
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
+                decoration: BoxDecoration(color: const Color(0xFF1A1A1F), borderRadius: BorderRadius.circular(20)),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          FaIcon(FontAwesomeIcons.clock, color: Colors.grey.shade500, size: 12),
-                          const SizedBox(width: 4),
-                          Text(timeText, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
+                          Text(
+                            location.shortName,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              height: 1.4,
+                            ),
+                          ),
+                          if (timeText.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                FaIcon(FontAwesomeIcons.clock, color: Colors.grey.shade500, size: 12),
+                                const SizedBox(width: 4),
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 2),
+                                  child: Text(timeText, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
+                                ),
+                              ],
+                            ),
+                          ],
                         ],
                       ),
-                    ],
+                    ),
+                    Icon(Icons.chevron_right, color: Colors.grey.shade600, size: 20),
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right, color: Colors.grey.shade600, size: 20),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -921,4 +1006,21 @@ Future<bool?> showDeleteRecapConfirmDialog(BuildContext context) {
       ],
     ),
   );
+}
+
+// Helper class for timeline locations
+class _TimelineLocation {
+  final String shortName;
+  final double latitude;
+  final double longitude;
+  final String? startTime;
+  String? endTime;
+
+  _TimelineLocation({
+    required this.shortName,
+    required this.latitude,
+    required this.longitude,
+    this.startTime,
+    this.endTime,
+  });
 }

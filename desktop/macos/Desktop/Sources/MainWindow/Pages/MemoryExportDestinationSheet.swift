@@ -202,26 +202,7 @@ private struct MemoryExportRow: View {
 }
 
 @MainActor
-struct MemoryExportWorkspace {
-  var installedApplicationURL: (ConnectorBrand) -> URL?
-  var defaultApplicationURL: (URL) -> URL?
-  var openWithApplication: ([URL], URL, NSWorkspace.OpenConfiguration, @escaping @Sendable (Error?) -> Void) -> Void
-  var open: (URL) -> Void
-
-  static let live = Self(
-    installedApplicationURL: { $0.installedApplicationURL },
-    defaultApplicationURL: { NSWorkspace.shared.urlForApplication(toOpen: $0) },
-    openWithApplication: { urls, applicationURL, configuration, completion in
-      NSWorkspace.shared.open(urls, withApplicationAt: applicationURL, configuration: configuration) { _, error in
-        completion(error)
-      }
-    },
-    open: { NSWorkspace.shared.open($0) })
-}
-
-@MainActor
 final class MemoryExportDestinationSheetModel: ObservableObject {
-  private let workspace: MemoryExportWorkspace
   @Published var isRunning = false
   @Published var statusMessage: String?
   @Published var errorMessage: String?
@@ -231,10 +212,6 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
   @Published var mcpKey: String?
   @Published var isLoadingMCPKey = false
   @Published var isTestingAgentConnection = false
-
-  init(workspace: MemoryExportWorkspace = .live) {
-    self.workspace = workspace
-  }
 
   func loadConfiguration() async {
     obsidianVaultPath = await MemoryExportService.shared.obsidianVaultPath()
@@ -435,19 +412,20 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
     NSWorkspace.shared.activateFileViewerSelecting([fileURL])
   }
 
-  func openDestination(for destination: MemoryExportDestination, url: URL?) {
+  private func openDestination(for destination: MemoryExportDestination, url: URL?) {
     guard let url else { return }
 
-    if let appURL = workspace.installedApplicationURL(destination.brand) {
+    if let appURL = destination.brand.installedApplicationURL {
       let configuration = NSWorkspace.OpenConfiguration()
       configuration.activates = true
 
-      workspace.openWithApplication([url], appURL, configuration) { [self] error in
+      NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: configuration) {
+        _, error in
         if let error {
           log(
             "MemoryExportDestinationSheetModel: Failed opening \(destination.title) with installed app: \(error.localizedDescription)"
           )
-          Self.performOnMainActor { [self] in
+          Task { @MainActor in
             self.openInDefaultHandler(url)
           }
         }
@@ -458,31 +436,24 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
     openInDefaultHandler(url)
   }
 
-  func openInDefaultHandler(_ url: URL) {
+  private func openInDefaultHandler(_ url: URL) {
     let configuration = NSWorkspace.OpenConfiguration()
     configuration.activates = true
 
-    if let appURL = workspace.defaultApplicationURL(url) {
-      workspace.openWithApplication([url], appURL, configuration) { [workspace] error in
+    if let appURL = NSWorkspace.shared.urlForApplication(toOpen: url) {
+      NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: configuration) {
+        _, error in
         if let error {
           log(
             "MemoryExportDestinationSheetModel: Failed opening \(url.absoluteString): \(error.localizedDescription)"
           )
-          Self.performOnMainActor {
-            workspace.open(url)
-          }
+          NSWorkspace.shared.open(url)
         }
       }
       return
     }
 
-    workspace.open(url)
-  }
-
-  nonisolated static func performOnMainActor(_ operation: @escaping @MainActor @Sendable () -> Void) {
-    Task { @MainActor in
-      operation()
-    }
+    NSWorkspace.shared.open(url)
   }
 }
 
@@ -494,7 +465,6 @@ struct MemoryExportDestinationSheet: View {
   @StateObject private var model = MemoryExportDestinationSheetModel()
   @State private var showManualSetup = false
   @State private var permissionRefreshID = 0
-  @State private var isDisconnecting = false
 
   private let permissionRefreshTimer = Timer.publish(every: 1.0, on: .main, in: .common)
     .autoconnect()
@@ -528,10 +498,6 @@ struct MemoryExportDestinationSheet: View {
       // memory pack) never clips inside the fixed-height sheet.
       ScrollView {
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {
-          if let entry = IntegrationNudgeCatalog.exportEntry(destinationID: destination.rawValue) {
-            IntegrationValueSection(entry: entry)
-          }
-
           content
 
           if let statusMessage = model.statusMessage {
@@ -820,34 +786,23 @@ struct MemoryExportDestinationSheet: View {
   }
 
   private func setupCompleteBlock(_ completion: MCPSetupCompletionSummary) -> some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-      HStack(alignment: .top, spacing: OmiSpacing.sm) {
-        Image(systemName: "checkmark.seal.fill")
+    HStack(alignment: .top, spacing: OmiSpacing.sm) {
+      Image(systemName: "checkmark.seal.fill")
+        .scaledFont(size: OmiType.subheading, weight: .semibold)
+        .foregroundColor(Ink.listeningGreen)
+        .padding(.top, 1)
+      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+        Text(completion.title)
           .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundColor(Ink.listeningGreen)
-          .padding(.top, 1)
-        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-          Text(completion.title)
-            .scaledFont(size: OmiType.subheading, weight: .semibold)
-            .foregroundColor(Ink.primary)
-          if destination == .claudeCode {
-            ClaudeCodeRestartSubtitle()
-          } else {
-            Text(completion.subtitle)
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(Ink.secondary)
-              .fixedSize(horizontal: false, vertical: true)
-          }
+          .foregroundColor(Ink.primary)
+        if destination == .claudeCode {
+          ClaudeCodeRestartSubtitle()
+        } else {
+          Text(completion.subtitle)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
+            .fixedSize(horizontal: false, vertical: true)
         }
-      }
-      if destination.cloudOAuthClientID != nil {
-        Button(isDisconnecting ? "Disconnecting…" : "Disconnect") {
-          disconnectCloudConnection()
-        }
-        .buttonStyle(.plain)
-        .foregroundColor(Ink.secondary)
-        .scaledFont(size: OmiType.caption, weight: .medium)
-        .disabled(isDisconnecting)
       }
     }
     .padding(OmiSpacing.md)
@@ -859,23 +814,6 @@ struct MemoryExportDestinationSheet: View {
           RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
             .stroke(Ink.listeningGreen.opacity(0.22), lineWidth: 1))
     )
-  }
-
-  private func disconnectCloudConnection() {
-    guard !isDisconnecting else { return }
-    isDisconnecting = true
-    model.errorMessage = nil
-    model.statusMessage = nil
-    Task { @MainActor in
-      do {
-        statuses[destination] = try await MemoryExportService.shared
-          .disconnectCloudOAuthConnection(for: destination)
-        model.statusMessage = "Disconnected from \(destination.title)."
-      } catch {
-        model.errorMessage = "Couldn't disconnect \(destination.title). Try again."
-      }
-      isDisconnecting = false
-    }
   }
 
   private var isConnected: Bool {

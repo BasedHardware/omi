@@ -81,10 +81,6 @@ def is_cloud_tasks_dispatch_enabled() -> bool:
     return os.getenv('SYNC_DISPATCH_MODE', 'inline') == 'cloud_tasks'
 
 
-def is_sync_backfill_routing_enabled() -> bool:
-    return os.getenv('SYNC_BACKFILL_ROUTING_ENABLED', 'false').lower() == 'true'
-
-
 def is_audio_merge_dispatch_enabled() -> bool:
     return os.getenv('AUDIO_MERGE_DISPATCH_MODE', 'inline') == 'cloud_tasks'
 
@@ -193,32 +189,15 @@ def enqueue_sync_job(payload: Dict[str, Any]) -> None:
     of times, then retain staged retry material if acknowledgement remains
     uncertain; they never fall back inline after submitting this task.
 
-    Queue selection stays on the main queue unless SYNC_BACKFILL_ROUTING_ENABLED
-    is true, the payload lane is backfill, and both SYNC_BACKFILL_TASKS_QUEUE
-    and SYNC_BACKFILL_TASKS_HANDLER_URL are set. Missing backfill env falls
-    back to the main queue so a job is never dropped.
-
-    The two-lane split was collapsed in #10400 after a customer incident: every
-    offline upload classifies as backfill (no server capture proof), and the
-    backfill worker then admitted only a few jobs at once, so Cloud Tasks
-    retried the surplus with exponential backoff until recordings sat
-    unprocessed for many hours. Restoring the split is gated default-off
-    because the backfill worker is now maxScale 30 / concurrency 1
-    (request-based) rather than the ~4-dispatch lane that caused the incident.
-    The lane label is always carried on the payload for metering and reporting.
+    Every sync job goes to the main queue. Offline recordings can never carry
+    server capture proof — the server was not in the loop when they were
+    captured — so they all classify as backfill, which sent the entire offline
+    workload to a lane provisioned for occasional historical recovery. That
+    lane's worker admitted only a few jobs at once, so Cloud Tasks retried the
+    surplus with exponential backoff until recordings sat unprocessed for many
+    hours. The lane label is still carried on the payload for metering and
+    reporting; it no longer selects the queue.
     """
-    if payload.get('lane') == 'backfill' and is_sync_backfill_routing_enabled():
-        queue = os.getenv('SYNC_BACKFILL_TASKS_QUEUE', '').strip()
-        handler_url = os.getenv('SYNC_BACKFILL_TASKS_HANDLER_URL', '').strip()
-        if queue and handler_url:
-            _enqueue_named_task(
-                queue,
-                handler_url,
-                str(payload['job_id']),
-                payload,
-                audience=os.getenv('SYNC_BACKFILL_TASKS_OIDC_AUDIENCE') or handler_url,
-            )
-            return
     _enqueue_named_task(os.getenv('SYNC_TASKS_QUEUE', ''), _handler_url(), str(payload['job_id']), payload)
 
 

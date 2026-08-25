@@ -33,10 +33,8 @@ BUDGETS: dict[str, tuple[int, int]] = {
     # main grew this with Codemagic release-pipeline detail after the budget was
     # first set from a stale base; recalibrated to current main + headroom.
     "desktop/macos/AGENTS.md": (560, 47_000),
-    "desktop/windows/AGENTS.md": (127, 6_950),
     "omi/firmware/AGENTS.md": (30, 1_500),
     "web/admin/AGENTS.md": (25, 1_500),
-    "web/app/AGENTS.md": (55, 2_400),
 }
 
 SKIP_PARTS = {"node_modules", ".build", ".git"}
@@ -98,9 +96,7 @@ def main() -> int:
     repo = Path(__file__).resolve().parents[2]
 
     errors: list[str] = []
-    # as_posix keeps the keys `/`-separated on Windows too; str() would emit
-    # backslashes there and misreport every budgeted file as both new and gone.
-    found = {p.relative_to(repo).as_posix() for p in discover(repo)}
+    found = {str(p.relative_to(repo)) for p in discover(repo)}
 
     # Every AGENTS.md must carry a budget, so a new guide cannot land unbounded.
     for rel in sorted(found - BUDGETS.keys()):

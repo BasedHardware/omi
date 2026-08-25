@@ -15,8 +15,6 @@ os.environ.setdefault('HOSTED_SPEAKER_EMBEDDING_API_URL', 'http://fake')  # enab
 os.environ.setdefault('DEEPGRAM_API_KEY', 'x')
 
 import utils.stt.streaming as st  # noqa: E402
-from utils.stt.speaker_clustering import SPEAKER_CLUSTERING_THRESHOLD  # noqa: E402
-from utils.stt.speaker_embedding import SPEAKER_MATCH_THRESHOLD  # noqa: E402
 
 
 def _cosine_distance(a, b):
@@ -69,11 +67,6 @@ def test_clusters_two_speakers_stably(monkeypatch):
     assert got == [0, 0, 1, 0, 1]
 
 
-def test_clustering_threshold_is_separate_from_enrollment_verification():
-    assert SPEAKER_MATCH_THRESHOLD == 0.45
-    assert SPEAKER_CLUSTERING_THRESHOLD == 0.60
-
-
 def test_short_clip_inherits_last_speaker_without_embedding(monkeypatch):
     rng = np.random.default_rng(1)
     calls = _patch_embeddings(monkeypatch, [_dir_vec(1, rng)])
@@ -100,91 +93,6 @@ def test_embedding_failure_falls_back_to_last_speaker(monkeypatch):
     sock = _make_socket()
     sock._last_speaker = 2
     assert asyncio.run(sock._assign_speaker(b'\x01\x00' * 16000)) == 2  # never drops the segment
-
-
-def test_online_clustering_merges_to_nearest_after_eight_speakers(monkeypatch):
-    embeddings = [np.eye(9, dtype=np.float32)[index].reshape(1, -1) for index in range(9)]
-    _patch_embeddings(monkeypatch, embeddings)
-    sock = _make_socket()
-    long_pcm = b'\x01\x00' * 16000
-
-    assigned = [asyncio.run(sock._assign_speaker(long_pcm)) for _ in embeddings]
-
-    assert assigned[:8] == list(range(8))
-    assert assigned[8] == 0
-    assert len(sock._spk_centroids) == 8
-
-
-def test_clustering_boundary_at_exactly_the_threshold_creates_a_new_speaker():
-    # The clustering boundary is strict: a clip at exactly 0.60 cosine distance
-    # is NOT the same speaker and must open a new centroid (while capacity
-    # remains). Pinning the exact boundary keeps future refactors from quietly
-    # turning < into <= and re-merging borderline speakers.
-    decision = st.select_speaker_cluster('emb', ['centroid'], lambda _a, _b: SPEAKER_CLUSTERING_THRESHOLD)
-    just_inside = st.select_speaker_cluster('emb', ['centroid'], lambda _a, _b: SPEAKER_CLUSTERING_THRESHOLD - 1e-9)
-
-    index, create_new, _distance, capped = decision
-    assert (index, create_new, capped) == (1, True, False)
-    assert just_inside[1] is False  # strictly below the threshold merges
-
-
-def test_enrollment_boundary_at_exactly_the_threshold_is_not_a_match(monkeypatch):
-    # Voiceprint verification is equally strict at its own 0.45 operating
-    # point: exactly at the threshold the answer is "not the same speaker".
-    from utils.stt import speaker_embedding
-
-    monkeypatch.setattr(speaker_embedding, 'compare_embeddings', lambda _a, _b: SPEAKER_MATCH_THRESHOLD)
-    same, distance = speaker_embedding.is_same_speaker('a', 'b')
-    assert same is False
-    assert distance == SPEAKER_MATCH_THRESHOLD
-
-
-def test_cap_merge_is_reported_and_does_not_drift_the_centroid(monkeypatch):
-    # When the eighth centroid is full, a ninth distinct voice is force-merged
-    # into the nearest centroid. That merge misattributes the segment, so it
-    # must be observable (shared fallback telemetry) and must not update the
-    # winning centroid's running mean — folding a >0.60 embedding into a mean
-    # would drag that centroid toward the wrong speaker and chain further
-    # misattributions.
-    embeddings = [np.eye(9, dtype=np.float32)[index].reshape(1, -1) for index in range(9)]
-    _patch_embeddings(monkeypatch, embeddings + [embeddings[0]])
-    fallbacks = []
-    monkeypatch.setattr(st, 'record_fallback', lambda **kwargs: fallbacks.append(kwargs))
-    sock = _make_socket()
-    long_pcm = b'\x01\x00' * 16000
-
-    assigned = [asyncio.run(sock._assign_speaker(long_pcm)) for _ in embeddings]
-    again = asyncio.run(sock._assign_speaker(long_pcm))  # speaker 0 keeps its own identity
-
-    assert assigned[8] == 0
-    assert len(fallbacks) == 1
-    assert fallbacks[0]['reason'] == 'capacity_full'
-    assert fallbacks[0]['outcome'] == 'degraded'
-    # The forced merge left centroid 0 exactly on its own first embedding...
-    np.testing.assert_array_equal(sock._spk_centroids[0], embeddings[0])
-    # ...so speaker 0's next clip still lands on speaker 0 deterministically.
-    assert again == 0
-
-
-def test_rare_owner_is_not_fragmented_among_many_speakers(monkeypatch):
-    # The conference-call shape: several distinct voices, clean audio, and the
-    # owner only speaking occasionally. If each rare owner turn opened a new
-    # centroid, the owner's transcript would fragment across several speaker
-    # labels — the mislabelling failure users actually notice. Within-speaker
-    # distance must stay comfortably under the 0.60 clustering threshold.
-    rng = np.random.default_rng(7)
-    order = [0, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 0]
-    _patch_embeddings(monkeypatch, [_dir_vec(index, rng) for index in order])
-    sock = _make_socket()
-    long_pcm = b'\x01\x00' * 16000
-
-    assigned = [asyncio.run(sock._assign_speaker(long_pcm)) for _ in order]
-
-    owner_turns = [index for index, speaker in enumerate(order) if speaker == 0]
-    owner_ids = {assigned[index] for index in owner_turns}
-    assert len(owner_ids) == 1  # first and last owner turn share one identity
-    # Nobody else was relabeled into the owner's identity.
-    assert assigned[owner_turns[0]] not in {assigned[i] for i, s in enumerate(order) if s != 0}
 
 
 def test_slice_pcm_bounds():

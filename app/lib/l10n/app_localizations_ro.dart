@@ -324,7 +324,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get searchApps => 'Căutați aplicații...';
 
   @override
-  String get myApps => 'Creat de mine';
+  String get myApps => 'Aplicațiile mele';
 
   @override
   String get installedApps => 'Aplicații instalate';
@@ -9887,63 +9887,4 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Deschide magazinul';
-
-  @override
-  String get chatScopeToday => 'Astăzi';
-
-  @override
-  String get chatScopeThisWeek => 'Săptămâna aceasta';
-
-  @override
-  String chatScopeAbout(String title) {
-    return 'Despre: $title';
-  }
-
-  @override
-  String get askAboutThisConversation => 'Întreabă despre asta';
-
-  @override
-  String get sendRawAudioToOmi => 'Trimite sunetul brut către Omi';
-
-  @override
-  String get sendRawAudioToOmiDescription =>
-      'Dezactivează pentru a împiedica trimiterea sunetului brut către Omi. Transcrierile și datele necesare funcțiilor cloud pot fi trimise în continuare către Omi.';
-
-  @override
-  String get findDevice => 'Găsește';
-
-  @override
-  String get diagnosticsShareFailed => 'Diagnosticul nu a putut fi partajat. Încearcă din nou.';
-
-  @override
-  String get appDisabledTitle => 'Această aplicație este dezactivată și nu poate fi instalată.';
-
-  @override
-  String get appDisabledWebhookFailures => 'Endpointul ei a eșuat 72 de ore la rând, așa că livrările au fost oprite.';
-
-  @override
-  String get appDisabledGeneric => 'A fost dezactivată de Omi.';
-
-  @override
-  String get appDisabledOwnerHint =>
-      'Repară mai întâi endpointul — reactivarea verifică din nou fiecare URL configurat.';
-
-  @override
-  String get appReEnable => 'Reactivează';
-
-  @override
-  String get appReEnableFailedTitle => 'Reactivarea a eșuat';
-
-  @override
-  String get appReEnableFailedBody => 'Această aplicație nu a putut fi reactivată. Încearcă din nou.';
-
-  @override
-  String appDisabledOn(String date) {
-    return 'Dezactivată pe $date.';
-  }
-
-  @override
-  String appDisabledLastError(String error) {
-    return 'Ultima eroare: $error.';
-  }
 }

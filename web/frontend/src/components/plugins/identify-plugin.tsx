@@ -8,7 +8,6 @@ import { NavArrowRight } from 'iconoir-react';
 import ErrorIdentifyPlugin from './error-identify-plugin';
 import IdentifyPluginLoader from './identify-plugin-loader';
 import { getPluginFromCache, setPluginInCache, hasPluginInCache } from './plugin-cache';
-import envConfig from '@/src/constants/envConfig';
 
 interface IdentifyPluginProps {
   pluginId: string;
@@ -49,7 +48,7 @@ function IdentifyPlugin({ pluginId }: IdentifyPluginProps) {
   }
 
   const isPublic = !pluginCommunity.private;
-  const pluginUrl = `${envConfig.WEB_URL}/apps/${pluginId}`;
+  const pluginUrl = `https://h.omi.me/apps/${pluginId}`;
 
   const content = (
     <>

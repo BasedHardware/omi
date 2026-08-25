@@ -335,6 +335,11 @@ extension SettingsContentView {
           }  // end if taskEnabled
         }
       }
+
+      // Task Agent Settings (merged into Task Assistant subsection)
+      settingsCard(settingId: "advanced.taskassistant.agent") {
+        TaskAgentSettingsView()
+      }
     }
   }
 
@@ -343,7 +348,7 @@ extension SettingsContentView {
       settingsCard(settingId: "advanced.insightassistant") {
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {
           HStack {
-            Image(systemName: ProactiveNotificationBadge.insightSystemImage)
+            Image(systemName: "lightbulb.fill")
               .scaledFont(size: OmiType.subheading)
               .foregroundColor(Ink.secondary)
 
@@ -892,58 +897,6 @@ extension SettingsContentView {
         }
       }
 
-      if useLegacyHomeDesign {
-        settingsCard(settingId: "advanced.preferences.oldesthome") {
-          HStack(spacing: OmiSpacing.lg) {
-            Image(systemName: "rectangle.stack")
-              .scaledFont(size: OmiType.subheading)
-              .foregroundColor(Ink.secondary)
-              .frame(width: 24, height: 24)
-
-            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-              Text("Use oldest Home theme")
-                .scaledFont(size: OmiType.subheading, weight: .semibold)
-                .foregroundColor(Ink.primary)
-
-              Text("Show the original widgets-and-chat Home")
-                .scaledFont(size: OmiType.body)
-                .foregroundColor(Ink.secondary)
-            }
-
-            Spacer()
-
-            Toggle("", isOn: $useOldestHomeDesign)
-              .toggleStyle(OmiToggleStyle())
-              .labelsHidden()
-          }
-        }
-      }
-
-      settingsCard(settingId: "advanced.preferences.speaknotifications") {
-        HStack(spacing: OmiSpacing.lg) {
-          Image(systemName: "speaker.wave.2")
-            .scaledFont(size: OmiType.subheading)
-            .foregroundColor(Ink.secondary)
-            .frame(width: 24, height: 24)
-
-          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-            Text("Speak Notifications Aloud")
-              .scaledFont(size: OmiType.subheading, weight: .semibold)
-              .foregroundColor(Ink.primary)
-
-            Text("Read proactive notifications out loud when they arrive, using your chat voice")
-              .scaledFont(size: OmiType.body)
-              .foregroundColor(Ink.secondary)
-          }
-
-          Spacer()
-
-          Toggle("", isOn: $speakNotificationsAloud)
-            .toggleStyle(OmiToggleStyle())
-            .labelsHidden()
-        }
-      }
-
       // Launch at Login toggle
       settingsCard(settingId: "advanced.preferences.launchatlogin") {
         HStack(spacing: OmiSpacing.lg) {
@@ -1016,33 +969,6 @@ extension SettingsContentView {
       // Rescan Files
       settingsCard(settingId: "advanced.troubleshooting.rescanfiles") {
         RescanFilesRow(showConfirmation: $showRescanFilesAlert)
-      }
-
-      // Reset Integration Suggestions
-      settingsCard(settingId: "advanced.troubleshooting.resetintegrationsuggestions") {
-        HStack(spacing: OmiSpacing.lg) {
-          Image(systemName: "sparkles.rectangle.stack")
-            .scaledFont(size: OmiType.subheading)
-            .foregroundColor(Ink.secondary)
-            .frame(width: 24, height: 24)
-
-          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-            Text("Reset Integration Suggestions")
-              .scaledFont(size: OmiType.subheading, weight: .semibold)
-              .foregroundColor(Ink.primary)
-
-            Text("Clears every integration's suggestion history, including ones you hid, so Omi can offer them again")
-              .scaledFont(size: OmiType.body)
-              .foregroundColor(Ink.secondary)
-          }
-
-          Spacer()
-
-          Button("Reset") {
-            IntegrationNudgeStore.shared.resetAll()
-          }
-          .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
-        }
       }
     }
   }

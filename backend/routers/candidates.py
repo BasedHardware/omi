@@ -41,7 +41,7 @@ IdempotencyHeader = Annotated[str, Header(alias='Idempotency-Key', min_length=1,
 AccountGenerationHeader = Annotated[int, Header(alias='X-Account-Generation', ge=0)]
 SUGGESTED_CANDIDATE_LIMIT = 5
 SUGGESTED_CANDIDATE_RAW_LIMIT = 500
-SUGGESTED_CANDIDATE_TTL = candidates_db.SUGGESTION_TTL
+SUGGESTED_CANDIDATE_FRESHNESS = candidates_db.PENDING_CANDIDATE_REUSE_WINDOW
 
 
 def _require_candidate_write_control(uid: str, account_generation: int) -> None:
@@ -104,7 +104,7 @@ def _has_suggested_candidate_shape(
     created_at = candidate.created_at
     if created_at.tzinfo is None:
         return False
-    return not enforce_freshness or not candidates_db.candidate_has_lapsed(candidate, now=now)
+    return not enforce_freshness or created_at >= now - SUGGESTED_CANDIDATE_FRESHNESS
 
 
 def _is_suggested_candidate(candidate: CandidateRecord, *, now: datetime) -> bool:
@@ -273,8 +273,8 @@ def get_candidate_workflow_control(uid: str = Depends(auth.get_current_user_uid)
         )
         chat_first_ui = resolve_chat_first_ui(rollout)
     except Exception:
-        # Control resolution is intentionally fail-closed: a backend outage or
-        # malformed generation fence keeps this user in the existing shell.
+        # Cohort resolution is intentionally fail-closed: a backend outage or
+        # stale selector keeps this user in the existing shell.
         return control.model_copy(
             update={
                 'workflow_mode': TaskWorkflowMode.off,
@@ -284,7 +284,7 @@ def get_candidate_workflow_control(uid: str = Depends(auth.get_current_user_uid)
 
     # Desktop samples both fields as one generation-bound projection. Preserve
     # the raw generation, but never let a stale workflow record select the
-    # legacy shell for a universally entitled account.
+    # legacy shell for an enrolled account.
     effective_control = effective_task_workflow_control(control, rollout)
     return effective_control.model_copy(update={'chat_first_ui': chat_first_ui})
 

@@ -353,10 +353,7 @@ def cache_user_geolocation(uid: str, geolocation: Dict[str, Any]) -> None:
     # optional fields already default to ``None`` when absent.
     present_fields = {key: value for key, value in geolocation.items() if value is not None}
     r.set(f'users:{uid}:geolocation', _serialize_cache_value(present_fields))
-    # 30m: conversation/tool place tagging does not need second-level freshness;
-    # clients re-upload on significant moves and at recording start. Keeps the
-    # last-known coords available without inventing a tighter freshness policy.
-    r.expire(f'users:{uid}:geolocation', 60 * 30)
+    r.expire(f'users:{uid}:geolocation', 60 * 30)  # FIXME: too much?
 
 
 def get_cached_user_geolocation(uid: str) -> Optional[Dict[str, Any]]:
@@ -503,41 +500,6 @@ def get_proactive_noti_sent_at(uid: str, app_id: str) -> Optional[int]:
 
 def get_proactive_noti_sent_at_ttl(uid: str, app_id: str) -> int:
     return r.ttl(f'{uid}:{app_id}:proactive_noti_sent_at')
-
-
-PROACTIVE_MESSAGE_CHANNEL = 'proactive_message:listen'
-
-
-@try_catch_decorator
-def publish_proactive_message(
-    uid: str, app_id: str, title: str, message: str, conversation_id: Optional[str] = None
-) -> None:
-    payload = {
-        'uid': uid,
-        'app_id': app_id,
-        'title': title,
-        'message': message,
-        'conversation_id': conversation_id,
-    }
-    r.publish(PROACTIVE_MESSAGE_CHANNEL, json.dumps(payload))
-
-
-_async_redis_client: Optional[Any] = None
-
-
-async def get_async_redis_client() -> Any:
-    global _async_redis_client
-    if _async_redis_client is None:
-        import redis.asyncio as _asyncio_redis
-
-        _async_redis_client = _asyncio_redis.Redis(
-            host=cast(str, _redis_host),
-            port=int(_redis_port_env) if _redis_port_env is not None else 6379,
-            username='default',
-            password=os.getenv('REDIS_DB_PASSWORD'),
-            decode_responses=True,
-        )
-    return _async_redis_client
 
 
 @try_catch_decorator
@@ -894,47 +856,6 @@ end
 return {current, ttl}
 """)
 
-# Proactive LLM calls need a reversible reservation: provider/schema failures
-# must not consume a user's successful-completion allowance. Unlike the legacy
-# increment-first limiter, a rejected reservation does not inflate the counter,
-# so releasing one admitted request remains exact under concurrency.
-_RATE_LIMIT_RESERVE_LUA = r.register_script("""
-local key = KEYS[1]
-local window = tonumber(ARGV[1])
-local limit = tonumber(ARGV[2])
-local current = tonumber(redis.call('GET', key) or '0')
-local ttl = redis.call('TTL', key)
-if current >= limit then
-    if ttl < 0 then
-        redis.call('EXPIRE', key, window)
-        ttl = window
-    end
-    return {0, current, ttl}
-end
-current = redis.call('INCR', key)
-if current == 1 or ttl < 0 then
-    redis.call('EXPIRE', key, window)
-    ttl = window
-end
-return {1, current, ttl}
-""")
-
-_RATE_LIMIT_RELEASE_LUA_SOURCE = """
-local key = KEYS[1]
-local current = tonumber(redis.call('GET', key) or '0') or 0
-if current <= 1 then
-    redis.call('DEL', key)
-    return 0
-end
-local remaining = tonumber(redis.call('DECR', key) or '0') or 0
-if remaining <= 0 then
-    redis.call('DEL', key)
-    return 0
-end
-return remaining
-"""
-_RATE_LIMIT_RELEASE_LUA = r.register_script(_RATE_LIMIT_RELEASE_LUA_SOURCE)
-
 
 def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> tuple[bool, int, int]:
     """Check per-key rate limit using a single atomic Lua call.
@@ -954,27 +875,6 @@ def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> t
     allowed = current <= max_requests
     retry_after = max(0, ttl) if not allowed else 0
     return allowed, remaining, retry_after
-
-
-def reserve_rate_limit(key: str, policy: str, max_requests: int, window: int) -> tuple[bool, int, int]:
-    """Atomically reserve one reversible slot without counting denied attempts.
-
-    Returns ``(allowed, remaining, reset_seconds)``. ``reset_seconds`` is the
-    key TTL on both admit and deny so callers can advertise window reset without
-    a second Redis round-trip. Denied attempts still do not increment the counter.
-    """
-    redis_key = f'rl:{policy}:{key}'
-    admitted, current, ttl = _RATE_LIMIT_RESERVE_LUA(keys=[redis_key], args=[window, max_requests])
-    allowed = bool(admitted)
-    remaining = max(0, max_requests - current)
-    reset_seconds = max(0, int(ttl))
-    return allowed, remaining, reset_seconds
-
-
-def release_rate_limit(key: str, policy: str) -> None:
-    """Release one previously admitted reversible rate-limit slot."""
-    redis_key = f'rl:{policy}:{key}'
-    _RATE_LIMIT_RELEASE_LUA(keys=[redis_key], args=[])
 
 
 # Atomic TTS rate-limit: burst (sliding-window ZSET) + daily char counter.
@@ -1104,16 +1004,6 @@ def can_update_persona(uid: str) -> bool:
 def set_speech_profile_duration(uid: str, duration: float) -> None:
     """Cache speech profile duration (write-ahead on upload)"""
     r.set(f'users:{uid}:speech_profile_duration', str(duration))
-
-
-@try_catch_decorator
-def get_speech_profile_duration(uid: str) -> Optional[float]:
-    """Read the cached speech profile duration in seconds (0.0 if unset; None if
-    the read itself fails, per try_catch_decorator's fail-open contract)."""
-    val = r.get(f'users:{uid}:speech_profile_duration')
-    if not val:
-        return 0.0
-    return float(val.decode() if isinstance(val, bytes) else val)
 
 
 # ******************************************************

@@ -74,6 +74,7 @@ class AssociationJudgment(BaseModel):
 
 
 class AssociationOutcomeKind(str, Enum):
+    not_canonical_cohort = 'not_canonical_cohort'
     workflow_disabled = 'workflow_disabled'
     no_candidates = 'no_candidates'
     no_match = 'no_match'
@@ -106,6 +107,7 @@ class WorkstreamIndexRebuildReport(BaseModel):
 
 
 class RecurrenceOutcomeKind(str, Enum):
+    not_canonical_cohort = 'not_canonical_cohort'
     workflow_disabled = 'workflow_disabled'
     below_threshold = 'below_threshold'
     would_create = 'would_create'

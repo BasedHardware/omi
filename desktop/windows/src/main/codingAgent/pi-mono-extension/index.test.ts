@@ -187,11 +187,11 @@ describe('provider registration', () => {
     expect(cap.provider?.cfg.apiKey).toBe('firebase-token-xyz')
   })
 
-  it('declares exactly omi-sonnet with zero client-side cost', () => {
+  it('declares exactly omi-sonnet and omi-opus with zero client-side cost', () => {
     const cap = makeFakePi()
     omiProvider(cap.pi)
     const models = cap.provider?.cfg.models as Array<Record<string, unknown>>
-    expect(models.map((m) => m.id)).toEqual(['omi-sonnet'])
+    expect(models.map((m) => m.id)).toEqual(['omi-sonnet', 'omi-opus'])
     for (const m of models) {
       expect(m.reasoning).toBe(true)
       expect(m.input).toEqual(['text', 'image'])

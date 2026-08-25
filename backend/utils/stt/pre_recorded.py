@@ -4,7 +4,6 @@ import wave as _wave
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from io import BytesIO
-from math import ceil
 from threading import RLock
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, cast
 
@@ -32,15 +31,12 @@ from config.stt_provider_policy import (
 )
 from models.transcript_segment import TranscriptSegment
 from utils.byok import get_byok_key
-from utils.observability.fallback import record_fallback
 from utils.other.endpoints import timeit
 from utils.stt.outcomes import TranscriptionFailure
-from utils.stt.speaker_clustering import select_speaker_cluster
-from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_from_bytes
+from utils.stt.speaker_embedding import SPEAKER_MATCH_THRESHOLD, compare_embeddings, extract_embedding_from_bytes
 
 _DG_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0)
 _MODULATE_TIMEOUT = httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.0)
-_MAX_PRE_RECORDED_SEGMENT_DURATION_SECONDS = 30.0
 
 logger = logging.getLogger(__name__)
 
@@ -124,18 +120,18 @@ def get_prerecorded_service(language: Optional[str] = 'en') -> Tuple[str, Option
 
 # Lazily initialized because constructing the SDK client at import makes every
 # backend consumer credential-dependent, including schema export and unit discovery.
+_deepgram_options: Optional[DeepgramClientOptions] = None
 _deepgram_client: Optional[DeepgramClient] = None
 _deepgram_client_lock = RLock()
 
 
-def _deepgram_options() -> DeepgramClientOptions:
-    """Build fresh options per client.
-
-    DeepgramClient.__init__ calls config.set_apikey(), so a cached options
-    object shared with a BYOK client rewrites the credential the managed
-    client still holds — every later request would bill that user's key.
-    """
-    return DeepgramClientOptions(options={"keepalive": "true"})
+def _get_deepgram_options() -> DeepgramClientOptions:
+    global _deepgram_options
+    if _deepgram_options is None:
+        with _deepgram_client_lock:
+            if _deepgram_options is None:
+                _deepgram_options = DeepgramClientOptions(options={"keepalive": "true"})
+    return _deepgram_options
 
 
 def _get_deepgram_client() -> DeepgramClient:
@@ -146,7 +142,7 @@ def _get_deepgram_client() -> DeepgramClient:
                 api_key = os.getenv('DEEPGRAM_API_KEY')
                 if not api_key:
                     raise PrerecordedSTTConfigurationError(PrerecordedSTTService.DEEPGRAM, 'DEEPGRAM_API_KEY')
-                _deepgram_client = DeepgramClient(api_key, _deepgram_options())
+                _deepgram_client = DeepgramClient(api_key, _get_deepgram_options())
     return _deepgram_client
 
 
@@ -154,7 +150,7 @@ def _deepgram_client_for_request() -> DeepgramClient:
     """Route to BYOK Deepgram key when set; otherwise use the process-wide client."""
     byok = get_byok_key('deepgram')
     if byok:
-        return DeepgramClient(byok, _deepgram_options())
+        return DeepgramClient(byok, _get_deepgram_options())
     return _get_deepgram_client()
 
 
@@ -973,20 +969,13 @@ def _parakeet_assign_speaker_sync(
         seg_wav = _wrap_pcm_as_wav(seg_pcm, sample_rate, 1)
         emb = extract_embedding_from_bytes(seg_wav)
 
-        best_i, create_new, _, capped = select_speaker_cluster(emb, centroids, compare_embeddings)
-        if not create_new:
-            if capped:
-                # Forced by the cap: the embedding missed every centroid, so keep
-                # it out of the running mean and report the degraded merge.
-                record_fallback(
-                    component='other',
-                    from_mode='new_speaker_centroid',
-                    to_mode='nearest_centroid',
-                    reason='capacity_full',
-                    outcome='degraded',
-                    log=logger,
-                )
-                return f'SPEAKER_{best_i:02d}'
+        best_i, best_dist = -1, 1e9
+        for i, centroid in enumerate(centroids):
+            d = compare_embeddings(emb, centroid)
+            if d < best_dist:
+                best_i, best_dist = i, d
+
+        if best_i >= 0 and best_dist < SPEAKER_MATCH_THRESHOLD:
             n = counts[best_i]
             centroids[best_i] = (centroids[best_i] * n + emb) / (n + 1)
             counts[best_i] = n + 1
@@ -994,7 +983,7 @@ def _parakeet_assign_speaker_sync(
 
         centroids.append(emb)
         counts.append(1)
-        return f'SPEAKER_{best_i:02d}'
+        return f'SPEAKER_{len(centroids) - 1:02d}'
     except Exception as e:
         logger.warning(f'Parakeet batch diarization failed, defaulting to SPEAKER_00: {e}')
         return 'SPEAKER_00'
@@ -1194,56 +1183,21 @@ def _retrieve_user_speaker_id(words: List[Dict[str, Any]], skip_n_seconds: int) 
 def _merge_segments(
     words: List[Dict[str, Any]], skip_n_seconds: int, user_speaker_id: Optional[str]
 ) -> List[Dict[str, Any]]:
-    def split_long_entry(entry: Dict[str, Any]) -> List[Dict[str, Any]]:
-        start = float(entry['start'])
-        end = float(entry['end'])
-        duration = end - start
-        if duration <= _MAX_PRE_RECORDED_SEGMENT_DURATION_SECONDS:
-            return [entry]
-
-        text_words = str(entry['text']).split()
-        if not text_words:
-            return [entry]
-
-        chunk_count = min(ceil(duration / _MAX_PRE_RECORDED_SEGMENT_DURATION_SECONDS), len(text_words))
-        chunk_duration = duration / chunk_count
-        words_per_chunk, remainder = divmod(len(text_words), chunk_count)
-        chunks: List[Dict[str, Any]] = []
-        text_offset = 0
-        for index in range(chunk_count):
-            chunk_word_count = words_per_chunk + (1 if index < remainder else 0)
-            next_text_offset = text_offset + chunk_word_count
-            chunk = dict(entry)
-            chunk['start'] = start + index * chunk_duration
-            chunk['end'] = end if index == chunk_count - 1 else start + (index + 1) * chunk_duration
-            chunk['text'] = ' '.join(text_words[text_offset:next_text_offset])
-            chunks.append(chunk)
-            text_offset = next_text_offset
-        return chunks
-
     segments: List[Dict[str, Any]] = []
     for word in words:
         if word['start'] < skip_n_seconds:
             continue
-        for entry in split_long_entry(word):
-            entry['is_user'] = entry['speaker'] == user_speaker_id if entry['speaker'] else False
+        word['is_user'] = word['speaker'] == user_speaker_id if word['speaker'] else False
 
-            same_prev_speaker = entry['speaker'] == segments[-1]['speaker'] if segments else False
-            seconds_from_prev = entry['start'] - segments[-1]['end'] if segments else 0
+        same_prev_speaker = word['speaker'] == segments[-1]['speaker'] if segments else False
+        seconds_from_prev = word['start'] - segments[-1]['end'] if segments else 0
 
-            within_max_duration = (
-                entry['end'] - segments[-1]['start'] < _MAX_PRE_RECORDED_SEGMENT_DURATION_SECONDS if segments else False
-            )
-            if (
-                segments
-                and same_prev_speaker
-                and seconds_from_prev < _MAX_PRE_RECORDED_SEGMENT_DURATION_SECONDS
-                and within_max_duration
-            ):
-                segments[-1]['end'] = entry['end']
-                segments[-1]['text'] += ' ' + entry['text']
-            else:
-                segments.append(entry)
+        # TODO: consider having a max segment size too
+        if segments and same_prev_speaker and seconds_from_prev < 30:
+            segments[-1]['end'] = word['end']
+            segments[-1]['text'] += ' ' + word['text']
+        else:
+            segments.append(word)
     return segments
 
 

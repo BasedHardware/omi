@@ -323,7 +323,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get searchApps => 'Otsi rakendusi...';
 
   @override
-  String get myApps => 'Minu loodud';
+  String get myApps => 'Minu rakendused';
 
   @override
   String get installedApps => 'Paigaldatud rakendused';
@@ -9834,63 +9834,4 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Avaa kauppa';
-
-  @override
-  String get chatScopeToday => 'Täna';
-
-  @override
-  String get chatScopeThisWeek => 'Sel nädalal';
-
-  @override
-  String chatScopeAbout(String title) {
-    return 'Teave: $title';
-  }
-
-  @override
-  String get askAboutThisConversation => 'Küsi selle kohta';
-
-  @override
-  String get sendRawAudioToOmi => 'Saada töötlemata heli Omisse';
-
-  @override
-  String get sendRawAudioToOmiDescription =>
-      'Lülita välja, et töötlemata heli Omisse ei saadetaks. Transkriptsioone ja pilvefunktsioonide jaoks vajalikke andmeid võidakse endiselt Omisse saata.';
-
-  @override
-  String get findDevice => 'Leia';
-
-  @override
-  String get diagnosticsShareFailed => 'Diagnostikat ei õnnestunud jagada. Proovi uuesti.';
-
-  @override
-  String get appDisabledTitle => 'See rakendus on välja lülitatud ja seda ei saa paigaldada.';
-
-  @override
-  String get appDisabledWebhookFailures => 'Selle lõpp-punkt ebaõnnestus 72 tundi järjest, seega saatmine peatati.';
-
-  @override
-  String get appDisabledGeneric => 'Omi lülitas selle välja.';
-
-  @override
-  String get appDisabledOwnerHint =>
-      'Paranda kõigepealt lõpp-punkt — uuesti sisselülitamisel kontrollitakse iga seadistatud URL uuesti.';
-
-  @override
-  String get appReEnable => 'Lülita uuesti sisse';
-
-  @override
-  String get appReEnableFailedTitle => 'Uuesti sisselülitamine ebaõnnestus';
-
-  @override
-  String get appReEnableFailedBody => 'Seda rakendust ei õnnestunud uuesti sisse lülitada. Proovi uuesti.';
-
-  @override
-  String appDisabledOn(String date) {
-    return 'Välja lülitatud $date.';
-  }
-
-  @override
-  String appDisabledLastError(String error) {
-    return 'Viimane viga: $error.';
-  }
 }

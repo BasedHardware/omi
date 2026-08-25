@@ -8,6 +8,7 @@ from typing import Any, Iterable
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+from config.canonical_memory_cohort import is_canonical_memory_user
 from database._client import get_firestore_client
 from database.firestore_index_registry import CHAT_FIRST_DEFERRALS_DUE_QUERY, CHAT_FIRST_DEFERRALS_SUBJECT_QUERY
 from database.read_boundary import MalformedDocError, parse_snapshot_strict
@@ -114,6 +115,8 @@ def proactive_deferral_id(uid: str, *, account_generation: int, continuity_key: 
 
 
 def _require_control(snapshot: Any, *, uid: str, account_generation: int) -> None:
+    if not is_canonical_memory_user(uid):
+        raise ChatFirstIntentGenerationMismatch('chat-first capability changed')
     control = TaskWorkflowControl()
     if snapshot.exists:
         try:
@@ -175,7 +178,7 @@ def get_budget_state(
     now: datetime,
     firestore_client: Any = None,
 ) -> ProactiveBudgetState:
-    """Read bounded accounting after the caller passed generation validation."""
+    """Read bounded accounting only after the caller passed cohort eligibility."""
 
     client = _db(firestore_client)
     _require_current_control(uid, account_generation=account_generation, firestore_client=client)
@@ -533,7 +536,6 @@ def fetch_ready_intents(
     *,
     account_generation: int,
     limit: int = 8,
-    exclude_block_types: set[str] | frozenset[str] | None = None,
     firestore_client: Any = None,
 ) -> list[ProactiveIntent]:
     """Return ready intents only; this never changes delivery or writes Chat."""
@@ -550,12 +552,6 @@ def fetch_ready_intents(
     for snapshot in query.stream():
         intent = _intent_from_snapshot(snapshot)
         if intent.account_generation != account_generation:
-            continue
-        # Apply compatibility filtering before the delivery window is bounded.
-        # Legacy clients cannot acknowledge newer block types, so letting those
-        # rows consume the first ``limit`` results would permanently starve the
-        # legacy-compatible intents behind them.
-        if exclude_block_types and any(block.type in exclude_block_types for block in intent.blocks):
             continue
         ready.append(intent)
     ready.sort(key=lambda intent: (intent.created_at, intent.intent_id))

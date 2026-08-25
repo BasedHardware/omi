@@ -518,6 +518,7 @@ def generate_image_via_gateway(
     size: str,
     quality: str,
     n: int,
+    response_format: str,
     timeout_seconds: float = 120.0,
 ) -> Mapping[str, object]:
     """Call the gateway-owned image generation surface."""
@@ -532,6 +533,7 @@ def generate_image_via_gateway(
                 'size': size,
                 'quality': quality,
                 'n': n,
+                'response_format': response_format,
             },
         )
         response.raise_for_status()

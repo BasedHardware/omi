@@ -51,8 +51,6 @@ final class AgentErrorClassifierTests: XCTestCase {
       "HTTP 402 status code (no body)",
       "402 Payment Required",
       "Request failed: http/402",
-      "status 402",
-      "status code: 402",
     ] {
       let classified = AgentErrorClassifier.classify(raw)
       XCTAssertEqual(classified.code, .providerBillingExhausted, "unclassified: \(raw)")
@@ -64,24 +62,6 @@ final class AgentErrorClassifierTests: XCTestCase {
         classified.userMessage.lowercased().contains("try again"),
         "copy must not prescribe retries for an unretryable billing error: \(raw)")
     }
-  }
-
-  /// Live pi-mono recycle wraps the 402 as "send again" and parks the status
-  /// on `technicalMessage`. Classifying only `userMessage` is how the billing
-  /// fix never reached the transcript.
-  func testRecycledWorkerWrapStillClassifiesTheTechnicalHTTP402() {
-    let classified = AgentErrorClassifier.classify(
-      AgentRuntimeFailure(
-        code: "adapter_execution_failed",
-        userMessage: "The local agent reset its session after an error. Send your message again.",
-        technicalMessage: "HTTP 402 status code (no body)",
-        retryable: true,
-        recoveryAction: "worker_recycled"
-      )
-    )
-    XCTAssertEqual(classified.code, .providerBillingExhausted)
-    XCTAssertFalse(classified.retryable)
-    XCTAssertFalse(classified.userMessage.lowercased().contains("try again"))
   }
 
   /// The status-shaped match must not swallow ordinary numbers that merely
@@ -251,10 +231,6 @@ final class AgentErrorClassifierTests: XCTestCase {
       ("403 \"byok_validation_failed\"", true, false),
       ("Connection error.", true, true),
       ("HTTP 402 status code (no body)", true, false),
-      // The desktop chat backend's own upstream-failure string. Unclassified,
-      // it renders as the generic "Omi couldn't answer this one", which is what
-      // the 2026-08-20 gateway-parameter outage showed users for ~19 hours.
-      ("Upstream provider error", true, true),
     ]
     for (raw, mustNotBeUnknown, expectedRetryable) in corpus {
       let c = AgentErrorClassifier.classify(raw)
@@ -263,18 +239,5 @@ final class AgentErrorClassifierTests: XCTestCase {
       }
       XCTAssertEqual(c.retryable, expectedRetryable, "retryability wrong for: \(raw)")
     }
-  }
-
-  func testUpstreamProviderErrorIsClassifiedRatherThanGeneric() {
-    let classified = AgentErrorClassifier.classify("Upstream provider error")
-
-    XCTAssertEqual(classified.code, .upstreamProviderFailed)
-    XCTAssertTrue(classified.retryable)
-    // The notice must show this rule's sentence, not the unclassified fallback.
-    let notice = ChatTurnFailureNotice.forFailure(
-      errorDescription: "Upstream provider error", presentsUserError: true)
-    XCTAssertNotNil(notice)
-    XCTAssertNotEqual(notice?.text, ChatTurnFailureNotice.unclassifiedText)
-    XCTAssertEqual(notice?.text, classified.userMessage)
   }
 }

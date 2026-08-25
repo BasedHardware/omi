@@ -106,8 +106,7 @@ void main() {
   test('clearUserData invalidates an in-flight search result', () async {
     final response = Completer<(List<ServerConversation>, int, int)>();
     final provider = ConversationProvider(
-      conversationSearchFetcher: (query, {page, limit, required includeDiscarded, startDate, endDate, speakerId}) =>
-          response.future,
+      conversationSearchFetcher: (query, {page, limit, required includeDiscarded, speakerId}) => response.future,
       isSignedIn: () => true,
     );
     addTearDown(provider.dispose);
@@ -124,8 +123,7 @@ void main() {
   test('clearUserData invalidates an in-flight search pagination result', () async {
     final response = Completer<(List<ServerConversation>, int, int)>();
     final provider = ConversationProvider(
-      conversationSearchFetcher: (query, {page, limit, required includeDiscarded, startDate, endDate, speakerId}) =>
-          response.future,
+      conversationSearchFetcher: (query, {page, limit, required includeDiscarded, speakerId}) => response.future,
       isSignedIn: () => true,
     );
     addTearDown(provider.dispose);

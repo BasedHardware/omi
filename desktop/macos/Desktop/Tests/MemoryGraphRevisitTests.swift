@@ -37,12 +37,14 @@ final class MemoryGraphRevisitTests: XCTestCase {
   func testMemoryHubDestinationMenuHasStableRoutes() {
     XCTAssertEqual(
       MemoryHubDestination.allCases,
-      [.memories, .conversations, .brainMap, .activity]
+      [.memories, .conversations, .brainMap]
     )
-    // Storage identity, pinned: these raw values are persisted, so the enum may not be reordered.
-    // Reading order is a different list and lives with the control that presents it — see
-    // `ChatFirstDestinationParityTests.testTheActivityChipRowOffersEveryHubPageAndNothingElse`.
-    XCTAssertEqual(MemoryHubDestination.activity.title, "Brain")
+    // Storage identity and reading order are different lists, and only one of them may be reordered
+    // freely: `allCases` is pinned by the persisted raw values above.
+    XCTAssertEqual(
+      MemoryHubDestination.switcherOrder,
+      [.conversations, .memories, .brainMap]
+    )
     XCTAssertEqual(MemoryHubDestination.memories.title, "Memories")
     XCTAssertEqual(MemoryHubDestination.conversations.title, "Conversations")
     XCTAssertEqual(MemoryHubDestination.brainMap.title, "Brain Map")
@@ -63,9 +65,8 @@ final class MemoryGraphRevisitTests: XCTestCase {
 
   /// The hover menu these three tests used to cover is gone, and so is
   /// `MemoryDropdownInteractionState` — its hover-generation machinery had no other caller. The
-  /// Memory hub's four destinations are now selected by Activity's chip row; that contract is held
-  /// by `ChatFirstDestinationParityTests.testTheActivityChipRowOffersEveryHubPageAndNothingElse`
-  /// and `TopNavigationBarLayoutTests`.
+  /// Memory hub's three destinations are now selected by the hub's own switcher; that contract is
+  /// held behaviorally by `MemoryHubSwitcherTests` and `TopNavigationBarLayoutTests`.
   func testTopNavigationUsesCompactPillSpacing() {
     XCTAssertEqual(TopNavigationPillMetrics.itemSpacing, 4)
     XCTAssertEqual(TopNavigationPillMetrics.horizontalPadding, 12)

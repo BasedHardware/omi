@@ -124,7 +124,7 @@ enum ChatFirstTaskPagePolicy {
   }
 }
 
-/// Universal lightweight checklist. It reads and mutates the one shared
+/// Cohort-only lightweight checklist. It reads and mutates the one shared
 /// TasksStore; legacy TasksPage continues to own the legacy-shell UI unchanged.
 @MainActor
 struct ChatFirstTasksPage: View {
@@ -150,7 +150,7 @@ struct ChatFirstTasksPage: View {
   }
 
   private var visibleTasks: [TaskActionItem] {
-    tasksStore.tasks.filter { !$0.isRetired }
+    tasksStore.tasks.filter { $0.deleted != true }
   }
 
   private var todayTasks: [TaskActionItem] {
@@ -410,11 +410,11 @@ struct ChatFirstTasksPage: View {
   private func registerAutomationActions() {
     automationRuntime?.registerTasksPage(
       toggleTask: { [tasksStore] in
-        guard let task = tasksStore.tasks.first(where: { !$0.isRetired && !$0.completed }) else { return false }
+        guard let task = tasksStore.tasks.first(where: { $0.deleted != true && !$0.completed }) else { return false }
         let intendedCompletion = !task.completed
         AnalyticsManager.shared.chatFirst(.taskMutation(lifecycle: .attempt, mutation: .completion))
         await tasksStore.toggleTask(task)
-        let reconciled = tasksStore.tasks.first { $0.id == task.id && !$0.isRetired }
+        let reconciled = tasksStore.tasks.first { $0.id == task.id && $0.deleted != true }
         AnalyticsManager.shared.chatFirst(
           .taskMutation(
             lifecycle: reconciled?.completed == intendedCompletion ? .success : .rollback,
@@ -544,7 +544,7 @@ private struct ChatFirstTaskRow: View {
         .taskMutation(lifecycle: .attempt, mutation: .completion)
       )
       await tasksStore.toggleTask(task)
-      let reconciledTask = tasksStore.tasks.first { $0.id == task.id && !$0.isRetired }
+      let reconciledTask = tasksStore.tasks.first { $0.id == task.id && $0.deleted != true }
       AnalyticsManager.shared.chatFirst(
         .taskMutation(
           lifecycle: reconciledTask?.completed == intendedCompletion ? .success : .rollback,

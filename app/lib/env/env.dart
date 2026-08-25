@@ -1,12 +1,13 @@
-import 'package:flutter/foundation.dart';
-
 import 'package:omi/flavors.dart';
 
 import 'environment_profile.dart';
 
 abstract class Env {
   static const productionApiBaseUrl = 'https://api.omi.me/';
-  static const _apiBaseUrlFromDefine = String.fromEnvironment('OMI_API_BASE_URL');
+  static const productionAgentProxyWsUrl = 'wss://agent.omi.me/v1/agent/ws';
+  static const _apiBaseUrlFromDefine = String.fromEnvironment(
+    'OMI_API_BASE_URL',
+  );
   static const firebaseAuthEmulatorHost = String.fromEnvironment(
     'OMI_FIREBASE_AUTH_EMULATOR_HOST',
     defaultValue: '127.0.0.1',
@@ -17,10 +18,12 @@ abstract class Env {
   );
   static late final EnvFields _instance;
   static String? _apiBaseUrlOverride;
+  static String? _agentProxyWsUrlOverride;
   static bool isTestFlight = false;
 
-  static AppEnvironmentProfile get profile =>
-      AppEnvironmentProfile.forFlavor(productionFlavor: F.env == Environment.prod);
+  static AppEnvironmentProfile get profile => AppEnvironmentProfile.forFlavor(
+        productionFlavor: F.env == Environment.prod,
+      );
 
   static void init(EnvFields instance) {
     _instance = instance;
@@ -33,6 +36,12 @@ abstract class Env {
   static void clearApiBaseUrlOverrideForTesting() {
     _apiBaseUrlOverride = null;
   }
+
+  static void overrideAgentProxyWsUrl(String url) {
+    _agentProxyWsUrlOverride = url;
+  }
+
+  static String? get openAIAPIKey => _instance.openAIAPIKey;
 
   static String? get posthogApiKey => _instance.posthogApiKey;
 
@@ -57,7 +66,10 @@ abstract class Env {
   /// uses the development serving API for product traffic.
   static String get authApiBaseUrl => authApiBaseUrlForProfile(profile, servingApiBaseUrl: apiBaseUrl);
 
-  static String authApiBaseUrlForProfile(AppEnvironmentProfile configuredProfile, {String? servingApiBaseUrl}) {
+  static String authApiBaseUrlForProfile(
+    AppEnvironmentProfile configuredProfile, {
+    String? servingApiBaseUrl,
+  }) {
     if (configuredProfile == AppEnvironmentProfile.mobileBeta) {
       return productionApiBaseUrl;
     }
@@ -67,14 +79,19 @@ abstract class Env {
   static void validateProfilePairing() {
     final productionFlavor = F.env == Environment.prod;
     if (!productionFlavor && profile != AppEnvironmentProfile.localDev) {
-      throw StateError('Profile ${profile.name} must be built with the prod flavor.');
+      throw StateError(
+        'Profile ${profile.name} must be built with the prod flavor.',
+      );
     }
     if (productionFlavor && profile == AppEnvironmentProfile.localDev) {
       throw StateError('The prod flavor cannot use the local_dev profile.');
     }
   }
 
-  static void validateFirebaseProject({required String projectId, AppEnvironmentProfile? configuredProfile}) {
+  static void validateFirebaseProject({
+    required String projectId,
+    AppEnvironmentProfile? configuredProfile,
+  }) {
     final effectiveProfile = configuredProfile ?? profile;
     if (projectId != effectiveProfile.firebaseProjectId) {
       throw StateError(
@@ -90,11 +107,13 @@ abstract class Env {
     required bool productionFamily,
     String? configuredApiBaseUrl,
     AppEnvironmentProfile? configuredProfile,
-    bool releaseBuild = kReleaseMode,
   }) {
     final effectiveProfile = configuredProfile ?? (productionFamily ? AppEnvironmentProfile.production : profile);
     final normalized = (configuredApiBaseUrl ?? apiBaseUrl ?? '').trim().replaceFirst(RegExp(r'/+$'), '');
-    final expected = effectiveProfile.defaultApiBaseUrl.replaceFirst(RegExp(r'/+$'), '');
+    final expected = effectiveProfile.defaultApiBaseUrl.replaceFirst(
+      RegExp(r'/+$'),
+      '',
+    );
 
     if (effectiveProfile == AppEnvironmentProfile.localDev) {
       if (!_isLocalDevelopmentApi(normalized)) {
@@ -106,23 +125,34 @@ abstract class Env {
       return;
     }
 
-    if (effectiveProfile == AppEnvironmentProfile.localProd) {
-      if (releaseBuild) {
-        throw StateError('Profile local_prod is only available in debug builds.');
-      }
-      final uri = Uri.tryParse(normalized);
-      if (uri == null || uri.host.isEmpty || (uri.scheme != 'http' && uri.scheme != 'https')) {
-        throw StateError('Profile local_prod requires a valid http(s) API endpoint.');
-      }
-      return;
+    if (normalized != expected) {
+      throw StateError(
+        'Profile ${effectiveProfile.name} requires API_BASE_URL=${effectiveProfile.defaultApiBaseUrl}',
+      );
     }
 
-    if (normalized != expected) {
-      throw StateError('Profile ${effectiveProfile.name} requires API_BASE_URL=${effectiveProfile.defaultApiBaseUrl}');
+    if (effectiveProfile == AppEnvironmentProfile.production &&
+        _agentProxyWsUrlFor(normalized) != productionAgentProxyWsUrl) {
+      throw StateError(
+        'Production packages require the production agent WebSocket endpoint.',
+      );
     }
   }
 
   static void requireProductionRouting() => validateStartupRouting(productionFamily: true);
+
+  /// WebSocket URL for the agent proxy service.
+  /// Derives from apiBaseUrl: api.omi.me → agent.omi.me, api.omiapi.com → agent.omiapi.com.
+  /// Can be overridden via Env.overrideAgentProxyWsUrl() for local testing.
+  static String get agentProxyWsUrl {
+    if (_agentProxyWsUrlOverride != null) return _agentProxyWsUrlOverride!;
+    return _agentProxyWsUrlFor(apiBaseUrl ?? productionApiBaseUrl);
+  }
+
+  static String _agentProxyWsUrlFor(String base) {
+    final host = Uri.parse(base).host.replaceFirst('api.', 'agent.');
+    return 'wss://$host/v1/agent/ws';
+  }
 
   static bool _isLocalDevelopmentApi(String base) {
     final uri = Uri.tryParse(base);
@@ -142,12 +172,6 @@ abstract class Env {
     return first == 10 ||
         (first == 172 && second >= 16 && second <= 31) ||
         (first == 192 && second == 168) ||
-        // 100.64.0.0/10 — RFC 6598 shared address space, the range Tailscale
-        // assigns. Included because a physical device has no other route to a
-        // developer's local harness: the harness binds loopback only by design,
-        // so the device cannot use 127.x, and a plain LAN address does not reach
-        // it either. Bounded to the real /10 — 100.63.x and 100.128.x are public.
-        (first == 100 && second >= 64 && second <= 127) ||
         (first == 127);
   }
 
@@ -169,6 +193,8 @@ abstract class Env {
 }
 
 abstract class EnvFields {
+  String? get openAIAPIKey;
+
   String? get posthogApiKey;
 
   String? get apiBaseUrl;

@@ -19,7 +19,6 @@ from langchain_core.messages import SystemMessage, AIMessage, HumanMessage, Base
 
 from models.app import App
 from models.chat import ChatSession, Message, PageContext
-from utils.journey_metrics_contract import ClientKind
 from utils.llm.chat import get_current_datetime_block, get_user_timezone, retrieve_is_file_question
 from utils.llm.clients import get_llm
 from utils.llm.gateway_client import GatewayDirectModelSurfaceBlocked
@@ -205,10 +204,9 @@ async def _execute_file_chat_stream(
         yield None
     except Exception as error:
         logger.error(
-            'file chat stream failed route=file uid=%s reason=stream_failure error_type=%s error=%s',
+            'file chat stream failed route=file uid=%s reason=stream_failure error_type=%s',
             uid,
             type(error).__name__,
-            error,
         )
         if callback_data is not None:
             callback_data['error'] = 'stream_failure'
@@ -336,7 +334,6 @@ async def execute_chat_stream(
     chat_session: Optional[ChatSession] = None,
     context: Optional[PageContext] = None,
     platform: Optional[str] = None,
-    client_kind: Optional[ClientKind] = None,
 ) -> AsyncGenerator[Optional[str], None]:
     """Route chat requests to the appropriate handler.
 
@@ -413,7 +410,6 @@ async def execute_chat_stream(
         chat_session=chat_session,
         context=context,
         platform=platform,
-        client_kind=client_kind,
         current_datetime_block=current_datetime_block,
         tz=tz,
         setup_deadline_at=setup_deadline_at,

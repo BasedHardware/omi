@@ -7,32 +7,6 @@ enum ConversationDetailPane: Equatable {
   case transcript
 }
 
-struct ConversationDetailProcessingLayout<Banner: View, Content: View>: View {
-  let isProcessing: Bool
-  let banner: Banner
-  let content: Content
-
-  init(
-    isProcessing: Bool,
-    @ViewBuilder banner: () -> Banner,
-    @ViewBuilder content: () -> Content
-  ) {
-    self.isProcessing = isProcessing
-    self.banner = banner()
-    self.content = content()
-  }
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.xxl) {
-      if isProcessing {
-        banner
-      }
-      content
-    }
-    .frame(maxWidth: .infinity, alignment: .leading)
-  }
-}
-
 /// Full detail view for a single conversation
 struct ConversationDetailView: View {
   let conversation: ServerConversation
@@ -50,17 +24,9 @@ struct ConversationDetailView: View {
   @ObservedObject private var automation = ConversationDetailAutomationState.shared
 
   @StateObject private var appProvider = AppProvider()
-  /// Descriptions the reader has explicitly added to their task list from this
-  /// summary, and those currently in flight. Action items on a summary are not
-  /// tasks (I1); this is the record of the reader's own "Add to Tasks" gesture.
-  @State private var addedActionItemIDs: Set<String> = []
-  @State private var addingActionItemIDs: Set<String> = []
   @State private var showAppSelector = false
   @State private var isReprocessing = false
   @State private var selectedAppForReprocess: OmiApp?
-  /// Locally mirrored preferred summarization app (mobile keeps the same key
-  /// in SharedPreferences; the backend exposes no GET for it).
-  @State private var preferredSummaryAppId: String?
 
   // Transcript presentation state. Summary and transcript are exclusive panes so neither one is
   // compressed into an unreadable split view at the minimum window width.
@@ -80,6 +46,7 @@ struct ConversationDetailView: View {
   @State private var showEditDialog = false
   @State private var editedTitle = ""
   @State private var isUpdatingTitle = false
+  @State private var isCopyingLink = false
   @State private var isDeleting = false
 
   // Speaker naming state
@@ -179,16 +146,20 @@ struct ConversationDetailView: View {
               .padding(.vertical, OmiSpacing.sm)
               .background(Ink.rowFillHover.opacity(0.4))
 
-              ConversationDetailProcessingLayout(isProcessing: isEnrichingDeferred) {
-                deferredProcessingSection
-                  .allowsHitTesting(false)
-              } content: {
+              VStack(alignment: .leading, spacing: OmiSpacing.xxl) {
                 summaryContent
               }
               .padding(OmiSpacing.xxl)
             }
             .glassCard(cornerRadius: OmiChrome.controlRadius)
             .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius))
+            .overlay(alignment: .top) {
+              if isEnrichingDeferred {
+                deferredProcessingSection
+                  .padding(OmiSpacing.xxl)
+                  .allowsHitTesting(false)
+              }
+            }
             .padding(OmiSpacing.xxl)
           }
           .glassScrollFade()
@@ -229,8 +200,6 @@ struct ConversationDetailView: View {
       showTranscriptDrawer = true
     }
     .task {
-      preferredSummaryAppId =
-        UserDefaults.standard.string(forKey: .preferredSummarizationAppId).flatMap { $0.isEmpty ? nil : $0 }
       await appProvider.fetchApps()
       await onFetchPeople?()
       AnalyticsManager.shared.conversationDetailOpened(conversationId: conversation.id)
@@ -276,16 +245,11 @@ struct ConversationDetailView: View {
       AppSelectorSheet(
         apps: appProvider.apps.filter { $0.capabilities.contains("memories") },
         isLoading: isReprocessing,
-        selectedAppId: ConversationSummarySelection.primarySummary(for: displayConversation).appId,
-        preferredAppId: preferredSummaryAppId,
         onSelect: { app in
           selectedAppForReprocess = app
           Task {
             await reprocessWithApp(app)
           }
-        },
-        onSetPreferred: { app in
-          setPreferredSummaryApp(app)
         },
         onDismiss: { showAppSelector = false }
       )
@@ -358,12 +322,10 @@ struct ConversationDetailView: View {
       // Title + timestamp subtitle
       VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         HStack(spacing: OmiSpacing.sm) {
-          Text(displayConversation.displayTitle)
+          Text(displayConversation.title)
             .scaledFont(size: OmiType.heading, weight: .semibold)
-            .foregroundColor(detailTitleColor)
+            .foregroundColor(Ink.primary)
             .lineLimit(1)
-
-          ConversationStatusBadge(state: displayConversation.displayState)
 
           // Edit title button (inline with title)
           Button(action: {
@@ -384,6 +346,11 @@ struct ConversationDetailView: View {
       }
 
       Spacer()
+
+      // Status badge
+      if displayConversation.status != .completed {
+        statusBadge
+      }
 
       // View Transcript pill button
       viewTranscriptButton
@@ -442,16 +409,20 @@ struct ConversationDetailView: View {
 
   private var inlineActionButtons: some View {
     HStack(spacing: OmiSpacing.sm) {
-      // Copy share link (minting flips visibility to shared; the control
-      // discloses and confirms that itself).
-      ConversationShareLinkButton(
-        conversationId: conversation.id,
-        canShare: canShareConversation,
-        onCopied: {
-          AnalyticsManager.shared.shareAction(
-            category: "conversation", properties: ["conversation_id": conversation.id])
-        }
-      )
+      // Copy link button
+      Button(action: { Task { await copyLink() } }) {
+        Image(systemName: isCopyingLink ? "arrow.triangle.2.circlepath" : "link")
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(Ink.secondary)
+          .frame(width: 28, height: 28)
+          .background(
+            Circle()
+              .fill(Ink.rowFillHover)
+          )
+      }
+      .buttonStyle(.plain)
+      .disabled(isCopyingLink)
+      .help("Copy link")
 
       // Copy transcript button
       Button(action: copyTranscript) {
@@ -532,14 +503,6 @@ struct ConversationDetailView: View {
     displayConversation.transcriptPresenceState != .lockedOrRedacted
   }
 
-  /// Sharing publishes the conversation (visibility flips to "shared"), so it
-  /// honors the same lock/redaction gate as copying the transcript: content
-  /// this surface refuses to put on the pasteboard must not be publishable to
-  /// an unauthenticated share URL from the same toolbar.
-  private var canShareConversation: Bool {
-    canCopyTranscript
-  }
-
   // MARK: - Actions
 
   private func copyTranscript() {
@@ -560,6 +523,22 @@ struct ConversationDetailView: View {
 
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(transcript, forType: .string)
+  }
+
+  private func copyLink() async {
+    isCopyingLink = true
+    defer { isCopyingLink = false }
+
+    do {
+      let shareableUrl = try await APIClient.shared.getConversationShareLink(id: conversation.id)
+      await MainActor.run {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(shareableUrl, forType: .string)
+      }
+      AnalyticsManager.shared.shareAction(category: "conversation", properties: ["conversation_id": conversation.id])
+    } catch {
+      logError("Failed to get share link", error: error)
+    }
   }
 
   private func updateTitle() async {
@@ -584,13 +563,30 @@ struct ConversationDetailView: View {
     }
   }
 
-  /// Title color in the header — dim placeholder titles (Processing /
-  /// Locked / Untitled) so they read as secondary text rather than as the
-  /// real title of the conversation.
-  private var detailTitleColor: Color {
-    switch displayConversation.displayState {
-    case .titled: return Ink.primary
-    default: return Ink.secondary
+  private var statusBadge: some View {
+    Text(displayConversation.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized)
+      .scaledFont(size: OmiType.caption, weight: .medium)
+      .foregroundColor(statusColor)
+      .padding(.horizontal, OmiSpacing.sm)
+      .padding(.vertical, OmiSpacing.xxs)
+      .background(
+        Capsule()
+          .fill(statusColor.opacity(0.2))
+      )
+  }
+
+  private var statusColor: Color {
+    switch displayConversation.status {
+    case .completed:
+      return Ink.listeningGreen
+    case .processing, .merging:
+      // Neutral: "working" is not a state with something to do about it, and the accent is
+      // already spent. Green/orange/red carry the states that are.
+      return Ink.secondary
+    case .inProgress:
+      return PageGlass.warning
+    case .failed:
+      return Ink.errorRed
     }
   }
 
@@ -598,42 +594,26 @@ struct ConversationDetailView: View {
 
   @ViewBuilder
   private var summaryContent: some View {
-    let selection = ConversationSummarySelection.primarySummary(for: displayConversation)
-
-    // Overview section (selected app result, or the structured fallback)
-    if !selection.content.isEmpty {
+    // Overview section
+    if !displayConversation.overview.isEmpty {
       overviewSection
-    }
-
-    // The backend's headed summary blocks. `overview` is only a compatibility paragraph now, so
-    // without these the pane shows a fraction of what was actually written.
-    //
-    // Shown only when Omi's own summary is the one on screen. `sections` belongs to the first-party
-    // structured summary, and a promoted app result already *replaces* that summary — rendering
-    // both stacks a second, unattributed Omi summary under the app's, which is also the one thing
-    // the Flutter client deliberately does not do.
-    if selection.appId == nil {
-      ConversationSummarySections(sections: displayConversation.structured.sections)
-        .padding(.horizontal, OmiSpacing.lg)
-    }
-
-    // Action items sit directly under the summary: they are the part of a
-    // meeting a reader acts on. Nothing here is a task until the reader says
-    // so (I1) — each row carries its own "Add to Tasks".
-    if !displayConversation.structured.actionItems.isEmpty {
-      actionItemsSection
     }
 
     // Metadata chips
     metadataSection
 
-    // App Results section (insights beyond the promoted primary summary)
-    if !ConversationSummarySelection.secondaryResults(for: displayConversation).isEmpty {
+    // App Results section
+    if !displayConversation.appsResults.isEmpty {
       appResultsSection
     }
 
     // Suggested apps section
     suggestedAppsSection
+
+    // Action items section
+    if !displayConversation.structured.actionItems.isEmpty {
+      actionItemsSection
+    }
   }
 
   // MARK: - Transcript Drawer
@@ -868,10 +848,7 @@ struct ConversationDetailView: View {
   // MARK: - Overview Section
 
   private var overviewSection: some View {
-    let selection = ConversationSummarySelection.primarySummary(for: displayConversation)
-    let primaryApp = selection.appId.flatMap { id in appProvider.apps.first { $0.id == id } }
-
-    return VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       HStack(spacing: OmiSpacing.xs) {
         Image(systemName: "star.fill")
           .scaledFont(size: OmiType.body)
@@ -880,34 +857,6 @@ struct ConversationDetailView: View {
         Text("Summary")
           .scaledFont(size: OmiType.body, weight: .semibold)
           .foregroundColor(Ink.secondary)
-
-        // The selected summarization app owns this section; say which one.
-        if let primaryApp {
-          Text(primaryApp.name)
-            .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(Ink.secondary)
-            .padding(.horizontal, OmiSpacing.sm)
-            .padding(.vertical, OmiSpacing.xxs)
-            .background(
-              Capsule()
-                .fill(Ink.rowFillHover)
-            )
-        }
-
-        Spacer()
-
-        Button(action: { showAppSelector = true }) {
-          HStack(spacing: OmiSpacing.xxs) {
-            Image(systemName: "arrow.triangle.2.circlepath")
-              .scaledFont(size: OmiType.caption)
-            Text(primaryApp == nil ? "Summary App" : "Change")
-              .scaledFont(size: OmiType.caption, weight: .medium)
-          }
-          .foregroundColor(Ink.secondary)
-        }
-        .buttonStyle(.plain)
-        .disabled(isReprocessing)
-        .help("Choose the app that summarizes this conversation")
       }
 
       // No `colorScheme` override here. This section used to force `.dark` so the markdown would
@@ -915,7 +864,7 @@ struct ConversationDetailView: View {
       // whole summary — the longest prose in the app — in near-white on a near-white ground. The
       // page is `glassContent()`, which already pins the panel's light appearance, and the markdown
       // inherits it.
-      OmiMarkdown(text: selection.content, sender: .ai)
+      OmiMarkdown(text: displayConversation.overview, sender: .ai)
         .textSelection(.enabled)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -1004,7 +953,7 @@ struct ConversationDetailView: View {
         .disabled(isReprocessing)
       }
 
-      ForEach(ConversationSummarySelection.secondaryResults(for: displayConversation)) { result in
+      ForEach(displayConversation.appsResults) { result in
         AppResultCard(
           result: result,
           app: appProvider.apps.first { $0.id == result.appId }
@@ -1025,11 +974,15 @@ struct ConversationDetailView: View {
         Spacer()
       }
 
-      // The $0-shadow exclusion that kept this section empty now lives (and is
-      // tested) in ConversationSummarySelection.suggestedApps.
-      let memoryApps = ConversationSummarySelection.suggestedApps(
-        appProvider.apps, results: displayConversation.appsResults
-      ).prefix(4)
+      let memoryApps = appProvider.apps.filter { app in
+        // Name the outer element: inside the inner closure a bare `$0`
+        // shadows it, so `$0.appId == $0.id` compared an appsResults entry
+        // to itself (always true for any entry with a non-nil app_id, since
+        // AppResponse.id == appId ?? uuid), which excluded every app and
+        // left this section perpetually empty.
+        app.capabilities.contains("memories")
+          && !displayConversation.appsResults.contains(where: { $0.appId == app.id })
+      }.prefix(4)
 
       if memoryApps.isEmpty && !appProvider.isLoading {
         Text("Enable apps with memory capability to get additional insights")
@@ -1075,37 +1028,13 @@ struct ConversationDetailView: View {
     // Track reprocess
     AnalyticsManager.shared.conversationReprocessed(conversationId: conversation.id, appId: app.id)
 
-    // Mobile parity: the backend resolves reprocess targets from the enabled
-    // slice (plus defaults), so a not-yet-enabled pick is enabled first —
-    // otherwise it silently clears apps_results and produces no summary.
-    if !app.enabled {
-      await appProvider.enableApp(app)
-    }
-
     do {
-      // The route returns the updated conversation; adopting it repaints the
-      // summary pane with the selected app as primary.
-      let updated = try await APIClient.shared.reprocessConversation(
+      try await APIClient.shared.reprocessConversation(
         conversationId: conversation.id,
         appId: app.id
       )
-      loadedConversation = updated
     } catch {
       logError("Failed to reprocess conversation", error: error)
-    }
-  }
-
-  /// Persists the preferred summarization app locally (the backend has no GET
-  /// for it) and server-side, where future conversation processing keys on it.
-  private func setPreferredSummaryApp(_ app: OmiApp) {
-    preferredSummaryAppId = app.id
-    UserDefaults.standard.set(app.id, forKey: .preferredSummarizationAppId)
-    Task {
-      do {
-        try await APIClient.shared.setPreferredSummarizationApp(appId: app.id)
-      } catch {
-        logError("Failed to set preferred summarization app", error: error)
-      }
     }
   }
 
@@ -1152,8 +1081,6 @@ struct ConversationDetailView: View {
 
             Spacer(minLength: OmiSpacing.sm)
 
-            addToTasksButton(for: item)
-
             Button {
               ConversationDetailAutomationState.shared.requestOpen(
                 conversationId: displayConversation.id,
@@ -1182,46 +1109,6 @@ struct ConversationDetailView: View {
               .stroke(Ink.rowFillHover.opacity(0.3), lineWidth: 1)
           )
         }
-      }
-    }
-  }
-
-  /// Explicit, per-item promotion of a summary action item into the task list.
-  /// This gesture is the only way an extracted item becomes a task.
-  @ViewBuilder
-  private func addToTasksButton(for item: ActionItem) -> some View {
-    let isAdded = addedActionItemIDs.contains(item.id)
-    let isAdding = addingActionItemIDs.contains(item.id)
-
-    Button {
-      addActionItemToTasks(item)
-    } label: {
-      HStack(spacing: OmiSpacing.xxs) {
-        Image(systemName: isAdded ? "checkmark" : "plus")
-        Text(isAdded ? "Added" : "Add to Tasks")
-      }
-      .scaledFont(size: OmiType.caption)
-      .foregroundColor(isAdded ? Ink.listeningGreen : Ink.secondary)
-    }
-    .buttonStyle(.plain)
-    .disabled(isAdded || isAdding)
-    .opacity(isAdding ? 0.5 : 1)
-    .accessibilityIdentifier("action-item-add-to-tasks")
-    .help(isAdded ? "Already in your tasks" : "Add this to your tasks")
-  }
-
-  private func addActionItemToTasks(_ item: ActionItem) {
-    guard !addedActionItemIDs.contains(item.id), !addingActionItemIDs.contains(item.id) else { return }
-    addingActionItemIDs.insert(item.id)
-    Task { @MainActor in
-      let created = await TasksStore.shared.createTask(
-        description: item.description,
-        dueAt: nil,
-        priority: nil
-      )
-      addingActionItemIDs.remove(item.id)
-      if created != nil {
-        addedActionItemIDs.insert(item.id)
       }
     }
   }
@@ -1409,5 +1296,137 @@ struct SuggestedAppCard: View {
     .disabled(isLoading)
     .onHover { isHovering = $0 }
   }
+}
 
+// MARK: - App Selector Sheet
+
+struct AppSelectorSheet: View {
+  let apps: [OmiApp]
+  let isLoading: Bool
+  let onSelect: (OmiApp) -> Void
+  let onDismiss: () -> Void
+
+  @State private var selectedAppId: String?
+
+  var body: some View {
+    VStack(spacing: 0) {
+      // Header
+      HStack {
+        Text("Select App")
+          .scaledFont(size: OmiType.subheading, weight: .semibold)
+          .foregroundColor(Ink.primary)
+
+        Spacer()
+
+        Button(action: onDismiss) {
+          Image(systemName: "xmark.circle.fill")
+            .scaledFont(size: OmiType.heading)
+            .foregroundColor(Ink.secondary)
+        }
+        .buttonStyle(.plain)
+      }
+      .padding()
+
+      Divider()
+        .background(Ink.rowFillHover)
+
+      // Apps list
+      if apps.isEmpty {
+        VStack(spacing: OmiSpacing.md) {
+          Image(systemName: "square.grid.2x2")
+            .scaledFont(size: OmiType.hero)
+            .foregroundColor(Ink.secondary)
+
+          Text("No Apps Available")
+            .scaledFont(size: OmiType.body, weight: .medium)
+            .foregroundColor(Ink.secondary)
+
+          Text("Enable apps with memory capability to reprocess conversations")
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
+            .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding()
+      } else {
+        ScrollView {
+          LazyVStack(spacing: OmiSpacing.hairline) {
+            ForEach(apps) { app in
+              AppSelectorRow(
+                app: app,
+                isSelected: selectedAppId == app.id,
+                isLoading: isLoading && selectedAppId == app.id
+              ) {
+                selectedAppId = app.id
+                onSelect(app)
+              }
+            }
+          }
+          .padding(.horizontal, OmiSpacing.sm)
+          .padding(.vertical, OmiSpacing.sm)
+        }
+      }
+    }
+    .frame(width: 320, height: 400)
+    .background(Ink.surface)
+  }
+}
+
+struct AppSelectorRow: View {
+  let app: OmiApp
+  let isSelected: Bool
+  let isLoading: Bool
+  let onSelect: () -> Void
+
+  @State private var isHovering = false
+
+  var body: some View {
+    Button(action: onSelect) {
+      HStack(spacing: OmiSpacing.md) {
+        AsyncImage(url: URL(string: app.image)) { phase in
+          switch phase {
+          case .success(let image):
+            image
+              .resizable()
+              .aspectRatio(contentMode: .fill)
+          default:
+            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
+              .fill(Ink.rowFillHover)
+          }
+        }
+        .frame(width: 44, height: 44)
+        .clipShape(RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius))
+
+        VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+          Text(app.name)
+            .scaledFont(size: OmiType.body, weight: .medium)
+            .foregroundColor(Ink.primary)
+
+          Text(app.author)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
+        }
+
+        Spacer()
+
+        if isLoading {
+          ProgressView()
+            .scaleEffect(0.7)
+        } else if isSelected {
+          Image(systemName: "checkmark.circle.fill")
+            .scaledFont(size: OmiType.heading)
+            .foregroundColor(Ink.primary)
+        }
+      }
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.sm)
+      .background(
+        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
+          .fill(isSelected || isHovering ? Ink.rowFillHover : Color.clear)
+      )
+    }
+    .buttonStyle(.plain)
+    .disabled(isLoading)
+    .onHover { isHovering = $0 }
+  }
 }

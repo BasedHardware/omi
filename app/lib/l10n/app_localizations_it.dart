@@ -323,7 +323,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get searchApps => 'Cerca app...';
 
   @override
-  String get myApps => 'Creato da me';
+  String get myApps => 'Le mie app';
 
   @override
   String get installedApps => 'App installate';
@@ -9897,63 +9897,4 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Apri store';
-
-  @override
-  String get chatScopeToday => 'Oggi';
-
-  @override
-  String get chatScopeThisWeek => 'Questa settimana';
-
-  @override
-  String chatScopeAbout(String title) {
-    return 'Informazioni su: $title';
-  }
-
-  @override
-  String get askAboutThisConversation => 'Chiedi informazioni';
-
-  @override
-  String get sendRawAudioToOmi => 'Invia l\'audio grezzo a Omi';
-
-  @override
-  String get sendRawAudioToOmiDescription =>
-      'Disattiva per impedire l\'invio dell\'audio grezzo a Omi. Le trascrizioni e i dati necessari alle funzioni cloud possono ancora essere inviati a Omi.';
-
-  @override
-  String get findDevice => 'Trova';
-
-  @override
-  String get diagnosticsShareFailed => 'Impossibile condividere la diagnostica. Riprova.';
-
-  @override
-  String get appDisabledTitle => 'Questa app è disattivata e non può essere installata.';
-
-  @override
-  String get appDisabledWebhookFailures =>
-      'Il suo endpoint ha continuato a fallire per 72 ore, quindi gli invii sono stati interrotti.';
-
-  @override
-  String get appDisabledGeneric => 'È stata disattivata da Omi.';
-
-  @override
-  String get appDisabledOwnerHint => 'Correggi prima l\'endpoint: la riattivazione ricontrolla ogni URL configurato.';
-
-  @override
-  String get appReEnable => 'Riattiva';
-
-  @override
-  String get appReEnableFailedTitle => 'Riattivazione non riuscita';
-
-  @override
-  String get appReEnableFailedBody => 'Non è stato possibile riattivare questa app. Riprova.';
-
-  @override
-  String appDisabledOn(String date) {
-    return 'Disattivata il $date.';
-  }
-
-  @override
-  String appDisabledLastError(String error) {
-    return 'Ultimo errore: $error.';
-  }
 }

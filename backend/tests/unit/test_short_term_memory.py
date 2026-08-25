@@ -124,20 +124,17 @@ def test_review_queue_resolve_accept_appends_commit_updates_queue_and_records_co
     user_ref.collection.return_value = queue_ref
     users_ref = MagicMock()
     users_ref.document.return_value = user_ref
-    service = MagicMock()
+    merges = []
     corrections = []
     marked_short_term = []
 
     monkeypatch.setattr(review_queue, 'get_review_conflict', lambda uid, review_id: item)
     monkeypatch.setattr(review_queue, 'db', MagicMock(collection=MagicMock(return_value=users_ref)))
-    from utils.memory import memory_service as memory_service_module
-
-    monkeypatch.setattr(memory_service_module, 'MemoryService', lambda db_client: service)
-    service._canonical_status = None
     monkeypatch.setattr(
-        review_queue.memory_ledger,
-        'append_commit',
-        lambda *_args, **_kwargs: {'commit': {'commit_id': 'commit-review'}},
+        review_queue.memories_db,
+        'merge_contradict_memory',
+        lambda uid, new_memory, superseded_ids: merges.append((new_memory, superseded_ids))
+        or {'commit': {'commit_id': 'commit-review'}},
     )
     monkeypatch.setattr(
         review_queue,
@@ -154,10 +151,9 @@ def test_review_queue_resolve_accept_appends_commit_updates_queue_and_records_co
 
     assert result['status'] == 'resolved'
     assert result['decision'] == 'accept'
-    accepted = service.write.call_args.args[1]
-    assert accepted['status'] == 'accepted'
-    assert accepted['qualifiers']['epistemic_status'] == 'accepted'
-    service.delete_batch.assert_called_once_with('uid-1', ['old'])
+    assert merges[0][0]['status'] == 'accepted'
+    assert merges[0][0]['qualifiers']['epistemic_status'] == 'accepted'
+    assert merges[0][1] == ['old']
     assert updates[0]['status'] == 'accepted'
     assert updates[0]['resolution_commit_id'] == 'commit-review'
     assert corrections[0]['decision'] == 'accept'
@@ -224,7 +220,7 @@ def test_canonical_review_resolution_uses_canonical_authority_and_redacts_projec
     doc_ref.update.assert_not_called()
 
 
-def test_review_queue_reject_tombstones_through_universal_service(monkeypatch):
+def test_review_queue_reject_uses_projection_writer(monkeypatch):
     item = {
         'review_id': 'review1',
         'fact_id': 'new',
@@ -240,8 +236,15 @@ def test_review_queue_reject_tombstones_through_universal_service(monkeypatch):
     user_ref.collection.return_value = queue_ref
     users_ref = MagicMock()
     users_ref.document.return_value = user_ref
-    service = MagicMock()
+    projection_updates = []
     marked_short_term = []
+
+    class Snapshot:
+        exists = True
+
+    class Transaction:
+        def update(self, ref, payload):
+            projection_updates.append((ref, payload))
 
     monkeypatch.setattr(review_queue, 'get_review_conflict', lambda uid, review_id: item)
     monkeypatch.setattr(review_queue, 'db', MagicMock(collection=MagicMock(return_value=users_ref)))
@@ -257,21 +260,18 @@ def test_review_queue_reject_tombstones_through_universal_service(monkeypatch):
         lambda outcome: outcome,
     )
 
-    from utils.memory import memory_service as memory_service_module
-
-    monkeypatch.setattr(memory_service_module, 'MemoryService', lambda db_client: service)
-
     def fake_append_commit(uid, parent, mutations, **kwargs):
-        assert 'projection_writer' not in kwargs
+        kwargs['projection_writer'](Transaction())
         return {'commit': {'commit_id': 'commit-review'}}
 
     monkeypatch.setattr(review_queue.memory_ledger, 'append_commit', fake_append_commit)
+    queue_ref.document.return_value.get.return_value = Snapshot()
 
     result = review_queue.resolve_review_conflict('uid-1', 'review1', 'reject')
 
     assert result['decision'] == 'reject'
     assert result['item']['status'] == 'rejected'
-    service.delete_batch.assert_called_once_with('uid-1', ['new'])
+    assert projection_updates[0][1]['review_status'] == 'rejected'
     assert marked_short_term == [('st-new', 'commit-review')]
 
 

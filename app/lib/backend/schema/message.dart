@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:collection/collection.dart';
 import 'package:omi/backend/schema/gen/messages_wire.g.dart' as wire;
 import 'package:uuid/uuid.dart';
@@ -244,7 +242,6 @@ class ServerMessage {
   List<String> thinkings = [];
   ChartData? chartData;
   Map<String, dynamic>? rawChartData;
-  List<Map<String, dynamic>> contentBlocks;
 
   ServerMessage(
     this.id,
@@ -261,7 +258,6 @@ class ServerMessage {
     this.rating,
     this.chartData,
     this.rawChartData,
-    this.contentBlocks = const [],
   });
 
   static ServerMessage fromJson(Map<String, dynamic> json) {
@@ -271,21 +267,13 @@ class ServerMessage {
   static ServerMessage fromGeneratedWireJson(Map<String, dynamic> json) {
     final generated = wire.GeneratedMessage.fromJson(json);
     final fromIntegration = (json['from_integration'] as bool?) ?? generated.fromExternalIntegration;
-    return ServerMessage.fromGenerated(
-      generated,
-      fromIntegration: fromIntegration,
-      contentBlocks: _decodeContentBlocks(json['content_blocks'], generated.metadata),
-    );
+    return ServerMessage.fromGenerated(generated, fromIntegration: fromIntegration);
   }
 
   static ServerMessage fromResponseJson(Map<String, dynamic> json) {
     final generated = wire.GeneratedResponseMessage.fromJson(json);
     final fromIntegration = (json['from_integration'] as bool?) ?? generated.fromExternalIntegration;
-    return ServerMessage.fromGeneratedResponse(
-      generated,
-      fromIntegration: fromIntegration,
-      contentBlocks: _decodeContentBlocks(json['content_blocks'], generated.metadata),
-    );
+    return ServerMessage.fromGeneratedResponse(generated, fromIntegration: fromIntegration);
   }
 
   factory ServerMessage.fromGenerated(
@@ -293,14 +281,13 @@ class ServerMessage {
     bool? fromIntegration,
     bool askForNps = true,
     ChartData? chartData,
-    List<Map<String, dynamic>> contentBlocks = const [],
   }) {
     final rawChartData = generated.chartData;
     final parsedChartData = chartData ?? ChartData.tryFromJson(rawChartData);
     return ServerMessage(
       generated.id,
       generated.createdAt,
-      _textWithStructuredFallback(generated.text, contentBlocks),
+      generated.text,
       MessageSender.values.firstWhere((e) => e.toString().split('.').last == generated.sender),
       MessageType.valuesFromString(generated.type),
       generated.pluginId ?? generated.appId,
@@ -312,7 +299,6 @@ class ServerMessage {
       rating: generated.rating,
       chartData: parsedChartData,
       rawChartData: rawChartData,
-      contentBlocks: contentBlocks,
     );
   }
 
@@ -320,14 +306,13 @@ class ServerMessage {
     wire.GeneratedResponseMessage generated, {
     bool? fromIntegration,
     ChartData? chartData,
-    List<Map<String, dynamic>> contentBlocks = const [],
   }) {
     final rawChartData = generated.chartData;
     final parsedChartData = chartData ?? ChartData.tryFromJson(rawChartData);
     return ServerMessage(
       generated.id,
       generated.createdAt,
-      _textWithStructuredFallback(generated.text, contentBlocks),
+      generated.text,
       MessageSender.values.firstWhere((e) => e.toString().split('.').last == generated.sender),
       MessageType.valuesFromString(generated.type),
       generated.pluginId ?? generated.appId,
@@ -339,7 +324,6 @@ class ServerMessage {
       rating: generated.rating,
       chartData: parsedChartData,
       rawChartData: rawChartData,
-      contentBlocks: contentBlocks,
     );
   }
 
@@ -362,121 +346,7 @@ class ServerMessage {
       'ask_for_nps': askForNps,
       'rating': rating,
       'chart_data': chartJson,
-      'content_blocks': contentBlocks,
     };
-  }
-
-  static List<Map<String, dynamic>> _decodeContentBlocks(dynamic firstClass, String? metadata) {
-    final direct = _mapList(firstClass);
-    if (direct.isNotEmpty || firstClass is List) return direct;
-    if (metadata == null || metadata.isEmpty) return const [];
-    try {
-      final decoded = jsonDecode(metadata);
-      return decoded is Map<String, dynamic> ? _mapList(decoded['content_blocks']) : const [];
-    } on FormatException {
-      return const [];
-    }
-  }
-
-  static List<Map<String, dynamic>> _mapList(dynamic value) {
-    if (value is! List) return const [];
-    return value.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList(growable: false);
-  }
-
-  static const _desktopChatChromeTypes = {
-    'goalLink',
-    'goal_link',
-    'taskCard',
-    'task_card',
-    'questionCard',
-    'question_card',
-  };
-
-  /// Desktop Chat-first cards (goal/task/question) are interactive shell chrome.
-  /// Mobile has no renderer for them, so fallback dumps like
-  /// `Goal - … Task Task Task` should not appear in the phone timeline.
-  bool get hideFromMobileChat {
-    if (sender != MessageSender.ai) return false;
-    if (type != MessageType.text) return false;
-    if (files.isNotEmpty || memories.isNotEmpty) return false;
-    if (contentBlocks.isEmpty) return false;
-    if (!_blocksAreDesktopChatChromeOnly(contentBlocks)) return false;
-    final fallback = _structuredFallbackText(contentBlocks);
-    if (fallback.isEmpty) return false;
-    final body = text.trim();
-    return body.isEmpty || _normalizeWhitespace(body) == _normalizeWhitespace(fallback);
-  }
-
-  static List<ServerMessage> visibleOnMobile(Iterable<ServerMessage> messages) {
-    return messages.where((message) => !message.hideFromMobileChat).toList();
-  }
-
-  static bool _blocksAreDesktopChatChromeOnly(List<Map<String, dynamic>> blocks) {
-    return blocks.every((block) => _desktopChatChromeTypes.contains(block['type']));
-  }
-
-  static String _normalizeWhitespace(String value) {
-    return value.split(RegExp(r'\s+')).where((part) => part.isNotEmpty).join(' ');
-  }
-
-  static String _structuredFallbackText(List<Map<String, dynamic>> blocks) {
-    if (blocks.isEmpty) return '';
-    return blocks.map(_blockFallbackText).where((value) => value.isNotEmpty).join('\n');
-  }
-
-  static String _textWithStructuredFallback(String text, List<Map<String, dynamic>> blocks) {
-    if (text.trim().isNotEmpty || blocks.isEmpty) return text;
-    return _structuredFallbackText(blocks);
-  }
-
-  static String _blockFallbackText(Map<String, dynamic> block) {
-    String value(String camel, [String? snake]) =>
-        ((block[camel] ?? (snake == null ? null : block[snake])) as String? ?? '').trim();
-    String labelled(String label, Iterable<String> details) {
-      final unique = details.where((detail) => detail.isNotEmpty).toSet().toList(growable: false);
-      return unique.isEmpty ? label : '$label - ${unique.join(' - ')}';
-    }
-
-    switch (block['type']) {
-      case 'text':
-        return value('text').isEmpty ? 'Message' : value('text');
-      case 'toolCall':
-      case 'tool_call':
-        return labelled('Tool', [value('name'), value('output'), value('inputSummary', 'input_summary')]);
-      case 'thinking':
-        return labelled('Thinking', [value('text')]);
-      case 'discoveryCard':
-      case 'discovery_card':
-        return labelled('Discovery', [value('title'), value('summary')]);
-      case 'questionCard':
-      case 'question_card':
-        return value('text').isEmpty ? 'Question' : value('text');
-      case 'taskCard':
-      case 'task_card':
-        return 'Task';
-      case 'goalLink':
-      case 'goal_link':
-        return labelled('Goal', [value('summary')]);
-      case 'captureLink':
-      case 'capture_link':
-        return labelled('Capture', [value('summary')]);
-      case 'conversationLink':
-      case 'conversation_link':
-        return labelled('Meeting notes ready', [value('summary')]);
-      case 'memoryLink':
-      case 'memory_link':
-        return labelled('Memory', [value('summary')]);
-      case 'citation':
-        return labelled('Source', [value('title'), value('preview')]);
-      case 'agentSpawn':
-      case 'agent_spawn':
-        return labelled('Agent started', [value('title'), value('objective')]);
-      case 'agentCompletion':
-      case 'agent_completion':
-        return labelled('Agent completed', [value('title'), value('output')]);
-      default:
-        return labelled('Chat item', [value('title'), value('summary'), value('text')]);
-    }
   }
 
   bool areFilesOfSameType() {

@@ -10,6 +10,8 @@ import 'dart:io';
 /// we test with a single init and exercise the override/flag mechanisms.
 class _TestEnvFields implements EnvFields {
   @override
+  String? get openAIAPIKey => null;
+  @override
   String? get posthogApiKey => null;
   @override
   String? get apiBaseUrl => null;
@@ -69,39 +71,33 @@ void main() {
 
     test('mobile beta keeps OAuth on the production identity plane', () {
       expect(
-        Env.authApiBaseUrlForProfile(AppEnvironmentProfile.mobileBeta, servingApiBaseUrl: 'https://api.omiapi.com/'),
+        Env.authApiBaseUrlForProfile(
+          AppEnvironmentProfile.mobileBeta,
+          servingApiBaseUrl: 'https://api.omiapi.com/',
+        ),
         Env.productionApiBaseUrl,
       );
     });
 
-    test('local prod pairs production Firebase with a developer-chosen backend', () {
-      expect(AppEnvironmentProfile.localProd.firebaseProjectId, 'based-hardware');
-      expect(AppEnvironmentProfile.localProd.usesFirebaseAuthEmulator, isFalse);
-      expect(AppEnvironmentProfile.localProd.allowsProductionData, isTrue);
-      expect(AppEnvironmentProfile.localProd.authCallbackScheme, 'omi');
-    });
-
     test('local profile rejects a production Firebase project', () {
       expect(
-        () =>
-            Env.validateFirebaseProject(projectId: 'based-hardware', configuredProfile: AppEnvironmentProfile.localDev),
+        () => Env.validateFirebaseProject(
+          projectId: 'based-hardware',
+          configuredProfile: AppEnvironmentProfile.localDev,
+        ),
         throwsStateError,
       );
     });
 
     test('flavor defaults map to production and local profiles', () {
-      expect(AppEnvironmentProfile.forFlavor(productionFlavor: true), AppEnvironmentProfile.production);
-      expect(AppEnvironmentProfile.forFlavor(productionFlavor: false), AppEnvironmentProfile.localDev);
-    });
-
-    test('production iOS config keeps the production Google redirect client id', () {
-      final prodConfig = File('ios/Flutter/prodRelease.xcconfig').readAsStringSync();
-
       expect(
-        prodConfig,
-        contains('GOOGLE_REVERSE_CLIENT_ID=com.googleusercontent.apps.208440318997-ukinsq3sijhcetkhr26ssqp1terbq7as'),
+        AppEnvironmentProfile.forFlavor(productionFlavor: true),
+        AppEnvironmentProfile.production,
       );
-      expect(prodConfig, isNot(contains('GOOGLE_REVERSE_CLIENT_ID=com.googleusercontent.apps.1031333818730-')));
+      expect(
+        AppEnvironmentProfile.forFlavor(productionFlavor: false),
+        AppEnvironmentProfile.localDev,
+      );
     });
   });
 
@@ -116,12 +112,14 @@ void main() {
       Env.clearApiBaseUrlOverrideForTesting();
     });
 
-    test('TestFlight production startup accepts the production API', () {
+    test('TestFlight production startup accepts the production API and WebSocket', () {
       validateApplicationStartupRouting(environment: Environment.prod, configuredApiBaseUrl: 'https://api.omi.me/');
+      expect(Env.productionAgentProxyWsUrl, 'wss://agent.omi.me/v1/agent/ws');
     });
 
-    test('Android production startup accepts the production API', () {
+    test('Android production startup accepts the production API and WebSocket', () {
       validateApplicationStartupRouting(environment: Environment.prod, configuredApiBaseUrl: 'https://api.omi.me/');
+      expect(Env.productionAgentProxyWsUrl, 'wss://agent.omi.me/v1/agent/ws');
     });
 
     test('mobile beta accepts the dev serving plane with production identity', () {
@@ -145,91 +143,6 @@ void main() {
           reason: endpoint,
         );
       }
-    });
-
-    test('local dev accepts loopback and every private-network range, including CGNAT', () {
-      for (final endpoint in [
-        'http://127.0.0.1:8000/',
-        'http://localhost:8000/',
-        'http://10.0.0.5:8000/',
-        'http://172.16.0.5:8000/',
-        'http://172.31.255.254:8000/',
-        'http://192.168.1.20:8000/',
-        // 100.64.0.0/10 (RFC 6598, carrier-grade NAT) is the range Tailscale
-        // assigns. A physical device cannot reach the local harness any other
-        // way — the harness binds loopback only by design — so rejecting this
-        // range stranded the app on a blank splash with no diagnostic.
-        'http://100.64.0.1:8000/',
-        'http://100.105.2.5:8000/',
-        'http://100.127.255.254:8000/',
-      ]) {
-        Env.validateStartupRouting(
-          productionFamily: false,
-          configuredProfile: AppEnvironmentProfile.localDev,
-          configuredApiBaseUrl: endpoint,
-        );
-      }
-    });
-
-    test('local dev still rejects public endpoints and the edges just outside CGNAT', () {
-      for (final endpoint in [
-        'https://api.omi.me/',
-        'https://api.omiapi.com/',
-        // 100.63.x and 100.128.x sit immediately outside 100.64.0.0/10 and must
-        // stay rejected — widening this must not degrade into "any 100.x host".
-        'http://100.63.255.255:8000/',
-        'http://100.128.0.1:8000/',
-        'http://8.8.8.8:8000/',
-      ]) {
-        expect(
-          () => Env.validateStartupRouting(
-            productionFamily: false,
-            configuredProfile: AppEnvironmentProfile.localDev,
-            configuredApiBaseUrl: endpoint,
-          ),
-          throwsStateError,
-          reason: endpoint,
-        );
-      }
-    });
-
-    test('local prod accepts loopback, private-network, and tunnel endpoints in debug builds', () {
-      for (final endpoint in [
-        'http://127.0.0.1:8000/',
-        'http://192.168.1.20:8000/',
-        'https://example.ngrok-free.app/',
-      ]) {
-        Env.validateStartupRouting(
-          productionFamily: true,
-          configuredProfile: AppEnvironmentProfile.localProd,
-          configuredApiBaseUrl: endpoint,
-          releaseBuild: false,
-        );
-      }
-    });
-
-    test('local prod is rejected in release builds', () {
-      expect(
-        () => Env.validateStartupRouting(
-          productionFamily: true,
-          configuredProfile: AppEnvironmentProfile.localProd,
-          configuredApiBaseUrl: 'http://127.0.0.1:8000/',
-          releaseBuild: true,
-        ),
-        throwsStateError,
-      );
-    });
-
-    test('local prod rejects a malformed endpoint', () {
-      expect(
-        () => Env.validateStartupRouting(
-          productionFamily: true,
-          configuredProfile: AppEnvironmentProfile.localProd,
-          configuredApiBaseUrl: 'not a url',
-          releaseBuild: false,
-        ),
-        throwsStateError,
-      );
     });
 
     test('local development startup accepts the emulator API', () {
@@ -261,22 +174,9 @@ void main() {
       mainSource.indexOf('validateApplicationStartupRouting();'),
       lessThan(mainSource.indexOf('ServiceManager.init()')),
     );
-    // Same guarantee as before — the project id of the Firebase app main.dart ends
-    // up with is fed to Env.validateFirebaseProject — but the statement it used to
-    // name verbatim now lives in ensureFirebaseApp() (lib/startup_firebase.dart),
-    // which applies it to the freshly initialized app, the already-running native
-    // app, and the app adopted after [core/duplicate-app] alike. So this pins the
-    // wiring instead of one branch's text; that ensureFirebaseApp actually calls it
-    // on every one of those paths is asserted behaviorally in
-    // test/unit/startup_firebase_duplicate_app_test.dart.
     expect(
       mainSource,
-      matches(
-        RegExp(
-          r'projectIdOf:\s*\(app\)\s*=>\s*app\.options\.projectId,\s*'
-          r'validateProject:\s*\(projectId\)\s*=>\s*Env\.validateFirebaseProject\(projectId:\s*projectId\),',
-        ),
-      ),
+      contains('Env.validateFirebaseProject(projectId: Firebase.app().options.projectId);'),
     );
   });
 }

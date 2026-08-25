@@ -17,7 +17,7 @@ extension SettingsContentView {
   var hasPaidSubscription: Bool {
     guard let subscription = userSubscription?.subscription else { return false }
     if subscription.features.contains("byok") { return false }
-    return subscription.plan.hasPaidCapability && subscription.status == .active
+    return subscription.plan != .basic && subscription.status == .active
   }
 
   var shouldShowPlanPurchaseOptions: Bool {
@@ -55,8 +55,6 @@ extension SettingsContentView {
     switch subscription.plan {
     case .basic:
       return "Free"
-    case .plus:
-      return "Plus"
     case .unlimited:
       // Backend serializes Operator subscribers as plan="unlimited" for
       // backward compat with old mobile builds that don't know the
@@ -66,14 +64,10 @@ extension SettingsContentView {
         return "Operator"
       }
       return "Neo"
-    case .unlimitedV2:
-      return "Unlimited"
     case .architect, .pro:
       return "Architect"
     case .operator:
       return "Operator"
-    case .unknown:
-      return subscription.plan.displayName
     }
   }
 
@@ -613,6 +607,42 @@ extension SettingsContentView {
     AssistantSettings.shared.screenAnalysisEnabled = enabled
   }
 
+  func toggleTranscription(enabled: Bool) {
+    // Check microphone permission
+    if enabled && !appState.hasMicrophonePermission {
+      transcriptionError = "Microphone permission required"
+      isTranscribing = false
+      return
+    }
+
+    transcriptionError = nil
+    isTogglingTranscription = true
+
+    // Track setting change
+    AnalyticsManager.shared.settingToggled(setting: "transcription", enabled: enabled)
+
+    if enabled {
+      appState.startTranscription()
+      isTogglingTranscription = false
+      isTranscribing = true
+    } else {
+      appState.stopTranscription()
+      isTogglingTranscription = false
+      isTranscribing = false
+    }
+
+    // Persist the setting
+    AssistantSettings.shared.transcriptionEnabled = enabled
+  }
+
+  func setSystemAudioCaptureMode(_ mode: AssistantSettings.SystemAudioCaptureMode) {
+    AnalyticsManager.shared.settingToggled(
+      setting: "system_audio_capture_mode_\(mode.rawValue)", enabled: mode != .never)
+    // Persisting posts .systemAudioCaptureModeDidChange; AppState re-applies the gate live for
+    // any in-progress recording.
+    AssistantSettings.shared.systemAudioCaptureMode = mode
+  }
+
   func startGlowPreview() {
     isPreviewRunning = true
 
@@ -738,11 +768,13 @@ extension SettingsContentView {
     let transcriptionVocabularyRevisionAtLoadStart =
       AssistantSettings.shared.transcriptionVocabularyRevision
     vadGateEnabled = AssistantSettings.shared.vadGateEnabled
+    systemAudioCaptureMode = AssistantSettings.shared.systemAudioCaptureMode
+
     Task {
       do {
         // Load all settings in parallel
         async let dailySummaryTask = APIClient.shared.getDailySummarySettings()
-        async let notificationsReconcile: Void = NotificationSettingsSyncCoordinator.shared.reconcile()
+        async let notificationsTask = APIClient.shared.getNotificationSettings()
         async let languageTask = APIClient.shared.getUserLanguage()
         async let recordingTask = APIClient.shared.getRecordingPermission()
         async let cloudSyncTask = APIClient.shared.getPrivateCloudSync()
@@ -751,9 +783,9 @@ extension SettingsContentView {
         // Sync assistant settings from server in parallel
         async let assistantSyncTask: () = SettingsSyncManager.shared.syncFromServer()
 
-        let (dailySummary, _, language, recording, cloudSync, transcription, _) = try await (
+        let (dailySummary, notifications, language, recording, cloudSync, transcription, _) = try await (
           dailySummaryTask,
-          notificationsReconcile,
+          notificationsTask,
           languageTask,
           recordingTask,
           cloudSyncTask,
@@ -766,9 +798,12 @@ extension SettingsContentView {
           dailySummaryHour = dailySummary.hour
           dailySummaryTime = SettingsControlMetrics.dailySummaryDate(
             forHour: dailySummary.hour, referenceDate: Date())
-          // Local UserDefaults remain the gate. The coordinator owns GET/hydrate/retry.
-          notificationsEnabled = NotificationService.areNotificationsEnabled()
-          notificationFrequency = NotificationService.currentFrequencyLevel()
+          notificationsEnabled = notifications.enabled
+          notificationFrequency = notifications.frequency
+          // Mirror to UserDefaults so NotificationService can gate/throttle without a backend roundtrip.
+          UserDefaults.standard.set(
+            notifications.enabled, forKey: NotificationService.masterEnabledDefaultsKey)
+          UserDefaults.standard.set(notifications.frequency, forKey: NotificationService.frequencyDefaultsKey)
           userLanguage = language.language
           recordingPermissionEnabled = recording.enabled
           privateCloudSyncEnabled = cloudSync.enabled
@@ -837,7 +872,7 @@ extension SettingsContentView {
           // hit the paywall once (e.g. WS connected before payment cleared
           // the trial cache) — without this they'd stay paywalled until the
           // next app restart even after their Operator/Architect plan is active.
-          if subscription.subscription.plan.hasPaidCapability,
+          if subscription.subscription.plan != .basic,
             subscription.subscription.status == .active,
             AppState.current?.isPaywalled == true
           {
@@ -911,11 +946,10 @@ extension SettingsContentView {
 
     FloatingBarUsageLimiter.shared.applyPlan(
       plan: subscription.subscription.plan,
-      status: subscription.subscription.status,
-      desktopGrandfatherUntil: subscription.desktopGrandfatherUntil
+      status: subscription.subscription.status
     )
 
-    if subscription.subscription.plan.hasPaidCapability,
+    if subscription.subscription.plan != .basic,
       subscription.subscription.status == .active,
       AppState.current?.isPaywalled == true
     {
@@ -1082,7 +1116,7 @@ extension SettingsContentView {
           let matchedPrice =
             expectedPriceId == nil || subscription.subscription.currentPriceId == expectedPriceId
           let hasPaidPlan =
-            subscription.subscription.plan.hasPaidCapability && subscription.subscription.status == .active
+            subscription.subscription.plan != .basic && subscription.subscription.status == .active
 
           if matchedPrice && hasPaidPlan {
             await MainActor.run {

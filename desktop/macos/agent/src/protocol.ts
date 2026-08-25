@@ -812,9 +812,6 @@ export interface RuntimeFailurePayload {
   adapterId?: string;
   provider?: string;
   retryable?: boolean;
-  recoveryAction?: "worker_recycled";
-  recoveryOutcome?: "recovered" | "stop_failed" | "binding_stale_failed";
-  retryDisposition?: "next_send";
 }
 
 export interface ToolActivityMessage extends QueryScopedOutbound {
@@ -823,16 +820,6 @@ export interface ToolActivityMessage extends QueryScopedOutbound {
   status: "started" | "progress" | "completed" | "failed" | "cancelled" | "interrupted";
   toolUseId?: string;
   input?: Record<string, unknown>;
-}
-
-/**
- * Content-free proof that the query-owning runtime is still servicing an
- * admitted turn. Swift uses this lease to distinguish a quiet provider round
- * from a frozen JSONL bridge; it must never be rendered as assistant output.
- */
-export interface TurnActivityMessage extends QueryScopedOutbound {
-  type: "turn_activity";
-  phase: "running";
 }
 
 export interface ToolResultDisplayMessage extends QueryScopedOutbound {
@@ -1188,7 +1175,6 @@ export type OutboundMessage =
   | TextDeltaMessage
   | ToolUseMessage
   | ToolActivityMessage
-  | TurnActivityMessage
   | ToolResultDisplayMessage
   | ThinkingDeltaMessage
   | ResultMessage
@@ -1229,7 +1215,6 @@ export type OutboundMessageDraft =
   | DraftEnvelope<TextDeltaMessage>
   | DraftEnvelope<ToolUseMessage>
   | DraftEnvelope<ToolActivityMessage>
-  | DraftEnvelope<TurnActivityMessage>
   | DraftEnvelope<ToolResultDisplayMessage>
   | DraftEnvelope<ThinkingDeltaMessage>
   | DraftEnvelope<ResultMessage>

@@ -187,10 +187,6 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     return;
   }
 
-  Future requestFirstOnboardingQuestion() async {
-    await sendText(jsonEncode({'type': 'start_onboarding'}));
-  }
-
   @override
   void onClosed([int? closeCode]) {
     _listeners.forEach((k, v) {
@@ -304,10 +300,6 @@ class TranscriptSocketServiceFactory {
     return _customSttSupportedCodecs.contains(codec);
   }
 
-  static bool shouldBlockUnsupportedCodecFallback(BleAudioCodec codec, CustomSttConfig config) {
-    return config.isEnabled && !isCodecSupportedForCustomStt(codec) && !config.sendRawAudioToOmi;
-  }
-
   /// Create default Omi transcription service
   static TranscriptSegmentSocketService createDefault(
     int sampleRate,
@@ -371,7 +363,6 @@ class TranscriptSocketServiceFactory {
       source: source,
       sttConfigId: sttConfigId,
       sttProvider: config.provider.name,
-      forwardRawAudioToSecondary: config.sendRawAudioToOmi,
     );
   }
 
@@ -498,7 +489,6 @@ class TranscriptSocketServiceFactory {
     String? source,
     String? sttConfigId,
     String? sttProvider,
-    required bool forwardRawAudioToSecondary,
   }) {
     final secondaryService = CustomSttTranscriptSegmentSocketService.create(
       sampleRate,
@@ -510,7 +500,6 @@ class TranscriptSocketServiceFactory {
       primarySocket: primarySocket,
       secondarySocket: secondaryService.socket,
       sttProvider: sttProvider,
-      forwardRawAudioToSecondary: forwardRawAudioToSecondary,
     );
     return TranscriptSegmentSocketService.withSocket(
       sampleRate,

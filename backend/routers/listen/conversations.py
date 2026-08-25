@@ -125,7 +125,6 @@ class LiveConversationController:
             self.host.request.uid,
             conversation_id,
             has_byok_keys=bool(get_byok_keys()),
-            client_kind=self.host.client_kind,
         )
         route = finalization['route']
         if route == 'pusher':
@@ -203,18 +202,6 @@ class LiveConversationController:
             )
             if action == RecordingSessionReconnectAction.resume_current:
                 self.host.state.current_conversation_id = conversation_id
-                # Persist the custom-STT marker on resume so a conversation that
-                # started under normal STT but continues under custom STT (or vice
-                # versa) cannot bypass the Omi-paid LLM cost gate: once any session
-                # was custom-STT, the conversation must not run Omi-paid enrichment
-                # without an LLM BYOK key.
-                if self.host.use_custom_stt and not existing.get('uses_custom_stt', False):
-                    await self.host.persistence.call(
-                        conversations_db.update_conversation,
-                        request.uid,
-                        conversation_id,
-                        {'uses_custom_stt': True},
-                    )
                 await self.host.persistence.call(redis_db.set_in_progress_conversation_id, request.uid, conversation_id)
                 self.send_conversation_session(binding, self.host.recording_session_id)
                 return
@@ -240,11 +227,9 @@ class LiveConversationController:
             status=ConversationStatus.in_progress,
             source=source,
             private_cloud_sync_enabled=self.host.private_cloud_sync_enabled,
-            uses_custom_stt=self.host.use_custom_stt,
             call_id=request.call_id if self.host.is_multi_channel else None,
             client_device_id=context.client_device_id,
             client_platform=context.platform,
-            external_data={'conversation_role': request.conversation_role},
         )
         await self.host.persistence.call(
             lifecycle_service.create_in_progress_conversation,

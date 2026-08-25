@@ -64,22 +64,14 @@ from database.sync_ledger import (
     release_sync_content_claim_after_job_retired,
     release_sync_content_claim,
 )
-from models.conversation import Conversation, CreateConversation
+from models.conversation import CreateConversation
 from models.conversation_enums import ConversationSource
 from models.transcript_segment import TranscriptSegment
 from utils.analytics import record_usage
 from utils.byok import get_byok_keys, set_byok_keys, set_byok_uid
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.process_conversation import process_conversation
-from utils.executors import (
-    db_executor,
-    postprocess_executor,
-    run_blocking,
-    start_background_task,
-    storage_executor,
-    submit_with_context,
-    sync_executor,
-)
+from utils.executors import db_executor, run_blocking, start_background_task, storage_executor, sync_executor
 from utils.fair_use import (
     FAIR_USE_ENABLED,
     FAIR_USE_RESTRICT_DAILY_DG_MS,
@@ -769,13 +761,6 @@ def retrieve_vad_segments(path: str, segmented_paths: set, errors: list = None):
         del aseg
 
 
-def _run_conversation_created_webhook(uid: str, conversation: Conversation) -> None:
-    """Load the webhook surface only in the post-processing worker that uses it."""
-    from utils.webhooks import conversation_created_webhook
-
-    asyncio.run(conversation_created_webhook(uid, conversation))
-
-
 def _reprocess_conversation_after_update(uid: str, conversation_id: str, language: str):
     """
     Reprocess a conversation after new segments have been added.
@@ -791,8 +776,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     # Convert to Conversation object
     conversation = deserialize_conversation(conversation_data)
 
-    was_discarded = conversation.discarded
-    processed_conversation = process_conversation(
+    process_conversation(
         uid=uid,
         language_code=language or 'en',
         conversation=conversation,
@@ -800,15 +784,6 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         is_reprocess=True,
         persistence_observer=_require_current_conversation_persistence,
     )
-
-    # Limitless uploads commonly begin as a short discarded fragment and only
-    # become a real conversation after later WAL segments are merged. The
-    # initial discarded pass is not a useful creation event, while the generic
-    # reprocess path deliberately suppresses webhooks. Emit exactly at the
-    # discarded -> visible transition so pendant conversations reach developer
-    # integrations without duplicating events on ordinary later reprocessing.
-    if conversation.source == ConversationSource.limitless and was_discarded and not processed_conversation.discarded:
-        submit_with_context(postprocess_executor, _run_conversation_created_webhook, uid, processed_conversation)
 
     logger.info(f'Successfully reprocessed conversation {conversation_id}')
 

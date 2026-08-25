@@ -32,14 +32,12 @@ extension SettingsContentView {
 
             notificationFrequencySlider(settingId: "notifications.frequency")
 
-            GlassSeparator()
-
             // Sits under the master toggle and the frequency slider because both gate it:
             // frequency caps how often any proactive card is delivered, and this decides
-            // whether focus nudges are generated at all.
+            // whether live suggestions are generated at all.
             settingRow(
-              title: "Focus Notifications",
-              subtitle: "Nudges in the notch to keep you on track, using what Omi already knows",
+              title: "Live Suggestions",
+              subtitle: "Suggest things in the notch, using what Omi already knows",
               settingId: "notifications.livesuggestions"
             ) {
               Toggle("", isOn: $liveSuggestionsEnabled)
@@ -89,21 +87,6 @@ extension SettingsContentView {
             GlassSeparator()
 
             settingRow(
-              title: "Meeting Summary Notifications",
-              subtitle: "After a call, offer to copy the share link or email the summary to participants",
-              settingId: "notifications.meetingsummary"
-            ) {
-              Toggle("", isOn: $meetingSummaryNotificationsEnabled)
-                .toggleStyle(OmiToggleStyle())
-                .labelsHidden()
-                .onChange(of: meetingSummaryNotificationsEnabled) { _, newValue in
-                  MeetingSummaryNotificationSettings.isEnabled = newValue
-                }
-            }
-
-            GlassSeparator()
-
-            settingRow(
               title: "Memory Notifications",
               subtitle: "Show notification when a memory is extracted",
               settingId: "notifications.memory"
@@ -117,24 +100,6 @@ extension SettingsContentView {
                     AssistantSettingsResponse(
                       memory: MemorySettingsResponse(notificationsEnabled: newValue)))
                 }
-            }
-
-            GlassSeparator()
-
-            // The fifth notification type. It lives inside the master gate for the
-            // same reason as the other four: `IntegrationNudgeCoordinator.isEnabledNow`
-            // requires notifications to be on, so showing this switched ON beside a
-            // disabled master toggle would promise a feature that cannot run.
-            // `@AppStorage` already persists to the key the coordinator reads;
-            // a second writer on one key only invites drift.
-            settingRow(
-              title: "Integration Notifications",
-              subtitle: "Occasionally offer to connect an app Omi can use — Gmail, Notion, ChatGPT",
-              settingId: "notifications.integrationsuggestions"
-            ) {
-              Toggle("", isOn: $integrationNudgesEnabled)
-                .toggleStyle(OmiToggleStyle())
-                .labelsHidden()
             }
           }
         }
@@ -164,7 +129,7 @@ extension SettingsContentView {
             GlassSeparator()
 
             settingRow(
-              title: "Summary Time", subtitle: "When to send your daily summary (hour only)",
+              title: "Summary Time", subtitle: "When to send your daily summary",
               settingId: "notifications.summarytime"
             ) {
               DatePicker(
@@ -176,13 +141,7 @@ extension SettingsContentView {
               .labelsHidden()
               .fixedSize()
               .onChange(of: dailySummaryTime) { _, selectedTime in
-                // Storage is hour-only; snap minutes to :00 in the control so 20:45 never
-                // appears as a saved value that reopens as 20:00.
-                let canonical = SettingsControlMetrics.canonicalizeDailySummaryTime(selectedTime)
-                if canonical != selectedTime {
-                  dailySummaryTime = canonical
-                }
-                let hour = SettingsControlMetrics.dailySummaryHour(from: canonical)
+                let hour = SettingsControlMetrics.dailySummaryHour(from: selectedTime)
                 guard hour != dailySummaryHour else { return }
                 dailySummaryHour = hour
                 updateDailySummarySettings(hour: hour)

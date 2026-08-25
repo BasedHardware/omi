@@ -1,5 +1,4 @@
 import AppKit
-import OmiTheme
 import SwiftUI
 import XCTest
 
@@ -78,199 +77,119 @@ final class MainChatNavigationRequestStoreTests: XCTestCase {
   }
 }
 
-final class ChatBubbleMetadataControlMetricsTests: XCTestCase {
-  func testMetadataControlsUseStablePointerTargetsAndMatchingInsets() {
-    XCTAssertGreaterThanOrEqual(ChatBubbleMetadataControlMetrics.targetSize, 24)
-    XCTAssertEqual(ChatBubbleMetadataControlMetrics.leadingInset, OmiSpacing.xxs)
-    XCTAssertEqual(ChatBubbleMetadataControlMetrics.topInset, ChatBubbleMetadataControlMetrics.leadingInset)
+final class ChatBubbleMetadataRevealTests: XCTestCase {
+  func testKeyboardFocusAloneRevealsMetadataRow() {
+    // Regression: the quiet-timeline redesign gated the row on pointer hover
+    // only, leaving Tab / Full Keyboard Access focused on invisible buttons.
+    XCTAssertTrue(
+      ChatBubbleMetadataReveal.isVisible(hovering: false, controlFocused: true, transientFeedback: false))
   }
 
-  func testPointerCanCrossFromMessageIntoControlsWithoutHidingThem() throws {
-    var hover = ChatBubbleMetadataHoverState()
-
-    XCTAssertNil(hover.update(.row, hovering: true))
-    let rowExit = try XCTUnwrap(hover.update(.row, hovering: false))
-    XCTAssertTrue(hover.keepsMetadataVisible)
-
-    XCTAssertNil(hover.update(.controls, hovering: true))
-    hover.completeRelease(rowExit)
+  func testHiddenOnlyWhenNeitherHoveredNorFocusedNorMidInteraction() {
+    XCTAssertFalse(
+      ChatBubbleMetadataReveal.isVisible(hovering: false, controlFocused: false, transientFeedback: false))
     XCTAssertTrue(
-      hover.keepsMetadataVisible,
-      "a stale row-exit release must not hide buttons after the pointer enters them")
-
-    let controlsExit = try XCTUnwrap(hover.update(.controls, hovering: false))
-    hover.completeRelease(controlsExit)
-    XCTAssertFalse(hover.keepsMetadataVisible)
+      ChatBubbleMetadataReveal.isVisible(hovering: true, controlFocused: false, transientFeedback: false))
+    XCTAssertTrue(
+      ChatBubbleMetadataReveal.isVisible(hovering: false, controlFocused: false, transientFeedback: true))
   }
 }
 
-/// Metadata controls need a real layout and hit-test region. Painting controls
-/// outside a zero-height row left visible pixels that could not receive clicks.
+/// **Revealing the metadata band must not change what the transcript measures.**
+///
+/// The band was zero-height at rest and took its intrinsic height on reveal, so
+/// a hovered assistant row was ~16 pt taller than the same row unhovered, and
+/// every row below it moved. Scrolling happens with the pointer over the
+/// transcript, so rows entered and left hover continuously during a gesture and
+/// the document reflowed under the cursor — measured on the mounted transcript
+/// as a document height that oscillated between 7773 and 7789 pt depending on
+/// where the mouse was.
+///
+/// Both halves are asserted here because either one alone is satisfiable by a
+/// bug: a band that reserves its height keeps the row stable, and a band that
+/// never renders keeps it stable too.
 @MainActor
 final class ChatBubbleMetadataBandLayoutTests: XCTestCase {
   private static let width: CGFloat = 480
+  /// The gap the transcript keeps after an assistant row, which is the space
+  /// the band draws into.
+  private static let gap = ChatTranscriptLayout.regularRowSpacing
 
-  func testSyncedAssistantRowReservesARealMetadataControlRegion() {
-    let synced = rowHeight(showsMetadata: true)
-    let streaming = rowHeight(showsMetadata: false)
-
-    XCTAssertGreaterThanOrEqual(
-      synced - streaming,
-      ChatBubbleMetadataControlMetrics.targetSize + ChatBubbleMetadataControlMetrics.topInset - 1,
-      "the metadata strip must remain inside the row's hit-test bounds")
+  func testRevealingTheMetadataBandDoesNotChangeTheRowHeight() {
+    XCTAssertEqual(
+      rowHeight(revealed: true),
+      rowHeight(revealed: false),
+      accuracy: 0.5,
+      "a revealed metadata band must add no layout height, or a hovered row pushes "
+        + "every row below it down and the document reflows under the pointer")
   }
 
-  func testFinishedUnsyncedReplyReservesTheSameMetadataControlRegionAsASyncedReply() {
-    let synced = rowHeight(isStreaming: false, isSynced: true)
-    let unsynced = rowHeight(isStreaming: false, isSynced: false)
-    let streaming = rowHeight(isStreaming: true, isSynced: false)
+  func testTheRevealedMetadataBandStillPaints() throws {
+    let revealed = try render(revealed: true)
+    let hidden = try render(revealed: false)
 
-    XCTAssertEqual(synced, unsynced, accuracy: 1)
-    XCTAssertGreaterThanOrEqual(
-      unsynced - streaming,
-      ChatBubbleMetadataControlMetrics.targetSize + ChatBubbleMetadataControlMetrics.topInset - 1)
+    XCTAssertGreaterThan(
+      differingPixels(revealed, hidden), 20,
+      "the metadata band drew nothing when revealed — drawing out of a zero-height "
+        + "frame is what keeps the row stable, so losing the paint is the other failure")
   }
 
-  private func bubble(showsMetadata: Bool) -> ChatBubble {
-    bubble(isStreaming: !showsMetadata, isSynced: showsMetadata)
-  }
-
-  private func bubble(isStreaming: Bool, isSynced: Bool) -> ChatBubble {
-    ChatBubble(
+  private func bubble(revealed: Bool) -> ChatBubble {
+    var bubble = ChatBubble(
       message: ChatMessage(
         id: "assistant-band",
         text: "A one-line answer.",
         createdAt: Date(timeIntervalSince1970: 1_700_000_000),
         sender: .ai,
-        isStreaming: isStreaming,
-        isSynced: isSynced),
+        isSynced: true),
       app: nil,
       showsOmiMark: false,
       onRate: { _ in })
+    bubble.metadataRevealOverrideForTesting = revealed
+    return bubble
   }
 
-  private func rowHeight(showsMetadata: Bool) -> CGFloat {
-    rowHeight(isStreaming: !showsMetadata, isSynced: showsMetadata)
+  private func rowHeight(revealed: Bool) -> CGFloat {
+    NSHostingView(rootView: bubble(revealed: revealed).frame(width: Self.width)).fittingSize.height
   }
 
-  private func rowHeight(isStreaming: Bool, isSynced: Bool) -> CGFloat {
-    NSHostingView(rootView: bubble(isStreaming: isStreaming, isSynced: isSynced).frame(width: Self.width))
-      .fittingSize.height
-  }
-}
+  /// Renders the row plus the gap underneath it over an opaque mid-grey ground,
+  /// so the comparison holds whichever appearance the test host is in — chat ink
+  /// is near-white in one and near-black in the other.
+  private func render(revealed: Bool) throws -> NSBitmapImageRep {
+    let height = rowHeight(revealed: false) + Self.gap
+    let host = NSHostingView(
+      rootView: VStack(spacing: 0) {
+        bubble(revealed: revealed)
+        Spacer(minLength: 0)
+      }
+      .frame(width: Self.width, height: height, alignment: .top)
+    )
+    host.frame = NSRect(x: 0, y: 0, width: Self.width, height: height)
 
-final class ChatBubbleMetadataBandTests: XCTestCase {
-  func testFinishedReplyOffersRatingsBeforeJournalSync() {
-    let message = ChatMessage(
-      id: "live-tail",
-      text: "On it — I'll look up the backend IDs and delete the duplicates now.",
-      sender: .ai,
-      isStreaming: false,
-      isSynced: false)
+    let ground = NSView(frame: host.frame)
+    ground.wantsLayer = true
+    ground.layer?.backgroundColor = NSColor(white: 0.5, alpha: 1).cgColor
+    ground.addSubview(host)
+    ground.layoutSubtreeIfNeeded()
 
-    XCTAssertEqual(ChatBubbleMetadataBand.of(message), .actions)
-  }
-
-  func testStreamingReplyHidesTheMetadataBand() {
-    let message = ChatMessage(
-      id: "live-tail",
-      text: "On it — I'll look up the backend IDs and delete the duplicates now.",
-      sender: .ai,
-      isStreaming: true,
-      isSynced: false)
-
-    XCTAssertEqual(ChatBubbleMetadataBand.of(message), .hidden)
+    let rep = try XCTUnwrap(ground.bitmapImageRepForCachingDisplay(in: ground.bounds))
+    ground.cacheDisplay(in: ground.bounds, to: rep)
+    return rep
   }
 
-  func testEmptyCompletedReplyKeepsTimestampOnly() {
-    let message = ChatMessage(
-      id: "empty-tail",
-      text: "",
-      sender: .ai,
-      isStreaming: false,
-      isSynced: false)
-
-    XCTAssertEqual(ChatBubbleMetadataBand.of(message), .timestampOnly)
-  }
-}
-
-@MainActor
-final class ChatBubbleIdentityTests: XCTestCase {
-  func testSyncAndMetadataAreVisibleIdentity() {
-    let unsynced = bubble(isSynced: false, metadata: nil)
-    let synced = bubble(isSynced: true, metadata: nil)
-    let withInfo = bubble(isSynced: false, metadata: Self.sampleMetadata)
-
-    XCTAssertNotEqual(unsynced, synced)
-    XCTAssertNotEqual(unsynced, withInfo)
-  }
-
-  func testMatchingCompletedRepliesRemainEqual() {
-    XCTAssertEqual(
-      bubble(isSynced: false, metadata: Self.sampleMetadata),
-      bubble(isSynced: false, metadata: Self.sampleMetadata))
-  }
-
-  func testLateArtifactsAreVisibleIdentity() {
-    let withoutArtifact = bubble(isSynced: false, metadata: nil)
-    let withArtifact = ChatBubble(
-      message: ChatMessage(
-        id: "live-tail",
-        text: "On it — I'll look up the backend IDs and delete the duplicates now.",
-        sender: .ai,
-        isStreaming: false,
-        isSynced: false,
-        resources: [
-          ChatResource(
-            id: "artifact:late",
-            origin: .generatedArtifact,
-            title: "result.json",
-            subtitle: "application/json",
-            mimeType: "application/json",
-            thumbnailURL: nil,
-            imageData: nil,
-            uri: "omi-artifact://late",
-            artifactId: "late",
-            sessionId: nil,
-            runId: nil,
-            state: .ready)
-        ]),
-      app: nil,
-      showsOmiMark: true,
-      onRate: { _ in })
-    XCTAssertNotEqual(withoutArtifact, withArtifact)
-  }
-
-  func testJournalFailureIsVisibleIdentity() {
-    let completed = bubble(isSynced: false, metadata: nil)
-    let failed = ChatBubble(
-      message: ChatMessage(
-        id: "live-tail",
-        text: "On it — I'll look up the backend IDs and delete the duplicates now.",
-        sender: .ai,
-        isStreaming: false,
-        isSynced: false,
-        journalStatus: .failed),
-      app: nil,
-      showsOmiMark: true,
-      onRate: { _ in })
-    XCTAssertNotEqual(completed, failed)
-  }
-
-  private static let sampleMetadata = MessageMetadata(toolNames: ["search"])
-
-  private func bubble(isSynced: Bool, metadata: MessageMetadata?) -> ChatBubble {
-    ChatBubble(
-      message: ChatMessage(
-        id: "live-tail",
-        text: "On it — I'll look up the backend IDs and delete the duplicates now.",
-        sender: .ai,
-        isStreaming: false,
-        isSynced: isSynced,
-        metadata: metadata),
-      app: nil,
-      showsOmiMark: true,
-      onRate: { _ in })
+  private func differingPixels(_ lhs: NSBitmapImageRep, _ rhs: NSBitmapImageRep) -> Int {
+    guard lhs.pixelsWide == rhs.pixelsWide, lhs.pixelsHigh == rhs.pixelsHigh else { return 0 }
+    var differing = 0
+    for y in 0..<lhs.pixelsHigh {
+      for x in 0..<lhs.pixelsWide {
+        guard let left = lhs.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+          let right = rhs.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB)
+        else { continue }
+        if abs(left.brightnessComponent - right.brightnessComponent) > 0.02 { differing += 1 }
+      }
+    }
+    return differing
   }
 }
 
@@ -300,137 +219,6 @@ final class ChatRowPresentationTests: XCTestCase {
       "\(ChatContinuityInvariants.proactiveNotificationContinuityKeyPrefix)\(id.uuidString)")
   }
 
-  func testTypedNotificationContinuitySurvivesJournalProjection() {
-    let id = UUID()
-    let key = ChatContinuityInvariants.proactiveNotificationContinuityKey(id: id, kind: .insight)
-    let push = message("A useful connection", sender: .ai, clientTurnId: key)
-
-    XCTAssertEqual(key, "notification:insight:\(id.uuidString)")
-    XCTAssertEqual(ChatContinuityInvariants.proactiveNotificationKind(push), .insight)
-    XCTAssertEqual(ProactiveNotificationBadge(kind: .insight).systemImage, "sparkles")
-    XCTAssertEqual(ProactiveNotificationBadge(kind: .insight).label, "Insight")
-  }
-
-  func testInsightGlyphIsSparklesAcrossSurfacesAndDoesNotCollideWithSuggestion() {
-    XCTAssertEqual(ProactiveNotificationBadge.insightSystemImage, "sparkles")
-    XCTAssertEqual(ProactiveNotificationBadge.suggestionSystemImage, "lightbulb")
-    XCTAssertEqual(
-      ProactiveNotificationBadge(kind: .insight).systemImage,
-      ProactiveNotificationBadge.insightSystemImage)
-    XCTAssertEqual(
-      ProactiveNotificationBadge(kind: .suggestion).systemImage,
-      ProactiveNotificationBadge.suggestionSystemImage)
-    XCTAssertNotEqual(
-      ProactiveNotificationBadge.insightSystemImage,
-      ProactiveNotificationBadge.suggestionSystemImage,
-      "Insight and Suggestion must keep distinct glyphs")
-  }
-
-  func testLegacyNotificationContinuityUsesTheNeutralBadge() {
-    let key = ChatContinuityInvariants.proactiveNotificationContinuityKey(id: UUID())
-    let push = message("An older notification", sender: .ai, clientTurnId: key)
-
-    XCTAssertEqual(ChatContinuityInvariants.proactiveNotificationKind(push), .general)
-    XCTAssertEqual(ProactiveNotificationBadge(kind: .general).systemImage, "bell")
-  }
-
-  func testExistingAssistantIDsMapToDistinctNotificationKinds() {
-    XCTAssertEqual(ProactiveNotificationKind.from(assistantId: "suggestion"), .suggestion)
-    XCTAssertEqual(ProactiveNotificationKind.from(assistantId: "insight"), .insight)
-    XCTAssertEqual(ProactiveNotificationKind.from(assistantId: "task"), .task)
-    XCTAssertEqual(ProactiveNotificationKind.from(assistantId: "memory-extraction"), .memory)
-    XCTAssertEqual(ProactiveNotificationKind.from(assistantId: "goals"), .goal)
-    XCTAssertEqual(ProactiveNotificationKind.from(assistantId: "meeting-notes"), .meetingNotes)
-    XCTAssertEqual(ProactiveNotificationKind.from(assistantId: "integration_connect"), .integration)
-    XCTAssertEqual(ProactiveNotificationBadge(kind: .meetingNotes).label, "Task")
-  }
-
-  /// The user-facing taxonomy is exactly five proactive categories — Focus, Task,
-  /// Insight, Memory, Integration — matching the five toggles in Settings →
-  /// Notifications. Focus is the focus-nudge assistant alone; tips, resurfaced items,
-  /// and generated goals are insights; connect-an-app offers are integrations.
-  /// `.general` is reserved for functional system alerts outside the taxonomy.
-  func testEveryProactiveKindPresentsAsOneOfTheFiveCategories() {
-    XCTAssertEqual(ProactiveNotificationBadge(kind: .suggestion).label, "Focus")
-    XCTAssertEqual(ProactiveNotificationBadge(kind: .task).label, "Task")
-    XCTAssertEqual(ProactiveNotificationBadge(kind: .meetingNotes).label, "Task")
-    XCTAssertEqual(ProactiveNotificationBadge(kind: .insight).label, "Insight")
-    XCTAssertEqual(ProactiveNotificationBadge(kind: .resurface).label, "Insight")
-    XCTAssertEqual(ProactiveNotificationBadge(kind: .goal).label, "Insight")
-    XCTAssertEqual(ProactiveNotificationBadge(kind: .memory).label, "Memory")
-    XCTAssertEqual(ProactiveNotificationBadge(kind: .integration).label, "Integration")
-    XCTAssertEqual(ProactiveNotificationBadge(kind: .general).label, "Notification")
-  }
-
-  func testNotificationJournalTextPreservesTheHeadlineAndBody() {
-    XCTAssertEqual(
-      FloatingControlBarManager.notificationJournalText(
-        title: "Insight",
-        body: "PR blocked, needs review"),
-      "Insight\nPR blocked, needs review")
-    XCTAssertEqual(
-      FloatingControlBarManager.notificationJournalText(title: "Meeting notes ready", body: ""),
-      "Meeting notes ready")
-  }
-
-  /// The director's copy contract makes the title and the message both name the same
-  /// referent; journaled together into one chat row that read as saying everything
-  /// twice (observed live on beta after 5a076e10b3). A headline whose every token the
-  /// body already carries — quoted, inflected, or reordered — is dropped from the row.
-  func testJournalDropsAHeadlineTheBodyAlreadyRestates() {
-    // Body quotes the title verbatim (smart quotes stripped by tokenization).
-    XCTAssertEqual(
-      FloatingControlBarManager.notificationJournalText(
-        title: "Instruct David Editor to write extra script for main Omi demo video",
-        body:
-          "\u{201C}Instruct David Editor to write extra script for main Omi demo video\u{201D} is due August 21."),
-      "\u{201C}Instruct David Editor to write extra script for main Omi demo video\u{201D} is due August 21.")
-    // Body restates the title with different casing and inflection.
-    XCTAssertEqual(
-      FloatingControlBarManager.notificationJournalText(
-        title: "Latest Omi desktop app download link",
-        body: "The latest Omi desktop app download link is omi.me/desktop."),
-      "The latest Omi desktop app download link is omi.me/desktop.")
-    // Body reorders the title's tokens ("fix on main" -> "fix is live on main").
-    XCTAssertEqual(
-      FloatingControlBarManager.notificationJournalText(
-        title: "The Omi macOS click-away deadzone fix on main",
-        body: "The Omi macOS click-away deadzone fix is live on main; verify it when you can."),
-      "The Omi macOS click-away deadzone fix is live on main; verify it when you can.")
-    // A headline contributing even one new token keeps its own line.
-    XCTAssertEqual(
-      FloatingControlBarManager.notificationJournalText(
-        title: "Ship the quarterly report",
-        body: "You promised it by 5pm — draft the summary now."),
-      "Ship the quarterly report\nYou promised it by 5pm — draft the summary now.")
-    // Live beta rows (Aug 21): the title's only novel tokens were prepositions
-    // ("for", "at") the body phrased differently — function words never keep a
-    // redundant headline alive.
-    XCTAssertEqual(
-      FloatingControlBarManager.notificationJournalText(
-        title: "Latest Omi desktop link for David at scalingforever.com",
-        body:
-          "The latest Omi desktop app download link is omi.me/desktop. You can paste it into the message to david@scalingforever.com."
-      ),
-      "The latest Omi desktop app download link is omi.me/desktop. You can paste it into the message to david@scalingforever.com."
-    )
-    XCTAssertEqual(
-      FloatingControlBarManager.notificationJournalText(
-        title: "Latest Omi desktop link for david@scalingforever.com",
-        body:
-          "The latest Omi desktop download link is omi.me/desktop, so you may not need to send the draft to david@scalingforever.com."
-      ),
-      "The latest Omi desktop download link is omi.me/desktop, so you may not need to send the draft to david@scalingforever.com."
-    )
-    // A title whose content genuinely differs from the body still keeps its line
-    // even when it shares function words.
-    XCTAssertEqual(
-      FloatingControlBarManager.notificationJournalText(
-        title: "Draft for the board meeting",
-        body: "You promised the revenue summary by 5pm."),
-      "Draft for the board meeting\nYou promised the revenue summary by 5pm.")
-  }
-
   func testAnOrdinaryReplyAndAUserTurnAreNotPushes() {
     XCTAssertEqual(ChatRowPresentation.of(message("Sounds good.", sender: .ai)), .assistantReply)
     XCTAssertEqual(ChatRowPresentation.of(message("hey", sender: .user)), .userTurn)
@@ -452,19 +240,7 @@ final class ChatRowPresentationTests: XCTestCase {
 
 /// The stamp under a reply is read to the minute, not to the year.
 final class ChatMessageTimestampFormatTests: XCTestCase {
-  /// Fixtures are built and rendered in one pinned zone, so neither the machine's zone nor its
-  /// language decides whether these assertions hold. `America/New_York` matches what the rest of
-  /// the desktop suite pins; the month and year below are only stable against a pinned `locale`,
-  /// since production deliberately renders in the user's own (`ja_JP` says 6月, not "Jun").
-  private var calendar = Calendar(identifier: .gregorian)
-  private let locale = Locale(identifier: "en_US_POSIX")
-
-  override func setUpWithError() throws {
-    try super.setUpWithError()
-    calendar.timeZone = try XCTUnwrap(
-      TimeZone(identifier: "America/New_York"),
-      "the pinned fixture zone must exist in the system time zone database")
-  }
+  private let calendar = Calendar(identifier: .gregorian)
 
   private func date(_ y: Int, _ m: Int, _ d: Int, _ h: Int, _ min: Int) -> Date {
     var components = DateComponents()
@@ -479,8 +255,7 @@ final class ChatMessageTimestampFormatTests: XCTestCase {
 
   func testTodayIsJustTheTime() {
     let now = date(2026, 8, 6, 17, 0)
-    let text = ChatMessageTimestampFormat.text(
-      for: date(2026, 8, 6, 13, 28), now: now, calendar: calendar, locale: locale)
+    let text = ChatMessageTimestampFormat.text(for: date(2026, 8, 6, 13, 28), now: now, calendar: calendar)
 
     XCTAssertFalse(text.contains("2026"), "the year on a message sent hours ago is chrome")
     XCTAssertFalse(text.contains("Aug"))
@@ -489,8 +264,7 @@ final class ChatMessageTimestampFormatTests: XCTestCase {
 
   func testAnEarlierDayThisYearAddsTheDayButNotTheYear() {
     let now = date(2026, 8, 6, 17, 0)
-    let text = ChatMessageTimestampFormat.text(
-      for: date(2026, 6, 1, 9, 5), now: now, calendar: calendar, locale: locale)
+    let text = ChatMessageTimestampFormat.text(for: date(2026, 6, 1, 9, 5), now: now, calendar: calendar)
 
     XCTAssertTrue(text.contains("Jun"))
     XCTAssertFalse(text.contains("2026"))
@@ -498,15 +272,14 @@ final class ChatMessageTimestampFormatTests: XCTestCase {
 
   func testAnotherYearIsTheOnlyCaseWorthNamingTheYearFor() {
     let now = date(2026, 8, 6, 17, 0)
-    let text = ChatMessageTimestampFormat.text(
-      for: date(2025, 12, 24, 9, 5), now: now, calendar: calendar, locale: locale)
+    let text = ChatMessageTimestampFormat.text(for: date(2025, 12, 24, 9, 5), now: now, calendar: calendar)
 
     XCTAssertTrue(text.contains("2025"))
   }
 }
 
 final class ChatBubbleLayoutRegressionTests: XCTestCase {
-  func testCollapsedReplyKeepsAnEllipsisBeforeTheBelowMessageExpansionControl() {
+  func testCollapsedReplyKeepsEllipsisAsTheInlineShowMoreAnchor() {
     let source = String(repeating: "reply ", count: 100)
     let collapsed = ChatBubbleTruncation.displayText(source, isStreaming: false, isExpanded: false)
 

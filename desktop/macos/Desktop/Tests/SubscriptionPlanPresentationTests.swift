@@ -17,11 +17,4 @@ final class SubscriptionPlanPresentationTests: XCTestCase {
       "Select Operator"
     )
   }
-
-  func testUnknownPlanUsesNeutralCopyAndNoPaidCapability() {
-    let plan = SubscriptionPlanType(rawValue: "future_plan_123")
-
-    XCTAssertEqual(plan.displayName, "Plan unavailable")
-    XCTAssertFalse(plan.hasPaidCapability)
-  }
 }

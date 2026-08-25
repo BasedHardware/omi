@@ -137,16 +137,6 @@ enum ProactiveAssistantOrchestrationPolicy {
     return .capture(nextCounter: 0, didLeaveCall: currentCounter > 0)
   }
 
-  /// How long the same context waits between frame re-flushes to the assistants.
-  ///
-  /// Maximum (level 5) is the "nudge me in seconds" demo mode: a 10 s fallback pairs with
-  /// the 10 s suggestion dwell so the first eligible evaluation lands ~10-13 s after the
-  /// switch. Every other level keeps the 60 s cadence; assistant-side gates still bound
-  /// actual model spend either way.
-  static func distributionFallbackInterval(frequencyLevel: Int) -> TimeInterval {
-    frequencyLevel >= 5 ? 10 : 60
-  }
-
   static func distributionDecision(
     lastDistributedApp: String?,
     lastDistributedWindowTitle: String?,
@@ -370,13 +360,9 @@ struct ProactiveCaptureTrigger {
     app: String,
     windowTitle: String?,
     idleSeconds: TimeInterval,
-    now: Date,
-    forceHeartbeatCapture: Bool = false,
-    idleThresholdOverride: TimeInterval? = nil
+    now: Date
   ) -> Decision {
-    // The override exists for Maximum notification level, whose 300s window would
-    // otherwise be defeated by this trigger's own 60s check.
-    if idleSeconds >= (idleThresholdOverride ?? idleThreshold) {
+    if idleSeconds >= idleThreshold {
       // User is idle: keep last context but do not capture.
       return .skip
     }
@@ -403,17 +389,6 @@ struct ProactiveCaptureTrigger {
 
     // Same context: only sample on heartbeat. The heartbeat interval grows when
     // recent previews are all similar, so static screens are probed less often.
-    // Maximum notification level opts out of both the growth and the preview
-    // similarity skip: its cadence contract needs a real frame at least every base
-    // heartbeat, and a mostly-static feed page must still be evaluated.
-    if forceHeartbeatCapture {
-      if now.timeIntervalSince(lastCaptureTime) >= heartbeatInterval {
-        lastCaptureTime = now
-        consecutiveSimilarPreviews = 0
-        return .capture
-      }
-      return .skip
-    }
     if now.timeIntervalSince(lastCaptureTime) >= effectiveHeartbeatInterval {
       return .preview
     }
@@ -573,15 +548,16 @@ enum PreviewSimilarityThresholdPolicy {
     "IntelliJ IDEA", "PyCharm", "WebStorm", "GoLand", "CLion", "DataGrip",
   ]
 
-  private static let chatBundleIDs: Set<String> = Set([
+  private static let chatBundleIDs: Set<String> = [
     "com.tinyspeck.slackmacgap",
     "com.hnc.discord",
+    "ru.keepcoder.telegram",
     "net.whatsapp.whatsapp",
     "com.apple.mobilesms",
     "com.microsoft.teams2",
     "com.microsoft.teams",
     "com.apple.facetime",
-  ]).union(ConferencingApps.telegramBundleIDs)
+  ]
   private static let chatAppNames: Set<String> = [
     "Slack", "Discord", "Telegram", "WhatsApp", "Messages",
     "Microsoft Teams", "FaceTime",

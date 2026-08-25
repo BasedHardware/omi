@@ -44,3 +44,4 @@ compile_lock x86_64-apple-darwin pylock.macos-x86_64.toml requirements.txt testi
 compile_lock x86_64-pc-windows-msvc pylock.windows.toml requirements.txt testing/e2e/requirements.txt
 compile_lock x86_64-unknown-linux-gnu pylock.runtime.toml requirements.txt
 compile_lock x86_64-unknown-linux-gnu pusher/pylock.toml pusher/requirements.txt
+compile_lock x86_64-unknown-linux-gnu agent-proxy/pylock.toml agent-proxy/requirements.txt

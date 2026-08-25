@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useRouter, useSearchParams } from '@tschk/moonshine-next/navigation';
-import { Loader2, ChevronDown, Star, Plus } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Search, Loader2, X, ChevronDown, Star, Plus, LayoutGrid } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   getAppsGrouped,
@@ -20,10 +20,8 @@ import type {
   SortOption,
 } from '@/types/apps';
 import { AppCard } from './AppCard';
-import { connectorTabFromParam, type ConnectorTab } from '@/lib/connectors';
 import { AppGridSection } from './AppGridSection';
-import { ConnectedServices } from './ConnectedServices';
-import { PageToolbar } from '@/components/layout/PageToolbar';
+import { PageHeader } from '@/components/layout/PageHeader';
 
 // Module-level cache for apps data
 interface AppsCache {
@@ -50,7 +48,7 @@ function isCacheStale(): boolean {
   return Date.now() - appsCache.timestamp > CACHE_TTL;
 }
 
-type Tab = ConnectorTab;
+type Tab = 'explore' | 'installed' | 'my-apps';
 
 // Quick filter dropdown component
 function FilterDropdown({
@@ -67,7 +65,7 @@ function FilterDropdown({
   placeholder?: string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const selectedOption = options.find((o) => o.id === value);
+  const selectedOption = options.find(o => o.id === value);
 
   return (
     <div className="relative">
@@ -76,14 +74,12 @@ function FilterDropdown({
         className={cn(
           'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors',
           value
-            ? 'bg-white/10 text-text-primary border border-white/30'
-            : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary border border-transparent',
+            ? 'bg-purple-primary/10 text-purple-primary border border-purple-primary/30'
+            : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary border border-transparent'
         )}
       >
         <span>{selectedOption?.title || label}</span>
-        <ChevronDown
-          className={cn('w-4 h-4 transition-transform', isOpen && 'rotate-180')}
-        />
+        <ChevronDown className={cn('w-4 h-4 transition-transform', isOpen && 'rotate-180')} />
       </button>
 
       {isOpen && (
@@ -97,12 +93,12 @@ function FilterDropdown({
               }}
               className={cn(
                 'w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors',
-                !value ? 'text-text-primary' : 'text-text-secondary',
+                !value ? 'text-purple-primary' : 'text-text-secondary'
               )}
             >
               {placeholder || `All ${label}s`}
             </button>
-            {options.map((option) => (
+            {options.map(option => (
               <button
                 key={option.id}
                 onClick={() => {
@@ -111,7 +107,7 @@ function FilterDropdown({
                 }}
                 className={cn(
                   'w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors',
-                  value === option.id ? 'text-text-primary' : 'text-text-primary',
+                  value === option.id ? 'text-purple-primary' : 'text-text-primary'
                 )}
               >
                 {option.title}
@@ -142,15 +138,13 @@ function RatingFilter({
         className={cn(
           'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors',
           value
-            ? 'bg-white/10 text-text-primary border border-white/30'
-            : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary border border-transparent',
+            ? 'bg-purple-primary/10 text-purple-primary border border-purple-primary/30'
+            : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary border border-transparent'
         )}
       >
         <Star className="w-4 h-4" />
         <span>{value ? `${value}+` : 'Rating'}</span>
-        <ChevronDown
-          className={cn('w-4 h-4 transition-transform', isOpen && 'rotate-180')}
-        />
+        <ChevronDown className={cn('w-4 h-4 transition-transform', isOpen && 'rotate-180')} />
       </button>
 
       {isOpen && (
@@ -164,12 +158,12 @@ function RatingFilter({
               }}
               className={cn(
                 'w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors',
-                !value ? 'text-text-primary' : 'text-text-secondary',
+                !value ? 'text-purple-primary' : 'text-text-secondary'
               )}
             >
               Any rating
             </button>
-            {ratings.map((rating) => (
+            {ratings.map(rating => (
               <button
                 key={rating}
                 onClick={() => {
@@ -178,7 +172,7 @@ function RatingFilter({
                 }}
                 className={cn(
                   'w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors flex items-center gap-1',
-                  value === rating ? 'text-text-primary' : 'text-text-primary',
+                  value === rating ? 'text-purple-primary' : 'text-text-primary'
                 )}
               >
                 {rating}+ <Star className="w-3 h-3 fill-current" />
@@ -206,7 +200,7 @@ function SortDropdown({
     { id: 'name_asc', label: 'A-Z' },
     { id: 'name_desc', label: 'Z-A' },
   ];
-  const selected = sortOptions.find((o) => o.id === value);
+  const selected = sortOptions.find(o => o.id === value);
 
   return (
     <div className="relative">
@@ -215,21 +209,19 @@ function SortDropdown({
         className={cn(
           'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors',
           value && value !== 'installs_desc'
-            ? 'bg-white/10 text-text-primary border border-white/30'
-            : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary border border-transparent',
+            ? 'bg-purple-primary/10 text-purple-primary border border-purple-primary/30'
+            : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary border border-transparent'
         )}
       >
         <span>{selected?.label || 'Sort'}</span>
-        <ChevronDown
-          className={cn('w-4 h-4 transition-transform', isOpen && 'rotate-180')}
-        />
+        <ChevronDown className={cn('w-4 h-4 transition-transform', isOpen && 'rotate-180')} />
       </button>
 
       {isOpen && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
           <div className="absolute top-full right-0 mt-1 z-20 min-w-[150px] bg-bg-secondary border border-bg-tertiary rounded-lg shadow-lg py-1">
-            {sortOptions.map((option) => (
+            {sortOptions.map(option => (
               <button
                 key={option.id}
                 onClick={() => {
@@ -239,8 +231,8 @@ function SortDropdown({
                 className={cn(
                   'w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors',
                   value === option.id || (!value && option.id === 'installs_desc')
-                    ? 'text-text-primary'
-                    : 'text-text-primary',
+                    ? 'text-purple-primary'
+                    : 'text-text-primary'
                 )}
               >
                 {option.label}
@@ -255,10 +247,7 @@ function SortDropdown({
 
 export function AppsExplorer() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const [activeTab, setActiveTab] = useState<Tab>(() =>
-    connectorTabFromParam(searchParams.get('tab')),
-  );
+  const [activeTab, setActiveTab] = useState<Tab>('explore');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
 
@@ -271,14 +260,10 @@ export function AppsExplorer() {
   const [appGroups, setAppGroups] = useState<AppGroup[]>(appsCache.appGroups || []);
   const [popularApps, setPopularApps] = useState<App[]>(appsCache.popularApps || []);
   const [searchResults, setSearchResults] = useState<App[]>([]);
-  const [installedApps, setInstalledApps] = useState<App[]>(
-    appsCache.installedApps || [],
-  );
+  const [installedApps, setInstalledApps] = useState<App[]>(appsCache.installedApps || []);
   const [myApps, setMyApps] = useState<App[]>(appsCache.myApps || []);
   const [categories, setCategories] = useState<AppCategory[]>(appsCache.categories || []);
-  const [capabilities, setCapabilities] = useState<AppCapability[]>(
-    appsCache.capabilities || [],
-  );
+  const [capabilities, setCapabilities] = useState<AppCapability[]>(appsCache.capabilities || []);
 
   // Track if fetch is in progress
   const fetchingRef = useRef(false);
@@ -360,8 +345,7 @@ export function AppsExplorer() {
   // Search or filter apps
   useEffect(() => {
     async function performSearch() {
-      const hasFilters =
-        filters.category || filters.capability || filters.rating || filters.sort;
+      const hasFilters = filters.category || filters.capability || filters.rating || filters.sort;
       const hasQuery = debouncedQuery.trim().length > 0;
 
       if (!hasFilters && !hasQuery) {
@@ -496,8 +480,7 @@ export function AppsExplorer() {
     appsCache.timestamp = Date.now();
   }, [activeTab]);
 
-  const isShowingSearchResults =
-    debouncedQuery.trim().length > 0 || activeFilterCount > 0;
+  const isShowingSearchResults = debouncedQuery.trim().length > 0 || activeFilterCount > 0;
 
   // Get group title from capability or category
   const getGroupTitle = (group: AppGroup): string => {
@@ -534,27 +517,22 @@ export function AppsExplorer() {
 
   return (
     <div className="min-h-full">
-      <PageToolbar
-        className="sticky top-0 z-10"
-        search={
-          activeTab === 'services'
-            ? undefined
-            : {
-                value: searchQuery,
-                onChange: setSearchQuery,
-                placeholder: 'Search apps...',
-              }
-        }
-        controls={
-          <div className="flex items-center gap-1">
+      {/* Page Header */}
+      <PageHeader title="Apps" icon={LayoutGrid} />
+
+      {/* Sticky Toolbar */}
+      <div className="sticky top-0 z-10 border-b border-bg-tertiary bg-bg-secondary">
+        <div className="py-4 px-4">
+          {/* Tabs + Create button */}
+          <div className="flex items-center gap-1 mb-4">
             {/* Tabs */}
             <button
               onClick={() => setActiveTab('explore')}
               className={cn(
                 'px-4 py-2 rounded-xl text-sm font-medium transition-colors',
                 activeTab === 'explore'
-                  ? 'bg-white text-black'
-                  : 'text-text-secondary hover:bg-bg-tertiary',
+                  ? 'bg-purple-primary text-white'
+                  : 'text-text-secondary hover:bg-bg-tertiary'
               )}
             >
               Explore
@@ -564,8 +542,8 @@ export function AppsExplorer() {
               className={cn(
                 'px-4 py-2 rounded-xl text-sm font-medium transition-colors',
                 activeTab === 'installed'
-                  ? 'bg-white text-black'
-                  : 'text-text-secondary hover:bg-bg-tertiary',
+                  ? 'bg-purple-primary text-white'
+                  : 'text-text-secondary hover:bg-bg-tertiary'
               )}
             >
               Installed
@@ -575,83 +553,95 @@ export function AppsExplorer() {
               className={cn(
                 'px-4 py-2 rounded-xl text-sm font-medium transition-colors',
                 activeTab === 'my-apps'
-                  ? 'bg-white text-black'
-                  : 'text-text-secondary hover:bg-bg-tertiary',
+                  ? 'bg-purple-primary text-white'
+                  : 'text-text-secondary hover:bg-bg-tertiary'
               )}
             >
               My Apps
             </button>
+
+            {/* Spacer + Create button */}
+            <div className="flex-1" />
             <button
-              onClick={() => setActiveTab('services')}
+              onClick={() => router.push('/my-apps/new')}
               className={cn(
-                'px-4 py-2 rounded-xl text-sm font-medium transition-colors',
-                activeTab === 'services'
-                  ? 'bg-white text-black'
-                  : 'text-text-secondary hover:bg-bg-tertiary',
+                'flex items-center gap-2 px-4 py-2 rounded-xl',
+                'bg-purple-primary text-white font-medium',
+                'hover:bg-purple-primary/90 transition-colors'
               )}
             >
-              Services
+              <Plus className="w-5 h-5" />
+              <span className="hidden sm:inline">Create App</span>
             </button>
           </div>
-        }
-        actions={
-          <button
-            onClick={() => router.push('/connectors/new')}
-            className={cn(
-              'flex items-center gap-2 px-4 py-2 rounded-control',
-              'bg-white text-black font-medium',
-              'hover:bg-white/90 transition-colors',
-            )}
-          >
-            <Plus className="w-5 h-5" />
-            <span className="hidden sm:inline">Create App</span>
-          </button>
-        }
-        below={
-          activeTab !== 'services' && (
-            <div className="flex flex-wrap items-center gap-2">
-              <FilterDropdown
-                label="Category"
-                value={filters.category}
-                options={categories}
-                onChange={(v) => setFilters((f) => ({ ...f, category: v }))}
-                placeholder="All categories"
-              />
-              <FilterDropdown
-                label="Capability"
-                value={filters.capability}
-                options={capabilities}
-                onChange={(v) => setFilters((f) => ({ ...f, capability: v }))}
-                placeholder="All capabilities"
-              />
-              <RatingFilter
-                value={filters.rating}
-                onChange={(v) => setFilters((f) => ({ ...f, rating: v }))}
-              />
-              <SortDropdown
-                value={filters.sort}
-                onChange={(v) => setFilters((f) => ({ ...f, sort: v }))}
-              />
-              {activeFilterCount > 0 && (
-                <button
-                  onClick={clearFilters}
-                  className="text-sm text-text-primary hover:underline ml-2"
-                >
-                  Clear all
-                </button>
+
+          {/* Search */}
+          <div className="relative mb-3">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-quaternary" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search apps..."
+              className={cn(
+                'w-full pl-10 pr-10 py-2.5 rounded-xl',
+                'bg-bg-tertiary border border-bg-quaternary',
+                'text-text-primary placeholder:text-text-quaternary',
+                'focus:outline-none focus:ring-2 focus:ring-purple-primary/50',
+                'transition-all'
               )}
-            </div>
-          )
-        }
-      />
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-bg-quaternary"
+              >
+                <X className="w-4 h-4 text-text-tertiary" />
+              </button>
+            )}
+          </div>
+
+          {/* Inline Filters */}
+          <div className="flex flex-wrap items-center gap-2">
+            <FilterDropdown
+              label="Category"
+              value={filters.category}
+              options={categories}
+              onChange={(v) => setFilters(f => ({ ...f, category: v }))}
+              placeholder="All categories"
+            />
+            <FilterDropdown
+              label="Capability"
+              value={filters.capability}
+              options={capabilities}
+              onChange={(v) => setFilters(f => ({ ...f, capability: v }))}
+              placeholder="All capabilities"
+            />
+            <RatingFilter
+              value={filters.rating}
+              onChange={(v) => setFilters(f => ({ ...f, rating: v }))}
+            />
+            <SortDropdown
+              value={filters.sort}
+              onChange={(v) => setFilters(f => ({ ...f, sort: v }))}
+            />
+            {activeFilterCount > 0 && (
+              <button
+                onClick={clearFilters}
+                className="text-sm text-purple-primary hover:underline ml-2"
+              >
+                Clear all
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
 
       {/* Content */}
       <div className="w-full px-6 py-6">
-        {activeTab === 'services' ? (
-          <ConnectedServices />
-        ) : isLoading ? (
+        {isLoading ? (
           <div className="flex justify-center py-12">
-            <Loader2 className="w-8 h-8 text-text-primary animate-spin" />
+            <Loader2 className="w-8 h-8 text-purple-primary animate-spin" />
           </div>
         ) : isSearching ? (
           <div className="flex justify-center py-12">
@@ -664,8 +654,7 @@ export function AppsExplorer() {
               // Search results within tab
               <>
                 <p className="text-sm text-text-tertiary mb-4">
-                  {searchResults.length} {searchResults.length === 1 ? 'app' : 'apps'}{' '}
-                  found
+                  {searchResults.length} {searchResults.length === 1 ? 'app' : 'apps'} found
                 </p>
                 {searchResults.length === 0 ? (
                   <div className="text-center py-12">
@@ -673,7 +662,7 @@ export function AppsExplorer() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {searchResults.map((app) => (
+                    {searchResults.map(app => (
                       <AppCard key={app.id} app={app} onUpdate={handleAppUpdate} />
                     ))}
                   </div>
@@ -688,7 +677,7 @@ export function AppsExplorer() {
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {getAppsForCurrentTab().map((app) => (
+                {getAppsForCurrentTab().map(app => (
                   <AppCard key={app.id} app={app} onUpdate={handleAppUpdate} />
                 ))}
               </div>
@@ -709,7 +698,7 @@ export function AppsExplorer() {
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {searchResults.map((app) => (
+                {searchResults.map(app => (
                   <AppCard key={app.id} app={app} onUpdate={handleAppUpdate} />
                 ))}
               </div>
@@ -729,8 +718,8 @@ export function AppsExplorer() {
 
             {/* Capability/Category groups */}
             {appGroups
-              .filter((group) => group.data && group.data.length > 0)
-              .map((group) => (
+              .filter(group => group.data && group.data.length > 0)
+              .map(group => (
                 <AppGridSection
                   key={getGroupId(group)}
                   title={getGroupTitle(group)}

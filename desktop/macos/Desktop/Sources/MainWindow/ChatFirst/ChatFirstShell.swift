@@ -2,7 +2,7 @@ import AppKit
 import OmiTheme
 import SwiftUI
 
-/// Universal main-window shell. It shares the existing data owners with the
+/// Cohort-only main-window shell. It shares the existing data owners with the
 /// legacy shell but owns no second chat state, task state, or navigation index.
 struct ChatFirstShell: View {
   @ObservedObject var navigation: ChatFirstShellNavigation
@@ -65,7 +65,7 @@ struct ChatFirstShell: View {
       destination
         .id(navigation.route.stableName)
     }
-    // The top bar occupies the hidden title-bar band; the window's top edge is the glass.
+    // The hidden title bar puts the traffic lights over the content view.
     .padding(.top, GlassShell.titlebarClearance)
     .environmentObject(navigation)
     .onAppear {
@@ -80,11 +80,6 @@ struct ChatFirstShell: View {
     .onDisappear { automationRuntime.uninstall() }
     .onChange(of: navigation.route) { _, route in
       syncMemoryDestination(for: route)
-    }
-    .onReceive(NotificationCenter.default.publisher(for: .desktopMeetingConversationDidComplete)) { _ in
-      _ = promptMaterializationCoordinator.meetingConversationDidComplete(
-        windowForeground: isMainWindowForeground
-      )
     }
     .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationOpenMemoryAtlasRequested)) { _ in
       memoryDestinationRawValue = MemoryHubDestination.brainMap.rawValue
@@ -110,22 +105,11 @@ struct ChatFirstShell: View {
     }
   }
 
-  private var isMainWindowForeground: Bool {
-    guard NSApp.isActive, let window = NSApp.mainWindow else { return false }
-    return window.isKeyWindow && window.isVisible
-  }
-
   @ViewBuilder
   private var destination: some View {
-    if ChatFirstPageGlassLanePolicy.shouldWrap(
-      navigation.route, memoryDestinationRawValue: memoryDestinationRawValue)
-    {
+    if ChatFirstPageGlassLanePolicy.shouldWrap(navigation.route) {
       PageGlassLane(
-        selectedIndex: ChatFirstPageGlassLanePolicy.pageGlassLaneIndex(for: navigation.route),
-        memoryDestinationRawValue: memoryDestinationRawValue,
-        homeOwnsItsPanels: HomeDesignPresentation.queryShellOwnsItsPanels(
-          useLegacyHomeDesign: true,
-          forceModernPresentation: true)
+        selectedIndex: ChatFirstPageGlassLanePolicy.pageGlassLaneIndex(for: navigation.route)
       ) {
         routeDestination
       }
@@ -161,17 +145,14 @@ struct ChatFirstShell: View {
       }
       .onDisappear { automationRuntime.unregisterChatPage() }
     case .conversations:
-      // No switcher here either. Every hub page is reached from Activity's chip row, and the
-      // `Activity` pill in the top bar is always one click away from this route, so the siblings
-      // are two clicks out rather than stranded (INV-NAV-1, `ShellDestination.reach`).
-      VStack(alignment: .leading, spacing: 0) {
-        HStack {
-          ActivityBackButton { selectHubDestination(.activity) }
-          Spacer(minLength: 0)
-        }
-        .padding(.top, 18)
-        .padding(.horizontal, 28)
-        .padding(.bottom, 6)
+      // This route is one of the Memory hub's three views, so it wears the hub's switcher too —
+      // otherwise landing here would strand Memories and Brain Map behind a route change nothing
+      // on screen offers (INV-NAV-1).
+      VStack(spacing: 0) {
+        MemoryHubSwitcher(selection: .conversations, onSelect: selectHubDestination)
+          .padding(.top, 22)
+          .padding(.horizontal, 28)
+          .padding(.bottom, 4)
         ChatFirstConversationsHost(
           navigation: navigation,
           appState: appState,
@@ -209,15 +190,7 @@ struct ChatFirstShell: View {
         viewModelContainer: viewModelContainer,
         memoriesViewModel: viewModelContainer.memoriesViewModel,
         destinationRawValue: $memoryDestinationRawValue,
-        onSelectDestination: selectHubDestination,
-        // The Activity spine's screenshot rows leave for Rewind through the
-        // shell that owns the route — without this the rows are inert here.
-        onOpenRewind: { navigation.selectMore(.rewind) },
-        // The typed deep link, so a conversation opened from Activity arrives at the Conversations
-        // host as a record rather than as an id the host has to find again. `selectPrimary` — what
-        // the spine used to call — is the tab-selection primitive and drops pending records by
-        // design, which is why the click landed on the list.
-        onOpenConversationRecord: { navigation.open(conversation: $0) }
+        onSelectDestination: selectHubDestination
       )
       .accessibilityIdentifier("chat-first-route-memories")
       .onAppear { navigation.markRouteVisible(.memories) }
@@ -264,17 +237,20 @@ struct ChatFirstShell: View {
     Binding(
       get: { ChatFirstModernNavigationPolicy.topBarIndex(for: navigation.route) },
       set: { rawValue in
+        if rawValue == SidebarNavItem.conversations.rawValue {
+          let destination =
+            MemoryHubDestination(rawValue: memoryDestinationRawValue) ?? .memories
+          if destination == .conversations {
+            conversationsSelectionGeneration &+= 1
+          }
+          navigation.selectPrimary(destination == .conversations ? .conversations : .memories)
+          return
+        }
         guard let route = ChatFirstModernNavigationPolicy.route(forTopBarIndex: rawValue) else {
           return
         }
         switch route {
-        case .conversations:
-          // The hub's one pill says `Brain`, so it opens the Brain spine — not whichever hub view
-          // happened to be persisted last, and not the Conversations route this index maps back
-          // from. Routing through the same writer the chip row uses keeps one path responsible for
-          // moving both halves of the state.
-          selectHubDestination(.activity)
-        case .chat, .tasks, .memories, .goals:
+        case .chat, .conversations, .tasks, .memories, .goals:
           navigation.selectPrimary(route)
         case .more(let page):
           navigation.selectMore(page)
@@ -339,6 +315,8 @@ struct ChatFirstShell: View {
       )
     case .permissions:
       PermissionsPage(appState: appState)
+    case .help:
+      HelpPage()
     case .settings:
       HStack(spacing: 0) {
         SettingsSidebar(
@@ -346,8 +324,7 @@ struct ChatFirstShell: View {
           highlightedSettingId: $highlightedSettingID,
           onBack: {
             _ = navigation.handleEscapeNavigation()
-          },
-          appState: appState
+          }
         )
         SettingsPage(
           appState: appState,
@@ -360,7 +337,7 @@ struct ChatFirstShell: View {
   }
 
   /// Existing Dashboard callbacks still speak in legacy sidebar items. Keep
-  /// that compatibility at this one boundary while the Chat-first shell itself is
+  /// that compatibility at this one boundary while the cohort shell itself is
   /// entirely route-typed.
   private var legacySelectionBinding: Binding<Int> {
     Binding(
@@ -385,6 +362,7 @@ struct ChatFirstShell: View {
       case .rewind: return .rewind
       case .apps: return .apps
       case .permissions: return .permissions
+      case .help: return .help
       case .settings: return .settings
       }
     }
@@ -394,16 +372,12 @@ struct ChatFirstShell: View {
 /// Chat-first keeps Home and Rewind as self-contained surfaces. All other mounted destinations
 /// receive the existing shared lane exactly once at the shell boundary.
 enum ChatFirstPageGlassLanePolicy {
-  static func shouldWrap(_ route: ChatFirstRoute, memoryDestinationRawValue: Int? = nil) -> Bool {
+  static func shouldWrap(_ route: ChatFirstRoute) -> Bool {
     switch route {
     case .chat, .more(.dashboard), .more(.rewind):
       return false
-    case .memories:
-      // The memory route mounts the hub, and Activity is the one hub page that builds Home's own
-      // two panels. Wrapping it puts glass inside glass and doubles the scrim.
-      return MemoryHubDestination(rawValue: memoryDestinationRawValue ?? -1) != .activity
-    case .conversations, .tasks, .goals,
-      .more(.apps), .more(.permissions), .more(.settings):
+    case .conversations, .tasks, .goals, .memories,
+      .more(.apps), .more(.permissions), .more(.help), .more(.settings):
       return true
     }
   }
@@ -419,6 +393,7 @@ enum ChatFirstPageGlassLanePolicy {
     case .more(.rewind): return SidebarNavItem.rewind.rawValue
     case .more(.apps): return SidebarNavItem.apps.rawValue
     case .more(.permissions): return SidebarNavItem.permissions.rawValue
+    case .more(.help): return SidebarNavItem.help.rawValue
     case .more(.settings): return SidebarNavItem.settings.rawValue
     }
   }
@@ -480,12 +455,7 @@ enum ChatFirstMemoryRoutePolicy {
   ) -> MemoryHubDestination? {
     switch route {
     case .memories:
-      // Every hub view that *lives* on the memory route survives the transition. This used to
-      // whitelist `.brainMap` by name, so when `.activity` was added as a fourth hub view the
-      // route sync silently rewrote it back to `.memories` — the click landed on Memories no
-      // matter which view you asked for. Deriving the answer from the one route mapping keeps
-      // the sync and the selection from drifting apart again.
-      return MemoryHubSelectionPolicy.chatFirstRoute(for: current) == .memories ? current : .memories
+      return current == .brainMap ? .brainMap : .memories
     case .conversations:
       return .conversations
     default:
@@ -523,10 +493,7 @@ private struct ChatFirstConversationsHost: View {
           automationRuntime: automationRuntime
         )
       } else {
-        ConversationsPageHost(
-          appState: appState,
-          initialConversation: navigation.pendingConversation
-        )
+        ConversationsPageHost(appState: appState)
       }
     }
     .onAppear {
@@ -537,14 +504,6 @@ private struct ChatFirstConversationsHost: View {
     }
     .onChange(of: explicitSelectionGeneration) { _, _ in
       showsCaptureArchive = false
-    }
-    // **The latch had no second release.** Once any capture link was followed, `showsCaptureArchive`
-    // stayed true until a tab was explicitly re-selected, so "open this exact conversation" kept
-    // landing in the archive's reduced pane — which reads its own summary and never consumes a
-    // pending record. An exact conversation is precisely the "ordinary Conversations navigation"
-    // the branch above promises the full editor to, so it releases the latch.
-    .onChange(of: navigation.pendingConversation?.id) { _, id in
-      if id != nil { showsCaptureArchive = false }
     }
   }
 }
@@ -583,10 +542,10 @@ private struct ChatFirstRestoredTasksHost: View {
         guard let task = await taskForFocus(id: id) else { return }
         await reveal(task, acknowledging: .task(id: id))
       case .goal(let id):
-        var task = tasksStore.tasks.first(where: { $0.goalId == id && !$0.isRetired })
+        var task = tasksStore.tasks.first(where: { $0.goalId == id && $0.deleted != true })
         if task == nil {
           await tasksStore.loadCompletedTasks()
-          task = tasksStore.tasks.first(where: { $0.goalId == id && !$0.isRetired })
+          task = tasksStore.tasks.first(where: { $0.goalId == id && $0.deleted != true })
         }
         if task == nil,
           let detail = try? await APIClient.shared.getCanonicalGoalDetail(goalID: id),
@@ -605,17 +564,14 @@ private struct ChatFirstRestoredTasksHost: View {
   }
 
   private func taskForFocus(id: String) async -> TaskActionItem? {
-    if let task = tasksStore.tasks.first(where: { $0.id == id && !$0.isRetired }) {
+    if let task = tasksStore.tasks.first(where: { $0.id == id && $0.deleted != true }) {
       return task
     }
-    // Straight off the wire, so legacy `deleted` may be absent and retirement
-    // only stated through canonical lifecycle status. Cache reads above and
-    // below are already normalized (`ActionItemRecord.from` stores `isRetired`).
-    if let task = try? await APIClient.shared.getActionItem(id: id), !task.isRetired {
+    if let task = try? await APIClient.shared.getActionItem(id: id), task.deleted != true {
       return task
     }
     await tasksStore.loadCompletedTasks()
-    return tasksStore.tasks.first(where: { $0.id == id && !$0.isRetired })
+    return tasksStore.tasks.first(where: { $0.id == id && $0.deleted != true })
   }
 
   private func reveal(_ task: TaskActionItem, acknowledging focus: ChatFirstPendingFocus) async {
@@ -646,13 +602,13 @@ private struct ChatFirstRestoredTasksHost: View {
   private func registerAutomationActions() {
     automationRuntime?.registerTasksPage(
       toggleTask: {
-        guard let task = tasksStore.tasks.first(where: { !$0.isRetired && !$0.completed }) else {
+        guard let task = tasksStore.tasks.first(where: { $0.deleted != true && !$0.completed }) else {
           return false
         }
         let intendedCompletion = !task.completed
         AnalyticsManager.shared.chatFirst(.taskMutation(lifecycle: .attempt, mutation: .completion))
         await tasksStore.toggleTask(task)
-        let reconciled = tasksStore.tasks.first { $0.id == task.id && !$0.isRetired }
+        let reconciled = tasksStore.tasks.first { $0.id == task.id && $0.deleted != true }
         AnalyticsManager.shared.chatFirst(
           .taskMutation(
             lifecycle: reconciled?.completed == intendedCompletion ? .success : .rollback,

@@ -322,7 +322,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchApps => 'Search apps...';
 
   @override
-  String get myApps => 'Created by me';
+  String get myApps => 'My Apps';
 
   @override
   String get installedApps => 'Installed Apps';
@@ -9832,62 +9832,4 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Open store';
-
-  @override
-  String get chatScopeToday => 'Today';
-
-  @override
-  String get chatScopeThisWeek => 'This week';
-
-  @override
-  String chatScopeAbout(String title) {
-    return 'About: $title';
-  }
-
-  @override
-  String get askAboutThisConversation => 'Ask about this';
-
-  @override
-  String get sendRawAudioToOmi => 'Send raw audio to Omi';
-
-  @override
-  String get sendRawAudioToOmiDescription =>
-      'Turn off to prevent raw audio from being sent to Omi. Transcripts and data needed by cloud features may still be sent to Omi.';
-
-  @override
-  String get findDevice => 'Find';
-
-  @override
-  String get diagnosticsShareFailed => 'Couldn\'t share diagnostics. Please try again.';
-
-  @override
-  String get appDisabledTitle => 'This app is disabled and cannot be installed.';
-
-  @override
-  String get appDisabledWebhookFailures => 'Its endpoint failed for 72 hours in a row, so deliveries were stopped.';
-
-  @override
-  String get appDisabledGeneric => 'It was disabled by Omi.';
-
-  @override
-  String get appDisabledOwnerHint => 'Fix the endpoint first — re-enabling re-checks every configured URL.';
-
-  @override
-  String get appReEnable => 'Re-enable';
-
-  @override
-  String get appReEnableFailedTitle => 'Could not re-enable';
-
-  @override
-  String get appReEnableFailedBody => 'This app could not be re-enabled. Please try again.';
-
-  @override
-  String appDisabledOn(String date) {
-    return 'Disabled on $date.';
-  }
-
-  @override
-  String appDisabledLastError(String error) {
-    return 'Last error: $error.';
-  }
 }

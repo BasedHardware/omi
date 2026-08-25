@@ -14,21 +14,25 @@ import Foundation
 struct SBSetupSnapshot: Equatable, Sendable {
   enum Listening: String, Equatable, Sendable {
     case disabled
-    case always
+    case continuous
     case meetingsOnly
+    case microphoneOnly
 
-    init(audioRecordingModeRaw: String, canHear: Bool) {
+    /// Keeps the setup snapshot independent of the live settings object while
+    /// preserving the capture semantics users see elsewhere in the app:
+    /// `.never` disables system audio, but leaves the microphone listening.
+    init(systemAudioModeRaw: String, canHear: Bool) {
       guard canHear else {
         self = .disabled
         return
       }
-      switch audioRecordingModeRaw {
-      case AssistantSettings.AudioRecordingMode.always.rawValue:
-        self = .always
-      case AssistantSettings.AudioRecordingMode.onlyMeetings.rawValue:
+      switch systemAudioModeRaw {
+      case AssistantSettings.SystemAudioCaptureMode.always.rawValue:
+        self = .continuous
+      case AssistantSettings.SystemAudioCaptureMode.onlyDuringMeetings.rawValue:
         self = .meetingsOnly
-      case AssistantSettings.AudioRecordingMode.off.rawValue:
-        self = .disabled
+      case AssistantSettings.SystemAudioCaptureMode.never.rawValue:
+        self = .microphoneOnly
       default:
         // An unknown persisted value is not evidence for a more permissive
         // mode. AssistantSettings normally heals this before it reaches us,
@@ -169,14 +173,19 @@ enum SBPostOnboardingGuidance {
     talkShortcutTokens: [String],
     setup: SBSetupSnapshot
   ) -> [SBOrientationCue] {
-    // Describe how this window actually behaves — it stays where you leave it — then name the
-    // persistent way back. The menu bar icon is named rather than left to the chord cue below because
-    // the chord is conditional and the icon is always there.
+    // Describes what the window actually does now, which has changed twice. There is no closing it —
+    // `ShellWindowChrome` hides all three traffic lights — so the original cue ("closing this window
+    // doesn't stop me") named a control that does not exist. Its replacement promised the opposite of
+    // what the shell does today: it said clicking another app would put the window away, which was
+    // true only while `.summoned` meant `hidesOnDeactivate = true`. The shell now stays in front of
+    // whatever is behind it until asked to leave, so this says *that*, and names the two ways out. The
+    // menu bar icon is named rather than left to the chord cue below, because the chord is conditional
+    // and the icon is always there.
     var cues: [SBOrientationCue] = [
       SBOrientationCue(
         id: "menubar",
         symbol: "menubar.arrow.up.rectangle",
-        title: "I stay open while you work — switch back any time. My menu bar icon brings me back too.",
+        title: "I stay in front while you work. Escape puts me away, and my menu bar icon brings me back.",
         keys: [])
     ]
 
@@ -220,7 +229,7 @@ enum SBPostOnboardingGuidance {
         symbol: "mic.slash",
         title: "I can't hear yet. Turn on the microphone in Settings whenever you want me to.",
         keys: [])
-    case .always:
+    case .continuous:
       return SBOrientationCue(
         id: "listening",
         symbol: "ear",
@@ -229,8 +238,14 @@ enum SBPostOnboardingGuidance {
     case .meetingsOnly:
       return SBOrientationCue(
         id: "listening",
-        symbol: "person.2",
-        title: "I'll start listening when a call starts.",
+        symbol: "calendar",
+        title: "I'll start listening when your meetings start.",
+        keys: [])
+    case .microphoneOnly:
+      return SBOrientationCue(
+        id: "listening",
+        symbol: "mic",
+        title: "I'm listening through your microphone only.",
         keys: [])
     }
   }
@@ -268,7 +283,7 @@ extension SBOnboardingModel {
     return SBSetupSnapshot(
       role: role ?? roleDraft,
       listening: SBSetupSnapshot.Listening(
-        audioRecordingModeRaw: appState.audioRecordingMode.rawValue,
+        systemAudioModeRaw: appState.effectiveSystemAudioMode.rawValue,
         canHear: canHear),
       // Match the dashboard's capture health contract. TCC can remain granted
       // after signing changes or a ScreenCaptureKit failure, so permission or

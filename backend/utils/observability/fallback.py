@@ -43,10 +43,6 @@ ALLOWED_REASONS = frozenset(
         'malformed_doc',
         'capacity_full',
         'allocation_rejected',
-        'private_tool_output_in_context',
-        'not_authorized',
-        'authorization_unavailable',
-        'unmigrated_principal',
         'other',
         'none',
     }
@@ -70,8 +66,8 @@ ALLOWED_COMPONENTS = frozenset(
         'redis_ratelimit',
         'silent_mic',
         'firestore_read',
-        'knowledge_graph',
         'agent_tools',
+        'agent_vm_reconciler',
         'other',
     }
 )

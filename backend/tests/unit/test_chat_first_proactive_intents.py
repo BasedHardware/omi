@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 
 import database.chat_first_intents as intents_db
+from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
 from models.chat_first import (
     CaptureLinkSpec,
     ChatFirstSubject,
@@ -161,6 +162,7 @@ class _Firestore:
 
 @pytest.fixture
 def firestore(monkeypatch):
+    set_canonical_cohort(monkeypatch, UID)
     monkeypatch.setattr(
         intents_db.firestore, 'transactional', lambda function: lambda transaction: function(transaction)
     )

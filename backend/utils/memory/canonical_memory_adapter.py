@@ -1,20 +1,17 @@
-"""Thin adapter over canonical apply/read services for the universal MemoryService."""
+"""Thin adapter over existing memory apply/read services for canonical-cohort MemoryService."""
 
 from __future__ import annotations
 
 import copy
 import hashlib
 import logging
-import time
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, cast
+from typing import Any, Callable, Dict, List, Optional, Tuple, cast
 
-from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from database._client import db as default_db_client
 from database import knowledge_graph as kg_db
-from database.firestore_index_registry import UNIVERSAL_CANONICAL_LIST_SCAN_QUERY
 from database.review_queue import purge_stale_review_conflicts_for_memories
 from utils.client_device import DeviceScopeRequest
 from utils.memory.device_scope_filter import filter_items_by_device_scope
@@ -40,7 +37,6 @@ from database.memory_apply_store import (
 from database.memory_vector_repair_outbox import build_vector_repair_purge_outbox_records
 from database.memory_vector_metadata import canonical_memory_provider_id
 from database.account_deletion_projection_fence import read_account_deletion_projection_fence
-from utils.other.list_budget import ListReadBudget, budgeted_document_get, budgeted_stream_list
 from models.memory_domain import (
     MemoryLayer as DomainMemoryLayer,
     MemoryProcessingState,
@@ -63,14 +59,7 @@ from models.memory_apply import (
 )
 from models.memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
 from models.memory_operations import MemoryOperation, MemoryOperationType
-from models.product_memory import (
-    MemoryAccessPolicy,
-    MemoryItemStatus,
-    MemoryLayer,
-    ProcessingState,
-    MemoryItem,
-    is_archive_access_eligible,
-)
+from models.product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryLayer, ProcessingState, MemoryItem
 from utils.memory.short_term_lifecycle import default_short_term_expiry
 from utils.memory.required_promotion import (
     REQUIRED_PROCESSING_STATUS_PENDING,
@@ -79,7 +68,7 @@ from utils.memory.required_promotion import (
     REQUIRED_PROCESSOR_VERSION,
     REQUIRED_PROMOTION_STATUS_PENDING,
 )
-from utils.memory.memory_system import ensure_canonical_apply_control_state
+from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.retrieval.hybrid import rrf_rerank
 from utils.memory.canonical_vector_sync import delete_canonical_memory_vector
 from utils.memory.product_memory_read_service import (
@@ -99,19 +88,6 @@ Payload = Dict[str, Any]
 SortKey = tuple[int, datetime | int]
 UserMutationPatchBuilder = Callable[[MemoryItem, datetime], Tuple[Payload, Payload]]
 
-# Concurrent same-account canonical writes race the account-global control
-# CAS inside the conversation source replacement. Retraction — the delete and
-# merge path — converges across those races instead of failing (#11726).
-_RETRACT_CONFLICT_ATTEMPTS = 5
-_RETRACT_CONFLICT_BACKOFF_SECONDS = (0.05, 0.1, 0.25, 0.5)
-# Extraction races the same control CAS but runs inside conversation processing,
-# which has no outer convergence loop: an immediate retry re-reads the control a
-# peer just advanced, so same-account writers keep losing in lockstep and the
-# whole enrichment fails. Back the replacement's own rounds off by default.
-_REPLACEMENT_CONFLICT_BACKOFF_SECONDS = (0.05, 0.1, 0.25, 0.5)
-# Retraction already wraps this call in the converging loop above; keeping its
-# inner rounds immediate stops the delete path's latency budget being multiplied.
-_IMMEDIATE_REPLACEMENT_RETRY_BACKOFF = (0.0, 0.0)
 _SETTLED_PROMOTION_FIELDS = frozenset(
     {
         "route",
@@ -141,16 +117,6 @@ class CanonicalMemoryNotFoundError(ValueError):
     """Raised when an item is absent or already tombstoned during an atomic batch read."""
 
 
-class ConversationReplacementConflictError(RuntimeError):
-    """Conversation source replacement exhausted its bounded conflict retries.
-
-    Subclasses :class:`RuntimeError` so pre-existing callers keep their
-    ``except RuntimeError`` contract. Callers that can retry the operation —
-    cascade delete, merge — get a typed signal instead of an opaque 500
-    (#11726).
-    """
-
-
 def _payload_or_empty(value: object) -> Payload:
     return cast(Payload, value) if isinstance(value, dict) else {}
 
@@ -171,6 +137,8 @@ def invalidate_kg_for_memory_retraction(uid: str, memory_ids: List[str], *, db_c
     if not memory_ids:
         return
     client = db_client if db_client is not None else default_db_client
+    if resolve_memory_system(uid, db_client=client) != MemorySystem.CANONICAL:
+        return
     pruned = kg_db.prune_memory_citations_from_kg(uid, memory_ids, db_client=client)
     logger.info(
         "kg_citations_pruned uid=%s retracted_memory_count=%d pruned_entities=%d",
@@ -219,7 +187,6 @@ def search_result_to_memorydb(uid: str, item: Dict[str, Any]) -> MemoryDB:
         updated_at=updated_at,
         manually_added=False,
         reviewed=False,
-        is_locked=bool(item.get("is_locked", False)),
         visibility=item.get("visibility") or "private",
         memory_tier=tier,
         valid_at=updated_at,
@@ -263,10 +230,6 @@ def memory_item_to_memorydb(item: MemoryItem) -> MemoryDB:
         category = MemoryCategory.interesting
     tags = list(promotion.get("tags") or [])
     reviewed = bool(promotion.get("reviewed", False))
-    is_baseline = bool(promotion.get("is_baseline", False))
-    is_locked = bool(promotion.get("is_locked", False))
-    is_read = bool(promotion.get("is_read", False))
-    is_dismissed = bool(promotion.get("is_dismissed", False))
     user_review = promotion.get("user_review")
     source_attribution = _payload_or_empty(promotion.get("source_attribution"))
     raw_subject_attribution = source_attribution.get("subject_attribution", SubjectAttribution.unknown.value)
@@ -286,10 +249,6 @@ def memory_item_to_memorydb(item: MemoryItem) -> MemoryDB:
         conversation_id=conversation_id,
         manually_added=item.user_asserted,
         reviewed=reviewed,
-        is_baseline=is_baseline,
-        is_locked=is_locked,
-        is_read=is_read,
-        is_dismissed=is_dismissed,
         user_review=user_review,
         visibility=item.visibility,
         evidence=evidence_payload,
@@ -384,37 +343,23 @@ def read_canonical_memories(
     db_client: Any = None,
     device_scope_request: Optional[DeviceScopeRequest] = None,
     include_pending_processing: bool = False,
-    include_archive: bool = False,
     now: Optional[datetime] = None,
-    budget: Optional[ListReadBudget] = None,
 ) -> List[MemoryDB]:
     """Read canonical items, optionally exposing explicit pending submissions.
 
     Pending text is withheld by default so agent/chat consumers cannot use raw
     submissions. Dedicated memory-list APIs opt in and display those records as
     Short-term while processing is underway.
-
-    Archive rows stay excluded unless ``include_archive`` is an explicit owner
-    opt-in. That flag is the only way this default list gains
-    ``archive_capability``; chat/MCP archive routes keep their own grants.
-    With a ``budget`` the authoritative item stream runs under the request's
-    per-RPC timeout and charges every fetched row (#11831).
     """
     client = db_client if db_client is not None else default_db_client
     device_scope = device_scope_request.device_scope if device_scope_request else "all"
     client_device_id = device_scope_request.client_device_id if device_scope_request else None
-    items = fetch_authoritative_product_memory_items(uid=uid, db_client=client, budget=budget)
+    items = fetch_authoritative_product_memory_items(uid=uid, db_client=client)
     current_time = now or datetime.now(timezone.utc)
-    archive_explicit = bool(include_archive)
-    policy = MemoryAccessPolicy.for_omi_chat(archive_capability=archive_explicit)
+    policy = MemoryAccessPolicy.for_omi_chat(archive_capability=False)
     visible = filter_canonical_default_visible_items(items, policy=policy, now=current_time)
-    visible_by_id = {item.memory_id: item for item in visible}
-    if archive_explicit:
-        for item in items:
-            # MemoryLayer.archive is visible only with archive_capability + explicit opt-in.
-            if is_archive_access_eligible(item, policy, now=current_time).allowed:
-                visible_by_id.setdefault(item.memory_id, item)
     if include_pending_processing:
+        visible_by_id = {item.memory_id: item for item in visible}
         for item in items:
             promotion = item.promotion or {}
             if (
@@ -428,11 +373,7 @@ def read_canonical_memories(
                 visible_by_id[item.memory_id] = item
         visible = sorted(visible_by_id.values(), key=lambda item: (-item.updated_at.timestamp(), item.memory_id))
     else:
-        visible = [
-            item
-            for item in sorted(visible_by_id.values(), key=lambda item: (-item.updated_at.timestamp(), item.memory_id))
-            if item.processing_state == ProcessingState.processed
-        ]
+        visible = [item for item in visible if item.processing_state == ProcessingState.processed]
     visible = filter_items_by_device_scope(
         visible,
         device_scope=device_scope if device_scope in ("current", "all", "explicit") else "all",
@@ -441,275 +382,6 @@ def read_canonical_memories(
     visible = _deduplicate_canonical_items(visible, lineage_context=items)
     paged = visible[offset : offset + limit]
     return [memory_item_to_memorydb(item) for item in paged]
-
-
-_CANONICAL_SCAN_PAGE_MAX = 500
-_CANONICAL_SCAN_LINEAGE_MAX_HOPS = 12
-CanonicalScanCursor = tuple[datetime, str]
-CanonicalScanSlot = tuple[Optional[MemoryDB], CanonicalScanCursor]
-
-
-def _coerce_scan_updated_at(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
-
-
-def _canonical_scan_item_visible(
-    item: MemoryItem,
-    *,
-    policy: MemoryAccessPolicy,
-    now: datetime,
-    include_pending_processing: bool,
-    include_archive: bool,
-    device_scope: str,
-    client_device_id: Optional[str],
-) -> bool:
-    """Apply list visibility predicates to one raw scan row without full-set loads."""
-    default_visible = filter_canonical_default_visible_items([item], policy=policy, now=now)
-    visible = bool(default_visible)
-    if include_archive and is_archive_access_eligible(item, policy, now=now).allowed:
-        visible = True
-    if include_pending_processing:
-        promotion = item.promotion or {}
-        if (
-            item.tier == MemoryLayer.short_term
-            and item.status == MemoryItemStatus.active
-            and item.processing_state == ProcessingState.pending
-            and item.source_state == SourceState.active
-            and promotion.get("required") is True
-            and promotion.get("user_review") is not False
-        ):
-            visible = True
-    elif item.processing_state != ProcessingState.processed:
-        visible = False
-    if not visible:
-        return False
-    scoped = filter_items_by_device_scope(
-        [item],
-        device_scope=device_scope if device_scope in ("current", "all", "explicit") else "all",
-        client_device_id=client_device_id,
-    )
-    return bool(scoped)
-
-
-def _read_canonical_memory_item_for_lineage(
-    uid: str,
-    memory_id: str,
-    *,
-    db_client: Any,
-    budget: Optional[ListReadBudget] = None,
-) -> Optional[MemoryItem]:
-    """Read one canonical document for lineage traversal without status filtering.
-
-    Snapshot/document id is the sole identity authority. Payload ``memory_id`` or
-    ``uid`` mismatches fail closed. Non-active (superseded/hidden/tombstoned)
-    rows are returned so callers can traverse restricted intermediates.
-    """
-    requested_id = (memory_id or "").strip()
-    if not requested_id:
-        return None
-    path = f"{MemoryCollections(uid=uid).memory_items}/{requested_id}"
-    snapshot = budgeted_document_get(db_client.document(path), budget)
-    if not getattr(snapshot, "exists", False):
-        return None
-    doc_id = getattr(snapshot, "id", None)
-    if not isinstance(doc_id, str) or not doc_id.strip():
-        raise ValueError(f"canonical lineage target missing document id: requested {requested_id}")
-    if doc_id != requested_id:
-        raise ValueError(f"canonical lineage document id mismatch: requested {requested_id}, found {doc_id}")
-    raw_payload: object = snapshot.to_dict()
-    payload = cast(Dict[str, Any], raw_payload) if isinstance(raw_payload, dict) else {}
-    item = MemoryItem.model_validate(payload)
-    if item.memory_id != doc_id:
-        raise ValueError(f"canonical memory id mismatch: requested {requested_id}, found {item.memory_id}")
-    if item.uid != uid:
-        raise ValueError(f"canonical memory uid mismatch: expected {uid}, got {item.uid}")
-    return item
-
-
-def _canonical_scan_lineage_suppressed(
-    item: MemoryItem,
-    *,
-    uid: str,
-    db_client: Any,
-    policy: MemoryAccessPolicy,
-    now: datetime,
-    include_pending_processing: bool,
-    include_archive: bool,
-    device_scope: str,
-    client_device_id: Optional[str],
-    budget: Optional[ListReadBudget] = None,
-) -> bool:
-    """Suppress a visible alias when a visible authoritative survivor wins.
-
-    Bounded identity-checked point-follow of ``canonical_memory_id`` /
-    ``superseded_by`` (max ``_CANONICAL_SCAN_LINEAGE_MAX_HOPS``). Non-visible
-    superseded/hidden/tombstoned nodes are traversal-only. Never reloads the
-    full canonical set. Cycles stop the walk; payload id/uid mismatches fail
-    closed without inventing a survivor.
-    """
-    outbound = (item.canonical_memory_id or item.superseded_by or "").strip()
-    if not outbound or outbound == item.memory_id:
-        return False
-
-    closure_by_id: Dict[str, MemoryItem] = {item.memory_id: item}
-    path: List[str] = [item.memory_id]
-    position_by_id: Dict[str, int] = {item.memory_id: 0}
-    current = item
-    lineage_root = item.memory_id
-
-    for _ in range(_CANONICAL_SCAN_LINEAGE_MAX_HOPS):
-        next_id = (current.canonical_memory_id or current.superseded_by or "").strip()
-        if not next_id or next_id == current.memory_id:
-            lineage_root = current.memory_id
-            break
-        cycle_start = position_by_id.get(next_id)
-        if cycle_start is not None:
-            lineage_root = min(path[cycle_start:])
-            break
-        try:
-            target = _read_canonical_memory_item_for_lineage(uid, next_id, db_client=db_client, budget=budget)
-        except ValueError:
-            # Payload/id/uid mismatch fail-closed for that hop: stop walking and
-            # only evaluate identity-checked nodes already in the closure.
-            break
-        if target is None:
-            # Unresolved pointer: treat the missing id as the chain end/root.
-            lineage_root = next_id
-            break
-        closure_by_id[target.memory_id] = target
-        position_by_id[target.memory_id] = len(path)
-        path.append(target.memory_id)
-        current = target
-        lineage_root = current.memory_id
-    else:
-        lineage_root = current.memory_id
-
-    visible_candidates = [
-        candidate
-        for candidate in closure_by_id.values()
-        if candidate.memory_id != item.memory_id
-        and _canonical_scan_item_visible(
-            candidate,
-            policy=policy,
-            now=now,
-            include_pending_processing=include_pending_processing,
-            include_archive=include_archive,
-            device_scope=device_scope,
-            client_device_id=client_device_id,
-        )
-    ]
-    if not visible_candidates:
-        return False
-    item_key = canonical_lineage_survivor_sort_key(item, lineage_root=lineage_root)
-    return any(
-        canonical_lineage_survivor_sort_key(candidate, lineage_root=lineage_root) < item_key
-        for candidate in visible_candidates
-    )
-
-
-def read_canonical_scan_page(
-    uid: str,
-    *,
-    limit: int = 100,
-    start_after: Optional[CanonicalScanCursor] = None,
-    db_client: Any = None,
-    device_scope_request: Optional[DeviceScopeRequest] = None,
-    include_pending_processing: bool = False,
-    include_archive: bool = False,
-    now: Optional[datetime] = None,
-    budget: Optional[ListReadBudget] = None,
-) -> Tuple[List[CanonicalScanSlot], bool]:
-    """Read one bounded canonical raw scan page via Firestore keyset order.
-
-    Each slot corresponds to one raw ``memory_items`` document in newest-first
-    ``updated_at DESC, __name__ ASC`` order. ``None`` memory means the row was
-    filtered by access/device/pending/archive/lineage policy and must still
-    advance the scan cursor. ``snapshot.id`` is the sole ``__name__`` authority;
-    payload ``memory_id`` mismatches fail closed as filtered slots. Callers
-    over-fetch additional pages when filters shrink the visible stream. Never
-    loads the full canonical set.
-    """
-    client = db_client if db_client is not None else default_db_client
-    bounded_limit = max(1, min(int(limit or 100), _CANONICAL_SCAN_PAGE_MAX))
-    device_scope = device_scope_request.device_scope if device_scope_request else "all"
-    client_device_id = device_scope_request.client_device_id if device_scope_request else None
-    current_time = now or datetime.now(timezone.utc)
-    archive_explicit = bool(include_archive)
-    policy = MemoryAccessPolicy.for_omi_chat(archive_capability=archive_explicit)
-
-    items_ref = client.collection(MemoryCollections(uid=uid).memory_items)
-    query = UNIVERSAL_CANONICAL_LIST_SCAN_QUERY.build(
-        items_ref,
-        {},
-        field_filter_factory=FieldFilter,
-    )
-    query = query.order_by('updated_at', direction=firestore.Query.DESCENDING).order_by('__name__')
-    if start_after is not None:
-        cursor_time, cursor_memory_id = start_after
-        if not cursor_memory_id.strip():
-            raise ValueError('canonical scan cursor memory_id must not be blank')
-        query = query.start_after(
-            {
-                'updated_at': _coerce_scan_updated_at(cursor_time),
-                '__name__': items_ref.document(cursor_memory_id),
-            }
-        )
-    snapshots = budgeted_stream_list(query.limit(bounded_limit), budget)
-    slots: List[CanonicalScanSlot] = []
-    for snapshot in snapshots:
-        doc_id = getattr(snapshot, 'id', None)
-        if not isinstance(doc_id, str) or not doc_id.strip():
-            continue
-        raw_payload = cast(object, snapshot.to_dict())
-        payload = cast(Dict[str, Any], raw_payload) if isinstance(raw_payload, dict) else {}
-        updated_raw = payload.get('updated_at')
-        if isinstance(updated_raw, datetime):
-            scan_updated_at = _coerce_scan_updated_at(updated_raw)
-        else:
-            scan_updated_at = datetime.fromtimestamp(0, tz=timezone.utc)
-        scan_cursor = (scan_updated_at, doc_id)
-        try:
-            item = MemoryItem.model_validate(payload)
-        except Exception:
-            # Malformed docs still consume scan position via snapshot identity.
-            slots.append((None, scan_cursor))
-            continue
-        if item.uid != uid:
-            raise ValueError(f'memory item uid mismatch: expected {uid}, got {item.uid}')
-        if item.memory_id != doc_id:
-            # Fail closed: payload identity must match document __name__.
-            slots.append((None, scan_cursor))
-            continue
-        if not _canonical_scan_item_visible(
-            item,
-            policy=policy,
-            now=current_time,
-            include_pending_processing=include_pending_processing,
-            include_archive=archive_explicit,
-            device_scope=device_scope,
-            client_device_id=client_device_id,
-        ):
-            slots.append((None, scan_cursor))
-            continue
-        if _canonical_scan_lineage_suppressed(
-            item,
-            uid=uid,
-            db_client=client,
-            policy=policy,
-            now=current_time,
-            include_pending_processing=include_pending_processing,
-            include_archive=archive_explicit,
-            device_scope=device_scope,
-            client_device_id=client_device_id,
-            budget=budget,
-        ):
-            slots.append((None, scan_cursor))
-            continue
-        slots.append((memory_item_to_memorydb(item), scan_cursor))
-    exhausted = len(snapshots) < bounded_limit
-    return slots, exhausted
 
 
 def search_canonical_memories(
@@ -744,7 +416,6 @@ def search_canonical_memories(
                 "tier": memory.memory_tier.value if memory.memory_tier is not None else MemoryLayer.short_term.value,
                 "date": memory.updated_at.isoformat(),
                 "visibility": memory.visibility,
-                "is_locked": memory.is_locked,
             }
             for memory in memories[:capped_limit]
         ]
@@ -810,14 +481,21 @@ def search_canonical_memories(
                 "tier": item.tier.value,
                 "date": item.updated_at.isoformat(),
                 "visibility": item.visibility,
-                "is_locked": bool((item.promotion or {}).get("is_locked", False)),
             }
         )
     return results
 
 
 def _ensure_control_state(uid: str, *, db_client: Any) -> MemoryControlState:
-    return ensure_canonical_apply_control_state(uid, db_client=db_client)
+    collections = MemoryCollections(uid=uid)
+    ref = db_client.document(collections.memory_apply_control_state)
+    snapshot = ref.get()
+    if getattr(snapshot, "exists", False):
+        return MemoryControlState(**_snapshot_payload(snapshot))
+
+    control = MemoryControlState(uid=uid, head_commit_id="head0", account_generation=1, source_generation=1)
+    ref.set(control.model_dump(mode="json"))
+    return control
 
 
 def _ordered_capture_devices_from_evidence(raw_evidence: List[Payload]) -> tuple[List[str], Optional[str]]:
@@ -977,8 +655,6 @@ def _product_metadata_from_payload(data: Dict[str, Any]) -> Dict[str, Any]:
     tags = data.get("tags")
     if tags:
         metadata["tags"] = list(tags)
-    if "is_locked" in data:
-        metadata["is_locked"] = bool(data.get("is_locked"))
     raw_attribution = data.get("subject_attribution")
     attribution = (
         raw_attribution.value if isinstance(raw_attribution, SubjectAttribution) else str(raw_attribution or "")
@@ -1082,7 +758,6 @@ def _canonical_extraction_apply_write(
     data: Dict[str, Any],
     *,
     control: MemoryControlState,
-    evidence_items: Optional[List[MemoryEvidence]] = None,
 ) -> tuple[CanonicalApplyWrite, str]:
     content = (data.get("content") or "").strip()
     if not content:
@@ -1105,8 +780,7 @@ def _canonical_extraction_apply_write(
         idempotency_identity,
     )
 
-    if evidence_items is None:
-        evidence_items = _evidence_items_from_payload(data)
+    evidence_items = _evidence_items_from_payload(data)
     raw_evidence = [
         cast(Payload, raw) for raw in cast(List[object], data.get("evidence") or []) if isinstance(raw, dict)
     ]
@@ -1177,22 +851,11 @@ def _canonical_extraction_apply_write(
     )
 
 
-def write_canonical_extraction_memory(
-    uid: str,
-    data: Dict[str, Any],
-    *,
-    db_client: Any = None,
-    evidence_items: Optional[List[MemoryEvidence]] = None,
-) -> str:
+def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_client: Any = None) -> str:
     """Persist one memory to memory_items + ledger (extraction or external/manual writes)."""
     client = db_client if db_client is not None else default_db_client
     control = _ensure_control_state(uid, db_client=client)
-    write, memory_id = _canonical_extraction_apply_write(
-        uid,
-        data,
-        control=control,
-        evidence_items=evidence_items,
-    )
+    write, memory_id = _canonical_extraction_apply_write(uid, data, control=control)
     for evidence in write.evidence:
         _persist_evidence(uid, evidence, db_client=client)
 
@@ -1233,71 +896,21 @@ def write_canonical_extraction_memory(
     return committed_id
 
 
-_EXTERNAL_EVIDENCE_REISSUE_LIMIT = 25
-
-
-def _reissued_external_evidence(
-    uid: str,
-    evidence_items: List[MemoryEvidence],
-    *,
-    db_client: Any,
-) -> List[MemoryEvidence]:
-    """Mint a fresh evidence identity when an external submission reuses a retired one.
-
-    External evidence ids are derived from the submitted content, and evidence
-    source_state is monotonic per identity. Deleting a memory tombstones its
-    evidence, so re-adding the same text would otherwise reuse the tombstoned
-    identity and fail the apply source gate on every retry. The new submission is
-    a new source artifact and gets its own identity; the tombstone stays retired.
-    Conversation-sourced evidence keeps the retired identity: a deleted
-    conversation is a deleted source, not a fresh one.
-    """
-    collections = MemoryCollections(uid=uid)
-    reissued: List[MemoryEvidence] = []
-    for item in evidence_items:
-        if item.conversation_id or item.source_type == "conversation":
-            reissued.append(item)
-            continue
-        evidence_id = item.evidence_id
-        for attempt in range(1, _EXTERNAL_EVIDENCE_REISSUE_LIMIT + 1):
-            snapshot = db_client.document(f"{collections.memory_evidence}/{evidence_id}").get()
-            if not getattr(snapshot, "exists", False):
-                break
-            stored = _snapshot_payload(snapshot)
-            if SourceState(stored.get("source_state") or SourceState.active.value) == SourceState.active:
-                break
-            evidence_id = (
-                "ev_"
-                + deterministic_contract_id(
-                    "canonical-external-evidence-reissue",
-                    {"evidence_id": item.evidence_id, "attempt": attempt},
-                )[:32]
-            )
-        else:
-            raise RuntimeError("canonical external write exhausted evidence identity reissues")
-        reissued.append(
-            item if evidence_id == item.evidence_id else item.model_copy(update={"evidence_id": evidence_id})
-        )
-    return reissued
-
-
 def write_canonical_external_memory(uid: str, data: Dict[str, Any], *, db_client: Any = None) -> str:
     """Persist a manual/API/integration memory via the canonical apply path."""
-    client = db_client if db_client is not None else default_db_client
-    return write_canonical_extraction_memory(
-        uid,
-        data,
-        db_client=client,
-        evidence_items=_reissued_external_evidence(
-            uid,
-            _evidence_items_from_payload(data),
-            db_client=client,
-        ),
-    )
+    return write_canonical_extraction_memory(uid, data, db_client=db_client)
 
 
 def _read_replacement_control(uid: str, *, db_client: Any) -> MemoryControlState:
-    return ensure_canonical_apply_control_state(uid, db_client=db_client)
+    snapshot = db_client.document(MemoryCollections(uid=uid).memory_apply_control_state).get()
+    if getattr(snapshot, "exists", False):
+        return MemoryControlState.model_validate(_snapshot_payload(snapshot))
+    return MemoryControlState(
+        uid=uid,
+        head_commit_id="head0",
+        account_generation=1,
+        source_generation=1,
+    )
 
 
 def _conversation_replacement_payload(
@@ -1411,39 +1024,19 @@ def _conversation_replacement_digest(
     )
 
 
-def _backoff_before_replacement_retry(attempt: int, schedule: Sequence[float]) -> None:
-    """Pause between conversation-replacement conflict rounds.
-
-    A zero or missing entry keeps the round immediate, which is what callers
-    that own an outer converging loop pass.
-    """
-    if attempt >= len(schedule):
-        return
-    delay = schedule[attempt]
-    if delay > 0:
-        time.sleep(delay)
-
-
 def replace_conversation_sourced_memories(
     uid: str,
     conversation_id: str,
     items: List[Dict[str, Any]],
     *,
     db_client: Any = None,
-    conflict_backoff_seconds: Sequence[float] = _REPLACEMENT_CONFLICT_BACKOFF_SECONDS,
 ) -> Dict[str, Any]:
-    """Atomically replace one conversation's complete canonical memory set.
-
-    Every same-account canonical write races the account-global control CAS, so
-    a conflicted round must re-plan against the control the peer left behind.
-    ``conflict_backoff_seconds`` bounds those rounds: one entry per retry, and
-    the number of attempts is ``len(...) + 1``.
-    """
+    """Atomically replace one conversation's complete canonical memory set."""
     client = db_client if db_client is not None else default_db_client
     replacement_digest = _conversation_replacement_digest(uid, conversation_id, items)
     replacement_id = f"replace_{replacement_digest[:32]}"
     last_conflict: Optional[ConversationSourceReplacementConflict] = None
-    for _attempt in range(len(conflict_backoff_seconds) + 1):
+    for _attempt in range(3):
         observed_control = _read_replacement_control(uid, db_client=client)
         expected_source_items = [
             item
@@ -1479,7 +1072,6 @@ def replace_conversation_sourced_memories(
             last_conflict = ConversationSourceReplacementConflict(
                 "memory control changed during conversation source scan"
             )
-            _backoff_before_replacement_retry(_attempt, conflict_backoff_seconds)
             continue
         observed_control = confirmed_control
         next_generation = observed_control.source_generation + 1
@@ -1549,11 +1141,8 @@ def replace_conversation_sourced_memories(
             break
         except ConversationSourceReplacementConflict as exc:
             last_conflict = exc
-            _backoff_before_replacement_retry(_attempt, conflict_backoff_seconds)
     else:
-        raise ConversationReplacementConflictError(
-            "canonical conversation replacement conflicted repeatedly"
-        ) from last_conflict
+        raise RuntimeError("canonical conversation replacement conflicted repeatedly") from last_conflict
 
     committed_ids = set(result.committed_memory_ids)
     for memory_id in result.retracted_memory_ids:
@@ -1735,85 +1324,6 @@ def update_canonical_memory_content(uid: str, memory_id: str, content: str, *, d
         uid,
         memory_id,
         mutation_kind="content_edit",
-        build_patch=build_patch,
-        db_client=client,
-    )
-    if previous.tier == MemoryLayer.long_term or previous.graph_ready or previous.kg_extracted:
-        invalidate_kg_for_memory_retraction(uid, [memory_id], db_client=client)
-    return updated
-
-
-def refine_canonical_memory(
-    uid: str,
-    memory_id: str,
-    arg_changes: Dict[str, Any],
-    *,
-    db_client: Any = None,
-) -> MemoryItem:
-    """Apply a released review-queue correction through canonical state.
-
-    Historical review records can carry structured argument changes in addition
-    to replacement content. One canonical patch preserves those changes and
-    returns the item to required Short-term processing; no historical writer is
-    involved.
-    """
-
-    if not arg_changes:
-        raise ValueError("canonical refinement requires argument changes")
-    client = db_client if db_client is not None else default_db_client
-
-    def build_patch(item: MemoryItem, now: datetime) -> Tuple[Payload, Payload]:
-        replacement_content = item.content or ""
-        arguments = dict(item.arguments or {})
-        for key, raw_change in arg_changes.items():
-            value = raw_change.get("to") if isinstance(raw_change, dict) and "to" in raw_change else raw_change
-            if key == "content":
-                if not isinstance(value, str) or not value.strip():
-                    raise ValueError("canonical refinement content must be non-empty")
-                replacement_content = value.strip()
-            elif key != "edited":
-                arguments[key] = value
-
-        promotion = _clear_settled_promotion_route(dict(item.promotion or {}))
-        prior_receipt = promotion.pop("processing_receipt", None)
-        processing_history = list(promotion.get("processing_history") or [])
-        if isinstance(prior_receipt, dict):
-            processing_history.append(prior_receipt)
-        promotion.update(
-            {
-                "required": True,
-                "status": REQUIRED_PROMOTION_STATUS_PENDING,
-                "processing_status": REQUIRED_PROCESSING_STATUS_PENDING,
-                "processor_id": REQUIRED_PROCESSOR_ID,
-                "processor_version": REQUIRED_PROCESSOR_VERSION,
-                "reason": "manual_review_refinement",
-                "source_surface": "memory_review_queue",
-                "attempt_count": 0,
-                "reviewed": True,
-                "user_review": True,
-                "processing_history": processing_history[-10:],
-                "review_correction": copy.deepcopy(arg_changes),
-            }
-        )
-        return (
-            {
-                "memory_text": replacement_content,
-                "arguments": arguments,
-                "target_tier": MemoryLayer.short_term.value,
-                "target_user_asserted": True,
-                "clear_graph_assertion": True,
-            },
-            {
-                "promotion_audit": promotion,
-                "expires_at": default_short_term_expiry(now),
-                "kg_extracted": False,
-            },
-        )
-
-    previous, updated = _apply_canonical_user_mutation(
-        uid,
-        memory_id,
-        mutation_kind="review_refinement",
         build_patch=build_patch,
         db_client=client,
     )
@@ -2059,9 +1569,6 @@ def update_canonical_memory_product_fields(
     *,
     tags: Optional[List[str]] = None,
     category: Optional[str] = None,
-    is_baseline: Optional[bool] = None,
-    is_read: Optional[bool] = None,
-    is_dismissed: Optional[bool] = None,
     db_client: Any = None,
 ) -> MemoryItem:
     client = db_client if db_client is not None else default_db_client
@@ -2070,12 +1577,6 @@ def update_canonical_memory_product_fields(
         metadata["tags"] = list(tags)
     if category is not None:
         metadata["category"] = category
-    if is_baseline is not None:
-        metadata["is_baseline"] = is_baseline
-    if is_read is not None:
-        metadata["is_read"] = bool(is_read)
-    if is_dismissed is not None:
-        metadata["is_dismissed"] = bool(is_dismissed)
     if not metadata:
         item = _read_canonical_memory_item(uid, memory_id, db_client=client)
         if item is None:
@@ -2227,7 +1728,23 @@ def _run_immediate_privacy_cleanup(
 
         return delete_atom_keyword_doc(uid, memory_id, db_client=db_client)
 
+    def _delete_v3_compatibility_projection() -> bool:
+        # Imported lazily because the projection serializer reuses this
+        # adapter's MemoryItem -> MemoryDB mapping.
+        from utils.memory.v3.compatibility_projection_sync import (
+            delete_v3_compatibility_projection_item,
+        )
+
+        control = _read_replacement_control(uid, db_client=db_client)
+        return delete_v3_compatibility_projection_item(
+            uid,
+            memory_id,
+            expected_account_generation=control.account_generation,
+            db_client=db_client,
+        )
+
     cleanup_steps: List[Tuple[str, Callable[[], Any]]] = [
+        ("compatibility_projection", _delete_v3_compatibility_projection),
         ("vector", lambda: delete_canonical_memory_vector(uid, memory_id)),
         (
             "graph_assertion",
@@ -2288,100 +1805,14 @@ def _non_tombstoned_lineage_memory_ids(
     )
 
 
-def _retracted_source_completion_control(
-    uid: str,
-    conversation_id: str,
-    *,
-    db_client: Any,
-) -> Optional[MemoryControlState]:
-    """Control state proving this source has nothing left to retract.
-
-    Mirrors the double-read fence the replacement loop itself uses: the cohort
-    scan only counts when the account-global control did not move while it
-    ran. ``None`` means completion is unproven — callers must keep retrying
-    the real replacement instead of treating the source as retracted.
-    """
-    before = _read_replacement_control(uid, db_client=db_client)
-    live_source_items = [
-        item
-        for item in fetch_authoritative_product_memory_items_for_source(
-            uid,
-            conversation_id,
-            db_client=db_client,
-        )
-        if item.status != MemoryItemStatus.tombstoned and _item_sourced_from_conversation(item, conversation_id)
-    ]
-    if live_source_items:
-        return None
-    after = _read_replacement_control(uid, db_client=db_client)
-    if (
-        before.head_commit_id != after.head_commit_id
-        or before.account_generation != after.account_generation
-        or before.source_generation != after.source_generation
-        or before.commit_sequence != after.commit_sequence
-    ):
-        return None
-    return after
-
-
-def _already_retracted_result(control: MemoryControlState) -> Dict[str, Any]:
-    """The committed-empty-replacement shape, without fighting the CAS for it."""
-    return {
-        "retracted_memory_ids": [],
-        "committed_memory_ids": [],
-        "reactivated_memory_ids": [],
-        "vector_delete_ids": [],
-        "tombstoned_evidence_ids": [],
-        "source_generation": control.source_generation,
-    }
-
-
 def retract_conversation_sourced_memories(uid: str, conversation_id: str, *, db_client: Any = None) -> Dict[str, Any]:
-    """Atomically replace one conversation's complete source set with nothing.
-
-    Concurrent same-account canonical writes — parallel cascade deletes,
-    extractions, merges — all race the account-global control CAS inside
-    :func:`replace_conversation_sourced_memories`, whose three immediate
-    attempts exhaust under sustained contention (#11726). A retraction
-    converges instead of failing: after each conflict round it re-checks,
-    under the same double-read control fence, whether the source is already
-    empty. That covers both a peer worker that committed this retraction and
-    a repeat delete whose committed receipt went stale after another
-    conversation's replacement advanced the generation. A source that still
-    has live items after every bounded round keeps raising, so callers fail
-    closed with the conversation and its memories intact.
-    """
-    client = db_client if db_client is not None else default_db_client
-    last_conflict: Optional[ConversationReplacementConflictError] = None
-    for attempt in range(_RETRACT_CONFLICT_ATTEMPTS):
-        try:
-            return replace_conversation_sourced_memories(
-                uid,
-                conversation_id,
-                [],
-                db_client=client,
-                conflict_backoff_seconds=_IMMEDIATE_REPLACEMENT_RETRY_BACKOFF,
-            )
-        except ConversationReplacementConflictError as exc:
-            last_conflict = exc
-            try:
-                completed_control = _retracted_source_completion_control(uid, conversation_id, db_client=client)
-            except Exception:
-                # A rescue-check read failure must not reintroduce the 500
-                # storm this loop exists to end — keep converging instead.
-                logger.exception(
-                    "canonical retraction completion check failed uid=%s conversation_id=%s",
-                    uid,
-                    conversation_id,
-                )
-                completed_control = None
-            if completed_control is not None:
-                return _already_retracted_result(completed_control)
-            if attempt + 1 < _RETRACT_CONFLICT_ATTEMPTS:
-                time.sleep(_RETRACT_CONFLICT_BACKOFF_SECONDS[min(attempt, len(_RETRACT_CONFLICT_BACKOFF_SECONDS) - 1)])
-    raise ConversationReplacementConflictError(
-        "canonical conversation retraction conflicted repeatedly"
-    ) from last_conflict
+    """Atomically replace one conversation's complete source set with nothing."""
+    return replace_conversation_sourced_memories(
+        uid,
+        conversation_id,
+        [],
+        db_client=db_client,
+    )
 
 
 def delete_canonical_memory(uid: str, memory_id: str, *, db_client: Any = None) -> None:

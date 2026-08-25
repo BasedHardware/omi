@@ -24,6 +24,7 @@ interface TaskGroupProps {
   onEnterSelectionMode?: (id: string) => void;
 }
 
+
 export function TaskGroup({
   title,
   icon,
@@ -57,7 +58,7 @@ export function TaskGroup({
         className={cn(
           'flex items-center gap-2 w-full',
           'text-left',
-          collapsible && 'cursor-pointer hover:opacity-80',
+          collapsible && 'cursor-pointer hover:opacity-80'
         )}
       >
         {collapsible && (
@@ -98,8 +99,8 @@ export function TaskGroup({
               onClick={() => setShowAll(true)}
               className={cn(
                 'w-full py-2 text-sm text-text-tertiary',
-                'hover:text-white transition-colors',
-                'text-center',
+                'hover:text-purple-primary transition-colors',
+                'text-center'
               )}
             >
               Show {tasks.length - maxVisible} more

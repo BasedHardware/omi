@@ -123,7 +123,7 @@ const emptyMetric = (): MutableMetric => ({
   durationMs: 0,
 });
 
-export const numberValue = (value: unknown): number => {
+const numberValue = (value: unknown): number => {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
 };

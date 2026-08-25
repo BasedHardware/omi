@@ -62,7 +62,6 @@ struct TaskChatPanel: View {
           onLoadMore: {},
           onRate: { _, _ in },
           localSendToken: taskState.localSendToken,
-          enablesPromptTimeline: false,
           welcomeContent: { taskWelcome }
         )
         .frame(maxHeight: .infinity)

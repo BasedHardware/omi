@@ -1,10 +1,6 @@
 import 'package:omi/services/capture/capture_controller.dart';
+import 'package:omi/services/capture/capture_external_actions.dart';
 
 class CaptureProvider extends CaptureController {
-  CaptureProvider({
-    super.externalActions,
-    super.conversationLocationCapture,
-    super.inProgressConversationLoader,
-    super.audioCodecLoader,
-  });
+  CaptureProvider({CaptureExternalActions? externalActions}) : super(externalActions: externalActions);
 }

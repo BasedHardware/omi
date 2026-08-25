@@ -71,7 +71,6 @@ final class APIClientConversationCountTests: XCTestCase {
     XCTAssertEqual(response.id, "conversation-1")
     XCTAssertEqual(response.status, "processing")
     XCTAssertFalse(response.discarded)
-    XCTAssertFalse(response.meetingTreatmentEligible)
   }
 
   func testConversationCountEndpointIncludesVisibleFilters() throws {

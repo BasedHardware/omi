@@ -418,7 +418,7 @@
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
-    "myApps": "Ustvarjeno od mene",
+    "myApps": "Moje aplikacije",
     "@myApps": {
         "description": "Filter button for user's own apps"
     },
@@ -10780,22 +10780,5 @@
     "accountCutoverMigrationInProgressTitle": "Probíhá migrace",
     "accountCutoverMigrationInProgressMessage": "Váš účet se migrací. Produktové funkce jsou pozastaveny až do dokončení migrace.",
     "accountCutoverMigrationRollbackMessage": "Váš účet je po vrácení migrace v režimu údržby. Novější data mohou být izolována.",
-    "accountCutoverOpenStore": "Otevřít obchod",
-    "chatScopeToday": "Danes",
-    "chatScopeThisWeek": "Ta teden",
-    "chatScopeAbout": "O: {title}",
-    "askAboutThisConversation": "Vprašaj o tem",
-    "sendRawAudioToOmi": "Pošiljaj neobdelan zvok v Omi",
-    "sendRawAudioToOmiDescription": "Izklopite, da preprečite pošiljanje neobdelanega zvoka v Omi. Prepisi in podatki, potrebni za funkcije v oblaku, se lahko še vedno pošiljajo v Omi.",
-    "findDevice": "Poišči",
-    "diagnosticsShareFailed": "Diagnostike ni bilo mogoče deliti. Poskusi znova.",
-    "appDisabledTitle": "Ta aplikacija je onemogočena in je ni mogoče namestiti.",
-    "appDisabledWebhookFailures": "Njena končna točka je odpovedovala 72 ur zapored, zato je bila dostava ustavljena.",
-    "appDisabledGeneric": "Onemogočila jo je Omi.",
-    "appDisabledOwnerHint": "Najprej popravi končno točko — ponovna omogočitev znova preveri vsak nastavljen URL.",
-    "appReEnable": "Znova omogoči",
-    "appReEnableFailedTitle": "Ponovna omogočitev ni uspela",
-    "appReEnableFailedBody": "Te aplikacije ni bilo mogoče znova omogočiti. Poskusi znova.",
-    "appDisabledOn": "Onemogočeno {date}.",
-    "appDisabledLastError": "Zadnja napaka: {error}."
+    "accountCutoverOpenStore": "Otevřít obchod"
 }

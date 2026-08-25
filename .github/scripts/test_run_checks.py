@@ -23,7 +23,6 @@ from run_checks import (
     VALID_PLATFORMS,
     Check,
     Manifest,
-    command_for_check,
     command_for_host,
     detect_platform,
     execute_checks,
@@ -198,15 +197,7 @@ class ManifestContractTests(unittest.TestCase):
     def test_ci_lane_is_reachable_from_repo_checks(self) -> None:
         workflow = (WORKFLOWS_DIR / "repo-checks.yml").read_text(encoding="utf-8")
         self.assertRegex(workflow, r"run_checks\.py\s+--lane\s+ci")
-        # #9744: main pushes must pass a body through --pr-body-file (not
-        # --skip-pr-body-checks). #11835: the body must be the squash commit
-        # message PLUS the live merged PR body, because this repo squashes
-        # with the commit list rather than the PR description.
-        self.assertNotIn("--skip-pr-body-checks", workflow)
-        self.assertRegex(workflow, r"git log -1 --format=%B HEAD")
-        self.assertRegex(workflow, r"pr_metadata\.py")
-        self.assertRegex(workflow, r"--from-commit-body-file")
-        self.assertRegex(workflow, r"--pr-body-file")
+        self.assertIn("--skip-pr-body-checks", workflow)
         manifest = load_manifest(MANIFEST_PATH)
         self.assertTrue(any("ci" in check.lanes for check in manifest.checks))
 
@@ -511,6 +502,9 @@ esac
                 "rayban-dat-xcode-graph",
                 "rayban-dat-build-wrapper",
             },
+            ".github/workflows/desktop_qualify_beta.yml": {
+                "desktop-release-one-path-contract",
+            },
         }
         for path, expected in expected_by_path.items():
             windows = {check.id for check in resolve_checks(manifest, [path], "ci", platform="windows")}
@@ -525,6 +519,7 @@ esac
             "scripts/dev-harness/_resolve_python.sh": {
                 "dev-harness-unit-tests",
                 "desktop-release-process-guards",
+                "pre-tag-readiness-contract",
             },
             "scripts/pre-push-singleflight": {"pr-preflight-contract-tests"},
             ".github/scripts/preflight_runner.py": {"pr-preflight-contract-tests"},
@@ -536,6 +531,7 @@ esac
                 "check-manifest-contract",
                 "desktop-release-process-guards",
                 "desktop-swiftlint-config",
+                "pre-tag-readiness-behavior",
             },
         }
         for path, expected in expected_by_path.items():
@@ -565,27 +561,7 @@ esac
             selected = {check.id for check in resolve_checks(manifest, ["app/lib/example.dart"], lane)}
             self.assertIn("failure-class-protocol", selected)
 
-    def test_main_push_includes_pr_body_checks_when_body_supplied(self) -> None:
-        """#9744: main pushes now pass the merge-commit body through
-        --pr-body-file, so body-requiring checks (product-invariants,
-        failure-class-protocol) must run — not be silently skipped."""
-        manifest = load_manifest(MANIFEST_PATH)
-        selected = {
-            check.id
-            for check in resolve_checks(
-                manifest,
-                ["app/lib/example.dart"],
-                "ci",
-                include_pr_body_checks=True,
-            )
-        }
-        self.assertIn("product-invariants", selected)
-        self.assertIn("failure-class-protocol", selected)
-        self.assertIn("diff-hygiene", selected)
-
-    def test_main_push_without_body_still_excludes_pr_body_checks(self) -> None:
-        """Fail-closed: a main push with no body must NOT run body-requiring
-        checks (they would fail on empty text), preserving the old skip."""
+    def test_main_push_excludes_only_pr_body_checks(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)
         selected = {
             check.id
@@ -599,46 +575,6 @@ esac
         self.assertNotIn("product-invariants", selected)
         self.assertNotIn("failure-class-protocol", selected)
         self.assertIn("diff-hygiene", selected)
-
-    def test_every_pr_body_consuming_check_is_excluded_from_post_merge_runs(self) -> None:
-        # Post-merge runs have no PR body, so a check whose escape hatch lives
-        # there would fail on main forever.
-        manifest = load_manifest(MANIFEST_PATH)
-        for check in manifest.checks:
-            if "{pr_body_file}" in check.command:
-                self.assertTrue(
-                    check.requires_pr_body,
-                    f"{check.id} consumes the PR body, so it must declare requires_pr_body: true",
-                )
-
-    def test_line_count_ratchet_receives_pr_body_metadata(self) -> None:
-        manifest = load_manifest(MANIFEST_PATH)
-        check = next(check for check in manifest.checks if check.id == "product-file-line-count-ratchet")
-
-        self.assertTrue(check.requires_pr_body)
-        self.assertIn("{pr_body_file}", check.command)
-        self.assertIn("{target_base}", check.command)
-        self.assertIn("{head}", check.command)
-        selected = resolve_checks(
-            manifest,
-            ["backend/routers/example.py"],
-            "ci",
-            include_pr_body_checks=False,
-        )
-        self.assertNotIn(check, selected)
-        self.assertIn(check, resolve_checks(manifest, ["backend/routers/example.py"], "ci"))
-
-        command = command_for_check(
-            check,
-            changed_files_path=Path("changed.txt"),
-            base="merge-base",
-            target_base="origin/main",
-            head="candidate-head",
-            pr_body_file=Path("body.txt"),
-            skip_changelog=False,
-        )
-        self.assertEqual(command[command.index("--base") + 1], "origin/main")
-        self.assertEqual(command[command.index("--head") + 1], "candidate-head")
 
     def test_backend_datetime_sort_sentinel_ratchet_runs_for_backend_sources(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)

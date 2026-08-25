@@ -61,18 +61,18 @@ class _LocalBlob:
         self.name = name
         self._path = bucket._root / name
 
-    def upload_from_filename(self, filename: str, *_args: Any, **_kwargs: Any) -> None:
+    def upload_from_filename(self, filename: str) -> None:
         import shutil
 
         self._path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(filename, self._path)
 
-    def upload_from_string(self, data: str | bytes, *_args: Any, **_kwargs: Any) -> None:
+    def upload_from_string(self, data: str | bytes) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         raw = data.encode() if isinstance(data, str) else data
         self._path.write_bytes(raw)
 
-    def download_to_filename(self, filename: str, *_args: Any, **_kwargs: Any) -> None:
+    def download_to_filename(self, filename: str) -> None:
         import shutil
 
         shutil.copy2(self._path, filename)

@@ -5,7 +5,7 @@ import uuid
 
 from utils.executors import postprocess_executor, submit_with_context
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional, List
 from datetime import datetime, timezone
 
@@ -23,14 +23,10 @@ from database.vector_db import (
 from utils.users import get_user_display_name
 from utils.share_links import build_share_url
 from utils.other import endpoints as auth
-from utils.other.list_budget import (
-    OMI_LIST_TRUNCATED_HEADER,
-    OMI_LIST_TRUNCATED_VALUE,
-    list_read_budget_for_request,
-)
 from utils.notifications import (
     send_notification,
     send_action_item_data_message,
+    send_action_item_update_message,
     send_action_item_deletion_message,
     send_action_items_batch_deletion_message,
     sync_action_item_reminder,
@@ -38,6 +34,7 @@ from utils.notifications import (
 from utils.task_sync import auto_sync_action_item
 from utils.task_intelligence.proactive_engine import run_task_changed_wake
 from pydantic import BaseModel, Field, ValidationError
+from models.shared import StatusResponse
 from models.action_item import (
     ActionItemCreateRequest,
     ActionItemResponse,
@@ -48,7 +45,6 @@ from models.action_item import (
     PendingSyncResponse,
 )
 from utils.task_intelligence import task_links
-from utils.product_telemetry import emit_product_event
 
 router = APIRouter()
 
@@ -77,7 +73,6 @@ def _batch_mutation_response(result, *, locked_ids: Optional[set[str]] = None) -
 
 class ActionItemIdsResponse(BaseModel):
     ids: List[str]
-    completed_scope: Optional[bool] = None
 
 
 class BatchMutationResponse(BaseModel):
@@ -349,8 +344,6 @@ def _ensure_aware(value: datetime) -> datetime:
 
 @router.get("/v1/action-items", response_model=ActionItemsResponse, tags=['action-items'])
 def get_action_items(
-    request: Request = None,  # type: ignore[assignment]
-    response: Response = None,  # type: ignore[assignment]
     limit: int = Query(50, ge=1, le=500, description="Maximum number of action items to return"),
     offset: int = Query(0, ge=0, description="Number of action items to skip"),
     completed: Optional[bool] = Query(None, description="Filter by completion status"),
@@ -359,15 +352,9 @@ def get_action_items(
     end_date: Optional[datetime] = Query(None, description="Filter by creation end date (inclusive)"),
     due_start_date: Optional[datetime] = Query(None, description="Filter by due start date (inclusive)"),
     due_end_date: Optional[datetime] = Query(None, description="Filter by due end date (inclusive)"),
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "action_items:list")),
+    uid: str = Depends(auth.get_current_user_uid),
 ):
-    """Get action items for the current user.
-
-    Large accounts can outrun the request budget; such reads return the honest
-    partial page with ``truncated=true``, ``has_more=true``, and the
-    ``X-Omi-List-Truncated: true`` header instead of a bare middleware 504
-    (#11831).
-    """
+    """Get action items for the current user."""
     if start_date is not None and end_date is not None and _ensure_aware(start_date) > _ensure_aware(end_date):
         raise HTTPException(status_code=400, detail="start_date must be earlier than or equal to end_date")
     if (
@@ -377,7 +364,6 @@ def get_action_items(
     ):
         raise HTTPException(status_code=400, detail="due_start_date must be earlier than or equal to due_end_date")
 
-    budget = list_read_budget_for_request(request, route='action-items')
     action_items = action_items_db.get_action_items(
         uid=uid,
         conversation_id=conversation_id,
@@ -388,13 +374,9 @@ def get_action_items(
         due_end_date=due_end_date,
         limit=limit + 1,
         offset=offset,
-        budget=budget,
     )
 
-    truncated = budget.truncated
-    # A lookahead-derived has_more cannot report complete when the budget ended
-    # the aggregate scan before the lookahead resolved.
-    has_more = truncated or len(action_items) > limit
+    has_more = len(action_items) > limit
     action_items = action_items[:limit]
 
     for item in action_items:
@@ -403,11 +385,8 @@ def get_action_items(
             item['description'] = (description[:70] + '...') if len(description) > 70 else description
 
     response_items = _safe_action_item_responses(action_items, uid=uid)
-    if truncated and response is not None:
-        response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
-    budget.observe('truncated' if truncated else 'complete')
 
-    return {"action_items": response_items, "has_more": has_more, "truncated": truncated}
+    return {"action_items": response_items, "has_more": has_more}
 
 
 @router.get("/v1/action-items/search", response_model=ActionItemsSearchResponse, tags=['action-items'])
@@ -427,33 +406,14 @@ def search_action_items(
 
 
 @router.get("/v1/action-items/ids", response_model=ActionItemIdsResponse, tags=['action-items'])
-def list_action_item_ids(
-    completed: Optional[bool] = Query(
-        None,
-        description="When present, return only non-deleted IDs in this completion bucket",
-    ),
-    uid: str = Depends(auth.get_current_user_uid),
-):
-    """Return the user's action-item IDs (lightweight reconciliation).
+def list_action_item_ids(uid: str = Depends(auth.get_current_user_uid)):
+    """Return all of the user's action-item IDs (IDs only, no field reads).
 
-    Without ``completed``: returns every ID with no field reads — the cheapest
-    way for a client to know which tasks it has without paging the full list.
-
-    With ``completed``: returns only non-deleted IDs in the requested bucket. The
-    ``completed`` bucket is filtered server-side; only documents in that bucket are
-    streamed (a two-field ``completed``, ``deleted`` projection), and the ``deleted``
-    exclusion is still applied in Python since Firestore equality filters would drop
-    undeleted rows that have no ``deleted`` field.
-
-    Declared before /v1/action-items/{action_item_id} so the static path is not
+    A lightweight way for a client to reconcile which tasks it has without paging the full
+    list. Declared before /v1/action-items/{action_item_id} so the static path is not
     captured as an action item id.
     """
-    if completed is None:
-        return {"ids": action_items_db.get_action_item_ids(uid)}
-    return {
-        "ids": action_items_db.get_visible_action_item_ids(uid, completed=completed),
-        "completed_scope": completed,
-    }
+    return {"ids": action_items_db.get_action_item_ids(uid)}
 
 
 @router.get("/v1/action-items/{action_item_id}", response_model=ActionItemResponse, tags=['action-items'])
@@ -508,25 +468,6 @@ def update_action_item(
     updated_item = action_items_db.get_action_item(uid, action_item_id)
     if updated_item is None:
         raise HTTPException(status_code=500, detail="Updated action item could not be loaded")
-
-    if request.owner is not None:
-        previous_owner_value = existing_item.get('owner') or 'unknown'
-        previous_owner = getattr(previous_owner_value, 'value', str(previous_owner_value))
-        next_owner = request.owner.value
-        if previous_owner != next_owner:
-            emit_product_event(
-                uid=uid,
-                event='Task Assignee Corrected',
-                properties={
-                    'action_item_id': action_item_id,
-                    'conversation_id': updated_item.get('conversation_id'),
-                    'previous_assignee': (
-                        previous_owner if previous_owner in {'user', 'other', 'unknown'} else 'unknown'
-                    ),
-                    'new_assignee': next_owner,
-                    'field_changed': 'owner',
-                },
-            )
     _wake_task_changes(uid, [action_item_id], updated_item.get('updated_at'))
 
     # Reconcile the client-scheduled reminder when completion or due date changed, using the final
@@ -621,14 +562,6 @@ def batch_delete_action_items(request: BatchDeleteActionItemsRequest, uid: str =
     vector store delete and the FCM cancellation message both use their batch
     helpers — no per-id loop on this hot path.
     """
-    # Chunk the locked-task preflight so large Select All batches (up to 10,000
-    # IDs) stay within Firestore's batch-get limits and avoid loading tens of
-    # megabytes of document data in one RPC before any deletion begins.
-    for i in range(0, len(request.ids), 500):
-        existing_items = action_items_db.get_action_items_by_ids(uid, request.ids[i : i + 500])
-        if any(item.get('is_locked', False) for item in existing_items):
-            raise HTTPException(status_code=402, detail="A paid plan is required to delete locked action items.")
-
     deleted_ids = action_items_db.delete_action_items_batch(uid, request.ids)
 
     if deleted_ids:

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useCallback, useState, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Brain, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -55,26 +55,31 @@ export function MemoryList({
   // Infinite scroll - trigger when approaching end of virtual items
   useEffect(() => {
     const virtualItems = virtualizer.getVirtualItems();
-    if (memories.length === 0 && hasMore && !loading && !loadingMore) {
-      setLoadingMore(true);
-      onLoadMore().finally(() => {
-        setLoadingMore(false);
-      });
-      return;
-    }
     if (!virtualItems.length) return;
 
     const lastItem = virtualItems[virtualItems.length - 1];
     if (!lastItem) return;
 
     // Trigger load more when within 5 items of the end
-    if (lastItem.index >= memories.length - 5 && hasMore && !loading && !loadingMore) {
+    if (
+      lastItem.index >= memories.length - 5 &&
+      hasMore &&
+      !loading &&
+      !loadingMore
+    ) {
       setLoadingMore(true);
       onLoadMore().finally(() => {
         setLoadingMore(false);
       });
     }
-  }, [memories.length, hasMore, loading, loadingMore, onLoadMore, virtualizer]);
+  }, [
+    memories.length,
+    hasMore,
+    loading,
+    loadingMore,
+    onLoadMore,
+    virtualizer,
+  ]);
 
   // Scroll to highlighted memory
   useEffect(() => {
@@ -90,7 +95,7 @@ export function MemoryList({
   }, [highlightedMemoryId, memories, virtualizer]);
 
   // Empty state
-  if (!loading && !hasMore && memories.length === 0) {
+  if (!loading && memories.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <div className="w-16 h-16 rounded-full bg-bg-tertiary flex items-center justify-center mb-4">
@@ -109,9 +114,8 @@ export function MemoryList({
   return (
     <div
       ref={containerRef}
-      role="region"
-      aria-label="Memories list"
-      className="flex flex-col overflow-y-auto max-h-[calc(100dvh-350px)] lg:max-h-none lg:flex-1 lg:min-h-0 pr-2 [scrollbar-gutter:stable] [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.12)_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-thumb:hover]:bg-white/20"
+      className="flex flex-col overflow-y-auto scrollbar-thin scrollbar-thumb-bg-quaternary scrollbar-track-transparent"
+      style={{ maxHeight: 'calc(100vh - 350px)' }}
     >
       {/* Virtual scrolling container */}
       <div
@@ -160,7 +164,7 @@ export function MemoryList({
       {/* Loading indicator */}
       {(loading || loadingMore) && (
         <div className="flex items-center justify-center py-4">
-          <Loader2 className="w-5 h-5 text-white animate-spin" />
+          <Loader2 className="w-5 h-5 text-purple-primary animate-spin" />
           <span className="ml-2 text-sm text-text-tertiary">Loading memories...</span>
         </div>
       )}
@@ -185,7 +189,7 @@ export function MemoryListSkeleton() {
           className={cn(
             'rounded-xl p-4',
             'bg-bg-tertiary border border-bg-quaternary',
-            'animate-pulse motion-reduce:animate-none',
+            'animate-pulse'
           )}
         >
           <div className="flex items-start gap-3">

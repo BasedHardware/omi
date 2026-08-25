@@ -16,6 +16,7 @@ DEFAULT_GKE_SERVICES = (
     'backend-listen',
     'pusher',
     'llm-gateway',
+    'agent-proxy',
     'parakeet',
     'diarizer',
     'vad',

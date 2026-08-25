@@ -20,14 +20,13 @@ from models.message_event import (
     SpeakerLabelSuggestionEvent,
     TranslationEvent,
 )
-from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment, Translation
+from models.transcript_segment import TranscriptSegment, Translation
 from utils.app_integrations import trigger_realtime_integrations
 from utils.conversations.factory import deserialize_conversation
 from utils.observability.fallback import record_fallback
 from utils.speaker_assignment import process_speaker_assigned_segments, should_update_speaker_to_person_map
 from utils.speaker_identification import detect_speaker_from_text
 from utils.stt.streaming import sort_segments_by_start, sort_transcript_segments_in_place
-from utils.stt.speaker_identity import ConversationSpeakerIdAllocator
 from utils.transcribe_decisions import (
     is_user_self_match,
     person_id_for_client,
@@ -39,7 +38,6 @@ from utils.transcribe_store import conversations_db, user_db
 from utils.translation import TranslationService
 from utils.translation_cache import ConversationLanguageState, TranscriptSegmentLanguageCache
 from utils.translation_coordinator import TranslationCoordinator
-from utils.product_telemetry import emit_product_event
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +85,6 @@ class TranscriptProcessor:
         self.cache = ConversationCache(self._load_conversation)
         self.current_session_segments: Dict[str, bool] = {}
         self.suggested_segments: set[str] = set()
-        self.speaker_id_allocator = ConversationSpeakerIdAllocator()
         self.language_cache = TranscriptSegmentLanguageCache()
         self.translation_service = TranslationService()
         self.translation_lock = asyncio.Lock()
@@ -189,7 +186,6 @@ class TranscriptProcessor:
             speaker = self.host.speakers
             targets = conversation.transcript_segments if self.host.state.speaker_map_dirty else updated
             process_speaker_assigned_segments(targets, speaker.segment_assignments, speaker.speaker_to_person)
-            self._apply_speaker_identity_statuses(targets)
             self.host.state.speaker_map_dirty = False
             serialised = [segment.model_dump() for segment in conversation.transcript_segments]
             written = await self.host.persistence.call(
@@ -225,9 +221,7 @@ class TranscriptProcessor:
 
     async def flush_speaker_assignments(self, conversation_id: Optional[str]) -> None:
         speaker = self.host.speakers
-        if not conversation_id or not (
-            speaker.speaker_to_person or speaker.segment_assignments or speaker.segment_identity_status
-        ):
+        if not conversation_id or not (speaker.speaker_to_person or speaker.segment_assignments):
             return
         data = await self.cache.get(conversation_id, force_refresh=True)
         if not data:
@@ -236,7 +230,6 @@ class TranscriptProcessor:
         process_speaker_assigned_segments(
             conversation.transcript_segments, speaker.segment_assignments, speaker.speaker_to_person
         )
-        self._apply_speaker_identity_statuses(conversation.transcript_segments)
         serialised = [segment.model_dump() for segment in conversation.transcript_segments]
         await self.host.persistence.call(
             conversations_db.update_conversation_segments,
@@ -247,21 +240,6 @@ class TranscriptProcessor:
         )
         self.cache.update_segments(serialised)
         self.host.state.speaker_map_dirty = False
-
-    def _apply_speaker_identity_statuses(self, segments: List[TranscriptSegment]) -> None:
-        speaker = self.host.speakers
-        for segment in segments:
-            person_id = speaker.segment_assignments.get(cast(str, segment.id))
-            if person_id is None and segment.speaker_id in speaker.speaker_to_person:
-                person_id = speaker.speaker_to_person[cast(int, segment.speaker_id)][0]
-            if person_id is not None:
-                segment.speaker_identity_status = (
-                    SpeakerIdentityStatus.user if is_user_self_match(person_id) else SpeakerIdentityStatus.not_user
-                )
-                continue
-            status = speaker.segment_identity_status.get(cast(str, segment.id))
-            if status is not None:
-                segment.speaker_identity_status = status
 
     async def _translate(self, segments: List[TranscriptSegment], conversation_id: str, removed: List[str]) -> None:
         if self.translation_coordinator:
@@ -285,14 +263,12 @@ class TranscriptProcessor:
         return False
 
     async def process_loop(self) -> None:
-        diarized_speaker_ids_by_conversation: Dict[str, set[int]] = {}
         while self.host.state.active or self.segment_buffer or self.photo_buffer:
             if await self.host.wait(0.6) and not (self.segment_buffer or self.photo_buffer):
                 break
             if not self.segment_buffer and not self.photo_buffer:
                 continue
             raw_segments = sort_segments_by_start(list(self.segment_buffer))
-            conversation_id = self.host.state.current_conversation_id
             self.segment_buffer.clear()
             photos = list(self.photo_buffer)
             self.photo_buffer.clear()
@@ -316,9 +292,7 @@ class TranscriptProcessor:
                 if isinstance(conversation_started, str):
                     conversation_started = datetime.fromisoformat(conversation_started)
                 offset = self.host.state.first_audio_byte_timestamp - conversation_started.timestamp()
-                self.speaker_id_allocator.hydrate(data.get('transcript_segments', []))
                 for raw in raw_segments:
-                    self.speaker_id_allocator.assign(raw)
                     raw['start'] += offset
                     raw['end'] += offset
                     segment = TranscriptSegment(**raw, speech_profile_processed=True)
@@ -327,13 +301,8 @@ class TranscriptProcessor:
                         and raw.get('speaker_id') != self.host.onboarding_omi_speaker_id
                     ):
                         segment.is_user = True
-                        segment.speaker_identity_status = SpeakerIdentityStatus.user
                     new_segments.append(segment)
                     self.current_session_segments[cast(str, segment.id)] = segment.speech_profile_processed
-                if conversation_id:
-                    diarized_speaker_ids_by_conversation.setdefault(conversation_id, set()).update(
-                        segment.speaker_id for segment in new_segments if isinstance(segment.speaker_id, int)
-                    )
                 self.host.state.words_transcribed_since_last_record += len(
                     ' '.join(segment.text for segment in new_segments).split()
                 )
@@ -374,7 +343,6 @@ class TranscriptProcessor:
                         [segment.model_dump() for segment in transcript_segments],
                         self.host.state.current_conversation_id,
                         source=self.host.request.source,
-                        client_kind=self.host.client_kind,
                     )
                 except Exception as error:
                     logger.error('Realtime integration trigger failed type=%s', type(error).__name__)
@@ -390,19 +358,6 @@ class TranscriptProcessor:
             logger.warning('Timed out waiting for listen speaker identification to finish')
         await self.host.speakers.drain(timeout=10, label='listen_speaker_final')
         await self.flush_speaker_assignments(self.host.state.current_conversation_id)
-        for conversation_id, diarized_speaker_ids in diarized_speaker_ids_by_conversation.items():
-            if not diarized_speaker_ids:
-                continue
-            emit_product_event(
-                uid=self.host.request.uid,
-                event='Diarization Completed',
-                properties={
-                    'recording_id': getattr(self.host, 'recording_session_id', None),
-                    'conversation_id': conversation_id,
-                    'speaker_count': len(diarized_speaker_ids),
-                    'source': 'stt_provider',
-                },
-            )
 
     async def _write_fresh(
         self,
@@ -435,9 +390,7 @@ class TranscriptProcessor:
                 person_id, person_name = speaker.speaker_to_person[segment.speaker_id]
                 if is_user_self_match(person_id):
                     segment.is_user = True
-                    segment.speaker_identity_status = SpeakerIdentityStatus.user
                 else:
-                    segment.speaker_identity_status = SpeakerIdentityStatus.not_user
                     self.host.emit_speaker_suggestion(segment.speaker_id, person_id, person_name, segment_id)
                 self.suggested_segments.add(segment_id)
                 continue

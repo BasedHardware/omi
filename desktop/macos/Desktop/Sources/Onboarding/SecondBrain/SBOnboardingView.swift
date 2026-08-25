@@ -69,6 +69,19 @@ struct SBOnboardingView: View {
     // Pins the panel's light appearance so `Ink`'s dynamic colours resolve dark here even on a
     // machine in Dark Mode. Without it this card is near-white type on a near-white ground.
     .glassContent()
+    .overlay(alignment: .topTrailing) {
+      ViewThatFits(in: .horizontal) {
+        HStack(spacing: 8) {
+          backButton
+          skipButton
+        }
+        VStack(alignment: .trailing, spacing: 8) {
+          backButton
+          skipButton
+        }
+      }
+      .padding(.top, 20).padding(.trailing, 24)
+    }
     .onAppear { model.begin() }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       if model.step == .context { refreshContextStates() }
@@ -101,25 +114,6 @@ struct SBOnboardingView: View {
 
   private func panel(in panelSize: CGSize) -> some View {
     VStack(spacing: 0) {
-      // Navigation belongs to the onboarding card, not the window's corner. The window can be wider
-      // than the card (and may be repositioned independently), so an outer overlay makes Back look
-      // detached from the conversation it controls.
-      HStack {
-        Spacer(minLength: 0)
-        ViewThatFits(in: .horizontal) {
-          HStack(spacing: 8) {
-            backButton
-            if model.canSkipOnboarding { skipButton }
-          }
-          VStack(alignment: .trailing, spacing: 8) {
-            backButton
-            if model.canSkipOnboarding { skipButton }
-          }
-        }
-      }
-      .frame(minHeight: 44)
-      .padding(.horizontal, 16)
-      .padding(.top, 8)
       ScrollViewReader { proxy in
         ScrollView {
           VStack(alignment: .leading, spacing: 14) {
@@ -139,13 +133,9 @@ struct SBOnboardingView: View {
               currentStepContainer(in: panelSize)
                 .id("widget")
             }
-            // Keep the last control above the progress band while ScrollViewReader settles after a
-            // growing widget or a streamed message. A tiny sentinel spacer can leave an input or
-            // permission action visually underneath the dots even though the band is a VStack
-            // sibling, so reserve a full band's height plus a small breathing room here as well.
-            Color.clear.frame(height: OnboardingGlass.scrollContentBottomPadding).id("bottom")
+            Color.clear.frame(height: 4).id("bottom")
           }
-          .padding(.horizontal, 28).padding(.top, 26)
+          .padding(.horizontal, 28).padding(.top, 26).padding(.bottom, 10)
         }
         // **The thread sits on the floor of the card, not its ceiling.** The panel is a fixed
         // 540 × 640 so it never jumps as the conversation grows, which means the first three steps
@@ -160,10 +150,6 @@ struct SBOnboardingView: View {
         .onChange(of: model.streamingText) { _, _ in scrollDown(proxy) }
         .onChange(of: model.shortcutPicked) { _, _ in scrollDown(proxy) }
         .onChange(of: model.shortcutPressed) { _, _ in scrollDown(proxy) }
-        // Tapping "Custom shortcut" enters recording mode, which expands the widget with
-        // instructions/refusal text below the preset rows. Without this scroll trigger the new
-        // content is clipped below the fold.
-        .onChange(of: model.shortcutRecording) { _, _ in scrollDown(proxy) }
         // Revealing the assistants list grows the widget *below* the fold, so without this the
         // rows it just opened are clipped by the card's lower edge and nothing moves.
         .onChange(of: showAIAssistants) { _, _ in scrollDown(proxy) }
@@ -200,10 +186,13 @@ struct SBOnboardingView: View {
       .animation(OnboardingGlass.stepAnimation, value: model.showWidget)
   }
 
-  /// Back and Skip sit in the card header, next to the conversation they control. `glassChip()` is a
-  /// wash — the treatment for a chip that already sits on a ground — and the card is already the
-  /// ground here. `.glassFloatingBar` keeps the compact control legible without making it look like a
-  /// second panel.
+  /// Back and Skip sit **outside** the card, in the window's top-right corner, so unlike everything
+  /// else on this screen they have no panel under them. `glassChip()` is a wash — the treatment for a
+  /// chip that already sits on a ground — and a wash on the desktop is the card's own defect at chip
+  /// scale: `Ink.secondary` on the wallpaper. So they are their own small pieces of glass, the same
+  /// way `RewindOnlyView`'s floating bar is. `.glassFloatingBar` and not a second `glassChip` on top
+  /// of it: the panel already draws the corner and the edge, and stacking the wash back on would be
+  /// two grounds on one 30 pt control.
   private static let chipRadius: CGFloat = 999
 
   @ViewBuilder private var backButton: some View {
@@ -216,6 +205,7 @@ struct SBOnboardingView: View {
       }
       .buttonStyle(.plain)
       .help("Go back and change an earlier answer")
+      .padding(.trailing, 12)
     }
   }
 
@@ -293,7 +283,6 @@ struct SBOnboardingView: View {
     case .agents: agentsWidget
     case .context: contextWidget
     case .capture: captureWidget
-    case .referral: referralWidget
     }
   }
 
@@ -642,7 +631,9 @@ struct SBOnboardingView: View {
             Text(opt.sub).inkStyle(InkType.statusLabel, color: Ink.secondary)
               .fixedSize(horizontal: false, vertical: true)
             Spacer()
-            if model.chosenShortcut == opt.shortcut {
+            if model.shortcutRecording {
+              Text("Press a key").inkStyle(InkType.statusLabel, color: Ink.secondary)
+            } else if model.chosenShortcut == opt.shortcut {
               Text("✓").inkStyle(InkType.statusLabel, color: Ink.primary)
             }
           }
@@ -658,24 +649,6 @@ struct SBOnboardingView: View {
         }
         .buttonStyle(.plain)
       }
-      Button {
-        model.beginShortcutRecording(isTalk: isTalk)
-      } label: {
-        HStack(spacing: 8) {
-          Image(systemName: "keyboard")
-            .font(.system(size: 13, weight: .medium))
-          Text("Custom shortcut").inkStyle(InkType.rowCopy, color: Ink.primary)
-          Spacer()
-          Text(model.shortcutRecording ? "Press it now" : "Set your own")
-            .inkStyle(InkType.statusLabel, color: Ink.secondary)
-        }
-        .padding(.horizontal, 14).padding(.vertical, 11)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(shortcutOptionShape.fill(model.shortcutRecording ? Ink.rowFillHover : .clear))
-        .overlay(shortcutOptionShape.strokeBorder(Ink.hairline, lineWidth: 1))
-        .contentShape(shortcutOptionShape)
-      }
-      .buttonStyle(.plain)
       if model.shortcutRecording {
         // A bare key is refused (`acceptsRecordedChord`) because a global bare `L` would make every
         // `L` typed anywhere open Omi. The refusal used to be silent, so the step looked broken to
@@ -689,11 +662,6 @@ struct SBOnboardingView: View {
         .inkStyle(InkType.rowCopy, color: Ink.primary)
         .fixedSize(horizontal: false, vertical: true)
         .padding(.top, 6)
-      } else if let error = model.shortcutRegistrationError {
-        Text(error)
-          .inkStyle(InkType.rowCopy, color: Ink.errorRed)
-          .fixedSize(horizontal: false, vertical: true)
-          .padding(.top, 6)
       } else if model.shortcutPicked {
         VStack(alignment: .leading, spacing: 10) {
           HStack(spacing: 6) {
@@ -711,13 +679,20 @@ struct SBOnboardingView: View {
         }
         .padding(.top, 6)
       }
-      // Shortcut setup is required: Continue appears only after the selected shortcut has been
-      // pressed, and there is deliberately no skip action on either shortcut stage.
+      // Continue only appears once the key has actually been pressed; before that,
+      // the same secondary Skip capsule every other step offers, so the user is never stuck.
       Group {
-        if model.shortcutPicked, model.shortcutPressed {
+        if model.shortcutPressed {
           SBInkButton(title: "Continue", isDefaultAction: true) {
             isTalk ? model.answerShortcutTalk() : model.answerShortcutOpen()
           }
+        } else {
+          Button {
+            isTalk ? model.answerShortcutTalk() : model.answerShortcutOpen()
+          } label: {
+            Text("Skip for now").frame(maxWidth: .infinity)
+          }
+          .buttonStyle(InkButtonStyle(kind: .secondary))
         }
       }
       .padding(.top, 6)
@@ -915,29 +890,31 @@ struct SBOnboardingView: View {
       Button {
         model.capture(SBOnboardingModel.defaultCaptureSelection)
       } label: {
-        Text("Only Meetings").frame(maxWidth: .infinity)
+        // **One `Text`, not an `HStack` of two.** The label is wider than the capsule's 340 pt
+        // measure, and side by side the first run wrapped to two lines while the qualifier stayed on
+        // one and centred itself against them — a lopsided block inside the pill, on the last card
+        // of the flow. Concatenated, the whole label wraps as a single centred paragraph.
+        //
+        // The qualifier still steps down in *alpha* on the label colour rather than moving to another
+        // rung — the ladder is for type on the panel, and there is no second ink inside a primary
+        // button. `Ink.surface` restated here because a per-run colour is the only way to vary one
+        // inside a concatenation, and `Ink.surface` is exactly what `InkButtonStyle` sets for
+        // `.primary`.
+        (Text("● Only during meetings ")
+          + Text("· from my calendar").foregroundColor(Ink.surface.opacity(0.75)))
+          .multilineTextAlignment(.center)
+          .frame(maxWidth: .infinity)
       }
       .buttonStyle(InkButtonStyle(kind: .primary))
       .keyboardShortcut(.defaultAction)
       Button {
-        model.capture(.always)
+        model.capture(.continuous)
       } label: {
-        Text("Always On").frame(maxWidth: .infinity)
+        Text("Start listening — continuously").frame(maxWidth: .infinity)
       }
       .buttonStyle(InkButtonStyle(kind: .secondary))
     }
     .frame(maxWidth: 340, alignment: .leading)
-  }
-
-  private var referralWidget: some View {
-    VStack(alignment: .leading, spacing: 14) {
-      ReferralProgramView(showsIntroduction: false)
-
-      SBInkButton(title: "Take me to Omi", isDefaultAction: true) {
-        model.finishReferral()
-      }
-    }
-    .frame(maxWidth: 380, alignment: .leading)
   }
 }
 

@@ -11,27 +11,6 @@ enum ConversationStatus: String, Codable {
   case failed = "failed"
 }
 
-/// What the conversation row/header should communicate about a conversation's
-/// state. Computed from `status`, `isLocked`, and `structured.title` together
-/// so the UI can show a meaningful label instead of collapsing every empty-
-/// title case to "Untitled".
-enum ConversationDisplayState: Equatable {
-  /// Normal: LLM produced a title.
-  case titled(String)
-  /// Pipeline is still running. Title will arrive soon.
-  case processing
-  /// Conversation is locked (subscription gating). Title intentionally hidden.
-  case locked
-  /// Processing finished but the title slot is empty AND the transcript has
-  /// recoverable content — usually a silent LLM failure. Surface a reprocess
-  /// affordance.
-  case untitledRecoverable
-  /// Empty/very short capture — genuinely nothing to title. No CTA.
-  case untitledEmpty
-  /// Pipeline reported failure. Reprocess affordance offered.
-  case failed
-}
-
 enum ConversationSource: String, Codable {
   case friend
   case omi
@@ -61,28 +40,6 @@ enum ConversationSource: String, Codable {
 struct ConversationMutationResponse: Decodable {
   let status: String
   let conversation: ServerConversation
-}
-
-/// Durable Cloud Tasks finalization projection returned by
-/// GET /v1/conversations/{id}/finalization.
-struct ConversationFinalizationStatusResponse: Decodable, Equatable {
-  let jobID: String
-  let status: String
-  let terminal: Bool
-  let retryable: Bool
-  let attemptCount: Int
-  let taskRetryCount: Int
-  let meetingTreatmentEligible: Bool?
-
-  enum CodingKeys: String, CodingKey {
-    case jobID = "job_id"
-    case status
-    case terminal
-    case retryable
-    case attemptCount = "attempt_count"
-    case taskRetryCount = "task_retry_count"
-    case meetingTreatmentEligible = "meeting_treatment_eligible"
-  }
 }
 
 enum TranscriptPresenceState: Equatable {
@@ -310,69 +267,9 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     self.deferred = deferred
   }
 
-  /// Returns the title from structured data, or a fallback.
-  ///
-  /// Prefer ``displayTitle`` in UI surfaces — it disambiguates between "no
-  /// title because still processing", "no title because locked", and "no
-  /// title because the LLM gave up" instead of collapsing all three to a
-  /// flat "Untitled Conversation" string. This getter stays for callers
-  /// that need a single plain string (exports, log lines, copy-to-clipboard).
+  /// Returns the title from structured data, or a fallback
   var title: String {
     structured.title.isEmpty ? "Untitled Conversation" : structured.title
-  }
-
-  /// What a row/header should actually render for this conversation's state.
-  ///
-  /// Four cases the UI used to collapse into the same "Untitled" string:
-  /// 1. processing / in-progress / merging → "Processing…" (no real title yet)
-  /// 2. locked (subscription gating) → "Locked"
-  /// 3. completed but empty title + non-trivial transcript → "Untitled" with
-  ///    a reprocess affordance — the LLM didn't produce a title, usually a
-  ///    transient processing failure that's recoverable.
-  /// 4. genuinely empty/short capture → "Untitled", no CTA (probably ambient
-  ///    noise; pushing reprocess would just burn tokens).
-  var displayState: ConversationDisplayState {
-    if isLocked {
-      return .locked
-    }
-    switch status {
-    case .inProgress, .processing, .merging:
-      return .processing
-    case .failed:
-      return .failed
-    case .completed:
-      if !structured.title.isEmpty {
-        return .titled(structured.title)
-      }
-      // Heuristic: a "real" conversation has at least one transcript segment
-      // long enough to plausibly have content (≥ 5 words). Below that, it's
-      // probably ambient/accidental capture and we shouldn't push reprocess.
-      let hasRecoverableContent = transcriptSegments.contains { seg in
-        seg.text.split(whereSeparator: { $0.isWhitespace }).count >= 5
-      }
-      return hasRecoverableContent ? .untitledRecoverable : .untitledEmpty
-    }
-  }
-
-  /// The string a row/header should display in the title slot.
-  var displayTitle: String {
-    switch displayState {
-    case .titled(let title): return title
-    case .processing: return "Processing…"
-    case .locked: return "Locked"
-    case .failed: return "Failed to process"
-    case .untitledRecoverable, .untitledEmpty: return "Untitled"
-    }
-  }
-
-  /// True when the conversation has content but no title and the user can
-  /// recover it by re-running the LLM processing step. Drives the "Reprocess"
-  /// affordance in the UI.
-  var canReprocess: Bool {
-    switch displayState {
-    case .untitledRecoverable, .failed: return true
-    default: return false
-    }
   }
 
   /// Returns the overview/summary from structured data
@@ -427,32 +324,6 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   }
 }
 
-/// One headed block of the conversation's written summary.
-///
-/// The backend moved the substance of a summary out of `overview` and into these when the notes
-/// pipeline landed: `overview` became a single short compatibility paragraph, and the headed
-/// detail — what was discussed, the friction, the follow-ups — lives here. The generated wire DTO
-/// has carried them since; this domain model did not, so every desktop surface was rendering the
-/// compatibility paragraph and calling it the summary.
-struct SummarySection: Codable, Equatable, Identifiable {
-  var id: String { heading }
-  let heading: String
-  let bodyMarkdown: String
-  let sourceSegmentIDs: [String]
-
-  init(heading: String, bodyMarkdown: String, sourceSegmentIDs: [String] = []) {
-    self.heading = heading
-    self.bodyMarkdown = bodyMarkdown
-    self.sourceSegmentIDs = sourceSegmentIDs
-  }
-
-  init(_ wire: OmiAPI.Section) {
-    heading = wire.heading
-    bodyMarkdown = wire.bodyMarkdown
-    sourceSegmentIDs = wire.sourceSegmentIds ?? []
-  }
-}
-
 struct Structured: Codable, Equatable {
   var title: String
   let overview: String
@@ -460,9 +331,6 @@ struct Structured: Codable, Equatable {
   let category: String
   let actionItems: [ActionItem]
   let events: [Event]
-  /// The headed blocks the backend writes the real summary into. Empty for captures processed
-  /// before the notes pipeline, which is why every reader must fall back to `overview`.
-  let sections: [SummarySection]
 
   init(from decoder: Decoder) throws {
     // Schema authority: OmiAPI.Structured (generated from app-client OpenAPI).
@@ -480,7 +348,6 @@ struct Structured: Codable, Equatable {
     }
     actionItems = (wire.actionItems ?? []).map(ActionItem.init)
     events = (wire.events ?? []).map(Event.init)
-    sections = (wire.sections ?? []).map(SummarySection.init)
   }
 
   init(_ wire: OmiAPI.Structured) {
@@ -494,14 +361,12 @@ struct Structured: Codable, Equatable {
     }
     actionItems = (wire.actionItems ?? []).map(ActionItem.init)
     events = (wire.events ?? []).map(Event.init)
-    sections = (wire.sections ?? []).map(SummarySection.init)
   }
 
   func encode(to encoder: Encoder) throws {
     let actionItemsWire = actionItems.map {
       OmiAPI.ActionItem(
-        candidateAction: nil, captureConfidence: nil, captureKind: nil, captureOwner: $0.captureOwner,
-        completed: $0.completed,
+        candidateAction: nil, captureConfidence: nil, captureKind: nil, captureOwner: nil, completed: $0.completed,
         completedAt: nil, concreteDeliverable: nil, conversationId: nil, createdAt: nil, description_: $0.description,
         dueAt: nil, ownershipConfidence: nil, sourceSegmentIds: $0.sourceSegmentIDs,
         targetTaskId: $0.targetTaskID, updatedAt: nil)
@@ -515,17 +380,12 @@ struct Structured: Codable, Equatable {
         title: $0.title
       )
     }
-    let sectionsWire = sections.map {
-      OmiAPI.Section(
-        bodyMarkdown: $0.bodyMarkdown, heading: $0.heading, sourceSegmentIds: $0.sourceSegmentIDs)
-    }
     let wire = OmiAPI.Structured(
       actionItems: actionItemsWire,
       category: OmiAPI.CategoryEnum(rawValue: category),
       emoji: emoji,
       events: eventsWire,
       overview: overview,
-      sections: sectionsWire,
       title: title
     )
     try wire.encode(to: encoder)
@@ -538,8 +398,7 @@ struct Structured: Codable, Equatable {
     emoji: String,
     category: String,
     actionItems: [ActionItem],
-    events: [Event],
-    sections: [SummarySection] = []
+    events: [Event]
   ) {
     self.title = title
     self.overview = overview
@@ -547,7 +406,6 @@ struct Structured: Codable, Equatable {
     self.category = category
     self.actionItems = actionItems
     self.events = events
-    self.sections = sections
   }
 }
 
@@ -556,10 +414,6 @@ struct ActionItem: Codable, Identifiable, Equatable {
   let description: String
   let completed: Bool
   let deleted: Bool
-  /// Extraction ownership from the backend (`capture_owner`), e.g. "user" when
-  /// the item is the user's own commitment. Optional: legacy captures and
-  /// locally cached rows predate the field.
-  let captureOwner: String?
   /// Canonical task linkage is optional on legacy captures. When present, the
   /// chat-first archive uses this opaque ID for a typed deep link rather than
   /// inferring a task from the description.
@@ -570,14 +424,12 @@ struct ActionItem: Codable, Identifiable, Equatable {
     description: String,
     completed: Bool,
     deleted: Bool,
-    captureOwner: String? = nil,
     targetTaskID: String? = nil,
     sourceSegmentIDs: [String] = []
   ) {
     self.description = description
     self.completed = completed
     self.deleted = deleted
-    self.captureOwner = captureOwner
     self.targetTaskID = targetTaskID
     self.sourceSegmentIDs = sourceSegmentIDs
   }
@@ -589,7 +441,6 @@ struct ActionItem: Codable, Identifiable, Equatable {
     self.description = wire.description_
     self.completed = wire.completed ?? false
     self.deleted = false
-    self.captureOwner = wire.captureOwner
     self.targetTaskID = wire.targetTaskId
     self.sourceSegmentIDs = wire.sourceSegmentIds ?? []
   }
@@ -599,7 +450,6 @@ struct ActionItem: Codable, Identifiable, Equatable {
     self.description = wire.description_
     self.completed = wire.completed ?? false
     self.deleted = false
-    self.captureOwner = wire.captureOwner
     self.targetTaskID = wire.targetTaskId
     self.sourceSegmentIDs = wire.sourceSegmentIds ?? []
   }
@@ -609,7 +459,7 @@ struct ActionItem: Codable, Identifiable, Equatable {
       candidateAction: nil,
       captureConfidence: nil,
       captureKind: nil,
-      captureOwner: captureOwner,
+      captureOwner: nil,
       completed: completed,
       completedAt: nil,
       concreteDeliverable: nil,
@@ -983,32 +833,5 @@ struct MoveToFolderRequest: Encodable {
 
   enum CodingKeys: String, CodingKey {
     case folderId = "folder_id"
-  }
-}
-
-/// A calendar-detected meeting participant the summary can be emailed to.
-struct ConversationShareRecipient: Codable, Equatable {
-  let name: String?
-  let email: String
-
-  /// Compact label for a "Send to …" control: first name when known, else the
-  /// email's local part.
-  var shortLabel: String {
-    if let name, !name.isEmpty {
-      return name.split(separator: " ").first.map(String.init) ?? name
-    }
-    return email.split(separator: "@").first.map(String.init) ?? email
-  }
-}
-
-struct ConversationShareRecipientsResponse: Codable {
-  let recipients: [ConversationShareRecipient]
-}
-
-struct ConversationShareEmailResponse: Codable {
-  let sentTo: [String]
-
-  enum CodingKeys: String, CodingKey {
-    case sentTo = "sent_to"
   }
 }

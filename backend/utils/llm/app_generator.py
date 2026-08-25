@@ -178,18 +178,15 @@ Design requirements:
     - Vibrant but not overwhelming colors
     - Style: Similar to modern iOS/Android app icons"""
 
-    # gpt-image-1 with an explicit size/quality pair the gateway rate card prices
-    # (openai.gpt-image-1.medium.1024x1024). The retired dall-e-3 `standard` quality and the
-    # `response_format` parameter are both rejected by the images API now, and it always
-    # returns base64 image data.
     response = await run_blocking(
         llm_executor,
         generate_image_via_gateway,
-        model="gpt-image-1",
+        model="dall-e-3",
         prompt=icon_prompt,
         size="1024x1024",
-        quality="medium",
+        quality="standard",
         n=1,
+        response_format="b64_json",
     )
 
     # Get the base64 image data and decode it

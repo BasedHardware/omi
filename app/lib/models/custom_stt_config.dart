@@ -17,7 +17,6 @@ class CustomSttConfig {
   final Map<String, String>? params;
   final String? audioFieldName;
   final Map<String, dynamic>? schemaJson;
-  final bool sendRawAudioToOmi;
 
   const CustomSttConfig({
     required this.provider,
@@ -32,7 +31,6 @@ class CustomSttConfig {
     this.params,
     this.audioFieldName,
     this.schemaJson,
-    this.sendRawAudioToOmi = true,
   });
 
   /// Determine if live/streaming based on request_type
@@ -116,7 +114,6 @@ class CustomSttConfig {
       'request_type': requestType,
       'headers': headers,
       'params': params,
-      'send_raw_audio_to_omi': sendRawAudioToOmi,
     };
 
     final jsonStr = jsonEncode(configData);
@@ -139,7 +136,6 @@ class CustomSttConfig {
         'params': params,
         'audio_field_name': audioFieldName,
         'schema': schemaJson,
-        'send_raw_audio_to_omi': sendRawAudioToOmi,
       };
 
   factory CustomSttConfig.fromJson(Map<String, dynamic> json) {
@@ -165,7 +161,6 @@ class CustomSttConfig {
       params: safeStringMap(json['params']),
       audioFieldName: json['audio_field_name'],
       schemaJson: json['schema'] != null ? Map<String, dynamic>.from(json['schema']) : null,
-      sendRawAudioToOmi: json['send_raw_audio_to_omi'] != false,
     );
   }
 
@@ -185,7 +180,6 @@ class CustomSttConfig {
     Map<String, String>? params,
     String? audioFieldName,
     Map<String, dynamic>? schemaJson,
-    bool? sendRawAudioToOmi,
   }) {
     return CustomSttConfig(
       provider: provider ?? this.provider,
@@ -200,7 +194,6 @@ class CustomSttConfig {
       params: params ?? this.params,
       audioFieldName: audioFieldName ?? this.audioFieldName,
       schemaJson: schemaJson ?? this.schemaJson,
-      sendRawAudioToOmi: sendRawAudioToOmi ?? this.sendRawAudioToOmi,
     );
   }
 

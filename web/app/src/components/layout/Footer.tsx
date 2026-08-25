@@ -1,7 +1,7 @@
 'use client';
 
 import { Twitter, Linkedin, Github } from 'lucide-react';
-import Image from '@tschk/moonshine-next/image';
+import Image from 'next/image';
 
 export function Footer() {
   return (
@@ -73,11 +73,11 @@ export function Footer() {
             <li>
               <a
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
-                href="https://www.omi.me/"
+                href="https://www.omi.me/products/omi-dev-kit-2"
                 target="_blank"
                 rel="noreferrer"
               >
-                Buy Omi
+                Omi DEV KIT 2
               </a>
             </li>
           </ul>

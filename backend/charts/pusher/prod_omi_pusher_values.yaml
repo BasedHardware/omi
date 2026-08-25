@@ -285,7 +285,7 @@ env:
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
   - name: STT_SERVICE_MODELS
-    value: "dg-nova-3,modulate-velma-2,parakeet"
+    value: "modulate-velma-2,dg-nova-3,parakeet"
   - name: RAPID_API_KEY
     valueFrom:
       secretKeyRef:
@@ -397,9 +397,6 @@ autoscaling:
       selectPolicy: Max
   # targetCPUUtilizationPercentage: 60
   # targetMemoryUtilizationPercentage: 60
-  # Intentionally higher than backend-listen (22): pusher's WebSocket
-  # handling profile sustains 30 concurrent connections per pod, while
-  # backend-listen does not. Keep the two values independently tuned (#6752).
   activeConnectionsPerPod: 30
 
 podDisruptionBudget:

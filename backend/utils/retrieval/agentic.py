@@ -21,8 +21,6 @@ from langchain_core.callbacks import BaseCallbackHandler
 agent_config_context: contextvars.ContextVar[dict] = contextvars.ContextVar('agent_config', default=None)
 
 from models.app import App
-from utils.journey_metrics_contract import ClientKind
-from utils.observability.journeys import ClientJourneyAttempt
 from models.chat import Message, ChatSession, PageContext
 from utils.retrieval.tools import (
     get_conversations_tool,
@@ -54,7 +52,6 @@ from utils.retrieval.tools import (
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
-from utils.retrieval.chat_scope import build_chat_scope
 from utils.retrieval.safety import (
     AgentSafetyGuard,
     SafetyGuardError,
@@ -63,7 +60,6 @@ from utils.retrieval.safety import (
     should_retry_provider_error,
     INPUT_TOO_LONG_MESSAGE,
 )
-from utils.retrieval.web_search_gate import SERVER_WEB_SEARCH_NAME, WEB_SEARCH_TOOL, request_tools_after_private_taint
 from utils.observability.fallback import record_fallback
 from utils.llm.byok_errors import handle_llm_error_async
 from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL, get_llm, num_tokens_from_string
@@ -388,6 +384,13 @@ TOOL_SEARCH_TOOL = {
     "name": "tool_search_tool_regex",
 }
 
+# Web search tool — Anthropic's built-in server-side web search (replaces Perplexity)
+WEB_SEARCH_TOOL = {
+    "type": "web_search_20260209",
+    "name": "web_search",
+    "max_uses": 5,
+}
+
 
 def _convert_tools(core_tools: list, app_tools: list = None) -> tuple:
     """Convert all tools and build name->object registry.
@@ -450,43 +453,13 @@ def _convert_anthropic_tools_to_openai(tool_schemas: list[dict]) -> list[dict]:
     return openai_tools
 
 
-_MEMORY_RETRIEVAL_TOOLS = frozenset({'get_memories_tool', 'search_memories_tool'})
-
-
-def _finish_memory_retrieval(attempt: ClientJourneyAttempt, result: str) -> None:
-    normalized = result.strip().lower()
-    if not normalized or normalized.startswith('no memories found'):
-        attempt.degrade('empty_answer')
-    elif normalized.startswith('error'):
-        attempt.fail('dependency_unavailable')
-    else:
-        attempt.succeed()
-
-
 @_traceable(name="chat.tool_execution", run_type="tool")
 async def _execute_tool(tool_name: str, tool_input: dict, registry: dict, configurable: dict) -> str:
     """Execute a LangChain tool by name, injecting RunnableConfig."""
     tool_obj = registry[tool_name]
     config = RunnableConfig(configurable=configurable)
-    client_kind = configurable.get('client_kind')
-    attempt = (
-        ClientJourneyAttempt('memory_retrieval', client_kind)
-        if tool_name in _MEMORY_RETRIEVAL_TOOLS and client_kind is not None
-        else None
-    )
-    try:
-        result = await tool_obj.ainvoke(tool_input, config=config)
-    except asyncio.CancelledError:
-        if attempt is not None:
-            attempt.cancel()
-        raise
-    except Exception:
-        if attempt is not None:
-            attempt.fail('dependency_unavailable')
-        raise
+    result = await tool_obj.ainvoke(tool_input, config=config)
     result = preserve_chat_memory_tool_result_boundary(tool_name, str(result))
-    if attempt is not None:
-        _finish_memory_retrieval(attempt, result)
     return result
 
 
@@ -685,16 +658,8 @@ async def _run_anthropic_agent_stream(
     producer_started_at = asyncio.get_running_loop().time()
     loop_iteration = 0
 
-    # Re-decide the server-side web_search offer inside the loop. The taint
-    # only appears after tool results are appended; see web_search_gate.py.
-    server_web_search_withheld = False
-
     while True:
         loop_iteration += 1
-
-        request_tools, server_web_search_withheld = request_tools_after_private_taint(
-            tool_schemas, messages, withheld=server_web_search_withheld
-        )
 
         attempts_made = 0
         retried_reason: Optional[str] = None
@@ -709,7 +674,7 @@ async def _run_anthropic_agent_stream(
                     model=ANTHROPIC_AGENT_MODEL,
                     system=system_blocks,
                     messages=messages,
-                    tools=request_tools,
+                    tools=tool_schemas,
                     max_tokens=8192,
                     # Anthropic moves this breakpoint to the last cacheable message
                     # block on every request. That incrementally caches both the
@@ -1216,7 +1181,6 @@ async def execute_agentic_chat_stream(
     chat_session: Optional[ChatSession] = None,
     context: Optional[PageContext] = None,
     platform: Optional[str] = None,
-    client_kind: Optional[ClientKind] = None,
     current_datetime_block: Optional[str] = None,
     tz: Optional[str] = None,
     setup_deadline_at: Optional[float] = None,
@@ -1393,8 +1357,6 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
     # Generate run_id for LangSmith tracing
     langsmith_run_id = str(uuid.uuid4())
 
-    chat_scope = build_chat_scope(context)
-
     # Config for tools to access via RunnableConfig
     configurable = {
         "user_id": uid,
@@ -1402,9 +1364,7 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
         "conversations_collected": conversations_collected,
         "safety_guard": safety_guard,
         "chat_session_id": chat_session.id if chat_session else None,
-        "client_kind": client_kind,
         "tools": core_tools + app_tools,
-        "chat_scope": chat_scope,
     }
 
     # Store config in context variable for tools that use agent_config_context

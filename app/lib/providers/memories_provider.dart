@@ -251,12 +251,7 @@ class MemoriesProvider extends ChangeNotifier {
       }
       deviceScopeSupported = result.deviceScopeSupported;
       all.addAll(result.memories);
-      // A truncated page is an honest partial response with no resumable cursor;
-      // stop loading instead of continuing with an unstable offset.
-      if (result.truncated || result.memories.length < limit) {
-        if (result.truncated) {
-          Logger.warning('MemoriesProvider: server returned a truncated list; stopping at $offset rows');
-        }
+      if (result.memories.length < limit) {
         break;
       }
       offset += result.memories.length;

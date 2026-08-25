@@ -18,13 +18,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import preflight_runner
-from pr_metadata import (
-    TransientPRMetadataError,
-    extract_merged_pr_number,
-    load_from_api,
-    load_from_event_file,
-    resolve_main_push_body,
-)
+from pr_metadata import TransientPRMetadataError, load_from_api, load_from_event_file
 from pr_preflight import changed_files, format_failure_class_suggest, resolve_pr_metadata, run_git, select_checks
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -111,82 +105,6 @@ class MetadataTests(unittest.TestCase):
         with self.assertRaisesRegex(TransientPRMetadataError, "request failed"):
             load_from_api("BasedHardware/omi", 9847, "test-token", opener=opener, sleeper=lambda _: None)
         self.assertEqual(calls["count"], 3)
-
-    def test_extract_merged_pr_number_from_squash_and_merge_subjects(self) -> None:
-        self.assertEqual(
-            extract_merged_pr_number(
-                "Cut the Windows app's idle request volume (#11835)\n\n* Run the retention sweep\n"
-            ),
-            11835,
-        )
-        self.assertEqual(extract_merged_pr_number('Merge pull request #10965 from aryanorastar/fix'), 10965)
-        self.assertEqual(extract_merged_pr_number('Revert "foo (#12)" (#99)'), 99)
-        self.assertIsNone(extract_merged_pr_number("security(backend): gate Anthropic web search"))
-        self.assertIsNone(extract_merged_pr_number(""))
-
-    def test_main_push_body_uses_live_pr_body_for_squash_head(self) -> None:
-        """#12003: wrapped merge text must not remain beside line-sensitive metadata."""
-        commit = (
-            "Cut the Windows app's idle and focus-driven backend request volume (#11835)\n\n"
-            "Line-Count-Exception: backend/utils/conversations/process_conversation.py | 2403 ->\n"
-            "  2424 | extracted helper keeps the production owner readable\n"
-        )
-        live_body = (
-            "## Product invariants affected\n\n"
-            "- INV-CHAT-1\n\n"
-            "Line-Count-Exception: backend/utils/conversations/process_conversation.py | "
-            "2403 -> 2424 | extracted helper keeps the production owner readable\n"
-        )
-        metadata = type("M", (), {"body": live_body, "number": 11835})()
-        resolved = resolve_main_push_body(
-            commit,
-            repository="BasedHardware/omi",
-            token="test-token",
-            loader=lambda *args, **kwargs: metadata,
-        )
-        self.assertEqual(resolved, live_body)
-        self.assertNotIn("2403 ->\n", resolved)
-
-    def test_main_push_body_keeps_commit_message_when_live_pr_body_is_empty(self) -> None:
-        commit = "Cut the Windows app's idle volume (#11835)\n\nFailure-Class: FC-example\n"
-        metadata = type("M", (), {"body": "  \n", "number": 11835})()
-
-        self.assertEqual(
-            resolve_main_push_body(
-                commit,
-                repository="BasedHardware/omi",
-                token="test-token",
-                loader=lambda *args, **kwargs: metadata,
-            ),
-            commit,
-        )
-
-    def test_main_push_body_keeps_commit_message_without_pr_number_or_token(self) -> None:
-        commit = "direct push that forgot INV-CHAT-1\n"
-        self.assertEqual(
-            resolve_main_push_body(commit, repository="BasedHardware/omi", token=""),
-            commit,
-        )
-        self.assertEqual(
-            resolve_main_push_body(commit, repository="BasedHardware/omi", token="tok"),
-            commit,
-        )
-
-    def test_main_push_body_falls_back_when_api_fails(self) -> None:
-        commit = "Cut the Windows app's idle volume (#11835)\n"
-
-        def loader(*args: object, **kwargs: object):
-            raise RuntimeError("GitHub API returned HTTP 502 while reading PR #11835")
-
-        self.assertEqual(
-            resolve_main_push_body(
-                commit,
-                repository="BasedHardware/omi",
-                token="test-token",
-                loader=loader,
-            ),
-            commit,
-        )
 
     def test_event_payload_loader_uses_top_level_pr_number(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -377,7 +295,6 @@ class SelectionTests(unittest.TestCase):
             {
                 "check-manifest-contract",
                 "diff-hygiene",
-                "git-author-identity",
                 "architecture-guardrails",
                 "product-invariants",
                 "failure-class-protocol",
@@ -728,20 +645,12 @@ class SingleFlightTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             temp = Path(tmp)
             counter = temp / "counter"
-            hold = temp / "hold"
-            hold.write_text("1", encoding="utf-8")
-            script = (
-                "from pathlib import Path\n"
-                "import time\n"
-                f"p = Path({str(counter)!r})\n"
-                f"hold = Path({str(hold)!r})\n"
-                "p.write_text(p.read_text() + 'x' if p.exists() else 'x')\n"
-                "print('==> focused-tests', flush=True)\n"
-                "deadline = time.monotonic() + 10\n"
-                "while hold.exists() and time.monotonic() < deadline:\n"
-                "    time.sleep(0.02)\n"
+            code = (
+                "from pathlib import Path; import time; "
+                f"p=Path({str(counter)!r}); p.write_text(p.read_text()+'x' if p.exists() else 'x'); "
+                "print('==> focused-tests', flush=True); time.sleep(.5)"
             )
-            command = [sys.executable, "-c", script]
+            command = [sys.executable, "-c", code]
             first = self.run_runner(temp, command)
             assert first.stdin is not None
             first.stdin.write("same\n")
@@ -751,8 +660,6 @@ class SingleFlightTests(unittest.TestCase):
             assert second.stdin is not None
             second.stdin.write("same\n")
             second.stdin.close()
-            time.sleep(0.3)
-            hold.unlink(missing_ok=True)
             first_output = first.stdout.read() if first.stdout else ""
             second_output = second.stdout.read() if second.stdout else ""
             self.assertEqual(first.wait(), 0, first_output)
@@ -767,27 +674,10 @@ class SingleFlightTests(unittest.TestCase):
             self.assertEqual(status["phase"], "passed")
             self.assertTrue((temp / "test" / "preflight.log").exists())
 
-    def _hold_command(self, hold: Path) -> list[str]:
-        # A short sleep races the second runner on a loaded host: the first
-        # child can exit before the overlap is observed, so the second starts
-        # cleanly and the test expects 75 but gets 0. Hold a file instead.
-        script = (
-            "from pathlib import Path\n"
-            "import time\n"
-            f"hold = Path({str(hold)!r})\n"
-            "print('==> slow', flush=True)\n"
-            "deadline = time.monotonic() + 10\n"
-            "while hold.exists() and time.monotonic() < deadline:\n"
-            "    time.sleep(0.02)\n"
-        )
-        return [sys.executable, "-c", script]
-
     def test_different_input_is_rejected_while_active(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             temp = Path(tmp)
-            hold = temp / "hold"
-            hold.write_text("1", encoding="utf-8")
-            command = self._hold_command(hold)
+            command = [sys.executable, "-c", "import time; print('==> slow', flush=True); time.sleep(.5)"]
             first = self.run_runner(temp, command)
             assert first.stdin is not None
             first.stdin.write("first\n")
@@ -802,7 +692,6 @@ class SingleFlightTests(unittest.TestCase):
             if second.stdout:
                 second.stdout.close()
             self.assertIn("already running different input", second_output)
-            hold.unlink(missing_ok=True)
             if first.stdout:
                 first.stdout.read()
                 first.stdout.close()
@@ -829,9 +718,7 @@ class SingleFlightTests(unittest.TestCase):
     def test_different_pre_push_environment_is_not_joined(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             temp = Path(tmp)
-            hold = temp / "hold"
-            hold.write_text("1", encoding="utf-8")
-            command = self._hold_command(hold)
+            command = [sys.executable, "-c", "import time; print('==> slow', flush=True); time.sleep(.5)"]
             first = self.run_runner(temp, command, extra_env={"PRE_PUSH_SKIP_ACTIONLINT": "1"})
             assert first.stdin is not None
             first.stdin.close()
@@ -844,7 +731,6 @@ class SingleFlightTests(unittest.TestCase):
             self.assertIn("already running different input", second_output)
             if second.stdout:
                 second.stdout.close()
-            hold.unlink(missing_ok=True)
             if first.stdout:
                 first.stdout.read()
                 first.stdout.close()

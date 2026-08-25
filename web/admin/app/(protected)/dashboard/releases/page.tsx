@@ -30,7 +30,10 @@ interface ReleaseRow {
   broken_count: number | null;
   rating: number | null;
   summary: string | null;
-  beta_live: boolean;
+  qualified_beta: boolean;
+  qualified_at: string | null;
+  qualification_evidence_url: string | null;
+  qualification_source: "canonical" | "legacy";
   stable_candidate: boolean;
   stable_candidate_at: string | null;
   stable_candidate_by: string | null;
@@ -42,7 +45,6 @@ interface ReleasesResponse {
   releases: ReleaseRow[];
   github_error: string | null;
   posthog_error: string | null;
-  appcast_error: string | null;
   partial: boolean;
 }
 
@@ -154,9 +156,22 @@ function LifecycleCell({ row }: { row: ReleaseRow }) {
       <span className="text-xs text-muted-foreground">{lifecycleLabel}</span>
     );
   }
+  const label = row.qualified_at ? formatDate(row.qualified_at) : "recently";
+  if (row.qualification_evidence_url) {
+    return (
+      <a
+        href={row.qualification_evidence_url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-xs font-medium text-emerald-500 hover:underline"
+      >
+        {lifecycleLabel} {label}
+      </a>
+    );
+  }
   return (
     <span className="text-xs font-medium text-emerald-500">
-      {lifecycleLabel}
+      {lifecycleLabel} {label}
     </span>
   );
 }
@@ -218,9 +233,7 @@ export default function ReleasesPage() {
           <span>
             {data.posthog_error
               ? `PostHog unavailable: ${data.posthog_error}`
-              : data.appcast_error
-                ? `Beta appcast unavailable: ${data.appcast_error}`
-                : "Some metrics may be incomplete."}
+              : "Some metrics may be incomplete."}
           </span>
         </div>
       )}

@@ -20,7 +20,6 @@
 
 import { computeUnpackGlobs } from './scripts/gen-pimono-unpack.mjs'
 import { KGWORKER_NATIVE_UNPACK_GLOBS } from './scripts/kgworker-native-closure.mjs'
-import fixPimonoChalkUnpack from './scripts/fix-pimono-chalk-unpack.mjs'
 
 // Fresh at every pack: the closure is recomputed from the installed node_modules,
 // so it can never be stale relative to what is actually on disk.
@@ -164,11 +163,6 @@ export default {
     ]
   },
   npmRebuild: false,
-  // See scripts/fix-pimono-chalk-unpack.mjs: corrects chalk's packaged version for
-  // pi-coding-agent's plain-Node child process — can't be fixed via a pnpm
-  // override like this repo's other pimono version collisions because chalk 5 is
-  // ESM-only and would break electron-builder's own CJS `require('chalk')`.
-  afterPack: fixPimonoChalkUnpack,
   // --- AUTO-UPDATE ---
   // electron-updater is wired in src/main/updater.ts (packaged builds only; silent
   // download + install-on-next-quit; NSIS differential updates stay default-on).

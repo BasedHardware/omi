@@ -427,7 +427,7 @@
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
-    "myApps": "Created by me",
+    "myApps": "My Apps",
     "@myApps": {
         "description": "Filter button for user's own apps"
     },
@@ -11634,90 +11634,5 @@
     "accountCutoverOpenStore": "Open store",
     "@accountCutoverOpenStore": {
         "description": "Button that opens the app store for a required cutover upgrade"
-    },
-    "chatScopeToday": "Today",
-    "@chatScopeToday": {
-        "description": "Chat timeframe scope chip for today"
-    },
-    "chatScopeThisWeek": "This week",
-    "@chatScopeThisWeek": {
-        "description": "Chat timeframe scope chip for this week"
-    },
-    "chatScopeAbout": "About: {title}",
-    "@chatScopeAbout": {
-        "description": "Chat scope chip when asking about a specific conversation",
-        "placeholders": {
-            "title": {
-                "type": "String"
-            }
-        }
-    },
-    "askAboutThisConversation": "Ask about this",
-    "@askAboutThisConversation": {
-        "description": "Tooltip for Ask button on conversation detail"
-    },
-    "sendRawAudioToOmi": "Send raw audio to Omi",
-    "@sendRawAudioToOmi": {
-        "description": "Toggle label controlling whether Custom STT raw audio is also sent to Omi"
-    },
-    "sendRawAudioToOmiDescription": "Turn off to prevent raw audio from being sent to Omi. Transcripts and data needed by cloud features may still be sent to Omi.",
-    "@sendRawAudioToOmiDescription": {
-        "description": "Explains that disabling raw audio forwarding preserves transcript-based cloud features"
-    },
-    "findDevice": "Find",
-    "@findDevice": {
-        "description": "Action that makes a nearby connected Omi pendant vibrate so the user can locate it"
-    },
-    "diagnosticsShareFailed": "Couldn't share diagnostics. Please try again.",
-    "@diagnosticsShareFailed": {
-        "description": "Snackbar shown when exporting device diagnostics to the share sheet fails"
-    },
-    "appDisabledTitle": "This app is disabled and cannot be installed.",
-    "@appDisabledTitle": {
-        "description": "Heading of the notice shown on an app the backend has automatically disabled"
-    },
-    "appDisabledWebhookFailures": "Its endpoint failed for 72 hours in a row, so deliveries were stopped.",
-    "@appDisabledWebhookFailures": {
-        "description": "Explains that an app was auto-disabled because its webhook endpoint kept failing"
-    },
-    "appDisabledGeneric": "It was disabled by Omi.",
-    "@appDisabledGeneric": {
-        "description": "Explains that an app was disabled for a reason other than webhook failures"
-    },
-    "appDisabledOwnerHint": "Fix the endpoint first — re-enabling re-checks every configured URL.",
-    "@appDisabledOwnerHint": {
-        "description": "Hint telling the app owner to repair their endpoint before re-enabling the app"
-    },
-    "appReEnable": "Re-enable",
-    "@appReEnable": {
-        "description": "Button that clears the disabled flag on an app the owner has repaired"
-    },
-    "appReEnableFailedTitle": "Could not re-enable",
-    "@appReEnableFailedTitle": {
-        "description": "Title of the dialog shown when re-enabling a disabled app is rejected"
-    },
-    "appReEnableFailedBody": "This app could not be re-enabled. Please try again.",
-    "@appReEnableFailedBody": {
-        "description": "Body of the dialog shown when re-enabling fails and the server gave no reason"
-    },
-    "appDisabledOn": "Disabled on {date}.",
-    "@appDisabledOn": {
-        "description": "States the date an app was automatically disabled",
-        "placeholders": {
-            "date": {
-                "type": "String",
-                "example": "2026-05-30"
-            }
-        }
-    },
-    "appDisabledLastError": "Last error: {error}.",
-    "@appDisabledLastError": {
-        "description": "States the last error recorded from the app's endpoint before it was disabled",
-        "placeholders": {
-            "error": {
-                "type": "String",
-                "example": "HTTP 307"
-            }
-        }
     }
 }

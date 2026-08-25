@@ -323,7 +323,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get searchApps => 'Meklēt lietotnes...';
 
   @override
-  String get myApps => 'Man radīts';
+  String get myApps => 'Manas lietotnes';
 
   @override
   String get installedApps => 'Instalētās lietotnes';
@@ -9863,64 +9863,4 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Otwórz sklep';
-
-  @override
-  String get chatScopeToday => 'Šodien';
-
-  @override
-  String get chatScopeThisWeek => 'Šonedēļ';
-
-  @override
-  String chatScopeAbout(String title) {
-    return 'Par: $title';
-  }
-
-  @override
-  String get askAboutThisConversation => 'Jautāt par šo';
-
-  @override
-  String get sendRawAudioToOmi => 'Sūtīt neapstrādātu audio uz Omi';
-
-  @override
-  String get sendRawAudioToOmiDescription =>
-      'Izslēdziet, lai neapstrādāts audio netiktu sūtīts uz Omi. Transkripcijas un mākoņfunkcijām nepieciešamie dati joprojām var tikt sūtīti uz Omi.';
-
-  @override
-  String get findDevice => 'Atrast';
-
-  @override
-  String get diagnosticsShareFailed => 'Neizdevās kopīgot diagnostiku. Mēģiniet vēlreiz.';
-
-  @override
-  String get appDisabledTitle => 'Šī lietotne ir atspējota, un to nevar instalēt.';
-
-  @override
-  String get appDisabledWebhookFailures =>
-      'Tās galapunkts neizdevās 72 stundas pēc kārtas, tāpēc piegādes tika apturētas.';
-
-  @override
-  String get appDisabledGeneric => 'To atspējoja Omi.';
-
-  @override
-  String get appDisabledOwnerHint =>
-      'Vispirms izlabojiet galapunktu — atkārtoti iespējojot, katrs konfigurētais URL tiek pārbaudīts vēlreiz.';
-
-  @override
-  String get appReEnable => 'Iespējot atkārtoti';
-
-  @override
-  String get appReEnableFailedTitle => 'Neizdevās iespējot atkārtoti';
-
-  @override
-  String get appReEnableFailedBody => 'Šo lietotni neizdevās iespējot atkārtoti. Mēģiniet vēlreiz.';
-
-  @override
-  String appDisabledOn(String date) {
-    return 'Atspējota $date.';
-  }
-
-  @override
-  String appDisabledLastError(String error) {
-    return 'Pēdējā kļūda: $error.';
-  }
 }

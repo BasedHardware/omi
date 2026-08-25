@@ -36,7 +36,6 @@ import { worksExternally, setupUrl, isSetupCompleted, startSetupPolling } from '
 import { AppDetailSheet } from '../components/apps/AppDetailSheet'
 import { auth } from '../lib/firebase'
 import { getE2EUser } from '../lib/dev/e2eAuth'
-import { useThrottledWindowFocus } from '../lib/focusRefetch'
 
 // Cap rendered search results so a broad query (e.g. "a") can't mount the whole
 // catalog at once. Users refine rather than scroll hundreds of cards.
@@ -330,18 +329,19 @@ export function Apps(): React.JSX.Element {
   // failed revalidation — never a blank list. Mirrors the Memories page's focus
   // refresh. Skipped while an initial load or manual refresh is already in flight, and
   // during a sign-out transition (auth.currentUser null).
-  // Throttled: `load()` is three requests and this listener is live even while the
-  // user is on another tab, so an unthrottled one billed all three per alt-tab. See
-  // lib/focusRefetch.ts.
-  useThrottledWindowFocus(() => {
-    // Resolve the signed-in user the same way the app's auth does (useAuth):
-    // getE2EUser() is null in normal use (flag-gated), so this is exactly
-    // auth.currentUser in production — but it also honors the fake-auth E2E user,
-    // so the focus-revalidation path is exercisable end to end. Skips during a
-    // sign-out transition (no user) and while a load/refresh is already in flight.
-    const signedIn = getE2EUser() ?? auth.currentUser
-    if (signedIn && !loading && !refreshing) void load()
-  })
+  useEffect(() => {
+    const onFocus = (): void => {
+      // Resolve the signed-in user the same way the app's auth does (useAuth):
+      // getE2EUser() is null in normal use (flag-gated), so this is exactly
+      // auth.currentUser in production — but it also honors the fake-auth E2E user,
+      // so the focus-revalidation path is exercisable end to end. Skips during a
+      // sign-out transition (no user) and while a load/refresh is already in flight.
+      const signedIn = getE2EUser() ?? auth.currentUser
+      if (signedIn && !loading && !refreshing) void load()
+    }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [loading, refreshing, load])
 
   // Debounce search so the network/filter doesn't run on every keystroke.
   useEffect(() => {

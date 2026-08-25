@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { ListChecks, Check, RefreshCw, Plus, Trash2, Calendar, X, Loader2 } from 'lucide-react'
 import { omiApi } from '../lib/apiClient'
 import { fetchAllActionItems } from '../lib/actionItems'
@@ -7,7 +7,6 @@ import { PageHeader } from '../components/layout/PageHeader'
 import { TasksGoalsToggle } from '../components/layout/TasksGoalsToggle'
 import { EmptyState } from '../components/ui/EmptyState'
 import { toast } from '../lib/toast'
-import { bucketOf, formatDue, startOfDay, startOfDayOffset, type Bucket } from '../lib/taskBuckets'
 import type { ActionItemRecord } from '../../../shared/types'
 import type { Conversation as CloudConversation } from '../lib/omiApi.generated'
 
@@ -30,9 +29,6 @@ function apiError(e: unknown): string {
   )
 }
 
-/** Must stay in sync with the `tasks` entry in `routes/manifest.ts`. */
-const TASKS_PATH = '/tasks'
-
 // Best-effort conversation title/emoji map for the per-task source links. A failed
 // conversations call still leaves the map empty (tasks come from the local store).
 async function fetchConvMeta(): Promise<Record<string, ConvMeta>> {
@@ -49,6 +45,14 @@ async function fetchConvMeta(): Promise<Record<string, ConvMeta>> {
     }
   }
   return map
+}
+
+const DAY = 86_400_000
+
+function startOfDay(ms: number): number {
+  const d = new Date(ms)
+  d.setHours(0, 0, 0, 0)
+  return d.getTime()
 }
 
 // Native <input type="date"> works in local YYYY-MM-DD; convert both ways while
@@ -68,6 +72,43 @@ function dateInputToMs(v: string): number | null {
   if (!v) return null
   const d = new Date(`${v}T12:00:00`)
   return Number.isNaN(d.getTime()) ? null : d.getTime()
+}
+
+function formatDue(ms: number): string {
+  const d = new Date(ms)
+  if (Number.isNaN(d.getTime())) return ''
+  const today = startOfDay(Date.now())
+  const due = startOfDay(d.getTime())
+  if (due === today) return 'Today'
+  if (due === today + DAY) return 'Tomorrow'
+  if (due === today - DAY) return 'Yesterday'
+  const sameYear = d.getFullYear() === new Date().getFullYear()
+  return d.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    ...(sameYear ? {} : { year: 'numeric' })
+  })
+}
+
+type Bucket = 'today' | 'tomorrow' | 'later' | 'nodate'
+
+// Four due-date buckets, matching Mac's TaskCategory (Today · Tomorrow · Later ·
+// No Deadline). Overdue tasks fold into Today — there is no separate Overdue
+// section — mirroring Mac's `categoryFor` (`dueAt < startOfTomorrow → .today`,
+// TasksPage.swift) and the Flutter app's grouping.
+function bucketOf(t: ActionItemRecord): Bucket {
+  if (t.dueAt == null) return 'nodate'
+  const due = startOfDay(t.dueAt)
+  const today = startOfDay(Date.now())
+  if (due <= today) return 'today' // overdue + today
+  // Tomorrow's local start-of-day via Date.setDate (which handles DST shifts and
+  // month/year boundaries). A fixed `today + DAY` offset is 23h/25h wrong on the
+  // two DST-transition days each year, which would mis-bucket a "due tomorrow"
+  // task into Later.
+  const tomorrow = new Date(today)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  if (due === startOfDay(tomorrow.getTime())) return 'tomorrow'
+  return 'later'
 }
 
 // A task whose due date is before today. Independent of bucketing (overdue rows
@@ -100,10 +141,6 @@ function moveSelection(
 }
 
 export function Tasks(): React.JSX.Element {
-  const { pathname } = useLocation()
-  // This panel stays mounted while the user is on another tab, so "mounted" is not
-  // "on screen". Same signal the Conversations panel gates its fetches on.
-  const tasksPanelIsActive = pathname === TASKS_PATH
   const [items, setItems] = useState<ActionItemRecord[]>(cache.items ?? [])
   const [convs, setConvs] = useState<Record<string, ConvMeta>>(cache.convs)
   const [loading, setLoading] = useState(!cache.loaded)
@@ -143,10 +180,6 @@ export function Tasks(): React.JSX.Element {
   }, [])
 
   const readConvs = useCallback(async (): Promise<void> => {
-    // `cache.convs` was written on every load and never consulted, so this re-paid a
-    // 200-conversation fetch for a label map it already had. Once per session is what
-    // the old mount-only call effectively gave us, and this keeps that.
-    if (Object.keys(cache.convs).length > 0) return
     try {
       const map = await fetchConvMeta()
       cache.convs = map
@@ -156,28 +189,15 @@ export function Tasks(): React.JSX.Element {
     }
   }, [])
 
-  // Cold load of the local rows. Both loaders do their setState after an await, so
-  // nest them in a callback rather than invoking them straight from the effect body
-  // (their state updates are deferred, not sync). Kept in its own effect, keyed only
-  // on `readTasks`, so it stays a once-per-mount read: folding the route into these
-  // deps would re-run it on every navigation in and out of the tab.
+  // Cold load: local rows (instant) + the conversation title map. Both loaders do
+  // their setState after an await, so nest them in a callback rather than invoking
+  // them straight from the effect body (their state updates are deferred, not sync).
   useEffect(() => {
     void (async () => {
       await readTasks()
-    })()
-  }, [readTasks])
-
-  // The conversation title map waits until this panel is actually on screen. MainViews
-  // mounts every panel 1.8s after launch and never unmounts them, so an unconditional
-  // call fetched 200 conversations at every launch to label source links on a page the
-  // user may never open. `readConvs` short-circuits on the populated cache, so
-  // revisiting the tab costs nothing.
-  useEffect(() => {
-    if (!tasksPanelIsActive) return
-    void (async () => {
       await readConvs()
     })()
-  }, [readConvs, tasksPanelIsActive])
+  }, [readTasks, readConvs])
 
   // Local-first freshness: main fires `onTasksChanged` on every optimistic write
   // and whenever a background sync lands, so a single subscription replaces the old
@@ -297,27 +317,6 @@ export function Tasks(): React.JSX.Element {
 
   // For open/all: group open items by due bucket. For done/all: a flat
   // completed list (newest first), shown after the open buckets.
-  // The bucket grouping reads the clock, so a page left open across local
-  // midnight would keep yesterday's Today/Tomorrow split until something else
-  // re-rendered. Tick the day anchor at each local midnight; bucketOf(t, dayStamp)
-  // is equivalent to bucketOf(t, Date.now()) because the rule only consumes
-  // startOfDay(now).
-  const [dayStamp, setDayStamp] = useState(() => startOfDay(Date.now()))
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>
-    const arm = (): void => {
-      timer = setTimeout(
-        () => {
-          setDayStamp(startOfDay(Date.now()))
-          arm()
-        },
-        Math.max(1000, startOfDayOffset(Date.now(), 1) - Date.now())
-      )
-    }
-    arm()
-    return () => clearTimeout(timer)
-  }, [])
-
   const openGroups = useMemo(() => {
     if (filter === 'done') return []
     const groups: Record<Bucket, ActionItemRecord[]> = {
@@ -328,7 +327,7 @@ export function Tasks(): React.JSX.Element {
     }
     for (const t of items) {
       if (t.completed) continue
-      groups[bucketOf(t, dayStamp)].push(t)
+      groups[bucketOf(t)].push(t)
     }
     for (const b of BUCKET_ORDER) {
       groups[b].sort((a, c) => {
@@ -342,7 +341,7 @@ export function Tasks(): React.JSX.Element {
       bucket: b,
       items: groups[b]
     }))
-  }, [items, filter, dayStamp])
+  }, [items, filter])
 
   const doneItems = useMemo(() => {
     if (filter === 'open') return []

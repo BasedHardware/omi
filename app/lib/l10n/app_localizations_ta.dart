@@ -323,7 +323,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get searchApps => 'பயன்பாடுகளைத் தேடுங்கள்...';
 
   @override
-  String get myApps => 'நான் உருவாக்கியவை';
+  String get myApps => 'என் பயன்பாடுகள்';
 
   @override
   String get installedApps => 'நிறுவப்பட்ட பயன்பாடுகள்';
@@ -9909,64 +9909,4 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'स्टोर खोलें';
-
-  @override
-  String get chatScopeToday => 'இன்று';
-
-  @override
-  String get chatScopeThisWeek => 'இந்த வாரம்';
-
-  @override
-  String chatScopeAbout(String title) {
-    return '$title பற்றி';
-  }
-
-  @override
-  String get askAboutThisConversation => 'இதைப் பற்றி கேள்';
-
-  @override
-  String get sendRawAudioToOmi => 'மூல ஆடியோவை Omi-க்கு அனுப்பவும்';
-
-  @override
-  String get sendRawAudioToOmiDescription =>
-      'மூல ஆடியோ Omi-க்கு அனுப்பப்படுவதைத் தடுக்க இதை அணைக்கவும். உரைமாற்றங்களும் கிளவுட் அம்சங்களுக்குத் தேவையான தரவும் இன்னும் Omi-க்கு அனுப்பப்படலாம்.';
-
-  @override
-  String get findDevice => 'கண்டறி';
-
-  @override
-  String get diagnosticsShareFailed => 'கண்டறிதல் தரவைப் பகிர முடியவில்லை. மீண்டும் முயற்சிக்கவும்.';
-
-  @override
-  String get appDisabledTitle => 'இந்த ஆப் முடக்கப்பட்டுள்ளது, நிறுவ முடியாது.';
-
-  @override
-  String get appDisabledWebhookFailures =>
-      'அதன் எண்ட்பாயிண்ட் தொடர்ந்து 72 மணி நேரம் தோல்வியடைந்ததால், அனுப்புதல் நிறுத்தப்பட்டது.';
-
-  @override
-  String get appDisabledGeneric => 'இதை Omi முடக்கியது.';
-
-  @override
-  String get appDisabledOwnerHint =>
-      'முதலில் எண்ட்பாயிண்டை சரிசெய்யவும் — மீண்டும் இயக்கும்போது அமைக்கப்பட்ட ஒவ்வொரு URL-ஐயும் மீண்டும் சரிபார்க்கும்.';
-
-  @override
-  String get appReEnable => 'மீண்டும் இயக்கு';
-
-  @override
-  String get appReEnableFailedTitle => 'மீண்டும் இயக்க முடியவில்லை';
-
-  @override
-  String get appReEnableFailedBody => 'இந்த ஆப்பை மீண்டும் இயக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.';
-
-  @override
-  String appDisabledOn(String date) {
-    return '$date அன்று முடக்கப்பட்டது.';
-  }
-
-  @override
-  String appDisabledLastError(String error) {
-    return 'கடைசி பிழை: $error';
-  }
 }

@@ -14,7 +14,6 @@ os.environ.setdefault(
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryLayer, ProcessingState
 from utils.memory.canonical_consolidation import list_pending_consolidation_items
-from utils.memory.required_promotion import REQUIRED_PROCESSING_STATUS_PENDING
 
 UID = "uid-consolidation-query"
 NOW = datetime(2026, 7, 28, 12, 0, tzinfo=timezone.utc)
@@ -106,12 +105,9 @@ class _Query:
     def stream(self) -> list[_Snapshot]:
         rows = list(self._db.rows)
         for field_path, op_string, expected in self._filters:
-            if op_string == "==":
-                rows = [row for row in rows if _nested_value(row[1], field_path) == expected]
-            elif op_string == "in":
-                rows = [row for row in rows if _nested_value(row[1], field_path) in expected]
-            else:
+            if op_string != "==":
                 raise AssertionError(f"unexpected operator: {op_string}")
+            rows = [row for row in rows if _nested_value(row[1], field_path) == expected]
         for field_path in reversed(self._order_fields):
             rows.sort(key=lambda row: _nested_value(row[1], field_path))
         if self._start_after_values:
@@ -149,7 +145,6 @@ def _item(
     status: MemoryItemStatus = MemoryItemStatus.active,
     processing_state: ProcessingState = ProcessingState.processed,
     source_state: SourceState = SourceState.active,
-    promotion: dict[str, Any] | None = None,
 ) -> MemoryItem:
     evidence = MemoryEvidence(
         evidence_id=f"evidence-{memory_id}",
@@ -175,7 +170,6 @@ def _item(
         captured_at=captured_at,
         updated_at=captured_at,
         expires_at=NOW + timedelta(days=30),
-        promotion=promotion or {},
     )
 
 
@@ -184,7 +178,7 @@ def _db_for(items: list[MemoryItem]) -> _Db:
 
 
 def test_consolidation_query_filters_orders_and_limits_before_streaming() -> None:
-    same_capture = NOW - timedelta(hours=36)
+    same_capture = NOW - timedelta(days=2)
     db = _db_for(
         [
             _item("eligible-b", captured_at=same_capture),
@@ -261,54 +255,3 @@ def test_blocked_page_cursor_preserves_stable_order_while_advancing_the_window()
     )
 
     assert [item.memory_id for item in pending] == ["memory-c"]
-
-
-def test_pending_required_items_merge_into_oldest_first_consolidation_batch() -> None:
-    older = NOW - timedelta(hours=5)
-    newer = NOW - timedelta(hours=1)
-    required = _item(
-        "req-explicit",
-        captured_at=older,
-        processing_state=ProcessingState.pending,
-        promotion={
-            "required": True,
-            "processing_status": REQUIRED_PROCESSING_STATUS_PENDING,
-        },
-    )
-    processed = _item("stm-processed", captured_at=newer)
-    skipped = _item(
-        "req-after-cursor",
-        captured_at=newer + timedelta(minutes=1),
-        processing_state=ProcessingState.pending,
-        promotion={
-            "required": True,
-            "processing_status": REQUIRED_PROCESSING_STATUS_PENDING,
-        },
-    )
-    db = _db_for([processed, required, skipped])
-
-    pending = list_pending_consolidation_items(UID, db_client=db, now=NOW, limit=2)
-
-    assert [item.memory_id for item in pending] == ["req-explicit", "stm-processed"]
-    assert pending[0].processing_state == ProcessingState.pending
-    assert pending[1].processing_state == ProcessingState.processed
-
-
-def test_expired_required_submissions_stay_eligible_for_consolidation() -> None:
-    required = _item(
-        "req-expired",
-        captured_at=NOW - timedelta(hours=60),
-        processing_state=ProcessingState.pending,
-        promotion={
-            "required": True,
-            "processing_status": REQUIRED_PROCESSING_STATUS_PENDING,
-        },
-    )
-    required = required.model_copy(update={"expires_at": NOW - timedelta(hours=12)})
-    processed_expired = _item("stm-expired", captured_at=NOW - timedelta(hours=60))
-    processed_expired = processed_expired.model_copy(update={"expires_at": NOW - timedelta(hours=12)})
-    db = _db_for([required, processed_expired])
-
-    pending = list_pending_consolidation_items(UID, db_client=db, now=NOW, limit=10)
-
-    assert [item.memory_id for item in pending] == ["req-expired"]

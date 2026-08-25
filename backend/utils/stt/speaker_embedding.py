@@ -14,9 +14,8 @@ from utils.http_client import get_stt_client
 
 logger = logging.getLogger(__name__)
 
-# Cosine distance threshold for enrolled-voiceprint verification only.
-# Based on VoxCeleb 1 test set EER of 2.8%. In-session clustering has its own
-# policy in speaker_clustering.py and must not silently retune this boundary.
+# Cosine distance threshold for speaker matching
+# Based on VoxCeleb 1 test set EER of 2.8%
 SPEAKER_MATCH_THRESHOLD = 0.45
 
 # Minimum audio duration (seconds) for speaker embedding extraction.

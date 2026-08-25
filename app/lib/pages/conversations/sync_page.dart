@@ -440,9 +440,6 @@ class _SyncPageState extends State<SyncPage> {
   }
 
   String _formatErrorMessage(BuildContext context, String errorMessage) {
-    if (SyncProvider.isPendingUploadError(errorMessage)) {
-      return context.l10n.syncStatusFailed;
-    }
     if (errorMessage.startsWith('Exception: ')) {
       errorMessage = errorMessage.substring('Exception: '.length);
     }
@@ -544,8 +541,7 @@ class _SyncPageState extends State<SyncPage> {
       titleColor = Colors.orangeAccent;
     } else if (uploaded > 0) {
       title = l.syncCardProcessing;
-      // Uploaded WAL counts are queue state, not server segment progress.
-      subtitle = l.syncProcessingBackgroundHint;
+      subtitle = '${l.syncCardProgressOf(uploaded, uploaded + readyToSync)} · ${l.syncProcessingBackgroundHint}';
     } else if (readyToSync > 0) {
       title = l.syncCardReadyCount(readyToSync);
       action = _statusActionPill(l.sync, Colors.deepPurpleAccent, () {

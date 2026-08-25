@@ -149,17 +149,10 @@ final class ChatSurfaceBoundsTests: XCTestCase {
         let composer = restingComposerHeight(mode: mode)
         let body = QueryShellLayout.panelBodyHeight(
           availableHeight: page, composerHeight: composer, mode: mode)
-        let surface = surfaceHeight(bodyHeight: body, composerHeight: composer, mode: mode)
-        if body < QueryShellLayout.maximumBodyHeight {
-          XCTAssertEqual(
-            surface, page, accuracy: 0.5,
-            "the \(mode) surface leaves part of a \(page) pt page unspent")
-        } else {
-          XCTAssertEqual(body, QueryShellLayout.maximumBodyHeight)
-          XCTAssertLessThanOrEqual(
-            surface, page,
-            "the \(mode) panel still runs off a \(page) pt page")
-        }
+        XCTAssertEqual(
+          surfaceHeight(bodyHeight: body, composerHeight: composer, mode: mode), page,
+          accuracy: 0.5,
+          "the \(mode) surface leaves part of a \(page) pt page unspent")
       }
     }
   }
@@ -255,11 +248,11 @@ final class ChatSurfaceBoundsTests: XCTestCase {
       QueryShellLayout.panelChromeHeight(mode: .results, composerHeight: 0))
   }
 
-  /// What Home's `GeometryReader` is actually handed: the window's content height less the
-  /// floating top bar and the gap beneath it.
+  /// What Home's `GeometryReader` is actually handed: the window's content height less the traffic
+  /// lights' clearance and the floating top bar above the page.
   private func pageHeights(windowHeights: [CGFloat]) -> [CGFloat] {
     let chrome =
-      GlassShell.titlebarClearance + TopNavigationLayoutMetrics.barHeight + OmiSpacing.sm
+      GlassShell.titlebarClearance + TopNavigationLayoutMetrics.barHeight + (OmiSpacing.sm * 2)
     return windowHeights.map { $0 - chrome }
   }
 

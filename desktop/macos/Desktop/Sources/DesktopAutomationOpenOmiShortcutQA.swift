@@ -15,7 +15,6 @@ extension DesktopAutomationActionRegistry {
         return [
           "gemini_proxy_base_url": GeminiClient.proxyBaseURL,
           "embedding_proxy_base_url": EmbeddingService.proxyBaseURL,
-          "proactivity_base_url": ProactiveLaneClient.backendBaseURL,
         ]
       }
 

@@ -46,8 +46,7 @@ import {
   getPiMonoByokEnv,
   getPiMonoSession,
   piMonoManagedApiBaseUrl,
-  registerPiMonoAdapter,
-  resolvePiMonoSpawnCredentials
+  registerPiMonoAdapter
 } from '../codingAgent/piMonoSession'
 import type { CodingAgentAdapterId, RuntimeAdapter } from '../codingAgent/interface'
 import {
@@ -177,7 +176,6 @@ export function buildPiMonoRuntimeAdapter(): RuntimeAdapter {
     omiApiBaseUrl: piMonoManagedApiBaseUrl(session),
     authToken: session.token,
     byokEnv: getPiMonoByokEnv(),
-    resolveSpawnCredentials: resolvePiMonoSpawnCredentials,
     onRestart: (reason) => console.log(`[pi-mono] restart: ${reason}`),
     // Lets the pi subprocess reach the product/control tool relay. Resolved per
     // attempt (idempotent host-side) so the pipe/token ride the per-turn context

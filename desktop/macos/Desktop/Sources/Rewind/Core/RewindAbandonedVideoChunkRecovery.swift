@@ -116,7 +116,8 @@ extension RewindDatabase {
       // `imagePath` is NOT NULL in SQLite, whereas video-backed screenshots
       // carry nil in the model.
       if record.imagePath == nil { record.imagePath = "" }
-      return try record.inserted(db)
+      try record.insert(db)
+      return record
     }
   }
 

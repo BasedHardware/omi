@@ -104,11 +104,9 @@ async def execute_agent_chat_stream(
     messages: List[Message],
     app: Optional[App] = None,
     cited: Optional[bool] = False,
-    callback_data: Optional[Dict[str, Any]] = None,
+    callback_data: Dict[str, Any] = {},
     chat_session: Optional[ChatSession] = None,
 ) -> AsyncGenerator[Optional[str], None]:
-    if callback_data is None:
-        callback_data = {}
     logger.info(f'execute_agent_chat_stream app:  {app.id if app else "<none>"}')
     callback = AsyncStreamingCallback()
 

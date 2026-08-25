@@ -15,8 +15,6 @@ const h = vi.hoisted(() => ({
   } | null,
   getSessionEpoch: vi.fn<() => number>(),
   getBackendSession: vi.fn(),
-  isSessionExpired: vi.fn<() => boolean>(),
-  pullFreshSession: vi.fn<() => Promise<void>>(),
   embedOne: vi.fn(),
   embedBatch: vi.fn(),
   getAllActionItemEmbeddings: vi.fn(),
@@ -29,9 +27,7 @@ const h = vi.hoisted(() => ({
 
 vi.mock('../assistants/core/session', () => ({
   getSessionEpoch: h.getSessionEpoch,
-  getBackendSession: h.getBackendSession,
-  isSessionExpired: h.isSessionExpired,
-  pullFreshSession: h.pullFreshSession
+  getBackendSession: h.getBackendSession
 }))
 vi.mock('../rewind/embeddingClient', () => ({
   embedOne: h.embedOne,
@@ -75,8 +71,6 @@ beforeEach(() => {
   h.session = { apiBase: 'a', desktopApiBase: 'd', token: 't' }
   h.getSessionEpoch.mockImplementation(() => h.epoch)
   h.getBackendSession.mockImplementation(() => h.session)
-  h.isSessionExpired.mockReturnValue(false)
-  h.pullFreshSession.mockResolvedValue(undefined)
   h.getAllActionItemEmbeddings.mockReturnValue([])
   h.getAllStagedTaskEmbeddings.mockReturnValue([])
   h.getActionItemsMissingEmbeddings.mockReturnValue([])
@@ -159,21 +153,6 @@ describe('embedQuery', () => {
     h.session = null
     expect(await embedQuery('real text')).toBeNull()
     expect(h.embedOne).not.toHaveBeenCalled()
-  })
-
-  it('retries a 401 query embed after pulling a fresh token', async () => {
-    h.embedOne
-      .mockRejectedValueOnce(new Error('embedding proxy request failed (status 401)'))
-      .mockResolvedValueOnce(fullVec(0.3))
-    h.pullFreshSession.mockImplementation(async () => {
-      h.session = { apiBase: 'a', desktopApiBase: 'd', token: 'fresh' }
-    })
-
-    const out = await embedQuery('where did I put the keys')
-    expect(out).toEqual(fullVec(0.3))
-    expect(h.pullFreshSession).toHaveBeenCalledTimes(1)
-    expect(h.embedOne).toHaveBeenCalledTimes(2)
-    expect(h.embedOne.mock.calls[1][0]).toMatchObject({ token: 'fresh' })
   })
 })
 

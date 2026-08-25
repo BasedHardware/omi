@@ -55,9 +55,6 @@ class _RecordingQuery:
         self._current.append(('order_by', field, direction))
         return self
 
-    def select(self, _fields):
-        return self
-
     def offset(self, _n):
         return self
 

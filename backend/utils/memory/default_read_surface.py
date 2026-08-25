@@ -33,7 +33,7 @@ class DefaultReadSearchResult:
 
     @property
     def should_use_legacy_fallback(self) -> bool:
-        return False
+        return self.read_decision == MemoryReadDecision.USE_LEGACY_SAFE
 
 
 def parse_default_read_datetime(value: Any) -> datetime:

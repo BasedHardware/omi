@@ -7,7 +7,6 @@
 !.env.prod.template
 !.env.offline.template
 !.envrc.example
-.personal_configs/
 *__pycache__/
 *venv/
 libraries/
@@ -27,7 +26,6 @@ yarn.lock
 .coordination/
 
 # General
-/.pr-body.md
 .idea/
 .next/
 .worktrees/
@@ -115,8 +113,6 @@ web/app/public/firebase-messaging-sw.js
 !app/ios/Podfile.lock
 !mcp/uv.lock
 *.lock
-# After *.lock: the last matching pattern wins, so a re-include must follow it.
-!web/app/bun.lock
 *.log
 *.swo
 *.swp
@@ -130,6 +126,7 @@ src/recordings
 /app/lib/firebase_options.dart
 /app/lib/firebase_options_*.dart
 !/app/lib/firebase_options_local.dart
+/app/ios/Runner/Info-Dev.plist
 /app/firebase.json
 
 # Solidworks models
@@ -161,8 +158,6 @@ plugins/example/tmp/
 
 backend/pretrained_models/
 backend/scripts/rag/*.json
-**/user_messages_with_bot_name.json
-**/plugin_data_by_persona_name.json
 backend/scripts/rag/visualizations/
 /backend/scripts/data/
 /backend/pretrained_models/
@@ -229,7 +224,6 @@ app/android/.kotlin/
 
 CLAUDE.md
 web/app/next-env.d.ts
-web/app/tsconfig.tsbuildinfo
 .claude/settings.local.json
 .claude/worktrees/
 .mcp.json
@@ -280,9 +274,3 @@ htmlcov/
 
 # pnpm store
 .pnpm-store/
-
-# `bunx shadcn` shells out to pnpm and drops these at the repo root. This repo
-# is Bun-only, so they are byproducts, never inputs — ignored so a shadcn run
-# cannot quietly commit a second lockfile.
-pnpm-lock.yaml
-pnpm-workspace.yaml

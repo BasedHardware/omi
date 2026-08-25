@@ -47,18 +47,8 @@ const quickFilters: QuickFilter[] = [
 
 const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 const MONTHS = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
 function isSameDay(d1: Date, d2: Date): boolean {
@@ -112,7 +102,11 @@ function getDaysInMonth(year: number, month: number): Date[] {
   return days;
 }
 
-export function DateFilter({ selectedDate, onDateChange, className }: DateFilterProps) {
+export function DateFilter({
+  selectedDate,
+  onDateChange,
+  className,
+}: DateFilterProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [viewDate, setViewDate] = useState(() => selectedDate || new Date());
   const containerRef = useRef<HTMLDivElement>(null);
@@ -183,10 +177,10 @@ export function DateFilter({ selectedDate, onDateChange, className }: DateFilter
           'text-sm font-medium transition-all duration-150',
           'border',
           isOpen
-            ? 'bg-bg-tertiary border-white/25 text-text-primary'
+            ? 'bg-bg-tertiary border-purple-primary/40 text-text-primary'
             : selectedDate
-              ? 'bg-white/[0.08] border-white/25 text-text-primary'
-              : 'bg-transparent border-transparent text-text-secondary hover:bg-bg-tertiary hover:text-text-primary',
+              ? 'bg-purple-primary/10 border-purple-primary/30 text-purple-primary'
+              : 'bg-transparent border-transparent text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
         )}
       >
         <Calendar className="w-4 h-4" />
@@ -226,7 +220,7 @@ export function DateFilter({ selectedDate, onDateChange, className }: DateFilter
               'absolute top-full right-0 mt-2 z-50',
               'w-72 p-3 rounded-xl',
               'bg-bg-secondary border border-bg-tertiary',
-              'shadow-lg shadow-black/20',
+              'shadow-lg shadow-black/20'
             )}
           >
             {/* Quick filters */}
@@ -241,8 +235,8 @@ export function DateFilter({ selectedDate, onDateChange, className }: DateFilter
                       'px-2.5 py-1 rounded-md text-xs font-medium',
                       'transition-colors',
                       selectedDate && isSameDay(selectedDate, filter.getDate())
-                        ? 'bg-text-primary text-bg-primary'
-                        : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary hover:text-text-primary',
+                        ? 'bg-purple-primary text-white'
+                        : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary hover:text-text-primary'
                     )}
                   >
                     {filter.label}
@@ -275,7 +269,10 @@ export function DateFilter({ selectedDate, onDateChange, className }: DateFilter
             {/* Day names */}
             <div className="grid grid-cols-7 gap-1 mb-1">
               {DAYS.map((day) => (
-                <div key={day} className="text-center text-xs text-text-quaternary py-1">
+                <div
+                  key={day}
+                  className="text-center text-xs text-text-quaternary py-1"
+                >
                   {day}
                 </div>
               ))}
@@ -298,12 +295,10 @@ export function DateFilter({ selectedDate, onDateChange, className }: DateFilter
                       'w-8 h-8 rounded-md text-xs font-medium',
                       'transition-all duration-100',
                       !isCurrentMonth && 'text-text-quaternary/50',
-                      isCurrentMonth &&
-                        !isSelected &&
-                        'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary',
-                      isSelected && 'bg-text-primary text-bg-primary',
-                      isTodayDate && !isSelected && 'ring-1 ring-white/25',
-                      isFuture && 'opacity-30 cursor-not-allowed',
+                      isCurrentMonth && !isSelected && 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary',
+                      isSelected && 'bg-purple-primary text-white',
+                      isTodayDate && !isSelected && 'ring-1 ring-purple-primary/50',
+                      isFuture && 'opacity-30 cursor-not-allowed'
                     )}
                   >
                     {date.getDate()}
@@ -319,7 +314,7 @@ export function DateFilter({ selectedDate, onDateChange, className }: DateFilter
                 className={cn(
                   'w-full mt-3 py-2 rounded-lg text-sm font-medium',
                   'text-text-secondary hover:text-text-primary',
-                  'hover:bg-bg-tertiary transition-colors',
+                  'hover:bg-bg-tertiary transition-colors'
                 )}
               >
                 Clear filter

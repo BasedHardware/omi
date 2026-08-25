@@ -23,86 +23,30 @@ final class PageGlassLaneTests: XCTestCase {
 
   // MARK: - Which destinations already have glass
 
-  /// QueryShell Home and Rewind build their own panels when the router says they do. Wrapping them
-  /// again does not stack two materials — a
+  /// Home and Rewind build their own panels. Wrapping them again does not stack two materials — a
   /// nested `.behindWindow` surface takes a *second* copy of the desktop and doubles the scrim — so a
   /// double-wrapped page reads visibly muddier than the pages around it.
   func testHomeAndRewindKeepTheirOwnPanelsAndEveryOtherDestinationIsGivenOne() {
-    for homeOwnsItsPanels in [false, true] {
-      XCTAssertEqual(
-        PageGlassLanePolicy.ownsItsPanels(
-          selectedIndex: SidebarNavItem.dashboard.rawValue,
-          homeOwnsItsPanels: homeOwnsItsPanels),
-        homeOwnsItsPanels)
-      XCTAssertTrue(
-        PageGlassLanePolicy.ownsItsPanels(
-          selectedIndex: SidebarNavItem.rewind.rawValue,
-          homeOwnsItsPanels: homeOwnsItsPanels))
-
-      for item in SidebarNavItem.allCases where item != .dashboard && item != .rewind {
-        XCTAssertFalse(
-          PageGlassLanePolicy.ownsItsPanels(
-            selectedIndex: item.rawValue,
-            homeOwnsItsPanels: homeOwnsItsPanels),
-          "\(item.title) has no glass of its own and must be given the lane's")
-      }
-    }
-  }
-
-  /// **The hub is one rail index wearing four pages, and only one of them brings its own glass.**
-  ///
-  /// Activity is Home's column — a search bar and a results panel, each already an `inkGlassPanel`.
-  /// Wrapping the hub wholesale nested both inside a third panel, which does not stack two materials
-  /// but takes a second copy of the desktop and doubles the scrim, so Activity read visibly muddier
-  /// than Chat and its two panels lost their separation. The hub's list pages paint no ground of
-  /// their own and must keep the lane.
-  func testOnlyTheActivityHubPageBringsItsOwnPanels() {
-    let hubIndex = SidebarNavItem.conversations.rawValue
     XCTAssertTrue(
-      PageGlassLanePolicy.ownsItsPanels(
-        selectedIndex: hubIndex,
-        memoryDestinationRawValue: MemoryHubDestination.activity.rawValue,
-        homeOwnsItsPanels: true),
-      "Activity builds Home's own two panels and must not be wrapped in a third")
+      PageGlassLanePolicy.ownsItsPanels(selectedIndex: SidebarNavItem.dashboard.rawValue))
+    XCTAssertTrue(PageGlassLanePolicy.ownsItsPanels(selectedIndex: SidebarNavItem.rewind.rawValue))
 
-    for destination in MemoryHubDestination.allCases where destination != .activity {
+    for item in SidebarNavItem.allCases where item != .dashboard && item != .rewind {
       XCTAssertFalse(
-        PageGlassLanePolicy.ownsItsPanels(
-          selectedIndex: hubIndex,
-          memoryDestinationRawValue: destination.rawValue,
-          homeOwnsItsPanels: true),
-        "\(destination.title) paints no ground of its own and must be given the lane's")
+        PageGlassLanePolicy.ownsItsPanels(selectedIndex: item.rawValue),
+        "\(item.title) has no glass of its own and must be given the lane's")
     }
-
-    for destination in MemoryHubDestination.allCases {
-      XCTAssertFalse(
-        PageGlassLanePolicy.ownsItsPanels(
-          selectedIndex: SidebarNavItem.memories.rawValue,
-          memoryDestinationRawValue: destination.rawValue,
-          homeOwnsItsPanels: true),
-        "the standalone Memories page must keep the lane whatever the hub last showed")
-    }
-
-    XCTAssertFalse(
-      PageGlassLanePolicy.ownsItsPanels(
-        selectedIndex: SidebarNavItem.conversations.rawValue,
-        homeOwnsItsPanels: true))
   }
 
   /// The router sends every unrecognised index to Home through its `default:` branch. An index the
   /// nav enum does not carry must therefore resolve to Home here too, or those routes wrap Home's
   /// two panels inside a third one.
   func testAnUnrecognisedIndexFollowsTheRouterBackToHome() {
-    for homeOwnsItsPanels in [false, true] {
-      for unknown in [2, 11, 13, -1, Int.max] {
-        XCTAssertNil(SidebarNavItem(rawValue: unknown), "fixture \(unknown) must not be a real route")
-        XCTAssertEqual(
-          PageGlassLanePolicy.ownsItsPanels(
-            selectedIndex: unknown,
-            homeOwnsItsPanels: homeOwnsItsPanels),
-          homeOwnsItsPanels,
-          "an unknown index renders Home, which must use the router's Home surface decision")
-      }
+    for unknown in [2, 11, 13, -1, Int.max] {
+      XCTAssertNil(SidebarNavItem(rawValue: unknown), "fixture \(unknown) must not be a real route")
+      XCTAssertTrue(
+        PageGlassLanePolicy.ownsItsPanels(selectedIndex: unknown),
+        "an unknown index renders Home, which already owns its panels")
     }
   }
 
@@ -128,52 +72,53 @@ final class PageGlassLaneTests: XCTestCase {
     XCTAssertEqual(PageGlassLaneLayout.cornerRadius, RewindSearchLayout.panelCornerRadius)
   }
 
-  /// The panel opens at the same distance under the top bar as Home's query bar does, and sits on
-  /// the window's bottom edge so resize is on the glass rather than on an invisible gutter.
-  func testThePanelKeepsHomesGapAboveItAndSitsOnTheWindowBottom() {
+  /// The panel opens at the same distance under the top bar as Home's query bar does, and closes the
+  /// same distance above the window's bottom edge.
+  func testThePanelKeepsHomesGapAboveItAndTheSameMarginBelow() {
     XCTAssertEqual(PageGlassLaneLayout.topGap, OmiSpacing.sm)
-    XCTAssertEqual(PageGlassLaneLayout.bottomGap, 0)
+    XCTAssertEqual(PageGlassLaneLayout.bottomGap, PageGlassLaneLayout.topGap)
   }
 
   // MARK: - What the mounted view actually does
 
   /// The claim worth holding is geometric, so it is asserted against a real mounted view rather
   /// than against the constants twice: a destination without its own glass is placed in the lane,
-  /// centred, and inset from both ends by the gap. The legacy Home branch is the same geometry with
-  /// the route's Home surface answer flipped.
-  func testAWrappedDestinationIsPlacedInTheLaneWithTheGapAboveAndBelowIt() throws {
+  /// centred, and inset from both ends by the gap.
+  func testAWrappedDestinationIsPlacedInTheLaneWithTheGapAboveAndBelowIt() {
     let size = CGSize(width: 1_400, height: 800)
-    for (index, homeOwnsItsPanels) in [
-      (SidebarNavItem.tasks.rawValue, true),
-      (SidebarNavItem.dashboard.rawValue, false),
-    ] {
-      let recorder = PageGlassLaneFrameRecorder()
-      let host = NSHostingView(
-        rootView: PageGlassLane(
-          selectedIndex: index,
-          homeOwnsItsPanels: homeOwnsItsPanels
-        ) {
-          PageGlassLaneProbe(recorder: recorder) { Color.clear }
-        }
-        .frame(width: size.width, height: size.height)
-      )
-      host.frame = NSRect(origin: .zero, size: size)
-      host.layoutSubtreeIfNeeded()
+    let recorder = PageGlassLaneFrameRecorder()
+    let host = NSHostingView(
+      rootView: PageGlassLane(selectedIndex: SidebarNavItem.tasks.rawValue) {
+        PageGlassLaneProbe(recorder: recorder) { Color.clear }
+      }
+      .frame(width: size.width, height: size.height)
+    )
+    host.frame = NSRect(origin: .zero, size: size)
+    host.layoutSubtreeIfNeeded()
 
-      let placed = try XCTUnwrap(recorder.frame)
-      let lane = PageGlassLaneLayout.laneWidth(for: size.width)
-      XCTAssertEqual(placed.width, lane, accuracy: 0.5)
-      XCTAssertEqual(
-        placed.height,
-        size.height - PageGlassLaneLayout.topGap - PageGlassLaneLayout.bottomGap,
-        accuracy: 0.5,
-        "one tall panel: the page fills the window and scrolls inside itself")
+    guard let placed = recorder.frame else {
+      return XCTFail("expected the wrapped destination to be placed")
     }
+    let lane = PageGlassLaneLayout.laneWidth(for: size.width)
+    XCTAssertEqual(placed.width, lane, accuracy: 0.5)
+    XCTAssertEqual(
+      placed.height,
+      size.height - PageGlassLaneLayout.topGap - PageGlassLaneLayout.bottomGap,
+      accuracy: 0.5,
+      "one tall panel: the page fills the window and scrolls inside itself")
   }
 
-  /// The lane fills the window horizontally. Vertical air between the top bar and the page remains
-  /// (`topGap`) so a page is not a full-bleed sheet behind the top bar; the bottom is flush.
-  func testTheLanesGlassFillsTheWindowWidthAndKeepsVerticalGaps() {
+  /// **The desktop survives on all four sides of the panel, at every window size.**
+  ///
+  /// This is the claim the two cases around it exist to serve, and the one they cannot make. Both
+  /// assert the panel *matches* `laneWidth` and the gaps — which stays true if `contentLaneWidth` is
+  /// ever changed to return the whole window, or if the gaps go to zero. Either change turns the
+  /// lane back into a full-bleed sheet of glass behind the UI, renders identically to the window
+  /// ground `ShellWindowChrome` deleted, and logs nothing.
+  ///
+  /// Measured off a real layout pass rather than recomputed: the recorded frame is in the hosting
+  /// view's own coordinates, so the four margins are the wallpaper the user actually keeps.
+  func testTheLanesGlassNeverReachesAnyEdgeOfTheWindow() {
     let sizes: [CGSize] = [
       CGSize(width: DesktopWindowLayoutPolicy.width, height: DesktopWindowLayoutPolicy.height),
       CGSize(width: 900, height: 600),
@@ -184,10 +129,7 @@ final class PageGlassLaneTests: XCTestCase {
     for size in sizes {
       let recorder = PageGlassLaneFrameRecorder()
       let host = NSHostingView(
-        rootView: PageGlassLane(
-          selectedIndex: SidebarNavItem.tasks.rawValue,
-          homeOwnsItsPanels: true
-        ) {
+        rootView: PageGlassLane(selectedIndex: SidebarNavItem.tasks.rawValue) {
           PageGlassLaneProbe(recorder: recorder) { Color.clear }
         }
         .frame(width: size.width, height: size.height)
@@ -201,14 +143,21 @@ final class PageGlassLaneTests: XCTestCase {
 
       let leading = placed.minX
       let trailing = size.width - placed.maxX
-      XCTAssertEqual(leading, 0, accuracy: 0.5, "at \(size) the lane must fill the window")
-      XCTAssertEqual(trailing, 0, accuracy: 0.5, "at \(size) the lane must fill the window")
-      XCTAssertGreaterThan(
-        placed.minY, 0,
-        "at \(size) the panel reaches the top edge: that stacks it into the top bar")
-      XCTAssertEqual(
-        size.height - placed.maxY, 0, accuracy: 0.5,
-        "at \(size) the panel must sit on the window's bottom edge")
+      let top = placed.minY
+      let bottom = size.height - placed.maxY
+
+      for (edge, margin) in [("leading", leading), ("trailing", trailing), ("top", top), ("bottom", bottom)] {
+        XCTAssertGreaterThan(
+          margin, 0,
+          "at \(size) the panel reaches the \(edge) edge: that is a ground spanning the window, not a "
+            + "panel floating on the desktop")
+      }
+      // The horizontal margin is the page's own, never smaller — a panel one point inside the frame
+      // is a full-bleed sheet with a rounding error, not a floating object.
+      XCTAssertGreaterThanOrEqual(leading, ChatComposerLayout.pageMargin - 0.5)
+      XCTAssertGreaterThanOrEqual(trailing, ChatComposerLayout.pageMargin - 0.5)
+      // …and it is centred, so neither side is the one that got the desktop.
+      XCTAssertEqual(leading, trailing, accuracy: 0.5, "the panel drifted off the window's axis")
     }
   }
 
@@ -218,10 +167,7 @@ final class PageGlassLaneTests: XCTestCase {
     let size = CGSize(width: 1_400, height: 800)
     let recorder = PageGlassLaneFrameRecorder()
     let host = NSHostingView(
-      rootView: PageGlassLane(
-        selectedIndex: SidebarNavItem.dashboard.rawValue,
-        homeOwnsItsPanels: true
-      ) {
+      rootView: PageGlassLane(selectedIndex: SidebarNavItem.dashboard.rawValue) {
         PageGlassLaneProbe(recorder: recorder) { Color.clear }
       }
       .frame(width: size.width, height: size.height)
@@ -239,17 +185,17 @@ final class PageGlassLaneTests: XCTestCase {
 
 // MARK: - The modal dim
 
-/// **A modal dim may darken a surface. It follows the glass, not leftover air.**
+/// **A modal dim may darken a surface. It may not darken the window.**
 ///
-/// The same claim as `testTheLanesGlassFillsTheWindowWidthAndKeepsVerticalGaps`, one layer up, and it is held
+/// The same claim as `testTheLanesGlassNeverReachesAnyEdgeOfTheWindow`, one layer up, and it is held
 /// the same way — off a real render at four window sizes rather than off the arithmetic under test.
 /// It is measured on the **pixels** rather than on a placed frame, because the thing that went wrong
 /// is not where a view was laid out: `Color.black.opacity(0.3).ignoresSafeArea()` is a paint, and a
 /// dim that is inset in layout but bleeds in the render is exactly the bug read backwards.
 ///
-/// Both directions are held. A dim that leaves a gutter of undimmed glass fails, and so does a dim
-/// that stops painting altogether — deleting every scrim would trade this visual bug for a usability
-/// one, so the guard has to be able to tell "bounded" from "gone".
+/// Both directions are held. A dim that reaches the window's edge fails, and so does a dim that stops
+/// painting altogether — deleting every scrim would trade this visual bug for a usability one, so the
+/// guard has to be able to tell "bounded" from "gone".
 @MainActor
 final class ShellModalScrimTests: XCTestCase {
 
@@ -260,27 +206,27 @@ final class ShellModalScrimTests: XCTestCase {
     CGSize(width: 3_440, height: 1_440),
   ]
 
-  /// The dim fills the glass. Horizontal flush is the product (`windowInset` is 0); the top bar
-  /// occupies the title-bar band, so a whole-shell dim starts at the window's top edge.
-  func testTheDimFillsTheGlass() throws {
-    XCTAssertEqual(ShellModalScrimLayout.topInset(.wholeShell), 0)
-    XCTAssertEqual(ShellModalScrimLayout.bottomInset(.wholeShell), 0)
-    XCTAssertEqual(ShellModalScrimLayout.topInset(.contentArea), PageGlassLaneLayout.topGap)
-    XCTAssertEqual(ShellModalScrimLayout.bottomInset(.contentArea), 0)
+  /// The dim mounted over the whole shell, and the dim mounted in the content area under the top bar,
+  /// both keep desktop on all four sides at every window size.
+  func testTheDimNeverPaintsToAnyEdgeOfTheWindow() throws {
+    for bounds in [ShellModalScrimBounds.wholeShell, .contentArea] {
+      for size in Self.windowSizes {
+        let painted = try XCTUnwrap(
+          PaintedExtent.of(ShellModalScrim().shellModalScrimBounds(bounds), in: size),
+          "\(bounds) at \(size) painted nothing — a modal with no dim does not read as modal")
 
-    for size in Self.windowSizes {
-      let painted = try XCTUnwrap(
-        PaintedExtent.of(ShellModalScrim(), in: size),
-        "at \(size) painted nothing — a modal with no dim does not read as modal")
-
-      XCTAssertEqual(painted.minX, 0, accuracy: 0.5, "at \(size) left an undimmed leading gutter")
-      XCTAssertEqual(
-        size.width - painted.maxX, 0, accuracy: 0.5,
-        "at \(size) left an undimmed trailing gutter")
-      XCTAssertEqual(painted.minY, 0, accuracy: 0.5, "at \(size) left an undimmed band above the top bar")
-      XCTAssertEqual(
-        size.height - painted.maxY, 0, accuracy: 0.5,
-        "at \(size) left an undimmed gutter under the glass")
+        for (edge, margin) in [
+          ("leading", painted.minX),
+          ("trailing", size.width - painted.maxX),
+          ("top", painted.minY),
+          ("bottom", size.height - painted.maxY),
+        ] {
+          XCTAssertGreaterThan(
+            margin, 0,
+            "\(bounds) at \(size) painted to the \(edge) edge: that is a dark rectangle on the "
+              + "user's wallpaper, not a dimmed app")
+        }
+      }
     }
   }
 
@@ -290,7 +236,7 @@ final class ShellModalScrimTests: XCTestCase {
   /// This is the case that must *not* be lane-clamped a second time: a page riding on
   /// `PageGlassLane` is already the lane, so clamping again would leave an undimmed 24 pt border of
   /// glass and the modal would read as sitting under the page. That the panel itself keeps desktop on
-  /// all four sides is `testTheLanesGlassFillsTheWindowWidthAndKeepsVerticalGaps` above; the two compose into
+  /// all four sides is `testTheLanesGlassNeverReachesAnyEdgeOfTheWindow` above; the two compose into
   /// the window-scale claim, and neither is provable from the other.
   func testAPagesOwnDimFillsThePanelItSitsOnAndNoMore() throws {
     for size in Self.windowSizes {
@@ -317,18 +263,12 @@ final class ShellModalScrimTests: XCTestCase {
   /// Read out of a real environment through a real layout pass, from inside `PageGlassLane`'s own
   /// content closure, which is exactly where every modal in the app is mounted.
   func testTheSurfaceTellsTheDimWhichSurfaceItIs() {
-    for homeOwnsItsPanels in [false, true] {
-      for item in SidebarNavItem.allCases {
-        let expected: ShellModalScrimBounds =
-          PageGlassLanePolicy.ownsItsPanels(
-            selectedIndex: item.rawValue,
-            homeOwnsItsPanels: homeOwnsItsPanels) ? .contentArea : .ownSurface
-        XCTAssertEqual(
-          Self.boundsPublished(
-            toDestination: item.rawValue,
-            homeOwnsItsPanels: homeOwnsItsPanels), expected,
-          "\(item.title) hands its modals the wrong surface")
-      }
+    for item in SidebarNavItem.allCases {
+      let expected: ShellModalScrimBounds =
+        PageGlassLanePolicy.ownsItsPanels(selectedIndex: item.rawValue) ? .contentArea : .ownSurface
+      XCTAssertEqual(
+        Self.boundsPublished(toDestination: item.rawValue), expected,
+        "\(item.title) hands its modals the wrong surface")
     }
   }
 
@@ -360,7 +300,7 @@ final class ShellModalScrimTests: XCTestCase {
       size.height - ShellModalScrimLayout.topInset(.wholeShell)
         - ShellModalScrimLayout.bottomInset(.wholeShell),
       accuracy: 1.5,
-      "the dim does not reach from the top bar through to the window's bottom edge")
+      "the dim does not reach from under the drag band to the panel's bottom margin")
   }
 
   // MARK: - The confirmation that used to be a system alert
@@ -385,15 +325,17 @@ final class ShellModalScrimTests: XCTestCase {
           "\(bounds) at \(size): the confirmation painted nothing into the app. A modal presented by "
             + "the system draws its backdrop on the window instead — which is the desktop here")
 
-        XCTAssertEqual(
-          painted.minX, 0, accuracy: 0.5,
-          "\(bounds) at \(size): the confirmation left an undimmed leading gutter")
-        XCTAssertEqual(
-          size.width - painted.maxX, 0, accuracy: 0.5,
-          "\(bounds) at \(size): the confirmation left an undimmed trailing gutter")
-        XCTAssertEqual(
-          size.height - painted.maxY, 0, accuracy: 0.5,
-          "\(bounds) at \(size): the confirmation left an undimmed gutter under the glass")
+        for (edge, margin) in [
+          ("leading", painted.minX),
+          ("trailing", size.width - painted.maxX),
+          ("top", painted.minY),
+          ("bottom", size.height - painted.maxY),
+        ] {
+          XCTAssertGreaterThan(
+            margin, 0,
+            "\(bounds) at \(size): the confirmation painted to the \(edge) edge, which on this "
+              + "window is the user's wallpaper")
+        }
 
         // …and it is still a modal. A card floating on an undimmed app would keep every margin
         // above and say nothing about the app being unavailable, so the dim's own extent is asserted
@@ -447,16 +389,10 @@ final class ShellModalScrimTests: XCTestCase {
 
   /// Mounts a probe exactly where a page's modals are mounted and reads back the surface it was told
   /// it is on.
-  private static func boundsPublished(
-    toDestination index: Int,
-    homeOwnsItsPanels: Bool
-  ) -> ShellModalScrimBounds? {
+  private static func boundsPublished(toDestination index: Int) -> ShellModalScrimBounds? {
     let recorder = ShellModalScrimBoundsRecorder()
     let host = NSHostingView(
-      rootView: PageGlassLane(
-        selectedIndex: index,
-        homeOwnsItsPanels: homeOwnsItsPanels
-      ) {
+      rootView: PageGlassLane(selectedIndex: index) {
         ShellModalScrimBoundsProbe(recorder: recorder)
       }
       .frame(width: 1_400, height: 800))

@@ -29,12 +29,9 @@ def subscription_module():
     """Load a fresh ``utils.subscription`` against stubbed circular-import deps."""
     announcements_stub = ModuleType("database.announcements")
     announcements_stub.compare_versions = lambda a, b: 0
-    client_stub = ModuleType("database._client")
-    client_stub.get_customer_firestore_client = MagicMock()
 
     fakes = {
         "database.announcements": announcements_stub,
-        "database._client": client_stub,
         "database.users": ModuleType("database.users"),
         "database.user_usage": ModuleType("database.user_usage"),
     }
@@ -118,101 +115,6 @@ def test_basic_plan_features_include_unlimited_memories(subscription_module):
     assert "Unlimited memories" in features
 
 
-def test_cancellation_is_pending_until_period_end(subscription_module):
-    subscription = SimpleNamespace(cancel_at_period_end=True, current_period_end=200)
-
-    assert subscription_module.is_pending_cancellation(subscription, now=199)
-    assert not subscription_module.is_pending_cancellation(subscription, now=200)
-
-
-def test_missing_period_end_is_still_pending_cancellation(subscription_module):
-    subscription = SimpleNamespace(cancel_at_period_end=True, current_period_end=None)
-
-    assert subscription_module.is_pending_cancellation(subscription, now=200)
-
-
-def test_can_pay_basic_stale_defers_plan_change_until_cancellation_ends(monkeypatch, subscription_module):
-    """A cancel-at-period-end Stripe subscription must block a different target
-    price even when the local Firestore record is missing/basic (lag or recovery).
-    Same-price reactivation stays allowed in that branch."""
-    sub = subscription_module
-
-    # Firestore record is basic/stale -> no pending cancellation there.
-    monkeypatch.setattr(sub, "users_db", SimpleNamespace())
-    sub.users_db.get_user_valid_subscription = lambda uid: None
-    sub.users_db.get_stripe_customer_id = lambda uid: "cus_x"
-    # No active (non-canceling) subscription, so the basic branch proceeds.
-    monkeypatch.setattr(sub, "_has_active_stripe_subscription", lambda uid: False)
-
-    pending = SimpleNamespace(
-        plan="paid",
-        status="active",
-        cancel_at_period_end=True,
-        current_period_end=2_000_000_000,
-        current_price_id="price_current",
-    )
-    monkeypatch.setattr(sub, "find_active_paid_subscription_for_user", lambda uid: pending)
-    monkeypatch.setattr(
-        sub,
-        "price_ids_match_plan_and_interval",
-        lambda current_price_id, target_price_id: current_price_id == target_price_id,
-    )
-
-    # Different target price must be deferred even though Firestore is basic.
-    can_pay, reason = sub.can_user_make_payment("u1", target_price_id="price_target")
-    assert can_pay is False
-    assert "after the current subscription ends" in reason
-
-    # Same-price reactivation is allowed.
-    can_pay, reason = sub.can_user_make_payment("u1", target_price_id="price_current")
-    assert can_pay is True
-    assert "reactivate" in reason
-
-
-def test_retained_price_matches_current_price_with_same_plan_and_interval(monkeypatch, subscription_module):
-    sub = subscription_module
-    retained_price_id = "price_1RtJPm1F8wnoWYvwhVJ38kLb"
-    monkeypatch.setenv("STRIPE_UNLIMITED_MONTHLY_PRICE_ID", "price_unlimited_monthly")
-    monkeypatch.setenv("STRIPE_UNLIMITED_ANNUAL_PRICE_ID", "price_unlimited_annual")
-
-    retrieve = MagicMock(side_effect=AssertionError("retained catalog prices must not require a Stripe read"))
-    monkeypatch.setattr(sub.stripe.Price, "retrieve", retrieve)
-
-    assert sub.price_ids_match_plan_and_interval(retained_price_id, "price_unlimited_monthly")
-    assert not sub.price_ids_match_plan_and_interval(retained_price_id, "price_unlimited_annual")
-    retrieve.assert_not_called()
-
-
-def test_price_interval_lookup_handles_price_without_recurring(monkeypatch, subscription_module):
-    sub = subscription_module
-    configured_alias_price_id = "price_configured_neo_alias"
-    monkeypatch.setenv("STRIPE_UNLIMITED_MONTHLY_PRICE_ID", "price_unlimited_monthly")
-    monkeypatch.setenv("STRIPE_UNLIMITED_ANNUAL_PRICE_ID", "price_unlimited_annual")
-    monkeypatch.setenv("STRIPE_NEO_MONTHLY_PRICE_ID", configured_alias_price_id)
-
-    # A configured migration alias without a catalog-ledger interval whose
-    # Stripe object carries no recurring block must not crash the lookup.
-    price_without_recurring = MagicMock()
-    del price_without_recurring.recurring
-    monkeypatch.setattr(sub.stripe.Price, "retrieve", MagicMock(return_value=price_without_recurring))
-
-    assert not sub.price_ids_match_plan_and_interval(configured_alias_price_id, "price_unlimited_monthly")
-    assert not sub.price_ids_match_plan_and_interval(configured_alias_price_id, "price_unlimited_annual")
-
-
-def test_reconcile_basic_subscription_without_stored_stripe_id(monkeypatch, subscription_module):
-    sub = subscription_module
-    stored = SimpleNamespace(plan=PlanType.basic, stripe_subscription_id=None, current_period_end=None)
-    recovered = MagicMock()
-    recovered.model_dump.return_value = {"stripe_subscription_id": "sub_recovered"}
-    users_db = SimpleNamespace(update_user_subscription=MagicMock())
-    monkeypatch.setattr(sub, "users_db", users_db)
-    monkeypatch.setattr(sub, "find_active_paid_subscription_for_user", lambda uid: recovered)
-
-    assert sub.reconcile_basic_plan_with_stripe("u1", stored) is recovered
-    users_db.update_user_subscription.assert_called_once_with("u1", {"stripe_subscription_id": "sub_recovered"})
-
-
 def test_unlimited_transcription_plan_skips_monthly_usage_scan(monkeypatch, subscription_module):
     monkeypatch.setattr(subscription_module, 'is_trial_paywalled', lambda uid, source: False)
     monkeypatch.setattr(subscription_module.users_db, 'is_byok_active', lambda uid: False, raising=False)
@@ -246,28 +148,6 @@ def test_bounded_transcription_plan_reads_monthly_usage_and_enforces_cap(monkeyp
 
     assert subscription_module.has_transcription_credits('uid') is False
     monthly_usage.assert_called_once_with('uid')
-
-
-def test_zero_transcription_allowance_is_exhausted_not_unlimited(monkeypatch, subscription_module):
-    _stub_remaining_deps(monkeypatch, subscription_module, PlanType.basic, used_seconds=0)
-    monkeypatch.setattr(subscription_module, 'get_plan_limits', lambda plan: SimpleNamespace(transcription_seconds=0))
-
-    assert subscription_module.has_transcription_credits('uid') is False
-    assert subscription_module.get_remaining_transcription_seconds('uid') == 0
-
-
-def test_malformed_transcription_allowance_fails_loudly(monkeypatch, subscription_module):
-    original_allocation_limit = subscription_module.allocation_limit
-
-    def malformed_allocation_limit(plan, allocation):
-        if allocation == 'transcription':
-            raise KeyError('basic.transcription limit is missing')
-        return original_allocation_limit(plan, allocation)
-
-    monkeypatch.setattr(subscription_module, 'allocation_limit', malformed_allocation_limit)
-
-    with pytest.raises(KeyError, match='limit is missing'):
-        subscription_module.get_plan_limits(PlanType.basic)
 
 
 def _stub_remaining_deps(monkeypatch, subscription_module, plan, used_seconds):
@@ -366,17 +246,3 @@ def test_plus_and_unlimited_v2_features_state_transcription_limits(subscription_
     assert any("Unlimited transcription" in f for f in unlim_mobile), unlim_mobile
     # Must not leak the Free-tier "Unlimited listening time" fallback.
     assert not any("listening" in f for f in plus_mobile), plus_mobile
-
-
-def test_basic_feature_defaults_project_from_plan_limits(monkeypatch, subscription_module):
-    monkeypatch.setattr(
-        subscription_module,
-        'get_plan_limits',
-        lambda plan: SimpleNamespace(transcription_seconds=600, words_transcribed=7, insights_gained=9),
-    )
-
-    features = subscription_module.get_plan_features(PlanType.basic)
-
-    assert '10 minutes of listening per month' in features
-    assert '7 words transcribed per month' in features
-    assert '9 insights per month' in features
