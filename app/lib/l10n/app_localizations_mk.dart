@@ -9894,6 +9894,20 @@ class AppLocalizationsMk extends AppLocalizations {
   String get accountCutoverOpenStore => 'Otevřít obchod';
 
   @override
+  String get chatScopeToday => 'Денес';
+
+  @override
+  String get chatScopeThisWeek => 'Оваа недела';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'За: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Прашај за ова';
+
+  @override
   String get sendRawAudioToOmi => 'Испраќај необработено аудио до Omi';
 
   @override

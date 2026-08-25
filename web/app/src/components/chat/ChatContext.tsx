@@ -44,6 +44,9 @@ export interface ChatContextInfo {
   id?: string;
   title?: string;
   summary?: string;
+  /** ISO datetime with offset; hard-scopes chat retrieval (#4515). */
+  start_date?: string;
+  end_date?: string;
 }
 
 const ChatContext = createContext<ChatContext | null>(null);

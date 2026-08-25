@@ -9677,6 +9677,20 @@ class AppLocalizationsKo extends AppLocalizations {
   String get accountCutoverOpenStore => '스토어 열기';
 
   @override
+  String get chatScopeToday => '오늘';
+
+  @override
+  String get chatScopeThisWeek => '이번 주';
+
+  @override
+  String chatScopeAbout(String title) {
+    return '$title에 대해';
+  }
+
+  @override
+  String get askAboutThisConversation => '이에 대해 질문';
+
+  @override
   String get sendRawAudioToOmi => '원본 오디오를 Omi로 보내기';
 
   @override

@@ -9658,6 +9658,20 @@ class AppLocalizationsZh extends AppLocalizations {
   String get accountCutoverOpenStore => '打开应用商店';
 
   @override
+  String get chatScopeToday => '今天';
+
+  @override
+  String get chatScopeThisWeek => '本周';
+
+  @override
+  String chatScopeAbout(String title) {
+    return '关于：$title';
+  }
+
+  @override
+  String get askAboutThisConversation => '询问此内容';
+
+  @override
   String get sendRawAudioToOmi => '向 Omi 发送原始音频';
 
   @override

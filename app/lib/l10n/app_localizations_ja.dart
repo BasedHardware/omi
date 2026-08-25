@@ -9676,6 +9676,20 @@ class AppLocalizationsJa extends AppLocalizations {
   String get accountCutoverOpenStore => 'ストアを開く';
 
   @override
+  String get chatScopeToday => '今日';
+
+  @override
+  String get chatScopeThisWeek => '今週';
+
+  @override
+  String chatScopeAbout(String title) {
+    return '$titleについて';
+  }
+
+  @override
+  String get askAboutThisConversation => 'これについて尋ねる';
+
+  @override
   String get sendRawAudioToOmi => '未処理の音声を Omi に送信';
 
   @override

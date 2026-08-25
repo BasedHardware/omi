@@ -879,6 +879,8 @@ export async function sendMessageStream(
       id?: string;
       title?: string;
       summary?: string;
+      start_date?: string;
+      end_date?: string;
     } | null;
   },
 ): Promise<void> {
@@ -917,7 +919,15 @@ export async function sendMessageStream(
     body: JSON.stringify({
       text,
       file_ids: options?.fileIds || [],
-      context: options?.context || null,
+      context: options?.context
+        ? {
+            type: options.context.type === 'general' ? 'recap' : options.context.type,
+            id: options.context.id,
+            title: options.context.title,
+            start_date: options.context.start_date,
+            end_date: options.context.end_date,
+          }
+        : null,
     }),
   });
 
