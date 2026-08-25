@@ -342,11 +342,11 @@ final class ScreenFrameQuickLook: NSObject {
 // MARK: - Data source and delegate
 
 extension ScreenFrameQuickLook: QLPreviewPanelDataSource {
-  nonisolated func numberOfPreviewItems(in panel: QLPreviewPanel!) -> Int {
+  nonisolated func numberOfPreviewItems(in panel: QLPreviewPanel) -> Int {
     MainActor.assumeIsolated { items.count }
   }
 
-  nonisolated func previewPanel(_ panel: QLPreviewPanel!, previewItemAt index: Int) -> QLPreviewItem! {
+  nonisolated func previewPanel(_ panel: QLPreviewPanel, previewItemAt index: Int) -> QLPreviewItem? {
     MainActor.assumeIsolated {
       guard items.indices.contains(index) else { return nil }
       return items[index]
@@ -358,7 +358,7 @@ extension ScreenFrameQuickLook: QLPreviewPanelDelegate {
   /// Escape closes the panel; every other key is Quick Look's own. Returning `false` lets the
   /// panel keep its arrow-key stepping, which is the whole reason the set is handed over rather
   /// than a single item.
-  nonisolated func previewPanel(_ panel: QLPreviewPanel!, handle event: NSEvent!) -> Bool {
+  nonisolated func previewPanel(_ panel: QLPreviewPanel, handle event: NSEvent) -> Bool {
     false
   }
 }
@@ -369,18 +369,18 @@ extension ScreenFrameQuickLook: QLPreviewPanelDelegate {
 /// view because the delegate is in the responder chain no matter what SwiftUI has done with first
 /// responder — see this file's header.
 extension AppDelegate {
-  @objc override func acceptsPreviewPanelControl(_ panel: QLPreviewPanel!) -> Bool {
+  @objc override func acceptsPreviewPanelControl(_ panel: QLPreviewPanel) -> Bool {
     MainActor.assumeIsolated { ScreenFrameQuickLook.shared.isPresenting }
   }
 
-  @objc override func beginPreviewPanelControl(_ panel: QLPreviewPanel!) {
+  @objc override func beginPreviewPanelControl(_ panel: QLPreviewPanel) {
     MainActor.assumeIsolated {
       panel.dataSource = ScreenFrameQuickLook.shared
       panel.delegate = ScreenFrameQuickLook.shared
     }
   }
 
-  @objc override func endPreviewPanelControl(_ panel: QLPreviewPanel!) {
+  @objc override func endPreviewPanelControl(_ panel: QLPreviewPanel) {
     MainActor.assumeIsolated {
       panel.dataSource = nil
       panel.delegate = nil
