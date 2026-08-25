@@ -26,6 +26,10 @@ class _RecordingObjectStore(FakeObjectStore):
 
 
 def _install(monkeypatch):
+    # The bucket now has to be configured for the operation to run at all: `_required_bucket` refuses
+    # an unset BUCKET_PLUGINS_LOGOS instead of passing None down to the port. This suite is about the
+    # URL-prefix guard, not about configuration, so it states the bucket rather than inheriting None.
+    monkeypatch.setattr(storage, 'omi_apps_bucket', 'omi-app-logos')
     store = _RecordingObjectStore(public_endpoint="https://storage.googleapis.com")
     monkeypatch.setattr(storage, '_object_store', lambda: store)
     return store

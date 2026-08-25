@@ -116,8 +116,10 @@ class PineconeVectorStore:
     def delete_by_filter(self, namespace: str, filter: Dict[str, Any]) -> None:
         # Same neutral-contract validation as query()/Qdrant: a delete is destructive, so reject an
         # out-of-contract filter here rather than let Pinecone interpret a wider dialect than Qdrant would.
-        if filter is not None:
-            neutral_filters.validate(filter)
+        # Validated unconditionally: the port declares the filter REQUIRED, and the `is not None` guard
+        # this replaces let a None slip past validation into `index.delete(filter=None)` — which is not
+        # a no-op, it is a delete with no predicate.
+        neutral_filters.validate(filter)
         _get_index().delete(filter=filter, namespace=namespace)
 
     def list_ids(self, namespace: str, *, prefix: str) -> Iterator[List[str]]:

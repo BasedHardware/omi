@@ -12,7 +12,6 @@ set empty on AWS bucket-owner-enforced buckets and grant public access via a buc
 
 from __future__ import annotations
 
-import io
 import logging
 import tempfile
 import os

@@ -100,9 +100,12 @@ def _revision(snapshot: Any) -> Any:
     to_datetime = getattr(value, "ToDatetime", None)
     if callable(to_datetime):
         try:
-            return _ensure_timezone_aware(to_datetime(tzinfo=timezone.utc))
+            # `to_datetime` comes from getattr on an unknown value, so what it returns is unknown too:
+            # protobuf Timestamp gives a datetime, anything else duck-typing found may not.
+            converted = to_datetime(tzinfo=timezone.utc)
         except (TypeError, ValueError, OverflowError):
             return None
+        return _ensure_timezone_aware(converted) if isinstance(converted, datetime) else None
 
     try:
         seconds = getattr(value, "seconds")

@@ -1,7 +1,7 @@
 import os
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Set, Tuple, cast
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from fastapi import HTTPException
 import stripe

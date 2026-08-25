@@ -383,7 +383,7 @@ class _DocRef:
         # Enumerate real subcollections so recursive-delete helpers (account / conversation deletion)
         # descend into them on Mongo instead of silently leaving orphaned descendant data.
         return [
-            _CollRef(self._client, f"{self.path}/{name}") for name in self._client._store.list_subcollections(self.path)
+            _CollRef(self._client, f"{self.path}/{name}") for name in self._client.store.list_subcollections(self.path)
         ]
 
     def get(
@@ -404,11 +404,11 @@ class _DocRef:
         fields = list(field_paths) if field_paths else None
         if transaction is not None:
             return _Snapshot(self, transaction._read(self.path, fields=fields))
-        return _Snapshot(self, self._client._store.get(self.path, fields=fields, timeout=timeout))
+        return _Snapshot(self, self._client.store.get(self.path, fields=fields, timeout=timeout))
 
     def set(self, data: Dict[str, Any], merge: bool = False, *, retry: Any = None, timeout: Any = None) -> None:
         del retry, timeout  # transport policy, adapter-owned -- see the note on _Query.stream
-        self._client._store.set(self.path, _neutral_data(data), merge=merge)
+        self._client.store.set(self.path, _neutral_data(data), merge=merge)
 
     def update(self, data: Dict[str, Any], option: Any = None, *, retry: Any = None, timeout: Any = None) -> None:
         del retry, timeout  # transport policy, adapter-owned -- see the note on _Query.stream
@@ -417,17 +417,17 @@ class _DocRef:
         # to the store port's ``if_updated_at``; the Mongo adapter enforces it against the stored
         # ``_updated_at`` and raises FailedPrecondition (via _firestore_errors) on a stale revision.
         with _firestore_errors():
-            self._client._store.update(self.path, _neutral_data(data), if_updated_at=_precondition_time(option))
+            self._client.store.update(self.path, _neutral_data(data), if_updated_at=_precondition_time(option))
 
     def create(self, data: Dict[str, Any], *, retry: Any = None, timeout: Any = None) -> None:
         del retry, timeout  # transport policy, adapter-owned -- see the note on _Query.stream
         with _firestore_errors():
-            self._client._store.create(self.path, _neutral_data(data))
+            self._client.store.create(self.path, _neutral_data(data))
 
     def delete(self, *, retry: Any = None, timeout: Any = None) -> None:
         del retry, timeout  # transport policy, adapter-owned -- see the note on _Query.stream
         with _firestore_errors():
-            self._client._store.delete(self.path)
+            self._client.store.delete(self.path)
 
 
 class _Query:
@@ -457,7 +457,10 @@ class _Query:
         self._fields = list(fields) if fields is not None else None
 
     def _clone(self, **kw: Any) -> "_Query":
-        base = dict(
+        # A kwargs bag, not a homogeneous mapping: without the annotation the inferred value type is
+        # the union of everything in it (`list[Any] | int | None`), which then fails against each
+        # typed parameter of _Query when it is unpacked.
+        base: Dict[str, Any] = dict(
             filters=self._filters,
             order_by=self._order_by,
             limit=self._limit,
@@ -561,12 +564,12 @@ class _Query:
             # inside `@firestore.transactional` bodies — the idempotency-key de-dup in
             # database/action_items.py, the relationship detach in goals.py, the photo probe in
             # conversation_finalization_jobs.py — and every one of those reads ran outside the session.
-            return self._client._store._query(self._collection, session=transaction._session, **kwargs)
-        return self._client._store.query(self._collection, **kwargs)
+            return self._client.store._query(self._collection, session=transaction._session, **kwargs)
+        return self._client.store.query(self._collection, **kwargs)
 
     def count(self) -> "_AggregationQuery":
         # Firestore's count() returns an AggregationQuery; callers do .count().get()[0][0].value.
-        return _AggregationQuery(self._client._store.count(self._collection, filters=self._filters or None))
+        return _AggregationQuery(self._client.store.count(self._collection, filters=self._filters or None))
 
     def stream(
         self,
@@ -676,7 +679,7 @@ class _FacadeTransaction:
         # transaction in the product WITHOUT ATOMICITY AND WITHOUT AN ERROR: the loud half
         # (AttributeError from _read) invited a fix, and the silent half shipped behind it. Asking the
         # store makes "no session" a declaration instead of a guess (BACKLOG L31).
-        self._session = self._client._store._begin_session()
+        self._session = self._client.store._begin_session()
         self._id = id(self)
         # Clear the held conflict: google's decorator REUSES this object across attempts, so a replay
         # that started still poisoned would run inert and re-raise the same conflict until the attempt
@@ -762,7 +765,7 @@ class _FacadeTransaction:
             # The Mongo session is already aborted; asking it anything raises. Report "absent" so the
             # body can finish and reach the commit, where the conflict is re-raised for the retry.
             return StoredDocument(id=path.rsplit("/", 1)[-1], path=path, exists=False, data=None)
-        return self._client._store._get(path, fields=fields, session=self._session)
+        return self._client.store._get(path, fields=fields, session=self._session)
 
     def get(self, ref: _DocRef, **_: Any) -> _Snapshot:
         return _Snapshot(ref, self._read(ref.path))
@@ -771,13 +774,13 @@ class _FacadeTransaction:
         if self._poisoned is not None:
             return
         with self._holding_conflicts():
-            self._client._store._set(ref.path, _neutral_data(data), merge=merge, session=self._session)
+            self._client.store._set(ref.path, _neutral_data(data), merge=merge, session=self._session)
 
     def update(self, ref: _DocRef, data: Dict[str, Any], option: Any = None) -> None:
         if self._poisoned is not None:
             return
         with self._holding_conflicts():
-            self._client._store._update(
+            self._client.store._update(
                 ref.path, _neutral_data(data), if_updated_at=_precondition_time(option), session=self._session
             )
 
@@ -785,13 +788,13 @@ class _FacadeTransaction:
         if self._poisoned is not None:
             return
         with self._holding_conflicts():
-            self._client._store._create(ref.path, _neutral_data(data), session=self._session)
+            self._client.store._create(ref.path, _neutral_data(data), session=self._session)
 
     def delete(self, ref: _DocRef, option: Any = None) -> None:
         if self._poisoned is not None:
             return
         with self._holding_conflicts():
-            self._client._store._delete(ref.path, if_updated_at=_precondition_time(option), session=self._session)
+            self._client.store._delete(ref.path, if_updated_at=_precondition_time(option), session=self._session)
 
     @contextlib.contextmanager
     def _holding_conflicts(self):
@@ -859,6 +862,17 @@ class NeutralFirestoreClient:
             )
         self._store = store
 
+    @property
+    def store(self) -> Any:
+        """The backing store, for this module's own companion classes.
+
+        `_DocRef`, `_CollRef`, `_Query` and the transaction/batch types are one implementation split
+        across several classes for readability; every one of them needs the store. Reaching for
+        `client._store` from a sibling class is private access as far as a type checker is concerned
+        (and upstream's pyright lane rejects it), so the module's internal API is stated once here
+        rather than suppressed at each of the seventeen call sites."""
+        return self._store
+
     def document(self, path: str) -> _DocRef:
         return _DocRef(self, path)
 
@@ -905,7 +919,9 @@ class NeutralFirestoreClient:
         # (cubic review PR 10887, review 4939247683).
         by_collection: Dict[str, list] = {}
         for ref in refs:
-            collection, _, doc_id = ref.path.rpartition("/")
+            # `_sep`, not `_`: this method takes **_ for the kwargs it ignores, so the usual throwaway
+            # name is already bound to that dict and unpacking into it rebinds a str over it.
+            collection, _sep, doc_id = ref.path.rpartition("/")
             by_collection.setdefault(collection, []).append(doc_id)
         found: Dict[str, StoredDocument] = {}
         for collection, ids in by_collection.items():
@@ -994,7 +1010,7 @@ class _GroupQuery:
                 'transactional form in the neutral port. Read the parents individually inside the '
                 'transaction, or do the sweep outside it.'
             )
-        for stored in self._client._store.query_group(
+        for stored in self._client.store.query_group(
             self._group,
             filters=self._filters or None,
             order_by=self._order_by,

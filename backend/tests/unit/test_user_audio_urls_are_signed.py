@@ -56,6 +56,20 @@ def store(monkeypatch, tmp_path):
     monkeypatch.setattr(storage, 'cache_signed_url', lambda key, url, ttl: None)
     # The bucket name is read into a module-level constant at import, so the env var is too late.
     monkeypatch.setattr(storage, 'speech_profiles_bucket', 'speech-profiles', raising=False)
+    # Every bucket the exercised helpers touch must now be configured: `_required_bucket` refuses an
+    # unset one instead of passing None down to the port, where it used to surface as a client error
+    # about a bucket literally named "None".
+    for attr, value in (
+        ('postprocessing_audio_bucket', 'postprocessing'),
+        ('memories_recordings_bucket', 'memories-recordings'),
+        ('syncing_local_bucket', 'temporal-sync'),
+        ('omi_apps_bucket', 'omi-app-logos'),
+        ('app_thumbnails_bucket', 'app-thumbnails'),
+        ('chat_files_bucket', 'chat-files'),
+        ('desktop_updates_bucket', 'desktop-updates'),
+    ):
+        monkeypatch.setattr(storage, attr, value, raising=False)
+
     return fake
 
 

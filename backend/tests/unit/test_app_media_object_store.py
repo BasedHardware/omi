@@ -13,6 +13,19 @@ from tests.object_store_fakes import FakeObjectStore
 def _fake_store(monkeypatch) -> FakeObjectStore:
     store = FakeObjectStore(public_endpoint="https://cdn.example")
     monkeypatch.setattr(storage, "_object_store", lambda: store)
+    # Every bucket the exercised helpers touch must now be configured: `_required_bucket` refuses an
+    # unset one instead of passing None down to the port, where it used to surface as a client error
+    # about a bucket literally named "None".
+    for attr, value in (
+        ('postprocessing_audio_bucket', 'postprocessing'),
+        ('memories_recordings_bucket', 'memories-recordings'),
+        ('syncing_local_bucket', 'temporal-sync'),
+        ('omi_apps_bucket', 'omi-app-logos'),
+        ('app_thumbnails_bucket', 'app-thumbnails'),
+        ('chat_files_bucket', 'chat-files'),
+        ('desktop_updates_bucket', 'desktop-updates'),
+    ):
+        monkeypatch.setattr(storage, attr, value, raising=False)
     return store
 
 

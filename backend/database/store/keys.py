@@ -11,8 +11,13 @@ known, since the joined path string has already lost the segment boundaries.
 from __future__ import annotations
 
 
-def ensure_id_segment(value: str, *, label: str = "document id") -> str:
+def ensure_id_segment(value: object, *, label: str = "document id") -> str:
     """Return ``value`` unchanged if it is a safe single path segment, else raise ``ValueError``.
+
+    The parameter is ``object``, not ``str``, on purpose: this is the boundary that decides whether an
+    id is safe, and the ids reaching it come from requests and stored documents where a declared type
+    is a promise, not a fact. Annotating ``str`` would make the isinstance check dead to a type checker
+    and delete the very guard the function exists for.
 
     A segment must be a non-empty string with no ``/`` (Firestore likewise forbids ``/`` in a
     document id). Rejecting is deliberate over encoding: an encoded id would not round-trip with the

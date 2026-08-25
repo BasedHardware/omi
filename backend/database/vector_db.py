@@ -6,7 +6,7 @@ import os
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional, TypedDict, cast
+from typing import Any, Callable, Dict, List, Optional, TypedDict
 
 from database import projection_repair
 from database.memory_vector_metadata import (
@@ -94,6 +94,21 @@ def _vector_store():
     from utils.vector import get_vector_store
 
     return get_vector_store()
+
+
+def _metadata_of(match: Any) -> Dict[str, Any]:
+    """The metadata of a hit, or a loud failure saying why it is missing.
+
+    ``VectorMatch.metadata`` is optional by contract: the adapters attach it only when the query set
+    ``include_metadata=True``. Every reader below does ask for it, so at runtime it is there — but
+    subscripting an optional key is exactly the access a type checker refuses, and answering with an
+    empty dict would turn a forgotten ``include_metadata`` into silently missing fields instead of an
+    error. This keeps the failure immediate and names its cause.
+    """
+    metadata = match.get('metadata')
+    if metadata is None:
+        raise KeyError('vector match carries no metadata: the query did not set include_metadata=True')
+    return metadata
 
 
 def is_vector_available() -> bool:
@@ -254,7 +269,7 @@ def query_vectors_by_metadata(
 
     conversation_id_to_matches: defaultdict[str, int] = defaultdict(int)
     for item in matches:
-        metadata: Dict[str, Any] = item['metadata']
+        metadata: Dict[str, Any] = _metadata_of(item)
         conversation_id: str = metadata['memory_id']
         for topic in topics:
             if topic in metadata_list(metadata, ConversationMetadataKeys.TOPICS):
@@ -345,7 +360,7 @@ def query_workstream_association_candidates(
     )
     result: List[str] = []
     for match in matches:
-        metadata = match.get('metadata') if isinstance(match, dict) else None
+        metadata = match.get('metadata')
         workstream_id = metadata.get('workstream_id') if isinstance(metadata, dict) else None
         if isinstance(workstream_id, str) and workstream_id not in result:
             result.append(workstream_id)
@@ -512,7 +527,7 @@ def find_similar_memories(
 
     results: List[Dict[str, Any]] = []
     for match in matches:
-        match_metadata: Dict[str, Any] = match['metadata']
+        match_metadata: Dict[str, Any] = _metadata_of(match)
         if match['score'] >= threshold:
             results.append(
                 {
@@ -551,7 +566,10 @@ def search_memories_by_vector(uid: str, query: str, limit: int = 10) -> List[str
 
     matches = _vector_store().query(MEMORIES_NAMESPACE, vector, top_k=limit, include_metadata=True, filter=filter_data)
 
-    return [match['metadata'].get('memory_id') for match in matches]
+    # A match whose metadata carries no memory_id cannot be returned as one: the declared
+    # List[str] would then hold a None and the caller would look it up and find nothing.
+    ids = (_metadata_of(match).get('memory_id') for match in matches)
+    return [i for i in ids if isinstance(i, str)]
 
 
 def upsert_canonical_memory_vector(
@@ -770,8 +788,8 @@ def find_similar_x_posts(uid: str, content: str, limit: int = 10) -> List[Dict[s
     matches = _vector_store().query(X_POSTS_NAMESPACE, vector, top_k=limit, include_metadata=True, filter={'uid': uid})
     return [
         {
-            'post_id': m['metadata'].get('post_id'),
-            'kind': m['metadata'].get('kind'),
+            'post_id': _metadata_of(m).get('post_id'),
+            'kind': _metadata_of(m).get('kind'),
             'score': m['score'],
         }
         for m in matches
@@ -866,9 +884,9 @@ def search_screen_activity_vectors(
 
     return [
         {
-            'screenshot_id': match['metadata'].get('screenshot_id'),
-            'timestamp': match['metadata'].get('timestamp'),
-            'appName': match['metadata'].get('appName'),
+            'screenshot_id': _metadata_of(match).get('screenshot_id'),
+            'timestamp': _metadata_of(match).get('timestamp'),
+            'appName': _metadata_of(match).get('appName'),
             'score': match['score'],
         }
         for match in matches
@@ -1001,7 +1019,8 @@ def search_action_items_by_vector(uid: str, query: str, limit: int = 10, min_sco
         f'search_action_items_by_vector uid={uid} matches={len(matches)} kept={len(kept)} '
         f'top_score={top_score} min_score={min_score}'
     )
-    return [m['metadata'].get('action_item_id') for m in kept]
+    ids = (_metadata_of(m).get('action_item_id') for m in kept)
+    return [i for i in ids if isinstance(i, str)]
 
 
 def find_similar_action_items(uid: str, query: str, threshold: float = 0.6, limit: int = 10) -> List[Dict[str, Any]]:
@@ -1222,7 +1241,7 @@ def search_transcript_chunks(
     results: List[Dict[str, Any]] = []
     for m in matches:
         raw_md: object = m.get('metadata')
-        md: Dict[str, Any] = cast(Dict[str, Any], raw_md) if isinstance(raw_md, dict) else {}
+        md: Dict[str, Any] = raw_md if isinstance(raw_md, dict) else {}
         results.append(
             {
                 'created_at': int(md['created_at']) if md.get('created_at') is not None else None,
@@ -1242,7 +1261,7 @@ def delete_transcript_chunk_vectors(uid: str, conversation_id: str) -> None:
     try:
         ids: List[str] = []
         for page in _vector_store().list_ids(TRANSCRIPT_CHUNKS_NAMESPACE, prefix=prefix):
-            ids.extend(cast(List[str], page if isinstance(page, list) else [page]))
+            ids.extend(page)
         for i in range(0, len(ids), 1000):
             _vector_store().delete_by_ids(TRANSCRIPT_CHUNKS_NAMESPACE, ids[i : i + 1000])
         if ids:
@@ -1268,7 +1287,7 @@ def delete_transcript_chunk_vectors_batch(
         try:
             ids: List[str] = []
             for page in _vector_store().list_ids(TRANSCRIPT_CHUNKS_NAMESPACE, prefix=prefix):
-                ids.extend(cast(List[str], page if isinstance(page, list) else [page]))
+                ids.extend(page)
             for i in range(0, len(ids), 1000):
                 _vector_store().delete_by_ids(TRANSCRIPT_CHUNKS_NAMESPACE, ids[i : i + 1000])
             deleted += len(ids)

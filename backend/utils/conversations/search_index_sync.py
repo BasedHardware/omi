@@ -97,9 +97,13 @@ def _epoch(value: Any) -> Optional[int]:
     to_timestamp = getattr(value, 'timestamp', None)
     if callable(to_timestamp):
         try:
-            return int(to_timestamp())
+            # Same reason as the branch above: `to_timestamp` was found by getattr on an unknown value,
+            # so its result is unknown until it is checked. int() of the wrong thing raises anyway, but
+            # the check says which shape is expected instead of relying on the bare except.
+            seconds = to_timestamp()
         except Exception:
             return None
+        return int(seconds) if isinstance(seconds, (int, float)) else None
     return None
 
 

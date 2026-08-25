@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional, cast
+from typing import Any, Dict, Optional
 
 from database.store import get_document_store
 from database.redis_db import cache_user_name
@@ -48,7 +48,7 @@ def _get_stored_user_name(uid: str) -> Optional[str]:
         user_doc = _store().get(f'users/{uid}')
         if user_doc.exists:
             raw: object = user_doc.to_dict()
-            data: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+            data: Dict[str, Any] = raw if isinstance(raw, dict) else {}
             name = data.get('name')
             if name and isinstance(name, str):
                 return name.split(' ')[0]

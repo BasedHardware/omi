@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, Optional, cast
+from typing import Any, Dict, Optional, cast, Mapping
 
 from models.memory_search_gateway import SearchDecision, SearchVectorHit
 from models.product_memory import RESTRICTED_SENSITIVITY_LABELS, MemoryTier, MemoryItem
@@ -124,7 +124,10 @@ def build_archive_memory_vector_filter(uid: str) -> Dict[str, Any]:
     return _base_memory_vector_filter(uid, {"memory_layer": {"$eq": MemoryTier.archive.value}})
 
 
-def parse_memory_search_vector_hit(match: Dict[str, Any]) -> ParsedMemoryVectorHit:
+def parse_memory_search_vector_hit(match: Mapping[str, Any]) -> ParsedMemoryVectorHit:
+    # Mapping, not Dict: callers pass a `VectorMatch` TypedDict, which is not assignable to
+    # Dict[str, Any] (a TypedDict is not a mutable map of arbitrary keys) but is a Mapping. This
+    # function only reads, so Mapping is also the honest signature.
     raw_metadata = match.get("metadata")
     metadata: Dict[str, Any] = cast(Dict[str, Any], raw_metadata) if isinstance(raw_metadata, dict) else {}
     try:
@@ -204,7 +207,7 @@ def _base_memory_vector_filter(uid: str, layer_filter: Dict[str, Any]) -> Dict[s
     }
 
 
-def _optional_match_id(match: Dict[str, Any]) -> Optional[str]:
+def _optional_match_id(match: Mapping[str, Any]) -> Optional[str]:
     value = match.get("id")
     if value is None:
         return None

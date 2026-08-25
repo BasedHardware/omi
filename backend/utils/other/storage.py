@@ -85,6 +85,19 @@ def _get_opuslib() -> Any:
     return opuslib
 
 
+def _required_bucket(name: Optional[str], env_var: str) -> str:
+    """The configured bucket, or a failure that names the variable nobody set.
+
+    Bucket names come from the environment and are therefore ``str | None``. Passing the None through
+    to the object-store port fails anyway — deeper, as a client error about a bucket called ``None`` —
+    so this turns it into the sentence an operator can act on. Buckets whose absence is a supported
+    state (speech profiles: storage simply disabled) keep their own resolver and are NOT routed here.
+    """
+    if not name:
+        raise RuntimeError(f'{env_var} is not configured, and this operation needs its bucket')
+    return name
+
+
 def _speech_profiles_bucket_name(required: bool = False) -> Optional[str]:
     """The configured speech-profiles bucket name, or None when unset (storage disabled)."""
     global _did_warn_missing_speech_profiles_bucket
@@ -272,12 +285,16 @@ def upload_postprocessing_audio(file_path: str) -> str:
     Signed, not public (ADR-0087). The caller already named the result ``signed_url``, which is what it
     should always have been: this is the user's recording, and the provider only needs it for one call.
     """
-    _object_store().put_from_file(postprocessing_audio_bucket, file_path, file_path)
-    return _signed_url(postprocessing_audio_bucket, file_path, USER_AUDIO_URL_MINUTES)
+    _object_store().put_from_file(
+        _required_bucket(postprocessing_audio_bucket, 'BUCKET_POSTPROCESSING'), file_path, file_path
+    )
+    return _signed_url(
+        _required_bucket(postprocessing_audio_bucket, 'BUCKET_POSTPROCESSING'), file_path, USER_AUDIO_URL_MINUTES
+    )
 
 
 def delete_postprocessing_audio(file_path: str) -> None:
-    _object_store().delete(postprocessing_audio_bucket, file_path)
+    _object_store().delete(_required_bucket(postprocessing_audio_bucket, 'BUCKET_POSTPROCESSING'), file_path)
 
 
 # ***********************************
@@ -289,13 +306,19 @@ def upload_sdcard_audio(file_path: str) -> str:
     # The asymmetry this used to carry — written at `file_path`, URL minted for `sdcard/{file_path}` —
     # was upstream's, and upstream fixed it in #11992: the object goes where the URL says it is.
     path = f'sdcard/{file_path}'
-    _object_store().put_from_file(postprocessing_audio_bucket, path, file_path)
+    _object_store().put_from_file(
+        _required_bucket(postprocessing_audio_bucket, 'BUCKET_POSTPROCESSING'), path, file_path
+    )
     # Signed for the same reason as the sibling above (ADR-0087).
-    return _signed_url(postprocessing_audio_bucket, path, USER_AUDIO_URL_MINUTES)
+    return _signed_url(
+        _required_bucket(postprocessing_audio_bucket, 'BUCKET_POSTPROCESSING'), path, USER_AUDIO_URL_MINUTES
+    )
 
 
 def download_postprocessing_audio(file_path: str, destination_file_path: str) -> None:
-    _object_store().download_to(postprocessing_audio_bucket, file_path, destination_file_path)
+    _object_store().download_to(
+        _required_bucket(postprocessing_audio_bucket, 'BUCKET_POSTPROCESSING'), file_path, destination_file_path
+    )
 
 
 # ************************************************
@@ -305,18 +328,24 @@ def download_postprocessing_audio(file_path: str, destination_file_path: str) ->
 
 def upload_conversation_recording(file_path: str, uid: str, conversation_id: str) -> str:
     path = f'{uid}/{conversation_id}.wav'
-    _object_store().put_from_file(memories_recordings_bucket, path, file_path)
+    _object_store().put_from_file(
+        _required_bucket(memories_recordings_bucket, 'BUCKET_MEMORIES_RECORDINGS'), path, file_path
+    )
     # Signed (ADR-0087): a conversation recording behind a link that never expires is the thing this
     # initiative exists to avoid.
-    return _signed_url(memories_recordings_bucket, path, USER_AUDIO_URL_MINUTES)
+    return _signed_url(
+        _required_bucket(memories_recordings_bucket, 'BUCKET_MEMORIES_RECORDINGS'), path, USER_AUDIO_URL_MINUTES
+    )
 
 
 def get_conversation_recording_if_exists(uid: str, memory_id: str) -> Optional[str]:
     logger.info(f'get_conversation_recording_if_exists {uid} {memory_id}')
     path = f'{uid}/{memory_id}.wav'
-    if _object_store().exists(memories_recordings_bucket, path):
+    if _object_store().exists(_required_bucket(memories_recordings_bucket, 'BUCKET_MEMORIES_RECORDINGS'), path):
         file_path = f'_temp/{memory_id}.wav'
-        _object_store().download_to(memories_recordings_bucket, path, file_path)
+        _object_store().download_to(
+            _required_bucket(memories_recordings_bucket, 'BUCKET_MEMORIES_RECORDINGS'), path, file_path
+        )
         return file_path
     return None
 
@@ -347,18 +376,24 @@ def get_syncing_file_temporal_url(file_path: str):
     Signed like its twin below (ADR-0087) — it carries the same audio. The two differ only in expiry;
     this one has no live caller, and is kept because upstream's surface has it.
     """
-    _object_store().put_from_file(syncing_local_bucket, file_path, file_path)
-    return _signed_url(syncing_local_bucket, file_path, USER_AUDIO_URL_MINUTES)
+    _object_store().put_from_file(
+        _required_bucket(syncing_local_bucket, 'BUCKET_TEMPORAL_SYNC_LOCAL'), file_path, file_path
+    )
+    return _signed_url(
+        _required_bucket(syncing_local_bucket, 'BUCKET_TEMPORAL_SYNC_LOCAL'), file_path, USER_AUDIO_URL_MINUTES
+    )
 
 
 def get_syncing_file_temporal_signed_url(file_path: str):
-    _object_store().put_from_file(syncing_local_bucket, file_path, file_path)
-    return _signed_url(syncing_local_bucket, file_path, 15)
+    _object_store().put_from_file(
+        _required_bucket(syncing_local_bucket, 'BUCKET_TEMPORAL_SYNC_LOCAL'), file_path, file_path
+    )
+    return _signed_url(_required_bucket(syncing_local_bucket, 'BUCKET_TEMPORAL_SYNC_LOCAL'), file_path, 15)
 
 
 def delete_syncing_temporal_file(file_path: str):
     # The port's delete is idempotent (no raise on a missing object), so no NotFound guard is needed.
-    _object_store().delete(syncing_local_bucket, file_path)
+    _object_store().delete(_required_bucket(syncing_local_bucket, 'BUCKET_TEMPORAL_SYNC_LOCAL'), file_path)
 
 
 # Long enough for every signed-URL consumer (Deepgram fetch, speaker-ID
@@ -381,7 +416,9 @@ def schedule_syncing_temporal_file_deletion(
 
 def upload_syncing_temporal_file(file_path: str):
     """Stage a local file in the syncing bucket (blob name = local relative path)."""
-    _object_store().put_from_file(syncing_local_bucket, file_path, file_path)
+    _object_store().put_from_file(
+        _required_bucket(syncing_local_bucket, 'BUCKET_TEMPORAL_SYNC_LOCAL'), file_path, file_path
+    )
 
 
 def download_syncing_temporal_file(file_path: str) -> bool:
@@ -394,7 +431,9 @@ def download_syncing_temporal_file(file_path: str) -> bool:
     if directory:
         os.makedirs(directory, exist_ok=True)
     try:
-        _object_store().download_to(syncing_local_bucket, file_path, file_path)
+        _object_store().download_to(
+            _required_bucket(syncing_local_bucket, 'BUCKET_TEMPORAL_SYNC_LOCAL'), file_path, file_path
+        )
         return True
     except ObjectNotFound:
         return False
@@ -1481,13 +1520,17 @@ def _signed_url(bucket: str, key: str, minutes: int) -> str:
 def upload_app_logo(file_path: str, app_id: str):
     path = f'{app_id}.png'
     _object_store().put_from_file(
-        omi_apps_bucket, path, file_path, content_type='image/png', cache_control='public, no-cache'
+        _required_bucket(omi_apps_bucket, 'BUCKET_PLUGINS_LOGOS'),
+        path,
+        file_path,
+        content_type='image/png',
+        cache_control='public, no-cache',
     )
-    return _object_store().public_url(omi_apps_bucket, path)
+    return _object_store().public_url(_required_bucket(omi_apps_bucket, 'BUCKET_PLUGINS_LOGOS'), path)
 
 
 def delete_app_logo(img_url: str):
-    prefix = _object_store().public_url(omi_apps_bucket, '')
+    prefix = _object_store().public_url(_required_bucket(omi_apps_bucket, 'BUCKET_PLUGINS_LOGOS'), '')
     # Require the URL to START WITH the app-logo prefix, not merely contain it: a foreign-bucket URL
     # embedding the prefix later could otherwise delete an unrelated object (this is a deletion path).
     if not img_url.startswith(prefix):
@@ -1495,20 +1538,24 @@ def delete_app_logo(img_url: str):
         return
     path = img_url[len(prefix) :]
     logger.info(f'delete_app_logo {path}')
-    _object_store().delete(omi_apps_bucket, path)
+    _object_store().delete(_required_bucket(omi_apps_bucket, 'BUCKET_PLUGINS_LOGOS'), path)
 
 
 def upload_app_thumbnail(file_path: str, thumbnail_id: str) -> str:
     path = f'{thumbnail_id}.jpg'
     _object_store().put_from_file(
-        app_thumbnails_bucket, path, file_path, content_type='image/jpeg', cache_control='public, no-cache'
+        _required_bucket(app_thumbnails_bucket, 'BUCKET_APP_THUMBNAILS'),
+        path,
+        file_path,
+        content_type='image/jpeg',
+        cache_control='public, no-cache',
     )
-    return _object_store().public_url(app_thumbnails_bucket, path)
+    return _object_store().public_url(_required_bucket(app_thumbnails_bucket, 'BUCKET_APP_THUMBNAILS'), path)
 
 
 def get_app_thumbnail_url(thumbnail_id: str) -> str:
     path = f'{thumbnail_id}.jpg'
-    return _object_store().public_url(app_thumbnails_bucket, path)
+    return _object_store().public_url(_required_bucket(app_thumbnails_bucket, 'BUCKET_APP_THUMBNAILS'), path)
 
 
 # **********************************
@@ -1532,7 +1579,11 @@ def upload_multi_chat_files(files_name: List[str], uid: str) -> Dict[str, str]:
         try:
             path = f'{uid}/{name}'
             _object_store().put_from_file(
-                chat_files_bucket, path, f'./{name}', cache_control='public, no-cache', public=True
+                _required_bucket(chat_files_bucket, 'BUCKET_CHAT_FILES'),
+                path,
+                f'./{name}',
+                cache_control='public, no-cache',
+                public=True,
             )
             keys[name] = path
         except Exception as e:
@@ -1554,7 +1605,7 @@ def resolve_chat_thumbnail(stored: str) -> str:
     """
     if not stored or '://' in stored:
         return stored
-    return _signed_url(chat_files_bucket, stored, USER_AUDIO_URL_MINUTES)
+    return _signed_url(_required_bucket(chat_files_bucket, 'BUCKET_CHAT_FILES'), stored, USER_AUDIO_URL_MINUTES)
 
 
 def resolve_chat_file_thumbnails(files: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -1586,4 +1637,6 @@ def get_desktop_update_signed_url(blob_path: str, expiration_hours: int = 1) -> 
         Signed URL valid for the specified duration
     """
     # Uses the _signed_url helper (Redis-cached, port-backed)
-    return _signed_url(desktop_updates_bucket, blob_path, expiration_hours * 60)
+    return _signed_url(
+        _required_bucket(desktop_updates_bucket, 'BUCKET_DESKTOP_UPDATES'), blob_path, expiration_hours * 60
+    )

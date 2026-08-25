@@ -21,11 +21,23 @@ class VectorRecord(TypedDict):
     metadata: Dict[str, Any]
 
 
-class VectorMatch(TypedDict, total=False):
-    """One query hit. ``values``/``metadata`` present only when requested."""
+class _VectorMatchIdentity(TypedDict):
+    """What every hit carries, on every backend."""
 
     id: str
     score: float
+
+
+class VectorMatch(_VectorMatchIdentity, total=False):
+    """One query hit.
+
+    ``id`` and ``score`` are REQUIRED: both adapters set them unconditionally when they build a hit
+    (pinecone.py:99, qdrant.py:191) — a match without an identity or a rank is not a match. Declaring
+    the whole shape `total=False` said the opposite, so every `hit["id"]` and `hit["score"]` in
+    `database/vector_db.py` read as an access to a possibly-absent key. ``values`` and ``metadata``
+    genuinely are optional: they appear only when the caller asked for them via
+    ``include_values`` / ``include_metadata``, and readers must keep using ``.get()`` for those."""
+
     values: List[float]
     metadata: Dict[str, Any]
 

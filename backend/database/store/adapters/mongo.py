@@ -33,7 +33,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
 
-from pymongo import ASCENDING, DESCENDING, DeleteOne, InsertOne, MongoClient, ReplaceOne, UpdateOne
+from pymongo import ASCENDING, DESCENDING, DeleteOne, InsertOne, MongoClient, UpdateOne
 from contextlib import contextmanager
 
 from pymongo.errors import DuplicateKeyError, OperationFailure

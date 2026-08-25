@@ -17,7 +17,7 @@ filter client-side.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Mapping
+from typing import Any, Mapping, cast
 
 _FIELD_OPERATORS = frozenset({"$eq", "$in", "$gte", "$lte", "$exists"})
 _LOGICAL_OPERATORS = frozenset({"$and", "$or"})
@@ -27,11 +27,16 @@ class UnsupportedFilterError(ValueError):
     """Raised when a filter uses an operator outside the neutral contract."""
 
 
-def validate(flt: Mapping[str, Any]) -> None:
-    """Raise UnsupportedFilterError if ``flt`` uses anything outside the neutral subset."""
+def validate(flt: object) -> None:
+    """Raise UnsupportedFilterError if ``flt`` uses anything outside the neutral subset.
+
+    ``object``, not ``Mapping``: this is the gate that decides whether a filter is expressible on
+    every backend, and it recurses into sub-filters whose shape nothing has checked yet. Declaring a
+    Mapping would make the isinstance check dead to a type checker and let a malformed sub-filter
+    through to the adapter."""
     if not isinstance(flt, Mapping):
         raise UnsupportedFilterError(f"filter must be a dict, got {type(flt).__name__}")
-    for key, value in flt.items():
+    for key, value in cast(Mapping[str, Any], flt).items():
         if key in _LOGICAL_OPERATORS:
             if not isinstance(value, (list, tuple)) or not value:
                 raise UnsupportedFilterError(f"{key} takes a non-empty list of sub-filters")

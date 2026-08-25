@@ -71,6 +71,7 @@ class Transaction(Protocol):
         does not stop the commit. The contract is therefore only "the read runs in the transaction's own
         view of committed state". A caller that needs read-set conflict detection must not rely on this.
         """
+        ...
 
 
 @runtime_checkable
@@ -182,6 +183,8 @@ class FacadeSessionStore(Protocol):
     open half of L31, to be done together with a third adapter and not before.
     """
 
+    ...
+
     # Same semantics as the DocumentStore ops of the same name, executed inside ``session``.
     def _get(self, path: str, *, fields: Optional[Sequence[str]] = None, session: Any = None) -> StoredDocument: ...
     def _set(self, path: str, data: Dict[str, Any], *, merge: bool = False, session: Any = None) -> None: ...
@@ -196,6 +199,7 @@ class FacadeSessionStore(Protocol):
         documents (``query.stream(transaction=tx)``), and the facade used to accept that transaction and
         drop it — so on Mongo the de-dup read in ``database/action_items.py`` ran outside the session
         (BACKLOG L24)."""
+        ...
 
     def _begin_session(self) -> Any:
         """Open a session with an active transaction, or return ``None`` to declare session-less.

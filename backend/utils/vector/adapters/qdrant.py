@@ -21,6 +21,8 @@ Env: ``QDRANT_URL`` (e.g. http://qdrant:6333), ``QDRANT_API_KEY`` (optional),
 
 from __future__ import annotations
 
+import logging
+
 import os
 import threading
 import uuid
@@ -28,6 +30,8 @@ from typing import Any, Dict, Iterator, List, Optional
 
 from utils.vector import filters as neutral_filters
 from utils.vector.ports import VectorMatch, VectorRecord
+
+logger = logging.getLogger(__name__)
 
 _ID_UUID_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "omi-vector-store")
 _ID_PAYLOAD_KEY = "__id"
@@ -136,7 +140,13 @@ def _to_qdrant_filter(flt: Optional[Dict[str, Any]]):
             for sub in value:
                 must.append(_to_qdrant_filter(sub))
         elif key == "$or":
-            must.append(models.Filter(should=[_to_qdrant_filter(sub) for sub in value]))
+            branches = [_to_qdrant_filter(sub) for sub in value]
+            if any(b is None for b in branches):
+                # An empty sub-filter translates to None, and `should=[None]` is not "match anything"
+                # to Qdrant — it is a malformed query. Reject it here, where the cause is still
+                # visible, instead of letting the client fail on a shape it cannot name.
+                raise neutral_filters.UnsupportedFilterError("$or contains an empty sub-filter")
+            must.append(models.Filter(should=branches))
         else:
             add_field(key, value)
 
@@ -188,7 +198,20 @@ class QdrantVectorStore:
         out: List[VectorMatch] = []
         for point in response.points:
             payload = dict(point.payload or {})
-            hit: VectorMatch = {"id": payload.get(_ID_PAYLOAD_KEY), "score": point.score}
+            original_id = payload.get(_ID_PAYLOAD_KEY)
+            if not isinstance(original_id, str):
+                # Every point WE write carries the caller's id under __id, because the point id itself
+                # is a uuid5 we derive and cannot invert. A point without it was not written through
+                # this adapter, and its qdrant id would be meaningless to the caller — returning it
+                # would send a lookup somewhere that does not exist. Drop it, and say so once.
+                logger.warning(
+                    "qdrant: point %s in %s has no %s payload key; dropping it from the results",
+                    point.id,
+                    namespace,
+                    _ID_PAYLOAD_KEY,
+                )
+                continue
+            hit: VectorMatch = {"id": original_id, "score": point.score}
             if include_metadata:
                 hit["metadata"] = {k: v for k, v in payload.items() if k != _ID_PAYLOAD_KEY}
             if include_values:
@@ -210,11 +233,15 @@ class QdrantVectorStore:
     def delete_by_filter(self, namespace: str, filter: Dict[str, Any]) -> None:
         from qdrant_client import models
 
+        selector = _to_qdrant_filter(filter)
+        if selector is None:
+            # A delete whose predicate translated to nothing is not a no-op: `FilterSelector(filter=None)`
+            # selects the whole collection. The port declares the filter required, so an empty one is a
+            # caller error, and this is the last place that can still say so. Same hole as the one the
+            # pinecone adapter carried in `delete_by_filter`.
+            raise neutral_filters.UnsupportedFilterError("delete_by_filter needs a non-empty filter")
         collection = _ensure_collection(namespace)
-        _get_client().delete(
-            collection_name=collection,
-            points_selector=models.FilterSelector(filter=_to_qdrant_filter(filter)),
-        )
+        _get_client().delete(collection_name=collection, points_selector=models.FilterSelector(filter=selector))
 
     def list_ids(self, namespace: str, *, prefix: str) -> Iterator[List[str]]:
         collection = _ensure_collection(namespace)

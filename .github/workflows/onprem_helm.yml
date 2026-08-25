@@ -25,15 +25,28 @@ jobs:
         with:
           version: v3.16.2
 
+      # The chart FAILS to render without files/omi-realm.json, on purpose (ADR-0082): a realm is
+      # per-installation and gitignored, and rendering a Keycloak with no realm is the silent success
+      # ADR-0081 closed elsewhere. CI has to supply one the same way an operator does — the example
+      # for the overlay being rendered, dev and prod carrying different principals — and remove it
+      # again before packaging, so the published .tgz never ships someone else's realm.
       - name: helm lint (dev + prod overlays)
         run: |
+          install -m 0644 deploy/onprem/keycloak/omi-realm.dev.example.json \
+            deploy/onprem/helm/omi-oss/files/omi-realm.json
           helm lint deploy/onprem/helm/omi-oss -f deploy/onprem/helm/omi-oss/values-dev.yaml
+          install -m 0644 deploy/onprem/keycloak/omi-realm.example.json \
+            deploy/onprem/helm/omi-oss/files/omi-realm.json
           helm lint deploy/onprem/helm/omi-oss -f deploy/onprem/helm/omi-oss/values-prod.yaml
 
       - name: helm template (render both overlays; values.schema.json validates inputs)
         run: |
+          install -m 0644 deploy/onprem/keycloak/omi-realm.dev.example.json \
+            deploy/onprem/helm/omi-oss/files/omi-realm.json
           helm template omi deploy/onprem/helm/omi-oss -n omi-dev \
             -f deploy/onprem/helm/omi-oss/values-dev.yaml > /dev/null
+          install -m 0644 deploy/onprem/keycloak/omi-realm.example.json \
+            deploy/onprem/helm/omi-oss/files/omi-realm.json
           helm template omi deploy/onprem/helm/omi-oss -n omi-prod \
             -f deploy/onprem/helm/omi-oss/values-prod.yaml > /dev/null
 
@@ -44,4 +57,6 @@ jobs:
         run: python3 .github/scripts/check_oss_release.py
 
       - name: helm package (installable .tgz artifact — ADR-0049 §4.3)
-        run: helm package deploy/onprem/helm/omi-oss -d /tmp/helm-out
+        run: |
+          rm -f deploy/onprem/helm/omi-oss/files/omi-realm.json
+          helm package deploy/onprem/helm/omi-oss -d /tmp/helm-out
