@@ -14,12 +14,20 @@ export const MRR_STATUSES: Stripe.SubscriptionListParams.Status[] = ['active', '
 /** Reported separately: a trial is pipeline, not revenue. */
 export const PIPELINE_STATUSES: Stripe.SubscriptionListParams.Status[] = ['trialing'];
 
+/** Stripe's complete set of recurring intervals. Anything else is a Stripe change, not a gap. */
 const MONTHS_PER_INTERVAL: Record<string, number> = {
   day: 12 / 365,
   week: 12 / 52,
   month: 1,
   year: 12,
 };
+
+/**
+ * Every dashboard figure is dollars. Stripe prices carry their own currency, and summing a EUR
+ * price into a USD total would report a number that is not money in any currency, so non-USD
+ * prices are excluded and counted separately rather than silently blended.
+ */
+const REPORTING_CURRENCY = 'usd';
 
 export interface ProductGroup {
   productId: string;
@@ -84,22 +92,56 @@ export function productIdOf(item: Stripe.SubscriptionItem): string | null {
  *
  * Annual plans divide by 12; any other interval normalises through its own month count, so a
  * quarterly or weekly price is not silently counted as a monthly one.
+ *
+ * Only USD prices are counted — see `isNonUsdPrice` / `countNonUsdSubscriptions`.
  */
 export function monthlyAmount(subscription: Stripe.Subscription): number {
   return subscription.items.data.reduce((sum, item) => {
     const price = priceOf(item);
     if (!price) return sum;
 
+    if (isNonUsd(price)) {
+      console.warn(
+        `Excluding non-USD price ${price.id} (${price.currency}) on subscription ${subscription.id} from MRR: dashboard totals are USD-only`,
+      );
+      return sum;
+    }
+
     const amount = ((price.unit_amount ?? 0) * (item.quantity ?? 1)) / 100;
     const recurring = price.recurring;
     if (!recurring) return sum;
 
     const monthsPerInterval = MONTHS_PER_INTERVAL[recurring.interval];
-    if (!monthsPerInterval) return sum;
+    if (!monthsPerInterval) {
+      // MONTHS_PER_INTERVAL covers Stripe's whole interval set, so this means Stripe added one.
+      // Loud rather than a silent $0 contribution that reads as a real number on the dashboard.
+      console.warn(
+        `Unknown recurring interval "${recurring.interval}" on price ${price.id}; excluded from MRR`,
+      );
+      return sum;
+    }
 
     const months = monthsPerInterval * (recurring.interval_count || 1);
     return sum + amount / months;
   }, 0);
+}
+
+function isNonUsd(price: Stripe.Price): boolean {
+  // Stripe always sets `currency`; a fixture without one is treated as the reporting currency.
+  return Boolean(price.currency) && price.currency !== REPORTING_CURRENCY;
+}
+
+/** True when any item on the subscription is priced in a currency the dashboard cannot total. */
+export function isNonUsdSubscription(subscription: Stripe.Subscription): boolean {
+  return subscription.items.data.some((item) => {
+    const price = priceOf(item);
+    return price !== null && isNonUsd(price);
+  });
+}
+
+/** How many subscriptions `monthlyAmount` left out of the totals for being non-USD. */
+export function countNonUsdSubscriptions(subscriptions: Stripe.Subscription[]): number {
+  return subscriptions.filter(isNonUsdSubscription).length;
 }
 
 /** Annualised amount for one subscription, in dollars. */
