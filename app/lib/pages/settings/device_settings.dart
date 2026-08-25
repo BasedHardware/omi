@@ -765,6 +765,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               title: context.l10n.omiButtonActions,
               showChevron: false,
               trailing: Switch(
+                key: const Key('omi_button_actions_toggle'),
                 value: _omiButtonActionsEnabled,
                 activeThumbColor: Colors.white,
                 activeTrackColor: const Color(0xFF636366),
