@@ -10,10 +10,13 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/auth_service.dart';
 
+import '../helpers/test_env.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() async {
+    ensureTestEnv();
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
   });

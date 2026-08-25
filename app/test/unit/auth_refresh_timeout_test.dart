@@ -7,6 +7,8 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/auth_service.dart';
 
+import '../helpers/test_env.dart';
+
 /// A forced token refresh that never returns must not hang its caller.
 ///
 /// `backend/http/shared.dart` refreshes on the way into *every* authenticated
@@ -19,6 +21,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() async {
+    ensureTestEnv();
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
   });
