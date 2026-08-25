@@ -187,4 +187,45 @@ void main() {
     provider.dispose();
     onboarding.dispose();
   });
+
+  test('streamDeviceRecording does not downgrade a normalized OpenGlass type', () async {
+    final provider = CaptureProvider(inProgressConversationLoader: () async {});
+    final discovery = _device(DeviceType.omi);
+    provider.updateRecordingDevice(discovery.copyWith(type: DeviceType.openglass));
+
+    await provider.streamDeviceRecording(device: discovery);
+
+    expect(provider.recordingDevice?.id, discovery.id);
+    expect(provider.recordingDevice?.type, DeviceType.openglass);
+    provider.dispose();
+  });
+
+  test('cancelTutorialOwnedVoiceSession no-ops when the session is not tutorial-owned', () {
+    final provider = CaptureProvider(speakerHaptic: (_, __) async => true);
+    provider.updateRecordingDevice(_device(DeviceType.omi));
+
+    provider.handleButtonEventForTesting('test-id', 1);
+    expect(provider.hasVoiceCommandSessionForTesting, isTrue);
+
+    provider.cancelTutorialOwnedVoiceSession();
+    expect(provider.hasVoiceCommandSessionForTesting, isTrue);
+    provider.dispose();
+  });
+
+  test('cancelTutorialOwnedVoiceSession cancels a tutorial-owned session', () {
+    final onboarding = DeviceOnboardingProvider()..startOnboarding();
+    onboarding.advanceStep();
+    final provider = CaptureProvider(speakerHaptic: (_, __) async => true);
+    provider.deviceOnboardingProvider = onboarding;
+    provider.updateRecordingDevice(_device(DeviceType.omi));
+    SharedPreferencesUtil().omiButtonActionsEnabled = false;
+
+    provider.handleButtonEventForTesting('test-id', 1);
+    expect(provider.hasVoiceCommandSessionForTesting, isTrue);
+
+    provider.cancelTutorialOwnedVoiceSession();
+    expect(provider.hasVoiceCommandSessionForTesting, isFalse);
+    provider.dispose();
+    onboarding.dispose();
+  });
 }

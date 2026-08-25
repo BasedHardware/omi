@@ -52,6 +52,22 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   BtDevice? connectedDevice;
   BtDevice? pairedDevice;
+
+  /// Capability-normalized identity for capture/home restarts.
+  ///
+  /// `getDeviceInfo()` reclassifies image-stream hardware as
+  /// [DeviceType.openglass] on [pairedDevice]. Home and speech-profile
+  /// restarts must prefer that over the advertising-time [connectedDevice]
+  /// so the Omi-button gate matches Device Settings.
+  BtDevice? get capabilityNormalizedDevice {
+    final connected = connectedDevice;
+    final paired = pairedDevice;
+    if (paired != null && (connected == null || paired.id == connected.id)) {
+      return paired;
+    }
+    return connected ?? paired;
+  }
+
   DateTime? _deviceSessionStartedAt;
   final BleDiagnosticsLoader _bleDiagnosticsLoader;
   final FindDeviceRunner _findDeviceRunner;
