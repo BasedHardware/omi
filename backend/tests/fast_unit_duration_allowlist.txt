@@ -316,6 +316,10 @@ tests/unit/test_trial_paywall_created_at.py::test_trial_expiry_reads_created_at_
 tests/unit/test_selfhost_stage_contract.py::test_the_gateway_interlock_treats_selfhost_as_a_real_runtime
 tests/unit/test_selfhost_stage_contract.py::test_promotion_flex_fails_closed_on_selfhost
 tests/unit/test_vector_upsert_chunking.py::test_qdrant_needs_no_chunking_and_gets_none
+# The one test that pays the source walk. Excluding build scratch and caching the result took this
+# file from six tests at ~7s each to one at ~1.5s, but reading every .py under backend/ (~2k files)
+# is genuinely that on CI's hardware, and the cache means exactly one test is charged for it.
+tests/unit/test_runtime_reachable_scripts.py::test_the_reachable_set_is_what_the_source_says
 # First test of a file that imports the MCP router graph to read its discovery document.
 tests/unit/test_mcp_resource_identity.py::test_the_document_reports_the_configured_resource
 # First test of a file that imports the notification stack (FCM + UnifiedPush channels).
