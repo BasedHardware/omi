@@ -25,6 +25,42 @@ final class RatingPromptCountingTests: XCTestCase {
     XCTAssertEqual(RatingPromptManager.shared.questionCount, 1)
   }
 
+  /// Drives the PRODUCTION submit/retry ledger the query shell delegates to —
+  /// the same sequence a user produces with a failed turn and 'Try again'.
+  func testQueryShellRetrySequenceCountsTheQuestionExactlyOnce() async {
+    var ledger = QueryShellSendLedger()
+
+    guard let submit = ledger.planSubmit("what changed today?") else {
+      return XCTFail("a resolved submit must produce a send plan")
+    }
+    XCTAssertTrue(submit.countsAsQuestion)
+    AnalyticsManager.shared.chatMessageSent(
+      messageLength: submit.question.count, source: "query_shell",
+      countsAsQuestion: submit.countsAsQuestion)
+
+    // The turn fails; the user presses 'Try again' twice.
+    for _ in 0..<2 {
+      guard let retry = ledger.planRetry() else {
+        return XCTFail("retry after a submit must produce a send plan")
+      }
+      XCTAssertEqual(retry.question, "what changed today?")
+      XCTAssertFalse(retry.countsAsQuestion)
+      AnalyticsManager.shared.chatMessageSent(
+        messageLength: retry.question.count, source: "query_shell",
+        countsAsQuestion: retry.countsAsQuestion)
+    }
+    await drainCounterHops()
+    XCTAssertEqual(RatingPromptManager.shared.questionCount, 1)
+  }
+
+  func testQueryShellLedgerRejectsRetryBeforeAnySubmitAndEmptySubmits() {
+    var ledger = QueryShellSendLedger()
+    XCTAssertNil(ledger.planRetry())
+    XCTAssertNil(ledger.planSubmit(nil))
+    XCTAssertNil(ledger.planSubmit(""))
+    XCTAssertEqual(ledger.planSubmit("q")?.countsAsQuestion, true)
+  }
+
   func testRetriesAndBusySendsNeverCount() async {
     AnalyticsManager.shared.chatMessageSent(messageLength: 5, source: "query_shell")
     await drainCounterHops()

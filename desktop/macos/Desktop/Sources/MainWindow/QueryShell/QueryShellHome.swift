@@ -80,7 +80,7 @@ struct QueryShellHome: View {
   @State private var didCopyTranscript = false
   /// The last question that actually went. `Try again` re-sends *that* — the composer is emptied by
   /// the send now, so re-reading the bar would retry an empty string.
-  @State private var lastAskedQuestion = ""
+  @State private var sendLedger = QueryShellSendLedger()
   /// The composer's measured height, so the panel's body can end inside the window.
   ///
   /// Measured rather than assumed: the composer is at its resting height most of the time but grows
@@ -422,26 +422,25 @@ struct QueryShellHome: View {
     if chatProvider.draftText != submission.text { chatProvider.draftText = submission.text }
     guard submission.mode != nil else { return }
     claimCaret()
-    guard let question = submission.question else { return }
-    lastAskedQuestion = question
-    send(question)
+    guard let plan = sendLedger.planSubmit(submission.question) else { return }
+    send(plan)
   }
 
   /// The one send. `Try again` on a failed turn enters here too, so a retry is the same turn through
-  /// the same provider and never a second send path (INV-6). A retry is the SAME logical question,
-  /// so it keeps the analytics event but never re-counts toward the rating-prompt trigger.
-  private func send(_ question: String, isRetry: Bool = false) {
+  /// the same provider and never a second send path (INV-6). The ledger owns whether the emission
+  /// counts toward the rating-prompt trigger (submits do, retries never re-count).
+  private func send(_ plan: QueryShellSendLedger.Plan) {
     AnalyticsManager.shared.chatMessageSent(
-      messageLength: question.count, hasSelectedAppContext: false, source: "query_shell",
-      countsAsQuestion: !isRetry)
+      messageLength: plan.question.count, hasSelectedAppContext: false, source: "query_shell",
+      countsAsQuestion: plan.countsAsQuestion)
     chatProvider.dismissOnboardingOpener()
-    Task { await chatProvider.sendMessage(question) }
+    Task { await chatProvider.sendMessage(plan.question) }
   }
 
   /// Re-sends the question that failed, not whatever the bar holds now — the send emptied it.
   private func retry() {
-    guard !lastAskedQuestion.isEmpty else { return }
-    send(lastAskedQuestion, isRetry: true)
+    guard let plan = sendLedger.planRetry() else { return }
+    send(plan)
   }
 
   /// Asks for the caret. Monotonic, so a claim is never swallowed for already having been made — the
