@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Fixed the screen-reading (OCR) helper process sometimes staying alive in the background after quitting Omi."
+  ]
+}

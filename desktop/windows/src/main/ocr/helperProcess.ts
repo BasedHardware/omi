@@ -30,9 +30,14 @@ class HelperProcess {
   // every OCR/window request re-spawns the missing exe, failing forever — flooding
   // the log and stalling each caller on a doomed spawn. Once unavailable, fail fast.
   private unavailable = false
+  // Set on app quit (mirrors SystemAudioMuteBridge) — stops any request still in
+  // flight (e.g. ocrService's backfill timer, if it fires before it's stopped)
+  // from re-spawning a helper into a shutting-down app that nothing is left to
+  // kill, which would orphan it past app exit.
+  private disposed = false
 
   private ensureStarted(): void {
-    if (this.child || this.starting || this.unavailable) return
+    if (this.child || this.starting || this.unavailable || this.disposed) return
     // Capped-backoff throttle: after a crash, wait `backoff` ms before the next
     // spawn so a helper that dies on startup is not re-spawned on every incoming
     // request (a fork storm). Requests inside the window fail fast and retry.
@@ -133,6 +138,7 @@ class HelperProcess {
 
   private request(opcode: number, payload: Buffer): Promise<string> {
     if (this.unavailable) return Promise.reject(new Error('helper unavailable (binary missing)'))
+    if (this.disposed) return Promise.reject(new Error('helper disposed (app quitting)'))
     this.ensureStarted()
     const child = this.child
     if (!child) return Promise.reject(new Error('helper not available'))
@@ -167,10 +173,9 @@ class HelperProcess {
   }
 
   dispose(): void {
+    // Suppress recovery re-spawns: we're shutting down, not crash-recycling.
+    this.disposed = true
     this.recycle()
-    // Explicit disposal is not a crash: the next request should spawn a fresh
-    // helper immediately instead of sitting out the crash-backoff window.
-    this.cooldownUntil = 0
   }
 }
 

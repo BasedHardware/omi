@@ -2,7 +2,9 @@
 // the will-quit handler can dispose it (without a dispose() call site it orphaned
 // omi-*-ocr-helper.exe on every quit). We mock child_process.spawn so no real
 // helper binary is needed, and assert dispose() kills the live child and that a
-// later request re-spawns a fresh one.
+// later request does NOT re-spawn a new one — a post-dispose respawn (e.g. from
+// ocrService's backfill timer firing after will-quit already ran) is exactly
+// what orphaned a helper past app exit even with dispose() wired up.
 import { EventEmitter } from 'node:events'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -69,14 +71,15 @@ describe('helperProcess.dispose (C7 — no orphaned OCR helper on quit)', () => 
     await expect(pending).rejects.toThrow(/helper exited/)
   })
 
-  it('re-spawns a fresh child on the next request after dispose()', async () => {
+  it('does not re-spawn on a request after dispose() — a post-quit tick must not orphan a new helper', async () => {
     spawnMock.mockImplementation(() => makeFakeChild())
     const { helperProcess } = await import('./helperProcess')
 
     void helperProcess.windowInfo().catch(() => {})
     helperProcess.dispose()
-    void helperProcess.windowInfo().catch(() => {})
+    const late = helperProcess.windowInfo()
 
-    expect(spawnMock).toHaveBeenCalledTimes(2)
+    expect(spawnMock).toHaveBeenCalledTimes(1)
+    await expect(late).rejects.toThrow(/disposed/)
   })
 })
