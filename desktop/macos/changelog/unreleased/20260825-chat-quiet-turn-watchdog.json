@@ -1,0 +1,3 @@
+{
+  "change": "Fixed longer Assistant replies being cancelled when the agent was still working through a quiet step."
+}
