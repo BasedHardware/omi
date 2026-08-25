@@ -788,7 +788,11 @@ def get_chat_session(uid: str, app_id: Optional[str] = None) -> Optional[Dict[st
         .stream()
     )
     ordered_docs = [_typed_doc(session) for session in ordered_sessions]
-    plugin_docs = [
+    # v1 plugin_id rows often have created_at but no updated_at. Ordering the
+    # plugin_id scan by updated_at makes Firestore omit those rows, so
+    # acquire_chat_session would mint a split session. Keep the updated_at
+    # newest-first path and also scan created_at / __name__.
+    plugin_updated_docs = [
         _typed_doc(session)
         for session in collection.where(filter=FieldFilter('plugin_id', '==', app_id))
         .order_by('updated_at', direction=firestore.Query.DESCENDING)
@@ -796,6 +800,15 @@ def get_chat_session(uid: str, app_id: Optional[str] = None) -> Optional[Dict[st
         .limit(CURRENT_CHAT_SESSION_SCAN_LIMIT)
         .stream()
     ]
+    plugin_created_docs = [
+        _typed_doc(session)
+        for session in collection.where(filter=FieldFilter('plugin_id', '==', app_id))
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
+        .order_by('__name__', direction=firestore.Query.DESCENDING)
+        .limit(CURRENT_CHAT_SESSION_SCAN_LIMIT)
+        .stream()
+    ]
+    plugin_docs = _merge_docs_by_id(plugin_updated_docs, plugin_created_docs)
     timestamped = [data for data in _merge_docs_by_id(ordered_docs, plugin_docs) if data.get('created_at') is not None]
     if timestamped:
         return max(timestamped, key=_session_recency_key)

@@ -20,10 +20,12 @@ import pytest
 import database.chat as chat_db
 
 
-def _doc(session_id, created_at=None, plugin_id=None):
+def _doc(session_id, created_at=None, plugin_id=None, updated_at=None):
     data = {'id': session_id, 'plugin_id': plugin_id}
     if created_at is not None:
         data['created_at'] = created_at
+    if updated_at is not None:
+        data['updated_at'] = updated_at
     doc = MagicMock()
     doc.to_dict.return_value = data
     doc.id = session_id
@@ -189,3 +191,85 @@ def test_doc_matches_app_scope_accepts_legacy_null_app_id():
 def test_plugin_id_scan_is_newest_first(monkeypatch):
     _, query = _run(monkeypatch, [_doc('only', NOW, plugin_id='app')])
     query.order_by.assert_any_call('updated_at', direction=chat_db.firestore.Query.DESCENDING)
+    query.order_by.assert_any_call('created_at', direction=chat_db.firestore.Query.DESCENDING)
+
+
+class _OmittingOrderQuery:
+    """Drops documents missing the ordered field, like Firestore."""
+
+    def __init__(self, docs, field=None, value=None, order_fields=None, limit=None):
+        self._docs = docs
+        self._field = field
+        self._value = value
+        self._order_fields = list(order_fields or [])
+        self._limit = limit
+
+    def where(self, filter=None, **_kwargs):
+        return _OmittingOrderQuery(
+            self._docs,
+            field=filter.field_path,
+            value=filter.value,
+            order_fields=self._order_fields,
+            limit=self._limit,
+        )
+
+    def order_by(self, field, **_kwargs):
+        return _OmittingOrderQuery(
+            self._docs,
+            field=self._field,
+            value=self._value,
+            order_fields=self._order_fields + [field],
+            limit=self._limit,
+        )
+
+    def limit(self, n):
+        return _OmittingOrderQuery(
+            self._docs,
+            field=self._field,
+            value=self._value,
+            order_fields=self._order_fields,
+            limit=n,
+        )
+
+    def stream(self):
+        matched = []
+        for doc in self._docs:
+            data = doc.to_dict()
+            if self._field is not None and data.get(self._field) != self._value:
+                continue
+            if any(field != '__name__' and field not in data for field in self._order_fields):
+                continue
+            matched.append(doc)
+        if self._limit is not None:
+            matched = matched[: self._limit]
+        return iter(matched)
+
+
+def test_plugin_id_only_session_without_updated_at_is_selected(monkeypatch):
+    """v1 rows have plugin_id + created_at and no updated_at.
+
+    The updated_at scan cannot see them; the created_at scan must.
+    """
+    legacy = _doc('legacy-v1', NOW, plugin_id='app')
+    collection = _OmittingOrderQuery([legacy])
+    db = MagicMock()
+    db.collection.return_value.document.return_value.collection.return_value = collection
+    monkeypatch.setattr(chat_db, 'db', db)
+
+    result = chat_db.get_chat_session('uid', 'app')
+
+    assert result is not None
+    assert result['id'] == 'legacy-v1'
+
+
+def test_plugin_id_updated_at_row_still_wins_when_newer(monkeypatch):
+    older_created_only = _doc('older-created', NOW - timedelta(days=2), plugin_id='app')
+    newer_updated = _doc('newer-updated', NOW, plugin_id='app', updated_at=NOW)
+    collection = _OmittingOrderQuery([older_created_only, newer_updated])
+    db = MagicMock()
+    db.collection.return_value.document.return_value.collection.return_value = collection
+    monkeypatch.setattr(chat_db, 'db', db)
+
+    result = chat_db.get_chat_session('uid', 'app')
+
+    assert result['id'] == 'newer-updated'
