@@ -1,17 +1,49 @@
+import {readFileSync} from 'node:fs';
+import {resolve} from 'node:path';
 import {
   conversationGroupLabel,
   desktopBackendConfigurationCopy,
+  desktopBackendUnauthorizedCopy,
+  desktopCloudBaseURL,
+  desktopLocalBackendServiceCopy,
   desktopProjectionUnavailableCopy,
   desktopBackendServiceCopy,
   desktopReadErrorCopy,
+  desktopRecoveryCopy,
   loadConversations,
   loadDesktopReads,
   loadMemories,
   loadTasks,
   parseMemoryText,
+  projectionTimestamp,
   taskGroup,
+  timelineGroups,
+} from '../src/desktopReadClient';
+import type {
+  ConversationProjection,
+  DesktopReadProjection,
+  DomainReadOutcome,
+  MemoryProjection,
 } from '../src/desktopReadClient';
 import type {NativeHttpRequest, OmiBackend} from '../src/omiNative';
+import {omiAuth as browserOmiAuth} from '../src/omiNative.web';
+
+test('keeps first-run onboarding copy off the retired host', () => {
+  const appSource = readFileSync(resolve(__dirname, '../App.tsx'), 'utf8');
+  const onboardingStart = appSource.indexOf('First-run onboarding');
+
+  expect(onboardingStart).toBeGreaterThan(-1);
+  expect(
+    appSource.slice(onboardingStart, onboardingStart + 3000),
+  ).not.toContain('h.omi.me');
+});
+
+test('treats onboarding as complete in the JavaScript-only adapter', async () => {
+  expect(await browserOmiAuth.hasCompletedOnboarding()).toBe(true);
+  await expect(
+    browserOmiAuth.markOnboardingComplete(),
+  ).resolves.toBeUndefined();
+});
 
 const page = (items: unknown[], completenessVersion: string) => ({
   contractVersion: '1.0.0',
@@ -88,9 +120,32 @@ function backendFor(
   };
 }
 
-test('maps native local backend failures to actionable, credential-safe copy', () => {
+test('maps native cloud-first backend failures to actionable, credential-safe copy', () => {
+  expect(desktopCloudBaseURL).toBe('https://api.omi.me');
+  expect(desktopBackendConfigurationCopy).toBe(
+    'Sign in to Omi cloud to load conversations and memories.',
+  );
+  expect(desktopBackendUnauthorizedCopy).toBe(
+    'Omi cloud needs a signed-in session.',
+  );
+  expect(desktopBackendConfigurationCopy).not.toContain('h.omi.me');
+  expect(desktopBackendUnauthorizedCopy).not.toContain('h.omi.me');
+  expect(desktopBackendConfigurationCopy).not.toContain('OMI_LOCAL_API');
+  expect(desktopBackendConfigurationCopy).not.toContain('127.0.0.1:8787');
+  expect(desktopBackendUnauthorizedCopy).not.toContain('OMI_LOCAL_API');
+  expect(desktopBackendUnauthorizedCopy).not.toContain('127.0.0.1:8787');
+  expect(desktopBackendServiceCopy).toContain('https://api.omi.me');
+  expect(desktopBackendServiceCopy).not.toContain('127.0.0.1:8787');
+  expect(desktopLocalBackendServiceCopy).toBe(
+    'The configured local Omi service is unavailable. Check its connection, then retry.',
+  );
+  expect(desktopLocalBackendServiceCopy).not.toContain('127.0.0.1:8787');
+  expect(desktopLocalBackendServiceCopy).not.toContain('h.omi.me');
   expect(desktopReadErrorCopy({code: 'OMI_HTTP_UNCONFIGURED'})).toBe(
     desktopBackendConfigurationCopy,
+  );
+  expect(desktopReadErrorCopy({code: 'unauthorized'})).toBe(
+    desktopBackendUnauthorizedCopy,
   );
   expect(desktopReadErrorCopy({code: 'OMI_HTTP_TRANSPORT'})).toBe(
     desktopBackendServiceCopy,
@@ -98,6 +153,69 @@ test('maps native local backend failures to actionable, credential-safe copy', (
   expect(desktopReadErrorCopy(new Error('response rejected'))).toBe(
     'response rejected',
   );
+});
+
+describe('desktopRecoveryCopy', () => {
+  const pageState = {
+    windowStatus: 'complete' as const,
+    complete: true,
+    hasMore: false,
+    nextCursor: null,
+    completenessStatus: 'complete' as const,
+    reasons: [] as string[],
+  };
+  const success = <
+    T extends DesktopReadProjection,
+  >(): DomainReadOutcome<T> => ({
+    status: 'success',
+    value: {items: [], page: {...pageState}},
+  });
+  const error = <T extends DesktopReadProjection>(
+    message: string,
+  ): DomainReadOutcome<T> => ({
+    status: 'error',
+    error: message,
+  });
+  const generic =
+    'Omi could not load saved conversations or memories. Your saved data has not been changed.';
+
+  test('prefers the conversations typed failure when both domains are typed', () => {
+    expect(
+      desktopRecoveryCopy(
+        error<ConversationProjection>(desktopBackendConfigurationCopy),
+        error<MemoryProjection>(desktopBackendServiceCopy),
+      ),
+    ).toBe(desktopBackendConfigurationCopy);
+  });
+
+  test('falls through an untyped conversations failure to a typed memories failure', () => {
+    expect(
+      desktopRecoveryCopy(
+        error<ConversationProjection>(
+          'desktop-conversations-read failed (500)',
+        ),
+        error<MemoryProjection>(desktopProjectionUnavailableCopy),
+      ),
+    ).toBe(desktopProjectionUnavailableCopy);
+  });
+
+  test('keeps one truthful generic fallback without leaking endpoint errors', () => {
+    expect(
+      desktopRecoveryCopy(
+        error<ConversationProjection>(
+          'desktop-conversations-read failed (500)',
+        ),
+        error<MemoryProjection>('Memories response is malformed'),
+      ),
+    ).toBe(generic);
+    expect(desktopRecoveryCopy(success(), success())).toBe(generic);
+    expect(
+      desktopRecoveryCopy(
+        error<ConversationProjection>(desktopBackendServiceCopy),
+        success(),
+      ),
+    ).toBe(desktopBackendServiceCopy);
+  });
 });
 
 test('loads and normalizes all three exact desktop read routes', async () => {
@@ -200,6 +318,54 @@ test('groups validated UTC conversation timestamps by local calendar day', () =>
       year: 'numeric',
     }),
   );
+});
+
+test('groups timeline rows through one canonical timestamp policy', () => {
+  const now = new Date(2026, 7, 14, 12, 0).getTime();
+  const rows: DesktopReadProjection[] = [
+    {
+      kind: 'conversation',
+      id: 'conversation-today',
+      title: 'Today',
+      summary: '',
+      searchableText: 'Today',
+      createdAt: new Date(2026, 7, 14, 8, 0).toISOString(),
+      updatedAt: new Date(2026, 7, 14, 8, 0).toISOString(),
+      startedAt: null,
+      finishedAt: null,
+      starred: false,
+      status: 'completed',
+      source: 'omi',
+      visibility: 'private',
+      folderId: null,
+      locked: false,
+      discarded: false,
+    },
+    {
+      kind: 'memory',
+      id: 'memory-without-date',
+      title: 'Undated',
+      summary: '',
+      searchableText: 'Undated',
+      citations: [],
+      timestamp: null,
+      provenance: {
+        label: null,
+        synthesisVersion: 'v1',
+        inputDigest: 'a',
+        outputDigest: 'b',
+      },
+    },
+  ];
+
+  expect(projectionTimestamp(rows[0])).toBe(
+    new Date(2026, 7, 14, 8, 0).getTime(),
+  );
+  expect(projectionTimestamp(rows[1])).toBeNull();
+  expect(timelineGroups(rows, now)).toEqual([
+    {label: 'Today', items: [rows[0]]},
+    {label: 'Date unavailable', items: [rows[1]]},
+  ]);
 });
 
 test('preserves absent memory timestamps without inventing an order', async () => {
@@ -489,4 +655,17 @@ test('retains successful domains when one desktop read fails', async () => {
   });
   expect(result.memories).toEqual(expect.objectContaining({status: 'success'}));
   expect(result.tasks).toEqual(expect.objectContaining({status: 'success'}));
+});
+
+test('maps a cloud 401 to typed unauthorized copy without fabricating rows', async () => {
+  const backend = backendFor(() => ({status: 401, body: null}));
+  const result = await loadDesktopReads(backend);
+  expect(result.conversations).toEqual({
+    status: 'error',
+    error: desktopBackendUnauthorizedCopy,
+  });
+  expect(result.memories).toEqual({
+    status: 'error',
+    error: desktopBackendUnauthorizedCopy,
+  });
 });

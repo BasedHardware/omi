@@ -35,7 +35,6 @@ import {requireNativeComponent} from './src/native-component';
 import ArrowUp from 'lucide-react-native/icons/arrow-up';
 import Brain from 'lucide-react-native/icons/brain';
 import ChevronLeft from 'lucide-react-native/icons/chevron-left';
-import Ellipsis from 'lucide-react-native/icons/ellipsis';
 import GanttChartSquare from 'lucide-react-native/icons/square-chart-gantt';
 import House from 'lucide-react-native/icons/house';
 import ListChecks from 'lucide-react-native/icons/list-checks';
@@ -61,6 +60,7 @@ import {
   browserScanErrorMessage,
   isBluetoothScanAvailable,
   omiBackend,
+  omiAuth,
   omiNative,
   type PlatformNativeSnapshot,
 } from './src/omiNative';
@@ -69,9 +69,10 @@ import {
   loadDesktopReads,
   loadMemories,
   desktopBackendConfigurationCopy,
-  desktopProjectionUnavailableCopy,
-  desktopBackendServiceCopy,
+  desktopBackendUnauthorizedCopy,
+  desktopRecoveryCopy,
   taskGroup,
+  timelineGroups,
   type DesktopReadOutcomes,
   type DesktopReadProjection,
   type ConversationProjection,
@@ -153,10 +154,51 @@ function bluetoothStatusLabel(state: string): string {
   }
 }
 
+type OmiGlassPanelProps = ViewProps & {glassCornerRadius?: number};
+
 const OmiGlassPanel =
   Platform.OS === 'macos'
-    ? requireNativeComponent<ViewProps>('OmiGlassPanel')
-    : View;
+    ? requireNativeComponent<OmiGlassPanelProps>('OmiGlassPanel')
+    : (View as unknown as React.ComponentType<OmiGlassPanelProps>);
+
+type OmiSFSymbolProps = ViewProps & {
+  symbolColor?: string;
+  symbolName: string;
+  symbolSize?: number;
+};
+
+const OmiSFSymbol =
+  Platform.OS === 'macos'
+    ? requireNativeComponent<OmiSFSymbolProps>('OmiSFSymbol')
+    : (View as unknown as React.ComponentType<OmiSFSymbolProps>);
+
+const destinationSymbols = {
+  Home: 'house',
+  Conversations: 'bubble.left.and.bubble.right',
+  Memories: 'brain',
+  Tasks: 'checklist',
+  Connectors: 'link',
+  Settings: 'gearshape',
+} as const;
+
+function MacSymbol({
+  color,
+  name,
+  size,
+}: {
+  color: string;
+  name: string;
+  size: number;
+}) {
+  return (
+    <OmiSFSymbol
+      symbolColor={color}
+      symbolName={name}
+      symbolSize={size}
+      style={{height: size, width: size}}
+    />
+  );
+}
 type ProjectionFilter = 'all' | DesktopReadProjection['kind'];
 type ReadsPhase =
   | 'initial-loading'
@@ -491,7 +533,7 @@ function ProjectionList({
           spine && styles.homeSpineEmptyTitle,
         ]}>
         {error === null
-          ? (emptyTitle ?? 'Nothing to show yet')
+          ? emptyTitle ?? 'Nothing to show yet'
           : 'Unable to load'}
       </Text>
       <Text
@@ -519,16 +561,54 @@ function ProjectionList({
   );
 }
 
-function projectionTimestamp(item: DesktopReadProjection): number | null {
-  if (item.kind === 'conversation') {
-    const value = Date.parse(item.startedAt ?? item.createdAt);
-    return Number.isFinite(value) ? value : null;
-  }
-  return item.kind === 'memory'
-    ? item.timestamp === null
-      ? null
-      : item.timestamp * 1000
-    : item.createdAt * 1000;
+function HomeRecovery({
+  copy,
+  onSignIn,
+  onRetry,
+  signingIn,
+  title,
+}: {
+  copy: string;
+  onSignIn?: () => void;
+  onRetry: () => void;
+  signingIn?: boolean;
+  title: string;
+}) {
+  return (
+    <View
+      accessibilityLabel="Home saved-data recovery"
+      style={styles.macHomeRecovery}>
+      <Text accessibilityRole="header" style={styles.macHomeRecoveryTitle}>
+        {title}
+      </Text>
+      <Text style={styles.macHomeRecoveryCopy}>{copy}</Text>
+      {onSignIn !== undefined && (
+        <FocusPressable
+          accessibilityLabel="Sign in"
+          accessibilityRole="button"
+          disabled={signingIn}
+          onPress={onSignIn}
+          style={({pressed}) => [
+            styles.macHomeRecoverySignIn,
+            pressed && styles.pressed,
+          ]}>
+          <Text style={styles.macHomeRecoverySignInText}>
+            {signingIn ? 'Signing in…' : 'Sign in'}
+          </Text>
+        </FocusPressable>
+      )}
+      <FocusPressable
+        accessibilityLabel="Retry saved data"
+        accessibilityRole="button"
+        onPress={onRetry}
+        style={({pressed}) => [
+          styles.macHomeRecoveryRetry,
+          pressed && styles.pressed,
+        ]}>
+        <Text style={styles.macHomeRecoveryRetryText}>Retry</Text>
+      </FocusPressable>
+    </View>
+  );
 }
 
 function HomeTimeline({
@@ -537,36 +617,18 @@ function HomeTimeline({
   footer,
   items,
   loading,
+  recovery,
 }: {
   emptyCopy: string;
   emptyTitle: string;
   footer: React.ReactElement;
   items: DesktopReadProjection[];
   loading: boolean;
+  recovery?: React.ReactElement | null;
 }) {
   const nowEpochMilliseconds = useRef(Date.now()).current;
   const groups = useMemo(
-    () =>
-      items.reduce<Array<{label: string; items: DesktopReadProjection[]}>>(
-        (result, item) => {
-          const timestamp = projectionTimestamp(item);
-          const label =
-            timestamp === null
-              ? 'Date unavailable'
-              : conversationGroupLabel(
-                  new Date(timestamp).toISOString(),
-                  nowEpochMilliseconds,
-                );
-          const group = result.find(candidate => candidate.label === label);
-          if (group === undefined) {
-            result.push({label, items: [item]});
-          } else {
-            group.items.push(item);
-          }
-          return result;
-        },
-        [],
-      ),
+    () => timelineGroups(items, nowEpochMilliseconds),
     [items, nowEpochMilliseconds],
   );
 
@@ -599,6 +661,8 @@ function HomeTimeline({
       <ActivityIndicator color="#777b77" />
       <Text style={styles.macHomeInlineCopy}>Loading timeline…</Text>
     </View>
+  ) : recovery != null ? (
+    recovery
   ) : (
     <View style={styles.macHomeInlineState}>
       <Text style={styles.macHomeInlineTitle}>{emptyTitle}</Text>
@@ -656,12 +720,11 @@ function HomeSearchField({
         !compact && !desktop && styles.homeSearchDockWide,
         searchFocused && styles.focusRing,
       ]}>
-      <Search
-        accessible={false}
-        color={desktop ? '#8f918f' : '#888888'}
-        size={18}
-        strokeWidth={2}
-      />
+      {desktop ? (
+        <MacSymbol color="#c8cbc6" name="magnifyingglass" size={16} />
+      ) : (
+        <Search accessible={false} color="#888888" size={18} strokeWidth={2} />
+      )}
       <TextInput
         accessibilityHint={
           desktop
@@ -674,7 +737,7 @@ function HomeSearchField({
         onFocus={onFocus}
         onPressIn={onPressIn}
         placeholder="Search Omi"
-        placeholderTextColor={desktop ? '#8f918f' : '#777777'}
+        placeholderTextColor={desktop ? '#c8cbc6' : '#777777'}
         ref={inputRef}
         showSoftInputOnFocus={searchArmed}
         style={[
@@ -1403,8 +1466,8 @@ function SettingsPage() {
           {section === 'Account'
             ? 'Profile, plan, notification, and usage settings require authenticated account APIs that the v5 backend does not expose.'
             : section === 'Privacy'
-              ? 'Recording, training, export, and deletion settings require authenticated privacy APIs that the v5 backend does not expose.'
-              : 'API keys, webhooks, and developer exports require authenticated developer APIs that the v5 backend does not expose.'}
+            ? 'Recording, training, export, and deletion settings require authenticated privacy APIs that the v5 backend does not expose.'
+            : 'API keys, webhooks, and developer exports require authenticated developer APIs that the v5 backend does not expose.'}
         </Text>
         <Text style={styles.projectionEmptyCopy}>
           No settings were inferred or changed.
@@ -1431,8 +1494,8 @@ function ReadStatus({
       ? `Showing the first 50 ${label.toLowerCase()}. More may be available.`
       : `More ${label.toLowerCase()} are available.`
     : page.completenessStatus === 'degraded'
-      ? `${label} may be temporarily incomplete.`
-      : `${label} are incomplete.`;
+    ? `${label} may be temporarily incomplete.`
+    : `${label} are incomplete.`;
   return (
     <View style={[styles.readStatus, mac && styles.macReadStatus]}>
       <Text style={[styles.readStatusText, mac && styles.macReadStatusText]}>
@@ -1650,7 +1713,14 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     null,
   );
   const readOutcomesRef = useRef<DesktopReadOutcomes | null>(null);
+  // Tracks whether Home ever presented saved rows, independent of the latest
+  // refresh outcome, so a failed first load followed by a retry stays truthful.
+  const homeReadsLoadedRef = useRef(false);
   const [readsPhase, setReadsPhase] = useState<ReadsPhase>('initial-loading');
+  const [signingIn, setSigningIn] = useState(false);
+  const [onboardingRequired, setOnboardingRequired] = useState(
+    macDesktop ? null : false,
+  );
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [searchArmed, setSearchArmed] = useState(false);
@@ -1819,6 +1889,12 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           };
         }
         readOutcomesRef.current = next;
+        if (
+          next.conversations.status === 'success' ||
+          next.memories.status === 'success'
+        ) {
+          homeReadsLoadedRef.current = true;
+        }
         return next;
       });
       const hasSavedRows = homeOutcomes.some(
@@ -1845,6 +1921,67 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     refreshReads(true).catch(() => undefined);
   }, [refreshReads]);
 
+  useEffect(() => {
+    let active = true;
+    const auth = omiAuth;
+    if (!macDesktop || auth === undefined || auth === null) {
+      setOnboardingRequired(false);
+      return () => {
+        active = false;
+      };
+    }
+    Promise.all([auth.hasCompletedOnboarding(), auth.hasCloudSession()])
+      .then(async ([completed, hasSession]) => {
+        if (hasSession && !completed) {
+          await auth.markOnboardingComplete();
+        }
+        if (active) {
+          setOnboardingRequired(!completed && !hasSession);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setOnboardingRequired(false);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [macDesktop]);
+
+  const signInAndRefresh = useCallback(async () => {
+    if (omiAuth === undefined || omiAuth === null) {
+      return;
+    }
+    setSigningIn(true);
+    try {
+      const result = await omiAuth.signIn();
+      if (result.signedIn) {
+        await omiAuth.markOnboardingComplete();
+        await refreshReads(false);
+      }
+    } finally {
+      setSigningIn(false);
+    }
+  }, [refreshReads]);
+
+  const completeFirstRun = useCallback(async () => {
+    if (omiAuth === undefined || omiAuth === null) {
+      return;
+    }
+    setSigningIn(true);
+    try {
+      const result = await omiAuth.signIn();
+      if (result.signedIn) {
+        await omiAuth.markOnboardingComplete();
+        setOnboardingRequired(false);
+        await refreshReads(false);
+      }
+    } finally {
+      setSigningIn(false);
+    }
+  }, [refreshReads]);
+
   const reads = useMemo(() => {
     if (readOutcomes === null) {
       return [];
@@ -1861,8 +1998,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         item.kind === 'conversation'
           ? Date.parse(item.startedAt ?? item.createdAt)
           : item.kind === 'memory'
-            ? (item.timestamp ?? 0)
-            : 0;
+          ? item.timestamp ?? 0
+          : 0;
       return timestamp(right) - timestamp(left);
     });
   }, [readOutcomes]);
@@ -1898,7 +2035,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     );
   }, [reads, searchQuery]);
   const homeSearching = searchQuery.trim() !== '';
-  // An unavailable local service is a single truthful empty state, not a result row. Keeping the
+  // An unavailable Omi cloud read is a single truthful empty state, not a result row. Keeping the
   // results panel content-sized here preserves the upstream two-island hierarchy instead of
   // turning an error into a window-filling modal.
   const homeSpineHasRows = homeResults.length > 0 && !allHomeReadsUnavailable;
@@ -2129,11 +2266,6 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     <View
       accessibilityLabel="Desktop application chrome"
       style={styles.macTopNavFrame}>
-      <OmiGlassPanel
-        accessibilityLabel="Desktop navigation material"
-        pointerEvents="none"
-        style={styles.macGlassPanel}
-      />
       <View accessibilityLabel="Desktop navigation" style={styles.macTopNav}>
         <HomeSearchField
           compact={false}
@@ -2155,74 +2287,29 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           searchArmed={searchArmed}
           searchFocused={searchFocused}
         />
-        <View accessibilityRole="tablist" style={styles.macHomeTabs}>
+        <View pointerEvents="auto" style={styles.macHomeTabs}>
           <FocusPressable
+            accessibilityHint="Shows destinations"
             accessibilityLabel="Home navigation"
-            accessibilityRole="tab"
-            accessibilityState={{selected: route === 'Home'}}
-            onPress={() => {
-              setRoute('Home');
-              setHomeChatOpen(false);
-              setMacMenuOpen(false);
-            }}
-            style={({pressed}) => [
-              styles.macTopNavItem,
-              route === 'Home' && styles.macTopNavItemActive,
-              pressed && styles.pressed,
-            ]}>
-            <House
-              accessible={false}
-              color={route === 'Home' ? '#141414' : '#8f918f'}
-              size={17}
-              strokeWidth={2}
-            />
-            <Text
-              style={[
-                styles.macTopNavText,
-                route === 'Home' && styles.macTopNavTextActive,
-              ]}>
-              Home
-            </Text>
-          </FocusPressable>
-          <FocusPressable
-            accessibilityLabel="More navigation"
             accessibilityRole="button"
             accessibilityState={{expanded: macMenuOpen}}
+            hitSlop={{bottom: 8, left: 8, right: 8, top: 8}}
             onPress={() => setMacMenuOpen(value => !value)}
             style={({pressed}) => [
-              styles.macOverflowButton,
+              styles.macTopNavItem,
+              styles.macTopNavItemActive,
               pressed && styles.pressed,
             ]}>
-            <Ellipsis
-              accessible={false}
-              color="#8f918f"
-              size={18}
-              strokeWidth={2}
+            <MacSymbol
+              color="#f2f4f1"
+              name={destinationSymbols[route]}
+              size={17}
             />
+            <Text style={[styles.macTopNavText, styles.macTopNavTextActive]}>
+              {route}
+            </Text>
           </FocusPressable>
         </View>
-        {macMenuOpen && (
-          <View
-            accessibilityLabel="More navigation menu"
-            style={styles.macNavigationMenu}>
-            {navigation.slice(1).map(item => (
-              <FocusPressable
-                accessibilityLabel={`${item.label} navigation`}
-                accessibilityRole="button"
-                key={item.label}
-                onPress={() => {
-                  setRoute(item.label as Route);
-                  setMacMenuOpen(false);
-                }}
-                style={({pressed}) => [
-                  styles.macNavigationMenuItem,
-                  pressed && styles.pressed,
-                ]}>
-                <Text style={styles.macNavigationMenuText}>{item.label}</Text>
-              </FocusPressable>
-            ))}
-          </View>
-        )}
       </View>
     </View>
   );
@@ -2396,8 +2483,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
               activeGenerationId !== null
                 ? 'Stop response'
                 : omiBackend === undefined || omiBackend === null
-                  ? 'Send message unavailable'
-                  : 'Send message'
+                ? 'Send message unavailable'
+                : 'Send message'
             }
             accessibilityRole="button"
             disabled={
@@ -2439,8 +2526,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       ? nativeSnapshot === null
         ? 'Checking Bluetooth…'
         : nativeSnapshot.bluetooth === 'poweredOn'
-          ? 'Omi disconnected'
-          : bluetoothStatusLabel(nativeSnapshot.bluetooth)
+        ? 'Omi disconnected'
+        : bluetoothStatusLabel(nativeSnapshot.bluetooth)
       : `Connected · ${
           nativeSnapshot?.capture === 'recording' ? 'Listening' : 'Ready'
         }`;
@@ -2448,43 +2535,42 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     nativeSnapshot === null
       ? '#b4ad9f'
       : connectedDevice === null
-        ? '#d9826f'
-        : '#45b79b';
+      ? '#d9826f'
+      : '#45b79b';
   const bluetoothStatusColor =
     nativeSnapshot === null
       ? '#b4ad9f'
       : nativeSnapshot.bluetooth === 'poweredOn'
-        ? '#45b79b'
-        : '#d9826f';
+      ? '#45b79b'
+      : '#d9826f';
   const currentItems = reads.slice(0, 2);
 
   const homeDesktopReadStatus = (
     <View style={styles.macHomeReadStatuses}>
-      {readsPhase !== 'ready' && readsPhase !== 'initial-loading' && (
-        <View style={styles.macHomeReadStatus}>
-          {readsPhase !== 'unavailable' && (
+      {readsPhase !== 'ready' &&
+        readsPhase !== 'initial-loading' &&
+        readsPhase !== 'unavailable' && (
+          <View style={styles.macHomeReadStatus}>
             <Text style={styles.macHomeReadStatusText}>
               {readsPhase === 'refreshing'
                 ? 'Refreshing saved data…'
                 : 'Showing saved data. Could not refresh.'}
             </Text>
-          )}
-          {(readsPhase === 'saved-but-refresh-failed' ||
-            readsPhase === 'unavailable') && (
-            <FocusPressable
-              accessibilityLabel="Retry saved data"
-              accessibilityRole="button"
-              onPress={() => refreshReads(false)}
-              style={({pressed}) => [
-                styles.retryButton,
-                styles.macHomeRetryButton,
-                pressed && styles.pressed,
-              ]}>
-              <Text style={styles.macHomeRetryButtonText}>Retry</Text>
-            </FocusPressable>
-          )}
-        </View>
-      )}
+            {readsPhase === 'saved-but-refresh-failed' && (
+              <FocusPressable
+                accessibilityLabel="Retry saved data"
+                accessibilityRole="button"
+                onPress={() => refreshReads(false)}
+                style={({pressed}) => [
+                  styles.retryButton,
+                  styles.macHomeRetryButton,
+                  pressed && styles.pressed,
+                ]}>
+                <Text style={styles.macHomeRetryButtonText}>Retry</Text>
+              </FocusPressable>
+            )}
+          </View>
+        )}
       {readOutcomes !== null && !allHomeReadsUnavailable && (
         <View style={styles.macHomeReadStatuses}>
           <OutcomeStatus
@@ -2553,19 +2639,39 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     readsPhase === 'unavailable'
       ? 'Saved data unavailable'
       : homeSearching
-        ? 'No results'
-        : 'No saved conversations or memories yet.';
+      ? 'No results'
+      : 'No saved conversations or memories yet.';
   const homeDesktopEmptyCopy =
-    readsPhase === 'unavailable'
-      ? readOutcomes?.conversations.status === 'error' &&
-        (readOutcomes.conversations.error === desktopBackendConfigurationCopy ||
-          readOutcomes.conversations.error === desktopBackendServiceCopy ||
-          readOutcomes.conversations.error === desktopProjectionUnavailableCopy)
-        ? readOutcomes.conversations.error
-        : 'Omi could not load saved conversations or memories. Your saved data has not been changed.'
+    readsPhase === 'unavailable' && readOutcomes !== null
+      ? desktopRecoveryCopy(readOutcomes.conversations, readOutcomes.memories)
       : homeSearching
-        ? 'Filter covers loaded conversations and memories only.'
-        : 'Loaded conversations and memories will appear here.';
+      ? 'Filter covers loaded conversations and memories only.'
+      : 'Loaded conversations and memories will appear here.';
+
+  const homeDesktopRecovery =
+    readsPhase === 'unavailable' ? (
+      <HomeRecovery
+        copy={homeDesktopEmptyCopy}
+        onSignIn={
+          homeDesktopEmptyCopy === desktopBackendConfigurationCopy ||
+          homeDesktopEmptyCopy === desktopBackendUnauthorizedCopy
+            ? () => {
+                signInAndRefresh().catch(() => undefined);
+              }
+            : undefined
+        }
+        onRetry={() => {
+          refreshReads(false).catch(() => undefined);
+        }}
+        signingIn={signingIn}
+        title={homeDesktopEmptyTitle}
+      />
+    ) : null;
+  // A retry from the unavailable state must never flash the resting "none yet"
+  // claim: while nothing has loaded, a refresh reads as continued loading.
+  const homeTimelineLoading =
+    readsPhase === 'initial-loading' ||
+    (readsPhase === 'refreshing' && !homeReadsLoadedRef.current);
 
   const homeDesktop = (
     <View
@@ -2577,9 +2683,41 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           emptyTitle={homeDesktopEmptyTitle}
           footer={homeDesktopReadStatus}
           items={homeSpineHasRows ? homeResults : []}
-          loading={readsPhase === 'initial-loading'}
+          loading={homeTimelineLoading}
+          recovery={homeDesktopRecovery}
         />
         {homeDesktopDeviceAffordance}
+      </View>
+    </View>
+  );
+
+  const firstRunOnboarding = (
+    <View
+      accessibilityLabel="First-run onboarding"
+      style={styles.macOnboardingSurface}>
+      <View style={styles.macOnboardingContent}>
+        <Text accessibilityRole="header" style={styles.macOnboardingTitle}>
+          Welcome to Omi
+        </Text>
+        <Text style={styles.macOnboardingCopy}>
+          Sign in to bring your saved conversations and memories into one calm
+          workspace.
+        </Text>
+        <FocusPressable
+          accessibilityLabel="Sign in"
+          accessibilityRole="button"
+          disabled={signingIn}
+          onPress={() => {
+            completeFirstRun().catch(() => undefined);
+          }}
+          style={({pressed}) => [
+            styles.macOnboardingSignIn,
+            pressed && styles.pressed,
+          ]}>
+          <Text style={styles.macOnboardingSignInText}>
+            {signingIn ? 'Signing in…' : 'Sign in'}
+          </Text>
+        </FocusPressable>
       </View>
     </View>
   );
@@ -2749,8 +2887,10 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     </ScrollView>
   );
 
-  return (
-    <SafeAreaView style={[styles.outer, macDesktop && styles.macOuter]}>
+  const shell = (
+    <SafeAreaView
+      edges={macDesktop ? ['left', 'right', 'bottom'] : undefined}
+      style={[styles.outer, macDesktop && styles.macOuter]}>
       <View
         style={[
           styles.shell,
@@ -2791,13 +2931,6 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                 desktopWorkspace && styles.desktopPane,
                 macDesktop && styles.macPane,
               ]}>
-              {macDesktop && route !== 'Home' && (
-                <OmiGlassPanel
-                  accessibilityLabel="Desktop material panel"
-                  pointerEvents="none"
-                  style={styles.macGlassPanel}
-                />
-              )}
               <Animated.View
                 accessibilityLabel={`${route} stage`}
                 style={[
@@ -2813,7 +2946,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                     compact && styles.stageCompact,
                     desktopWorkspace && styles.desktopStage,
                   ]}>
-                  {route === 'Home' && !homeChatOpen ? (
+                  {onboardingRequired === true ? (
+                    firstRunOnboarding
+                  ) : route === 'Home' && !homeChatOpen ? (
                     desktopWorkspace ? (
                       homeDesktop
                     ) : (
@@ -2870,11 +3005,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                         {readsPhase === 'initial-loading'
                                           ? 'Loading saved data…'
                                           : readsPhase === 'refreshing'
-                                            ? 'Refreshing saved data…'
-                                            : readsPhase ===
-                                                'saved-but-refresh-failed'
-                                              ? 'Showing saved data. Could not refresh.'
-                                              : 'Saved data is unavailable.'}
+                                          ? 'Refreshing saved data…'
+                                          : readsPhase ===
+                                            'saved-but-refresh-failed'
+                                          ? 'Showing saved data. Could not refresh.'
+                                          : 'Saved data is unavailable.'}
                                       </Text>
                                       {allHomeReadsUnavailable && (
                                         <Text
@@ -2883,16 +3018,12 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                             macDesktop &&
                                               styles.macReadStatusText,
                                           ]}>
-                                          {readOutcomes?.conversations
-                                            .status === 'error' &&
-                                          (readOutcomes.conversations.error ===
-                                            desktopBackendConfigurationCopy ||
-                                            readOutcomes.conversations.error ===
-                                              desktopBackendServiceCopy ||
-                                            readOutcomes.conversations.error ===
-                                              desktopProjectionUnavailableCopy)
-                                            ? readOutcomes.conversations.error
-                                            : 'Omi could not load saved conversations or memories. Your saved data has not been changed.'}
+                                          {readOutcomes === null
+                                            ? ''
+                                            : desktopRecoveryCopy(
+                                                readOutcomes.conversations,
+                                                readOutcomes.memories,
+                                              )}
                                         </Text>
                                       )}
                                       {(readsPhase ===
@@ -3068,8 +3199,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                   : styles.chatHistoryCompact,
                               ]
                             : messages.length === 0 && !chatBusy
-                              ? styles.home
-                              : styles.chatHistory
+                            ? styles.home
+                            : styles.chatHistory
                         }>
                         <FocusPressable
                           accessibilityLabel="Back to Home"
@@ -3209,6 +3340,75 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       </View>
     </SafeAreaView>
   );
+
+  const macDestinationMenu = macMenuOpen ? (
+    <View pointerEvents="box-none" style={styles.macDestinationLayer}>
+      <FocusPressable
+        accessibilityLabel="Dismiss destination switcher"
+        accessibilityRole="button"
+        onPress={() => setMacMenuOpen(false)}
+        style={styles.macDestinationDismiss}
+      />
+      <View
+        accessibilityLabel="Home destination switcher"
+        accessibilityRole="menu"
+        pointerEvents="auto"
+        style={styles.macNavigationMenu}>
+        {navigation.map(item => (
+          <FocusPressable
+            accessibilityLabel={`${item.label} destination`}
+            accessibilityRole="menuitem"
+            accessibilityState={{selected: route === item.label}}
+            hitSlop={{bottom: 6, left: 8, right: 8, top: 6}}
+            key={item.label}
+            onPress={() => {
+              setRoute(item.label as Route);
+              if (item.label === 'Home') {
+                setHomeChatOpen(false);
+              }
+              setMacMenuOpen(false);
+            }}
+            style={({pressed}) => [
+              styles.macNavigationMenuItem,
+              route === item.label && styles.macNavigationMenuItemActive,
+              pressed && styles.pressed,
+            ]}>
+            <MacSymbol
+              color={route === item.label ? '#f2f4f1' : '#d7dad5'}
+              name={destinationSymbols[item.label as Route]}
+              size={16}
+            />
+            <Text
+              style={[
+                styles.macNavigationMenuText,
+                route === item.label && styles.macTopNavTextActive,
+              ]}>
+              {item.label}
+            </Text>
+            {route === item.label && (
+              <View style={styles.macNavigationSelection} />
+            )}
+          </FocusPressable>
+        ))}
+      </View>
+    </View>
+  ) : null;
+
+  if (!macDesktop) {
+    return shell;
+  }
+  return (
+    <View pointerEvents="box-none" style={styles.macRoot}>
+      <OmiGlassPanel
+        accessibilityLabel="Desktop workspace material"
+        glassCornerRadius={0}
+        pointerEvents="none"
+        style={styles.macRootGlass}
+      />
+      {shell}
+      {macDestinationMenu}
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -3219,66 +3419,100 @@ const styles = StyleSheet.create({
   shellWide: {flexDirection: 'row'},
   macShell: {
     backgroundColor: 'transparent',
-    paddingTop: 28,
+    paddingTop: 0,
   },
   macTopNavFrame: {
     alignSelf: 'stretch',
-    height: 66,
-    marginHorizontal: 18,
-    zIndex: 2,
+    backgroundColor: 'rgba(18, 20, 19, 0.22)',
+    borderRadius: 0,
+    height: 38,
+    marginHorizontal: 0,
+    marginTop: 28,
+    overflow: 'visible',
+    paddingHorizontal: 12,
+    pointerEvents: 'auto',
+    zIndex: 20,
   },
   macTopNav: {
     alignItems: 'center',
     backgroundColor: 'transparent',
+    flex: 1,
     flexDirection: 'row',
     gap: 12,
-    height: 66,
-    paddingHorizontal: 4,
+    height: 38,
+    overflow: 'visible',
+    pointerEvents: 'auto',
     position: 'relative',
   },
   macTopNavItem: {
     alignItems: 'center',
-    borderRadius: 22,
+    borderRadius: 13,
     flexDirection: 'row',
     gap: 7,
-    height: 44,
-    paddingHorizontal: 14,
+    height: 30,
+    paddingHorizontal: 11,
   },
   macTopNavItemActive: {backgroundColor: 'rgba(255, 255, 255, 0.1)'},
-  macTopNavText: {color: '#8f918f', fontSize: 13, fontWeight: '600'},
+  macTopNavText: {color: '#c8cbc6', fontSize: 13, fontWeight: '600'},
   macTopNavTextActive: {color: '#f2f4f1'},
   macPrimaryText: {color: '#f2f4f1'},
   macHomeTabs: {
     alignItems: 'center',
     flexDirection: 'row',
+    flexShrink: 0,
     gap: 2,
+    pointerEvents: 'auto',
   },
-  macOverflowButton: {
-    alignItems: 'center',
-    borderRadius: 18,
-    height: 36,
-    justifyContent: 'center',
-    width: 36,
-  },
-  macNavigationMenu: {
-    backgroundColor: '#252826',
-    borderColor: '#3b3f3c',
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 2,
-    padding: 6,
+  macDestinationLayer: {
+    bottom: 0,
+    left: 0,
     position: 'absolute',
     right: 0,
-    top: 58,
-    width: 170,
+    top: 0,
+    zIndex: 40,
+  },
+  macDestinationDismiss: {
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  macNavigationMenu: {
+    backgroundColor: 'rgba(31, 35, 33, 0.98)',
+    borderColor: 'transparent',
+    borderRadius: 14,
+    borderWidth: 0,
+    gap: 2,
+    padding: 7,
+    pointerEvents: 'auto',
+    position: 'absolute',
+    right: 16,
+    top: 60,
+    width: 224,
+    zIndex: 41,
   },
   macNavigationMenuItem: {
+    alignItems: 'center',
     borderRadius: 8,
+    flexDirection: 'row',
+    gap: 10,
     minHeight: 36,
-    justifyContent: 'center',
     paddingHorizontal: 12,
   },
-  macNavigationMenuText: {color: '#e5e7e4', fontSize: 13, fontWeight: '600'},
+  macNavigationMenuItemActive: {backgroundColor: 'rgba(255, 255, 255, 0.1)'},
+  macNavigationMenuText: {
+    color: '#dfe2dd',
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  macNavigationSelection: {
+    backgroundColor: '#78bda5',
+    borderRadius: 3,
+    height: 6,
+    width: 6,
+  },
   navigation: {backgroundColor: '#141414'},
   rail: {paddingHorizontal: 8, paddingVertical: 24},
   railHeader: {alignItems: 'flex-start', gap: 8},
@@ -3346,8 +3580,9 @@ const styles = StyleSheet.create({
   macPaneInset: {
     alignSelf: 'stretch',
     paddingBottom: 0,
-    paddingHorizontal: 18,
+    paddingHorizontal: 0,
     paddingTop: 0,
+    zIndex: 0,
   },
   paneInsetCompact: {padding: 0},
   paneFrame: {
@@ -3396,7 +3631,8 @@ const styles = StyleSheet.create({
     borderRadius: 0,
     borderWidth: 0,
   },
-  macGlassPanel: {
+  macRoot: {flex: 1, position: 'relative'},
+  macRootGlass: {
     bottom: 0,
     left: 0,
     position: 'absolute',
@@ -3406,39 +3642,82 @@ const styles = StyleSheet.create({
   macHomeSurface: {
     alignSelf: 'stretch',
     backgroundColor: 'transparent',
+    borderRadius: 0,
     flex: 1,
-    overflow: 'hidden',
     position: 'relative',
+  },
+  macOnboardingSurface: {
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    flex: 1,
+    justifyContent: 'center',
+    padding: 48,
+  },
+  macOnboardingContent: {
+    alignItems: 'center',
+    gap: 16,
+    maxWidth: 560,
+    width: '100%',
+  },
+  macOnboardingTitle: {
+    color: '#f2f4f1',
+    fontSize: 36,
+    fontWeight: '700',
+    letterSpacing: -1,
+    lineHeight: 42,
+    textAlign: 'center',
+  },
+  macOnboardingCopy: {
+    color: '#d7dad5',
+    fontSize: 16,
+    lineHeight: 24,
+    textAlign: 'center',
+  },
+  macOnboardingSignIn: {
+    alignItems: 'center',
+    backgroundColor: '#f2f4f1',
+    borderRadius: 16,
+    justifyContent: 'center',
+    marginTop: 8,
+    minHeight: 44,
+    paddingHorizontal: 28,
+  },
+  macOnboardingSignInText: {
+    color: '#171918',
+    fontSize: 15,
+    fontWeight: '700',
   },
   macHomeLane: {
     flex: 1,
     gap: 8,
     paddingBottom: 18,
-    paddingHorizontal: 18,
-    paddingTop: 8,
+    paddingLeft: 16,
+    paddingRight: 16,
+    paddingTop: 12,
     width: '100%',
   },
-  // Horizontal inset only: the row owns vertical centering for the icon, text baseline, and action.
   macHomeQueryField: {
-    alignSelf: 'center',
-    backgroundColor: 'rgba(31, 34, 32, 0.82)',
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-    borderWidth: 1,
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'transparent',
+    borderRadius: 12,
+    borderWidth: 0,
     flex: 1,
+    flexGrow: 1,
     gap: 10,
     marginBottom: 0,
     marginTop: 0,
-    maxWidth: 720,
-    minHeight: 44,
-    paddingLeft: 14,
-    paddingRight: 4,
+    maxWidth: '100%',
+    minHeight: 30,
+    paddingHorizontal: 12,
     width: 'auto',
   },
   macSearchInput: {
+    flex: 1,
     fontSize: 15,
-    height: 24,
-    minHeight: 0,
-    paddingVertical: 0,
+    minHeight: 28,
+    paddingVertical: 4,
   },
   macHomeTimeline: {flex: 1, width: '100%'},
   macHomeTimelineContent: {
@@ -3460,7 +3739,7 @@ const styles = StyleSheet.create({
     width: 7,
   },
   macHomeDayLabel: {
-    color: '#aeb2ae',
+    color: '#d7dad5',
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 1.2,
@@ -3476,11 +3755,55 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 5,
     maxWidth: 520,
-    paddingHorizontal: 18,
-    paddingVertical: 16,
+    paddingHorizontal: 4,
+    paddingVertical: 12,
   },
   macHomeInlineTitle: {color: '#eef0ed', fontSize: 14, fontWeight: '600'},
-  macHomeInlineCopy: {color: '#999d99', fontSize: 13, lineHeight: 19},
+  macHomeInlineCopy: {color: '#d7dad5', fontSize: 13, lineHeight: 19},
+  macHomeRecovery: {
+    alignItems: 'flex-start',
+    gap: 8,
+    maxWidth: 440,
+    paddingBottom: 8,
+    paddingHorizontal: 0,
+    paddingTop: 10,
+  },
+  macHomeRecoveryTitle: {
+    color: '#f2f4f1',
+    fontSize: 17,
+    fontWeight: '600',
+    letterSpacing: -0.2,
+    lineHeight: 22,
+  },
+  macHomeRecoveryCopy: {color: '#dfe2dd', fontSize: 13, lineHeight: 19},
+  macHomeRecoveryRetry: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(255, 255, 255, 0.16)',
+    borderRadius: 14,
+    borderWidth: 1,
+    justifyContent: 'center',
+    marginTop: 2,
+    minHeight: 32,
+    paddingHorizontal: 14,
+  },
+  macHomeRecoveryRetryText: {color: '#f2f4f1', fontSize: 13, fontWeight: '600'},
+  macHomeRecoverySignIn: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: '#f2f4f1',
+    borderRadius: 14,
+    justifyContent: 'center',
+    marginTop: 2,
+    minHeight: 34,
+    paddingHorizontal: 16,
+  },
+  macHomeRecoverySignInText: {
+    color: '#171918',
+    fontSize: 13,
+    fontWeight: '700',
+  },
   paneCompact: {borderRadius: 0, borderWidth: 0},
   paneCompactSurface: {backgroundColor: '#1c1c1a'},
   stageMotion: {flex: 1},
@@ -3662,9 +3985,9 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
   },
   homeSpineKind: {color: '#78bda5'},
-  homeSpineMeta: {color: '#818581'},
+  homeSpineMeta: {color: '#bfc3bd'},
   homeSpineTitle: {color: '#eef0ed', fontSize: 15, marginTop: 5},
-  homeSpineSummary: {color: '#999d99', marginTop: 3},
+  homeSpineSummary: {color: '#c7cac5', marginTop: 3},
   homeSpineEmpty: {
     alignItems: 'flex-start',
     flex: 0,
@@ -3674,7 +3997,7 @@ const styles = StyleSheet.create({
     paddingTop: 18,
   },
   homeSpineEmptyTitle: {color: '#eef0ed'},
-  homeSpineEmptyCopy: {color: '#999d99', textAlign: 'left'},
+  homeSpineEmptyCopy: {color: '#c7cac5', textAlign: 'left'},
   homeSpineList: {flexGrow: 1, paddingBottom: 0},
   homeResults: {flex: 1},
   homeResultsWide: {flex: 0, flexGrow: 0, maxHeight: 430, minHeight: 210},
@@ -3684,7 +4007,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 8,
   },
-  macHomeReadStatusText: {color: '#b1b4b0', fontSize: 12, fontWeight: '600'},
+  macHomeReadStatusText: {color: '#d7dad5', fontSize: 12, fontWeight: '600'},
   macHomeRetryButton: {
     alignSelf: 'flex-start',
     marginTop: 10,
@@ -3697,9 +4020,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     minHeight: 36,
-    borderTopColor: 'rgba(255, 255, 255, 0.07)',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 4,
+    paddingHorizontal: 0,
     paddingTop: 12,
   },
   macHomeDeviceStatus: {
@@ -3707,7 +4028,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 7,
   },
-  macHomeDeviceStatusText: {color: '#8f918f', fontSize: 12},
+  macHomeDeviceStatusText: {color: '#d7dad5', fontSize: 12},
   macHomeDeviceActions: {
     alignItems: 'center',
     flex: 1,
@@ -3724,17 +4045,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 10,
   },
-  macHomeDeviceChipText: {color: '#c8cbc7', fontSize: 11, fontWeight: '600'},
-  macHomeDeviceHint: {color: '#8f918f', fontSize: 11},
-  deviceChip: {
-    backgroundColor: '#242424',
-    borderColor: '#383838',
-    borderRadius: 18,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  deviceChipText: {color: '#d8d8d8', fontSize: 13, fontWeight: '600'},
+  macHomeDeviceChipText: {color: '#d7dad5', fontSize: 11, fontWeight: '600'},
+  macHomeDeviceHint: {color: '#d7dad5', fontSize: 11},
   deviceHeader: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -3807,56 +4119,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 38,
   },
-  searchHeader: {paddingBottom: 12, paddingTop: 16},
-  searchBox: {
-    alignItems: 'center',
-    backgroundColor: '#232323',
-    borderColor: '#3a3a3a',
-    borderRadius: 14,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 8,
-    minHeight: 52,
-    paddingHorizontal: 14,
-  },
   searchInput: {color: '#ffffff', flex: 1, fontSize: 15, minHeight: 44},
-  clearSearch: {
-    alignItems: 'center',
-    borderRadius: 22,
-    height: 44,
-    justifyContent: 'center',
-    width: 44,
-  },
-  clearSearchText: {color: '#b0b0b0', fontSize: 24, lineHeight: 26},
-  searchActions: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 8,
-    justifyContent: 'space-between',
-    marginTop: 10,
-  },
-  filters: {flexDirection: 'row', flexWrap: 'wrap', gap: 7},
-  filterChip: {
-    borderColor: '#363636',
-    borderRadius: 18,
-    borderWidth: 1,
-    minHeight: 36,
-    paddingHorizontal: 13,
-    justifyContent: 'center',
-  },
-  filterChipActive: {backgroundColor: '#ffffff', borderColor: '#ffffff'},
-  filterText: {color: '#a0a0a0', fontSize: 12, fontWeight: '600'},
-  filterTextActive: {color: '#141414'},
-  chatPill: {
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    flexDirection: 'row',
-    gap: 7,
-    minHeight: 40,
-    paddingHorizontal: 15,
-  },
-  chatPillText: {color: '#141414', fontSize: 13, fontWeight: '700'},
   chatScroll: {flex: 1},
   chatScrollContent: {flexGrow: 1},
   chatHistory: {
@@ -4035,7 +4298,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   memoryProvenance: {color: '#888888', fontSize: 11, marginTop: 9},
-  memoryCitation: {color: '#707070', fontSize: 11, marginTop: 3},
   memoryFooter: {gap: 10, paddingVertical: 8},
   tasksPage: {flex: 1, paddingHorizontal: 28, paddingTop: 24},
   taskSearchBox: {
@@ -4155,7 +4417,6 @@ const styles = StyleSheet.create({
     marginTop: 16,
     padding: 14,
   },
-  projection: {flex: 1, paddingHorizontal: 28, paddingVertical: 24},
   projectionTitle: {color: '#ffffff', fontSize: 22, fontWeight: '600'},
   projectionEmpty: {
     alignItems: 'center',

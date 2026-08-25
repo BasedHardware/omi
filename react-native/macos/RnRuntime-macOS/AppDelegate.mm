@@ -5,6 +5,9 @@
 #import <React/RCTUIKit.h>
 #import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>
 
+static const CGFloat OmiTrafficLightLeading = 13.0;
+static const CGFloat OmiTrafficLightSpacing = 6.0;
+
 @implementation AppDelegate
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification
@@ -66,7 +69,7 @@
   window.titlebarAppearsTransparent = YES;
   window.titleVisibility = NSWindowTitleHidden;
   window.title = @"";
-  window.toolbarStyle = NSWindowToolbarStyleUnified;
+  window.toolbarStyle = NSWindowToolbarStyleAutomatic;
   window.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
   // The app uses a transparent full-size titlebar, so the uncovered window ground is the drag
   // region. Controls continue to receive their normal input; this restores ordinary macOS window
@@ -87,6 +90,32 @@
   [window standardWindowButton:NSWindowCloseButton].hidden = NO;
   [window standardWindowButton:NSWindowMiniaturizeButton].hidden = NO;
   [window standardWindowButton:NSWindowZoomButton].hidden = NO;
+  [self positionOmiTrafficLights];
+}
+
+- (void)positionOmiTrafficLights
+{
+  NSWindow *window = self.window;
+  NSButton *closeButton = [window standardWindowButton:NSWindowCloseButton];
+  NSButton *miniaturizeButton = [window standardWindowButton:NSWindowMiniaturizeButton];
+  NSButton *zoomButton = [window standardWindowButton:NSWindowZoomButton];
+  if (closeButton == nil || closeButton.superview == nil) {
+    return;
+  }
+  closeButton.hidden = NO;
+  miniaturizeButton.hidden = NO;
+  zoomButton.hidden = NO;
+  NSView *container = closeButton.superview;
+  CGFloat buttonWidth = NSWidth(closeButton.frame);
+  CGFloat buttonHeight = NSHeight(closeButton.frame);
+  CGFloat y = floor((NSHeight(container.bounds) - buttonHeight) / 2.0);
+  CGFloat x = OmiTrafficLightLeading;
+  for (NSButton *button in @[ closeButton, miniaturizeButton, zoomButton ]) {
+    NSRect frame = button.frame;
+    frame.origin = NSMakePoint(x, y);
+    button.frame = frame;
+    x += buttonWidth + OmiTrafficLightSpacing;
+  }
 }
 
 - (void)installOmiWindowDragMonitor

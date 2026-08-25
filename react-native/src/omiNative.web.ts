@@ -22,6 +22,7 @@ import type {
   NativeHttpRequest,
   NativeHttpResponse,
   NativeSnapshot as NativeSnapshotContract,
+  OmiAuth,
   OmiBackend,
   OmiNative as NativeOmiNative,
 } from './omiNativeTypes';
@@ -32,6 +33,7 @@ export type {
   NativeHttpMethod,
   NativeHttpRequest,
   NativeHttpResponse,
+  OmiAuth,
   OmiBackend,
 } from './omiNativeTypes';
 
@@ -307,8 +309,21 @@ const browserBackend: OmiBackend = {
 };
 
 const browserNative = createWebNativeAdapter();
+const browserAuth: OmiAuth = {
+  async hasCloudSession() {
+    return false;
+  },
+  async hasCompletedOnboarding() {
+    return true;
+  },
+  async markOnboardingComplete() {},
+  async signIn() {
+    return {signedIn: false};
+  },
+};
 
 export const omiBackend = browserBackend;
+export const omiAuth = browserAuth;
 export const omiNative = browserNative;
 export const isNativeBackendInstalled = true;
 export const isNativeModuleInstalled = true;
