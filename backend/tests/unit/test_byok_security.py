@@ -448,6 +448,47 @@ class TestChatQuotaBYOKBypass:
             enforce_chat_quota('unvalidated-header-uid')
         assert exc_info.value.status_code == 402
 
+    @patch('utils.subscription.get_customer_firestore_client', return_value='customer-fs')
+    @patch('utils.subscription.has_validated_byok_keys', return_value=True)
+    @patch('utils.subscription.get_byok_key')
+    @patch('utils.subscription.users_db')
+    @patch('utils.subscription.get_chat_quota_snapshot')
+    def test_enforce_desktop_chat_quota_requires_anthropic(
+        self, mock_snapshot, mock_users_db, mock_get_key, _mock_validated, _mock_fs
+    ):
+        from fastapi import HTTPException
+        from models.users import PlanType
+        from utils.subscription import enforce_desktop_chat_quota
+
+        mock_users_db.is_byok_active.return_value = True
+        mock_get_key.side_effect = lambda p: 'sk-or' if p == 'openrouter' else None
+        mock_snapshot.return_value = {
+            'plan': PlanType.basic,
+            'unit': 'questions',
+            'used': 31,
+            'limit': 30,
+            'allowed': False,
+            'reset_at': '2026-05-01',
+        }
+        with pytest.raises(HTTPException) as exc_info:
+            enforce_desktop_chat_quota('or-only-uid', platform='macos')
+        assert exc_info.value.status_code == 402
+
+    @patch('utils.subscription.get_customer_firestore_client', return_value='customer-fs')
+    @patch('utils.subscription.has_validated_byok_keys', return_value=True)
+    @patch('utils.subscription.get_byok_key')
+    @patch('utils.subscription.users_db')
+    @patch('utils.subscription.is_trial_paywalled', return_value=False)
+    def test_enforce_desktop_chat_quota_bypasses_for_anthropic(
+        self, _mock_paywalled, mock_users_db, mock_get_key, _mock_validated, _mock_fs
+    ):
+        from utils.subscription import enforce_desktop_chat_quota
+
+        mock_users_db.is_byok_active.return_value = True
+        mock_get_key.side_effect = lambda p: 'sk-ant' if p == 'anthropic' else None
+        enforce_desktop_chat_quota('anthropic-uid', platform='macos')
+        mock_users_db.is_byok_active.assert_called_once()
+
 
 # ---------------------------------------------------------------------------
 # 7. Transcription credit BYOK bypass

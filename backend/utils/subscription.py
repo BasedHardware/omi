@@ -359,8 +359,8 @@ def is_trial_paywalled(
 
 
 def clear_trial_paywall_cache(uid: str) -> None:
-    redis_db.delete_generic_cache(f"trial_paywall:expired:{uid}:gemini")
-    redis_db.delete_generic_cache(f"trial_paywall:expired:{uid}:openai")
+    for provider in ("openrouter", "openai", "anthropic", "gemini"):
+        redis_db.delete_generic_cache(f"trial_paywall:expired:{uid}:{provider}")
     redis_db.delete_generic_cache(f"trial_paywall:expired:{uid}")
 
 
@@ -1095,6 +1095,7 @@ def enforce_chat_quota(
     *,
     firestore_client: Any | None = None,
     provision: bool = True,
+    required_llm_provider: str | None = None,
 ) -> None:
     """Block or allow a chat request based on the user's plan + usage.
 
@@ -1135,7 +1136,10 @@ def enforce_chat_quota(
     # Require an LLM provider key on this request (not just any BYOK header)
     # so a user can't activate with fake fingerprints or send only x-byok-deepgram
     # to bypass chat quota while chat falls back to Omi's OpenAI/Anthropic keys.
-    if users_db.is_byok_active(uid, firestore_client=firestore_client) and _request_has_llm_byok_key():
+    has_exempt_llm = (
+        _request_has_byok_provider(required_llm_provider) if required_llm_provider else _request_has_llm_byok_key()
+    )
+    if users_db.is_byok_active(uid, firestore_client=firestore_client) and has_exempt_llm:
         return
 
     snapshot = get_chat_quota_snapshot(uid, platform=platform, firestore_client=firestore_client, provision=provision)
@@ -1168,11 +1172,15 @@ def enforce_desktop_chat_quota(uid: str, platform: Optional[str] = None) -> None
     Development desktop-backend ADC stays on the compute project for ``agentVm``.
     Entitlements read the customer SA (``SERVICE_ACCOUNT_JSON`` or the Auth file).
     """
+    # Desktop agent chat only consumes Anthropic. An OpenRouter/Gemini/OpenAI
+    # key must not exempt this path while the request still uses Omi's managed
+    # Anthropic credential.
     enforce_chat_quota(
         uid,
         platform,
         firestore_client=get_customer_firestore_client(),
         provision=False,
+        required_llm_provider='anthropic',
     )
 
 
