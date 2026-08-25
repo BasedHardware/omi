@@ -175,3 +175,17 @@ def test_newer_plugin_id_only_session_wins_over_older_app_id_session(monkeypatch
     result = chat_db.get_chat_session('uid', 'app')
 
     assert result['id'] == 'newer-plugin'
+
+
+
+def test_doc_matches_app_scope_accepts_legacy_null_app_id():
+    """Reconcile cursors minted from plugin_id-only rows must stay in scope."""
+    assert chat_db._doc_matches_app_scope({'plugin_id': 'app'}, 'app') is True
+    assert chat_db._doc_matches_app_scope({'app_id': None, 'plugin_id': 'app'}, 'app') is True
+    assert chat_db._doc_matches_app_scope({'app_id': 'other', 'plugin_id': 'app'}, 'app') is False
+    assert chat_db._doc_matches_app_scope({'app_id': 'app'}, 'app') is True
+
+
+def test_plugin_id_scan_is_newest_first(monkeypatch):
+    _, query = _run(monkeypatch, [_doc('only', NOW, plugin_id='app')])
+    query.order_by.assert_any_call('updated_at', direction=chat_db.firestore.Query.DESCENDING)

@@ -19,8 +19,6 @@ Environment:
     GOOGLE_APPLICATION_CREDENTIALS: Path to Firebase service account key
 """
 
-import firebase_admin
-from firebase_admin import credentials, firestore
 import sys
 import os
 import argparse
@@ -31,6 +29,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
+from database._client import get_firestore_client
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -38,10 +38,12 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 
 def _firestore_client():
-    """Return a Firestore client, lazy-init."""
-    if not firebase_admin._apps:
-        firebase_admin.initialize_app(credentials.ApplicationDefault())
-    return firestore.client()
+    """Pin to the customer-data project via SERVICE_ACCOUNT_JSON.
+
+    ADC / GOOGLE_CLOUD_PROJECT can identify the compute or dev project;
+    get_firestore_client() uses the customer-data service account when present.
+    """
+    return get_firestore_client()
 
 
 def _backfill_collection(client, collection_name: str, dry_run: bool, batch_size: int, uid: str | None) -> int:

@@ -44,8 +44,11 @@ CHAT_HISTORY_REPORTED_RAW_SCAN_CAP = 50
 
 
 def _doc_matches_app_scope(data: Dict[str, Any], app_id: Optional[str]) -> bool:
-    if 'app_id' in data:
-        return data.get('app_id') == app_id
+    # Null app_id with a plugin_id is the pre-backfill shape. Presence of the
+    # key must not hide those rows from the union used to mint reconcile cursors.
+    stored_app = data.get('app_id')
+    if stored_app is not None:
+        return stored_app == app_id
     return data.get('plugin_id') == app_id
 
 
@@ -788,6 +791,8 @@ def get_chat_session(uid: str, app_id: Optional[str] = None) -> Optional[Dict[st
     plugin_docs = [
         _typed_doc(session)
         for session in collection.where(filter=FieldFilter('plugin_id', '==', app_id))
+        .order_by('updated_at', direction=firestore.Query.DESCENDING)
+        .order_by('__name__', direction=firestore.Query.DESCENDING)
         .limit(CURRENT_CHAT_SESSION_SCAN_LIMIT)
         .stream()
     ]
