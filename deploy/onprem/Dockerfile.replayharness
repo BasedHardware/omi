@@ -1,0 +1,54 @@
+# Replay-harness image = the offline test image + what the harness spawns for real.
+#
+# The Phase 0A replay harness (`npm run test:replay-harness-phase0a:emulator`) is not a pytest suite:
+# `backend/testing/replay_harness_phase0a/run.sh` launches the Firestore emulator (Java), a
+# `redis-server` per test on an ephemeral port, and the backend itself in several process roles. This
+# image carries those four things so the harness runs the way CI runs it, on a box that has only Docker.
+#
+# Build from the REPO ROOT, because the lockfiles it pins live there and in backend/:
+#   docker build -t omi-oss-replay-harness -f deploy/onprem/Dockerfile.replayharness .
+#
+# Run (see SELFHOST_NOTES, "Replay harness Phase 0A"):
+#   docker run --rm -v $(git rev-parse --show-toplevel):/repo omi-oss-replay-harness
+FROM omi-oss-backend-test:latest
+USER root
+
+# Java 21 for the Firestore emulator, and a real redis-server: the harness spawns its own binary per
+# test rather than talking to a service container, so a `services:`-style Redis would not be used at all
+# (the CI job installs the package for the same reason).
+# build-essential + python3-dev: `uv pip sync` below resolves the lockfile from scratch and a few
+# packages have no wheel for this platform, so they compile. The runtime image has no compiler (rightly
+# — it does not build anything), and without one the sync dies on a bare "No such file or directory: gcc".
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        openjdk-21-jre-headless redis-server gnupg build-essential python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Node 22, matching the CI job. Debian trixie ships 20, and the Firebase CLI pinned below wants 22+.
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# The pinned Firebase CLI, from the repo's own lockfile — `npm ci` so the version is the one CI resolves,
+# not whatever npm would pick today. Installed into /opt so a bind-mounted repo does not shadow it.
+WORKDIR /opt/harness-node
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts && ln -s /opt/harness-node/node_modules/.bin/firebase /usr/local/bin/firebase
+
+# The Python environment CI builds: `uv pip sync pylock.toml`, not the runtime image's own venv. The two
+# are close but not identical, and a harness failure caused by a dependency we happen to ship differently
+# would be a ghost — the point of this image is to reproduce THEIR run.
+COPY backend/pylock.toml /opt/pylock.toml
+RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh \
+    && uv venv /opt/harness-venv \
+    && uv pip sync /opt/pylock.toml --python /opt/harness-venv/bin/python
+
+# run.sh insists on `backend/.venv` inside the repo, which here is a bind mount. The entrypoint links it
+# to the image's venv and removes the link on the way out, so nothing of ours is left in the working
+# tree (`backend/.venv` is gitignored, but a symlink pointing at a container path would be dead on the
+# host and confusing to find later).
+COPY deploy/onprem/replay-harness-entrypoint.sh /usr/local/bin/replay-harness-entrypoint.sh
+RUN chmod +x /usr/local/bin/replay-harness-entrypoint.sh
+
+WORKDIR /repo
+ENTRYPOINT ["/usr/local/bin/replay-harness-entrypoint.sh"]
+CMD ["npm", "run", "test:replay-harness-phase0a:emulator"]
