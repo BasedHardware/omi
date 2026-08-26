@@ -1623,7 +1623,7 @@ def get_backend_onboarding_admission(uid: str, *, firestore_client: Any = None) 
             or onboarding.get("completed") is True
             or onboarding.get("device_onboarding_completed") is True
         ):
-            return False
+            return None
         admission_snapshot = client.document(f"users/{uid}/{ONBOARDING_ADMISSION_PATH}").get()
         payload = admission_snapshot.to_dict() if getattr(admission_snapshot, "exists", False) else {}
         expires_at = payload.get("expires_at") if isinstance(payload, dict) else None
