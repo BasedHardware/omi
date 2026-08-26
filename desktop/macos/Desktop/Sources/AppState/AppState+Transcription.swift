@@ -845,7 +845,7 @@ extension AppState {
       // Pause before the hand-off. NSWorkspace.open can return while Omi is
       // still the active app, and a queued alert must not attach a sheet that
       // System Settings then covers. didBecomeActive resumes the queue.
-      alertPresenter.pauseQueueUntilAppActive()
+      self.alertPresenter.pauseQueueUntilAppActive()
       if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
         NSWorkspace.shared.open(url)
       }

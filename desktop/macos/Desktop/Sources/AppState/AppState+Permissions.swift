@@ -103,7 +103,9 @@ final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
   }
 
   @objc private func presentPendingAlertIfPossible() {
-    guard !queuePausedUntilForeground, !isPresentingAlert, !isRevealingMainWindow, !pendingAlerts.isEmpty else { return }
+    guard !queuePausedUntilForeground, !isPresentingAlert, !isRevealingMainWindow, !pendingAlerts.isEmpty else {
+      return
+    }
     let pending = pendingAlerts[0]
     guard let window = shellWindowProvider() else {
       revealMainWindowIfNeeded()
