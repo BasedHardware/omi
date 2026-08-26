@@ -1,0 +1,3 @@
+{
+  "change": "Chat failures now report which subsystem they came from, so a failed answer can be diagnosed instead of just counted"
+}
