@@ -7,6 +7,11 @@ const MAX_URL_LENGTH = 2048;
 const MAX_MODEL_LENGTH = 128;
 const ENABLED_TRUE = "true";
 
+// Official OpenRouter API host only. Do not accept lookalikes, proxies, or http.
+export const OPENROUTER_GATEWAY_HOST = "openrouter.ai";
+// Hung upstream must not stall a Durable Object alarm.
+export const GATEWAY_FETCH_TIMEOUT_MS = 15_000;
+
 // The deployment is intentionally pinned rather than accepting arbitrary
 // OpenRouter model identifiers from configuration. A model change is a code
 // review + evaluation event, not an operational typo with unknown behavior/cost.
@@ -70,6 +75,7 @@ export const generateViaGateway = async (
         ],
         max_tokens: MAX_TOKENS,
       }),
+      signal: AbortSignal.timeout(GATEWAY_FETCH_TIMEOUT_MS),
     });
     if (!response.ok) {
       logGateway(
@@ -116,7 +122,10 @@ function isValidGatewayUrl(value: string): boolean {
   if (!isBoundedString(value, MAX_URL_LENGTH)) return false;
   try {
     const parsed = new URL(value);
-    return parsed.protocol === "https:" && parsed.hostname.length > 0;
+    return (
+      parsed.protocol === "https:" &&
+      parsed.hostname.toLowerCase() === OPENROUTER_GATEWAY_HOST
+    );
   } catch {
     return false;
   }
@@ -143,6 +152,8 @@ function logGateway(
 
 export const openrouter = {
   LUNA_MODEL,
+  OPENROUTER_GATEWAY_HOST,
+  GATEWAY_FETCH_TIMEOUT_MS,
   gatewayModeEnabled,
   gatewayConfig,
   gatewayReady,
