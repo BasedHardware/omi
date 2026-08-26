@@ -571,7 +571,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       }
     }
 
-    String displayName = 'Summary';
+    String displayName = context.l10n.summary;
     if (isReprocessing && reprocessingApp != null) {
       displayName = reprocessingApp.name;
     } else if (app != null) {
