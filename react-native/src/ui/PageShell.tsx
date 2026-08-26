@@ -1,27 +1,26 @@
 import React from 'react';
-import {Platform, StyleSheet, View, type ViewProps} from 'react-native';
+import {StyleSheet, View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
-import {requireNativeComponent} from '../native-component';
+import {GlassPanel} from './GlassPanel';
 import {tokens} from './tokens';
-
-type GlassPanelProps = ViewProps & {glassCornerRadius?: number};
-
-const GlassPanel =
-  Platform.OS === 'macos'
-    ? requireNativeComponent<GlassPanelProps>('OmiGlassPanel')
-    : (View as unknown as React.ComponentType<GlassPanelProps>);
 
 export function PageShell({
   children,
   desktopOverlay,
   macDesktop,
+  workspaceMaterial = true,
 }: {
   children: React.ReactNode;
   desktopOverlay?: React.ReactNode;
   macDesktop: boolean;
+  workspaceMaterial?: boolean;
 }) {
   const content = (
-    <SafeAreaView style={[styles.safe, macDesktop && styles.macSafe]}>
+    <SafeAreaView
+      style={[
+        styles.safe,
+        macDesktop && styles.macSafe,
+      ]}>
       {children}
     </SafeAreaView>
   );
@@ -30,12 +29,14 @@ export function PageShell({
   }
   return (
     <View pointerEvents="box-none" style={styles.macRoot}>
-      <GlassPanel
-        accessibilityLabel="Desktop workspace material"
-        glassCornerRadius={tokens.radius.none}
-        pointerEvents="none"
-        style={styles.glass}
-      />
+      {workspaceMaterial ? (
+        <GlassPanel
+          accessibilityLabel="Desktop workspace material"
+          glassCornerRadius={tokens.radius.none}
+          pointerEvents="none"
+          style={styles.glass}
+        />
+      ) : null}
       {content}
       {desktopOverlay}
     </View>
