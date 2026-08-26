@@ -183,6 +183,17 @@ LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL = Counter(
 for _outcome in ('completed', 'migrated', 'skipped', 'error'):
     LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL.labels(outcome=_outcome)
 
+LISTEN_FINALIZATION_BYOK_ABANDONMENTS_TOTAL = Counter(
+    'listen_finalization_byok_abandonments_total',
+    'Stranded BYOK finalization job dispositions by the abandonment sweep',
+    ['outcome'],
+)
+
+# Zero-initialize the closed outcome set so an idle process exports every
+# series, distinguishing no stranded rows from a missing scrape target.
+for _outcome in ('abandoned_conversation_closed', 'abandoned_bookkeeping', 'skipped', 'error'):
+    LISTEN_FINALIZATION_BYOK_ABANDONMENTS_TOTAL.labels(outcome=_outcome)
+
 LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS = Counter(
     'llm_gateway_chat_extraction_requests_total',
     'LLM gateway routing outcomes by feature (serving, fallback, direct_exception, shadow)',
