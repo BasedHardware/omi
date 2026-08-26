@@ -1,0 +1,3 @@
+{
+  "change": "Startup timing is measured and reported again, from real process start, and no longer calls every clean launch a crash"
+}
