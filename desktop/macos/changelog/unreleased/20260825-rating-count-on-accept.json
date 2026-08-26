@@ -1,5 +1,0 @@
-{
-  "changes": [
-    "A chat send the assistant refuses no longer loses your typed question or miscounts toward the rating prompt."
-  ]
-}
