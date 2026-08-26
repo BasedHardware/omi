@@ -2,7 +2,15 @@ import CoreGraphics
 import CoreImage
 import CoreMedia
 import Foundation
-import ScreenCaptureKit
+// ScreenCaptureKit's async stream methods are nonisolated and take non-Sendable
+// arguments (SCContentFilter, SCStreamConfiguration), so every call from this actor
+// reads as sending a `self`-isolated value to a nonisolated method. The pinned CI
+// toolchain's SDK carries no concurrency annotations for the framework, which makes
+// those errors rather than warnings; a newer SDK annotates them and stays quiet.
+// `@preconcurrency` is the sanctioned way to say "this module predates strict
+// concurrency" — the calls are serialized by the stream lock, which is what actually
+// makes them safe.
+@preconcurrency import ScreenCaptureKit
 
 /// Pure reconfiguration policy for the persistent capture stream, extracted so the
 /// session-reuse contract is unit-testable without ScreenCaptureKit: a request must
