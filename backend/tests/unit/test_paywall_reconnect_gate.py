@@ -408,8 +408,9 @@ class TestByokRequestEscapeHatch:
 
         yield
 
-        # Reset BYOK contextvar between tests so leftover keys don't bleed.
+        # Reset BYOK contextvars between tests so leftover keys/uid don't bleed.
         byok._byok_ctx.set(None)
+        byok.set_byok_uid(None)
         for name in stubs:
             if saved[name] is None:
                 sys.modules.pop(name, None)
@@ -426,11 +427,15 @@ class TestByokRequestEscapeHatch:
             }
         )
         self._byok._byok_validated_ctx.set(True)
+        # The enrollment-verifying escape hatch needs the request uid on the
+        # context (middleware sets it in production).
+        self._byok.set_byok_uid('uid-stale-firestore')
         assert self._sub.is_trial_paywalled('uid-stale-firestore', 'desktop') is False
 
     def test_validated_llm_byok_header_bypasses_paywall(self):
         self._byok.set_byok_keys({'openrouter': 'sk-stub'})
         self._byok._byok_validated_ctx.set(True)
+        self._byok.set_byok_uid('uid-stale-firestore')
         assert self._sub.is_trial_paywalled('uid-stale-firestore', 'desktop') is False
 
     def test_validated_deepgram_only_header_still_paywalls(self):
