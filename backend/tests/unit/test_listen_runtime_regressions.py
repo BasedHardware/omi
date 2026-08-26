@@ -278,6 +278,7 @@ async def test_bootstrap_sends_first_onboarding_question_before_any_audio(monkey
         fair_use_dg_budget_exhausted=False,
     )
     monkeypatch.setattr(runtime_module, 'load_listen_connect_base', lambda *_args, **_kwargs: _async_result(base))
+    monkeypatch.setattr(runtime_module.user_db, 'ensure_backend_onboarding_admission', lambda _uid: True, raising=False)
     monkeypatch.setattr(runtime_module.user_db, 'get_backend_onboarding_admission', lambda _uid: 'a' * 32)
     monkeypatch.setattr(
         runtime_module, 'get_stt_service_for_language', lambda language, **_kwargs: ('test-stt', 'en', 'test-model')
