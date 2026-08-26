@@ -382,7 +382,9 @@ def get_usage_summary(uid: str, days: int = 30) -> Dict[str, Dict[str, int]]:
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     cutoff_id = f"{cutoff.year}-{cutoff.month:02d}-{cutoff.day:02d}"
 
-    docs = usage_collection.where("__name__", ">=", cutoff_id).stream()
+    # The value of a `__name__` filter must be a Key, not a string: Firestore answers
+    # `400 __key__ filter value must be a Key` otherwise, so this raised on every call.
+    docs = usage_collection.where("__name__", ">=", usage_collection.document(cutoff_id)).stream()
 
     # Aggregate by feature
     summary: Dict[str, Dict[str, int]] = {}
@@ -614,7 +616,8 @@ def get_plan_usage_report(uid: str, days: int = 30) -> Dict[str, Dict[str, Any]]
     usage_collection = db.collection('users').document(uid).collection('llm_usage')
     report: Dict[str, Dict[str, Any]] = {}
 
-    for doc in usage_collection.where('__name__', '>=', cutoff_id).stream():
+    # A `__name__` filter takes a Key, not a string (see get_usage_summary above).
+    for doc in usage_collection.where('__name__', '>=', usage_collection.document(cutoff_id)).stream():
         data = _typed_doc(doc)
         plan_usage = data.get('plan_usage')
         if isinstance(plan_usage, dict):
