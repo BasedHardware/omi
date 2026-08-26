@@ -81,6 +81,8 @@ generated_route_overrides:
     request_timeout_ms: 900000
   - feature: onboarding
     primary: {provider: openai, model: qwen2.5:14b}
+  - feature: screen_frame_judge
+    primary: {provider: openai, model: gemma4:12b}
   - feature: session_titles
     primary: {provider: openai, model: qwen2.5:14b}
   - feature: translation

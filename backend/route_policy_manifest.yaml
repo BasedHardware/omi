@@ -2276,6 +2276,23 @@ routes:
     policy:
       review_status: reviewed
       auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: user_profile
+      deprecation:
+        state: active
+      owner: backend
   # UnifiedPush endpoint registration: the on-prem twin of the FCM token route, for a deployment
   # that ships no Google push path (ADR-0011/0041). Declared reviewed rather than added to the
   # legacy baseline — that baseline is for routes that predate the manifest, and this one does not.
