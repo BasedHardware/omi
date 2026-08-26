@@ -595,3 +595,149 @@ Respond with action, supersedes (indices), merged_content (only for merge), and 
         logger.error(f'Error resolving memory conflict: {e}')
         # Default to storing the new memory if resolution fails (never lose information).
         return MemoryResolution(action='add', reasoning=f'Resolution failed: {e}')
+
+
+# ── Daily sweep summary agent ──
+#
+# One agent pass per user per completed local day: the whole day's conversation
+# SUMMARIES go in as the spine, and the model may request a bounded number of
+# raw transcript excerpts to verify specifics before finalizing.  At most two
+# provider calls; both run inside the sweep's single at-most-once invocation
+# fence, so a retry replays the staged output instead of paying again.
+
+
+class DailySweepAgentMemory(BaseModel):
+    content: str = Field(description="One durable memory, stated as a standalone fact")
+    conversation_ids: List[str] = Field(
+        default=[], description="Ids of the conversations this memory came from (at least one)"
+    )
+
+
+class DailySweepTranscriptRequest(BaseModel):
+    conversation_id: str = Field(description="Id of the conversation whose raw transcript to fetch")
+    reason: str = Field(default="", description="What specific detail needs verification")
+
+
+class DailySweepFolderAssignment(BaseModel):
+    conversation_id: str = Field(description="Id of an unfiled conversation")
+    folder_id: str = Field(description="Id of the folder it belongs in, from the provided folder list")
+
+
+class DailySweepAgentPassOutput(BaseModel):
+    memories: List[DailySweepAgentMemory] = Field(default=[])
+    transcript_requests: List[DailySweepTranscriptRequest] = Field(default=[])
+    folder_assignments: List[DailySweepFolderAssignment] = Field(default=[])
+
+
+_DAILY_SWEEP_FOLDER_TASK = (
+    "**Folder task**: the following conversations are unfiled. For each, pick the best folder_id from the "
+    "folder list, or omit it if none fits.\nUnfiled conversations: {unfiled}\nFolders: {folders}"
+)
+
+
+def _daily_sweep_summaries_block(summary_rows: Sequence[tuple[str, str]]) -> str:
+    return "\n".join(f"[{conversation_id}] {text}" for conversation_id, text in summary_rows)
+
+
+def _daily_sweep_folder_task(folder_options: Sequence[tuple[str, str]], needs_folder_ids: Sequence[str]) -> str:
+    if not folder_options or not needs_folder_ids:
+        return "Folder task: none. folder_assignments must be empty."
+    folders = ", ".join(f"{folder_id} ({name})" for folder_id, name in folder_options)
+    return _DAILY_SWEEP_FOLDER_TASK.format(unfiled=", ".join(needs_folder_ids), folders=folders)
+
+
+def run_daily_sweep_summary_agent(
+    uid: str,
+    summary_rows: Sequence[tuple[str, str]],
+    transcript_lookup: Dict[str, str],
+    *,
+    folder_options: Sequence[tuple[str, str]] = (),
+    needs_folder_ids: Sequence[str] = (),
+    max_candidates: int = 8,
+    max_transcript_fetches: int = 8,
+    max_fetch_characters: int = 8_000,
+    llm: Optional[Any] = None,
+) -> DailySweepAgentPassOutput:
+    """Run the bounded two-phase daily agent; raises MemoryExtractionError on failure.
+
+    Strict by design: the sweep treats any raise as an indeterminate invocation
+    (source incomplete, no cursor advance) rather than attesting an empty day.
+    """
+
+    from utils.prompts import daily_sweep_summary_agent_prompt, daily_sweep_transcript_review_prompt
+
+    if not summary_rows:
+        return DailySweepAgentPassOutput()
+    known_ids = {conversation_id for conversation_id, _ in summary_rows}
+    user_name, memories_str = get_prompt_memories(uid)
+    parser = PydanticOutputParser(pydantic_object=DailySweepAgentPassOutput)
+    common = {
+        'user_name': user_name,
+        'current_date': current_date_for_uid(uid),
+        'memories_str': memories_str,
+        'summaries_block': _daily_sweep_summaries_block(summary_rows),
+        'folder_task': _daily_sweep_folder_task(folder_options, needs_folder_ids),
+        'max_candidates': max_candidates,
+        'format_instructions': parser.get_format_instructions(),
+    }
+
+    def invoke(prompt: Any, prompt_input: Dict[str, Any]) -> DailySweepAgentPassOutput:
+        model = llm if llm is not None else get_llm('memories')
+        return parser.invoke(model.invoke(prompt.invoke(prompt_input)))
+
+    try:
+        with track_usage(uid, Features.MEMORIES):
+            first = invoke(
+                daily_sweep_summary_agent_prompt,
+                {**common, 'max_transcript_fetches': max_transcript_fetches},
+            )
+            requests = [
+                request
+                for request in first.transcript_requests
+                if request.conversation_id in known_ids and transcript_lookup.get(request.conversation_id)
+            ][: max(0, max_transcript_fetches)]
+            if not requests:
+                return _sanitized_daily_sweep_output(first, known_ids, max_candidates)
+            excerpts = "\n\n".join(
+                f"[{request.conversation_id}] ({request.reason})\n"
+                + (transcript_lookup.get(request.conversation_id) or "")[: max(1, max_fetch_characters)]
+                for request in requests
+            )
+            draft = "\n".join(
+                f"- {memory.content} (from {', '.join(memory.conversation_ids)})" for memory in first.memories
+            )
+            second = invoke(
+                daily_sweep_transcript_review_prompt,
+                {**common, 'draft_block': draft or '(none)', 'excerpts_block': excerpts},
+            )
+        merged = DailySweepAgentPassOutput(
+            memories=second.memories,
+            transcript_requests=[],
+            folder_assignments=second.folder_assignments or first.folder_assignments,
+        )
+        return _sanitized_daily_sweep_output(merged, known_ids, max_candidates)
+    except Exception as error:
+        logger.error("Daily sweep summary agent failed: %s", type(error).__name__)
+        raise MemoryExtractionError("daily_sweep_summary_agent") from error
+
+
+def _sanitized_daily_sweep_output(
+    output: DailySweepAgentPassOutput, known_ids: set, max_candidates: int
+) -> DailySweepAgentPassOutput:
+    """Drop memories without valid provenance and assignments for unknown rows."""
+
+    memories = []
+    for memory in output.memories:
+        cited = [conversation_id for conversation_id in memory.conversation_ids if conversation_id in known_ids]
+        content = " ".join((memory.content or "").split())
+        if not cited or not content:
+            continue
+        memories.append(DailySweepAgentMemory(content=content, conversation_ids=cited))
+        if len(memories) >= max(0, max_candidates):
+            break
+    assignments = [
+        assignment
+        for assignment in output.folder_assignments
+        if assignment.conversation_id in known_ids and assignment.folder_id.strip()
+    ]
+    return DailySweepAgentPassOutput(memories=memories, transcript_requests=[], folder_assignments=assignments)

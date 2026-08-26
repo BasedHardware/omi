@@ -1314,6 +1314,25 @@ def test_onboarding_malformed_stage_fails_closed_without_reextracting(monkeypatc
     )
 
 
+def _day_source(conversation_id, summary, transcript="", needs_folder=False):
+    from utils.memory.daily_memory_sweep import CompletedDayConversationSource
+
+    return CompletedDayConversationSource(
+        conversation_id=conversation_id,
+        summary_text=summary,
+        transcript_text=transcript,
+        needs_folder=needs_folder,
+    )
+
+
+def _agent_output(memories=(), folder_assignments=()):
+    return SimpleNamespace(
+        memories=list(memories),
+        transcript_requests=[],
+        folder_assignments=list(folder_assignments),
+    )
+
+
 def test_completed_day_model_candidates_are_staged_before_apply_and_reused(monkeypatch):
     db = _Db()
     control = _open_control(monkeypatch)
@@ -1321,15 +1340,17 @@ def test_completed_day_model_candidates_are_staged_before_apply_and_reused(monke
     local_date = date(2026, 8, 23)
     window = completed_local_day_window(local_date, "UTC")
     monkeypatch.setattr(
-        "utils.memory.daily_memory_sweep._read_completed_day_conversation_texts",
-        lambda *_args, **_kwargs: ((("conversation-1", "stable transcript"),), "complete"),
+        "utils.memory.daily_memory_sweep._read_completed_day_conversation_sources",
+        lambda *_args, **_kwargs: ((_day_source("conversation-1", "stable summary"),), "complete"),
     )
     model = DailySweepModelAuthority(enabled=True, model_name="test", max_candidates=8, max_cost_usd=1.0)
     calls = []
 
-    def extractor(_uid, _text):
-        calls.append(True)
-        return (SimpleNamespace(content="fact from first extraction"),)
+    def agent(_uid, summary_rows, transcript_lookup, **_kwargs):
+        calls.append(summary_rows)
+        return _agent_output(
+            memories=[SimpleNamespace(content="fact from first pass", conversation_ids=["conversation-1"])]
+        )
 
     first = produce_completed_day_daily_summary_sources(
         "user-1",
@@ -1338,20 +1359,24 @@ def test_completed_day_model_candidates_are_staged_before_apply_and_reused(monke
         control,
         db_client=db,
         model_authority=model,
-        model_extractor=extractor,
+        agent_runner=agent,
         window_override=window,
     )
     assert first.source_status == "complete"
     assert len(first.daily_summary) == 1
+    assert first.daily_summary[0].source_refs == ("conversation:conversation-1",)
     assert len(calls) == 1
+    assert calls[0] == (("conversation-1", "stable summary"),)
     staged = next(payload for path, payload in db.store.items() if "daily_summary_staged" in path)
     assert staged["candidate_count"] == 1
+    assert staged["folder_assignments"] == []
     assert staged["candidate_digest"] == deterministic_contract_id(
-        "daily-sweep-daily-summary-candidate-page", {"digests": [first.daily_summary[0].digest()]}
+        "daily-sweep-daily-summary-candidate-page",
+        {"digests": [first.daily_summary[0].digest()], "folder_assignments": []},
     )
 
-    def should_not_extract(_uid, _text):
-        raise AssertionError("completed-day continuation reran nondeterministic extraction")
+    def should_not_run(_uid, _rows, _lookup, **_kwargs):
+        raise AssertionError("completed-day continuation reran the nondeterministic agent")
 
     second = produce_completed_day_daily_summary_sources(
         "user-1",
@@ -1360,11 +1385,125 @@ def test_completed_day_model_candidates_are_staged_before_apply_and_reused(monke
         control,
         db_client=db,
         model_authority=model,
-        model_extractor=should_not_extract,
+        agent_runner=should_not_run,
         window_override=window,
     )
     assert second.daily_summary == first.daily_summary
     assert len(calls) == 1
+
+
+def test_completed_day_agent_assigns_folders_for_unopened_conversations(monkeypatch):
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    local_date = date(2026, 8, 23)
+    window = completed_local_day_window(local_date, "UTC")
+    db.document("users/user-1/conversations/conversation-1").set(
+        {"jit_first_open": {"state": "pending"}, "discarded": False}
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep._read_completed_day_conversation_sources",
+        lambda *_args, **_kwargs: (
+            (
+                _day_source("conversation-1", "planning summary", needs_folder=True),
+                _day_source("conversation-2", "second summary"),
+            ),
+            "complete",
+        ),
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep._read_daily_sweep_folder_options",
+        lambda _uid, db_client: (("folder-1", "Planning"),),
+    )
+    model = DailySweepModelAuthority(enabled=True, model_name="test", max_candidates=8, max_cost_usd=1.0)
+    seen_kwargs = {}
+
+    def agent(_uid, _rows, _lookup, **kwargs):
+        seen_kwargs.update(kwargs)
+        return _agent_output(
+            memories=[SimpleNamespace(content="cross-day fact", conversation_ids=["conversation-1", "conversation-2"])],
+            folder_assignments=[SimpleNamespace(conversation_id="conversation-1", folder_id="folder-1")],
+        )
+
+    result = produce_completed_day_daily_summary_sources(
+        "user-1",
+        local_date,
+        "UTC",
+        control,
+        db_client=db,
+        model_authority=model,
+        agent_runner=agent,
+        window_override=window,
+    )
+    assert result.source_status == "complete"
+    assert seen_kwargs["folder_options"] == (("folder-1", "Planning"),)
+    assert seen_kwargs["needs_folder_ids"] == ("conversation-1",)
+    assert result.daily_summary[0].source_refs == (
+        "conversation:conversation-1",
+        "conversation:conversation-2",
+    )
+    staged = next(payload for path, payload in db.store.items() if "daily_summary_staged" in path)
+    assert staged["folder_assignments"] == [{"conversation_id": "conversation-1", "folder_id": "folder-1"}]
+    assert db.store["users/user-1/conversations/conversation-1"]["folder_id"] == "folder-1"
+
+
+def test_folder_backstop_never_overwrites_and_requires_obligation():
+    from utils.memory.daily_memory_sweep import _apply_daily_sweep_folder_assignments
+
+    db = _Db()
+    db.document("users/user-1/conversations/filed").set(
+        {"jit_first_open": {"state": "pending"}, "folder_id": "existing", "discarded": False}
+    )
+    db.document("users/user-1/conversations/eager").set({"discarded": False})
+    db.document("users/user-1/conversations/open-pending").set(
+        {"jit_first_open": {"state": "pending"}, "discarded": False}
+    )
+    applied = _apply_daily_sweep_folder_assignments(
+        "user-1",
+        [
+            {"conversation_id": "filed", "folder_id": "folder-1"},
+            {"conversation_id": "eager", "folder_id": "folder-1"},
+            {"conversation_id": "open-pending", "folder_id": "folder-1"},
+            {"conversation_id": "open-pending", "folder_id": "not-a-folder"},
+        ],
+        db_client=db,
+        valid_folder_ids={"folder-1"},
+    )
+    assert applied == 1
+    assert db.store["users/user-1/conversations/filed"]["folder_id"] == "existing"
+    assert "folder_id" not in db.store["users/user-1/conversations/eager"]
+    assert db.store["users/user-1/conversations/open-pending"]["folder_id"] == "folder-1"
+
+
+def test_completed_day_memory_without_valid_citation_is_dropped(monkeypatch):
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    local_date = date(2026, 8, 23)
+    window = completed_local_day_window(local_date, "UTC")
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep._read_completed_day_conversation_sources",
+        lambda *_args, **_kwargs: ((_day_source("conversation-1", "stable summary"),), "complete"),
+    )
+    model = DailySweepModelAuthority(enabled=True, model_name="test", max_candidates=8, max_cost_usd=1.0)
+
+    def agent(_uid, _rows, _lookup, **_kwargs):
+        return _agent_output(
+            memories=[SimpleNamespace(content="fabricated provenance", conversation_ids=["not-in-day"])]
+        )
+
+    result = produce_completed_day_daily_summary_sources(
+        "user-1",
+        local_date,
+        "UTC",
+        control,
+        db_client=db,
+        model_authority=model,
+        agent_runner=agent,
+        window_override=window,
+    )
+    assert result.source_status == "complete_zero"
+    assert result.daily_summary == ()
 
 
 def test_completed_day_malformed_stage_fails_closed_without_reextracting(monkeypatch):
@@ -1383,7 +1522,7 @@ def test_completed_day_malformed_stage_fails_closed_without_reextracting(monkeyp
     )
     ref.set(
         {
-            "schema_version": "daily_memory_sweep_daily_summary_stage.v1",
+            "schema_version": "daily_memory_sweep_daily_summary_stage.v2",
             "uid": "user-1",
             "local_date": local_date.isoformat(),
             "timezone_name": "UTC",
@@ -1396,16 +1535,17 @@ def test_completed_day_malformed_stage_fails_closed_without_reextracting(monkeyp
             "candidate_digest": "tampered",
             "candidate_page": [],
             "candidate_count": 0,
+            "folder_assignments": [],
         }
     )
     monkeypatch.setattr(
-        "utils.memory.daily_memory_sweep._read_completed_day_conversation_texts",
-        lambda *_args, **_kwargs: ((("conversation-1", "stable transcript"),), "complete"),
+        "utils.memory.daily_memory_sweep._read_completed_day_conversation_sources",
+        lambda *_args, **_kwargs: ((_day_source("conversation-1", "stable summary"),), "complete"),
     )
     model = DailySweepModelAuthority(enabled=True, model_name="test", max_candidates=8, max_cost_usd=1.0)
 
-    def should_not_extract(_uid, _text):
-        raise AssertionError("malformed completed-day stage must not rerun extraction")
+    def should_not_run(_uid, _rows, _lookup, **_kwargs):
+        raise AssertionError("malformed completed-day stage must not rerun the agent")
 
     result = produce_completed_day_daily_summary_sources(
         "user-1",
@@ -1414,7 +1554,7 @@ def test_completed_day_malformed_stage_fails_closed_without_reextracting(monkeyp
         control,
         db_client=db,
         model_authority=model,
-        model_extractor=should_not_extract,
+        agent_runner=should_not_run,
         window_override=window,
     )
     assert result.source_status == "incomplete"

@@ -3,8 +3,11 @@
 This module is an authority seam, not a scheduler.  It accepts a server-built
 daily input, writes through the canonical ledger boundary, and stays completely
 inert until an explicit backend authority opens it.  The completed-day producer
-reads only bounded, finished transcript text (with an optional typed summary
-packet), then invokes the existing memory model under an explicit cost budget.
+reads the day's finished conversation SUMMARIES as one bounded spine and runs a
+single two-phase agent pass over them (the agent may pull a bounded number of
+raw transcript excerpts to verify specifics before finalizing), all under an
+explicit cost budget.  The onboarding cold-start channel still reads bounded
+finished transcript text per conversation.
 
 The contract is deliberately small:
 
@@ -82,6 +85,15 @@ from utils.memory.jit_trigger_contract import compile_trigger_condition
 # into an empty day.
 MAX_COMPLETED_DAY_CONVERSATIONS = 32
 MAX_COMPLETED_DAY_INPUT_CHARACTERS = 48_000
+# The summary spine bounds the whole-day agent pass.  Summaries are two orders
+# of magnitude smaller than transcripts, so these ceilings are effectively
+# unreachable for real days; they exist so an over-budget page is still a
+# provable incomplete source rather than a silent truncation.
+MAX_COMPLETED_DAY_SUMMARY_CONVERSATIONS = 200
+MAX_COMPLETED_DAY_SUMMARY_INPUT_CHARACTERS = 120_000
+MAX_DAILY_TRANSCRIPT_FETCHES = 8
+MAX_DAILY_TRANSCRIPT_FETCH_CHARACTERS = 8_000
+MAX_SUMMARY_FALLBACK_TRANSCRIPT_CHARACTERS = 1_200
 MAX_ONBOARDING_CONVERSATIONS = 8
 MAX_ONBOARDING_SCAN_PAGES = 16
 MAX_ONBOARDING_INPUT_CHARACTERS = 24_000
@@ -93,7 +105,7 @@ ONBOARDING_PERMANENT_RECEIPT_PREFIX = "onboarding_source_"
 ONBOARDING_SOURCE_RECEIPT_PATH = "daily_memory_sweep_onboarding_sources"
 ONBOARDING_STAGED_CANDIDATE_PATH = "daily_memory_sweep_onboarding_staged"
 DAILY_SUMMARY_STAGED_CANDIDATE_PATH = "daily_memory_sweep_daily_summary_staged"
-DAILY_SUMMARY_STAGE_SCHEMA_VERSION = "daily_memory_sweep_daily_summary_stage.v1"
+DAILY_SUMMARY_STAGE_SCHEMA_VERSION = "daily_memory_sweep_daily_summary_stage.v2"
 MODEL_INVOCATION_PATH = "daily_memory_sweep_model_invocations"
 # This collection is intentionally outside ``users/{uid}``.  Account deletion
 # recursively removes every user subcollection, but an in-flight provider call
@@ -3143,20 +3155,31 @@ def _bounded_candidate_channel(
     return tuple(parsed)
 
 
-def _read_completed_day_conversation_texts(
+@dataclass(frozen=True)
+class CompletedDayConversationSource:
+    """One eligible conversation: summary spine row + transcript for lookup."""
+
+    conversation_id: str
+    summary_text: str
+    transcript_text: str
+    needs_folder: bool
+
+
+def _read_completed_day_conversation_sources(
     uid: str,
     window: CompletedLocalDayWindow,
     *,
     db_client: Any,
     max_conversations: int,
-    max_characters: int,
-) -> Tuple[Tuple[Tuple[str, str], ...], Literal["complete", "incomplete"]]:
-    """Read only bounded textual conversations in one exact UTC window.
+    max_summary_characters: int,
+) -> Tuple[Tuple[CompletedDayConversationSource, ...], Literal["complete", "incomplete"]]:
+    """Read bounded conversation summaries (plus transcripts) in one UTC window.
 
-    This adapter deliberately strips photos and other media.  A query failure,
-    an over-budget page, or an undecodable conversation is incomplete rather
-    than an empty source, so callers cannot move the cursor past unprocessed
-    data.
+    The SUMMARY texts form the agent's spine and are what the character budget
+    bounds; transcripts ride along only for the bounded verification lookup.
+    Photos and other media are stripped by construction.  A query failure, an
+    over-budget page, or an undecodable conversation is incomplete rather than
+    an empty source, so callers cannot move the cursor past unprocessed data.
     """
 
     collection = db_client.collection(f"users/{uid}/conversations")
@@ -3188,7 +3211,7 @@ def _read_completed_day_conversation_texts(
     )
     from models.conversation import Conversation
 
-    rows: List[Tuple[str, str]] = []
+    rows: List[CompletedDayConversationSource] = []
     total_characters = 0
     for snapshot in snapshots:
         conversation_id = str(getattr(snapshot, "id", "") or "")
@@ -3209,17 +3232,39 @@ def _read_completed_day_conversation_texts(
             conversation = Conversation(**(prepared or {}))
             # TranscriptSegment.segments_as_string is the canonical textual
             # rendering.  It ignores photos by construction.
-            text = conversation.get_transcript(include_timestamps=False) or ""
+            transcript = (conversation.get_transcript(include_timestamps=False) or "").strip()
+            structured = conversation.structured
+            title = (getattr(structured, "title", "") or "").strip() if structured else ""
+            overview = (getattr(structured, "overview", "") or "").strip() if structured else ""
+            category = getattr(getattr(structured, "category", None), "value", "") if structured else ""
+            started = getattr(conversation, "started_at", None)
+            started_label = started.astimezone(timezone.utc).strftime("%H:%M") if started else ""
         except Exception:
             return (), "incomplete"
-        text = text.strip()
-        if not text:
+        if title or overview:
+            summary = " ".join(
+                part for part in (started_label, f"({category})" if category else "", title, "—", overview) if part
+            )
+        else:
+            # A finished conversation without a structured summary still counts
+            # toward the day: fall back to a bounded transcript head so the
+            # spine never silently omits an eligible source.
+            summary = transcript[:MAX_SUMMARY_FALLBACK_TRANSCRIPT_CHARACTERS]
+        summary = summary.strip()
+        if not summary and not transcript:
             continue
-        total_characters += len(text)
-        if total_characters > max_characters:
+        total_characters += len(summary)
+        if total_characters > max_summary_characters:
             return (), "incomplete"
-        rows.append((conversation_id, text))
-    rows.sort(key=lambda row: row[0])
+        rows.append(
+            CompletedDayConversationSource(
+                conversation_id=conversation_id,
+                summary_text=summary,
+                transcript_text=transcript,
+                needs_folder=not (raw.get("folder_id") or "") and isinstance(raw.get("jit_first_open"), Mapping),
+            )
+        )
+    rows.sort(key=lambda row: row.conversation_id)
     return tuple(rows), "complete"
 
 
@@ -3758,20 +3803,49 @@ def _produce_onboarding_sources(
     )
 
 
+_FOLDER_ASSIGNMENT_PAGE_KIND = "__daily_sweep_kind"
+
+
+def _split_daily_summary_page(
+    page: Sequence[Mapping[str, Any]],
+) -> Tuple[Tuple[dict[str, Any], ...], Tuple[Dict[str, str], ...]]:
+    """Split one invocation page into candidate dicts and folder assignments."""
+
+    candidates: List[dict[str, Any]] = []
+    assignments: List[Dict[str, str]] = []
+    for item in page:
+        if item.get(_FOLDER_ASSIGNMENT_PAGE_KIND) == "folder_assignment":
+            conversation_id = str(item.get("conversation_id") or "")
+            folder_id = str(item.get("folder_id") or "")
+            if conversation_id and folder_id:
+                assignments.append({"conversation_id": conversation_id, "folder_id": folder_id})
+            continue
+        candidates.append(dict(item))
+    assignments.sort(key=lambda row: row["conversation_id"])
+    return tuple(candidates), tuple(assignments)
+
+
 def _load_or_stage_daily_summary_candidates(
     uid: str,
     local_date: date,
     timezone_name: str,
     control: MemoryControlState,
     window: CompletedLocalDayWindow,
-    conversation_rows: Sequence[Tuple[str, str]],
+    conversation_rows: Sequence[CompletedDayConversationSource],
     *,
     db_client: Any,
-    extractor: Any,
+    agent_runner: Any,
+    folder_options: Sequence[Tuple[str, str]] = (),
     max_candidates: int,
     sweep_generation: int = 1,
-) -> Optional[Tuple[DailySweepCandidate, ...]]:
-    """Stage the complete bounded daily-summary candidate page before apply."""
+) -> Optional[Tuple[Tuple[DailySweepCandidate, ...], Tuple[Dict[str, str], ...]]]:
+    """Stage the complete bounded daily-summary agent page before apply.
+
+    The whole two-phase agent run (summary spine plus bounded transcript
+    verification) is ONE at-most-once invocation; the staged page carries both
+    the memory candidates and the folder assignments for unopened
+    conversations, so a crash-and-retry replays the exact same outputs.
+    """
 
     stage_ref = _daily_summary_staged_candidates_ref(
         db_client,
@@ -3787,11 +3861,13 @@ def _load_or_stage_daily_summary_candidates(
         {
             "uid": uid,
             "local_date": local_date.isoformat(),
-            "rows": [{"source": source_id, "text": text} for source_id, text in conversation_rows],
+            "rows": [{"source": row.conversation_id, "text": row.summary_text} for row in conversation_rows],
         },
     )
 
-    def read_staged(snapshot: Any) -> Optional[Tuple[DailySweepCandidate, ...]]:
+    def read_staged(
+        snapshot: Any,
+    ) -> Optional[Tuple[Tuple[DailySweepCandidate, ...], Tuple[Dict[str, str], ...]]]:
         if not getattr(snapshot, "exists", False):
             return None
         payload = snapshot.to_dict() or {}
@@ -3806,6 +3882,7 @@ def _load_or_stage_daily_summary_candidates(
                 return None
         except (TypeError, ValueError):
             return None
+        raw_assignments = payload.get("folder_assignments", []) if isinstance(payload, dict) else None
         if (
             not isinstance(payload, dict)
             or payload.get("schema_version") != DAILY_SUMMARY_STAGE_SCHEMA_VERSION
@@ -3822,18 +3899,25 @@ def _load_or_stage_daily_summary_candidates(
             or not isinstance(payload.get("candidate_page"), list)
             or len(payload["candidate_page"]) > MAX_CANDIDATES_PER_DAY
             or payload.get("candidate_count") != len(payload["candidate_page"])
+            or not isinstance(raw_assignments, list)
+            or len(raw_assignments) > MAX_COMPLETED_DAY_SUMMARY_CONVERSATIONS
         ):
             return None
         try:
             staged = tuple(DailySweepCandidate.model_validate(item) for item in payload["candidate_page"])
+            assignments = tuple(
+                {"conversation_id": str(item["conversation_id"]), "folder_id": str(item["folder_id"])}
+                for item in raw_assignments
+            )
         except Exception:
             return None
         expected_digest = deterministic_contract_id(
-            "daily-sweep-daily-summary-candidate-page", {"digests": [item.digest() for item in staged]}
+            "daily-sweep-daily-summary-candidate-page",
+            {"digests": [item.digest() for item in staged], "folder_assignments": list(assignments)},
         )
         if payload.get("candidate_digest") != expected_digest:
             return None
-        return staged
+        return staged, assignments
 
     try:
         staged_snapshot = stage_ref.get()
@@ -3859,43 +3943,71 @@ def _load_or_stage_daily_summary_candidates(
     )[:96]
 
     def build_candidate_page() -> Tuple[dict[str, Any], ...]:
+        summary_rows = tuple((row.conversation_id, row.summary_text) for row in conversation_rows)
+        transcript_lookup = {row.conversation_id: row.transcript_text for row in conversation_rows}
+        needs_folder_ids = tuple(row.conversation_id for row in conversation_rows if row.needs_folder)
+        output = agent_runner(
+            uid,
+            summary_rows,
+            transcript_lookup,
+            folder_options=tuple(folder_options) if needs_folder_ids else (),
+            needs_folder_ids=needs_folder_ids,
+            max_candidates=max_candidates,
+            max_transcript_fetches=MAX_DAILY_TRANSCRIPT_FETCHES,
+            max_fetch_characters=MAX_DAILY_TRANSCRIPT_FETCH_CHARACTERS,
+        )
         candidates: List[DailySweepCandidate] = []
-        for conversation_id, text in conversation_rows:
-            extracted = extractor(uid, text)
-            for index, memory in enumerate(extracted or ()):
-                content = str(getattr(memory, "content", "") or "").strip()
-                if not content:
-                    continue
-                candidates.append(
-                    DailySweepCandidate(
-                        candidate_id=deterministic_contract_id(
-                            "daily-sweep-model-candidate",
-                            {
-                                "uid": uid,
-                                "date": local_date.isoformat(),
-                                "source": f"conversation:{conversation_id}",
-                                "index": index,
-                            },
-                        )[:128],
-                        kind="fact",
-                        operation="add",
-                        content=content,
-                        source_id=f"conversation:{conversation_id}",
-                        source_type="daily_summary",
-                        source_version="daily-memory-model.v1",
-                        source_refs=(f"conversation:{conversation_id}",),
-                        authority=SweepAuthority.sweep_inference,
-                        subject_scope=MemorySubjectScope.primary_user,
-                        subject_entity_id=getattr(memory, "subject_entity_id", None),
-                    )
+        for index, memory in enumerate(getattr(output, "memories", ()) or ()):
+            content = str(getattr(memory, "content", "") or "").strip()[:MAX_CONTENT_CHARACTERS]
+            cited = [
+                str(conversation_id)
+                for conversation_id in (getattr(memory, "conversation_ids", ()) or ())
+                if str(conversation_id) in transcript_lookup
+            ]
+            if not content or not cited:
+                # A memory without provenance into this day's rows is dropped:
+                # candidates may never fabricate source references.
+                continue
+            candidates.append(
+                DailySweepCandidate(
+                    candidate_id=deterministic_contract_id(
+                        "daily-sweep-model-candidate",
+                        {
+                            "uid": uid,
+                            "date": local_date.isoformat(),
+                            "source": f"conversation:{cited[0]}",
+                            "index": index,
+                        },
+                    )[:128],
+                    kind="fact",
+                    operation="add",
+                    content=content,
+                    source_id=f"conversation:{cited[0]}",
+                    source_type="daily_summary",
+                    source_version="daily-memory-agent.v1",
+                    source_refs=tuple(f"conversation:{conversation_id}" for conversation_id in cited[:MAX_SOURCE_REFS]),
+                    authority=SweepAuthority.sweep_inference,
+                    subject_scope=MemorySubjectScope.primary_user,
+                    subject_entity_id=getattr(memory, "subject_entity_id", None),
                 )
-                if len(candidates) >= max_candidates:
-                    break
+            )
             if len(candidates) >= max_candidates:
                 break
         if len(candidates) > MAX_CANDIDATES_PER_DAY:
             raise ValueError("daily summary model candidate budget exceeded")
-        return tuple(item.model_dump(mode="json") for item in candidates)
+        valid_folder_ids = {folder_id for folder_id, _name in folder_options}
+        assignment_rows = [
+            {
+                _FOLDER_ASSIGNMENT_PAGE_KIND: "folder_assignment",
+                "conversation_id": str(getattr(assignment, "conversation_id", "") or ""),
+                "folder_id": str(getattr(assignment, "folder_id", "") or ""),
+            }
+            for assignment in (getattr(output, "folder_assignments", ()) or ())
+            if str(getattr(assignment, "conversation_id", "") or "") in set(needs_folder_ids)
+            and str(getattr(assignment, "folder_id", "") or "") in valid_folder_ids
+        ]
+        assignment_rows.sort(key=lambda row: row["conversation_id"])
+        return tuple(item.model_dump(mode="json") for item in candidates) + tuple(assignment_rows)
 
     try:
         raw_candidates = _invoke_model_once(
@@ -3910,7 +4022,8 @@ def _load_or_stage_daily_summary_candidates(
         )
         if raw_candidates is None:
             return None
-        candidate_page = tuple(DailySweepCandidate.model_validate(item) for item in raw_candidates)
+        candidate_dicts, folder_assignments = _split_daily_summary_page(raw_candidates)
+        candidate_page = tuple(DailySweepCandidate.model_validate(item) for item in candidate_dicts)
         stage_payload = {
             "schema_version": DAILY_SUMMARY_STAGE_SCHEMA_VERSION,
             "uid": uid,
@@ -3924,10 +4037,15 @@ def _load_or_stage_daily_summary_candidates(
             "window_end_utc": window.end_utc,
             "transcript_digest": transcript_digest,
             "candidate_digest": deterministic_contract_id(
-                "daily-sweep-daily-summary-candidate-page", {"digests": [item.digest() for item in candidate_page]}
+                "daily-sweep-daily-summary-candidate-page",
+                {
+                    "digests": [item.digest() for item in candidate_page],
+                    "folder_assignments": list(folder_assignments),
+                },
             ),
             "candidate_page": [item.model_dump(mode="json") for item in candidate_page],
             "candidate_count": len(candidate_page),
+            "folder_assignments": list(folder_assignments),
             "staged_at": datetime.now(timezone.utc),
             "expires_at": datetime.now(timezone.utc) + STAGED_CANDIDATE_RETENTION,
             "model_invocation_id": invocation_id,
@@ -3959,9 +4077,83 @@ def _load_or_stage_daily_summary_candidates(
                 return read_staged(stage_ref.get())
         except Exception:
             return read_staged(stage_ref.get())
-        return candidate_page
+        return candidate_page, folder_assignments
     except Exception:
         return None
+
+
+def _read_daily_sweep_folder_options(uid: str, *, db_client: Any) -> Tuple[Tuple[str, str], ...]:
+    """Read the user's folder taxonomy for the agent's folder task, fail-soft.
+
+    Folder metadata is a prompt convenience, never an eligibility proof: any
+    failure returns an empty tuple so the day's memory formation proceeds
+    without a folder task rather than blocking on cosmetic data.
+    """
+
+    try:
+        collection = db_client.collection(f"users/{uid}/folders")
+        snapshots = list(collection.limit(MAX_LEGACY_COMPAT_OCCUPANTS).stream())
+    except Exception:
+        return ()
+    options: List[Tuple[str, str]] = []
+    for snapshot in snapshots:
+        payload = snapshot.to_dict() if hasattr(snapshot, "to_dict") else None
+        if not isinstance(payload, dict) or payload.get("deleted"):
+            continue
+        folder_id = str(getattr(snapshot, "id", "") or payload.get("id") or "").strip()
+        name = str(payload.get("name") or "").strip()[:64]
+        if folder_id:
+            options.append((folder_id, name))
+    options.sort(key=lambda option: option[0])
+    return tuple(options)
+
+
+def _apply_daily_sweep_folder_assignments(
+    uid: str,
+    assignments: Sequence[Mapping[str, str]],
+    *,
+    db_client: Any,
+    valid_folder_ids: set,
+) -> int:
+    """Idempotently backstop folder assignment for unopened conversations.
+
+    Guards per row: the conversation must still exist, be non-discarded, carry
+    a first-open obligation, and have no folder yet — a folder set by the
+    first-open worker (or the user) in the meantime always wins.  Every row is
+    best-effort: replaying a staged page after a crash re-applies only the
+    rows that are still unfiled.
+    """
+
+    applied = 0
+    for assignment in assignments:
+        conversation_id = str(assignment.get("conversation_id") or "")
+        folder_id = str(assignment.get("folder_id") or "")
+        if not conversation_id or folder_id not in valid_folder_ids:
+            continue
+        try:
+            reference = db_client.document(f"users/{uid}/conversations/{conversation_id}")
+            snapshot = reference.get()
+            raw = snapshot.to_dict() if getattr(snapshot, "exists", False) else None
+            if (
+                not isinstance(raw, dict)
+                or raw.get("discarded")
+                or (raw.get("folder_id") or "")
+                or not isinstance(raw.get("jit_first_open"), Mapping)
+            ):
+                continue
+            reference.set({"folder_id": folder_id}, merge=True)
+            applied += 1
+        except Exception:
+            continue
+        try:
+            from database.folders import update_folder_conversation_count
+
+            update_folder_conversation_count(uid, folder_id)
+        except Exception:
+            # Count refresh is a display convenience; the next assignment or
+            # first-open count commit converges it.
+            pass
+    return applied
 
 
 def produce_completed_day_daily_summary_sources(
@@ -3972,18 +4164,21 @@ def produce_completed_day_daily_summary_sources(
     *,
     db_client: Any,
     model_authority: Optional[DailySweepModelAuthority] = None,
-    model_extractor: Optional[Any] = None,
+    agent_runner: Optional[Any] = None,
     window_override: Optional[CompletedLocalDayWindow] = None,
     sweep_generation: int = 1,
 ) -> DailySweepRuntimeSources:
-    """Produce the exact completed-day source, including its bounded model call.
+    """Produce the exact completed-day source, including its bounded agent run.
 
     A summary document is a cache, not a producer authority.  When its
     candidate channel is absent, this function reads the completed day's
-    conversation transcripts and invokes the existing memory extractor behind
-    the explicit model/cost seam.  The cursor advances for an empty day only
-    after a bounded source query proves that the day contained no textual
-    conversations (or a summary explicitly attests zero conversations).
+    conversation SUMMARIES as one spine and runs the bounded two-phase daily
+    agent (summaries in; the agent may pull a bounded number of raw transcript
+    excerpts to verify specifics) behind the explicit model/cost seam.  The
+    same run assigns folders for the day's unopened, unfiled conversations.
+    The cursor advances for an empty day only after a bounded source query
+    proves that the day contained no textual conversations (or a summary
+    explicitly attests zero conversations).
     """
 
     window = window_override or completed_local_day_window(local_date, timezone_name)
@@ -4048,12 +4243,12 @@ def produce_completed_day_daily_summary_sources(
             model_cost_usd=0.0,
         )
 
-    conversation_rows, conversation_status = _read_completed_day_conversation_texts(
+    conversation_rows, conversation_status = _read_completed_day_conversation_sources(
         uid,
         window,
         db_client=db_client,
-        max_conversations=MAX_COMPLETED_DAY_CONVERSATIONS,
-        max_characters=MAX_COMPLETED_DAY_INPUT_CHARACTERS,
+        max_conversations=MAX_COMPLETED_DAY_SUMMARY_CONVERSATIONS,
+        max_summary_characters=MAX_COMPLETED_DAY_SUMMARY_INPUT_CHARACTERS,
     )
     if conversation_status == "incomplete":
         return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
@@ -4069,8 +4264,8 @@ def produce_completed_day_daily_summary_sources(
     if not model.route_is_budgeted:
         return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
 
-    extractor = model_extractor or _extract_daily_memory_candidates
-    if model_extractor is None:
+    runner = agent_runner
+    if runner is None:
         # The deployment may only name the model configured for the existing
         # memory route.  It cannot select an arbitrary model through a source
         # packet or staging document.
@@ -4078,11 +4273,24 @@ def produce_completed_day_daily_summary_sources(
 
         if model.model_name != get_model("memories"):
             return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
-    total_characters = sum(len(text) for _, text in conversation_rows)
-    estimated_cost = (total_characters / 1000.0) * MODEL_COST_PER_1K_INPUT_CHARACTERS_USD
+        from utils.llm.memories import run_daily_sweep_summary_agent
+
+        runner = run_daily_sweep_summary_agent
+    spine_characters = sum(len(row.summary_text) for row in conversation_rows)
+    # Conservative ceiling: the spine is sent in phase A, and a verification
+    # phase may re-send the spine plus the full transcript-fetch budget.  The
+    # budget check must hold for the worst case before any provider call.
+    estimated_cost = (
+        (2 * spine_characters + MAX_DAILY_TRANSCRIPT_FETCHES * MAX_DAILY_TRANSCRIPT_FETCH_CHARACTERS) / 1000.0
+    ) * MODEL_COST_PER_1K_INPUT_CHARACTERS_USD
     if estimated_cost > model.max_cost_usd:
         return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
-    candidates = _load_or_stage_daily_summary_candidates(
+    folder_options = (
+        _read_daily_sweep_folder_options(uid, db_client=db_client)
+        if any(row.needs_folder for row in conversation_rows)
+        else ()
+    )
+    staged = _load_or_stage_daily_summary_candidates(
         uid,
         local_date,
         timezone_name,
@@ -4090,14 +4298,25 @@ def produce_completed_day_daily_summary_sources(
         window,
         conversation_rows,
         db_client=db_client,
-        extractor=extractor,
+        agent_runner=runner,
+        folder_options=folder_options,
         max_candidates=model.max_candidates,
         sweep_generation=sweep_generation,
     )
-    if candidates is None:
+    if staged is None:
         # Model/provider failures and malformed existing stages are source
         # incompleteness, never permission to re-extract or advance.
         return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
+    candidates, folder_assignments = staged
+    if folder_assignments:
+        # Folder assignment is cosmetic and idempotent; a partial failure here
+        # must never block or invalidate the day's memory formation.
+        _apply_daily_sweep_folder_assignments(
+            uid,
+            folder_assignments,
+            db_client=db_client,
+            valid_folder_ids={folder_id for folder_id, _name in folder_options},
+        )
     return DailySweepRuntimeSources.from_iterables(
         daily_summary=candidates,
         complete=True,
@@ -4620,6 +4839,11 @@ __all__ = [
     "MAX_WRITES_PER_DAY",
     "MAX_COMPLETED_DAY_CONVERSATIONS",
     "MAX_COMPLETED_DAY_INPUT_CHARACTERS",
+    "MAX_COMPLETED_DAY_SUMMARY_CONVERSATIONS",
+    "MAX_COMPLETED_DAY_SUMMARY_INPUT_CHARACTERS",
+    "MAX_DAILY_TRANSCRIPT_FETCHES",
+    "MAX_DAILY_TRANSCRIPT_FETCH_CHARACTERS",
+    "CompletedDayConversationSource",
     "MAX_ONBOARDING_CONVERSATIONS",
     "MAX_ONBOARDING_RECEIPT_KEYS",
     "MAX_ONBOARDING_SOURCE_KEYS_PER_PACKET",

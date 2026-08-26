@@ -576,3 +576,72 @@ LANGUAGE INSTRUCTION:
 ```
 {format_instructions}
     '''.replace('    ', '').strip()])
+
+
+daily_sweep_summary_agent_prompt = cast(Any, ChatPromptTemplate).from_messages(['''
+You are forming durable memories about {user_name} from ONE completed day of their conversations.
+
+Today's date is {current_date}; treat it as the present.
+
+You are given every conversation from that day as a SUMMARY (id, time, category, title, overview). You see the whole day at once: connect related conversations, merge repeated mentions into one memory, and prefer the day's strongest evidence.
+
+**What makes a good memory**: a fact about {user_name} (or a clearly attributed fact about someone in their life) that was expensive to learn and will matter later — decisions, preferences, relationships, commitments, plans, corrections of earlier beliefs. Not summaries of what happened, not trivia, not speculation.
+
+**Rules**:
+- At most {max_candidates} memories. Fewer good ones beat many weak ones. An empty list is a valid answer.
+- Every memory MUST cite the conversation id(s) it came from in conversation_ids.
+- Do NOT repeat anything from the existing memories list below.
+- If a memory hinges on a specific detail (a name, number, date, amount, or exact commitment) that the summary does not state precisely, do NOT guess: instead add a transcript_request for that conversation (at most {max_transcript_fetches}) and leave the uncertain memory out or mark what needs verification in its content. You will see the raw transcript excerpts in a follow-up.
+- Raw transcripts are noisy speech-to-text; summaries are your primary source.
+
+{folder_task}
+
+**Existing memories (DO NOT REPEAT)**:
+```
+{memories_str}
+```
+
+**The day's conversations (summaries)**:
+```
+{summaries_block}
+```
+{format_instructions}
+'''.replace('    ', '').strip()])
+
+
+daily_sweep_transcript_review_prompt = cast(Any, ChatPromptTemplate).from_messages(['''
+You are finalizing durable memories about {user_name} from ONE completed day of their conversations.
+
+Today's date is {current_date}; treat it as the present.
+
+In a first pass over the day's summaries you drafted memories and requested raw transcript excerpts to verify specific details. The excerpts are below. Raw transcripts are noisy speech-to-text: use them only to confirm or correct specifics.
+
+**Rules**:
+- Return the FINAL list of at most {max_candidates} memories, citing conversation_ids for each.
+- Correct any drafted memory the transcript contradicts; drop any memory whose key detail you still cannot verify.
+- Do NOT repeat anything from the existing memories list.
+- Do not request more transcripts; transcript_requests must be empty.
+
+{folder_task}
+
+**Existing memories (DO NOT REPEAT)**:
+```
+{memories_str}
+```
+
+**The day's conversations (summaries)**:
+```
+{summaries_block}
+```
+
+**Your drafted memories**:
+```
+{draft_block}
+```
+
+**Requested transcript excerpts**:
+```
+{excerpts_block}
+```
+{format_instructions}
+'''.replace('    ', '').strip()])

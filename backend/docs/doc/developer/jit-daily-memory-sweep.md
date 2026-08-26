@@ -28,19 +28,32 @@ are `daily_summary`, `onboarding_cold_start`, and
 `existing_trigger_reconciliation`; this staging packet is not a memory
 authority and is inert while the backend switch is closed. When staging is
 absent, the completed-day producer proves an exact UTC window, excludes
-discarded/processing/unfinished conversations, and sends only transcript text
-(never photos, screen pixels, or today's partial window) through the existing
-bounded memory extractor. An optional typed summary packet is accepted only
-when it explicitly attests completion; a missing or failed source remains
-incomplete and cannot advance the cursor. Model-produced candidates require
-the separate model/cost authority and bounded deployment flags
-`MEMORY_DAILY_MEMORY_SWEEP_MODEL_*`.
+discarded/processing/unfinished conversations, and runs ONE two-phase agent
+pass over the whole day: the conversation SUMMARIES form the bounded spine
+(never photos, screen pixels, or today's partial window), and the agent may
+request a bounded number of raw transcript excerpts (at most 8, capped per
+fetch) to verify specific details before finalizing. Every memory must cite
+the conversation ids it came from; memories without provenance into the day's
+rows are dropped. The same run assigns folders for the day's unopened,
+unfiled conversations (a folder set by the first-open worker or the user
+always wins; assignment is idempotent and best-effort). An optional typed
+summary packet is accepted only when it explicitly attests completion; a
+missing or failed source remains incomplete and cannot advance the cursor.
+Model-produced candidates require the separate model/cost authority and
+bounded deployment flags `MEMORY_DAILY_MEMORY_SWEEP_MODEL_*`. The onboarding
+cold-start channel still reads bounded per-conversation transcript text
+through the existing memory extractor.
 
-When the completed-day transcript path invokes the model, the full bounded
-candidate page and its digest are staged under the sweep-owned control path
-before any candidate can be applied. A later retry reads that exact stage; a
-missing or malformed stage is incomplete and never triggers a second,
-nondeterministic extraction.
+When the completed-day agent path invokes the model, both phases run inside a
+single at-most-once invocation, and the full bounded candidate page (memory
+candidates plus folder assignments) and its digest are staged under the
+sweep-owned control path before any candidate can be applied. A later retry
+reads that exact stage; a missing or malformed stage is incomplete and never
+triggers a second, nondeterministic extraction. The cost gate is a ceiling
+checked before any provider call: twice the spine characters plus the full
+transcript-fetch budget must fit `MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD`
+(set it to at least ~$0.75 to cover maximal days; typical days ceiling far
+lower).
 
 Onboarding provenance is a server-generated session marker written by the
 listen runtime; client `source` and onboarding flags are not trusted. The
