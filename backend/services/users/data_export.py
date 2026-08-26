@@ -186,8 +186,17 @@ def _iter_user_nested_subcollection(
             yield row
 
 
-def _export_photo_manifest(uid: str, conversation_id: str, photo: Mapping[str, Any]) -> JsonRecord:
-    """Return a portable photo manifest, including durable bytes when present."""
+def _export_photo_manifest(
+    uid: str, conversation_id: str, photo: Mapping[str, Any], *, require_bytes: bool = True
+) -> JsonRecord:
+    """Return a portable photo manifest, including durable bytes when present.
+
+    ``require_bytes`` controls the no-reference case: frame requests in a
+    retained state must abort (their bytes are known to exist, so omitting
+    them would silently drop durable data), while legacy conversation photo
+    rows can legitimately hold no bytes anywhere and must not permanently
+    deny the user their export.
+    """
 
     result: JsonRecord = {
         "conversation_id": conversation_id,
@@ -227,7 +236,12 @@ def _export_photo_manifest(uid: str, conversation_id: str, photo: Mapping[str, A
         result["bytes_base64"] = base64.b64encode(payload).decode("ascii")
         result["bytes_available"] = True
         return result
-    raise PortabilityExportIncomplete("retained image bytes reference is missing or malformed")
+    if require_bytes:
+        raise PortabilityExportIncomplete("retained image bytes reference is missing or malformed")
+    # A conversation photo row with neither inline bytes nor a storage
+    # reference holds no durable image anywhere — there is nothing to omit.
+    result["bytes_unavailable_reason"] = "no_retained_bytes_reference"
+    return result
 
 
 def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str]) -> Iterator[str]:
@@ -262,7 +276,7 @@ def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str]) -> Iter
                         photo_spool.write(",\n")
                     photo_spool.write("    ")
                     json.dump(
-                        _export_photo_manifest(uid, conversation_id, photo),
+                        _export_photo_manifest(uid, conversation_id, photo, require_bytes=False),
                         photo_spool,
                         default=_json_default,
                         indent=4,

@@ -710,3 +710,19 @@ def test_iter_user_data_export_paginates_complete_collections(monkeypatch):
         call("uid1", limit=1000, offset=0),
         call("uid1", limit=1000, offset=1000),
     ]
+
+
+def test_legacy_conversation_photo_without_any_bytes_reference_exports_metadata():
+    """A broken legacy photo row (empty inline marker, no storage_id) must not
+    permanently deny the user their export — there are no durable bytes to
+    omit. Frame requests keep the fail-closed contract via require_bytes."""
+
+    manifest = data_export._export_photo_manifest(
+        "uid1",
+        "conv-1",
+        {"id": "photo-legacy", "base64": "", "content_type": "image/jpeg"},
+        require_bytes=False,
+    )
+
+    assert manifest["bytes_available"] is False
+    assert manifest["bytes_unavailable_reason"] == "no_retained_bytes_reference"
