@@ -395,6 +395,16 @@ class TestWithRateLimitWrapper(unittest.TestCase):
             asyncio.run(dep_func(uid="user123"))
         self.assertEqual(ctx.exception.status_code, 429)
 
+    def test_with_rate_limit_dependency_maps_executor_saturation_to_503(self):
+        dep_func = self.ep.with_rate_limit(lambda: "uid", "chat:send_message")
+
+        with patch.object(self.ep, 'run_blocking', side_effect=self.ep.ExecutorSaturatedError('saturated')):
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.run(dep_func(uid="user123"))
+
+        self.assertEqual(ctx.exception.status_code, 503)
+        self.assertEqual(ctx.exception.headers, {'Retry-After': '1'})
+
     @patch('utils.other.endpoints._enforce_rate_limit')
     def test_with_rate_limit_context_uses_app_key_identity(self, mock_enforce):
         dep_func = self.ep.with_rate_limit_context(lambda: "unused", "dev:conversations_read")

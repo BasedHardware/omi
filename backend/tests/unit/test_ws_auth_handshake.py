@@ -166,6 +166,19 @@ class TestWebSocketAuthListen(WebSocketAuthTestCase):
                 self.fail("Expected WebSocket to be closed by server")
         self.assertEqual(ctx.exception.code, 1008)
 
+    def test_critical_executor_saturation_sends_close_1013(self):
+        """Overloaded auth capacity tells clients to retry, rather than misreporting bad credentials."""
+        endpoints = sys.modules['utils.other.endpoints']
+        with patch.object(
+            endpoints,
+            'run_blocking',
+            side_effect=endpoints.ExecutorSaturatedError('critical executor is saturated'),
+        ):
+            with self.assertRaises(WebSocketDisconnect) as ctx:
+                with self.client.websocket_connect("/ws-listen", headers={"Authorization": "Bearer valid_token"}):
+                    self.fail("Expected overload close frame")
+        self.assertEqual(ctx.exception.code, 1013)
+
     @patch('utils.other.endpoints.verify_token', side_effect=InvalidIdTokenError('bad token'))
     def test_invalid_token_sends_close_1008(self, mock_verify):
         """Invalid token -> WebSocketDisconnect with code 1008."""
