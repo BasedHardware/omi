@@ -151,6 +151,7 @@ class AccountingContext:
     feature: str | None
     api_surface: str
     payer: str
+    app_platform: str | None = None
 
     @classmethod
     def create(
@@ -162,6 +163,7 @@ class AccountingContext:
         feature: str | None,
         api_surface: str,
         payer: str,
+        app_platform: str | None = None,
     ) -> 'AccountingContext':
         return cls(
             invocation_id=str(uuid4()),
@@ -171,6 +173,7 @@ class AccountingContext:
             feature=feature,
             api_surface=api_surface,
             payer=payer,
+            app_platform=app_platform,
         )
 
 
@@ -288,6 +291,7 @@ class AccountingEvent:
     rate_card_id: str | None
     cost_basis: str
     provider_response_id: str | None
+    app_platform: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -301,6 +305,7 @@ class AccountingEvent:
             'feature': self.feature,
             'api_surface': self.api_surface,
             'payer': self.payer,
+            'app_platform': self.app_platform,
             'provider': self.provider,
             'configured_model': self.configured_model,
             'actual_model_version': self.actual_model_version,
@@ -543,6 +548,7 @@ def build_accounting_event(context: AccountingContext, attempt: ProviderAttempt)
         feature=context.feature,
         api_surface=context.api_surface,
         payer=context.payer,
+        app_platform=context.app_platform,
         provider=attempt.provider,
         configured_model=attempt.configured_model,
         actual_model_version=attempt.actual_model_version,

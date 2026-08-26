@@ -25,6 +25,10 @@ TYPESENSE_PINNED_VERSION = "27.1"
 LOCAL_TYPESENSE_API_KEY = "local-typesense-api-key-not-real"
 LOCAL_FIREBASE_API_KEY = "local-firebase-auth-emulator-api-key"
 LOCAL_LLM_GATEWAY_SERVICE_TOKEN = "local-dev-llm-gateway-service-token-not-real"
+# Signs the internal screen-frame approval token. Production sets either this or
+# SCREEN_FRAME_KMS_KEY; without one the egress routes fail closed, so the harness
+# supplies a throwaway value rather than leaving meeting screenshots unrunnable locally.
+LOCAL_SCREEN_FRAME_SIGNING_SECRET = "local-dev-screen-frame-signing-secret-not-real"
 LOCAL_STORAGE_BUCKET_ENV = {
     "BUCKET_SPEECH_PROFILES": "speech-profiles",
     "BUCKET_POSTPROCESSING": "postprocessing",
@@ -35,6 +39,7 @@ LOCAL_STORAGE_BUCKET_ENV = {
     "BUCKET_APP_THUMBNAILS": "app-thumbnails",
     "BUCKET_CHAT_FILES": "chat-files",
     "BUCKET_DESKTOP_UPDATES": "desktop-updates",
+    "BUCKET_SCREEN_FRAMES": "screen-frames",
 }
 PORT_OFFSET_ENV = "OMI_HARNESS_PORT_OFFSET"
 PORT_OVERRIDE_ENVS = {
@@ -354,6 +359,10 @@ def _harness_service_extra(cfg: HarnessConfig) -> dict[str, str]:
         "OMI_LLM_GATEWAY_URL": cfg.llm_gateway_url,
         "OMI_LLM_GATEWAY_SERVICE_TOKEN": cfg.llm_gateway_service_token,
         "OMI_LLM_GATEWAY_FEATURE_MODE": gateway_feature_mode,
+        # Production ships default-off and turns this on deliberately; the harness is
+        # the one place the feature must be on, since running it is the whole point.
+        "SCREEN_FRAME_EGRESS_ENABLED": "true",
+        "SCREEN_FRAME_SIGNING_SECRET": LOCAL_SCREEN_FRAME_SIGNING_SECRET,
         **LOCAL_STORAGE_BUCKET_ENV,
     }
 

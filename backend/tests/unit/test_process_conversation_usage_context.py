@@ -507,6 +507,88 @@ def test_deferred_derived_effects_emit_nothing_until_runner_invoked(monkeypatch)
     assert submit.call_count >= 4  # vectors, memory, action items, goals, webhook
 
 
+def _explicit_selection_flow_conversation():
+    completed = MagicMock()
+    completed.id = "conversation-explicit-selection"
+    completed.dict.return_value = {"id": "conversation-explicit-selection", "status": "completed"}
+    completed.structured = None  # skip analytics counting
+    completed.apps_results = []
+    completed.suggested_summarization_apps = []
+    completed.private_cloud_sync_enabled = False
+    completed.folder_id = "existing-folder"  # skip folder assignment
+    return completed
+
+
+def _run_explicit_selection_flow(monkeypatch, trigger_apps, update_calls):
+    """Drive process_conversation for an explicit app selection; appends each write to update_calls."""
+    input_conversation = MagicMock()
+    input_conversation.source = "omi"
+    input_conversation.get_person_ids.return_value = []
+    completed = _explicit_selection_flow_conversation()
+
+    monkeypatch.setattr(process_conversation, "_get_structured", lambda *args, **kwargs: (MagicMock(), False))
+    monkeypatch.setattr(process_conversation, "_get_conversation_obj", lambda *args, **kwargs: completed)
+    monkeypatch.setattr(
+        process_conversation.lifecycle_service, "persist_processed_conversation", MagicMock(return_value=True)
+    )
+    monkeypatch.setattr(process_conversation, "submit_with_context", MagicMock())
+    monkeypatch.setattr(process_conversation, "_trigger_apps", trigger_apps)
+    monkeypatch.setattr(process_conversation, "_extract_memories", MagicMock())
+    monkeypatch.setattr(
+        process_conversation.conversations_db,
+        "update_conversation",
+        lambda uid, cid, updates: update_calls.append(updates),
+    )
+
+    return process_conversation.process_conversation(
+        "uid",
+        "en",
+        input_conversation,
+        is_reprocess=True,
+        app_id="selected-app",
+        explicit_app=SimpleNamespace(id="selected-app"),
+    )
+
+
+def test_explicit_selection_success_persists_that_apps_result(monkeypatch):
+    """SCA-359: opt-in + explicit app_id persists the selected app's non-empty result."""
+    monkeypatch.setenv('CONVERSATION_NOTES_V2_ENABLED', 'true')
+
+    def _successful_trigger_apps(uid, conversation, **kwargs):
+        conversation.apps_results.append(process_conversation.AppResult(app_id='selected-app', content='APP SUMMARY'))
+
+    update_calls: list = []
+    result = _run_explicit_selection_flow(monkeypatch, _successful_trigger_apps, update_calls)
+
+    assert result.apps_results == [process_conversation.AppResult(app_id='selected-app', content='APP SUMMARY')]
+    assert {
+        'apps_results': [{'app_id': 'selected-app', 'content': 'APP SUMMARY'}],
+        'suggested_summarization_apps': [],
+    } in (update_calls)
+
+
+def test_explicit_selection_failure_surfaces_a_real_error_and_persists_as_today(monkeypatch):
+    """SCA-359 contract: reprocess with app_id returns the app's result or a real error.
+
+    Never a 200 whose payload quietly substitutes first-party notes for the selected
+    app's summary. The persist-as-today write-back still runs (the ed2ba41c5b opt-in
+    empty persist that clears a stale selection) so the failure contract changes the
+    response, not the durable shape."""
+    monkeypatch.setenv('CONVERSATION_NOTES_V2_ENABLED', 'true')
+
+    def _failing_trigger_apps(uid, conversation, **kwargs):
+        conversation.apps_results = []  # execution failed: nothing appended
+        raise process_conversation.ExplicitAppSelectionFailedError('selected-app produced no summary content')
+
+    update_calls: list = []
+    with pytest.raises(HTTPException) as exc_info:
+        _run_explicit_selection_flow(monkeypatch, _failing_trigger_apps, update_calls)
+
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.detail == 'Error processing conversation, please try again later'
+    assert {'apps_results': [], 'suggested_summarization_apps': []} in update_calls
+
+
 def test_fresh_creation_uses_the_explicit_completed_lifecycle_owner(monkeypatch):
     new_request = CreateConversation(
         started_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
@@ -1408,6 +1490,89 @@ def test_trigger_apps_does_not_count_non_user_reprocessing(is_reprocess):
     suggestion_mock.assert_not_called()
     app_result_mock.assert_called_once()
     record_usage.assert_not_called()
+
+
+def test_trigger_apps_opt_in_preferred_app_still_auto_runs(monkeypatch):
+    """SCA-359: under notes v2 the Redis preferred app remains the one automatic app run."""
+    monkeypatch.setenv('CONVERSATION_NOTES_V2_ENABLED', 'true')
+    preferred = _make_mock_app('preferred-app', 'PreferredApp')
+    _setup_trigger_apps_mocks(preferred_app_id='preferred-app', available_apps=[preferred])
+    conv = _make_trigger_conversation()
+
+    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    p2 = patch.object(process_conversation, 'get_available_apps', return_value=[preferred])
+    with p1, p2, p3, p4, p5, p6:
+        process_conversation._trigger_apps('user-preferred-opt-in', conv)
+
+    suggestion_mock.assert_not_called()
+    app_result_mock.assert_called_once()
+    assert len(conv.apps_results) == 1
+
+
+def test_trigger_apps_explicit_selection_execution_failure_is_fail_closed(monkeypatch):
+    """SCA-359: an explicitly selected app whose execution fails must not read as success."""
+    monkeypatch.setenv('CONVERSATION_NOTES_V2_ENABLED', 'true')
+    selected = _make_mock_app('selected-app', 'SelectedApp')
+    _setup_trigger_apps_mocks(preferred_app_id=None)
+    conv = _make_trigger_conversation()
+
+    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    app_result_mock.side_effect = RuntimeError('LLM unavailable')
+    with p1, p2, p3, p4, p5, p6:
+        with pytest.raises(process_conversation.ExplicitAppSelectionFailedError):
+            process_conversation._trigger_apps(
+                'user-explicit',
+                conv,
+                is_reprocess=True,
+                app_id=selected.id,
+                explicit_app=selected,
+                usage_attribution=process_conversation.AppUsageAttribution.EXPLICIT_SELECTION,
+            )
+
+    suggestion_mock.assert_not_called()
+    assert conv.apps_results == []
+
+
+def test_trigger_apps_explicit_selection_empty_content_is_fail_closed(monkeypatch):
+    """SCA-359: empty model output is a failed selection, not a silent notes fallback."""
+    monkeypatch.setenv('CONVERSATION_NOTES_V2_ENABLED', 'true')
+    selected = _make_mock_app('selected-app', 'SelectedApp')
+    _setup_trigger_apps_mocks(preferred_app_id=None)
+    conv = _make_trigger_conversation()
+
+    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    app_result_mock.return_value = '   '
+    with p1, p2, p3, p4, p5, p6:
+        with pytest.raises(process_conversation.ExplicitAppSelectionFailedError):
+            process_conversation._trigger_apps(
+                'user-explicit',
+                conv,
+                is_reprocess=True,
+                app_id=selected.id,
+                explicit_app=selected,
+                usage_attribution=process_conversation.AppUsageAttribution.EXPLICIT_SELECTION,
+            )
+
+    # Persist-as-today shape: the whitespace result is still appended for the
+    # write-back; the failure contract is about the response, not the persist.
+    assert [(r.app_id, r.content) for r in conv.apps_results] == [('selected-app', '')]
+
+
+def test_trigger_apps_automatic_app_failure_stays_fail_open(monkeypatch):
+    """Only explicit selections fail closed; automatic runs keep log-and-continue."""
+    monkeypatch.setenv('CONVERSATION_NOTES_V2_ENABLED', 'true')
+    preferred = _make_mock_app('preferred-app', 'PreferredApp')
+    _setup_trigger_apps_mocks(preferred_app_id='preferred-app', available_apps=[preferred])
+    conv = _make_trigger_conversation()
+
+    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    app_result_mock.side_effect = RuntimeError('LLM unavailable')
+    p2 = patch.object(process_conversation, 'get_available_apps', return_value=[preferred])
+    with p1, p2, p3, p4, p5, p6:
+        process_conversation._trigger_apps('user-automatic', conv)
+
+    app_result_mock.assert_called_once()
+    assert conv.apps_results == []
 
 
 def test_summary_pipeline_mode_cannot_reach_the_regressing_combination(monkeypatch):

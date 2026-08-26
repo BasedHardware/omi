@@ -99,6 +99,7 @@ _TWO_TIER_MODEL_PROFILE: Dict[str, Tuple[str, str]] = {
     'app_integration': ('gemini-2.5-flash-lite', 'gemini'),
     'trends': ('gemini-2.5-flash-lite', 'gemini'),
     'translation': ('gemini-2.5-flash-lite', 'gemini'),
+    'screen_frame_judge': ('gemini-2.5-flash-lite', 'gemini'),
     'chat_agent': ('claude-sonnet-4-6', 'anthropic'),
     'wrapped_analysis': ('gemini-3-flash-preview', 'openrouter'),
     'web_search': ('sonar-pro', 'perplexity'),
@@ -162,6 +163,7 @@ _STRUCTURED_OUTPUT_FEATURES = {
     'trends',
     'what_matters_now',
     'translation',
+    'screen_frame_judge',
 }
 STRUCTURED_OUTPUT_FEATURES = _STRUCTURED_OUTPUT_FEATURES
 

@@ -5626,11 +5626,12 @@ class ChatProvider: ObservableObject {
   /// was accepted into the timeline. Preflight failures leave it untouched,
   /// and typing a new draft while acceptance is pending is never overwritten.
   @discardableResult
-  func sendMainDraft(_ text: String) async -> String? {
+  func sendMainDraft(_ text: String, onAccepted: (@MainActor () -> Void)? = nil) async -> String? {
     let submittedRevision = composerDraft.revision
     return await sendMessage(
       text,
       onAccepted: { [weak self] in
+        onAccepted?()
         guard let self,
           self.composerDraft.revision == submittedRevision,
           self.draftText == text

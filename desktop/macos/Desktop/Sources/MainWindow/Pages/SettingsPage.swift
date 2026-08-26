@@ -197,6 +197,19 @@ struct SettingsContentView: View {
   @AppStorage(DefaultsKey.chatScreenshotSharingEnabled.rawValue)
   var chatScreenshotSharingEnabled: Bool = true
 
+  // Offline cache of the server's `meeting_note_screenshots_enabled` account setting; read
+  // synchronously by MeetingNoteScreenshotsFeature.isEnabled so the feature gate never blocks on
+  // the network. The account setting itself (GET/PATCH `v1/screen-frame-egress/settings`) is
+  // authoritative — see `loadMeetingNoteScreenshotsSetting()` /
+  // `updateMeetingNoteScreenshotsSetting(enabled:)` in SettingsContentView+Rewind.swift. Default on.
+  @AppStorage(DefaultsKey.meetingNoteScreenshotsEnabled.rawValue)
+  var meetingNoteScreenshotsEnabled: Bool = true
+
+  // Guards against the read-on-appear (`loadMeetingNoteScreenshotsSetting`) reconciling
+  // `meetingNoteScreenshotsEnabled` with the server's value from also being mistaken for a user
+  // edit and PATCHed straight back — see the toggle's `onChange` in SettingsContentView+Rewind.swift.
+  @State var isSyncingMeetingNoteScreenshotsFromServer = false
+
   // The sole ambient-audio preference. Runtime activity remains on AppState.
   @AppStorage(AssistantSettings.audioRecordingModeDefaultsKey) var audioRecordingModeRaw =
     AssistantSettings.AudioRecordingMode.onlyMeetings.rawValue

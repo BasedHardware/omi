@@ -24,6 +24,7 @@
   "HOSTED_TRANSLATION_API_URL": "same shape as HOSTED_PARAKEET_API_URL: opt-in with --profile inference (NLLB), declared conditionally by Helm, documented for compose.",
   "HTTP_LISTEN_FINALIZATION_RUN_TIMEOUT": "default-ok: main.py:255 defaults to 1500s for the finalization run. A tuning knob, not a switch; the inline dispatch path uses it as-is.",
   "LANGCHAIN_API_KEY": "default-ok: LangSmith. Governed by OMI_VENDOR_EGRESS=deny (ADR-0057), which turns the tracer off regardless of the key.",
+  "LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED": "default-on is correct: services/conversation_finalization.py:305 defaults to 'true'. It gives a stranded BYOK finalization job an owner and a terminal state instead of leaving it pending forever (#12214) — a reliability behaviour that is right on any deployment, cloud or on-prem, and turning it off would only trade a recovered job for a stuck one.",
   "LISTEN_FINALIZATION_DISPATCH_MODE": "default-ok, same shape as ACCOUNT_DELETION_DISPATCH_MODE: utils/cloud_tasks.py:121, default 'inline'. Conversation finalization runs in-process.",
   "LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS": "default-ok: conversation_finalization_jobs.py:107 falls back to DEFAULT_ORPHAN_RECONCILE_STALE_SECONDS, the in-code constant. Tuning for the orphan reconciler, which runs on-prem with the default.",
   "LISTEN_FINALIZATION_TASKS_HANDLER_URL": "default-ok: Cloud Tasks path only, off on-prem (LISTEN_FINALIZATION_DISPATCH_MODE=inline).",

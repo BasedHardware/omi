@@ -16,7 +16,7 @@ import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/apps/widgets/ai_app_generator_banner.dart';
 import 'package:omi/pages/apps/widgets/app_metadata_widget.dart';
 import 'package:omi/pages/apps/widgets/external_trigger_fields_widget.dart';
-import 'package:omi/pages/apps/widgets/full_screen_image_viewer.dart';
+import 'package:omi/widgets/media_viewer_page.dart';
 import 'package:omi/pages/apps/widgets/notification_scopes_chips_widget.dart';
 import 'package:omi/pages/payments/payment_method_provider.dart';
 import 'package:omi/pages/payments/payments_page.dart';
@@ -243,8 +243,16 @@ class _AddAppPageState extends State<AddAppPage> {
                                                     Navigator.push(
                                                       context,
                                                       MaterialPageRoute(
-                                                        builder: (context) => FullScreenImageViewer(
-                                                          imageUrl: provider.thumbnailUrls[index],
+                                                        builder: (context) => MediaViewerPage(
+                                                          items: provider.thumbnailUrls
+                                                              .map((url) => MediaViewerItem(
+                                                                    imageUrl: url,
+                                                                  ))
+                                                              .toList(),
+                                                          initialIndex: index,
+                                                          maxScaleMultiplier: 2,
+                                                          showCloseButton: true,
+                                                          wrapBodyInSafeArea: false,
                                                         ),
                                                       ),
                                                     );

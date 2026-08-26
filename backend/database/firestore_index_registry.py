@@ -123,6 +123,47 @@ INDEX_ONLY_REQUIREMENTS = (
         'COLLECTION_GROUP',
         (_asc('uid'), _asc('generation'), _desc('updated_at'), _asc('__name__')),
     ),
+    # Admin cost dashboard: server-side SUM aggregations over the gateway
+    # accounting ledger (web/admin lib/services/gateway-ledger.ts). Unlike
+    # plain equality queries, SUM aggregations need the summed field
+    # (estimated_cost_micro_usd) inside a composite index. One index per
+    # filter shape, each with and without the BYOK-excluding payer filter.
+    FirestoreIndexRequirement(
+        'llm_gateway_attempts_date_cost_sum',
+        'llm_gateway_attempts',
+        'COLLECTION',
+        (_asc('date'), _asc('estimated_cost_micro_usd'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'llm_gateway_attempts_date_provider_cost_sum',
+        'llm_gateway_attempts',
+        'COLLECTION',
+        (_asc('date'), _asc('provider'), _asc('estimated_cost_micro_usd'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'llm_gateway_attempts_date_feature_cost_sum',
+        'llm_gateway_attempts',
+        'COLLECTION',
+        (_asc('date'), _asc('feature'), _asc('estimated_cost_micro_usd'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'llm_gateway_attempts_date_payer_cost_sum',
+        'llm_gateway_attempts',
+        'COLLECTION',
+        (_asc('date'), _asc('payer'), _asc('estimated_cost_micro_usd'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'llm_gateway_attempts_date_provider_payer_cost_sum',
+        'llm_gateway_attempts',
+        'COLLECTION',
+        (_asc('date'), _asc('provider'), _asc('payer'), _asc('estimated_cost_micro_usd'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'llm_gateway_attempts_date_feature_payer_cost_sum',
+        'llm_gateway_attempts',
+        'COLLECTION',
+        (_asc('date'), _asc('feature'), _asc('payer'), _asc('estimated_cost_micro_usd'), _asc('__name__')),
+    ),
     FirestoreIndexRequirement(
         'conversations_category_created',
         'conversations',
@@ -772,6 +813,14 @@ HOURLY_USAGE_PLAN_ATTRIBUTION_QUERY = FirestoreQuerySpec(
     ),
 )
 
+FINALIZATION_OLDEST_NONTERMINAL_QUERY = FirestoreQuerySpec(
+    identifier='conversation_finalization_jobs_oldest_nonterminal',
+    collection_group='conversation_finalization_jobs',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('status', '==', 'status'),),
+    index_fields=(_asc('status'), _asc('created_at'), _asc('__name__')),
+)
+
 QUERY_SPECS = (
     ACTION_ITEMS_COMPLETION_ID_SCAN_QUERY,
     ACTION_ITEMS_COMPLETED_DUE_RANGE_QUERY,
@@ -811,6 +860,7 @@ QUERY_SPECS = (
     HOURLY_USAGE_PLAN_ATTRIBUTION_QUERY,
     MESSAGES_BY_APP_ORDERED_QUERY,
     CONVERSATIONS_ACTIVE_ORDERED_QUERY,
+    FINALIZATION_OLDEST_NONTERMINAL_QUERY,
 )
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)

@@ -13,6 +13,7 @@ import database.users as users_db
 from database.vector_db import delete_vector, delete_transcript_chunk_vectors
 import database.vector_db as vector_db
 from utils.other.storage import delete_conversation_audio_files
+from utils.screen_frames.store import delete_conversation_screen_frames
 from models.calendar_context import CalendarMeetingContext
 from models.conversation import (
     BulkAssignSegmentsRequest,
@@ -60,6 +61,7 @@ from utils.conversations.process_conversation import (
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations import share_email
 from utils.conversations.meeting_receipt import record_and_persist_finalized_meeting_receipt
+from utils.integration_telemetry import emit_posthog_event
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
 from utils.memory.retraction_scope import retraction_can_be_skipped
@@ -937,6 +939,16 @@ def delete_conversation(
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)
         background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
 
+    # Screen frames (meeting-note screenshots) are primary conversation
+    # content, not cascade-only derived data, so this runs unconditionally
+    # and synchronously — unlike audio_files above, a conversation typically
+    # carries at most 7 of these (contract §7 cap), so the GCS fan-out here
+    # is cheap. Must run before delete_conversation below: Firestore does
+    # not cascade subcollection deletes, and the GCS objects have no other
+    # cleanup path once the parent doc (and the frame_id it's keyed under)
+    # is gone.
+    delete_conversation_screen_frames(uid, conversation_id)
+
     conversations_db.delete_conversation(uid, conversation_id)
     delete_vector(uid, conversation_id)
     delete_transcript_chunk_vectors(uid, conversation_id)
@@ -1483,6 +1495,13 @@ def send_conversation_share_email(
         # successful dispatch can trigger the visibility rollback (a delivered
         # email keeps a live link).
         share_email.send_summary_email(uid=uid, conversation=conversation, recipient_emails=to_dispatch)
+        # Viral-loop telemetry: summary shares feed the admin K-factor. Emitted
+        # only after the provider accepted, so the count is delivered shares.
+        emit_posthog_event(
+            uid,
+            'Conversation Summary Shared',
+            {'conversation_id': conversation_id, 'recipient_count': len(to_dispatch), 'channel': 'email'},
+        )
         try:
             conversations_db.confirm_share_email_recipients(uid, conversation_id, to_dispatch)
         except Exception:

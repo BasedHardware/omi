@@ -594,7 +594,11 @@ def open_live_recording_session(
 
     conversation = conversations_db.get_conversation(uid, existing['conversation_id'])
     if conversation is not None:
-        return dict(binding) | {'requires_rollover': False}
+        return dict(binding) | {
+            'requires_rollover': False,
+            'conversation_snapshot': conversation,
+            'conversation_snapshot_known': True,
+        }
 
     if existing['lifecycle_phase'] not in _TERMINAL_RECORDING_SESSION_PHASES:
         tombstone_recording_session(

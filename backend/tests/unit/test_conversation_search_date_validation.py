@@ -60,15 +60,28 @@ _stubs = [
     # metric; utils is an _AutoMockModule package here, so the real submodule
     # is not importable and the name has to be stubbed like the rest.
     'utils.journey_metrics_contract',
+    # routers.conversations emits Conversation Summary Shared telemetry on
+    # delivered share emails; same _AutoMockModule reasoning as above.
+    'utils.integration_telemetry',
     'utils.other.endpoints',
     'utils.other.list_budget',
     'utils.other.storage',
+    # routers.conversations imports utils.screen_frames.store at module load to close the
+    # screenshot deletion loop (Firestore does not cascade-delete subcollections), so this name
+    # has to be stubbed or collection dies with ModuleNotFoundError before any test runs.
+    'utils.screen_frames',
+    'utils.screen_frames.store',
     # Names only: this file's _AutoMockModule/_register_module wrap them. Parents
     # (including utils.conversations) are created by _register_module, so the
     # package itself is omitted here. See package_submodule_stubs.
     *sorted(package_submodule_stubs('utils.conversations', include_package=False)),
     'utils.executors',
     'utils.product_telemetry',
+    # routers.conversations imports emit_posthog_event from here at module scope.
+    # utils is an _AutoMockModule package in this file, so the real submodule is
+    # not importable and the name has to be stubbed like the rest -- without it
+    # collection fails with ModuleNotFoundError before any test runs.
+    'utils.integration_telemetry',
     'utils.llm.conversation_processing',
     'utils.speaker_identification',
     'utils.app_integrations',

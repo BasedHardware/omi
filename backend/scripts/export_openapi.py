@@ -80,6 +80,7 @@ APP_CLIENT_PREFIXES = (
     '/v1/persons',
     '/v1/phone',
     '/v1/screen-activity',
+    '/v1/screen-frame-egress',
     '/v1/stripe',
     '/v1/sync',
     '/v1/task-integrations',
@@ -147,6 +148,26 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
         'GET',
         '/v1/conversations/{conversation_id}/share-recipients',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
+    (
+        'GET',
+        '/v1/conversations/{conversation_id}/screenshots',
+    ): 'Firebase-authenticated first-party app route, deliberately NOT on the Developer API surface: these return signed URLs to private screen capture, and the screen-frame egress design scopes that material to first-party clients. Exposing it to third-party API keys is a privacy expansion nobody has approved, and it is the direction that cannot be undone once keys exist.',
+    (
+        'DELETE',
+        '/v1/conversations/{conversation_id}/screenshots',
+    ): 'Firebase-authenticated first-party app route, deliberately NOT on the Developer API surface: these return signed URLs to private screen capture, and the screen-frame egress design scopes that material to first-party clients. Exposing it to third-party API keys is a privacy expansion nobody has approved, and it is the direction that cannot be undone once keys exist.',
+    (
+        'DELETE',
+        '/v1/conversations/{conversation_id}/screenshots/{frame_id}',
+    ): 'Firebase-authenticated first-party app route, deliberately NOT on the Developer API surface: these return signed URLs to private screen capture, and the screen-frame egress design scopes that material to first-party clients. Exposing it to third-party API keys is a privacy expansion nobody has approved, and it is the direction that cannot be undone once keys exist.',
+    (
+        'PATCH',
+        '/v1/conversations/{conversation_id}/screenshot-sharing',
+    ): 'Firebase-authenticated first-party app route, deliberately NOT on the Developer API surface: these return signed URLs to private screen capture, and the screen-frame egress design scopes that material to first-party clients. Exposing it to third-party API keys is a privacy expansion nobody has approved, and it is the direction that cannot be undone once keys exist.',
+    (
+        'GET',
+        '/v1/conversations/{conversation_id}/shared/screenshots',
+    ): 'Firebase-authenticated first-party app route, deliberately NOT on the Developer API surface: these return signed URLs to private screen capture, and the screen-frame egress design scopes that material to first-party clients. Exposing it to third-party API keys is a privacy expansion nobody has approved, and it is the direction that cannot be undone once keys exist.',
     (
         'POST',
         '/v1/conversations/{conversation_id}/share-email',

@@ -1319,8 +1319,10 @@ def _gateway_feature_for_lane(lane_id: str) -> str:
     return 'chat_agent'
 
 
-def _gateway_request_headers(request_id: str, lane_id: str = CHAT_AGENT_AUTO_LANE_ID) -> dict[str, str]:
-    headers = llm_gateway_headers(feature=_gateway_feature_for_lane(lane_id))
+def _gateway_request_headers(
+    request_id: str, lane_id: str = CHAT_AGENT_AUTO_LANE_ID, platform: str | None = None
+) -> dict[str, str]:
+    headers = llm_gateway_headers(feature=_gateway_feature_for_lane(lane_id), platform=platform)
     headers['X-Omi-Request-ID'] = request_id
     return headers
 
@@ -1374,7 +1376,7 @@ async def _stream_gateway(
             async with get_llm_gateway_client().stream(
                 'POST',
                 f'{get_llm_gateway_base_url()}/v1/chat/completions',
-                headers=_gateway_request_headers(request_id, lane_id),
+                headers=_gateway_request_headers(request_id, lane_id, platform),
                 json=gateway_payload,
             ) as response:
                 if response.status_code >= 400:
@@ -1680,7 +1682,7 @@ async def _chat_completions_unobserved(
             async with get_llm_gateway_semaphore():
                 response = await get_llm_gateway_client().post(
                     f'{get_llm_gateway_base_url()}/v1/chat/completions',
-                    headers=_gateway_request_headers(request_id, public_model),
+                    headers=_gateway_request_headers(request_id, public_model, x_app_platform),
                     json=gateway_payload,
                 )
             response.raise_for_status()

@@ -82,6 +82,23 @@ def _install_query_stream_retry_compat() -> None:
 
 _install_query_stream_retry_compat()
 
+
+def _install_document_read_probe() -> None:
+    """Count every single-document read by collection pattern and hit/miss.
+
+    Same lazy-import discipline as the query retry shim above: the probe wraps
+    SDK classes that do not exist under the unit-test import stubs.
+    """
+    try:
+        from database.firestore_document_probe import install_document_read_probe
+    except ImportError:
+        return
+
+    install_document_read_probe()
+
+
+_install_document_read_probe()
+
 _firestore_client = None
 _firestore_client_lock = Lock()
 _customer_firestore_client = None

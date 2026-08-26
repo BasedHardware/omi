@@ -2,6 +2,40 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.220",
+      "date": "2026-08-26",
+      "changes": [
+        "Fixed the Screen Recording permission dialog reappearing even though permission was already granted."
+      ]
+    },
+    {
+      "version": "0.12.219",
+      "date": "2026-08-26",
+      "changes": [
+        "Pressing Return while the assistant is still answering no longer clears your draft or miscounts a question.",
+        "Every chat surface now records a question only once the assistant actually accepts the send.",
+        "A chat send the assistant refuses no longer loses your typed question or miscounts toward the rating prompt."
+      ]
+    },
+    {
+      "version": "0.12.218",
+      "date": "2026-08-25",
+      "changes": [
+        "Hardened the rating-prompt kill switch wiring against analytics SDK updates.",
+        "The rating prompt now counts each question exactly once (retries and busy sends no longer advance it).",
+        "Hardened rating-prompt question accounting behind an executable submit/retry ledger.",
+        "The rating-prompt kill switch now takes effect within minutes, without waiting for another question.",
+        "Added a remote kill switch for the in-app rating prompt."
+      ]
+    },
+    {
+      "version": "0.12.217",
+      "date": "2026-08-25",
+      "changes": [
+        "Added a one-time in-app rating prompt: after your 3rd question, a closable bar asks how you'd rate Omi Desktop (1-5 stars)."
+      ]
+    },
+    {
       "version": "0.12.216",
       "date": "2026-08-25",
       "changes": [

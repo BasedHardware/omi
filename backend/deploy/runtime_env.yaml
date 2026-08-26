@@ -70,6 +70,9 @@ environments:
           MEETING_RECEIPT_RECONCILER_ENABLED:
             value: 'false'
             category: rollout
+          LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED:
+            value: 'true'
+            category: rollout
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             value: 'true'
             category: rollout
@@ -1097,6 +1100,9 @@ environments:
             category: rollout
           MEETING_RECEIPT_RECONCILER_ENABLED:
             value: 'false'
+            category: rollout
+          LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED:
+            value: 'true'
             category: rollout
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             value: 'false'

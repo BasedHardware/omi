@@ -212,6 +212,7 @@ class Features:
     OPENGLASS = "openglass"
     APP_GENERATOR = "app_generator"
     ONBOARDING = "onboarding"
+    SCREEN_FRAME_JUDGE = "screen_frame_judge"
 
     # Conversation processing sub-features (granular cost tracking)
     CONVERSATION_DISCARD = "conv_discard"

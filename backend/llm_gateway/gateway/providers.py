@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 import json
 import os
+import re
 import time
 from typing import Any, Protocol, cast
 
@@ -409,16 +410,17 @@ def _vertex_request(request: Mapping[str, Any]) -> dict[str, Any]:
         if not isinstance(message, Mapping):
             raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
         role = message.get('role')
-        text = _text_content(message.get('content'))
         if role == 'system':
-            system_parts.append({'text': text})
+            # Vertex systemInstruction takes text parts only. _vertex_parts raises rather
+            # than silently flattening an image here, same as everywhere else below.
+            system_parts.extend(_system_text_parts(message.get('content')))
             continue
         if role not in {'user', 'assistant'}:
             raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
         contents.append(
             {
                 'role': 'model' if role == 'assistant' else 'user',
-                'parts': [{'text': text}],
+                'parts': _vertex_parts(message.get('content')),
             }
         )
 
@@ -748,6 +750,82 @@ def _openai_usage_payload(usage: ProviderUsage) -> dict[str, Any]:
         'prompt_tokens_details': {'cached_tokens': usage.cached_input_tokens},
         'completion_tokens_details': {'reasoning_tokens': usage.reasoning_tokens},
     }
+
+
+# RFC 2397 permits parameters between the media type and the base64 token
+# (`data:image/jpeg;charset=utf-8;base64,...`), and browser- or canvas-produced
+# data URLs do emit them. Rejecting those would be the mirror of the bug this
+# module just fixed: refusing an image we can in fact represent.
+_VERTEX_DATA_URL_RE = re.compile(
+    r'^data:(?P<mime>[\w.+-]+/[\w.+-]+)(?:;[\w.+-]+=[^;,]*)*;(?i:base64),(?P<data>.+)$',
+    re.DOTALL,
+)
+
+
+def _vertex_parts(content: Any) -> list[dict[str, Any]]:
+    """Translate OpenAI-shaped message content into Vertex parts.
+
+    Anything this cannot represent raises CAPABILITY_MISMATCH rather than being
+    dropped. That distinction is the whole point of this function: the previous
+    implementation ran every message through _text_content(), which keeps only
+    `type == "text"` parts, so an image attached to a Gemini request vanished
+    silently and the model answered about content it never received. For a
+    caller like utils/screen_frames/judge.py — a privacy gate that decides
+    whether a screenshot may be stored — a confident answer from a model that
+    was sent no image is worse than an error, because the caller's fail-closed
+    handling never triggers.
+    """
+    if content is None:
+        # See the empty-parts note at the end of this function: None is what an
+        # assistant tool-call turn carries, and Vertex rejects a Content with no parts.
+        return [{'text': ''}]
+    if isinstance(content, str):
+        return [{'text': content}]
+    if not isinstance(content, list):
+        raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
+
+    parts: list[dict[str, Any]] = []
+    for part in cast(list[object], content):
+        if not isinstance(part, Mapping):
+            raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
+        typed_part = cast(Mapping[str, Any], part)
+        part_type = typed_part.get('type')
+        if part_type == 'text':
+            text = typed_part.get('text')
+            if not isinstance(text, str):
+                raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
+            parts.append({'text': text})
+            continue
+        if part_type == 'image_url':
+            image_url = typed_part.get('image_url')
+            if not isinstance(image_url, Mapping):
+                raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
+            url = cast(Mapping[str, Any], image_url).get('url')
+            if not isinstance(url, str):
+                raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
+            match = _VERTEX_DATA_URL_RE.match(url)
+            if match is None:
+                # A remote https:// image is not fetchable by Vertex the way it is by
+                # OpenAI; only inline bytes and gs:// URIs are. Refuse rather than send
+                # a request the model will answer without the image.
+                raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
+            parts.append({'inlineData': {'mimeType': match.group('mime'), 'data': match.group('data')}})
+            continue
+        raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
+    # A message with no representable content still needs one part: Vertex rejects a
+    # Content with an empty parts array, and the previous implementation always
+    # produced [{'text': ''}] here (via _text_content(None) == ''). An assistant
+    # tool-call turn carries content=None, so this path is reachable the moment a
+    # multi-turn Gemini feature exists.
+    return parts or [{'text': ''}]
+
+
+def _system_text_parts(content: Any) -> list[dict[str, str]]:
+    parts = _vertex_parts(content)
+    for part in parts:
+        if 'text' not in part:
+            raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
+    return [{'text': cast(str, part['text'])} for part in parts] or [{'text': ''}]
 
 
 def _text_content(content: Any) -> str:

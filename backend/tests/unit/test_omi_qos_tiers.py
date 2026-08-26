@@ -1012,6 +1012,7 @@ class TestBYOKProfile:
                 'onboarding',
                 'app_integration',
                 'trends',
+                'screen_frame_judge',
             ):
                 continue
             assert provider == 'openai', f'byok {feature} should be openai, got {provider}'
@@ -1103,6 +1104,7 @@ class TestStructuredOutputFeatureTracking:
             'translation',
             'conv_app_select',
             'external_structure',
+            'screen_frame_judge',
             'trends',
             'what_matters_now',
         }
@@ -1114,19 +1116,20 @@ class TestStructuredOutputFeatureTracking:
                 assert feature in profile, f'{feature} missing from {profile_name}'
 
     def test_premium_gemini_structured_output(self):
-        """In premium profile, translation and trends use structured output on Gemini."""
+        """In premium profile, translation, trends, and screen_frame_judge use structured output on Gemini."""
         premium = MODEL_QOS_PROFILES['premium']
         gemini_so = {f for f in _STRUCTURED_OUTPUT_FEATURES if premium[f][1] == 'gemini'}
         assert gemini_so == {
             'translation',
             'trends',
-        }, f'Expected translation and trends on Gemini SO in premium, got {gemini_so}'
+            'screen_frame_judge',
+        }, f'Expected translation, trends, and screen_frame_judge on Gemini SO in premium, got {gemini_so}'
 
     def test_byok_no_gemini_structured_output(self):
-        """BYOK routes structured output to OpenAI except managed translation."""
+        """BYOK routes structured output to OpenAI except managed translation/trends/screen_frame_judge."""
         profile = MODEL_QOS_PROFILES['byok']
         for feature in _STRUCTURED_OUTPUT_FEATURES:
-            if feature in {'translation', 'trends'}:
+            if feature in {'translation', 'trends', 'screen_frame_judge'}:
                 assert profile[feature] == ('gemini-2.5-flash-lite', 'gemini')
                 continue
             assert profile[feature][1] == 'openai', f'byok {feature} should be openai, got {profile[feature][1]}'

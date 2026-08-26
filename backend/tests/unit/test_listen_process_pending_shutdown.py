@@ -295,3 +295,140 @@ async def test_resume_does_not_rewrite_marker_for_normal_stt_session():
 
     updates = [c for c in host.calls if c[0] == 'update_conversation']
     assert updates == [], f'unexpected update_conversation call: {host.calls}'
+
+
+# ── Skip the guaranteed-miss existence read for server-generated ids ────────
+#
+# `users/{uid}/conversations/{id}` is the single largest slice of prod
+# single-document reads (38.3%), and a fresh server-generated id can never
+# already have a document under it. See conversation-existence-read.
+
+
+class _CreateConversationHost:
+    """Host for create_new_in_progress_conversation covering the existence-read
+    skip (a server-generated id can't already have a document) and the
+    lifecycle-snapshot reuse (open_live_recording_session already read the
+    document once while resolving the binding)."""
+
+    def __init__(
+        self,
+        *,
+        client_conversation_id: str | None = None,
+        existing_conversation: dict | None = None,
+        conversation_snapshot: dict | None = None,
+        conversation_snapshot_known: bool = False,
+        binding_conversation_id: str | None = None,
+    ) -> None:
+        self.request = SimpleNamespace(uid='uid-1', source='omi', call_id=None, conversation_role=None)
+        self.client_device_context = SimpleNamespace(client_device_id='dev-1', platform='desktop')
+        self.language = 'en'
+        self.use_custom_stt = False
+        self.private_cloud_sync_enabled = False
+        self.client_conversation_id = client_conversation_id
+        self.recording_session_id = 'session-1'
+        self.is_multi_channel = False
+        self.state = SimpleNamespace(current_conversation_id=None)
+        self.recording_session_ids_by_conversation = {}
+        self.persistence = SimpleNamespace(call=self._call)
+        self.calls: list[tuple] = []
+        self._existing = existing_conversation
+        self._conversation_snapshot = conversation_snapshot
+        self._conversation_snapshot_known = conversation_snapshot_known
+        self._binding_conversation_id_override = binding_conversation_id
+
+    async def _call(self, fn, *args, **kwargs):
+        self.calls.append((fn.__name__, args, kwargs))
+        if fn.__name__ == 'open_live_recording_session':
+            proposed_id = args[2]
+            conversation_id = self._binding_conversation_id_override or proposed_id
+            binding = {'requires_rollover': False, 'conversation_id': conversation_id}
+            if self._conversation_snapshot_known:
+                binding['conversation_snapshot'] = self._conversation_snapshot
+                binding['conversation_snapshot_known'] = True
+            return binding
+        if fn.__name__ == 'get_conversation':
+            return self._existing
+        if fn.__name__ in ('set_in_progress_conversation_id', 'update_conversation', 'create_in_progress_conversation'):
+            return None
+        return None
+
+
+class _CreateConversationController(LiveConversationController):
+    def __init__(self, host: _CreateConversationHost) -> None:
+        super().__init__(host)
+        self.session_events: list[str] = []
+
+    def send_conversation_session(self, *args, **kwargs) -> None:
+        self.session_events.append('sent')
+
+
+async def test_fresh_server_generated_id_skips_the_existence_read():
+    """No client_conversation_id: proposed_id is a freshly minted uuid4 and the
+    binding adopts it verbatim, so get_conversation for that id is a guaranteed
+    NOT_FOUND and must not be called."""
+    host = _CreateConversationHost(client_conversation_id=None)
+    controller = _CreateConversationController(host)
+
+    await controller.create_new_in_progress_conversation()
+
+    get_conversation_calls = [c for c in host.calls if c[0] == 'get_conversation']
+    assert get_conversation_calls == [], f'unexpected get_conversation call(s): {get_conversation_calls}'
+    create_calls = [c for c in host.calls if c[0] == 'create_in_progress_conversation']
+    assert len(create_calls) == 1, f'expected the new-conversation path to run, got {host.calls}'
+    assert host.state.current_conversation_id is not None
+
+
+async def test_rollover_generation_skips_the_existence_read():
+    """rollover=True always mints a fresh server-generated id even when a
+    client_conversation_id is present (silence/status rollovers must not reuse
+    or mutate the prior binding), so the existence read must still be skipped."""
+    host = _CreateConversationHost(client_conversation_id='client-supplied-id')
+    controller = _CreateConversationController(host)
+
+    await controller.create_new_in_progress_conversation(rollover=True)
+
+    get_conversation_calls = [c for c in host.calls if c[0] == 'get_conversation']
+    assert get_conversation_calls == [], f'unexpected get_conversation call(s): {get_conversation_calls}'
+    open_calls = [c for c in host.calls if c[0] == 'open_live_recording_session']
+    assert len(open_calls) == 1
+    proposed_id = open_calls[0][1][2]
+    assert proposed_id != 'client-supplied-id', 'rollover must not reuse the client-supplied id as proposed_id'
+
+
+async def test_resume_with_client_id_naming_existing_conversation_still_reads_it():
+    """A client-supplied id can legitimately name an existing conversation
+    (resume/idempotency), so the existence read is load-bearing here and must
+    not be skipped; the same reconnect action must still be taken."""
+    host = _CreateConversationHost(
+        client_conversation_id='conv-1',
+        existing_conversation={'id': 'conv-1', 'status': 'in_progress', 'discarded': False},
+    )
+    controller = _CreateConversationController(host)
+
+    await controller.create_new_in_progress_conversation()
+
+    get_conversation_calls = [c for c in host.calls if c[0] == 'get_conversation']
+    assert len(get_conversation_calls) == 1, f'expected one get_conversation call, got {host.calls}'
+    assert get_conversation_calls[0][1][1] == 'conv-1'
+    assert host.state.current_conversation_id == 'conv-1'
+    assert controller.session_events == ['sent']
+    create_calls = [c for c in host.calls if c[0] == 'create_in_progress_conversation']
+    assert create_calls == [], 'a resumed conversation must not be recreated'
+
+
+async def test_resume_with_client_id_naming_missing_conversation_behaves_as_before():
+    """A client-supplied id naming no existing conversation must still be
+    looked up (it is not server-generated) and then fall through to the normal
+    new-conversation creation path, exactly as before this change."""
+    host = _CreateConversationHost(client_conversation_id='conv-missing', existing_conversation=None)
+    controller = _CreateConversationController(host)
+
+    await controller.create_new_in_progress_conversation()
+
+    get_conversation_calls = [c for c in host.calls if c[0] == 'get_conversation']
+    assert len(get_conversation_calls) == 1, f'expected one get_conversation call, got {host.calls}'
+    assert get_conversation_calls[0][1][1] == 'conv-missing'
+    create_calls = [c for c in host.calls if c[0] == 'create_in_progress_conversation']
+    assert len(create_calls) == 1
+    assert create_calls[0][2].get('idempotent') is True
+    assert host.state.current_conversation_id == 'conv-missing'

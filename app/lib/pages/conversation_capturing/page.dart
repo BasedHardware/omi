@@ -20,7 +20,7 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
-import 'package:omi/widgets/photo_viewer_page.dart';
+import 'package:omi/widgets/media_viewer_page.dart';
 import 'package:omi/widgets/transcript.dart';
 
 class ConversationCapturingPage extends StatefulWidget {
@@ -583,7 +583,18 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   void _openPhotoViewer(List<ConversationPhoto> allPhotos, int index) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => PhotoViewerPage(photos: allPhotos, initialIndex: index >= 0 ? index : 0),
+        builder: (context) => MediaViewerPage(
+          items: allPhotos
+              .map((photo) => MediaViewerItem(
+                    base64: photo.base64,
+                    heroTag: photo.id,
+                    showCaptionStrip: true,
+                    caption: photo.description,
+                    discarded: photo.discarded,
+                  ))
+              .toList(),
+          initialIndex: index >= 0 ? index : 0,
+        ),
       ),
     );
   }
