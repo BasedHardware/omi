@@ -1013,7 +1013,7 @@ def fetch_action_item_vectors(uid: str, action_item_ids: List[str]) -> dict[str,
     result = {}
     batch_size = 100  # Pinecone fetch uses GET; keep IDs per call small to avoid 414
     for i in range(0, len(action_item_ids), batch_size):
-        batch_ids = action_item_ids[i:i + batch_size]
+        batch_ids = action_item_ids[i : i + batch_size]
         vector_ids = [f'{uid}-ai-{aid}' for aid in batch_ids]
         try:
             response = index.fetch(ids=vector_ids, namespace=ACTION_ITEMS_NAMESPACE)

@@ -11,7 +11,15 @@ import database.redis_db as redis_db
 from database.vector_db import delete_action_item_vectors_batch
 from utils.other import endpoints as auth
 from utils.notifications import send_action_items_batch_deletion_message
-from utils.action_item_cleanup import candidates_stale_age, candidates_overdue, candidates_semantic_dedup, candidates_llm_relevance, candidates_conversation_context, candidates_vague, merge_candidates
+from utils.action_item_cleanup import (
+    candidates_stale_age,
+    candidates_overdue,
+    candidates_semantic_dedup,
+    candidates_llm_relevance,
+    candidates_conversation_context,
+    candidates_vague,
+    merge_candidates,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +33,7 @@ _SAMPLE_PER_STRATEGY = 5
 # Request / response models
 # ---------------------------------------------------------------------------
 
+
 class CleanupPreviewRequest(BaseModel):
     strategies: List[str] = Field(
         default=['stale_age'],
@@ -32,8 +41,12 @@ class CleanupPreviewRequest(BaseModel):
     )
     age_days: int = Field(default=30, ge=1, le=365, description="Threshold for stale_age strategy")
     overdue_days: int = Field(default=7, ge=1, le=365, description="Threshold for overdue strategy")
-    similarity_threshold: float = Field(default=0.92, ge=0.5, le=1.0, description="Similarity threshold for semantic_dedup")
-    llm_confidence_threshold: float = Field(default=0.92, ge=0.5, le=1.0, description="Confidence threshold for llm_relevance")
+    similarity_threshold: float = Field(
+        default=0.92, ge=0.5, le=1.0, description="Similarity threshold for semantic_dedup"
+    )
+    llm_confidence_threshold: float = Field(
+        default=0.92, ge=0.5, le=1.0, description="Confidence threshold for llm_relevance"
+    )
 
 
 class CleanupSampleItem(BaseModel):
@@ -68,6 +81,7 @@ class CleanupExecuteResponse(BaseModel):
 # Redis session helpers
 # ---------------------------------------------------------------------------
 
+
 def _session_key(uid: str, session_id: str) -> str:
     return f'cleanup_session:{uid}:{session_id}'
 
@@ -88,6 +102,7 @@ def _delete_session(uid: str, session_id: str) -> None:
 # Endpoints
 # ---------------------------------------------------------------------------
 
+
 @router.post('/v1/action-items/cleanup/preview', response_model=CleanupPreviewResponse, tags=['action-items'])
 def cleanup_preview(request: CleanupPreviewRequest, uid: str = Depends(auth.get_current_user_uid)):
     """
@@ -105,7 +120,9 @@ def cleanup_preview(request: CleanupPreviewRequest, uid: str = Depends(auth.get_
     if 'llm_relevance' in request.strategies:
         strategy_fns['llm_relevance'] = lambda: candidates_llm_relevance(uid, request.llm_confidence_threshold)
     if 'conversation_context' in request.strategies:
-        strategy_fns['conversation_context'] = lambda: candidates_conversation_context(uid, request.llm_confidence_threshold)
+        strategy_fns['conversation_context'] = lambda: candidates_conversation_context(
+            uid, request.llm_confidence_threshold
+        )
     if 'vague' in request.strategies:
         strategy_fns['vague'] = lambda: candidates_vague(uid)
 
@@ -137,11 +154,15 @@ def cleanup_preview(request: CleanupPreviewRequest, uid: str = Depends(auth.get_
     candidates = merge_candidates(candidate_lists)
 
     session_id = str(uuid.uuid4())
-    _save_session(uid, session_id, {
-        'ids': [c['id'] for c in candidates],
-        'strategies': request.strategies,
-        'age_days': request.age_days,
-    })
+    _save_session(
+        uid,
+        session_id,
+        {
+            'ids': [c['id'] for c in candidates],
+            'strategies': request.strategies,
+            'age_days': request.age_days,
+        },
+    )
 
     seen_per_strategy: dict[str, int] = {}
     sample = []

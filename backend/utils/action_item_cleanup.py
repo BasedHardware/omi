@@ -77,6 +77,7 @@ def _fetch_conversation_contexts(uid: str, conversation_ids: set[str]) -> dict[s
 # Strategy: age-based staleness
 # ---------------------------------------------------------------------------
 
+
 def candidates_stale_age(uid: str, age_days: int = 30) -> list[dict]:
     """
     Return open tasks with no due date whose source conversation is older than
@@ -106,11 +107,13 @@ def candidates_stale_age(uid: str, age_days: int = 30) -> list[dict]:
             continue
 
         if (now - ref).days >= age_days:
-            candidates.append({
-                'id': item['id'],
-                'description': item.get('description', ''),
-                'strategy': 'stale_age',
-            })
+            candidates.append(
+                {
+                    'id': item['id'],
+                    'description': item.get('description', ''),
+                    'strategy': 'stale_age',
+                }
+            )
 
     return candidates
 
@@ -118,6 +121,7 @@ def candidates_stale_age(uid: str, age_days: int = 30) -> list[dict]:
 # ---------------------------------------------------------------------------
 # Strategy: overdue due dates
 # ---------------------------------------------------------------------------
+
 
 def candidates_overdue(uid: str, overdue_days: int = 7) -> list[dict]:
     """
@@ -141,6 +145,7 @@ def candidates_overdue(uid: str, overdue_days: int = 7) -> list[dict]:
 # ---------------------------------------------------------------------------
 # Strategy: semantic deduplication
 # ---------------------------------------------------------------------------
+
 
 def candidates_semantic_dedup(uid: str, similarity_threshold: float = 0.92) -> list[dict]:
     """
@@ -176,8 +181,7 @@ def candidates_semantic_dedup(uid: str, similarity_threshold: float = 0.92) -> l
     similarity = matrix @ matrix.T  # (n × n) cosine similarity
 
     # Parse creation dates for tie-breaking (newer wins)
-    dates = [_parse_dt(i.get('created_at')) or datetime.min.replace(tzinfo=timezone.utc)
-             for i in items_with_vec]
+    dates = [_parse_dt(i.get('created_at')) or datetime.min.replace(tzinfo=timezone.utc) for i in items_with_vec]
     id_to_item = {i['id']: i for i in items_with_vec}
 
     candidate_ids: set[str] = set()
@@ -199,11 +203,13 @@ def candidates_semantic_dedup(uid: str, similarity_threshold: float = 0.92) -> l
                 break  # current item is the older duplicate; outer loop will skip it
             if dup_id not in candidate_ids:
                 candidate_ids.add(dup_id)
-                candidates.append({
-                    'id': dup_id,
-                    'description': id_to_item[dup_id].get('description', ''),
-                    'strategy': 'semantic_dedup',
-                })
+                candidates.append(
+                    {
+                        'id': dup_id,
+                        'description': id_to_item[dup_id].get('description', ''),
+                        'strategy': 'semantic_dedup',
+                    }
+                )
 
     logger.info(f'semantic_dedup uid={uid} checked={len(items_with_vec)} duplicates={len(candidates)}')
     return candidates
@@ -212,6 +218,7 @@ def candidates_semantic_dedup(uid: str, similarity_threshold: float = 0.92) -> l
 # ---------------------------------------------------------------------------
 # Strategy: LLM relevance scoring
 # ---------------------------------------------------------------------------
+
 
 class _TaskVerdict(BaseModel):
     id: str = PydanticField(description="The task ID exactly as given")
@@ -223,10 +230,11 @@ class _BatchVerdicts(BaseModel):
     verdicts: list[_TaskVerdict] = PydanticField(description="One verdict per task")
 
 
-_RELEVANCE_PROMPT = ChatPromptTemplate.from_messages([
-    (
-        "system",
-        """You are reviewing open to-do items to identify ones that are likely no longer relevant.
+_RELEVANCE_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            """You are reviewing open to-do items to identify ones that are likely no longer relevant.
 
 For each task assess whether it is still actionable given how long ago it was created.
 
@@ -236,12 +244,13 @@ Rules:
 - Event-specific tasks (prepare for X meeting, get ready for Y event) from long ago are likely stale.
 - Vague or already-obvious tasks ("go to bed", "brush teeth") that recur daily are likely stale duplicates.
 - Return confidence >= 0.85 only when you are quite sure.""",
-    ),
-    (
-        "human",
-        "Today's date: {today}\n\nTasks to review:\n{tasks}",
-    ),
-])
+        ),
+        (
+            "human",
+            "Today's date: {today}\n\nTasks to review:\n{tasks}",
+        ),
+    ]
+)
 
 _BATCH_SIZE = 50
 
@@ -278,7 +287,7 @@ def candidates_llm_relevance(uid: str, confidence_threshold: float = 0.85) -> li
             logger.warning(f'LLM relevance batch failed: {e}')
             return []
 
-    batches = [all_items[i:i + _BATCH_SIZE] for i in range(0, len(all_items), _BATCH_SIZE)]
+    batches = [all_items[i : i + _BATCH_SIZE] for i in range(0, len(all_items), _BATCH_SIZE)]
     candidates = []
     with ThreadPoolExecutor(max_workers=5) as pool:
         for result in as_completed([pool.submit(_score_batch, b) for b in batches]):
@@ -292,10 +301,11 @@ def candidates_llm_relevance(uid: str, confidence_threshold: float = 0.85) -> li
 # Strategy: conversation context
 # ---------------------------------------------------------------------------
 
-_CONV_CONTEXT_PROMPT = ChatPromptTemplate.from_messages([
-    (
-        "system",
-        """You are reviewing open to-do items. Each task came from a specific conversation.
+_CONV_CONTEXT_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            """You are reviewing open to-do items. Each task came from a specific conversation.
 You will be given the conversation's title, a brief overview, and how long ago it happened,
 along with the tasks that were extracted from it.
 
@@ -308,10 +318,10 @@ Rules:
 - If the conversation topic is ongoing (a relationship, a project, a recurring role),
   tasks are more likely still relevant.
 - Return confidence >= 0.85 only when you are quite sure.""",
-    ),
-    (
-        "human",
-        """Today: {today}
+        ),
+        (
+            "human",
+            """Today: {today}
 
 Conversation: "{title}"
 Summary: {overview}
@@ -319,8 +329,9 @@ Happened: {age}
 
 Tasks from this conversation:
 {tasks}""",
-    ),
-])
+        ),
+    ]
+)
 
 
 def candidates_conversation_context(uid: str, confidence_threshold: float = 0.85) -> list[dict]:
@@ -361,13 +372,18 @@ def candidates_conversation_context(uid: str, confidence_threshold: float = 0.85
         age = f"{(now - started_at).days} days ago" if started_at else "unknown"
         task_lines = [f"- id:{i['id']} | {i.get('description', '')}" for i in batch]
         try:
-            result = cast(_BatchVerdicts, chain.invoke({
-                "today": today,
-                "title": ctx['title'] or '(untitled)',
-                "overview": ctx['overview'] or '(no summary)',
-                "age": age,
-                "tasks": "\n".join(task_lines),
-            }))
+            result = cast(
+                _BatchVerdicts,
+                chain.invoke(
+                    {
+                        "today": today,
+                        "title": ctx['title'] or '(untitled)',
+                        "overview": ctx['overview'] or '(no summary)',
+                        "age": age,
+                        "tasks": "\n".join(task_lines),
+                    }
+                ),
+            )
             return [
                 {'id': v.id, 'description': id_to_item[v.id].get('description', ''), 'strategy': 'conversation_context'}
                 for v in result.verdicts
@@ -378,9 +394,7 @@ def candidates_conversation_context(uid: str, confidence_threshold: float = 0.85
             return []
 
     all_batches = [
-        (cid, items[i:i + _BATCH_SIZE])
-        for cid, items in by_conv.items()
-        for i in range(0, len(items), _BATCH_SIZE)
+        (cid, items[i : i + _BATCH_SIZE]) for cid, items in by_conv.items() for i in range(0, len(items), _BATCH_SIZE)
     ]
     candidates = []
     with ThreadPoolExecutor(max_workers=5) as pool:
@@ -457,6 +471,7 @@ def candidates_vague(uid: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 # Merge helpers
 # ---------------------------------------------------------------------------
+
 
 def merge_candidates(lists: list[list[dict]]) -> list[dict]:
     """Merge candidate lists from multiple strategies, deduplicating by ID."""

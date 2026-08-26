@@ -62,6 +62,7 @@ def cleanup():
 # _is_vague
 # ---------------------------------------------------------------------------
 
+
 class TestIsVague:
     def test_short_description_with_dangling_pronoun(self, cleanup):
         # "it" + "away" — unresolved referent
@@ -90,6 +91,7 @@ class TestIsVague:
 # ---------------------------------------------------------------------------
 # candidates_stale_age
 # ---------------------------------------------------------------------------
+
 
 class TestCandidatesStaleAge:
     def test_old_task_without_due_date_is_candidate(self, cleanup, monkeypatch):
@@ -127,7 +129,8 @@ class TestCandidatesStaleAge:
         conv = {"started_at": _dt(120)}
         monkeypatch.setattr(cleanup.action_items_db, "get_action_items", lambda *a, **kw: items)
         monkeypatch.setattr(
-            cleanup.conversations_db, "get_conversation",
+            cleanup.conversations_db,
+            "get_conversation",
             lambda uid, cid: conv if cid == "conv-old" else None,
         )
 
@@ -141,7 +144,8 @@ class TestCandidatesStaleAge:
         conv = {"started_at": _dt(5)}
         monkeypatch.setattr(cleanup.action_items_db, "get_action_items", lambda *a, **kw: items)
         monkeypatch.setattr(
-            cleanup.conversations_db, "get_conversation",
+            cleanup.conversations_db,
+            "get_conversation",
             lambda uid, cid: conv if cid == "conv-new" else None,
         )
 
@@ -163,6 +167,7 @@ class TestCandidatesStaleAge:
 # ---------------------------------------------------------------------------
 # candidates_overdue
 # ---------------------------------------------------------------------------
+
 
 class TestCandidatesOverdue:
     def test_db_returned_task_with_due_at_is_candidate(self, cleanup, monkeypatch):
@@ -191,6 +196,7 @@ class TestCandidatesOverdue:
 
         assert "due_end_date" in captured, "due_end_date must be forwarded to the DB"
         from datetime import timezone
+
         assert captured["due_end_date"].tzinfo is not None, "cutoff must be timezone-aware"
 
     def test_task_without_due_at_skipped(self, cleanup, monkeypatch):
@@ -213,6 +219,7 @@ class TestCandidatesOverdue:
 # ---------------------------------------------------------------------------
 # candidates_vague
 # ---------------------------------------------------------------------------
+
 
 class TestCandidatesVague:
     def test_vague_task_is_candidate(self, cleanup, monkeypatch):
@@ -255,6 +262,7 @@ class TestCandidatesVague:
 # ---------------------------------------------------------------------------
 # merge_candidates
 # ---------------------------------------------------------------------------
+
 
 class TestMergeCandidates:
     def test_deduplicates_same_id_across_lists(self, cleanup):

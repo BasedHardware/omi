@@ -50,15 +50,13 @@ def router():
 
 
 def _three_candidates(strategy: str = "stale_age"):
-    return [
-        {"id": f"t{i}", "description": f"task {i}", "strategy": strategy}
-        for i in range(3)
-    ]
+    return [{"id": f"t{i}", "description": f"task {i}", "strategy": strategy} for i in range(3)]
 
 
 # ---------------------------------------------------------------------------
 # Preview endpoint
 # ---------------------------------------------------------------------------
+
 
 class TestCleanupPreview:
     def test_returns_session_id_breakdown_and_total(self, router, monkeypatch):
@@ -144,16 +142,19 @@ class TestCleanupPreview:
 # Execute endpoint
 # ---------------------------------------------------------------------------
 
+
 class TestCleanupExecute:
     def test_deletes_staged_ids_and_returns_count(self, router, monkeypatch):
         ids = ["t1", "t2", "t3"]
         monkeypatch.setattr(
-            router, "_load_session",
+            router,
+            "_load_session",
             lambda uid, sid: {"ids": ids, "strategies": ["stale_age"], "age_days": 90},
         )
         monkeypatch.setattr(router, "_delete_session", lambda *a, **kw: None)
         monkeypatch.setattr(
-            router.action_items_db, "delete_action_items_batch",
+            router.action_items_db,
+            "delete_action_items_batch",
             lambda uid, id_list: id_list,
         )
         monkeypatch.setattr(router, "delete_action_item_vectors_batch", lambda *a, **kw: None)
@@ -175,13 +176,15 @@ class TestCleanupExecute:
 
     def test_empty_candidate_list_returns_zero_without_calling_delete(self, router, monkeypatch):
         monkeypatch.setattr(
-            router, "_load_session",
+            router,
+            "_load_session",
             lambda uid, sid: {"ids": [], "strategies": ["stale_age"], "age_days": 90},
         )
         monkeypatch.setattr(router, "_delete_session", lambda *a, **kw: None)
         delete_called = []
         monkeypatch.setattr(
-            router.action_items_db, "delete_action_items_batch",
+            router.action_items_db,
+            "delete_action_items_batch",
             lambda *a, **kw: delete_called.append(True) or [],
         )
 
@@ -194,21 +197,25 @@ class TestCleanupExecute:
     def test_vectors_and_notifications_only_on_non_empty_deleted(self, router, monkeypatch):
         ids = ["t1"]
         monkeypatch.setattr(
-            router, "_load_session",
+            router,
+            "_load_session",
             lambda uid, sid: {"ids": ids, "strategies": ["stale_age"], "age_days": 90},
         )
         monkeypatch.setattr(router, "_delete_session", lambda *a, **kw: None)
         monkeypatch.setattr(
-            router.action_items_db, "delete_action_items_batch",
+            router.action_items_db,
+            "delete_action_items_batch",
             lambda uid, id_list: id_list,
         )
         vector_calls, notify_calls = [], []
         monkeypatch.setattr(
-            router, "delete_action_item_vectors_batch",
+            router,
+            "delete_action_item_vectors_batch",
             lambda uid, deleted_ids: vector_calls.append(deleted_ids),
         )
         monkeypatch.setattr(
-            router, "send_action_items_batch_deletion_message",
+            router,
+            "send_action_items_batch_deletion_message",
             lambda **kw: notify_calls.append(kw),
         )
 
