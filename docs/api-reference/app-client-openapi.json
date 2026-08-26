@@ -6745,6 +6745,10 @@
       },
       "CleanupCandidateMeta": {
         "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -6756,13 +6760,22 @@
         },
         "required": [
           "id",
-          "strategy"
+          "strategy",
+          "description"
         ],
         "title": "CleanupCandidateMeta",
         "type": "object"
       },
       "CleanupExecuteRequest": {
         "properties": {
+          "excluded_ids": {
+            "description": "Candidate IDs from the preview to keep (not delete)",
+            "items": {
+              "type": "string"
+            },
+            "title": "Excluded Ids",
+            "type": "array"
+          },
           "session_id": {
             "title": "Session Id",
             "type": "string"
