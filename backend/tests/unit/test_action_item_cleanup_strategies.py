@@ -87,6 +87,22 @@ class TestIsVague:
     def test_empty_string_not_vague(self, cleanup):
         assert cleanup._is_vague("") is False
 
+    @pytest.mark.parametrize(
+        "description",
+        [
+            "Clean the kitchen",
+            "Fix the sink",
+            "Sort the laundry",
+            "Change the oil",
+            "Check the mail",
+            "Return the library books",
+        ],
+    )
+    def test_verb_plus_concrete_the_noun_not_vague(self, cleanup, description):
+        # "the <noun>" names a concrete object — it's not a dangling reference like
+        # "it"/"them"/"that", so these should not be flagged as vague.
+        assert cleanup._is_vague(description) is False
+
 
 # ---------------------------------------------------------------------------
 # candidates_stale_age

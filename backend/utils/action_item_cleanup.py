@@ -416,11 +416,13 @@ _PRONOUN_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-# Common imperative verb + dangling reference combos
+# Common imperative verb + dangling reference combos. Only pronouns/demonstratives
+# count as "dangling" — "the <noun>" (e.g. "the sink", "the kitchen") is a concrete,
+# resolvable object, not a lost reference, so it's excluded here.
 _DANGLING_PATTERN = re.compile(
     r'^(put|take|send|get|fix|check|do|move|bring|pick up|drop off|return|'
     r'give back|hand|pass|grab|swap|switch|change|clean|clear|sort|set)\s+'
-    r'(it|them|those|these|that|this|the\s+\w+)\b',
+    r'(it|them|those|these|that|this)\b',
     re.IGNORECASE,
 )
 
