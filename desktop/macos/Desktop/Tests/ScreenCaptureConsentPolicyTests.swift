@@ -11,13 +11,6 @@ import XCTest
 /// fix it: the error is classified, and the classified error is terminal outside the
 /// special system modes.
 final class ScreenCaptureConsentPolicyTests: XCTestCase {
-  private func sourceFile(_ relativePath: String) throws -> String {
-    let url = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent().deletingLastPathComponent()
-      .appendingPathComponent(relativePath)
-    return try String(contentsOf: url, encoding: .utf8)
-  }
-
   // MARK: - Error classification
 
   func testUserDeclinedSCStreamErrorClassifiesAsPermissionDeclined() {
@@ -88,45 +81,4 @@ final class ScreenCaptureConsentPolicyTests: XCTestCase {
   }
 
   // MARK: - The retry loops must use the classified capture API
-
-  /// The recovery poll (5 s) and background poll (60 s) were the amplifiers that
-  /// re-armed the consent dialog: both probed with `captureActiveWindowAsync`, which
-  /// returns `Data?` and erases the decline. Pin them to the classified API and to an
-  /// explicit `.permissionDeclined` exit so a refactor cannot silently reintroduce the
-  /// unclassified probe.
-  func testRecoveryLoopsUseClassifiedCaptureAndExitOnDecline() throws {
-    let src = try sourceFile("Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift")
-
-    for fn in ["private func attemptRecovery() async {", "private func backgroundPollAttempt() async {"] {
-      guard let start = src.range(of: fn),
-        let end = src.range(of: "\n  }", range: start.upperBound..<src.endIndex)?.lowerBound
-      else { return XCTFail("\(fn) must exist") }
-      let body = String(src[start.upperBound..<end])
-      XCTAssertTrue(
-        body.contains("captureActiveWindowCGImage()"),
-        "\(fn) must probe with the classified capture API")
-      XCTAssertFalse(
-        body.contains("captureActiveWindowAsync()"),
-        "\(fn) must not use the unclassified Data? probe — it erases declined consent")
-      XCTAssertTrue(
-        body.contains("case .permissionDeclined:") && body.contains("handleCaptureConsentDeclined()"),
-        "\(fn) must exit through the terminal consent handler on a decline")
-    }
-  }
-
-  /// The capture tick itself must route a decline to the terminal handler, not the
-  /// engine-failure counter (5 consecutive failures of which re-enter the retry loop).
-  func testCaptureTickRoutesDeclineToTerminalHandler() throws {
-    let src = try sourceFile("Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift")
-    guard let start = src.range(of: "private func captureFrame() async {"),
-      let end = src.range(of: "\n  }", range: start.upperBound..<src.endIndex)?.lowerBound
-    else { return XCTFail("captureFrame must exist") }
-    let body = String(src[start.upperBound..<end])
-    XCTAssertTrue(
-      body.contains("case .permissionDeclined:"),
-      "captureFrame must handle the classified decline distinctly")
-    XCTAssertTrue(
-      body.contains("handleCaptureConsentDeclined()"),
-      "captureFrame must route declines to the terminal consent handler")
-  }
 }

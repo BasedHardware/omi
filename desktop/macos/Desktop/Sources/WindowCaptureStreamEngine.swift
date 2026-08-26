@@ -427,6 +427,11 @@ final class CaptureFrameSink: NSObject, SCStreamOutput, SCStreamDelegate, @unche
   private var latestFrame: (windowID: CGWindowID, image: CGImage)?
   private var waiter: CheckedContinuation<CGImage?, Never>?
   private var waiterGeneration = 0
+
+  /// Whether a caller is currently parked in `nextFrame`. Tests use this to observe
+  /// that a waiter has registered instead of sleeping for a plausible interval; a
+  /// wall-clock wait would make the retarget assertions racy on a loaded machine.
+  var hasParkedWaiter: Bool { lock.withLock { waiter != nil } }
   private var stopError: Error?
 
   /// Shared CIContext for CVPixelBuffer → CGImage. Cheap at ≤2 fps.

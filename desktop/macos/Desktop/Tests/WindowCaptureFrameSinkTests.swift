@@ -67,7 +67,12 @@ final class WindowCaptureFrameSinkTests: XCTestCase {
     let sink = CaptureFrameSink()
     sink.endRetarget(windowID: 42)
     async let pending = sink.nextFrame(windowID: 42, timeoutNs: 5_000_000_000)
-    try await Task.sleep(nanoseconds: 30_000_000)
+    // Yield until the waiter has actually parked. Sleeping a fixed interval instead
+    // would assert against a race: on a loaded machine the retarget can land before
+    // the continuation registers, and the test would pass for the wrong reason.
+    while !sink.hasParkedWaiter {
+      await Task.yield()
+    }
     sink.beginRetarget()
     let frame = await pending
     XCTAssertNil(frame)
