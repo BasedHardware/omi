@@ -84,6 +84,11 @@ enum DefaultsKey: String {
   case floatingBarCachedDesktopGrandfatherUntil = "floatingBar_cachedDesktopGrandfatherUntil"
   case desktopIsPaywalled = "desktop_isPaywalled"
   case askOmiBarEnabled = "askOmiBarEnabled"
+  case byokLLMProvider = "dev_byok_llm_provider"
+  /// Provider → SHA-256 fingerprint last enrolled after BYOKValidator .ok.
+  case byokEnrolledFingerprints = "byok_enrolled_fingerprints"
+  /// UID that last owned persisted BYOK keys on this Mac.
+  case byokOwnerUid = "byok_owner_uid"
   case rewindDisableContentCache = "rewindDisableContentCache"
   // Task-order migration keys are typed so TasksPage and its tests share the
   // migration contract instead of repeating raw UserDefaults literals.

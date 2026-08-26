@@ -44,6 +44,11 @@ export async function teardownUserData(): Promise<void> {
   } catch (e) {
     console.warn('[auth-teardown] byokClearAll failed:', (e as Error).message)
   }
+  try {
+    await window.omi?.byokClearCodex?.()
+  } catch (e) {
+    console.warn('[auth-teardown] byokClearCodex failed:', (e as Error).message)
+  }
   resetByokKeys()
   // 2b. Hosted MCP export key: same rationale as BYOK — it lives in its own
   //     encrypted store outside SQLite. Belt-and-suspenders with the clear inside

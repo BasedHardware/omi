@@ -470,17 +470,54 @@ def test_update_person_name_existing_returns_ok():
     update_person.assert_called_once_with('uid1', 'p1', 'Alice')
 
 
-def test_byok_subscription_endpoint_returns_unlimited_plan():
-    # `PlanLimits` was used in this module without being imported, so every BYOK
-    # user's GET /v1/users/me/subscription raised NameError -> 500 in prod.
+def test_byok_llm_only_subscription_meters_transcription_on_free_tier():
+    # Snapshot split: a validated LLM BYOK key unlocks unlimited chat/insights,
+    # but without a Deepgram header on the request the transcription/words
+    # fields must stay metered on the free-tier limits (Omi still pays for STT),
+    # not the 0/0 unlimited sentinel.
+    basic_limits = users_router.PlanLimits(transcription_seconds=600, words_transcribed=8000)
     with patch.object(users_router.users_db, 'is_byok_active', MagicMock(return_value=True)), patch.object(
-        users_router, 'has_byok_keys', MagicMock(return_value=True)
+        users_router, 'request_has_llm_byok_key', MagicMock(return_value=True)
+    ), patch.object(users_router, 'get_byok_key', MagicMock(return_value=None)), patch.object(
+        users_router, 'get_basic_plan_limits', MagicMock(return_value=basic_limits)
+    ), patch.object(
+        users_router,
+        'get_monthly_usage_for_subscription',
+        MagicMock(return_value={'transcription_seconds': 120, 'words_transcribed': 500}),
+    ):
+        response = users_router.get_user_subscription_endpoint(uid='uid1')
+
+    assert response.subscription.plan == users_router.PlanType.unlimited
+    assert response.subscription.features == ['byok']
+    # Chat/insights remain unlimited.
+    assert response.subscription.limits.insights_gained is None
+    assert response.insights_gained_used == 0
+    assert response.insights_gained_limit == 0
+    # Transcription/words are metered on the real free-tier usage.
+    assert response.subscription.limits.transcription_seconds == 600
+    assert response.transcription_seconds_used == 120
+    assert response.transcription_seconds_limit == 600
+    assert response.words_transcribed_limit == 8000
+    assert response.words_transcribed_used == 500
+
+
+def test_byok_llm_deepgram_subscription_returns_fully_unlimited_plan():
+    # With a validated x-byok-deepgram header the whole snapshot is unlimited,
+    # including transcription (None in the catalog, wire 0).
+    with patch.object(users_router.users_db, 'is_byok_active', MagicMock(return_value=True)), patch.object(
+        users_router, 'request_has_llm_byok_key', MagicMock(return_value=True)
+    ), patch.object(
+        users_router, 'get_byok_key', MagicMock(side_effect=lambda p: 'dg-key' if p == 'deepgram' else None)
     ):
         response = users_router.get_user_subscription_endpoint(uid='uid1')
 
     assert response.subscription.plan == users_router.PlanType.unlimited
     assert response.subscription.features == ['byok']
     assert response.subscription.limits.transcription_seconds is None
+    assert response.subscription.limits.words_transcribed is None
+    assert response.transcription_seconds_used == 0
+    assert response.transcription_seconds_limit == 0
+    assert response.words_transcribed_limit == 0
 
 
 def test_marketplace_reviewer_subscription_endpoint_returns_unlimited_plan():

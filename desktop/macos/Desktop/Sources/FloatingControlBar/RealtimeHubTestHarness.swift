@@ -192,7 +192,7 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
       // Phase 2: if asked for ephemeral, or no BYOK key exists (managed user),
       // mint a server-side ephemeral token via the backend; else use the BYOK key.
       let wantEphemeral = params["auth"] == "ephemeral"
-      let byok = APIKeyService.byokKey(provider.byokProvider)
+      let byok = APIKeyService.selectedRealtimeBYOKKey(for: provider.byokProvider)
       let auth: HubAuth
       if !wantEphemeral, let key = byok {
         auth = .byokKey(key)

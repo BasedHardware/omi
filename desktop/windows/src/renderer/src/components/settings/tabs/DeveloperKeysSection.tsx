@@ -1,9 +1,10 @@
 // Settings → Advanced → "Developer API Keys" subsection: bring-your-own-key
-// (BYOK). Provide all four provider keys and Omi runs entirely on them — the
-// "free forever" plan — with no Omi subscription charge. Ported from the macOS
-// DeveloperKeys section (SettingsContentView+DeveloperKeys.swift): same
-// all-or-nothing model, same copy, same up-front live validation before the
-// backend is ever flipped on.
+// (BYOK). Configure at least one LLM provider key (Deepgram is optional) and
+// Omi runs on your keys — the "free forever" plan — with no Omi subscription
+// charge. Ported from the macOS DeveloperKeys section
+// (SettingsContentView+DeveloperKeys.swift): same capability-scoped model,
+// same copy, same up-front live validation before the backend is ever flipped
+// on.
 //
 // Keys are encrypted at rest in the main process (ByokKeyStore, DPAPI). This UI
 // never persists or logs raw keys; enrollment sends only SHA-256 fingerprints.
@@ -16,24 +17,43 @@ import { dismissUsageLimit } from '../../../lib/usageLimit'
 import { fetchSubscription, fetchChatQuota } from '../../../lib/billing'
 import {
   BYOK_PROVIDERS,
+  BYOK_LLM_PROVIDERS,
+  isByokActive,
   type ByokProvider,
   type ByokValidationResults
 } from '../../../../../shared/byok'
 
 /** Field metadata per provider — titles/subtitles verbatim from the macOS view. */
 const PROVIDERS: { id: ByokProvider; title: string; subtitle: string; displayName: string }[] = [
+  {
+    id: 'openrouter',
+    title: 'OpenRouter API Key',
+    subtitle: 'For OpenRouter models.',
+    displayName: 'OpenRouter'
+  },
   { id: 'openai', title: 'OpenAI API Key', subtitle: 'For GPT calls.', displayName: 'OpenAI' },
-  { id: 'anthropic', title: 'Anthropic API Key', subtitle: 'For chat (Claude).', displayName: 'Anthropic' },
+  {
+    id: 'anthropic',
+    title: 'Anthropic API Key',
+    subtitle: 'For chat (Claude).',
+    displayName: 'Anthropic'
+  },
   {
     id: 'gemini',
     title: 'Gemini API Key',
     subtitle: 'For proactive AI (memory, tasks, insights, focus).',
     displayName: 'Gemini'
   },
-  { id: 'deepgram', title: 'Deepgram API Key', subtitle: 'For live transcription.', displayName: 'Deepgram' }
+  {
+    id: 'deepgram',
+    title: 'Deepgram API Key',
+    subtitle: 'For live transcription.',
+    displayName: 'Deepgram'
+  }
 ]
 
 const emptyKeys = (): Record<ByokProvider, string> => ({
+  openrouter: '',
   openai: '',
   anthropic: '',
   gemini: '',
@@ -49,7 +69,12 @@ export function DeveloperKeysSection(): React.JSX.Element {
   const [statuses, setStatuses] = useState<ByokValidationResults>({})
   const [checking, setChecking] = useState(false)
   const [activationError, setActivationError] = useState<string | null>(null)
+  // Whether the backend enrollment actually succeeded — the banner must not
+  // claim "Free plan active" off key presence alone: an invalid or rejected key
+  // stays in the fields while activation stays off.
+  const [enrolledActive, setEnrolledActive] = useState(false)
   const [reveal, setReveal] = useState<Record<ByokProvider, boolean>>({
+    openrouter: false,
     openai: false,
     anthropic: false,
     gemini: false,
@@ -60,9 +85,11 @@ export function DeveloperKeysSection(): React.JSX.Element {
   // pending timer so rapid edits collapse into one validate/enroll.
   const keysRef = useRef<Record<ByokProvider, string>>(emptyKeys())
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const enrollGenRef = useRef(0)
 
   // Load stored keys once on mount so the fields reflect what's saved. We do NOT
-  // validate on open (no network on open) — the banner reflects presence only;
+  // validate on open (no network on open) — the banner reflects the LAST
+  // enrollment outcome (validated providers from main), not field presence;
   // badges populate after a change triggers enrollment (Mac parity).
   useEffect(() => {
     void window.omi.byokGetAll().then((stored) => {
@@ -70,22 +97,26 @@ export function DeveloperKeysSection(): React.JSX.Element {
       keysRef.current = merged
       setKeys(merged)
     })
+    void window.omi.byokValidatedProviders().then((validated) => {
+      const llm = new Set<string>(BYOK_LLM_PROVIDERS as readonly string[])
+      setEnrolledActive(validated.some((p) => llm.has(p)))
+    })
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
     }
   }, [])
 
-  const hasAll = BYOK_PROVIDERS.every((p) => keys[p].trim().length > 0)
+  const hasActiveLLMByok = enrolledActive
   const hasAnyKey = BYOK_PROVIDERS.some((p) => keys[p].trim().length > 0)
 
   // Persist the current key set, then reconcile backend activation. Runs
   // debounced after edits (not per keystroke).
   const commit = async (): Promise<void> => {
+    const gen = ++enrollGenRef.current
     const cur = keysRef.current
     await Promise.all(BYOK_PROVIDERS.map((p) => window.omi.byokSet(p, cur[p].trim())))
-    // Live-validate only when the full set is present (matches the enroll IPC's
-    // own gate); a partial set just deactivates with no per-provider network.
-    const willValidate = BYOK_PROVIDERS.every((p) => cur[p].trim().length > 0)
+    // Live-validate when an LLM key is configured; Deepgram remains optional.
+    const willValidate = isByokActive(cur)
     setChecking(willValidate)
     setActivationError(null)
     const token = await auth.currentUser?.getIdToken().catch(() => undefined)
@@ -95,9 +126,11 @@ export function DeveloperKeysSection(): React.JSX.Element {
       return
     }
     const result = await window.omi.byokEnroll(token)
+    if (gen !== enrollGenRef.current) return
     setChecking(false)
     setStatuses(result.results)
     if (result.active) {
+      setEnrolledActive(true)
       setActivationError(null)
       // Mac parity: on activation, refresh plan/quota and clear any sticky
       // paywall so a user who just hit their limit isn't left blocked.
@@ -105,16 +138,22 @@ export function DeveloperKeysSection(): React.JSX.Element {
       void fetchSubscription().catch(() => {})
       void fetchChatQuota().catch(() => {})
     } else if (result.backendError) {
+      // The enroll POST failed — server state unknown, so keep the prior
+      // activation evidence instead of flipping the banner either way.
       setActivationError("Couldn't reach Omi to switch on the free plan. Try again.")
-    } else if (willValidate) {
-      const rejected = PROVIDERS.filter((p) => result.results[p.id] && !result.results[p.id]?.ok)
-        .map((p) => p.displayName)
-        .sort()
-      setActivationError(
-        rejected.length
-          ? `Rejected by provider: ${rejected.join(', ')}. Free plan stays off until all 4 keys authenticate.`
-          : null
-      )
+    } else {
+      // Deactivate DELETE sent (or every LLM key rejected) — the free plan is off.
+      setEnrolledActive(false)
+      if (willValidate) {
+        const rejected = PROVIDERS.filter((p) => result.results[p.id] && !result.results[p.id]?.ok)
+          .map((p) => p.displayName)
+          .sort()
+        setActivationError(
+          rejected.length
+            ? `Rejected by provider: ${rejected.join(', ')}. Free plan stays off until an LLM key authenticates.`
+            : null
+        )
+      }
     }
   }
 
@@ -136,6 +175,7 @@ export function DeveloperKeysSection(): React.JSX.Element {
     setStatuses({})
     setActivationError(null)
     setChecking(false)
+    setEnrolledActive(false)
     await window.omi.byokClearAll()
     const token = await auth.currentUser?.getIdToken().catch(() => undefined)
     if (token) await window.omi.byokEnroll(token) // deactivates (empty set)
@@ -153,19 +193,19 @@ export function DeveloperKeysSection(): React.JSX.Element {
 
       {/* Status banner — verbatim macOS copy, "this Mac" adapted to "this PC". */}
       <div className="mb-4 flex items-start gap-3 rounded-xl border border-white/[0.08] bg-white/[0.03] p-4">
-        {hasAll ? (
+        {hasActiveLLMByok ? (
           <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400" strokeWidth={1.75} />
         ) : (
           <KeyRound className="mt-0.5 h-5 w-5 shrink-0 text-white/55" strokeWidth={1.75} />
         )}
         <div className="min-w-0">
           <div className="text-[15px] font-semibold text-text-primary">
-            {hasAll ? 'Free plan active' : 'Use Omi free forever'}
+            {hasActiveLLMByok ? 'Free plan active' : 'Use Omi free forever'}
           </div>
           <div className="mt-0.5 text-sm text-text-tertiary">
-            {hasAll
+            {hasActiveLLMByok
               ? "You're paying your own providers. Omi skips the subscription charge. Keys stay on this PC."
-              : 'Provide all four keys (OpenAI, Anthropic, Gemini, Deepgram) to switch to the free plan. Keys stay on this PC — we never store them on our servers.'}
+              : 'Add an LLM key to switch to the free plan. OpenRouter is preferred when configured; Deepgram is optional and only powers transcription. Keys stay on this PC — we never store them on our servers.'}
           </div>
         </div>
       </div>
@@ -229,7 +269,10 @@ export function DeveloperKeysSection(): React.JSX.Element {
 
       {hasAnyKey && (
         <div className="mt-5 flex justify-center">
-          <button onClick={() => void clearAll()} className="text-sm font-medium text-red-400 hover:text-red-300">
+          <button
+            onClick={() => void clearAll()}
+            className="text-sm font-medium text-red-400 hover:text-red-300"
+          >
             Clear All Custom Keys
           </button>
         </div>

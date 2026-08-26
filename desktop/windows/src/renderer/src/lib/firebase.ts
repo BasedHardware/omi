@@ -11,6 +11,7 @@ import {
 } from 'firebase/auth'
 import { teardownUserData } from './authTeardown'
 import { encryptedAuthPersistence, scrubLegacyPlaintextAuth } from './encryptedAuthPersistence'
+import { isByokActive } from '../../../shared/byok'
 import type { SignInProvider } from '../../../shared/types'
 
 const app = initializeApp({
@@ -46,8 +47,18 @@ export const auth = (() => {
 // `firebase:authUser:*` key that Firebase's own migration didn't clear (e.g. a
 // window that loaded mid-migration). Guarded so it only removes a key the
 // encrypted store already holds. Fire-and-forget; never blocks boot.
-onAuthStateChanged(auth, () => {
+onAuthStateChanged(auth, (user) => {
   void scrubLegacyPlaintextAuth()
+  if (!user || typeof window === 'undefined') return
+  void user
+    .getIdToken()
+    .then(async (token) => {
+      const keys = await window.omi?.byokGetAll?.()
+      if (keys && isByokActive(keys)) {
+        await window.omi?.byokEnroll?.(token)
+      }
+    })
+    .catch(() => undefined)
 })
 
 /**

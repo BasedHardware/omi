@@ -64,7 +64,7 @@ from utils.observability.fallback import record_fallback
 from utils.product_telemetry import emit_product_event
 from utils.task_intelligence.workstream_association import associate_canonical_evidence
 from utils.subscription import is_trial_paywalled, should_defer_desktop_processing
-from utils.byok import get_byok_key
+from utils.subscription import request_has_llm_byok_key
 from utils.transcribe_decisions import should_skip_custom_stt_postprocessing
 from models.other import Person
 from models.structured import Structured  # type: ignore[reportAttributeAccessIssue]  # SDK/fallback export is runtime-complete.
@@ -1870,7 +1870,7 @@ def process_conversation(
     if uses_custom_stt:
         # Deferred: users_db.is_byok_active does an uncached Firestore read, so
         # it only runs for custom-STT conversations, not every finalization.
-        has_llm_byok_key = bool(users_db.is_byok_active(uid) and (get_byok_key('openai') or get_byok_key('anthropic')))
+        has_llm_byok_key = bool(users_db.is_byok_active(uid) and request_has_llm_byok_key())
     else:
         has_llm_byok_key = False
     if uses_custom_stt and should_skip_custom_stt_postprocessing(

@@ -184,7 +184,7 @@ async def tts_synthesize(request: TtsSynthesizeRequest, uid: str = Depends(get_c
     voice_id = request.voice_id.strip()
     if not _is_allowed_openai_voice(voice_id):
         raise HTTPException(status_code=400, detail="voice_id is not supported")
-    if await run_blocking(db_executor, is_desktop_trial_paywalled, uid, "desktop"):
+    if await run_blocking(db_executor, is_desktop_trial_paywalled, uid, "desktop", required_byok_provider="openai"):
         raise HTTPException(status_code=403, detail="A paid subscription is required")
     api_key = get_byok_key("openai") or os.getenv("OPENAI_API_KEY", "").strip()
     if not api_key:

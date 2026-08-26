@@ -1866,7 +1866,7 @@ def test_custom_stt_conversation_without_llm_byok_key_skips_llm_work(monkeypatch
     monkeypatch.setattr(process_conversation, '_trigger_apps', lambda *a, **k: None)
     # No LLM BYOK key on this request, so Omi would pay — the gate must fire.
     monkeypatch.setattr(process_conversation.users_db, 'is_byok_active', lambda _uid: False)
-    monkeypatch.setattr(process_conversation, 'get_byok_key', lambda _provider: None)
+    monkeypatch.setattr(process_conversation, 'request_has_llm_byok_key', lambda: False)
     # The completed status must be durably persisted, not left in `processing`.
     persisted = {}
     monkeypatch.setattr(
@@ -1917,9 +1917,7 @@ def test_custom_stt_conversation_with_llm_byok_key_runs_llm_work(monkeypatch):
     monkeypatch.setattr(process_conversation, 'submit_with_context', MagicMock())
     # The user carries an OpenAI key — enrichment runs on their bill.
     monkeypatch.setattr(process_conversation.users_db, 'is_byok_active', lambda _uid: True)
-    monkeypatch.setattr(
-        process_conversation, 'get_byok_key', lambda provider: 'sk-test' if provider == 'openai' else None
-    )
+    monkeypatch.setattr(process_conversation, 'request_has_llm_byok_key', lambda: True)
 
     process_conversation.process_conversation('uid', 'en', input_conversation)
 
@@ -1956,7 +1954,7 @@ def test_omi_stt_conversation_never_reads_byok_state(monkeypatch):
         'is_byok_active',
         lambda _uid: byok_calls.append(_uid) or True,
     )
-    monkeypatch.setattr(process_conversation, 'get_byok_key', lambda _provider: 'sk-test')
+    monkeypatch.setattr(process_conversation, 'request_has_llm_byok_key', lambda: byok_calls.append('llm') or True)
 
     process_conversation.process_conversation('uid', 'en', completed_conversation)
 
