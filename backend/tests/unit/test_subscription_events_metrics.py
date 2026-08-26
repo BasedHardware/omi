@@ -23,7 +23,14 @@ import logging
 from pathlib import Path
 
 from utils.metrics import OMI_SUBSCRIPTION_EVENTS
-from utils.observability.subscription_events import record_subscription_event
+from utils.observability.subscription_events import (
+    _EVENTS,
+    _INTERVALS,
+    _PLANS,
+    _REASONS,
+    _reachable_reasons,
+    record_subscription_event,
+)
 
 # Real, currently-recognized catalog prices (backend/config/plan_catalog.json),
 # one per plan, so plan/interval resolution is exercised against the actual
@@ -376,3 +383,92 @@ def test_webhook_calls_the_recorder_inside_the_subscription_event_branch():
     assert 'record_subscription_event(' in branch_body
     assert "stripe_event_type=event['type']" in branch_body
     assert "previous_attributes=event.get('data', {}).get('previous_attributes')" in branch_body
+
+
+# ---------------------------------------------------------------------------
+# Born-at-zero. A Counter child does not exist until its first ``.inc()``, so an
+# uninitialized labelled series is first scraped already holding 1 and is never
+# observed at 0. ``increase()``/``rate()`` measure movement inside the query
+# window, so a series that appears at 1 and stays there contributes exactly 0 —
+# the first event for a label combination is invisible to every panel and rule
+# built on them. Subscription events are rare enough, and ``plan`` x
+# ``interval`` x one process per Cloud Run instance wide enough, that almost
+# every event is the first for its combination.
+# ---------------------------------------------------------------------------
+
+_PLUS_YEAR_PRICE = 'price_1TuHCw1F8wnoWYvwZvKu86sI'
+
+_Series = tuple[str, str, str, str]
+
+
+def _exported_series() -> dict[_Series, float]:
+    return {
+        (
+            sample.labels['event'],
+            sample.labels['plan'],
+            sample.labels['interval'],
+            sample.labels['reason'],
+        ): sample.value
+        for family in OMI_SUBSCRIPTION_EVENTS.collect()
+        for sample in family.samples
+        if sample.name == 'omi_subscription_events_total'
+    }
+
+
+def _reachable_series() -> set[_Series]:
+    return {
+        (event, plan, interval, reason)
+        for event in _EVENTS
+        for plan in _PLANS
+        for interval in _INTERVALS
+        for reason in _reachable_reasons(event)
+    }
+
+
+def test_every_reachable_label_combination_is_exported_before_its_first_event():
+    exported = set(_exported_series())
+
+    missing = sorted(_reachable_series() - exported)
+    assert missing == [], (
+        'These label combinations have no series until their first event, so that first event '
+        f'would be invisible to increase(): {missing}'
+    )
+
+
+def test_zero_initialization_stays_inside_the_space_recording_can_emit():
+    exported = set(_exported_series())
+    reachable = _reachable_series()
+
+    # 4 reason-free events x 7 plans x 3 intervals, plus `ended` x 7 x 3 x 4 reasons.
+    assert len(reachable) == 168
+    # Both the initialization and the recording path read the same label sets,
+    # so neither can grow a combination the other does not know about.
+    assert exported - reachable == set()
+
+
+def test_only_ended_can_ever_carry_a_cancellation_reason():
+    for event in _EVENTS:
+        if event == 'ended':
+            assert set(_reachable_reasons(event)) == set(_REASONS)
+        else:
+            assert _reachable_reasons(event) == ('none',)
+
+
+def test_a_first_event_steps_a_series_that_was_already_exported_at_zero():
+    """The shape increase() needs: a step up from an existing sample, not an appearance at 1."""
+
+    series: _Series = ('cancellation_requested', 'plus', 'year', 'none')
+    before = _exported_series()
+    assert series in before
+
+    record_subscription_event(
+        stripe_event_type='customer.subscription.updated',
+        subscription_obj=_subscription_obj(
+            price_id=_PLUS_YEAR_PRICE,
+            interval='year',
+            cancel_at_period_end=True,
+        ),
+        previous_attributes={'cancel_at_period_end': False},
+    )
+
+    assert _exported_series()[series] == before[series] + 1
