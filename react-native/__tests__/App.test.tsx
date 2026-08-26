@@ -1052,7 +1052,11 @@ function mockCloudRoutes(request: MockRequest): MockResponse | null {
     };
   }
   if (request.path === '/v1/users/training-data-opt-in') {
-    return {id: request.id, status: 200, body: JSON.stringify({opted_in: false})};
+    return {
+      id: request.id,
+      status: 200,
+      body: JSON.stringify({opted_in: false}),
+    };
   }
   if (request.path === '/v1/users/private-cloud-sync') {
     return {
@@ -1110,7 +1114,11 @@ test('lists mocked cloud apps and reports a real install failure', async () => {
       return cloud;
     }
     if (request.path.startsWith('/v1/apps/enable')) {
-      return {id: request.id, status: 400, body: '{"detail":"setup incomplete"}'};
+      return {
+        id: request.id,
+        status: 400,
+        body: '{"detail":"setup incomplete"}',
+      };
     }
     return mockBackendResponse(request);
   });
@@ -1255,7 +1263,6 @@ test('returns to first-run onboarding after macOS sign-out clears the session', 
     ),
   ).toHaveLength(0);
 });
-
 
 test('macOS sign-out stays first-run even when an environment token remains in this process', async () => {
   mockPlatformOS = 'macos';

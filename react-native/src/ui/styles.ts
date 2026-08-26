@@ -1038,5 +1038,5 @@ export const styles = StyleSheet.create({
     lineHeight: 18,
     marginTop: 8,
   },
-  pressed: {opacity: 0.72, transform: [{scale: 0.98}]}
+  pressed: {opacity: 0.72, transform: [{scale: 0.98}]},
 });

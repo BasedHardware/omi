@@ -16,11 +16,7 @@ export function PageShell({
   workspaceMaterial?: boolean;
 }) {
   const content = (
-    <SafeAreaView
-      style={[
-        styles.safe,
-        macDesktop && styles.macSafe,
-      ]}>
+    <SafeAreaView style={[styles.safe, macDesktop && styles.macSafe]}>
       {children}
     </SafeAreaView>
   );

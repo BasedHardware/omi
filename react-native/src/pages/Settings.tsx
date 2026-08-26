@@ -45,7 +45,10 @@ function SettingRow({
           accessibilityRole="button"
           disabled={busy}
           onPress={action}
-          style={({pressed}) => [styles.cloudAction, pressed && styles.pressed]}>
+          style={({pressed}) => [
+            styles.cloudAction,
+            pressed && styles.pressed,
+          ]}>
           <Text style={styles.cloudActionText}>
             {busy ? 'Updating…' : actionLabel}
           </Text>
@@ -65,11 +68,13 @@ export function SettingsPage({
   signingIn?: boolean;
 }) {
   const [section, setSection] = useState<SettingsSection>('Account');
-  const [phase, setPhase] = useState<'loading' | 'signed-out' | 'ready' | 'error'>(
-    'loading',
-  );
+  const [phase, setPhase] = useState<
+    'loading' | 'signed-out' | 'ready' | 'error'
+  >('loading');
   const [error, setError] = useState<string | null>(null);
-  const [snapshot, setSnapshot] = useState<AccountSettingsSnapshot | null>(null);
+  const [snapshot, setSnapshot] = useState<AccountSettingsSnapshot | null>(
+    null,
+  );
   const [pending, setPending] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -147,207 +152,210 @@ export function SettingsPage({
     }
   };
 
-  const account = snapshot === null ? null : (
-    <>
-      {snapshot.profile === null ? (
-        <Text style={styles.projectionEmptyCopy}>
-          {snapshot.profileError ?? 'Account profile is unavailable.'}
-        </Text>
-      ) : (
-        <>
-          <SettingRow
-            copy={snapshot.profile.name ?? 'Name not set on this account.'}
-            title="Name"
-          />
-          <SettingRow
-            copy={snapshot.profile.email ?? 'Email not set on this account.'}
-            title="Email"
-          />
-          <SettingRow copy={snapshot.profile.uid} title="Account id" />
-          {snapshot.profile.company !== null && (
-            <SettingRow copy={snapshot.profile.company} title="Company" />
-          )}
-          {snapshot.profile.job !== null && (
-            <SettingRow copy={snapshot.profile.job} title="Job" />
-          )}
-          {snapshot.profile.dataProtectionLevel !== null && (
+  const account =
+    snapshot === null ? null : (
+      <>
+        {snapshot.profile === null ? (
+          <Text style={styles.projectionEmptyCopy}>
+            {snapshot.profileError ?? 'Account profile is unavailable.'}
+          </Text>
+        ) : (
+          <>
             <SettingRow
-              copy={snapshot.profile.dataProtectionLevel}
-              title="Data protection"
+              copy={snapshot.profile.name ?? 'Name not set on this account.'}
+              title="Name"
             />
-          )}
-        </>
-      )}
-      {snapshot.subscription === null ? (
+            <SettingRow
+              copy={snapshot.profile.email ?? 'Email not set on this account.'}
+              title="Email"
+            />
+            <SettingRow copy={snapshot.profile.uid} title="Account id" />
+            {snapshot.profile.company !== null && (
+              <SettingRow copy={snapshot.profile.company} title="Company" />
+            )}
+            {snapshot.profile.job !== null && (
+              <SettingRow copy={snapshot.profile.job} title="Job" />
+            )}
+            {snapshot.profile.dataProtectionLevel !== null && (
+              <SettingRow
+                copy={snapshot.profile.dataProtectionLevel}
+                title="Data protection"
+              />
+            )}
+          </>
+        )}
+        {snapshot.subscription === null ? (
+          <Text style={styles.projectionEmptyCopy}>
+            {snapshot.subscriptionError ?? 'Plan is unavailable.'}
+          </Text>
+        ) : (
+          <SettingRow
+            copy={[
+              snapshot.subscription.plan,
+              snapshot.subscription.status,
+              snapshot.subscription.transcriptionSecondsUsed !== null &&
+              snapshot.subscription.transcriptionSecondsLimit !== null
+                ? `${snapshot.subscription.transcriptionSecondsUsed} / ${snapshot.subscription.transcriptionSecondsLimit} transcribed seconds`
+                : null,
+            ]
+              .filter(item => item !== null)
+              .join(' · ')}
+            title="Plan"
+          />
+        )}
+        {(onSignOut !== undefined ||
+          (omiAuth !== undefined && omiAuth !== null)) && (
+          <SettingRow
+            action={() => {
+              runAction('sign-out', signOut).catch(() => undefined);
+            }}
+            actionLabel="Sign out"
+            busy={pending === 'sign-out'}
+            copy="Leave this app's cloud session. Your Omi account stays in the cloud."
+            title="Sign out"
+          />
+        )}
         <Text style={styles.projectionEmptyCopy}>
-          {snapshot.subscriptionError ?? 'Plan is unavailable.'}
+          Notification and usage controls that need other account APIs are not
+          shown.
         </Text>
-      ) : (
-        <SettingRow
-          copy={[
-            snapshot.subscription.plan,
-            snapshot.subscription.status,
-            snapshot.subscription.transcriptionSecondsUsed !== null &&
-            snapshot.subscription.transcriptionSecondsLimit !== null
-              ? `${snapshot.subscription.transcriptionSecondsUsed} / ${snapshot.subscription.transcriptionSecondsLimit} transcribed seconds`
-              : null,
-          ]
-            .filter(item => item !== null)
-            .join(' · ')}
-          title="Plan"
-        />
-      )}
-      {(onSignOut !== undefined ||
-        (omiAuth !== undefined && omiAuth !== null)) && (
-        <SettingRow
-          action={() => {
-            runAction('sign-out', signOut).catch(() => undefined);
-          }}
-          actionLabel="Sign out"
-          busy={pending === 'sign-out'}
-          copy="Leave this app's cloud session. Your Omi account stays in the cloud."
-          title="Sign out"
-        />
-      )}
-      <Text style={styles.projectionEmptyCopy}>
-        Notification and usage controls that need other account APIs are not
-        shown.
-      </Text>
-    </>
-  );
+      </>
+    );
 
-  const privacy = snapshot === null ? null : (
-    <>
-      {snapshot.storeRecordingPermission === null ? (
-        <Text style={styles.projectionEmptyCopy}>
-          {snapshot.storeRecordingError ??
-            'Recording storage permission is unavailable.'}
-        </Text>
-      ) : (
-        <SettingRow
-          action={() => {
-            const backend = omiBackend;
-            if (backend === undefined || backend === null) {
-              return;
+  const privacy =
+    snapshot === null ? null : (
+      <>
+        {snapshot.storeRecordingPermission === null ? (
+          <Text style={styles.projectionEmptyCopy}>
+            {snapshot.storeRecordingError ??
+              'Recording storage permission is unavailable.'}
+          </Text>
+        ) : (
+          <SettingRow
+            action={() => {
+              const backend = omiBackend;
+              if (backend === undefined || backend === null) {
+                return;
+              }
+              runAction('recording', () =>
+                setStoreRecordingPermission(
+                  backend,
+                  !snapshot.storeRecordingPermission,
+                ),
+              ).catch(() => undefined);
+            }}
+            actionLabel={
+              snapshot.storeRecordingPermission
+                ? 'Turn off recording storage'
+                : 'Turn on recording storage'
             }
-            runAction('recording', () =>
-              setStoreRecordingPermission(
-                backend,
-                !snapshot.storeRecordingPermission,
-              ),
-            ).catch(() => undefined);
-          }}
-          actionLabel={
-            snapshot.storeRecordingPermission
-              ? 'Turn off recording storage'
-              : 'Turn on recording storage'
-          }
-          busy={pending === 'recording'}
-          copy={
-            snapshot.storeRecordingPermission
-              ? 'Cloud recording storage is on.'
-              : 'Cloud recording storage is off.'
-          }
-          title="Recording storage"
-        />
-      )}
-      {snapshot.trainingOptedIn === null ? (
-        <Text style={styles.projectionEmptyCopy}>
-          {snapshot.trainingError ?? 'Training opt-in is unavailable.'}
-        </Text>
-      ) : (
-        <SettingRow
-          action={
-            snapshot.trainingOptedIn
-              ? undefined
-              : () => {
-                  const backend = omiBackend;
-                  if (backend === undefined || backend === null) {
-                    return;
+            busy={pending === 'recording'}
+            copy={
+              snapshot.storeRecordingPermission
+                ? 'Cloud recording storage is on.'
+                : 'Cloud recording storage is off.'
+            }
+            title="Recording storage"
+          />
+        )}
+        {snapshot.trainingOptedIn === null ? (
+          <Text style={styles.projectionEmptyCopy}>
+            {snapshot.trainingError ?? 'Training opt-in is unavailable.'}
+          </Text>
+        ) : (
+          <SettingRow
+            action={
+              snapshot.trainingOptedIn
+                ? undefined
+                : () => {
+                    const backend = omiBackend;
+                    if (backend === undefined || backend === null) {
+                      return;
+                    }
+                    runAction('training', () =>
+                      optInTrainingData(backend),
+                    ).catch(() => undefined);
                   }
-                  runAction('training', () =>
-                    optInTrainingData(backend),
-                  ).catch(() => undefined);
-                }
-          }
-          actionLabel={snapshot.trainingOptedIn ? undefined : 'Opt in'}
-          busy={pending === 'training'}
-          copy={
-            snapshot.trainingOptedIn
-              ? 'This account has opted in to training data. The API does not expose an opt-out from here.'
-              : 'This account has not opted in to training data.'
-          }
-          title="Training data"
-        />
-      )}
-      {snapshot.privateCloudSync === null ? (
-        <Text style={styles.projectionEmptyCopy}>
-          {snapshot.privateCloudSyncError ??
-            'Private cloud sync is unavailable.'}
-        </Text>
-      ) : (
-        <SettingRow
-          action={() => {
-            const backend = omiBackend;
-            if (backend === undefined || backend === null) {
-              return;
             }
-            runAction('sync', () =>
-              setPrivateCloudSync(backend, !snapshot.privateCloudSync),
-            ).catch(() => undefined);
-          }}
-          actionLabel={
-            snapshot.privateCloudSync
-              ? 'Turn off private cloud sync'
-              : 'Turn on private cloud sync'
-          }
-          busy={pending === 'sync'}
-          copy={
-            snapshot.privateCloudSync
-              ? 'Private cloud sync is on.'
-              : 'Private cloud sync is off.'
-          }
-          title="Private cloud sync"
-        />
-      )}
-      <Text style={styles.projectionEmptyCopy}>
-        Export and account deletion are not offered here. Those actions need
-        file download or irreversible deletion flows this page does not run.
-      </Text>
-    </>
-  );
+            actionLabel={snapshot.trainingOptedIn ? undefined : 'Opt in'}
+            busy={pending === 'training'}
+            copy={
+              snapshot.trainingOptedIn
+                ? 'This account has opted in to training data. The API does not expose an opt-out from here.'
+                : 'This account has not opted in to training data.'
+            }
+            title="Training data"
+          />
+        )}
+        {snapshot.privateCloudSync === null ? (
+          <Text style={styles.projectionEmptyCopy}>
+            {snapshot.privateCloudSyncError ??
+              'Private cloud sync is unavailable.'}
+          </Text>
+        ) : (
+          <SettingRow
+            action={() => {
+              const backend = omiBackend;
+              if (backend === undefined || backend === null) {
+                return;
+              }
+              runAction('sync', () =>
+                setPrivateCloudSync(backend, !snapshot.privateCloudSync),
+              ).catch(() => undefined);
+            }}
+            actionLabel={
+              snapshot.privateCloudSync
+                ? 'Turn off private cloud sync'
+                : 'Turn on private cloud sync'
+            }
+            busy={pending === 'sync'}
+            copy={
+              snapshot.privateCloudSync
+                ? 'Private cloud sync is on.'
+                : 'Private cloud sync is off.'
+            }
+            title="Private cloud sync"
+          />
+        )}
+        <Text style={styles.projectionEmptyCopy}>
+          Export and account deletion are not offered here. Those actions need
+          file download or irreversible deletion flows this page does not run.
+        </Text>
+      </>
+    );
 
-  const developer = snapshot === null ? null : snapshot.webhooks === null ? (
-    <Text style={styles.projectionEmptyCopy}>
-      {snapshot.webhooksError ?? 'Developer webhook status is unavailable.'}
-    </Text>
-  ) : snapshot.webhooks.length === 0 ? (
-    <Text style={styles.projectionEmptyCopy}>
-      No developer webhooks were returned.
-    </Text>
-  ) : (
-    <>
-      {snapshot.webhooks.map(webhook => (
-        <SettingRow
-          copy={[
-            webhook.enabled === null
-              ? 'Status unknown'
-              : webhook.enabled
-              ? 'Enabled'
-              : 'Disabled',
-            webhook.url,
-          ]
-            .filter(item => item !== null)
-            .join(' · ')}
-          key={webhook.type}
-          title={webhook.type}
-        />
-      ))}
+  const developer =
+    snapshot === null ? null : snapshot.webhooks === null ? (
       <Text style={styles.projectionEmptyCopy}>
-        API keys and webhook URL edits are not offered here.
+        {snapshot.webhooksError ?? 'Developer webhook status is unavailable.'}
       </Text>
-    </>
-  );
+    ) : snapshot.webhooks.length === 0 ? (
+      <Text style={styles.projectionEmptyCopy}>
+        No developer webhooks were returned.
+      </Text>
+    ) : (
+      <>
+        {snapshot.webhooks.map(webhook => (
+          <SettingRow
+            copy={[
+              webhook.enabled === null
+                ? 'Status unknown'
+                : webhook.enabled
+                ? 'Enabled'
+                : 'Disabled',
+              webhook.url,
+            ]
+              .filter(item => item !== null)
+              .join(' · ')}
+            key={webhook.type}
+            title={webhook.type}
+          />
+        ))}
+        <Text style={styles.projectionEmptyCopy}>
+          API keys and webhook URL edits are not offered here.
+        </Text>
+      </>
+    );
 
   return (
     <ScrollView contentContainerStyle={styles.destinationPage}>
@@ -403,21 +411,20 @@ export function SettingsPage({
                 </Text>
               </FocusPressable>
             )}
-            {phase === 'error' &&
-              error !== desktopBackendConfigurationCopy && (
-                <FocusPressable
-                  accessibilityLabel="Retry settings"
-                  accessibilityRole="button"
-                  onPress={() => {
-                    reload().catch(() => undefined);
-                  }}
-                  style={({pressed}) => [
-                    styles.cloudAction,
-                    pressed && styles.pressed,
-                  ]}>
-                  <Text style={styles.cloudActionText}>Retry</Text>
-                </FocusPressable>
-              )}
+            {phase === 'error' && error !== desktopBackendConfigurationCopy && (
+              <FocusPressable
+                accessibilityLabel="Retry settings"
+                accessibilityRole="button"
+                onPress={() => {
+                  reload().catch(() => undefined);
+                }}
+                style={({pressed}) => [
+                  styles.cloudAction,
+                  pressed && styles.pressed,
+                ]}>
+                <Text style={styles.cloudActionText}>Retry</Text>
+              </FocusPressable>
+            )}
           </>
         ) : section === 'Account' ? (
           account

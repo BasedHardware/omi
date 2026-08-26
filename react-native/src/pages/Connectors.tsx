@@ -28,9 +28,9 @@ export function ConnectorsPage({
   onSignIn?: () => Promise<void>;
   signingIn?: boolean;
 }) {
-  const [phase, setPhase] = useState<'loading' | 'signed-out' | 'ready' | 'error'>(
-    'loading',
-  );
+  const [phase, setPhase] = useState<
+    'loading' | 'signed-out' | 'ready' | 'error'
+  >('loading');
   const [error, setError] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<ConnectorsSnapshot | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
@@ -102,8 +102,7 @@ export function ConnectorsPage({
         title: 'My Apps',
       },
       {
-        empty:
-          'No apps with an external service connection were returned.',
+        empty: 'No apps with an external service connection were returned.',
         items: serviceApps(snapshot),
         key: 'Services',
         title: 'Services',
@@ -173,21 +172,20 @@ export function ConnectorsPage({
                 </Text>
               </FocusPressable>
             )}
-            {phase === 'error' &&
-              error !== desktopBackendConfigurationCopy && (
-                <FocusPressable
-                  accessibilityLabel="Retry apps"
-                  accessibilityRole="button"
-                  onPress={() => {
-                    reload().catch(() => undefined);
-                  }}
-                  style={({pressed}) => [
-                    styles.cloudAction,
-                    pressed && styles.pressed,
-                  ]}>
-                  <Text style={styles.cloudActionText}>Retry</Text>
-                </FocusPressable>
-              )}
+            {phase === 'error' && error !== desktopBackendConfigurationCopy && (
+              <FocusPressable
+                accessibilityLabel="Retry apps"
+                accessibilityRole="button"
+                onPress={() => {
+                  reload().catch(() => undefined);
+                }}
+                style={({pressed}) => [
+                  styles.cloudAction,
+                  pressed && styles.pressed,
+                ]}>
+                <Text style={styles.cloudActionText}>Retry</Text>
+              </FocusPressable>
+            )}
           </View>
         ) : (
           sections.map(section => (
@@ -199,7 +197,9 @@ export function ConnectorsPage({
                 <Text style={styles.projectionEmptyCopy}>{section.empty}</Text>
               ) : (
                 section.items.map(app => (
-                  <View key={`${section.key}-${app.id}`} style={styles.cloudRow}>
+                  <View
+                    key={`${section.key}-${app.id}`}
+                    style={styles.cloudRow}>
                     <View style={styles.cloudRowBody}>
                       <Text style={styles.cloudRowTitle}>{app.name}</Text>
                       {app.description.length > 0 && (

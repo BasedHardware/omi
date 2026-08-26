@@ -333,13 +333,19 @@ describe('Onboarding chrome', () => {
     const surface = renderer.root.find(
       node => node.props.accessibilityLabel === 'First-run onboarding',
     );
-    const surfaceStyle = Object.assign({}, ...flattenStyle(surface.props.style));
+    const surfaceStyle = Object.assign(
+      {},
+      ...flattenStyle(surface.props.style),
+    );
     const content = renderer.root.find(node =>
       flattenStyle(node.props.style).some(
         style => style.gap === tokens.space.sm && style.width === '100%',
       ),
     );
-    const contentStyle = Object.assign({}, ...flattenStyle(content.props.style));
+    const contentStyle = Object.assign(
+      {},
+      ...flattenStyle(content.props.style),
+    );
     const dotsStyle = Object.assign(
       {},
       ...flattenStyle(findOmiDots(renderer).parent?.props.style),
@@ -363,12 +369,10 @@ describe('Onboarding chrome', () => {
     ).toHaveLength(0);
     expect(contentStyle.gap).toBe(tokens.space.sm);
     expect(Number(contentStyle.gap)).toBeLessThan(tokens.space.lg);
-    expect(dotsStyle.marginBottom ?? tokens.space.none).toBe(
-      tokens.space.none,
-    );
+    expect(dotsStyle.marginBottom ?? tokens.space.none).toBe(tokens.space.none);
   });
 
-  test('welcome mark geometry is main\'s white ring, not a rainbow smile', () => {
+  test("welcome mark geometry is main's white ring, not a rainbow smile", () => {
     expect(OMI_MARK_INK).toBe('#ffffff');
     expect(omiMarkGeometry).toMatchObject({
       canvas: 260,

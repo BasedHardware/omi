@@ -80,7 +80,9 @@ function optionalBoolean(value: unknown): boolean | null {
 }
 
 function optionalInteger(value: unknown): number | null {
-  return typeof value === 'number' && Number.isSafeInteger(value) ? value : null;
+  return typeof value === 'number' && Number.isSafeInteger(value)
+    ? value
+    : null;
 }
 
 function parseJson(body: string | null, label: string): unknown {
@@ -346,8 +348,14 @@ export async function loadAccountSettings(
   ] = await Promise.all([
     readOptional(async () =>
       parseCloudProfile(
-        (await cloudRequest(backend, 'desktop-profile-read', 'GET', '/v1/users/profile'))
-          .body,
+        (
+          await cloudRequest(
+            backend,
+            'desktop-profile-read',
+            'GET',
+            '/v1/users/profile',
+          )
+        ).body,
         'Profile response',
       ),
     ),
