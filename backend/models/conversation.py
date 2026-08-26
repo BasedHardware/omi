@@ -198,6 +198,20 @@ class Conversation(BaseModel):
     conversation_audio: Optional[ConversationAudio] = None
     private_cloud_sync_enabled: bool = False
 
+    # Meeting-note screenshots are deliberately NOT a field here. Building the set means minting
+    # fresh 60-minute signed URLs for every persisted frame, which no ordinary conversation read
+    # should pay for, so nothing ever populated it and the field was permanently None. A field
+    # that always says nothing is worse than absent on the most widely consumed model in the
+    # product: it tells every client — iOS, Android, web — that a conversation carries its
+    # screenshots inline, when the only way to get them is
+    # GET /v1/conversations/{id}/screenshots. It also pulled ConversationScreenFrameSet into the
+    # mobile Dart schema group, where the generator could not resolve it. Callers that want the
+    # set inline: utils.screen_frames.enforcement.build_frame_set_response.
+    # Per-conversation opt-out of including screenshots in the public shared
+    # note. Default true (David's ruling 2026-08-20) — shared notes include
+    # screenshots unless the owner explicitly turns this off.
+    screenshot_sharing_enabled: bool = True
+
     apps_results: List[AppResult] = []
     suggested_summarization_apps: List[str] = []
 

@@ -50,6 +50,11 @@ struct ConversationDetailView: View {
   @ObservedObject private var automation = ConversationDetailAutomationState.shared
 
   @StateObject private var appProvider = AppProvider()
+  /// This note's screenshots, owned here rather than inside the summary because both halves of the
+  /// note read them: the strip is in the summary, and the banner is the *header's* background.
+  /// Constructing it is free — the initialiser only captures closures — and it starts no work
+  /// until `MeetingNoteScreenshotStrip`'s task calls `load()`, which the gate below still governs.
+  @StateObject private var screenshotsStore = MeetingScreenshotsStore()
   /// Descriptions the reader has explicitly added to their task list from this
   /// summary, and those currently in flight. Action items on a summary are not
   /// tasks (I1); this is the record of the reader's own "Add to Tasks" gesture.
@@ -385,6 +390,11 @@ struct ConversationDetailView: View {
 
       Spacer()
 
+      // The meeting's chosen frame, sharp and with nothing written over it. It sets this row's
+      // height, so a note with a banner gets a slightly taller header and a note without one is
+      // exactly as it was.
+      headerBannerInset
+
       // View Transcript pill button
       viewTranscriptButton
 
@@ -393,6 +403,11 @@ struct ConversationDetailView: View {
     }
     .padding(.horizontal, OmiSpacing.xxl)
     .padding(.vertical, OmiSpacing.lg)
+    // The banner, as this header's ground rather than as a slot below it. `MeetingNoteHeaderBanner`
+    // draws no text — every word in this header is still the header's own real chrome, in front of
+    // it — and it is absent entirely when the note has no approved frame, which leaves the ordinary
+    // header exactly as it was.
+    .background(headerBanner)
     .alert("Edit Conversation Title", isPresented: $showEditDialog) {
       TextField("Title", text: $editedTitle)
       Button("Cancel", role: .cancel) {}
@@ -410,6 +425,31 @@ struct ConversationDetailView: View {
       }
     } message: {
       Text("Are you sure you want to delete this conversation? This action cannot be undone.")
+    }
+  }
+
+  @ViewBuilder
+  private var headerBanner: some View {
+    if MeetingScreenshotsStore.isEnabled, let banner = screenshotsStore.banner {
+      MeetingNoteHeaderBanner(frame: banner)
+    }
+  }
+
+  @ViewBuilder
+  private var headerBannerInset: some View {
+    if MeetingScreenshotsStore.isEnabled, let banner = screenshotsStore.banner {
+      MeetingNoteHeaderInset(
+        frame: banner,
+        onOpen: {
+          ScreenFrameQuickLook.shared.present(
+            screenshotsStore.quickLookFrames,
+            startingAt: banner.id,
+            refreshing: {
+              await screenshotsStore.refreshPersistedSet()
+              return screenshotsStore.quickLookFrames
+            })
+        },
+        onContentUnavailable: { Task { await screenshotsStore.refreshPersistedSet() } })
     }
   }
 
@@ -598,6 +638,22 @@ struct ConversationDetailView: View {
 
   @ViewBuilder
   private var summaryContent: some View {
+    if MeetingScreenshotsStore.isEnabled {
+      MeetingNoteScreenshotsLayout(
+        store: screenshotsStore, conversation: displayConversation, date: displayDate
+      ) {
+        summaryBeforeScreenshots
+      } afterScreenshots: {
+        summaryAfterScreenshots
+      }
+    } else {
+      summaryBeforeScreenshots
+      summaryAfterScreenshots
+    }
+  }
+
+  @ViewBuilder
+  private var summaryBeforeScreenshots: some View {
     let selection = ConversationSummarySelection.primarySummary(for: displayConversation)
 
     // Overview section (selected app result, or the structured fallback)
@@ -623,7 +679,10 @@ struct ConversationDetailView: View {
     if !displayConversation.structured.actionItems.isEmpty {
       actionItemsSection
     }
+  }
 
+  @ViewBuilder
+  private var summaryAfterScreenshots: some View {
     // Metadata chips
     metadataSection
 

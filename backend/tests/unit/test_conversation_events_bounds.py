@@ -140,6 +140,7 @@ def router():
         "database": _pkg("database"),
         "database._client": client_mod,
         "database.conversations": _pkg("database.conversations"),
+        "database.screen_frames": _pkg("database.screen_frames"),
         "database.action_items": _pkg("database.action_items"),
         "database.memories": _pkg("database.memories"),
         "database.redis_db": _pkg("database.redis_db"),

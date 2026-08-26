@@ -22,12 +22,41 @@ export type {
   AudioFileUrlInfo,
   Conversation,
   ConversationPhoto,
+  ConversationScreenFrame,
+  ConversationScreenFrameSet,
   ConversationStatus,
   Event,
   Geolocation,
   MemoryCategory,
+  NormalizedRect,
+  ScreenFrameGround,
+  ScreenFrameSharingUpdateRequest,
   Structured,
 } from '@/lib/omiApi.generated';
+
+/**
+ * Meeting-note screenshot ("screen frame") types. Formerly hand-written in
+ * `@/types/screenFrames` (TODO(screen-frames) #12155) as a stopgap while the
+ * screen-frame-egress routes were being built concurrently across
+ * backend/desktop/web; the OpenAPI spec has since been regenerated with them,
+ * so those types are re-exported above like everything else in this file.
+ *
+ * Two optionality differences from the old hand-written shapes, both now
+ * resolved at call sites rather than papered over here:
+ * - `ConversationScreenFrameSet.banner`/`.strip` are optional in the
+ *   generated schema (the old hand-written type required them); consumers
+ *   default an absent `strip` to `[]` and treat an absent `banner` as `null`
+ *   (see `@/lib/screenFrames`).
+ * - `ConversationScreenFrame.ground` is now *required* (the old hand-written
+ *   type marked it optional for pre-`ground` records); `ScreenFrameGround.stops`
+ *   is a general `string[]` rather than a 2-tuple, so
+ *   `ConversationScreenFrameBanner` still defaults each stop defensively.
+ *
+ * `ScreenFrameSourceBadge` (the presentational label/icon union) has no
+ * generated equivalent — it's UI-only, not backend schema — so it stays local
+ * to `ConversationScreenFrameBanner`, derived from the generated
+ * `source_badge` field rather than re-declared.
+ */
 
 // `Memory` and `TranscriptSegment` aliases are defined below as intersections
 // because consumers read client-enriched fields the backend REST schema does

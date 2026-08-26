@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/widgets/photo_viewer_page.dart';
+import 'package:omi/widgets/media_viewer_page.dart';
 
 class PhotosGridComponent extends StatelessWidget {
   final List<ConversationPhoto> photos;
@@ -24,7 +24,7 @@ class PhotosGridComponent extends StatelessWidget {
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (context) => PhotoViewerPage(photos: photos, initialIndex: idx),
+                builder: (context) => MediaViewerPage(items: _mediaItemsFor(photos), initialIndex: idx),
               ),
             );
           },
@@ -75,4 +75,16 @@ class PhotosGridComponent extends StatelessWidget {
       ),
     );
   }
+}
+
+List<MediaViewerItem> _mediaItemsFor(List<ConversationPhoto> photos) {
+  return photos.map((photo) {
+    return MediaViewerItem(
+      base64: photo.base64,
+      heroTag: photo.id,
+      showCaptionStrip: true,
+      caption: photo.description,
+      discarded: photo.discarded,
+    );
+  }).toList();
 }

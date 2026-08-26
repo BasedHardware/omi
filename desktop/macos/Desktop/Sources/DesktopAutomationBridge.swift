@@ -681,6 +681,12 @@ final class DesktopAutomationActionRegistry {
     let run: Handler
   }
 
+  /// A 1x1 PNG, for the hermetic half of `screen_frame_quick_look_probe`. Literal bytes rather
+  /// than a rendered image so the probe has no dependency on capture history, a backend, or AppKit
+  /// drawing — the thing it is verifying is the panel, not the picture.
+  static let onePixelPNGBase64 =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+
   private var entries: [String: Entry] = [:]
   private var didRegisterBuiltins = false
   /// Non-prod harness latch so race probes stay busy without relying on LLM latency.
@@ -3709,6 +3715,84 @@ final class DesktopAutomationActionRegistry {
         "speaker_label": assignedSegment?.speaker ?? segment.speaker ?? "",
         "segment_count": "\(refreshed.transcriptSegments.count)",
       ]
+    }
+
+    register(
+      name: "screen_frame_quick_look_probe",
+      summary: "Open screenshots in Quick Look and read the panel back",
+      params: ["conversationId", "source", "dismiss"]
+    ) { params in
+      // Quick Look's panel is a system window, so no capture path in this app can photograph it —
+      // see `ScreenFrameQuickLook.probeState()`. This is how the responder-chain claim, the
+      // materialisation of signed URLs into files, and the panel actually opening are verified.
+      if params["dismiss"] == "true" {
+        await ScreenFrameQuickLook.shared.dismissForProbe()
+        return ["dismissed": "true"]
+      }
+      // Two sources, because they materialise by completely different routes: a meeting frame is a
+      // signed URL to download, a Rewind moment is usually a frame inside a video chunk to decode.
+      // A probe that only exercised one would leave the other unproven.
+      let source = params["source"] ?? "conversation"
+      let frames: [QuickLookFrame]
+      let subject: String
+      if source == "synthetic" {
+        // The hermetic case. It needs neither a signed URL nor a Rewind chunk, so it can run on a
+        // fresh bundle with no capture history and no backend — which is what makes it usable as
+        // an e2e step. `URLSession` serves `file://` for a data task, so this reaches the panel
+        // through exactly the same materialise-then-present path a real frame does.
+        let seed = FileManager.default.temporaryDirectory
+          .appendingPathComponent("omi-quick-look-probe.png")
+        guard let png = Data(base64Encoded: Self.onePixelPNGBase64) else {
+          return ["error": "probe_seed_undecodable"]
+        }
+        do {
+          try png.write(to: seed, options: .atomic)
+        } catch {
+          return ["error": "probe_seed_unwritable: \(error.localizedDescription)"]
+        }
+        frames = [QuickLookFrame(id: "probe", source: .remote(seed), title: "Quick Look probe")]
+        subject = "synthetic"
+      } else if source == "rewind" {
+        let recent = try await RewindDatabase.shared.getRecentScreenshots(limit: 6)
+        frames = recent.map { QuickLookFrame(screenshot: $0) }
+        subject = "rewind"
+      } else {
+        let rawConversationId = params["conversationId"]?
+          .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let rawConversationId, !rawConversationId.isEmpty else {
+          return ["error": "missing conversationId"]
+        }
+        let set = try await APIClient.shared.getConversationScreenFrames(
+          conversationID: rawConversationId)
+        let ordered = (set.banner.map { [$0] } ?? []) + set.strip
+        frames = ordered.compactMap { QuickLookFrame(frame: $0) }
+        subject = rawConversationId
+      }
+      guard let first = frames.first else {
+        return ["error": "no_frames", "conversation_id": subject]
+      }
+      await MainActor.run {
+        ScreenFrameQuickLook.shared.present(frames, startingAt: first.id)
+      }
+      // `present` fetches the clicked frame before it shows anything, so the panel is not up the
+      // instant this returns. Poll rather than sleep a guessed interval.
+      // Both conditions, not just visibility: an ordered-out panel can still report itself visible
+      // while its data source is gone, so polling on `panel_visible` alone returns the *previous*
+      // presentation's window and reads zero ready items off the new one.
+      for _ in 0..<40 {
+        let state = await MainActor.run { ScreenFrameQuickLook.shared.probeState() }
+        if state["panel_visible"] == "true", state["panel_controlled"] == "true",
+          state["ready_count"] != "0"
+        {
+          break
+        }
+        try? await Task.sleep(nanoseconds: 100_000_000)
+      }
+      var result = await MainActor.run { ScreenFrameQuickLook.shared.probeState() }
+      result["conversation_id"] = subject
+      result["source"] = source
+      result["requested_count"] = "\(frames.count)"
+      return result
     }
 
     register(

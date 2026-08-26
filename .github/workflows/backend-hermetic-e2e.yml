@@ -18,7 +18,13 @@ jobs:
   scope:
     name: Detect Hermetic Backend Scope
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    # The full-history fetch (fetch-depth: 0, required to resolve the PR base
+    # live for the scope diff) can exceed two minutes on hosted runners for
+    # large merge refs; the old 2-minute job cap killed the fetch mid-transfer
+    # and the merge gate correctly failed closed on "scope cancelled" with no
+    # code failure. Bound generously like the apt steps below: the cap is a
+    # hang backstop, not a budget the legitimate path must fit under.
+    timeout-minutes: 10
     outputs:
       applies: ${{ steps.scope.outputs.applies }}
     steps:

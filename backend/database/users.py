@@ -225,6 +225,20 @@ def set_user_store_recording_permission(uid: str, value: bool):
     user_ref.update({'store_recording_permission': value})
 
 
+def get_meeting_note_screenshots_enabled(uid: str) -> bool:
+    """Account-level setting gating screen-frame egress admission (contract
+    §6). Default true — off means the feature does nothing and existing
+    frames stay hidden (contract §9), it does not delete anything."""
+    user_ref = db.collection('users').document(uid)
+    user_data = user_ref.get().to_dict() or {}
+    return user_data.get('meeting_note_screenshots_enabled', True)
+
+
+def set_meeting_note_screenshots_enabled(uid: str, value: bool):
+    user_ref = db.collection('users').document(uid)
+    user_ref.update({'meeting_note_screenshots_enabled': value})
+
+
 def get_user_private_cloud_sync_enabled(uid: str) -> bool:
     """Check if user has private cloud sync enabled."""
     user_ref = db.collection('users').document(uid)

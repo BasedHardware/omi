@@ -89,6 +89,7 @@ from routers import (
     task_recommendations,
     conversation_finalization,
     public_shared_conversation_chat,
+    screen_frames,
 )
 from routers.listen.registry import proactive_message_dispatcher
 
@@ -236,6 +237,7 @@ app.include_router(desktop_proxy.router)
 app.include_router(desktop_realtime.router)
 app.include_router(desktop_screen_crisp.router)
 app.include_router(desktop_tts_updates.router)
+app.include_router(screen_frames.router)
 
 
 methods_timeout = {

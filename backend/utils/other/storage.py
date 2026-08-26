@@ -21,7 +21,7 @@ else:
     _opus_import_error = None
 from google.cloud.exceptions import NotFound, NotFound as BlobNotFound
 
-from database.redis_db import cache_signed_url, get_cached_signed_url
+from database.redis_db import cache_signed_url, get_cached_signed_url, delete_cached_signed_url
 from utils import encryption
 from utils.cloud_tasks import enqueue_audio_merge_job, is_audio_merge_dispatch_enabled
 from utils.observability.fallback import record_fallback
@@ -78,6 +78,7 @@ omi_apps_bucket = os.getenv('BUCKET_PLUGINS_LOGOS')
 app_thumbnails_bucket = os.getenv('BUCKET_APP_THUMBNAILS')
 chat_files_bucket = os.getenv('BUCKET_CHAT_FILES')
 desktop_updates_bucket = os.getenv('BUCKET_DESKTOP_UPDATES')
+screen_frames_bucket = os.getenv('BUCKET_SCREEN_FRAMES')
 
 _did_warn_missing_speech_profiles_bucket = False
 
@@ -1608,3 +1609,78 @@ def get_desktop_update_signed_url(blob_path: str, expiration_hours: int = 1) -> 
 
     # Use existing _get_signed_url helper with caching
     return _get_signed_url(blob, expiration_hours * 60)
+
+
+# **************************************************
+# ****** SCREEN FRAMES (meeting-note screenshots) ***
+# **************************************************
+#
+# Path convention: {uid}/{conversation_id}/{frame_id}.jpg and
+# {uid}/{conversation_id}/{frame_id}_thumb.jpg (contract §8).
+#
+# upload_screen_frame_blobs is called from exactly one place in the codebase:
+# utils/screen_frames/writer.py — the writer described in contract §5 that is
+# the only code path allowed to write BUCKET_SCREEN_FRAMES. Nothing else
+# should call it. In production this bucket-writing call runs under a
+# separate service account scoped to BUCKET_SCREEN_FRAMES only (contract §5
+# deploy prerequisite; not something this change provisions).
+
+SCREEN_FRAME_SIGNED_URL_MINUTES = 60
+
+
+def _screen_frame_blob_path(uid: str, conversation_id: str, frame_id: str) -> str:
+    return f'{uid}/{conversation_id}/{frame_id}.jpg'
+
+
+def _screen_frame_thumbnail_blob_path(uid: str, conversation_id: str, frame_id: str) -> str:
+    return f'{uid}/{conversation_id}/{frame_id}_thumb.jpg'
+
+
+def _require_screen_frames_bucket() -> str:
+    if not screen_frames_bucket:
+        raise RuntimeError('BUCKET_SCREEN_FRAMES is not configured')
+    return screen_frames_bucket
+
+
+def upload_screen_frame_blobs(
+    uid: str,
+    conversation_id: str,
+    frame_id: str,
+    jpeg_bytes: bytes,
+    thumbnail_jpeg_bytes: bytes,
+) -> None:
+    """Write the canonical frame and its thumbnail. Writer-only — see module note above."""
+    bucket = _get_storage_client().bucket(_require_screen_frames_bucket())
+    content_blob = bucket.blob(_screen_frame_blob_path(uid, conversation_id, frame_id))
+    content_blob.upload_from_string(jpeg_bytes, content_type='image/jpeg')
+    thumb_blob = bucket.blob(_screen_frame_thumbnail_blob_path(uid, conversation_id, frame_id))
+    thumb_blob.upload_from_string(thumbnail_jpeg_bytes, content_type='image/jpeg')
+
+
+def get_screen_frame_signed_url(uid: str, conversation_id: str, frame_id: str) -> str:
+    bucket = _get_storage_client().bucket(_require_screen_frames_bucket())
+    blob = bucket.blob(_screen_frame_blob_path(uid, conversation_id, frame_id))
+    return _get_signed_url(blob, SCREEN_FRAME_SIGNED_URL_MINUTES)
+
+
+def get_screen_frame_thumbnail_signed_url(uid: str, conversation_id: str, frame_id: str) -> str:
+    bucket = _get_storage_client().bucket(_require_screen_frames_bucket())
+    blob = bucket.blob(_screen_frame_thumbnail_blob_path(uid, conversation_id, frame_id))
+    return _get_signed_url(blob, SCREEN_FRAME_SIGNED_URL_MINUTES)
+
+
+def delete_screen_frame_blobs(uid: str, conversation_id: str, frame_id: str) -> None:
+    """Delete both GCS objects for a frame and their cached signed URLs.
+
+    A delete that leaves bytes in the bucket, or a still-live cached signed
+    URL, is a bug, not a partial success (contract §8) — so both object
+    deletes and both cache evictions happen here unconditionally, even if
+    one of the blobs was already missing.
+    """
+    content_path = _screen_frame_blob_path(uid, conversation_id, frame_id)
+    thumb_path = _screen_frame_thumbnail_blob_path(uid, conversation_id, frame_id)
+    bucket_name = _require_screen_frames_bucket()
+    delete_blob(bucket_name, content_path)
+    delete_blob(bucket_name, thumb_path)
+    delete_cached_signed_url(content_path)
+    delete_cached_signed_url(thumb_path)
