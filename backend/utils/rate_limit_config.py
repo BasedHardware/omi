@@ -13,6 +13,18 @@ Tuning knobs:
     RATE_LIMIT_SHADOW: defaults OFF (enforcement/429 rejections). Set env var
         RATE_LIMIT_SHADOW_MODE=true to revert to shadow/log-only mode.
 
+    RATE_LIMIT_BOOST_EXEMPT: comma-separated policy names that RATE_LIMIT_BOOST
+        must NOT multiply. A boost sized for "relax everything during an event"
+        also relaxes the few policies whose base limit is the whole point of the
+        policy — a cap chosen to stop a client hot loop is not something an
+        event boost should widen 100x. Those policies are listed here and always
+        serve their base limit.
+
+        Default: "action_items:list". Read from env at startup, so the exemption
+        is operator-escapable without a code change: set
+        RATE_LIMIT_BOOST_EXEMPT="" to put every policy back under the boost.
+        Unknown names are ignored (a typo must not take the process down).
+
 Redis efficiency:
     Each check = 1 Lua script call (atomic INCR + TTL check).
     Multi-instance safe — all state in Redis, no in-process caching.
@@ -27,11 +39,17 @@ import os
 RATE_LIMIT_BOOST: float = float(os.getenv("RATE_LIMIT_BOOST", "1.0"))
 RATE_LIMIT_SHADOW: bool = os.getenv("RATE_LIMIT_SHADOW_MODE", "false").lower() == "true"
 
+# Policies the boost must not touch. Env-overridable (see module docstring);
+# resolved against RATE_POLICIES below so a typo is dropped, not enforced.
+_BOOST_EXEMPT_DEFAULT = "action_items:list"
+_RATE_LIMIT_BOOST_EXEMPT_RAW: str = os.getenv("RATE_LIMIT_BOOST_EXEMPT", _BOOST_EXEMPT_DEFAULT)
+
 # ---------------------------------------------------------------------------
 # Policies: "name" -> (max_requests, window_seconds)
 #
 # max_requests is the BASE limit before boost is applied.
-# Effective limit = int(max_requests * boost).
+# Effective limit = int(max_requests * boost), except for the policies in
+# BOOST_EXEMPT_POLICIES, which always serve max_requests.
 # ---------------------------------------------------------------------------
 
 RATE_POLICIES: dict[str, tuple[int, int]] = {
@@ -71,6 +89,9 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # stormed this route (~120 qps fleet) with no platform/version header.
     # 12/min/uid covers Mac/Flutter hydrate plus a few pagination pages and
     # stops a tight loop. Enforced in Depends() before Firestore.
+    # Boost-exempt (see BOOST_EXEMPT_POLICIES): with RATE_LIMIT_BOOST=100 in
+    # prod this cap resolved to 1,200/60s and never fired once, while the loop
+    # ran at ~97/min — 48.8% of all billable Firestore document reads.
     "action_items:list": (12, 60),
     "action_items:write": (120, 3600),
     # Memories — single LLM call each
@@ -159,8 +180,22 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
 }
 
 
+# Resolved after RATE_POLICIES so unknown names (typos, policies deleted since the
+# env var was set) are dropped rather than silently "exempting" nothing that exists.
+BOOST_EXEMPT_POLICIES: frozenset[str] = frozenset(
+    name for name in (n.strip() for n in _RATE_LIMIT_BOOST_EXEMPT_RAW.split(",")) if name in RATE_POLICIES
+)
+
+
 def get_effective_limit(policy_name: str, boost: float | None = None) -> tuple[int, int]:
-    """Return (effective_max_requests, window_seconds) with boost applied."""
+    """Return (effective_max_requests, window_seconds) with boost applied.
+
+    Policies in BOOST_EXEMPT_POLICIES ignore the boost entirely — including an
+    explicitly passed ``boost`` — and always return their base limit. The point
+    of exempting a policy is that its number is a decision, not a default.
+    """
     base_max, window = RATE_POLICIES[policy_name]
+    if policy_name in BOOST_EXEMPT_POLICIES:
+        return base_max, window
     b = boost if boost is not None else RATE_LIMIT_BOOST
     return max(1, int(base_max * b)), window
