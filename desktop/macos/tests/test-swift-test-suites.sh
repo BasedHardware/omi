@@ -490,4 +490,49 @@ if [ "$unbatched_failed" != "1" ] || ! grep -q -- "--- FAILED: AlphaTests ---" "
   fail "unbatched run did not reproduce the per-suite failure attribution"
 fi
 
+# A measure-block suite is derived as batch-ineligible: it runs its blocks ten
+# times and legitimately takes minutes, so co-residency either blows a healthy
+# batch's budget (observed on CI: a 17-minute batch timeout followed by the
+# full 25-suite isolated fallback) or forces every batch's budget up to the
+# worst suite. It must run in its own SwiftPM process while its neighbours
+# still batch.
+export OMI_SWIFT_TEST_SUITE_BATCH_SIZE=25
+mkdir -p "$TMPDIR/solo-tests"
+cp "$TMPDIR"/green-tests/*.swift "$TMPDIR/solo-tests/"
+cat >"$TMPDIR/solo-tests/AtlasPerfHarnessTests.swift" <<'SWIFT'
+import XCTest
+
+final class AtlasPerfHarnessTests: XCTestCase {
+  func testLayoutThroughput() {
+    measure({})
+  }
+}
+SWIFT
+export OMI_SWIFT_TEST_DISCOVERY_ROOT="$TMPDIR/solo-tests"
+: >"$FAKE_XCRUN_LOG"
+if ! "$RUNNER" >"$TMPDIR/solo-runner.out" 2>"$TMPDIR/solo-runner.err"; then
+  fail "discovery set with a measure suite did not pass"
+fi
+if ! grep -q "Ran 9 Swift suites in isolation" "$TMPDIR/solo-runner.out"; then
+  fail "solo scenario did not report the whole discovery set"
+fi
+if grep -q -- "--- BATCH " "$TMPDIR/solo-runner.out"; then
+  fail "solo scenario fell back to per-suite execution"
+fi
+if ! awk '/swift test/ && /--filter AtlasPerfHarnessTests\// { if (gsub(/--filter/, "&") == 1) found = 1 } END { exit found ? 0 : 1 }' \
+  "$FAKE_XCRUN_LOG"; then
+  fail "measure suite was not isolated into its own single-filter invocation"
+fi
+if awk '/swift test/ && /--filter AtlasPerfHarnessTests\// { if (gsub(/--filter/, "&") > 1) shared = 1 } END { exit shared ? 1 : 0 }' \
+  "$FAKE_XCRUN_LOG"; then
+  :
+else
+  fail "measure suite shared a batch with other suites"
+fi
+# 1 batch of the 5 ordinary parallel suites + 1 solo + 3 sequential.
+solo_invocations="$(grep -c "swift test" "$FAKE_XCRUN_LOG" | tr -d ' ')"
+if [ "$solo_invocations" != "5" ]; then
+  fail "solo scenario used $solo_invocations SwiftPM invocations, expected 1 batch + 1 solo + 3 sequential"
+fi
+
 echo "swift-test-suites tests passed"

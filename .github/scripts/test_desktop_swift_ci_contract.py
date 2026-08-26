@@ -248,12 +248,12 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("always() && !cancelled()", job)
         self.assertIn("Require independent macOS phase verdicts", job)
 
-    def test_ci_uses_isolated_swiftpm_build_directories_for_two_workers(self):
+    def test_ci_uses_isolated_swiftpm_build_directories_per_worker(self):
         """#10507: parallel suites require isolated build and runtime state."""
         verify_job = self.jobs["desktop-swift-verify"]
         suite_runner = _suite_runner_text()
 
-        self.assertIn('OMI_SWIFT_TEST_SUITE_WORKERS: "2"', verify_job)
+        self.assertIn('OMI_SWIFT_TEST_SUITE_WORKERS: "3"', verify_job)
         self.assertIn("copy-on-write clone", verify_job)
         self.assertIn("--scratch-path", suite_runner)
         self.assertIn("cp -cR", suite_runner)

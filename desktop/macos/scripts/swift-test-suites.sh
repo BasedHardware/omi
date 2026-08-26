@@ -206,11 +206,21 @@ run_suite() {
   local status_path="$log_dir/$suite.status"
   local timeout_path="$log_dir/$suite.timeout"
   local status=0
+  local budget="$SUITE_TIMEOUT_SECONDS"
+
+  # A measure-block suite's wall clock scales with runner contention: the
+  # MemoryAtlas harness needs ~245s alone, and a third worker on a 3-core
+  # hosted Mac can push it past the flat budget. Double the budget for the
+  # solo cluster rather than raising it for all ~670 suites, where it would
+  # let a genuine hang burn ten minutes instead of five.
+  if is_solo_suite "$suite"; then
+    budget=$((SUITE_TIMEOUT_SECONDS * 2))
+  fi
 
   rm -f "$timeout_path"
-  run_swift_test "$log_path" "$SUITE_TIMEOUT_SECONDS" "$build_path" "$runtime_path" "$suite" || status=$?
+  run_swift_test "$log_path" "$budget" "$build_path" "$runtime_path" "$suite" || status=$?
   if [ -f "$timeout_path" ]; then
-    echo "suite timed out after ${SUITE_TIMEOUT_SECONDS}s" >>"$log_path"
+    echo "suite timed out after ${budget}s" >>"$log_path"
     status=124
   fi
   echo "$status" >"$status_path"
@@ -265,6 +275,16 @@ run_batch() {
   exit 0
 }
 
+# Suites the parent resolved as batch-ineligible (see the derivation near
+# discovery). Workers are child processes, so the resolved list travels in an
+# exported environment variable, not in shell state.
+is_solo_suite() {
+  case " ${OMI_SWIFT_TEST_SOLO_SUITES_RESOLVED:-} " in
+    *" $1 "*) return 0 ;;
+  esac
+  return 1
+}
+
 run_worker() {
   local log_dir="$1"
   local suite_list="$2"
@@ -292,9 +312,21 @@ run_worker() {
   while [ "$index" -lt "$total" ]; do
     batch=()
     while [ "${#batch[@]}" -lt "$SUITE_BATCH_SIZE" ] && [ "$index" -lt "$total" ]; do
-      batch+=("${pending[$index]}")
+      suite="${pending[$index]}"
       index=$((index + 1))
+      if is_solo_suite "$suite"; then
+        # A measure-block suite legitimately runs for minutes; sharing a batch
+        # budget with it either kills a healthy batch or inflates every batch's
+        # budget to cover the worst suite. It keeps its own process and its own
+        # per-suite budget.
+        "$SCRIPT_PATH" __run_suite "$log_dir" "$suite" "$build_path" "$runtime_path" || true
+        continue
+      fi
+      batch+=("$suite")
     done
+    if [ "${#batch[@]}" -eq 0 ]; then
+      continue
+    fi
     if [ "${#batch[@]}" -eq 1 ]; then
       # A single-suite batch is the per-suite path with extra steps, and going
       # through the batch wrapper would run a failing suite twice. Dispatching
@@ -387,6 +419,28 @@ if [ "${#fixture_files[@]}" -gt 0 ]; then
     | sed -E "$suite_class_name" \
     | sort -u)
 fi
+
+# XCTest `measure` suites run their blocks ten times and legitimately take
+# minutes each. Discovery order is alphabetical, so naive chunking concentrated
+# the MemoryAtlas performance cluster into one batch that blew a 17-minute
+# batch budget and then paid the full isolated fallback on top (CI run
+# 2026-08-26, batch worker-0-8 exited 124). Derive them from the source —
+# like the serial cluster above, so a new measure suite cannot silently join
+# the batch pool — and run each in its own SwiftPM process, where the startup
+# cost batching saves is noise next to the suite's run time.
+declare -a measure_files=()
+while IFS= read -r measure_file; do
+  measure_files+=("$measure_file")
+done < <(find "$TESTS_ROOT" -type f -name '*.swift' \
+  -exec grep -lE '\bmeasure(Metrics)?\(' {} + 2>/dev/null || true)
+
+derived_solo_suites=""
+if [ "${#measure_files[@]}" -gt 0 ]; then
+  derived_solo_suites="$(grep -hE "$suite_class_pattern" "${measure_files[@]}" \
+    | sed -E "$suite_class_name" \
+    | sort -u | tr '\n' ' ')"
+fi
+export OMI_SWIFT_TEST_SOLO_SUITES_RESOLVED="${OMI_SWIFT_TEST_SOLO_SUITES:-} $derived_solo_suites"
 
 is_serial_suite() {
   case " $SERIAL_SUITES " in

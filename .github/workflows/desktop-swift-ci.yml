@@ -239,9 +239,13 @@ jobs:
         env:
           # Each isolated worker receives a copy-on-write clone of the prebuilt
           # SwiftPM scratch directory, so filtered suites do not contend on the
-          # shared Desktop/.build lock. Two workers are a measured first step;
-          # do not increase without macOS-runner evidence.
-          OMI_SWIFT_TEST_SUITE_WORKERS: "2"
+          # shared Desktop/.build lock. Batching collapsed per-invocation
+          # SwiftPM startup (the reason two workers were the measured ceiling),
+          # so three workers now match the runner's three cores; measure-block
+          # suites carry a doubled per-suite budget to absorb the added CPU
+          # contention. Evidence: PR #12247's runs. Drop back to "2" if the
+          # performance harness starts timing out.
+          OMI_SWIFT_TEST_SUITE_WORKERS: "3"
           OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS: "300"
         run: ./scripts/run-swift-ci.sh --test
 
