@@ -14,6 +14,40 @@ import { createHash, createHmac, randomBytes } from 'node:crypto'
  * conversation, or Rewind tables.  Tests use node:sqlite and production uses
  * better-sqlite3 through db.ts.
  */
+/**
+ * The three mirror tables the HOST database touches outside the JIT lane: Rewind
+ * retention joins the pin/temporary tables on every prune, and local-conversation
+ * deletion drains the cleanup outbox. They are split out so a failed mirror
+ * bootstrap can still restore them — losing the JIT lane is acceptable, silently
+ * losing screen-frame retention is not.
+ */
+export const JIT_HOST_SURFACE_SCHEMA = `
+CREATE TABLE IF NOT EXISTS jit_keyframe_pin (
+  frame_id INTEGER PRIMARY KEY,
+  owner_id TEXT NOT NULL,
+  conversation_id TEXT NOT NULL,
+  pinned_at INTEGER NOT NULL,
+  image_path TEXT NOT NULL DEFAULT '',
+  renderer_deletion_key TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS jit_keyframe_cleanup_outbox (
+  frame_id INTEGER PRIMARY KEY,
+  owner_id TEXT NOT NULL,
+  conversation_id TEXT NOT NULL,
+  image_path TEXT NOT NULL DEFAULT '',
+  attempts INTEGER NOT NULL DEFAULT 0,
+  next_attempt_at INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT,
+  updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS jit_temporary_frame (
+  frame_id INTEGER PRIMARY KEY,
+  owner_id TEXT NOT NULL,
+  expires_at INTEGER NOT NULL,
+  created_at INTEGER NOT NULL
+);
+`
+
 export const JIT_TRIGGER_MIRROR_SCHEMA = `
 CREATE TABLE IF NOT EXISTS jit_trigger_mirror (
   memory_id TEXT PRIMARY KEY,
@@ -99,30 +133,7 @@ CREATE TABLE IF NOT EXISTS jit_proactivity_reservation_receipt (
   server_receipt_json TEXT NOT NULL,
   created_at INTEGER NOT NULL
 );
-CREATE TABLE IF NOT EXISTS jit_keyframe_pin (
-  frame_id INTEGER PRIMARY KEY,
-  owner_id TEXT NOT NULL,
-  conversation_id TEXT NOT NULL,
-  pinned_at INTEGER NOT NULL,
-  image_path TEXT NOT NULL DEFAULT '',
-  renderer_deletion_key TEXT NOT NULL DEFAULT ''
-);
-CREATE TABLE IF NOT EXISTS jit_keyframe_cleanup_outbox (
-  frame_id INTEGER PRIMARY KEY,
-  owner_id TEXT NOT NULL,
-  conversation_id TEXT NOT NULL,
-  image_path TEXT NOT NULL DEFAULT '',
-  attempts INTEGER NOT NULL DEFAULT 0,
-  next_attempt_at INTEGER NOT NULL DEFAULT 0,
-  last_error TEXT,
-  updated_at INTEGER NOT NULL
-);
-CREATE TABLE IF NOT EXISTS jit_temporary_frame (
-  frame_id INTEGER PRIMARY KEY,
-  owner_id TEXT NOT NULL,
-  expires_at INTEGER NOT NULL,
-  created_at INTEGER NOT NULL
-);
+${JIT_HOST_SURFACE_SCHEMA}
 CREATE INDEX IF NOT EXISTS idx_jit_wakeup_trigger_day
   ON jit_wakeup_receipt(trigger_id, budget_day, state);
 CREATE INDEX IF NOT EXISTS idx_jit_wakeup_day
@@ -764,6 +775,30 @@ export function initializeJitTriggerMirror(db: JitMirrorDb): void {
     } catch {
       /* already present */
     }
+  }
+}
+
+/**
+ * Bootstrap the mirror without letting it take the whole local database down.
+ * The mirror is additive: every legacy feature must survive its failure, so a
+ * throw here is logged and reported, never propagated to the shared db open
+ * path. Returns whether the JIT lane may run — false means no `jit_*` table can
+ * be assumed and callers must stay inert. The host-facing tables (Rewind
+ * retention, keyframe cleanup) are retried on their own so screen-frame
+ * retention keeps working with the JIT lane switched off.
+ */
+export function initializeJitTriggerMirrorSafely(db: JitMirrorDb): boolean {
+  try {
+    initializeJitTriggerMirror(db)
+    return true
+  } catch (error) {
+    console.error('[jit] trigger mirror bootstrap failed; JIT features stay inert', error)
+    try {
+      db.exec(JIT_HOST_SURFACE_SCHEMA)
+    } catch (hostError) {
+      console.error('[jit] host-facing mirror tables unavailable; Rewind prune may skip', hostError)
+    }
+    return false
   }
 }
 

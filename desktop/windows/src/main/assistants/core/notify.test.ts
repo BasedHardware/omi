@@ -72,6 +72,22 @@ describe('NotificationThrottle.tryAllow', () => {
     expect(t.tryAllow(input({ now: T0 + 1 })).allowed).toBe(true)
   })
 
+  it('stops blocking once a reservation nobody released has expired', () => {
+    // A slot leaked by a throw between reserve and commit used to gag EVERY
+    // proactive lane for the life of the process. Reservations expire.
+    const t = new NotificationThrottle()
+    const leaked = t.reserve(input({ frequencyLevel: 5 }))
+    expect('token' in leaked).toBe(true)
+    expect(t.decide(input({ frequencyLevel: 5, now: T0 + 9 * MIN }))).toEqual({
+      allowed: false,
+      reason: 'frequency'
+    })
+    expect(t.decide(input({ frequencyLevel: 5, now: T0 + 10 * MIN }))).toEqual({ allowed: true })
+    // The stale slot is gone, not merely ignored: committing it cannot resurrect
+    // a display budget the throttle has already released.
+    expect(t.commit(leaked as Extract<typeof leaked, { token: string }>)).toBe(false)
+  })
+
   it('level 0 (Off, the default) suppresses everything proactive', () => {
     const t = new NotificationThrottle()
     expect(t.tryAllow(input({ frequencyLevel: 0 }))).toEqual({

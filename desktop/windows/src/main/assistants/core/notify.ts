@@ -26,6 +26,14 @@ import type { InsightPayload } from '../../../shared/types'
 
 const MINUTE = 60_000
 
+/** A pending reservation blocks every other proactive lane, so a slot that is
+ *  never committed nor cancelled — a throw between `reserve` and delivery —
+ *  would silence ALL proactive notifications for the rest of the process. A
+ *  reservation therefore expires: once it is this old it no longer blocks and is
+ *  pruned. This bounds the damage of a leak; it does not excuse one, and callers
+ *  must still cancel on every failure path. */
+const PENDING_SLOT_TTL_MS = 10 * MINUTE
+
 /** Level → minimum interval between notifications.
  *  `Infinity` = off (never), `null` = no throttle at all. */
 const LEVEL_INTERVALS_MS: readonly (number | null)[] = [
@@ -72,8 +80,18 @@ export class NotificationThrottle {
   private readonly lastByAssistant = new Map<string, number>()
   private readonly pending = new Map<string, NotificationDeliverySlot>()
 
-  /** Pure: does not mutate. */
+  /** Drop reservations older than the TTL. An abandoned slot must never become a
+   *  permanent gag on every assistant. */
+  private prunePending(now: number): void {
+    for (const [token, slot] of this.pending) {
+      if (now - slot.now >= PENDING_SLOT_TTL_MS) this.pending.delete(token)
+    }
+  }
+
+  /** Expires stale reservations first; beyond that it does not mutate — neither
+   *  clock moves here. */
   decide(input: ThrottleInput): ThrottleDecision {
+    this.prunePending(input.now)
     if (input.snoozedUntil !== null && input.now < input.snoozedUntil)
       return { allowed: false, reason: 'snoozed' }
     if (!input.respectFrequency) return { allowed: true }

@@ -154,7 +154,7 @@ import type {
 import { perfMark } from '../../shared/perf'
 import { cachedStmt } from './stmtCache'
 import {
-  initializeJitTriggerMirror,
+  initializeJitTriggerMirrorSafely,
   listAllJitKeyframePinDetails,
   enqueueJitKeyframeCleanup,
   type JitMirrorDb
@@ -183,6 +183,9 @@ function timed<T>(name: string, fn: () => T): T {
 
 let db: Database.Database | null = null
 let roDb: Database.Database | null = null
+// Set by every open: whether the additive JIT mirror bootstrapped. False keeps
+// the JIT lane unregistered while the rest of the database stays usable.
+let jitMirrorAvailable = false
 
 // (ensureColumn — add a column only if missing, so existing databases migrate
 // forward without data loss — is dbMigrations.addColumnIfMissing, shared with
@@ -710,8 +713,13 @@ function get(): Database.Database {
   runMigrations(db)
   // JIT uses a dedicated namespaced mirror/outbox. It is additive and never
   // shares tables with legacy memories or conversations, so an old client can
-  // continue running safely while the JIT lane is disabled.
-  initializeJitTriggerMirror(db as unknown as import('../jit/jitTriggerMirror').JitMirrorDb)
+  // continue running safely while the JIT lane is disabled. Its bootstrap is
+  // therefore guarded: opening the ONE local database every legacy feature
+  // depends on must not fail because an additive mirror could not be created.
+  // The lane stays unregistered instead (see isJitMirrorAvailable).
+  jitMirrorAvailable = initializeJitTriggerMirrorSafely(
+    db as unknown as import('../jit/jitTriggerMirror').JitMirrorDb
+  )
   // After a salvage the FTS index is empty: salvage skips virtual tables (copying
   // FTS shadow tables raw would produce a corrupt index) and preserves
   // user_version, so migration v2's backfill does not re-run. The bootstrap block
@@ -737,6 +745,13 @@ function get(): Database.Database {
  * for non-JIT user data; the mirror owns only its `jit_*` namespace. */
 export function getJitDatabase(): Database.Database {
   return get()
+}
+
+/** False when the mirror bootstrap failed on this open: the database is usable,
+ * but no `jit_*` table may be assumed, so the JIT lane must not be registered.
+ * Only meaningful once the database has been opened (see `getJitDatabase`). */
+export function isJitMirrorAvailable(): boolean {
+  return jitMirrorAvailable
 }
 
 type LocalConversationRow = {

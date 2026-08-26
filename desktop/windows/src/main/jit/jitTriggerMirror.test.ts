@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite'
 import { createHash } from 'node:crypto'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { JitTriggerSnapshot } from '../../shared/jitTriggerRuntime'
 import {
   beginJitWakeup,
@@ -9,6 +9,7 @@ import {
   completeJitWakeup,
   enqueueJitFeedback,
   initializeJitTriggerMirror,
+  initializeJitTriggerMirrorSafely,
   deriveJitOpaqueId,
   getOrCreateJitInstallationId,
   listAllJitKeyframePinDetails,
@@ -77,6 +78,49 @@ const snapshot = (revision = 'rev-1', rows = 1): JitTriggerSnapshot => ({
 })
 
 describe('Windows JIT durable mirror', () => {
+  it('never fails the shared database open when its own bootstrap fails', () => {
+    const value = new DatabaseSync(':memory:')
+    value.exec('CREATE TABLE legacy_memories (id TEXT PRIMARY KEY, content TEXT)')
+    value.exec('CREATE TABLE rewind_frames (id INTEGER PRIMARY KEY, ts INTEGER NOT NULL)')
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    let schemaExecuted = false
+    const failing = {
+      exec: (sql: string): unknown => {
+        if (!schemaExecuted) {
+          schemaExecuted = true
+          throw new Error('disk full')
+        }
+        return value.exec(sql)
+      },
+      prepare: (sql: string) => value.prepare(sql)
+    } as unknown as JitMirrorDb
+
+    // The mirror is additive: its failure must report itself, not abort the one
+    // local database every legacy feature reads.
+    expect(initializeJitTriggerMirrorSafely(failing)).toBe(false)
+    expect(errors).toHaveBeenCalled()
+    expect(() => value.prepare('SELECT id FROM legacy_memories').all()).not.toThrow()
+    // Rewind retention joins the host-facing mirror tables on every prune, so
+    // those are restored even with the JIT lane inert.
+    expect(() =>
+      value
+        .prepare(
+          'SELECT id FROM rewind_frames WHERE id NOT IN (SELECT frame_id FROM jit_keyframe_pin) AND (ts < ? OR id IN (SELECT frame_id FROM jit_temporary_frame WHERE expires_at <= ?))'
+        )
+        .all(0, 0)
+    ).not.toThrow()
+    // The lane's own tables are absent, and reading one is an ordinary catchable
+    // error rather than a crash.
+    expect(() => value.prepare('SELECT * FROM jit_wakeup_receipt').all()).toThrow()
+    vi.restoreAllMocks()
+  })
+
+  it('reports a healthy bootstrap so the JIT lane may register', () => {
+    const value = new DatabaseSync(':memory:')
+    expect(initializeJitTriggerMirrorSafely(value as unknown as JitMirrorDb)).toBe(true)
+    expect(() => value.prepare('SELECT * FROM jit_wakeup_receipt').all()).not.toThrow()
+  })
+
   it('uses a persisted random installation secret for opaque retained IDs', () => {
     const value = db() as unknown as JitMirrorDb
     const installationId = getOrCreateJitInstallationId(value, () => 'a'.repeat(64))

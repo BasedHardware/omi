@@ -1,6 +1,6 @@
 import { registerAssistant } from '../assistants/core/coordinator'
 import { getBackendSession, onSessionReset } from '../assistants/core/session'
-import { getJitDatabase } from '../ipc/db'
+import { getJitDatabase, isJitMirrorAvailable } from '../ipc/db'
 import {
   WindowsJitAssistant,
   createWindowsJitAgentTurnExecutor,
@@ -38,9 +38,18 @@ let runtime: WindowsJitRuntime | null = null
  * paid/display boundary and flag-off keeps the legacy lane available. */
 export function registerJitAssistant(): void {
   if (registered) return
+  const mirrorDb = getJitDatabase() as unknown as JitMirrorDb
+  // The mirror bootstrap is guarded so a failure cannot block opening the shared
+  // database. When it did fail no `jit_*` table exists, so the lane stays
+  // unregistered rather than throwing on the first analyzed frame; the legacy
+  // assistants remain the delivery path exactly as with the flag off.
+  if (!isJitMirrorAvailable()) {
+    console.warn('[jit] trigger mirror unavailable; JIT assistant not registered')
+    return
+  }
   registered = true
   runtime = WindowsJitRuntime.withDefaultDb(
-    getJitDatabase() as unknown as JitMirrorDb,
+    mirrorDb,
     tokenOwnerId,
     () => null,
     () => getBackendSession() !== null

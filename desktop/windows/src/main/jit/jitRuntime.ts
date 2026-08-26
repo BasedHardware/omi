@@ -71,6 +71,12 @@ export type JitNanoTriageDecision = 'approved' | 'rejected' | 'unknown'
 
 const ROLLOUT_CACHE_MS = 30_000
 const SNAPSHOT_CACHE_MS = 30_000
+// A failed rollout decision used to reset the cache stamp, so an offline machine
+// or a 5xx re-asked on every analyzed frame — roughly one authenticated request
+// per second, forever. Failures are cached too, with a backoff that doubles from
+// the normal cache window up to ten minutes and resets on the first success.
+const ROLLOUT_FAILURE_BACKOFF_MIN_MS = ROLLOUT_CACHE_MS
+const ROLLOUT_FAILURE_BACKOFF_MAX_MS = 600_000
 
 function hasAttestedEmbedding(
   trigger: JitCompiledTrigger,
@@ -119,6 +125,8 @@ function authorityFromDecision(
 export class WindowsJitRuntime {
   private rollout: JitRolloutDecision | null = null
   private rolloutAt = 0
+  private rolloutFailureAt = 0
+  private rolloutFailures = 0
   private snapshotReceipt: JitMirrorReceipt | null = null
   private snapshotAt = 0
   private ledgerReceipt: JitLedgerMirrorReceipt | null = null
@@ -192,6 +200,14 @@ export class WindowsJitRuntime {
     this.policy = null
   }
 
+  /** Exponential from the ordinary cache window to ten minutes. */
+  private rolloutBackoffMs(): number {
+    return Math.min(
+      ROLLOUT_FAILURE_BACKOFF_MAX_MS,
+      ROLLOUT_FAILURE_BACKOFF_MIN_MS * 2 ** (this.rolloutFailures - 1)
+    )
+  }
+
   private async authority(): Promise<JitRuntimeAuthority> {
     const ownerId = this.deps.ownerId()
     const generation = this.deps.accountGeneration()
@@ -201,17 +217,27 @@ export class WindowsJitRuntime {
     if (!ownerId || !this.deps.authorizationCurrent()) {
       this.rollout = null
       this.rolloutAt = 0
+      this.rolloutFailures = 0
+      this.rolloutFailureAt = 0
       this.clearAuthorityCaches()
       return { ...JIT_RUNTIME_DEFAULT_AUTHORITY }
     }
     const now = this.now()
     if (!this.rollout || now - this.rolloutAt >= ROLLOUT_CACHE_MS) {
+      // An error is NOT enabled, and it is also not a licence to retry on every
+      // analyzed frame: honour the failure backoff before asking again.
+      if (this.rolloutFailures > 0 && now - this.rolloutFailureAt < this.rolloutBackoffMs())
+        return { ...JIT_RUNTIME_DEFAULT_AUTHORITY, ownerId, accountGeneration: generation }
       try {
         this.rollout = await this.deps.client.rolloutDecision()
         this.rolloutAt = now
+        this.rolloutFailures = 0
+        this.rolloutFailureAt = 0
       } catch {
         this.rollout = null
         this.rolloutAt = 0
+        this.rolloutFailures += 1
+        this.rolloutFailureAt = now
         this.clearAuthorityCaches()
       }
     }
@@ -843,6 +869,8 @@ export class WindowsJitRuntime {
     this.pending.clear()
     this.rollout = null
     this.rolloutAt = 0
+    this.rolloutFailures = 0
+    this.rolloutFailureAt = 0
   }
 
   cancelAll(): void {
@@ -890,22 +918,31 @@ export class WindowsJitRuntime {
     }
   }
 
-  isAuthoritativeEnabled(): boolean {
+  /**
+   * Read-only view of the cached rollout + snapshot authority. Unlike
+   * `isAuthoritativeEnabled()` it never clears caches or cancels leases, so it is
+   * safe to consult from evidence-gathering paths that run BEFORE admission.
+   */
+  cachedAuthoritativeEnabled(): boolean {
     const ownerId = this.deps.ownerId()
     const effective =
       ownerId !== null &&
       this.deps.authorizationCurrent() &&
       this.rollout !== null &&
       this.now() - this.rolloutAt < ROLLOUT_CACHE_MS &&
-      this.rollout?.rollout === 'enabled' &&
+      this.rollout.rollout === 'enabled' &&
       this.rollout.killSwitch === 'disabled' &&
       this.rollout.effective === 'enabled'
-    const enabled =
+    return (
       effective &&
       this.policy !== null &&
       this.snapshotReceipt?.ownerId === ownerId &&
       this.ledgerReceipt?.ownerId === ownerId
-    if (!enabled) {
+    )
+  }
+
+  isAuthoritativeEnabled(): boolean {
+    if (!this.cachedAuthoritativeEnabled()) {
       this.clearAuthorityCaches()
       return false
     }
@@ -929,11 +966,18 @@ export class WindowsJitRuntime {
 
   /** Add calendar evidence only from an already-authorized source. The cache
    * bounds account reads to one refresh per minute; no prompt or hot-loop retry
-   * is introduced when the source is absent or unavailable. */
+   * is introduced when the source is absent or unavailable.
+   *
+   * The provider is a LIVE account read (Google Calendar). It is therefore gated
+   * on the cached authority: a user the server has not admitted to the JIT lane
+   * must pay zero calendar requests for it, so until the rollout and snapshot
+   * caches say enabled the observation stays purely local. The first frame after
+   * a cold start is evaluated without calendar evidence by design; admission
+   * populates the caches and later frames carry it. */
   async observationForFrame(frame: RewindFrame): Promise<JitTriggerObservation> {
     const observation = this.observationFromFrame(frame)
     const provider = this.deps.calendarObservation
-    if (!provider) return observation
+    if (!provider || !this.cachedAuthoritativeEnabled()) return observation
     const now = this.now()
     if (!this.calendarCache || now - this.calendarCacheAt >= 60_000) {
       try {

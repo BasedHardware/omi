@@ -1,6 +1,11 @@
 import { DatabaseSync } from 'node:sqlite'
-import { describe, expect, it } from 'vitest'
-import type { JitTriState, JitTriggerSnapshot } from '../../shared/jitTriggerRuntime'
+import { describe, expect, it, vi } from 'vitest'
+import type {
+  JitCalendarEvent,
+  JitTriState,
+  JitTriggerSnapshot
+} from '../../shared/jitTriggerRuntime'
+import type { RewindFrame } from '../../shared/types'
 import { WindowsJitRuntime } from './jitRuntime'
 import {
   initializeJitTriggerMirror,
@@ -48,12 +53,27 @@ const snapshot = (revision = 'rev-1'): JitTriggerSnapshot => ({
   }
 })
 
+const frameFixture = (over: Partial<RewindFrame> = {}): RewindFrame => ({
+  id: 7,
+  ts: Date.parse('2026-08-24T12:00:00Z'),
+  app: 'Code',
+  windowTitle: 'runtime.ts',
+  processName: 'Code.exe',
+  ocrText: 'const x = 1',
+  imagePath: 'C:/frames/7.jpg',
+  width: 100,
+  height: 100,
+  indexed: 1,
+  ...over
+})
+
 function makeRuntime(
   decision: JitTriState | (() => JitTriState) = 'enabled',
   trigger = snapshot(),
   clock: () => number = () => 100,
   ledgerPages: JitLedgerMirrorPage[] = [],
-  frameExists: (frameId: number) => boolean = () => false
+  frameExists: (frameId: number) => boolean = () => false,
+  calendarObservation?: () => Promise<{ authorized: boolean; events: JitCalendarEvent[] }>
 ): {
   runtime: WindowsJitRuntime
   db: DatabaseSync
@@ -79,14 +99,19 @@ function makeRuntime(
     authorizationCurrent: () => true,
     now: clock,
     frameExists,
+    ...(calendarObservation ? { calendarObservation } : {}),
     client: {
-      rolloutDecision: async () => ({
-        rollout: typeof decision === 'function' ? decision() : decision,
-        killSwitch: 'disabled',
-        effective: typeof decision === 'function' ? decision() : decision,
-        reason: 'test',
-        errorClass: 'none'
-      }),
+      rolloutDecision: async () => {
+        // One evaluation per request: the decision seam may count calls or throw.
+        const state = typeof decision === 'function' ? decision() : decision
+        return {
+          rollout: state,
+          killSwitch: 'disabled' as const,
+          effective: state,
+          reason: 'test',
+          errorClass: 'none' as const
+        }
+      },
       triggerSnapshot: async () => trigger,
       ledgerMirrorPage: async () =>
         ledgerPages.shift() ?? {
@@ -272,6 +297,107 @@ describe('Windows JIT runtime authority', () => {
     expect(db.prepare('SELECT operation FROM jit_proactivity_reservation_receipt').all()).toEqual([
       { operation: 'nano_triage' }
     ])
+  })
+
+  it('caches a failed rollout decision instead of re-asking on every frame', async () => {
+    let now = 0
+    let requests = 0
+    let offline = true
+    const { runtime } = makeRuntime(
+      () => {
+        requests += 1
+        if (offline) throw new Error('offline')
+        return 'enabled'
+      },
+      snapshot(),
+      () => now
+    )
+    // The coordinator analyzes a frame roughly every three seconds. Without a
+    // failure cache this loop was one authenticated request per frame, forever.
+    for (let i = 0; i < 20; i++) {
+      now += 3_000
+      expect((await runtime.admit({ appName: 'Code' }, '2026-08-24')).kind).toBe('legacy_fallback')
+    }
+    // First attempt, then one retry after the 30s backoff; the second failure
+    // doubles it to 60s, which the remaining frames are still inside.
+    expect(requests).toBe(2)
+    now = 93_000
+    expect((await runtime.admit({ appName: 'Code' }, '2026-08-24')).kind).toBe('legacy_fallback')
+    expect(requests).toBe(3)
+    // A success clears the backoff, so recovery is not delayed by past failures.
+    offline = false
+    now = 213_001
+    expect((await runtime.admit({ appName: 'Code' }, '2026-08-24')).kind).toBe('planned')
+    expect(requests).toBe(4)
+    offline = true
+    now = 243_002
+    expect((await runtime.admit({ appName: 'Code' }, '2026-08-24')).kind).toBe('legacy_fallback')
+    expect(requests).toBe(5)
+    now = 243_003
+    expect((await runtime.admit({ appName: 'Code' }, '2026-08-24')).kind).toBe('legacy_fallback')
+    expect(requests).toBe(5)
+  })
+
+  it('buys no calendar read for a user the server has not admitted', async () => {
+    let calendarReads = 0
+    const { runtime } = makeRuntime(
+      'disabled',
+      snapshot(),
+      () => 100,
+      [],
+      () => false,
+      async () => {
+        calendarReads += 1
+        return { authorized: true, events: [{ title: 'Standup', eventType: 'calendar_event' }] }
+      }
+    )
+    const observation = await runtime.observationForFrame(frameFixture())
+    expect(calendarReads).toBe(0)
+    expect(observation.calendarAuthorized).toBeUndefined()
+    expect(observation.calendarEvents).toBeUndefined()
+    expect((await runtime.admit(observation, '2026-08-24')).kind).toBe('legacy_fallback')
+    // A non-cohort user must pay nothing for a lane the server refuses.
+    expect(calendarReads).toBe(0)
+  })
+
+  it('adds calendar evidence once the cached authority says the lane is enabled', async () => {
+    let calendarReads = 0
+    const { runtime } = makeRuntime(
+      'enabled',
+      snapshot(),
+      () => 100,
+      [],
+      () => false,
+      async () => {
+        calendarReads += 1
+        return { authorized: true, events: [{ title: 'Standup', eventType: 'calendar_event' }] }
+      }
+    )
+    // The very first frame is evaluated locally; admission populates the caches.
+    await runtime.observationForFrame(frameFixture())
+    expect(calendarReads).toBe(0)
+    await runtime.admit({ appName: 'Code' }, '2026-08-24')
+    const observation = await runtime.observationForFrame(frameFixture())
+    expect(calendarReads).toBe(1)
+    expect(observation.calendarAuthorized).toBe(true)
+    expect(observation.calendarEvents).toEqual([{ title: 'Standup', eventType: 'calendar_event' }])
+  })
+
+  it('degrades to the legacy lane when the mirror tables are missing', async () => {
+    const { runtime, db } = makeRuntime()
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    for (const row of db
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'jit\\_%' ESCAPE '\\'"
+      )
+      .all() as { name: string }[])
+      db.exec(`DROP TABLE ${row.name}`)
+    // A failed mirror bootstrap leaves the database usable and the JIT lane
+    // inert: this must suppress, not throw out of the coordinator.
+    expect((await runtime.admit({ appName: 'Code' }, '2026-08-24')).kind).toBe('suppressed')
+    expect(runtime.pinConversationKeyframe(42, 'agent-conversation-1')).toBe(false)
+    expect(runtime.markAmbientFrameTemporary(42)).toBe(false)
+    vi.restoreAllMocks()
   })
 
   it('only pins a Rewind frame after existence validation', () => {
