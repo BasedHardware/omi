@@ -158,7 +158,7 @@ env:
   - name: MEETING_RECEIPT_RECONCILER_ENABLED
     value: "false"
   - name: LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED
-    value: "false"
+    value: "true"
   - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED
     value: "true"
   - name: CONVERSATION_OCR_CONTEXT_ENABLED

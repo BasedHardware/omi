@@ -159,8 +159,8 @@ session, and it is already visible on its own gauge).
 
 * Eligible: `requires_byok`, status `queued` or `leased` with an expired lease,
   and a server-owned last-activity instant older than
-  `LISTEN_FINALIZATION_BYOK_ABANDONED_SECONDS` (default seven days, clamped to a
-  one-day floor and a 90-day ceiling). A row whose age cannot be established is
+  `LISTEN_FINALIZATION_BYOK_ABANDONED_SECONDS` (default fourteen days, clamped
+  to a one-day floor and a 90-day ceiling). A row whose age cannot be established is
   skipped, never terminalized.
 * Terminal: `dead_letter` with `last_failure_code = byok_session_abandoned`,
   distinct from `final_attempt_failed`, and projection shard deltas moved so the
@@ -177,6 +177,14 @@ session, and it is already visible on its own gauge).
   CAS cursor, exactly like the stale bare-`processing` sweep.
 
 The sweep is gated by `LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED`, default
-`false` in every environment. Outcomes surface on
+`true` in every environment. It ships on because no environment can rehearse
+it: dev holds zero BYOK jobs, so an off-by-default flag would defer the
+disposition of stranded rows indefinitely without producing any evidence, and
+a resumed BYOK row is reachable by no consumer in the meantime. The bounded
+age is the safety control; the flag exists to **stop** the sweep during an
+incident, not to stage its rollout. To stop it, set the value to `false` in
+`backend/deploy/runtime_env/_base.yaml` and both backend-listen chart values
+and deploy -- a `kubectl set env` override survives only until the next deploy
+of any commit. Outcomes surface on
 `listen_finalization_byok_abandonments_total{outcome=...}`
 (`abandoned_conversation_closed`, `abandoned_bookkeeping`, `skipped`, `error`).

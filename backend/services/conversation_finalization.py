@@ -290,8 +290,19 @@ def reconcile_stale_processing_conversations(limit: int = 100, *, firestore_clie
 
 
 def is_byok_abandonment_sweep_enabled() -> bool:
-    """Gate the BYOK abandonment sweep; conservative default is off."""
-    return os.getenv('LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED', 'false').strip().lower() in {
+    """Gate the BYOK abandonment sweep; on by default.
+
+    A resumed BYOK job is reachable by no consumer -- the Cloud Tasks worker
+    refuses ``requires_byok`` and the reconciler filters on a
+    ``reconcile_after_at`` those paths delete -- so leaving the sweep off does
+    not hold the row in a recoverable state, it only defers its disposition
+    while the conversation stays in ``processing``. There is also no
+    environment that can rehearse it: dev holds zero BYOK jobs, so shipping
+    this dark would buy delay rather than evidence. The bounded age in
+    ``get_byok_abandoned_after`` is the real safety control; this switch exists
+    to stop the sweep, not to stage it.
+    """
+    return os.getenv('LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED', 'true').strip().lower() in {
         '1',
         'true',
         'yes',

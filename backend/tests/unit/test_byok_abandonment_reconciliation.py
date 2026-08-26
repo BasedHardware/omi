@@ -523,8 +523,23 @@ def _candidate(job_id: str = 'job-1', **extra) -> dict:
     return _stranded_job(job_id, **extra) | {'job_id': job_id}
 
 
-def test_sweep_is_off_by_default(monkeypatch):
+def test_sweep_is_on_by_default(monkeypatch):
+    """No environment can rehearse this sweep, so it ships on.
+
+    dev holds zero BYOK jobs, so an off-by-default flag would defer the
+    disposition of stranded rows indefinitely without buying any evidence. The
+    bounded age is the safety control, not the switch.
+    """
+    _advance, abandon = _install(monkeypatch, [_candidate()])
     monkeypatch.delenv('LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED', raising=False)
+
+    assert service.reconcile_abandoned_byok_finalization_jobs()['abandoned'] == 1
+    abandon.assert_called_once()
+
+
+def test_sweep_can_be_switched_off(monkeypatch):
+    """The flag still exists to stop the sweep in an incident."""
+    monkeypatch.setenv('LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED', 'false')
     query = MagicMock()
     monkeypatch.setattr(service.jobs_db, 'get_abandoned_byok_job_candidates', query)
 
@@ -535,6 +550,10 @@ def test_sweep_is_off_by_default(monkeypatch):
         'error': 0,
     }
     query.assert_not_called()
+
+
+def test_default_abandonment_age_is_fourteen_days():
+    assert jobs.DEFAULT_BYOK_ABANDONED_AFTER_SECONDS == 14 * 86_400
 
 
 def test_enabled_sweep_terminalizes_through_the_scanned_generation_fence(monkeypatch):

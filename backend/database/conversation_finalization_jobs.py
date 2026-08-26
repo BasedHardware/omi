@@ -48,7 +48,7 @@ DEFAULT_ORPHAN_RECONCILE_STALE_SECONDS = 900
 # reconciler only selects rows carrying `reconcile_after_at`, which every BYOK
 # transition deletes. Seven days is deliberately far longer than any plausible
 # reconnect window.
-DEFAULT_BYOK_ABANDONED_AFTER_SECONDS = 7 * 86_400
+DEFAULT_BYOK_ABANDONED_AFTER_SECONDS = 14 * 86_400
 BYOK_ABANDONED_FAILURE_CODE = 'byok_session_abandoned'
 MEETING_RECEIPT_SCHEMA_VERSION = 1
 MEETING_RECEIPT_RECONCILE_AFTER = timedelta(minutes=10)
@@ -145,7 +145,8 @@ def get_byok_abandoned_after() -> timedelta:
     one-day floor, so a live session that legitimately reconnects always wins,
     and a 90-day ceiling, so an operator misconfiguration cannot defer the
     disposition of an unownable row for an unbounded period. Classified as a
-    reliability recovery knob; deploy default is unset so the floor applies.
+    reliability recovery knob; the deploy default is unset, so the built-in
+    14-day default applies.
     """
     try:
         seconds = int(

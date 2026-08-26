@@ -78,7 +78,7 @@ environment_shared:
           value: 'false'
           category: rollout
         LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED:
-          value: 'false'
+          value: 'true'
           category: rollout
         CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
           value: 'false'
