@@ -25678,9 +25678,26 @@
         ]
       },
       "post": {
-        "description": "Create a new action item.\n\nContent-idempotent on (uid, normalized description): a retry of the same\nrequest returns the original action_item rather than creating a duplicate.",
+        "description": "Create a new action item.\n\nIdempotent only when the client sends ``Idempotency-Key``. Two creates\nwith the same description (and different keys, or no key) are two tasks.",
         "operationId": "create_action_item_v1_action_items_post",
         "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 256,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",

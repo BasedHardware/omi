@@ -8882,7 +8882,7 @@ export async function get_action_items_v1_action_items_get(query: { limit?: numb
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function create_action_item_v1_action_items_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ActionItemCreateRequest, init?: OmiApiClientInit): Promise<ActionItemResponse> {
+export async function create_action_item_v1_action_items_post(header: { Idempotency_Key?: string | null, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ActionItemCreateRequest, init?: OmiApiClientInit): Promise<ActionItemResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/action-items`;
   const _search = "";
@@ -8892,6 +8892,7 @@ export async function create_action_item_v1_action_items_post(header: { authoriz
       ...(body ? { 'Content-Type': 'application/json' } : {}),
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
+      ...(header.Idempotency_Key !== undefined ? { "Idempotency-Key": String(header.Idempotency_Key) } : {}),
       ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
