@@ -2045,7 +2045,8 @@ def test_ledger_writer_mode_skips_eager_extraction(monkeypatch):
     """A cut-over (ledger writer mode) user must not pay for per-conversation
     L1 extraction: the compatibility write would be refused by writer admission
     after the model call was already spent, failing finalization. The daily
-    sweep owns memory formation for those users."""
+    sweep owns memory formation for those users, so the public boundary
+    returns before parity capture or any model work."""
     import sys
 
     from models.memory_apply import WriterMode
@@ -2057,14 +2058,12 @@ def test_ledger_writer_mode_skips_eager_extraction(monkeypatch):
         lambda uid, *, db_client: SimpleNamespace(writer_mode=WriterMode.ledger),
         raising=False,
     )
-    canonical = MagicMock(side_effect=AssertionError('canonical extraction must not run under ledger writer mode'))
-    monkeypatch.setattr(process_conversation, '_extract_memories_canonical', canonical)
-    monkeypatch.setattr(process_conversation, 'MemoryService', lambda db_client: MagicMock())
+    inner = MagicMock(side_effect=AssertionError('extraction must not run under ledger writer mode'))
+    monkeypatch.setattr(process_conversation, '_extract_memories_inner', inner)
 
-    result = process_conversation._extract_memories_inner('uid-ledger', _ledger_gate_conversation('conv-ledger'))
+    process_conversation.extract_memories('uid-ledger', _ledger_gate_conversation('conv-ledger'))
 
-    assert result.count == 0
-    canonical.assert_not_called()
+    inner.assert_not_called()
 
 
 def test_compatibility_writer_mode_still_runs_eager_extraction(monkeypatch):
@@ -2079,17 +2078,16 @@ def test_compatibility_writer_mode_still_runs_eager_extraction(monkeypatch):
         lambda uid, *, db_client: SimpleNamespace(writer_mode=WriterMode.compatibility),
         raising=False,
     )
-    sentinel = process_conversation.ConversationMemoryExtractionResult(
-        count=3, source='transcription', path='canonical'
+    inner = MagicMock(
+        return_value=process_conversation.ConversationMemoryExtractionResult(
+            count=0, source='transcription', path='canonical'
+        )
     )
-    canonical = MagicMock(return_value=sentinel)
-    monkeypatch.setattr(process_conversation, '_extract_memories_canonical', canonical)
-    monkeypatch.setattr(process_conversation, 'MemoryService', lambda db_client: MagicMock())
+    monkeypatch.setattr(process_conversation, '_extract_memories_inner', inner)
 
-    result = process_conversation._extract_memories_inner('uid-compat', _ledger_gate_conversation('conv-compat'))
+    process_conversation.extract_memories('uid-compat', _ledger_gate_conversation('conv-compat'))
 
-    assert result is sentinel
-    canonical.assert_called_once()
+    inner.assert_called_once()
 
 
 def test_unreadable_writer_mode_preserves_legacy_extraction(monkeypatch):
@@ -2101,14 +2099,13 @@ def test_unreadable_writer_mode_preserves_legacy_extraction(monkeypatch):
         raise RuntimeError('control state unreadable')
 
     monkeypatch.setattr(memory_system_stub, 'ensure_canonical_apply_control_state', unavailable, raising=False)
-    sentinel = process_conversation.ConversationMemoryExtractionResult(
-        count=1, source='transcription', path='canonical'
+    inner = MagicMock(
+        return_value=process_conversation.ConversationMemoryExtractionResult(
+            count=0, source='transcription', path='canonical'
+        )
     )
-    canonical = MagicMock(return_value=sentinel)
-    monkeypatch.setattr(process_conversation, '_extract_memories_canonical', canonical)
-    monkeypatch.setattr(process_conversation, 'MemoryService', lambda db_client: MagicMock())
+    monkeypatch.setattr(process_conversation, '_extract_memories_inner', inner)
 
-    result = process_conversation._extract_memories_inner('uid-err', _ledger_gate_conversation('conv-err'))
+    process_conversation.extract_memories('uid-err', _ledger_gate_conversation('conv-err'))
 
-    assert result is sentinel
-    canonical.assert_called_once()
+    inner.assert_called_once()

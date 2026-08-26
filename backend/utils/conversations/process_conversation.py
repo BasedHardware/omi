@@ -851,12 +851,46 @@ def _parity_accepted_memories(memories: List[MemoryDB]) -> list[dict[str, Any]]:
     ]
 
 
+def _sweep_owned_writer_mode(uid: str) -> Optional[str]:
+    """Writer mode when a non-compatibility authority owns memory formation.
+
+    A ledger-cutover (or transitioning) user must not pay for eager
+    per-conversation extraction: writer admission would refuse the
+    compatibility write AFTER the model call was already spent, failing the
+    whole finalization, and the daily sweep owns those users' memory
+    formation. Only a positively-read non-compatibility mode is reported;
+    any control-state read failure returns None so the legacy eager path is
+    preserved.
+    """
+    try:
+        from models.memory_apply import WriterMode
+        from utils.memory.memory_system import ensure_canonical_apply_control_state
+
+        db_client = getattr(db_client_module, 'db', None)
+        control = ensure_canonical_apply_control_state(uid, db_client=db_client)
+        writer_mode = getattr(control, 'writer_mode', WriterMode.compatibility)
+        if writer_mode != WriterMode.compatibility:
+            return getattr(writer_mode, 'value', str(writer_mode))
+    except Exception:
+        return None
+    return None
+
+
 def extract_memories(uid: str, conversation: Conversation) -> None:
     """Extract one conversation's memories through the selected memory system.
 
     Finalization workers use this public boundary while holding their durable
     lease. Keep the private helper below for existing in-module async callers.
     """
+    sweep_owned_mode = _sweep_owned_writer_mode(uid)
+    if sweep_owned_mode is not None:
+        logger.info(
+            'memory extraction skipped: writer_mode=%s owns formation uid=%s conv=%s',
+            sweep_owned_mode,
+            uid,
+            conversation.id,
+        )
+        return
     source = source_for_conversation(conversation)
     parity_capture = SurfaceParityCapture.from_environ(
         principal_id=uid,
@@ -1532,36 +1566,6 @@ def _extract_memories_inner(
     db_client = getattr(db_client_module, 'db', None)
     memory_service = MemoryService(db_client=db_client)
     memory_service.ensure_canonical_mutation_ready(uid)
-    # A user whose writer mode has left ``compatibility`` (ledger cutover, or a
-    # transition in flight) must not run eager per-conversation extraction: the
-    # daily sweep owns memory formation for ledger users, and the compatibility
-    # write below would be refused by writer admission AFTER the extraction
-    # model call was already paid — failing the whole finalization. Skipping
-    # here is both the cost saving the cutover promises and the correctness
-    # fix. Only a positively-read non-compatibility mode skips; any read
-    # failure preserves the legacy eager path.
-    sweep_owned_mode: str | None = None
-    try:
-        from models.memory_apply import WriterMode
-        from utils.memory.memory_system import ensure_canonical_apply_control_state
-
-        control = ensure_canonical_apply_control_state(uid, db_client=db_client)
-        writer_mode = getattr(control, 'writer_mode', WriterMode.compatibility)
-        if writer_mode != WriterMode.compatibility:
-            sweep_owned_mode = getattr(writer_mode, 'value', str(writer_mode))
-    except Exception:
-        # Unreadable control state preserves the legacy eager path.
-        sweep_owned_mode = None
-    if sweep_owned_mode is not None:
-        logger.info(
-            'memory extraction skipped: writer_mode=%s owns formation uid=%s conv=%s',
-            sweep_owned_mode,
-            uid,
-            conversation.id,
-        )
-        return ConversationMemoryExtractionResult(
-            count=0, source=source_for_conversation(conversation), path=PATH_CANONICAL
-        )
     return _extract_memories_canonical(uid, conversation, db_client=db_client, parity_capture=parity_capture)
 
 
