@@ -18,9 +18,14 @@ const chatSchema = [
 const taskSchema =
   "CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, account_id TEXT NOT NULL, description TEXT NOT NULL, completed INTEGER NOT NULL, completed_at INTEGER, due_at INTEGER, owner TEXT, source TEXT NOT NULL, provenance TEXT NOT NULL, sort_order REAL NOT NULL, indent_level INTEGER NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, revision TEXT)";
 
+const attachmentSchema = [
+  "CREATE TABLE IF NOT EXISTS chat_attachments (id TEXT PRIMARY KEY, account_id TEXT NOT NULL, op_id TEXT NOT NULL, display_name TEXT NOT NULL, media_type TEXT NOT NULL, size_bytes INTEGER NOT NULL, state TEXT NOT NULL CHECK (state IN ('staged', 'uploaded', 'ingesting', 'ingested', 'invalid', 'bound', 'expired')), r2_key TEXT NOT NULL, expires_at INTEGER NOT NULL, bound_message_id TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)",
+  "CREATE INDEX IF NOT EXISTS chat_attachments_account ON chat_attachments (account_id)",
+];
+
 const authenticatedHeaders = {
   authorization: "Bearer test-token",
-  "x-omi-client-id": "test-client",
+  "x-omi-client-id": "test-account",
 };
 
 const create = (id: string) => ({
@@ -52,9 +57,13 @@ beforeEach(async () => {
     await env.DB.exec(statement);
   }
   await env.DB.exec(taskSchema);
+  for (const statement of attachmentSchema) {
+    await env.DB.exec(statement);
+  }
   await env.DB.prepare("DELETE FROM chat_messages").run();
   await env.DB.prepare("DELETE FROM chat_admissions").run();
   await env.DB.prepare("DELETE FROM chat_generation_events").run();
+  await env.DB.prepare("DELETE FROM chat_attachments").run();
 });
 
 describe("AccountBackend D1-backed coordination", () => {

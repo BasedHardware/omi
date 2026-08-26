@@ -19,7 +19,7 @@ const attachmentSchema = [
 
 const authenticatedHeaders = {
   authorization: "Bearer test-token",
-  "x-omi-client-id": "test-client",
+  "x-omi-client-id": "test-account",
 };
 
 const validStageRequest = (opId: string) => ({
@@ -123,6 +123,33 @@ describe("D1-authoritative attachment staging integration", () => {
       .bind("int-replay-1")
       .first<{ count: number }>();
     expect(count!.count).toBe(1);
+  });
+
+  test("a distinct client id stages under its own account, not the shared staging-primary", async () => {
+    const response = await fetchWorker("/v1/chat-attachments", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-token",
+        "x-omi-client-id": "client-gamma",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(validStageRequest("int-client-gamma")),
+    });
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as { upload: { key: string } };
+    expect(body.upload.key).toMatch(/^attachments\/client-gamma\//);
+    const row = await env.DB.prepare(
+      "SELECT account_id FROM chat_attachments WHERE op_id = ?"
+    )
+      .bind("int-client-gamma")
+      .first<{ account_id: string }>();
+    expect(row!.account_id).toBe("client-gamma");
+    const leaked = await env.DB.prepare(
+      "SELECT id FROM chat_attachments WHERE account_id = ? AND op_id = ?"
+    )
+      .bind("test-account", "int-client-gamma")
+      .first<{ id: string }>();
+    expect(leaked).toBeNull();
   });
 
   test("account isolation excludes foreign-account staged attachments", async () => {

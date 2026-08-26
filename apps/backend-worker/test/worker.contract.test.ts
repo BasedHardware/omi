@@ -71,7 +71,7 @@ let cancellation: "accepted" | "terminal" | "not_found" = "accepted";
 let d1Mock: D1Database;
 const accountStub = {
   admit: async (
-    _accountId: string,
+    accountId: string,
     input: Record<string, unknown>,
     chatLimit: number
   ) => {
@@ -97,7 +97,7 @@ const accountStub = {
         .prepare(
           "SELECT id, display_name, media_type, size_bytes FROM chat_attachments WHERE id = ? AND account_id = ?"
         )
-        .bind(String(attachmentId), "test-account")
+        .bind(String(attachmentId), accountId)
         .first<{
           id: string;
           display_name: string;
@@ -125,7 +125,7 @@ const accountStub = {
       )
       .bind(
         String(input["id"]),
-        "test-account",
+        accountId,
         String(input["opId"]),
         payload,
         admission.generation.id
@@ -181,7 +181,7 @@ const fetchWorker = (path: string, init?: RequestInit) =>
 
 const authenticatedHeaders = {
   authorization: "Bearer test-token",
-  "x-omi-client-id": "test-client",
+  "x-omi-client-id": "test-account",
 };
 
 const chatCreate = (id: string) => ({
@@ -467,7 +467,7 @@ describe("worker request contract", () => {
 
   const anonymousHeaders = {
     authorization: "Bearer ",
-    "x-omi-client-id": "test-client",
+    "x-omi-client-id": "test-account",
   };
 
   test.each([
@@ -562,13 +562,126 @@ describe("worker request contract", () => {
     const missingClient = await fetchWorker("/v1/conversations", {
       headers: { authorization: authenticatedHeaders.authorization },
     });
+    const overlongClient = await fetchWorker("/v1/conversations", {
+      headers: {
+        authorization: authenticatedHeaders.authorization,
+        "x-omi-client-id": "x".repeat(129),
+      },
+    });
 
     expect(invalidToken.status).toBe(401);
     expect(missingClient.status).toBe(400);
+    expect(overlongClient.status).toBe(400);
     expect((await missingClient.json()) as unknown).toEqual({
       error: { code: "bad_request", retryable: false, action: "edit_request" },
     });
     expect(accountCalls).toEqual([]);
+  });
+
+  test("client ids isolate chat, tasks, and conversations", async () => {
+    await insertChatMessage({
+      id: "iso-a",
+      accountId: "client-alpha",
+      text: "alpha only",
+      createdAt: 1,
+      position: 1,
+      chatSessionId: null,
+    });
+    await insertChatMessage({
+      id: "iso-b",
+      accountId: "client-beta",
+      text: "beta only",
+      createdAt: 1,
+      position: 1,
+      chatSessionId: null,
+    });
+    await d1Mock
+      .prepare(
+        "INSERT INTO tasks (id, account_id, description, completed, completed_at, due_at, owner, source, provenance, sort_order, indent_level, created_at, updated_at, revision) VALUES (?, ?, ?, 0, NULL, NULL, NULL, 'assistant', '[]', 1, 0, 1, 1, NULL)"
+      )
+      .bind("task:alpha", "client-alpha", "alpha task")
+      .run();
+    await d1Mock
+      .prepare(
+        "INSERT INTO tasks (id, account_id, description, completed, completed_at, due_at, owner, source, provenance, sort_order, indent_level, created_at, updated_at, revision) VALUES (?, ?, ?, 0, NULL, NULL, NULL, 'assistant', '[]', 1, 0, 1, 1, NULL)"
+      )
+      .bind("task:beta", "client-beta", "beta task")
+      .run();
+
+    const headersFor = (clientId: string) => ({
+      authorization: "Bearer test-token",
+      "x-omi-client-id": clientId,
+    });
+    const alphaHistory = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: headersFor("client-alpha"),
+    });
+    const betaHistory = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: headersFor("client-beta"),
+    });
+    const alphaTasks = await fetchWorker("/v1/tasks?limit=10", {
+      headers: headersFor("client-alpha"),
+    });
+    const betaConversations = await fetchWorker("/v1/conversations?limit=50", {
+      headers: headersFor("client-beta"),
+    });
+
+    expect(alphaHistory.status).toBe(200);
+    expect(
+      (
+        (await alphaHistory.json()) as { messages: Array<{ text: string }> }
+      ).messages.map((message) => message.text)
+    ).toEqual(["alpha only"]);
+    expect(
+      (
+        (await betaHistory.json()) as { messages: Array<{ text: string }> }
+      ).messages.map((message) => message.text)
+    ).toEqual(["beta only"]);
+    expect(
+      ((await alphaTasks.json()) as { items: Array<{ id: string }> }).items.map(
+        (item) => item.id
+      )
+    ).toEqual(["task:alpha"]);
+    expect(
+      (
+        (await betaConversations.json()) as {
+          items: Array<{ overview: string }>;
+        }
+      ).items.map((item) => item.overview)
+    ).toEqual(["beta only"]);
+
+    const alphaSettings = await fetchWorker("/v1/settings", {
+      headers: headersFor("client-alpha"),
+    });
+    expect(alphaSettings.status).toBe(200);
+    expect((await alphaSettings.json()) as unknown).toMatchObject({
+      identity,
+      entitlement: { used: 0, planLabel: initialEntitlement.planLabel },
+    });
+  });
+
+  test("memories stay empty when VECTORIZE returns ids that cannot be revalidated", async () => {
+    const response = await handler.fetch(
+      new Request("https://worker.test/v1/memories", {
+        headers: authenticatedHeaders,
+      }),
+      {
+        ...env,
+        VECTORIZE: {
+          query: async () => ({
+            matches: [{ id: "memory-1", score: 0.9 }],
+            count: 1,
+          }),
+        },
+        AI: {
+          run: async () => ({ data: [[1, 0, 0, 0]] }),
+        },
+      } as never,
+      executionContext as never
+    );
+    expect(response.status).toBe(200);
+    const body = await response.text();
+    expect(JSON.parse(body) as unknown).toEqual(emptyRecallPage());
+    expect(parseSynthesizedPageJson(body)).not.toBeNull();
   });
 
   test("wired chat conversations and unwired memories stay honest empty successes", async () => {
@@ -857,7 +970,7 @@ describe("worker request contract", () => {
       new Request("https://worker.test/v1/chat-messages?limit=10", {
         headers: {
           authorization: "Bearer rotated-token",
-          "x-omi-client-id": "test-client",
+          "x-omi-client-id": "test-account",
         },
       }),
       { ...env, API_TOKEN: "rotated-token" } as never,

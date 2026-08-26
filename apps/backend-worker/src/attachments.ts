@@ -262,6 +262,43 @@ export async function readAttachment(
   return row;
 }
 
+export type BoundAttachmentBytesRef = {
+  id: string;
+  displayName: string;
+  mediaType: string;
+  sizeBytes: number;
+  r2Key: string;
+};
+
+export async function listBoundAttachments(
+  db: D1Database,
+  accountId: string,
+  messageId: string
+): Promise<BoundAttachmentBytesRef[]> {
+  const result = await db
+    .prepare(
+      `SELECT id, display_name, media_type, size_bytes, r2_key
+       FROM chat_attachments
+       WHERE account_id = ? AND bound_message_id = ? AND state = 'bound'
+       ORDER BY created_at, id`
+    )
+    .bind(accountId, messageId)
+    .all<{
+      id: string;
+      display_name: string;
+      media_type: string;
+      size_bytes: number;
+      r2_key: string;
+    }>();
+  return result.results.map((row) => ({
+    id: row.id,
+    displayName: row.display_name,
+    mediaType: row.media_type,
+    sizeBytes: row.size_bytes,
+    r2Key: row.r2_key,
+  }));
+}
+
 export type BoundChatAttachment = {
   id: string;
   displayName: string;

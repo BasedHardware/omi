@@ -27,7 +27,7 @@ beforeAll(async () => {
 
 const authenticatedHeaders = {
   authorization: "Bearer test-token",
-  "x-omi-client-id": "test-client",
+  "x-omi-client-id": "test-account",
 };
 
 const validStageRequest = (opId: string) => ({
@@ -591,6 +591,9 @@ describe("attachment staging route fail-closed behavior", () => {
     expect(CHAT_CAPABILITIES.maxAttachmentBytes).toBe(52_428_800);
     expect(CHAT_CAPABILITIES.allowedAttachmentMimeTypes).toContain(
       "application/pdf"
+    );
+    expect(CHAT_CAPABILITIES.allowedAttachmentMimeTypes).toContain(
+      "text/plain"
     );
   });
 });

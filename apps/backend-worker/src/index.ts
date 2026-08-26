@@ -34,8 +34,12 @@ import {
   stageAttachment,
   type AttachmentIngestMessage,
 } from "./attachments";
+import {
+  createVectorizeRetrievalBoundary,
+  noCanonicalMemoryStore,
+} from "./retrieval";
 import { parseTaskLimit, readTasks } from "./tasks";
-import { backendError, isChatCreate, json } from "./wire";
+import { backendError, isChatCreate, isClientId, json } from "./wire";
 
 type WorkerEnv = Omit<
   Env,
@@ -47,6 +51,7 @@ type WorkerEnv = Omit<
     DB?: D1Database;
     ATTACHMENTS?: R2Bucket;
     ATTACHMENT_INGEST?: Queue<AttachmentIngestMessage>;
+    VECTORIZE?: Vectorize;
     R2_ACCOUNT_ID?: string;
     R2_BUCKET_NAME?: string;
     R2_ACCESS_KEY_ID?: string;
@@ -141,10 +146,14 @@ app.use("/v1/*", async (context, next) => {
     return backendError("unauthorized", "reauthenticate", 401);
   }
   const clientId = context.req.header("x-omi-client-id");
-  if (clientId === undefined || clientId.length === 0) {
+  // Staging isolation by client id, not production multi-tenant auth.
+  // After Bearer auth, each validated x-omi-client-id is its own data
+  // partition for chat, tasks, attachments, and conversations. Settings
+  // display name/email/plan stay staging labels.
+  if (clientId === undefined || !isClientId(clientId)) {
     return backendError("bad_request", "edit_request", 400);
   }
-  context.set("accountId", context.env.STAGING_ACCOUNT_ID);
+  context.set("accountId", clientId);
   await next();
 });
 
@@ -389,7 +398,7 @@ app.get("/v1/conversations", async (context) => {
     ? backendError("bad_request", "edit_request", 400)
     : json(page);
 });
-app.get("/v1/memories", (context) => {
+app.get("/v1/memories", async (context) => {
   const query = new URL(context.req.url).searchParams;
   if (
     [...query.keys()].some((key) => key !== "limit" && key !== "cursor") ||
@@ -401,7 +410,20 @@ app.get("/v1/memories", (context) => {
   const limit = parseTaskLimit(query.get("limit"));
   const cursor = query.get("cursor") ?? undefined;
   if (cursor === "") return backendError("bad_request", "edit_request", 400);
-  void limit;
+  if (context.env.AI !== undefined) {
+    const recalled = await createVectorizeRetrievalBoundary(
+      context.env.VECTORIZE === undefined
+        ? { AI: context.env.AI }
+        : { AI: context.env.AI, VECTORIZE: context.env.VECTORIZE },
+      noCanonicalMemoryStore
+    ).query({
+      accountId: context.get("accountId"),
+      queryText: "",
+      topK: limit,
+    });
+    // No D1 memory table: ids cannot be revalidated, so hits stay empty.
+    void recalled;
+  }
   return json(emptyPage("recall-completeness-v1"));
 });
 app.get("/v1/tasks", async (context) => {
@@ -470,6 +492,7 @@ const handler = {
 export { AccountBackend };
 export {
   createVectorizeRetrievalBoundary,
+  noCanonicalMemoryStore,
   type CanonicalMemoryStore,
   type RetrievalBoundary,
   type RetrievalEnv,

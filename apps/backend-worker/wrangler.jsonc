@@ -75,4 +75,10 @@
       }
     ]
   }
+  // VECTORIZE is intentionally unbound. `wrangler vectorize list` found
+  // omi-memory-claims (768-d) and omi-v5-retrieval-benchmark-staging
+  // (synthetic benchmark only). Neither is an omi-v5 staging memories
+  // index. Operators must `wrangler vectorize create` a memories index
+  // and bind the real index_name here. An absent binding keeps
+  // /v1/memories fail-closed (honest empty, no fabricated hits).
 }

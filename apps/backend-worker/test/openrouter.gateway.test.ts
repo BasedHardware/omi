@@ -54,7 +54,7 @@ const fetchWorker = (
 
 const authenticatedHeaders = {
   authorization: "Bearer test-token",
-  "x-omi-client-id": "test-client",
+  "x-omi-client-id": "test-account",
 };
 
 const captureFetch = (respond: (request: Request) => Response) => {
