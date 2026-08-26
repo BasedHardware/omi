@@ -1,4 +1,4 @@
-FROM python:3.11-slim-bookworm AS builder
+FROM gcr.io/based-hardware-dev/python:3.11-slim-forky AS builder
 
 ENV PATH="/opt/venv/bin:$PATH"
 RUN python -m venv /opt/venv
@@ -6,8 +6,8 @@ RUN python -m venv /opt/venv
 COPY backend/diarizer/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
-FROM python:3.11-slim-bookworm
-# Python 3.11 on Debian 12 (Bookworm)
+FROM gcr.io/based-hardware-dev/python:3.11-slim-forky
+# Python 3.11 on Debian 14 (Forky)
 
 WORKDIR /app
 ENV PATH="/usr/local/nvidia/bin:/usr/local/cuda/bin:/opt/venv/bin:$PATH"
