@@ -10797,5 +10797,6 @@
     "appReEnableFailedTitle": "மீண்டும் இயக்க முடியவில்லை",
     "appReEnableFailedBody": "இந்த ஆப்பை மீண்டும் இயக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.",
     "appDisabledOn": "{date} அன்று முடக்கப்பட்டது.",
-    "appDisabledLastError": "கடைசி பிழை: {error}"
+    "appDisabledLastError": "கடைசி பிழை: {error}",
+    "prerecordedTranscript": "முன் பதிவு"
 }

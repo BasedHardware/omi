@@ -9926,4 +9926,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Último error: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Pregrabado';
 }

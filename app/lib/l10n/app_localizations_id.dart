@@ -9913,4 +9913,7 @@ class AppLocalizationsId extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Kesalahan terakhir: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Prarekam';
 }

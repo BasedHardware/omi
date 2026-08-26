@@ -3231,5 +3231,6 @@
     "appReEnableFailedTitle": "Reactivarea a eșuat",
     "appReEnableFailedBody": "Această aplicație nu a putut fi reactivată. Încearcă din nou.",
     "appDisabledOn": "Dezactivată pe {date}.",
-    "appDisabledLastError": "Ultima eroare: {error}."
+    "appDisabledLastError": "Ultima eroare: {error}.",
+    "prerecordedTranscript": "Preînregistrat"
 }

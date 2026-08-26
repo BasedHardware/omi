@@ -3231,5 +3231,6 @@
     "appReEnableFailedTitle": "Käyttöönotto epäonnistui",
     "appReEnableFailedBody": "Tätä sovellusta ei voitu ottaa uudelleen käyttöön. Yritä uudelleen.",
     "appDisabledOn": "Poistettu käytöstä {date}.",
-    "appDisabledLastError": "Viimeisin virhe: {error}."
+    "appDisabledLastError": "Viimeisin virhe: {error}.",
+    "prerecordedTranscript": "Esitallenne"
 }

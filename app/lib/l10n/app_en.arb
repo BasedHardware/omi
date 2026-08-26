@@ -11723,5 +11723,9 @@
                 "example": "HTTP 307"
             }
         }
+    },
+    "prerecordedTranscript": "Prerecorded",
+    "@prerecordedTranscript": {
+        "description": "Tab label for the prerecorded conversation transcript"
     }
 }

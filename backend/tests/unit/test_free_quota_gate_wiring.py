@@ -213,8 +213,8 @@ def _fake_websocket(provider: str = 'gemini') -> MagicMock:
     return ws
 
 
-async def _passthrough_run_blocking(_executor, fn, *args):
-    return fn(*args)
+async def _passthrough_run_blocking(_executor, fn, *args, **kwargs):
+    return fn(*args, **kwargs)
 
 
 class TestOmniRelayGate:
@@ -233,6 +233,7 @@ class TestOmniRelayGate:
             relay, 'get_chat_quota_snapshot', return_value={'plan': PlanType.basic, 'allowed': False}
         ) as snapshot:
             asyncio.run(relay.omni_relay(ws))
+            relay.is_trial_paywalled.assert_called_once_with('u1', 'desktop', required_byok_provider='gemini')
             snapshot.assert_called_once_with('u1', 'desktop')
             ws.close.assert_awaited_once_with(code=1008, reason='quota_exceeded')
             ws.accept.assert_not_awaited()
@@ -248,9 +249,7 @@ class TestOmniRelayGate:
         ), patch.object(relay, '_verify_ws_auth', return_value='u1'), patch.object(
             relay, 'extract_byok_from_websocket', return_value={'gemini': 'sk-user'}
         ), patch.object(
-            relay, 'set_byok_keys'
-        ), patch.object(
-            relay, 'validate_byok_websocket', return_value=None
+            relay, 'validate_byok_websocket_keys', return_value=({'gemini': 'sk-user'}, None)
         ), patch.object(
             relay, 'is_trial_paywalled', return_value=False
         ), patch.object(
@@ -261,6 +260,7 @@ class TestOmniRelayGate:
             relay, 'get_chat_quota_snapshot'
         ) as snapshot:
             asyncio.run(relay.omni_relay(ws))
+            relay.is_trial_paywalled.assert_called_once_with('u1', 'desktop', required_byok_provider='gemini')
             snapshot.assert_not_called()
             ws.close.assert_awaited_once()
             assert ws.close.await_args.kwargs.get('code') == 1011
@@ -278,9 +278,7 @@ class TestOmniRelayGate:
         ), patch.object(relay, '_verify_ws_auth', return_value='u1'), patch.object(
             relay, 'extract_byok_from_websocket', return_value={'deepgram': 'dg-user'}
         ), patch.object(
-            relay, 'set_byok_keys'
-        ), patch.object(
-            relay, 'validate_byok_websocket', return_value=None
+            relay, 'validate_byok_websocket_keys', return_value=({'deepgram': 'dg-user'}, None)
         ), patch.object(
             relay, 'is_trial_paywalled', return_value=False
         ), patch.object(
@@ -289,6 +287,7 @@ class TestOmniRelayGate:
             relay, 'get_chat_quota_snapshot', return_value={'plan': PlanType.basic, 'allowed': False}
         ) as snapshot:
             asyncio.run(relay.omni_relay(ws))
+            relay.is_trial_paywalled.assert_called_once_with('u1', 'desktop', required_byok_provider='gemini')
             snapshot.assert_called_once_with('u1', 'desktop')
             ws.close.assert_awaited_once_with(code=1008, reason='quota_exceeded')
 

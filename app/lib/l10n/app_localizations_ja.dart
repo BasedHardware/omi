@@ -9734,4 +9734,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String appDisabledLastError(String error) {
     return '最後のエラー: $error';
   }
+
+  @override
+  String get prerecordedTranscript => '事前録音';
 }

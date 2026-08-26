@@ -9934,4 +9934,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Апошняя памылка: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Папярэдне запісанае';
 }

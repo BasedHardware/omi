@@ -3207,5 +3207,6 @@
     "appReEnableFailedTitle": "再有効化できませんでした",
     "appReEnableFailedBody": "このアプリを再有効化できませんでした。もう一度お試しください。",
     "appDisabledOn": "{date} に無効化されました。",
-    "appDisabledLastError": "最後のエラー: {error}"
+    "appDisabledLastError": "最後のエラー: {error}",
+    "prerecordedTranscript": "事前録音"
 }

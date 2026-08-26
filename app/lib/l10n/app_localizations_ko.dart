@@ -9736,4 +9736,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String appDisabledLastError(String error) {
     return '마지막 오류: $error';
   }
+
+  @override
+  String get prerecordedTranscript => '사전 녹음';
 }

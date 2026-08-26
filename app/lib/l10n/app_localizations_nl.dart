@@ -9929,4 +9929,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Laatste fout: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Vooraf opgenomen';
 }

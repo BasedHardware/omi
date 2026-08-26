@@ -9886,4 +9886,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Seneste fejl: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Forudoptaget';
 }

@@ -3266,5 +3266,6 @@
     "appReEnableFailedTitle": "Réactivation impossible",
     "appReEnableFailedBody": "Cette app n'a pas pu être réactivée. Veuillez réessayer.",
     "appDisabledOn": "Désactivée le {date}.",
-    "appDisabledLastError": "Dernière erreur : {error}."
+    "appDisabledLastError": "Dernière erreur : {error}.",
+    "prerecordedTranscript": "Préenregistré"
 }

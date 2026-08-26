@@ -9881,4 +9881,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'अंतिम त्रुटि: $error';
   }
+
+  @override
+  String get prerecordedTranscript => 'पूर्व-रिकॉर्डेड';
 }

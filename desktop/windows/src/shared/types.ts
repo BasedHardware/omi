@@ -1363,8 +1363,13 @@ export type OmiBridgeApi = {
   byokClear: (provider: ByokProvider) => Promise<void>
   /** Remove all stored provider keys. */
   byokClearAll: () => Promise<void>
-  /** True only when all four providers have a key (backend all-or-nothing). */
+  byokClearCodex: () => Promise<void>
+  /** True when a configured LLM provider has a stored key. */
   byokIsActive: () => Promise<boolean>
+  /** Providers whose stored key still matches the fingerprint the backend
+   *  accepted at the last successful enrollment (validated capabilities — not
+   *  mere key presence). Empty until an enrollment succeeds. */
+  byokValidatedProviders: () => Promise<ByokProvider[]>
   /** Live-validate the stored keys and reconcile backend BYOK activation. The
    *  Firebase bearer token is relayed from the renderer's session. */
   byokEnroll: (token: string) => Promise<ByokEnrollResult>

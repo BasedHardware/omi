@@ -297,18 +297,34 @@ def is_byok_active(uid: str, *, firestore_client: Any | None = None) -> bool:
     return age <= BYOK_HEARTBEAT_TTL_SECONDS
 
 
-def set_byok_active(uid: str, fingerprints: dict):
-    user_ref = db.collection('users').document(uid)
-    user_ref.set(
+@transactional
+def _set_byok_active_transaction(transaction, user_ref, fingerprints: dict):
+    snapshot = user_ref.get(transaction=transaction)
+    data = snapshot.to_dict() or {}
+    byok = data.get('byok') or {}
+    enrolled_fingerprints = dict(fingerprints) if isinstance(fingerprints, dict) else {}
+    fingerprints_write = dict(enrolled_fingerprints)
+    existing_fingerprints = byok.get('fingerprints')
+    if isinstance(existing_fingerprints, dict):
+        for provider in existing_fingerprints:
+            if provider not in enrolled_fingerprints:
+                fingerprints_write[provider] = firestore.DELETE_FIELD
+    transaction.set(
+        user_ref,
         {
             'byok': {
                 'active': True,
-                'fingerprints': fingerprints,
+                'fingerprints': fingerprints_write,
                 'last_seen_at': datetime.now(timezone.utc),
             }
         },
         merge=True,
     )
+
+
+def set_byok_active(uid: str, fingerprints: dict):
+    user_ref = db.collection('users').document(uid)
+    _set_byok_active_transaction(db.transaction(), user_ref, fingerprints)
 
 
 def clear_byok_active(uid: str):

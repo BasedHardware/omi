@@ -9932,4 +9932,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Ostatni błąd: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Wstępnie nagrane';
 }

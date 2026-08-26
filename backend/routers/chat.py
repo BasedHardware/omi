@@ -67,6 +67,7 @@ from utils.llm.goals import extract_and_update_goal_progress
 from database.redis_db import try_acquire_goal_extraction_lock, check_rate_limit, store_chat_share, get_chat_share
 from database.users import set_chat_message_rating_score
 from utils.rate_limit_config import get_effective_limit, RATE_LIMIT_SHADOW
+from utils.llm.gateway_client import CHAT_AGENT_ROUTE_DIRECT, get_chat_agent_route
 from utils.subscription import enforce_chat_quota, is_trial_paywalled
 from utils import share_links
 from utils.other import endpoints as auth, storage
@@ -359,6 +360,12 @@ def _record_chat_quota_question_best_effort(
         logger.exception('Failed to record chat quota question source=%s uid=%s', source, uid)
 
 
+def _required_chat_quota_provider() -> str | None:
+    # Direct agent chat consumes managed Anthropic unless an Anthropic BYOK key
+    # is on the request. Other BYOK providers must stay metered on this path.
+    return 'anthropic' if get_chat_agent_route() == CHAT_AGENT_ROUTE_DIRECT else None
+
+
 @router.post('/v2/messages', tags=['chat'], response_model=ResponseMessage)
 def send_message(
     data: SendMessageRequest,
@@ -374,7 +381,7 @@ def send_message(
     # Catalog overage plans return normally. Desktop pre-checks via
     # /v1/users/me/usage-quota and never reaches this path when over.
     try:
-        enforce_chat_quota(uid, platform=x_app_platform)
+        enforce_chat_quota(uid, platform=x_app_platform, required_llm_provider=_required_chat_quota_provider())
     except HTTPException as exc:
         if exc.status_code != 402 or not isinstance(exc.detail, dict):
             raise
@@ -821,7 +828,7 @@ def create_voice_message_stream(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "voice:message")),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ):
-    enforce_chat_quota(uid, platform=x_app_platform)
+    enforce_chat_quota(uid, platform=x_app_platform, required_llm_provider=_required_chat_quota_provider())
 
     resolved_language = resolve_voice_message_language(uid, language)
     stt_provider, _, _stt_model = get_prerecorded_service(resolved_language)

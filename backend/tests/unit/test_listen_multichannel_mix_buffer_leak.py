@@ -111,7 +111,7 @@ def test_custom_stt_photo_skips_omi_description_without_llm_byok_key(monkeypatch
         return 'a description'
 
     monkeypatch.setattr(receiver, 'describe_image', _describe)
-    monkeypatch.setattr(receiver, 'get_byok_key', lambda _provider: None)
+    monkeypatch.setattr(receiver, 'request_has_llm_byok_key', lambda: False)
     monkeypatch.setattr(receiver.users_db, 'is_byok_active', lambda _uid: False)
 
     asyncio.run(_process_photo(recv))
@@ -133,7 +133,7 @@ def test_custom_stt_photo_uses_placeholder_when_byok_enrollment_lookup_fails(mon
         return 'a description'
 
     monkeypatch.setattr(receiver, 'describe_image', _describe)
-    monkeypatch.setattr(receiver, 'get_byok_key', lambda _provider: 'sk-test')
+    monkeypatch.setattr(receiver, 'request_has_llm_byok_key', lambda: True)
 
     def _enrollment_failure(_uid):
         raise RuntimeError('firestore unavailable')
@@ -158,7 +158,7 @@ def test_custom_stt_photo_runs_description_with_llm_byok_key(monkeypatch):
         return 'a description'
 
     monkeypatch.setattr(receiver, 'describe_image', _describe)
-    monkeypatch.setattr(receiver, 'get_byok_key', lambda provider: 'sk-test' if provider == 'openai' else None)
+    monkeypatch.setattr(receiver, 'request_has_llm_byok_key', lambda: True)
     monkeypatch.setattr(receiver.users_db, 'is_byok_active', lambda _uid: True)
 
     asyncio.run(_process_photo(recv))
@@ -179,7 +179,7 @@ def test_custom_stt_photo_skips_description_when_byok_header_present_but_inactiv
         return 'a description'
 
     monkeypatch.setattr(receiver, 'describe_image', _describe)
-    monkeypatch.setattr(receiver, 'get_byok_key', lambda provider: 'sk-forged' if provider == 'openai' else None)
+    monkeypatch.setattr(receiver, 'request_has_llm_byok_key', lambda: True)
     monkeypatch.setattr(
         receiver.users_db,
         'is_byok_active',
@@ -206,7 +206,7 @@ def test_omi_stt_photo_always_runs_description(monkeypatch):
         return 'a description'
 
     monkeypatch.setattr(receiver, 'describe_image', _describe)
-    monkeypatch.setattr(receiver, 'get_byok_key', lambda _provider: byok_calls.append(_provider) or 'sk-test')
+    monkeypatch.setattr(receiver, 'request_has_llm_byok_key', lambda: byok_calls.append('llm') or True)
     monkeypatch.setattr(
         receiver.users_db,
         'is_byok_active',

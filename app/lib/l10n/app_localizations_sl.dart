@@ -9933,4 +9933,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Zadnja napaka: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Vnaprej posneto';
 }

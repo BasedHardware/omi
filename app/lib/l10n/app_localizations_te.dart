@@ -9951,4 +9951,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'చివరి లోపం: $error';
   }
+
+  @override
+  String get prerecordedTranscript => 'ముందుగా రికార్డ్ చేసినది';
 }
