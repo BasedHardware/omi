@@ -185,7 +185,7 @@ class AppUsageAttribution(str, Enum):
 class ExplicitAppSelectionFailedError(RuntimeError):
     """A reprocess that named one summarization app ended without its result.
 
-    Raised by `_trigger_apps` when an explicit `app_id` selection leaves no
+    Raised by `trigger_conversation_apps` when an explicit `app_id` selection leaves no
     non-empty result for that app — the execution failed (the executor loop
     already logged the exception) or the model returned empty content.
     First-party notes are a display fallback, not a substitute for the
@@ -764,7 +764,6 @@ def trigger_conversation_apps(
         except Exception as e:
             succeeded = False
             logger.error(f"Error executing app: {e}")
-    return succeeded
 
     if app_id:
         # Explicit selection is fail-closed: the client asked for THIS app's summary, so a
@@ -773,6 +772,8 @@ def trigger_conversation_apps(
         selected_result = next((r for r in conversation.apps_results if r.app_id == app_id), None)
         if selected_result is None or not selected_result.content.strip():
             raise ExplicitAppSelectionFailedError(f'Selected app {app_id} produced no summary content')
+
+    return succeeded
 
 
 def update_goal_progress(
@@ -2155,7 +2156,7 @@ def process_conversation(
                     # failure instead of success-with-notes (SCA-359).
                     logger.error('Explicit app selection failed: %s', error)
                     explicit_selection_failures.append(error)
-            # _trigger_apps only mutates the in-memory conversation and the durable write above already
+            # trigger_conversation_apps only mutates the in-memory conversation and the durable write above already
             # happened, so persist its output the same way the calendar_event/folder_id/audio_files
             # write-backs do. Otherwise the app summary the LLM just produced is discarded.
             if not jit_defer_expensive and (

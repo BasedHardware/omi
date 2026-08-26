@@ -532,7 +532,7 @@ def _run_explicit_selection_flow(monkeypatch, trigger_apps, update_calls):
         process_conversation.lifecycle_service, "persist_processed_conversation", MagicMock(return_value=True)
     )
     monkeypatch.setattr(process_conversation, "submit_with_context", MagicMock())
-    monkeypatch.setattr(process_conversation, "_trigger_apps", trigger_apps)
+    monkeypatch.setattr(process_conversation, "trigger_conversation_apps", trigger_apps)
     monkeypatch.setattr(process_conversation, "_extract_memories", MagicMock())
     monkeypatch.setattr(
         process_conversation.conversations_db,
@@ -1306,12 +1306,12 @@ def test_threaded_tracking_context_isolation():
 
 
 # ---------------------------------------------------------------------------
-# Tests for _trigger_apps preferred-app shortcut (PR #4683, issue #4639)
+# Tests for trigger_conversation_apps preferred-app shortcut (PR #4683, issue #4639)
 # ---------------------------------------------------------------------------
 
 
 def _make_mock_app(app_id, name="TestApp"):
-    """Create a minimal App-like mock for _trigger_apps tests."""
+    """Create a minimal App-like mock for trigger_conversation_apps tests."""
     app = MagicMock()
     app.id = app_id
     app.name = name
@@ -1321,7 +1321,7 @@ def _make_mock_app(app_id, name="TestApp"):
 
 
 def _setup_trigger_apps_mocks(preferred_app_id=None, default_apps=None, available_apps=None):
-    """Set up the module-level mocks needed by _trigger_apps."""
+    """Set up the module-level mocks needed by trigger_conversation_apps."""
     import sys
 
     redis_mod = sys.modules["database.redis_db"]
@@ -1341,7 +1341,7 @@ def _setup_trigger_apps_mocks(preferred_app_id=None, default_apps=None, availabl
 
 
 def _make_trigger_conversation(suggested_apps=None):
-    """Create a minimal conversation mock for _trigger_apps tests."""
+    """Create a minimal conversation mock for trigger_conversation_apps tests."""
     conv = MagicMock()
     conv.id = "conv-trigger-test"
     conv.get_transcript.return_value = "Speaker 0: Hello"
@@ -1352,7 +1352,7 @@ def _make_trigger_conversation(suggested_apps=None):
 
 
 def _trigger_apps_context(default_apps=None, availability_app=None):
-    """Context manager that patches all external dependencies of _trigger_apps.
+    """Context manager that patches all external dependencies of trigger_conversation_apps.
 
     `availability_app` stands in for `get_available_app_model_by_id` — the
     set-preferred route's availability authority (#10074): None models a
@@ -1502,7 +1502,7 @@ def test_trigger_apps_opt_in_preferred_app_still_auto_runs(monkeypatch):
     suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
     p2 = patch.object(process_conversation, 'get_available_apps', return_value=[preferred])
     with p1, p2, p3, p4, p5, p6:
-        process_conversation._trigger_apps('user-preferred-opt-in', conv)
+        process_conversation.trigger_conversation_apps('user-preferred-opt-in', conv)
 
     suggestion_mock.assert_not_called()
     app_result_mock.assert_called_once()
@@ -1520,7 +1520,7 @@ def test_trigger_apps_explicit_selection_execution_failure_is_fail_closed(monkey
     app_result_mock.side_effect = RuntimeError('LLM unavailable')
     with p1, p2, p3, p4, p5, p6:
         with pytest.raises(process_conversation.ExplicitAppSelectionFailedError):
-            process_conversation._trigger_apps(
+            process_conversation.trigger_conversation_apps(
                 'user-explicit',
                 conv,
                 is_reprocess=True,
@@ -1544,7 +1544,7 @@ def test_trigger_apps_explicit_selection_empty_content_is_fail_closed(monkeypatc
     app_result_mock.return_value = '   '
     with p1, p2, p3, p4, p5, p6:
         with pytest.raises(process_conversation.ExplicitAppSelectionFailedError):
-            process_conversation._trigger_apps(
+            process_conversation.trigger_conversation_apps(
                 'user-explicit',
                 conv,
                 is_reprocess=True,
@@ -1569,7 +1569,7 @@ def test_trigger_apps_automatic_app_failure_stays_fail_open(monkeypatch):
     app_result_mock.side_effect = RuntimeError('LLM unavailable')
     p2 = patch.object(process_conversation, 'get_available_apps', return_value=[preferred])
     with p1, p2, p3, p4, p5, p6:
-        process_conversation._trigger_apps('user-automatic', conv)
+        process_conversation.trigger_conversation_apps('user-automatic', conv)
 
     app_result_mock.assert_called_once()
     assert conv.apps_results == []
@@ -1634,7 +1634,7 @@ def test_trigger_apps_preferred_app_without_memories_capability_falls_through():
     suggestion_mock.assert_called_once()
 
 
-# Regression: the durable write happens before _trigger_apps runs, so the app summary it produces
+# Regression: the durable write happens before trigger_conversation_apps runs, so its app summary
 # must be written back explicitly (like calendar_event / folder_id / audio_files already are).
 # Without that write-back the LLM output is computed and discarded: the detail view falls back to
 # structured.overview, a preferred summarization app never takes effect, the suggested-apps
@@ -1676,7 +1676,7 @@ def test_app_summary_results_reach_the_database(monkeypatch):
         updates.append(data)
 
     def fake_trigger_apps(_uid, conversation, **_kwargs):
-        # The real _trigger_apps only mutates the in-memory conversation.
+        # The real trigger_conversation_apps only mutates the in-memory conversation.
         conversation.suggested_summarization_apps = ['app-1']
         conversation.apps_results = [_FakeAppResult('app-1', 'APP SUMMARY')]
 
