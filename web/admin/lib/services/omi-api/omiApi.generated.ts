@@ -2187,11 +2187,14 @@ export interface GoalUpdate {
 }
 
 export interface GoogleCalendarEvent {
+  all_day?: boolean;
   attendee_emails?: Array<string>;
   attendees?: Array<string>;
+  description?: string;
   end_time: string;
   event_id: string;
   html_link?: string | null;
+  location?: string;
   start_time: string;
   title: string;
 }
