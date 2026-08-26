@@ -13,6 +13,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, cast
 from fastapi.websockets import WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
+from database.firestore_read_metrics import FirestoreReadSite
 from models.message_event import (
     FREEMIUM_ACTION_SETUP_ON_DEVICE_STT,
     FreemiumThresholdReachedEvent,
@@ -804,7 +805,10 @@ class ListenSessionRuntime:
                     await self.conversations.process_conversation(conversation_id)
                 else:
                     conversation = await self.persistence.call(
-                        conversations_db.get_conversation, self.request.uid, conversation_id
+                        conversations_db.get_conversation,
+                        self.request.uid,
+                        conversation_id,
+                        read_site=FirestoreReadSite.LISTEN_RUNTIME_TEARDOWN,
                     )
                     finalization_reason = getattr(self.state, 'finalization_reason', None)
                     if conversation and finalization_reason:

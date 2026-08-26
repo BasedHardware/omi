@@ -18,6 +18,7 @@ from typing import Any, Mapping
 from database import conversation_finalization_jobs as jobs_db
 from database import conversations as conversations_db
 from database import recording_sessions as recording_sessions_db
+from database.firestore_read_metrics import FirestoreReadSite
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 from models.conversation_enums import ConversationStatus
 from utils.cloud_tasks import (
@@ -592,7 +593,9 @@ def open_live_recording_session(
     if existing is None:
         return dict(binding) | {'requires_rollover': False}
 
-    conversation = conversations_db.get_conversation(uid, existing['conversation_id'])
+    conversation = conversations_db.get_conversation(
+        uid, existing['conversation_id'], read_site=FirestoreReadSite.LIFECYCLE_OPEN_LIVE_SESSION_BINDING
+    )
     if conversation is not None:
         return dict(binding) | {
             'requires_rollover': False,

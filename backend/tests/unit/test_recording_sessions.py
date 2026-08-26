@@ -151,7 +151,7 @@ def test_completed_retry_returns_its_canonical_terminal_envelope(recording_store
 
 def test_empty_recording_tombstone_forces_a_fresh_live_generation(recording_store, monkeypatch):
     monkeypatch.setattr(lifecycle_service, 'recording_session_mode', lambda: 'enforce')
-    monkeypatch.setattr(lifecycle_service.conversations_db, 'get_conversation', lambda *_: None)
+    monkeypatch.setattr(lifecycle_service.conversations_db, 'get_conversation', lambda *_, **__: None)
     lifecycle_service.open_recording_session(
         'uid', 'recording-old', 'conversation-old', firestore_client=recording_store
     )
@@ -179,7 +179,7 @@ def test_empty_recording_tombstone_forces_a_fresh_live_generation(recording_stor
 
 def test_missing_active_binding_is_tombstoned_before_rollover(recording_store, monkeypatch):
     monkeypatch.setattr(lifecycle_service, 'recording_session_mode', lambda: 'enforce')
-    monkeypatch.setattr(lifecycle_service.conversations_db, 'get_conversation', lambda *_: None)
+    monkeypatch.setattr(lifecycle_service.conversations_db, 'get_conversation', lambda *_, **__: None)
     lifecycle_service.open_recording_session(
         'uid', 'recording-old', 'conversation-old', firestore_client=recording_store
     )
@@ -482,7 +482,7 @@ async def test_resume_reuses_the_lifecycle_snapshot_instead_of_reading_twice(rec
     get_conversation_calls: list[str] = []
     conversation = {'id': 'conversation-old', 'status': 'in_progress', 'discarded': False}
 
-    def counting_get_conversation(_uid, conversation_id):
+    def counting_get_conversation(_uid, conversation_id, **_kwargs):
         get_conversation_calls.append(conversation_id)
         return conversation if conversation_id == 'conversation-old' else None
 

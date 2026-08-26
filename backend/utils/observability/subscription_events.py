@@ -39,6 +39,44 @@ _REASONS = frozenset({'cancellation_requested', 'payment_failure', 'payment_disp
 
 _PAYMENT_FAILED_STATUSES = frozenset({'past_due', 'unpaid'})
 
+# `reason` describes why a subscription ended, so only this event can ever carry
+# one; every other event pins 'none'. Both the recording path and the zero
+# initialization below read this, so the reachable label space cannot drift from
+# what is actually emitted.
+_REASON_BEARING_EVENT = 'ended'
+
+
+def _reachable_reasons(event: str) -> tuple[str, ...]:
+    return tuple(sorted(_REASONS)) if event == _REASON_BEARING_EVENT else ('none',)
+
+
+def _zero_initialize_label_children() -> None:
+    """Create every reachable label child so each series is born at 0, not at 1.
+
+    A prometheus_client Counter child does not exist until its first ``.inc()``,
+    so a labelled series is first scraped already holding 1 and is never observed
+    at 0. ``increase()`` and ``rate()`` measure movement inside the query window,
+    and a series that appears at 1 and stays there has not moved — so the first
+    event for a label combination contributes exactly nothing to every panel and
+    rule built on them. Subscription events are rare and the labels are wide
+    enough (``plan`` x ``interval``, one process per Cloud Run instance) that
+    almost every event is the first for its combination, which is how a real
+    cancellation renders as a confident 0.
+
+    The reachable space is 4 non-``ended`` events x plans x intervals, plus
+    ``ended`` x plans x intervals x reasons — bounded and closed by construction,
+    which is the property the label sets above exist to guarantee.
+    """
+
+    for event in sorted(_EVENTS):
+        for plan in sorted(_PLANS):
+            for interval in sorted(_INTERVALS):
+                for reason in _reachable_reasons(event):
+                    OMI_SUBSCRIPTION_EVENTS.labels(event=event, plan=plan, interval=interval, reason=reason)
+
+
+_zero_initialize_label_children()
+
 
 def _determine_event(
     stripe_event_type: str,
@@ -150,6 +188,6 @@ def _record(
 
     plan = _resolve_plan(subscription_obj)
     interval = _resolve_interval(subscription_obj)
-    reason = _resolve_cancellation_reason(subscription_obj) if event == 'ended' else 'none'
+    reason = _resolve_cancellation_reason(subscription_obj) if event == _REASON_BEARING_EVENT else 'none'
 
     OMI_SUBSCRIPTION_EVENTS.labels(event=event, plan=plan, interval=interval, reason=reason).inc()

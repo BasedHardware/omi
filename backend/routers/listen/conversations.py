@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
+from database.firestore_read_metrics import FirestoreReadSite
 from models.conversation import Conversation
 from models.conversation_enums import ConversationSource, ConversationStatus
 from models.message_event import ConversationEvent, ConversationSessionEvent, LastConversationEvent
@@ -86,7 +87,10 @@ class LiveConversationController:
             logger.warning('Suppressing lifecycle event without durable binding conversation=%s', conversation_id)
             return
         data = await self.host.persistence.call(
-            conversations_db.get_conversation, self.host.request.uid, conversation_id
+            conversations_db.get_conversation,
+            self.host.request.uid,
+            conversation_id,
+            read_site=FirestoreReadSite.LISTEN_RECORDING_LIFECYCLE_EVENT,
         )
         if not data:
             return
@@ -143,7 +147,10 @@ class LiveConversationController:
 
     async def process_conversation(self, conversation_id: str) -> bool:
         data = await self.host.persistence.call(
-            conversations_db.get_conversation, self.host.request.uid, conversation_id
+            conversations_db.get_conversation,
+            self.host.request.uid,
+            conversation_id,
+            read_site=FirestoreReadSite.LISTEN_PROCESS_CONVERSATION,
         )
         if not data:
             return False
@@ -161,7 +168,10 @@ class LiveConversationController:
         if deleted:
             return True
         latest = await self.host.persistence.call(
-            conversations_db.get_conversation, self.host.request.uid, conversation_id
+            conversations_db.get_conversation,
+            self.host.request.uid,
+            conversation_id,
+            read_site=FirestoreReadSite.LISTEN_POST_DELETE_REREAD,
         )
         return bool(
             latest and (latest.get('transcript_segments') or latest.get('has_content') or latest.get('photos'))
@@ -206,7 +216,12 @@ class LiveConversationController:
             # resolving the binding; reuse it instead of reading it again.
             existing = binding['conversation_snapshot']
         else:
-            existing = await self.host.persistence.call(conversations_db.get_conversation, request.uid, conversation_id)
+            existing = await self.host.persistence.call(
+                conversations_db.get_conversation,
+                request.uid,
+                conversation_id,
+                read_site=FirestoreReadSite.LISTEN_CLIENT_ID_PROBE,
+            )
         if existing:
             action = decide_recording_session_reconnect_action(
                 status=existing.get('status'),
@@ -383,7 +398,10 @@ class LiveConversationController:
             if not conversation_id:
                 continue
             conversation = await self.host.persistence.call(
-                conversations_db.get_conversation, self.host.request.uid, conversation_id
+                conversations_db.get_conversation,
+                self.host.request.uid,
+                conversation_id,
+                read_site=FirestoreReadSite.LISTEN_LIFECYCLE_POLL,
             )
             if not conversation:
                 await self.create_new_in_progress_conversation(rollover=True)

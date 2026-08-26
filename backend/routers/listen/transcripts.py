@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Sequence, cast
 
 from fastapi.websockets import WebSocketDisconnect
 
+from database.firestore_read_metrics import FirestoreReadSite
 from models.conversation import Conversation
 from models.conversation_enums import ConversationSource
 from models.conversation_photo import ConversationPhoto
@@ -103,7 +104,10 @@ class TranscriptProcessor:
 
     async def _load_conversation(self, conversation_id: str) -> Optional[Dict[str, Any]]:
         return await self.host.persistence.call(
-            conversations_db.get_conversation, self.host.request.uid, conversation_id
+            conversations_db.get_conversation,
+            self.host.request.uid,
+            conversation_id,
+            read_site=FirestoreReadSite.LISTEN_TRANSCRIPT_CACHE_LOAD,
         )
 
     def enqueue(self, segments: List[Dict[str, Any]]) -> None:

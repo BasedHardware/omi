@@ -10,6 +10,7 @@ import logging
 from enum import Enum
 
 from database import conversations as conversations_db
+from database.firestore_read_metrics import FirestoreReadSite
 from database.redis_db import get_cached_user_geolocation
 from models.conversation_enums import ConversationStatus
 from models.geolocation import Geolocation
@@ -59,7 +60,13 @@ async def finalize_persisted_conversation(
     integration delivery is dropped rather than dead-lettering the whole
     conversation for a third-party endpoint that is down.
     """
-    conversation_data = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
+    conversation_data = await run_blocking(
+        db_executor,
+        conversations_db.get_conversation,
+        uid,
+        conversation_id,
+        read_site=FirestoreReadSite.FINALIZER_JOB_REPLAY,
+    )
     if not conversation_data:
         # A prior delivery can have durably completed fanout just before the
         # worker crashes.  Preserve that acknowledgement even if the row is

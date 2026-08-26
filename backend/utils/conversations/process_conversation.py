@@ -13,6 +13,7 @@ from fastapi import HTTPException
 
 import database._client as db_client_module
 from database import redis_db
+from database.firestore_read_metrics import FirestoreReadSite
 from database.auth import get_user_name
 from utils.conversations.transcript_for_llm import (
     conversation_transcript_for_action_items,
@@ -2467,7 +2468,9 @@ def retrieve_in_progress_conversation(uid: str) -> Optional[Dict[str, Any]]:
     existing: Optional[Dict[str, Any]] = None
 
     if conversation_id:
-        existing = conversations_db.get_conversation(uid, conversation_id)
+        existing = conversations_db.get_conversation(
+            uid, conversation_id, read_site=FirestoreReadSite.PROCESS_CONVERSATION_RETRIEVE_IN_PROGRESS
+        )
         if existing and existing['status'] != 'in_progress':
             existing = None
 
