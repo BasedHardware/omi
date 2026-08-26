@@ -12,9 +12,13 @@ from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
-# Keep in lockstep with test_listen_pusher_stack_ci_wiring._BOUNDED_APT_GET:
-# unbounded apt-get is the hang that previously burned this job's timeout.
-_BOUNDED_APT_GET = 'sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=10 -o Acquire::https::Timeout=10'
+# Keep in lockstep with test_listen_pusher_stack_ci_wiring._REDIS_ACTION: the
+# bounded apt-get that keeps a stalled mirror from burning this job's timeout
+# lives in the composite action, and
+# test_listen_pusher_stack_ci_wiring.test_hermetic_gauntlet_redis_apt_installs_are_bounded
+# proves the bound itself for all three gauntlet jobs.  Here we only prove that
+# this job routes through it and keeps its own step ceiling.
+_REDIS_ACTION = 'uses: ./.github/actions/install-redis-server'
 
 
 def test_sync_cloud_tasks_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -> None:
@@ -40,8 +44,7 @@ def test_sync_cloud_tasks_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -
     assert 'npm ci --ignore-scripts' in job
     assert 'uses: actions/setup-java@v5' in job
     assert "java-version: '21'" in job
-    assert f'{_BOUNDED_APT_GET} update' in job
-    assert f'{_BOUNDED_APT_GET} install --yes redis-server' in job
+    assert _REDIS_ACTION in job
     assert 'timeout-minutes: 5' in job
     assert 'npm run test:sync-cloud-tasks-stack:emulator' in job
 

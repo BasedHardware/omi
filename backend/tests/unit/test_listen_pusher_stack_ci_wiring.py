@@ -10,7 +10,14 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 # Unbounded `apt-get` against the hosted-runner Azure mirror can stall with no
 # output until the job ceiling. The hermetic gauntlets must keep Acquire
 # retries/timeouts on both update and install, plus a step-level timeout.
+#
+# Those two commands now live in one composite action rather than being copied
+# into each gauntlet job, so the bound is asserted against the action and the
+# jobs are asserted to route through it.  `test_hermetic_gauntlet_redis_apt_installs_are_bounded`
+# below is the single place that proves the pairing.
 _BOUNDED_APT_GET = 'sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=10 -o Acquire::https::Timeout=10'
+_REDIS_ACTION = 'uses: ./.github/actions/install-redis-server'
+_REDIS_ACTION_FILE = Path('.github') / 'actions' / 'install-redis-server' / 'action.yml'
 
 
 def test_listen_pusher_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -> None:
@@ -35,8 +42,7 @@ def test_listen_pusher_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -> N
     assert 'for attempt in 1 2 3' in job
     assert 'uses: actions/setup-java@v5' in job
     assert "java-version: '21'" in job
-    assert f'{_BOUNDED_APT_GET} update' in job
-    assert f'{_BOUNDED_APT_GET} install --yes redis-server' in job
+    assert _REDIS_ACTION in job
     assert 'timeout-minutes: 5' in job
     assert 'npm run test:listen-pusher-stack:emulator -- --state-dir "$RUNNER_TEMP/listen-pusher-stack"' in job
     assert 'name: Show listen gauntlet process diagnostics on failure' in job
@@ -143,7 +149,22 @@ def test_hermetic_e2e_tokenizer_warmup_is_cached_and_bounded() -> None:
 
 def test_hermetic_gauntlet_redis_apt_installs_are_bounded() -> None:
     workflow = (_REPO_ROOT / '.github' / 'workflows' / 'backend-hermetic-e2e.yml').read_text(encoding='utf-8')
+    action = (_REPO_ROOT / _REDIS_ACTION_FILE).read_text(encoding='utf-8')
 
-    assert workflow.count(f'{_BOUNDED_APT_GET} update') == 3
-    assert workflow.count(f'{_BOUNDED_APT_GET} install --yes redis-server') == 3
-    assert 'sudo apt-get install --yes redis-server' not in workflow
+    # One definition of the bound, for the three jobs that need redis-server.
+    assert action.count(f'{_BOUNDED_APT_GET} update') == 1
+    assert action.count(f'{_BOUNDED_APT_GET} install --yes redis-server') == 1
+    # Fail closed: no apt-get anywhere may escape the Acquire retries/timeouts.
+    assert action.count('apt-get') == action.count(_BOUNDED_APT_GET) == 2
+    assert 'apt-get' not in workflow
+
+    # All three gauntlet jobs install redis-server through that action, and each
+    # carries its own step ceiling.  `timeout-minutes` is not a valid key on a
+    # composite-action step, so this backstop can only live on the caller: if it
+    # is ever "tidied" into the action it silently disappears, and a stalled apt
+    # mirror goes back to burning the job's 20-minute timeout.
+    assert workflow.count(_REDIS_ACTION) == 3
+    redis_steps = [step for step in workflow.split('\n      - ') if _REDIS_ACTION in step]
+    assert len(redis_steps) == 3
+    for step in redis_steps:
+        assert 'timeout-minutes: 5' in step
