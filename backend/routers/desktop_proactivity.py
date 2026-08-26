@@ -28,7 +28,6 @@ from utils.llm.gateway_observability import record_direct_exception_surface
 from utils.llm.prompt_cache import EXPLICIT_CACHE_OPTIONS, has_cacheable_prefix
 from utils.llm.providers import get_openai_api_key
 from utils.journey_metrics_contract import ClientKind, resolve_client_kind_from_headers
-from utils.jit_rollout import JITDecisionStage, JITRolloutDecision, resolve_jit_rollout
 from utils.observability.fallback import record_fallback
 from utils.observability.journeys import ClientJourneyAttempt
 from utils.other.endpoints import get_current_user_uid
@@ -628,15 +627,8 @@ async def _post_provider_completion(
 ) -> Any:
     async with get_llm_gateway_semaphore():
         # Queue before the gateway slot is not paid provider work.  Do not let
-        # an unbounded wait consume lease time or make a stale kill-switch
-        # snapshot authorize the eventual request.
+        # an unbounded wait consume lease time.
         await _renew_quota(uid, operation, reservation_token)
-        paid_boundary_decision = await resolve_jit_rollout(
-            uid,
-            stage=JITDecisionStage.PAID_BOUNDARY,
-            force_refresh=True,
-        )
-        _require_jit_rollout(paid_boundary_decision)
         payload = provider_request.payload
         if max_completion_tokens is not None:
             payload = {**payload, "max_completion_tokens": max_completion_tokens}
@@ -681,10 +673,14 @@ async def _proactive_completion_unobserved(
     response: Response,
     uid: str = Depends(_authorized_desktop_user),
 ) -> ProactiveCompletionEnvelope:
+    # This route is the released proactivity lane that shipped desktop clients
+    # poll continuously. It is deliberately NOT gated on the JIT cohort: gating
+    # it would silently kill context-bucket extraction for the entire deployed
+    # fleet the moment the backend ships, long before any client migrates to
+    # the JIT trigger runtime. The JIT lanes enforce admission on their own
+    # reservation routes; retiring this lane is a later, explicit operation.
     operation = request.operation.value
     lane = _OPERATION_LANES[operation]
-    ingress_decision = await resolve_jit_rollout(uid, stage=JITDecisionStage.INGRESS)
-    _require_jit_rollout(ingress_decision)
     if llm_stub_enabled():
         response_body = _offline_stub_response(request)
         return ProactiveCompletionEnvelope(
@@ -697,14 +693,6 @@ async def _proactive_completion_unobserved(
             response=response_body,
         )
 
-    # A cached ingress allow is not admission to mutate quota. Refresh first so
-    # a newly-enabled kill switch or provider uncertainty performs no quota work.
-    paid_admission = await resolve_jit_rollout(
-        uid,
-        stage=JITDecisionStage.PAID_BOUNDARY,
-        force_refresh=True,
-    )
-    _require_jit_rollout(paid_admission)
     quota: ProactiveQuotaState | None = None
     quota_reserved = False
     quota_released = False
@@ -767,7 +755,7 @@ async def _proactive_completion_unobserved(
         await release_quota_once()
         raise
     except HTTPException as exc:
-        if length_retry_attempted and provider_request is not None and not _is_jit_rollout_block(exc):
+        if length_retry_attempted and provider_request is not None:
             _record_length_retry_outcome(provider_request, "exhausted")
         await release_quota_once()
         raise
@@ -851,27 +839,6 @@ async def _proactive_completion_unobserved(
     )
 
 
-def _require_jit_rollout(decision: JITRolloutDecision) -> None:
-    if decision.permits_work:
-        return
-    raise HTTPException(
-        status_code=403,
-        detail={
-            'code': 'jit_rollout_not_enabled',
-            'decision': decision.effective.value,
-            'reason': decision.reason.value,
-        },
-    )
-
-
-def _is_jit_rollout_block(exc: HTTPException) -> bool:
-    return bool(
-        exc.status_code == 403
-        and isinstance(exc.detail, Mapping)
-        and exc.detail.get('code') == 'jit_rollout_not_enabled'
-    )
-
-
 def _invalid_structured_output() -> HTTPException:
     return HTTPException(status_code=_INVALID_STRUCTURED_OUTPUT_STATUS, detail=_INVALID_STRUCTURED_OUTPUT_DETAIL)
 
@@ -918,8 +885,6 @@ async def proactive_completion(
     except Exception as exc:
         if isinstance(exc, HTTPException) and exc.status_code == 429:
             attempt.degrade('quota_capped')
-        elif isinstance(exc, HTTPException) and _is_jit_rollout_block(exc):
-            attempt.degrade('rollout_disabled')
         else:
             attempt.fail(_proactivity_issue_class(exc))
         raise

@@ -13,12 +13,6 @@ from fastapi import Response
 
 from llm_gateway.gateway.config_loader import load_gateway_config
 from routers import desktop_proactivity
-from utils.jit_rollout import (
-    JITDecisionReason,
-    JITErrorClass,
-    JITRolloutDecision,
-    TriState,
-)
 from utils.observability import journeys
 from utils.subscription import (
     DESKTOP_ACCESS_TIER_ARCHITECT,
@@ -33,21 +27,7 @@ CACHEABLE_STABLE_PROMPT = "stable bucket instructions for the proactive director
 
 
 @pytest.fixture(autouse=True)
-def _allow_jit_rollout(monkeypatch):
-    async def resolve(_uid, *, stage, force_refresh=False):
-        del stage, force_refresh
-        return JITRolloutDecision(
-            rollout=TriState.ENABLED,
-            kill_switch=TriState.DISABLED,
-            effective=TriState.ENABLED,
-            reason=JITDecisionReason.ROLLOUT_ENABLED,
-            error_class=JITErrorClass.NONE,
-            cache_hit=False,
-            cache_ttl_seconds=20,
-        )
-
-    monkeypatch.setattr(desktop_proactivity, 'resolve_jit_rollout', resolve)
-
+def _stub_quota_lease(monkeypatch):
     # Most route tests use an in-memory quota state rather than Redis. Keep
     # their provider-path assertions focused while dedicated lease tests below
     # exercise renew/finalize failure semantics explicitly.
@@ -92,25 +72,6 @@ def request(
     )
 
 
-def _rollout_decision(
-    *,
-    rollout: TriState,
-    kill_switch: TriState,
-    effective: TriState,
-    reason: JITDecisionReason,
-    error_class: JITErrorClass = JITErrorClass.NONE,
-) -> JITRolloutDecision:
-    return JITRolloutDecision(
-        rollout=rollout,
-        kill_switch=kill_switch,
-        effective=effective,
-        reason=reason,
-        error_class=error_class,
-        cache_hit=False,
-        cache_ttl_seconds=0,
-    )
-
-
 def _test_quota_state(
     *,
     limit: int = 150,
@@ -123,190 +84,6 @@ def _test_quota_state(
         reset_seconds=reset_seconds,
         reservation_token="test-reservation-token",
     )
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    'decision',
-    [
-        _rollout_decision(
-            rollout=TriState.DISABLED,
-            kill_switch=TriState.DISABLED,
-            effective=TriState.DISABLED,
-            reason=JITDecisionReason.ROLLOUT_DISABLED,
-        ),
-        _rollout_decision(
-            rollout=TriState.UNKNOWN,
-            kill_switch=TriState.UNKNOWN,
-            effective=TriState.UNKNOWN,
-            reason=JITDecisionReason.PROVIDER_ERROR,
-            error_class=JITErrorClass.PROVIDER,
-        ),
-        _rollout_decision(
-            rollout=TriState.ENABLED,
-            kill_switch=TriState.ENABLED,
-            effective=TriState.DISABLED,
-            reason=JITDecisionReason.KILL_SWITCH_ENABLED,
-        ),
-    ],
-)
-async def test_off_unknown_and_killed_decisions_do_no_quota_or_provider_work(monkeypatch, decision):
-    calls = {'quota': 0, 'provider_selection': 0, 'provider': 0}
-
-    async def resolve(_uid, *, stage, force_refresh=False):
-        del stage, force_refresh
-        return decision
-
-    async def quota(*_args, **_kwargs):
-        calls['quota'] += 1
-        raise AssertionError('quota must not be reserved')
-
-    async def provider(*_args, **_kwargs):
-        calls['provider'] += 1
-        raise AssertionError('provider must not be called')
-
-    def provider_selection(*_args, **_kwargs):
-        calls['provider_selection'] += 1
-        raise AssertionError('provider must not be selected')
-
-    monkeypatch.setattr(desktop_proactivity, 'resolve_jit_rollout', resolve)
-    monkeypatch.setattr(desktop_proactivity, '_consume_quota', quota)
-    monkeypatch.setattr(desktop_proactivity, '_proactive_provider_request', provider_selection)
-    monkeypatch.setattr(desktop_proactivity, '_post_provider_completion', provider)
-    monkeypatch.setattr(desktop_proactivity, 'llm_stub_enabled', lambda: False)
-
-    with pytest.raises(desktop_proactivity.HTTPException) as blocked:
-        await desktop_proactivity._proactive_completion_unobserved(request(), Response(), uid='user-1')
-
-    assert blocked.value.status_code == 403
-    assert calls == {'quota': 0, 'provider_selection': 0, 'provider': 0}
-
-
-@pytest.mark.asyncio
-async def test_stale_ingress_allow_then_kill_does_no_quota_or_provider_work(monkeypatch):
-    enabled = _rollout_decision(
-        rollout=TriState.ENABLED,
-        kill_switch=TriState.DISABLED,
-        effective=TriState.ENABLED,
-        reason=JITDecisionReason.ROLLOUT_ENABLED,
-    )
-    killed = _rollout_decision(
-        rollout=TriState.ENABLED,
-        kill_switch=TriState.ENABLED,
-        effective=TriState.DISABLED,
-        reason=JITDecisionReason.KILL_SWITCH_ENABLED,
-    )
-    resolutions = []
-    quota_calls = []
-    provider_calls = []
-    provider_selections = []
-
-    async def resolve(_uid, *, stage, force_refresh=False):
-        resolutions.append((stage, force_refresh))
-        return enabled if len(resolutions) == 1 else killed
-
-    async def quota(uid, operation):
-        quota_calls.append((uid, operation))
-        raise AssertionError('quota must not be reserved after the paid-boundary kill refresh')
-
-    async def provider(*_args, **_kwargs):
-        provider_calls.append(True)
-        raise AssertionError('provider must not be called after kill refresh')
-
-    def provider_selection(*_args, **_kwargs):
-        provider_selections.append(True)
-        raise AssertionError('provider must not be selected after kill refresh')
-
-    monkeypatch.setattr(desktop_proactivity, 'resolve_jit_rollout', resolve)
-    monkeypatch.setattr(desktop_proactivity, '_consume_quota', quota)
-    monkeypatch.setattr(desktop_proactivity, '_proactive_provider_request', provider_selection)
-    monkeypatch.setattr(desktop_proactivity, '_post_provider_completion', provider)
-    monkeypatch.setattr(desktop_proactivity, 'llm_stub_enabled', lambda: False)
-
-    with pytest.raises(desktop_proactivity.HTTPException) as blocked:
-        await desktop_proactivity._proactive_completion_unobserved(request(), Response(), uid='user-1')
-
-    assert blocked.value.status_code == 403
-    assert resolutions == [
-        (desktop_proactivity.JITDecisionStage.INGRESS, False),
-        (desktop_proactivity.JITDecisionStage.PAID_BOUNDARY, True),
-    ]
-    assert quota_calls == []
-    assert provider_selections == []
-    assert provider_calls == []
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("late_mode", ["killed", "unknown"])
-async def test_late_paid_boundary_block_does_not_emit_direct_fallback_telemetry(monkeypatch, late_mode):
-    enabled = _rollout_decision(
-        rollout=TriState.ENABLED,
-        kill_switch=TriState.DISABLED,
-        effective=TriState.ENABLED,
-        reason=JITDecisionReason.ROLLOUT_ENABLED,
-    )
-    late_decision = (
-        _rollout_decision(
-            rollout=TriState.ENABLED,
-            kill_switch=TriState.ENABLED,
-            effective=TriState.DISABLED,
-            reason=JITDecisionReason.KILL_SWITCH_ENABLED,
-        )
-        if late_mode == "killed"
-        else _rollout_decision(
-            rollout=TriState.UNKNOWN,
-            kill_switch=TriState.UNKNOWN,
-            effective=TriState.UNKNOWN,
-            reason=JITDecisionReason.PROVIDER_ERROR,
-            error_class=JITErrorClass.PROVIDER,
-        )
-    )
-    resolutions = []
-    released = []
-    fallbacks = []
-    direct_surfaces = []
-
-    async def resolve(_uid, *, stage, force_refresh=False):
-        resolutions.append((stage, force_refresh))
-        return enabled if len(resolutions) <= 2 else late_decision
-
-    async def consume(*_args):
-        return _test_quota_state()
-
-    async def release(uid, operation, *_args):
-        released.append((uid, operation))
-
-    monkeypatch.setattr(desktop_proactivity, "resolve_jit_rollout", resolve)
-    monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
-    monkeypatch.delenv("OMI_LLM_GATEWAY_URL", raising=False)
-    monkeypatch.setenv("OMI_ENV_STAGE", "dev")
-    monkeypatch.setattr(desktop_proactivity, "get_openai_api_key", lambda: "dev-provider-key")
-    monkeypatch.setattr(desktop_proactivity, "record_fallback", lambda **values: fallbacks.append(values))
-    monkeypatch.setattr(
-        desktop_proactivity,
-        "record_direct_exception_surface",
-        lambda **values: direct_surfaces.append(values),
-    )
-    monkeypatch.setattr(desktop_proactivity, "_consume_quota", consume)
-    monkeypatch.setattr(desktop_proactivity, "_release_quota", release)
-    monkeypatch.setattr(
-        desktop_proactivity,
-        "get_llm_gateway_client",
-        lambda: (_ for _ in ()).throw(AssertionError("late rollout block must precede provider I/O")),
-    )
-
-    with pytest.raises(desktop_proactivity.HTTPException) as blocked:
-        await desktop_proactivity.proactive_completion(request(), Response(), uid="user-1")
-
-    assert blocked.value.status_code == 403
-    assert resolutions == [
-        (desktop_proactivity.JITDecisionStage.INGRESS, False),
-        (desktop_proactivity.JITDecisionStage.PAID_BOUNDARY, True),
-        (desktop_proactivity.JITDecisionStage.PAID_BOUNDARY, True),
-    ]
-    assert released == [("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)]
-    assert fallbacks == []
-    assert direct_surfaces == []
 
 
 def test_operation_pins_lane_and_only_reasoning_enables_explicit_cache():
@@ -746,81 +523,6 @@ async def test_gateway_queue_wait_does_not_renew_expiring_lease_until_slot(monke
 
 
 @pytest.mark.asyncio
-async def test_gateway_queue_wait_refreshes_kill_switch_before_direct_provider(monkeypatch):
-    entered = asyncio.Event()
-    release_slot = asyncio.Event()
-    kill_switch = False
-    resolutions = []
-    provider_calls = []
-    released = []
-    fallbacks = []
-    enabled = _rollout_decision(
-        rollout=TriState.ENABLED,
-        kill_switch=TriState.DISABLED,
-        effective=TriState.ENABLED,
-        reason=JITDecisionReason.ROLLOUT_ENABLED,
-    )
-    killed = _rollout_decision(
-        rollout=TriState.ENABLED,
-        kill_switch=TriState.ENABLED,
-        effective=TriState.DISABLED,
-        reason=JITDecisionReason.KILL_SWITCH_ENABLED,
-    )
-
-    class QueuedSemaphore:
-        async def __aenter__(self):
-            entered.set()
-            await release_slot.wait()
-            return self
-
-        async def __aexit__(self, *_):
-            return None
-
-    class DirectClient:
-        async def post(self, *_args, **_kwargs):
-            provider_calls.append(True)
-            raise AssertionError("provider must not run after the kill switch changes")
-
-    async def resolve(_uid, *, stage, force_refresh=False):
-        resolutions.append((stage, force_refresh, kill_switch))
-        return killed if kill_switch else enabled
-
-    async def consume(*_args):
-        return _test_quota_state()
-
-    async def release(uid, operation, token):
-        released.append((uid, operation, token))
-
-    monkeypatch.setattr(desktop_proactivity, "resolve_jit_rollout", resolve)
-    monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
-    monkeypatch.delenv("OMI_LLM_GATEWAY_URL", raising=False)
-    monkeypatch.setenv("OMI_ENV_STAGE", "dev")
-    monkeypatch.setattr(desktop_proactivity, "get_openai_api_key", lambda: "dev-provider-key")
-    monkeypatch.setattr(desktop_proactivity, "record_fallback", lambda **values: fallbacks.append(values))
-    monkeypatch.setattr(desktop_proactivity, "_consume_quota", consume)
-    monkeypatch.setattr(desktop_proactivity, "_release_quota", release)
-    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", lambda: DirectClient())
-    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_semaphore", lambda: QueuedSemaphore())
-
-    task = asyncio.create_task(desktop_proactivity.proactive_completion(request(), Response(), uid="user-1"))
-    await asyncio.wait_for(entered.wait(), timeout=1)
-    kill_switch = True
-    release_slot.set()
-    with pytest.raises(desktop_proactivity.HTTPException) as blocked:
-        await task
-
-    assert blocked.value.status_code == 403
-    assert provider_calls == []
-    assert fallbacks == []
-    assert released == [("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION, "test-reservation-token")]
-    assert resolutions == [
-        (desktop_proactivity.JITDecisionStage.INGRESS, False, False),
-        (desktop_proactivity.JITDecisionStage.PAID_BOUNDARY, True, False),
-        (desktop_proactivity.JITDecisionStage.PAID_BOUNDARY, True, True),
-    ]
-
-
-@pytest.mark.asyncio
 async def test_missing_finalize_fails_closed_without_rolling_back_successful_provider_work(monkeypatch):
     released = []
 
@@ -1239,55 +941,6 @@ async def test_gateway_failure_releases_reserved_quota(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_cancellation_during_provider_paid_boundary_refresh_releases_quota_once(monkeypatch):
-    resolutions = []
-    released = []
-    enabled = _rollout_decision(
-        rollout=TriState.ENABLED,
-        kill_switch=TriState.DISABLED,
-        effective=TriState.ENABLED,
-        reason=JITDecisionReason.ROLLOUT_ENABLED,
-    )
-
-    async def resolve(_uid, *, stage, force_refresh=False):
-        resolutions.append((stage, force_refresh))
-        if len(resolutions) == 3:
-            raise asyncio.CancelledError()
-        return enabled
-
-    async def consume(*_args):
-        return _test_quota_state()
-
-    async def release(uid, operation, *_args):
-        released.append((uid, operation))
-
-    monkeypatch.setattr(desktop_proactivity, "resolve_jit_rollout", resolve)
-    monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
-    monkeypatch.setattr(desktop_proactivity, "_consume_quota", consume)
-    monkeypatch.setattr(desktop_proactivity, "_release_quota", release)
-    monkeypatch.setattr(
-        desktop_proactivity,
-        "_proactive_provider_request",
-        lambda *_args: desktop_proactivity._ProviderRequest(
-            url="http://gateway/v1/chat/completions",
-            headers={},
-            payload={"max_completion_tokens": 1024},
-            fallback_class="none",
-        ),
-    )
-
-    with pytest.raises(asyncio.CancelledError):
-        await desktop_proactivity._proactive_completion_unobserved(request(), Response(), uid="user-1")
-
-    assert resolutions == [
-        (desktop_proactivity.JITDecisionStage.INGRESS, False),
-        (desktop_proactivity.JITDecisionStage.PAID_BOUNDARY, True),
-        (desktop_proactivity.JITDecisionStage.PAID_BOUNDARY, True),
-    ]
-    assert released == [("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)]
-
-
-@pytest.mark.asyncio
 async def test_cancellation_during_provider_retry_releases_quota_once_without_retry_telemetry(monkeypatch):
     calls = []
     released = []
@@ -1608,94 +1261,6 @@ async def test_length_retry_recovery_waits_for_successful_quota_finalization(mon
     assert failed.value.status_code == 503
     assert len(calls) == 2
     assert fallbacks == []
-
-
-@pytest.mark.asyncio
-async def test_kill_toggle_after_first_provider_call_denies_length_retry(monkeypatch):
-    terminal = _capture_proactivity_journeys(monkeypatch)
-    calls = []
-    resolutions = []
-    consumed = []
-    released = []
-    fallbacks = []
-    kill_state = {'enabled': False}
-    enabled = _rollout_decision(
-        rollout=TriState.ENABLED,
-        kill_switch=TriState.DISABLED,
-        effective=TriState.ENABLED,
-        reason=JITDecisionReason.ROLLOUT_ENABLED,
-    )
-    killed = _rollout_decision(
-        rollout=TriState.ENABLED,
-        kill_switch=TriState.ENABLED,
-        effective=TriState.DISABLED,
-        reason=JITDecisionReason.KILL_SWITCH_ENABLED,
-    )
-
-    class DirectClient:
-        async def post(self, url, *, headers, json):
-            calls.append((url, headers, json))
-            kill_state['enabled'] = True
-            return httpx.Response(
-                200,
-                request=httpx.Request('POST', url),
-                json={'choices': [{'finish_reason': 'length', 'message': {'content': ''}}]},
-            )
-
-    class Semaphore:
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *_):
-            return None
-
-    async def resolve(_uid, *, stage, force_refresh=False):
-        resolutions.append((stage, force_refresh))
-        return killed if kill_state['enabled'] else enabled
-
-    async def consume(uid, operation):
-        consumed.append((uid, operation))
-        return _test_quota_state()
-
-    async def release(uid, operation, *_args):
-        released.append((uid, operation))
-
-    monkeypatch.setattr(desktop_proactivity, 'resolve_jit_rollout', resolve)
-    monkeypatch.setattr(desktop_proactivity, 'llm_stub_enabled', lambda: False)
-    monkeypatch.delenv('OMI_LLM_GATEWAY_URL', raising=False)
-    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
-    monkeypatch.setattr(desktop_proactivity, 'get_openai_api_key', lambda: 'dev-provider-key')
-    monkeypatch.setattr(desktop_proactivity, 'record_fallback', lambda **values: fallbacks.append(values))
-    monkeypatch.setattr(desktop_proactivity, '_consume_quota', consume)
-    monkeypatch.setattr(desktop_proactivity, '_release_quota', release)
-    monkeypatch.setattr(desktop_proactivity, 'get_llm_gateway_client', lambda: DirectClient())
-    monkeypatch.setattr(desktop_proactivity, 'get_llm_gateway_semaphore', lambda: Semaphore())
-
-    with pytest.raises(desktop_proactivity.HTTPException) as blocked:
-        await desktop_proactivity.proactive_completion(
-            request(),
-            Response(),
-            uid='user-1',
-            x_app_platform='macos',
-        )
-
-    assert blocked.value.status_code == 403
-    assert blocked.value.detail == {
-        'code': 'jit_rollout_not_enabled',
-        'decision': 'disabled',
-        'reason': 'kill_switch_enabled',
-    }
-    assert resolutions == [
-        (desktop_proactivity.JITDecisionStage.INGRESS, False),
-        (desktop_proactivity.JITDecisionStage.PAID_BOUNDARY, True),
-        (desktop_proactivity.JITDecisionStage.PAID_BOUNDARY, True),
-        (desktop_proactivity.JITDecisionStage.PAID_BOUNDARY, True),
-    ]
-    assert len(calls) == 1
-    assert consumed == [('user-1', desktop_proactivity.ProactiveOperation.EXTRACTION)]
-    assert released == [('user-1', desktop_proactivity.ProactiveOperation.EXTRACTION)]
-    assert fallbacks == []
-    assert terminal == [('desktop_proactivity', 'desktop_macos', 'degraded', 'rollout_disabled')]
 
 
 @pytest.mark.asyncio
@@ -2129,33 +1694,6 @@ async def test_desktop_proactivity_journey_records_quota_cap_as_degraded(monkeyp
 
 
 @pytest.mark.asyncio
-async def test_desktop_proactivity_journey_records_rollout_block_as_degraded(monkeypatch):
-    terminal = _capture_proactivity_journeys(monkeypatch)
-    blocked = _rollout_decision(
-        rollout=TriState.UNKNOWN,
-        kill_switch=TriState.UNKNOWN,
-        effective=TriState.UNKNOWN,
-        reason=JITDecisionReason.PROVIDER_ERROR,
-        error_class=JITErrorClass.PROVIDER,
-    )
-
-    async def resolve(*_args, **_kwargs):
-        return blocked
-
-    monkeypatch.setattr(desktop_proactivity, 'resolve_jit_rollout', resolve)
-    with pytest.raises(desktop_proactivity.HTTPException) as error:
-        await desktop_proactivity.proactive_completion(
-            request(),
-            Response(),
-            uid='user-1',
-            x_app_platform='macos',
-        )
-
-    assert error.value.status_code == 403
-    assert terminal == [('desktop_proactivity', 'desktop_macos', 'degraded', 'rollout_disabled')]
-
-
-@pytest.mark.asyncio
 async def test_desktop_proactivity_journey_rejects_post_200_invalid_structured_output(monkeypatch):
     terminal = _capture_proactivity_journeys(monkeypatch)
 
@@ -2194,3 +1732,48 @@ async def test_desktop_proactivity_journey_rejects_post_200_invalid_structured_o
 
     assert invalid.value.status_code == desktop_proactivity._INVALID_STRUCTURED_OUTPUT_STATUS
     assert terminal == [('desktop_proactivity', 'desktop_macos', 'failure', 'invalid_response')]
+
+
+@pytest.mark.asyncio
+async def test_legacy_clients_are_not_gated_by_jit_rollout(monkeypatch):
+    """The released completion lane must serve deployed clients with no JIT cohort state.
+
+    Regression guard for the gate that returned 403 ``jit_rollout_not_enabled``
+    here: it silently killed context-bucket extraction for the whole shipped
+    desktop fleet. JIT admission is enforced on the JIT reservation routes, not
+    on this pre-existing lane; this test runs the full unobserved path with no
+    rollout stub of any kind and expects provider work to proceed.
+    """
+
+    provider_calls = []
+
+    async def quota(uid, operation):
+        return desktop_proactivity.ProactiveQuotaState(limit=10, remaining=9, reset_seconds=60, reservation_token='tok')
+
+    async def provider(provider_request, *, uid, operation, reservation_token, max_completion_tokens=None):
+        provider_calls.append(operation)
+        return {
+            "choices": [{"message": {"content": "{\"insights\": []}"}}],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+        }
+
+    monkeypatch.setattr(desktop_proactivity, '_consume_quota', quota)
+    monkeypatch.setattr(
+        desktop_proactivity,
+        '_proactive_provider_request',
+        lambda req, uid, request_id: desktop_proactivity._ProviderRequest(
+            url='https://gateway.test/v1/chat/completions',
+            headers={},
+            payload={'max_completion_tokens': 800},
+            fallback_class='none',
+        ),
+    )
+    monkeypatch.setattr(desktop_proactivity, '_post_provider_completion', provider)
+    monkeypatch.setattr(desktop_proactivity, '_validate_gateway_output', lambda *_a, **_k: None)
+    monkeypatch.setattr(desktop_proactivity, 'llm_stub_enabled', lambda: False)
+    assert not hasattr(desktop_proactivity, 'resolve_jit_rollout')
+
+    envelope = await desktop_proactivity._proactive_completion_unobserved(request(), Response(), uid='user-1')
+
+    assert provider_calls, 'provider must be reached without any JIT rollout consultation'
+    assert envelope.operation.value == 'proactive_extraction'
