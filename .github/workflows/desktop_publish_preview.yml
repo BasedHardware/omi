@@ -245,7 +245,7 @@ jobs:
 
       - name: Retain Codemagic preview build observation evidence
         if: always() && steps.dispatch.outcome == 'success'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: codemagic-preview-build-observation-${{ needs.resolve.outputs.slug }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/codemagic-preview-build-observation.json

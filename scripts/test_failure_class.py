@@ -236,6 +236,106 @@ class FailureClassCliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(payload["ok"])
 
+    def write_new_definition(self, class_id: str, evidence_prs: object) -> None:
+        definition = {
+            "schema_version": 1,
+            "id": class_id,
+            "violated_contract": "Test boundaries retain their contract.",
+            "canonical_prevention": "Keep the guard at the shared boundary.",
+            "evidence_prs": evidence_prs,
+            "status": "open",
+        }
+        self.write(
+            f".github/failure-classes/{class_id}.json",
+            json.dumps(definition, indent=2) + "\n",
+        )
+
+    def test_new_definition_may_declare_empty_evidence_prs(self) -> None:
+        """A class born in this PR has no merged PR to cite.
+
+        `evidence_prs` records merged PRs, and the PR fixing a class's first instance
+        has no number until it is opened. Requiring non-empty made `Failure-Class: new`
+        unsatisfiable without inventing a number or pushing with --no-verify.
+        """
+        self.write_new_definition("FC-new-test-boundary", [])
+        self.write("src/example.txt", "new class\n")
+        self.commit("fix: register a newly observed class")
+        result = self.validate(self.body("Failure-Class: new\n"))
+        payload = self.payload(result)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(payload["ok"])
+
+    def test_empty_evidence_prs_stays_valid_once_the_class_is_merged(self) -> None:
+        """The allowance must not depend on the class being new in the range.
+
+        A rule scoped to 'added by this change' would pass in the authoring PR and then
+        fail on every run afterwards, because the merged definition is no longer new.
+        """
+        self.set_definition_field("FC-malformed-doc-read", "evidence_prs", [])
+        result = self.validate(self.body("## Summary\n"))
+        payload = self.payload(result)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(payload["ok"])
+
+    def test_evidence_prs_still_rejects_non_positive_entries(self) -> None:
+        self.set_definition_field("FC-malformed-doc-read", "evidence_prs", [0])
+        result = self.validate(self.body("## Summary\n"))
+        payload = self.payload(result)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("invalid_evidence_prs", [item["code"] for item in payload["errors"]])
+
+    def test_pipe_separated_declaration_reports_the_declaration_not_the_registry(self) -> None:
+        """The old template read as a pipe-separated value, and the resulting error
+        pointed at the registry instead of at the malformed line."""
+        self.write_new_definition("FC-new-test-boundary", [])
+        self.write("src/example.txt", "new class\n")
+        self.commit("fix: register a newly observed class")
+        result = self.validate(self.body("Failure-Class: FC-new-test-boundary | new\n"))
+        payload = self.payload(result)
+        codes = [item["code"] for item in payload["errors"]]
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("invalid_declaration", codes)
+        self.assertNotIn("instance_fix_mutates_registry", codes)
+        declaration_error = next(item for item in payload["errors"] if item["code"] == "invalid_declaration")
+        self.assertIn("|", declaration_error["message"])
+        self.assertEqual(
+            declaration_error["accepted_forms"],
+            ["Failure-Class: FC-<lower-kebab-slug>", "Failure-Class: new", "Failure-Class: none"],
+        )
+
+    def test_prepare_narrows_candidates_to_matching_scope_hints(self) -> None:
+        self.set_definition_field("FC-malformed-doc-read", "scope_hints", ["src/**"])
+        self.write("src/example.txt", "touched\n")
+        self.commit("fix(backend): protect read boundary")
+        result = self.cli(
+            "prepare", "--base", self.base, "--head", "HEAD", "--pr-body-file", str(self.body("## Summary\n"))
+        )
+        payload = self.payload(result)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([item["id"] for item in payload["advisory_candidates"]], ["FC-malformed-doc-read"])
+        self.assertEqual(payload["candidates_total"], len(SEED_IDS))
+        self.assertIn("advisory", payload["candidate_narrowing"])
+
+    def test_prepare_lists_every_candidate_when_nothing_matches_scope(self) -> None:
+        """Narrowing to nothing would read as 'no class can apply' — a classification
+        this CLI does not make."""
+        for class_id in SEED_IDS:
+            self.set_definition_field(class_id, "scope_hints", ["nowhere/**"])
+        self.add_fix_commit()
+        result = self.cli(
+            "prepare", "--base", self.base, "--head", "HEAD", "--pr-body-file", str(self.body("## Summary\n"))
+        )
+        self.assertEqual(self.payload(result)["candidates_shown"], len(SEED_IDS))
+
+    def test_prepare_all_candidates_flag_disables_narrowing(self) -> None:
+        self.set_definition_field("FC-malformed-doc-read", "scope_hints", ["src/**"])
+        self.add_fix_commit()
+        result = self.cli(
+            "prepare", "--base", self.base, "--head", "HEAD",
+            "--pr-body-file", str(self.body("## Summary\n")), "--all-candidates",
+        )
+        self.assertEqual(self.payload(result)["candidates_shown"], len(SEED_IDS))
+
     def test_new_declaration_without_added_definition_fails(self) -> None:
         self.add_fix_commit()
         result = self.validate(self.body("Failure-Class: new\n"))

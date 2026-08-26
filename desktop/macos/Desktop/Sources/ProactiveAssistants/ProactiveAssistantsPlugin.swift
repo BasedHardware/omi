@@ -340,6 +340,10 @@ public class ProactiveAssistantsPlugin: NSObject {
     // Report resources before starting heavy monitoring
     ResourceMonitor.shared.reportResourcesNow(context: "before_monitoring_start")
 
+    // Resolve the persistent-stream rollout flag while we are on the main actor
+    // (PostHog is MainActor-bound; the capture path is not and reads the cache).
+    ScreenCaptureStreamFeature.resolveAndCache()
+
     // Initialize services
     screenCaptureService = ScreenCaptureService()
 
@@ -481,6 +485,9 @@ public class ProactiveAssistantsPlugin: NSObject {
     isInDelayPeriod = false
     backgroundPollTimer?.invalidate()
     backgroundPollTimer = nil
+    // The persistent stream keeps the OS screen-recording indicator lit; release it
+    // whenever the display is unavailable. Resume rebuilds it on the first tick.
+    ScreenCaptureService.suspendPersistentCaptureStream(reason: "system interruption")
   }
 
   private func resumeCaptureAfterSystemInterruption(reason: String) {
@@ -557,6 +564,7 @@ public class ProactiveAssistantsPlugin: NSObject {
     insightAssistant = nil
     memoryAssistant = nil
     screenCaptureService = nil
+    ScreenCaptureService.suspendPersistentCaptureStream(reason: "monitoring stopped")
 
     isMonitoring = false
     isStartingMonitoring = false  // Reset in case stop was called during startup
@@ -711,6 +719,15 @@ public class ProactiveAssistantsPlugin: NSObject {
     var capturedFreshFrame = false
     if #available(macOS 14.0, *) {
       let result = await dwellCaptureWithTimeout(windowID: windowID, seconds: 5)
+      // A declined consent must NOT fall through to the retry-anchor path below: that
+      // backdates the anchor and re-attempts in ~10 s, which is another timer-cadence
+      // capture session and another chance to re-arm the consent dialog. Same contract
+      // as the capture tick and the recovery polls — terminal, not retried.
+      if case .permissionDeclined = result {
+        log("Context dwell refresh aborted: consent declined — stopping capture, no retry")
+        handleCaptureConsentDeclined()
+        return
+      }
       if case .success(let image) = result,
         AssistantCoordinator.shared.isTracking(app: appName, windowTitle: windowTitle)
       {
@@ -754,6 +771,11 @@ public class ProactiveAssistantsPlugin: NSObject {
     // never produce another full frame through the preview-skip path.
     if #available(macOS 14.0, *) {
       let result = await dwellCaptureWithTimeout(windowID: windowID, seconds: 5)
+      if case .permissionDeclined = result {
+        log("Context dwell refresh: consent declined on the post-visit capture — stopping capture")
+        handleCaptureConsentDeclined()
+        return
+      }
       if case .success(let image) = result,
         AssistantCoordinator.shared.isTracking(app: appName, windowTitle: windowTitle)
       {
@@ -780,6 +802,51 @@ public class ProactiveAssistantsPlugin: NSObject {
     screenCaptureFailureTracker.recordTargetUnavailable()
     lastCaptureSucceeded = true
     setScreenCaptureHealth(.temporarilyUnavailable)
+  }
+
+  /// One consent-decline banner per EPISODE, not per process. Static (like
+  /// hasAutoResetThisSession) because the app-activation path restarts monitoring and
+  /// each restart's first declined capture must not stack another banner on the one the
+  /// user has not acted on yet. Cleared on the first successful capture (see
+  /// captureFrame), which is what ends the episode — a process that runs for weeks will
+  /// meet more than one re-confirmation, and the second one must still be explained.
+  private static var hasNotifiedConsentDeclinedThisSession = false
+
+  /// ScreenCaptureKit said "the user declined TCCs" — macOS re-confirming consent for
+  /// app-built content filters, with the Screen Recording grant itself intact.
+  ///
+  /// This must be terminal, not retried: every retried capture opens a fresh session,
+  /// and macOS re-arms the consent dialog per session, so the old 3 s retry (plus the
+  /// 5 s recovery poll behind it) produced three dialogs in ten minutes on a live
+  /// machine. Exposé/Mission Control produce the same error transiently — that carve-out
+  /// stays. Recovery is human-scale only: the notification click restarts monitoring,
+  /// and so does the existing app re-activation start path.
+  private func handleCaptureConsentDeclined() {
+    switch ScreenCaptureConsentPolicy.actionForDeclinedCapture(
+      isInSpecialSystemMode: isInSpecialSystemMode(),
+      hasNotifiedThisSession: Self.hasNotifiedConsentDeclinedThisSession)
+    {
+    case .waitForSpecialModeToEnd:
+      handleCaptureTargetUnavailable()
+    case .stopAndNotify(let shouldNotify):
+      log(
+        "ProactiveAssistantsPlugin: ScreenCaptureKit consent declined — stopping capture, no automatic retry"
+      )
+      AnalyticsManager.shared.screenCaptureBrokenDetected()
+      sendEvent(type: "captureConsentDeclined", data: [:])
+      let ownerID = RuntimeOwnerIdentity.currentOwnerId()
+      stopMonitoring()
+      guard shouldNotify, let ownerID else { return }
+      Self.hasNotifiedConsentDeclinedThisSession = true
+      NotificationService.shared.sendNotification(
+        ownerID: ownerID,
+        title: NotificationService.screenCaptureConsentTitle,
+        message:
+          "macOS asked to re-confirm screen recording for Omi. Click to resume capture.",
+        deliverSystemBanner: true,
+        respectFrequency: false
+      )
+    }
   }
 
   private func handleCaptureEngineFailure() {
@@ -1100,6 +1167,13 @@ public class ProactiveAssistantsPlugin: NSObject {
       if #available(macOS 14.0, *) {
         let previewResult = await screenCaptureService.captureWindowCGImage(
           windowID: windowID, maxSize: 80)
+        // Short-circuit on a decline. Falling through would open a SECOND capture
+        // session in the same tick (the full capture below), doubling the very
+        // session rate that re-arms the consent dialog.
+        if case .permissionDeclined = previewResult {
+          handleCaptureConsentDeclined()
+          return
+        }
         if case .success(let previewImage) = previewResult {
           let previewHash = RewindOCRService.dHash(of: previewImage)
           let similarity = captureTrigger.previewSimilarity(to: previewHash)
@@ -1144,6 +1218,9 @@ public class ProactiveAssistantsPlugin: NSObject {
       case .windowGone:
         handleCaptureTargetUnavailable()
         return
+      case .permissionDeclined:
+        handleCaptureConsentDeclined()
+        return
       case .failed:
         handleCaptureEngineFailure()
         return
@@ -1157,6 +1234,14 @@ public class ProactiveAssistantsPlugin: NSObject {
         }
         lastCaptureSucceeded = true
         setScreenCaptureHealth(.active)
+        // A successful capture ends the consent episode, so the one-banner-per-episode
+        // budget is refilled here rather than being spent once for the life of the
+        // process. Same shape as the reset-notification suppression, which
+        // `AppState.checkScreenRecordingPermission()` clears as soon as capture
+        // recovers. Without this, a second genuine re-confirmation weeks into an
+        // uptime stops capture with no user-visible explanation at all — silence is
+        // worse than the spam this guard exists to prevent.
+        Self.hasNotifiedConsentDeclinedThisSession = false
 
         frameCount += 1
         let captureTime = Date()
@@ -1806,13 +1891,20 @@ public class ProactiveAssistantsPlugin: NSObject {
       return
     }
 
-    if await screenCaptureService.captureActiveWindowAsync() != nil {
+    switch await screenCaptureService.captureActiveWindowCGImage() {
+    case .success:
       // Success! Exit recovery mode
       log(
         "ProactiveAssistantsPlugin: Recovery successful after \(recoveryRetryCount) attempts (~\(recoveryRetryCount * Int(recoveryInterval))s), resuming normal capture (frontmost: \(getFrontmostAppInfo()))"
       )
       exitRecoveryMode(success: true)
-    } else {
+    case .permissionDeclined:
+      // The consent dialog is up. Recovery's 5 s retry is exactly the loop that
+      // re-arms it — stop here; handleCaptureConsentDeclined stops monitoring, which
+      // clears the recovery state.
+      log("ProactiveAssistantsPlugin: Recovery hit declined consent — stopping instead of retrying")
+      handleCaptureConsentDeclined()
+    case .windowGone, .failed:
       // Still failing
       if recoveryRetryCount >= maxRecoveryRetries {
         // Give up and show the reset notification
@@ -1882,12 +1974,20 @@ public class ProactiveAssistantsPlugin: NSObject {
 
     log("ProactiveAssistantsPlugin: Background poll attempt \(backgroundPollCount)/\(maxBackgroundPollAttempts)")
 
-    if await screenCaptureService.captureActiveWindowAsync() != nil {
+    switch await screenCaptureService.captureActiveWindowCGImage() {
+    case .success:
       log("ProactiveAssistantsPlugin: Background polling recovered after \(backgroundPollCount) attempts")
       exitBackgroundPolling(success: true)
-    } else if backgroundPollCount >= maxBackgroundPollAttempts {
-      log("ProactiveAssistantsPlugin: Background polling exhausted, attempting auto-reset")
-      exitBackgroundPolling(success: false)
+    case .permissionDeclined:
+      // Same contract as attemptRecovery: a pending consent dialog must never be
+      // re-sampled on a timer, not even a 60 s one.
+      log("ProactiveAssistantsPlugin: Background poll hit declined consent — stopping instead of retrying")
+      handleCaptureConsentDeclined()
+    case .windowGone, .failed:
+      if backgroundPollCount >= maxBackgroundPollAttempts {
+        log("ProactiveAssistantsPlugin: Background polling exhausted, attempting auto-reset")
+        exitBackgroundPolling(success: false)
+      }
     }
   }
 

@@ -130,9 +130,30 @@ struct OnboardingChatView: View {
   // Permission help notification state — shows a floating bar hint if user struggles
   @State private var permissionHelpShown: Set<String> = []
   @State private var permissionHelpTimer: DispatchWorkItem? = nil
+  @State private var permissionCheckTick = 0
 
-  // Timer to periodically check permission status
+  // Timer to periodically check permission status.
+  //
+  // The tick is 1 s because the screen-recording and microphone checks are local TCC
+  // lookups and the step's UI should flip promptly when the user grants one. The other
+  // three are NOT cheap and are deliberately not run every tick — see
+  // `privilegedProbeTickInterval`.
   let permissionCheckTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
+  /// Run the expensive probes every Nth tick instead of every tick.
+  ///
+  /// Per invocation, `checkAccessibilityPermission` makes up to five
+  /// `AXUIElementCopyAttributeValue` round trips into other processes,
+  /// `checkAutomationPermission` does an `AEDeterminePermissionToAutomateTarget`
+  /// lookup against System Events, and `checkFullDiskAccess` reads a TCC-protected
+  /// directory — three separate authorization subsystems. At 1 Hz for the whole life
+  /// of this view that is thousands of privileged checks per onboarding session, every
+  /// one of them a denied access that tccd logs while the user has not granted yet.
+  /// It is the same shape as the capture defect in
+  /// `docs/screencapture-consent-reprompt.md`: a privileged check on a tight timer.
+  /// 5 s is well inside human reaction time for a Settings toggle, and the instant
+  /// signals already exist anyway — the `com.apple.accessibility.api` observer and the
+  /// app-activation refresh both fire on the real grant edge.
+  private static let privilegedProbeTickInterval = 5
 
   var body: some View {
     VStack(spacing: 0) {
@@ -418,8 +439,11 @@ struct OnboardingChatView: View {
       ChatDraftStore.shared.setText(text, for: .onboardingMain)
     }
     .onReceive(permissionCheckTimer) { _ in
+      // Cheap every tick: both are local TCC lookups with no cross-process traffic.
       appState.checkScreenRecordingPermission()
       appState.checkMicrophonePermission()
+      permissionCheckTick &+= 1
+      guard permissionCheckTick % Self.privilegedProbeTickInterval == 0 else { return }
       appState.checkAccessibilityPermission()
       appState.checkAutomationPermission()
       appState.checkFullDiskAccess()
