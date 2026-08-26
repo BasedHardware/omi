@@ -144,7 +144,7 @@ test("web assets are typed for both Metro numbers and browser URLs", async () =>
 test("web platform ownership stays in the React Native boundary", async () => {
   const source = await webSource();
   const appSource = await readFile(
-    resolve(root, "../react-native/App.tsx"),
+    resolve(root, "../react-native/src/app/AppOrchestrator.tsx"),
     "utf8"
   );
 
